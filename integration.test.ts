@@ -493,3 +493,21 @@ test("createSpaces counts tool traffic into the meter you give it, not the globa
 	assert.equal(mine.total("writes"), 1); assert.equal(global.total("writes"), 0);
 	await h.close(ctx);
 });
+
+test("readAll lists entries for a dashboard without removing them; space_list does it for agents", async () => {
+	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
+	const registry = createRegistry(); registry.install(spaces);
+	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+	const s = new JavaSpace(h, ctx);
+	for (let i = 0; i < 3; i++) await s.write(job(i), null, FOREVER);
+	assert.deepEqual((await s.readAll({ type: "Job" })).map((e) => e.fields.n), [0, 1, 2]);
+	assert.equal((await s.readAll({ type: "Job" }, { limit: 2 })).length, 2);
+	assert.equal(await s.count(), 3); // nothing was removed
+	const root = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
+	faux.setResponses([fauxAssistantMessage(fauxToolCall("space_list", { type: "Job" }), { stopReason: "toolUse" }), fauxAssistantMessage("done")]);
+	await (await root.submit({ type: "input", content: "list" }, ctx)).wait(ctx);
+	const all = JSON.stringify((await root.entries({}, 20, undefined, ctx)).items);
+	assert.ok(all.includes('\\"n\\":2') || all.includes('"n":2'));
+	assert.equal(await s.count(), 3);
+	await h.close(ctx);
+});

@@ -455,6 +455,24 @@ export function count(s: Readonly<SpaceState>, now: number, tmpl: Template = nul
 	return n;
 }
 
+export const MAX_LIST = 1000;
+/**
+ * All entries a `read` could see, oldest first, up to `limit` (default and maximum MAX_LIST). Does not lock or modify
+ * anything, so it is safe for dashboards. `as` is checked against `txn` like for any other use of a transaction.
+ */
+export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null, txn: string | null = null, limit = MAX_LIST, as?: Target): EntryView[] {
+	if (!Number.isInteger(limit) || limit < 1) throw new IllegalArgumentError("limit must be a positive integer");
+	if (txn !== null) requireTxn(s as SpaceState, txn, as);
+	const mine = active(s, txn, now);
+	const out: EntryView[] = [];
+	for (const e of s.entries) {
+		if (out.length >= Math.min(limit, MAX_LIST)) break;
+		const st = standing(s, e, now); // the same view of the space as count() has
+		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) out.push(view(e));
+	}
+	return out;
+}
+
 export type SpaceStats = {
 	entries: number; // visible to a plain read
 	byType: Record<string, number>;

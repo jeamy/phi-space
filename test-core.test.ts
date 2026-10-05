@@ -400,3 +400,18 @@ test("entry views carry the owner so readers can judge where content comes from"
 	const owners = [c.probe(s, 1, T("Job", { n: 1 }), null, false), c.probe(s, 1, T("Job", { n: 2 }), null, false)].map((p) => c.view((p as any).entry).owner);
 	assert.deepEqual(owners, ["A", null]);
 });
+
+test("list returns what a read could see, oldest first, capped, without locking anything", () => {
+	const s = mk();
+	for (let i = 0; i < 5; i++) c.write(s, 0, job(i), null, i === 4 ? 50 : c.FOREVER);
+	c.write(s, 0, { type: "Other", fields: {} }, null, c.FOREVER);
+	const t = c.createTxn(s, 0, 1000); c.write(s, 0, job(9), t.id, c.FOREVER);
+	assert.deepEqual(c.list(s, 10, T("Job")).map((e) => e.fields.n), [0, 1, 2, 3, 4]); // 9 is uncommitted
+	assert.deepEqual(c.list(s, 10, T("Job"), t.id).map((e) => e.fields.n), [0, 1, 2, 3, 4, 9]); // its own write is visible
+	assert.deepEqual(c.list(s, 100, T("Job")).map((e) => e.fields.n), [0, 1, 2, 3]); // 4 expired
+	assert.equal(c.list(s, 10, T("Job"), null, 2).length, 2);
+	assert.equal(c.list(s, 10).length, 6); // null template: everything visible
+	assert.throws(() => c.list(s, 10, null, null, 0), c.IllegalArgumentError);
+	assert.throws(() => c.list(s, 10, null, t.id, 5, "A"), c.PermissionError); // not A's transaction
+	assert.equal(s.entries.every((e) => e.readBy.length === 0 && e.takenBy === null), true); // nothing locked
+});

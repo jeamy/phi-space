@@ -72,6 +72,16 @@ export class JavaSpace {
 		if (this.as !== undefined) throw new core.IllegalArgumentError("only host code may change limits");
 		return this.host.commit(async (tx) => core.setLimits(await tx.doc(Space), l), this.ctx);
 	}
+	/**
+	 * Every entry a `read` with this template would currently see (oldest first, at most `limit`, default and maximum
+	 * 1000). A snapshot read: no commit, no lock, nothing is removed and nobody is woken, so it suits dashboards.
+	 */
+	async readAll(tmpl: Template = null, o: { limit?: number; txn?: string | null } = {}): Promise<Taken[]> {
+		const s = await this.host.snapshot(Space, this.ctx);
+		const out = s ? core.list(s, this.now(), tmpl, o.txn ?? null, o.limit, this.as) : [];
+		this.meter.inc("reads");
+		return out;
+	}
 	/** Number of entries a `read` with this template would currently see. No commit, no waiting. */
 	async count(tmpl: Template = null, txn: string | null = null): Promise<number> {
 		const s = await this.host.snapshot(Space, this.ctx);

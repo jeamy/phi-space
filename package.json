@@ -3,11 +3,13 @@
   "version": "0.0.1",
   "type": "module",
   "description": "JavaSpaces-style space for @earendil-works/pi-durable",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "test": "node --experimental-strip-types --test test-core.test.ts test-meter.test.ts integration.test.ts",
     "example": "node --experimental-strip-types examples/workers.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "build": "tsc -p tsconfig.build.json",
+    "bundle": "esbuild src/index.ts --bundle --format=esm --platform=node --target=node22 --external:@earendil-works/* --legal-comments=none --outfile=dist/pi-spaces.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "*",
@@ -16,6 +18,12 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
-    "typescript": "^7.0.2"
-  }
+    "typescript": "^7.0.2",
+    "esbuild": "^0.25.0"
+  },
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }
