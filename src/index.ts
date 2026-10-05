@@ -31,7 +31,7 @@ const Fields = Type.Optional(Type.Record(Type.String(), Type.Any()));
 const TemplateParams = {
 	type: Type.Optional(Type.String({ description: "Entry type; also matches subtypes" })),
 	fields: Fields,
-	timeoutMs: Type.Optional(Type.Number({ description: `Wait up to this long (max ${MAX_WAIT_MS}). 0 = do not wait.` })),
+	timeoutMs: Type.Optional(Type.Number({ minimum: 0, description: `Wait up to this long (max ${MAX_WAIT_MS}). 0 = do not wait.` })),
 	ifExists: Type.Optional(Type.Boolean({ description: "Do not wait for a match to appear; wait only while matches are locked by another transaction" })),
 	txn: Type.Optional(Type.String()),
 };
@@ -61,7 +61,7 @@ export const spaces = defineExtension({
 			parameters: Type.Object(TemplateParams),
 			replay: "safe",
 			execute: async (a, api, ctx) => {
-				const deadline = await api.memo<number>("deadline", Date.now() + Math.min(a.timeoutMs ?? 0, MAX_WAIT_MS), ctx);
+				const deadline = await api.memo<number>("deadline", Date.now() + Math.max(0, Math.min(a.timeoutMs ?? 0, MAX_WAIT_MS)), ctx);
 				const s = new JavaSpace(api, ctx);
 				const t = { type: a.type ?? null, fields: (a.fields ?? {}) as core.Fields };
 				return text(await (a.ifExists ? s.readIfExists : s.read).call(s, t, 0, { txn: a.txn ?? null, deadline }));
@@ -73,7 +73,7 @@ export const spaces = defineExtension({
 			parameters: Type.Object(TemplateParams),
 			replay: "safe",
 			execute: async (a, api, ctx) => {
-				const deadline = await api.memo<number>("deadline", Date.now() + Math.min(a.timeoutMs ?? 0, MAX_WAIT_MS), ctx);
+				const deadline = await api.memo<number>("deadline", Date.now() + Math.max(0, Math.min(a.timeoutMs ?? 0, MAX_WAIT_MS)), ctx);
 				const s = new JavaSpace(api, ctx);
 				const t = { type: a.type ?? null, fields: (a.fields ?? {}) as core.Fields };
 				const o = { txn: a.txn ?? null, deadline, once: onceFor(api.taskId) };
@@ -96,7 +96,7 @@ export const spaces = defineExtension({
 		defineTool({
 			name: "space_wait",
 			description: "Wait for a matching entry WITHOUT blocking this turn. Returns at once with a wait id; when an entry appears (or the timeout passes) the space sends you a message. A take-wait hands you the entry under a transaction: commit it with space_txn when done, or it returns to the space when the lease lapses. Use this for long waits; space_take/space_read with timeoutMs block the turn.",
-			parameters: Type.Object({ type: Type.Optional(Type.String()), fields: Fields, mode: Type.Optional(Type.Union([Type.Literal("take"), Type.Literal("read")])), timeoutMs: Type.Number({ description: "How long the wait stays registered (up to 1 day)" }), txnLeaseMs: Type.Optional(Type.Number({ description: "Lease for the transaction that holds a taken entry (default 1 h)" })) }),
+			parameters: Type.Object({ type: Type.Optional(Type.String()), fields: Fields, mode: Type.Optional(Type.Union([Type.Literal("take"), Type.Literal("read")])), timeoutMs: Type.Number({ minimum: 0, description: "How long the wait stays registered (up to 1 day)" }), txnLeaseMs: Type.Optional(Type.Number({ description: "Lease for the transaction that holds a taken entry (default 1 h)" })) }),
 			replay: "safe",
 			execute: async (a, api, ctx) => {
 				const id = await api.commit(async (tx) => {
@@ -140,19 +140,36 @@ const describe = (e: core.SpaceEvent): string => {
 	return `[space event ${e.eventId} #${e.seq}] a${en} entry was written${hb}`;
 };
 
-/** Deliver outbox events (notify, served waiters, timeouts) as input to their conversations. `requestId` makes redelivery harmless. */
+const MAX_TRIES = 5; // a poisoned event is dropped after this many failed deliveries
+
+/**
+ * Deliver outbox events (notify, served waiters, timeouts) as input to their conversations. One failing event does not
+ * hold back the others: it is retried on the next trigger and dropped after MAX_TRIES. `requestId` makes redelivery
+ * harmless. Delivered and given-up events leave the outbox in one commit.
+ */
 export async function deliverEvents(harness: Harness, ctx: Context): Promise<number> {
 	const snap = await harness.snapshot(Space, ctx);
 	const events = [...(snap?.outbox ?? [])];
+	const done = new Set<string>();
+	const failed = new Set<string>();
+	const key = (e: core.SpaceEvent) => `${e.eventId}:${e.seq}`;
 	for (const e of events) {
-		const conv = e.target ? await harness.conversation(e.target as any, ctx) : undefined;
-		if (conv) await conv.submit({ type: "input", requestId: `${e.eventId}:${e.seq}`, content: describe(e) }, ctx);
-		await harness.commit(async (tx) => {
-			const s = await tx.doc(Space);
-			s.outbox = s.outbox.filter((x) => !(x.eventId === e.eventId && x.seq === e.seq));
-		}, ctx);
+		try {
+			const conv = e.target ? await harness.conversation(e.target as any, ctx) : undefined;
+			if (conv) await conv.submit({ type: "input", requestId: key(e), content: describe(e) }, ctx);
+			done.add(key(e));
+		} catch {
+			failed.add(key(e));
+		}
 	}
-	return events.length;
+	if (done.size === 0 && failed.size === 0) return 0;
+	await harness.commit(async (tx) => {
+		const s = await tx.doc(Space);
+		s.outbox = s.outbox.filter((x) => !done.has(key(x)));
+		for (const x of s.outbox) if (failed.has(key(x))) x.tries = (x.tries ?? 0) + 1;
+		s.outbox = s.outbox.filter((x) => (x.tries ?? 0) < MAX_TRIES);
+	}, ctx);
+	return done.size;
 }
 
 /**

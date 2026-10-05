@@ -40,7 +40,7 @@ export type RegRec = {
 };
 /** A parked read/take for a conversation: served by the space when a match appears, instead of a blocked call. */
 export type WaiterRec = { id: string; template: Template; take: boolean; target: string | null; deadline: number; txnLeaseMs: number; handback: Json };
-export type EntryView = { id: string; type: string; fields: Fields };
+export type EntryView = { id: string; type: string; types: string[]; fields: Fields };
 export type SpaceEvent = {
 	kind: "entry" | "waiter" | "timeout"; // entry: notify; waiter: a parked op was served; timeout: its deadline passed
 	eventId: string;
@@ -48,12 +48,23 @@ export type SpaceEvent = {
 	handback: Json;
 	target: string | null;
 	entry?: EntryView;
+	tries?: number; // failed deliveries so far
 	txn?: string; // a served take-waiter holds the entry under this transaction until committed or its lease lapses
 };
 export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[] };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [] });
-export const migrate = (v: any, _from: number): SpaceState => ({ ...initialState(), ...v, waiters: v.waiters ?? [] });
+export const migrate = (v: any, _from: number): SpaceState => {
+	const d = initialState();
+	return {
+		nextId: v.nextId ?? d.nextId,
+		entries: (v.entries ?? d.entries).map((e: any) => ({ ...e, types: e.types ?? [e.type], readBy: e.readBy ?? [], writtenUnder: e.writtenUnder ?? null, takenBy: e.takenBy ?? null })),
+		txns: v.txns ?? d.txns,
+		regs: v.regs ?? d.regs,
+		waiters: v.waiters ?? d.waiters,
+		outbox: v.outbox ?? d.outbox,
+	};
+};
 export type Lease = { id: string; expires: number };
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)); // draft proxies are not structured-cloneable
@@ -80,7 +91,7 @@ export function matches(t: Template, e: { types: string[]; fields: Fields }): bo
 	if (t === null) return true;
 	if (t.type != null && !e.types.includes(t.type)) return false; // subtype matching
 	for (const [k, v] of Object.entries(t.fields ?? {})) {
-		if (v === null) continue; // wildcard; you cannot search for a null field (as in Jini)
+		if (v == null) continue; // wildcard (null or undefined); you cannot search for a null field (as in Jini)
 		if (!(k in e.fields) || !deepEqual(v, e.fields[k]!)) return false;
 	}
 	return true;
@@ -102,11 +113,11 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn);
 	const expires = grant(lease, now);
-	const types = entry.types?.[0] === entry.type ? entry.types : [entry.type, ...(entry.types ?? [])];
+	const types = [...new Set([entry.type, ...(entry.types ?? [])])]; // the type first, no duplicates
 	const rec: EntryRec = {
 		id: newId(s, "e"),
 		type: entry.type,
-		types: [...types],
+		types,
 		fields: clone(entry.fields),
 		expires,
 		writtenUnder: txn,
@@ -140,7 +151,7 @@ export function probe(s: SpaceState, now: number, tmpl: Template, txn: string | 
 	return f.status === "found" ? { status: "found", entry: apply(s, f.rec, txn, take) } : f;
 }
 
-const view = (e: EntryRec): EntryView => ({ id: e.id, type: e.type, fields: clone(e.fields) });
+export const view = (e: EntryRec): EntryView => ({ id: e.id, type: e.type, types: [...e.types], fields: clone(e.fields) });
 
 function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean): { status: "found"; rec: EntryRec } | { status: "none" } | { status: "locked" } {
 	let locked = false;
@@ -183,7 +194,8 @@ export const abortTxn = (s: SpaceState, now: number, id: string) => { settle(s, 
 export function addWaiter(s: SpaceState, now: number, w: { template: Template; take: boolean; target: string | null; timeout: number; txnLeaseMs?: number; handback?: Json }): string {
 	if (w.timeout < 0) throw new IllegalArgumentError("negative timeout");
 	settle(s, now);
-	const rec: WaiterRec = { id: newId(s, "w"), template: w.template, take: w.take, target: w.target, deadline: now + w.timeout, txnLeaseMs: w.txnLeaseMs ?? DEFAULT_LEASE_MS, handback: w.handback ?? null };
+	const txnLeaseMs = grant(w.txnLeaseMs ?? ANY, now) - now; // same rules as every other lease: ANY, cap, no negatives
+	const rec: WaiterRec = { id: newId(s, "w"), template: w.template, take: w.take, target: w.target, deadline: now + w.timeout, txnLeaseMs, handback: w.handback ?? null };
 	s.waiters.push(rec);
 	serve(s, now);
 	return rec.id;
@@ -202,7 +214,7 @@ function serve(s: SpaceState, now: number): void {
 		if (f.status !== "found") continue;
 		s.waiters.splice(s.waiters.indexOf(w), 1);
 		if (!w.take) { s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, null, false)) }); continue; }
-		const t = { id: newId(s, "t"), expires: now + Math.min(w.txnLeaseMs, MAX_LEASE_MS) };
+		const t = { id: newId(s, "t"), expires: now + w.txnLeaseMs };
 		s.txns[t.id] = t;
 		s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, t.id, true)), txn: t.id });
 	}
@@ -241,12 +253,15 @@ function leaseObj(s: SpaceState, id: string): { expires: number } | undefined {
 }
 export function renew(s: SpaceState, now: number, id: string, ms: number): number {
 	settle(s, now);
+	const w = s.waiters.find((x) => x.id === id); // a wait's deadline behaves like a lease
+	if (w) return (w.deadline = grant(ms, now));
 	const o = leaseObj(s, id);
 	if (!o) throw new UnknownLeaseError(id);
 	return (o.expires = grant(ms, now));
 }
 export function cancel(s: SpaceState, now: number, id: string): void {
 	settle(s, now);
+	if (cancelWaiter(s, id)) return; // cancelled waits send no timeout event
 	const o = leaseObj(s, id);
 	if (!o) throw new UnknownLeaseError(id);
 	o.expires = now; // settle() removes it; a cancelled txn lease aborts the transaction
@@ -255,5 +270,10 @@ export function cancel(s: SpaceState, now: number, id: string): void {
 
 /** Earliest time something can change without a commit (lease expiry); the waiter must wake then. */
 export function nextExpiry(s: SpaceState): number {
-	return Math.min(FOREVER, ...s.entries.map((e) => e.expires), ...Object.values(s.txns).map((t) => t.expires), ...s.waiters.map((w) => w.deadline));
+	let min = FOREVER; // loops, not Math.min(...spread): spreading a large array overflows the stack
+	for (const e of s.entries) if (e.expires < min) min = e.expires;
+	for (const r of s.regs) if (r.expires < min) min = r.expires;
+	for (const t of Object.values(s.txns)) if (t.expires < min) min = t.expires;
+	for (const w of s.waiters) if (w.deadline < min) min = w.deadline;
+	return min;
 }

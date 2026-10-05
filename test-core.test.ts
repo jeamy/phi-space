@@ -135,3 +135,38 @@ test("waiter: entry returned by an aborted txn serves a waiting taker; two waite
 	c.write(s, 5, job(2), null, c.FOREVER);
 	assert.deepEqual(s.outbox.map((e) => e.entry!.fields.n), [1, 2]);
 });
+
+test("nextExpiry covers registrations and waiters, and survives huge states", () => {
+	const s = mk(); c.notify(s, 0, null, null, 500, null, null);
+	assert.equal(c.nextExpiry(s), 500);
+	c.addWaiter(s, 0, { template: null, take: true, target: "x", timeout: 100 });
+	assert.equal(c.nextExpiry(s), 100);
+	for (let i = 0; i < 200_000; i++) s.entries.push({ id: `e${i}`, type: "J", types: ["J"], fields: {}, expires: 1000 + i, writtenUnder: null, takenBy: null, readBy: [] });
+	assert.equal(c.nextExpiry(s), 100);
+});
+test("waiters can be cancelled and renewed through the lease API; cancel sends no timeout", () => {
+	const s = mk(); const w = c.addWaiter(s, 0, { template: T("A"), take: true, target: "x", timeout: 100 });
+	assert.equal(c.renew(s, 10, w, 500), 510);
+	c.cancel(s, 20, w);
+	assert.equal(s.waiters.length, 0); c.settle(s, 1000); assert.equal(s.outbox.length, 0);
+	assert.throws(() => c.cancel(s, 21, w), c.UnknownLeaseError);
+});
+test("waiter txn lease follows lease rules: ANY gets the default, negatives throw", () => {
+	const s = mk(); c.write(s, 0, job(1), null, c.FOREVER);
+	c.addWaiter(s, 1, { template: T("Job"), take: true, target: "x", timeout: 100, txnLeaseMs: c.ANY });
+	assert.equal(Object.values(s.txns)[0]!.expires, 1 + c.DEFAULT_LEASE_MS);
+	assert.throws(() => c.addWaiter(s, 2, { template: null, take: true, target: "x", timeout: 1, txnLeaseMs: -5 }), c.IllegalArgumentError);
+});
+test("undefined template fields are wildcards like null", () => {
+	const s = mk(); c.write(s, 0, job(1), null, c.FOREVER);
+	assert.equal(c.probe(s, 1, T("Job", { n: 1, status: undefined as any }), null, false).status, "found");
+});
+test("types are preserved in what read/take return and deduplicated on write", () => {
+	const s = mk(); c.write(s, 0, { type: "MyType", types: ["Base", "MyType"], fields: {} }, null, c.FOREVER);
+	assert.deepEqual(s.entries[0]!.types, ["MyType", "Base"]);
+	assert.deepEqual(c.view((c.probe(s, 1, null, null, true) as any).entry).types, ["MyType", "Base"]);
+});
+test("migrate normalizes old documents", () => {
+	const m = c.migrate({ entries: [{ id: "e1", type: "J", fields: {}, expires: 5 }], outbox: undefined }, 2);
+	assert.deepEqual(m.outbox, []); assert.deepEqual(m.entries[0]!.types, ["J"]); assert.deepEqual(m.entries[0]!.readBy, []);
+});

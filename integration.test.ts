@@ -119,3 +119,36 @@ test("space_wait: tool returns at once; entry arrives later as a message and is 
 	assert.equal(await s.takeIfExists({ type: "Job" }, 50), null);
 	await stop(); await h.close(ctx);
 });
+
+test("deliverEvents: a failing event does not block the others and is dropped after repeated failures", async () => {
+	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
+	const registry = createRegistry(); registry.install(spaces);
+	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+	const good = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	const s = new JavaSpace(h, ctx);
+	await h.commit(async (tx) => { // an event whose conversation lookup throws (malformed id), then a good one
+		const d = await tx.doc(Space);
+		d.outbox.push({ kind: "timeout", eventId: "bad", seq: 1, handback: null, target: "bad" });
+		d.outbox.push({ kind: "timeout", eventId: "good", seq: 1, handback: null, target: good.id as unknown as string });
+	}, ctx);
+	// The conversation lookup for target "bad" fails, as a temporary storage or submit error would.
+	const flaky: any = new Proxy(h, { get: (t: any, k) => k === "conversation" ? (id: any, c: any) => id === "bad" ? Promise.reject(new Error("boom")) : t.conversation(id, c) : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
+	assert.equal(await deliverEvents(flaky, ctx), 1); // the good one was delivered despite the bad one before it
+	const left = (await h.snapshot(Space, ctx))!.outbox;
+	assert.deepEqual(left.map((e) => e.eventId), ["bad"]);
+	for (let i = 0; i < 6; i++) await deliverEvents(flaky, ctx);
+	assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 0); // poisoned event dropped
+	void s; await h.close(ctx);
+});
+
+test("blocking take leaves no timers behind when woken early", async () => {
+	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const before = (process as any).getActiveResourcesInfo().filter((x: string) => x === "Timeout").length;
+	const p = s.take({ type: "Job" }, 60_000); await sleep(100);
+	await s.write(job(1), null, FOREVER); await p;
+	await sleep(50);
+	const after = (process as any).getActiveResourcesInfo().filter((x: string) => x === "Timeout").length;
+	assert.ok(after <= before, `timers before ${before}, after ${after}`);
+	await h.close(ctx);
+});

@@ -29,7 +29,7 @@ export type OpOptions = {
 	once?: Once;
 };
 
-const view = (e: core.EntryRec) => ({ id: e.id, type: e.type, fields: e.fields });
+const view = core.view;
 export type Taken = ReturnType<typeof view>;
 
 export class JavaSpace {
@@ -70,13 +70,14 @@ export class JavaSpace {
 		if (timeout < 0) throw new core.IllegalArgumentError("negative timeout");
 		const deadline = o.deadline ?? this.now() + timeout;
 		const txn = o.txn ?? null;
+		await this.host.commit(async (tx) => { await tx.doc(Space); }, this.ctx); // the watch needs the doc to exist
 		for (;;) {
 			// Watch before probing, so a write that lands between the probe and the wait still wakes us.
-			await this.host.commit(async (tx) => { await tx.doc(Space); }, this.ctx); // the watch needs the doc to exist
 			const watch = await this.host.watchDoc(Space, this.ctx);
 			let woke!: () => void;
 			const changed = new Promise<void>((r) => (woke = r));
 			watch?.start(async () => woke());
+			let timer: ReturnType<typeof setTimeout> | undefined;
 			try {
 				const r = await this.host.commit(async (tx) => {
 					const prior = take && o.once ? await o.once.get(tx) : undefined;
@@ -84,7 +85,7 @@ export class JavaSpace {
 					const s = await tx.doc(Space);
 					const p = core.probe(s, this.now(), tmpl, txn, take);
 					if (p.status === "found" && take && o.once) await o.once.set(tx, view(p.entry) as unknown as Json);
-					return p;
+					return { ...p, next: core.nextExpiry(s) }; // one commit per round: probe and next wake-up together
 				}, this.ctx);
 				if (r.status === "replay") return r.value;
 				if (r.status === "found") return view(r.entry);
@@ -92,10 +93,10 @@ export class JavaSpace {
 				if (r.status === "none" && ifExists) return null;
 				const left = deadline - this.now();
 				if (left <= 0) return null;
-				const next = await this.host.commit(async (tx) => core.nextExpiry(await tx.doc(Space)), this.ctx);
-				const wake = Math.max(1, Math.min(left, next - this.now()));
-				await awaitWithContext(Promise.race([changed, new Promise<void>((r) => setTimeout(r, wake))]), this.ctx);
+				const wake = Math.max(1, Math.min(left, r.next - this.now()));
+				await awaitWithContext(Promise.race([changed, new Promise<void>((res) => { timer = setTimeout(res, wake); })]), this.ctx);
 			} finally {
+				clearTimeout(timer); // do not leave a timer per round behind
 				await watch?.stop();
 			}
 		}
