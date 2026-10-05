@@ -8,7 +8,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { JavaSpace, NO_WAIT, FOREVER, Space, deliverEvents, spaces, core, startMaintenance, startService } from "./src/index.ts";
+import { JavaSpace, NO_WAIT, FOREVER, Space, deliverEvents, spaces, core, startMaintenance, startService, startDelivery } from "./src/index.ts";
 
 const open = (storage: any, models = createModels()) => Harness.open(storage, { models, registry: createRegistry() }, ctx);
 const job = (n: number) => ({ type: "Job", fields: { n } });
@@ -134,10 +134,13 @@ test("deliverEvents: a failing event does not block the others and is dropped af
 	}, ctx);
 	// The conversation lookup for target "bad" fails, as a temporary storage or submit error would.
 	const flaky: any = new Proxy(h, { get: (t: any, k) => k === "conversation" ? (id: any, c: any) => id === "bad" ? Promise.reject(new Error("boom")) : t.conversation(id, c) : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
-	assert.equal(await deliverEvents(flaky, ctx), 1); // the good one was delivered despite the bad one before it
+	let clock = Date.now(); const o = { now: () => clock, retryMs: 10 };
+	assert.equal(await deliverEvents(flaky, ctx, o), 1); // the good one was delivered despite the bad one before it
 	const left = (await h.snapshot(Space, ctx))!.outbox;
 	assert.deepEqual(left.map((e) => e.eventId), ["bad"]);
-	for (let i = 0; i < 6; i++) await deliverEvents(flaky, ctx);
+	await deliverEvents(flaky, ctx, o); // too early: backoff, not retried
+	assert.equal((await h.snapshot(Space, ctx))!.outbox[0]!.tries, 1);
+	for (let i = 0; i < 6; i++) { clock += 1000; await deliverEvents(flaky, ctx, o); }
 	assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 0); // poisoned event dropped
 	void s; await h.close(ctx);
 });
@@ -150,5 +153,64 @@ test("blocking take leaves no timers behind when woken early", async () => {
 	await sleep(50);
 	const after = (process as any).getActiveResourcesInfo().filter((x: string) => x === "Timeout").length;
 	assert.ok(after <= before, `timers before ${before}, after ${after}`);
+	await h.close(ctx);
+});
+
+test("deliverEvents: events without a target are dropped explicitly and not counted as delivered", async () => {
+	const h = await open(new MemoryStorage());
+	await h.commit(async (tx) => {
+		const d = await tx.doc(Space);
+		d.outbox.push({ kind: "timeout", eventId: "n1", seq: 1, handback: null, target: null });
+		d.outbox.push({ kind: "timeout", eventId: "n2", seq: 1, handback: null, target: "" });
+	}, ctx);
+	assert.equal(await deliverEvents(h, ctx), 0);
+	assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 0);
+	await assert.rejects(() => new JavaSpace(h, ctx).notify(null, { target: "" }), /target/);
+	await h.close(ctx);
+});
+
+test("reaper survives a failing commit: logs, retries, and keeps cleaning up", async () => {
+	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	let fail = false; const errors: unknown[] = [];
+	const flaky: any = new Proxy(h, { get: (t: any, k) => k === "commit" ? (f: any, c: any) => fail ? Promise.reject(new Error("disk")) : t.commit(f, c) : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
+	const stop = await startMaintenance(flaky, ctx, { retryMs: 50, onError: (e) => errors.push(e) });
+	await s.write(job(1), null, 120);
+	fail = true; await sleep(250); // the expiry tick fails
+	assert.ok(errors.length > 0); assert.equal((await h.snapshot(Space, ctx))!.entries.length, 1);
+	fail = false; await sleep(200); // the retry succeeds
+	assert.equal((await h.snapshot(Space, ctx))!.entries.length, 0);
+	await stop(); await h.close(ctx);
+});
+
+test("delivery retries a failed event on a timer", async () => {
+	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
+	const registry = createRegistry(); registry.install(spaces);
+	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+	const conv = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
+	faux.setResponses([fauxAssistantMessage("ok")]);
+	let fail = true;
+	const flaky: any = new Proxy(h, { get: (t: any, k) => k === "conversation" ? (id: any, c: any) => fail ? Promise.reject(new Error("temp")) : t.conversation(id, c) : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
+	const stop = await startDelivery(flaky, ctx, { retryMs: 60, onError: () => {} });
+	await new JavaSpace(h, ctx).notify({ type: "Job" }, { target: conv.id as unknown as string, lease: FOREVER });
+	await new JavaSpace(h, ctx).write(job(1), null, FOREVER);
+	await sleep(200); assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 1); // still queued
+	fail = false;
+	for (let i = 0; i < 40 && (await h.snapshot(Space, ctx))!.outbox.length; i++) await sleep(50);
+	assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 0);
+	await stop(); await h.close(ctx);
+});
+
+test("space_notify tool subscribes the calling conversation", async () => {
+	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
+	const registry = createRegistry(); registry.install(spaces);
+	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+	const a = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
+	faux.setResponses([fauxAssistantMessage(fauxToolCall("space_notify", { type: "Job" }), { stopReason: "toolUse" }), fauxAssistantMessage("subscribed")]);
+	await (await a.submit({ type: "input", content: "tell me about jobs" }, ctx)).wait(ctx);
+	const regs = (await h.snapshot(Space, ctx))!.regs;
+	assert.equal(regs.length, 1); assert.equal(regs[0]!.target, a.id as unknown as string);
+	faux.setResponses([fauxAssistantMessage("saw it")]);
+	await new JavaSpace(h, ctx).write(job(1), null, FOREVER);
+	assert.equal(await deliverEvents(h, ctx), 1);
 	await h.close(ctx);
 });

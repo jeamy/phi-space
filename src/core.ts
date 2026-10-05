@@ -49,6 +49,7 @@ export type SpaceEvent = {
 	target: string | null;
 	entry?: EntryView;
 	tries?: number; // failed deliveries so far
+	retryAt?: number; // not before this time (backoff after a failed delivery)
 	txn?: string; // a served take-waiter holds the entry under this transaction until committed or its lease lapses
 };
 export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[] };

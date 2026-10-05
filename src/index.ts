@@ -110,6 +110,22 @@ export const spaces = defineExtension({
 			},
 		}),
 		defineTool({
+			name: "space_notify",
+			description: "Subscribe to future writes matching the template: each one sends you a message (until ttlMs passes or you cancel with space_lease). Unlike space_wait this is not one-shot and takes nothing.",
+			parameters: Type.Object({ type: Type.Optional(Type.String()), fields: Fields, ttlMs: Type.Optional(Type.Number({ minimum: 0 })), handback: Type.Optional(Type.Any()) }),
+			replay: "safe",
+			execute: async (a, api, ctx) => {
+				const r = await api.commit(async (tx) => {
+					const c = await tx.doc(Claim, api.taskId);
+					if (c.done) return c.value;
+					const n = core.notify(await tx.doc(Space), Date.now(), { type: a.type ?? null, fields: (a.fields ?? {}) as core.Fields }, null, a.ttlMs ?? core.ANY, (a.handback ?? null) as core.Json, api.conversationId as unknown as string);
+					c.done = true; c.value = n as unknown as core.Json;
+					return n;
+				}, ctx);
+				return text(r);
+			},
+		}),
+		defineTool({
 			name: "space_lease",
 			description: "Renew or cancel a lease (entry, notify registration or transaction id).",
 			parameters: Type.Object({ action: Type.Union([Type.Literal("renew"), Type.Literal("cancel")]), id: Type.String(), ms: Type.Optional(Type.Number()) }),
@@ -147,26 +163,32 @@ const MAX_TRIES = 5; // a poisoned event is dropped after this many failed deliv
  * hold back the others: it is retried on the next trigger and dropped after MAX_TRIES. `requestId` makes redelivery
  * harmless. Delivered and given-up events leave the outbox in one commit.
  */
-export async function deliverEvents(harness: Harness, ctx: Context): Promise<number> {
+export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<number> {
+	const now = o.now ?? Date.now;
+	const retryMs = o.retryMs ?? 1000;
 	const snap = await harness.snapshot(Space, ctx);
-	const events = [...(snap?.outbox ?? [])];
-	const done = new Set<string>();
+	const events = (snap?.outbox ?? []).filter((e) => (e.retryAt ?? 0) <= now()); // failed ones wait for their backoff
+	const done = new Set<string>(); // submitted
+	const dropped = new Set<string>(); // nobody to deliver to: no target, or the conversation no longer exists
 	const failed = new Set<string>();
 	const key = (e: core.SpaceEvent) => `${e.eventId}:${e.seq}`;
 	for (const e of events) {
 		try {
-			const conv = e.target ? await harness.conversation(e.target as any, ctx) : undefined;
-			if (conv) await conv.submit({ type: "input", requestId: key(e), content: describe(e) }, ctx);
-			done.add(key(e));
+			const conv = e.target != null && e.target !== "" ? await harness.conversation(e.target as any, ctx) : undefined;
+			if (!conv) dropped.add(key(e));
+			else {
+				await conv.submit({ type: "input", requestId: key(e), content: describe(e) }, ctx);
+				done.add(key(e));
+			}
 		} catch {
 			failed.add(key(e));
 		}
 	}
-	if (done.size === 0 && failed.size === 0) return 0;
+	if (done.size === 0 && dropped.size === 0 && failed.size === 0) return 0;
 	await harness.commit(async (tx) => {
 		const s = await tx.doc(Space);
-		s.outbox = s.outbox.filter((x) => !done.has(key(x)));
-		for (const x of s.outbox) if (failed.has(key(x))) x.tries = (x.tries ?? 0) + 1;
+		s.outbox = s.outbox.filter((x) => !done.has(key(x)) && !dropped.has(key(x)));
+		for (const x of s.outbox) if (failed.has(key(x))) { x.tries = (x.tries ?? 0) + 1; x.retryAt = now() + retryMs * x.tries; }
 		s.outbox = s.outbox.filter((x) => (x.tries ?? 0) < MAX_TRIES);
 	}, ctx);
 	return done.size;
@@ -176,36 +198,65 @@ export async function deliverEvents(harness: Harness, ctx: Context): Promise<num
  * Reaper: removes expired entries/leases, aborts expired transactions and times out waiters at the moment they lapse
  * instead of at the next operation. Stateless (`settle` is idempotent), so after a restart just start it again.
  */
-export async function startMaintenance(harness: Harness, ctx: Context, now: () => number = Date.now): Promise<() => Promise<void>> {
+export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number };
+
+export async function startMaintenance(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
+	const now = o.now ?? Date.now;
+	const onError = o.onError ?? ((e) => console.error("pi-spaces reaper:", e));
+	const retryMs = o.retryMs ?? 1000;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let stopped = false;
-	const tick = async () => {
+	const arm = (ms: number) => { clearTimeout(timer); if (!stopped) timer = setTimeout(() => void tick(), Math.max(1, ms)); };
+	// A failed commit must not end the reaper (and a throwing watch listener would end the watch): log and retry.
+	const tick = async (): Promise<void> => {
 		if (stopped) return;
 		clearTimeout(timer);
-		const next = await harness.commit(async (tx) => {
-			const s = await tx.doc(Space);
-			core.settle(s, now());
-			return core.nextExpiry(s);
-		}, ctx);
-		if (!stopped && next < core.FOREVER) timer = setTimeout(() => void tick().catch(() => {}), Math.max(1, next - now()));
+		try {
+			const next = await harness.commit(async (tx) => {
+				const s = await tx.doc(Space);
+				core.settle(s, now());
+				return core.nextExpiry(s);
+			}, ctx);
+			if (next < core.FOREVER) arm(next - now());
+		} catch (e) {
+			onError(e);
+			arm(retryMs);
+		}
 	};
 	await tick(); // creates the doc, so the watch below has something to observe
 	const watch = await harness.watchDoc(Space, ctx);
-	watch?.start(async () => { await tick(); });
+	watch?.start(tick); // tick never throws
 	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
 }
 
 /** Delivery plus reaper: everything the space needs to run in the background. */
-export async function startService(harness: Harness, ctx: Context): Promise<() => Promise<void>> {
-	const stops = [await startMaintenance(harness, ctx), await startDelivery(harness, ctx)];
+export async function startService(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
+	const stops = [await startMaintenance(harness, ctx, o), await startDelivery(harness, ctx, o)];
 	return async () => { for (const stop of stops) await stop(); };
 }
 
-/** Deliver whenever the space changes. Returns a stop function. */
-export async function startDelivery(harness: Harness, ctx: Context): Promise<() => Promise<void>> {
+/** Deliver whenever the space changes, and retry failed events on a timer. Returns a stop function. */
+export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
+	const onError = o.onError ?? ((e) => console.error("pi-spaces delivery:", e));
+	const retryMs = o.retryMs ?? 1000;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let stopped = false;
+	const run = async (): Promise<void> => {
+		if (stopped) return;
+		clearTimeout(timer);
+		try {
+			await deliverEvents(harness, ctx, o);
+			let next = Infinity; // wake for the earliest backed-off retry; the commit that set it re-triggers run() once, harmlessly
+			for (const e of (await harness.snapshot(Space, ctx))?.outbox ?? []) if (e.retryAt !== undefined) next = Math.min(next, e.retryAt);
+			if (next < Infinity && !stopped) timer = setTimeout(() => void run(), Math.max(1, next - (o.now ?? Date.now)()));
+		} catch (e) {
+			onError(e);
+			if (!stopped) timer = setTimeout(() => void run(), retryMs);
+		}
+	};
 	await harness.commit(async (tx) => { await tx.doc(Space); }, ctx);
 	const watch = await harness.watchDoc(Space, ctx);
-	watch?.start(async () => { await deliverEvents(harness, ctx); });
-	await deliverEvents(harness, ctx); // events committed before the watch started
-	return async () => { await watch?.stop(); };
+	watch?.start(run); // run never throws, so the watch is not ended by a listener error
+	await run(); // events committed before the watch started
+	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
 }

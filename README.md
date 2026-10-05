@@ -10,7 +10,7 @@ A JavaSpaces-style space (Jini JavaSpaces Service Specification v2.2) as an exte
 |---|---|
 | `src/core.ts` | pure spec semantics over a JSON state: entries, templates, leases, transactions, notify |
 | `src/client.ts` | `JavaSpace`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
-| `src/index.ts` | the `spaces` extension (tools `space_write/read/take/txn/lease`, prompt section) and notify delivery |
+| `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section) and notify delivery |
 
 The space is one Session-scoped document, so it is committed atomically and survives restarts.
 

@@ -50,11 +50,14 @@ export class JavaSpace {
 	take(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.op(tmpl, timeout, o, true, false); }
 	takeIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.op(tmpl, timeout, o, true, true); }
 
-	notify(tmpl: Template, o: { txn?: string | null; lease?: number; handback?: Json; target?: string | null } = {}) {
-		return this.host.commit(async (tx) => core.notify(await tx.doc(Space), this.now(), tmpl, o.txn ?? null, o.lease ?? core.ANY, o.handback ?? null, o.target ?? null), this.ctx);
+	/** `target` is the conversation that receives the events; without one they would have nobody to go to. */
+	async notify(tmpl: Template, o: { target: string; txn?: string | null; lease?: number; handback?: Json }) {
+		if (!o.target) throw new core.IllegalArgumentError("notify needs a target conversation");
+		return this.host.commit(async (tx) => core.notify(await tx.doc(Space), this.now(), tmpl, o.txn ?? null, o.lease ?? core.ANY, o.handback ?? null, o.target), this.ctx);
 	}
 	/** Park a read/take for a conversation. The space delivers the entry (or a timeout) to it as input later. */
-	wait(tmpl: Template, o: { take?: boolean; target: string; timeout: number; txnLeaseMs?: number; handback?: Json }): Promise<string> {
+	async wait(tmpl: Template, o: { take?: boolean; target: string; timeout: number; txnLeaseMs?: number; handback?: Json }): Promise<string> {
+		if (!o.target) throw new core.IllegalArgumentError("wait needs a target conversation");
 		return this.host.commit(async (tx) => core.addWaiter(await tx.doc(Space), this.now(), { template: tmpl, take: o.take ?? true, target: o.target, timeout: o.timeout, ...(o.txnLeaseMs === undefined ? {} : { txnLeaseMs: o.txnLeaseMs }), handback: o.handback ?? null }), this.ctx);
 	}
 	/** A frozen canonical copy. JavaSpaces' snapshot is a serialization cache; this keeps the contract only. */
@@ -71,14 +74,16 @@ export class JavaSpace {
 		const deadline = o.deadline ?? this.now() + timeout;
 		const txn = o.txn ?? null;
 		await this.host.commit(async (tx) => { await tx.doc(Space); }, this.ctx); // the watch needs the doc to exist
-		for (;;) {
-			// Watch before probing, so a write that lands between the probe and the wait still wakes us.
-			const watch = await this.host.watchDoc(Space, this.ctx);
-			let woke!: () => void;
-			const changed = new Promise<void>((r) => (woke = r));
-			watch?.start(async () => woke());
-			let timer: ReturnType<typeof setTimeout> | undefined;
-			try {
+		// One watch for the whole wait. It is acquired before the first probe and flags every change, so a write that
+		// lands between a probe and the wait is never missed: `dirty` is cleared before each probe and checked after.
+		const watch = await this.host.watchDoc(Space, this.ctx);
+		let dirty = false;
+		let poke: () => void = () => {};
+		watch?.start(async () => { dirty = true; poke(); });
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			for (;;) {
+				dirty = false;
 				const r = await this.host.commit(async (tx) => {
 					const prior = take && o.once ? await o.once.get(tx) : undefined;
 					if (prior !== undefined) return { status: "replay" as const, value: prior as Taken | null };
@@ -93,12 +98,14 @@ export class JavaSpace {
 				if (r.status === "none" && ifExists) return null;
 				const left = deadline - this.now();
 				if (left <= 0) return null;
+				if (dirty) continue; // something changed during the probe: look again before sleeping
 				const wake = Math.max(1, Math.min(left, r.next - this.now()));
-				await awaitWithContext(Promise.race([changed, new Promise<void>((res) => { timer = setTimeout(res, wake); })]), this.ctx);
-			} finally {
-				clearTimeout(timer); // do not leave a timer per round behind
-				await watch?.stop();
+				await awaitWithContext(new Promise<void>((res) => { poke = res; timer = setTimeout(res, wake); }), this.ctx);
+				clearTimeout(timer);
 			}
+		} finally {
+			clearTimeout(timer);
+			await watch?.stop();
 		}
 	}
 }
