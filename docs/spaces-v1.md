@@ -79,6 +79,14 @@ in [federation-plan-v1.md](federation-plan-v1.md) und baut auf den Lücken hier 
 
 ## 4. Gefundene Fehler und Lücken
 
+**Stand Stufe 0 (behoben):** B1 (Template-Feld `id`, Tool-Parameter `id` bei `space_read/take/list`), B2 (Kündigen
+verwirft das gebündelte Event), B3 (`notifyIntervalMs` wird zur Laufzeit gelesen), L6 (`space_txn` und `space_lease`
+sind exactly-once über Claims, `replay: "safe"`), L7 (`maxSpaceBytes`, Standard 64 MiB, gilt auch für Host-Writes;
+Größe je Entry wird beim Write gespeichert, die Summe ist O(Entries)), L10 (Zustellung parallel über Ziele, höchstens
+8, je Ziel in Reihenfolge), L14 (pi-termux-mobile lädt `Spaces` und startet `startService`; Bundle als
+`runtime/pi-spaces.mjs`). Außerdem: Interface `SpaceLike`, `canonicalJson` (RFC 8785). Die Tabelle unten zeigt den
+Zustand vor Stufe 0.
+
 Nach Schwere sortiert. Mit **[Bug]** markierte Punkte sind echte Fehlverhalten, der Rest Lücken oder Design-Grenzen.
 
 | # | Punkt | Wo | Auswirkung |

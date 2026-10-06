@@ -1,3 +1,5 @@
+> **Ersetzt durch [federation-plan-v3.md](federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
+
 # Föderierte Spaces v1 – Analyse und Plan
 
 Ziel: Jeder erreichbare Host (pi-serverd) stellt Agenten einen Space bereit. Mehrere Spaces lassen sich verbinden

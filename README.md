@@ -69,6 +69,9 @@ Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in t
 - **Per-harness metering**: the default `spaces` extension counts into the process-wide `meter`; use
   `createSpaces(new Meter())` and `new JavaSpace(h, ctx, Date.now, thatMeter)` for your own.
 
+- **By id**: a template may carry `id` (an entry id from an event message); `space_read/take/list` take `id` too.
+- **Space size**: `maxSpaceBytes` (default 64 MiB of entry fields) limits the whole space, host writes included.
+
 ## Scope
 
 One harness process is the "space service"; "many agents" means many conversations in it. Pi Durable allows one

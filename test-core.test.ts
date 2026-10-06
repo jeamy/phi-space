@@ -415,3 +415,38 @@ test("list returns what a read could see, oldest first, capped, without locking 
 	assert.throws(() => c.list(s, 10, null, t.id, 5, "A"), c.PermissionError); // not A's transaction
 	assert.equal(s.entries.every((e) => e.readBy.length === 0 && e.takenBy === null), true); // nothing locked
 });
+
+test("B1: a template with an id matches exactly that entry (other fields still apply)", () => {
+	const s = mk(); const a = c.write(s, 0, job(1), null, c.FOREVER); const b = c.write(s, 0, job(1), null, c.FOREVER);
+	const p = c.probe(s, 1, { type: "Job", id: b.id }, null, false);
+	assert.equal(p.status === "found" && p.entry.id, b.id);
+	assert.equal(c.probe(s, 1, { id: a.id, fields: { n: 2 } }, null, false).status, "none");
+	assert.equal(c.count(s, 1, { id: "nope" }), 0);
+	assert.deepEqual(c.list(s, 1, { id: a.id }).map((e) => e.id), [a.id]);
+});
+test("B2: cancelling a throttled subscription drops its bundled event", () => {
+	const s = mk(); const n = c.notify(s, 0, T("J"), null, c.FOREVER, null, "A", "A");
+	const w = (at: number) => c.write(s, at, { type: "J", fields: {} }, null, c.FOREVER);
+	w(10); w(20); w(30);
+	c.cancel(s, 40, n.eventId, "A"); c.settle(s, 5000);
+	assert.equal(s.outbox.length, 1);
+});
+test("B3: a changed notify interval also applies to existing subscriptions", () => {
+	const s = mk(); c.notify(s, 0, T("J"), null, c.FOREVER, null, "A", "A");
+	const w = (at: number) => c.write(s, at, { type: "J", fields: {} }, null, c.FOREVER);
+	w(10); w(20);
+	assert.equal(s.outbox.length, 1);
+	c.setLimits(s, { notifyIntervalMs: 5000 });
+	assert.equal(c.nextExpiry(s), 5010); // the bundle is now due at the new interval
+	c.settle(s, 1500); assert.equal(s.outbox.length, 1);
+	c.settle(s, 5010); assert.equal(s.outbox.length, 2);
+	c.setLimits(s, { notifyIntervalMs: 0 }); w(6000); w(6001); assert.equal(s.outbox.length, 4); // no limit at all
+});
+test("L7: the whole space is limited in bytes, for the host too; freed space can be used again", () => {
+	const s = mk(); c.setLimits(s, { maxSpaceBytes: 100 });
+	const big = (n: number) => ({ type: "B", fields: { t: "x".repeat(n) } });
+	const e = c.write(s, 0, big(40), null, c.FOREVER); c.write(s, 0, big(40), null, c.FOREVER);
+	assert.throws(() => c.write(s, 0, big(40), null, c.FOREVER), c.LimitError);
+	c.cancel(s, 1, e.id);
+	c.write(s, 2, big(40), null, c.FOREVER);
+});

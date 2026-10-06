@@ -1,3 +1,5 @@
+> **Ersetzt durch [federation-plan-v3.md](federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
+
 # Föderierte Spaces v2 – Zusammenfassung der Änderungen
 
 **Version:** 2.0  

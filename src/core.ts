@@ -31,9 +31,10 @@ export type Limits = {
 	maxRegsPerOwner: number;
 	maxWaitersPerOwner: number;
 	maxTxnsPerOwner: number;
+	maxSpaceBytes: number; // JSON bytes of all entries' fields together (also for host writes)
 	notifyIntervalMs: number; // a conversation's subscription sends at most one event per interval (0: no limit)
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, notifyIntervalMs: 1000 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000 };
 export class LimitError extends Error {}
 export class IllegalArgumentError extends Error {}
 /** A conversation tried to use or change something that is not its own. */
@@ -44,7 +45,7 @@ export class UnknownLeaseError extends Error {}
 /** An entry: a typed group of fields. `types` is the type followed by its supertypes, fixed at write time. */
 export type EntryDraft = { type: string; types?: string[]; fields: Fields };
 /** A template: absent/null type and fields are wildcards. A null template (`null`) matches any entry. */
-export type Template = { type?: string | null; fields?: Fields } | null;
+export type Template = { type?: string | null; fields?: Fields; id?: string | null } | null;
 
 export type EntryRec = {
 	id: string;
@@ -56,6 +57,7 @@ export type EntryRec = {
 	takenBy: string | null; // locked against every other operation
 	readBy: string[]; // others may read, but not take
 	owner: Target | null; // who may renew/cancel its lease; null: host code only
+	size?: number; // JSON bytes of `fields`, for the space-wide limit
 };
 /** `owner`: the only conversation that may use, commit, abort, renew or cancel it; null: host code only. */
 export type TxnRec = { id: string; expires: number; owner: Target | null };
@@ -152,8 +154,9 @@ export function deepEqual(a: Json, b: Json): boolean {
 	return ka.length === kb.length && ka.every((k) => k in (b as object) && deepEqual((a as Fields)[k]!, (b as Fields)[k]!));
 }
 
-export function matches(t: Template, e: { types: string[]; fields: Fields }): boolean {
+export function matches(t: Template, e: { id?: string; types: string[]; fields: Fields }): boolean {
 	if (t === null) return true;
+	if (t.id != null && t.id !== e.id) return false; // exact entry id
 	if (t.type != null && !e.types.includes(t.type)) return false; // subtype matching
 	for (const [k, v] of Object.entries(t.fields ?? {})) {
 		if (v == null) continue; // wildcard (null or undefined); you cannot search for a null field (as in Jini)
@@ -220,6 +223,11 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 		readBy: [],
 		owner: as ?? null,
 	};
+	rec.size = jsonBytes(entry.fields);
+	const lim = limitsOf(s);
+	let used = rec.size;
+	for (const e of s.entries) used += e.size ?? jsonBytes(e.fields);
+	if (used > lim.maxSpaceBytes) throw new LimitError(`the space would exceed ${lim.maxSpaceBytes} bytes`);
 	if (expires <= now) return { id: rec.id, expires }; // born expired (lease 0): never visible, so never announced or served
 	s.entries.push(rec);
 	notifyWrite(s, rec, txn, now);
@@ -236,12 +244,14 @@ function emit(s: SpaceState, r: RegRec, e: EntryView, count: number, now: number
 	delete r.pendingEntry;
 	s.outbox.push({ kind: "entry", eventId: r.id, seq: r.seq, handback: r.handback, target: r.target, entry: e, ...(count > 1 ? { count } : {}) });
 }
+// The interval is read from the limits when needed, so changing it also affects existing subscriptions.
+const intervalOf = (s: Readonly<SpaceState>, r: RegRec): number => (r.minIntervalMs ? limitsOf(s).notifyIntervalMs : 0);
 function notifyWrite(s: SpaceState, e: EntryRec, txn: string | null, now: number): void {
 	for (const r of s.regs) {
 		// Spec: a registration under T is notified of writes under T *in addition to* those a null-txn registration gets.
 		const applies = txn === null ? true : r.txn === txn;
 		if (!applies || !matches(r.template, e)) continue;
-		if (r.minIntervalMs && r.lastEventAt !== undefined && now < r.lastEventAt + r.minIntervalMs) {
+		if (intervalOf(s, r) && r.lastEventAt !== undefined && now < r.lastEventAt + intervalOf(s, r)) {
 			r.pending = (r.pending ?? 0) + 1; // too soon after the last event: counted, sent bundled later
 			r.pendingEntry = view(e);
 			continue;
@@ -252,7 +262,7 @@ function notifyWrite(s: SpaceState, e: EntryRec, txn: string | null, now: number
 /** Send the bundled event for registrations whose interval is over. */
 function flushRegs(s: SpaceState, now: number): void {
 	for (const r of s.regs) {
-		if (r.pending && r.pendingEntry && r.lastEventAt !== undefined && now >= r.lastEventAt + (r.minIntervalMs ?? 0)) emit(s, r, r.pendingEntry, r.pending, now);
+		if (r.pending && r.pendingEntry && r.lastEventAt !== undefined && now >= r.lastEventAt + intervalOf(s, r)) emit(s, r, r.pendingEntry, r.pending, now);
 	}
 }
 
@@ -416,17 +426,19 @@ export function cancel(s: SpaceState, now: number, id: string, as?: Target): voi
 	settle(s, now);
 	const l = leased(s, id, as);
 	if (l.waiter) { cancelWaiter(s, id); return; } // cancelled waits send no timeout event
+	const reg = s.regs.find((x) => x.id === id);
+	if (reg) { reg.pending = 0; delete reg.pendingEntry; } // a cancelled subscription sends no bundled event either
 	l.set(now); // settle() removes it; a cancelled txn lease aborts the transaction
 	settle(s, now);
 }
 
 /** Earliest time something can change without a commit (lease expiry); the waiter must wake then. */
-export function nextExpiry(s: SpaceState): number {
+export function nextExpiry(s: Readonly<SpaceState>): number {
 	let min = FOREVER; // loops, not Math.min(...spread): spreading a large array overflows the stack
 	for (const e of s.entries) if (e.expires < min) min = e.expires;
 	for (const r of s.regs) {
 		if (r.expires < min) min = r.expires;
-		if (r.pending && r.lastEventAt !== undefined) min = Math.min(min, r.lastEventAt + (r.minIntervalMs ?? 0)); // bundled event due
+		if (r.pending && r.lastEventAt !== undefined) min = Math.min(min, r.lastEventAt + intervalOf(s, r)); // bundled event due
 	}
 	for (const t of Object.values(s.txns)) if (t.expires < min) min = t.expires;
 	for (const w of s.waiters) if (w.deadline < min) min = w.deadline;

@@ -708,7 +708,7 @@ Gates (vor der jeweiligen Stufe nachzuweisen):
 
 ## 14. Offene Fragen
 
-Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. Empfehlungen sind Vorschläge.
+Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F8, F10, F12, F13, F14 sind entschieden (Empfehlung übernommen). Hinweis zu F1/F2: Abschnitt 4.1.1 plant VPS; dann gilt für F1 Fencing über die Anbieter-API (Server stoppen, Neustart sperren) und für F2 Koordinator und Standby bei verschiedenen Anbietern/Zonen. Empfehlungen sind Vorschläge.
 
 | # | Frage | Empfehlung | blockiert |
 |---|---|---|---|

@@ -30,7 +30,26 @@ export type Taken = ReturnType<typeof view>;
 /** Pause (plus up to as much again of jitter) between a change waking a blocked read/take and its next probe. */
 export const WAKE_DEBOUNCE_MS = 20;
 
-export class JavaSpace {
+/** What tools and federated/remote implementations share. `JavaSpace` is the local one. */
+export interface SpaceLike {
+	write(entry: EntryDraft, txn?: string | null, lease?: number): Promise<Lease>;
+	read(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
+	readIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
+	take(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
+	takeIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
+	notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json }): Promise<{ eventId: string; lease: Lease }>;
+	wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json }): Promise<string>;
+	readAll(tmpl?: Template, o?: { limit?: number; txn?: string | null }): Promise<Taken[]>;
+	count(tmpl?: Template, txn?: string | null): Promise<number>;
+	stats(): Promise<core.SpaceStats>;
+	createTransaction(lease?: number): Promise<Lease>;
+	commit(txn: string): Promise<void>;
+	abort(txn: string): Promise<void>;
+	renew(leaseId: string, ms: number): Promise<number>;
+	cancel(leaseId: string): Promise<void>;
+}
+
+export class JavaSpace implements SpaceLike {
 	private host: SpaceHost;
 	private ctx: Context;
 	private now: () => number;

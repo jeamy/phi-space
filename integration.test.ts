@@ -569,3 +569,28 @@ test("pipeline: a source that never reports is listed as missing after the timeo
 	assert.match((await p.present(p.role(h, 20)))!, /missing: cloud/);
 	await h.close(ctx);
 });
+
+test("canonicalJson sorts keys, drops undefined and rejects non-finite numbers", async () => {
+	const { canonicalJson } = await import("./src/index.ts");
+	assert.equal(canonicalJson({ b: 1, a: [true, null, "x\u00e4"], c: { z: 1.5, y: undefined as any } }), '{"a":[true,null,"x\u00e4"],"b":1,"c":{"z":1.5}}');
+	assert.equal(canonicalJson({ a: 1, b: 2 }), canonicalJson({ b: 2, a: 1 }));
+	assert.throws(() => canonicalJson(NaN));
+});
+
+test("space_txn and space_lease are exactly-once tools; space_read finds an entry by id", async () => {
+	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
+	const registry = createRegistry(); registry.install(spaces);
+	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+	const conv = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
+	const s = new JavaSpace(h, ctx); const e = await s.write(job(5), null, FOREVER); await s.write(job(5), null, FOREVER);
+	faux.setResponses([
+		fauxAssistantMessage(fauxToolCall("space_txn", { action: "begin" }), { stopReason: "toolUse" }),
+		fauxAssistantMessage(fauxToolCall("space_read", { id: e.id }), { stopReason: "toolUse" }),
+		fauxAssistantMessage("done"),
+	]);
+	await (await conv.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
+	assert.equal((await s.stats()).txns, 1);
+	const all = JSON.stringify((await conv.entries({}, 20, undefined, ctx)).items);
+	assert.ok(all.includes(e.id));
+	await h.close(ctx);
+});
