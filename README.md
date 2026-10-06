@@ -102,6 +102,25 @@ month-long and `FOREVER` waits neither spin nor get lost.
 ## Develop
 
 ```
-npm test        # core spec tests + integration (concurrency, crash/reopen on JSONL, notify, blocking)
+npm test        # core spec tests + integration (concurrency, crash/reopen on JSONL, notify, blocking, pipeline)
 npm run example
+```
+
+## Examples
+
+| file | what | needs |
+|---|---|---|
+| `examples/workers.ts` | one conversation posts a job, another takes it | – (scripted model) |
+| `examples/blocking-tool.ts` | `space_take` with a timeout, the entry arrives later | – |
+| `examples/sensor-pipeline.ts` | collectors → competing analysts (take under txn, fork/join on `Done`) → presenter; also used by the pipeline tests | – (host code as conversations) |
+| `examples/chat.ts` | three agents chat in a ring; each has a notify subscription for messages addressed to it | – scripted; `--live` uses a real model |
+| `examples/arxiv-research.ts` | 3 collectors search arXiv (`arxiv_search`, `examples/arxiv-tool.ts`) and write deduplicated `Paper` entries, an analyst (`space_wait`) groups them into eras, a presenter writes a Markdown report | real model, network |
+
+Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
+API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,
+tests and limits of each example: [docs/examples.md](docs/examples.md).
+
+```
+node --experimental-strip-types examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
+node --experimental-strip-types examples/arxiv-research.ts --out /tmp/llm-history.md
 ```

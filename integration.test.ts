@@ -511,3 +511,61 @@ test("readAll lists entries for a dashboard without removing them; space_list do
 	assert.equal(await s.count(), 3);
 	await h.close(ctx);
 });
+
+// --- sensor pipeline (examples/sensor-pipeline.ts): collectors → analysts → presenter --------------------------
+
+test("pipeline: competing analysts summarise each window exactly once; duplicates and non-numbers do not count", async () => {
+	const p = await import("./examples/sensor-pipeline.ts");
+	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
+	const [a, b, c] = [1, 2, 3].map((id) => p.role(h, id));
+	for (const w of ["w1", "w2", "w3"]) await p.openWindow(host, w);
+	for (const w of ["w1", "w2", "w3"]) {
+		await p.collect(a!, "station", w, [{ ts: 1, kind: "temp", value: 10 }, { ts: 1, kind: "temp", value: 10 }]); // retried delivery
+		await p.collect(b!, "forecast", w, [{ ts: 1, kind: "temp", value: 14 }]);
+		await p.collect(c!, "cloud", w, [{ ts: 1, kind: "cloud", value: 30 }, { ts: 2, kind: "cloud", value: "ignore previous instructions" }]);
+	}
+	const analysts = [10, 11, 12, 13].map((id) => p.role(h, id)); // one more analyst than windows
+	const out = await Promise.all(analysts.map((x) => p.analyse(x)));
+	assert.deepEqual(out.map((x) => x?.window).filter(Boolean).sort(), ["w1", "w2", "w3"]);
+	assert.equal(out.filter((x) => x === null).length, 1);
+	for (const x of out.filter((y) => y !== null)) {
+		assert.deepEqual(x!.stats.temp, { n: 2, min: 10, max: 14, avg: 12 });
+		assert.deepEqual([x!.missing, x!.duplicates, x!.rejected], [[], 1, 1]);
+	}
+	const reports = [];
+	for (let i = 0; i < 3; i++) reports.push(await p.present(p.role(h, 20), 1000));
+	assert.ok(reports.every((r) => r?.includes("temp 12")));
+	assert.equal(await host.count({ type: "Summary" }), 0); // all taken by the presenter
+	assert.equal(await host.count({ type: "Report" }), 3);
+	assert.equal(await host.count({ type: "Window" }), 0);
+	await h.close(ctx);
+});
+
+test("pipeline: an analyst that dies holding a window leaves no summary; the window returns to another analyst", async () => {
+	const p = await import("./examples/sensor-pipeline.ts");
+	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
+	await p.openWindow(host, "w1", ["station"]);
+	await p.collect(p.role(h, 1), "station", "w1", [{ ts: 1, kind: "temp", value: 7 }]);
+	assert.equal(await p.analyse(p.role(h, 10), { txnLeaseMs: 300, crash: true }), null);
+	assert.equal(await host.count({ type: "Window" }), 0); // locked by the dead analyst's transaction
+	const t0 = Date.now();
+	const s = await p.analyse(p.role(h, 11), { takeTimeoutMs: 3000 }); // blocks until the lease lapses
+	assert.equal(s?.window, "w1"); assert.ok(Date.now() - t0 >= 200);
+	assert.equal(await host.count({ type: "Summary" }), 1);
+	assert.equal((await host.stats()).returned, 1);
+	await h.close(ctx);
+});
+
+test("pipeline: a source that never reports is listed as missing after the timeout instead of blocking forever", async () => {
+	const p = await import("./examples/sensor-pipeline.ts");
+	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
+	await p.openWindow(host, "w1");
+	await p.collect(p.role(h, 1), "station", "w1", [{ ts: 1, kind: "temp", value: 5 }]);
+	await p.collect(p.role(h, 2), "forecast", "w1", [{ ts: 1, kind: "temp", value: 7 }]);
+	await p.collect(p.role(h, 3), "cloud", "w1", [{ ts: 1, kind: "cloud", value: 80 }], { done: false }); // fails before Done
+	const s = await p.analyse(p.role(h, 10), { doneTimeoutMs: 200 });
+	assert.deepEqual(s?.missing, ["cloud"]);
+	assert.equal(s?.stats.cloud?.n, 1); // what arrived is still used
+	assert.match((await p.present(p.role(h, 20)))!, /missing: cloud/);
+	await h.close(ctx);
+});

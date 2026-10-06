@@ -7,6 +7,9 @@
   "scripts": {
     "test": "node --experimental-strip-types --test test-core.test.ts test-meter.test.ts integration.test.ts",
     "example": "node --experimental-strip-types examples/workers.ts",
+    "example:pipeline": "node --experimental-strip-types examples/sensor-pipeline.ts",
+    "example:chat": "node --experimental-strip-types examples/chat.ts",
+    "example:arxiv": "node --experimental-strip-types examples/arxiv-research.ts",
     "typecheck": "tsc",
     "build": "tsc -p tsconfig.build.json",
     "bundle": "esbuild src/index.ts --bundle --format=esm --platform=node --target=node22 --external:@earendil-works/* --legal-comments=none --outfile=dist/pi-spaces.mjs"
