@@ -1,6 +1,6 @@
 # Projektstart am Handy: Spaces und Monitoring automatisch bereitstellen
 
-Stand: 2026-10-07. **Ergänzender Zielvertrag**, nicht implementiert. Verbindliche Federation-Grundlage
+Stand: 2026-10-07 (Bootstrap, RunGate-Barrieren und Recovery an v3 angeglichen). **Ergänzender Zielvertrag**, nicht implementiert. Verbindliche Federation-Grundlage
 ist [v3](federation-plan-v3.md); die [v2-Zusammenfassung](federation-plan-v2-summary.md) bleibt ein Archiv.
 Architektur und manueller Bootstrap: [Betrieb und mobile Steuerung](betrieb-und-mobile-steuerung.md).
 
@@ -174,13 +174,13 @@ Capability-/Kapazitätsauswahl darf nicht unabhängig Task und Ergebnis auf vers
 | Schritt | Aktion | Voraussetzung für den nächsten Schritt |
 |---|---|---|
 | 1. Prüfen | Config, Benutzerrechte, Host-Zugang, Features, Release und Speicherbedarf prüfen | kein ungeklärter Konflikt mit bestehendem Zustand |
-| 2. Koordinator sichern | Runtime auf A vorbereiten, Control/Supervisor erreichbar machen | dauerhafter Deployment-Auftrag auf A gespeichert |
-| 3. Hosts vorbereiten | passendes Runtime-Release auf allen erforderlichen Hosts installieren oder wiederverwenden | authentifizierter Space-/Supervisor-Healthcheck erfolgreich |
+| 2. Koordinator sichern | Runtime auf A vorbereiten, Control/Supervisor erreichbar machen; erste Admin-Paarung abschließen bzw. bestehende prüfen | dauerhafter Deployment-Auftrag auf A und autorisierter Admin-Kontext; Bootstrap-Befugnis nach Verbrauch geschlossen |
+| 3. Hosts vorbereiten | Runtime installieren/wiederverwenden; createEnroll als gepairter Admin, bereinigter Enrollment-RPC je Host | authentifizierter Space-/Supervisor-Healthcheck erfolgreich; SSH-/Host-Rechte ersetzen keine Admin-Autorisierung |
 | 4. Monitoring starten | Host-Sampler starten/wiederverwenden; projektbezogene Space-/Worker-Sichten aktivieren | frischer Status von jedem erforderlichen Host |
 | 5. Spaces bereitstellen | ausgewählte IDs auflösen und bestehende Spaces prüfen/wiederverwenden; nur fehlende erlaubte Spaces anlegen | Rechte, Limits, Projektzugriff und Schema kompatibel |
 | 6. Federation bereitstellen | bestehende Membership/Policy/Router prüfen und wiederverwenden; nur erforderliche zulässige Ergänzungen anwenden | alle benötigten Members erreichbar; Policy konsistent |
-| 7. Lauf vorbereiten | runId und Teilbereichsmanifest speichern; Tasks je Member idempotent vorbereiten | jeder erforderliche Teilbereich bestätigt vorbereitet |
-| 8. Worker aktivieren | registrierte Sieb-Worker mit festen Memberbindungen starten | Startgeneration und gewünschte Anzahl gespeichert |
+| 7. Lauf vorbereiten | runId/Manifest und lokale RunGates in preparing speichern; Tasks in begrenzten idempotenten Teilcommits vorbereiten | alle Teile bestätigt; vorhandene Worker durch RunGates bis zur vollständigen Vorbereitung gesperrt |
+| 8. Worker aktivieren | RunGates kontrolliert freigeben, Sieb-Worker mit festen Memberbindungen starten | Steuerrevision, Startgeneration und gewünschte Anzahl gespeichert; Member-ACKs vollständig, kein atomarer globaler Start zugesagt |
 
 Die Infrastruktur wird mit **einem dauerhaften Deployment-Auftrag** und separaten Unterrequest-IDs
 gesteuert. Ein fachlicher Laufstart ist ebenfalls dedupliziert. Der Koordinator führt nach seiner
@@ -204,7 +204,10 @@ Unterrequest-ID aufgelöst. Ein Timeout allein rechtfertigt keinen erneuten Task
 Projektzustände: `checking → provisioning → configuring → preparing → ready → starting → running`.
 `ready` bedeutet, dass Infrastruktur und Tasks bereit sind; es bedeutet nicht, dass Worker bereits laufen.
 Fehlende Voraussetzungen führen zu `blocked`, ein bestätigter endgültiger Fehler zu `failed`.
-Diese Projektzustände ersetzen nicht die v3-Zustände einzelner Commands.
+Diese Projektzustände ersetzen nicht die v3-Zustände einzelner Commands. Nicht mehr automatisch
+auflösbare Wirkungen erhalten `needsReview` und sperren ihre abhängigen Schritte, nicht unabhängige Projekte.
+Kein automatischer Ersatzauftrag nach ResultExpired oder Restore. Der Controller setzt nach Neustart
+rekonstruierte Langzeitoperationen fort, ohne deren Abschluss zur globalen Startbedingung zu machen.
 
 Vor Workerstart müssen alle im Manifest erforderlichen Members, Rechte, Space-Features, Policy-Versionen,
 Speicherbudgets und frischen Monitor-Heartbeats geprüft sein. Bei primary/sync muss zusätzlich der feste
@@ -236,9 +239,14 @@ Die mobilen Statusabfragen pausieren bei geschlossener Seite, die serverseitigen
 
 ## 8. Stoppen, Entfernen und Beispielabnahme
 
-**Lauf stoppen:** keine neuen Claims, laufende Txns entscheiden/sauber abbrechen, Worker dieses Laufs stoppen.
+**Lauf pausieren/fortsetzen/stoppen:** geschützte RunGates, endliche Worker-Txns und bestätigte Sperrbarriere
+auf allen Manifest-Members gemäß [Betrieb, Abschnitt 6](betrieb-und-mobile-steuerung.md#6-beispiel-primzahlsieb-steuern).
+Pause zeigt bis zu allen ACKs pausing/pauseIncomplete; Stop endet nach derselben Barriere in stopped und beendet
+nur Worker dieses Laufs. Resume verwendet eine höhere Steuerrevision derselben runId; stopped ist endgültig.
 Runtime, Monitor und gespeicherte Ergebnisse bleiben erhalten. **Projekt entfernen** ist eine separate Aktion
-mit drain, Ergebnisaufbewahrung, Leerungsprüfung und removeMember. Ein gemeinsam genutzter Host-Daemon
+mit drain, gebundenen Abschluss-Writes, Ergebnisaufbewahrung und removeMember einschließlich dauerhafter lokaler
+Sperre und EmptyProof. HRW-Members dieses Beispiels sind in v3 nicht entfernbar; Projektentfernung löst deren
+Membership nicht auf. Lauf-/Workerbindungen können beendet werden, die Infrastruktur bleibt bestehen. Ein gemeinsam genutzter Host-Daemon
 wird dabei nicht pauschal beendet. **Handy trennen** beendet weder Lauf noch Monitoring.
 
 Abnahme für prime-demo mit zwei Members:
@@ -252,7 +260,12 @@ Abnahme für prime-demo mit zwei Members:
    persistierter Wirkungen fortgesetzt; keine Behauptung von Fortschritt ohne Ausführungsnachweis.
 5. Worker stirbt nach Reservierung: Task kehrt nach Lease-Ablauf auf seinem Member zurück.
 6. Monitor auf B fällt aus: UI zeigt veralteten Status; vorhandene Arbeit wird nicht als fehlgeschlagen gelöscht.
-7. Ein anderes Projekt läuft auf A: Stoppen/Entfernen von prime-demo beendet dessen Worker oder Runtime nicht.
+7. Ein anderes Projekt läuft auf A: Stoppen/Entfernen von prime-demo beendet dessen Worker oder Runtime nicht;
+   HRW-Membership bleibt unverändert.
+8. Pause mit offline Member und Controller-Neustart: keine falsche Erfolgsanzeige; nach allen ACKs kein Run-Commit,
+   verspätete alte Steuerrevisionen werden abgewiesen. Große Vorbereitung respektiert Commit-Budget und RunGates.
+9. Erstes Admin-Pairing, Enrollment und Recovery entsprechen v3: kein Klartext-Token im Storage, keine
+   automatische Wiederfreigabe restaurierter Schlüssel, keine setStandby-Zirkularität nach Control-Promotion.
 
 Diese Mehrhost-/Installationsfälle sind **noch nicht getestet**. Heutige Siebtests belegen lokale
 Berechnung, Txn-Rollback, Lease-Ablauf und JSONL-Reopen. Für die automatische mobile Bereitstellung fehlen

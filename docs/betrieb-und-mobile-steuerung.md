@@ -1,6 +1,6 @@
 # Spaces betreiben und vom Handy steuern
 
-Stand: 2026-10-07 (an v3-Korrekturen angepasst). Architektur und Bedienentwurf zum [Federation-Plan v3](federation-plan-v3.md).
+Stand: 2026-10-07 (Recovery, Bootstrap, Drain, Pause und Folgeaufrufe mit dem präzisierten v3-Vertrag abgeglichen). Architektur und Bedienentwurf zum [Federation-Plan v3](federation-plan-v3.md).
 Die Diagramme unterscheiden vorhandenen Code von geplanten Diensten. Bootstrap-Aufrufe und neue
 Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 
@@ -154,7 +154,9 @@ flowchart TB
 ```
 
 Gestrichelte Pfeile sind **Erweiterungen gegenüber v3**. In v3 bearbeitet der Supervisor nur Enrollment,
-Supervisor-Commands, Lease-Signatur, Recovery, Promotion und Umschaltung; er nimmt keine Aufträge vom Router an.
+Supervisor-Commands, Lease-Signatur, Recovery, Promotion und Umschaltung sowie die begrenzte Zusammenarbeit
+mit dem Router bei `setStandby` und beim Replikatkonfigurationsabgleich. Allgemeine Worker-Startaufträge sind
+noch kein Bestandteil von v3.
 Für Worker wird ein eigener Vertrag vorgeschlagen (7.3): Desired-State-Entries `WorkerAssignment` im Control Space,
 die jeder Supervisor nur für seinen eigenen Host lesen darf. Der Router schreibt sie nach einem Admin-Command,
 und der Supervisor gleicht sie lokal ab. Er erhält dafür eine zusätzliche, eng begrenzte Leseberechtigung, aber
@@ -168,9 +170,13 @@ das Overlay. Ab Stufe 3 kann ein fester Standby Control- und Data-Members synchr
 Data Member darf dann nur in local- oder primary-Regeln stehen, nicht in expand oder lww/set (v3 6.4).
 Replikation ist für den Einstieg nicht erforderlich.
 
-Fällt der Koordinator aus, laufen nach höchstens 60 s Grants und Router-Lease ab. Danach stehen alle entfernten
+Fällt der Koordinator aus, laufen Grants und Router-Lease innerhalb ihrer Laufzeit von höchstens 60 s plus zulässiger Zeitunsicherheit ab. Danach stehen alle entfernten
 Space-Operationen der Federation, auch zwischen anderen Hosts. Lokale Worker auf jedem Host arbeiten weiter
-(v3 5.2).
+(v3 5.2). Nach Control-Promotion ohne Standby ist zunächst die ausdrücklich autorisierte Recovery-
+Umschaltung auf Single nötig; erst danach kann `setStandby` einen Ersatz einrichten. Die UI zeigt die zeitweise
+schwächere Durability an. Bei Restore braucht jeder wieder teilnehmende Member die lokal bestätigte neue
+Autorität; alte Schlüssel-/Gruppenrechte werden nicht aus dem Snapshot reaktiviert. Offline-Members bleiben
+als `recoveryBlocked` sichtbar und in der Vollständigkeitsprüfung enthalten.
 
 Ein Datenbankverzeichnis wird niemals von mehreren unabhängigen Harness-Prozessen gemeinsam geöffnet.
 RemoteSpace ruft den besitzenden Host auf; es öffnet dessen SQLite-/JSONL-Dateien nicht über das Netzwerk.
@@ -200,16 +206,17 @@ nicht direkt benutzen. Ein späteres Gateway liefert statische UI und autorisier
 |---|---|---|
 | Hosts | erreichbar / veraltet / offline, Ressourcen, Version | Pairing, Host hinzufügen |
 | Spaces | Host, Modus, Bestand, Limits, Membership | anlegen, aufnehmen, drain, entfernen |
-| Läufe | runId, erwartete/fertige Tasks, Fehler, Ergebnis | Sieb starten, pausieren, fortsetzen, Ergebnis herunterladen |
+| Läufe | runId, erwartete/fertige Tasks, Fehler, Ergebnis, Steuerrevision/ACKs | Sieb starten, pausieren, fortsetzen, stoppen, Ergebnis herunterladen |
 | Worker / Agenten | Host, Ziel-Space, Rolle, aktiv/reserviert/gestoppt | Anzahl setzen, starten, nach Task stoppen |
-| Vorgänge | commandId, accepted/applying/completed/failed | Fortschritt verfolgen, unbekannten Ausgang auflösen |
+| Vorgänge | commandId, accepted/applying/completed/failed/needsReview | Fortschritt verfolgen, Ausgang auflösen oder fachliche Klärung dokumentieren |
 
 Observer-Leserechte genügen für Hosts, Spaces, Läufe und Worker, soweit die Daten freigegeben sind. Die Ansicht
 **Vorgänge** zeigt Commands und Results; das sind Steuerdaten und nach v3 §9 nur für Admins lesbar. Observer
 sehen dort höchstens eine freigegebene Zusammenfassung. Verwaltungsaktionen brauchen Admin-Rechte.
 Beim Wiederverbinden zuerst Snapshot/Status laden, dann Events verfolgen. Veraltete Messwerte werden
 mit Zeitpunkt angezeigt; „offline“ ist kein Beweis, dass Worker auf dem Host beendet sind.
-Long-Polls laufen nur bei sichtbarer Seite. Dashboard-Schließen pausiert keinen Rechenlauf.
+UI-Long-Polls laufen nur bei sichtbarer Seite. Der Router betreut angenommene Operationen einschließlich
+Delegationserneuerung serverseitig weiter. Dashboard-Schließen pausiert keinen Rechenlauf.
 
 ## 4. Bootstrap: Script plus Config
 
@@ -268,14 +275,20 @@ Der Script-Vertrag:
    Host-Secret-Store beitreten; Gruppe `space-hosts` zuweisen. Die Peer-ID jedes Hosts über die Management-API
    ermitteln und für die gebundenen Tokens festhalten. Das Admin-Handy tritt per NetBird-Login bei und erhält
    `space-admin`; auch seine Peer-ID wird ermittelt.
-5. Control/Recovery/Supervisor auf A initialisieren, einschließlich Out-of-Band-Recovery-Zugang (v3 5.4).
-   B per an seine Peer-ID gebundenem Einmal-Token enrollen. Das erste Enrollment darf nicht vom noch fehlenden
-   Router abhängen.
-6. Benannte Data Spaces lokal anlegen; wiederholter Apply erkennt bereits angelegte Aliase und deren IDs.
-7. Router starten, Members über Commands aufnehmen, Policy validieren; nie bestehende HRW-Bestände umverteilen.
+5. Control/Recovery/Supervisor auf A initialisieren, einschließlich Out-of-Band-Recovery-Zugang (v3 5.4)
+   und unabhängigem Recovery-Register für eindeutig serialisierte Autoritätswechsel (v3 5.2.1).
+   Den einmaligen, an die Handy-Peer-ID gebundenen Admin-Bootstrap-Token flüchtig anzeigen und **zuerst** das
+   Admin-Pairing abschließen. Der Supervisor bearbeitet es ohne Router; erfolgreicher Verbrauch schließt die
+   lokale Erstinitialisierungsbefugnis dauerhaft (v3 4.5). Bei bereits initialisiertem Host vorhandene
+   Admin-Autorisierung prüfen, keinen neuen Bootstrap-Zugang öffnen.
+6. Als gepairter Admin `createEnroll` für B senden und B mit gebundenem Einmal-Token über den bereinigten
+   Enrollment-RPC enrollen. Script-Commands benötigen diesen Admin-Kontext; SSH oder Rolle host genügen nicht.
+7. Benannte Data Spaces lokal über den autorisierten Lebenszykluspfad anlegen; wiederholter Apply erkennt
+   bereits angelegte Aliase und IDs. Router starten, Members über Admin-Commands aufnehmen, Policy validieren;
+   nie bestehende HRW-Bestände umverteilen.
 8. Workerdefinitionen registrieren; Start getrennt von Installation behandeln.
-9. Admin-Pairing (an die Peer-ID des Handys gebundener Bootstrap-Token) einmal anzeigen und den freigegebenen
-   Status vom Handy prüfen. Kein Rechenlauf wird unbeabsichtigt gestartet.
+9. Freigegebenen Status vom Handy prüfen. Kein Rechenlauf wird unbeabsichtigt gestartet. Token-Payloads werden
+   weder als Control-Entries noch in Requests, Logs, Snapshots oder Fortschrittsdaten gespeichert.
 
 Config beschreibt den gewünschten Zustand. Tatsächlich angewendeter Zustand und Revision liegen serverseitig.
 Mobile Änderungen müssen sich anschließend exportieren lassen; ein späterer Script-Apply zeigt Differenzen
@@ -303,18 +316,28 @@ diesen Member können zuerst genügen; ein zweiter Task-Space erfordert die Auft
 
 ### Entfernen
 
-1. `drain`: keine neuen Platzierungen; bestehende Reads, Takes und Aufgaben bleiben erreichbar.
-2. Worker nach laufendem Task stoppen. Offene Remote-Operationen am Member entscheiden oder dort abbrechen;
-   unbekannter Ausgang bleibt ausstehend, bis er aufgelöst ist.
-3. Läufe beenden, Ergebnisse exportieren und benötigte Daten bewusst aufbewahren oder löschen.
-4. Leerung prüfen: Entries einschließlich unsichtbarer Txn-Writes, Txns, Reservierungen, Waiter und offene
-   RPC-/Router-Arbeit. Nur ein sichtbarer Entry-count von null reicht nicht.
-5. `removeMember` ausführen und auf completed warten. Keine Referenzen oder laufenden Workerbindungen verbleiben lassen.
-6. Separat lokalen Space löschen oder archivieren; interne Claims/Auditdaten nach ihrer Aufbewahrungsregel behandeln.
-   Host-Shutdown und Host-/Schlüsselwiderruf sind weitere getrennte Aktionen, falls dort nichts anderes läuft.
+1. `drain`: neue unabhängige Platzierungen stoppen. Bestehende Arbeit bleibt erreichbar; gebundene
+   Abschluss-Writes sind gemäß v3 7.1 erlaubt. Für Sieb-Tasks muss vor drain ein Abschlussprofil feststehen:
+   nur SieveResult derselben runId/taskId auf demselben Member, begrenzte Bytes/Anzahl und endliche Lease.
+2. Worker nach laufendem Task stoppen. Während drain neu reservierte bestehende Tasks benötigen die
+   Abschlussberechtigung des Members; ohne Profil keine neuen verarbeitenden Take-Txns. Offene Remote-
+   Operationen am Member entscheiden/abbrechen; unbekannter Ausgang bleibt sichtbar und ausstehend.
+3. Läufe beenden, Ergebnisse exportieren und Daten bewusst aufbewahren oder löschen. Ein nicht leerer,
+   weiter aufzubewahrender Bestand verhindert die Entfernung; removeMember ist kein Archivierungsersatz.
+4. `removeMember` startet die dauerhafte lokale Sperrphase `removing` aus v3 7.1. Neue fachliche Mutationen,
+   Take-Claims und Txns sind dann auch für lokale Worker gesperrt. Leerung einschließlich unsichtbarer Writes,
+   Txns/Sperren, Waiter, aktiver Notify-Registrierungen, interner Folgearbeit und offener RPCs wird unter dieser
+   Sperre bestätigt. Notify-Registrierungen enden geordnet mit dem Event `registrationClosed`; ausstehende
+   Mailbox-Events bleiben bis ACK/TTL abrufbar (v3 7.1).
+5. Router prüft seine offenen Requests, Routingreferenzen und Worker-/Run-Bindungen, committet Membership-
+   Entfernung und bestätigt `detached` am Member. Auf completed warten; ein Absturz erhält Sperre und IDs.
+   Bei unbekanntem Ausgang nicht lokal entsperren. Historische Manifeste bleiben Auditdaten, keine aktive Bindung.
+6. Separat archivieren/löschen. Geschlossene Claims und Mailbox-Ergebnisse bleiben über Space-ID bis zu ihrer
+   Frist erreichbar; Storage darf vorher nicht ersatzlos gelöscht werden. Host-Shutdown und Schlüsselwiderruf
+   sind weitere getrennte Aktionen.
 
 Ein Member einer HRW-Menge (expand nach Feld) lässt sich in v3 **gar nicht** entfernen. `drain` weist dort
-neue Writes für seinen Schlüsselanteil ab, und `removeMember` liefert `MigrationRequired`. Entfernbar sind nur
+neue unabhängige Writes für seinen Schlüsselanteil ab; gebundene Abschluss-Writes bleiben erlaubt. `removeMember` liefert `MigrationRequired`. Entfernbar sind nur
 Members mit fester Typzuordnung und Members von capacity/capability-Regeln.
 Ein offline Member mit ungeklärtem Bestand lässt sich nicht als „leer“ entfernen. Erfordert ein Wechsel
 Datenmigration, wird er bis zur Umsetzung des Migrationsprotokolls abgewiesen. `take A → write B` ersetzt
@@ -337,9 +360,10 @@ sequenceDiagram
   participant W as Sieb-Worker
   H->>C: Lauf starten: [1,1001), Blockgröße 128, 2 Worker
   C->>M: dauerhafter Startauftrag mit runId
-  M->>S: Konfiguration und 8 Tasks gemeinsam vorbereiten
+  M->>S: Konfiguration, RunGate preparing und 8 Tasks vorbereiten
+  C->>S: RunGate nach vollständiger Vorbereitung freigeben
   loop Je Task
-    W->>S: Txn beginnen und Task reservieren
+    W->>S: Txn beginnen, RunGate running sperrend lesen, Task reservieren
     S-->>W: taskId und Segment
     W->>W: Segment sieben
     W->>S: SieveResult in derselben Txn schreiben
@@ -356,15 +380,62 @@ Am Handy sind dafür fünf Schritte vorgesehen:
 2. **Lauf starten → Primzahlsieb**: Start 1, exklusive Obergrenze 1001, Blockgröße 128, Worker 2.
 3. **Starten**: Backend vergibt runId und journalisiert den Auftrag; Wiederholung derselben Anfrage startet keinen zweiten Lauf.
 4. **Fortschritt**: 0/8 bis 8/8 erledigte Segmente, offene Reservierungen, Workerstatus und Fehler anzeigen.
-5. **Ergebnis**: Primzahlliste ansehen/herunterladen. Pause stoppt neue Claims; Fortsetzen verwendet dieselbe runId.
+5. **Ergebnis**: Primzahlliste ansehen/herunterladen. Pause verwendet die bestätigte Sperrphase unten; Fortsetzen behält runId und erhöht die Steuerrevision.
 
-Pause löscht keine Tasks. Sie ist **nicht atomar** gegenüber Workern: Ein Worker, der den Laufzustand vor dem
-Take liest, kann kurz nach der Pause noch einen Task reservieren. Garantiert ist nur, dass nach Bestätigung der
-Pause bis zum Fortsetzen keine weiteren Txns dieses Laufs **committen**, sofern der Worker den Laufzustand in
-derselben Txn vor dem Commit erneut prüft. Ohne diese Prüfung ist Pause nur „keine neuen Claims nach kurzer
-Verzögerung“. Ein sauber stoppender Worker beendet seine aktuelle Txn. Bei Prozessverlust wird
-der Task nach Lease-Ablauf erneut verfügbar. Erfolgreicher Commit heißt atomarer Task-/Ergebnisabschluss;
-er bedeutet nicht, dass CPU-Berechnung insgesamt genau einmal ausgeführt wurde.
+**Verbindlicher Pause-/Fortsetzungsvertrag der Betriebserweiterung:** Pause löscht keine Tasks und wird
+nicht allein durch einen gelesenen Status im Control Space wirksam. Das Manifest nennt alle Task-Members.
+Auf jedem liegt genau ein geschützter `RunGate {runId, controlRevision, state: preparing | running | paused | stopped}`,
+verwaltet durch den Run-Controller über einen autorisierten lokalen Supervisor-Aufruf. RunGate ist lokale
+Steuerinformation des jeweiligen Data Space, kein zusätzlicher HRW-Nutzdatentyp; normale Worker dürfen ihn nur
+lesen. Bei Run-Vorbereitung entstehen Gate und Tasks idempotent; vor vollständiger Vorbereitung bleibt das
+Gate `preparing`, auch wenn auf dem Host bereits Worker laufen.
+
+- Jeder Worker liest den RunGate **unter derselben Member-Txn vor dem Task-Take**, prüft `running` und hält
+  dessen Lesesperre bis zum Commit/Abort. Task-Take ohne gültige Gate-Bindung sowie Result-Writes mit fremder
+  runId/taskId werden serverseitig abgewiesen. Gate-Entfernung, Lease-Manipulation und direkte Host-Aufrufe dürfen
+  diese Prüfung nicht umgehen. Der Gate selbst hat keine ablaufende Lease; Worker-Txns haben endliche Leases.
+- **Erzwungener Abschluss:** Das `CompletionProfile` des Siebs (v3 6.4) gilt für jeden Commit: Pro genommenem
+  `SieveTask` genau ein `SieveResult` mit gleicher runId/taskId und den erwarteten `rangeStart`/`rangeEnd` in
+  derselben Txn. Commit ohne Ergebnis, mit zwei Ergebnissen oder mit falschen Grenzen scheitert mit
+  `CompletionViolation`; die Txn bleibt abbrechbar. Tasks ohne Ergebnis zu entfernen ist nur über den
+  Admin-Command `purgeTasks` mit eigenem Recht und Audit möglich, nie über Worker-Rechte.
+- `pauseRun` journalisiert eine neue monotone Steuerrevision und sendet sie mit stabilen Unterrequest-IDs an
+  alle Manifest-Members. Jeder Member installiert zuerst eine dauerhafte Eintrittssperre gegen neue Run-Txns
+  und Lease-Verlängerungen bestehender Run-Txns. Bereits gebundene Txns dürfen innerhalb ihrer verbleibenden
+  Lease abschließen; anschließend wird der Gate exklusiv, konfliktgesichert auf `paused` geändert. Ein Member
+  bestätigt erst nach diesem Commit und ohne verbleibende Run-Txns oder versiegelte Abschlusskandidaten.
+- Der Controller meldet global `paused` erst nach allen Member-ACKs. Währenddessen zeigt die UI `pausing`,
+  bei unerreichbaren Members `pauseIncomplete` mit fehlenden ACKs; dort kann bis zur lokalen Sperre weiter
+  gearbeitet werden. Nach global bestätigter Pause gibt es bis resume keine weiteren fachlichen Run-Commits.
+  Pause kann weder zurückliegende Commits noch bereits ausgeführte externe Wirkungen rückgängig machen.
+- `resumeRun` ist erst nach vollständig bestätigter Pause zulässig. Es verwendet dieselbe runId und eine höhere
+  controlRevision. Members ändern Gate und Eintrittssperre atomar auf `running`. Ältere Revisionen werden
+  abgewiesen. Die UI zeigt `resuming` bis alle ACKs vorliegen; auf bereits bestätigten
+  Members kann Arbeit vorher beginnen. Es gibt keinen atomaren globalen Startzeitpunkt.
+- **Revisionen und ACKs:** Dieselbe `controlRevision` ist nur bei identischem Command (`commandId`, Art und
+  Zielzustand) idempotent und liefert die gespeicherte Bestätigung. Dieselbe Revision mit anderem Command oder
+  Inhalt ergibt `RunGateConflict` ohne Änderung. Jedes ACK belegt `{runId, memberId, authorityId,
+  dataIncarnation, controlRevision, state, commandId}`; der Controller wertet nur ACKs aus, deren Autorität und
+  Dateninkarnation zum aktuellen Stand des Members passen.
+- **Abgleich nach Restore:** Nach Control-Restore (v3 5.2.1) oder Data-Restore (v3 5.2.2) ist der Lauf
+  `reconciling`. Der Controller liest zuerst alle RunGates der Manifest-Members. Höhere Gate-Revisionen auf einem
+  Member haben Vorrang vor einem älteren Manifest: Der Controller übernimmt die höchste Revision und deren
+  Zustand und vergibt neue Revisionen nur darüber. Ein restaurierter Member mit älterer Gate-Revision erhält den
+  übernommenen Zustand mit neuer Revision. Erst wenn alle Members abgeglichen sind, darf global `paused`,
+  `running` oder `stopped` gemeldet werden; fehlende Members halten den Lauf in `reconciling`. Auf einem
+  restaurierten Member bleiben `restoredUnverified`-Tasks bis `releaseRestored` gesperrt.
+- `stopRun` verwendet dieselbe Sperr-/ACK-Barriere und endet in `stopped`; diese runId wird nicht wieder
+  gestartet. Pause/Resume/Stop werden pro Run serialisiert. Neue Kommandos überholen keinen unklaren Ausgang;
+  Neustart rekonstruiert Revisionen und Teilbestätigungen. Administrative Klärung bleibt erforderlich, wenn ein
+  Member dauerhaft verloren ist; die UI darf dann keine vollständige Pause/Beendigung behaupten.
+- Nach vollständig bestätigtem Stop und Export/Löschung der Laufdaten darf der Controller den RunGate in
+  abgeschlossene interne Laufhistorie überführen. Die persistente stopped-Steuerrevision bleibt zur Abweisung
+  verspäteter Start-/Resume-Aufträge erhalten; sie zählt wie ein abgeschlossener Claim, nicht als aktiver Entry
+  oder Workerbindung bei removeMember. Normale Worker dürfen diese Bereinigung nicht ausführen.
+
+Ein sauber stoppender Worker beendet seine aktuelle Txn. Bei Prozessverlust wird der Task nach Lease-Ablauf
+erneut verfügbar. Erfolgreicher Commit heißt atomarer Task-/Ergebnisabschluss; CPU-Berechnung kann mehrfach
+stattfinden. Die Steuerbarriere ist zusätzlich zum heutigen Sieb zu implementieren.
 
 **Heute ausführbar:** `npm run example:sieve -- 1001 2`. Dies benutzt MemoryStorage und beendet sich nach
 der Aggregation. Die exportierten Funktionen können einen JSONL-Harness verwenden; es gibt noch keinen
@@ -382,8 +453,11 @@ Für dieses kleine Beispiel ist eine Aufteilung unnötig. Für den späteren Meh
 Ergebnis derselben `taskId` immer auf demselben Member. Ein Worker nimmt den Task in einer Txn auf Member X und
 schreibt das Ergebnis mit derselben `taskId` nach X, ohne `RoutingConflict`. Die Verteilung bestimmt HRW, nicht
 der Betreiber. Das Lauf-Manifest hält für jede `taskId` den berechneten Member fest. Jeder Task wird auf seinem
-Member idempotent vorbereitet; es gibt keinen atomaren Commit über beide Hosts. Teilweise Vorbereitung wird
-angezeigt und wiederaufgenommen. Grenzen:
+Member idempotent vorbereitet; es gibt keinen atomaren Commit über beide Hosts. Große Vorbereitungen werden
+unter dem v3-Commit-Budget mit dauerhaftem Teilmanifest aufgeteilt; `preparing`-RunGates verhindern vorzeitige
+Bearbeitung durch vorhandene Worker. Erst nach vollständiger Vorbereitung werden sie freigegeben. Teilweise
+Vorbereitung wird angezeigt und wiederaufgenommen. Pause/Resume verwendet anschließend alle Manifest-Members
+nach dem RunGate-Vertrag oben. Grenzen:
 - Die Member-Menge ist unveränderlich (v3 7.1). Neue Members können für diese Typen keine neuen Läufe übernehmen.
 - Keiner dieser Members lässt sich entfernen.
 
@@ -437,14 +511,14 @@ liegen unter **Projekt-Einstellungen → Hosts**; laufende Verwaltungsvorgänge 
 | Hosts | Alias, SSH-Ziel, Identität/Fingerprint, Version, erreichbar/offline | Host hinzufügen, verbinden/pairen | autorisierte Provisionierung und Enrollment; noch keine automatische Member-Aufnahme |
 | Spaces | Alias, spaceId, Host, Modus, Entries, Txns, Limits | Space hinzufügen | bestehenden Space aufnehmen oder neuen Space auf gewähltem Host anlegen und anschließend aufnehmen |
 | Space-Details | Bestand, offene Arbeit, Membership | Neue Zuweisungen stoppen (drain) | neue Platzierungen sperren; bestehende Arbeit und Reads erhalten |
-| Space-Details nach drain | Ergebnisaufbewahrung, Leerungsprüfung | Aus Federation entfernen | removeMember erst nach nachgewiesener Leerung; keine automatische Datenlöschung; bei HRW-Members deaktiviert mit Grund „Migration erforderlich“ |
+| Space-Details nach drain | Ergebnisaufbewahrung, Sperrphase, EmptyProof | Aus Federation entfernen | removeMember sperrt lokal und prüft Leerung sowie Bindungen; keine automatische Datenlöschung; bei HRW-Members deaktiviert mit Grund „Migration erforderlich“ |
 | Space-Details ohne Membership | archivierter/leerer Bestand | Archivieren oder Space löschen | getrennte Lebenszyklusaktion; Referenzen, Rechte und Aufbewahrung prüfen |
 | Neuer Sieblauf | Start, exklusive Obergrenze, Blockgröße, Workerzahl, Ziel-Space/Federation | Lauf starten | runId/Manifest anlegen, Bereiche validieren, Tasks idempotent vorbereiten und Worker zuweisen |
-| Lauf-Details | erledigte/erwartete Segmente, Reservierungen, Fehler | Pausieren, Fortsetzen | neue Claims für diesen Lauf stoppen beziehungsweise wieder freigeben; laufende Txns entscheiden |
+| Lauf-Details | Segmente, Reservierungen, pausing/pauseIncomplete/paused/resuming/reconciling, Member-ACKs | Pausieren, Fortsetzen, Lauf stoppen | RunGate-Barriere auf allen Manifest-Members; Erfolg erst nach allen ACKs, laufende Txns vorher entscheiden |
 | Lauf-Details | Vollständigkeit und gespeicherte Primzahlliste | Ergebnis ansehen, herunterladen | autorisierter Ergebnisexport aus committed Results; Teilresultat ausdrücklich kennzeichnen |
 | Worker-Details | registrierte Workerart, Host, Member, gewünschte/aktive Anzahl | Anzahl ändern, Starten, Nach Task stoppen | gewünschte Anzahl und Generation speichern; Supervisor startet/stoppt nur die zugeordneten Worker |
 | Agent-Details | Conversation, Modell, Ziel-Space, Status, Budget | Agent anlegen, konfigurieren, Generation abbrechen | getrennt autorisierte Conversation-/Modellverwaltung; keine Änderung fremder Worker oder Hosts |
-| Vorgänge | accepted/applying/completed/failed, letzter Schritt, commandId | Details, Status erneut abrufen | bestehenden Auftrag abfragen; unklaren Ausgang anhand gespeicherter Request-ID auflösen |
+| Vorgänge | accepted/applying/completed/failed/needsReview, letzter Schritt, commandId | Details, Status erneut abrufen, Klärung dokumentieren | bestehende IDs abfragen; bei verlorener Historie keine automatische Wiederholung; Admin-Klärung auditieren |
 
 „Space hinzufügen“ öffnet eine kleine Auswahl: **vorhandenen Space aufnehmen** oder **neuen Space anlegen**.
 Eine neue Member-Zuordnung wird vor Ausführung gegen v3-Routinggrenzen geprüft. Kann ein bestehender Bestand
@@ -474,7 +548,8 @@ Handyseite schließen oder Verbindung trennen beendet weder Worker noch serverse
 Die bisher am Dokumentende genannten Lücken betreffen sowohl mobile Oberfläche als auch Backend.
 Zusätzlich zum v3-Netz-/Space-Protokoll fehlen für die oben genannten Bedienelemente:
 
-- **Laufverwaltung:** startRun/pauseRun/resumeRun; dauerhaftes Manifest, idempotente Starts, Zustandsübergänge und Ergebnisexport.
+- **Laufverwaltung:** startRun/pauseRun/resumeRun/stopRun; dauerhaftes Manifest, idempotente Starts,
+  geschützte lokale RunGates und Sperr-/ACK-Barriere nach Abschnitt 6, Zustandsübergänge und Ergebnisexport.
 - **Workerverwaltung:** registrierte Workerarten, gewünschte Anzahl, Generation und Wiederaufnahme. Lokale
   Ausführung durch den Supervisor über `WorkerAssignment`-Entries (Abschnitt 2); das erweitert die
   Supervisor-Rolle aus v3 und braucht eine eigene Abnahme.
@@ -496,6 +571,32 @@ optional Browser-Gateway (4). Lauf-/Workersteuerung und die mobile Spaces-Seite 
 nach Stufe 2 parallel zu Stufe 3 entstehen, setzen aber Router und Membership voraus. Replikation ist für den
 Einstieg nicht nötig, aber Voraussetzung für Hochverfügbarkeit des Control Space.
 Die vorhandene SSH-Remote-Oberfläche bleibt der Einstieg für heutige Conversation-Steuerung.
+
+### 7.4 Abnahme der Betriebserweiterung
+
+Diese Fälle sind verpflichtend und noch nicht als implementiert oder getestet anzusehen:
+
+1. Bootstrap nach jedem Schritt unterbrechen: erstes Admin-Pairing vor Host-Enrollment und Commands;
+   Wiederholung öffnet keine neue Erstinitialisierungsbefugnis und erzeugt keine zweiten IDs.
+2. Worker zwischen Gate-Read, Take, Result-Write und Commit pausieren: laufende Txn darf vor dem Pause-ACK
+   abschließen; nach bestätigtem `paused` kein weiterer Run-Commit. Direkte/local Calls umgehen die Barriere nicht.
+3. Ein Member während Pause offline: `pauseIncomplete`, niemals global `paused`; nach Wiederkehr derselbe
+   Auftrag. Verspätete Pause nach neuerem Resume wird abgewiesen; Controller-Neustart erhält Revisionen und ACKs.
+4. Bestehende Worker während mehrteiliger Run-Vorbereitung: keine Bearbeitung vor Freigabe der RunGates;
+   Abbruch/Retry erzeugt weder doppelte Tasks noch fehlende Manifestteile.
+5. drain zwischen Task und Ergebnis: zulässiger Abschluss gelingt atomar; neue Tasks und ungebundene
+   Ergebnis-Writes scheitern. Während removeMember kann auch ein lokaler Writer den EmptyProof nicht entwerten.
+6. UI schließen und Router neu starten mit FOREVER-Operation: Betreuung läuft serverseitig weiter,
+   unabhängige neue Arbeit bleibt möglich. Nach ResultExpired zeigt die UI needsReview ohne Neustartknopf
+   für eine automatische Ersatzwirkung; Admin-Klärung ist separat dokumentiert.
+7. Control-Promotion und Restore: Durability, neue Autorität, Rechtefreigabe und recoveryBlocked-Members
+   korrekt anzeigen; keine erfolgreiche Wiederaufnahme allein aus einem alten Snapshot ableiten.
+8. Gleiche RunGate-Revision mit anderem Command: `RunGateConflict`, Gate unverändert; gleiche Revision mit
+   gleichem Command: gespeicherte Bestätigung.
+9. Control-Restore mit älterem Manifest, Members mit höheren Gate-Revisionen; Data-Restore eines Members mit
+   älterem Gate: Lauf bleibt `reconciling`, bis alle Gates abgeglichen sind; danach keine niedrigere Revision.
+10. Sieb-Worker committet ohne Ergebnis, mit zwei Ergebnissen oder falschen Grenzen: `CompletionViolation`;
+    nur `purgeTasks` mit Admin-Recht leert Tasks ohne Ergebnis.
 
 Weitere Verträge: [Sieb](examples/sieve.md), [lokaler Core](spaces-v1.md),
 [v3-Stufenplan](federation-plan-v3.md#11-stufenplan).
