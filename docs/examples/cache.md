@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Datum:** 2026-10-06  
-**Status:** Entwurf  
+**Status:** Entwurf — **keine Implementierung vorhanden** (`examples/cache.ts` existiert nicht)  
 **Zweck:** Validierung von Konsistenz, Verfügbarkeit und Performance im `sync` (lww)-Modus.  
 **Historische Referenz:** JavaSpaces (geteilte Variablen, Kanäle/Queues).
 
@@ -278,11 +278,11 @@ default:
 
 | **Anforderung** | **Abschnitt in v3** | **Status** |
 |----------------|----------------------|------------|
-| `sync`-Modus (lww) | 7.2 | ✅ Implementiert |
+| `sync`-Modus (lww) | 7.2 | ❌ Geplant (Stufe 3) |
 | Leases | 6.1 | ✅ Implementiert |
-| Tombstones | 6.1 | ✅ Implementiert |
-| Atomare Operationen | 2.1 | ✅ Garantiert |
-| Replikation | 7.2 | ✅ Implementiert |
+| Tombstones | 6.1 | ❌ Geplant (Stufe 3, nur für `sync` nötig) |
+| Atomare Operationen | 2.1 | ✅ Implementiert |
+| Replikation | 7.2 | ❌ Geplant (Stufe 3) |
 
 ---
 

@@ -10,8 +10,14 @@ wie die Beispiele aufgebaut sind, welche Space-Muster sie zeigen, was getestet i
 | `examples/sensor-pipeline.ts` | keins (Host-Code als Conversations) | 3 Tests in `integration.test.ts` |
 | `examples/chat.ts` | geskriptet, `--live` echt | geskriptet lauffähig; live **noch nicht gelaufen** |
 | `examples/arxiv-research.ts` | echt | arXiv-Tool einmal gegen arXiv geprüft; Gesamtlauf **noch nicht gelaufen** |
+| `examples/dark-energy-research.ts` | echt | **noch nicht gelaufen** (Spec: [examples/arxiv.md](examples/arxiv.md)) |
+| `examples/golomb.ts` | keins (Host-Code) | Tests in `test/examples/golomb.test.ts` |
 | `examples/arxiv-tool.ts` | – | siehe oben |
 | `examples/live-models.ts` | – | Modellauswahl geprüft |
+
+Ausführlichere Specs und Lernpfad liegen unter [examples/](examples/). Dort stehen auch die
+wichtigen Space-Regeln für Agenten-Prompts (kein `space_count`, kein Update, kein
+`{feld: null}`-Template für „fehlt").
 
 ## 1. Messdaten-Pipeline (`sensor-pipeline.ts`)
 

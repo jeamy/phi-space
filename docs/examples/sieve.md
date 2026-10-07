@@ -280,16 +280,227 @@ default:
 
 ---
 
-## 9. Abhängigkeiten zu federation-plan-v3.md
+## 9. Referenzimplementierungen (Code-Beispiele)
+
+### 9.1 Einfaches Master-Worker (`workers.ts`)
+
+**Datei**: [`../../examples/workers.ts`](../../examples/workers.ts)
+
+Diese Implementierung demonstriert das **Grundlegende Master-Worker-Pattern** ohne komplexe Logik – ideal als Einstieg in Space-basierte Task-Verteilung.
+
+#### Agenten
+
+| Agent | Rolle | Operationen | Implementierung |
+|-------|-------|------------|----------------|
+| `boss` | Erstellt Jobs | `space_write(Job)` | Faux-Provider (simuliert) |
+| `worker` | Verarbeitet Jobs | `space_take(Job)` | Faux-Provider (simuliert) |
+
+#### Ablauf
+
+1. **Boss**: `space_write({type: "Job", fields: {op: "resize", file: "a.png"}})`
+2. **Worker**: `space_take({type: "Job"})`
+3. **Worker**: "verarbeitet" Job (simuliert durch Faux-Provider)
+
+#### Code-Beispiel
+
+```typescript
+// Auszug aus examples/workers.ts
+const boss = await harness.root(context, { agent });
+const worker = await harness.createConversation({ 
+  ownership: { kind: "ownerless" }, 
+  agent 
+}, context);
+
+faux.setResponses([
+  fauxAssistantMessage(fauxToolCall("space_write", { 
+    type: "Job", 
+    fields: { op: "resize", file: "a.png" } 
+  }), { stopReason: "toolUse" }),
+  fauxAssistantMessage("posted"),
+  fauxAssistantMessage(fauxToolCall("space_take", { type: "Job" }), { stopReason: "toolUse" }),
+  fauxAssistantMessage("took it"),
+]);
+
+await (await boss.submit({ type: "input", content: "post a job" }, context)).wait(context);
+await (await worker.submit({ type: "input", content: "take a job" }, context)).wait(context);
+```
+
+#### Besonderheiten
+
+- ✅ **Einfachheit**: Minimale Implementierung des Patterns
+- ✅ **Deterministisch**: Faux-Provider ermöglicht reproduzierbare Tests
+- ✅ **Grundlagen**: Ideal für Einführung in `write`/`take`
+- ❌ **Keine Transaktionen**: Keine atomaren Operationen
+- ❌ **Keine Aggregation**: Kein Sammeln von Ergebnissen
+- ❌ **Keine Leases**: Keine Timeout-Handhabung
+
+#### Vergleich mit Primzahlsieb
+
+| Aspekt | `workers.ts` | Primzahlsieb-Beispiel | Golomb-Lineal (`golomb.ts`) |
+|--------|--------------|----------------------|----------------------------------|
+| Komplexität | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| Agenten | 2 | 3 (Master, Worker, Collector) | 4 (Master, Worker, Validator, Monitor) |
+| Algorithmus | - | Sieve of Eratosthenes | Branch-and-Bound DFS |
+| Transaktionen | ❌ | ✅ | ✅ |
+| Aggregation | ❌ | ✅ | ✅ |
+| Leases | ❌ | ✅ | ✅ |
+| Checkpointing | ❌ | ⚠️ Optional | ✅ |
+
+**Zweck**: `workers.ts` ist das **Minimalbeispiel** für Master-Worker. Das Primzahlsieb-Beispiel ist die **Vollimplementierung** für Echtwelt-Anwendungen.
+
+#### Aufruf
+
+```bash
+# Grundlegendes Beispiel
+node --experimental-strip-types examples/workers.ts
+```
+
+---
+
+### 9.2 Blockierende Tool-Nutzung (`blocking-tool.ts`)
+
+**Datei**: [`../examples/blocking-tool.ts`](../examples/blocking-tool.ts)
+
+Demonstriert **blockierende Operationen** mit Timeout-Handhabung – wichtig für das Verständnis von `take`-Timeouts und Leases.
+
+#### Ablauf
+
+1. Agent ruft `space_take` mit Timeout auf
+2. Ein anderer Prozess schreibt 300ms später die Entry
+3. Take-Operation sollte erfolgreich sein
+
+#### Code-Beispiel
+
+```typescript
+// Auszug aus examples/blocking-tool.ts
+const conv = await harness.createConversation({ 
+  ownership: { kind: "ownerless" }, 
+  agent 
+}, ctx);
+
+faux.setResponses([
+  fauxAssistantMessage(fauxToolCall("space_take", { 
+    type: "Job", 
+    timeoutMs: 5000 
+  }), { stopReason: "toolUse" }),
+  fauxAssistantMessage("took it after timeout"),
+]);
+
+// Ein anderer Prozess schreibt nach 300ms
+setTimeout(async () => {
+  await (await harness.root(ctx, { agent: { model: fauxModel, extensions: [spaces] } }))
+    .submit({ type: "input", content: "write a job" }, ctx);
+}, 300);
+
+const r = await conv.submit({ type: "input", content: "take job with timeout" }, ctx);
+await r.wait(ctx);
+```
+
+#### Besonderheiten
+
+- ✅ **Timeout-Handhabung**: Demonstriert `timeoutMs` Parameter
+- ✅ **Blockierendes Warten**: Agent wartet auf Entry
+- ✅ **Testfall**: Ideal für Timeout-Tests
+- ❌ **Kein echtes LLM**: Nur Faux-Provider
+
+#### Aufruf
+
+```bash
+node --experimental-strip-types examples/blocking-tool.ts
+```
+
+---
+
+### 9.3 Verteilte kombinatorische Suche (`golomb.ts`)
+
+**Datei**: [`../examples/golomb.ts`](../examples/golomb.ts)
+**Dokumentation**: [golomb.md](golomb.md)
+
+Diese **Vollimplementierung** demonstriert eine **komplexe Master-Worker-Anwendung** mit:
+
+- Branch-and-Bound-DFS-Algorithmus
+- BitSet-Optimierung für effiziente Suche
+- Checkpointing für Resume-Fähigkeit
+- Validierung und Monitoring
+
+#### Agenten
+
+| Agent | Rolle | Operationen | Implementierung |
+|-------|-------|------------|----------------|
+| `Master` | Aufgabenverteiler | `write(GolombSearchTask)`, `read(GolombRuler)` | `GolombMaster` |
+| `Worker` | Sucher | `take(GolombSearchTask)`, `write(GolombRuler)` | `GolombWorker` |
+| `Validator` | Prüfer | `read(GolombRuler)` | `GolombValidator` |
+| `Monitor` | Beobachter | `read(GolombSummary)`, `read(GolombSearchProgress)` | `GolombMonitor` |
+
+#### Besonderheiten
+
+- ✅ **Branch-and-Bound**: Effiziente Suche mit Pruning
+- ✅ **BitSet-Optimierung**: O(1) Duplikatsprüfung
+- ✅ **Checkpointing**: Resume-Fähigkeit nach Unterbrechung
+- ✅ **Validierung**: Automatische Prüfung aller Ergebnisse
+- ✅ **Monitoring**: Echtzeit-Fortschrittsanzeige
+- ✅ **Persistenz**: JSONL-Storage für Dauerhaftigkeit
+
+#### Vergleich mit Primzahlsieb
+
+| Aspekt | Primzahlsieb | Golomb-Lineal |
+|--------|--------------|---------------|
+| **Algorithmus** | Sieve of Eratosthenes | Branch-and-Bound DFS |
+| **Aufteilung** | Nach Zahlenbereichen | Nach a₂-Bereichen |
+| **Pruning** | Primzahl-Multiplikation | Duplikatsprüfung |
+| **Checkpointing** | ⚠️ Optional | ✅ Vollständig |
+| **Validierung** | ✅ | ✅ |
+| **Monitoring** | ✅ | ✅ |
+
+#### Aufruf
+
+```bash
+# Suche nach optimalem Golomb-Lineal der Ordnung 12
+node --experimental-strip-types examples/golomb.ts 12
+
+# Mit 8 Workern
+node --experimental-strip-types examples/golomb.ts 12 --workers 8
+
+# Mit Checkpointing
+node --experimental-strip-types examples/golomb.ts 12 --checkpoint /tmp/golomb-cp.json
+```
+
+**Hinweis**: Für detaillierte Dokumentation siehe [golomb.md](golomb.md)
+
+---
+
+### 9.4 Verwandte Beispiele
+
+| Beispiel | Datei | Dokumentation | Fokus |
+|----------|-------|----------------|--------|
+| **Master-Worker Grundlagen** | `workers.ts` | Dieser Abschnitt | Einfaches Pattern |
+| **Blockierende Operationen** | `blocking-tool.ts` | Dieser Abschnitt | Timeout-Handhabung |
+| **Verteilte kombinatorische Suche** | `golomb.ts` | [golomb.md](golomb.md) | Branch-and-Bound + Checkpointing |
+| **IoT-Pipeline** | `sensor-pipeline.ts` | [iot.md](iot.md) | Daten-Pipeline |
+| **LLM-Agenten** | `arxiv-research.ts` | [arxiv.md](arxiv.md) | LLM-Integration |
+| **Chat** | `chat.ts` | [chat.md](chat.md) | Space-Events |
+
+---
+
+### 9.5 Empfehlungen für Entwickler
+
+1. **Anfänger**: Beginne mit `workers.ts` für Grundverständnis
+2. **Fortgeschrittene**: Studiere `sensor-pipeline.ts` für Pipeline-Muster
+3. **Experten**: Analysiere `golomb.ts` für komplexe Algorithmen
+4. **LLM-Integration**: Siehe `arxiv-research.ts` und `chat.ts`
+
+---
+
+## 10. Abhängigkeiten zu federation-plan-v3.md
 
 | **Anforderung** | **Abschnitt in v3** | **Status** |
 |----------------|----------------------|------------|
-| `expand`-Modus | 7.1 | ✅ Implementiert |
+| `expand`-Modus | 7.1 | ❌ Geplant (Stufe 2) |
 | `take` mit Lease | 6.1 | ✅ Implementiert |
 | Transaktionen | 6.1 | ✅ Implementiert |
-| Atomare Operationen | 2.1 | ✅ Garantiert |
-| HRW-Verteilung | 7.1 | ✅ Implementiert |
-| Byte-Limits | 6.2 | ✅ Konfiguriert |
+| Atomare Operationen | 2.1 | ✅ Implementiert |
+| HRW-Verteilung | 7.1 | ❌ Geplant (Stufe 2) |
+| Byte-Limits | 6.2 | ✅ Implementiert (`maxSpaceBytes`) |
 
 ---
 

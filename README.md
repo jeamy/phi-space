@@ -118,10 +118,17 @@ npm run example
 | `examples/sensor-pipeline.ts` | collectors → competing analysts (take under txn, fork/join on `Done`) → presenter; also used by the pipeline tests | – (host code as conversations) |
 | `examples/chat.ts` | three agents chat in a ring; each has a notify subscription for messages addressed to it | – scripted; `--live` uses a real model |
 | `examples/arxiv-research.ts` | 3 collectors search arXiv (`arxiv_search`, `examples/arxiv-tool.ts`) and write deduplicated `Paper` entries, an analyst (`space_wait`) groups them into eras, a presenter writes a Markdown report | real model, network |
+| `examples/golomb.ts` | distributed Golomb-ruler search: master partitions the search into `a2` ranges, workers `take` tasks, DFS with branch-and-bound via `GolombBestKnown`, `GolombTaskDone`/`GolombSearchDone` markers; `--checkpoint` resumes | – (host code) |
+| `examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
 API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,
-tests and limits of each example: [docs/examples.md](docs/examples.md).
+tests and limits of each example: [docs/examples.md](docs/examples.md) and [docs/examples/](docs/examples/).
+
+```
+npm run test:examples    # test/examples/ suite (node:test + compat shim, no vitest)
+npm run example:golomb -- 7 --workers 4
+```
 
 ```
 node --experimental-strip-types examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"

@@ -65,8 +65,12 @@ export async function analyse(s: JavaSpace, o: { takeTimeoutMs?: number; doneTim
 		stats[kind] = { n: v.length, min: Math.min(...v), max: Math.max(...v), avg: Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 };
 	}
 	const summary: Summary = { window, stats, missing, duplicates, rejected };
-	await s.write({ type: "Summary", fields: summary as never }, t.id, FOREVER);
-	await s.commit(t.id);
+	try {
+		await s.write({ type: "Summary", fields: summary as never }, t.id, FOREVER);
+		await s.commit(t.id);
+	} catch {
+		return null; // transaction lease lapsed mid-analysis: nothing committed, window returns
+	}
 	return summary;
 }
 
