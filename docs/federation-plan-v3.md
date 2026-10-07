@@ -430,7 +430,7 @@ Admins schreiben ausschließlich `Command`-Entries; alle übrigen Steuerdaten en
 | `rotateKey` | Supervisor (Control-Primary) | neuen Schlüssel per Challenge mit altem und neuem Schlüssel aufnehmen, alten widerrufen |
 | `setLimits`, `drain`, `addMember`, `removeMember`, `setPolicy` | Router | 5.1, 7.1 |
 | `restoreDataSpace` | Supervisor (Control-Primary) mit Supervisor des Zielhosts | Restore eines einzelnen Data Space nach 5.2.2 |
-| `releaseRestored` | Router | restaurierte `restoredUnverified`-Entries im angegebenen Scope freigeben (5.2.2) |
+| `releaseRestored` | Supervisor (Control-Primary) mit Supervisor des Zielhosts | restaurierte `restoredUnverified`-Entries im angegebenen Scope freigeben (5.2.2); funktioniert ohne Router |
 | `setStandby` | Router mit Supervisor beider Hosts | festen Standby eines primary-Space einrichten oder wechseln, nur bei pausierten Writes (7.2) |
 
 Supervisor-Commands sind ebenso idempotent und journalisiert wie Router-Commands (5.1). Weitere
@@ -560,7 +560,7 @@ die Control-Autorität. Nur dieser Space erhält eine neue Dateninkarnation. Der
    verwendbar. Freigabe nur per Admin-Command `releaseRestored {space, recoveryId, scope}` mit `scope` als
    Typ, Lauf oder Entry-Liste. Der Admin entscheidet damit fachlich, dass erneute Verarbeitung zulässig ist
    (z.B. idempotente Sieb-Tasks); für nicht idempotente Aufgaben bleibt die Löschung oder manuelle Klärung.
-5. **Router und Läufe:** Der Router markiert alle Unterrequests auf diesen Member, deren Claims nach dem
+5. **Router und Läufe** (sobald ein Router existiert, ab Stufe 2): Der Router markiert alle Unterrequests auf diesen Member, deren Claims nach dem
    Snapshot-Stand liegen oder fehlen, als `needsReview` (5.1). Zielbindungen bleiben erhalten; es gibt keine
    Neuplatzierung auf andere Members. Lauf-Manifeste mit Tasks auf diesem Member werden `needsReview`, bis ihr
    Controller die Gates neu abgeglichen hat ([Betrieb 6](betrieb-und-mobile-steuerung.md)).
@@ -865,7 +865,8 @@ type Policy = {
 };
 ```
 
-- **Abschlussprofile:** Hat ein Task-Typ ein `CompletionProfile`, prüft der Member **jeden** Commit einer Txn,
+- **Abschlussprofile:** In Stufe 1 (ohne Policy) wird ein `CompletionProfile` als lokale Konfiguration des Space
+  hinterlegt; ab Stufe 2 ersetzt das Profil aus der Policy diese Übergangskonfiguration. Hat ein Task-Typ ein `CompletionProfile`, prüft der Member **jeden** Commit einer Txn,
   die einen solchen Task destruktiv nimmt: Pro genommenem Task müssen zwischen 1 und `maxResultCount`
   Ergebnisse der `resultTypes` mit gleichen `equalFields` in derselben Txn geschrieben sein, innerhalb von
   `maxResultBytes`; profilbezogene Validierungen (beim Sieb genau ein `SieveResult` mit `rangeStart`/`rangeEnd`
@@ -1274,7 +1275,7 @@ Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F8, F10, F
 | F8 | Werden RPC-Ergebnisse 24 h oder bis 7 Tage aufbewahrt? | 24 h | 1 |
 | F9 | Welche Inhalte gelten als personenbezogen, und braucht es eine Löschfunktion pro Principal über Entries, Claims und Mailboxes? | ja, als Admin-Command in Stufe 2 | 2 |
 | F10 | Ist Teilergebnis-Lesen (`allowPartial`) für Dashboards Standard oder nur explizit? | nur explizit; Dashboard setzt es | 2 |
-| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | bis Lasttest übernehmen | 1b |
+| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | bis Lasttest übernehmen | 1 (Startwerte), 2 (final) |
 | F12 | Wird das Browser-Gateway gebraucht, oder genügen Handy-App und CLI? | zurückstellen | 4 |
 | F13 | Wird automatische Migration (HRW-Erweiterung) gebraucht? Sie ist nicht in v3. | erst bei konkretem Bedarf | – |
 | F14 | Sollen die v2-Dokumente (`federation-plan-v2*.md`, `.DOCS-UPDATE.md`) archiviert oder gelöscht und `README.md` auf v3 umgestellt werden? Sie verweisen auf nicht existierende Dateien und erklären die gründlichere v1 für veraltet. | README auf v3 umstellen, v2 als „ersetzt“ markieren | – |
