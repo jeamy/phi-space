@@ -1,8 +1,11 @@
 # pi-spaces
 
-A JavaSpaces-style space (Jini JavaSpaces Service Specification v2.2) as an extension for
+pi-spaces is a TypeScript space library implemented as an extension for
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). Many agents
 (conversations) share one space, take work from it, and talk to each other through it.
+
+The historical JavaSpaces specification (Jini JavaSpaces Service Specification v2.2) is a reference
+for the coordination model. The local pi-spaces client is `PiSpaces`.
 
 ## Layers
 
@@ -10,7 +13,7 @@ A JavaSpaces-style space (Jini JavaSpaces Service Specification v2.2) as an exte
 |---|---|
 | `src/core.ts` | pure spec semantics over a JSON state: entries, templates, leases, transactions, notify |
 | `src/doc.ts` | the `Space` document definition (shared by client and meter, so they do not import each other) |
-| `src/client.ts` | `JavaSpace`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
+| `src/client.ts` | `PiSpaces`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
 | `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section) and notify delivery |
 
 The space is one Session-scoped document, so it is committed atomically and survives restarts.
@@ -36,7 +39,7 @@ The space is one Session-scoped document, so it is committed atomically and surv
 - **notify**: registration with lease, handback, per-registration strictly increasing sequence numbers. A listener is a
   conversation: events are submitted as input with `requestId = pi-spaces:eventId:seq`, so redelivery is harmless.
   Best effort.
-- **Waiters (non-blocking wait)**: `space_wait` / `JavaSpace.wait` parks a read or take for a conversation and returns at
+- **Waiters (non-blocking wait)**: `space_wait` / `PiSpaces.wait` parks a read or take for a conversation and returns at
   once. When a match appears (or the timeout passes) the space sends the conversation a message. A take-waiter takes the
   entry under a fresh transaction, so a lost delivery is not a lost job: the receiver commits it with `space_txn`,
   otherwise it returns to the space when the transaction lease lapses, or at once if the conversation is gone or
@@ -49,12 +52,12 @@ Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in t
 
 - **Ownership**: a conversation owns what it creates (entries, transactions, subscriptions, waits) and can only use,
   commit, abort, renew or cancel its own. What host code creates (no owner) is the host's: agents can read and take
-  host entries, but never cancel or renew them, nor use host transactions. Host code (`JavaSpace` without `as`) is
+  host entries, but never cancel or renew them, nor use host transactions. Host code (`PiSpaces` without `as`) is
   unrestricted.
 - **Quotas** for conversations (host code is exempt), checked on every write, notify, wait and transaction:
   entry or handback up to 64 KiB of JSON, type names up to 128 characters and 16 types, 1000 entries per
   conversation, 10 000 in the space, 20 subscriptions, 20 waits and 20 open transactions per conversation. They throw
-  `LimitError`. Change them with `new JavaSpace(harness, ctx).setLimits({ maxEntries: 50_000 })`; the values are stored
+  `LimitError`. Change them with `new PiSpaces(harness, ctx).setLimits({ maxEntries: 50_000 })`; the values are stored
   in the space document.
 
 - **Subscriptions** (`space_notify`) of a conversation need a type or at least one field, and send at most one event
@@ -68,7 +71,7 @@ Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in t
 - **Blocked reads/takes** wait a jittered 20-40 ms after a change before probing again, so a burst of writes costs one
   round and many waiters do not probe in the same instant (`WAKE_DEBOUNCE_MS`).
 - **Per-harness metering**: the default `spaces` extension counts into the process-wide `meter`; use
-  `createSpaces(new Meter())` and `new JavaSpace(h, ctx, Date.now, thatMeter)` for your own.
+  `createSpaces(new Meter())` and `new PiSpaces(h, ctx, Date.now, thatMeter)` for your own.
 
 - **By id**: a template may carry `id` (an entry id from an event message); `space_read/take/list` take `id` too.
 - **Space size**: `maxSpaceBytes` (default 64 MiB of entry fields) limits the whole space, host writes included.
@@ -91,7 +94,7 @@ month-long and `FOREVER` waits neither spin nor get lost.
 
 ## Monitoring
 
-- `JavaSpace.count(tmpl)` / `stats()` (pure `core.count`/`core.stats`): gauges from a snapshot, no commit, nobody woken.
+- `PiSpaces.count(tmpl)` / `stats()` (pure `core.count`/`core.stats`): gauges from a snapshot, no commit, nobody woken.
   They judge an unsettled snapshot the way a read would after settling (a lapsed transaction's takes are back, its
   writes gone, timed-out waits no longer wait). `returned` is a durable total of entries given back by aborted or
   expired transactions.

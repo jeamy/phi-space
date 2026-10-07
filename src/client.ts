@@ -1,4 +1,4 @@
-// A JavaSpace-shaped client over the Session-scoped Space document. Host code, tasks and tools all use this.
+// The local pi-spaces client over the Session-scoped Space document. Host code, tasks and tools all use this.
 // Everything here runs against one harness: the harness process is the "space service".
 import type { Session, Tx } from "@earendil-works/pi-durable";
 import { awaitWithContext } from "@earendil-works/chord/context";
@@ -30,7 +30,7 @@ export type Taken = ReturnType<typeof view>;
 /** Pause (plus up to as much again of jitter) between a change waking a blocked read/take and its next probe. */
 export const WAKE_DEBOUNCE_MS = 20;
 
-/** What tools and federated/remote implementations share. `JavaSpace` is the local one. */
+/** What tools and federated/remote implementations share. `PiSpaces` is the local one. */
 export interface SpaceLike {
 	write(entry: EntryDraft, txn?: string | null, lease?: number): Promise<Lease>;
 	read(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
@@ -49,7 +49,7 @@ export interface SpaceLike {
 	cancel(leaseId: string): Promise<void>;
 }
 
-export class JavaSpace implements SpaceLike {
+export class PiSpaces implements SpaceLike {
 	private host: SpaceHost;
 	private ctx: Context;
 	private now: () => number;

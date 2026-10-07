@@ -10,7 +10,7 @@ Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 |---|---|
 | pi-durable Harness | führt Conversations/Tasks aus und speichert Dokumente über atomare Commits |
 | pi-spaces | Erweiterung mit Agenten-Tools; Space-Dokument Version 4 im Scope der gesamten Harness-Session |
-| JavaSpace | lokaler Host-Client für dieses Dokument; kein Netzwerkclient |
+| Lokaler pi-spaces-Client | API-Klasse `PiSpaces` für dieses Dokument; kein Netzwerkclient |
 | Reaper und Delivery | `startService` verarbeitet Ablauf und lokale Events |
 | Monitoring | `stats`, `count`, `Meter`, `watchLive`; lokale Zustände und prozesslokale Raten |
 | pi-termux-mobile | HTTP-Oberfläche auf dem Handy, Remote-Verbindung per SSH/Unix-Socket zu pi-serverd |
@@ -55,6 +55,13 @@ kein zentraler pi-durable-Cloud-Dienst: Jeder Host besitzt seinen eigenen Harnes
 Die mobile UI nennt Conversations ebenfalls „Sessions“. Eine neue solche Session erzeugt heute
 **keinen neuen Space**: Alle Conversations desselben Harness teilen das session-scoped Space-Dokument.
 Ein zusätzlicher unabhängiger Server/Harness besitzt einen getrennten Space; es entsteht dadurch keine Federation.
+
+Ein Space ist für unterschiedliche Arbeitsarten nutzbar. Neue Sieb-, Pipeline- oder Rechercheaufgaben
+erfordern keinen neuen Space, sofern Entry-Verträge, Rechte, Limits und Routing-/Replikationsregeln passen.
+Beim geplanten Projektstart werden ausgewählte vorhandene Spaces wiederverwendet; nur nachweislich fehlende
+Spaces werden angelegt. Ein gestoppter Host-Dienst öffnet beim Neustart seinen bisherigen persistenten
+Bestand. Der genaue [Wiederverwendungsvertrag](projektstart-autoprovisionierung.md#vorhandene-runtime-und-spaces-wiederverwenden)
+verhindert doppelte Daemons und Ersatz-Spaces bei unbekanntem Remote-Zustand.
 
 ## 2. Gesamtbild für die geplante Verwaltung
 
@@ -316,7 +323,8 @@ er bedeutet nicht, dass CPU-Berechnung insgesamt genau einmal ausgeführt wurde.
 **Heute ausführbar:** `npm run example:sieve -- 1001 2`. Dies benutzt MemoryStorage und beendet sich nach
 der Aggregation. Die exportierten Funktionen können einen JSONL-Harness verwenden; es gibt noch keinen
 dauerhaften Run-Controller, HTTP-Ergebnisdownload oder mobilen Start-/Pauseknopf.
-`prepareSieveRun` benötigt lokale Host-Commits; der Worker ist auf JavaSpace typisiert. Ein Remote-Adapter
+`prepareSieveRun` benötigt lokale Host-Commits; der Worker ist auf den lokalen pi-spaces-Client
+(API-Klasse `PiSpaces`) typisiert. Ein Remote-Adapter
 und die Vorbereitung auf dem Zielhost sind für diesen Bedienablauf zusätzlich zu implementieren.
 
 ### Später mehrere Task-Spaces
@@ -348,12 +356,12 @@ Für echte parallele CPU-Berechnung sind getrennte Workerprozesse oder Hosts erf
 
 `watchLive` liefert lokale Snapshots. Er misst keinen gesamten VPS und ersetzt keine Netzwerk-/Host-Healthchecks.
 Eine langsam aktualisierte MemberStatus-Lease ist kein autoritativer Task-Abschlussbeleg.
-Bootstrap-Writes des Siebs verwenden direkte Core-Commits und werden nicht automatisch als JavaSpace-Writes
+Bootstrap-Writes des Siebs verwenden direkte Core-Commits und werden nicht automatisch als Writes des pi-spaces-Clients
 gezählt; der Fortschritt wird deshalb aus den tatsächlichen Laufdaten abgeleitet.
 
 ### 7.2 Konkrete Bedienelemente auf dem mobilen Gerät
 
-**Ja: Die folgenden Ansichten, Eingabefelder und Buttons gehören in die mobile App beziehungsweise
+**Die folgenden Ansichten, Eingabefelder und Buttons gehören in die mobile App beziehungsweise
 deren Web-Oberfläche.** Sie senden autorisierte Aufträge an das Backend. Die eigentliche Installation,
 Space-Verwaltung und Worker-Ausführung erfolgt auf den Hosts. Es handelt sich um Vorschläge für neue
 Bedienelemente; die vorhandene Remote-Seite besitzt diese Projekt-/Federation-Steuerung noch nicht.

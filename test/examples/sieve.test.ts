@@ -7,13 +7,13 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { JavaSpace, FOREVER } from "../../src/index.ts";
+import { PiSpaces, FOREVER } from "../../src/index.ts";
 import { segmentedSieve, prepareSieveRun, processSieveTask, collectSieveResults, runSieve, type SieveConfig } from "../../examples/sieve.ts";
 
 const config: SieveConfig = { runId: "test-sieve", start: 1, end: 1001, blockSize: 128 };
 async function memory() {
   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-  return { h, space: new JavaSpace(h, ctx) };
+  return { h, space: new PiSpaces(h, ctx) };
 }
 // Independent reference: trial division, deliberately not a second copy of the sieve.
 const reference = (start: number, end: number) => Array.from({ length: end - start }, (_, i) => start + i)
@@ -51,7 +51,7 @@ test("Sieve commit failure returns task and discards staged result", async () =>
   const { h, space } = await memory();
   try {
     await prepareSieveRun(h, config);
-    const worker = new JavaSpace(h, ctx, Date.now, undefined, 1);
+    const worker = new PiSpaces(h, ctx, Date.now, undefined, 1);
     await assert.rejects(processSieveTask(worker, config.runId, { beforeCommit: async () => { throw new Error("injected failure"); } }), /injected/);
     assert.equal(await space.count({ type: "SieveTask" }), 8);
     assert.equal(await space.count({ type: "SieveResult" }), 0);
@@ -68,7 +68,7 @@ test("Sieve reservation returns at lease expiry and completed work survives JSON
   const openStore = async () => Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
   try {
     let h = await openStore();
-    const worker = new JavaSpace(h, ctx, () => now, undefined, 1);
+    const worker = new PiSpaces(h, ctx, () => now, undefined, 1);
     await prepareSieveRun(h, config);
     assert.equal(await processSieveTask(worker, config.runId, { leaseMs: 10, crashAfterTake: true }), false);
     assert.equal(await worker.count({ type: "SieveTask" }), 7);
@@ -77,7 +77,7 @@ test("Sieve reservation returns at lease expiry and completed work survives JSON
     await processSieveTask(worker, config.runId);
     await h.close(ctx);
     h = await openStore();
-    const resumed = new JavaSpace(h, ctx, () => now);
+    const resumed = new PiSpaces(h, ctx, () => now);
     try {
       await prepareSieveRun(h, config);
       assert.equal(await resumed.count({ type: "SieveResult" }), 1);

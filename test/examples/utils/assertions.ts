@@ -2,8 +2,8 @@
 // Erweitert Vitest/Jest Assertions um Space-spezifische Prüfungen
 
 import { expect } from "../compat.ts";
-import type { JavaSpace, Taken } from "../../../src/index.ts";
-import type { JavaSpace as Space } from "../../../src/index.ts";
+import type { PiSpaces, Taken } from "../../../src/index.ts";
+import type { PiSpaces as Space } from "../../../src/index.ts";
 type Entry = Taken;
 import type { TestHarness } from "./harness.ts";
 

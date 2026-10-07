@@ -12,8 +12,7 @@ Die Auswahl lädt die Projektkonfiguration und zeigt Hosts, Spaces, Modus und Re
 Erst Starten löst die Bereitstellung aus. Voraussetzung sind zuvor eingerichteter Host-Zugang und
 autorisierte Installations-/Enrollment-Rechte. Danach muss der Benutzer nicht jeden Space einzeln installieren.
 
-Hier bezeichnet „JavaSpaces“ die TypeScript-Bibliothek pi-spaces. Es wird keine Java-VM oder separate
-JavaSpaces-Serverdistribution installiert. Die Bibliothek läuft als Erweiterung im pi-durable-Harness
+pi-spaces ist unsere TypeScript-Bibliothek. Sie läuft als Erweiterung im pi-durable-Harness
 des jeweiligen pi-serverd. Logische Spaces sind persistente Dokumente mit stabilen IDs.
 
 ## 2. Was die vorhandene mobile Runtime bereits macht
@@ -35,6 +34,50 @@ Monitoring-Installation oder Bereitschaftsprüfung einer Federation. Ein erfolgr
 belegt nicht, dass der geplante Space-RPC und seine Garantien vorhanden sind.
 Der Codebefund ist keine ausgeführte Remote-Installations- oder mobile E2E-Abnahme.
 
+### 2.1 Voraussetzungen nach Rolle
+
+NetBird und Node.js allein reichen nicht. Vor dem Start prüft der geplante Bootstrap folgende
+Voraussetzungen; vorhandene passende Komponenten werden wiederverwendet.
+
+| Ort | Voraussetzung | Warum / heutiger Stand |
+|---|---|---|
+| Jeder Remote-Host | unterstützte Linux-Umgebung, Node.js und npm | mobile Runtime verlangt laut package.json Node ≥ 22.19.0; tatsächliches freigegebenes Release prüfen |
+| Jeder Remote-Host | funktionsfähiges `node:sqlite` | SQLite-Adapter verwendet Nodes DatabaseSync; Import und Schreibtest prüfen, nicht nur Versionsnummer |
+| Jeder Remote-Host | OpenSSH-Server, autorisierter SSH-Zugang | erster Bootstrap und heutige Remote-Verbindung; späterer Space-RPC ersetzt nicht die erstmalige Provisionierung |
+| Jeder Remote-Host | bash, tar mit gzip-Unterstützung, base64 und übliche Unix-Werkzeuge | bestehender SSH-Provisionierer verwendet diese Werkzeuge; Linux-Prozessprüfung benötigt /proc |
+| Jeder Federation-Host | NetBird-Client, Enrollment und erreichbares Overlay | Installation allein genügt nicht; Peer-Zuordnung, Gruppen und ACLs prüfen |
+| Jeder Remote-Host | freigegebenes Runtime-Release mit passenden npm-Dependencies und Spaces-Bundle | pi-durable, pi-server, pi-ai, chord und weitere Pakete gemäß Runtime-Lockfile; Bundle-Version gesondert prüfen |
+| Jeder Remote-Host | privates, beschreibbares persistentes State-Verzeichnis | ein Storage-Besitzer; Platz für DB/Journal und Backups, korrekte Datei-/Socket-Rechte |
+| Jeder Remote-Host | Host-/App-Identität und autorisierte Grants | v3 verlangt zusätzlich zur NetBird-Netzidentität App-Schlüssel und Rollen |
+| Jeder Remote-Host | funktionierende Zeitsynchronisierung | Leases/Deadlines und spätere Replikation benötigen den vorgesehenen Zeitvertrag |
+| Jeder Remote-Host | unabhängige Dienstausführung | heutiger Start über tmux oder nohup; Boot-Autostart und Neustartüberwachung zusätzlich vorsehen |
+| Jeder Federation-Host | Space-RPC, Supervisor, Recovery, Reaper/Delivery und Host-Monitor | Teile vorhanden; Federation-/Monitoringdienste noch zu implementieren |
+| Koordinator | Control Space, Router, Journal und Provisionierungszugänge | dauerhafte Fortsetzung nach Handy-Trennung; eigener geschützter Steuerzustand |
+| Erstinstallation | erreichbare Paketquelle oder vorbereitetes Offline-Release | npm-/OS-Pakete müssen beschaffbar sein; für spätere Runs kein erneuter Download nötig |
+| Native mobile Steuerung | mobile Runtime, SSH-Client/-Schlüssel und für v3 NetBird/App-Pairing | Android/Termux-Umgebung entsprechend freigegebenem mobilen Build; mehrfache Host-Verbindungen noch offen |
+| NetBird-Infrastruktur | Management-, Signal- und Relay-Dienste, DNS/Domain und passende Netzfreigaben | self-hosted v3-Plan: eigene VM und Docker Compose; genaue Version/Ports folgen Gate 5 |
+| Browserzugriff | HTTPS-Gateway, TLS-Zertifikat und Benutzer-/App-Anmeldung | nur für Browserweg; Browsergerät braucht nicht selbst Node.js oder SSH, Gateway braucht Overlay-Zugang |
+
+NetBird ist für die geplante Overlay-Federation erforderlich. Das lokale Sieb und die heutige reine
+SSH-Remote-Steuerung benötigen NetBird nicht. Bei einer vorhandenen NetBird-Installation wird die
+Infrastruktur wiederverwendet; nicht jeder Worker-Host betreibt Management/Signal/Relay.
+
+**Keine allgemeinen Pflichtinstallationen:** eigenständiger SQLite-Server, PostgreSQL/Redis,
+Docker auf jedem Worker, Git, globales TypeScript oder Prometheus/Grafana. Der SQLite-Adapter verwendet
+Nodes eingebaute SQLite-Anbindung. TypeScript wird für Entwicklung benötigt, Git bei Deployment aus Source;
+für ein fertiges JS-Release nicht grundsätzlich. tmux ist im vorhandenen Provisionierer optional.
+Docker Compose betrifft den geplanten self-hosted NetBird-Infrastrukturhost, nicht automatisch jeden Member.
+Provider-Zugangsdaten sind nur für echte LLM-Agenten nötig; reine Sieb-Worker benötigen keine.
+
+Installationsrechte für fehlende OS-Komponenten werden beim Host-Onboarding festgelegt; die normale
+Worker-Runtime kann unter einem eigenen unprivilegierten Benutzer laufen. NetBird-Dienst/Netzaufbau und
+Paketinstallation benötigen passende Systemrechte. Fehlende Rechte blockieren den Vorbereitungsschritt.
+Ein einfacher Projektstart installiert Node/NetBird nicht schon heute automatisch.
+
+Der Bootstrap prüft anschließend nicht nur installierte Pakete, sondern auch SSH-Zugang, SQLite-Schreibbarkeit,
+Storage-Besitzer, Runtime-/Protokollfeatures, Overlay-Erreichbarkeit, App-Rechte und Monitoring-Heartbeat.
+Erst dann gilt der Host als bereit. Genaue OS-/NetBird-Kompatibilität bleibt eine Integrationsabnahme.
+
 ## 3. Drei getrennte Zustände
 
 | Zustand | Bedeutung | Lebensdauer |
@@ -45,7 +88,36 @@ Der Codebefund ist keine ausgeführte Remote-Installations- oder mobile E2E-Abna
 
 Starten prüft und ergänzt den gewünschten Zustand; es installiert nicht bei jedem Klick erneut.
 Ein zweiter Start derselben Anfrage darf weder doppelte Spaces noch einen zweiten Rechenlauf erzeugen.
-Ein bewusst neuer Lauf erhält eine neue runId. Andere Projekte auf demselben Host bleiben isoliert.
+Ein bewusst neuer Lauf erhält eine neue runId. Zugriffe verschiedener Projekte werden nach dem
+konfigurierten Rechtevertrag getrennt; ein ausdrücklich gemeinsam genutzter Space bleibt möglich.
+
+### Vorhandene Runtime und Spaces wiederverwenden
+
+Ein Space ist ein allgemeiner Bestand für typisierte Entries, keine Installation eines bestimmten
+Algorithmus. Sieb, Recherche, Pipeline und andere Arbeitsarten können dieselbe Runtime und bei passenden
+Regeln auch denselben Data Space benutzen. Neu sind dann Aufgaben und Workerbindungen, nicht der Space.
+Ein Space ist normalerweise kein eigener Serverprozess, der pro Arbeitsart gestartet werden müsste.
+
+Der Startauftrag löst die ausgewählten stabilen Space-IDs auf und prüft den tatsächlichen Zustand:
+
+| Vorhandener Zustand | Verhalten beim Projektstart |
+|---|---|
+| Runtime und ausgewählter Space erreichbar und kompatibel | verbinden und wiederverwenden; kein zweiter Daemon, kein weiterer Space |
+| Space persistent vorhanden, sein Host-Dienst gestoppt | denselben Dienst mit demselben Storage starten; vorhandenen Space öffnen |
+| ausgewählter Space nachweislich nicht vorhanden | bei erlaubter Anlage einmal unter der vorgesehenen ID erzeugen |
+| Host nicht erreichbar oder Zustand unbekannt | Start blockieren und Zustand auflösen; keinen Ersatz-Space unter neuer ID anlegen |
+| bestehender Space hat unpassende Rechte, Modus, Schema oder Policy | konkreten Konflikt melden; keine stille Änderung oder Neuinstallation |
+
+Die Wiederverwendung richtet sich nach **ausgewählten IDs und geprüften Rechten**, nicht nach dem ersten
+zufällig gefundenen Space. Auf dem Handy kann ein Projekt bestehende Spaces/Federation auswählen und diese
+Zuordnung speichern. Die gleiche Einstellung gilt beim Script-Bootstrap. Auch Enrollment, Member-Aufnahme,
+Router und Host-Monitor werden bei passendem Zustand wiederverwendet.
+
+In einem gemeinsam genutzten Space müssen Entry-Verträge und Typregeln zusammenpassen. Worker filtern
+Aufgaben nach Arbeitsart und runId; bei gemeinsam genutzten projektbezogenen Typen zusätzlich nach
+projectId. Solche Filter verhindern versehentliche Vermischung, ersetzen aber keine serverseitigen
+Zugriffsrechte. Harte Isolation oder widersprüchliche Replikations-/Routingverträge können separate Spaces
+erfordern. Task-Verarbeitung mit exklusivem Take benötigt expand/primary; ein LWW-Space eignet sich dafür nicht.
 
 ## 4. Projektkonfiguration
 
@@ -59,6 +131,7 @@ außerhalb der Datei; eine neue Revision verändert keinen laufenden Auftrag.
   "projectId": "prime-demo",
   "configRevision": 1,
   "runtimeRelease": "approved-space-runtime-1",
+  "provisioning": { "reuseExisting": true, "createMissing": true },
   "coordinatorHost": "host-a",
   "hosts": [
     { "hostId": "host-a", "ssh": "pi@vps-a" },
@@ -99,8 +172,8 @@ Capability-/Kapazitätsauswahl darf nicht unabhängig Task und Ergebnis auf vers
 | 2. Koordinator sichern | Runtime auf A vorbereiten, Control/Supervisor erreichbar machen | dauerhafter Deployment-Auftrag auf A gespeichert |
 | 3. Hosts vorbereiten | passendes Runtime-Release auf allen erforderlichen Hosts installieren oder wiederverwenden | authentifizierter Space-/Supervisor-Healthcheck erfolgreich |
 | 4. Monitoring starten | Host-Sampler starten/wiederverwenden; projektbezogene Space-/Worker-Sichten aktivieren | frischer Status von jedem erforderlichen Host |
-| 5. Spaces anlegen | stabile IDs und projektbezogene Rechte/Limits idempotent anlegen | Owner-/Projekt-/Schema-Zuordnung geprüft |
-| 6. Federation herstellen | Enrollment, addMember, neue zulässige Policy und Router aktivieren | alle benötigten Members erreichbar; Policy konsistent |
+| 5. Spaces bereitstellen | ausgewählte IDs auflösen und bestehende Spaces prüfen/wiederverwenden; nur fehlende erlaubte Spaces anlegen | Rechte, Limits, Projektzugriff und Schema kompatibel |
+| 6. Federation bereitstellen | bestehende Membership/Policy/Router prüfen und wiederverwenden; nur erforderliche zulässige Ergänzungen anwenden | alle benötigten Members erreichbar; Policy konsistent |
 | 7. Lauf vorbereiten | runId und Teilbereichsmanifest speichern; Tasks je Member idempotent vorbereiten | jeder erforderliche Teilbereich bestätigt vorbereitet |
 | 8. Worker aktivieren | registrierte Sieb-Worker mit festen Memberbindungen starten | Startgeneration und gewünschte Anzahl gespeichert |
 

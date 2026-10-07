@@ -1,11 +1,11 @@
 // pi-spaces: a JavaSpaces-style space as a pi-durable extension.
 //   core.ts    pure spec semantics (entries, templates, leases, transactions, notify)
-//   client.ts  JavaSpace-shaped API over a Session document, with blocking read/take
+//   client.ts  local PiSpaces API over a Session document, with blocking read/take
 //   index.ts   LLM tools, prompt section, event delivery
 import { Type } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/chord";
 import { defineDoc, defineExtension, defineTool, section, type ConversationId, type Harness, type Tx } from "@earendil-works/pi-durable";
-import { JavaSpace, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
+import { PiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
 import * as core from "./core.ts";
 import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
 
@@ -50,8 +50,8 @@ const TemplateParams = {
  * `spaces` counts into the process-wide `meter`.
  */
 export function createSpaces(meter: Meter = defaultMeter) {
-	/** The JavaSpace a tool acts through: as its own conversation, so it owns what it creates and touches nothing else. */
-	const spaceFor = (api: SpaceHost & { conversationId: core.Target }, ctx: Context): SpaceLike => new JavaSpace(api, ctx, Date.now, meter, api.conversationId);
+	/** The PiSpaces a tool acts through: as its own conversation, so it owns what it creates and touches nothing else. */
+	const spaceFor = (api: SpaceHost & { conversationId: core.Target }, ctx: Context): SpaceLike => new PiSpaces(api, ctx, Date.now, meter, api.conversationId);
 	return defineExtension({
 		name: "spaces",
 		tools: [

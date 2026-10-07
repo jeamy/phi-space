@@ -15,7 +15,7 @@ Der Storage und dessen Fehlervertrag bestimmen Dauerhaftigkeit, nicht die Space-
 |---|---|
 | core.ts | reine Semantik mit explizitem now, Entries, Txns, Waiter, Notify, Ablauf und Limits |
 | doc.ts | Space-Dokument und Migration |
-| client.ts | JavaSpace/SpaceLike, blockierende Operationen, once-Hook, Snapshot-Lesen |
+| client.ts | lokaler pi-spaces-Client (API-Klasse `PiSpaces`, Interface `SpaceLike`), blockierende Operationen, once-Hook, Snapshot-Lesen |
 | index.ts | Agenten-Tools, Claims, Prompt, Reaper und Delivery |
 | meter.ts | prozesslokale Zähler und Raten |
 | canonical.ts | kanonische JSON-Kodierung für Feldvergleich |

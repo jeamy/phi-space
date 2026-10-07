@@ -8,7 +8,7 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { JavaSpace, FOREVER, Space } from "../../src/index.ts";
+import { PiSpaces, FOREVER, Space } from "../../src/index.ts";
 import { GolombMaster, GolombWorker, GolombRuler } from "../../examples/golomb.ts";
 import { openWindow, collect, analyse, present } from "../../examples/sensor-pipeline.ts";
 import { runArxivResearch } from "../../examples/arxiv-research.ts";
@@ -20,7 +20,7 @@ import { spawn } from "node:child_process";
 
 async function memory() {
   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-  return { h, s: new JavaSpace(h, ctx) };
+  return { h, s: new PiSpaces(h, ctx) };
 }
 const task = { runId: "golomb-4-6", taskId: "golomb-4-task-0", order: 4, maxLength: 6, startPos: 1, endPos: 4, status: "pending" as const };
 
@@ -29,7 +29,7 @@ test("Golomb executes the real search and resumes a completed persistent run", a
   const open = async () => Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
   try {
     let h = await open();
-    let s = new JavaSpace(h, ctx);
+    let s = new PiSpaces(h, ctx);
     await s.write({ type: "GolombTaskDone", fields: { runId: "other", taskId: "old" } }, null, FOREVER);
     const [best] = await Promise.all([new GolombMaster(s, 4, 6, 1).run(), new GolombWorker(s, "w", 4, 6).loop()]);
     assert.ok(best);
@@ -37,7 +37,7 @@ test("Golomb executes the real search and resumes a completed persistent run", a
     assert.equal(GolombRuler.isValid(best.positions), true);
     assert.equal(await s.count({ type: "GolombTaskDone", fields: { runId: task.runId } }), 1);
     await h.close(ctx);
-    h = await open(); s = new JavaSpace(h, ctx);
+    h = await open(); s = new PiSpaces(h, ctx);
     try {
       const resumed = await new GolombMaster(s, 4, 6, 1).run();
       assert.deepEqual(resumed?.positions, best.positions);
@@ -81,9 +81,9 @@ test("Killed Golomb process leaves a recoverable reservation on JSONL", { timeou
     import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
     import { createModels } from "@earendil-works/pi-ai/models";
     import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-    import { JavaSpace, FOREVER } from "./src/index.ts";
+    import { PiSpaces, FOREVER } from "./src/index.ts";
     const h=await Harness.open(await openNodeJsonlStorage(process.argv[1],ctx),{models:createModels(),registry:createRegistry()},ctx);
-    const s=new JavaSpace(h,ctx);
+    const s=new PiSpaces(h,ctx);
     await s.write({type:"GolombSearchTask",fields:${JSON.stringify(task)}},null,FOREVER);
     const txn=await s.createTransaction(120000);
     await s.take({type:"GolombSearchTask"},0,{txn:txn.id});
@@ -107,7 +107,7 @@ test("Killed Golomb process leaves a recoverable reservation on JSONL", { timeou
     const exited = new Promise<void>(resolve => child.once("exit", () => resolve()));
     child.kill("SIGKILL"); await exited;
     const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
-    const s = new JavaSpace(h, ctx);
+    const s = new PiSpaces(h, ctx);
     try {
       assert.equal(await s.count({ type: "GolombSearchTask" }), 0);
       assert.equal(await s.count({ type: "GolombRuler" }), 0);

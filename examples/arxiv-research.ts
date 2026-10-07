@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, JavaSpace, spaces, startService } from "../src/index.ts";
+import { FOREVER, PiSpaces, spaces, startService } from "../src/index.ts";
 import { research } from "./arxiv-tool.ts";
 import { pathToFileURL } from "node:url";
 import { claimFreshDirectory, researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
@@ -74,7 +74,7 @@ registry.install(researchSpaces);
 registry.install(research);
 const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models, registry }, ctx);
 h.resume();
-const host = new JavaSpace(h, ctx);
+const host = new PiSpaces(h, ctx);
 const stopService = await startService(h, ctx);
 try {
 console.log(`model ${model.provider}/${model.modelId}\ntopic ${topic}\nstate ${dir}\n`);

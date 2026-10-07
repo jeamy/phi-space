@@ -5,7 +5,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, JavaSpace, NO_WAIT, spaces, startService } from "../../src/index.ts";
+import { FOREVER, PiSpaces, NO_WAIT, spaces, startService } from "../../src/index.ts";
 import { 
   openWindow, 
   collect, 
@@ -35,7 +35,7 @@ async function setupPipelineHarness() {
   registry.install(spaces);
   
   const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-  const host = new JavaSpace(h, ctx);
+  const host = new PiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
   return { h, host, stopService, models };
@@ -52,7 +52,7 @@ async function teardownPipelineHarness(h: Harness, stopService: () => Promise<vo
 
 describe("sensor-pipeline.ts", () => {
   let h: Harness;
-  let host: JavaSpace;
+  let host: PiSpaces;
   let stopService: () => Promise<void>;
 
   beforeEach(async () => {
@@ -536,7 +536,7 @@ describe("sensor-pipeline.ts", () => {
 
 describe("sensor-pipeline Performance", () => {
   let h: Harness;
-  let host: JavaSpace;
+  let host: PiSpaces;
   let stopService: () => Promise<void>;
 
   beforeEach(async () => {
@@ -605,15 +605,15 @@ describe("sensor-pipeline Performance", () => {
 // ============================================================================
 
 expect.extend({
-  async toHaveWindow(host: JavaSpace, windowId: string) {
+  async toHaveWindow(host: PiSpaces, windowId: string) {
     const windows = await host.readAll({ type: "Window", fields: { id: windowId } });
     return windows.length > 0 ? { pass: true } : { pass: false, expected: true, actual: false };
   },
-  async toHaveReadings(host: JavaSpace, count: number) {
+  async toHaveReadings(host: PiSpaces, count: number) {
     const readings = await host.readAll({ type: "Reading" });
     return readings.length === count ? { pass: true } : { pass: false, expected: count, actual: readings.length };
   },
-  async toHaveValidSummary(host: JavaSpace, windowId: string) {
+  async toHaveValidSummary(host: PiSpaces, windowId: string) {
     const summaries = await host.readAll({ type: "Summary", fields: { window: windowId } });
     if (summaries.length === 0) {
       return { pass: false, expected: true, actual: false };

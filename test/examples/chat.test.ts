@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, JavaSpace, spaces, startService } from "../../src/index.ts";
+import { FOREVER, PiSpaces, spaces, startService } from "../../src/index.ts";
 
 // ============================================================================
 // TEST UTILITIES
@@ -71,7 +71,7 @@ async function setupChatHarness() {
   registry.install(spaces);
   
   const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-  const host = new JavaSpace(h, ctx);
+  const host = new PiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
   return { h, host, stopService, models, faux };
@@ -88,7 +88,7 @@ async function teardownChatHarness(h: Harness, stopService: () => Promise<void>)
 
 describe("chat.ts", () => {
   let h: Harness;
-  let host: JavaSpace;
+  let host: PiSpaces;
   let stopService: () => Promise<void>;
   let models: ReturnType<typeof createModels>;
 
@@ -187,7 +187,7 @@ describe("chat.ts", () => {
       // Zwei separate Durchläufe mit gleichem Input
       const runChat = async (runId: string) => {
         const h1 = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-        const host1 = new JavaSpace(h1, ctx);
+        const host1 = new PiSpaces(h1, ctx);
         const stop1 = await startService(h1, ctx);
         
         const faux1 = createScriptedFaux();
@@ -399,7 +399,7 @@ describe("chat.ts Integration Tests", () => {
     registry.install(spaces);
     
     const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-    const host = new JavaSpace(h, ctx);
+    const host = new PiSpaces(h, ctx);
     const stopService = await startService(h, ctx);
     
     try {
@@ -467,11 +467,11 @@ describe("chat.ts Integration Tests", () => {
 // ============================================================================
 
 expect.extend({
-  async toHaveMsgCount(host: JavaSpace, type: string, count: number) {
+  async toHaveMsgCount(host: PiSpaces, type: string, count: number) {
     const actual = await host.count({ type });
     return actual === count ? { pass: true } : { pass: false, expected: count, actual };
   },
-  async toHaveRingStructure(host: JavaSpace, room: string, expectedPath: string[]) {
+  async toHaveRingStructure(host: PiSpaces, room: string, expectedPath: string[]) {
     const msgs = (await host.readAll({ type: "Msg", fields: { room } }))
       .map(e => e.fields as { from: string; to: string })
       .sort((a, b) => {

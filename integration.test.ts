@@ -8,14 +8,14 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { JavaSpace, NO_WAIT, FOREVER, Space, deliverEvents, spaces, core, startMaintenance, startService, startDelivery } from "./src/index.ts";
+import { PiSpaces, NO_WAIT, FOREVER, Space, deliverEvents, spaces, core, startMaintenance, startService, startDelivery } from "./src/index.ts";
 
 const open = (storage: any, models = createModels()) => Harness.open(storage, { models, registry: createRegistry() }, ctx);
 const job = (n: number) => ({ type: "Job", fields: { n } });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test("blocking take wakes when a matching entry is written", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	const t0 = Date.now();
 	const p = s.take({ type: "Job" }, 5000);
 	await sleep(150); await s.write(job(1), null, FOREVER);
@@ -26,14 +26,14 @@ test("blocking take wakes when a matching entry is written", async () => {
 });
 
 test("readIfExists returns at once when nothing matches, read waits", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	let t = Date.now(); assert.equal(await s.readIfExists({ type: "Job" }, 2000), null); assert.ok(Date.now() - t < 500);
 	t = Date.now(); assert.equal(await s.read({ type: "Job" }, 300), null); assert.ok(Date.now() - t >= 280);
 	await h.close(ctx);
 });
 
 test("concurrency: 3 workers, 12 jobs, each taken exactly once", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	for (let i = 0; i < 12; i++) await s.write(job(i), null, FOREVER);
 	const worker = async () => {
 		const mine: number[] = [];
@@ -46,13 +46,13 @@ test("concurrency: 3 workers, 12 jobs, each taken exactly once", async () => {
 
 test("crash: job taken under a txn reappears after reopen once the txn lease expires", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "pi-spaces-"));
-	let h = await open(await openNodeJsonlStorage(dir, ctx)); let s = new JavaSpace(h, ctx);
+	let h = await open(await openNodeJsonlStorage(dir, ctx)); let s = new PiSpaces(h, ctx);
 	await s.write(job(7), null, FOREVER);
 	const t = await s.createTransaction(400);
 	assert.equal((await s.take({ type: "Job" }, NO_WAIT, { txn: t.id }))?.fields.n, 7);
 	assert.equal(await s.takeIfExists({ type: "Job" }, 50), null); // locked by the open txn
 	await h.close(ctx); // "crash": worker never commits
-	h = await open(await openNodeJsonlStorage(dir, ctx)); s = new JavaSpace(h, ctx);
+	h = await open(await openNodeJsonlStorage(dir, ctx)); s = new PiSpaces(h, ctx);
 	h.resume();
 	assert.equal((await s.take({ type: "Job" }, 3000))?.fields.n, 7); // blocks until the lease lapses
 	await h.close(ctx);
@@ -64,7 +64,7 @@ test("tools + notify delivery run end to end with the faux provider", async () =
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 	const agent = { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] };
 	const boss = await h.root(ctx, { agent });
-	const s = new JavaSpace(h, ctx);
+	const s = new PiSpaces(h, ctx);
 	await s.notify({ type: "Job" }, { lease: FOREVER, handback: "jobs", target: boss.id });
 	faux.setResponses([fauxAssistantMessage("saw the event")]);
 	await s.write(job(1), null, FOREVER);
@@ -77,7 +77,7 @@ test("tools + notify delivery run end to end with the faux provider", async () =
 });
 
 test("reaper: expired entries are removed and waiters time out without any operation", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	const stop = await startMaintenance(h, ctx);
 	await s.write(job(1), null, 150);
 	await s.wait({ type: "Never" }, { target: "nobody", timeout: 200 });
@@ -94,7 +94,7 @@ test("space_wait: tool returns at once; entry arrives later as a message and is 
 	const registry = createRegistry(); registry.install(spaces);
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 	const agent = { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] };
-	const worker = await h.root(ctx, { agent }); const s = new JavaSpace(h, ctx);
+	const worker = await h.root(ctx, { agent }); const s = new PiSpaces(h, ctx);
 	const stop = await startService(h, ctx);
 	faux.setResponses([
 		fauxAssistantMessage(fauxToolCall("space_wait", { type: "Job", timeoutMs: 60_000 }), { stopReason: "toolUse" }),
@@ -126,7 +126,7 @@ test("deliverEvents: a failing event does not block the others and is dropped af
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 	const good = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
 	faux.setResponses([fauxAssistantMessage("ok")]);
-	const s = new JavaSpace(h, ctx);
+	const s = new PiSpaces(h, ctx);
 	await h.commit(async (tx) => { // an event whose conversation lookup throws (malformed id), then a good one
 		const d = await tx.doc(Space);
 		d.outbox.push({ kind: "timeout", eventId: "bad", seq: 1, handback: null, target: 999 });
@@ -148,7 +148,7 @@ test("deliverEvents: a failing event does not block the others and is dropped af
 });
 
 test("blocking take leaves no timers behind when woken early", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	const before = (process as any).getActiveResourcesInfo().filter((x: string) => x === "Timeout").length;
 	const p = s.take({ type: "Job" }, 60_000); await sleep(100);
 	await s.write(job(1), null, FOREVER); await p;
@@ -167,12 +167,12 @@ test("deliverEvents: events without a target are dropped explicitly and not coun
 	}, ctx);
 	assert.equal(await deliverEvents(h, ctx), 0);
 	assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 0);
-	await assert.rejects(() => new JavaSpace(h, ctx).notify(null, { target: "" }), /target/);
+	await assert.rejects(() => new PiSpaces(h, ctx).notify(null, { target: "" }), /target/);
 	await h.close(ctx);
 });
 
 test("reaper survives a failing commit: logs, retries, and keeps cleaning up", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	let fail = false; const errors: unknown[] = [];
 	const flaky: any = new Proxy(h, { get: (t: any, k) => k === "commit" ? (f: any, c: any) => fail ? Promise.reject(new Error("disk")) : t.commit(f, c) : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
 	const stop = await startMaintenance(flaky, ctx, { retryMs: 50, onError: (e) => errors.push(e) });
@@ -193,8 +193,8 @@ test("delivery retries a failed event on a timer", async () => {
 	let fail = true;
 	const flaky: any = new Proxy(h, { get: (t: any, k) => k === "conversation" ? (id: any, c: any) => fail ? Promise.reject(new Error("temp")) : t.conversation(id, c) : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
 	const stop = await startDelivery(flaky, ctx, { retryMs: 60, onError: () => {} });
-	await new JavaSpace(h, ctx).notify({ type: "Job" }, { target: conv.id, lease: FOREVER });
-	await new JavaSpace(h, ctx).write(job(1), null, FOREVER);
+	await new PiSpaces(h, ctx).notify({ type: "Job" }, { target: conv.id, lease: FOREVER });
+	await new PiSpaces(h, ctx).write(job(1), null, FOREVER);
 	await sleep(200); assert.equal((await h.snapshot(Space, ctx))!.outbox.length, 1); // still queued
 	fail = false;
 	for (let i = 0; i < 40 && (await h.snapshot(Space, ctx))!.outbox.length; i++) await sleep(50);
@@ -212,7 +212,7 @@ test("space_notify tool subscribes the calling conversation", async () => {
 	const regs = (await h.snapshot(Space, ctx))!.regs;
 	assert.equal(regs.length, 1); assert.equal(regs[0]!.target, a.id);
 	faux.setResponses([fauxAssistantMessage("saw it")]);
-	await new JavaSpace(h, ctx).write(job(1), null, FOREVER);
+	await new PiSpaces(h, ctx).write(job(1), null, FOREVER);
 	assert.equal(await deliverEvents(h, ctx), 1);
 	await h.close(ctx);
 });
@@ -224,7 +224,7 @@ const countCommits = (h: any) => {
 };
 
 test("long waits do not spin: take(FOREVER) on an empty space sleeps, and still wakes on a write", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	const n = countCommits(h);
 	const p = s.take({ type: "Job" }, FOREVER);
 	await sleep(300);
@@ -235,7 +235,7 @@ test("long waits do not spin: take(FOREVER) on an empty space sleeps, and still 
 });
 
 test("reaper does not spin on waits months away or forever", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	await s.wait({ type: "Never" }, { target: 1, timeout: 90 * 24 * 3600 * 1000 });
 	await s.wait({ type: "Never" }, { target: 1, timeout: FOREVER });
 	const n = countCommits(h);
@@ -247,7 +247,7 @@ test("reaper does not spin on waits months away or forever", async () => {
 });
 
 test("delivery: a served take whose conversation is gone is released at once, not after its lease", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	await s.wait({ type: "Job" }, { target: 987654, timeout: FOREVER, txnLeaseMs: FOREVER }); // no such conversation
 	await s.write(job(1), null, FOREVER);
 	assert.equal(await s.takeIfExists({ type: "Job" }, NO_WAIT), null); // held for the waiter
@@ -275,8 +275,8 @@ test("tools act as their conversation: another conversation cannot commit a tran
 	await h.close(ctx);
 });
 
-test("JavaSpace.count and stats read the live space without waking anyone", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+test("PiSpaces.count and stats read the live space without waking anyone", async () => {
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	assert.equal(await s.count(), 0);
 	for (let i = 0; i < 4; i++) await s.write(job(i), null, FOREVER);
 	await s.write({ type: "Other", fields: {} }, null, FOREVER);
@@ -291,7 +291,7 @@ test("JavaSpace.count and stats read the live space without waking anyone", asyn
 
 test("client operations are counted; replays and no-ops are not", async () => {
 	const { Meter } = await import("./src/meter.ts");
-	const m = new Meter(); const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx, Date.now, m);
+	const m = new Meter(); const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx, Date.now, m);
 	for (let i = 0; i < 3; i++) await s.write(job(i), null, FOREVER);
 	await s.read({ type: "Job" }, NO_WAIT); await s.take({ type: "Job" }, NO_WAIT); await s.take({ type: "Job" }, NO_WAIT);
 	assert.equal(await s.takeIfExists({ type: "Nope" }, NO_WAIT), null);
@@ -308,7 +308,7 @@ test("served waiters are counted once delivered; a dropped one is not", async ()
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 	const conv = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
 	faux.setResponses([fauxAssistantMessage("got it"), fauxAssistantMessage("saw it")]);
-	const m = new Meter(); const s = new JavaSpace(h, ctx);
+	const m = new Meter(); const s = new PiSpaces(h, ctx);
 	await s.wait({ type: "Job" }, { target: conv.id, timeout: FOREVER }); // take
 	await s.wait({ type: "Job" }, { target: conv.id, timeout: FOREVER, take: false }); // read
 	await s.wait({ type: "Job" }, { target: 987654, timeout: FOREVER }); // nobody there
@@ -322,7 +322,7 @@ test("served waiters are counted once delivered; a dropped one is not", async ()
 
 test("with an exactly-once hook, reads and misses are recorded too: a replay returns the outcome and is not counted again", async () => {
 	const { Meter } = await import("./src/meter.ts");
-	const h = await open(new MemoryStorage()); const m = new Meter(); const s = new JavaSpace(h, ctx, Date.now, m);
+	const h = await open(new MemoryStorage()); const m = new Meter(); const s = new PiSpaces(h, ctx, Date.now, m);
 	const slots = new Map<string, any>();
 	const once = (k: string) => ({ get: async () => slots.get(k), set: async (_tx: any, v: any) => { slots.set(k, v); } });
 	await s.write(job(1), null, FOREVER);
@@ -375,7 +375,7 @@ test("space_write counts once, after the commit", async () => {
 
 test("watchLive: samples never overlap, nothing is reported after stop, callback errors are reported", async () => {
 	const { Meter, watchLive } = await import("./src/meter.ts");
-	const h = await open(new MemoryStorage()); await new JavaSpace(h, ctx).write(job(1), null, FOREVER);
+	const h = await open(new MemoryStorage()); await new PiSpaces(h, ctx).write(job(1), null, FOREVER);
 	let inFlight = 0, maxInFlight = 0;
 	const slow: any = new Proxy(h, { get: (t: any, k) => k === "snapshot" ? async (...a: any[]) => { inFlight++; maxInFlight = Math.max(maxInFlight, inFlight); await sleep(120); inFlight--; return t.snapshot(...a); } : typeof t[k] === "function" ? t[k].bind(t) : t[k] });
 	let calls = 0; const errors: unknown[] = [];
@@ -391,7 +391,7 @@ test("watchLive: samples never overlap, nothing is reported after stop, callback
 
 test("watchLive reports gauges and rates without writing to the space", async () => {
 	const { Meter, watchLive, formatStatus } = await import("./src/meter.ts");
-	const m = new Meter(); const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx, Date.now, m);
+	const m = new Meter(); const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx, Date.now, m);
 	const seen: string[] = [];
 	const stop = watchLive(h, ctx, (l) => seen.push(formatStatus(l)), { intervalMs: 60, meter: m });
 	await s.write(job(1), null, FOREVER); await s.write(job(2), null, FOREVER);
@@ -404,9 +404,9 @@ test("watchLive reports gauges and rates without writing to the space", async ()
 	await h.close(ctx);
 });
 
-test("limits and ownership through JavaSpace: host sets limits, agents are held to them", async () => {
-	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
-	const agent = new JavaSpace(h, ctx, Date.now, undefined, 7);
+test("limits and ownership through PiSpaces: host sets limits, agents are held to them", async () => {
+	const h = await open(new MemoryStorage()); const host = new PiSpaces(h, ctx);
+	const agent = new PiSpaces(h, ctx, Date.now, undefined, 7);
 	await assert.rejects(() => Promise.resolve().then(() => agent.setLimits({ maxEntries: 5 })), /only host code/);
 	assert.equal((await host.setLimits({ maxEntriesPerOwner: 2 })).maxEntriesPerOwner, 2);
 	await agent.write(job(1), null, FOREVER); await agent.write(job(2), null, FOREVER);
@@ -420,8 +420,8 @@ test("limits and ownership through JavaSpace: host sets limits, agents are held 
 });
 
 test("take still removes: agents take host entries and each other's, and the removal frees their quota", async () => {
-	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
-	const a = new JavaSpace(h, ctx, Date.now, undefined, 1), b = new JavaSpace(h, ctx, Date.now, undefined, 2);
+	const h = await open(new MemoryStorage()); const host = new PiSpaces(h, ctx);
+	const a = new PiSpaces(h, ctx, Date.now, undefined, 1), b = new PiSpaces(h, ctx, Date.now, undefined, 2);
 	await host.setLimits({ maxEntriesPerOwner: 1 });
 	await host.write(job(1), null, FOREVER); // host-owned
 	await a.write({ type: "Mine", fields: { n: 2 } }, null, FOREVER); // a-owned (a is now at its quota)
@@ -440,7 +440,7 @@ test("messages label entry content as data, show its origin and cut it to a safe
 	const registry = createRegistry(); registry.install(spaces);
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 	const conv = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
-	const host = new JavaSpace(h, ctx); const agent = new JavaSpace(h, ctx, Date.now, undefined, 5);
+	const host = new PiSpaces(h, ctx); const agent = new PiSpaces(h, ctx, Date.now, undefined, 5);
 	await host.notify({ type: "Note" }, { target: conv.id, lease: FOREVER });
 	faux.setResponses([fauxAssistantMessage("ok"), fauxAssistantMessage("ok")]);
 	await host.write({ type: "Note", fields: { text: "A".repeat(5000) } }, null, FOREVER);
@@ -456,8 +456,8 @@ test("messages label entry content as data, show its origin and cut it to a safe
 });
 
 test("a conversation's subscription is rate limited; the host's is not", async () => {
-	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
-	const agent = new JavaSpace(h, ctx, Date.now, undefined, 1);
+	const h = await open(new MemoryStorage()); const host = new PiSpaces(h, ctx);
+	const agent = new PiSpaces(h, ctx, Date.now, undefined, 1);
 	await assert.rejects(() => agent.notify(null, { target: 1, lease: FOREVER }), /needs a type/);
 	await agent.notify({ type: "J" }, { target: 1, lease: FOREVER });
 	await host.notify({ type: "J" }, { target: 2, lease: FOREVER });
@@ -470,7 +470,7 @@ test("a conversation's subscription is rate limited; the host's is not", async (
 });
 
 test("debounce: a burst of writes wakes blocked takers and each gets a distinct entry", async () => {
-	const h = await open(new MemoryStorage()); const s = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
 	const takers = [1, 2, 3, 4].map(() => s.take({ type: "Job" }, 5000));
 	await sleep(100);
 	for (let i = 0; i < 4; i++) await s.write(job(i), null, FOREVER);
@@ -498,7 +498,7 @@ test("readAll lists entries for a dashboard without removing them; space_list do
 	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
 	const registry = createRegistry(); registry.install(spaces);
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-	const s = new JavaSpace(h, ctx);
+	const s = new PiSpaces(h, ctx);
 	for (let i = 0; i < 3; i++) await s.write(job(i), null, FOREVER);
 	assert.deepEqual((await s.readAll({ type: "Job" })).map((e) => e.fields.n), [0, 1, 2]);
 	assert.equal((await s.readAll({ type: "Job" }, { limit: 2 })).length, 2);
@@ -516,7 +516,7 @@ test("readAll lists entries for a dashboard without removing them; space_list do
 
 test("pipeline: competing analysts summarise each window exactly once; duplicates and non-numbers do not count", async () => {
 	const p = await import("./examples/sensor-pipeline.ts");
-	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const host = new PiSpaces(h, ctx);
 	const [a, b, c] = [1, 2, 3].map((id) => p.role(h, id));
 	for (const w of ["w1", "w2", "w3"]) await p.openWindow(host, w);
 	for (const w of ["w1", "w2", "w3"]) {
@@ -543,7 +543,7 @@ test("pipeline: competing analysts summarise each window exactly once; duplicate
 
 test("pipeline: an analyst that dies holding a window leaves no summary; the window returns to another analyst", async () => {
 	const p = await import("./examples/sensor-pipeline.ts");
-	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const host = new PiSpaces(h, ctx);
 	await p.openWindow(host, "w1", ["station"]);
 	await p.collect(p.role(h, 1), "station", "w1", [{ ts: 1, kind: "temp", value: 7 }]);
 	assert.equal(await p.analyse(p.role(h, 10), { txnLeaseMs: 300, crash: true }), null);
@@ -558,7 +558,7 @@ test("pipeline: an analyst that dies holding a window leaves no summary; the win
 
 test("pipeline: a source that never reports is listed as missing after the timeout instead of blocking forever", async () => {
 	const p = await import("./examples/sensor-pipeline.ts");
-	const h = await open(new MemoryStorage()); const host = new JavaSpace(h, ctx);
+	const h = await open(new MemoryStorage()); const host = new PiSpaces(h, ctx);
 	await p.openWindow(host, "w1");
 	await p.collect(p.role(h, 1), "station", "w1", [{ ts: 1, kind: "temp", value: 5 }]);
 	await p.collect(p.role(h, 2), "forecast", "w1", [{ ts: 1, kind: "temp", value: 7 }]);
@@ -582,7 +582,7 @@ test("space_txn and space_lease are exactly-once tools; space_read finds an entr
 	const registry = createRegistry(); registry.install(spaces);
 	const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 	const conv = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
-	const s = new JavaSpace(h, ctx); const e = await s.write(job(5), null, FOREVER); await s.write(job(5), null, FOREVER);
+	const s = new PiSpaces(h, ctx); const e = await s.write(job(5), null, FOREVER); await s.write(job(5), null, FOREVER);
 	faux.setResponses([
 		fauxAssistantMessage(fauxToolCall("space_txn", { action: "begin" }), { stopReason: "toolUse" }),
 		fauxAssistantMessage(fauxToolCall("space_read", { id: e.id }), { stopReason: "toolUse" }),

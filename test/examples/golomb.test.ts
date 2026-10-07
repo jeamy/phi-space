@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, JavaSpace, spaces, startService } from "../../src/index.ts";
+import { FOREVER, PiSpaces, spaces, startService } from "../../src/index.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,7 +40,7 @@ async function setupGolombHarness(testDir: string) {
   const storage = await openNodeJsonlStorage(testDir, ctx);
   const h = await Harness.open(storage, { models, registry }, ctx);
   h.resume();
-  const host = new JavaSpace(h, ctx);
+  const host = new PiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
   return { h, host, stopService, storage };
@@ -290,7 +290,7 @@ describe("Golomb Pipeline Integration", () => {
       }, null, FOREVER);
       
       //Worker nimmt Task und findet Lösung
-      const worker = new JavaSpace(h, ctx, Date.now, undefined, 100);
+      const worker = new PiSpaces(h, ctx, Date.now, undefined, 100);
       
       // Überprüfe ob Task verfügbar ist
       const tasks = await host.readAll({ type: "GolombSearchTask" });

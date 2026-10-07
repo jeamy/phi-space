@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { core, FOREVER, JavaSpace, Space, canonicalJson, type SpaceHost } from "../src/index.ts";
+import { core, FOREVER, PiSpaces, Space, canonicalJson, type SpaceHost } from "../src/index.ts";
 
 export type SieveConfig = { runId: string; start: number; end: number; blockSize: number };
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
@@ -63,7 +63,7 @@ export async function prepareSieveRun(host: SpaceHost, config: SieveConfig): Pro
 }
 
 /** Each worker owns its reservation; results and consumed task are committed together. */
-export async function processSieveTask(space: JavaSpace, runId: string, options: {
+export async function processSieveTask(space: PiSpaces, runId: string, options: {
   leaseMs?: number; crashAfterTake?: boolean; beforeCommit?: () => Promise<void>
 } = {}): Promise<boolean> {
   const txn = await space.createTransaction(options.leaseMs ?? 30_000);
@@ -85,7 +85,7 @@ export async function processSieveTask(space: JavaSpace, runId: string, options:
 }
 
 /** Look up every expected ID: never infer completeness from a truncated result list/count. */
-export async function collectSieveResults(space: JavaSpace, config: SieveConfig): Promise<number[]> {
+export async function collectSieveResults(space: PiSpaces, config: SieveConfig): Promise<number[]> {
   validate(config);
   const primes: number[] = [];
   for (let start = config.start, i = 0; start < config.end; start += config.blockSize, i++) {
@@ -109,11 +109,11 @@ export async function runSieve(options: { start?: number; end?: number; blockSiz
   const workers = options.workers ?? 4;
   if (!Number.isSafeInteger(workers) || workers < 1 || workers > 32) throw new Error("workers must be 1..32");
   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-  const host = new JavaSpace(h, ctx);
+  const host = new PiSpaces(h, ctx);
   try {
     await prepareSieveRun(h, config);
     await Promise.all(Array.from({ length: workers }, (_, i) => (async () => {
-      const worker = new JavaSpace(h, ctx, Date.now, undefined, i + 1);
+      const worker = new PiSpaces(h, ctx, Date.now, undefined, i + 1);
       while (await processSieveTask(worker, config.runId)) { /* next task */ }
     })()));
     const primes = await collectSieveResults(host, config);

@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, JavaSpace, spaces, startService } from "../src/index.ts";
+import { FOREVER, PiSpaces, spaces, startService } from "../src/index.ts";
 import { research } from "./arxiv-tool.ts";
 import { pathToFileURL } from "node:url";
 import { claimFreshDirectory, researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
@@ -217,7 +217,7 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde: die Meldung enthält den U
 
 // Monitor: host-side status loop — no LLM agent (a model cannot schedule itself every 30s,
 // and there is no space_count tool). Writes a SystemStatus entry (5-minute lease) periodically.
-const startMonitor = (host: JavaSpace, startedAt: string) => {
+const startMonitor = (host: PiSpaces, startedAt: string) => {
   const types = ["PaperMetadata", "ClassifiedPaper", "PaperSummary", "AnalysisResult", "Analysis", "UserQuery", "QueryResponse"];
   let stopped = false;
   let wake: (() => void) | undefined;
@@ -260,7 +260,7 @@ async function execute() {
   
   const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models, registry }, ctx);
   h.resume();
-  const host = new JavaSpace(h, ctx);
+  const host = new PiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
   console.log(`model ${model.provider}/${model.modelId}`);

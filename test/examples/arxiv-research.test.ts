@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, JavaSpace, spaces, startService } from "../../src/index.ts";
+import { FOREVER, PiSpaces, spaces, startService } from "../../src/index.ts";
 import { research } from "../../examples/arxiv-tool.ts";
 
 // ============================================================================
@@ -147,7 +147,7 @@ async function setupArxivHarness() {
   registry.install(research);
   
   const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-  const host = new JavaSpace(h, ctx);
+  const host = new PiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
   return { h, host, stopService, models, faux };
@@ -174,7 +174,7 @@ async function teardownArxivHarness(h: Harness, stopService: () => Promise<void>
 
 describe("arxiv-research.ts", () => {
   let h: Harness;
-  let host: JavaSpace;
+  let host: PiSpaces;
   let stopService: () => Promise<void>;
 
   beforeEach(async () => {
@@ -606,19 +606,19 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
 // ============================================================================
 
 expect.extend({
-  async toHavePapers(host: JavaSpace, count: number) {
+  async toHavePapers(host: PiSpaces, count: number) {
     const papers = await host.readAll({ type: "Paper" });
     return papers.length === count ? { pass: true } : { pass: false, expected: count, actual: papers.length };
   },
-  async toHaveCollectorDone(host: JavaSpace, collector: string) {
+  async toHaveCollectorDone(host: PiSpaces, collector: string) {
     const done = await host.readAll({ type: "CollectorDone", fields: { collector } });
     return done.length > 0 ? { pass: true } : { pass: false, expected: true, actual: false };
   },
-  async toHaveAnalysis(host: JavaSpace) {
+  async toHaveAnalysis(host: PiSpaces) {
     const analyses = await host.readAll({ type: "Analysis" });
     return analyses.length > 0 ? { pass: true } : { pass: false, expected: true, actual: false };
   },
-  async toHaveReport(host: JavaSpace) {
+  async toHaveReport(host: PiSpaces) {
     const reports = await host.readAll({ type: "Report" });
     return reports.length > 0 ? { pass: true } : { pass: false, expected: true, actual: false };
   }
