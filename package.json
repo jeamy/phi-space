@@ -15,7 +15,9 @@
     "bundle": "esbuild src/index.ts --bundle --format=esm --platform=node --target=node22 --external:@earendil-works/* --legal-comments=none --outfile=dist/pi-spaces.mjs",
     "test:examples": "node --experimental-strip-types --test test/examples/*.test.ts",
     "example:golomb": "node --experimental-strip-types examples/golomb.ts",
-    "example:dark-energy": "node --experimental-strip-types examples/dark-energy-research.ts"
+    "example:dark-energy": "node --experimental-strip-types examples/dark-energy-research.ts",
+    "example:sieve": "node --experimental-strip-types examples/sieve.ts",
+    "example:cache": "node --experimental-strip-types examples/cache.ts"
   },
   "dependencies": {
     "@earendil-works/chord": "*",

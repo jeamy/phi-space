@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, JavaSpace, NO_WAIT, type SpaceHost } from "../src/index.ts";
+import { FOREVER, JavaSpace, NO_WAIT, TransactionError, type SpaceHost } from "../src/index.ts";
 
 export const SOURCES = ["station", "forecast", "cloud"] as const;
 export type Sample = { ts: number; kind: string; value: unknown };
@@ -52,12 +52,16 @@ export async function analyse(s: JavaSpace, o: { takeTimeoutMs?: number; doneTim
 	const seen = new Set<string>();
 	const values: Record<string, number[]> = {};
 	let duplicates = 0, rejected = 0;
+	if (await s.count({ type: "Reading", fields: { window } }) > 1000) {
+		await s.abort(t.id);
+		throw new Error("Window exceeds the 1000-reading snapshot limit; split the window before analysis");
+	}
 	for (const r of await s.readAll({ type: "Reading", fields: { window } })) {
 		const { source, ts, kind, value } = r.fields as { source: string; ts: number; kind: string; value: unknown };
-		const key = `${source}:${kind}:${ts}`; // a retried delivery must not count twice
+		if (typeof value !== "number" || !Number.isFinite(value)) { rejected++; continue; }
+		const key = JSON.stringify([source, kind, ts]); // no delimiter collisions
 		if (seen.has(key)) { duplicates++; continue; }
 		seen.add(key);
-		if (typeof value !== "number" || !Number.isFinite(value)) { rejected++; continue; } // data, never instructions
 		(values[kind] ??= []).push(value);
 	}
 	const stats: Record<string, Stat> = {};
@@ -68,22 +72,31 @@ export async function analyse(s: JavaSpace, o: { takeTimeoutMs?: number; doneTim
 	try {
 		await s.write({ type: "Summary", fields: summary as never }, t.id, FOREVER);
 		await s.commit(t.id);
-	} catch {
-		return null; // transaction lease lapsed mid-analysis: nothing committed, window returns
+	} catch (error) {
+		await s.abort(t.id).catch(() => {});
+		if (error instanceof TransactionError) return null;
+		throw error;
 	}
 	return summary;
 }
 
 /** Presenter: take a summary and turn it into a short report entry. */
 export async function present(s: JavaSpace, timeoutMs = 5000): Promise<string | null> {
-	const e = await s.take({ type: "Summary" }, timeoutMs);
-	if (!e) return null;
+	const txn = await s.createTransaction(Math.max(60_000, timeoutMs + 30_000));
+	try {
+	const e = await s.take({ type: "Summary" }, timeoutMs, { txn: txn.id });
+	if (!e) { await s.abort(txn.id); return null; }
 	const x = e.fields as unknown as Summary;
 	const parts = Object.entries(x.stats).map(([k, v]) => `${k} ${v.avg} (${v.min}..${v.max}, n=${v.n})`);
 	const notes = [x.missing.length ? `missing: ${x.missing.join(", ")}` : "", x.duplicates ? `${x.duplicates} duplicates ignored` : "", x.rejected ? `${x.rejected} invalid values rejected` : ""].filter(Boolean);
 	const text = `Window ${x.window}: ${parts.join("; ")}${notes.length ? ` [${notes.join("; ")}]` : ""}`;
-	await s.write({ type: "Report", fields: { window: x.window, text } }, null, FOREVER);
+	await s.write({ type: "Report", fields: { window: x.window, text } }, txn.id, FOREVER);
+	await s.commit(txn.id);
 	return text;
+	} catch (error) {
+		await s.abort(txn.id).catch(() => {});
+		throw error;
+	}
 }
 
 async function main() {

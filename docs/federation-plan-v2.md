@@ -1092,7 +1092,7 @@ Wie in v1, aber mit den folgenden Anpassungen:
 
 ## 📚 Referenzdokumente
 
-- [federation-limitations.md](federation-limitations.md) – Einschränkungen der Replikationsmodi ([14.3](#143-lwwset-konsistenz))
-- [fencing-adapter-spec.md](fencing-adapter-spec.md) – Spezifikation der Fencing-Adapter ([14.1](#141-fencing-adapter))
-- [pairing-protocol.md](pairing-protocol.md) – Detailliertes Pairing-Protokoll ([14.2](#142-sicheres-pairing))
-- [netbird-test-suite.md](netbird-test-suite.md) – Testfälle für NetBird ([14.15](#1415-netbird-ausfalltest-suite))
+- federation-limitations.md (historisch genannter, nicht vorhandener Pfad: `federation-limitations.md`) – Einschränkungen der Replikationsmodi ([14.3](#143-lwwset-konsistenz))
+- fencing-adapter-spec.md (historisch genannter, nicht vorhandener Pfad: `fencing-adapter-spec.md`) – Spezifikation der Fencing-Adapter ([14.1](#141-fencing-adapter))
+- pairing-protocol.md (historisch genannter, nicht vorhandener Pfad: `pairing-protocol.md`) – Detailliertes Pairing-Protokoll ([14.2](#142-sicheres-pairing))
+- netbird-test-suite.md (historisch genannter, nicht vorhandener Pfad: `netbird-test-suite.md`) – Testfälle für NetBird ([14.15](#1415-netbird-ausfalltest-suite))

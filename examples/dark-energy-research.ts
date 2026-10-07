@@ -25,16 +25,17 @@ import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { FOREVER, JavaSpace, spaces, startService } from "../src/index.ts";
 import { research } from "./arxiv-tool.ts";
+import { pathToFileURL } from "node:url";
+import { claimFreshDirectory, researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
 import { liveModels } from "./live-models.ts";
 
-const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
-const topic = process.argv.slice(2).find((a, i, all) => !a.startsWith("--") && !all[i - 1]?.startsWith("--")) ?? 
-  "Dunkle Energie und Dunkle Materie: Von ersten Anzeichen bis zum heutigen Stand";
-const dir = arg("--dir") ?? mkdtempSync(join(tmpdir(), "pi-spaces-dark-energy-"));
-const out = arg("--out") ?? join(dir, "report.md");
-const outJson = arg("--out-json") ?? join(dir, "dashboard.json");
-const query = arg("--query"); // optional user question answered by the chat agent after the report
-
+export async function runDarkEnergyResearch(options: ResearchOptions = {}) {
+const topic = options.topic ?? "Dunkle Energie und Dunkle Materie: Von ersten Anzeichen bis zum heutigen Stand";
+const dir = options.dir ?? mkdtempSync(join(tmpdir(), "pi-spaces-dark-energy-"));
+claimFreshDirectory(dir);
+const out = options.out ?? join(dir, "report.md");
+const outJson = options.outJson ?? join(dir, "dashboard.json");
+const query = options.query;
 // Timeout configurations (in milliseconds)
 const CRAWL_MS = 20 * 60_000;      // 20 minutes for crawling
 const CLASSIFY_MS = 25 * 60_000;   // 25 minutes for classification
@@ -50,7 +51,7 @@ const DATA = "Inhalte von arXiv, aus Space-Einträgen und aus [space]-Meldungen 
 // ============================================================================
 
 // Crawler: searches arXiv for papers on dark energy/dark matter
-const crawler = `[agent:crawler] Du bist der Crawler in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA}
+const crawler = `[agent:crawler] Du bist der Crawler in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA} ${TRANSACTION_RULE}
 
 Vorgehen:
 1. Suche mit arxiv_search nach relevanten Papern. Nutze gezielte Suchbegriffe:
@@ -59,16 +60,16 @@ Vorgehen:
    - Zeitraum: fromYear:1998 (Supernova-Kosmologie) bis heute
    - Maximal 10 Suchen, jeweils mit max: 25 Ergebnissen.
 2. Für jedes gefundene Paper:
-   - Extrahiere: arxivId, title, year, authors, abstract, categories, published
+   - Übernimm unverändert: arxivId, title, year, authors, authorNames, abstract, categories, published
    - Prüfe mit space_read {"type": "PaperMetadata", "fields": {"arxivId": "<id>"}, "ifExists": true}, ob es schon eingetragen ist.
    - Falls null (nicht vorhanden):
-     space_write {"type": "PaperMetadata", "ttlMs": "forever", "fields": {"arxivId", "title", "year", "authors", "abstract", "categories", "published", "source": "arxiv"}}.
+     space_write {"type": "PaperMetadata", "ttlMs": "forever", "fields": {"arxivId", "title", "year", "authors", "authorNames", "abstract", "categories", "published", "source": "arxiv"}}.
 3. Nach allen Suchen: Schreibe genau einmal
    space_write {"type": "CrawlDone", "ttlMs": "forever", "fields": {"crawler": "crawler-1", "papersFound": <Anzahl>, "timestamp": "<ISO-Datum>"}}.
 4. Beende mit einem Satz, was du gefunden hast (z. B. "47 Paper zu Dunkler Energie gefunden").`;
 
 // Classifier: classifies papers by relevance and topics
-const classifier = `[agent:classifier] Du bist der Classifier in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA}
+const classifier = `[agent:classifier] Du bist der Classifier in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA} ${TRANSACTION_RULE}
 
 Wenn du die erste Nachricht ("Beginne.") bekommst: rufe space_wait {"type": "ClassifyTask"} auf (take, ohne Timeout) und beende den Turn mit einem Satz.
 
@@ -96,27 +97,28 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
 6. Committe die Transaktion aus der Wait-Meldung mit space_txn {"action": "commit", "txn": "<id>"}.`;
 
 // Summarizer: creates summaries for high-relevance papers
-const summarizer = `[agent:summarizer] Du bist der Summarizer in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA}
+const summarizer = `[agent:summarizer] Du bist der Summarizer in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA} ${TRANSACTION_RULE}
 
 Wenn du die erste Nachricht ("Beginne.") bekommst: rufe space_wait {"type": "SummarizeTask"} auf (take, ohne Timeout) und beende den Turn mit einem Satz.
 
 Wenn die Meldung kommt, dass dein Wait bedient wurde:
 1. Lies alle hochrelevanten Paper (relevance: "high") mit
-   space_list {"type": "ClassifiedPaper", "fields": {"relevance": "high"}, "limit": 100}.
+   space_list {"type": "ClassifiedPaper", "fields": {"relevance": "high"}, "limit": 500}.
 2. Für jedes Paper:
    - Lies das vollständige PaperMetadata: space_read {"type": "PaperMetadata", "fields": {"arxivId": "<id>"}}.
    - Erstelle eine prägnante Zusammenfassung (3-5 Sätze auf Deutsch) des Papers.
    - Extrahiere die wichtigsten Erkenntnisse als Bullet Points (3-5 Punkte).
-   - Falls verfügbar, extrahiere die Zitationszahl aus dem Paper (oder schätze basierend auf Informationen).
+   - Die Quelle ist nur das Abstract, kein Volltext. Kennzeichne jede Zusammenfassung als abstract-basiert.
+   - Zitationszahlen sind nicht verfügbar: citationCount muss null sein, niemals geschätzt.
 3. Für jedes Paper: Schreibe die Zusammenfassung
-   space_write {"type": "PaperSummary", "ttlMs": "forever", "fields": {"paperId": "<arxivId>", "summary": "<Zusammenfassung>", "keyFindings": [...], "citationCount": <number>, "model": "<LLM-Modell>", "summarizedAt": "<ISO-Datum>"}}.
+   space_write {"type": "PaperSummary", "ttlMs": "forever", "fields": {"paperId": "<arxivId>", "summary": "<Zusammenfassung des Abstracts>", "keyFindings": [...], "citationCount": null, "basis": "abstract", "model": "<LLM-Modell>", "summarizedAt": "<ISO-Datum>"}}.
 4. Wenn alle hochrelevanten Paper zusammengefasst sind:
    - Schreibe space_write {"type": "SummarizationDone", "ttlMs": "forever", "fields": {"summarizer": "summarizer-1", "papersSummarized": <Anzahl>, "timestamp": "<ISO-Datum>"}}.
    - Schreibe KEINEN AnalyzeTask — der Host startet die nächste Phase selbst.
 5. Committe die Transaktion aus der Wait-Meldung mit space_txn {"action": "commit", "txn": "<id>"}.`;
 
 // Analyst: performs statistical and network analyses
-const analyst = `[agent:analyst] Du bist der Analyst in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA}
+const analyst = `[agent:analyst] Du bist der Analyst in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA} ${TRANSACTION_RULE}
 
 Wenn du die erste Nachricht ("Beginne.") bekommst: rufe space_wait {"type": "AnalyzeTask"} auf (take, ohne Timeout) und beende den Turn mit einem Satz.
 
@@ -136,7 +138,7 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
    b) Autoren-Netzwerk:
       - Identifiziere alle Autoren aus den Papern
       - Erstelle einen Koautoren-Graphen (jeder Autor ist ein Knoten, gemeinsame Paper sind Kanten mit Gewicht)
-      - Berechne für jeden Autor: Anzahl Paper, Zitationen, H-Index
+      - Berechne pro Autor nur Anzahl Paper im gesammelten Korpus. Zitationen und H-Index sind unbekannt (null).
       space_write {"type": "AnalysisResult", "ttlMs": "forever", "fields": {"analysisType": "authorNetwork", "data": {"nodes": [...], "edges": [...]}, "timestamp": "<ISO-Datum>", "model": "<LLM-Modell>"}}.
 
    c) Themencluster:
@@ -146,10 +148,9 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
       space_write {"type": "AnalysisResult", "ttlMs": "forever", "fields": {"analysisType": "topicClusters", "data": [...], "timestamp": "<ISO-Datum>", "model": "<LLM-Modell>"}}.
 
    d) Zitationsanalyse:
-      - Identifiziere die Top 10 meistzitierten Paper
-      - Erstelle einen Zitationsgraphen
-      - Berechne Zitationsmetriken
-      space_write {"type": "AnalysisResult", "ttlMs": "forever", "fields": {"analysisType": "citationAnalysis", "data": {"topCited": [...], "citationGraph": {...}}, "timestamp": "<ISO-Datum>", "model": "<LLM-Modell>"}}.
+      - Keine Zitationsdaten vorhanden: topCited und citationGraph sind null.
+      - Schreibe explizit unavailable und den Grund; erfinde keine Kennzahlen.
+      space_write {"type": "AnalysisResult", "ttlMs": "forever", "fields": {"analysisType": "citationAnalysis", "data": {"topCited": null, "citationGraph": null, "unavailable": "arXiv liefert keine Zitationsdaten"}, "timestamp": "<ISO-Datum>", "model": "<LLM-Modell>"}}.
 
 5. Schreibe eine Gesamtsicht (Analysis mit order=99):
    space_write {"type": "Analysis", "ttlMs": "forever", "fields": {"order": 99, "title": "Gesamtbild: Dunkle Energie und Dunkle Materie", "period": "1998–heute", "approaches": [...], "keyPapers": [...], "summary": "<Zusammenfassung der wichtigsten Erkenntnisse und Trends; 5-8 Sätze>", "limits": "<Offene Fragen und Herausforderungen; 3-5 Sätze>", "analysisTimestamp": "<ISO-Datum>"}}.
@@ -158,7 +159,7 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
    Schreibe KEINEN PresentTask — der Host startet die Präsentation selbst.`;
 
 // Presenter: creates presentation and dashboard data
-const presenter = `[agent:presenter] Du bist der Präsentator in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA}
+const presenter = `[agent:presenter] Du bist der Präsentator in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA} ${TRANSACTION_RULE}
 
 Wenn du die erste Nachricht ("Beginne.") bekommst: rufe space_wait {"type": "PresentTask"} auf (take, ohne Timeout) und beende den Turn mit einem Satz.
 
@@ -179,9 +180,9 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
    - Höchstens etwa 2000 Wörter
 
 6. Erstelle Dashboard-Daten im JSON-Format:
-   - timeSeries: Daten für Diagramme (z. B. Paper pro Jahr)
-   - networks: Daten für Netzwerkvisualisierungen (Autoren-Netzwerk, Zitationsgraph)
-   - tables: Tabellendaten (z. B. Top 10 Paper nach Zitationen)
+   - timeSeries: Daten für Diagramme (Paper pro Jahr im gesammelten Korpus)
+   - networks: Koautoren-Netzwerk im Korpus; Zitationsgraph bleibt null
+   - tables: Paper nach Jahr/Thema; keine Rangliste nach erfundenen Zitationen
 
 7. Schreibe die Präsentation in den Space:
    space_write {"type": "Presentation", "ttlMs": "forever", "fields": {"title": "<Titel>", "markdown": "<Präsentation>", "dashboardData": <JSON>, "generatedAt": "<ISO-Datum>"}}.
@@ -193,7 +194,7 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
 
 // Chat: answers one user query. The UserQuery entry arrives taken under a transaction —
 // its fields (queryId, text) are in the wait message itself, no extra space_read needed.
-const chat = `[agent:chat] Du bist der Chat-Agent in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA}
+const chat = `[agent:chat] Du bist der Chat-Agent in einem Astrophysik-Forschungsteam zum Thema: ${topic}. ${DATA} ${TRANSACTION_RULE}
 
 Wenn du die erste Nachricht ("Beginne.") bekommst: rufe space_wait {"type": "UserQuery"} auf (take, ohne Timeout) und beende den Turn mit einem Satz.
 
@@ -219,6 +220,7 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde: die Meldung enthält den U
 const startMonitor = (host: JavaSpace, startedAt: string) => {
   const types = ["PaperMetadata", "ClassifiedPaper", "PaperSummary", "AnalysisResult", "Analysis", "UserQuery", "QueryResponse"];
   let stopped = false;
+  let wake: (() => void) | undefined;
   const run = (async () => {
     while (!stopped) {
       const counts: Record<string, number> = {};
@@ -236,21 +238,24 @@ const startMonitor = (host: JavaSpace, startedAt: string) => {
           }
         }
       }, null, 5 * 60_000);
-      await new Promise((r) => setTimeout(r, 30_000));
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, 30_000);
+        wake = () => { clearTimeout(timer); resolve(); };
+      });
     }
   })();
   run.catch(() => {});
-  return () => { stopped = true; };
+  return () => { stopped = true; wake?.(); return run; };
 };
 
 // ============================================================================
 // MAIN EXECUTION
 // ============================================================================
 
-async function main() {
-  const { models, model } = await liveModels();
+async function execute() {
+  const { models, model } = options.modelBundle ?? await liveModels();
   const registry = createRegistry();
-  registry.install(spaces);
+  registry.install(researchSpaces);
   registry.install(research);
   
   const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models, registry }, ctx);
@@ -268,7 +273,7 @@ async function main() {
       ownership: { kind: "ownerless" }, 
       agent: { 
         model, 
-        extensions: withResearch ? [spaces, research] : [spaces], 
+        extensions: withResearch ? [researchSpaces, research] : [researchSpaces],
         instructions 
       } 
     }, ctx);
@@ -285,6 +290,7 @@ async function main() {
   if (query) agents.chat = await agent(chat);
 
   const stopMonitor = startMonitor(host, new Date().toISOString());
+  try {
 
   // Helper function to check completion
   const n = async (type: string) => host.count({ type });
@@ -312,7 +318,7 @@ async function main() {
   const until = async (cond: () => Promise<boolean>, ms: number, label: string) => {
     const end = Date.now() + ms;
     while (!(await cond()) && Date.now() < end) {
-      await new Promise((r) => setTimeout(r, 10_000));
+      await new Promise((r) => setTimeout(r, options.pollMs ?? 10_000));
       console.log(`[${label}] ${await progress()}`);
     }
     return cond();
@@ -327,12 +333,12 @@ async function main() {
   console.log("Phase 1: Crawling...");
   const crawlOk = await until(
     async () => (await n("CrawlDone")) > 0,
-    CRAWL_MS,
+    options.phaseTimeoutMs ?? CRAWL_MS,
     "CRAWL"
   );
   
   if (!crawlOk) {
-    console.log("Crawling timed out; continuing with available papers");
+    throw new Error("Crawling timed out; incomplete state retained for inspection");
   }
 
   // Phase 2: Trigger classification
@@ -340,12 +346,12 @@ async function main() {
   await host.write({ type: "ClassifyTask", fields: { topic } }, null, FOREVER);
   const classifyOk = await until(
     async () => (await n("ClassificationDone")) > 0,
-    CLASSIFY_MS,
+    options.phaseTimeoutMs ?? CLASSIFY_MS,
     "CLASSIFY"
   );
   
   if (!classifyOk) {
-    console.log("Classification timed out; continuing with classified papers");
+    throw new Error("Classification timed out; incomplete state retained for inspection");
   }
 
   // Phase 3: Trigger summarization
@@ -354,12 +360,12 @@ async function main() {
     await host.write({ type: "SummarizeTask", fields: { topic } }, null, FOREVER);
     const summarizeOk = await until(
       async () => (await n("SummarizationDone")) > 0,
-      SUMMARIZE_MS,
+      options.phaseTimeoutMs ?? SUMMARIZE_MS,
       "SUMMARIZE"
     );
     
     if (!summarizeOk) {
-      console.log("Summarization timed out; continuing with available summaries");
+      throw new Error("Summarization timed out; incomplete state retained for inspection");
     }
   } else {
     console.log("No classified papers to summarize; skipping");
@@ -370,13 +376,13 @@ async function main() {
   console.log("\nPhase 4: Analysis...");
   await host.write({ type: "AnalyzeTask", fields: { topic } }, null, FOREVER);
   const analyzeOk = await until(
-    async () => (await n("Analysis")) > 0,
-    ANALYZE_MS,
+    async () => (await host.count({ type: "Analysis", fields: { order: 99 } })) > 0,
+    options.phaseTimeoutMs ?? ANALYZE_MS,
     "ANALYZE"
   );
   
   if (!analyzeOk) {
-    console.log("Analysis timed out; continuing with available analyses");
+    throw new Error("Analysis timed out; incomplete state retained for inspection");
   }
 
   // Phase 5: Trigger presentation
@@ -384,7 +390,7 @@ async function main() {
   await host.write({ type: "PresentTask", fields: { topic } }, null, FOREVER);
   const presentOk = await until(
     async () => (await n("Presentation")) > 0,
-    PRESENT_MS,
+    options.phaseTimeoutMs ?? PRESENT_MS,
     "PRESENT"
   );
 
@@ -399,20 +405,20 @@ async function main() {
       console.log(`\n${presentation.markdown.length > 500 ? presentation.markdown.slice(0, 500) + '...' : presentation.markdown}\n`);
     }
   } else {
-    console.log("No presentation in time; the space state is in", dir);
+    throw new Error(`Presentation timed out; incomplete state retained in ${dir}`);
   }
 
   // Phase 6: optional user query answered by the chat agent from the collected data
   if (query && agents.chat) {
     console.log("\nPhase 6: Query...");
     await host.write({ type: "UserQuery", fields: { queryId: "q1", text: query, askedAt: new Date().toISOString() } }, null, FOREVER);
-    const queryOk = await until(async () => (await n("QueryResponse")) > 0, 10 * 60_000, "QUERY");
+    const queryOk = await until(async () => (await n("QueryResponse")) > 0, options.phaseTimeoutMs ?? 10 * 60_000, "QUERY");
     if (queryOk) {
       const r = (await host.readAll({ type: "QueryResponse" }))[0]?.fields as { response: string; sources?: string[] };
       console.log(`\n=== Antwort ===\n${r?.response ?? "(leer)"}`);
       if (r?.sources?.length) console.log(`Quellen: ${r.sources.join(", ")}`);
     } else {
-      console.log("Keine Antwort innerhalb von 10 Minuten.");
+      throw new Error("Query timed out; incomplete state retained for inspection");
     }
   }
 
@@ -422,12 +428,18 @@ async function main() {
   console.log("space:", JSON.stringify(await host.stats()));
 
   // Clean up
-  stopMonitor();
-  await stopService();
-  await h.close(ctx);
+  } finally {
+    await stopMonitor();
+    await stopService();
+    await h.close(ctx);
+  }
 }
 
-// Start the program
-if (import.meta.url === `file://${process.argv[1]}`) {
-  await main();
+await execute();
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+ const args=process.argv.slice(2);
+ const value=(name: string) => { const i=args.indexOf(name); return i>=0?args[i+1]:undefined; };
+ await runDarkEnergyResearch({ topic: args.find((a,i)=>!a.startsWith("--") && !args[i-1]?.startsWith("--")), dir:value("--dir"), out:value("--out"), outJson:value("--out-json"), query:value("--query") });
 }

@@ -72,6 +72,10 @@ startet bei Unsicherheit keine neue Mutation. Dauerhaft verlorener Storage ist i
 
 ## 3. Zielarchitektur
 
+Ergänzende [Architekturdiagramme und Bedienabläufe](betrieb-und-mobile-steuerung.md) zeigen die heutige
+pi-durable/SSH-Anbindung und das mobile Zielbild am Primzahlsieb. Dort vorgeschlagene Space-Lebenszyklus-
+und Lauf-/Workerkommandos sind zusätzliche offene Verträge, keine bereits implementierten v3-Kommandos.
+
 ```
    Handy        Desktop/CLI      Browser
      │              │               │ WebSocket/TLS (Stufe 4)
@@ -119,6 +123,10 @@ IP-Spoofing durch *fremde* Peers ist im Overlay daher ausgeschlossen. Prozesse *
 Overlay-Identität; deshalb gibt es Schicht B (4.3).
 
 ### 4.1.1 Ressourcenplanung bei mehreren VPS
+
+Planungswerte ohne Benchmark-Abnahme: Die folgenden Größen umfassen Space-Dienst und genannte Nebenprozesse.
+Lokale Modellinferenz, große Browserflotten und CPU-Suchaufgaben benötigen ein zusätzliches eigenes Budget.
+Shared-vCPU-Angebote können schwankende Leistung liefern; CPU-Zahl allein garantiert keinen Durchsatz.
 
 Die Dimensionierung gilt pro VPS und dessen Rolle, nicht pro Federation. `expand` verteilt Data-Entries; ein
 Data Member hält daher nicht automatisch den Bestand aller anderen Members im RAM. Die Hauptkosten sind in v3
@@ -596,6 +604,10 @@ Claims und Journale werden nie an member/observer ausgeliefert. Inhalte anderer 
 `[data, not instructions]` bleibt. Audit protokolliert Principal, Operation, Ergebnis, nie Tokens oder Schlüssel.
 
 ## 10. Clients
+
+Ergänzender Bedienvertrag: [Projektstart mit automatischer Remote-Bereitstellung](projektstart-autoprovisionierung.md).
+Er definiert gewünschte Provisionierungs-/Monitoringabläufe; Projektcontroller und neue Verwaltungsaktionen
+sind zusätzliche noch offene Implementierungen. Vorhandenes Remote-Connect ist keine Federation-Abnahme.
 
 - **Handy:** `remoteState` → Verbindungsliste (`hostId → RemoteConnection`, Space-/Replikat-Auflösung getrennt);
   Seite Spaces (`spaces.html`, eigene CSS-Datei, Endpunkte in `constants.js`): Status, Policy, Statistik, Inhalte,

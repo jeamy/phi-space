@@ -8,7 +8,7 @@ JavaSpaces-style space as a `@earendil-works/pi-durable` extension. TypeScript, 
 - Typecheck: `npm run typecheck` (`tsc`, covers `src`, `examples`, `*.test.ts`)
 - Tests: `npm test` (node test runner: `test-core.test.ts`, `test-meter.test.ts`, `integration.test.ts`)
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> integration.test.ts`
-- Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`
+- Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
 - Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`
 
 Run typecheck and tests after every change.

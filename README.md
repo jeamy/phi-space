@@ -20,8 +20,9 @@ The space is one Session-scoped document, so it is committed atomically and surv
 - **Entries** `{type, types, fields}`; `types` (type then supertypes) is fixed at write time. Templates: absent or
   null type/field is a wildcard, a `null` template matches anything, subtypes match, fields compare by deep equality.
   As in Jini, you cannot search for a field being null.
-- **take**: never returns the same entry twice. Tool calls are exactly-once across replay: the result is recorded in a
-  task document in the same commit that removes the entry.
+- **take**: a committed destructive take removes an entry once. A take under a transaction is a reservation;
+  abort/expiry makes it available again. Tool replays return their stored result without repeating the mutation.
+  This does not guarantee exactly-once external effects.
 - **read vs readIfExists** (same for take): `*IfExists` waits only while every match is locked by another
   transaction; plain `read`/`take` waits for a match to appear, up to the timeout. `NO_WAIT = 0`.
 - **Leases**: granted as requested. `ANY` gets 1 hour, `FOREVER` never expires (tools: `"forever"`), negative or NaN
@@ -30,8 +31,8 @@ The space is one Session-scoped document, so it is committed atomically and surv
   lease expiry aborts. A worker that takes under a transaction and dies returns its job when the lease lapses.
   Lapses are applied in time order, even when nobody looked for a while.
 - **Ownership**: tools act as their conversation. It owns the transactions it begins (and those a `space_wait` hands it),
-  the entries it writes and its waits and registrations, and may only use, commit, renew or cancel its own or ownerless
-  ones. Host code (`new JavaSpace(harness, ctx)` without `as`) is unrestricted.
+  the entries it writes and its waits and registrations, and may only use, commit, renew or cancel its own ones.
+  Ownerless transactions and leases belong to host code, which is unrestricted.
 - **notify**: registration with lease, handback, per-registration strictly increasing sequence numbers. A listener is a
   conversation: events are submitted as input with `requestId = pi-spaces:eventId:seq`, so redelivery is harmless.
   Best effort.
@@ -117,17 +118,26 @@ npm run example
 | `examples/blocking-tool.ts` | `space_take` with a timeout, the entry arrives later | – |
 | `examples/sensor-pipeline.ts` | collectors → competing analysts (take under txn, fork/join on `Done`) → presenter; also used by the pipeline tests | – (host code as conversations) |
 | `examples/chat.ts` | three agents chat in a ring; each has a notify subscription for messages addressed to it | – scripted; `--live` uses a real model |
-| `examples/arxiv-research.ts` | 3 collectors search arXiv (`arxiv_search`, `examples/arxiv-tool.ts`) and write deduplicated `Paper` entries, an analyst (`space_wait`) groups them into eras, a presenter writes a Markdown report | real model, network |
-| `examples/golomb.ts` | distributed Golomb-ruler search: master partitions the search into `a2` ranges, workers `take` tasks, DFS with branch-and-bound via `GolombBestKnown`, `GolombTaskDone`/`GolombSearchDone` markers; `--checkpoint` resumes | – (host code) |
+| `examples/arxiv-research.ts` | collectors search arXiv and attempt read-before-write deduplication; task outputs require a matching transaction; fresh state directory required | real model, network |
+| `examples/sieve.ts` | bounded segmented sieve with transactional tasks, reference tests and JSONL recovery | – (host code) |
+| `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions | – (host code; no replication) |
+| `examples/golomb.ts` | local cooperative DFS with transactional tasks and isolated runs; persistent completed tasks resume; `--checkpoint` writes completion receipts, not partial DFS cursors | – (host code) |
 | `examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
 API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,
 tests and limits of each example: [docs/examples.md](docs/examples.md) and [docs/examples/](docs/examples/).
 
+Actual research runners are tested with scripted models and persistent storage. Real-model quality and network
+integration are not validated by these tests. Research runs require fresh directories; automatic research resume
+is unsupported. Citation metrics are unavailable from arXiv metadata and remain null. No measured scaling or
+production benchmarks exist. Several async workers do not provide CPU parallelism.
+
 ```
 npm run test:examples    # test/examples/ suite (node:test + compat shim, no vitest)
 npm run example:golomb -- 7 --workers 4
+npm run example:sieve -- 1001 4
+npm run example:cache
 ```
 
 ```

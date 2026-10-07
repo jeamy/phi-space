@@ -1,5 +1,9 @@
 > **Ersetzt durch [federation-plan-v3.md](federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
 
+> **Aktueller Projektstart:** [Automatische Remote-Bereitstellung](projektstart-autoprovisionierung.md) beschreibt
+> den geplanten mobilen Start mit Spaces, Monitoring und Federation. Die historischen „gelöst“-Markierungen
+> unten sind keine Implementierungs- oder Abnahmenachweise; verworfene v2-Vorschläge sind in v3 korrigiert.
+
 # Föderierte Spaces v2 – Zusammenfassung der Änderungen
 
 **Version:** 2.0  
@@ -644,10 +648,10 @@ Diese Punkte sind **keine Blocker**, aber verbessern die **Betriebszuverlässigk
 - **Integrationstests** mit Test-Containern (Docker)
 - **End-to-End-Tests** für kritische Pfade
 - **Dokumentation** aktualisieren:
-  - [federation-limitations.md](federation-limitations.md) ([14.3](#143-lwwset-konsistenz))
-  - [fencing-adapter-spec.md](fencing-adapter-spec.md) ([14.1](#141-fencing-adapter-für-sichere-promotion))
-  - [pairing-protocol.md](pairing-protocol.md) ([14.2](#142-sicheres-pairing-protokoll))
-  - [netbird-test-suite.md](netbird-test-suite.md) ([14.15](#1415-netbird-ausfalltest-suite))
+  - federation-limitations.md (historisch genannter, nicht vorhandener Pfad: `federation-limitations.md`) ([14.3](#143-lwwset-konsistenz))
+  - fencing-adapter-spec.md (historisch genannter, nicht vorhandener Pfad: `fencing-adapter-spec.md`) ([14.1](#141-fencing-adapter-für-sichere-promotion))
+  - pairing-protocol.md (historisch genannter, nicht vorhandener Pfad: `pairing-protocol.md`) ([14.2](#142-sicheres-pairing-protokoll))
+  - netbird-test-suite.md (historisch genannter, nicht vorhandener Pfad: `netbird-test-suite.md`) ([14.15](#1415-netbird-ausfalltest-suite))
 
 ---
 
@@ -687,8 +691,8 @@ Diese Punkte sind **keine Blocker**, aber verbessern die **Betriebszuverlässigk
 | [federation-plan-v2.md](federation-plan-v2.md) | **Hauptdokument** mit allen Änderungen | ✅ Aktualisiert |
 | [federation-plan-v1.md](federation-plan-v1.md) | Ursprünglicher Plan | ⚠️ Veraltet |
 | [federation-plan-v2-summary.md](federation-plan-v2-summary.md) | **Diese Datei** – Schnelle Übersicht | ✅ Aktuell |
-| [federation-limitations.md](../federation-limitations.md) | LWW/Set-Einschränkungen | 📝 Geplant |
-| [fencing-adapter-spec.md](../fencing-adapter-spec.md) | Fencing-Adapter-Spezifikation | 📝 Geplant |
+| federation-limitations.md (historisch genannter, nicht vorhandener Pfad: `../federation-limitations.md`) | LWW/Set-Einschränkungen | 📝 Geplant |
+| fencing-adapter-spec.md (historisch genannter, nicht vorhandener Pfad: `../fencing-adapter-spec.md`) | Fencing-Adapter-Spezifikation | 📝 Geplant |
 
 ---
 

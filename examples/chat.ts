@@ -11,9 +11,11 @@ import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-work
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { FOREVER, JavaSpace, spaces, startService } from "../src/index.ts";
 import { liveModels } from "./live-models.ts";
+import { pathToFileURL } from "node:url";
 
-const live = process.argv.includes("--live");
-const topic = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? "Welche Idee hat Transformer-Sprachmodelle am meisten vorangebracht, und was ist ihr größter Schwachpunkt?";
+export async function runChat(options: {live?: boolean; topic?: string; maxTurns?: number; timeoutMs?: number} = {}) {
+const live = options.live ?? false;
+const topic = options.topic ?? "Welche Idee hat Transformer-Sprachmodelle am meisten vorangebracht, und was ist ihr größter Schwachpunkt?";
 const ROOM = "lobby";
 const NAMES = ["alice", "bob", "carol"] as const;
 const PERSONA: Record<string, string> = {
@@ -21,7 +23,7 @@ const PERSONA: Record<string, string> = {
 	bob: "skeptischer Ingenieur, achtet auf Kosten und Fehler",
 	carol: "Moderatorin, fasst zusammen und stellt Rückfragen",
 };
-const MAX_TURNS = live ? 6 : 9;
+const MAX_TURNS = options.maxTurns ?? (live ? 6 : 9);
 const next = (name: string) => NAMES[(NAMES.indexOf(name as (typeof NAMES)[number]) + 1) % NAMES.length]!;
 
 const instructions = (name: string) => `[agent:${name}] Du bist ${name}, ${PERSONA[name]}, in einem Gruppenchat (Raum "${ROOM}").
@@ -62,19 +64,29 @@ const host = new JavaSpace(h, ctx);
 const stopService = await startService(h, ctx);
 
 const subs: string[] = [];
+const conversations = [];
+try {
 for (const name of NAMES) {
 	const conv = await h.createConversation({ ownership: { kind: "ownerless" }, agent: { model, extensions: [spaces], instructions: instructions(name) } }, ctx);
+	conversations.push(conv);
 	subs.push((await host.notify({ type: "Msg", fields: { room: ROOM, to: name } }, { target: conv.id, lease: FOREVER })).eventId);
 }
 console.log(`model: ${model.provider}/${model.modelId}\ntopic: ${topic}\n`);
 await host.write({ type: "Msg", fields: { room: ROOM, from: "host", to: NAMES[0], n: 0, text: topic } }, null, FOREVER);
 
-const deadline = Date.now() + (live ? 10 * 60_000 : 30_000);
+const deadline = Date.now() + (options.timeoutMs ?? (live ? 10 * 60_000 : 30_000));
 while ((await host.count({ type: "Msg" })) <= MAX_TURNS && Date.now() < deadline) await new Promise((r) => setTimeout(r, 200));
 for (const id of subs) await host.cancel(id); // nobody is woken any more
-await h.waitForIdle(ctx);
+await stopService();
+await Promise.all(conversations.map(conv => conv.abort(ctx)));
 
 const msgs = (await host.readAll({ type: "Msg", fields: { room: ROOM } })).map((e) => e.fields as { n: number; from: string; to: string; text: string });
 for (const m of msgs.sort((a, b) => a.n - b.n)) console.log(`#${m.n} ${m.from} → ${m.to}: ${m.text}\n`);
+return msgs;
+} finally {
 await stopService();
 await h.close(ctx);
+}
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await runChat({live: process.argv.includes("--live"), topic: process.argv.slice(2).find(a=>!a.startsWith("--"))});
