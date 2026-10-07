@@ -108,6 +108,11 @@ month-long and `FOREVER` waits neither spin nor get lost.
 
 ## Develop
 
+`npm run bundle` builds the library and automatically refreshes the sibling pi-termux-mobile runtime,
+including compiled example modules. Set `PI_SPACES_MOBILE_ROOT` for another mobile checkout.
+The mobile Android pre-build task rebuilds from pi-spaces source and packages the updated assets;
+set `PI_SPACES_SOURCE` there if this source checkout is elsewhere.
+
 ```
 npm test        # core spec tests + integration (concurrency, crash/reopen on JSONL, notify, blocking, pipeline)
 npm run example

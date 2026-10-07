@@ -6,6 +6,8 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
 ## Commands
 
 - Typecheck: `npm run typecheck` (`tsc`, covers `src`, `examples`, `*.test.ts`)
+- Bundle: `npm run bundle` (also synchronizes the sibling mobile runtime and compiled example modules;
+  `PI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner: `test-core.test.ts`, `test-meter.test.ts`, `integration.test.ts`)
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> integration.test.ts`
 - Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`

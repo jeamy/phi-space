@@ -12,7 +12,7 @@
     "example:arxiv": "node --experimental-strip-types examples/arxiv-research.ts",
     "typecheck": "tsc",
     "build": "tsc -p tsconfig.build.json",
-    "bundle": "esbuild src/index.ts --bundle --format=esm --platform=node --target=node22 --external:@earendil-works/* --legal-comments=none --outfile=dist/pi-spaces.mjs",
+    "bundle": "node scripts/bundle-mobile.mjs",
     "test:examples": "node --experimental-strip-types --test test/examples/*.test.ts",
     "example:golomb": "node --experimental-strip-types examples/golomb.ts",
     "example:dark-energy": "node --experimental-strip-types examples/dark-energy-research.ts",

@@ -20,8 +20,18 @@ Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 Geprüfte mobile Quellen liegen im Nachbarprojekt: `runtime/server.mjs`, `runtime/pi-serverd.mjs`,
 `runtime/common.mjs`, `runtime/remote-client.mjs`, `runtime/remote-provision.mjs` und
 `runtime/public/constants.js`. Dies ist ein Codebefund, keine ausgeführte mobile E2E-Abnahme.
-Das dortige `runtime/pi-spaces.mjs` ist eine kopierte Bundle-Datei, kein automatischer Import dieses
-Checkouts. Ein neues Beispiel oder eine Bibliotheksänderung hier aktualisiert das mobile Release nicht automatisch.
+`npm run bundle` baut die Bibliothek und aktualisiert automatisch `runtime/pi-spaces.mjs` im vorhandenen
+Nachbarprojekt. Beispiele werden als ausführbare JS-Module nach `runtime/space-examples/` gebündelt.
+Der Android-Build ruft vor dem Verpacken `scripts/prepare-runtime.py` auf: Er baut pi-spaces aus diesem
+Checkout erneut, erzeugt `runtime.bin` und eine Prüfsumme beider App-Payloads. Änderungen werden bei der
+App-Installation über diese Prüfsumme erkannt, ohne manuellen Runtime-Versionsbump.
+Andere Pfade lassen sich über `PI_SPACES_SOURCE` (mobiler Build) und `PI_SPACES_MOBILE_ROOT` (Bundle) wählen.
+Fehlt beim Android-Build ein kompatibler Source-Checkout, erscheint eine Warnung; der Build verwendet
+die vorhandenen mobilen Bundles. Nur fehlende notwendige Bundle-Dateien oder Fehler beim Bauen eines
+vorhandenen Checkouts führen zum Abbruch. Ohne Source wird keine Aktualität gegenüber dem Checkout behauptet.
+Remote-Provisionierung berücksichtigt Bibliothek und Beispielmodule im Release-Hash und überträgt sie
+beim nächsten Installations-/Updateablauf. Das installiert noch keine neue APK auf dem Handy und aktualisiert
+keinen laufenden Remote-Daemon ohne den vorhandenen Freigabeablauf. CLI-Beispiele erzeugen keine neuen UI-Buttons.
 
 ```mermaid
 flowchart TB

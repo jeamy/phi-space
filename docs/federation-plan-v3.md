@@ -90,6 +90,7 @@ und Lauf-/Workerkommandos sind zusätzliche offene Verträge, keine bereits impl
  │  Supervisor + Recovery Space (lokal)   │        │  Supervisor + Recovery     │
  │  pi-serverd                            │◄──────►│  pi-serverd                │
  │   ├ Control Space (primary)            │        │   ├ Control-Standby (St. 3)│
+ │                                        │        │   ├ Router-Standby (inakt.)│
  │   ├ Router (Journal, FederatedSpace)   │        │   ├ Data Space B           │
  │   ├ Data Space A                       │        │   └ Agenten                │
  │   └ Agenten                            │        └────────────────────────────┘
@@ -101,6 +102,8 @@ und Lauf-/Workerkommandos sind zusätzliche offene Verträge, keine bereits impl
 - Clients halten keinen zentralen Betriebszustand; Host-Worker laufen ohne Dashboard weiter. Clients behalten
   eigene Request-IDs bis zum Abschluss.
 - Router-Journal und RPC-Claims liegen in internen dauerhaften Dokumenten; Agenten-Nutzdaten nie im Control Space.
+- Der Router-Standby läuft passiv (kein Lease, keine Delegationen) und wird erst bei der Promotion nach 5.2
+  aktiv: Epoche erhöhen, alte `RouterLease` ablaufen lassen, dann in `recovering` starten.
 
 ## 4. Netz und Vertrauen
 

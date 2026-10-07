@@ -18,6 +18,18 @@ Stand: 2026-10-07. Dieser Bericht beschreibt den geprüften lokalen Arbeitsstand
 | lokale Dokumentdateiverweise | keine fehlenden Zielpfade |
 | git diff --check | ohne Whitespace-Fehler |
 
+## Automatische mobile Bundle-Aktualisierung
+
+Im Nachbarprojekt pi-termux-mobile wurde der Android-Debug-Build mit dem neuen preBuild-Schritt erfolgreich
+ausgeführt. Geprüft wurden die Übereinstimmung des Bibliotheksbundles in Source-Ausgabe, mobiler Runtime und
+APK sowie die enthaltenen Sieb-/Cache-Module und die Prüfsumme von runtime.bin/rootfs.bin.
+Eine unveränderte erneute Vorbereitung erzeugt dieselbe Prüfsumme und erhält die Asset-Zeitstempel.
+Die gebündelten Sieb-/Cache-CLI-Programme laufen lokal; vier Remote-Provisionierungsregressionen bestehen,
+einschließlich Hash-Änderung bei geänderten, hinzugefügten und entfernten Beispielmodulen.
+
+Dies belegt Build, Verpackung und lokale Ausführung. Installation/Re-Extraktion auf einem echten Handy und
+Übertragung an einen Remote-Host wurden dabei nicht ausgeführt; die vorhandenen Update-Freigaben bleiben bestehen.
+
 Die tatsächlichen Forschungsrunner wurden mit Faux-Modellen, lokalen Daten und JSONL ausgeführt; reale Modelle
 und arXiv-Netzrequests waren nicht Teil dieser Abnahme. Referenzwerte und Datenvertrag wurden gegen
 [OEIS A003022](https://oeis.org/A003022) und die
