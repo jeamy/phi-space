@@ -134,18 +134,18 @@ außerhalb der Datei; eine neue Revision verändert keinen laufenden Auftrag.
   "provisioning": { "reuseExisting": true, "createMissing": true },
   "coordinatorHost": "host-a",
   "hosts": [
-    { "hostId": "host-a", "ssh": "pi@vps-a" },
-    { "hostId": "host-b", "ssh": "pi@vps-b" }
+    { "alias": "host-a", "ssh": "pi@vps-a" },
+    { "alias": "host-b", "ssh": "pi@vps-b" }
   ],
   "federation": {
-    "federationId": "prime-demo-fed",
-    "controlSpaceId": "prime-demo-control",
+    "federationAlias": "prime-demo-fed",
+    "controlSpace": "prime-demo-control",
     "mode": "expand",
     "members": [
-      { "spaceId": "prime-demo-a", "hostId": "host-a" },
-      { "spaceId": "prime-demo-b", "hostId": "host-b" }
+      { "space": "prime-demo-a", "host": "host-a" },
+      { "space": "prime-demo-b", "host": "host-b" }
     ],
-    "routingProfile": "sieve-pinned-subruns"
+    "routingProfile": "sieve-hrw-by-taskid"
   },
   "monitoring": { "enabled": true, "sampleIntervalMs": 2000 },
   "workload": {
@@ -154,14 +154,19 @@ außerhalb der Datei; eine neue Revision verändert keinen laufenden Auftrag.
     "end": 1001,
     "blockSize": 128,
     "workersPerMember": 1,
-    "partition": "disjoint-ranges"
+    "partition": "hrw-by-taskId"
   }
 }
 ```
 
-Release-Namen und IDs sind Beispiele. Der Projektcontroller übersetzt das Routing-Profil in eine
-validierte Policy und ein Teilbereichsmanifest; der String selbst ist kein zusätzlicher v3-Routingmodus.
-Jeder Teilbereich bindet SieveTask, SieveResult und Txn an denselben Member.
+Release-Namen und Aliase sind Beispiele. Hosts, Spaces und Federation stehen nur als Aliase in der Config;
+`hostId` und `spaceId` werden nach v3 beim Anlegen erzeugt und serverseitig dem Alias zugeordnet.
+Der Projektcontroller übersetzt das Routing-Profil in eine validierte Policy und ein Lauf-Manifest; der String
+selbst ist kein zusätzlicher v3-Routingmodus. `sieve-hrw-by-taskid` bedeutet je eine expand-Regel nach `taskId`
+mit derselben Member-Menge für SieveTask und SieveResult. Damit bindet jede `taskId` Task, Ergebnis und Txn an
+denselben Member; das Manifest hält die berechnete Zuordnung fest. Gezielt angeheftete Teilbereiche
+(`disjoint-ranges` je Member) sind eine Erweiterung außerhalb von v3
+([Betrieb, Abschnitt 6](betrieb-und-mobile-steuerung.md#später-mehrere-task-spaces)).
 Capability-/Kapazitätsauswahl darf nicht unabhängig Task und Ergebnis auf verschiedene Hosts verteilen.
 
 ## 5. Automatischer Startauftrag

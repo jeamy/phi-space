@@ -1,6 +1,6 @@
 # Spaces betreiben und vom Handy steuern
 
-Stand: 2026-10-07. Architektur und Bedienentwurf zum [Federation-Plan v3](federation-plan-v3.md).
+Stand: 2026-10-07 (an v3-Korrekturen angepasst). Architektur und Bedienentwurf zum [Federation-Plan v3](federation-plan-v3.md).
 Die Diagramme unterscheiden vorhandenen Code von geplanten Diensten. Bootstrap-Aufrufe und neue
 Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 
@@ -116,14 +116,15 @@ flowchart TB
     HA --> StoreA
     Control -->|"validierte Commands"| Router
     Router --> Control
-    Router -->|"lokale Verwaltungsaufträge"| SupA
+    Router -->|"MemberStatus"| Control
+    Control -.->|"Workeraufträge (Erweiterung)"| SupA
     SupA --- RecA
-    SupA --> AgentA
+    SupA -.->|"startet / stoppt (Erweiterung)"| AgentA
     AgentA -->|"lokaler Client oder Tools"| DataA
     ServiceA --> HA
     DataA --> MonitorA
     HA --> MonitorA
-    MonitorA -->|"zeitlich begrenzter Status"| Control
+    MonitorA -->|"Capability / Host-Metriken"| Control
   end
   subgraph workerhost["Member-Host B"]
     GateB["space-gate"]
@@ -140,21 +141,36 @@ flowchart TB
     HB --- DataB
     HB --> StoreB
     SupB --- RecB
-    SupB --> AgentB
+    SupB -.->|"startet / stoppt (Erweiterung)"| AgentB
     AgentB -->|"lokal oder RemoteSpace"| DataB
     ServiceB --> HB
     DataB --> MonitorB
     HB --> MonitorB
   end
   Router -->|"RemoteSpace: Overlay-RPC"| GateB
-  MonitorB -->|"autorisierte Capability / Status"| Control
+  MonitorB -->|"autorisierte Capability / Host-Metriken"| Control
+  Control -.->|"Workeraufträge (Erweiterung)"| SupB
   Control -->|"freigegebene Status-Sicht über RPC"| Mobile
 ```
 
+Gestrichelte Pfeile sind **Erweiterungen gegenüber v3**. In v3 bearbeitet der Supervisor nur Enrollment,
+Supervisor-Commands, Lease-Signatur, Recovery, Promotion und Umschaltung; er nimmt keine Aufträge vom Router an.
+Für Worker wird ein eigener Vertrag vorgeschlagen (7.3): Desired-State-Entries `WorkerAssignment` im Control Space,
+die jeder Supervisor nur für seinen eigenen Host lesen darf. Der Router schreibt sie nach einem Admin-Command,
+und der Supervisor gleicht sie lokal ab. Er erhält dafür eine zusätzliche, eng begrenzte Leseberechtigung, aber
+keine Rechte auf andere Steuerdaten. `MemberStatus` schreibt nach v3 nur der Router. Host-Monitore
+veröffentlichen Ressourcen und Gesundheit über ihre eigene `Capability`.
+
 NetBird transportiert und begrenzt Erreichbarkeit; App-Schlüssel und Rollen autorisieren die Operationen.
 Der Control Space enthält Steuerdaten, der Data Space Nutzdaten. Journal und RPC-Claims sind geschützte
-interne Dokumente. Recovery bleibt je Host lokal. Ab Stufe 3 kann ein fester Standby Control- und
-Data-Members synchron spiegeln; Replikation ist für den Einstieg nicht erforderlich.
+interne Dokumente. Recovery bleibt je Host lokal und ist über einen Out-of-Band-Zugang erreichbar, nicht über
+das Overlay. Ab Stufe 3 kann ein fester Standby Control- und Data-Members synchron spiegeln; ein so gespiegelter
+Data Member darf dann nur in local- oder primary-Regeln stehen, nicht in expand oder lww/set (v3 6.4).
+Replikation ist für den Einstieg nicht erforderlich.
+
+Fällt der Koordinator aus, laufen nach höchstens 60 s Grants und Router-Lease ab. Danach stehen alle entfernten
+Space-Operationen der Federation, auch zwischen anderen Hosts. Lokale Worker auf jedem Host arbeiten weiter
+(v3 5.2).
 
 Ein Datenbankverzeichnis wird niemals von mehreren unabhängigen Harness-Prozessen gemeinsam geöffnet.
 RemoteSpace ruft den besitzenden Host auf; es öffnet dessen SQLite-/JSONL-Dateien nicht über das Netzwerk.
@@ -188,7 +204,9 @@ nicht direkt benutzen. Ein späteres Gateway liefert statische UI und autorisier
 | Worker / Agenten | Host, Ziel-Space, Rolle, aktiv/reserviert/gestoppt | Anzahl setzen, starten, nach Task stoppen |
 | Vorgänge | commandId, accepted/applying/completed/failed | Fortschritt verfolgen, unbekannten Ausgang auflösen |
 
-Standardmäßig reichen Observer-Leserechte. Verwaltungsaktionen brauchen Admin-Rechte.
+Observer-Leserechte genügen für Hosts, Spaces, Läufe und Worker, soweit die Daten freigegeben sind. Die Ansicht
+**Vorgänge** zeigt Commands und Results; das sind Steuerdaten und nach v3 §9 nur für Admins lesbar. Observer
+sehen dort höchstens eine freigegebene Zusammenfassung. Verwaltungsaktionen brauchen Admin-Rechte.
 Beim Wiederverbinden zuerst Snapshot/Status laden, dann Events verfolgen. Veraltete Messwerte werden
 mit Zeitpunkt angezeigt; „offline“ ist kein Beweis, dass Worker auf dem Host beendet sind.
 Long-Polls laufen nur bei sichtbarer Seite. Dashboard-Schließen pausiert keinen Rechenlauf.
@@ -210,24 +228,26 @@ Release-Übertragung und Daemon-Start ab, aber kein Federation-Bootstrap.
   "deployment": "prime-demo",
   "coordinator": "host-a",
   "hosts": [
-    { "hostId": "host-a", "ssh": "pi@vps-a", "role": "coordinator" },
-    { "hostId": "host-b", "ssh": "pi@vps-b", "role": "worker" }
+    { "alias": "host-a", "ssh": "pi@vps-a", "role": "coordinator" },
+    { "alias": "host-b", "ssh": "pi@vps-b", "role": "member-host" }
   ],
   "spaces": [
-    { "spaceId": "control-demo", "hostId": "host-a", "purpose": "control" },
-    { "spaceId": "sieve-a", "hostId": "host-a", "purpose": "data", "maxSpaceBytes": 67108864 }
+    { "alias": "control-demo", "host": "host-a", "purpose": "control" },
+    { "alias": "sieve-a", "host": "host-a", "purpose": "data", "maxSpaceBytes": 67108864 }
   ],
   "routing": { "profile": "single-member-sieve", "member": "sieve-a" },
   "workers": [
-    { "workerId": "sieve-worker-a", "hostId": "host-a", "kind": "sieve", "targetSpace": "sieve-a", "count": 2 }
+    { "alias": "sieve-worker-a", "host": "host-a", "kind": "sieve", "targetSpace": "sieve-a", "count": 2 }
   ],
   "mobile": { "access": "native-overlay", "enrollmentRole": "admin" },
   "credentials": { "source": "host-secret-store" }
 }
 ```
 
-IDs sind einmal vergebene logische Identitäten; der Bootstrap persistiert ihre Zuordnung und weist
-Kollisionen/unerlaubte Änderungen ab. Beispiele oben sind keine bereits angelegten Spaces.
+Die Config enthält nur **Aliase**. Nach v3 sind `hostId` und `spaceId` unveränderliche, beim Anlegen erzeugte
+Identitäten, und Namen sind veränderbare Aliase. Der Bootstrap erzeugt die IDs, persistiert die Zuordnung
+Alias → ID serverseitig und weist Kollisionen oder die Umdeutung eines Alias auf eine andere ID ab. Beispiele oben
+sind keine bereits angelegten Spaces.
 Keine Tokens oder Provider-Schlüssel in die Config schreiben. Das Sieb benötigt keinen Provider-Schlüssel.
 Host B ist hier provisioniert, aber erhält erst bei Bedarf einen eigenen Data Space oder Remote-Worker.
 Das Routing-Profil wird in eine gültige v3-Policy übersetzt: SieveTask und SieveResult bleiben auf demselben Member.
@@ -244,12 +264,18 @@ Der Script-Vertrag:
 1. Config und unterstützte Features prüfen; bei fehlendem Space-RPC/Schema stoppen.
 2. Hosts per SSH vorbereiten; stabile IDs, private State-Verzeichnisse und eindeutigen Storage-Besitzer sichern.
 3. Versioniertes Runtime-Release inklusive passendem Spaces-Bundle bereitstellen; Gesundheit prüfen.
-4. Overlay und Autorisierung prüfen. Control/Recovery/Supervisor auf A initialisieren; B per gebundenem
-   Einmal-Token enrollen. Erstes Enrollment darf nicht vom noch fehlenden Router abhängen.
-5. Benannte Data Spaces lokal anlegen; wiederholter Apply erkennt bereits angelegte IDs.
-6. Router starten, Members über Commands aufnehmen, Policy validieren; nie bestehende HRW-Bestände umverteilen.
-7. Workerdefinitionen registrieren; Start getrennt von Installation behandeln.
-8. Admin-Pairing einmal anzeigen, freigegebenen Status vom Handy prüfen. Kein Rechenlauf wird unbeabsichtigt gestartet.
+4. **Overlay-Beitritt:** NetBird-Client auf jedem Host installieren und mit einem Setup-Key aus dem
+   Host-Secret-Store beitreten; Gruppe `space-hosts` zuweisen. Die Peer-ID jedes Hosts über die Management-API
+   ermitteln und für die gebundenen Tokens festhalten. Das Admin-Handy tritt per NetBird-Login bei und erhält
+   `space-admin`; auch seine Peer-ID wird ermittelt.
+5. Control/Recovery/Supervisor auf A initialisieren, einschließlich Out-of-Band-Recovery-Zugang (v3 5.4).
+   B per an seine Peer-ID gebundenem Einmal-Token enrollen. Das erste Enrollment darf nicht vom noch fehlenden
+   Router abhängen.
+6. Benannte Data Spaces lokal anlegen; wiederholter Apply erkennt bereits angelegte Aliase und deren IDs.
+7. Router starten, Members über Commands aufnehmen, Policy validieren; nie bestehende HRW-Bestände umverteilen.
+8. Workerdefinitionen registrieren; Start getrennt von Installation behandeln.
+9. Admin-Pairing (an die Peer-ID des Handys gebundener Bootstrap-Token) einmal anzeigen und den freigegebenen
+   Status vom Handy prüfen. Kein Rechenlauf wird unbeabsichtigt gestartet.
 
 Config beschreibt den gewünschten Zustand. Tatsächlich angewendeter Zustand und Revision liegen serverseitig.
 Mobile Änderungen müssen sich anschließend exportieren lassen; ein späterer Script-Apply zeigt Differenzen
@@ -268,6 +294,9 @@ Die v3-Kommandoliste besitzt addMember/removeMember, aber noch keinen vollständ
 Space-Anlage/-Löschung. Dafür wird hier eine Ergänzung vorgeschlagen: `createSpace`/`deleteSpace`
 mit idempotenter Verarbeitung durch Router und Host-Supervisor. Diese Ergänzung ist noch kein v3-Abnahmebefund.
 
+Wird ein **vorhandener** Space aufgenommen, prüft `addMember` seinen Bestand (v3 7.1). Entries eines Typs, den
+die Policy einem anderen Member oder einer HRW-Menge ohne diesen Space zuordnet, führen zu `RoutingConflict`.
+
 `addMember` verschiebt keine vorhandenen Entries und verändert keine bestehende HRW-Zuordnung.
 Beim einfachen Sieb nutzt ein laufender Durchgang weiter seinen ursprünglichen Member. Mehr Worker auf
 diesen Member können zuerst genügen; ein zweiter Task-Space erfordert die Aufteilung aus Abschnitt 6.
@@ -284,6 +313,9 @@ diesen Member können zuerst genügen; ein zweiter Task-Space erfordert die Auft
 6. Separat lokalen Space löschen oder archivieren; interne Claims/Auditdaten nach ihrer Aufbewahrungsregel behandeln.
    Host-Shutdown und Host-/Schlüsselwiderruf sind weitere getrennte Aktionen, falls dort nichts anderes läuft.
 
+Ein Member einer HRW-Menge (expand nach Feld) lässt sich in v3 **gar nicht** entfernen. `drain` weist dort
+neue Writes für seinen Schlüsselanteil ab, und `removeMember` liefert `MigrationRequired`. Entfernbar sind nur
+Members mit fester Typzuordnung und Members von capacity/capability-Regeln.
 Ein offline Member mit ungeklärtem Bestand lässt sich nicht als „leer“ entfernen. Erfordert ein Wechsel
 Datenmigration, wird er bis zur Umsetzung des Migrationsprotokolls abgewiesen. `take A → write B` ersetzt
 keine sichere Migration. `removeMember` ist weder Datenlöschung noch das Stoppen des gesamten Hosts.
@@ -326,7 +358,11 @@ Am Handy sind dafür fünf Schritte vorgesehen:
 4. **Fortschritt**: 0/8 bis 8/8 erledigte Segmente, offene Reservierungen, Workerstatus und Fehler anzeigen.
 5. **Ergebnis**: Primzahlliste ansehen/herunterladen. Pause stoppt neue Claims; Fortsetzen verwendet dieselbe runId.
 
-Pause löscht keine Tasks. Ein sauber stoppender Worker beendet seine aktuelle Txn. Bei Prozessverlust wird
+Pause löscht keine Tasks. Sie ist **nicht atomar** gegenüber Workern: Ein Worker, der den Laufzustand vor dem
+Take liest, kann kurz nach der Pause noch einen Task reservieren. Garantiert ist nur, dass nach Bestätigung der
+Pause bis zum Fortsetzen keine weiteren Txns dieses Laufs **committen**, sofern der Worker den Laufzustand in
+derselben Txn vor dem Commit erneut prüft. Ohne diese Prüfung ist Pause nur „keine neuen Claims nach kurzer
+Verzögerung“. Ein sauber stoppender Worker beendet seine aktuelle Txn. Bei Prozessverlust wird
 der Task nach Lease-Ablauf erneut verfügbar. Erfolgreicher Commit heißt atomarer Task-/Ergebnisabschluss;
 er bedeutet nicht, dass CPU-Berechnung insgesamt genau einmal ausgeführt wurde.
 
@@ -339,16 +375,29 @@ und die Vorbereitung auf dem Zielhost sind für diesen Bedienablauf zusätzlich 
 
 ### Später mehrere Task-Spaces
 
-Für dieses kleine Beispiel ist eine Aufteilung unnötig. Für den späteren Mehrhost-Ablauf erhält der Lauf
-ein dauerhaftes Manifest seiner disjunkten Teilbereiche und zugeordneten Members: beispielsweise
-[1,501) auf sieve-a und [501,1001) auf sieve-b. Jeder Teilbereich wird auf seinem Member idempotent vorbereitet;
-es gibt keinen atomaren Commit über beide Hosts. Teilweise Vorbereitung wird angezeigt und wiederaufgenommen.
+Für dieses kleine Beispiel ist eine Aufteilung unnötig. Für den späteren Mehrhost-Ablauf gibt es zwei Wege.
 
-Worker binden Txn, Task und SieveResult an **denselben** Member. Ergebnisse werden nicht nachträglich durch
-eine unabhängige capacity-Regel auf einen anderen Member geschrieben. Der Collector prüft das Manifest und
-alle erwarteten IDs auf beiden Members; ein ausgefallener Member liefert „unvollständig“, niemals „fertig“.
-Neue Members übernehmen neue Läufe/Teilbereiche; laufende Tasks werden nicht heimlich migriert.
-Für echte parallele CPU-Berechnung sind getrennte Workerprozesse oder Hosts erforderlich.
+**In v3 ausdrückbar: HRW nach `taskId`.** `SieveTask` und `SieveResult` erhalten je eine expand-Regel
+`by: {field: "taskId"}` mit **derselben** festen Member-Menge, z.B. `[sieve-a, sieve-b]`. Damit landen Task und
+Ergebnis derselben `taskId` immer auf demselben Member. Ein Worker nimmt den Task in einer Txn auf Member X und
+schreibt das Ergebnis mit derselben `taskId` nach X, ohne `RoutingConflict`. Die Verteilung bestimmt HRW, nicht
+der Betreiber. Das Lauf-Manifest hält für jede `taskId` den berechneten Member fest. Jeder Task wird auf seinem
+Member idempotent vorbereitet; es gibt keinen atomaren Commit über beide Hosts. Teilweise Vorbereitung wird
+angezeigt und wiederaufgenommen. Grenzen:
+- Die Member-Menge ist unveränderlich (v3 7.1). Neue Members können für diese Typen keine neuen Läufe übernehmen.
+- Keiner dieser Members lässt sich entfernen.
+
+**Erweiterung, nicht Teil von v3:** gezielte Zuordnung ganzer Teilbereiche (z.B. [1,501) auf sieve-a,
+[501,1001) auf sieve-b) und Aufnahme neuer Members für neue Läufe. Das braucht eine laufbezogene
+Routingtabelle, die das Manifest als Routingquelle verwendet; v3 kennt nur eine Regel pro Typ. Ersatzweise
+geht das heute nur mit eigenen Typnamen je Teilbereich und je einer `local`-Regel, was die Typgrenzen schnell
+erschöpft.
+
+In beiden Fällen gilt: Worker binden Txn, Task und SieveResult an **denselben** Member. Ergebnisse werden nicht
+nachträglich durch eine unabhängige capacity-Regel auf einen anderen Member geschrieben. Der Collector prüft das
+Manifest und alle erwarteten IDs auf allen beteiligten Members; ein ausgefallener Member liefert „unvollständig“,
+niemals „fertig“. Laufende Tasks werden nicht heimlich migriert. Für echte parallele CPU-Berechnung sind
+getrennte Workerprozesse oder Hosts erforderlich.
 
 ## 7. Monitoring und fehlende Steuerverträge
 
@@ -388,7 +437,7 @@ liegen unter **Projekt-Einstellungen → Hosts**; laufende Verwaltungsvorgänge 
 | Hosts | Alias, SSH-Ziel, Identität/Fingerprint, Version, erreichbar/offline | Host hinzufügen, verbinden/pairen | autorisierte Provisionierung und Enrollment; noch keine automatische Member-Aufnahme |
 | Spaces | Alias, spaceId, Host, Modus, Entries, Txns, Limits | Space hinzufügen | bestehenden Space aufnehmen oder neuen Space auf gewähltem Host anlegen und anschließend aufnehmen |
 | Space-Details | Bestand, offene Arbeit, Membership | Neue Zuweisungen stoppen (drain) | neue Platzierungen sperren; bestehende Arbeit und Reads erhalten |
-| Space-Details nach drain | Ergebnisaufbewahrung, Leerungsprüfung | Aus Federation entfernen | removeMember erst nach nachgewiesener Leerung; keine automatische Datenlöschung |
+| Space-Details nach drain | Ergebnisaufbewahrung, Leerungsprüfung | Aus Federation entfernen | removeMember erst nach nachgewiesener Leerung; keine automatische Datenlöschung; bei HRW-Members deaktiviert mit Grund „Migration erforderlich“ |
 | Space-Details ohne Membership | archivierter/leerer Bestand | Archivieren oder Space löschen | getrennte Lebenszyklusaktion; Referenzen, Rechte und Aufbewahrung prüfen |
 | Neuer Sieblauf | Start, exklusive Obergrenze, Blockgröße, Workerzahl, Ziel-Space/Federation | Lauf starten | runId/Manifest anlegen, Bereiche validieren, Tasks idempotent vorbereiten und Worker zuweisen |
 | Lauf-Details | erledigte/erwartete Segmente, Reservierungen, Fehler | Pausieren, Fortsetzen | neue Claims für diesen Lauf stoppen beziehungsweise wieder freigeben; laufende Txns entscheiden |
@@ -426,7 +475,10 @@ Die bisher am Dokumentende genannten Lücken betreffen sowohl mobile Oberfläche
 Zusätzlich zum v3-Netz-/Space-Protokoll fehlen für die oben genannten Bedienelemente:
 
 - **Laufverwaltung:** startRun/pauseRun/resumeRun; dauerhaftes Manifest, idempotente Starts, Zustandsübergänge und Ergebnisexport.
-- **Workerverwaltung:** registrierte Workerarten, gewünschte Anzahl, Generation und Wiederaufnahme; lokale Supervisor-Ausführung.
+- **Workerverwaltung:** registrierte Workerarten, gewünschte Anzahl, Generation und Wiederaufnahme. Lokale
+  Ausführung durch den Supervisor über `WorkerAssignment`-Entries (Abschnitt 2); das erweitert die
+  Supervisor-Rolle aus v3 und braucht eine eigene Abnahme.
+- **Lauf-Routing über mehrere Members:** laufbezogene Routingtabelle für gezielte Teilbereichszuordnung (6).
 - **Agentenverwaltung:** Conversations anlegen/konfigurieren/stoppen, mit getrennten Rechten und festem Ziel-Space.
 - **Space-Lebenszyklus:** idempotente Anlage, Registry/Storage-Zuordnung, Archivierung und geprüfte Löschung.
 - **Mobile Oberfläche und Brücke:** neue Spaces-Endpunkte sowie Verbindungsliste und Snapshot-/Event-Recovery.
@@ -438,8 +490,11 @@ Die geplante space-gate-Allowlist erlaubt nur `serviceId: space`; vorhandene `se
 nicht automatisch öffentlich. Agentenverwaltung benötigt einen ausdrücklich definierten, autorisierten
 Steuerpfad über Commands/Supervisor oder einen separat abgesicherten Dienst.
 
-Reihenfolge der Umsetzung: benannte Spaces und RPC → Enrollment/Recovery → Router/Membership →
-Lauf-/Workersteuerung → mobile Spaces-Seite → optional Browser-Gateway und Replikation.
+Reihenfolge der Umsetzung nach den v3-Stufen: benannte Spaces und RPC (Stufe 1) → Overlay, Enrollment und
+Recovery (1b) → Router/Membership (2) → Replikation und kontrollierte Übernahme (3) → weitere Clients und
+optional Browser-Gateway (4). Lauf-/Workersteuerung und die mobile Spaces-Seite sind Erweiterungen. Sie können
+nach Stufe 2 parallel zu Stufe 3 entstehen, setzen aber Router und Membership voraus. Replikation ist für den
+Einstieg nicht nötig, aber Voraussetzung für Hochverfügbarkeit des Control Space.
 Die vorhandene SSH-Remote-Oberfläche bleibt der Einstieg für heutige Conversation-Steuerung.
 
 Weitere Verträge: [Sieb](examples/sieve.md), [lokaler Core](spaces-v1.md),

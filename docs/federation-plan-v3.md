@@ -1,6 +1,6 @@
 # Föderierte Spaces v3 – konsolidierter Plan
 
-Stand: 2026-10-06. Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
+Stand: 2026-10-07 (Konsistenzprüfung eingearbeitet: Lease-Signatur, Epochen, Restore, Folgeoperationen, Commit-Grenze, Recovery-Zugang). Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
 
 **Status:** Zielvertrag. Nichts davon ist implementiert oder abgenommen. Eine Garantie gilt erst als erfüllt, wenn
 die zugehörigen Abnahmekriterien (Abschnitt 11) und Gates (Abschnitt 13) erfüllt sind.
@@ -51,7 +51,7 @@ Bewertung des ursprünglichen Entwurfs (unverändert gültig):
 - **Global ID**: `<spaceId>/<localId>`. Lokale IDs bestehen aus Inkarnations-ID plus Zähler und werden nie
   wiederverwendet; nach Restore wird vor neuen Writes eine neue Inkarnation vergeben. Replikation erhält
   vorhandene IDs. Restore ist keine verlustfreie Promotion.
-- **Mailbox**: dauerhafte Events für Principal und Consumer, adressiert über `mailboxId`, `epoch`, `seq`.
+- **Mailbox**: dauerhafte Events für Principal und Consumer, adressiert über `mailboxId`, `mailboxEpoch`, `seq`.
 - **Overlay**: NetBird-Netz. Overlay-IPs sind Endpunkte, keine dauerhaften Identitäten.
 
 ### 2.1 Verbindliche Garantien und Grenzen
@@ -66,9 +66,19 @@ Bewertung des ursprünglichen Entwurfs (unverändert gültig):
 | primary/sync | Bestätigte Operationen bleiben bei zulässiger Promotion erhalten (5.3). |
 | Asynchrone Kopie | Backup/Lesekopie. Bestätigte Writes/Takes können beim Verlust des Primary fehlen. **Nie automatische und nie verlustfreie Promotion**; nur Restore mit neuer Inkarnation. |
 | lww/set | Eventuelle Konvergenz nach vollständigem Austausch; keine exklusive Arbeitsvergabe. |
+| Ergebnisfrist | Nach Löschung eines abgeschlossenen Ergebnisses (6.2) liefert ein Retry `ResultExpired` ohne Mutation. Ein genommener Entry, dessen Ergebnis bis dahin nie abgeholt wurde, ist für den Aufrufer verloren. |
+| Restore (single) | Wirkungen, deren Journal-/Claim-Zustand nicht im Snapshot enthalten ist, sind nach Restore nicht mehr über die Request-ID auflösbar; betroffene Requests erhalten `IncarnationChanged` und werden fachlich geprüft (5.2.1). |
 
 Netzfehler können einen unbekannten Ausgang hinterlassen. Der Client fragt mit derselben Request-ID nach und
 startet bei Unsicherheit keine neue Mutation. Dauerhaft verlorener Storage ist in expand Datenverlust.
+
+**Epochen** (drei getrennte, monoton steigende Zähler; „Epoche“ ohne Zusatz ist unzulässig):
+
+| Name | Gilt für | Erhöht durch |
+|---|---|---|
+| `primaryEpoch` | einen logischen Space mit Replikat oder Restore | Promotion (5.3), Restore (5.2.1), Umschaltung auf Single (5.3.1) |
+| `routerEpoch` | Router-Leases einer Federation | jeden Start eines Routers nach Promotion, Restore oder Router-Wechsel |
+| `mailboxEpoch` | eine Mailbox | Mailbox-Reset |
 
 ## 3. Zielarchitektur
 
@@ -98,12 +108,16 @@ und Lauf-/Workerkommandos sind zusätzliche offene Verträge, keine bereits impl
             NetBird Management/Signal/Relay (selbst gehostet, eigene VM)
 ```
 
+Das Diagramm fasst Standby und Data Member B verkürzt auf einem Host zusammen. Nach 4.1.1 läuft der synchrone
+Standby auf einem eigenen VPS mit Koordinator-Dimensionierung; Data Members liegen auf weiteren Hosts.
+
 - Agenten benutzen die Tools wie heute; mit `space` gehen Operationen über `RemoteSpace` bzw. `FederatedSpace`.
 - Clients halten keinen zentralen Betriebszustand; Host-Worker laufen ohne Dashboard weiter. Clients behalten
   eigene Request-IDs bis zum Abschluss.
 - Router-Journal und RPC-Claims liegen in internen dauerhaften Dokumenten; Agenten-Nutzdaten nie im Control Space.
-- Der Router-Standby läuft passiv (kein Lease, keine Delegationen) und wird erst bei der Promotion nach 5.2
-  aktiv: Epoche erhöhen, alte `RouterLease` ablaufen lassen, dann in `recovering` starten.
+- Der Router-Standby läuft passiv (kein Lease, keine Delegationen) und wird erst bei der Promotion nach 5.3
+  aktiv: `primaryEpoch` und `routerEpoch` erhöhen, alte `RouterLease` ablaufen lassen, dann in `recovering`
+  starten.
 
 ## 4. Netz und Vertrauen
 
@@ -151,7 +165,7 @@ Entries, Journal, Snapshots und Replikationsrückstau.
 
 Koordinator und Standby müssen eine Fehlerdomäne trennen: mindestens verschiedene physische Hosts und nach
 Möglichkeit verschiedene Availability Zones oder Anbieter. Zwei VPS desselben physischen Hosts schützen nicht
-gegen dessen Ausfall. Data Members dürfen auf weitere VPS verteilt werden. Der Fencing-Adapter aus 5.3 muss den
+gegen dessen Ausfall. Data Members dürfen auf weitere VPS verteilt werden. Der Fencing-Adapter aus 5.5 muss den
 jeweiligen Anbieter und dessen Verwaltungs-API tatsächlich kontrollieren können.
 
 Bei `primary/sync` liegt auf jedem bestätigten Write der zusätzliche Roundtrip zum Standby. Koordinator und
@@ -168,9 +182,14 @@ Replikationslag und Mailbox-/Journal-Budgets pro VPS.
   Protokollmerkmale aus und setzt weder Identität noch Rolle.
 - pi-serverd erhält dafür eine explizite Authentifizierungsgrenze; bloßes Voranstellen eines Frames mit
   ungeprüftem Durchreichen genügt nicht.
-- Grenzen (Startwerte, per Lasttest bestätigen, Gate 4): Handshake ≤ 5 s; Frame ≤ 256 KiB (muss größer sein als
-  `maxEntryBytes` 64 KiB plus Protokoll-Overhead); höchstens 32 gleichzeitige Verbindungen pro Peer;
-  Rate-Limit für Handshakes.
+- Grenzen (Startwerte vor 1b festlegen, per Lasttest vor 2 bestätigen, Gate 4): Handshake ≤ 5 s; Frame ≤ 256 KiB
+  (muss größer sein als `maxEntryBytes` 64 KiB plus Protokoll-Overhead); höchstens 32 gleichzeitige Verbindungen
+  pro Peer; Rate-Limit für Handshakes.
+- **Commit-Grenze:** Ein Commit-Batch ist unteilbar (6.1). Deshalb gilt `maxCommitBytes` ≤ Frame minus
+  Protokoll-Overhead (Startwert 192 KiB, F11/Gate 4; Summe der kanonisch kodierten Deltas eines Commits einschließlich
+  Claims und Metadaten). Txn-Commits, Batch-Writes und Run-Vorbereitungen, die größer wären, werden vor Annahme
+  mit `ResourceExhausted` abgewiesen und müssen in mehrere Commits aufgeteilt werden. Damit passt jeder Batch
+  aus `changes` und Replikation in einen Frame.
 - Nur `serviceId: space`. `sessions`/`chat` bleiben auf diesem Eingang gesperrt.
 - `pi-client` erhält eine TCP-Transport-Factory; Kompatibilität des Byte-/CBOR-Transports vor Umsetzung prüfen.
 
@@ -186,6 +205,9 @@ kommt nur am Browser-Gateway zum Einsatz (Abschnitt 10). Offene Frage F3.
 | A: Overlay | Quell-IP → Management-API → unveränderliche Peer-ID und Gruppen; Cache höchstens 60 s. |
 | B: App-Schlüssel | Challenge pro Verbindung (unten). Erlaubte Schlüssel sind `PeerKey`-Entries im Control Space. |
 
+Schicht A hängt von der NetBird-Management-API ab. Fällt sie länger als die Cache-Laufzeit aus, weisen alle
+Gates neue Verbindungen ab (4.6). Der Recovery-Pfad hängt deshalb weder von Schicht A noch vom Gate ab (5.4).
+
 **Challenge (Schicht B):** Das Gate sendet `{gateHostId, observedPeerId, connNonce (32 Byte), protocol,
 issuedAt}`. Der Client prüft, dass `gateHostId` dem erwarteten Host und `observedPeerId` seiner eigenen
 Overlay-Identität entspricht, und signiert die kanonische Kodierung (4.4). Damit kann ein Angreifer, der selbst
@@ -194,16 +216,22 @@ Die Nonce ist einmalig und höchstens 30 s gültig. Signaturen pro Request sind 
 weiteren Verkehr der Verbindung an den Peer bindet (offene Frage F4).
 
 - Algorithmus: Ed25519; wo der Plattform-Keystore Ed25519 nicht unterstützt, ECDSA P-256 (Gate 6).
-- Schicht B ist Pflicht für Control Space, Admin, Router, Gateway, Replikation und delegierende Hosts. Direkte
+- Schicht B ist Pflicht für Control Space, Admin, Router, Gateway, Replikation und delegierende Hosts. Einzige
+  Ausnahme ist das Enrollment (4.5): Ein ungepaarter Peer beweist mit der Challenge nur den Besitz des *neuen*
+  Schlüssels und erhält ausschließlich die Rolle „ungepaarter Peer“ aus Abschnitt 9. Direkte
   Data-Space-Clients dürfen nur mit A arbeiten, wenn eine explizite Peer-/Gruppenregel `member` oder `observer`
   zuweist. Ohne Regel kein Zugriff. Gruppen- und App-Rechte werden geschnitten, nie vereinigt.
 - Benutzerrollen `admin`, `member`, `observer`; Dienstrollen `host`, `router`, `replicator`, `supervisor` mit
   explizit erlaubten Spaces und Operationen. Ein Host ist dadurch kein Admin.
 - Autorisierung bei jedem Request und erneut vor dem entscheidenden Commit. Grants gelten höchstens 60 s;
   Invalidierungen schließen Sessions und beenden offene Polls. Ohne rechtzeitig erneuerten, autoritativen Grant
-  werden neue und unentschiedene Operationen abgewiesen. Replikate stellen keine Grants aus altem Zustand aus.
+  werden neue Operationen abgewiesen; unentschiedene werden nicht entschieden, sondern bleiben `pending`, bis
+  ein gültiger Grant bzw. eine gültige Delegation vorliegt oder ihre Deadline abläuft (dann endgültig erfolglos). Replikate stellen keine Grants aus altem Zustand aus.
   Bestätigte Arbeit wird durch Widerruf nicht rückgängig gemacht.
 - **Widerruf wirkt innerhalb Grant-Laufzeit plus Zeitunsicherheit**, nicht sofort unter jeder Partition.
+- Grants stellt nur der autoritative Control-Primary aus. Ist er nicht erreichbar, laufen nach Grant-Laufzeit
+  **alle** entfernten Operationen auf **allen** Members aus, nicht nur Enrollment und Commands (5.2). Lokale
+  Agenten, lokale Worker, Reaper und Lease-Ablauf eines Hosts laufen weiter.
 - Recovery verwendet einen gesondert lokal provisionierten Admin-Schlüssel (5.3); sein Widerruf wird auf jedem
   Recovery-Host separat bestätigt. Desktop-Schlüsseldateien `0600`.
 
@@ -213,27 +241,58 @@ Ein Host weist lokale Agenten nur im eigenen Principal-Namensraum aus. Der Route
 signierten Delegationsnachweis weiter:
 
 ```ts
+type RouterLease = {
+  id: string;
+  routerPeerId: PeerId;
+  routerEpoch: number;
+  controlSpaceId: SpaceId;
+  controlPrimaryEpoch: number;  // primaryEpoch des Control Space beim Ausstellen
+  expiresAt: number;
+};
+type SignedRouterLease = { lease: RouterLease; issuer: PeerId; signature: string }; // Supervisor des Control-Primary
+
 type Delegation = {
-  issuer: PeerId;               // Router
-  routerLease: { id: string; epoch: number; expiresAt: number }; // aus dem Control Space (5.2)
+  issuer: PeerId;               // Router; muss lease.routerPeerId sein
+  routerLease: SignedRouterLease; // nicht vom Router selbst signiert (5.2)
   principal: Principal;         // ursprünglicher Aufrufer
   targetSpace: SpaceId;         // Audience
-  operation: string;            // z.B. "take"
+  targetPrimaryEpoch?: number;  // bei primary-Zielen: erwartete primaryEpoch
+  operation: string;            // z.B. "take", "pollOperation", "cancelOperation"
   requestId: string;            // Unterrequest-ID des Routers
+  requestGeneration: string;    // Request-Generation des Ziels (6.2)
   argumentHash: string;         // kanonischer Hash der Argumente
-  policyVersion: number;
-  expiresAt: number;            // ≤ 60 s, ≤ routerLease.expiresAt
+  policyVersion: number;        // Policy-Version, unter der die Operation begonnen wurde
+  expiresAt: number;            // ≤ 60 s, ≤ routerLease.lease.expiresAt
 };
 ```
+
+Die Delegation enthält alle Bestandteile des RPC-Claim-Schlüssels aus 6.2 (Principal, Ziel-Space,
+Request-Generation, Request-ID) sowie bei primary-Zielen die `primaryEpoch`.
 
 - **Kanonische Kodierung** für Signatur und Hashes: JSON nach RFC 8785 (sortierte Schlüssel, feste Zahlenform),
   eigene kleine Implementierung ohne Abhängigkeit. `JSON.stringify` allein ist nicht deterministisch genug.
 - Signatur mit dem Router-Schlüssel (`node:crypto`); der öffentliche Schlüssel steht als `PeerKey` mit Rolle
-  `router` im Control Space.
-- Der Member prüft: Signatur, Audience = eigener Space, Ablauf (mit Zeitunsicherheit), Router-Lease gültig und
-  Epoche nicht kleiner als die zuletzt bekannte, `argumentHash` passt zum Request, Scope erlaubt die Operation.
-- **Policy-Version:** ist sie *kleiner* als die dem Member bekannte, wird abgewiesen (Rechte könnten entzogen
-  worden sein). Ist sie größer, lädt der Member die Policy nach; gelingt das nicht, wird abgewiesen.
+  `router` im Control Space. Die eingebettete `RouterLease` trägt eine **zweite Signatur** des Supervisors des
+  Control-Primary (`PeerKey` mit Rolle `supervisor`), die er erst nach dauerhaftem Commit der Lease ausstellt
+  (5.2). Ein Router kann sich so keine eigene Lease verlängern.
+- Der Member prüft: beide Signaturen, `issuer = lease.routerPeerId`, Audience = eigener Space, Ablauf beider
+  Objekte (mit Zeitunsicherheit), `routerEpoch` und `controlPrimaryEpoch` nicht kleiner als die zuletzt bekannten
+  (der Member speichert die höchsten gesehenen Werte dauerhaft), `requestGeneration` gültig, bei primary-Zielen
+  `targetPrimaryEpoch` gleich der eigenen, `argumentHash` passt zum Request, Scope erlaubt die Operation.
+- **Policy-Version für neue Operationen:** ist sie *kleiner* als die dem Member bekannte, wird abgewiesen (Rechte
+  könnten entzogen worden sein). Ist sie größer, lädt der Member die Policy nach; gelingt das nicht, wird
+  abgewiesen.
+- **Folgeoperationen begonnener Requests** (`pollOperation`, `cancelOperation`, Gewinner-Commit und -Abort aus
+  dem Waiter-Wettlauf, Ergebnisabruf) tragen die ursprüngliche `policyVersion` (6.4). Der Member akzeptiert sie
+  auch nach einer Policy-Änderung, wenn zu dieser `requestId` bereits ein Claim desselben Principals mit
+  derselben Policy-Version existiert und die **aktuelle** Policy dem Principal die Operation weiterhin erlaubt.
+  Entzieht die neue Policy das Recht, sind nur noch `cancelOperation` und Ergebnisabruf zulässig; so bleibt jeder
+  Ausgang auflösbar, ohne neue Wirkung unter alten Rechten.
+- **Lange Operationen:** Eine Delegation gilt höchstens 60 s, eine Operation (`space_wait`, FOREVER) länger. Der
+  Router erneuert sie für jeden Poll mit neuer Delegation über dieselbe `requestId`, Generation und denselben
+  `argumentHash`. Die Wiederautorisierung vor dem entscheidenden Commit (4.3) verwendet die jüngste gültige
+  Delegation des Requests. Liegt keine gültige vor (Router weg, Lease abgelaufen), entscheidet der Member
+  nicht, sondern lässt die Operation `pending`, bis eine neue Delegation kommt oder ihre Deadline abläuft.
 - **Replay:** Der Nachweis ist an `requestId` und `argumentHash` gebunden; ein Replay trifft den vorhandenen
   RPC-Claim und liefert nur dasselbe Ergebnis. Zusätzlich verwirft der Member Nachweise, deren `requestId` er
   für einen anderen Principal kennt.
@@ -243,22 +302,35 @@ type Delegation = {
 ### 4.5 Pairing
 
 1. Gerät tritt dem Overlay bei; ein Admin weist die Gruppe zu.
-2. Admin erstellt `Enroll {tokenHash (SHA-256), role, scope, allowedPeerId, expiresAt = +5 min, attempts: 0}`.
+2. Der Admin-Client erzeugt den Token **lokal** und sendet nur dessen Hash im Command `createEnroll`; der
+   Supervisor legt daraus `Enroll {tokenHash (SHA-256), role, scope, allowedPeerId, expiresAt = +5 min,
+   attempts: 0}` an. Der Klartext-Token erscheint weder im Command noch im Result noch im Control Space.
    QR enthält Endpunkt, Control-Space-ID und Token mit **256 Bit** Zufall. Klartext-Token wird nirgends geloggt.
 3. Ungepaarte Peers dürfen ausschließlich `EnrollRequest` schreiben und ihr eigenes Ergebnis lesen; weder Tokens
-   listen noch Control-Daten lesen, abonnieren oder nehmen.
+   listen noch Control-Daten lesen, abonnieren oder nehmen. Das ist die einzige Ausnahme von der
+   Schicht-B-Pflicht für den Control Space (4.3). Voraussetzung ist eine NetBird-Gruppenregel, die den Peer für
+   das Enrollment zulässt.
 4. Ablauf: Peer verbindet (Schicht A), erhält die Verbindungs-Challenge aus 4.3, signiert sie mit dem **neuen**
-   Schlüssel und sendet `EnrollRequest {token, publicKey, signature}`. Der Supervisor prüft
-   `sha256(token) = tokenHash`, `observedPeerId = allowedPeerId`, Ablauf, Versuchszähler und Signatur.
+   Schlüssel und sendet `EnrollRequest {token, publicKey, signature}`. Der Supervisor prüft in dieser
+   Reihenfolge:
+   1. Ein `Enroll` mit `sha256(token) = tokenHash` existiert. Sonst Fehler ohne Zähländerung; dieser Fall
+      zählt nur gegen das Peer-Limit aus Schritt 5.
+   2. `observedPeerId = allowedPeerId`. Sonst Fehler **ohne** Erhöhung des Token-Zählers, damit ein fremder Peer
+      keinen Token verbrennen kann.
+   3. Ablauf und Versuchszähler.
+   4. Signatur und Schlüsselformat. Erst ein Fehler hier erhöht `attempts`.
+
    Tokenverbrauch und `PeerKey`-Anlage erfolgen atomar am Control-Primary; Retry ist über die Request-ID
    dedupliziert.
-5. Rate-Limits: höchstens 3 Fehlversuche pro Token (danach ungültig), höchstens 1 Versuch pro Peer und Minute.
+5. Rate-Limits: höchstens 3 Fehlversuche des gebundenen Peers pro Token (danach ungültig), höchstens 1 Versuch
+   pro Peer und Minute.
 6. Manuelle Eingabe verwendet denselben starken Token. Kurze Codes brauchen ein getrenntes Verfahren (PAKE,
    Versuchslimit, Admin-Bestätigung) und sind nicht Teil von v3.
 
 Bootstrap: Der erste Host legt Control Space und einmalig einen Bootstrap-Token an; der Supervisor bearbeitet ihn
-ohne Router. Weitere Hosts erhalten gebundene Einmal-Tokens und nur die Rolle `host`; Routingziele werden sie erst
-nach `addMember`.
+ohne Router. Auch der Bootstrap-Token ist an eine `allowedPeerId` gebunden: Das erste Admin-Gerät tritt vorher dem
+Overlay bei, und seine Peer-ID wird über die Management-API ermittelt und beim Anlegen eingetragen. Weitere Hosts
+erhalten gebundene Einmal-Tokens und nur die Rolle `host`; Routingziele werden sie erst nach `addMember`.
 
 ### 4.6 NetBird-Betrieb und Ausfalltests
 
@@ -283,13 +355,28 @@ Ergebnis wird in diesem Abschnitt nachgetragen.
 |---|---|---|
 | `Member` | Router nach Command | Identitäten, Endpunkte, Aufnahmezustand, Routingzuordnung |
 | `FederationPolicy` | Router nach Command | validierte Policy mit `policyVersion` |
-| `PeerKey` | Supervisor | Principal, öffentlicher Schlüssel, Algorithmus, Rollen, Scope |
-| `Enroll` / `EnrollRequest` | admin / ungepaarter Peer | 4.5 |
-| `Command` / `Result` | admin / Router | `setLimits`, `drain`, `addMember`, `removeMember`, `setPolicy`; `{commandId, state, error?}` |
-| `RouterLease` | Router | `{id, epoch, expiresAt}`, Erneuerung alle 20 s, Laufzeit 60 s (5.2) |
-| `MemberStatus` | Router | Erreichbarkeit, Revision, Lag, Kapazität; Lease 30 s |
-| `Capability` | Host für sich selbst | Werkzeuge, Modelle, Ressourcen; Lease 2 min |
+| `PeerKey` | Supervisor | Principal, öffentlicher Schlüssel, Algorithmus, Rollen, Scope, Zustand `active \| revoked` |
+| `Enroll` | Supervisor nach Command `createEnroll` | 4.5 |
+| `EnrollRequest` | ungepaarter Peer | 4.5 |
+| `Command` / `Result` | admin / Router bzw. Supervisor | `{commandId, state, error?}`; Kommandos siehe unten |
+| `RouterLease` | Supervisor des Control-Primary auf Anfrage des Routers | `RouterLease` aus 4.4, signiert; Erneuerung alle 20 s, Laufzeit 60 s (5.2) |
+| `MemberStatus` | Router | Erreichbarkeit, Revision, Lag, Kapazität; Lease 30 s; aus Router-Sicht |
+| `Capability` | Host für sich selbst | Werkzeuge, Modelle, Ressourcen, Host-Metriken; Lease 2 min |
 | `RecoveryRequest` / `RecoveryResult` | Recovery-Admin / Supervisor | nur im lokalen Recovery Space |
+
+Admins schreiben ausschließlich `Command`-Entries; alle übrigen Steuerdaten entstehen durch deren Verarbeitung.
+
+| Command | verarbeitet von | Wirkung |
+|---|---|---|
+| `createEnroll` | Supervisor (Control-Primary) | `Enroll` anlegen (4.5); funktioniert ohne Router |
+| `revokePeer` | Supervisor (Control-Primary) | `PeerKey` auf `revoked`; Grants laufen nach 4.3 aus |
+| `rotateKey` | Supervisor (Control-Primary) | neuen Schlüssel per Challenge mit altem und neuem Schlüssel aufnehmen, alten widerrufen |
+| `setLimits`, `drain`, `addMember`, `removeMember`, `setPolicy` | Router | 5.1, 7.1 |
+| `setStandby` | Router mit Supervisor beider Hosts | festen Standby eines primary-Space einrichten oder wechseln, nur bei pausierten Writes (7.2) |
+
+Supervisor-Commands sind ebenso idempotent und journalisiert wie Router-Commands (5.1). Weitere
+Lebenszyklus-Kommandos (Space anlegen/löschen, Lauf- und Workersteuerung) sind in
+[betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) als Erweiterung vorgeschlagen und nicht Teil von v3.
 
 ### 5.1 Kommandos und Router-Journal
 
@@ -310,43 +397,110 @@ Command-Verarbeitung ist eine dauerhafte Zustandsmaschine `accepted → applying
 
 | Stufe | Betrieb | Garantie bei Ausfall des Primary |
 |---|---|---|
-| 1b–2 | **single** plus regelmäßiger asynchroner Snapshot auf einen zweiten Host | kein Enrollment/keine Commands bis Rückkehr oder **Restore**. Restore = neue Inkarnation, letzte Änderungen können fehlen (Enrollments ggf. wiederholen). Keine automatische Übernahme. |
-| ab 3 | **primary/sync** mit festem Standby | manuelle Promotion nach 5.3 ohne Verlust bestätigter Operationen |
+| 1b–2 | **single** plus regelmäßiger asynchroner Snapshot auf einen zweiten Host | Nach Ablauf von Grants (60 s) und Router-Lease stehen **alle entfernten Operationen** der Federation, nicht nur Enrollment und Commands. Lokale Arbeit je Host läuft weiter. Fortsetzung erst nach Rückkehr oder **Restore** nach 5.2.1. Keine automatische Übernahme. |
+| ab 3 | **primary/sync** mit festem Standby | manuelle Promotion nach 5.3 ohne Verlust bestätigter Operationen. Bis zur Promotion stehen entfernte Operationen wie oben; nach der Promotion bis zur Einrichtung eines neuen Standbys oder zur Umschaltung nach 5.3.1 ebenfalls, weil ohne sync-Commit keine Lease erneuert wird. |
+
+Ein Ausfall des Control-Primary oder seines synchronen Standbys hält damit die ganze Federation an, sobald
+Grants und Router-Lease ablaufen. Das ist der Preis dafür, dass Rechte und Router-Fencing nur aus autoritativem
+Zustand stammen.
 
 **Router-Lease (Software-Fencing des Routers):** Der Router darf Delegationen nur innerhalb einer gültigen
-`RouterLease` ausstellen. Die Lease wird per Commit im Control Space erneuert; im Modus primary/sync braucht jeder
-Commit die Standby-Bestätigung. Ein abgeschnittener alter Primary kann seine Lease daher nicht erneuern, und
-Members weisen seine Delegationen nach Ablauf zurück. Ein neuer Router startet frühestens nach Ablauf der alten
-Lease plus maximaler Zeitunsicherheit.
+`RouterLease` ausstellen. Er beantragt die Erneuerung beim Supervisor des Control-Primary; dieser committet die
+Lease im Control Space und signiert sie erst danach (4.4). Im Modus primary/sync braucht jeder Commit die
+Standby-Bestätigung. Ein abgeschnittener alter Primary kann daher keine Lease mehr erhalten, und eine selbst
+ausgestellte Lease scheitert an der Supervisor-Signatur. Members weisen seine Delegationen nach Ablauf zurück.
+Ein neuer Router startet frühestens nach Ablauf der alten Lease plus maximaler Zeitunsicherheit und erhält eine
+höhere `routerEpoch`.
+
+**Epochen-Ankündigung:** Nach Promotion, Restore oder Router-Wechsel schreibt der Supervisor des neuen
+Control-Primary eine signierte `EpochNotice {kind: "restore" | "promotion" | "routerChange", controlSpaceId,
+controlPrimaryEpoch, routerEpoch}` an jeden Member.
+Jeder Member speichert den höchsten Wert dauerhaft und weist danach Leases mit kleineren Werten ab. Erreicht die
+Ankündigung einen Member nicht, schützt ihn trotzdem der Lease-Ablauf des alten Routers. Bei `promotion` und
+`routerChange` ist das Journal erhalten; offene Operationen bleiben bestehen und werden vom neuen Router über
+dieselben Unterrequests aufgelöst (5.1). Nur `kind: "restore"` löst die Abbrüche aus 5.2.1 Schritt 4 aus.
+
+#### 5.2.1 Restore im Single-Betrieb (Stufe 1b–2)
+
+Restore ist keine Promotion, braucht aber dieselben Schutzschritte gegen einen zurückkehrenden alten Primary:
+
+1. **Alten Primary sperren:** Fencing nach 5.5. Vor Abnahme eines realen Adapters (Gate 2) genügt für einen
+   Restore im Single-Betrieb ausnahmsweise ein vom Recovery-Admin dokumentiertes Abschalten mit Neustartsperre
+   über die Anbieterkonsole, mit Screenshot oder API-Auszug im Audit (F15). Für Promotion gilt diese Ausnahme
+   nie. Ohne Sperre kein Restore.
+2. **Neue Inkarnation und Epochen:** Der Snapshot wird mit neuer Inkarnation installiert. `primaryEpoch` und
+   `routerEpoch` werden auf *höchster bekannter Wert + 1* gesetzt. Als bekannt gelten der Snapshot-Wert und die
+   Werte, die der Recovery-Admin von den Members abfragt. Bei unvollständiger Abfrage wird ein Sicherheitsabstand
+   addiert (Startwert +1000, F11).
+3. **Alte Request-Generationen beenden:** Alle Request-Generationen der alten Inkarnation werden ungültig. Darin
+   unbekannte Request-IDs ergeben `IncarnationChanged` statt einer neuen Mutation; der Client prüft fachlich und
+   startet bewusst mit neuer ID.
+4. **Journal-Lücke:** Router-Journal und Commands nach dem Snapshot-Stand fehlen. Die Members brechen beim
+   Empfang der `EpochNotice` mit `kind: "restore"` alle **unentschiedenen** Operationen älterer `routerEpoch` über ihren lokalen
+   Cancel-Pfad ab. Bereits **entschiedene** Wirkungen bleiben bestehen und erscheinen als Auditfall
+   `orphanedAfterRestore` mit Principal, Request-ID und Ergebnis, damit der Admin sie fachlich klären kann.
+   „Zweite Wirkung ausgeschlossen“ (5.1) gilt über einen Restore hinweg nur für Requests, deren Journal-Eintrag
+   im Snapshot enthalten ist.
+5. **Enrollments und Widerrufe** nach dem Snapshot-Stand werden wiederholt; `revokePeer` zuerst.
+6. Erst danach startet der Router in `recovering`. Der alte Host darf nur nach Neuaufbau als neuer Snapshot-
+   Empfänger zurückkehren.
 
 ### 5.3 Manuelle Promotion (ab Stufe 3)
 
 Keine automatische Wahl bei bloßem Timeout. Pro primary-Space ein fester Standby; Supervisor auf beiden Hosts.
 
-1. Recovery-Admin schreibt einen signierten Request in den Recovery Space **des Standbys**: erwartete Epoche,
+1. Recovery-Admin schreibt einen signierten Request in den Recovery Space **des Standbys**: erwartete `primaryEpoch`,
    Ziel, Recovery-ID.
 2. **Fencing-Nachweis** nach 5.5. Netzwerk-Timeout oder bloße Admin-Behauptung genügen nicht.
 3. Nur der feste synchrone Standby übernimmt; er prüft Historie und Replikationsvertrag (7.2). Lücken → Abbruch.
-4. Supervisor erhöht die Epoche atomar, aktiviert den Space, startet den Router in `recovering` erst nach Ablauf
-   der alten `RouterLease`. Mutierende Requests tragen die Epoche; alte Epochen werden abgewiesen.
-5. Der alte Host startet erst nach Rejoin und vollständiger Synchronisierung als Replikat; ein Prozessneustart
-   stellt keine Primary-Berechtigung wieder her.
-6. Bis ein neuer synchroner Standby eingerichtet ist, bleiben sync-Writes gesperrt. Single-Betrieb nur nach
-   ausdrücklicher Umschaltung, dann ohne HA-Garantie.
+4. Supervisor erhöht `primaryEpoch` des Space atomar und aktiviert ihn. Ist es der Control Space, wartet er den
+   Ablauf der alten `RouterLease` ab, erhöht `routerEpoch`, sendet die `EpochNotice` (5.2) und startet den Router
+   in `recovering`. Mutierende Requests tragen `primaryEpoch`; alte Werte werden abgewiesen.
+5. Der alte Host bleibt gefenct. `release` hebt die Sperre nur in den **Quarantänemodus** auf (5.5): Der Host
+   bootet, sein Supervisor startet die betroffenen Spaces ausschließlich als Replikat-Empfänger ohne Gate-Zugang
+   für Clients, ohne Agenten und ohne Router. Erst nach vollständiger Synchronisierung über Snapshot plus Stream
+   wird er per `setStandby` neuer Standby. Ein Prozessneustart stellt keine Primary-Berechtigung wieder her.
+6. Bis ein neuer synchroner Standby eingerichtet ist, bleiben sync-Writes gesperrt. Damit ist auch der Control
+   Space nicht schreibbar, und Router-Lease und Grants laufen aus (5.2). Ausweg ist die Umschaltung nach 5.3.1.
+
+#### 5.3.1 Standby-Ausfall und Umschaltung auf Single
+
+Fällt der synchrone Standby aus, im Normalbetrieb oder nach einer Promotion, kann der Primary nichts mehr
+bestätigen. Weil dann auch Commands nicht committbar sind, läuft die Umschaltung über den Recovery-Pfad **des
+Primary**:
+
+1. Recovery-Admin schreibt `RecoveryRequest {kind: "degradeToSingle", space, expectedPrimaryEpoch}` in den lokalen
+   Recovery Space des Primary.
+2. **Fencing-Nachweis für den Standby** nach 5.5. Sonst könnte ein nur abgeschnittener Standby parallel befördert
+   werden.
+3. Der Supervisor erhöht `primaryEpoch`, setzt in **demselben Commit** per Policy-Änderung
+   `durability: "single"` mit erhöhter `policyVersion` und vermerkt den alten Standby als ausgeschlossen. Das ist
+   die einzige Policy-Änderung außerhalb von `setPolicy`; sie betrifft nur die Replikatkonfiguration dieses
+   Space. Ein späterer Promotion-Request für den alten Standby scheitert an der `primaryEpoch`.
+4. Ab jetzt gilt die Garantie von primary/single. Rückkehr zu sync nur per `setStandby` mit neu synchronisiertem
+   Standby.
 
 ### 5.4 Recovery Space bleibt lokal
 
 Der Recovery Space wird nicht repliziert. Er ist der Steuerpfad, der funktionieren muss, wenn Control Space oder
-Router ausgefallen sind, und liegt auf dem Host, der handeln soll (dem Standby). Ist dieser Host selbst
-ausgefallen, gibt es nichts zu befördern. Eine Replikation würde den Recovery-Pfad von genau der Infrastruktur
-abhängig machen, deren Ausfall er behandelt, und eigene Split-Brain-Fälle schaffen.
+Router ausgefallen sind, und liegt auf dem Host, der handeln soll: für Promotion auf dem Standby, für die
+Umschaltung nach 5.3.1 auf dem Primary. Ist dieser Host selbst ausgefallen, gibt es nichts zu befördern. Eine
+Replikation würde den Recovery-Pfad von genau der Infrastruktur abhängig machen, deren Ausfall er behandelt, und
+eigene Split-Brain-Fälle schaffen.
+
+**Zugang unabhängig von Overlay und Gate:** Der Recovery Space ist nur über den lokalen Unix-Socket des
+Supervisors erreichbar, nicht über `space-gate`. Der Recovery-Admin erreicht ihn über einen Out-of-Band-Zugang:
+die Konsole des Anbieters bzw. Hypervisors oder SSH über die öffentliche Adresse mit eigenem Schlüssel, der nur
+den Recovery-Befehl erlaubt (`command=`-Restriktion). Die Anfrage selbst ist mit dem lokal provisionierten
+Recovery-Admin-Schlüssel signiert (4.3). So funktioniert Recovery auch bei ausgefallenem NetBird-Management, bei
+abgelaufenem Schicht-A-Cache und ohne Control Space. Dieser Zugang ist der Nachweis für Gate 1.
 
 ### 5.5 Fencing
 
 Fencing hat zwei Ebenen:
 
 1. **Daten (immer wirksam in primary/sync):** Der alte Primary kann ohne Standby-Bestätigung nichts bestätigen,
-   und der beförderte Standby bestätigt keine alte Epoche mehr. Bestätigte Doppelwirkungen auf replizierten
+   und der beförderte Standby bestätigt keine alte `primaryEpoch` mehr. Bestätigte Doppelwirkungen auf replizierten
    Daten sind damit ausgeschlossen, solange es keinen stillen Rückfall auf asynchronen Betrieb gibt.
 2. **Prozesse (Pflicht für Promotion):** Der alte Primary könnte weiter veraltete Reads ausliefern, Agenten
    betreiben und externe Wirkungen auslösen. Deshalb ist ein Nachweis nötig, dass er gestoppt und gegen
@@ -357,7 +511,7 @@ interface FencingAdapter {
   readonly kind: "power" | "hypervisor" | "cloud" | "container";
   fence(hostId: string, reason: string): Promise<FenceProof>;     // stoppen UND Neustart sperren
   verify(proof: FenceProof): Promise<boolean>;                     // vom Supervisor unabhängig nachgeprüft
-  release(hostId: string): Promise<void>;                          // nur nach Rejoin (5.3 Schritt 5)
+  release(hostId: string, mode: "quarantine"): Promise<void>;      // nur in den Quarantänemodus (5.3 Schritt 5)
 }
 type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: Json; restartLocked: boolean };
 ```
@@ -366,6 +520,10 @@ type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: 
   schaltbare Steckdose/PDU, IPMI/BMC, Hypervisor- oder Cloud-API, Container-Runtime auf einem *anderen* Host.
 - `restartLocked` muss erfüllt sein (z.B. Steckdose bleibt aus, VM deaktiviert, Restart-Policy entfernt). „Power
   off“ allein genügt nicht.
+- `release` ist nicht zirkulär: Es gibt keine allgemeine Freigabe, sondern nur den Quarantänemodus. Der
+  Supervisor liest beim Boot ein vom Adapter gesetztes, außerhalb des Hosts gespeichertes Merkmal (z.B.
+  Cloud-Metadaten/Tag, Hypervisor-Notiz) und startet dann nur den Replikat-Empfang (5.3 Schritt 5). Fehlt das
+  Merkmal oder ist es unlesbar, startet er keinen Space schreibend.
 - Ein Marker-Datei-Adapter ist **nur im Simulator** zulässig; er ist eine Behauptung, kein Nachweis.
 - Welcher Adapter eingesetzt wird, hängt von der Hardware der Hosts ab (offene Frage F1, Gate 2).
 
@@ -374,7 +532,9 @@ type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: 
 ### 6.1 Core-Erweiterungen (Doc-Version 5)
 
 1. **Revision** pro dauerhaftem Commit; ein Batch enthält alle Deltas eines Commits; Cursor nur zwischen Batches.
-   Stream-ID = Space + Historien-Inkarnation (+ Epoche bei primary); Revisionen verschiedener Streams sind nicht
+   Jeder Batch ist durch `maxCommitBytes` (4.2) kleiner als ein Frame; das Byte-Limit von `changes` beendet eine
+   Antwort nur zwischen Batches, mindestens ein Batch wird immer geliefert.
+   Stream-ID = Space + Historien-Inkarnation (+ `primaryEpoch` bei primary); Revisionen verschiedener Streams sind nicht
    vergleichbar.
 2. **Zwei Replikationszwecke:** Entry-Strom (Put/Delete, Lease-Änderungen, Konfliktmetadaten) für lww/set;
    vollständige atomare Commit-Historie (Txns, Sperren, Waiter, Mailbox, RPC-Claims, Router-Dokumente) für
@@ -395,12 +555,12 @@ type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: 
 ### 6.2 Dienst `space`
 
 Jeder Aufruf nennt die stabile Space-ID (Alias vorher auflösen). Argumente werden validiert. Mutationen tragen
-`requestId`, Request-Generation und bei primary die Epoche. Relative Zeiten werden beim ersten angenommenen
+`requestId`, Request-Generation und bei primary die `primaryEpoch`. Relative Zeiten werden beim ersten angenommenen
 Aufruf einmalig in eine serverseitige Deadline übersetzt.
 
 | Methode | Wesentliche Argumente | Antwort |
 |---|---|---|
-| `hello` | Protokollversion, Features | IDs, Epoche, Limits, Rolle, Features |
+| `hello` | Protokollversion, Features | IDs, `primaryEpoch`, Limits, Rolle, Features |
 | `write` | Entry, Lease, Txn?, Request | Entry-ID, Lease |
 | `read` / `take` | Template, Gesamt-Timeout, `ifExists?`, Txn?, Request | `pending` oder dauerhaftes `done(entry \| null)` |
 | `pollOperation` | Request, `waitMs ≤ 25000` | Operationszustand |
@@ -409,8 +569,8 @@ Aufruf einmalig in eine serverseitige Deadline übersetzt.
 | `count` / `stats` | Template? | Wert plus Revision; föderiert plus Vollständigkeit (7.1) |
 | `txn` / `lease` | Aktion, ID?, Dauer?, Request | Zustand/Lease |
 | `wait` / `notify` | Template, Laufzeiten, Consumer, Handback, Request | ID, Lease |
-| `events` | Mailbox, Epoche, Cursor, `waitMs ≤ 25000` | Events, Next oder explizite Lücke |
-| `ack` | Mailbox, Epoche, `upTo` | idempotent |
+| `events` | Mailbox, `mailboxEpoch`, Cursor, `waitMs ≤ 25000` | Events, Next oder explizite Lücke |
+| `ack` | Mailbox, `mailboxEpoch`, `upTo` | idempotent |
 | `changes` | Stream-ID, `afterRev`, `waitMs ≤ 25000`, Byte-Limit | Commit-Batches oder `resync` |
 
 **RPC-Claims:** Schlüssel `(principal, spaceId, requestGeneration, requestId)`; gespeichert werden Methode,
@@ -424,8 +584,10 @@ erreicht, nicht über Weglassen:
 
 - Argumente nur als Hash; Ergebnisse enthalten nur, was der Aufrufer ohnehin erhält (z.B. den genommenen Entry).
 - Abgeschlossene Ergebnisse mindestens 24 h, höchstens 7 Tage (Startwert 24 h), danach gelöscht; nur der
-  Hash-Eintrag bleibt bis zum Ende der Request-Generation, damit alte IDs `RequestExpired` statt einer neuen
-  Mutation ergeben.
+  Hash-Eintrag bleibt bis zum Ende der Request-Generation. Ein Retry mit bekannter ID nach Ergebnislöschung
+  liefert `ResultExpired` (Ausgang war entschieden, Inhalt nicht mehr abrufbar), eine unbekannte ID nach Ablauf
+  der Generation `RequestExpired`; keiner der beiden Fälle mutiert. Die Generationslaufzeit ist deshalb höchstens
+  so lang, dass ihre Hash-Einträge ins Claim-Budget passen (Gate 4).
 - Claims, Journale und Mailboxes sind nur für den eigenen Principal und Dienstrollen lesbar, nie für Observer.
 - Löschanfrage für Inhalte eines Principals erfasst Entries, Claims und Mailbox-Events gemeinsam (offene Frage F9).
 
@@ -437,7 +599,7 @@ eine neue ID. Das erhält auch die `ifExists`-Semantik.
 werden darin unbekannte IDs mit `RequestExpired` abgewiesen, auch nach Claim-Bereinigung. Alte unbekannte Requests
 werden nie als neue Writes behandelt.
 
-**Mailbox:** ACK nur für den authentifizierten Consumer, passende Epoche und bereits ausgelieferte Sequenzen; nur
+**Mailbox:** ACK nur für den authentifizierten Consumer, passende `mailboxEpoch` und bereits ausgelieferte Sequenzen; nur
 zusammenhängende Präfixe. Alte ACKs löschen nach Reset keine neuen Events. TTL-Verlust wird als Lücke gemeldet.
 ACK bestätigt Transportübernahme, keinen Take-Commit.
 
@@ -465,7 +627,9 @@ type Rule =
   | { type: string; mode: "local"; member: string }
   | { type: string; mode: "expand"; members: string[]; by: "type" | { field: string } | "capacity" | "capability" }
   | { type: string; mode: "sync"; variant: "primary"; member: string; primaryReplica: string;
-      standbyReplica?: string; durability: "single" | "sync" }
+      durability: "single"; backupReplica?: string }          // optional asynchroner Snapshot, nie Promotion
+  | { type: string; mode: "sync"; variant: "primary"; member: string; primaryReplica: string;
+      durability: "sync"; standbyReplica: string }            // Standby Pflicht
   | { type: string; mode: "sync"; variant: "lww"; members: string[]; keyFields: string[]; semantics: "state" }
   | { type: string; mode: "sync"; variant: "set"; members: string[]; semantics: "facts" };
 type Policy = { policyVersion: number; rules: Rule[]; default: { mode: "local"; member: string } };
@@ -474,16 +638,21 @@ type Policy = { policyVersion: number; rules: Rule[]; default: { mode: "local"; 
 - `semantics` ist ein Pflichtfeld zur ausdrücklichen Bestätigung: lww nur für Zustand (Sensorwerte,
   Konfiguration, Status), set nur für Fakten/Beobachtungen. Für Jobs, einmalige Aktionen oder Zahlungen sind
   beide unzulässig; dort gilt expand oder primary.
-- Primary-Epochen pro logischem Space. In v3 umfasst primary den ganzen Member einschließlich interner Dokumente;
+- `primaryEpoch` pro logischem Space. In v3 umfasst primary den ganzen Member einschließlich interner Dokumente;
   alle Typregeln eines Members haben dieselbe Replikatkonfiguration. Control-Daten inklusive Capability bleiben
   einheitlich primary.
+- **Modusgrenzen pro Member:** Ein Member mit primary-Replikation darf in v3 nur in `local`- und
+  primary-Regeln vorkommen. Steht er zusätzlich in einer expand-Regel, wäre das der RAID-10-Fall (7.3). Steht er
+  in einer lww/set-Regel, würden dieselben Entries über zwei Replikationspfade laufen. Beides weist die
+  Policy-Validierung ab. Members von expand- und lww/set-Regeln haben keine primary-Replikate.
 - Pro Typ genau eine Regel; Supertypen im Template erweitern die Suche auf alle betroffenen Regeln. `local` meint
   den explizit benannten Member, nie implizit den Host des Clients.
 - Direkte Member-Zugriffe prüfen dieselben Modus-, Rechte- und Routinggrenzen; verwaltete expand-Typen dürfen
   außerhalb ihres Members nicht direkt geschrieben werden.
 
 **Router-Journal:** vor dem ersten Remote-Aufruf: logischer Request, Principal, Policy-Version, Ziele,
-Unterrequest-IDs, Deadline. Eine begonnene Operation wechselt bei Timeout weder Member noch Policy. Entfernte
+Unterrequest-IDs, Request-Generationen der Ziele, Deadline. Eine begonnene Operation wechselt bei Timeout weder
+Member noch Policy; ihre Folgeoperationen tragen die ursprüngliche Policy-Version (4.4). Entfernte
 Ergebnisse werden dauerhaft übernommen, bevor Client-Antwort oder ACK erfolgt.
 
 **Waiter-Wettlauf:** alle Registrierungs-IDs und eine Generation pro Versuch werden journalisiert. Die erste noch
@@ -497,7 +666,9 @@ unklarer Commit wird aufgelöst, nie durch einen zweiten Gewinner ersetzt.
 
 ### 7.1 expand
 
-- **write:** Typ → fester Member; Feld → HRW über die festgelegte Member-Menge; capacity/capability → Auswahl vor
+- **write:** Typ → fester Member; Feld → HRW über die festgelegte Member-Menge. Eingabe des HRW-Hashes ist nur
+  die kanonische Kodierung des Feldwerts, nicht der Typ. Regeln mit demselben Feld und derselben Member-Menge
+  legen gleiche Werte daher auf denselben Member (z.B. Task und Ergebnis mit gleicher `taskId`); capacity/capability → Auswahl vor
   dem ersten Versuch, dauerhaft im Journal gebunden. Veraltete Kapazitätsdaten führen zu Ablehnung, nicht zu
   stiller Zweitplatzierung. Neuplanung nur nach eindeutig abgewiesenem Versuch.
 - **read:** erster Treffer; Miss erst nach Miss aller relevanten Members; bei Ausfall ohne Treffer `Unavailable`.
@@ -515,6 +686,21 @@ unklarer Commit wird aufgelöst, nie durch einen zweiten Gewinner ersetzt.
 unveränderlich. `addMember` registriert Hosts und erlaubt neue, leere Regeln; es ändert keine bestehende
 Zuordnung, auch nicht „nur für neue Daten“, weil gezielte Reads nach Feld sonst den falschen Member fragen.
 `removeMember` erfordert nachgewiesene Leerung einschließlich offener Operationen.
+
+**Aufnahme eines Space mit Bestand:** `addMember` prüft vor der Aufnahme den Inhalt des Space einschließlich
+unsichtbarer Txn-Writes, Waiter und Claims. Enthält er Entries eines Typs, den die Policy einem anderen Member
+oder einer HRW-Menge ohne diesen Member zuordnet, wird das Command mit `RoutingConflict` und der Liste der
+betroffenen Typen abgewiesen. Erlaubt sind nur Bestände ungeregelter Typen (die dann eine neue Regel mit genau
+diesem Member erhalten) und leere Spaces.
+
+**HRW-Members:** Da die HRW-Menge unveränderlich ist, kann ein HRW-Member weder entfernt noch durch einen anderen
+ersetzt werden. `drain` auf einem HRW-Member weist neue Writes für seinen Schlüsselanteil mit `MemberDrained` ab,
+statt sie anderswo zu platzieren; `removeMember` wird für ihn mit `MigrationRequired` abgewiesen. Entfernbar
+sind in v3 nur Members mit fester Typzuordnung (nach Leerung) und Members von capacity/capability-Regeln.
+
+**capacity/capability-Mengen:** `setPolicy` darf die Memberliste einer capacity/capability-Regel **erweitern**,
+weil dort die Auswahl journalisiert und nicht aus dem Schlüssel berechnet wird; frühere Standorte bleiben in der
+Suchmenge. Verkleinern nur über drain plus Leerung.
 
 **drain:** stoppt neue Platzierungen auf dem Member. Bereits begonnene Operationen behalten ihr Ziel und laufen zu
 Ende oder werden über `cancelOperation` **am Member** abgebrochen; das Ergebnis (abgebrochen oder bereits
@@ -538,8 +724,9 @@ mit Migrationsbedarf abgewiesen.
 beantwortet, wenn der Standby den Batch dauerhaft angenommen und der Primary ihn lokal angewendet hat. Der Primary
 persistiert Batch und Pending-Zustand vor dem Senden und klärt sie nach Neustart mit dem Standby, bevor er weitere
 Mutationen zulässt. Ein auf dem Standby angenommener Batch gilt als entschieden. Replikate liefern nur als veraltbar
-markierte Reads; konsistente Reads und Takes gehen zum Primary. Kein stiller Rückfall auf asynchron. Standby wird
-über Snapshot plus Stream synchronisiert, dann aktiviert; Standby-Wechsel nur bei pausierten Writes.
+markierte Reads; konsistente Reads und Takes gehen zum Primary. Kein stiller Rückfall auf asynchron; die
+ausdrückliche Umschaltung steht in 5.3.1. Standby wird über Snapshot plus Stream synchronisiert, dann aktiviert;
+Standby-Wechsel (`setStandby`) nur bei pausierten Writes.
 
 **Entry-Replikation (lww/set):** jede Änderung hat die unveränderliche ID `(originReplicaId, incarnation, seq)`.
 Weiterleitung erhält ID, Owner und Metadaten und erzeugt keine neue Änderung. Dedup-/Kausalzustand ist dauerhaft
@@ -558,7 +745,9 @@ bleiben (Add-Wins). `SpaceLike` weist exklusive Txns für solche Regeln ab.
 **Leases bei lww/set:** Ablauf wird als unveränderliche Origin-Deadline der jeweiligen Version übertragen;
 Weiterleitung erneuert nicht, Renewal erzeugt eine neue Version. **Natürlicher Ablauf versteckt nur die
 abgelaufene Version** und erzeugt keinen Tombstone, damit eine neuere Erneuerung auf einem anderen Replikat nicht
-gelöscht wird. Ablauf kann innerhalb der Zeitunsicherheit unterschiedlich sichtbar sein; bei überschrittener
+gelöscht wird. Sichtbar ist bei lww immer nur die gewinnende Version; ist sie abgelaufen, gilt der Schlüssel als
+nicht vorhanden. Ältere, noch nicht abgelaufene Versionen werden **nie** wieder sichtbar, sonst lebte überholter
+Zustand auf. Erst eine neuere Version (Put oder Renewal) macht den Schlüssel wieder sichtbar. Ablauf kann innerhalb der Zeitunsicherheit unterschiedlich sichtbar sein; bei überschrittener
 Unsicherheit werden zeitkritische Operationen gesperrt. Lease-Ablauf stoppt keinen extern weiterlaufenden Worker.
 
 **Tombstones und Offline-Replikate:** Konflikt-/Remove-Metadaten bleiben in eigenem Budget dauerhaft; bei
@@ -598,7 +787,7 @@ jede Mutation. Unbekannte Rollen/Typen/Operationen werden abgewiesen.
 | host | eigene Capability, lokale Agenten delegieren | eigener Namensraum, zugewiesene Spaces |
 | router | Commands verarbeiten, delegieren | gültige `RouterLease`, geprüfter Scope |
 | replicator | Snapshots/Streams importieren | nur zugewiesene Quelle/Ziel/Modus |
-| supervisor | Enrollment, Recovery, Promotion | nur vorgesehene atomare Übergänge |
+| supervisor | Enrollment, Supervisor-Commands (5), Signatur der `RouterLease`, Recovery, Promotion, Umschaltung (5.3.1) | nur vorgesehene atomare Übergänge |
 | ungepaarter Peer | eigenes Enrollment | sonst nichts |
 
 Geschützte Typen sind auch gegen Take, Lease-Eingriff und Txn-Mutation geschützt; Templates mit Supertypen oder
@@ -625,10 +814,13 @@ sind zusätzliche noch offene Implementierungen. Vorhandenes Remote-Connect ist 
 Jede Stufe implementiert ihre Voraussetzungen vor der Abnahme. Simulatorprüfungen ergänzen persistente Tests;
 NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
 
-### Stufe 0 – Bestehender Core
-- B1–B3, L6, L7, L10; `SpaceLike`; Einbindung in pi-serverd und server.mjs (L14); kanonische JSON-Kodierung.
+### Stufe 0 – Core-Voraussetzungen
+- Erledigt laut [spaces-v1.md](spaces-v1.md): B1–B3, L6, L10, `SpaceLike`, kanonische JSON-Kodierung
+  (`src/canonical.ts`).
+- Offen: L7-Rest (Byte-Limits für interne Dokumente/Storage) und abgenommene Einbindung in pi-serverd und
+  server.mjs (L14).
 - **Abnahme:** bestehende Suite und Regressionstests grün; lokale Worker koordinieren sich; Tests unterscheiden
-  Reservierung, Commit und externe Wirkung.
+  Reservierung, Commit und externe Wirkung; L7 und L14 nachgewiesen.
 
 ### Stufe 1 – Benannte Spaces und lokales Protokoll
 - Doc-Version 5 und Migration 4 → 5; IDs, Rechte-Grundmodell, Meter pro Space, Byte-Limits, Revisionen.
@@ -639,34 +831,52 @@ NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
   `RequestExpired`, falsche Argumente, alte ACKs geprüft; Migrationsfixtures erhalten Entries, Txns, Outbox.
 
 ### Stufe 1b – Overlay, Autorisierung, Enrollment
-- Gate mit Grenzen und Dienst-Allowlist; Schicht A/B mit verbindungsgebundener Challenge; Delegation mit
-  `RouterLease`; vollständige Typ-/Operations-ACLs.
-- Control Space single plus asynchroner Snapshot und dokumentiertes Restore; Supervisor und lokaler Recovery
-  Space; Enrollment ohne Router mit Rate-Limits.
+- Gate mit Grenzen, `maxCommitBytes` und Dienst-Allowlist; Schicht A/B mit verbindungsgebundener Challenge;
+  vollständige Typ-/Operations-ACLs.
+- Control Space single plus asynchroner Snapshot und Restore nach 5.2.1; Supervisor, lokaler Recovery Space mit
+  Out-of-Band-Zugang (5.4); Enrollment ohne Router mit Rate-Limits; Supervisor-Commands `createEnroll`,
+  `revokePeer`, `rotateKey`.
 - NetBird-Testmatrix (4.6), Schlüsselablage auf Zielplattformen, Widerruf und Grant-Ablauf.
-- **Abnahme:** Handy/Desktop gepairt; ungepaarter Peer nur Enrollment; Fehlversuchslimit greift; weitergereichte
-  Challenge (fremde `observedPeerId`) scheitert; gefälschtes zweites Hello und fremde Dienste abgewiesen;
-  geschützte Typen weder nehmbar noch über Lease/Txn löschbar; Widerruf innerhalb der Grenze; Restore aus
-  Snapshot mit neuer Inkarnation funktioniert.
+- **Abnahme:** Handy und ein Test-Client auf dem Desktop (Testtreiber, nicht das Paket aus Stufe 4) gepairt;
+  ungepaarter Peer nur Enrollment; Fehlversuchslimit greift; ein fremder Peer kann den Token nicht verbrennen;
+  weitergereichte Challenge (fremde `observedPeerId`) scheitert; gefälschtes zweites Hello und fremde Dienste
+  abgewiesen; geschützte Typen weder nehmbar noch über Lease/Txn löschbar; `revokePeer` wirkt innerhalb der
+  Grenze; Restore mit neuer Inkarnation und Epochen, alte Request-Generationen ergeben `IncarnationChanged`;
+  Recovery-Request bei gesperrtem NetBird-Management über den Out-of-Band-Zugang möglich; zu großer Commit wird
+  abgewiesen.
 
 ### Stufe 2 – Router und expand
 - Journal mit Unterrequest-Deduplizierung und Recovery; feste Policy-Versionen; Regeln 7.1; drain;
-  `readAll` mit `allowPartial`/`waitForComplete`; Capability-Verzeichnis; Delegation mit Policy-Versionsprüfung.
+  `readAll` mit `allowPartial`/`waitForComplete`; Capability-Verzeichnis.
+- Delegation nach 4.4: vom Supervisor signierte `RouterLease`, `routerEpoch`/`EpochNotice`, Policy-Versionsprüfung
+  mit Folgeoperationen, Delegationserneuerung für lange Operationen.
 - **Abnahme:** 1000 Jobs, 3 Members, 6 Worker: höchstens ein destruktiver Commit je Entry; Absturz nach jeder
   Journal-/RPC-/ACK-Grenze auf persistentem Storage ohne Doppelwirkung; Retries ändern die Zielbindung nicht;
-  drain mit laufenden Takes verliert und verdoppelt nichts; Delegation mit alter Policy-Version, falscher
-  Audience, abgelaufener Router-Lease oder falschem Argument-Hash scheitert; Idempotenz-Beispiel und
-  Gegenbeispiel dokumentieren die Grenze externer Wirkungen.
+  drain mit laufenden Takes verliert und verdoppelt nichts.
+- Delegationen scheitern bei:
+  - alter Policy-Version für neue Operationen,
+  - falscher Audience, Generation oder abgelaufener Router-Lease,
+  - selbst signierter Lease oder Lease mit alter `routerEpoch`,
+  - falschem Argument-Hash.
+- Ebenfalls abgenommen:
+  - Poll und Cancel einer begonnenen Operation funktionieren nach `setPolicy`.
+  - Ein `space_wait` über mehrere Minuten wird korrekt entschieden.
+  - `addMember` mit Bestand eines verwalteten Typs wird abgewiesen.
+  - `removeMember` auf einem HRW-Member wird abgewiesen.
+  - Idempotenz-Beispiel und Gegenbeispiel dokumentieren die Grenze externer Wirkungen.
 
 ### Stufe 3 – Replikation und kontrollierte Übernahme
 - Snapshot-/Stream-Import, lww/set mit versionierten Deletes, Leases, Deduplizierung, Offline-Rejoin.
-- primary/sync mit festem Standby; Control Space wechselt auf primary/sync; Router-Lease über sync-Commits;
-  Fencing-Adapter nach 5.5; Promotion nach 5.3.
+- primary/sync mit festem Standby und `setStandby`; Control Space wechselt auf primary/sync; Router-Lease über
+  sync-Commits; Fencing-Adapter nach 5.5 mit Quarantänemodus; Promotion nach 5.3; Umschaltung nach 5.3.1;
+  Policy-Validierung der Modusgrenzen (6.4).
 - **Abnahme:** 10-min-Partition mit konkurrierenden Writes/Deletes/Erneuerungen konvergiert; alter Put belebt
   keinen Tombstone wieder; natürlicher Ablauf löscht keine neuere Erneuerung; Snapshot unter Last verliert nichts;
   ohne Standby keine Bestätigung; Promotion ohne verifizierten Fencing-Nachweis, mit Marker-Adapter oder auf
   falschem Standby verweigert; alter Router kann nach Lease-Ablauf nichts mehr delegieren; bestätigte Ergebnisse
-  bleiben nach Promotion erhalten; alter Primary startet nicht schreibend.
+  bleiben nach Promotion erhalten; alter Primary startet nach `release` nur in Quarantäne; ältere lww-Version
+  wird nach Ablauf der Gewinnerversion nicht sichtbar; Standby-Ausfall sperrt Bestätigungen, `degradeToSingle`
+  ohne Standby-Fencing wird verweigert; Policy mit primary-Member in expand- oder lww-Regel wird abgewiesen.
 
 ### Stufe 4 – Weitere Clients
 - Desktop/CLI-Paket, optional Browser-Gateway.
@@ -702,8 +912,9 @@ Festgelegt in v3:
 
 1. Grundlage ist der Vertrag aus 2.1; kein allgemeines Exactly-once für externe Wirkungen.
 2. Kein mTLS; WireGuard plus verbindungsgebundene App-Challenge (4.2, 4.3) – vorbehaltlich F3.
-3. Control Space in 1b–2 single mit asynchronem Snapshot und Restore; primary/sync ab Stufe 3.
+3. Control Space in 1b–2 single mit asynchronem Snapshot und Restore nach 5.2.1 (Fencing, neue Epochen, Generationsende); primary/sync ab Stufe 3.
 4. Keine automatische Promotion; manuelle Promotion nur nach verifiziertem Fencing (Marker nur im Simulator).
+   Einzige Ausnahme: Restore im Single-Betrieb vor Gate 2 mit dokumentierter Konsolensperre (F15).
 5. Recovery Space lokal, nicht repliziert.
 6. RPC-Ergebnisse dauerhaft, Argumente nur als Hash, Fristen 24 h bis 7 Tage.
 7. Delegation signiert, kanonisch kodiert, an Audience/Request/Argument-Hash/Policy-Version/Router-Lease gebunden.
@@ -714,33 +925,35 @@ Festgelegt in v3:
 
 Gates (vor der jeweiligen Stufe nachzuweisen):
 
-1. Koordinator-Host und unabhängig erreichbarer Recovery-Zugang (vor 1b).
+1. Koordinator-Host und Out-of-Band-Recovery-Zugang nach 5.4, getestet bei gesperrtem NetBird (vor 1b).
 2. Konkreter Fencing-Adapter mit Neustartsperre, real getestet (vor 3).
 3. Zulässige Uhrunsicherheit, HLC-Zukunftsgrenze, Sperrverhalten; gelten auch für Grants und Router-Lease (vor 1b).
-4. Konkrete Byte-/Anzahl-/Frame-Limits, Snapshot- und Generationslaufzeiten aus Lasttests (vor 2).
+4. Startwerte für Frame, `maxCommitBytes`, Verbindungen und Handshake festgelegt (vor 1b, F11); konkrete
+   Byte-/Anzahl-Limits, Snapshot- und Generationslaufzeiten aus Lasttests bestätigt (vor 2).
 5. NetBird-Version, Deployment, Lizenzen, Management-API-Rechte, Ergebnisse der Testmatrix 4.6 (vor 1b).
 6. Schlüsselablage auf Zielplattformen (Android-Keystore: Ed25519 oder P-256), WebCrypto für Browser (vor 1b/4).
 
 ## 14. Offene Fragen
 
-Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F8, F10, F12, F13, F14 sind entschieden (Empfehlung übernommen). Hinweis zu F1/F2: Abschnitt 4.1.1 plant VPS; dann gilt für F1 Fencing über die Anbieter-API (Server stoppen, Neustart sperren) und für F2 Koordinator und Standby bei verschiedenen Anbietern/Zonen. Empfehlungen sind Vorschläge.
+Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F8, F10, F12, F13, F14, F15 sind entschieden (Empfehlung übernommen). Empfehlungen sind Vorschläge.
 
 | # | Frage | Empfehlung | blockiert |
 |---|---|---|---|
-| F1 | Auf welcher Infrastruktur laufen die Hosts (Bare Metal mit BMC, VMs, Container, Raspberry Pi o.ä.)? Davon hängt der Fencing-Adapter ab. | Für Heimgeräte: schaltbare Steckdose/PDU mit API; für VMs: Hypervisor-API | Stufe 3 |
-| F2 | Welcher Host ist Koordinator, welcher Standby? Läuft der Koordinator getrennt von der NetBird-VM? | stets laufender Heimserver als Koordinator; NetBird-VM getrennt | 1b |
+| F1 | Auf welcher Infrastruktur laufen die Hosts? Davon hängt der Fencing-Adapter ab. | Bei VPS nach 4.1.1: Cloud-Adapter über die Anbieter-API (Server stoppen, Neustart sperren, Quarantäne-Merkmal setzen). Nur für Heimgeräte: schaltbare Steckdose/PDU mit API | Stufe 3 |
+| F2 | Welcher Host ist Koordinator, welcher Standby? Läuft der Koordinator getrennt von der NetBird-VM? | Koordinator und Standby als VPS nach 4.1.1 auf getrennten physischen Hosts/Zonen in naher Region; NetBird-VM getrennt. Für 1b genügt die Wahl des Koordinators | 1b (Standby: 3) |
 | F3 | Reicht WireGuard plus App-Challenge, oder gibt es eine Anforderung (Compliance, Audit) für TLS/mTLS auf dem Space-Port? | kein mTLS | 1b |
 | F4 | Challenge pro Verbindung (v3) oder Signatur pro Request (v2)? | pro Verbindung; Delegation ohnehin pro Request signiert | 1b |
-| F5 | Ist für den Control Space in 1b–2 ein Restore mit möglichem Verlust der letzten Minuten akzeptabel? | ja; Steuerdaten sind klein, Enrollments wiederholbar | 1b |
+| F5 | Ist für den Control Space in 1b–2 ein Restore mit möglichem Verlust der letzten Minuten akzeptabel? | ja; Steuerdaten sind klein, Enrollments wiederholbar; verwaiste Wirkungen nach 5.2.1 Schritt 4 werden geprüft | 1b |
 | F6 | Welche Uhrunsicherheit ist zulässig (NTP auf allen Hosts)? | 2 s, Sperre ab 5 s; HLC-Zukunftsgrenze 60 s | 1b |
 | F7 | Grant-Laufzeit 60 s und Router-Lease 60 s/20 s: akzeptabel als maximale Widerrufsverzögerung? | ja | 1b |
 | F8 | Werden RPC-Ergebnisse 24 h oder bis 7 Tage aufbewahrt? | 24 h | 1 |
 | F9 | Welche Inhalte gelten als personenbezogen, und braucht es eine Löschfunktion pro Principal über Entries, Claims und Mailboxes? | ja, als Admin-Command in Stufe 2 | 2 |
 | F10 | Ist Teilergebnis-Lesen (`allowPartial`) für Dashboards Standard oder nur explizit? | nur explizit; Dashboard setzt es | 2 |
-| F11 | Startwerte für Frame (256 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | bis Lasttest übernehmen | 1b |
+| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s), Epochen-Sicherheitsabstand bei Restore (+1000) passend? | bis Lasttest übernehmen | 1b |
 | F12 | Wird das Browser-Gateway gebraucht, oder genügen Handy-App und CLI? | zurückstellen | 4 |
 | F13 | Wird automatische Migration (HRW-Erweiterung) gebraucht? Sie ist nicht in v3. | erst bei konkretem Bedarf | – |
 | F14 | Sollen die v2-Dokumente (`federation-plan-v2*.md`, `.DOCS-UPDATE.md`) archiviert oder gelöscht und `README.md` auf v3 umgestellt werden? Sie verweisen auf nicht existierende Dateien und erklären die gründlichere v1 für veraltet. | README auf v3 umstellen, v2 als „ersetzt“ markieren | – |
+| F15 | Darf vor Abnahme eines realen Fencing-Adapters (Gate 2) ein dokumentiertes Abschalten mit Neustartsperre über die Anbieterkonsole als Fencing-Nachweis für einen Restore in 1b–2 gelten? Das lockert „bloße Admin-Behauptung genügt nicht“ (5.3, Entscheidung 4). | ja, nur für Restore im Single-Betrieb, mit Screenshot/API-Auszug im Audit; nie für Promotion | 1b |
 
 ## Anhang A – Alternative ohne Overlay: SSH-Zertifikate
 
