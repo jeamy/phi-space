@@ -16,7 +16,7 @@ Stufen zu beginnen. Die Stufen danach hängen an Entscheidungen und Nachweisen, 
 |---|---|---|
 | 0 – Core-Rest | **ja** | nichts |
 | 1 – benannte Spaces, lokales Protokoll | **ja** | nur F8 (entschieden: 24 h) und Startwerte aus F11 (bis Lasttest übernehmen) |
-| 1b – Overlay, Identität, Enrollment, Restore | **nein** | Entscheidungen F2–F7, F11; Gates 1, 3, 5, 6; Freigabe neuer Abhängigkeiten (Abschnitt 6) |
+| 1b – Overlay, Identität, Enrollment, Restore | nach Stufe 1 | Entscheidungen getroffen (2026-10-08); offen sind die Nachweise für Gates 1, 3, 5, 6 |
 | 2 – Router und expand | nach 1b | F9; Gate 4 (Lasttestwerte) |
 | 3 – Replikation, Promotion | nach 2 | F1; Gate 2 (realer Fencing-Adapter) |
 | 4 – weitere Clients | nach 2 | F12 bleibt zurückgestellt |
@@ -47,16 +47,16 @@ aufdeckt, wird zuerst `federation-plan-v3.md` korrigiert und dann weiterentwicke
 
 | Frage | benötigt vor | Empfehlung im Plan | Wer |
 |---|---|---|---|
-| F2 Koordinator-Host | 1b | VPS nach v3 4.1.1 | Betreiber |
-| F3 kein mTLS | 1b | bestätigen | Betreiber |
-| F4 Challenge pro Verbindung | 1b | bestätigen | Betreiber |
-| F5 verlustbehafteter Control-Restore | 1b | bestätigen | Betreiber |
-| F6 Uhrunsicherheit 2 s / Sperre 5 s / HLC 60 s | 1b | bestätigen, NTP auf allen Hosts | Betreiber |
-| F7 Grant 60 s, Lease 60 s/20 s | 1b | bestätigen | Betreiber |
-| F11 Startwerte Frame/Commit/Verbindungen | 1 (Startwerte), 2 (final) | übernehmen, per Lasttest bestätigen | Implementierung |
+| F2 Koordinator-Host | 1b | **entschieden:** VPS nach v3 4.1.1, NetBird-VM getrennt | Betreiber |
+| F3 kein mTLS | 1b | **entschieden:** kein mTLS | Betreiber |
+| F4 Challenge pro Verbindung | 1b | **entschieden:** pro Verbindung | Betreiber |
+| F5 verlustbehafteter Control-Restore | 1b | **entschieden:** akzeptiert | Betreiber |
+| F6 Uhrunsicherheit 2 s / Sperre 5 s / HLC 60 s | 1b | **entschieden**, NTP auf allen Hosts | Betreiber |
+| F7 Grant 60 s, Lease 60 s/20 s | 1b | **entschieden** | Betreiber |
+| F11 Startwerte Frame/Commit/Verbindungen | 1 (Startwerte), 2 (final) | **entschieden:** Startwerte übernommen, Lasttest bestätigt sie vor Stufe 2 | Implementierung |
 | F9 Löschung pro Principal | 2 | Admin-Command in Stufe 2 | Betreiber |
 | F1 Fencing-Adapter | 3 | Cloud-API des VPS-Anbieters | Betreiber |
-| Neue Abhängigkeit `pi-server` (TCP/Unix-Transport) für pi-spaces | 1b | als Peer-Dependency; siehe 6 | Betreiber |
+| Neue Abhängigkeit `pi-server` (TCP/Unix-Transport) für pi-spaces | 1b | **entschieden:** Peer-Dependency, Transport hinter einem Interface; eingetragen erst mit AP 1.9 | Betreiber |
 
 ## 4. Arbeitspakete und Reihenfolge
 
@@ -84,7 +84,7 @@ Reihenfolge innerhalb der Phase entlang der Abhängigkeiten:
 
 | AP | Inhalt | Module | Größe |
 |---|---|---|---|
-| 1.1 | **Doc-Version 5 als Familie:** `pi-spaces.space` wird `defineDocFamily` mit Schlüssel `spaceId`; Registry-Dokument `pi-spaces.registry` für `hostId`, Alias → `spaceId`. Migration 4 → 5 nach dem in AP 0.3 festgelegten Weg: Der bisherige Singleton wird einmalig in einen Space mit **erzeugter** `spaceId` und Alias `default` übernommen (Entries, Txns, Outbox, Claims erhalten), danach retired. | `doc.ts`, `core.migrate`, `client.ts` | M |
+| 1.1 | **Doc-Version 5 als Familie:** `pi-spaces.space` wird `defineDocFamily` mit Schlüssel `spaceId`; Registry-Dokument `pi-spaces.registry` für `hostId`, Alias → `spaceId`. Migration 4 → 5 nach dem in AP 0.3 festgelegten Weg: Der bisherige Singleton bleibt das Dokument des Default-Space und erhält bei der Registrierung eine **erzeugte** `spaceId` und den Alias `default`; nur weitere Spaces liegen in der Familie (keine Kopiermigration). | `doc.ts`, `core.migrate`, `client.ts` | M |
 | 1.2 | **Identitäten:** `hostId`, `spaceId`, Dateninkarnation; lokale IDs = Inkarnation + Zähler; `gid = spaceId/localId`; `view()` liefert `gid`. | `core.ts` | S |
 | 1.3 | **Revision und Änderungsstrom:** Revision pro Commit; begrenzter, persistenter Batch-Log je Space; `changes(afterRev, maxBytes)` lokal; Snapshot-Token mit Revision R und begrenzter Vorhaltung (`SnapshotExpired`). | neues `src/stream.ts` | L |
 | 1.4 | **Budgets und Seiten:** `maxCommitBytes`, `maxEventBytes`; Reservierung für Commit **und** Abort vor jeder Txn-Erweiterung (v3 4.2); bytebegrenzte Seiten für `readAll`, Snapshot, `events`, `changes` mit Cursor ohne Lücken/Dubletten (v3 6.2 „Seitengrößen“). Ersetzt `MAX_LIST` ohne Cursor (L13). | `core.ts`, `stream.ts` | M |
@@ -194,3 +194,13 @@ Konkret als Nächstes, in dieser Reihenfolge:
 | Fencing-API des Anbieters ohne echte Neustartsperre | Stufe 3 nicht abnehmbar | Anbieterwahl mit F1 klären, bevor Phase 3 beginnt |
 | Vertragsfehler zeigen sich erst im Code | Nacharbeit an mehreren APs | Abweichungen zuerst im Vertrag korrigieren; Abnahmefälle als ausführbare Tests pflegen |
 | Umfang | v3 ist groß; viele Pakete der Größe L | nach Phase 1 und nach Phase 2 jeweils prüfen, ob Stufe 3 wirklich benötigt wird; Phase 2b kann früher Nutzen bringen |
+
+## 7. Fortschritt
+
+| AP | Stand | Abweichung / Befund |
+|---|---|---|
+| 0.1 | umgesetzt: `test/support/persistent.ts` (JSONL/SQLite, Absturz, Fehlerinjektion `failBeforeCommit`/`loseAnswer`), `test-persistence.test.ts` | Der erste Test fand einen Fehler: Claim-Replays gaben einen Draft-Proxy zurück, der nach dem Commit nicht lesbar ist („settled overlay“). Behoben in `client.ts` und den Tools (`core.plain`). Betraf auch das ausgelieferte Verhalten: Ein Tool-Replay nach Absturz meldete dem Modell einen Fehler statt des Ergebnisses; Regressionstest mit Agent auf JSONL/SQLite. |
+| 0.3 | umgesetzt: `scripts/spike-durable.ts`, Ergebnis in [VALIDIERUNG.md](VALIDIERUNG.md#pi-durable-machbarkeit-ap-03) | Mehrdokument-Commits mit Familien sind atomar. Ein Familien-Token mit der `kind` des Singletons liest **still ein anderes, leeres Dokument**; daher keine Umdeutung des Singletons. `settle()` ersetzte bei jedem Commit das ganze Entry-Array; behoben (in place), Commit-Kosten bei 1000 Entries von etwa 48 ms auf 3–6 ms, Storage von 231 MB auf 0,7 MB. Restkosten wachsen linear mit der Entry-Zahl (AP 0.2). |
+| 1.1 | umgesetzt: `src/spaces.ts`, Doc-Version 5 | Entscheidung nach 0.3: Der bisherige Singleton bleibt der Default-Space (Alias `default`, erzeugte `spaceId`); nur weitere Spaces liegen in der Familie `pi-spaces.named-space`. Keine Kopiermigration nötig. `startService` bedient auch später angelegte Spaces. Tools arbeiten weiter auf dem Default-Space. |
+| 1.2 | umgesetzt | Lokale IDs `<präfix><inkarnation>-<zähler>` mit 8 Hex-Zeichen Inkarnation (bleiben einfache Wörter für Modelle und Parser); `gid` in jeder View. |
+| 1.5 | umgesetzt: `src/claims.ts`, `test-claims.test.ts` | Offen: Signatur der Generationen (mit AP 1.8), Budgetreservierung für Claims (AP 1.4/0.2), Trennung des Rahmens tritt erst mit dem Dienst `space` sichtbar auf. |

@@ -1261,7 +1261,7 @@ Gates (vor der jeweiligen Stufe nachzuweisen):
 
 ## 14. Offene Fragen
 
-Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F8, F10, F12, F13, F14, F15 sind entschieden (Empfehlung übernommen). Empfehlungen sind Vorschläge.
+Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F10–F15 sind entschieden (Empfehlung übernommen; F2–F7 und F11 am 2026-10-08). F11 gilt für die Startwerte; die finalen Werte bestimmt der Lasttest vor Stufe 2 (Gate 4). Empfehlungen sind Vorschläge.
 
 | # | Frage | Empfehlung | blockiert |
 |---|---|---|---|

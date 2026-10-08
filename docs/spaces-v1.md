@@ -6,23 +6,39 @@ Die historischen v1/v2-Planfassungen sind nicht verbindlich.
 
 ## Architektur und Datenmodell
 
-Ein Harness-Prozess besitzt den Storage. Ein Space ist ein session-scoped Dokument pi-spaces.space, Version 4.
-Mutationen lesen/ändern/schreiben es in einem Harness-Commit. Snapshot-Leseoperationen verwenden keinen Commit.
+Ein Harness-Prozess besitzt den Storage. Der Default-Space ist das session-scoped Dokument pi-spaces.space,
+Version 5. Weitere benannte Spaces liegen in der Session-Familie pi-spaces.named-space, geschlüsselt nach ihrer
+erzeugten `spaceId`; das Dokument pi-spaces.registry ordnet Aliase den IDs zu und hält die `hostId`.
+Mutationen lesen/ändern/schreiben einen Space in einem Harness-Commit. Snapshot-Leseoperationen verwenden keinen Commit.
 MemoryStorage ist flüchtig; JSONL ermöglicht persistente Wiederaufnahme innerhalb des Harness-Vertrags.
 Der Storage und dessen Fehlervertrag bestimmen Dauerhaftigkeit, nicht die Space-API allein.
 
 | Modul | Verantwortung |
 |---|---|
 | core.ts | reine Semantik mit explizitem now, Entries, Txns, Waiter, Notify, Ablauf und Limits |
-| doc.ts | Space-Dokument und Migration |
+| doc.ts | Dokument des Default-Space und Migration |
+| spaces.ts | Registry, benannte Spaces (`createSpace`, `listSpaces`), Auflösung Alias → `spaceId` |
+| claims.ts | dauerhafte Request-Claims und Request-Generationen (v3 6.2) |
 | client.ts | lokaler pi-spaces-Client (API-Klasse `PiSpaces`, Interface `SpaceLike`), blockierende Operationen, once-Hook, Snapshot-Lesen |
 | index.ts | Agenten-Tools, Claims, Prompt, Reaper und Delivery |
 | meter.ts | prozesslokale Zähler und Raten |
 | canonical.ts | kanonische JSON-Kodierung für Feldvergleich |
 
-SpaceState enthält nextId, entries, txns, regs, waiters, outbox, returned und limits.
-EntryRec speichert type/types/fields, expires, writtenUnder, takenBy, readBy, owner und optionale Größe.
-IDs sind lokal, keine globalen Member-IDs. Zeitpunkte sind absolute Millisekunden; FOREVER bleibt unverfallend.
+SpaceState enthält nextId, entries, txns, regs, waiters, outbox, returned, limits sowie spaceId, incarnation und
+rpc (Claims/Generationen). EntryRec speichert type/types/fields, expires, writtenUnder, takenBy, readBy, owner und
+optionale Größe. Lokale IDs haben die Form `<präfix><inkarnation>-<zähler>` (ältere `e<n>` bleiben gültig); Views
+tragen zusätzlich die globale ID `gid = <spaceId>/<lokale ID>`. `spaceId` und Inkarnation entstehen bei der
+Registrierung, der Default-Space bei der ersten Nutzung über `PiSpaces` oder die Tools.
+Zeitpunkte sind absolute Millisekunden; FOREVER bleibt unverfallend.
+
+**Request-Claims:** `PiSpaces`-Mutationen und read/take akzeptieren optional `request: {principal, generation,
+requestId}`. Claim, Wirkung und Ergebnis entstehen im selben Commit; gespeichert wird nur ein Hash der fachlichen
+Argumente. Ein Retry mit gleicher Identität und gleichen Argumenten liefert das gespeicherte Ergebnis (auch nach
+Neustart); ein offener Request läuft mit seiner ersten Deadline weiter. Fehlerfälle: `RequestConflict`,
+`RequestExpired`, `ResultExpired`, `IncarnationChanged`, `OperationCancelled`. Dazu `issueGeneration`,
+`pollOperation`, `cancelOperation`. Ergebnisfrist (`claimResultMs`, Standard 24 h) und Zulassungsfrist
+(`generationAdmitMs`, Standard 1 h) sind Limits. Generationen sind noch nicht signiert; das folgt mit dem
+Dienst `space` (AP 1.8).
 
 ## Operationen und Garantien
 
@@ -84,7 +100,10 @@ Die Kennungen bleiben für Verweise aus dem Plan erhalten; sie sind kein unverä
 
 ## Leistung und Nachweise
 
-Dokumentgröße, lineare Suche und Waiter-Scans beeinflussen Kosten. Kein belegter Durchsatz oder linearer
+Dokumentgröße, lineare Suche und Waiter-Scans beeinflussen Kosten. Messung mit `scripts/spike-durable.ts`
+in [VALIDIERUNG.md](VALIDIERUNG.md#pi-durable-machbarkeit-ap-03): Ein Commit mit einem Write kostet bei 1000 Entries
+etwa 3–6 ms und wächst linear mit der Entry-Zahl, weil `write` die Gesamtbytes und `settle` alle Entries
+durchläuft. Kein belegter Durchsatz oder linearer
 Speedup; Snapshot-Limits und JSON-Bytebudget sind keine RAM-/VPS-Mindestanforderungen.
 Optimierungen wie Indizes, Sharding, Dirty-Flags und Remote-Protokoll benötigen eigene Implementierung/Tests.
 

@@ -5,7 +5,7 @@ Stand: 2026-10-07. Dieser Bericht beschreibt den geprüften lokalen Arbeitsstand
 | Prüfung | Ergebnis |
 |---|---|
 | npm run typecheck | bestanden |
-| npm test | Kern- und Integrationstests bestanden |
+| npm test | Kern-, Integrations-, Persistenz-, Spaces- und Claims-Tests bestanden (108) |
 | npm run test:examples | 158 Tests bestanden, keine Fehler/Skips; Ausführung mit freigegebenen Unterprozessen |
 | Sieb-/Cache-Regressionen | 7 Sieb- und 8 Cache-Tests; unabhängige Primzahlreferenz, Konkurrenz, Rollback, Lease/TTL und JSONL-Reopen |
 | gezielter SIGKILL-/JSONL-Test | Reservierung nach Prozessverlust vorhanden, uncommitted Ergebnis unsichtbar; nach Recovery erneut korrekt gesucht |
@@ -17,6 +17,37 @@ Stand: 2026-10-07. Dieser Bericht beschreibt den geprüften lokalen Arbeitsstand
 | npm run example:cache | versionsgebundener Ersatz durch Bob, anschließende Löschung und Miss |
 | lokale Dokumentdateiverweise | keine fehlenden Zielpfade |
 | git diff --check | ohne Whitespace-Fehler |
+
+## pi-durable-Machbarkeit (AP 0.3)
+
+Messung am 2026-10-07 mit `node --experimental-strip-types scripts/spike-durable.ts <N>` auf dem
+Entwicklungsrechner (Node 22, lokale SSD). Einzelläufe, keine Statistik; Richtwerte, keine Abnahme nach Gate 4.
+
+**Semantik:**
+- Ein Commit über ein Familien-Dokument und einen Singleton ist atomar; ein Fehler rollt beide zurück.
+- Ein Familien-Token mit derselben `kind` wie ein persistierter Singleton liefert **ohne Fehler** ein anderes,
+  leeres Dokument. Der Singleton darf deshalb nicht einfach als Familie weitergeführt werden.
+- Kopieren in eine neue `kind` plus `retireDoc` im selben Commit funktioniert und übersteht Reopen.
+
+**Kosten eines Space-Dokuments** (Entries mit etwa 230 Byte Feldern; Befüllen in Commits zu 500 Writes):
+
+| Entries | Backend | Befüllen | 1 Write | Take, erster Treffer | Take, letzter Treffer | Storage | Reopen + Snapshot |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 1000 vor Korrektur | JSONL | 20 s | 48 ms | 48 ms | 86 ms | 231 MB | 3,5 s |
+| 1000 | JSONL | 0,7 s | 3,3 ms | 2,6 ms | 10 ms | 0,7 MB | 35 ms |
+| 1000 | SQLite | 0,6 s | 5,8 ms | 2,6 ms | 10 ms | 0,7 MB | 13 ms |
+| 4000 | JSONL | 9,9 s | 8,9 ms | 6,3 ms | 31 ms | 1,8 MB | 56 ms |
+| 4000 | SQLite | 10,3 s | 8,5 ms | 7,0 ms | 30 ms | 1,8 MB | 22 ms |
+| 10 000 | JSONL | 68 s | 19,8 ms | 12,3 ms | 81 ms | 3,9 MB | 98 ms |
+| 10 000 | SQLite | 66 s | 17,6 ms | 12,3 ms | 78 ms | 4,0 MB | 40 ms |
+
+Die Korrektur: `settle()` und das Txn-Ende ersetzten bei jedem Commit ganze Arrays im Dokument-Draft; pi-durable
+speicherte dadurch jedes Mal den vollständigen Space. Jetzt wird nur entfernt, was tatsächlich abläuft.
+
+**Folgerung:** Die Kosten wachsen linear mit der Entry-Zahl. Bei 10 000 Entries (dem Lasttestziel aus v3 §12)
+kostet ein einzelner Write knapp 20 ms und ein Take mit spätem Treffer etwa 80 ms. Treiber sind die
+Gesamtbyte-Summe in `write`, der Scan in `settle` und die lineare Template-Suche über Draft-Proxys. Gegenmaßnahmen
+(laufende Bytesumme, Ablauf-Index, Typindex) gehören zu AP 0.2 bzw. AP 1.4 und vor die Lasttests von Gate 4.
 
 ## Automatische mobile Bundle-Aktualisierung
 

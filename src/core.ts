@@ -33,8 +33,10 @@ export type Limits = {
 	maxTxnsPerOwner: number;
 	maxSpaceBytes: number; // JSON bytes of all entries' fields together (also for host writes)
 	notifyIntervalMs: number; // a conversation's subscription sends at most one event per interval (0: no limit)
+	claimResultMs: number; // how long a decided request keeps its result (federation-plan-v3 6.2: 24 h to 7 days)
+	generationAdmitMs: number; // how long a request generation admits new request ids
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000 };
 export class LimitError extends Error {}
 export class IllegalArgumentError extends Error {}
 /** A conversation tried to use or change something that is not its own. */
@@ -79,7 +81,7 @@ export type RegRec = {
 /** A parked read/take for a conversation: served by the space when a match appears, instead of a blocked call. */
 export type WaiterRec = { id: string; template: Template; take: boolean; target: Target | null; deadline: number; txnLeaseMs: number; handback: Json };
 /** `owner`: who wrote it (a conversation id), or null for host code, so a reader can judge where content comes from. */
-export type EntryView = { id: string; type: string; types: string[]; fields: Fields; owner: Target | null };
+export type EntryView = { id: string; gid?: string; type: string; types: string[]; fields: Fields; owner: Target | null };
 export type SpaceEvent = {
 	kind: "entry" | "waiter" | "timeout"; // entry: notify; waiter: a parked op was served; timeout: its deadline passed
 	eventId: string;
@@ -94,7 +96,11 @@ export type SpaceEvent = {
 };
 /** `returned`: entries given back by aborted or expired transactions, ever. Only changes in commits that change the
  * space anyway (a transaction ends), so keeping it durable wakes nobody. */
-export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits> };
+/**
+ * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
+ * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
+ */
+export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
@@ -107,12 +113,18 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		waiters: v.waiters ?? d.waiters,
 		outbox: v.outbox ?? d.outbox,
 		...(v.limits ? { limits: v.limits } : {}),
+		...(typeof v.spaceId === "string" ? { spaceId: v.spaceId } : {}),
+		...(typeof v.incarnation === "string" ? { incarnation: v.incarnation } : {}),
+		...(v.rpc ? { rpc: v.rpc } : {}), // request claims (claims.ts)
 		returned: v.returned ?? d.returned,
 	};
 };
 export type Lease = { id: string; expires: number };
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)); // draft proxies are not structured-cloneable
+/** A plain copy of a value read from a document draft. Drafts are unusable once their commit settles, so anything a
+ * commit returns that came from the document (a stored claim, for one) must be copied out inside the commit. */
+export const plain = <T>(v: T): T => (v === undefined ? v : clone(v));
 const encoder = new TextEncoder();
 const jsonBytes = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
 export const limitsOf = (s: Readonly<SpaceState>): Limits => ({ ...DEFAULT_LIMITS, ...(s.limits ?? {}) });
@@ -129,7 +141,11 @@ function checkSize(what: string, v: unknown, lim: Limits): void {
 	const n = jsonBytes(v);
 	if (n > lim.maxEntryBytes) throw new LimitError(`${what} is ${n} bytes; the limit is ${lim.maxEntryBytes}`);
 }
-const newId = (s: SpaceState, p: string) => `${p}${s.nextId++}`;
+// Ids of an incarnation never repeat (the counter only grows) and never collide with another incarnation's. Ids written
+// before the space had an incarnation keep their old form `e<n>`.
+const newId = (s: SpaceState, p: string) => (s.incarnation ? `${p}${s.incarnation}-${s.nextId++}` : `${p}${s.nextId++}`);
+/** Global id of a local entry id in space `spaceId`: `<spaceId>/<localId>`. */
+export const gidOf = (spaceId: string, id: string): string => `${spaceId}/${id}`;
 
 /** Leases are granted as requested: FOREVER (or Infinity) never expires, ANY gets the default. */
 function grant(requested: number, now: number): number {
@@ -184,12 +200,21 @@ export function settle(s: SpaceState, now: number): void {
 	serve(s, now);
 	flushRegs(s, now);
 }
+/**
+ * Remove the items `drop` selects, in place and only where there are any. Assigning a new array to a document draft
+ * records the whole array as the commit's change: with many entries every commit would store the entire space.
+ */
+function prune<T>(a: T[], drop: (x: T) => boolean): number {
+	let n = 0;
+	for (let i = a.length - 1; i >= 0; i--) if (drop(a[i]!)) { a.splice(i, 1); n++; }
+	return n;
+}
 function expire(s: SpaceState, at: number): void {
 	for (const r of s.regs) if (r.expires <= at && r.pending && r.pendingEntry) emit(s, r, r.pendingEntry, r.pending, at); // do not lose a bundle
-	s.entries = s.entries.filter((e) => e.expires > at);
-	s.regs = s.regs.filter((r) => r.expires > at);
+	prune(s.entries, (e) => e.expires <= at);
+	prune(s.regs, (r) => r.expires <= at);
 	for (const w of s.waiters) if (w.deadline <= at) s.outbox.push({ kind: "timeout", eventId: w.id, seq: 1, handback: w.handback, target: w.target });
-	s.waiters = s.waiters.filter((w) => w.deadline > at);
+	prune(s.waiters, (w) => w.deadline <= at);
 }
 
 /**
@@ -253,10 +278,10 @@ function notifyWrite(s: SpaceState, e: EntryRec, txn: string | null, now: number
 		if (!applies || !matches(r.template, e)) continue;
 		if (intervalOf(s, r) && r.lastEventAt !== undefined && now < r.lastEventAt + intervalOf(s, r)) {
 			r.pending = (r.pending ?? 0) + 1; // too soon after the last event: counted, sent bundled later
-			r.pendingEntry = view(e);
+			r.pendingEntry = view(e, s.spaceId);
 			continue;
 		}
-		emit(s, r, view(e), 1 + (r.pending ?? 0), now); // pending writes (if any) ride along with this one
+		emit(s, r, view(e, s.spaceId), 1 + (r.pending ?? 0), now); // pending writes (if any) ride along with this one
 	}
 }
 /** Send the bundled event for registrations whose interval is over. */
@@ -276,7 +301,8 @@ export function probe(s: SpaceState, now: number, tmpl: Template, txn: string | 
 	return f.status === "found" ? { status: "found", entry: apply(s, f.rec, txn, take) } : f;
 }
 
-export const view = (e: EntryRec): EntryView => ({ id: e.id, type: e.type, types: [...e.types], fields: clone(e.fields), owner: e.owner });
+/** What callers see of an entry. With the space's id it also carries the global id. */
+export const view = (e: EntryRec, spaceId?: string): EntryView => ({ id: e.id, ...(spaceId ? { gid: gidOf(spaceId, e.id) } : {}), type: e.type, types: [...e.types], fields: clone(e.fields), owner: e.owner });
 
 function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean): { status: "found"; rec: EntryRec } | { status: "none" } | { status: "locked" } {
 	let locked = false;
@@ -345,9 +371,7 @@ export function addWaiter(s: SpaceState, now: number, w: { template: Template; t
 	return rec.id;
 }
 export function cancelWaiter(s: SpaceState, id: string): boolean {
-	const n = s.waiters.length;
-	s.waiters = s.waiters.filter((w) => w.id !== id);
-	return s.waiters.length < n;
+	return prune(s.waiters, (w) => w.id === id) > 0;
 }
 
 // A take-waiter takes its entry under a fresh transaction, so a lost delivery is not a lost job: the entry returns
@@ -357,30 +381,29 @@ function serve(s: SpaceState, now: number): void {
 		const f = find(s, w.template, null, w.take);
 		if (f.status !== "found") continue;
 		s.waiters.splice(s.waiters.indexOf(w), 1);
-		if (!w.take) { s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, null, false)) }); continue; }
+		if (!w.take) { s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, null, false), s.spaceId) }); continue; }
 		const t: TxnRec = { id: newId(s, "t"), expires: until(now, w.txnLeaseMs), owner: w.target }; // the receiver commits it
 		s.txns[t.id] = t;
-		s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, t.id, true)), txn: t.id });
+		s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, t.id, true), s.spaceId), txn: t.id });
 	}
 }
 
 function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 	delete s.txns[id];
-	s.regs = s.regs.filter((r) => r.txn !== id); // registrations under a txn are dropped when it completes
-	const keep: EntryRec[] = [];
+	prune(s.regs, (r) => r.txn === id); // registrations under a txn are dropped when it completes
 	const published: EntryRec[] = [];
-	for (const e of s.entries) {
-		e.readBy = e.readBy.filter((t) => t !== id);
+	for (let i = s.entries.length - 1; i >= 0; i--) { // backwards: removals do not shift what is still to visit
+		const e = s.entries[i]!;
+		if (e.readBy.includes(id)) prune(e.readBy, (t) => t === id);
 		if (commit) {
-			if (e.takenBy === id) continue; // removal commits (also covers written-and-taken)
+			if (e.takenBy === id) { s.entries.splice(i, 1); continue; } // removal commits (also covers written-and-taken)
 			if (e.writtenUnder === id) { e.writtenUnder = null; published.push(e); }
 		} else {
-			if (e.writtenUnder === id) continue; // aborted writes are discarded
+			if (e.writtenUnder === id) { s.entries.splice(i, 1); continue; } // aborted writes are discarded
 			if (e.takenBy === id) { e.takenBy = null; s.returned = (s.returned ?? 0) + 1; } // takes are undone: the entry is back
 		}
-		keep.push(e);
 	}
-	s.entries = keep;
+	published.reverse(); // announced in write order
 	for (const e of published) notifyWrite(s, e, null, now);
 }
 
@@ -480,7 +503,7 @@ export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null
 	for (const e of s.entries) {
 		if (out.length >= Math.min(limit, MAX_LIST)) break;
 		const st = standing(s, e, now); // the same view of the space as count() has
-		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) out.push(view(e));
+		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) out.push(view(e, s.spaceId));
 	}
 	return out;
 }

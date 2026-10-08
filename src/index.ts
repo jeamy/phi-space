@@ -6,11 +6,16 @@ import { Type } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/chord";
 import { defineDoc, defineExtension, defineTool, section, type ConversationId, type Harness, type Tx } from "@earendil-works/pi-durable";
 import { PiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
+import { listSpaces, NamedSpace, Registry, spaceDoc } from "./spaces.ts";
+import { sweep as sweepClaims } from "./claims.ts";
 import * as core from "./core.ts";
 import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
 
 export * from "./client.ts";
+export { createSpace, listSpaces, snapshotSpace, resolveSpaceId, spaceDoc, Registry, NamedSpace, UnknownSpaceError, DEFAULT_ALIAS, type SpaceInfo, type RegistryState } from "./spaces.ts";
 export { canonicalJson } from "./canonical.ts";
+export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type ClaimState } from "./claims.ts";
+export * as claims from "./claims.ts";
 export * from "./meter.ts";
 export { core };
 
@@ -63,8 +68,8 @@ export function createSpaces(meter: Meter = defaultMeter) {
 				execute: async (a, api, ctx) => {
 					const r = await api.commit(async (tx) => {
 						const c = await tx.doc(Claim, api.taskId);
-						if (c.done) return { lease: c.value, fresh: false };
-						const l = core.write(await tx.doc(Space), Date.now(), { type: a.type, ...(a.types ? { types: a.types } : {}), fields: a.fields as core.Fields }, a.txn ?? null, ms(a.ttlMs, core.ANY), api.conversationId);
+						if (c.done) return { lease: core.plain(c.value), fresh: false };
+						const l = core.write(await spaceDoc(tx, undefined, Date.now()), Date.now(), { type: a.type, ...(a.types ? { types: a.types } : {}), fields: a.fields as core.Fields }, a.txn ?? null, ms(a.ttlMs, core.ANY), api.conversationId);
 						c.done = true; c.value = l as unknown as core.Json;
 						return { lease: l as unknown as core.Json, fresh: true };
 					}, ctx);
@@ -117,8 +122,8 @@ export function createSpaces(meter: Meter = defaultMeter) {
 					// Exactly-once: the effect and its record are one commit, so a replay returns the first result.
 					return text(await api.commit(async (tx) => {
 						const c = await tx.doc(Claim, api.taskId);
-						if (c.done) return c.value;
-						const sp = await tx.doc(Space), now = Date.now();
+						if (c.done) return core.plain(c.value);
+						const now = Date.now(), sp = await spaceDoc(tx, undefined, now);
 						let r: core.Json = "ok";
 						if (a.action === "begin") r = core.createTxn(sp, now, ms(a.leaseMs, core.ANY), api.conversationId) as unknown as core.Json;
 						else if (a.action === "commit") core.commitTxn(sp, now, a.txn!, api.conversationId);
@@ -136,8 +141,8 @@ export function createSpaces(meter: Meter = defaultMeter) {
 				execute: async (a, api, ctx) => {
 					const id = await api.commit(async (tx) => {
 						const c = await tx.doc(Claim, api.taskId);
-						if (c.done) return c.value as string;
-						const w = core.addWaiter(await tx.doc(Space), Date.now(), { template: tmpl(a), take: a.mode !== "read", target: api.conversationId, timeout: ms(a.timeoutMs, core.FOREVER), txnLeaseMs: ms(a.txnLeaseMs, core.ANY), handback: (a.handback ?? null) as core.Json, as: api.conversationId });
+						if (c.done) return core.plain(c.value) as string;
+						const w = core.addWaiter(await spaceDoc(tx, undefined, Date.now()), Date.now(), { template: tmpl(a), take: a.mode !== "read", target: api.conversationId, timeout: ms(a.timeoutMs, core.FOREVER), txnLeaseMs: ms(a.txnLeaseMs, core.ANY), handback: (a.handback ?? null) as core.Json, as: api.conversationId });
 						c.done = true; c.value = w;
 						return w;
 					}, ctx);
@@ -152,8 +157,8 @@ export function createSpaces(meter: Meter = defaultMeter) {
 				execute: async (a, api, ctx) => {
 					const r = await api.commit(async (tx) => {
 						const c = await tx.doc(Claim, api.taskId);
-						if (c.done) return c.value;
-						const n = core.notify(await tx.doc(Space), Date.now(), tmpl(a), null, ms(a.ttlMs, core.ANY), (a.handback ?? null) as core.Json, api.conversationId, api.conversationId);
+						if (c.done) return core.plain(c.value);
+						const n = core.notify(await spaceDoc(tx, undefined, Date.now()), Date.now(), tmpl(a), null, ms(a.ttlMs, core.ANY), (a.handback ?? null) as core.Json, api.conversationId, api.conversationId);
 						c.done = true; c.value = n as unknown as core.Json;
 						return n;
 					}, ctx);
@@ -167,8 +172,8 @@ export function createSpaces(meter: Meter = defaultMeter) {
 				replay: "safe",
 				execute: async (a, api, ctx) => text(await api.commit(async (tx) => {
 					const c = await tx.doc(Claim, api.taskId);
-					if (c.done) return c.value;
-					const sp = await tx.doc(Space), now = Date.now();
+					if (c.done) return core.plain(c.value);
+					const now = Date.now(), sp = await spaceDoc(tx, undefined, now);
 					let r: core.Json = "ok";
 					if (a.action === "renew") r = core.renew(sp, now, a.id, ms(a.ms, core.ANY), api.conversationId);
 					else core.cancel(sp, now, a.id, api.conversationId);
@@ -219,7 +224,7 @@ const MAX_TRIES = 5; // a poisoned event is dropped after this many failed deliv
 export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<number> {
 	const now = o.now ?? Date.now;
 	const retryMs = o.retryMs ?? 1000;
-	const snap = await harness.snapshot(Space, ctx);
+	const snap = await snapshotOf(harness, o.space, ctx);
 	const events = (snap?.outbox ?? []).filter((e) => (e.retryAt ?? 0) <= now()); // failed ones wait for their backoff
 	const done = new Set<string>(); // submitted
 	const dropped = new Set<string>(); // nobody to deliver to: no target, or the conversation no longer exists
@@ -254,7 +259,7 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
 	const gaveUp: string[] = [];
 	let undeliverable = 0;
 	await harness.commit(async (tx) => {
-		const s = await tx.doc(Space);
+		const s = await spaceDoc(tx, o.space, now());
 		s.outbox = s.outbox.filter((x) => !done.has(key(x)));
 		for (const x of s.outbox) if (failed.has(key(x))) { x.tries = (x.tries ?? 0) + 1; x.retryAt = now() + retryMs * x.tries; }
 		const lost = new Set<string>();
@@ -284,7 +289,23 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
  * Reaper: removes expired entries/leases, aborts expired transactions and times out waiters at the moment they lapse
  * instead of at the next operation. Stateless (`settle` is idempotent), so after a restart just start it again.
  */
-export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number; meter?: Meter };
+export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number; meter?: Meter; /** alias or spaceId; omitted: the default space */ space?: string };
+
+/** Committed state of a space for the background services (the default space even before it is registered). */
+async function snapshotOf(harness: Harness, space: string | undefined, ctx: Context): Promise<Readonly<core.SpaceState> | undefined> {
+	if (space === undefined) return harness.snapshot(Space, ctx);
+	const r = await harness.snapshot(Registry, ctx);
+	const id = r?.aliases[space] ?? (r?.spaces[space] ? space : undefined);
+	if (id === undefined) return undefined;
+	return id === r?.defaultSpaceId ? harness.snapshot(Space, ctx) : harness.snapshot(NamedSpace, id, ctx);
+}
+async function watchOf(harness: Harness, space: string | undefined, ctx: Context) {
+	if (space === undefined) return harness.watchDoc(Space, ctx);
+	const r = await harness.snapshot(Registry, ctx);
+	const id = r?.aliases[space] ?? (r?.spaces[space] ? space : undefined);
+	if (id === undefined || id === r?.defaultSpaceId) return harness.watchDoc(Space, ctx);
+	return harness.watchDoc(NamedSpace, id, ctx);
+}
 
 /**
  * One run at a time: a trigger during a run (a watch frame, often caused by the run's own commit, or a timer) does not
@@ -318,8 +339,9 @@ export async function startMaintenance(harness: Harness, ctx: Context, o: Servic
 		clearTimeout(timer);
 		try {
 			const next = await harness.commit(async (tx) => {
-				const s = await tx.doc(Space);
+				const s = await spaceDoc(tx, o.space, now());
 				core.settle(s, now());
+				sweepClaims(s, now()); // drop results past their retention (claims.ts)
 				return core.nextExpiry(s);
 			}, ctx);
 			if (next < core.FOREVER) arm(next - now());
@@ -328,19 +350,42 @@ export async function startMaintenance(harness: Harness, ctx: Context, o: Servic
 			arm(retryMs);
 		}
 	});
-	await harness.commit(async (tx) => { await tx.doc(Space); }, ctx); // the watch needs the doc to exist
+	await harness.commit(async (tx) => { await spaceDoc(tx, o.space, now()); }, ctx); // the watch needs the doc to exist
 	// Attach the watch BEFORE the first tick: frames are only buffered from the attach on, so a commit between a tick
 	// and a later attach would be missed (and with an empty space no timer would be armed either).
-	const watch = await harness.watchDoc(Space, ctx);
+	const watch = await watchOf(harness, o.space, ctx);
 	watch?.start(tick); // tick never throws
 	await tick();
 	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
 }
 
-/** Delivery plus reaper: everything the space needs to run in the background. */
+/**
+ * Delivery plus reaper: everything a space needs to run in the background. With `o.space` for that space only;
+ * without, for the default space and every named space, including ones created later (the registry is watched).
+ */
 export async function startService(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
-	const stops = [await startMaintenance(harness, ctx, o), await startDelivery(harness, ctx, o)];
-	return async () => { for (const stop of stops) await stop(); };
+	const stops: (() => Promise<void>)[] = [];
+	const one = async (space: string | undefined) => { stops.push(await startMaintenance(harness, ctx, { ...o, space }), await startDelivery(harness, ctx, { ...o, space })); };
+	if (o.space !== undefined) { await one(o.space); return async () => { for (const stop of stops) await stop(); }; }
+	await one(undefined);
+	const served = new Set<string>();
+	let stopped = false;
+	const addNew = serialized(async () => {
+		if (stopped) return;
+		try {
+			const r = await harness.snapshot(Registry, ctx);
+			for (const i of await listSpaces(harness, ctx)) {
+				if (served.has(i.spaceId) || i.spaceId === r?.defaultSpaceId) continue;
+				served.add(i.spaceId);
+				await one(i.spaceId);
+			}
+		} catch (e) { (o.onError ?? ((x) => console.error("pi-spaces service:", x)))(e); }
+	});
+	await harness.commit(async (tx) => { await tx.doc(Registry); }, ctx);
+	const watch = await harness.watchDoc(Registry, ctx);
+	watch?.start(addNew);
+	await addNew();
+	return async () => { stopped = true; await watch?.stop(); for (const stop of stops) await stop(); };
 }
 
 /** Deliver whenever the space changes, and retry failed events on a timer. Returns a stop function. */
@@ -355,15 +400,15 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 		try {
 			await deliverEvents(harness, ctx, o);
 			let next = Infinity; // wake for the earliest backed-off retry; the commit that set it re-triggers run() once, harmlessly
-			for (const e of (await harness.snapshot(Space, ctx))?.outbox ?? []) if (e.retryAt !== undefined) next = Math.min(next, e.retryAt);
+			for (const e of (await snapshotOf(harness, o.space, ctx))?.outbox ?? []) if (e.retryAt !== undefined) next = Math.min(next, e.retryAt);
 			if (next < Infinity && !stopped) timer = setTimeout(() => void run(), core.timerDelay(next - (o.now ?? Date.now)()));
 		} catch (e) {
 			onError(e);
 			if (!stopped) timer = setTimeout(() => void run(), retryMs);
 		}
 	});
-	await harness.commit(async (tx) => { await tx.doc(Space); }, ctx);
-	const watch = await harness.watchDoc(Space, ctx);
+	await harness.commit(async (tx) => { await spaceDoc(tx, o.space, (o.now ?? Date.now)()); }, ctx);
+	const watch = await watchOf(harness, o.space, ctx);
 	watch?.start(run); // run never throws, so the watch is not ended by a listener error
 	await run(); // events committed before the watch started
 	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
