@@ -38,9 +38,18 @@ export type Limits = {
 	maxClaimBytes: number; // JSON bytes of all request claims and generations; a fresh request is refused above it (AP 0.2)
 	maxOutboxBytes: number; // JSON bytes of undelivered events; new subscriptions and waits are refused above it, no event is dropped
 	maxDocBytes: number; // JSON bytes of the whole space: entries plus claims, outbox, waiters, registrations and transactions
+	maxFrameBytes: number; // largest protocol frame (federation-plan-v3 4.2); pages and events must fit it with their overhead
+	maxEventBytes: number; // largest event (entry plus handback plus metadata); a write whose event could exceed it is refused first
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024 };
 export class LimitError extends Error {}
+/** A limit would be exceeded; raised before anything changed (federation-plan-v3 4.2 `ResourceExhausted`). */
+export class ResourceExhausted extends LimitError {}
+/** The byte budget of a page cannot hold the next whole element; nothing advanced. Retry with at least `requiredBytes`. */
+export class ResponseBudgetTooSmall extends Error {
+	requiredBytes: number; // (no parameter property: the code runs under node's strip-only TypeScript mode)
+	constructor(requiredBytes: number) { super(`the next element needs ${requiredBytes} bytes of budget`); this.requiredBytes = requiredBytes; }
+}
 export class IllegalArgumentError extends Error {}
 /** A conversation tried to use or change something that is not its own. */
 export class PermissionError extends Error {}
@@ -151,6 +160,20 @@ export function claimBytes(s: Readonly<SpaceState>): number {
 	if (r.bytes === undefined) return jsonBytes(r.claims) + jsonBytes(r.generations);
 	return r.bytes;
 }
+/**
+ * An event carries the entry, a handback and metadata. A conservative bound (the largest handback of any registration or
+ * wait, whether or not it matches) is checked before the write is accepted, so no event can exceed `maxEventBytes`.
+ */
+function checkEventSize(s: Readonly<SpaceState>, rec: EntryRec, lim: Limits): void {
+	if (s.regs.length === 0 && s.waiters.length === 0) return;
+	let handback = 0;
+	for (const r of s.regs) handback = Math.max(handback, jsonBytes(r.handback));
+	for (const w of s.waiters) handback = Math.max(handback, jsonBytes(w.handback));
+	const bound = jsonBytes(view(rec, s.spaceId)) + handback + EVENT_OVERHEAD;
+	if (bound > lim.maxEventBytes) throw new ResourceExhausted(`an event for this entry could take ${bound} bytes; the limit is ${lim.maxEventBytes}`);
+}
+const EVENT_OVERHEAD = 256; // kind, ids, sequence, target, count
+
 /** Backpressure: while undelivered events exceed the budget, nothing new is subscribed (no event is ever dropped). */
 function checkOutbox(s: Readonly<SpaceState>): void {
 	const lim = limitsOf(s);
@@ -275,6 +298,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	if (used > lim.maxSpaceBytes) throw new LimitError(`the space would exceed ${lim.maxSpaceBytes} bytes`);
 	if (used + overheadBytes(s) > lim.maxDocBytes) throw new LimitError(`the space document would exceed ${lim.maxDocBytes} bytes`);
 	if (expires <= now) return { id: rec.id, expires }; // born expired (lease 0): never visible, so never announced or served
+	checkEventSize(s, rec, lim);
 	s.entries.push(rec);
 	notifyWrite(s, rec, txn, now);
 	if (txn === null) serve(s, now);
@@ -529,6 +553,46 @@ export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null
 		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) out.push(view(e, s.spaceId));
 	}
 	return out;
+}
+
+/** Bytes a page needs besides its items: the envelope, the cursor and separators. */
+export const PAGE_OVERHEAD = 96;
+export type Page = { items: EntryView[]; next: string | null };
+
+const seqOf = (id: string): number => { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; };
+
+/**
+ * One page of what `list` would return, limited by encoded bytes: `maxBytes` (default and cap: the frame budget) covers
+ * the items, the cursor and the envelope. A page ends between whole entries; `after` is the `next` of the page before and
+ * continues behind its last entry, so paging neither skips nor repeats entries that stay. A non-empty page holds at
+ * least one entry; if the next one does not fit, `ResponseBudgetTooSmall` says what is needed and nothing advances.
+ * (Entries written or removed while paging are seen or not by their position; a snapshot token needs revisions, AP 1.3.)
+ */
+export function listPage(s: Readonly<SpaceState>, now: number, tmpl: Template = null, txn: string | null = null, o: { maxBytes?: number; after?: string | null } = {}, as?: Target): Page {
+	const frame = limitsOf(s).maxFrameBytes;
+	const budget = o.maxBytes === undefined ? frame : o.maxBytes;
+	if (!Number.isInteger(budget) || budget <= 0) throw new IllegalArgumentError("maxBytes must be a positive integer");
+	const cap = Math.min(budget, frame);
+	if (o.after != null && !/^\d+$/.test(o.after)) throw new IllegalArgumentError("bad cursor");
+	const after = o.after == null ? 0 : Number(o.after);
+	if (txn !== null) requireTxn(s as SpaceState, txn, as);
+	const mine = active(s, txn, now);
+	const items: EntryView[] = [];
+	let used = PAGE_OVERHEAD;
+	for (const e of s.entries) {
+		if (seqOf(e.id) <= after) continue;
+		const st = standing(s, e, now); // the same view of the space as list() and count()
+		if (!((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e))) continue;
+		const v = view(e, s.spaceId);
+		const n = jsonBytes(v) + 1;
+		if (used + n > cap) {
+			if (items.length === 0) throw new ResponseBudgetTooSmall(PAGE_OVERHEAD + n);
+			return { items, next: String(seqOf(items[items.length - 1].id)) };
+		}
+		items.push(v);
+		used += n;
+	}
+	return { items, next: null };
 }
 
 export type SpaceStats = {

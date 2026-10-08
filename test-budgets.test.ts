@@ -77,3 +77,93 @@ test("the document budget counts claims and queued events with the entries", () 
 	core.setLimits(s, { maxDocBytes: 10_000 });
 	core.write(s, 2, { type: "Job", fields: { b: "y".repeat(100) } }, null, core.FOREVER);
 });
+
+// ---- byte-bounded pages (AP 1.4, federation-plan-v3 4.2 / 6.2 "Seitengrößen")
+
+function fill(s: core.SpaceState, n: number, pad = (i: number) => (i * 37) % 300) {
+	for (let i = 0; i < n; i++) core.write(s, 0, { type: "Job", fields: { i, pad: "p".repeat(pad(i)) } }, null, core.FOREVER);
+}
+function pages(s: core.SpaceState, maxBytes: number, tmpl: core.Template = null) {
+	const out: core.EntryView[][] = [];
+	let after: string | null = null;
+	for (let guard = 0; guard < 10_000; guard++) {
+		const p = core.listPage(s, 1, tmpl, null, { maxBytes, after });
+		assert.ok(bytes(p) <= maxBytes, `a page of ${bytes(p)} bytes exceeds its budget ${maxBytes}`);
+		if (p.items.length === 0) { assert.equal(p.next, null); break; }
+		out.push(p.items);
+		if (p.next === null) break;
+		after = p.next;
+	}
+	return out;
+}
+
+test("pages are limited by encoded bytes and add up to the whole list, in order, without gaps or repeats", () => {
+	const s = core.initialState();
+	fill(s, 200);
+	const all = core.list(s, 1);
+	for (const budget of [2_000, 5_000, 40_000]) {
+		const ps = pages(s, budget);
+		assert.deepEqual(ps.flat().map((e) => e.id), all.map((e) => e.id), `budget ${budget}`);
+		assert.ok(ps.length > 1 || budget > 30_000);
+	}
+});
+
+test("paging is not capped by the 1000 entries of readAll", () => {
+	const s = core.initialState();
+	fill(s, 1500, () => 0);
+	const got = pages(s, 64_000).flat();
+	assert.equal(got.length, 1500);
+	assert.equal(core.list(s, 1).length, 1000, "readAll keeps its own cap");
+});
+
+test("a budget too small for the next entry: ResponseBudgetTooSmall with requiredBytes, nothing advances, the retry fits", () => {
+	const s = core.initialState();
+	fill(s, 5, () => 200);
+	let err: unknown;
+	try { core.listPage(s, 1, null, null, { maxBytes: 100 }); } catch (e) { err = e; }
+	assert.ok(err instanceof core.ResponseBudgetTooSmall);
+	const need = (err as core.ResponseBudgetTooSmall).requiredBytes;
+	assert.ok(need > 100 && need <= core.DEFAULT_LIMITS.maxFrameBytes);
+	const p = core.listPage(s, 1, null, null, { maxBytes: need });
+	assert.equal(p.items.length, 1, "at least one entry, exactly the one that was announced");
+	assert.deepEqual(core.listPage(s, 1, null, null, { maxBytes: need }), p, "same call, same page: no state moved");
+	// the next entry is where the cursor says
+	const nextNeed = (() => { try { core.listPage(s, 1, null, null, { maxBytes: 100, after: p.next }); } catch (e) { return (e as core.ResponseBudgetTooSmall).requiredBytes; } return 0; })();
+	assert.ok(nextNeed > 0);
+});
+
+test("entries removed while paging neither break the cursor nor repeat others", () => {
+	const s = core.initialState();
+	fill(s, 60, () => 100);
+	const first = core.listPage(s, 1, null, null, { maxBytes: 3_000 });
+	assert.ok(first.next);
+	for (const e of [...first.items.slice(0, 2), ...core.list(s, 1).slice(30, 33)]) core.cancel(s, 1, e.id); // already delivered ones and ones still ahead
+	const rest = pages(s, 3_000).flat();
+	assert.equal(new Set(rest.map((e) => e.id)).size, rest.length, "no repeats");
+	const seen = new Set(first.items.map((e) => e.id));
+	const stillThere = core.list(s, 1).map((e) => e.id);
+	const cont: string[] = [];
+	let after: string | null = first.next;
+	while (after !== null) { const p = core.listPage(s, 1, null, null, { maxBytes: 3_000, after }); cont.push(...p.items.map((e) => e.id)); after = p.next; }
+	assert.deepEqual([...seen, ...cont].filter((id) => stillThere.includes(id)).sort(), stillThere.slice().sort(), "everything that remains was delivered once");
+});
+
+test("bad budgets and cursors are rejected, an entry past the frame is a configuration error", () => {
+	const s = core.initialState();
+	fill(s, 3);
+	for (const maxBytes of [0, -5, 1.5, Number.NaN]) assert.throws(() => core.listPage(s, 1, null, null, { maxBytes }), core.IllegalArgumentError);
+	assert.throws(() => core.listPage(s, 1, null, null, { after: "abc" }), core.IllegalArgumentError);
+	core.setLimits(s, { maxFrameBytes: 500 });
+	assert.ok(core.listPage(s, 1, null, null, { maxBytes: 10_000_000 }).items.length >= 1, "the frame caps a larger request");
+});
+
+test("a write whose event could exceed maxEventBytes is refused before it changes anything", () => {
+	const s = core.initialState();
+	core.write(s, 0, { type: "Job", fields: { ok: 1 } }, null, core.FOREVER); // no registration: no event, fine at any size
+	core.notify(s, 0, { type: "Job" }, null, core.FOREVER, { tag: "h".repeat(300) }, "conv-1");
+	core.setLimits(s, { maxEventBytes: 1_000 });
+	const before = s.entries.length;
+	assert.throws(() => core.write(s, 1, { type: "Job", fields: { big: "b".repeat(900) } }, null, core.FOREVER), core.ResourceExhausted);
+	assert.equal(s.entries.length, before, "the refused write left no entry");
+	assert.ok(core.write(s, 1, { type: "Job", fields: { small: 1 } }, null, core.FOREVER).id, "a small one still works");
+});

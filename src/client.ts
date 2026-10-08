@@ -50,6 +50,8 @@ export interface SpaceLike {
 	notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json } & Req): Promise<{ eventId: string; lease: Lease }>;
 	wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string>;
 	readAll(tmpl?: Template, o?: { limit?: number; txn?: string | null }): Promise<Taken[]>;
+	/** One page limited by encoded bytes; continue with `next` (core.listPage). */
+	readPage(tmpl?: Template, o?: { maxBytes?: number; after?: string | null; txn?: string | null }): Promise<core.Page>;
 	count(tmpl?: Template, txn?: string | null): Promise<number>;
 	stats(): Promise<core.SpaceStats>;
 	createTransaction(lease?: number, o?: Req): Promise<Lease>;
@@ -170,6 +172,13 @@ export class PiSpaces implements SpaceLike {
 		const out = s ? core.list(s, this.now(), tmpl, o.txn ?? null, o.limit, this.as) : [];
 		this.meter.inc("reads");
 		return out;
+	}
+	/** Like `readAll`, one page limited by encoded bytes (core.listPage). Pass `next` of a page as `after` to continue. */
+	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; txn?: string | null } = {}): Promise<core.Page> {
+		const s = await this.snap();
+		const page = s ? core.listPage(s, this.now(), tmpl, o.txn ?? null, { maxBytes: o.maxBytes, after: o.after }, this.as) : { items: [], next: null };
+		this.meter.inc("reads");
+		return page;
 	}
 	/** Number of entries a `read` with this template would currently see. No commit, no waiting. */
 	async count(tmpl: Template = null, txn: string | null = null): Promise<number> {
