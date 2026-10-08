@@ -411,6 +411,24 @@ Ergebnis wird in diesem Abschnitt nachgetragen.
 | Management + Relay | 1 h | nur direkt erreichbare Peers kommunizieren |
 | Peer entfernt | – | Tunnel endet; Gate weist binnen Cache-Laufzeit ab |
 
+**Ergebnisse (Stand 2026-10-08, Testumgebung auf `big`, Einzelheiten in [testumgebung-big.md](testumgebung-big.md) Abschnitt 12).**
+Aufbau (Gate 5): NetBird-Server 0.80.0 (kombinierter Container mit Management, Signal, Relay und STUN) und Dashboard hinter nginx mit
+TLS auf `spacebird.eibrain.org`, eingebauter Dex als Identity Provider, Linux-Agent 0.80.0 in rootless Docker mit Kernel-WireGuard,
+Android-Client 0.60.3. Management-API: ein Service-User mit der Rolle Admin genügt für Gruppen, Setup-Keys, Policies und die
+Peer-Liste (`GET /api/users/current` ist für ihn gesperrt). Gemessen:
+
+- Gruppenregeln (Policy „Default“ aus): zwischen zwei Hosts der Gruppe `space-hosts` ist nur TCP 7421 offen; TCP 8080, TCP 22 und ICMP sind
+  blockiert (Hypothese bestätigt, Policy wirkt auf Port-Ebene).
+- Peer aus der Gruppe entfernt: Verkehr in beide Richtungen sofort blockiert, der Peer sieht keine anderen Peers mehr, die anderen führen ihn nicht
+  mehr in der Peer-Liste. Ohne Neustart der Agenten. Ankunftszeit nicht gemessen; ob die Schicht-A-Auflösung im Gate (Cache 60 s) rechtzeitig
+  abweist, ist daher offen.
+- Verbindungsaufbau ist verzögert (lazy): ein Peer erscheint zunächst als „Idle“, die P2P-Verbindung entsteht beim ersten Verkehr.
+
+Offen: die vier Ausfallzeilen (Management, Signal, Relay, Management + Relay), Zeitmessung für Gruppenwechsel und Peer-ID-Abfrage
+(Cache-Grenze), Verhalten des Handys. Der kombinierte Container fällt bei Ausfall von Management, Signal und Relay gemeinsam aus; die Zeilen
+„Signal“ und „Relay“ einzeln ließen sich mit diesem Aufbau nicht trennen (NetBird erlaubt externe Signal- und Relay-Server, siehe
+config.yaml `signalUri` und `relays`).
+
 ## 5. Control Space, Router, Supervisor, Recovery
 
 | Typ | Schreibt | Inhalt |

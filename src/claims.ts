@@ -7,7 +7,10 @@
 // hash only; the result is stored in full until its retention ends, then only the hash remains.
 import { createHash, randomBytes } from "node:crypto";
 import { canonicalJson } from "./canonical.ts";
-import { limitsOf, type Json, type SpaceState } from "./core.ts";
+import { LimitError, claimBytes, limitsOf, type Json, type SpaceState } from "./core.ts";
+
+const encoder = new TextEncoder();
+const bytesOf = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
 
 export type Principal = { peerId: string; agentId?: string };
 /** Who asks, in which generation, under which id. `requestId` is chosen by the caller and kept across retries. */
@@ -26,7 +29,7 @@ export type ClaimRec = {
 	principal: Principal;
 };
 export type GenerationRec = { principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number };
-export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec> };
+export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number }; // bytes: running tally of claims and generations (AP 0.2)
 export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string };
 
 /** Same request id, different method or arguments. */
@@ -42,7 +45,8 @@ export class OperationCancelled extends Error {}
 
 const rpc = (s: SpaceState): RpcState => {
 	const x = s as SpaceState & { rpc?: RpcState };
-	if (!x.rpc) x.rpc = { generations: {}, claims: {} };
+	if (!x.rpc) x.rpc = { generations: {}, claims: {}, bytes: 0 };
+	else if (x.rpc.bytes === undefined) x.rpc.bytes = bytesOf(x.rpc.claims) + bytesOf(x.rpc.generations); // state from before the tally
 	return x.rpc;
 };
 const samePrincipal = (a: Principal, b: Principal) => canonicalJson(a) === canonicalJson(b);
@@ -59,7 +63,10 @@ export function issueGeneration(s: SpaceState, now: number, principal: Principal
 	checkPrincipal(principal);
 	const generation = `g${randomBytes(8).toString("hex")}`;
 	const admitUntil = now + limitsOf(s).generationAdmitMs;
-	rpc(s).generations[generation] = { principal: { ...principal }, incarnation: s.incarnation ?? null, issuedAt: now, admitUntil };
+	const rec: GenerationRec = { principal: { ...principal }, incarnation: s.incarnation ?? null, issuedAt: now, admitUntil };
+	const st = rpc(s);
+	st.generations[generation] = rec;
+	st.bytes! += bytesOf(rec) + bytesOf(generation) + 2;
 	return { generation, admitUntil };
 }
 
@@ -92,7 +99,11 @@ export function admit(s: SpaceState, now: number, r: RequestRef, method: string,
 	if (g.incarnation !== (s.incarnation ?? null)) throw new IncarnationChanged(`generation ${r.generation} belongs to an earlier incarnation of this space`);
 	if (!samePrincipal(g.principal, r.principal)) throw new RequestExpired(`generation ${r.generation} was issued to another principal`);
 	if (now > g.admitUntil) throw new RequestExpired(`generation ${r.generation} no longer admits new requests`);
-	st.claims[key] = { method, argHash: hash, deadline, state: "pending", generation: r.generation, requestId: r.requestId, principal: { ...r.principal } };
+	const lim = limitsOf(s);
+	if (claimBytes(s) >= lim.maxClaimBytes) throw new LimitError(`request claims use ${claimBytes(s)} bytes; the limit is ${lim.maxClaimBytes}`);
+	const rec: ClaimRec = { method, argHash: hash, deadline, state: "pending", generation: r.generation, requestId: r.requestId, principal: { ...r.principal } };
+	st.claims[key] = rec;
+	st.bytes! += bytesOf(rec) + bytesOf(key) + 2;
 	return { kind: "fresh", key, deadline };
 }
 
@@ -101,9 +112,12 @@ export function decide(s: SpaceState, now: number, key: string, outcome: { state
 	const c = rpc(s).claims[key];
 	if (!c) throw new Error(`no claim ${key}`);
 	if (c.state !== "pending") return;
+	const st = rpc(s);
+	const before = bytesOf(c);
 	c.state = outcome.state;
 	c.result = outcome.state === "done" ? outcome.result : null;
 	c.decidedAt = now;
+	st.bytes! += bytesOf(c) - before;
 }
 
 /**
@@ -139,11 +153,11 @@ export function sweep(s: SpaceState, now: number): void {
 	const used = new Set<string>();
 	for (const [k, c] of Object.entries(st.claims)) {
 		if (c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + keep <= now) {
-			if (!c.resultExpired) { delete c.result; c.resultExpired = true; }
+			if (!c.resultExpired) { const before = bytesOf(c); delete c.result; c.resultExpired = true; st.bytes = (st.bytes ?? 0) + bytesOf(c) - before; }
 			const g = st.generations[c.generation];
-			if (!g || g.admitUntil < now) { delete st.claims[k]; continue; }
+			if (!g || g.admitUntil < now) { st.bytes = (st.bytes ?? 0) - bytesOf(c) - bytesOf(k) - 2; delete st.claims[k]; continue; }
 		}
 		used.add(c.generation);
 	}
-	for (const [id, g] of Object.entries(st.generations)) if (g.admitUntil < now && !used.has(id)) delete st.generations[id];
+	for (const [id, g] of Object.entries(st.generations)) if (g.admitUntil < now && !used.has(id)) { st.bytes = (st.bytes ?? 0) - bytesOf(g) - bytesOf(id) - 2; delete st.generations[id]; }
 }

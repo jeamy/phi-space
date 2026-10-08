@@ -268,6 +268,8 @@ test("a registration under txn T also receives plain committed writes (spec: in 
 	c.commitTxn(s, 4, u.id); assert.equal(s.outbox.length, 3); // published: committed write reaches T's registration
 });
 
+// the counts of stats(); the byte breakdown is covered by test-budgets.test.ts
+const counts = ({ bytes: _bytes, ...rest }: ReturnType<typeof c.stats>) => rest;
 test("count and stats see only what a read would see, and break the rest down", () => {
 	const s = mk();
 	c.write(s, 0, job(1), null, c.FOREVER); c.write(s, 0, job(2), null, c.FOREVER);
@@ -282,7 +284,7 @@ test("count and stats see only what a read would see, and break the rest down", 
 	assert.equal(c.count(s, 10, T("Job")), 2);
 	assert.equal(c.count(s, 10, T("Job"), t.id), 3); // t also sees its own uncommitted write
 	assert.equal(c.count(s, 100), 2); // job3 expired
-	assert.deepEqual(c.stats(s, 10), { entries: 3, byType: { Job: 2, Other: 1 }, locked: 1, uncommitted: 1, expired: 0, txns: 1, waiters: 1, registrations: 1, outbox: 0, returned: 0 });
+	assert.deepEqual(counts(c.stats(s, 10)), { entries: 3, byType: { Job: 2, Other: 1 }, locked: 1, uncommitted: 1, expired: 0, txns: 1, waiters: 1, registrations: 1, outbox: 0, returned: 0 });
 	assert.equal(c.stats(s, 100).expired, 1);
 	assert.equal(c.count(s, 10, { type: "Nope" }), 0);
 });
@@ -296,9 +298,9 @@ test("count and stats on an unsettled snapshot agree with what a read would see 
 	const snap = structuredClone(s); // nobody settles before 10
 	assert.equal(c.count(snap, 10), 1);
 	assert.equal(c.count(snap, 10, T("Job"), t.id), 1); // a lapsed txn sees no uncommitted writes of its own
-	assert.deepEqual(c.stats(snap, 10), { entries: 1, byType: { Job: 1 }, locked: 0, uncommitted: 0, expired: 1, txns: 0, waiters: 0, registrations: 0, outbox: 0, returned: 1 });
+	assert.deepEqual(counts(c.stats(snap, 10)), { entries: 1, byType: { Job: 1 }, locked: 0, uncommitted: 0, expired: 1, txns: 0, waiters: 0, registrations: 0, outbox: 0, returned: 1 });
 	assert.equal(c.probe(s, 10, T("Job"), null, false).status, "found"); // what a read sees
-	assert.deepEqual(c.stats(s, 10), { ...c.stats(snap, 10), expired: 0, outbox: 1 }); // settled: gone, timeout queued
+	assert.deepEqual(counts(c.stats(s, 10)), { ...counts(c.stats(snap, 10)), expired: 0, outbox: 1 }); // settled: gone, timeout queued
 });
 test("returned counts entries given back by aborted and expired transactions, durably", () => {
 	const s = mk(); c.write(s, 0, job(1), null, c.FOREVER); c.write(s, 0, job(2), null, c.FOREVER);

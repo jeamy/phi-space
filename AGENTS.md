@@ -9,7 +9,7 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
 - Bundle: `npm run bundle` (also synchronizes the sibling mobile runtime and compiled example modules;
   `PI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner: `test-core.test.ts`, `test-meter.test.ts`, `integration.test.ts`,
-  `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-scenario.test.ts`); crash/reopen helpers for JSONL and SQLite
+  `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-budgets.test.ts`, `test-scenario.test.ts`); crash/reopen helpers for JSONL and SQLite
   in `test/support/persistent.ts`
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> integration.test.ts`
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;

@@ -35,8 +35,11 @@ export type Limits = {
 	notifyIntervalMs: number; // a conversation's subscription sends at most one event per interval (0: no limit)
 	claimResultMs: number; // how long a decided request keeps its result (federation-plan-v3 6.2: 24 h to 7 days)
 	generationAdmitMs: number; // how long a request generation admits new request ids
+	maxClaimBytes: number; // JSON bytes of all request claims and generations; a fresh request is refused above it (AP 0.2)
+	maxOutboxBytes: number; // JSON bytes of undelivered events; new subscriptions and waits are refused above it, no event is dropped
+	maxDocBytes: number; // JSON bytes of the whole space: entries plus claims, outbox, waiters, registrations and transactions
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024 };
 export class LimitError extends Error {}
 export class IllegalArgumentError extends Error {}
 /** A conversation tried to use or change something that is not its own. */
@@ -137,6 +140,23 @@ export function setLimits(s: SpaceState, l: Partial<Limits>): Limits {
 	return limitsOf(s);
 }
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
+/** Bytes of the parts of the document that are not entries (claims by their running tally). */
+export function overheadBytes(s: Readonly<SpaceState>): number {
+	return claimBytes(s) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns);
+}
+/** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
+export function claimBytes(s: Readonly<SpaceState>): number {
+	const r = s.rpc;
+	if (!r) return 0;
+	if (r.bytes === undefined) return jsonBytes(r.claims) + jsonBytes(r.generations);
+	return r.bytes;
+}
+/** Backpressure: while undelivered events exceed the budget, nothing new is subscribed (no event is ever dropped). */
+function checkOutbox(s: Readonly<SpaceState>): void {
+	const lim = limitsOf(s);
+	if (s.outbox.length > 0 && jsonBytes(s.outbox) > lim.maxOutboxBytes) throw new LimitError(`${lim.maxOutboxBytes} bytes of events wait for delivery; try again later`);
+}
+
 function checkSize(what: string, v: unknown, lim: Limits): void {
 	const n = jsonBytes(v);
 	if (n > lim.maxEntryBytes) throw new LimitError(`${what} is ${n} bytes; the limit is ${lim.maxEntryBytes}`);
@@ -253,6 +273,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	let used = rec.size;
 	for (const e of s.entries) used += e.size ?? jsonBytes(e.fields);
 	if (used > lim.maxSpaceBytes) throw new LimitError(`the space would exceed ${lim.maxSpaceBytes} bytes`);
+	if (used + overheadBytes(s) > lim.maxDocBytes) throw new LimitError(`the space document would exceed ${lim.maxDocBytes} bytes`);
 	if (expires <= now) return { id: rec.id, expires }; // born expired (lease 0): never visible, so never announced or served
 	s.entries.push(rec);
 	notifyWrite(s, rec, txn, now);
@@ -364,6 +385,7 @@ export function addWaiter(s: SpaceState, now: number, w: { template: Template; t
 		if (s.waiters.filter((x) => x.target === w.as).length >= lim.maxWaitersPerOwner) throw new LimitError(`you already have ${lim.maxWaitersPerOwner} waits`);
 		checkSize("handback", w.handback ?? null, lim);
 	}
+	checkOutbox(s);
 	const txnLeaseMs = grant(w.txnLeaseMs ?? ANY, now) - now; // same rules as every other lease: ANY, FOREVER, no negatives
 	const rec: WaiterRec = { id: newId(s, "w"), template: w.template, take: w.take, target: w.target, deadline, txnLeaseMs, handback: w.handback ?? null };
 	s.waiters.push(rec);
@@ -417,6 +439,7 @@ export function notify(s: SpaceState, now: number, tmpl: Template, txn: string |
 		// "Everything" is a firehose: every write anywhere would wake this conversation.
 		if (tmpl === null || (tmpl.type == null && !Object.values(tmpl.fields ?? {}).some((v) => v != null))) throw new IllegalArgumentError("a subscription needs a type or at least one field");
 	}
+	checkOutbox(s);
 	const r: RegRec = { id: newId(s, "n"), template: tmpl, expires: grant(lease, now), txn, handback, target, seq: 0 };
 	if (as !== undefined && limitsOf(s).notifyIntervalMs > 0) r.minIntervalMs = limitsOf(s).notifyIntervalMs;
 	s.regs.push(r);
@@ -518,13 +541,15 @@ export type SpaceStats = {
 	waiters: number; // still waiting (deadline not passed)
 	registrations: number;
 	outbox: number; // events waiting for delivery
+	bytes?: { entries: number; outbox: number; claims: number; waiters: number; registrations: number; txns: number; total: number }; // JSON bytes per part; always set by stats()
 	returned: number; // entries given back by aborted or expired transactions, ever (durable)
 };
 
 /** A point-in-time summary of the space, as an operation would see it after settling; pure, so it runs on any snapshot. */
 export function stats(s: Readonly<SpaceState>, now: number): SpaceStats {
-	const r: SpaceStats = { entries: 0, byType: {}, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: s.outbox.length, returned: s.returned ?? 0 };
+	const r: SpaceStats = { entries: 0, byType: {}, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: s.outbox.length, returned: s.returned ?? 0, bytes: { entries: 0, outbox: jsonBytes(s.outbox), claims: claimBytes(s), waiters: jsonBytes(s.waiters), registrations: jsonBytes(s.regs), txns: jsonBytes(s.txns), total: 0 } };
 	for (const e of s.entries) {
+		r.bytes!.entries += e.size ?? jsonBytes(e.fields);
 		const st = standing(s, e, now);
 		if (st === "visible") { r.entries++; r.byType[e.type] = (r.byType[e.type] ?? 0) + 1; } else r[st]++;
 		if (st === "visible" && e.takenBy !== null) r.returned++; // taken by a lapsed transaction: back once settled
@@ -532,5 +557,6 @@ export function stats(s: Readonly<SpaceState>, now: number): SpaceStats {
 	for (const t of Object.values(s.txns)) if (t.expires > now) r.txns++;
 	for (const w of s.waiters) if (w.deadline > now) r.waiters++;
 	for (const g of s.regs) if (g.expires > now) r.registrations++;
+	r.bytes!.total = jsonBytes(s); // the whole document as stored
 	return r;
 }
