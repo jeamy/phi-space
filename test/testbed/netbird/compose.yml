@@ -1,0 +1,39 @@
+# NetBird management stack for the pi-spaces test bed (docs/testumgebung-big.md, "NetBird"). Installed by `testbed.sh netbird init`
+# as <dir>/netbird/docker-compose.yml. Layout follows NetBird's own getting-started.sh (v0.80) for an external reverse proxy:
+# the combined server (management + signal + relay + STUN) and the dashboard are published on 127.0.0.1 only; nginx on the host
+# terminates TLS and proxies to them. Separate compose project: `testbed.sh down` of the spaces test bed never touches it.
+name: ${NETBIRD_PROJECT:-spacebird}
+
+services:
+  dashboard:
+    image: ${NETBIRD_DASHBOARD_IMAGE:-netbirdio/dashboard:latest}
+    container_name: ${NETBIRD_PROJECT:-spacebird}-dashboard
+    restart: unless-stopped
+    networks: [netbird]
+    ports: ["127.0.0.1:${NETBIRD_DASHBOARD_PORT:-18080}:80"]
+    env_file: [./dashboard.env]
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 50m, max-file: "2"}}
+
+  server:
+    image: ${NETBIRD_SERVER_IMAGE:-netbirdio/netbird-server:latest}
+    container_name: ${NETBIRD_PROJECT:-spacebird}-server
+    restart: unless-stopped
+    networks: [netbird]
+    ports:
+      - "127.0.0.1:${NETBIRD_SERVER_PORT:-18081}:80" # management gRPC/HTTP, signal, relay (WebSocket); behind nginx
+      # STUN. Loopback by default: peers on this host do not need it. Set NETBIRD_STUN_BIND=0.0.0.0 (and open UDP 3478 in the
+      # firewall) when peers outside the host must reach it; it cannot be proxied by nginx.
+      - "${NETBIRD_STUN_BIND:-127.0.0.1}:${NETBIRD_STUN_PORT:-3478}:3478/udp"
+    volumes:
+      - netbird_data:/var/lib/netbird
+      - ./config.yaml:/etc/netbird/config.yaml:ro
+    command: ["--config", "/etc/netbird/config.yaml"]
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 50m, max-file: "2"}}
+
+networks:
+  netbird: {}
+
+volumes:
+  netbird_data: {}

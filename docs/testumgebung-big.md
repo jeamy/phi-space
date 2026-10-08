@@ -222,3 +222,61 @@ Storage neu, ist aber kein Absturz mitten im Commit) und das Pausieren über ein
 Vorbereiten der Aufgaben ist nicht gegen vorzeitige Bearbeitung abgesichert (Betrieb Abschnitt 6, `preparing`). Als
 Regressionstest läuft eine kleine Fassung der TypeScript-Quelle lokal in `npm test` (`test-scenario.test.ts`); auf dem Server
 läuft die kompilierte Fassung (`scenarios/sieve-mobile.mjs`).
+
+## 12. NetBird (Gate 5, Arbeitspaket 1b.1)
+
+Der NetBird-Management-Server läuft auf `big` als eigenes Compose-Projekt (`spacebird`) im Verzeichnis `<dir>/netbird`, getrennt vom
+Spaces-Testbed: `down` und `destroy` des Testbeds berühren ihn nicht. Aufbau nach NetBirds eigenem `getting-started.sh`
+(v0.80) für einen externen Reverse Proxy: ein kombinierter Server-Container (Management, Signal, Relay, STUN) und das
+Dashboard, beide nur auf `127.0.0.1` veröffentlicht (Standard 18081 und 18080). Als Identity Provider dient der eingebaute Dex.
+Host: `spacebird.eibrain.org` (zeigt auf big, `TESTBED_NETBIRD_DOMAIN`).
+
+**Befund (2026-10-08, nur lesend):** `/dev/net/tun` ist für alle les- und schreibbar; Ports ab 1024 sind frei bindbar
+(`ip_unprivileged_port_start = 1024`); nginx belegt 80/443; `mux` hat kein sudo, nginx und Zertifikat muss die Serveradministration
+einrichten.
+
+```sh
+npm run testbed -- --dry-run netbird up      # zeigt, was geschehen würde
+npm run testbed -- netbird up                # schreibt Compose/Konfiguration (Schlüssel neu, Modus 600), zieht Images, startet
+npm run testbed -- netbird nginx bootstrap   # nur Port 80, damit certbot das Zertifikat holen kann
+npm run testbed -- netbird nginx             # die vollständige Site
+npm run testbed -- netbird status            # Container, Image-Stand, Erreichbarkeit über https
+```
+
+nginx und Zertifikat (als root auf big; das Skript tut das nie selbst):
+
+1. Ausgabe von `netbird nginx bootstrap` nach `/etc/nginx/sites-available/spacebird.eibrain.org`, nach `sites-enabled` verlinken,
+   `nginx -t && systemctl reload nginx`.
+2. `certbot certonly --webroot -w /var/www/html -d spacebird.eibrain.org`.
+3. Dieselbe Datei durch die Ausgabe von `netbird nginx` ersetzen, `nginx -t && systemctl reload nginx`.
+
+**STUN (UDP 3478)** ist standardmäßig nur auf Loopback veröffentlicht: Peers auf demselben Host brauchen ihn nicht. Für Peers außerhalb
+(z. B. ein echtes Handy) `TESTBED_NETBIRD_STUN_BIND=0.0.0.0` setzen und UDP 3478 in der Firewall öffnen; nginx kann UDP nicht
+weiterleiten.
+
+**Version festhalten:** `TESTBED_NETBIRD_VERSION` (Server) steht auf 0.80.0; das Dashboard hat eine eigene Versionierung (`TESTBED_NETBIRD_DASHBOARD_VERSION`, Standard `latest`, der Digest steht in `netbird status`). Für den Nachweis zu Gate 5
+`netbird status` (Image-Digest) in Abschnitt 4.6 des Föderationsplans eintragen. Die Linux-Agenten (Sidecar mit `NET_ADMIN` und `/dev/net/tun`,
+gemeinsamer Netzwerk-Namespace) und die Testmatrix 4.6 folgen, sobald der Server erreichbar ist; ob der Userspace-WireGuard-Modus unter
+rootless Docker trägt, ist noch nicht geprüft.
+
+### Gruppen, Setup-Keys und Policies einrichten
+
+Voraussetzung: ein Service-User (Rolle Network Admin) im Dashboard und dessen Token in `<dir>/netbird/secrets.env` auf dem Server
+(`NB_PAT=<token>`, Modus 600). Das Token verlässt den Server nie und wird nicht ausgegeben.
+
+```sh
+npm run testbed -- --dry-run netbird setup
+npm run testbed -- netbird setup                 # idempotent; --rotate-keys erzeugt neue Setup-Keys
+```
+
+Das Skript (`test/testbed/netbird/setup.sh`, läuft auf dem Server) legt die Gruppen aus dem Föderationsplan 4.1 an (`space-hosts`,
+`space-admin`, `space-observer`), zwei wiederverwendbare Setup-Keys (`testbed-hosts` tritt `space-hosts` bei, `testbed-admin` tritt
+`space-admin` bei; 30 Tage; der Wert wird nur bei der Erzeugung angezeigt und steht danach als `NB_KEY_HOSTS` / `NB_KEY_ADMIN` in
+`secrets.env`) und zwei Policies: `space-port` (Hosts, Admins und Observer → Hosts, nur TCP auf `TESTBED_NETBIRD_SPACE_PORT`, ein
+Platzhalter 7421, bis es das space-gate gibt) und `space-admin-ssh` (Admins → Hosts, TCP 22). Zum Schluss listet es alle Policies und
+die Peers mit ID, Overlay-Adresse und Gruppen (Nachweis für Gate 5).
+
+**Die Standard-Policy „Default“ erlaubt jedem Peer alles.** Solange sie aktiv ist, wirken die Gruppenregeln nicht. Das Skript schaltet
+sie nicht von selbst ab (sonst könnte ein Fehler dich aussperren); nach dem ersten Lauf und dem Beitritt der Test-Peers im Dashboard
+unter Access Control → Policies abschalten und die Testmatrix 4.6 darauf laufen lassen. Die Logik des Skripts ist gegen eine Mock-API
+geprüft, nicht gegen den echten Server: Felder der NetBird-API können abweichen.
