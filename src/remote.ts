@@ -54,7 +54,7 @@ export type RemoteOptions = {
 	frameFraction?: number;
 };
 
-type Hello = { spaceId: string; alias: string; incarnation: string; streamId: string; authorityId: string; primaryEpoch: number; limits: { maxFrameBytes: number; maxPollMs: number } & Record<string, number>; features: string[] };
+export type Hello = { principal: string; roles: string[]; hostId?: string; spaceId: string; alias: string; incarnation: string; streamId: string; authorityId: string; primaryEpoch: number; limits: { maxFrameBytes: number; maxPollMs: number } & Record<string, number>; features: string[] };
 
 const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> = {
 	RequestConflict: (m) => new claims.RequestConflict(m),
