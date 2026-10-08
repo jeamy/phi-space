@@ -7,16 +7,29 @@ pi-spaces is a TypeScript space library implemented as an extension for
 The historical JavaSpaces specification (Jini JavaSpaces Service Specification v2.2) is a reference
 for the coordination model. The local pi-spaces client is `PiSpaces`.
 
+**Status.** The library works inside one harness process: entries, templates, leases, transactions, notify, waiters,
+several named spaces, and durable request claims. Everything beyond that (a network service, router, federation,
+replication, mobile control) is a plan, not code: see [Documentation](#documentation).
+
 ## Layers
 
 | file | what |
 |---|---|
 | `src/core.ts` | pure spec semantics over a JSON state: entries, templates, leases, transactions, notify |
-| `src/doc.ts` | the `Space` document definition (shared by client and meter, so they do not import each other) |
+| `src/doc.ts` | the `Space` document of the default space (shared by client and meter, so they do not import each other) |
+| `src/spaces.ts` | named spaces: registry (host id, alias → space id), `createSpace`, `listSpaces`, `snapshotSpace` |
+| `src/claims.ts` | durable request claims and request generations (idempotent mutations, `pollOperation`, `cancelOperation`) |
 | `src/client.ts` | `PiSpaces`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
-| `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section) and notify delivery |
+| `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section), notify delivery, reaper |
+| `src/meter.ts` | process-local counters and rates |
+| `src/canonical.ts` | canonical JSON (RFC 8785) for field comparison and hashes |
 
-The space is one Session-scoped document, so it is committed atomically and survives restarts.
+A space is one document, so a commit is atomic and survives restarts. The default space is the Session-scoped document
+`pi-spaces.space` (version 5); further named spaces live in the Session-scoped family `pi-spaces.named-space`, keyed by an
+immutable, generated `spaceId`. The registry document maps aliases to ids and holds this host's id.
+
+**Storage compatibility.** Version 5 migrates a stored version-4 space forward. It is one-way: a bundle that only knows
+version 4 cannot open a storage that has run this version.
 
 ## Spec mapping
 
@@ -45,6 +58,20 @@ The space is one Session-scoped document, so it is committed atomically and surv
   otherwise it returns to the space when the transaction lease lapses, or at once if the conversation is gone or
   delivery gives up. Waiters live in the document and survive restarts; `space_wait` waits forever by default.
 - **snapshot**: a frozen copy only (JavaSpaces' snapshot is a serialization cache).
+- **Named spaces**: `await harness.commit((tx) => createSpace(tx, "sieve-a", Date.now()), ctx)` creates a space (idempotent per
+  alias; the alias is a name, the `spaceId` is generated and never changes). `new PiSpaces(h, ctx, Date.now, meter, as,
+  { space: "sieve-a" })` works on it (alias or id); without `space` the client uses the default space, so existing code is
+  unchanged. `listSpaces(h, ctx)` lists them. `startService` also serves spaces created later.
+- **Ids**: local ids carry the space's incarnation, `e<incarnation>-<n>`, and every entry view has a global id
+  `gid = <spaceId>/<local id>`. Ids written before a space was registered keep their old `e<n>` form.
+- **Request claims** (idempotent mutations): `write`, `notify`, `wait`, transactions, leases and blocking `read`/`take` accept
+  `request: { principal, generation, requestId }`. The claim, the effect and its result are stored in the same commit, with
+  only a hash of the arguments. A retry with the same identity and arguments returns the stored result, also after a
+  crash and restart; a pending request continues with its first deadline; other arguments give `RequestConflict`.
+  `issueGeneration(principal)` opens a generation that admits new request ids for `generationAdmitMs` (1 h); known requests stay
+  answerable after that. Results are kept `claimResultMs` (24 h) after the decision, then `ResultExpired`; unknown ids of
+  a closed generation give `RequestExpired`, never a new mutation. `pollOperation` reads a request, `cancelOperation` ends a
+  pending one (`OperationCancelled`). Generations are not signed yet and claims do not have their own byte budget.
 
 Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in the spec; do not rely on FIFO.
 
@@ -79,7 +106,9 @@ Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in t
 ## Scope
 
 One harness process is the "space service"; "many agents" means many conversations in it. Pi Durable allows one
-process per storage. Spaces across several processes would need changes to pi itself.
+process per storage. Named spaces share that process and its storage; they are not separate hosts. Spaces across several
+processes or hosts need the network service and federation described in [docs/federation-plan-v3.md](docs/federation-plan-v3.md),
+which is not implemented.
 `space_take`/`space_read` with `timeoutMs` block the turn and are capped at 60 s; use `space_wait` for long waits.
 
 ## Running it
@@ -114,9 +143,25 @@ The mobile Android pre-build task rebuilds from pi-spaces source and packages th
 set `PI_SPACES_SOURCE` there if this source checkout is elsewhere.
 
 ```
-npm test        # core spec tests + integration (concurrency, crash/reopen on JSONL, notify, blocking, pipeline)
+npm run typecheck
+npm test        # core spec, integration, persistence (JSONL and SQLite crash/reopen with injected faults),
+                # named spaces, request claims, the mobile sieve scenario
 npm run example
 ```
+
+Crash and recovery tests use `test/support/persistent.ts`: harnesses on real JSONL and SQLite storage that can be abandoned like
+a killed process, with a switch that fails the next commit or loses its answer after it became durable. `MemoryStorage`
+alone proves nothing about durability.
+
+### Remote test bed
+
+`npm run testbed -- <command>` verifies the **built artifact** (the `pi-spaces.mjs` bundle, compiled examples and scenarios; no
+source code) in docker containers on a server instead of on this machine: `check`, `up`, `test`, `scenario`, `status`, `kill`,
+`partition`, `heal`, `down`. Server, directory and credentials come from environment variables or a git-ignored
+`test/testbed/testbed.env`. See [test/testbed/README.md](test/testbed/README.md) and
+[docs/testumgebung-big.md](docs/testumgebung-big.md) (German). The scenario `sieve-mobile` runs a prime sieve driven by a
+simulated phone: lost calls and answers with retries under the same request id, app in the background, workers dying
+with a reserved task, a host restart; its evaluation compares the stored state with trial division.
 
 ## Examples
 
@@ -152,3 +197,16 @@ npm run example:cache
 node --experimental-strip-types examples/chat.ts --live "Was war der wichtigste Schritt zu heutigen LLMs?"
 node --experimental-strip-types examples/arxiv-research.ts --out /tmp/llm-history.md
 ```
+
+## Documentation
+
+German documents in [docs/](docs/README.md):
+
+| document | what |
+|---|---|
+| [spaces-v1.md](docs/spaces-v1.md) | the current local implementation, gaps and measurements |
+| [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (target, not implemented) |
+| [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |
+| [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md) | operating spaces from a phone: architecture, bootstrap, the sieve example |
+| [testumgebung-big.md](docs/testumgebung-big.md) | the remote docker test bed |
+| [VALIDIERUNG.md](docs/VALIDIERUNG.md) | what was verified locally, and measurements |
