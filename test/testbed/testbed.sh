@@ -29,7 +29,9 @@ Commands:
   init [--force]                 create the server directory and the compose files; existing files are kept
   build                          build the artifacts locally (dist/testbed-artifacts); nothing is sent
   ship                           build, then copy the artifacts (and nothing else) to <dir>/build on the server
-  up [core|federation]           init + ship + image build + start every container that is not running (default: core)
+  up [core|federation|overlay|all]
+                                 init + ship + image build + start every container that is not running (default: core);
+                                 overlay = NetBird agent peers (needs `netbird setup` first)
   status                         containers of the test bed
   test [smoke|examples|scenario|all]
                                  production checks in the runner container (default: all): the shipped bundle loads,
@@ -312,8 +314,10 @@ cmd_up() {
 	local profile=${1:-core} svcs=()
 	case $profile in
 		core) svcs=(runner) ;;
-		federation | all) ;;
-		*) die "up: unknown profile '$profile' (core, federation)" ;;
+		federation) svcs=(runner host-a host-b member-1 member-2) ;;
+		overlay) svcs=(nb-host-a nb-host-b nb-member-1 nb-member-2) ;;
+		all) ;;
+		*) die "up: unknown profile '$profile' (core, federation, overlay, all)" ;;
 	esac
 	cmd_init
 	cmd_ship

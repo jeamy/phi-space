@@ -280,3 +280,46 @@ die Peers mit ID, Overlay-Adresse und Gruppen (Nachweis für Gate 5).
 sie nicht von selbst ab (sonst könnte ein Fehler dich aussperren); nach dem ersten Lauf und dem Beitritt der Test-Peers im Dashboard
 unter Access Control → Policies abschalten und die Testmatrix 4.6 darauf laufen lassen. Die Logik des Skripts ist gegen eine Mock-API
 geprüft, nicht gegen den echten Server: Felder der NetBird-API können abweichen.
+
+### Agent-Peers (Profil `overlay`)
+
+Vier Agent-Container (`nb-host-a`, `nb-host-b`, `nb-member-1`, `nb-member-2`, Image `netbirdio/netbird:0.80.0`) treten dem Overlay mit dem
+Setup-Key `testbed-hosts` bei und erscheinen im Dashboard als `host-a`, `host-b`, `member-1`, `member-2` in der Gruppe `space-hosts`.
+Der Key steht in `<dir>/netbird/peer-hosts.env` (Modus 600; nur `NB_SETUP_KEY` und `NB_MANAGEMENT_URL`, nie das API-Token); `netbird setup`
+schreibt die Datei. Die Agenten brauchen `/dev/net/tun` und `NET_ADMIN` und laufen deshalb nicht im gehärteten Profil der Node-Container.
+Vorerst sind es eigene Peers neben den Host-Containern; sie teilen deren Netzwerk-Namespace erst, wenn der Userspace-Modus unter rootless
+Docker nachgewiesen ist.
+
+```sh
+npm run testbed -- init --force          # neue Compose-Vorlage auf den Server (ändert nichts an laufenden Containern)
+npm run testbed -- netbird setup         # schreibt peer-hosts.env (idempotent)
+npm run testbed -- --dry-run up overlay
+npm run testbed -- up overlay            # startet nur die vier Agenten
+npm run testbed -- logs nb-host-a        # Verbindungsaufbau, WireGuard-Modus
+```
+
+## Nachweis: TUI auf big (2026-10-08)
+
+Die neue Inspector-Dockerfile ist ausgeliefert. `npm run tui -- --action test-all --allow-remote`
+bestand Smoke, fünf Beispiele und das Sieb-Szenario. Die interaktive TUI liest Spaces/Objekte und
+Berichte vom Runner. Stopp/Start ist nun ebenfalls geprüft; Space-Objekte und Bericht blieben erhalten.
+Der gehärtete Runner läuft weiter. Vollständiger Umfang und Protokollorte: [tui.md](tui.md#servernachweis-vom-2026-10-08).
+
+**Ergebnis des ersten Laufs (2026-10-08):** Alle vier Agenten verbinden sich mit dem Management, Signal und Relay von `spacebird.eibrain.org`
+und erhalten Overlay-Adressen aus 100.89.0.0/16. Der Agent läuft auch unter rootless Docker mit **Kernel-WireGuard** (`Interface type:
+Kernel`, Gerät `wt0`); der befürchtete Userspace-Modus war nicht nötig. Verbindungen entstehen verzögert (lazy): `Peers count 0/4`, bis
+Verkehr fließt; danach P2P über die Docker-Bridge (Ping `nb-host-a` → `nb-host-b`, 0 % Verlust, 2–22 ms). Offene Warnung im Log:
+`src_valid_mark` lässt sich im Container nicht setzen (`/proc/sys` schreibgeschützt); das betrifft nur Routing über fremde Netze, nicht
+das Overlay. Noch nicht geprüft: die Wirkung der Policies, solange die Policy „Default“ aktiv ist, die Gruppenzuweisung des Handys und das
+Verhalten bei Entfernen eines Peers aus der Gruppe (Testmatrix 4.6).
+
+**Wirkung der Policies (2026-10-08, „Default“ abgeschaltet):** Von `host-a` zu `host-b`, beide in `space-hosts`: TCP 7421 offen; TCP 8080 und
+TCP 22 sowie ICMP blockiert. Das entspricht den Policies `space-port` (nur 7421) und `space-admin-ssh` (nur Admin-Geräte; Hosts untereinander
+dürfen kein SSH). Gemessen mit `nc -w 4` gegen Test-Listener in `nb-host-b`. Offen aus Testmatrix 4.6: Gruppenwechsel und Entfernen eines Peers
+im laufenden Betrieb, Verhalten des Handys (`space-admin`) und die Peer-ID-Abfrage über die Management-API mit dem Service-User.
+
+**Entfernen eines Peers aus der Gruppe (2026-10-08):** `member-2` wurde im Dashboard aus `space-hosts` entfernt. Danach: `host-a` → `member-2`
+und `member-2` → `host-a` auf TCP 7421 blockiert (vorher über die Gruppe erlaubt), `member-2` sieht keinen anderen Peer mehr (`Peers count 0/0`),
+`host-a` führt `member-2` nicht mehr in der Peer-Liste; `host-a` → `host-b` bleibt offen. Die Änderung kam ohne Neustart der Agenten an. Das
+Handy `a34xeea` (`space-admin`) erscheint in der Peer-Liste der Hosts (Status Idle, Verbindung entsteht bei Verkehr). Nicht gemessen: wie schnell
+die Änderung ankommt (hier nach wenigen Sekunden bis Minuten seit Entfernen; Zeitpunkt nicht protokolliert).

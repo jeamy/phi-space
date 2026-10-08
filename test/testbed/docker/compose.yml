@@ -71,11 +71,51 @@ services:
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-2}
     volumes: ["member-2-data:/data"]
 
+  # NetBird overlay peers (profile "overlay"): one agent container per federation host, joined with the space-hosts setup key
+  # (written by `netbird setup` to <dir>/netbird/peer-hosts.env: NB_SETUP_KEY + NB_MANAGEMENT_URL, nothing else). They are
+  # separate peers for now; the hosts will share their network namespace once the userspace WireGuard mode is proven under
+  # rootless docker. The agent needs /dev/net/tun and NET_ADMIN, so it cannot use the hardened profile of the node containers.
+  nb-host-a: &nb-agent
+    image: ${NETBIRD_AGENT_IMAGE:-netbirdio/netbird:0.80.0}
+    pull_policy: missing
+    profiles: [overlay]
+    init: true
+    restart: unless-stopped
+    hostname: nb-host-a
+    env_file: [{path: ./netbird/peer-hosts.env, required: false}] # optional: every command runs with all profiles enabled
+    environment: {NB_HOSTNAME: host-a}
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 512
+    mem_limit: 512m
+    networks: [testnet]
+    volumes: ["nb-host-a:/var/lib/netbird"]
+  nb-host-b:
+    <<: *nb-agent
+    hostname: nb-host-b
+    environment: {NB_HOSTNAME: host-b}
+    volumes: ["nb-host-b:/var/lib/netbird"]
+  nb-member-1:
+    <<: *nb-agent
+    hostname: nb-member-1
+    environment: {NB_HOSTNAME: member-1}
+    volumes: ["nb-member-1:/var/lib/netbird"]
+  nb-member-2:
+    <<: *nb-agent
+    hostname: nb-member-2
+    environment: {NB_HOSTNAME: member-2}
+    volumes: ["nb-member-2:/var/lib/netbird"]
+
 networks:
   testnet:
     driver: bridge
 
 volumes:
+  nb-host-a: {}
+  nb-host-b: {}
+  nb-member-1: {}
+  nb-member-2: {}
   runner-data: {}
   host-a-data: {}
   host-b-data: {}

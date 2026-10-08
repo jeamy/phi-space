@@ -75,6 +75,18 @@ echo "== setup keys"
 setup_key testbed-hosts "$G_HOSTS" NB_KEY_HOSTS
 setup_key testbed-admin "$G_ADMIN" NB_KEY_ADMIN
 
+# the agent containers get only their setup key and the management URL, never the API token
+write_peer_env() { # file env-var
+	local file=$1 var=$2 key
+	key=$(grep "^$var=" secrets.env | tail -n1 | cut -d= -f2- || true)
+	[[ -n $key ]] || { echo "  $file not written: $var is not in secrets.env (run with NB_ROTATE_KEYS=1)" >&2; return 0; }
+	printf 'NB_SETUP_KEY=%s\nNB_MANAGEMENT_URL=%s\n' "$key" "$NB_URL" >"$file.new"; chmod 600 "$file.new"; mv "$file.new" "$file"
+	echo "  $file written (setup key + management URL only)" >&2
+}
+echo "== peer env files"
+write_peer_env peer-hosts.env NB_KEY_HOSTS
+write_peer_env peer-admin.env NB_KEY_ADMIN
+
 policy() { # name description sources-json dest-id protocol ports-json
 	local name=$1 desc=$2 src=$3 dst=$4 proto=$5 ports=$6 pid body
 	body=$(jq -nc --arg n "$name" --arg d "$desc" --argjson s "$src" --arg t "$dst" --arg p "$proto" --argjson ports "$ports" \
