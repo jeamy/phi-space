@@ -9,9 +9,11 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
 - Bundle: `npm run bundle` (also synchronizes the sibling mobile runtime and compiled example modules;
   `PI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner: `test-core.test.ts`, `test-meter.test.ts`, `integration.test.ts`,
-  `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`); crash/reopen helpers for JSONL and SQLite
+  `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-scenario.test.ts`); crash/reopen helpers for JSONL and SQLite
   in `test/support/persistent.ts`
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> integration.test.ts`
+- Remote test bed (docker on the server `big`; `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
+  docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or syncing changes a shared server: ask before the first real run.
 - Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
 - Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`
 

@@ -1,0 +1,4 @@
+*
+!repo/package.json
+!repo/package-lock.json
+!entrypoint.sh

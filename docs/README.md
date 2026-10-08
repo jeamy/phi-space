@@ -5,6 +5,7 @@
 | [spaces-v1.md](spaces-v1.md) | aktuelle Implementierung, Lücken, Optimierungen | aktuell |
 | [federation-plan-v3.md](federation-plan-v3.md) | Plan für föderierte Spaces, Gates, offene Fragen | **aktuell** |
 | [implementierungsplan-v3.md](implementierungsplan-v3.md) | Reife, Vorab-Entscheidungen, Arbeitspakete und Reihenfolge für v3 | Plan, nichts umgesetzt |
+| [testumgebung-big.md](testumgebung-big.md) | Docker-Testumgebung auf dem Server big: Skript, Container, Fehlerinjektion, Grenzen | umgesetzt, `test/testbed/` |
 | [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) | Architekturdiagramme, pi-durable/Remote-Anbindung, Bootstrap, mobile Abläufe und Sieb-Beispiel | vorhandener Stand und Bedienentwurf |
 | [projektstart-autoprovisionierung.md](projektstart-autoprovisionierung.md) | automatische Remote-Bereitstellung von Runtime, Spaces, Monitoring und Federation bei Projektstart | ergänzender Zielvertrag |
 | [examples.md](examples.md) | Beispiele (Pipeline, Chat, arXiv-Team) im Detail — was wirklich läuft | aktuell |
