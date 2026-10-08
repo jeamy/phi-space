@@ -52,6 +52,8 @@ export interface SpaceLike {
 	readAll(tmpl?: Template, o?: { limit?: number; txn?: string | null }): Promise<Taken[]>;
 	/** One page limited by encoded bytes; continue with `next` (core.listPage). */
 	readPage(tmpl?: Template, o?: { maxBytes?: number; after?: string | null; txn?: string | null }): Promise<core.Page>;
+	/** Commit batches after a revision (core.changes). */
+	changes(afterRev: number, o?: { maxBytes?: number }): Promise<core.Changes>;
 	count(tmpl?: Template, txn?: string | null): Promise<number>;
 	stats(): Promise<core.SpaceStats>;
 	createTransaction(lease?: number, o?: Req): Promise<Lease>;
@@ -176,9 +178,14 @@ export class PiSpaces implements SpaceLike {
 	/** Like `readAll`, one page limited by encoded bytes (core.listPage). Pass `next` of a page as `after` to continue. */
 	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; txn?: string | null } = {}): Promise<core.Page> {
 		const s = await this.snap();
-		const page = s ? core.listPage(s, this.now(), tmpl, o.txn ?? null, { maxBytes: o.maxBytes, after: o.after }, this.as) : { items: [], next: null };
+		const page = core.listPage(s ?? core.initialState(), this.now(), tmpl, o.txn ?? null, { maxBytes: o.maxBytes, after: o.after }, this.as);
 		this.meter.inc("reads");
 		return page;
+	}
+	/** The commit batches after `afterRev` (core.changes): limited by bytes, ends between batches, `more` says if there is newer. */
+	async changes(afterRev: number, o: { maxBytes?: number } = {}): Promise<core.Changes> {
+		const s = await this.snap();
+		return core.changes(s ?? core.initialState(), afterRev, o);
 	}
 	/** Number of entries a `read` with this template would currently see. No commit, no waiting. */
 	async count(tmpl: Template = null, txn: string | null = null): Promise<number> {

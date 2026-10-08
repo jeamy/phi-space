@@ -70,7 +70,11 @@ export async function resolveSpaceId(tx: Tx, space: string | undefined, now: num
 export async function spaceDoc(tx: Tx, space: string | undefined, now: number): Promise<core.SpaceState> {
 	const id = await resolveSpaceId(tx, space, now);
 	const r = await tx.doc(Registry);
-	return id === r.defaultSpaceId ? tx.doc(Space) : tx.doc(NamedSpace, id, null);
+	const d = id === r.defaultSpaceId ? await tx.doc(Space) : await tx.doc(NamedSpace, id, null);
+	// A document draft is the same object in every commit, so it cannot tell commits apart: fetching the document is the
+	// start of a commit's work on it, and its changes belong to one new revision (stream.ts).
+	core.seal(d);
+	return d;
 }
 
 /**

@@ -1,5 +1,8 @@
 // Pure JavaSpaces semantics (Jini JavaSpaces spec v2.2) over a plain JSON state. No pi imports.
 // Functions mutate `state` in place (it is a document draft inside a commit) and take `now` explicitly.
+import { collect, record, revisionOf, seal, type Batch, type Op, type StreamState } from "./stream.ts";
+export { seal };
+
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 export type Fields = { [k: string]: Json };
 /** Who receives events: a conversation id (a number in pi-durable; strings are tolerated for pure-core use). */
@@ -39,9 +42,10 @@ export type Limits = {
 	maxOutboxBytes: number; // JSON bytes of undelivered events; new subscriptions and waits are refused above it, no event is dropped
 	maxDocBytes: number; // JSON bytes of the whole space: entries plus claims, outbox, waiters, registrations and transactions
 	maxFrameBytes: number; // largest protocol frame (federation-plan-v3 4.2); pages and events must fit it with their overhead
+	maxLogBytes: number; // JSON bytes of the retained change batches (revisions, AP 1.3); older batches are dropped
 	maxEventBytes: number; // largest event (entry plus handback plus metadata); a write whose event could exceed it is refused first
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024, maxLogBytes: 4 * 1024 * 1024 };
 export class LimitError extends Error {}
 /** A limit would be exceeded; raised before anything changed (federation-plan-v3 4.2 `ResourceExhausted`). */
 export class ResourceExhausted extends LimitError {}
@@ -112,7 +116,7 @@ export type SpaceEvent = {
  * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
  * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
  */
-export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState };
+export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
@@ -128,6 +132,7 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		...(typeof v.spaceId === "string" ? { spaceId: v.spaceId } : {}),
 		...(typeof v.incarnation === "string" ? { incarnation: v.incarnation } : {}),
 		...(v.rpc ? { rpc: v.rpc } : {}), // request claims (claims.ts)
+		...(v.stream ? { stream: v.stream } : {}), // revisions and change batches (stream.ts)
 		returned: v.returned ?? d.returned,
 	};
 };
@@ -151,7 +156,7 @@ export function setLimits(s: SpaceState, l: Partial<Limits>): Limits {
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
 /** Bytes of the parts of the document that are not entries (claims by their running tally). */
 export function overheadBytes(s: Readonly<SpaceState>): number {
-	return claimBytes(s) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns);
+	return claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns);
 }
 /** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
 export function claimBytes(s: Readonly<SpaceState>): number {
@@ -254,6 +259,7 @@ function prune<T>(a: T[], drop: (x: T) => boolean): number {
 }
 function expire(s: SpaceState, at: number): void {
 	for (const r of s.regs) if (r.expires <= at && r.pending && r.pendingEntry) emit(s, r, r.pendingEntry, r.pending, at); // do not lose a bundle
+	for (const e of s.entries) if (e.expires <= at && e.writtenUnder === null && e.takenBy === null) logDel(s, at, e.id);
 	prune(s.entries, (e) => e.expires <= at);
 	prune(s.regs, (r) => r.expires <= at);
 	for (const w of s.waiters) if (w.deadline <= at) s.outbox.push({ kind: "timeout", eventId: w.id, seq: 1, handback: w.handback, target: w.target });
@@ -300,6 +306,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	if (expires <= now) return { id: rec.id, expires }; // born expired (lease 0): never visible, so never announced or served
 	checkEventSize(s, rec, lim);
 	s.entries.push(rec);
+	if (txn === null) logPut(s, now, rec); // visible at once; under a transaction it appears at commit
 	notifyWrite(s, rec, txn, now);
 	if (txn === null) serve(s, now);
 	return { id: rec.id, expires };
@@ -343,7 +350,7 @@ export function probe(s: SpaceState, now: number, tmpl: Template, txn: string | 
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn, as);
 	const f = find(s, tmpl, txn, take);
-	return f.status === "found" ? { status: "found", entry: apply(s, f.rec, txn, take) } : f;
+	return f.status === "found" ? { status: "found", entry: apply(s, now, f.rec, txn, take) } : f;
 }
 
 /** What callers see of an entry. With the space's id it also carries the global id. */
@@ -365,9 +372,10 @@ function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean):
 	return locked ? { status: "locked" } : { status: "none" };
 }
 
-function apply(s: SpaceState, e: EntryRec, txn: string | null, take: boolean): EntryRec {
+function apply(s: SpaceState, now: number, e: EntryRec, txn: string | null, take: boolean): EntryRec {
 	const copy = clone(e);
 	if (take) {
+		if (e.writtenUnder === null) logDel(s, now, e.id); // it stops being visible (taken, or locked by a transaction)
 		if (txn === null || e.writtenUnder === txn) s.entries.splice(s.entries.indexOf(e), 1); // gone, or never visible outside
 		else e.takenBy = txn;
 	} else if (txn !== null && !e.readBy.includes(txn)) e.readBy.push(txn);
@@ -427,10 +435,10 @@ function serve(s: SpaceState, now: number): void {
 		const f = find(s, w.template, null, w.take);
 		if (f.status !== "found") continue;
 		s.waiters.splice(s.waiters.indexOf(w), 1);
-		if (!w.take) { s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, null, false), s.spaceId) }); continue; }
+		if (!w.take) { s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, now, f.rec, null, false), s.spaceId) }); continue; }
 		const t: TxnRec = { id: newId(s, "t"), expires: until(now, w.txnLeaseMs), owner: w.target }; // the receiver commits it
 		s.txns[t.id] = t;
-		s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, f.rec, t.id, true), s.spaceId), txn: t.id });
+		s.outbox.push({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(apply(s, now, f.rec, t.id, true), s.spaceId), txn: t.id });
 	}
 }
 
@@ -446,11 +454,11 @@ function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 			if (e.writtenUnder === id) { e.writtenUnder = null; published.push(e); }
 		} else {
 			if (e.writtenUnder === id) { s.entries.splice(i, 1); continue; } // aborted writes are discarded
-			if (e.takenBy === id) { e.takenBy = null; s.returned = (s.returned ?? 0) + 1; } // takes are undone: the entry is back
+			if (e.takenBy === id) { e.takenBy = null; s.returned = (s.returned ?? 0) + 1; if (e.writtenUnder === null) logPut(s, now, e); } // takes are undone: the entry is back
 		}
 	}
 	published.reverse(); // announced in write order
-	for (const e of published) notifyWrite(s, e, null, now);
+	for (const e of published) { logPut(s, now, e); notifyWrite(s, e, null, now); }
 }
 
 export function notify(s: SpaceState, now: number, tmpl: Template, txn: string | null, lease: number, handback: Json, target: Target | null, as?: Target): { eventId: string; lease: Lease } {
@@ -490,6 +498,8 @@ export function renew(s: SpaceState, now: number, id: string, ms: number, as?: T
 	const l = leased(s, id, as);
 	const v = grant(ms, now);
 	l.set(v);
+	const e = s.entries.find((x) => x.id === id);
+	if (e && e.writtenUnder === null && e.takenBy === null) logPut(s, now, e); // the lease is part of the visible state
 	return v;
 }
 export function cancel(s: SpaceState, now: number, id: string, as?: Target): void {
@@ -557,7 +567,7 @@ export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null
 
 /** Bytes a page needs besides its items: the envelope, the cursor and separators. */
 export const PAGE_OVERHEAD = 96;
-export type Page = { items: EntryView[]; next: string | null };
+export type Page = { items: EntryView[]; next: string | null; rev: number; streamId: string }; // rev: revision when the page was read; `changes` after the first page's rev completes the picture
 
 const seqOf = (id: string): number => { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; };
 
@@ -587,12 +597,50 @@ export function listPage(s: Readonly<SpaceState>, now: number, tmpl: Template = 
 		const n = jsonBytes(v) + 1;
 		if (used + n > cap) {
 			if (items.length === 0) throw new ResponseBudgetTooSmall(PAGE_OVERHEAD + n);
-			return { items, next: String(seqOf(items[items.length - 1].id)) };
+			return { items, next: String(seqOf(items[items.length - 1].id)), rev: revisionOf(s), streamId: streamIdOf(s) };
 		}
 		items.push(v);
 		used += n;
 	}
-	return { items, next: null };
+	return { items, next: null, rev: revisionOf(s), streamId: streamIdOf(s) };
+}
+
+// ---- revisions and the change stream (src/stream.ts)
+
+const putOp = (e: EntryRec): Op => ({ op: "put", id: e.id, type: e.type, types: [...e.types], fields: clone(e.fields), expires: e.expires, owner: e.owner });
+function logPut(s: SpaceState, now: number, e: EntryRec): void { record(s, now, putOp(e), limitsOf(s).maxLogBytes); }
+function logDel(s: SpaceState, now: number, id: string): void { record(s, now, { op: "del", id }, limitsOf(s).maxLogBytes); }
+
+/** The stream this revision belongs to: revisions of different streams (spaces, incarnations) are not comparable. */
+export const streamIdOf = (s: Readonly<SpaceState>): string => `${s.spaceId ?? "local"}:${s.incarnation ?? "0"}`;
+/** Revision of the newest commit that changed what a plain reader sees (0: none yet). */
+export const revision = (s: Readonly<SpaceState>): number => revisionOf(s);
+
+/** The batches the log has dropped no longer answer `changes`: take a fresh page read and continue from its revision. */
+export class SnapshotExpired extends Error {}
+/** The revision is newer than anything this stream has produced: another stream, or a space restored to an earlier state. */
+export class RevisionAhead extends Error {}
+export const CHANGES_OVERHEAD = 160; // envelope: stream id, revisions, flags
+
+export type Changes = { streamId: string; batches: Batch[]; next: number; rev: number; more: boolean };
+
+/**
+ * The commit batches after `afterRev`, limited by encoded bytes like every page: the budget (default and cap: the frame)
+ * ends an answer between batches and at least one batch is returned. `next` is the revision to continue after; `more`
+ * says whether the stream has newer batches. A budget below the next batch is `ResponseBudgetTooSmall`, a dropped
+ * history `SnapshotExpired`. Pure, so it runs on any snapshot.
+ */
+export function changes(s: Readonly<SpaceState>, afterRev: number, o: { maxBytes?: number } = {}): Changes {
+	const lim = limitsOf(s);
+	const budget = o.maxBytes === undefined ? lim.maxFrameBytes : o.maxBytes;
+	if (!Number.isInteger(budget) || budget <= 0) throw new IllegalArgumentError("maxBytes must be a positive integer");
+	if (!Number.isInteger(afterRev) || afterRev < 0) throw new IllegalArgumentError("afterRev must be a non-negative integer");
+	const r = collect(s, afterRev, Math.min(budget, lim.maxFrameBytes), CHANGES_OVERHEAD);
+	if ("ahead" in r) throw new RevisionAhead(`revision ${afterRev} is ahead of this stream (at ${r.rev})`);
+	if ("expired" in r) throw new SnapshotExpired(`batches up to revision ${r.floor} are no longer kept`);
+	if ("tooSmall" in r) throw new ResponseBudgetTooSmall(r.tooSmall);
+	const rev = revisionOf(s);
+	return { streamId: streamIdOf(s), batches: r.batches, next: r.next, rev, more: r.next < rev };
 }
 
 export type SpaceStats = {
