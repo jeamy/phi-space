@@ -1,14 +1,15 @@
 # Testumgebung auf dem Server `big`
 
-Stand: 2026-10-08. Beschreibt `test/testbed/` und das Vorgehen. Die Umgebung führt die vorhandenen Tests aus und
-stellt die Hosts bereit, die die Stufen 1b–3 des [Implementierungsplans](implementierungsplan-v3.md) brauchen.
-Sie ersetzt weder NetBird noch einen echten Fencing-Adapter (Abschnitt 8).
+Stand: 2026-10-08. Beschreibt `test/testbed/` und das Vorgehen. Die Umgebung prüft das **gebaute Produktionsartefakt**
+unter produktionsnahen Bedingungen und stellt die Hosts bereit, die die Stufen 1b–3 des
+[Implementierungsplans](implementierungsplan-v3.md) brauchen. Sie ersetzt weder NetBird noch einen echten Fencing-Adapter
+(Abschnitt 8). **Auf dem Server liegt kein Quellcode.**
 
-**Prüfstand (2026-10-08, auf dem Server ausgeführt):** `check`, `up` (Image-Build und Start des Runners), `test quick`
-(Typecheck und 108 Tests im Container bestanden), `kill runner` (Container beendet, neu gestartet, danach `exec` möglich,
-Volume erhalten) und das Szenario Primzahlsieb aus Abschnitt 10 (create, run, evaluate und ein zweiter Lauf mit `all`).
-**Noch nicht ausgeführt:** `up federation`, `stop`, `partition`/`heal`, `test examples`/`all`. Der erste Build deckte ein
-veraltetes `package-lock.json` auf (Abschnitt 9).
+**Prüfstand (2026-10-08, auf dem Server ausgeführt, produktionsnahe Fassung):** `purge-sources`, `destroy`, `init --force`,
+`test all` (Smoke, fünf Beispiele, Szenario Primzahlsieb), das Szenario in drei Phasen mit `kill runner` dazwischen und `down`;
+die Härtung des Containers wurde im laufenden Container geprüft. **Noch nicht ausgeführt:** `up federation`, `stop`,
+`partition`/`heal`. Der erste Build deckte ein veraltetes `package-lock.json` auf (Abschnitt 9). Die Quelltests (Typecheck,
+`npm test`, `npm run test:examples`) laufen bewusst nur lokal (Abschnitt 1).
 
 ## 1. Zweck und Überblick
 
@@ -16,19 +17,34 @@ Tests und später die Federation-Hosts laufen in Docker-Containern auf einem Ser
 Ein Skript erledigt Einrichtung und Betrieb:
 
 ```
-lokaler Rechner                       Server big (ssh), Verzeichnis /media/docker/pi-spaces
-test/testbed/testbed.sh  ── ssh ──►   docker-compose.yml  Dockerfile  entrypoint.sh  .env      (nur angelegt, wenn fehlend)
-   rsync des Checkouts   ─────────►   repo/                                                      (Quellen, ohne node_modules)
-                                      Container (rootless Docker):
-                                        runner      Tests: typecheck, npm test, test:examples
-                                        host-a      Koordinator   ┐
-                                        host-b      Standby       ├ Profil "federation", Volume /data je Host
-                                        member-1/2  Data Members  ┘
+lokaler Rechner                              Server big (ssh), Verzeichnis /media/docker/pi-spaces
+src/, examples/, scenarios/ (TypeScript)
+   │  esbuild (build-artifacts.mjs)
+   ▼
+dist/testbed-artifacts/                      docker-compose.yml  Dockerfile  .dockerignore  .env   (nur angelegt, wenn fehlend)
+  pi-spaces.mjs  examples/*.mjs  ── rsync ─► build/   (nur Artefakte + package.json/-lock.json + MANIFEST.json)
+  scenarios/*.mjs  MANIFEST.json                │  docker build auf dem Server
+                                                ▼
+                                          Image: Node + `npm ci --omit=dev` + Artefakte unter /opt/app
+                                          Container (rootless Docker, Benutzer node, NODE_ENV=production,
+                                          read-only Dateisystem, keine Capabilities, nur /data beschreibbar):
+                                            runner      Smoke, Beispiele, Szenarien
+                                            host-a      Koordinator   ┐
+                                            host-b      Standby       ├ Profil "federation", Volume /data je Host
+                                            member-1/2  Data Members  ┘
 ```
 
-Die Quellen werden bei jedem Lauf per rsync übertragen und in die Container eingebunden (`./repo:/work`).
-Das Image enthält nur Node und die gelockten Abhängigkeiten (`npm ci`); es wird nur neu gebaut, wenn sich
-`package.json`, `package-lock.json` oder das Dockerfile ändern.
+**Produktionsnähe statt Quellkopie.** Lokal werden dieselben Artefakte gebaut, die auch das mobile Projekt bekommt
+(`scripts/bundle-mobile.mjs`): das Bündel `pi-spaces.mjs` (**byte-identisch** zu dem in `pi-termux-mobile/runtime`), die
+kompilierten Beispiele und die kompilierten Szenarien (sie importieren das ausgelieferte Bündel, keine zweite Kopie). Nur diese
+Dateien, die Abhängigkeitsmanifeste und ein `MANIFEST.json` (Commit, Zeitpunkt, Hashes) gehen auf den Server; `ship` bricht ab,
+wenn eine TypeScript-Datei darunter wäre. Das Image enthält Node, die Produktionsabhängigkeiten laut Lock (`npm ci --omit=dev`)
+und diese Artefakte. Es gibt keinen eingebundenen Checkout, keinen `ts`-Interpreter-Modus und keine Dev-Abhängigkeiten.
+
+**Was damit geprüft wird und was nicht.** Der Server prüft das Artefakt in einer Produktionsumgebung (echtes Node-Image, reales
+Dateisystem, unprivilegierter Benutzer, gehärteter Container, persistente Volumes, Absturz und Neustart). Die Quelltests
+(`npm run typecheck`, `npm test`, `npm run test:examples`) greifen auf TypeScript-Quellen zu und laufen deshalb weiter nur lokal.
+Sie auf dem Server auszuführen hieße, Quellen dorthin zu kopieren.
 
 ## 2. Befund zum Server (geprüft am 2026-10-08, nur lesend)
 
@@ -49,7 +65,8 @@ Das ist nicht empfohlen.
 
 ## 3. Voraussetzungen
 
-Lokal: `ssh`, `rsync`, `bash` (für ein Passwort statt Schlüssel zusätzlich `sshpass`). Auf dem Server: Docker mit
+Lokal: `ssh`, `rsync`, `bash`, `node` und die installierten Entwicklungsabhängigkeiten (`esbuild` baut die Artefakte; für ein
+Passwort statt Schlüssel zusätzlich `sshpass`). Auf dem Server: Docker mit
 Compose-Plugin und `rsync`. Der Server braucht Zugriff auf Docker Hub und die npm-Registry
 (Image `node:22-bookworm-slim`, `npm ci` im Build).
 
@@ -84,29 +101,36 @@ Alle Befehle: `npm run testbed -- <befehl>` oder `bash test/testbed/testbed.sh <
 2. **Prüfen:** `check`. Nur lesend: Werkzeuge, ssh, Benutzer, Docker (rootless?), Compose, rsync, Verzeichnis, freier Platz,
    vorhandene Container des Projekts. Mit `--dry-run` zeigt jeder Befehl, was er auf dem Server tun würde.
 3. **Starten:** `up` (oder `up federation`). Das Skript
-   - legt `/media/docker/pi-spaces` und `repo/` an, falls sie fehlen;
-   - schreibt `docker-compose.yml`, `Dockerfile`, `entrypoint.sh`, `.dockerignore` und `.env`, **nur wenn sie fehlen**;
+   - legt `/media/docker/pi-spaces` und `build/` an, falls sie fehlen;
+   - schreibt `docker-compose.yml`, `Dockerfile`, `.dockerignore` und `.env`, **nur wenn sie fehlen**;
      weicht eine vorhandene Datei von der Vorlage ab, wird gewarnt und nichts überschrieben (`init --force` überschreibt);
-   - überträgt den Checkout per rsync (ohne `.git`, `node_modules`, `dist`, Logs, `.env`);
-   - baut das Image (Cache, solange `package*.json` und Dockerfile gleich bleiben);
+   - baut die Artefakte lokal (`build`) und überträgt nur diese nach `build/` (`ship`);
+   - baut das Image auf dem Server (die Schicht mit den Produktionsabhängigkeiten bleibt im Cache, solange sich die
+     Manifeste nicht ändern);
    - startet **nur die Container, die nicht laufen**; laufende bleiben unberührt (`docker compose up -d`);
    - zeigt den Status.
-4. **Testen:** `test` (Standard `quick` = typecheck + `npm test`), `test unit`, `test examples`, `test all`.
-   Argumente für eine einzelne Suite nach `--`: `test unit -- --test-name-pattern=claims`. `test` führt vorher `up core` aus,
-   überträgt also den aktuellen Stand. Alle Suiten laufen auch bei einem Fehlschlag durch; der Exit-Code ist dann 1.
+4. **Testen:** `test` (Standard `all`) führt vorher `up core` aus, liefert also den aktuellen Stand aus, und prüft im Runner:
+   `smoke` (das Bündel lädt und exportiert, was die Laufzeit braucht; Node-Version, `NODE_ENV`, Benutzer und Artefakt-Commit
+   werden ausgegeben; **keine TypeScript-Datei** im Image und unter `/media/docker/pi-spaces`), `examples` (die kompilierten
+   Beispiele `workers`, `sensor-pipeline`, `chat`, `cache` und `sieve 1001 2` mit „168 primes“) und `scenario` (Primzahlsieb mit
+   simuliertem Handy, Abschnitt 10). Einzeln: `test smoke|examples|scenario`. Alle Schritte laufen auch bei einem Fehlschlag
+   durch; der Exit-Code ist dann 1.
 5. **Beobachten:** `status`, `logs <dienst> [zeilen]`, `exec <dienst> <befehl…>` (mit Terminal, wenn vorhanden).
-6. **Beenden:** `down` entfernt Container und Netz, behält Volumes und `repo/`. `destroy --yes` entfernt zusätzlich
-   Volumes und Image. Das Verzeichnis selbst und `repo/` löscht das Skript nie.
+6. **Beenden:** `down` entfernt Container und Netz, behält Volumes und die ausgelieferten Artefakte. `destroy --yes` entfernt
+   zusätzlich Volumes und Image. Das Verzeichnis und `build/` löscht das Skript nie. Eine Quellkopie aus früheren Versionen
+   des Skripts (`repo/`) entfernt `purge-sources`.
 
 ## 6. Container und ihre Verwendung
 
-Alle Container laufen im Leerlauf (`sleep infinity`, `init: true`, `restart: unless-stopped`); Prozesse starten Tests und
+Alle Container laufen im Leerlauf (`sleep infinity`, `init: true`, `restart: unless-stopped`) und sind gehärtet:
+Benutzer `node` (nicht root), `NODE_ENV=production`, schreibgeschütztes Wurzeldateisystem mit `tmpfs` auf `/tmp`, alle
+Capabilities entfernt, `no-new-privileges`, keine Ports. Beschreibbar ist nur `/data`. Prozesse starten Szenarien und
 später die Dienste mit `exec`. Jeder Host hat ein eigenes Volume `/data`, so dass kein Storage zwischen Hosts geteilt wird
 (ein Datenbankverzeichnis wird nie von mehreren Harnesses geöffnet) und ein Absturz die Daten erhält.
 
 | Dienst | Profil | Rolle (v3) | Verwendung |
 |---|---|---|---|
-| `runner` | immer | Testläufer | `typecheck`, `npm test`, `npm run test:examples`; Crash-/Reopen-Tests auf echtem Dateisystem (JSONL, SQLite) |
+| `runner` | immer | Läufer für Artefakte | Smoke, kompilierte Beispiele, Szenarien; Crash-/Reopen-Fälle auf echtem Dateisystem (JSONL) |
 | `host-a` | `federation` | Koordinator | ab Stufe 1b: Gate, Supervisor, Recovery Space, Control Space, Router |
 | `host-b` | `federation` | fester Standby | ab Stufe 3: synchroner Standby, Promotion |
 | `member-1`, `member-2` | `federation` | Data Members | ab Stufe 2: expand/HRW mit mehreren Members, Worker |
@@ -149,10 +173,13 @@ Hand: Container stoppen und sein Volume mit `docker volume rm` entfernen.
 | `docker: NOT REACHABLE` | Daemon des Benutzers läuft nicht (`systemctl --user status docker` auf dem Server) oder anderer Socket: `TESTBED_DOCKER_HOST` |
 | `docker.sock: no such file` als `root` | Der Daemon gehört einem anderen Benutzer; als dieser arbeiten (der normale ssh-Alias) |
 | `image build failed` | Auf dem Server `cd /media/docker/pi-spaces && docker compose build runner` für die volle Ausgabe; meist Netzzugang oder Plattenplatz |
+| `TypeScript source found in … refusing to ship` | Ein Build hätte Quellcode in die Artefakte gelegt; `build-artifacts.mjs` prüfen |
+| `smoke` meldet TypeScript-Dateien auf dem Server | Rest einer früheren Version: `purge-sources`; sonst nachsehen, was unter `/media/docker/pi-spaces` liegt |
 | `npm ci` meldet `lock file ... does not satisfy` | `package-lock.json` passt nicht zu `package.json`. Das war hier der Fall (esbuild fehlte im Lock). Lokal `npm install --package-lock-only` und die Änderung prüfen |
 | `Permission denied (publickey)` mit einem fremden Benutzernamen | `test/testbed/testbed.env` enthält einen aktiven Platzhalter (`TESTBED_SSH_USER=deploy`). Zeile entfernen oder einkommentiert lassen; Umgebungsvariablen haben Vorrang, `TESTBED_SSH_USER=` (leer) nimmt den Benutzer aus `~/.ssh/config` |
 | `… on the server differs from the template` | Server-Datei wurde geändert oder die Vorlage wurde aktualisiert: Unterschied prüfen, dann `init --force` |
-| Tests laufen, aber `Cannot find package` | `package.json`/`package-lock.json` geändert: `up` erneut (baut das Image neu) |
+| `Cannot find package` im Container | Ein neuer Import ist nicht in `package.json`/`package-lock.json` (Produktionsabhängigkeit): ergänzen, dann `up` |
+| Das Szenario startet das Sieb-Beispiel (CLI-Ausgabe, Fehler „Sieve needs a runId“) | Ein eingebettetes Beispiel führt seinen Direktstart-Block aus; `build-artifacts.mjs` neutralisiert `import.meta.url` in Beispielen für Szenarien |
 | Container startet immer wieder neu | `logs <dienst>`; `stop` hält ihn an, `down` entfernt ihn |
 
 ## 10. Szenario: Primzahlsieb mit simuliertem Handy
@@ -179,7 +206,8 @@ Aufrufe, Standard 0,3), `--offline-ms`, `--crash-workers`, `--lease-ms`, `--cras
 Optionen: `scenario sieve-mobile help`. Der Zustand liegt in `/data/sieve-mobile` und übersteht `kill` und `down`; `--fresh`
 verwirft ihn.
 
-Beispiel mit Absturz des Containers zwischen den Phasen:
+Auf dem Server läuft jeweils die kompilierte Fassung gegen das ausgelieferte Bündel. Beispiel mit Absturz des Containers
+zwischen den Phasen:
 
 ```sh
 npm run testbed -- scenario sieve-mobile create --fresh
@@ -192,4 +220,5 @@ npm run testbed -- scenario sieve-mobile evaluate   # Exit-Code 0 = bestanden
 mehrere Hosts (alles läuft in einem Container und einem Harness-Prozess; ein Host-„Neustart“ beendet die Worker und öffnet den
 Storage neu, ist aber kein Absturz mitten im Commit) und das Pausieren über ein RunGate (noch nicht implementiert). Das
 Vorbereiten der Aufgaben ist nicht gegen vorzeitige Bearbeitung abgesichert (Betrieb Abschnitt 6, `preparing`). Als
-Regressionstest läuft eine kleine Fassung in `npm test` (`test-scenario.test.ts`).
+Regressionstest läuft eine kleine Fassung der TypeScript-Quelle lokal in `npm test` (`test-scenario.test.ts`); auf dem Server
+läuft die kompilierte Fassung (`scenarios/sieve-mobile.mjs`).

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Remote docker test bed for pi-spaces: syncs this checkout to a server over ssh and runs the tests, and later the
-# federation hosts, in docker containers there instead of on the developer machine.
+# Remote docker test bed for pi-spaces: builds the production artifacts here (the pi-spaces.mjs bundle, compiled
+# examples and scenarios), ships ONLY those to a server over ssh, builds a production-like image from them there and
+# runs scenarios, and later the federation hosts, in docker containers. No source code reaches the server.
 # Docs: docs/testumgebung-big.md (German), test/testbed/README.md. Usage: testbed.sh --help
 set -euo pipefail
 
@@ -26,22 +27,24 @@ Options:
 Commands:
   check                          read-only: local tools, ssh, sudo, docker, compose, rsync, directory
   init [--force]                 create the server directory and the compose files; existing files are kept
-  sync                           copy this checkout (including uncommitted changes) to <dir>/repo
-  up [core|federation]           init + sync + build + start every container that is not running (default: core)
+  build                          build the artifacts locally (dist/testbed-artifacts); nothing is sent
+  ship                           build, then copy the artifacts (and nothing else) to <dir>/build on the server
+  up [core|federation]           init + ship + image build + start every container that is not running (default: core)
   status                         containers of the test bed
-  test [quick|unit|examples|typecheck|all] [-- args]
-                                 run in the runner container (default: quick = typecheck + unit);
-                                 args after -- go to the test command of a single suite
-  scenario <name> [args]         sync, start the runner and run test/testbed/scenarios/<name>.ts in it
+  test [smoke|examples|scenario|all]
+                                 production checks in the runner container (default: all): the shipped bundle loads,
+                                 no sources on the server, the compiled examples run, the sieve-mobile scenario passes
+  scenario <name> [args]         ship, start the runner and run the compiled scenarios/<name>.mjs in it
                                  (sieve-mobile create|run|evaluate|all: simulated phone, see docs/testumgebung-big.md)
+  purge-sources                  remove a leftover source copy (<dir>/repo) from earlier versions of this script
   exec <service> <command...>    run a command in a running container (tty if available)
   logs <service> [lines]         last log lines of a container (default 200)
   stop <service>                 stop one container; it stays down until `up`
   kill <service>                 SIGKILL then start again, like a crash and reboot; the volume survives
   partition <service>            disconnect from the test network
   heal <service>                 reconnect to the test network
-  down                           remove containers and network, keep volumes and the repo copy
-  destroy --yes                  down + remove volumes and the image (the directory and repo copy stay)
+  down                           remove containers and network, keep volumes and the shipped artifacts
+  destroy --yes                  down + remove volumes and the image (the directory and <dir>/build stay)
   config                         show the effective settings
 
 Settings (environment or test/testbed/testbed.env), defaults in brackets:
@@ -225,14 +228,14 @@ TESTBED_PIDS_LIMIT=$TESTBED_PIDS_LIMIT
 EOF
 }
 
-TEMPLATES=("docker-compose.yml:compose.yml:644" "Dockerfile:Dockerfile:644" "entrypoint.sh:entrypoint.sh:755" ".dockerignore:dockerignore:644")
+TEMPLATES=("docker-compose.yml:compose.yml:644" "Dockerfile:Dockerfile:644" ".dockerignore:dockerignore:644")
 
 cmd_init() {
 	local force=0
 	[[ ${1:-} == --force ]] && force=1
 	ensure_connection
 	info "directory $DIR on $TARGET"
-	r "mkdir -p $(shq "$DIR/repo")"
+	r "mkdir -p $(shq "$DIR/build")"
 	local spec name rest src mode want have
 	for spec in "${TEMPLATES[@]}"; do
 		name=${spec%%:*}; rest=${spec#*:}; src=${rest%%:*}; mode=${rest##*:}
@@ -253,23 +256,37 @@ cmd_init() {
 	fi
 }
 
-EXCLUDES=(--exclude .git/ --exclude node_modules --exclude dist/ --exclude '*.log' --exclude '*.tsbuildinfo'
-	--exclude .env --exclude .DS_Store --exclude test/testbed/testbed.env)
+ARTIFACTS="$REPO/dist/testbed-artifacts"
 
-cmd_sync() {
+cmd_build() {
+	need_local node
+	[[ -f $REPO/node_modules/esbuild/package.json ]] || die "esbuild is not installed in $REPO/node_modules (npm install)"
+	info "build artifacts"
+	node "$HERE/build-artifacts.mjs" "$ARTIFACTS" >&2
+}
+
+# Ship only the built artifacts: a few .mjs files and the dependency manifests, never TypeScript sources.
+cmd_ship() {
 	ensure_connection
-	r "mkdir -p $(shq "$DIR/repo")"
+	cmd_build
+	if find "$ARTIFACTS" -type f \( -name '*.ts' -o -name '*.tsx' \) | grep -q .; then die "TypeScript source found in $ARTIFACTS; refusing to ship"; fi
+	r "mkdir -p $(shq "$DIR/build")"
 	local ssh_cmd="ssh" a rsh=()
 	for a in "${SSH_ARGS[@]}"; do ssh_cmd+=" $a"; done
 	resolve_sudo
 	[[ -n $SUDO_PREFIX ]] && rsh=(--rsync-path "sudo -n rsync")
-	info "sync $REPO -> $TARGET:$DIR/repo"
-	local cmd=("${AUTH[@]+"${AUTH[@]}"}" rsync -az --delete --no-owner --no-group --human-readable --info=stats1
-		"${rsh[@]+"${rsh[@]}"}" -e "$ssh_cmd" "${EXCLUDES[@]}" "$REPO/" "$TARGET:$DIR/repo/")
+	info "ship artifacts -> $TARGET:$DIR/build"
+	local cmd=("${AUTH[@]+"${AUTH[@]}"}" rsync -az --delete --checksum --no-owner --no-group --human-readable --info=stats1
+		"${rsh[@]+"${rsh[@]}"}" -e "$ssh_cmd" "$ARTIFACTS/" "$TARGET:$DIR/build/")
 	if dry; then printf '[dry-run] %s\n' "${cmd[*]}" >&2; return 0; fi
 	local out
 	out=$("${cmd[@]}") || die "rsync failed"
 	grep -E "Number of (regular )?files|Total transferred|Total file size" <<<"$out" >&2 || true
+}
+
+cmd_purge_sources() {
+	ensure_connection
+	r "if [ -d $(shq "$DIR/repo") ]; then n=\$(find $(shq "$DIR/repo") -type f | wc -l); rm -rf -- $(shq "$DIR/repo"); echo \"removed $DIR/repo (\$n files)\"; else echo 'no source copy on the server'; fi; rm -f -- $(shq "$DIR/entrypoint.sh")"
 }
 
 cmd_up() {
@@ -282,8 +299,8 @@ cmd_up() {
 		*) die "up: unknown profile '$profile' (core, federation)" ;;
 	esac
 	cmd_init
-	cmd_sync
-	info "build image (cached unless package*.json or the Dockerfile changed)"
+	cmd_ship
+	info "build image (production dependencies cached unless the manifests change)"
 	rcompose build --quiet runner >/dev/null || die "image build failed (on the server: cd $DIR && docker compose build runner)"
 	info "start containers that are not running ($profile)"
 	rcompose --profile '*' up -d --remove-orphans "${svcs[@]+"${svcs[@]}"}"
@@ -295,43 +312,73 @@ cmd_status() {
 	rcompose --profile '*' ps -a --format 'table {{.Service}}\t{{.State}}\t{{.Status}}\t{{.Image}}'
 }
 
-cmd_test() {
-	local suite=${1:-quick}
-	[[ $# -gt 0 ]] && shift
-	[[ ${1:-} == -- ]] && shift
-	local extra=("$@") steps=()
-	case $suite in
-		quick) steps=(typecheck unit) ;;
-		unit | examples | typecheck) steps=("$suite") ;;
-		all) steps=(typecheck unit examples) ;;
-		*) die "test: unknown suite '$suite' (quick, unit, examples, typecheck, all)" ;;
-	esac
-	[[ ${#extra[@]} -gt 0 && ${#steps[@]} -gt 1 ]] && die "test: extra arguments only work with a single suite"
-	cmd_up core
-	local step c failed=()
-	for step in "${steps[@]}"; do
-		case $step in
-			typecheck) c="npm run typecheck" ;;
-			unit) c="npm test" ;;
-			examples) c="npm run test:examples" ;;
-		esac
-		[[ ${#extra[@]} -gt 0 && $step != typecheck ]] && c+=" -- $(shq_join "${extra[@]}")"
-		info "$step: $c"
-		if ! rcompose exec -T runner sh -c "cd /work && $c"; then failed+=("$step"); fi
+# JS run inside the container by `test smoke`: the shipped bundle loads and exports what the runtime uses.
+SMOKE_JS="$(cat <<'JS'
+import * as m from '/opt/app/pi-spaces.mjs';
+import { readFileSync } from 'node:fs';
+const need = ['PiSpaces', 'createSpace', 'listSpaces', 'claims', 'startService', 'spaces', 'FOREVER'];
+const missing = need.filter((k) => !(k in m));
+const man = JSON.parse(readFileSync('/opt/app/MANIFEST.json', 'utf8'));
+console.log(`node ${process.version}, NODE_ENV=${process.env.NODE_ENV}, uid ${process.getuid()}, artifact ${man.commit}${man.dirty ? ' (uncommitted changes)' : ''} built ${man.builtAt}`);
+if (missing.length) { console.error('missing exports: ' + missing.join(', ')); process.exit(1); }
+JS
+)"
+
+FAILED=()
+check_step() {
+	local label=$1
+	shift
+	info "$label"
+	if ! "$@"; then FAILED+=("$label"); warn "FAILED: $label"; fi
+}
+in_runner() { rcompose exec -T runner "$@"; }
+
+test_smoke() {
+	in_runner node --input-type=module -e "$SMOKE_JS" || return 1
+	# No sources anywhere: not in the image, not on the host.
+	in_runner sh -c 'n=$(find /opt/app -path /opt/app/node_modules -prune -o -type f \( -name "*.ts" -o -name "*.tsx" \) -print | wc -l); echo "TypeScript files in the image outside node_modules: $n"; test "$n" = 0' || return 1
+	dry && return 0
+	r "n=\$(find $(shq "$DIR") -type f \\( -name '*.ts' -o -name '*.tsx' \\) | wc -l); echo \"TypeScript files on the server under $DIR: \$n\"; test \"\$n\" = 0; test ! -e $(shq "$DIR/repo")"
+}
+test_examples() {
+	local out bad=0 spec name
+	for spec in "workers" "sensor-pipeline" "chat" "cache" "sieve 1001 2"; do
+		# shellcheck disable=SC2086 # deliberate splitting: name and arguments
+		set -- $spec
+		name=$1
+		shift
+		if out=$(in_runner node "examples/$name.mjs" "$@" 2>&1); then
+			if [[ $name == sieve && ! $out =~ "168 primes" ]]; then echo "  FAIL  examples/$name.mjs: no '168 primes' in the output"; bad=1; else echo "  ok    examples/$name.mjs $*"; fi
+		else echo "  FAIL  examples/$name.mjs $*"; printf '%s\n' "$out" | tail -5 | sed 's/^/        /'; bad=1; fi
 	done
-	if [[ ${#failed[@]} -gt 0 ]]; then die "failed: ${failed[*]}"; fi
+	return $bad
+}
+test_scenario() { in_runner node scenarios/sieve-mobile.mjs all; }
+
+cmd_test() {
+	local suite=${1:-all} steps=()
+	case $suite in
+		smoke | examples | scenario) steps=("$suite") ;;
+		all) steps=(smoke examples scenario) ;;
+		*) die "test: unknown suite '$suite' (smoke, examples, scenario, all)" ;;
+	esac
+	cmd_up core
+	local step
+	for step in "${steps[@]}"; do check_step "$step" "test_$step"; done
+	if [[ ${#FAILED[@]} -gt 0 ]]; then die "failed: ${FAILED[*]}"; fi
 	if dry; then info "dry run: nothing was executed"; else info "all passed: ${steps[*]}"; fi
 }
 
 cmd_scenario() {
-	local name=${1:-}
-	[[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "scenario: a name is expected; available: $(cd "$HERE/scenarios" && ls | sed 's/\.ts$//' | tr '\n' ' ')"
-	[[ -f $HERE/scenarios/$name.ts ]] || die "scenario: unknown '$name'; available: $(cd "$HERE/scenarios" && ls | sed 's/\.ts$//' | tr '\n' ' ')"
+	local name=${1:-} avail
+	avail=$(cd "$HERE/scenarios" && ls | sed 's/\.ts$//' | tr '\n' ' ')
+	[[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "scenario: a name is expected; available: $avail"
+	[[ -f $HERE/scenarios/$name.ts ]] || die "scenario: unknown '$name'; available: $avail"
 	shift
 	cmd_up core
 	info "scenario $name $*"
 	# The exit code of the scenario is the exit code of this command (0 passed, 1 failed, 2 usage).
-	rcompose exec -T runner sh -c "cd /work && node --no-warnings --experimental-strip-types test/testbed/scenarios/$name.ts $(shq_join "$@")"
+	rcompose exec -T runner node "scenarios/$name.mjs" "$@"
 }
 
 valid_service() { [[ ${1:-} =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "service name expected (runner, host-a, ...)"; }
@@ -365,7 +412,7 @@ cmd_destroy() {
 	ensure_connection
 	rcompose --profile '*' down --volumes --remove-orphans
 	r "docker image rm $(shq "${PROJECT}-node:local") 2>/dev/null || true"
-	info "removed. $DIR and $DIR/repo are untouched; delete them by hand if wanted."
+	info "removed. $DIR and $DIR/build are untouched; delete them by hand if wanted."
 }
 
 # ---------------------------------------------------------------- main
@@ -387,7 +434,9 @@ main() {
 		config) cmd_config ;;
 		check) cmd_check ;;
 		init) cmd_init "$@" ;;
-		sync) cmd_sync ;;
+		build) cmd_build ;;
+		ship | sync) cmd_ship ;;
+		purge-sources) cmd_purge_sources ;;
 		up) cmd_up "$@" ;;
 		status) cmd_status ;;
 		test) cmd_test "$@" ;;

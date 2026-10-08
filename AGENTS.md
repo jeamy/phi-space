@@ -12,8 +12,9 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
   `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-scenario.test.ts`); crash/reopen helpers for JSONL and SQLite
   in `test/support/persistent.ts`
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> integration.test.ts`
-- Remote test bed (docker on the server `big`; `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
-  docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or syncing changes a shared server: ask before the first real run.
+- Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
+  `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
+  docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
 - Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
 - Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`
 

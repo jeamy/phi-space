@@ -1,19 +1,22 @@
-# Image for every test bed container: Node plus the locked dependencies of pi-spaces.
-# The sources are not baked in; they are synced to ./repo on the server and bind-mounted at /work.
+# Production-like image: Node, the production dependencies from the lock file and the BUILT artifacts of pi-spaces
+# (the same pi-spaces.mjs bundle the mobile runtime gets, compiled examples and scenarios). No TypeScript source, no
+# tests, no bind-mounted checkout. Built on the server from ./build, which build-artifacts.mjs fills.
 ARG NODE_IMAGE=node:22-bookworm-slim
 FROM ${NODE_IMAGE}
 
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
+ENV NODE_ENV=production NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
 
-# Dependencies only change with package*.json, so this layer is cached across syncs.
-WORKDIR /opt/deps
-COPY repo/package.json repo/package-lock.json ./
-RUN npm ci
+# Dependencies only change with the manifests, so this layer is cached across artifact changes.
+WORKDIR /opt/app
+COPY build/package.json build/package-lock.json ./
+RUN npm ci --omit=dev
 
-COPY entrypoint.sh /usr/local/bin/testbed-entrypoint
-RUN chmod 755 /usr/local/bin/testbed-entrypoint && mkdir -p /work /data
+COPY build/pi-spaces.mjs build/MANIFEST.json ./
+COPY build/examples ./examples
+COPY build/scenarios ./scenarios
 
-WORKDIR /work
-ENTRYPOINT ["testbed-entrypoint"]
-# Containers idle; tests and host processes are started in them with `testbed.sh exec` / `test`.
+# State lives in the /data volume and nowhere else; the process runs unprivileged.
+RUN mkdir -p /data && chown node:node /data
+USER node
+# Containers idle; scenarios and, later, host processes are started in them with `testbed.sh exec` / `scenario`.
 CMD ["sleep", "infinity"]

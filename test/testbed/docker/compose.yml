@@ -2,12 +2,14 @@
 # overwrites). Settings come from the .env next to it. No ports are published: containers talk over the private network.
 # The server runs rootless docker (one daemon per user): container root is the host user, bind mounts stay owned by it.
 #
-# Containers idle (`sleep infinity`); tests and, later, pi-serverd / gate / supervisor processes are started in them.
+# Production-like: the image holds the built artifacts only (no sources, no bind mounts), NODE_ENV=production, an
+# unprivileged user, a read-only root filesystem with a tmpfs /tmp, and all capabilities dropped. State lives in /data.
+# Containers idle (`sleep infinity`); scenarios and, later, pi-serverd / gate / supervisor processes are started in them.
 # Each host has its own /data volume, so storage is never shared between hosts and survives a container kill.
 name: ${TESTBED_PROJECT:-pi-spaces-test}
 
 x-env: &env
-  NODE_ENV: test
+  NODE_ENV: production
   TESTBED: "1"
 
 x-node: &node
@@ -15,7 +17,11 @@ x-node: &node
   pull_policy: never # built by testbed.sh (docker compose build runner), never pulled
   init: true
   restart: unless-stopped
-  working_dir: /work
+  working_dir: /opt/app
+  user: node
+  read_only: true
+  tmpfs: ["/tmp"]
+  cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
   pids_limit: ${TESTBED_PIDS_LIMIT:-1024}
   mem_limit: ${TESTBED_MEM_LIMIT:-512m}
@@ -24,7 +30,7 @@ x-node: &node
   environment: *env
 
 services:
-  # Unit, integration and example tests (npm test, npm run test:examples, typecheck). Always part of the bed.
+  # Runs the compiled examples and scenarios (smoke, examples, sieve-mobile). Always part of the bed.
   runner:
     <<: *node
     build:
@@ -34,7 +40,7 @@ services:
     hostname: runner
     mem_limit: ${TESTBED_RUNNER_MEM:-2g}
     cpus: ${TESTBED_RUNNER_CPUS:-2.0}
-    volumes: ["./repo:/work", "runner-data:/data"]
+    volumes: ["runner-data:/data"]
 
   # Federation topology (profile "federation"). Idle until the stages that need them exist (v3 stage 1b onwards).
   host-a: # coordinator: control space primary, router, supervisor, recovery space
@@ -42,28 +48,28 @@ services:
     profiles: [federation]
     hostname: host-a
     environment: {<<: *env, TESTBED_ROLE: coordinator, TESTBED_HOST_ID: host-a}
-    volumes: ["./repo:/work", "host-a-data:/data"]
+    volumes: ["host-a-data:/data"]
 
   host-b: # fixed synchronous standby of the coordinator (own failure domain in the model)
     <<: *node
     profiles: [federation]
     hostname: host-b
     environment: {<<: *env, TESTBED_ROLE: standby, TESTBED_HOST_ID: host-b}
-    volumes: ["./repo:/work", "host-b-data:/data"]
+    volumes: ["host-b-data:/data"]
 
   member-1: # data member
     <<: *node
     profiles: [federation]
     hostname: member-1
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-1}
-    volumes: ["./repo:/work", "member-1-data:/data"]
+    volumes: ["member-1-data:/data"]
 
   member-2: # data member
     <<: *node
     profiles: [federation]
     hostname: member-2
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-2}
-    volumes: ["./repo:/work", "member-2-data:/data"]
+    volumes: ["member-2-data:/data"]
 
 networks:
   testnet:
