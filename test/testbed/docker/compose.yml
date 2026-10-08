@@ -26,7 +26,6 @@ x-node: &node
   pids_limit: ${TESTBED_PIDS_LIMIT:-1024}
   mem_limit: ${TESTBED_MEM_LIMIT:-512m}
   cpus: ${TESTBED_CPUS:-0.5}
-  networks: [testnet]
   environment: *env
 
 services:
@@ -38,36 +37,43 @@ services:
       args:
         NODE_IMAGE: ${TESTBED_NODE_IMAGE:-node:22-bookworm-slim}
     hostname: runner
+    networks: [testnet]
     mem_limit: ${TESTBED_RUNNER_MEM:-2g}
     cpus: ${TESTBED_RUNNER_CPUS:-2.0}
     volumes: ["runner-data:/data"]
 
-  # Federation topology (profile "federation"). Idle until the stages that need them exist (v3 stage 1b onwards).
+  # Federation topology (profile "federation", needs the "overlay" agents: `up federation` starts both). Each host shares the network
+  # namespace of its NetBird agent nb-<host>, so it has the overlay interface wt0 and the overlay address of its peer; hostnames and
+  # the testnet alias belong to the agent. Idle until the stages that need them exist (v3 stage 1b onwards), or a scenario runs in them.
   host-a: # coordinator: control space primary, router, supervisor, recovery space
     <<: *node
     profiles: [federation]
-    hostname: host-a
+    network_mode: "service:nb-host-a" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
+    depends_on: [nb-host-a]
     environment: {<<: *env, TESTBED_ROLE: coordinator, TESTBED_HOST_ID: host-a}
     volumes: ["host-a-data:/data"]
 
   host-b: # fixed synchronous standby of the coordinator (own failure domain in the model)
     <<: *node
     profiles: [federation]
-    hostname: host-b
+    network_mode: "service:nb-host-b" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
+    depends_on: [nb-host-b]
     environment: {<<: *env, TESTBED_ROLE: standby, TESTBED_HOST_ID: host-b}
     volumes: ["host-b-data:/data"]
 
   member-1: # data member
     <<: *node
     profiles: [federation]
-    hostname: member-1
+    network_mode: "service:nb-member-1" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
+    depends_on: [nb-member-1]
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-1}
     volumes: ["member-1-data:/data"]
 
   member-2: # data member
     <<: *node
     profiles: [federation]
-    hostname: member-2
+    network_mode: "service:nb-member-2" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
+    depends_on: [nb-member-2]
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-2}
     volumes: ["member-2-data:/data"]
 

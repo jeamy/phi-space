@@ -77,6 +77,8 @@ class TransportFailure extends Error {}
 export class RemoteSpace implements SpaceLike {
 	private t: Transport;
 	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction">> & Pick<RemoteOptions, "space" | "maxClientWaitMs">;
+	/** What the link cost so far: transport attempts repeated with the same identity, and calls given up as OutcomeUnknown. */
+	readonly counters = { retries: 0, unknown: 0 };
 	private hello?: Promise<Hello>;
 	private frameLimit = core.DEFAULT_LIMITS.maxFrameBytes; // until the host has announced its own
 	private gen?: { generation: string; admitUntil: number };
@@ -122,6 +124,7 @@ export class RemoteSpace implements SpaceLike {
 	private async send(call: Call, onExhausted?: () => Error): Promise<Json> {
 		let last: unknown;
 		for (let n = 0; n < this.o.attempts; n++) {
+			if (n > 0) this.counters.retries++;
 			if (n > 0) await this.o.sleep(Math.min(this.o.backoffMs * 2 ** (n - 1), this.o.maxBackoffMs) * (1 + this.o.random()));
 			try {
 				const r = await this.roundTrip({ ...call, ...(this.o.space === undefined ? {} : { space: this.o.space }) });
@@ -132,6 +135,7 @@ export class RemoteSpace implements SpaceLike {
 				last = e;
 			}
 		}
+		if (onExhausted) this.counters.unknown++;
 		throw onExhausted ? onExhausted() : (last as Error);
 	}
 	private rawCall(method: Call["method"], args: Record<string, Json> = {}): Promise<Json> { return this.send({ method, args }); }

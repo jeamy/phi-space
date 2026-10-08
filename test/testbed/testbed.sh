@@ -314,7 +314,7 @@ cmd_up() {
 	local profile=${1:-core} svcs=()
 	case $profile in
 		core) svcs=(runner) ;;
-		federation) svcs=(runner host-a host-b member-1 member-2) ;;
+		federation) svcs=(runner nb-host-a nb-host-b nb-member-1 nb-member-2 host-a host-b member-1 member-2) ;;
 		overlay) svcs=(nb-host-a nb-host-b nb-member-1 nb-member-2) ;;
 		all) ;;
 		*) die "up: unknown profile '$profile' (core, federation, overlay, all)" ;;
@@ -374,7 +374,7 @@ test_examples() {
 	done
 	return $bad
 }
-test_scenario() { in_runner node scenarios/sieve-mobile.mjs all; }
+test_scenario() { in_runner node scenarios/sieve-mobile.mjs all && in_runner node scenarios/sieve-remote.mjs all --kill-host --fresh; }
 
 cmd_test() {
 	local suite=${1:-all} steps=()

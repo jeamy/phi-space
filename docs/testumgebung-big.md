@@ -323,3 +323,36 @@ und `member-2` → `host-a` auf TCP 7421 blockiert (vorher über die Gruppe erla
 `host-a` führt `member-2` nicht mehr in der Peer-Liste; `host-a` → `host-b` bleibt offen. Die Änderung kam ohne Neustart der Agenten an. Das
 Handy `a34xeea` (`space-admin`) erscheint in der Peer-Liste der Hosts (Status Idle, Verbindung entsteht bei Verkehr). Nicht gemessen: wie schnell
 die Änderung ankommt (hier nach wenigen Sekunden bis Minuten seit Entfernen; Zeitpunkt nicht protokolliert).
+
+## 13. Szenario sieve-remote: Dienst, Sockets und Overlay
+
+`scenarios/sieve-remote.mjs` testet den Weg, den ein Handy später nimmt: Der Host ist ein eigener Prozess mit dem Dienst `space` (`SpaceService`)
+auf Unix-Sockets und optional einem TCP-Port; Telefon und Worker sind Clients (`RemoteSpace` über `socketTransport`) und berühren den Storage des
+Hosts nie direkt. Jede Wirkung läuft über Request-Identität, Claims, Polls und Wiederholungen. Das Telefon (Rolle admin, `phone.sock`) legt die
+Aufgaben an, fünf Worker (Rolle member, `worker.sock`) nehmen sie unter einer Transaktion, schreiben das Ergebnis in derselben Transaktion und committen;
+zwei Worker „sterben“ mit gehaltener Aufgabe (die Lease der Transaktion läuft ab, die Aufgabe kehrt zurück). Die Auswertung vergleicht die
+gespeicherten Primzahlen mit Probedivision, prüft genau ein Ergebnis je Block, keine verbliebene Aufgabe und keine offene Transaktion.
+
+```sh
+npm run testbed -- scenario sieve-remote all --kill-host --fresh   # Host mit SIGKILL beendet bei 40 % und wieder gestartet
+```
+
+Der Befehl ist Teil von `test` (Suite `scenario`). Ergebnis auf big, im produktionsnahen Runner (nur gebautes Bündel, Image gehärtet): bestanden, 16 Blöcke,
+550 Primzahlen, Host-Kill überstanden.
+
+**Über das Overlay.** Mit `up federation` laufen die vier Host-Container im Netzwerk-Namespace ihres NetBird-Agenten (`network_mode: service:nb-<host>`) und
+haben dadurch die Overlay-Schnittstelle `wt0`. Der Dienst lauscht auf `host-b` nur an deren Adresse; ein Client auf `host-a` greift darauf zu:
+
+```sh
+npm run testbed -- exec host-b sh -c 'nohup node scenarios/sieve-remote.mjs serve --fresh --listen overlay:7421 --tcp-peer worker >/tmp/serve.log 2>&1 &'
+npm run testbed -- exec host-a node scenarios/sieve-remote.mjs client --connect <Overlay-Adresse von host-b>:7421 --end 6001 --workers 5 --work-ms 3000
+npm run testbed -- partition nb-host-b      # während des Laufs; danach: heal nb-host-b
+```
+
+Gemessen (2026-10-08, 24 Blöcke, 783 Primzahlen): bestanden, auch mit einer Unterbrechung von 10 s (`partition nb-host-b`, dann `heal`): 6 Transportversuche
+wurden mit derselben Identität wiederholt, kein Block doppelt, kein Block verloren, alle Prüfungen ok (Laufzeit 28 s statt etwa 24 s). Außerdem: Der Port 7421 ist
+nur über die Overlay-Adresse erreichbar (die Adresse im Testnetz verweigert die Verbindung), ein anderer Overlay-Port (8080) ist durch die Policy gesperrt.
+`partition` und `heal` wirken auf den Agenten (`nb-<host>`), weil der Host dessen Netzwerk teilt.
+
+Grenzen: Der Test nutzt eine einzige TCP-Identität (`--tcp-peer`, Rolle member) für Telefon und Worker; die Zuordnung Overlay-Peer → Principal (Schicht A) und die
+App-Challenge (Schicht B) gibt es noch nicht. Das Szenario startet den Server mit `nohup` in einem `exec`; ein `kill` des Containers beendet ihn (kein Neustart-Skript).
