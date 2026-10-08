@@ -5,7 +5,7 @@
   "description": "JavaSpaces-style space for @earendil-works/pi-durable",
   "main": "dist/index.js",
   "scripts": {
-    "test": "node --experimental-strip-types --test test-core.test.ts test-meter.test.ts integration.test.ts test-persistence.test.ts test-spaces.test.ts test-claims.test.ts test-budgets.test.ts test-stream.test.ts test-scenario.test.ts",
+    "test": "node --experimental-strip-types --test test-core.test.ts test-meter.test.ts integration.test.ts test-persistence.test.ts test-spaces.test.ts test-claims.test.ts test-budgets.test.ts test-stream.test.ts test-service.test.ts test-scenario.test.ts",
     "example": "node --experimental-strip-types examples/workers.ts",
     "example:pipeline": "node --experimental-strip-types examples/sensor-pipeline.ts",
     "example:chat": "node --experimental-strip-types examples/chat.ts",

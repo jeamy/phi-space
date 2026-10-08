@@ -9,7 +9,7 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
 - Bundle: `npm run bundle` (also synchronizes the sibling mobile runtime and compiled example modules;
   `PI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner: `test-core.test.ts`, `test-meter.test.ts`, `integration.test.ts`,
-  `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-budgets.test.ts`, `test-stream.test.ts`, `test-scenario.test.ts`); crash/reopen helpers for JSONL and SQLite
+  `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-budgets.test.ts`, `test-stream.test.ts`, `test-service.test.ts`, `test-scenario.test.ts`); crash/reopen helpers for JSONL and SQLite
   in `test/support/persistent.ts`
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> integration.test.ts`
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
@@ -23,7 +23,7 @@ Run typecheck and tests after every change.
 ## Layout
 
 - `src/core.ts` pure semantics, `src/doc.ts` the default Space document, `src/spaces.ts` registry and named spaces,
-  `src/claims.ts` request claims/generations, `src/client.ts` `PiSpaces`, `src/index.ts` tools, delivery, reaper,
+  `src/claims.ts` request claims/generations, `src/stream.ts` revisions and the change stream, `src/service.ts` the transport-independent `space` service, `src/client.ts` `PiSpaces`, `src/index.ts` tools, delivery, reaper,
   `src/meter.ts` metrics.
 - `examples/` runnable examples; `examples/sensor-pipeline.ts` is also imported by the pipeline tests.
 - `docs/` plans and documentation: `spaces-v1.md` (current implementation, gaps), `federation-plan-v3.md` (current

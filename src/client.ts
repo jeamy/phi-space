@@ -187,6 +187,11 @@ export class PiSpaces implements SpaceLike {
 		const s = await this.snap();
 		return core.changes(s ?? core.initialState(), afterRev, o);
 	}
+	/** Revision of the newest commit that changed what a plain reader sees (0: none yet), with the stream it belongs to. */
+	async revision(): Promise<{ rev: number; streamId: string }> {
+		const s = (await this.snap()) ?? core.initialState();
+		return { rev: core.revision(s), streamId: core.streamIdOf(s) };
+	}
 	/** Number of entries a `read` with this template would currently see. No commit, no waiting. */
 	async count(tmpl: Template = null, txn: string | null = null): Promise<number> {
 		const s = await this.snap();
