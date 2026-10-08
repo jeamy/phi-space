@@ -1,6 +1,6 @@
 # Spaces betreiben und vom Handy steuern
 
-Stand: 2026-10-07 (Recovery, Bootstrap, Drain, Pause und Folgeaufrufe mit dem präzisierten v3-Vertrag abgeglichen). Architektur und Bedienentwurf zum [Federation-Plan v3](federation-plan-v3.md).
+Stand: 2026-10-08 (historische Restore-Arbeit, vollständige Lauf-Recovery und Boot-Berechtigungen je Space mit v3 abgeglichen). Architektur und Bedienentwurf zum [Federation-Plan v3](federation-plan-v3.md).
 Die Diagramme unterscheiden vorhandenen Code von geplanten Diensten. Bootstrap-Aufrufe und neue
 Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 
@@ -9,14 +9,18 @@ Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 | Komponente | Aktueller Stand |
 |---|---|
 | pi-durable Harness | führt Conversations/Tasks aus und speichert Dokumente über atomare Commits |
-| pi-spaces | Erweiterung mit Agenten-Tools; Space-Dokument Version 4 im Scope der gesamten Harness-Session |
+| pi-spaces | Erweiterung mit Agenten-Tools; Default-Space Version 5 im Scope der Harness-Session; weitere benannte Spaces über Registry und Dokumentfamilie |
 | Lokaler pi-spaces-Client | API-Klasse `PiSpaces` für dieses Dokument; kein Netzwerkclient |
 | Reaper und Delivery | `startService` verarbeitet Ablauf und lokale Events |
 | Monitoring | `stats`, `count`, `Meter`, `watchLive`; lokale Zustände und prozesslokale Raten |
 | pi-termux-mobile | HTTP-Oberfläche auf dem Handy, Remote-Verbindung per SSH/Unix-Socket zu pi-serverd |
 | pi-serverd im mobilen Projekt | SQLite-Harness, gebündelte Spaces-Erweiterung, Reaper/Delivery; Sessions-/Chat-Protokoll |
-| Benannte Spaces, Federation und Spaces-Seite | v3-Zielbild; im geprüften Code nicht vorhanden |
+| Benannte Spaces und lokale Request-Claims | in der Bibliothek vorhanden (`src/spaces.ts`, `src/claims.ts`); Signaturen, vollständige Budgets und Netzwerkdienst noch offen |
+| Federation und Spaces-Seite | v3-Zielbild; im geprüften Code nicht vorhanden |
 
+Der lokale Stand ist in [spaces-v1.md](spaces-v1.md) und im
+[Implementierungsfortschritt](implementierungsplan-v3.md#7-fortschritt) beschrieben. Benannte Dokumente in der
+Bibliothek sind noch keine mobile Space-Verwaltung oder Federation-Abnahme.
 Geprüfte mobile Quellen liegen im Nachbarprojekt: `runtime/server.mjs`, `runtime/pi-serverd.mjs`,
 `runtime/common.mjs`, `runtime/remote-client.mjs`, `runtime/remote-provision.mjs` und
 `runtime/public/constants.js`. Dies ist ein Codebefund, keine ausgeführte mobile E2E-Abnahme.
@@ -174,9 +178,13 @@ Fällt der Koordinator aus, laufen Grants und Router-Lease innerhalb ihrer Laufz
 Space-Operationen der Federation, auch zwischen anderen Hosts. Lokale Worker auf jedem Host arbeiten weiter
 (v3 5.2). Nach Control-Promotion ohne Standby ist zunächst die ausdrücklich autorisierte Recovery-
 Umschaltung auf Single nötig; erst danach kann `setStandby` einen Ersatz einrichten. Die UI zeigt die zeitweise
-schwächere Durability an. Bei Restore braucht jeder wieder teilnehmende Member die lokal bestätigte neue
+schwächere Durability an. Bei **Control-Restore** braucht jeder wieder teilnehmende Member die lokal bestätigte neue
 Autorität; alte Schlüssel-/Gruppenrechte werden nicht aus dem Snapshot reaktiviert. Offline-Members bleiben
 als `recoveryBlocked` sichtbar und in der Vollständigkeitsprüfung enthalten.
+Ein **Data-Restore** wechselt nur die Dateninkarnation des betroffenen Space. Die Control-Autorität bleibt
+gleich; alte Pending-Arbeit wird historisch gesperrt, restaurierte Tasks bleiben `restoredUnverified` bis zur
+fachlichen Freigabe. Betroffene Läufe benötigen den Recovery-Abgleich aus Abschnitt 6; andere Members behalten
+ihre Autorität und Berechtigungen. Die Boot-Nachweise führen diese Berechtigungen je Space (v3 5.5).
 
 Ein Datenbankverzeichnis wird niemals von mehreren unabhängigen Harness-Prozessen gemeinsam geöffnet.
 RemoteSpace ruft den besitzenden Host auf; es öffnet dessen SQLite-/JSONL-Dateien nicht über das Netzwerk.
@@ -270,6 +278,9 @@ Der Script-Vertrag:
 
 1. Config und unterstützte Features prüfen; bei fehlendem Space-RPC/Schema stoppen.
 2. Hosts per SSH vorbereiten; stabile IDs, private State-Verzeichnisse und eindeutigen Storage-Besitzer sichern.
+   Der Host wird nur mit gültigem externem Boot-Zustand aktiv; vor normalem Start jedes Space muss dessen eigene
+   Boot-Berechtigung zur lokal vorbereiteten Konfiguration passen (v3 5.5). Ein wiederholter Apply reaktiviert
+   keine durch Fencing widerrufenen Berechtigungen.
 3. Versioniertes Runtime-Release inklusive passendem Spaces-Bundle bereitstellen; Gesundheit prüfen.
 4. **Overlay-Beitritt:** NetBird-Client auf jedem Host installieren und mit einem Setup-Key aus dem
    Host-Secret-Store beitreten; Gruppe `space-hosts` zuweisen. Die Peer-ID jedes Hosts über die Management-API
@@ -417,13 +428,47 @@ Gate `preparing`, auch wenn auf dem Host bereits Worker laufen.
   Inhalt ergibt `RunGateConflict` ohne Änderung. Jedes ACK belegt `{runId, memberId, authorityId,
   dataIncarnation, controlRevision, state, commandId}`; der Controller wertet nur ACKs aus, deren Autorität und
   Dateninkarnation zum aktuellen Stand des Members passen.
+- **Recovery-Sicht:** Der Member hält Gate, Eintrittssperre und laufenden Steuerauftrag samt Revision,
+  `commandId`, Art, Argument-Hash und Phase dauerhaft zusammen. Eine autorisierte `RunRecoveryView` enthält
+  diese Daten, abgeschlossene stopped-Historie, Autorität/Dateninkarnation, Member-Revision und offene bzw.
+  versiegelte Run-Txns. Damit ist z.B. eine bereits installierte Pause-Sperre der Revision 11 sichtbar, auch
+  wenn der Gate wegen einer laufenden Txn noch `running/10` zeigt. Ein Snapshot des Gates allein ist kein
+  Recovery-Nachweis.
 - **Abgleich nach Restore:** Nach Control-Restore (v3 5.2.1) oder Data-Restore (v3 5.2.2) ist der Lauf
-  `reconciling`. Der Controller liest zuerst alle RunGates der Manifest-Members. Höhere Gate-Revisionen auf einem
-  Member haben Vorrang vor einem älteren Manifest: Der Controller übernimmt die höchste Revision und deren
-  Zustand und vergibt neue Revisionen nur darüber. Ein restaurierter Member mit älterer Gate-Revision erhält den
-  übernommenen Zustand mit neuer Revision. Erst wenn alle Members abgeglichen sind, darf global `paused`,
-  `running` oder `stopped` gemeldet werden; fehlende Members halten den Lauf in `reconciling`. Auf einem
-  restaurierten Member bleiben `restoredUnverified`-Tasks bis `releaseRestored` gesperrt.
+  `reconciling`. Der Controller installiert auf jedem Manifest-Member mit stabiler Unterrequest-ID eine
+  dauerhafte Recovery-Eintrittssperre gegen neue Run-Txns und Lease-Verlängerungen. Bestehende Txns werden wie
+  bei Pause entschieden; versiegelte Kandidaten einer intakten Historie müssen aufgelöst sein. Dann liefert
+  der Member unter dieser Sperre eine `RunRecoveryView`. Fehlende Members verhindern vollständige Freigabe.
+  Restaurierte Views sind als historische Nachweise markiert; alte Pending-Aufträge werden nach v3 5.2.2
+  nicht wieder ausgeführt, ihre beabsichtigte Wirkung bleibt zur fachlichen Klärung sichtbar.
+
+  Der Controller gleicht **alle** Views mit Manifest und erhaltenem Command-Journal ab. Die höchste Revision
+  aus Gate, Sperre, Steuerauftrag und stopped-Historie begrenzt neue Revisionen nach unten; sie wählt **nicht**
+  automatisch einen Zielzustand. Gleiche Revision mit verschiedenen Command-Identitäten/Inhalten,
+  fehlende Auftragsherkunft oder ein unvollständiger Pause-/Resume-/Stop-Übergang ergeben `needsReview` bei
+  weiter bestehender Sperre. Ein lokal installiertes `running` ist keine Freigabe, andere Members automatisch
+  fortzusetzen. Alte Control-Pending-Aufträge werden nach Restore nie automatisch neu ausgesendet.
+
+  Sind alle aktuellen Nachweise vollständig, stabil und identisch `paused` oder `stopped`, darf der Controller
+  diesen Zustand mit frischen ACKs bestätigen; stopped-Historie bleibt terminal. Für unvollständige Übergänge
+  oder Wiederaufnahme von `running` braucht es einen eigenen Admin-Command
+  `resolveRunRecovery {runId, expectedViewHash, decision: pause | stop | resume}` mit Audit. Er bindet die
+  bewusste Entscheidung an die vollständigen Views; der Hash bezieht sich auf deren stabile Steuerdaten,
+  nicht auf Messzeitpunkte oder fachlich unabhängige Space-Mutationen. Vor Annahme wird er geprüft; dann
+  persistiert der Controller Entscheidung, erwartete Steuerstände je Member und Unterrequest-IDs. Jeder
+  Member-Schritt prüft seinen erwarteten Steuerstand per Compare-and-Set. Änderungen durch die bereits
+  journalisierten eigenen Schritte sind Fortschritt desselben Auftrags und legitimieren keine zweite Wirkung.
+  Unerwartete Änderungen führen zu erneuter Klärung, ohne angewendete Teilwirkungen zu verschweigen.
+  `resume` ist bei irgendeinem nachgewiesenen stopped-Zustand unzulässig. Neue Steuerrevisionen liegen über
+  allen beobachteten Revisionen; Pause/Stop verwenden zuerst die vollständige Sperr-/ACK-Barriere. Ein Resume
+  setzt erst den vollständig bestätigten paused-Zustand voraus, verwendet danach eine weitere höhere Revision
+  und folgt der normalen Freigabe mit Teil-ACKs. Recovery-Sperre und Gate werden dabei atomar je Member
+  abgeglichen. Ein Absturz setzt dieselbe Entscheidung fort, nicht eine neue Entscheidung aus einer höchsten Zahl.
+
+  Erst nach vollständigem Abgleich darf ein globaler stabiler Zustand gemeldet werden; während der Freigabe
+  gelten `resuming` und die normale Teilstart-Semantik. `restoredUnverified`-Tasks bleiben auch danach bis
+  `releaseRestored` gesperrt. Dieser Command ersetzt weder die Lauf-Recovery noch die Prüfung eines
+  `CompletionProfile` und reaktiviert keine historischen RPCs.
 - `stopRun` verwendet dieselbe Sperr-/ACK-Barriere und endet in `stopped`; diese runId wird nicht wieder
   gestartet. Pause/Resume/Stop werden pro Run serialisiert. Neue Kommandos überholen keinen unklaren Ausgang;
   Neustart rekonstruiert Revisionen und Teilbestätigungen. Administrative Klärung bleibt erforderlich, wenn ein
@@ -515,6 +560,7 @@ liegen unter **Projekt-Einstellungen → Hosts**; laufende Verwaltungsvorgänge 
 | Space-Details ohne Membership | archivierter/leerer Bestand | Archivieren oder Space löschen | getrennte Lebenszyklusaktion; Referenzen, Rechte und Aufbewahrung prüfen |
 | Neuer Sieblauf | Start, exklusive Obergrenze, Blockgröße, Workerzahl, Ziel-Space/Federation | Lauf starten | runId/Manifest anlegen, Bereiche validieren, Tasks idempotent vorbereiten und Worker zuweisen |
 | Lauf-Details | Segmente, Reservierungen, pausing/pauseIncomplete/paused/resuming/reconciling, Member-ACKs | Pausieren, Fortsetzen, Lauf stoppen | RunGate-Barriere auf allen Manifest-Members; Erfolg erst nach allen ACKs, laufende Txns vorher entscheiden |
+| Lauf-Details nach Restore | Gate-/Sperrrevisionen, offene Steuerphase, Herkunft, fehlende Members, needsReview | Recovery-Entscheidung bestätigen | resolveRunRecovery bindet Admin-Entscheidung an vollständige Views; kein automatisches Resume aus höchster Gate-Revision |
 | Lauf-Details | Vollständigkeit und gespeicherte Primzahlliste | Ergebnis ansehen, herunterladen | autorisierter Ergebnisexport aus committed Results; Teilresultat ausdrücklich kennzeichnen |
 | Worker-Details | registrierte Workerart, Host, Member, gewünschte/aktive Anzahl | Anzahl ändern, Starten, Nach Task stoppen | gewünschte Anzahl und Generation speichern; Supervisor startet/stoppt nur die zugeordneten Worker |
 | Agent-Details | Conversation, Modell, Ziel-Space, Status, Budget | Agent anlegen, konfigurieren, Generation abbrechen | getrennt autorisierte Conversation-/Modellverwaltung; keine Änderung fremder Worker oder Hosts |
@@ -549,7 +595,8 @@ Die bisher am Dokumentende genannten Lücken betreffen sowohl mobile Oberfläche
 Zusätzlich zum v3-Netz-/Space-Protokoll fehlen für die oben genannten Bedienelemente:
 
 - **Laufverwaltung:** startRun/pauseRun/resumeRun/stopRun; dauerhaftes Manifest, idempotente Starts,
-  geschützte lokale RunGates und Sperr-/ACK-Barriere nach Abschnitt 6, Zustandsübergänge und Ergebnisexport.
+  geschützte lokale RunGates, RunRecoveryView/resolveRunRecovery und Sperr-/ACK-Barriere nach Abschnitt 6,
+  Zustandsübergänge und Ergebnisexport.
 - **Workerverwaltung:** registrierte Workerarten, gewünschte Anzahl, Generation und Wiederaufnahme. Lokale
   Ausführung durch den Supervisor über `WorkerAssignment`-Entries (Abschnitt 2); das erweitert die
   Supervisor-Rolle aus v3 und braucht eine eigene Abnahme.
@@ -594,9 +641,16 @@ Diese Fälle sind verpflichtend und noch nicht als implementiert oder getestet a
 8. Gleiche RunGate-Revision mit anderem Command: `RunGateConflict`, Gate unverändert; gleiche Revision mit
    gleichem Command: gespeicherte Bestätigung.
 9. Control-Restore mit älterem Manifest, Members mit höheren Gate-Revisionen; Data-Restore eines Members mit
-   älterem Gate: Lauf bleibt `reconciling`, bis alle Gates abgeglichen sind; danach keine niedrigere Revision.
+   älterem Gate: vollständige Recovery-Views statt Gate-Maximum; Sperre bis zum Abgleich, neue Revisionen oberhalb
+   aller Gate-/Sperr-/Auftragsrevisionen; running nur nach bewusster Admin-Freigabe.
 10. Sieb-Worker committet ohne Ergebnis, mit zwei Ergebnissen oder falschen Grenzen: `CompletionViolation`;
     nur `purgeTasks` mit Admin-Recht leert Tasks ohne Ergebnis.
+11. Pause 11 hat Eintrittssperre installiert, Gate steht noch auf running/10; Control-Restore: Phase 11 bleibt
+    sichtbar, kein automatisches Resume; Admin-Klärung und vollständige Barriere vor Wiederaufnahme.
+12. Teilweise angewendetes Resume, Command-Journal beim Restore verloren; stopped-Historie auf einem Member:
+    needsReview mit Recovery-Sperre; ohne vollständige Views keine Freigabe, stopped niemals wieder running.
+13. Admin entscheidet resolveRunRecovery, dann ACK-Verlust/Controller-Neustart oder Änderung der Views:
+    dieselbe Entscheidung wird idempotent fortgesetzt; neue oder widersprüchliche Views erfordern neue Prüfung.
 
 Weitere Verträge: [Sieb](examples/sieve.md), [lokaler Core](spaces-v1.md),
 [v3-Stufenplan](federation-plan-v3.md#11-stufenplan).

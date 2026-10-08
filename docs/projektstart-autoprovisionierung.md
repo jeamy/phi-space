@@ -1,6 +1,6 @@
 # Projektstart am Handy: Spaces und Monitoring automatisch bereitstellen
 
-Stand: 2026-10-07 (Bootstrap, RunGate-Barrieren und Recovery an v3 angeglichen). **Ergänzender Zielvertrag**, nicht implementiert. Verbindliche Federation-Grundlage
+Stand: 2026-10-08 (Bootstrap, Boot-Berechtigungen je Space und vollständige Lauf-Recovery an v3 angeglichen). **Ergänzender Zielvertrag**, nicht implementiert. Verbindliche Federation-Grundlage
 ist [v3](federation-plan-v3.md); die [v2-Zusammenfassung](federation-plan-v2-summary.md) bleibt ein Archiv.
 Architektur und manueller Bootstrap: [Betrieb und mobile Steuerung](betrieb-und-mobile-steuerung.md).
 
@@ -208,11 +208,20 @@ Diese Projektzustände ersetzen nicht die v3-Zustände einzelner Commands. Nicht
 auflösbare Wirkungen erhalten `needsReview` und sperren ihre abhängigen Schritte, nicht unabhängige Projekte.
 Kein automatischer Ersatzauftrag nach ResultExpired oder Restore. Der Controller setzt nach Neustart
 rekonstruierte Langzeitoperationen fort, ohne deren Abschluss zur globalen Startbedingung zu machen.
+Nach Control-/Data-Restore erhaltene Pending-Zustände sind historische Nachweise, keine fortzuführenden
+Langzeitoperationen. Betroffene Läufe bleiben `reconciling` bzw. `needsReview`, bis die vollständigen
+`RunRecoveryView`-Nachweise nach [Betrieb, Abschnitt 6](betrieb-und-mobile-steuerung.md#6-beispiel-primzahlsieb-steuern)
+abgeglichen sind. Eintrittssperren und angefangene Steuerphasen zählen ebenso wie Gates; eine höchste
+running-Revision löst kein automatisches Resume aus. Die Wiederaufnahme benötigt `resolveRunRecovery`
+mit Admin-Entscheidung; `releaseRestored` gibt nur restaurierte Tasks frei und ersetzt diesen Abgleich nicht.
 
 Vor Workerstart müssen alle im Manifest erforderlichen Members, Rechte, Space-Features, Policy-Versionen,
 Speicherbudgets und frischen Monitor-Heartbeats geprüft sein. Bei primary/sync muss zusätzlich der feste
 Standby tatsächlich bestätigen können. Ein Ausfall erzeugt keinen stillen Wechsel zu expand oder async.
 LWW/set sind für die exklusive Vergabe von Sieb-Tasks unzulässig.
+Zusätzlich muss jeder Space eine externe Boot-Berechtigung für seine aktuelle Autorität/Dateninkarnation,
+Rolle und vorhandene Replikatversion besitzen (v3 5.5). Die Bereitstellung gleicht lokale Konfiguration und
+Nachweis ab, ohne Berechtigungen anderer Spaces zu überschreiben oder gefencte Hosts automatisch zu reaktivieren.
 
 Ein schon belegter Host wird nicht stillschweigend neu gestartet. Release- und Schemawechsel benötigen
 einen kompatiblen Upgradepfad; konfliktbehaftete Updates warten auf ein vorgesehenes Wartungsfenster.

@@ -1,9 +1,12 @@
 # Föderierte Spaces v3 – konsolidierter Plan
 
-Stand: 2026-10-07 (dritte Konsistenzprüfung: Data-Restore, Retry nach Promotion, erzwungene Abschlüsse, Seitengrößen, Boot-Merkmal; davor: Recovery-Entscheidungen, Autoritätswechsel, Folgeaufrufe, Enrollment, Drain und Commit-Budgets verbindlich präzisiert). Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
+Stand: 2026-10-08 (vierte Konsistenzprüfung: Nachweis für `NotCommitted`, historische Pending-Arbeit, Lauf-Recovery, Boot-Berechtigungen je Space und zu kleine Seitenbudgets präzisiert). Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
 
-**Status:** Zielvertrag. Nichts davon ist implementiert oder abgenommen. Eine Garantie gilt erst als erfüllt, wenn
-die zugehörigen Abnahmekriterien (Abschnitt 11) und Gates (Abschnitt 13) erfüllt sind.
+**Status:** Zielvertrag mit teilweise implementierten lokalen Grundlagen: Doc-Version 5, benannte Spaces,
+Identitäten, lokale Request-Claims und persistente Testhilfen sind vorhanden. Der aktuelle Umfang und die offenen
+Teile stehen in [spaces-v1.md](spaces-v1.md) und im [Implementierungsfortschritt](implementierungsplan-v3.md#7-fortschritt).
+Federation, Netzwerk-RPC, Recovery und die Betriebserweiterung sind noch nicht abgenommen. Eine Garantie gilt
+erst als erfüllt, wenn ihre Abnahmekriterien (Abschnitt 11) und Gates (Abschnitt 13) erfüllt sind.
 
 **Herkunft:** Grundlage ist die überarbeitete v1, weil sie den genaueren Vertrag enthält. Aus v2 sind die
 brauchbaren Vorschläge übernommen und, wo nötig, korrigiert. Vorschläge, die Garantien der v1 brechen, sind nicht
@@ -68,7 +71,7 @@ Bewertung des ursprünglichen Entwurfs (unverändert gültig):
 | lww/set | Eventuelle Konvergenz nach vollständigem Austausch; keine exklusive Arbeitsvergabe. |
 | Ergebnisfrist | Nach Löschung eines abgeschlossenen Ergebnisses (6.2) liefert ein Retry `ResultExpired` ohne Mutation. Ein genommener Entry, dessen Ergebnis bis dahin nie abgeholt wurde, ist für den Aufrufer verloren. |
 | Restore (Data, 5.2.2) | Neue Dateninkarnation nur dieses Space bei unveränderter Control-Autorität. Alte Generationen liefern `IncarnationChanged`; abhängige Router-Arbeit und Läufe werden `needsReview`; restaurierte exklusive Entries bleiben bis `releaseRestored` gesperrt. |
-| Unbekannter Request nach Promotion | Eine unbekannte Request-ID mit älterer `primaryEpoch` derselben Autorität erhält in primary/sync `NotCommitted`: Jede versiegelte, gesendete oder bestätigte Wirkung steht in der Historie des beförderten Standbys. Der Client darf danach mit neuer ID neu beginnen. |
+| Unbekannter Request nach Promotion | `NotCommitted` nur nach dem vollständigen Nachweis und dauerhaftem Negativclaim aus 6.2: erhaltene Generation, gleiche Autorität/Dateninkarnation, verlustfreie Historie und ausgeschlossenes altes Replikat. Erst danach darf der Client mit neuer ID beginnen. Ablauf oder verlorene Historie liefern keine solche Freigabe. |
 | Restore (single) | Alte Generationen erlauben keine neuen Wirkungen (`IncarnationChanged`). Erhaltene Member-Claims bleiben für neu autorisierte Auflösung nutzbar; verlorener Journal-/Claim-Zustand erfordert fachliche Klärung (`needsReview`, 5.2.1). |
 
 Netzfehler können einen unbekannten Ausgang hinterlassen. Der Client fragt mit derselben Request-ID nach und
@@ -311,7 +314,9 @@ Request-Generation, Request-ID) sowie bei primary-Zielen die `primaryEpoch`.
   gespeicherten Höchstwerte. Bei primary-Zielen muss `targetPrimaryEpoch` für **neue** Requests der eigenen
   entsprechen. Für Retries und Folgeaufrufe zu einem vorhandenen Claim genügt eine `targetPrimaryEpoch` derselben
   Autorität, die nicht größer als die eigene ist; der Claim wird dann unabhängig von der Epoche beantwortet bzw.
-  fortgeführt. Eine unbekannte ID mit älterer Epoche ergibt `NotCommitted` (2.1), nie eine neue Wirkung.
+  fortgeführt, sofern der Claim nicht aus einem verlustbehafteten Restore stammt (5.2.2).
+  Eine unbekannte ID mit älterer Epoche wird nach der Prüfreihenfolge aus 6.2 aufgelöst;
+  `NotCommitted` ist keine pauschale Antwort auf einen fehlenden Claim und erzeugt keine fachliche Wirkung.
   `operation` und `argumentHash` müssen zum tatsächlichen Aufruf passen; der Scope muss ihn erlauben.
 - **Neue Operationen:** Generation innerhalb der Zulassungsfrist; ältere Policy-Versionen werden abgewiesen.
   Bei einer neueren Version lädt der Member die Policy nach; ohne Erfolg wird abgewiesen.
@@ -524,7 +529,9 @@ Restore ist keine Promotion, braucht aber dieselben Schutzschritte gegen einen z
    Austausch werden lokale Mutationen angehalten und alte versiegelte Kandidaten nach 7.2 aufgelöst. Bei
    replizierten Data Spaces bestätigen alle zugelassenen Replikate den Übergang, oder ein fehlendes Replikat
    wird nach 5.3.1 gefenct und ausgeschlossen; bis dahin kein Member-ACK. Daten-Primary-Epochen beginnen im
-   neuen Namensraum bei 1; vorhandene Daten/Claims bleiben erhalten. Auf dem restaurierten Control Space gilt
+   neuen Namensraum bei 1; vorhandene Daten/Claims bleiben erhalten. Vor dem Member-ACK wird auch dessen externe
+   Boot-Berechtigung nach 5.5 auf die neue Autorität und die bestätigte lokale Konfiguration abgeglichen.
+   Auf dem restaurierten Control Space gilt
    derselbe Übergang; seine alten Pending-Requests werden nie automatisch neu ausgesendet.
    Offline-Members bleiben `recoveryBlocked`, erhalten keine neuen Grants und werden nicht aus Suchmengen
    entfernt: vollständige Abfragen melden weiterhin Unverfügbarkeit. Erst nach lokalem Übergang und ACK werden
@@ -545,27 +552,57 @@ Restore ist keine Promotion, braucht aber dieselben Schutzschritte gegen einen z
 
 Verliert ein Data Member seinen Storage, während Control Space und andere Members gesund sind, wechselt **nicht**
 die Control-Autorität. Nur dieser Space erhält eine neue Dateninkarnation. Der Ablauf ist ein Supervisor-Command
-`restoreDataSpace {space, snapshotRef, recoveryId}` des Control-Primary mit Ausführung am Zielhost:
+`restoreDataSpace {space, snapshotRef, recoveryId, targetHostId, expectedDataIncarnation,
+expectedPrimaryEpoch, expectedReplicaConfigVersion?}` des Control-Primary mit Ausführung am Zielhost.
+Der Supervisor journalisiert und serialisiert den Übergang je Space gegen Policy-/Replikatwechsel; dieselbe
+Recovery-ID mit denselben Argumenten setzt ihn fort, andere Argumente ergeben `RequestConflict`.
 
 1. **Alten Host sperren:** Fencing nach 5.5 bzw. F15; ohne Sperre kein Restore. Der Member ist bis Schritt 6
-   `recoveryBlocked`; vollständige Abfragen melden ihn als fehlend.
-2. **Neue Dateninkarnation:** Der Snapshot wird mit neuer Inkarnation und `primaryEpoch` = bisherige + 1
-   installiert (gleiche Autorität, also vergleichbar). Neue lokale IDs verwenden die neue Inkarnation;
-   restaurierte Entries behalten ihre IDs.
+   `recoveryBlocked`; vollständige Abfragen melden ihn als fehlend. Bei einem primary/sync-Member ist zuerst
+   der feste Standby zu prüfen: Eine intakte synchrone Historie wird per Promotion fortgeführt, nicht durch einen
+   älteren Snapshot ersetzt. Sind alle synchronen Kopien verloren, werden alle bisherigen Replikate gefenct
+   und ausgeschlossen; der Restore startet ausdrücklich in primary/single. F15 gilt nur für Single-Restore
+   vor Gate 2, nicht als Ersatz für das Fencing einer bestehenden sync-Konfiguration.
+2. **Neue Dateninkarnation:** Der Snapshot wird unter geschlossener Admission mit neuer Inkarnation installiert.
+   `primaryEpoch` steigt über den letzten bestätigten Wert aus Control und externem Boot-Nachweis, nicht bloß
+   über den älteren Snapshot-Wert. Fehlende oder widersprüchliche Versionsnachweise blockieren den Übergang.
+   Der Restore erhält eine neue, höhere lokale Replikatkonfigurationsversion, sofern der Space eine solche hat.
+   Neue lokale IDs verwenden die neue Inkarnation; restaurierte Entries behalten ihre IDs.
 3. **Generationen und Claims:** Alle Request-Generationen der alten Inkarnation werden für neue IDs ungültig
    (`IncarnationChanged`). Im Snapshot enthaltene Claims bleiben gemäß Frist abrufbar, sind aber als
-   `restoredHistory` markiert: Ihr Ergebnis kann nach dem Snapshot-Stand überholt worden sein.
-4. **Quarantäne restaurierter Entries:** Alle restaurierten Entries von Typen mit exklusiver Vergabe (expand,
-   primary; nicht lww/set) erhalten `restoredUnverified`. Sie sind lesbar, aber weder nehmbar noch in Txns
+   `restoredHistory` markiert und nur historisch abfragbar. Ein darin bereits entschiedenes Ergebnis bleibt als
+   Ergebnis zum Snapshot-Zeitpunkt erkennbar; ein dort noch offener Request hat heute einen unbekannten Ausgang.
+   **Keine alte Pending-Arbeit wird fortgeführt:** Pending-Claims, Waiter, Registrierungen, Folgeaufträge,
+   Txns und versiegelte Kandidaten des Snapshots sind Auditmaterial, keine ausführbaren Aufträge. Offene Claims
+   erhalten eine Auflösungssperre `needsReview`, ohne ihren historischen Ausgang als `cancelled` oder `failed`
+   umzuschreiben. Die neue aktive Kopie löst alte Reservierungen/Lesesperren lokal, verwirft unsichtbare
+   Txn-Writes und installiert keine alten Waiter, Registrierungen oder Folgeaufträge. Das ist Bereinigung einer
+   restaurierten Kopie, kein Abort auf dem verlorenen Original. Auch ein kopierter CommitIntent wird nie erneut
+   angewendet; 7.2 gilt für die intakt fortgeführte Historie, nicht für einen verlustbehafteten Snapshot-Restore.
+   Historische Mailbox-Inhalte werden entsprechend markiert; ihre alte Mailbox-Identität wird nicht wieder
+   aktiviert. Neue Mailboxes erhalten neue Identitäten. Bereinigung und Audit erfolgen crashfest in budgetierten
+   Schritten bei gesperrter Admission; Freigabe erst nach vollständigem Abschluss. `releaseRestored` gibt nur
+   Entries frei, niemals alte Claims oder Aufträge. Ein neuer fachlicher Auftrag braucht eine bewusste Klärung
+   und eine neue Request-ID.
+4. **Quarantäne restaurierter Entries:** Alle restaurierten Nutz-Entries von Typen mit exklusiver Vergabe
+   (local, expand und primary; nicht lww/set) erhalten `restoredUnverified`. Interne Steuerdaten, etwa RunGates,
+   werden über ihren geschützten Recovery-Pfad abgeglichen, nicht als frei nehmbarer Nutzbestand installiert.
+   Die Nutz-Entries sind lesbar, aber weder nehmbar noch in Txns
    verwendbar. Freigabe nur per Admin-Command `releaseRestored {space, recoveryId, scope}` mit `scope` als
    Typ, Lauf oder Entry-Liste. Der Admin entscheidet damit fachlich, dass erneute Verarbeitung zulässig ist
    (z.B. idempotente Sieb-Tasks); für nicht idempotente Aufgaben bleibt die Löschung oder manuelle Klärung.
-5. **Router und Läufe** (sobald ein Router existiert, ab Stufe 2): Der Router markiert alle Unterrequests auf diesen Member, deren Claims nach dem
-   Snapshot-Stand liegen oder fehlen, als `needsReview` (5.1). Zielbindungen bleiben erhalten; es gibt keine
+5. **Router und Läufe** (sobald ein Router existiert, ab Stufe 2): Der Router markiert alle Unterrequests auf diesen Member,
+   deren Claims im Snapshot offen sind, nach dem Snapshot-Stand liegen oder fehlen, als `needsReview` (5.1).
+   Historische Ergebnisse werden nur als entsprechend markierte Nachweise übernommen. Zielbindungen bleiben erhalten; es gibt keine
    Neuplatzierung auf andere Members. Lauf-Manifeste mit Tasks auf diesem Member werden `needsReview`, bis ihr
-   Controller die Gates neu abgeglichen hat ([Betrieb 6](betrieb-und-mobile-steuerung.md)).
-6. **Freigabe:** Erst nach Schritt 1–5 und Ablauf der Restlaufzeit alter Grants nimmt der Member wieder
-   entfernte Arbeit an. Der alte Host kehrt nur nach Neuaufbau zurück.
+   Controller die vollständigen Recovery-Views abgeglichen hat ([Betrieb 6](betrieb-und-mobile-steuerung.md)).
+   Schritt 5 persistiert diese Sperren; er wartet nicht auf die spätere fachliche Entscheidung. Begrenzte
+   Status-/Recovery-Aufrufe bleiben schon während `recoveryBlocked` für die vorgesehene Dienstrolle zugänglich.
+6. **Freigabe:** Die Supervisoren gleichen die neue Dateninkarnation, Ziel-Replika, Epoche und Durability mit
+   dem Control Space und der externen Boot-Berechtigung nach 5.5 ab. Unklarer Ausgang bleibt `recoveryBlocked`;
+   ein Snapshot darf die alte Routing-/Replikatkonfiguration nicht eigenmächtig reaktivieren. Erst nach
+   Schritt 1–5, diesem Abgleich und Ablauf der Restlaufzeit alter Grants nimmt der Member wieder entfernte Arbeit
+   an. Der alte Host kehrt nur nach Neuaufbau zurück.
 
 Ein Data-Restore ist damit immer verlustbehaftet; 2.1 begrenzt die Take-Garantie entsprechend.
 
@@ -578,13 +615,17 @@ Keine automatische Wahl bei bloßem Timeout. Pro primary-Space ein fester Standb
    konkurrierende Übergänge werden per lokalem Compare-and-Set serialisiert.
 2. **Fencing-Nachweis** nach 5.5. Netzwerk-Timeout oder bloße Admin-Behauptung genügen nicht.
 3. Nur der feste synchrone Standby übernimmt; er prüft Historie und Replikationsvertrag (7.2) sowie sein
-   Boot-Merkmal `active` mit aktueller `replicaConfigVersion` (5.5). Lücken oder abweichendes Merkmal → Abbruch.
-4. Supervisor erhöht `primaryEpoch` des Space atomar und aktiviert ihn. Ist es der Control Space, wartet er den
+   Host-Zustand `active` und seine gültige Boot-Berechtigung als Standby für genau diesen Space (5.5).
+   Lücken oder abweichende Berechtigung → Abbruch.
+4. Supervisor erhöht `primaryEpoch` des Space atomar. Normale Mutationen bleiben gesperrt, bis seine externe
+   Boot-Berechtigung die neue Epoche und Rolle Primary bestätigt (5.5). Ist es der Control Space, wartet er den
    Ablauf der alten `RouterLease` ab, erhöht `routerEpoch`, sendet die `EpochNotice` (5.2) und startet den Router
    zunächst im Zustand `awaitingDurability` ohne neue Lease. Dieser lokale Promotions-/Recovery-Commit ist
    durch Fencing autorisiert und benötigt den ausgeschlossenen alten Primary nicht. Mutierende Requests tragen Autorität und
    `primaryEpoch`; neue Requests mit alten Werten werden abgewiesen, Retries bekannter Claims nach 4.4
-   beantwortet, unbekannte IDs alter Epoche mit `NotCommitted`. Router-Recovery mit neuer Lease beginnt erst nach Schritt 6.
+   beantwortet; unbekannte IDs alter Epoche werden ausschließlich nach 6.2 aufgelöst. Eine erforderliche
+   Negativentscheidung bleibt bis zur Wiederherstellung schreibbarer Durability pending.
+   Router-Recovery mit neuer Lease beginnt erst nach Schritt 6.
 5. Der alte Host bleibt gefenct. `release` hebt die Sperre nur in den **Quarantänemodus** auf (5.5): Der Host
    bootet, sein Supervisor startet die betroffenen Spaces ausschließlich als Replikat-Empfänger ohne Gate-Zugang
    für Clients, ohne Agenten und ohne Router. Erst nach vollständiger Synchronisierung über Snapshot plus Stream
@@ -619,6 +660,8 @@ Primary**:
    schließt das Gegenreplikat aus und speichert Recovery-ID/Result in demselben lokalen Commit. Recovery-ID und
    erwartete Versionen sichern Wiederholung und Konkurrenz ab. Das ist ein ausdrücklich durch Fencing
    autorisierter lokaler Recovery-Commit ohne Standby; keine Transaktion mit dem Control Space.
+   Vor Freigabe lokaler Arbeit wird die externe Boot-Berechtigung des Primary auf die neuen Versionen
+   und Durability abgeglichen (5.5); unklarer Ausgang hält die Admission gesperrt.
 5. **Control-Policy abgleichen:** Der Supervisor hält eine signierte `ReplicaConfigNotice` mit Space,
    Autorität, neuen Versionen, Durability und Recovery-ID dauerhaft zur Abholung bereit. Der Router übernimmt
    sie idempotent in einem separaten Control-Commit und erhöht `policyVersion`; diese Übernahme darf ausschließlich
@@ -637,7 +680,10 @@ Primary**:
    Replikatkonfiguration mit höherer Version und `primaryEpoch` dauerhaft auf beiden Replikaten installieren.
    Das Ziel bestätigt diese Konfiguration vor ihrer Aktivierung am Primary; unklarer Ausgang bleibt gesperrt und
    wird über dieselbe Command-/Unterrequest-ID geklärt. Nach beidseitiger Bestätigung setzt der ausführende
-   Supervisor das Boot-Merkmal des Ziels von `quarantine` auf `active` mit der neuen `replicaConfigVersion` (5.5). Danach Policy wie oben abgleichen und Writes freigeben.
+   Supervisor die externen Boot-Berechtigungen **beider** Replikate auf die neue Konfiguration, Epoche und
+   jeweilige Rolle (5.5). Erst danach darf der Zielhost von `quarantine` auf `active` wechseln. Danach Policy
+   wie oben abgleichen und Writes freigeben. Auch der bisherige Primary braucht die aktualisierte Berechtigung;
+   ein Neustart zwischen lokalem Commit und externem Abgleich setzt ausschließlich diesen Übergang fort.
    Ein Standby-Wechsel bei noch intakter sync-Konfiguration hält den alten Standby bis zur bestätigten neuen
    Konfiguration gebunden; anschließend darf nur der neue Standby als Promotionsziel gelten. Das alte Replikat
    muss seinen Ausschluss dauerhaft bestätigen oder vor Freigabe der neuen Konfiguration gefenct werden.
@@ -680,8 +726,22 @@ interface FencingAdapter {
   fence(hostId: string, reason: string): Promise<FenceProof>;     // stoppen UND Neustart sperren
   verify(proof: FenceProof): Promise<boolean>;                     // vom Supervisor unabhängig nachgeprüft
   release(hostId: string, mode: "quarantine"): Promise<void>;      // nur in den Quarantänemodus (5.3 Schritt 5)
+  readBootState(hostId: string): Promise<HostBootState>;
+  compareAndSetBootState(hostId: string, expectedVersion: number, next: HostBootState): Promise<HostBootState>;
 }
 type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: Json; restartLocked: boolean };
+type SpaceBootPermit = {
+  state: "active" | "revoked";
+  authorityId: string; dataIncarnation: string;
+  role: "local" | "primary" | "standby" | "entryReplica";
+  primaryEpoch?: number; replicaConfigVersion?: number;
+  durability?: "single" | "sync";
+  transitionId: string;
+};
+type HostBootState = {
+  hostId: string; version: number; state: "active" | "fenced" | "quarantine";
+  spaces: Record<string, SpaceBootPermit>; // Schlüssel ist die stabile spaceId
+};
 ```
 
 - Zulässig sind nur Adapter, deren Zustand der Supervisor selbst über eine unabhängige Schnittstelle abfragt:
@@ -689,25 +749,47 @@ type FenceProof = { hostId: string; kind: string; observedAt: number; evidence: 
 - `restartLocked` muss erfüllt sein (z.B. Steckdose bleibt aus, VM deaktiviert, Restart-Policy entfernt). „Power
   off“ allein genügt nicht.
 - `release` ist nicht zirkulär: Es gibt keine allgemeine Freigabe, sondern nur den Quarantänemodus.
-- **Boot-Merkmal:** Jeder Host hat ein außerhalb des Hosts gespeichertes Merkmal (z.B. Cloud-Metadaten/Tag,
-  Hypervisor-Notiz) `HostBootState {hostId, state: active | fenced | quarantine, replicaConfigVersion,
-  recoveryId}`. Der Supervisor liest es bei jedem Boot:
+- **Boot-Merkmal:** Jeder Host hat einen außerhalb des Hosts gespeicherten, versionierten `HostBootState`
+  (z.B. Cloud-Metadaten oder Recovery-Register mit unabhängiger API). Die Host-Sperre ist global; Autorität,
+  Dateninkarnation, Rolle und Replikatversion werden **je Space** in `spaces` geführt. `version` schützt den
+  atomaren Compare-and-Set dieses Registers, ist keine `replicaConfigVersion`. Änderungen an Space A erhalten
+  die bestätigten Berechtigungen von Space B; konkurrierende Übergänge lesen nach CAS-Konflikt neu.
+  Der Supervisor liest und prüft den Zustand bei jedem Boot:
 
   | Zustand | gesetzt durch | Boot-Verhalten |
   |---|---|---|
-  | `active` | Provisionierung beim Bootstrap; Abschluss von `setStandby` | normaler Start gemäß lokaler Replikatkonfiguration |
-  | `fenced` | `fence` (Promotion, 5.2.1, 5.2.2, 5.3.1) | Host bleibt aus; startet er dennoch, kein Space und kein Gate |
+  | `active` | Provisionierung; nach bestätigter Synchronisierung durch `setStandby` | jeder Space startet nur mit exakt passender eigener Boot-Berechtigung und lokaler Konfiguration |
+  | `fenced` | `fence` (Promotion, 5.2.1, 5.2.2, 5.3.1) | Host bleibt aus; startet er dennoch, kein Space und kein Gate; alle bisherigen Space-Berechtigungen sind widerrufen |
   | `quarantine` | `release(…, "quarantine")` | nur Replikat-Empfang ohne Gate-Zugang, Agenten und Router (5.3 Schritt 5) |
 
-  Fehlt das Merkmal oder ist es unlesbar, startet kein Space schreibend; das betrifft nicht den Erststart, weil
-  die Provisionierung `active` vor dem ersten Start setzt. Der Übergang `quarantine → active` geschieht nur im
-  letzten Schritt von `setStandby` (5.3.1 Schritt 7): Nachdem beide Replikate die neue Replikatkonfiguration
-  bestätigt haben, setzt der ausführende Supervisor über den Adapter `active` mit genau dieser
-  `replicaConfigVersion`. Ein Promotionsziel muss `active` mit seiner aktuellen `replicaConfigVersion` tragen
-  (5.3 Schritt 3). Ein veralteter Quarantäne-Marker kann daher keinen autorisierten Primary auf Empfang
-  zurückstufen: Ein Host wird erst nach diesem Übergang Standby und damit Promotionsziel. Ein Marker mit
-  kleinerer `replicaConfigVersion` als die lokal bestätigte Konfiguration ist ein Konfigurationsfehler und
-  blockiert den schreibenden Start bis zur Klärung über den Recovery-Pfad.
+  Fencing setzt auch jede bisherige Space-Berechtigung auf `revoked`; die letzten Versionswerte bleiben im
+  unabhängigen Register/Audit erhalten und dürfen nicht durch einen Snapshot oder ein älteres Register-Backup
+  zurückgerollt werden. Nur ein neuer bestätigter Übergang installiert wieder eine `active`-Berechtigung.
+  Der globale Host-Zustand `active` allein hebt keinen Space-Widerruf auf.
+
+  Fehlt der Host-Zustand oder ist er unlesbar, startet kein Space schreibend. Bei gültigem `active` blockiert
+  eine fehlende oder abweichende Space-Berechtigung nur diesen Space; andere bestätigte Spaces bleiben nutzbar.
+  Für Erststart und Anlage weiterer Spaces installiert die autorisierte Provisionierung vor Aufnahme normaler
+  Arbeit die zur lokal vorbereiteten Konfiguration passende Berechtigung. Bloßer Prozessneustart oder erneuter
+  Script-Apply darf keine widerrufene Berechtigung wiederherstellen.
+
+  `release` erhält den Host in Quarantäne; alte Berechtigungen werden nicht wiederbelebt. `quarantine → active`
+  ist nur am Ende von `setStandby` zulässig, nach bestätigter Synchronisierung und Installation der neuen
+  Berechtigungen. Andere Spaces eines gefencten Hosts brauchen jeweils einen eigenen bestätigten Übergang;
+  die Freigabe eines Standbys reaktiviert keine anderen alten Primaries.
+
+  **Alle Rollen-/Versionswechsel** (Promotion, Single-Umschaltung, `setStandby`, Control-/Data-Restore)
+  journalisieren vorab erwarteten Registerstand, Zielkonfiguration und stabile Übergangs-ID. Sie gleichen die
+  externen Berechtigungen aller weiter zugelassenen Replikate ab; ein ausgeschlossenes Replikat bestätigt den
+  Widerruf oder bleibt gefenct. Vor normaler Schreibfreigabe müssen lokale Konfiguration und externer Nachweis
+  exakt übereinstimmen und die Space-Berechtigung muss `active` sein, einschließlich Autorität,
+  Dateninkarnation, Rolle und vorhandener Versionsfelder. Bei primary/standby sind Epoche, Replikatversion
+  und Durability Pflichtfelder, keine optional weglassbaren Prüfungen.
+  Es gibt keine atomare Transaktion mit der Anbieter-API: Nach Absturz oder ACK-Verlust wird derselbe Übergang
+  über lokale und externe Nachweise geklärt. Bis dahin keine fachlichen Mutationen, Grants oder Lease-Erneuerungen
+  des betroffenen Space. Der lokale Recovery-Zugang bleibt offen; eng begrenzte, bereits journalisierte
+  Konfigurations-/Recovery-Schritte dürfen den Abgleich fortsetzen, nie unabhängige Arbeit. Ein Promotionsziel
+  braucht vorher eine passende Standby-Berechtigung; vor Aktivierung braucht es die passende Primary-Berechtigung.
 - Ein Marker-Datei-Adapter ist **nur im Simulator** zulässig; er ist eine Behauptung, kein Nachweis.
 - Welcher Adapter eingesetzt wird, hängt von der Hardware der Hosts ab (offene Frage F1, Gate 2).
 
@@ -778,8 +860,9 @@ bekannter Claim aber auch nach Promotion beantwortet (4.4).
 **RPC-Claims:** Schlüssel `(principal, spaceId, requestGeneration, requestId)`; gespeichert werden Methode,
 kanonischer **Argument-Hash** der fachlichen Argumente (keine Klartext-Argumente), einmalige Deadline, Zustand `pending | done | cancelled`
 und das **Ergebnis dauerhaft** im selben Commit wie die Operation. Abweichende Wiederverwendung → `RequestConflict`.
-Ein Retry liefert das gespeicherte Ergebnis, ohne erneut zu mutieren. Generationen enthalten die
-Autoritätsinkarnation; der Claim-Namensraum bleibt damit nach Restore eindeutig. Vor dem eigentlichen sync-
+Ein Retry liefert das gespeicherte Ergebnis, ohne erneut zu mutieren. Generationen sind neben Principal/Space
+an Autoritäts- und Dateninkarnation gebunden; der Claim-Namensraum bleibt damit nach Restore eindeutig.
+Historische Restore-Claims sind nur nach 5.2.2 auflösbar, nie als aktive Pending-Arbeit fortführbar. Vor dem eigentlichen sync-
 Commit kann ein Claim als `pending/commitSealed` markiert sein (7.2); Cancel kann dann keine erfolglose
 Entscheidung mehr erzwingen. Transport-Timeout ist niemals eine solche Entscheidung.
 
@@ -811,6 +894,33 @@ Abschluss; Hash-Einträge bleiben mindestens bis zum Ende von Zulassungsfrist un
 Danach ist `RequestExpired` statt `ResultExpired` zulässig, niemals eine neue Wirkung. Neue mutierende
 Folgeaufrufe beziehen eine aktuelle eigene Generation; die referenzierte Ursprungsgeneration darf abgelaufen sein.
 
+**Auflösung unbekannter IDs nach Promotion:** Nach Authentifizierung, aktueller Rechteprüfung und Prüfung der
+Zielreferenz gilt diese Reihenfolge; ein Fehler ermächtigt nie allein zum automatischen Ersatzrequest:
+
+1. Andere Autorität/Dateninkarnation oder verlustbehafteter Restore: `IncarnationChanged`; ein vorhandener
+   historischer Claim bleibt ausschließlich als Nachweis lesbar, offener/verlorener Ausgang wird `needsReview`.
+2. Passender bekannter Claim, einschließlich Claims eines versiegelten Kandidaten: Methode/Argument-Hash prüfen,
+   dann gespeichertes Ergebnis, `ResultExpired` oder Pending-Zustand liefern. Generationsablauf löscht einen
+   vorhandenen Nachweis nicht; er erlaubt aber keine neue fachliche Mutation unter einer unbekannten ID.
+3. Fehlender Claim und unbekannte oder abgelaufene Zulassungsgeneration: `RequestExpired`, nicht `NotCommitted`.
+   Ein fehlender Hash nach zulässiger Bereinigung beweist keinen erfolglosen Ausgang.
+4. Fehlender Claim in einer erhaltenen, noch gültigen Generation und ältere `primaryEpoch`: `NotCommitted` nur,
+   wenn die Historie seit Ausgabe der Generation verlustfrei fortgeführt wurde, alle angenommenen Claims und
+   entschiedenen Wirkungen dieser Generation erhalten sind, sämtliche versiegelten Kandidaten geprüft wurden
+   und alle früheren Replikate als mögliche Schreibquellen ausgeschlossen sind. Der Promotionsnachweis bindet
+   diese Abdeckung an Space, Autorität, Dateninkarnation, Generation und frühere Epochen. Nachweis fehlt oder
+   ist unvollständig: `OutcomeUnknown`, zugehörige Router-Arbeit `needsReview`, kein automatischer Ersatz.
+
+Vor Rückgabe von `NotCommitted` persistiert der aktuelle Primary einen terminalen **Negativclaim** für den
+ursprünglichen Claim-Schlüssel, Methode und Argument-Hash, mit Ergebnis `NotCommitted` und Promotionsnachweis.
+Er unterliegt denselben Durability-, Budget- und Aufbewahrungsregeln wie andere entschiedene Claims. Prüfung und
+Negativclaim entstehen serialisiert gegen Annahme/Versiegelung desselben Requests. Ein verspäteter Original-
+Aufruf, auch mit aktualisiertem Rahmen, trifft diesen Claim und kann keine Wirkung mehr erzeugen. Ohne
+bestätigungsfähige Durability bleibt diese Auflösung pending; ein bloßer Lese-Miss ist keine Negativentscheidung.
+Erst dieses dauerhaft entschiedene Ergebnis erlaubt dem Client einen neuen Request. Ein nur lokal versiegelter,
+nie am Standby angenommener Kandidat kann bei Verlust des Primary-Storage fehlen; Fencing verhindert seine
+spätere Wirkung. Alle am Standby angenommenen und alle bestätigten Wirkungen bleiben dagegen erhalten.
+
 **Seitengrößen:** Snapshot-Seiten, `readAll`, `events` und `changes` sind nach **kodierten Bytes** begrenzt,
 nicht nur nach Anzahl. Die Grenze ist `min(maxBytes des Aufrufers, Frame minus Protokoll-Overhead)` und umfasst
 Elemente, Metadaten, Cursor und Token. Eine Seite endet nur zwischen ganzen Elementen; `next` zeigt hinter das
@@ -820,6 +930,14 @@ Seite liefert mindestens ein Element. Ein einzelnes Element passt immer: Entries
 Commit-Batches durch `maxCommitBytes` und Events durch `maxEventBytes` (Entry plus Event-Metadaten, kleiner als
 ein Frame) begrenzt; ein Write, Notify oder Take, dessen Event diese Grenze überschritte, wird vor Annahme mit
 `ResourceExhausted` abgewiesen.
+
+`maxBytes` muss eine positive ganze Zahl sein; ohne Angabe gilt das Frame-Budget. Reicht das effektive Budget
+nicht für das nächste ganze Element einschließlich Metadaten, Cursor und Token, kommt
+`ResponseBudgetTooSmall {requiredBytes}` statt einer leeren Fortschrittsseite. Cursor, ACK-Stand und fachlicher
+Operationszustand bleiben unverändert. Der Client wiederholt mit größerem Budget und demselben Snapshot-Token
+bzw. Cursor; ist der Snapshot inzwischen abgelaufen, gilt `SnapshotExpired`. `requiredBytes` überschreitet
+das Frame-Budget nicht: Die Elementgrenzen reservieren auch den vollständigen Antwort-Overhead. Andernfalls
+liegt ein Protokoll-/Konfigurationsfehler vor, der nicht durch Überschreiten des Frame-Limits umgangen wird.
 
 **Mailbox:** ACK nur für den authentifizierten Consumer, passende `mailboxEpoch` und bereits ausgelieferte Sequenzen; nur
 zusammenhängende Präfixe. Alte ACKs löschen nach Reset keine neuen Events. TTL-Verlust wird als Lücke gemeldet.
@@ -1001,8 +1119,10 @@ Mutationen, Cancel, Widerruf oder Reaper dürfen diesen Kandidaten nicht veränd
 Der Standby nimmt nur das lückenlose nächste Intent derselben Konfiguration an und persistiert den Batch vor
 dem ACK. Dort angenommene Batches gelten als entschieden und werden bei Promotion angewendet. Am Primary
 wird ein Commit erst sichtbar/beantwortet, wenn der Standby bestätigt und der Primary lokal angewendet hat.
-Weil jede Claim-Anlage, Versiegelung und Bestätigung Teil dieser Historie ist, beantwortet ein beförderter
-Standby unbekannte Request-IDs älterer `primaryEpoch` derselben Autorität verbindlich mit `NotCommitted` (2.1).
+Die Historie des Standbys enthält alle dort angenommenen Batches und damit alle bestätigten Wirkungen.
+Ein nur lokal versiegelter, noch nicht angenommener Kandidat kann bei Verlust des Primary-Storage fehlen.
+Unbekannte IDs älterer `primaryEpoch` werden nur nach dem Nachweis, der Prüfreihenfolge und dem dauerhaften
+Negativclaim aus 6.2 mit `NotCommitted` beantwortet; Claim-Bereinigung oder Restore erlauben diesen Schluss nicht.
 Nach Neustart fragt der Primary den Standby nach Revision/Hash: identisch vorhanden → lokal anwenden;
 noch nicht vorhanden → denselben Kandidaten senden; Konflikt/Lücke → blockieren. Ohne Standby keine normale
 Bestätigung. Nur nach verifiziertem Fencing darf 5.3.1 den gespeicherten Kandidaten lokal zu Ende führen.
@@ -1221,12 +1341,18 @@ Die folgenden Fälle sind noch auszuführen; ihre Aufnahme ist keine Implementie
 | 2 | Lokaler Write zwischen Leerungsprüfung und removeMember; Absturz an jedem Übergang | lokale Sperre verhindert Nachfüllen; gleicher Entfernungsvorgang wird fortgesetzt; Claims bleiben abrufbar |
 | 3 | Standby persistiert Batch, ACK verloren; Primary stirbt; danach degradeToSingle | Kandidat und Ergebnis genau einmal erhalten, kein nachträglicher Miss/Abort |
 | 3 | Primary-**Prozess** stirbt nach Versiegeln vor Send, Reopen des **ursprünglichen** Storage; Standby nicht erreichbar; Fencing und Single-Umschaltung | derselbe Kandidat wird lokal abgeschlossen; beschädigtes Präfix blockiert |
-| 3 | Primary-**Storage** geht nach Versiegeln vor Send verloren; Standby lebt; Fencing und Promotion | Kandidat ist verloren und war nie bestätigt; Retry mit alter Epoche ergibt `NotCommitted`; alle bestätigten Operationen bleiben erhalten |
+| 3 | Primary-**Storage** geht nach Versiegeln vor Send verloren; Standby lebt; Fencing und Promotion; Generation noch gültig | Kandidat war nie bestätigt; nach 6.2 dauerhaft entschiedener Negativclaim erlaubt `NotCommitted`; alle bestätigten Operationen bleiben erhalten |
 | 3 | Take bestätigt, Antwort verloren, dann Promotion; Retry mit aktualisiertem Rahmen | gespeichertes Ergebnis ohne zweiten Take; geänderte fachliche Argumente → `RequestConflict` |
-| 3 | Erststart ohne Marker, veralteter Quarantäne-Marker nach `setStandby`, Promotion mit `quarantine`-Marker | Erststart nur mit Provisionierungs-`active`; nach `setStandby` gilt `active`; Promotion mit Quarantäne-Marker verweigert |
+| 3 | Erststart ohne Boot-Berechtigung, veralteter Nachweis nach `setStandby`, Promotion in Quarantäne | Erststart nur mit passender Provisionierungsberechtigung; beide Replikate nach `setStandby` abgeglichen; Promotion in Quarantäne verweigert |
 | 3 | Entfernten Data Space auf Single umstellen, Control dabei offline | nur lokaler Konfigurationscommit; Remote-Nutzung bis Policy-Abgleich gesperrt; kein vorgetäuschter verteilter Commit |
 | 3 | Control-Promotion ohne verfügbaren Standby, danach Ersatz einrichten | erst Recovery-Single, dann Router/setStandby; Ablehnung von Single lässt System offline |
 | 3 | ACK-Verlust und Neustart während setStandby; altes Replikat kehrt zurück | keine neue Schreibfreigabe bei unklarem Übergang; ausgeschlossenes Replikat kann nicht promovieren |
+| 3 | Erfolgreicher Request, Claim und Generation bereinigt, dann Promotion und alter Retry | `RequestExpired`, niemals `NotCommitted` oder automatische Ersatzwirkung |
+| 3 | Unbekannter alter Request gegen verspäteten Original-Aufruf mit neuem Rahmen; Absturz nach Negativclaim | entweder Originalwirkung mit bekanntem Claim oder dauerhafter Negativclaim; niemals Wirkung nach `NotCommitted` |
+| 1b | Snapshot enthält wartenden Take; Original nahm danach X; Data-Restore, anschließend neuer Write Y | alter Claim nur historische Auflösung/needsReview; kein alter Waiter nimmt Y; auch nach releaseRestored keine Fortführung des alten Requests |
+| 1 | maxBytes kleiner als Antwort-Overhead bzw. nächstes Element; erneut mit requiredBytes | `ResponseBudgetTooSmall`, unveränderter Cursor/ACK; vollständiges Element passt ohne Lücke oder Frame-Überschreitung |
+| 3 | Zwei Spaces auf einem Host mit verschiedenen Replikatversionen; setStandby/degrade eines Space, danach Reboot beider Hosts | passende Berechtigung je Space; beide weiter zugelassenen Replikate abgeglichen; anderer Space unverändert |
+| 3 | Abbruch zwischen lokaler Promotion/degrade/setStandby und externem Boot-Abgleich | nur derselbe Recovery-Übergang darf fortsetzen; vor bestätigtem Abgleich keine fachlichen Writes/Grants |
 
 Pause-, Run- und Worker-Garantien der Erweiterung werden zusätzlich nach
 [Betrieb, Abschnitt 7.4](betrieb-und-mobile-steuerung.md#74-abnahme-der-betriebserweiterung) geprüft.
@@ -1250,8 +1376,9 @@ Festgelegt in v3:
 
 Gates (vor der jeweiligen Stufe nachzuweisen):
 
-1. Koordinator-Host, unabhängiges dauerhaftes Recovery-Register und Out-of-Band-Recovery-Zugang nach 5.4,
-   getestet bei gesperrtem NetBird einschließlich konkurrierender Autoritätswechsel (vor 1b).
+1. Koordinator-Host, unabhängiges dauerhaftes Recovery-Register, externes Boot-Register mit CAS und
+   Out-of-Band-Recovery-Zugang nach 5.4/5.5, getestet bei gesperrtem NetBird einschließlich konkurrierender
+   Autoritätswechsel und Space-Berechtigungsupdates ohne Überschreiben anderer Spaces (vor 1b).
 2. Konkreter Fencing-Adapter mit Neustartsperre, real getestet (vor 3).
 3. Zulässige Uhrunsicherheit, HLC-Zukunftsgrenze, Sperrverhalten; gelten auch für Grants und Router-Lease (vor 1b).
 4. Startwerte für Frame, `maxCommitBytes`, Verbindungen und Handshake festgelegt (vor 1b, F11); konkrete

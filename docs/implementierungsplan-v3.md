@@ -1,15 +1,17 @@
 # Implementierungsplan Federation v3
 
-Stand: 2026-10-07. Setzt [federation-plan-v3.md](federation-plan-v3.md) (Vertrag) und
+Stand: 2026-10-08. Setzt [federation-plan-v3.md](federation-plan-v3.md) (Vertrag) und
 [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) (Betriebserweiterung) in
-Arbeitspakete um. Grundlage ist der Codestand aus [spaces-v1.md](spaces-v1.md): `src/core.ts` (513 Zeilen),
-`src/client.ts`, `src/index.ts`, `src/doc.ts` mit einem session-scoped Singleton-Dokument `pi-spaces.space` v4.
+Arbeitspakete um. Grundlage ist der Codestand aus [spaces-v1.md](spaces-v1.md): Der Default-Space bleibt das
+session-scoped Dokument `pi-spaces.space` v5; weitere Spaces liegen in der Familie `pi-spaces.named-space`.
+`src/spaces.ts` stellt Registry/Identitäten bereit, `src/claims.ts` lokale Claims. Der erreichte Umfang und die
+noch offenen Teile stehen in Abschnitt 7; kein einzelnes lokales Paket ersetzt eine vollständige Stufenabnahme.
 
 Dieser Plan ist eine Reihenfolge, keine Zeitschätzung. Größen (S/M/L) sind relative Aufwände.
 
 ## 1. Ist der Plan bereit für die Implementierung?
 
-**Teilweise.** Der Vertrag ist nach drei Konsistenzprüfungen in sich schlüssig genug, um mit den lokalen
+**Teilweise.** Der Vertrag ist nach vier Konsistenzprüfungen in sich schlüssig genug, um mit den lokalen
 Stufen zu beginnen. Die Stufen danach hängen an Entscheidungen und Nachweisen, die noch fehlen.
 
 | Stufe | Bereit? | Was fehlt vor Beginn |
@@ -85,11 +87,11 @@ Reihenfolge innerhalb der Phase entlang der Abhängigkeiten:
 
 | AP | Inhalt | Module | Größe |
 |---|---|---|---|
-| 1.1 | **Doc-Version 5 als Familie:** `pi-spaces.space` wird `defineDocFamily` mit Schlüssel `spaceId`; Registry-Dokument `pi-spaces.registry` für `hostId`, Alias → `spaceId`. Migration 4 → 5 nach dem in AP 0.3 festgelegten Weg: Der bisherige Singleton bleibt das Dokument des Default-Space und erhält bei der Registrierung eine **erzeugte** `spaceId` und den Alias `default`; nur weitere Spaces liegen in der Familie (keine Kopiermigration). | `doc.ts`, `core.migrate`, `client.ts` | M |
+| 1.1 | **Doc-Version 5 und benannte Spaces:** Der bisherige Singleton `pi-spaces.space` bleibt der Default-Space; weitere Spaces liegen in `defineDocFamily` mit der eigenen `kind` `pi-spaces.named-space` und Schlüssel `spaceId`. Registry-Dokument `pi-spaces.registry` für `hostId` und Alias → `spaceId`. Migration 4 → 5 erhält den Default-Bestand; bei der Registrierung entstehen seine **erzeugte** `spaceId` und Alias `default`. Keine Umdeutung des Singletons zur Familie und keine Kopiermigration (Entscheidung aus AP 0.3). | `doc.ts`, `core.migrate`, `client.ts` | M |
 | 1.2 | **Identitäten:** `hostId`, `spaceId`, Dateninkarnation; lokale IDs = Inkarnation + Zähler; `gid = spaceId/localId`; `view()` liefert `gid`. | `core.ts` | S |
 | 1.3 | **Revision und Änderungsstrom:** Revision pro Commit; begrenzter, persistenter Batch-Log je Space; `changes(afterRev, maxBytes)` lokal; Snapshot-Token mit Revision R und begrenzter Vorhaltung (`SnapshotExpired`). | neues `src/stream.ts` | L |
-| 1.4 | **Budgets und Seiten:** `maxCommitBytes`, `maxEventBytes`; Reservierung für Commit **und** Abort vor jeder Txn-Erweiterung (v3 4.2); bytebegrenzte Seiten für `readAll`, Snapshot, `events`, `changes` mit Cursor ohne Lücken/Dubletten (v3 6.2 „Seitengrößen“). Ersetzt `MAX_LIST` ohne Cursor (L13). | `core.ts`, `stream.ts` | M |
-| 1.5 | **RPC-Claims und Generationen:** Trennung fachliche Argumente / erneuerbarer Rahmen; Argument-Hash über kanonisches JSON nur der fachlichen Argumente; Claim `(principal, spaceId, generation, requestId)` im Space-Dokument und im selben Commit; Zustände `pending`, `pending/commitSealed`, `done`, `cancelled`; Fristen (24 h, Hash bis Ende Zulassungs- und Ergebnisfrist); `RequestConflict`, `RequestExpired`, `ResultExpired`, `IncarnationChanged`; signierte Generationen (HMAC mit Host-Schlüssel genügt lokal); `pollOperation`, `cancelOperation` mit `targetRequest`. | neues `src/claims.ts` | L |
+| 1.4 | **Budgets und Seiten:** `maxCommitBytes`, `maxEventBytes`; Reservierung für Commit **und** Abort vor jeder Txn-Erweiterung (v3 4.2); bytebegrenzte Seiten für `readAll`, Snapshot, `events`, `changes` mit Cursor ohne Lücken/Dubletten; bei zu kleinem Budget `ResponseBudgetTooSmall {requiredBytes}` ohne Cursor-/ACK-Fortschritt (v3 6.2 „Seitengrößen“). Ersetzt `MAX_LIST` ohne Cursor (L13). | `core.ts`, `stream.ts` | M |
+| 1.5 | **RPC-Claims und Generationen:** Trennung fachliche Argumente / erneuerbarer Rahmen; Argument-Hash über kanonisches JSON nur der fachlichen Argumente; Claim `(principal, spaceId, generation, requestId)` im Space-Dokument und im selben Commit; Zustände `pending`, `pending/commitSealed`, `done`, `cancelled`; Fristen (24 h, Hash bis Ende Zulassungs- und Ergebnisfrist); `RequestConflict`, `RequestExpired`, `ResultExpired`, `IncarnationChanged`; signierte Generationen, an Principal/Space und Daten-/Autoritätsinkarnation gebunden (HMAC mit Host-Schlüssel genügt lokal); `pollOperation`, `cancelOperation` mit `targetRequest`. | neues `src/claims.ts` | L |
 | 1.6 | **Mailboxes:** strukturierte Principals; Mailbox mit `mailboxEpoch`, `seq`, ACK nur zusammenhängender Präfixe, TTL 7 Tage plus Byte-Limit, Lückenmeldung; Outbox für Peer-Ziele wird Mailbox; `registrationClosed` als Event-Art vorbereiten. | neues `src/mailbox.ts`, `index.ts` Delivery | M |
 | 1.7 | **Interne Folgeaufträge und Abschlussprofile:** Reaper/Settle mit dauerhaftem Cursor und Batches unter `maxCommitBytes`; Fanout-Folgeaufträge (v3 6.1 Punkt 8). Lokale `CompletionProfile`-Prüfung bei jedem Commit einer Take-Txn (`CompletionViolation`), in Stufe 1 als Übergangskonfiguration pro Space (v3 6.4); Policy ersetzt sie in 2.6. Das Sieb nutzt sie sofort. | `core.ts` | M |
 | 1.8 | **Dienst `space` transportunabhängig:** Dispatcher mit den Methoden aus v3 6.2, Validierung, Rahmenprüfung (Autorität/Epoche als Platzhalter), Rechte-Grundmodell mit Test-Identitätsadapter. Kein Netzwerk. | neues `src/service.ts` | M |
@@ -112,8 +114,8 @@ Erst nach den Entscheidungen aus Abschnitt 3. Reihenfolge: Identität vor Contro
 | 1b.4 | **Control Space und Grants:** geschützte Typen (`PeerKey`, `Enroll`, `Command`, `Result`, …), Rollenmatrix v3 §9, Grants ≤ 60 s mit erneuter Prüfung vor dem Commit, `resolution`-Grant, Authority-ID. | L |
 | 1b.5 | **Supervisor-Prozess:** lokaler Dienst je Host; Supervisor-Commands `createEnroll`, `revokePeer`, `rotateKey`; Bootstrap-Befugnis einmalig; `enroll`-RPC mit Prüfreihenfolge und Token nur im flüchtigen Puffer. | L |
 | 1b.6 | **Recovery-Pfad:** Recovery Space über lokalen Socket, Out-of-Band-Zugang (SSH mit `command=`), unabhängiges Recovery-Register mit Compare-and-Set (Gate 1). | M |
-| 1b.7 | **Restore:** Control-Restore 5.2.1 (Autoritätswechsel, `AuthorityTransition` je Member, Rechte neu freigeben) und Data-Restore 5.2.2 (`restoredUnverified`, Supervisor-Command `releaseRestored`, `IncarnationChanged`); Router-Schritt 5.2.2/5 folgt in 2.1. Fencing zunächst über F15-Ausnahme. | L |
-| 1b.8 | **Boot-Merkmal (Grundform):** `HostBootState` mit `active` bei Provisionierung; Supervisor startet ohne lesbares `active` nichts schreibend. Zustände `fenced`/`quarantine` folgen in 3.6. | S |
+| 1b.7 | **Restore:** Control-Restore 5.2.1 (Autoritätswechsel, `AuthorityTransition` je Member, Rechte neu freigeben) und Data-Restore 5.2.2 (serialisierter Übergang, historische Claims nur lesbar, alte Pending-Arbeit/Reservierungen aus aktiver Kopie entfernen, `restoredUnverified`/`releaseRestored`, `IncarnationChanged`, Control-/Boot-Abgleich); Router-Schritt 5.2.2/5 folgt in 2.1. Fencing zunächst über F15-Ausnahme nur im Single-Betrieb. | L |
+| 1b.8 | **Boot-Merkmal (Grundform):** Versionierter `HostBootState` mit globalem Host-Zustand und eigenen Berechtigungen je Space, CAS über unabhängiges Register; Provisionierung installiert passende Autorität/Dateninkarnation. Ohne passenden Nachweis keine schreibende Arbeit des Space; Control-/Data-Restore aktualisieren den Nachweis. Zustände `fenced`/`quarantine` und Replikatwechsel folgen in 3.6. | M |
 
 **Abnahme Phase 1b:** v3 §11 Stufe 1b und alle Zeilen „1b“ aus §12.1. Integrationsnachweis zuerst mit zwei
 pi-serverd plus Gates auf localhost und Test-Identitätsadapter, dann in der echten NetBird-Umgebung.
@@ -140,7 +142,9 @@ pi-serverd plus Gates auf localhost und Test-Identitätsadapter, dann in der ech
 Voraussetzung ist Phase 2. Inhalt nach [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md):
 
 1. **Run-Controller:** Manifest, `startRun` idempotent, mehrteilige Vorbereitung unter Commit-Budget.
-2. **RunGate-Barriere:** Eintrittssperre, ACK-Inhalt, `RunGateConflict`, `reconciling` nach Restore.
+2. **RunGate-Barriere:** Eintrittssperre, ACK-Inhalt, `RunGateConflict`; `RunRecoveryView` mit Gate, Sperre,
+   Steuerauftrag/Phase und stopped-Historie; `reconciling`/`needsReview` nach Restore, `resolveRunRecovery`
+   mit vollständigen Views und Admin-Entscheidung statt automatischem Resume aus höchster Revision.
 3. **Workerverwaltung:** `WorkerAssignment`-Entries, Supervisor-Abgleich, Generationen.
 4. **Bootstrap-Script** (`--check`/`--apply`) mit Alias → ID, NetBird-Beitritt, Admin-Pairing zuerst.
 5. **Mobile Spaces-Seite** im Nachbarprojekt: Verbindungsliste, Vorgänge, Lauf-Details.
@@ -152,11 +156,11 @@ Voraussetzung ist Phase 2. Inhalt nach [betrieb-und-mobile-steuerung.md](betrieb
 | AP | Inhalt | Größe |
 |---|---|---|
 | 3.1 | **Stream-Import:** Snapshot plus `changes` auf ein Replikat; atomare Installation; Replikatoren mit engem Importpfad. | L |
-| 3.2 | **primary/sync:** `CommitIntent` versiegeln vor Senden, höchstens ein Kandidat, Standby-ACK nur lückenlos, Neustartklärung; `NotCommitted` für unbekannte IDs alter Epoche. | L |
+| 3.2 | **primary/sync:** `CommitIntent` versiegeln vor Senden, höchstens ein Kandidat, Standby-ACK nur lückenlos, Neustartklärung; unbekannte IDs nach v3 6.2 prüfen: gültige erhaltene Generation, vollständige verlustfreie Historie, alte Schreibquellen ausgeschlossen, dauerhafter Negativclaim vor `NotCommitted`; Ablauf/Restore erlauben keine automatische Ersatzwirkung. | L |
 | 3.3 | **Fencing-Adapter** für den gewählten Anbieter (Gate 2), `verify` unabhängig. | M |
 | 3.4 | **Promotion** 5.3, **degradeToSingle** 5.3.1, `ReplicaConfigNotice`, Control-Sonderfall. | L |
 | 3.5 | **`setStandby`** mit Schreibsperre und beidseitiger Bestätigung. | M |
-| 3.6 | **Boot-Merkmal komplett:** `fenced`, `quarantine`, Rücksetzen auf `active` nur am Ende von `setStandby`. | S |
+| 3.6 | **Boot-Merkmal komplett:** Globale Zustände `fenced`/`quarantine`; Berechtigungen je Space für Rolle, Autorität, Dateninkarnation, Epoche, Replikatversion/Durability. Alle Rollen-/Versionswechsel gleichen alle weiter zugelassenen Replikate mit CAS und stabilem Übergang ab; lokale/externe Teilzustände sperren normale Writes/Grants. `quarantine → active` nur nach `setStandby`; mehrere Spaces und Reboot beider Replikate testen. | M |
 | 3.7 | **lww/set:** HLC mit Persistenz, versionierte Tombstones, Lease-Versionen, Kausalstand und Kompaktierung. | L |
 | 3.8 | **Control Space auf primary/sync umstellen.** | M |
 
