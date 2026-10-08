@@ -153,7 +153,7 @@ test("bad budgets and cursors are rejected, an entry past the frame is a configu
 	fill(s, 3);
 	for (const maxBytes of [0, -5, 1.5, Number.NaN]) assert.throws(() => core.listPage(s, 1, null, null, { maxBytes }), core.IllegalArgumentError);
 	assert.throws(() => core.listPage(s, 1, null, null, { after: "abc" }), core.IllegalArgumentError);
-	core.setLimits(s, { maxFrameBytes: 500 });
+	core.setLimits(s, { maxFrameBytes: 500, maxCommitBytes: 300 });
 	assert.ok(core.listPage(s, 1, null, null, { maxBytes: 10_000_000 }).items.length >= 1, "the frame caps a larger request");
 });
 
@@ -166,4 +166,77 @@ test("a write whose event could exceed maxEventBytes is refused before it change
 	assert.throws(() => core.write(s, 1, { type: "Job", fields: { big: "b".repeat(900) } }, null, core.FOREVER), core.ResourceExhausted);
 	assert.equal(s.entries.length, before, "the refused write left no entry");
 	assert.ok(core.write(s, 1, { type: "Job", fields: { small: 1 } }, null, core.FOREVER).id, "a small one still works");
+});
+
+// ---- commit budget and the reservation for completing a transaction (AP 1.4, federation-plan-v3 4.2 "Commit-Grenze")
+
+const entryOf = (i: number, pad = 300) => ({ type: "Job", fields: { i, pad: "q".repeat(pad) } });
+
+test("setLimits keeps maxCommitBytes (plus its envelope) inside the frame", () => {
+	const s = core.initialState();
+	assert.throws(() => core.setLimits(s, { maxCommitBytes: core.DEFAULT_LIMITS.maxFrameBytes }), core.IllegalArgumentError);
+	assert.throws(() => core.setLimits(s, { maxFrameBytes: 1_000 }), core.IllegalArgumentError, "a frame smaller than a commit batch");
+	core.setLimits(s, { maxFrameBytes: 4_000, maxCommitBytes: 2_000 });
+	assert.equal(core.limitsOf(s).maxCommitBytes, 2_000);
+});
+
+test("a write whose commit could exceed maxCommitBytes (entry plus the events of matching subscriptions) is refused first", () => {
+	const s = core.initialState();
+	for (let i = 0; i < 6; i++) core.notify(s, 0, { type: "Job" }, null, core.FOREVER, { tag: "h".repeat(400) }, `conv-${i}`);
+	core.setLimits(s, { maxCommitBytes: 3_000, maxEventBytes: 2_000 });
+	const before = core.stats(s, 1).entries;
+	assert.throws(() => core.write(s, 1, entryOf(1), null, core.FOREVER), core.ResourceExhausted);
+	assert.equal(core.stats(s, 1).entries, before, "nothing was written");
+	assert.equal(s.stream?.rev ?? 0, 0, "and no revision was used");
+	core.write(s, 1, { type: "Other", fields: {} }, null, core.FOREVER); // nobody listens to it: small commit
+});
+
+test("a transaction reserves room for its completion with every extension; refusals leave it completable", () => {
+	const s = core.initialState();
+	core.setLimits(s, { maxCommitBytes: 4_000, maxEventBytes: 3_000 });
+	const t = core.createTxn(s, 1, 60_000);
+	let refused = 0, written = 0;
+	for (let i = 0; i < 30; i++) {
+		const reserved = s.txns[t.id]!.reserved ?? 0;
+		try { core.write(s, 1, entryOf(i), t.id, core.FOREVER); written++; }
+		catch (e) { assert.ok(e instanceof core.ResourceExhausted); refused++; assert.equal(s.txns[t.id]!.reserved ?? 0, reserved, "a refusal reserves nothing"); assert.equal(s.entries.length, written); }
+	}
+	assert.ok(written >= 3 && refused > 0, `${written} written, ${refused} refused`);
+	assert.ok((s.txns[t.id]!.reserved ?? 0) + 1024 <= 4_000, "the reservation stays within the budget");
+	// the limit may even be lowered afterwards: completion never fails at a byte limit
+	core.setLimits(s, { maxCommitBytes: 1_000 });
+	core.commitTxn(s, 2, t.id);
+	assert.equal(core.stats(s, 2).entries, written);
+	const batch = s.stream!.log[s.stream!.log.length - 1]!;
+	assert.equal(batch.ops.length, written, "all of it in one batch");
+});
+
+test("a take under a transaction reserves the put an abort would write; abort and commit still work at the limit", () => {
+	const s = core.initialState();
+	for (let i = 0; i < 12; i++) core.write(s, 1, entryOf(i), null, core.FOREVER);
+	core.setLimits(s, { maxCommitBytes: 4_000 });
+	const t = core.createTxn(s, 2, 60_000);
+	let took = 0, refused = 0;
+	for (let i = 0; i < 12; i++) {
+		try { const p = core.probe(s, 2, { type: "Job" }, t.id, true); if (p.status === "found") took++; else break; }
+		catch (e) { assert.ok(e instanceof core.ResourceExhausted); refused++; break; }
+	}
+	assert.ok(took >= 1 && refused === 1, `${took} taken, then refused`);
+	assert.equal(core.stats(s, 2).locked, took, "exactly the taken ones are locked; the refused take changed nothing");
+	core.abortTxn(s, 3, t.id);
+	assert.equal(core.stats(s, 3).entries, 12, "an abort puts them back");
+	const t2 = core.createTxn(s, 4, 60_000);
+	assert.equal(core.probe(s, 4, { type: "Job" }, t2.id, true).status, "found");
+	core.commitTxn(s, 5, t2.id);
+	assert.equal(core.stats(s, 5).entries, 11);
+});
+
+test("taking back what the transaction wrote itself needs no new reservation", () => {
+	const s = core.initialState();
+	core.setLimits(s, { maxCommitBytes: 2_600 });
+	const t = core.createTxn(s, 1, 60_000);
+	core.write(s, 1, entryOf(1), t.id, core.FOREVER);
+	const reserved = s.txns[t.id]!.reserved;
+	assert.equal(core.probe(s, 1, { type: "Job" }, t.id, true).status, "found");
+	assert.equal(s.txns[t.id]!.reserved, reserved);
 });

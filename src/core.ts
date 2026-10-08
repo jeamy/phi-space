@@ -41,11 +41,12 @@ export type Limits = {
 	maxClaimBytes: number; // JSON bytes of all request claims and generations; a fresh request is refused above it (AP 0.2)
 	maxOutboxBytes: number; // JSON bytes of undelivered events; new subscriptions and waits are refused above it, no event is dropped
 	maxDocBytes: number; // JSON bytes of the whole space: entries plus claims, outbox, waiters, registrations and transactions
+	maxCommitBytes: number; // largest batch one commit may write (entry deltas, events, claim); must fit a frame with its envelope
 	maxFrameBytes: number; // largest protocol frame (federation-plan-v3 4.2); pages and events must fit it with their overhead
 	maxLogBytes: number; // JSON bytes of the retained change batches (revisions, AP 1.3); older batches are dropped
 	maxEventBytes: number; // largest event (entry plus handback plus metadata); a write whose event could exceed it is refused first
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024, maxLogBytes: 4 * 1024 * 1024 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxCommitBytes: 192 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024, maxLogBytes: 4 * 1024 * 1024 };
 export class LimitError extends Error {}
 /** A limit would be exceeded; raised before anything changed (federation-plan-v3 4.2 `ResourceExhausted`). */
 export class ResourceExhausted extends LimitError {}
@@ -78,7 +79,7 @@ export type EntryRec = {
 	size?: number; // JSON bytes of `fields`, for the space-wide limit
 };
 /** `owner`: the only conversation that may use, commit, abort, renew or cancel it; null: host code only. */
-export type TxnRec = { id: string; expires: number; owner: Target | null };
+export type TxnRec = { id: string; expires: number; owner: Target | null; reserved?: number }; // reserved: bytes its commit or abort may write, kept below maxCommitBytes
 export type RegRec = {
 	id: string; // event id
 	template: Template;
@@ -150,6 +151,8 @@ export function setLimits(s: SpaceState, l: Partial<Limits>): Limits {
 	for (const [k, v] of Object.entries(l)) {
 		if (!(k in DEFAULT_LIMITS) || typeof v !== "number" || !Number.isInteger(v) || v < (k === "notifyIntervalMs" ? 0 : 1)) throw new IllegalArgumentError(`bad limit ${k}`);
 	}
+	const merged = { ...limitsOf(s), ...l };
+	if (merged.maxCommitBytes + CHANGES_OVERHEAD > merged.maxFrameBytes) throw new IllegalArgumentError(`maxCommitBytes ${merged.maxCommitBytes} plus the envelope must fit maxFrameBytes ${merged.maxFrameBytes}`);
 	s.limits = { ...(s.limits ?? {}), ...l };
 	return limitsOf(s);
 }
@@ -178,6 +181,30 @@ function checkEventSize(s: Readonly<SpaceState>, rec: EntryRec, lim: Limits): vo
 	if (bound > lim.maxEventBytes) throw new ResourceExhausted(`an event for this entry could take ${bound} bytes; the limit is ${lim.maxEventBytes}`);
 }
 const EVENT_OVERHEAD = 256; // kind, ids, sequence, target, count
+const COMMIT_FIXED = 1024; // claim and result, batch envelope, bookkeeping of one commit
+
+/**
+ * A conservative bound of what making `e` visible writes: its stream operation plus one event for every registration and
+ * wait that matches it now (subscriptions made later are not counted).
+ */
+function publishCost(s: Readonly<SpaceState>, e: EntryRec): number {
+	const v = jsonBytes(view(e, s.spaceId));
+	let n = jsonBytes(putOp(e)) + 1;
+	for (const r of s.regs) if (matches(r.template, e)) n += v + jsonBytes(r.handback) + EVENT_OVERHEAD;
+	for (const w of s.waiters) if (matches(w.template, e)) n += v + jsonBytes(w.handback) + EVENT_OVERHEAD;
+	return n;
+}
+/**
+ * Reserve room for the commit that makes an entry visible (txn null: this very commit) or for completing `txn` either
+ * way, before the mutation. Over the budget the request fails with ResourceExhausted and nothing has changed, so what a
+ * transaction already holds can always still be committed or aborted: completion itself never checks a limit.
+ */
+function reserve(s: SpaceState, txn: string | null, cost: number, lim: Limits): void {
+	const t = txn === null ? undefined : s.txns[txn];
+	const have = t?.reserved ?? 0;
+	if (have + cost + COMMIT_FIXED > lim.maxCommitBytes) throw new ResourceExhausted(`${txn === null ? "this commit" : `completing transaction ${txn}`} could write ${have + cost + COMMIT_FIXED} bytes; the limit is ${lim.maxCommitBytes}`);
+	if (t) t.reserved = have + cost;
+}
 
 /** Backpressure: while undelivered events exceed the budget, nothing new is subscribed (no event is ever dropped). */
 function checkOutbox(s: Readonly<SpaceState>): void {
@@ -305,6 +332,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	if (used + overheadBytes(s) > lim.maxDocBytes) throw new LimitError(`the space document would exceed ${lim.maxDocBytes} bytes`);
 	if (expires <= now) return { id: rec.id, expires }; // born expired (lease 0): never visible, so never announced or served
 	checkEventSize(s, rec, lim);
+	reserve(s, txn, publishCost(s, rec), lim); // before any change: a refusal leaves everything as it was
 	s.entries.push(rec);
 	if (txn === null) logPut(s, now, rec); // visible at once; under a transaction it appears at commit
 	notifyWrite(s, rec, txn, now);
@@ -350,6 +378,7 @@ export function probe(s: SpaceState, now: number, tmpl: Template, txn: string | 
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn, as);
 	const f = find(s, tmpl, txn, take);
+	if (f.status === "found" && take && txn !== null && f.rec.writtenUnder !== txn) reserve(s, txn, publishCost(s, f.rec), limitsOf(s)); // an abort puts it back
 	return f.status === "found" ? { status: "found", entry: apply(s, now, f.rec, txn, take) } : f;
 }
 
