@@ -13,6 +13,7 @@
 // of 4.4. A host that is not enrolled with a key therefore works under its group rules alone ("A-only").
 import type net from "node:net";
 import type { Connection, Identity, IdentityAdapter } from "./service.ts";
+import { DEFAULT_PRIVILEGED, type AuthState, type KeyDirectory } from "./auth.ts";
 import { serveSpace, type SpaceServer } from "./socket.ts";
 import type { SpaceService } from "./service.ts";
 
@@ -92,12 +93,21 @@ export type GroupRoles = Record<string, readonly string[]>;
 export const DEFAULT_GROUP_ROLES: GroupRoles = { "space-hosts": ["member"], "space-admin": ["admin"], "space-observer": ["observer"] };
 export const rolesOf = (groups: readonly string[], map: GroupRoles): string[] => [...new Set(groups.flatMap((g) => map[g] ?? []))].sort();
 
-/** The identity adapter that goes with the gate: the principal is the peer id, the roles were decided by the gate. */
+/**
+ * The identity adapter that goes with the gate: the principal is the peer id. The roles are the groups' roles (layer A);
+ * privileged ones are withheld until the connection has proven an app key (layer B, auth.ts), and with a proof the roles are
+ * the intersection of the groups' and the key's: neither side can add what the other did not grant (4.3).
+ */
 export class GateIdentity implements IdentityAdapter {
+	private privileged: readonly string[];
+	constructor(o: { privilegedRoles?: readonly string[] } = {}) { this.privileged = o.privilegedRoles ?? DEFAULT_PRIVILEGED; }
 	authenticate(conn: Connection): Identity | null {
 		const roles = (conn.credentials as { roles?: unknown } | undefined)?.roles;
 		if (!conn.peerId || !Array.isArray(roles) || roles.length === 0 || !roles.every((r) => typeof r === "string")) return null;
-		return { principal: { peerId: conn.peerId }, roles: roles as string[] };
+		const proof = (conn.state as AuthState | undefined)?.proof;
+		const effective = proof ? (roles as string[]).filter((r) => proof.roles.includes(r)) : (roles as string[]).filter((r) => !this.privileged.includes(r));
+		// Only withheld roles and no proof: the peer is known but may do nothing yet (the refusal then says a proof is required)
+		return { principal: { peerId: conn.peerId }, roles: effective };
 	}
 }
 
@@ -108,6 +118,8 @@ export type GateOptions = {
 	listen: { host: string; port: number };
 	directory: PeerDirectory;
 	groupRoles?: GroupRoles;
+	/** The control space's keys: open connections that proved a key are closed when the key is revoked or its roles change. */
+	keys?: KeyDirectory;
 	/** Time to identify the peer (4.2: handshake <= 5 s); a connection that is not identified by then is closed. */
 	handshakeMs?: number;
 	/** Connections per peer (4.2: 32) and new connections per peer per second (a bucket of the same size). */
@@ -125,7 +137,7 @@ export type GateOptions = {
 export type Gate = SpaceServer & {
 	/** Check every open connection against a fresh directory; closes those whose peer is gone or whose roles changed. Returns how many. */
 	revalidate(): Promise<number>;
-	peers(): Array<{ peerId: string; ip: string; roles: string[] }>;
+	peers(): Array<{ peerId: string; ip: string; roles: string[]; proven: boolean }>;
 };
 
 export async function startGate(service: Pick<SpaceService, "handleText">, o: GateOptions): Promise<Gate> {
@@ -136,7 +148,7 @@ export async function startGate(service: Pick<SpaceService, "handleText">, o: Ga
 	const maxPerPeer = o.maxConnectionsPerPeer ?? 32;
 	const rate = o.connectionsPerSecondPerPeer ?? 32;
 	const handshakeMs = o.handshakeMs ?? 5_000;
-	const open = new Map<net.Socket, { peerId: string; ip: string; roles: string[] }>();
+	const open = new Map<net.Socket, { peerId: string; ip: string; roles: string[]; state: Record<string, unknown> }>();
 	const buckets = new Map<string, { tokens: number; at: number }>(); // per source address, before the peer is known
 	const event = (e: Parameters<NonNullable<GateOptions["onEvent"]>>[0]) => { try { o.onEvent?.(e); } catch { /* an audit hook must not break the gate */ } };
 
@@ -165,10 +177,11 @@ export async function startGate(service: Pick<SpaceService, "handleText">, o: Ga
 			if (roles.length === 0) { event({ event: "refused", ip, peerId: peer.id, reason: "no group of this peer grants a role" }); return null; }
 			if ([...open.values()].filter((c) => c.peerId === peer.id).length >= maxPerPeer) { event({ event: "refused", ip, peerId: peer.id, reason: `already ${maxPerPeer} connections` }); return null; }
 			if (socket.destroyed) return null;
-			open.set(socket, { peerId: peer.id, ip, roles });
+			const state: Record<string, unknown> = {};
+			open.set(socket, { peerId: peer.id, ip, roles, state });
 			socket.once("close", () => open.delete(socket));
 			event({ event: "accepted", ip, peerId: peer.id });
-			return { peerId: peer.id, overlayIp: ip, credentials: { roles, groups: peer.groups, name: peer.name } };
+			return { peerId: peer.id, overlayIp: ip, state, credentials: { roles, groups: peer.groups, name: peer.name } };
 		} catch (e) {
 			event({ event: "refused", ip, reason: (e as Error).message });
 			return null;
@@ -197,6 +210,12 @@ export async function startGate(service: Pick<SpaceService, "handleText">, o: Ga
 					const peer = await o.directory.lookup(c.ip);
 					if (!peer || peer.id !== c.peerId) reason = "the peer is gone";
 					else if (rolesOf(peer.groups, map).join() !== c.roles.join()) reason = "the roles of the peer changed";
+					const proof = (c.state as AuthState).proof;
+					if (!reason && proof && o.keys) {
+						const key = await o.keys.find(c.peerId, proof.keyId);
+						if (!key || key.state !== "active") reason = "the key of this connection was revoked";
+						else if (key.roles.join() !== proof.roles.join()) reason = "the roles of the key changed";
+					}
 				} catch { reason = down ? "the directory is unreachable and its cache has expired" : "the directory could not be read"; }
 				if (reason) { event({ event: "revoked", ip: c.ip, peerId: c.peerId, reason }); socket.destroy(); open.delete(socket); closed++; }
 			}
@@ -209,7 +228,7 @@ export async function startGate(service: Pick<SpaceService, "handleText">, o: Ga
 	return {
 		...server,
 		revalidate,
-		peers: () => [...open.values()].map((c) => ({ ...c })),
+		peers: () => [...open.values()].map((c) => ({ peerId: c.peerId, ip: c.ip, roles: [...c.roles], proven: (c.state as AuthState).proof !== undefined })),
 		close: async () => { clearInterval(timer); await server.close(); },
 	};
 }

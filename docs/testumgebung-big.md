@@ -399,3 +399,22 @@ solange er entfernt ist) wird abgewiesen.
   Die Trennungen lagen genau 15 s auseinander, auf den Ticks der Revalidierung (Gate-Zeit +1793,2 s und +1808,2 s). `revalidate()` holt dabei jedes Mal eine **frische** Liste und wartet nicht auf
   das Ende des 60-s-Caches: Der Entzug einer Rolle wirkt am Gate also nach höchstens `revalidateMs` (15 s) plus der Antwortzeit der API, nicht nach 60 s. Die 60 s gelten für neue Verbindungen.
 - Nicht gemessen: der genaue Speicherzeitpunkt im Dashboard (die Grenzen oben sind Obergrenzen aus den Zeiten der Nachrichten), der Ausfall der Management-API gegen das echte NetBird.
+
+## 15. Schicht B: Schlüssel-Challenge (4.3)
+
+`src/auth.ts` ergänzt das Gate um den Beweis eines App-Schlüssels. Privilegierte Rollen (`admin`, `router`, `replicator`, `supervisor`, `host`) werden zurückgehalten, bis die Verbindung einen Schlüssel
+bewiesen hat; `member` und `observer` arbeiten allein mit Schicht A (4.3: „A-only“, nur mit ausdrücklicher Gruppenregel).
+
+- **Ablauf:** Der Client ruft `challenge`; das Gate antwortet mit `{gateHostId, observedPeerId, connNonce (32 Byte), protocol, issuedAt}`. Der Client prüft, dass `gateHostId` der Host ist, den er erreichen will
+  (`expectedGateHostId`), und `observedPeerId` seine eigene Peer-ID (`ownPeerId`); erst dann signiert er die kanonische Kodierung (mit Domänen-Präfix). `prove {keyId, signature, challenge}` prüft Nonce
+  (einmalig, 30 s, nur auf der Verbindung, auf der sie ausgestellt wurde), den Schlüssel (`PeerKey` dieses Peers, Zustand `active`) und die Signatur. Eine relayte Challenge eines anderen Peers wird nicht beantwortet
+  (der Client erkennt die fremde Peer-ID); ein Client mit Signer ohne `expectedGateHostId` und `ownPeerId` wird nicht gebaut.
+- **Rollen:** Mit Beweis gilt die **Schnittmenge** aus den Rollen der Gruppen und den Rollen des Schlüssels; keine Seite kann hinzufügen, was die andere nicht erlaubt. Ohne Beweis bleiben nur die A-only-Rollen.
+  Fehlt dadurch eine Rolle für eine Methode, antwortet das Gate `ProofRequired` statt `PermissionDenied`; `RemoteSpace` beweist dann selbst (ein Versuch) und wiederholt den Aufruf. Nach einem Neuaufbau der Verbindung
+  geschieht das erneut, weil der Beweis an die Verbindung gebunden ist.
+- **Algorithmen:** Ed25519 (öffentlicher Schlüssel roh, 32 Byte) und ECDSA P-256 mit SHA-256 (SPKI-DER, DER-Signaturen: das, was der Android-Keystore liefert, Gate 6). Öffentliche Schlüssel als Base64.
+- **Widerruf:** Das Gate prüft beim Revalidierungs-Tick (15 s) auch den Schlüssel: widerrufen oder Rollen geändert → die Verbindung wird getrennt. Falsche Beweise: höchstens 5 je Verbindung.
+- **Schlüsselverzeichnis:** `KeyDirectory` ist die Schnittstelle; `MemoryKeyDirectory` für Tests und Werkzeuge. Die Anbindung an `PeerKey`-Einträge des Control Space folgt mit dem Control Space (5.1).
+- **Noch nicht enthalten:** Enrollment/Pairing (4.5: ungepaarter Peer, `createEnroll`), die Grants und RouterLease (4.4), das Ablegen der privaten Schlüssel auf den Zielplattformen (Gate 6: Android-Keystore, Desktop-Datei `0600`)
+  und die Prüfung gegen echte Geräte. `test-auth.test.ts` deckt ab: A-only, Beweis mit beiden Algorithmen, Schnittmenge (beide Richtungen), falsche Beweise (unbekannter Schlüssel, Signatur eines anderen Schlüssels,
+  Challenge einer anderen Verbindung, Schlüssel eines anderen Peers, Ablauf, Wiederholung, Widerruf), Relay-Schutz und der Zähler falscher Beweise.

@@ -43,7 +43,7 @@ async function setup(tc: TestContext, o: Partial<GateOptions> = {}, dirOpts: { c
 	const mgmt = await new Management().start(tc);
 	mgmt.peers = [
 		peer("p-host", "127.0.0.2", ["space-hosts"]),
-		peer("p-admin", "127.0.0.3", ["space-admin"]),
+		peer("p-admin", "127.0.0.3", ["space-admin", "space-hosts"]),
 		peer("p-obs", "127.0.0.4", ["space-observer"]),
 		peer("p-nogroup", "127.0.0.5", ["something-else"]),
 		peer("p-both", "127.0.0.7", ["space-hosts", "space-observer"]),
@@ -68,7 +68,7 @@ test("the peer behind the address decides: roles come from its groups, the princ
 	assert.deepEqual(hello.roles, ["member"]);
 	await host.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 	assert.equal(await host.count({ type: "Job" }), 1);
-	assert.deepEqual((await g.as("127.0.0.3").info()).roles, ["admin"]);
+	assert.deepEqual((await g.as("127.0.0.3").info()).roles, ["member"], "admin is withheld until a key is proven (layer B)");
 	const obs = g.as("127.0.0.4");
 	assert.deepEqual((await obs.info()).roles, ["observer"]);
 	assert.equal(await obs.count({ type: "Job" }), 1, "an observer reads");
@@ -136,7 +136,7 @@ test("revalidation closes the connections of a peer that lost its roles or vanis
 	const revoked = g.events.filter((e) => e.event === "revoked").map((e) => e.reason);
 	assert.deepEqual(revoked, ["the roles of the peer changed", "the peer is gone"]);
 	// roles that change without disappearing also end the connection (the new roles apply to the next one)
-	g.mgmt.peers = [...g.mgmt.peers, peer("p-admin", "127.0.0.3", ["space-admin"])];
+	g.mgmt.peers = [...g.mgmt.peers, peer("p-admin", "127.0.0.3", ["space-hosts"])];
 	g.clock.t += 61_000; // the cached list does not know the peer yet
 	const again = g.as("127.0.0.3", 1);
 	await again.count();

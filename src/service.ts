@@ -24,7 +24,7 @@ const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation",
 // ---- identity and rights
 
 /** What a transport knows about a connection: it fills this in, the identity adapter decides what it means. */
-export type Connection = { peerId?: string; overlayIp?: string; credentials?: Json };
+export type Connection = { peerId?: string; overlayIp?: string; credentials?: Json; /** Owned by the transport/gate, one object per connection; the proof of layer B keeps its state here (auth.ts). */ state?: Record<string, unknown> };
 export type Identity = { principal: Principal; roles: string[] };
 export interface IdentityAdapter { authenticate(conn: Connection): Identity | null | Promise<Identity | null> }
 /** Test adapter: a fixed table from peer id to identity. */
@@ -58,7 +58,7 @@ export type Call = {
 export type ErrorCode =
 	| "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "NotFound" | "Internal";
 export type Reply = { ok: true; result: Json } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
 export type SpaceServiceOptions = {

@@ -7,6 +7,7 @@
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import { PROTOCOL_VERSION, type Call, type ErrorCode, type Reply } from "./service.ts";
+import { AUTH_PROTOCOL, signedBytes, type Challenge, type Signer } from "./auth.ts";
 import type { EntryDraft, Json, Lease, Template } from "./core.ts";
 import type { ClaimView, RequestRef } from "./claims.ts";
 import type { OpOptions, Req, SpaceLike, Taken } from "./client.ts";
@@ -43,6 +44,11 @@ export type RemoteOptions = {
 	callTimeoutMs?: number;
 	/** The caller stops waiting for a blocking call after this long: OutcomeUnknown. No default (waits of FOREVER are legitimate). */
 	maxClientWaitMs?: number;
+	/** Layer B: the app key of this client; needs `expectedGateHostId` and `ownPeerId`. */
+	signer?: Signer;
+	/** The host id this client means to reach (checked against every challenge) and the NetBird peer id of this client. */
+	expectedGateHostId?: string;
+	ownPeerId?: string;
 	/** The part of a generation's admission time that must remain to start a call under it (default 5 s). */
 	generationMarginMs?: number;
 	now?: () => number;
@@ -76,7 +82,8 @@ class TransportFailure extends Error {}
 
 export class RemoteSpace implements SpaceLike {
 	private t: Transport;
-	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction">> & Pick<RemoteOptions, "space" | "maxClientWaitMs">;
+	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction" | "signer" | "expectedGateHostId" | "ownPeerId">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId">;
+	private proving?: Promise<unknown>;
 	/** What the link cost so far: transport attempts repeated with the same identity, and calls given up as OutcomeUnknown. */
 	readonly counters = { retries: 0, unknown: 0 };
 	private hello?: Promise<Hello>;
@@ -85,6 +92,7 @@ export class RemoteSpace implements SpaceLike {
 	private genPending?: Promise<{ generation: string; admitUntil: number }>;
 
 	constructor(transport: Transport, o: RemoteOptions = {}) {
+		if (o.signer && (!o.expectedGateHostId || !o.ownPeerId)) throw new core.IllegalArgumentError("a signer needs expectedGateHostId and ownPeerId: without them a challenge relayed by another peer could not be recognised");
 		this.t = transport;
 		this.o = {
 			attempts: 5, backoffMs: 100, maxBackoffMs: 2_000, callTimeoutMs: 35_000, generationMarginMs: 5_000,
@@ -123,6 +131,7 @@ export class RemoteSpace implements SpaceLike {
 	 */
 	private async send(call: Call, onExhausted?: () => Error): Promise<Json> {
 		let last: unknown;
+		let reproved = false;
 		for (let n = 0; n < this.o.attempts; n++) {
 			if (n > 0) this.counters.retries++;
 			if (n > 0) await this.o.sleep(Math.min(this.o.backoffMs * 2 ** (n - 1), this.o.maxBackoffMs) * (1 + this.o.random()));
@@ -131,6 +140,8 @@ export class RemoteSpace implements SpaceLike {
 				if (!r.ok) throw toError(r.error);
 				return r.result;
 			} catch (e) {
+				// the host withheld a privileged role because this connection has not proven its app key: prove once, repeat the call
+				if (e instanceof RemoteError && e.code === "ProofRequired" && this.o.signer && !reproved) { reproved = true; await this.authenticate(); n--; continue; }
 				if (!(e instanceof TransportFailure)) throw e;
 				last = e;
 			}
@@ -139,6 +150,25 @@ export class RemoteSpace implements SpaceLike {
 		throw onExhausted ? onExhausted() : (last as Error);
 	}
 	private rawCall(method: Call["method"], args: Record<string, Json> = {}): Promise<Json> { return this.send({ method, args }); }
+
+	/**
+	 * Layer B (4.3): prove the app key on this connection. The host's challenge must name the host this client means to reach
+	 * and this client's own peer id before anything is signed, so a challenge that another peer relays is not answered.
+	 * Done automatically when the host answers ProofRequired; call it yourself to prove up front.
+	 */
+	authenticate(): Promise<{ keyId: string; principal: string; roles: string[] }> {
+		const signer = this.o.signer;
+		if (!signer) return Promise.reject(new UnsupportedOperation("this RemoteSpace has no signer"));
+		this.proving ??= (async () => {
+			const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
+			if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
+			if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}: a challenge for another peer is not signed`);
+			const { expiresAt: _expires, ...challenge } = ch;
+			const signature = Buffer.from(await signer.sign(signedBytes(challenge))).toString("base64");
+			return this.send({ method: "prove" as Call["method"], args: { keyId: signer.keyId, signature, challenge: challenge as unknown as Json } });
+		})().finally(() => { this.proving = undefined; });
+		return this.proving as Promise<{ keyId: string; principal: string; roles: string[] }>;
+	}
 
 	// ---- request identity
 
