@@ -329,3 +329,23 @@ und `member-2` → `host-a` auf TCP 7421 blockiert (vorher über die Gruppe erla
 `host-a` führt `member-2` nicht mehr in der Peer-Liste; `host-a` → `host-b` bleibt offen. Die Änderung kam ohne Neustart der Agenten an. Das
 Handy `a34xeea` (`space-admin`) erscheint in der Peer-Liste der Hosts (Status Idle, Verbindung entsteht bei Verkehr). Nicht gemessen: wie schnell
 die Änderung ankommt (hier nach wenigen Sekunden bis Minuten seit Entfernen; Zeitpunkt nicht protokolliert).
+
+## 16. Pairing (4.5)
+
+`src/enroll.ts` bringt den App-Schlüssel eines Geräts in den Control Space, ohne dass ein Klartext-Token irgendwo landet.
+
+- **Admin-Seite:** `newEnrollToken()` erzeugt lokal 256 Bit, `hashToken()` bildet SHA-256; nur der Hash geht in `createEnroll` (idempotent, höchstens 5 min Laufzeit, Rollen `host`, `member`, `observer`)
+  bzw. `bootstrapEnroll` (der einzige Weg zu einer Admin-Rolle, an die Peer-ID des ersten Admin-Geräts gebunden). Der QR-Inhalt (`enrollQr`) trägt Endpunkt, Control-Space-ID und Token und wird nie geloggt.
+- **Gerät:** Ein Peer in der Gruppe `space-enroll` hat am Gate nur die Rolle `unpaired` (Methoden `hello` und `generation`, dazu `enroll` und `enrollStatus` im `EnrollmentService`). Mit `RemoteSpace.enroll(token)` auf dem
+  Control Space (`space: "control"`) holt es die Challenge, signiert sie mit dem **neuen** Schlüssel und sendet `enroll`. Der Token liegt nur im flüchtigen Speicher des Handlers und wird sofort gehasht.
+- **Reihenfolge der Prüfung (wie 4.5):** Token mit diesem Hash vorhanden (sonst nur das Limit je Peer) → gebundene Peer-ID (ein fremder Peer verbrennt keinen Token) → Ablauf und Versuchszähler →
+  Signatur und Schlüsselformat (nur ein Fehler hier erhöht `attempts`; drei Fehler machen den Token ungültig). Bei Erfolg geschehen Tokenverbrauch, `PeerKey` und der Ergebnisclaim in **einem** Commit.
+  Ein Wiederholversuch mit derselben Anfrageidentität (neue Challenge, neue Signatur) wird aus dem Claim beantwortet, auch wenn der Token längst verbraucht ist. Höchstens ein Versuch je Peer und Minute.
+  Jede Ablehnung hat dieselbe Antwort, ein abgewiesenes Gerät erfährt nichts über Token.
+- **Bootstrap:** Der lokal bereitgestellte Supervisor legt einmalig den Token des ersten Admin an; ein verlorener, noch unbenutzter Token wird ersetzt (der alte Hash wird ungültig); mit dem ersten
+  Verbrauch ist die Befugnis für immer geschlossen (`BootstrapClosed`).
+- **Schlüssel:** `SpaceKeyDirectory` liest die `PeerKey`-Einträge des Control Space als Verzeichnis für Schicht B; `revokePeerKey` widerruft, das Gate trennt die Verbindungen mit dem Schlüssel beim nächsten Tick.
+
+`test-enroll.test.ts` (Gate, Management-Nachbildung, `MemoryStorage`): Bootstrap und Wiederholung, Ersatz eines verlorenen Tokens, Host-Token und Rollenbegrenzung, kein Klartext-Token im Control Space, in Claims und Ereignissen,
+die Reihenfolge der Prüfungen, Ratenbegrenzung, Ablauf, einheitliche Ablehnung, nur ungepaarte Peers, `enrollStatus` nur für die eigene Anfrage, Widerruf eines gepaarten Schlüssels.
+Noch nicht: der Supervisor als Prozess, der `createEnroll` aus einem Command eines gepaarten Admin verarbeitet (5.1), Schlüsselrotation (`rotateKey`) und der Lauf auf echten Geräten.

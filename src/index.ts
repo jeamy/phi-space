@@ -13,6 +13,7 @@ import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
 export * from "./client.ts";
 export { createSpace, listSpaces, snapshotSpace, resolveSpaceId, spaceDoc, Registry, NamedSpace, UnknownSpaceError, DEFAULT_ALIAS, type SpaceInfo, type RegistryState } from "./spaces.ts";
 export { canonicalJson } from "./canonical.ts";
+export { EnrollmentService, SpaceKeyDirectory, createEnroll, bootstrapEnroll, revokePeerKey, newEnrollToken, hashToken, enrollQr, keyFingerprint, BootstrapClosed, CONTROL_SPACE, ENROLL_TTL_MS, UNPAIRED_ROLE, ENROLLABLE_ROLES, type EnrollRec, type EnrollmentOptions } from "./enroll.ts";
 export { ProvingService, MemoryKeyDirectory, generateKey, verifySignature, signedBytes, AUTH_PROTOCOL, CHALLENGE_TTL_MS, DEFAULT_PRIVILEGED, type Algorithm, type Challenge, type KeyDirectory, type PeerKeyRec, type Signer, type AuthState, type ProvingOptions } from "./auth.ts";
 export { startGate, NetbirdDirectory, GateIdentity, DirectoryDown, DEFAULT_GROUP_ROLES, rolesOf, type Gate, type GateOptions, type PeerDirectory, type PeerInfo, type GroupRoles, type NetbirdDirectoryOptions } from "./gate.ts";
 export { serveSpace, socketTransport, type ServeOptions, type SpaceServer, type SocketTransport, type ListenTarget } from "./socket.ts";

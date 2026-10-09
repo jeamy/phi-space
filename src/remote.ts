@@ -89,6 +89,7 @@ export class RemoteSpace implements SpaceLike {
 	private t: Transport;
 	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction" | "signer" | "expectedGateHostId" | "ownPeerId">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId">;
 	private proving?: Promise<unknown>;
+	private enrollRequest?: { generation: string; requestId: string };
 	/** What the link cost so far: transport attempts repeated with the same identity, and calls given up as OutcomeUnknown. */
 	readonly counters = { retries: 0, unknown: 0 };
 	private hello?: Promise<Hello>;
@@ -180,6 +181,33 @@ export class RemoteSpace implements SpaceLike {
 			return this.send({ method: "prove" as Call["method"], args: { keyId: signer.keyId, signature, challenge: challenge as unknown as Json } });
 		})().finally(() => { this.proving = undefined; });
 		return this.proving as Promise<{ keyId: string; principal: string; roles: string[] }>;
+	}
+
+	/**
+	 * Pair this device (4.5): prove possession of the NEW key by signing the host's challenge and hand over the one-time token.
+	 * Use a RemoteSpace on the control space (`space: "control"`) whose `signer` holds the new key. The request identity of
+	 * the first attempt is kept: a retry after a lost answer is answered from the stored claim, also when the token is spent
+	 * by then. Returns the id and role of the new key; afterwards `authenticate()` proves it as usual.
+	 */
+	async enroll(token: string): Promise<{ keyId: string; role: string; peerId: string; scope?: string[] }> {
+		const signer = this.o.signer;
+		if (!signer?.publicKey) throw new UnsupportedOperation("enroll needs a signer with its public key");
+		await this.info();
+		this.enrollRequest ??= { generation: await this.generation(), requestId: this.o.newRequestId() };
+		const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
+		if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
+		if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}`);
+		const { expiresAt: _expires, ...challenge } = ch;
+		const signature = Buffer.from(await signer.sign(signedBytes(challenge))).toString("base64");
+		const request = this.enrollRequest;
+		return (await this.send({ method: "enroll" as Call["method"], request, args: { token, algorithm: signer.algorithm, publicKey: signer.publicKey, signature, challenge: challenge as unknown as Json } } as Call, () => new OutcomeUnknown(request, "the transport kept failing"))) as { keyId: string; role: string; peerId: string; scope?: string[] };
+	}
+	/** The state of this device's own enrollment request (after OutcomeUnknown, for instance). */
+	async enrollStatus(request?: { generation: string; requestId: string }): Promise<{ state: string; result?: Json }> {
+		const target = request ?? this.enrollRequest;
+		if (!target) throw new UnsupportedOperation("no enrollment was started");
+		await this.info();
+		return (await this.send({ method: "enrollStatus" as Call["method"], args: { targetRequest: target as unknown as Json } })) as { state: string; result?: Json };
 	}
 
 	// ---- request identity

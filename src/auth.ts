@@ -69,16 +69,18 @@ export function verifySignature(rec: Pick<PeerKeyRec, "algorithm" | "publicKey">
 }
 
 /** What a client holds: a key id and a way to sign (the private key may live in a keystore). */
-export type Signer = { keyId: string; algorithm: Algorithm; sign(data: Uint8Array): Promise<Uint8Array> | Uint8Array };
+export type Signer = { keyId: string; algorithm: Algorithm; /** base64 public key: needed to enroll it */ publicKey?: string; sign(data: Uint8Array): Promise<Uint8Array> | Uint8Array };
 /** A fresh key pair in this process (tests, desktop tools). The public half goes to the control space. */
 export function generateKey(algorithm: Algorithm, keyId: string): { signer: Signer; publicKey: string } {
 	if (algorithm === "ed25519") {
 		const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 		const raw = publicKey.export({ format: "der", type: "spki" }).subarray(ED25519_SPKI_PREFIX.length);
-		return { publicKey: Buffer.from(raw).toString("base64"), signer: { keyId, algorithm, sign: (d) => cryptoSign(null, Buffer.from(d), privateKey) } };
+		const pub = Buffer.from(raw).toString("base64");
+		return { publicKey: pub, signer: { keyId, algorithm, publicKey: pub, sign: (d) => cryptoSign(null, Buffer.from(d), privateKey) } };
 	}
 	const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
-	return { publicKey: Buffer.from(publicKey.export({ format: "der", type: "spki" })).toString("base64"), signer: { keyId, algorithm, sign: (d) => cryptoSign("sha256", Buffer.from(d), privateKey) } };
+	const pub = Buffer.from(publicKey.export({ format: "der", type: "spki" })).toString("base64");
+	return { publicKey: pub, signer: { keyId, algorithm, publicKey: pub, sign: (d) => cryptoSign("sha256", Buffer.from(d), privateKey) } };
 }
 
 // ---- the challenge
