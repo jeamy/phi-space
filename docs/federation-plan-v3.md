@@ -4,16 +4,20 @@ Stand: 2026-10-08 (vierte Konsistenzprüfung: Nachweis für `NotCommitted`, hist
 
 **Status:** Zielvertrag mit teilweise implementierten lokalen Grundlagen: Doc-Version 5, benannte Spaces,
 Identitäten, lokale Request-Claims und persistente Testhilfen sind vorhanden. Der aktuelle Umfang und die offenen
-Teile stehen in [spaces-v1.md](spaces-v1.md) und im [Implementierungsfortschritt](implementierungsplan-v3.md#7-fortschritt).
-Federation, Netzwerk-RPC, Recovery und die Betriebserweiterung sind noch nicht abgenommen. Eine Garantie gilt
+Teile stehen im [Implementierungsstand](implementierungsstand.md) und im [Implementierungsfortschritt](implementierungsplan-v3.md#7-fortschritt).
+Federation, Recovery und die Betriebserweiterung sind noch nicht abgenommen. Lokaler Netzwerk-RPC ist vorhanden,
+ersetzt aber keine dieser Garantien. Eine Garantie gilt
 erst als erfüllt, wenn ihre Abnahmekriterien (Abschnitt 11) und Gates (Abschnitt 13) erfüllt sind.
 
 **Herkunft:** Grundlage ist die überarbeitete v1, weil sie den genaueren Vertrag enthält. Aus v2 sind die
 brauchbaren Vorschläge übernommen und, wo nötig, korrigiert. Vorschläge, die Garantien der v1 brechen, sind nicht
 übernommen. Die Bewertung jedes v2-Punkts steht in Anhang B, offene Fragen in Abschnitt 14.
 
-Grundlage der Implementierung: [spaces-v1.md](spaces-v1.md). Voraussetzungen von dort: B1–B3, L1–L3, L6, L7, L10,
-L11, L13, L14.
+Grundlage der Implementierung: [Implementierungsstand](implementierungsstand.md). Die historischen Kennungen B/L
+sind in [spaces-v1.md](spaces-v1.md) nur noch für frühere Planverweise erhalten.
+
+**Implementierungsnachweis 2026-10-09:** Das lokale Stufe-1-Protokoll (AP 1.1–1.9) ist implementiert
+und in [ap1-abnahme.md](ap1-abnahme.md) geprüft. Gate, Schicht A/B und Replikation bleiben weitere Stufen.
 
 ## 1. Ziel und Ausgangslage
 
@@ -423,9 +427,6 @@ Peer-Liste (`GET /api/users/current` ist für ihn gesperrt). Gemessen:
   mehr in der Peer-Liste. Ohne Neustart der Agenten. Ankunftszeit nicht gemessen; ob die Schicht-A-Auflösung im Gate (Cache 60 s) rechtzeitig
   abweist, ist daher offen.
 - Verbindungsaufbau ist verzögert (lazy): ein Peer erscheint zunächst als „Idle“, die P2P-Verbindung entsteht beim ersten Verkehr.
-
-- Gate gegen das echte NetBird (2026-10-09): Die Peer-ID und die Gruppen hinter einer Overlay-Adresse kommen aus `GET /api/peers`; Entzug einer Gruppe trennt auf Netzebene in Sekunden (die Route verschwindet),
-  ein Rollenwechsel bei offenem Netz trennt die offene Verbindung am Gate beim nächsten Revalidierungs-Tick (15 s, mit frischer Liste), neue Verbindungen sehen den Stand des Caches (höchstens 60 s). Siehe testumgebung-big.md Abschnitt 14.
 
 Offen: die vier Ausfallzeilen (Management, Signal, Relay, Management + Relay), Zeitmessung für Gruppenwechsel und Peer-ID-Abfrage
 (Cache-Grenze), Verhalten des Handys. Der kombinierte Container fällt bei Ausfall von Management, Signal und Relay gemeinsam aus; die Zeilen
@@ -970,6 +971,21 @@ Pending-Operationen pro Principal und Transport-Peer; Platz für Ergebnis/Claim 
 betroffene Operationen abgelehnt statt aktive Take-Ergebnisse zu verlieren. Replikationsrückstau blockiert
 synchrone Writes. Rate-Limits auch für Enrollment, Reads, Polls, Txns, ACKs.
 
+**Lokale Umsetzung und Recovery (Stufe 1):** Der Claim speichert weiterhin nur den Argument-Hash,
+Frist und reservierten Ergebnisplatz. Ein separat persistierter RPC-Waiter speichert Template, Take/Read,
+Txn und feste Deadline als Ausführungszustand. So kann der Host nach Reopen entscheiden, ohne einen
+noch laufenden ursprünglichen Aufrufer zu benötigen; dies ist keine Speicherung roher Argumente im Claim.
+Unveränderliche Snapshot-Tokens sind in Stufe 1 hostlokal, an Strom/Query/Owner gebunden und begrenzt
+(TTL 60 s, 16 Snapshots und 64 MiB je Space). Reopen oder Verdrängung ergibt `SnapshotExpired`.
+`count`/`stats` und die mitgelieferte Revision stammen aus einem gemeinsamen Snapshot.
+
+Bei Mailbox-TTL-Verlust entsteht eine neue `mailboxEpoch` mit Gap zum verlorenen Präfix. Der erhaltene
+Suffix behält seine Sequenznummern; der Server liefert den Startcursor der neuen Epoche mit. Ein altes
+ACK kann keine neuen Events löschen. Nicht bestätigte verlorene Take-Events stellen die Take-Txn in eine
+dauerhafte, budgetbegrenzt verarbeitete Freigabequeue; bestätigte Zustellungen bleiben von ihrer separaten
+Txn-Entscheidung abhängig. Physisches Löschen eines bereits geACKten Präfixes erfolgt in begrenzten
+Wartungscommits. ACK bestätigt Empfang, niemals Task-Abschluss.
+
 ### 6.3 `RemoteSpace`
 
 Gemeinsames `SpaceLike`-Interface mit Capability-Flags für Modusgrenzen. `RemoteSpace` hält Request-ID und
@@ -1244,12 +1260,12 @@ Jede Stufe implementiert ihre Voraussetzungen vor der Abnahme. Simulatorprüfung
 NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
 
 ### Stufe 0 – Core-Voraussetzungen
-- Erledigt laut [spaces-v1.md](spaces-v1.md): B1–B3, L6, L10, `SpaceLike`, kanonische JSON-Kodierung
-  (`src/canonical.ts`).
-- Offen: L7-Rest (Byte-Limits für interne Dokumente/Storage) und abgenommene Einbindung in pi-serverd und
-  server.mjs (L14).
+- Erledigt laut [Implementierungsstand](implementierungsstand.md): `SpaceLike`, kanonische JSON-Kodierung,
+  globale IDs, Revisionen/Changes, bytebegrenzte Seiten und interne Budgets.
+- pi-serverd-Einbindung und lokale Mailboxes sind mit AP 1 abgenommen; server.mjs-/Handy-UI, Gate und
+  Federation-Bausteine bleiben separat.
 - **Abnahme:** bestehende Suite und Regressionstests grün; lokale Worker koordinieren sich; Tests unterscheiden
-  Reservierung, Commit und externe Wirkung; L7 und L14 nachgewiesen.
+  Reservierung, Commit und externe Wirkung; Budgets und pi-serverd-Einbindung nachgewiesen.
 
 ### Stufe 1 – Benannte Spaces und lokales Protokoll
 - Doc-Version 5 und Migration 4 → 5; IDs, Rechte-Grundmodell, Meter pro Space, Byte-Limits, Revisionen.

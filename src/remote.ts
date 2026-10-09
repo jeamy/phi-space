@@ -11,6 +11,8 @@ import { AUTH_PROTOCOL, signedBytes, type Challenge, type Signer } from "./auth.
 import type { EntryDraft, Json, Lease, Template } from "./core.ts";
 import type { ClaimView, RequestRef } from "./claims.ts";
 import type { OpOptions, Req, SpaceLike, Taken } from "./client.ts";
+import { MailboxEpochMismatch, InvalidAck, type MailboxPage } from "./mailbox.ts";
+import { performance } from "node:perf_hooks";
 
 /** One round trip: the encoded call out, the encoded reply back. It may fail or hang; the caller decides what that means. */
 export interface Transport { request(text: string): Promise<string> }
@@ -60,7 +62,7 @@ export type RemoteOptions = {
 	frameFraction?: number;
 };
 
-export type Hello = { principal: string; roles: string[]; hostId?: string; spaceId: string; alias: string; incarnation: string; streamId: string; authorityId: string; primaryEpoch: number; limits: { maxFrameBytes: number; maxPollMs: number } & Record<string, number>; features: string[] };
+export type Hello = { principal: string; roles: string[]; hostId?: string; spaceId: string; alias: string; incarnation: string; streamId: string; authorityId: string; primaryEpoch: number; limits: { maxFrameBytes: number; maxPollMs: number } & Record<string, number>; features: string[]; capabilities: { snapshotPagination: boolean; mailboxes: boolean; completionProfiles: boolean; transactions: boolean; blockingTake: boolean; mode: "single" } };
 
 const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> = {
 	RequestConflict: (m) => new claims.RequestConflict(m),
@@ -74,6 +76,9 @@ const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> 
 	RevisionAhead: (m) => new core.RevisionAhead(m),
 	PermissionDenied: (m) => new core.PermissionError(m),
 	TransactionError: (m) => new core.TransactionError(m),
+	CompletionViolation: (m) => new core.CompletionViolation(m),
+	MailboxEpochMismatch: (m) => new MailboxEpochMismatch(m),
+	InvalidAck: (m) => new InvalidAck(m),
 	BadRequest: (m) => new core.IllegalArgumentError(m),
 };
 const toError = (e: { code: ErrorCode; message: string; requiredBytes?: number }): Error => CODE_ERRORS[e.code]?.(e.message, e.requiredBytes) ?? new RemoteError(e.code, e.message, e.requiredBytes);
@@ -109,7 +114,7 @@ export class RemoteSpace implements SpaceLike {
 
 	// ---- transport with identity-preserving retries
 
-	private async roundTrip(call: Call): Promise<Reply> {
+	private async roundTrip(call: Call, end?: number): Promise<Reply> {
 		const text = JSON.stringify(call);
 		const limit = this.frameLimit; // not read from `hello`: the retries of `hello` itself must not wait for it
 		if (new TextEncoder().encode(text).length > limit) throw new core.ResourceExhausted(`a call may take at most ${limit} bytes`);
@@ -117,9 +122,13 @@ export class RemoteSpace implements SpaceLike {
 		try {
 			const raw = await Promise.race([
 				this.t.request(text),
-				new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new TransportFailure("the call timed out")), this.o.callTimeoutMs); }),
+				new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new TransportFailure("the call timed out")), Math.max(1, Math.min(this.o.callTimeoutMs, end === undefined ? Infinity : end - performance.now()))); }),
 			]);
-			try { return JSON.parse(raw) as Reply; } catch { throw new TransportFailure("the reply is not JSON"); }
+			try {
+				const parsed = JSON.parse(raw);
+				if (!parsed || typeof parsed !== "object" || typeof parsed.ok !== "boolean" || (parsed.ok && !Object.hasOwn(parsed, "result")) || (!parsed.ok && (!parsed.error || typeof parsed.error.code !== "string"))) throw new Error("invalid reply envelope");
+				return parsed as Reply;
+			} catch { throw new TransportFailure("the reply is not a protocol reply"); }
 		} catch (e) {
 			throw e instanceof TransportFailure || e instanceof core.ResourceExhausted ? e : new TransportFailure(e instanceof Error ? e.message : String(e));
 		} finally { clearTimeout(timer); }
@@ -129,14 +138,17 @@ export class RemoteSpace implements SpaceLike {
 	 * Send `call`; a transport failure repeats the very same call (same request identity, same arguments). `ok:false` replies
 	 * are answers, never retried: they throw. Returns the result. `onExhausted` turns "attempts used up" into the caller's error.
 	 */
-	private async send(call: Call, onExhausted?: () => Error): Promise<Json> {
+	private async send(call: Call, onExhausted?: () => Error, end?: number): Promise<Json> {
+		call = core.plain(call as unknown as Json) as unknown as Call;
 		let last: unknown;
 		let reproved = false;
 		for (let n = 0; n < this.o.attempts; n++) {
+			if (end !== undefined && performance.now() >= end) break;
 			if (n > 0) this.counters.retries++;
-			if (n > 0) await this.o.sleep(Math.min(this.o.backoffMs * 2 ** (n - 1), this.o.maxBackoffMs) * (1 + this.o.random()));
+			if (n > 0) await this.o.sleep(Math.min(Math.min(this.o.backoffMs * 2 ** (n - 1), this.o.maxBackoffMs) * (1 + this.o.random()), end === undefined ? Infinity : Math.max(0, end - performance.now())));
+			if (end !== undefined && performance.now() >= end) break;
 			try {
-				const r = await this.roundTrip({ ...call, ...(this.o.space === undefined ? {} : { space: this.o.space }) });
+				const r = await this.roundTrip({ ...call, ...(this.o.space === undefined ? {} : { space: this.o.space }) }, end);
 				if (!r.ok) throw toError(r.error);
 				return r.result;
 			} catch (e) {
@@ -184,6 +196,7 @@ export class RemoteSpace implements SpaceLike {
 		return { generation: await this.generation(), requestId: this.o.newRequestId() };
 	}
 	private async mutate(method: Call["method"], args: Record<string, Json>, o: Req | undefined): Promise<Json> {
+		args = core.plain(args);
 		const request = await this.identity(o);
 		return this.send({ method, request, args }, () => new OutcomeUnknown(request, "the transport kept failing"));
 	}
@@ -201,23 +214,25 @@ export class RemoteSpace implements SpaceLike {
 	private async blocking(method: "read" | "take", tmpl: Template, timeout: number, o: OpOptions, ifExists: boolean): Promise<Taken | null> {
 		if (o.once) throw new core.IllegalArgumentError("`once` is a local hook: a remote call keeps its outcome under its request identity instead");
 		const request = await this.identity(o);
-		const started = this.o.now();
-		const timeoutMs = o.deadline !== undefined ? Math.max(0, o.deadline - started) : timeout;
-		const args = { template: tmpl as unknown as Json, timeoutMs: leaseArg(timeoutMs), txn: o.txn ?? null, ifExists, waitMs: this.pollMs() };
+		const started = performance.now();
+		const end = this.o.maxClientWaitMs === undefined ? undefined : started + this.o.maxClientWaitMs;
+		const args = { template: tmpl as unknown as Json, timeoutMs: leaseArg(timeout), ...(o.deadline === undefined ? {} : { deadline: o.deadline }), txn: o.txn ?? null, ifExists, waitMs: this.pollMs(end) };
 		const unknown = (why: string) => () => new OutcomeUnknown(request, why);
-		let r = (await this.send({ method, request, args }, unknown("the transport kept failing"))) as { state: string; entry?: Taken | null };
+		let r = (await this.send({ method, request, args }, unknown("the client stopped waiting; resolve the same request"), end)) as { state: string; entry?: Taken | null };
 		for (;;) {
 			if (r.state === "done") return (r.entry ?? null) as Taken | null;
-			if (this.o.maxClientWaitMs !== undefined && this.o.now() - started >= this.o.maxClientWaitMs) throw new OutcomeUnknown(request, "the client stopped waiting; the operation continues on the host");
-			const view = (await this.send({ method: "pollOperation", args: { targetRequest: request as unknown as Json, waitMs: this.pollMs() } }, unknown("the transport kept failing while polling"))) as unknown as ClaimView;
+			if (this.o.maxClientWaitMs !== undefined && performance.now() - started >= this.o.maxClientWaitMs) throw new OutcomeUnknown(request, "the client stopped waiting; the operation continues on the host");
+			const view = (await this.send({ method: "pollOperation", args: { targetRequest: request as unknown as Json, waitMs: this.pollMs(end) } }, unknown("the client stopped waiting while polling"), end)) as unknown as ClaimView;
+			if (view.resultExpired) throw new claims.ResultExpired("the operation's retained result expired");
+			if (view.error) throw toError(view.error);
 			if (view.state === "cancelled") throw new claims.OperationCancelled(`request ${request.requestId} was cancelled`);
 			if (view.state === "done") return ((view.result ?? null) as unknown as Taken | null);
 			r = { state: "pending" };
 		}
 	}
-	private pollMs(): number {
-		const left = this.o.maxClientWaitMs;
-		return left === undefined ? 25_000 : Math.min(25_000, Math.max(1, left));
+	private pollMs(end?: number): number {
+		const left = end === undefined ? undefined : end - performance.now();
+		return left === undefined ? 25_000 : Math.min(25_000, Math.max(1, Math.floor(left)));
 	}
 
 	/** The state of a request of this client, e.g. after `OutcomeUnknown`. */
@@ -230,17 +245,34 @@ export class RemoteSpace implements SpaceLike {
 		return (await this.mutate("cancelOperation", { targetRequest: request as unknown as Json }, o)) as unknown as ClaimView;
 	}
 
-	notify(): Promise<never> { return Promise.reject(new UnsupportedOperation("notify needs mailboxes (AP 1.6)")); }
-	wait(): Promise<never> { return Promise.reject(new UnsupportedOperation("wait needs mailboxes (AP 1.6)")); }
+	async notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json } & Req): Promise<{ eventId: string; lease: Lease }> {
+		await this.checkOwnTarget(o.target);
+		return await this.mutate("notify", { template: tmpl as unknown as Json, txn: o.txn ?? null, leaseMs: leaseArg(o.lease ?? core.ANY), handback: o.handback ?? null }, o) as unknown as { eventId: string; lease: Lease };
+	}
+	async wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string> {
+		await this.checkOwnTarget(o.target);
+		const r = await this.mutate("wait", { template: tmpl as unknown as Json, take: o.take ?? true, timeoutMs: leaseArg(o.timeout), txnLeaseMs: leaseArg(o.txnLeaseMs ?? core.ANY), handback: o.handback ?? null }, o) as { id: string };
+		return r.id;
+	}
+	private async checkOwnTarget(target: core.Target): Promise<void> {
+		if (target !== "self" && target !== (await this.info()).principal) throw new core.IllegalArgumentError("remote events target the own principal mailbox; use target: self");
+	}
 
-	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; txn?: string | null } = {}): Promise<core.Page> {
+	async events(o: { mailboxEpoch?: string; after?: number; maxBytes?: number; waitMs?: number } = {}): Promise<MailboxPage> {
+		await this.info(); return await this.send({ method: "events", args: core.plain(o) as Record<string, Json> }) as unknown as MailboxPage;
+	}
+	async ack(mailboxEpoch: string, upTo: number, o: Req = {}): Promise<{ mailboxEpoch: string; acked: number }> {
+		return await this.mutate("ack", { mailboxEpoch, upTo }, o) as unknown as { mailboxEpoch: string; acked: number };
+	}
+
+	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; token?: string; txn?: string | null } = {}): Promise<core.Page> {
 		await this.info();
-		const args = { template: tmpl as unknown as Json, ...(o.maxBytes === undefined ? {} : { maxBytes: o.maxBytes }), cursor: o.after ?? null, txn: o.txn ?? null };
+		const args = { template: tmpl as unknown as Json, ...(o.maxBytes === undefined ? {} : { maxBytes: o.maxBytes }), ...(o.token === undefined ? {} : { token: o.token }), cursor: o.after ?? null, txn: o.txn ?? null };
 		return (await this.send({ method: "readAll", args })) as unknown as core.Page;
 	}
-	/** Like the local `readAll`: the first `limit` entries (default and maximum 1000), fetched page by page. */
+	/** Like the local `readAll`: all entries, or the first `limit` when supplied, fetched page by page. */
 	async readAll(tmpl: Template = null, o: { limit?: number; txn?: string | null } = {}): Promise<Taken[]> {
-		const limit = o.limit ?? core.MAX_LIST;
+		const limit = o.limit ?? Number.MAX_SAFE_INTEGER;
 		if (!Number.isInteger(limit) || limit < 1) throw new core.IllegalArgumentError("limit must be a positive integer");
 		const out: Taken[] = [];
 		let after: string | null = null;
@@ -248,8 +280,8 @@ export class RemoteSpace implements SpaceLike {
 			const p: core.Page = await this.readPage(tmpl, { after, txn: o.txn ?? null });
 			out.push(...p.items);
 			after = p.next;
-		} while (after !== null && out.length < Math.min(limit, core.MAX_LIST));
-		return out.slice(0, Math.min(limit, core.MAX_LIST));
+		} while (after !== null && out.length < limit);
+		return out.slice(0, limit);
 	}
 	async changes(afterRev: number, o: { maxBytes?: number; waitMs?: number; streamId?: string } = {}): Promise<core.Changes & { resync?: boolean }> {
 		await this.info();

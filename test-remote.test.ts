@@ -135,7 +135,7 @@ test("cancelOperation ends a pending call for its waiter", async () => {
 	void OperationCancelled;
 });
 
-test("server answers become the usual error classes; mailbox methods and local hooks are not supported", async () => {
+test("server answers become the usual error classes; mailbox methods work and local hooks remain local", async () => {
 	const h = await memory();
 	const sv = service(h);
 	const obs = new RemoteSpace(inProcessTransport(sv, { peerId: "peer-obs" }), fast);
@@ -144,8 +144,8 @@ test("server answers become the usual error classes; mailbox methods and local h
 	await assert.rejects(a.write({ type: "Job", fields: { big: "x".repeat(70_000) } }, null, FOREVER), core.ResourceExhausted);
 	await assert.rejects(a.commit("t-nothing"), core.TransactionError);
 	await assert.rejects(a.take({ type: "X" }, 0, { once: { get: async () => undefined, set: async () => {} } }), core.IllegalArgumentError);
-	await assert.rejects(a.notify(), UnsupportedOperation);
-	await assert.rejects(a.wait(), UnsupportedOperation);
+	assert.ok((await a.notify({ type: "Job" }, { target: "self", lease: FOREVER })).eventId);
+	assert.ok(await a.wait({ type: "Missing" }, { target: "self", timeout: 1, take: false }));
 	const unknownSpace = new RemoteSpace(inProcessTransport(sv, { peerId: "peer-a" }), { ...fast, space: "nope" });
 	await assert.rejects(unknownSpace.count(), (e: { code?: string }) => e.code === "UnknownSpace");
 	const nobody = new RemoteSpace(inProcessTransport(sv, { peerId: "stranger" }), fast);
@@ -165,8 +165,8 @@ test("changes through the remote client: batches, long poll, and resync as Snaps
 	const a = new RemoteSpace(inProcessTransport(service(h), { peerId: "peer-a" }), fast);
 	for (let i = 0; i < 3; i++) await a.write({ type: "Job", fields: { i } }, null, FOREVER);
 	const c = await a.changes(0);
-	assert.equal(c.rev, 3);
-	assert.equal(c.batches.length, 3);
+	assert.equal(c.rev, c.batches.length);
+	assert.equal(c.batches.filter(b => b.ops.some(o => o.op === "put")).length, 3, "three visible writes plus metadata commits");
 	await assert.rejects(a.changes(0, { streamId: "other:1" }), core.SnapshotExpired);
 	const late = a.changes(c.rev, { waitMs: 2_000 });
 	setTimeout(() => void a.write({ type: "Job", fields: { late: 1 } }, null, FOREVER), 100);

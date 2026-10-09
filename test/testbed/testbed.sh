@@ -30,9 +30,11 @@ Commands:
   build                          build the artifacts locally (dist/testbed-artifacts); nothing is sent
   ship                           build, then copy the artifacts (and nothing else) to <dir>/build on the server
   up [core|federation|overlay|all]
-                                 init + ship + image build + start every container that is not running (default: core);
+                                 init + ship + image build + reconcile/start containers (may recreate; default: core);
                                  overlay = NetBird agent peers (needs `netbird setup` first)
   status                         containers of the test bed
+  inspect <service>             read-only committed spaces and scenario reports (JSON; no build/start)
+  start <service>               start an existing stopped container (no build/ship)
   test [smoke|examples|scenario|all]
                                  production checks in the runner container (default: all): the shipped bundle loads,
                                  no sources on the server, the compiled examples run, the sieve-mobile scenario passes
@@ -323,7 +325,7 @@ cmd_up() {
 	cmd_ship
 	info "build image (production dependencies cached unless the manifests change)"
 	rcompose build --quiet runner >/dev/null || die "image build failed (on the server: cd $DIR && docker compose build runner)"
-	info "start containers that are not running ($profile)"
+	info "reconcile/start containers ($profile; changed image/config may recreate them)"
 	rcompose --profile '*' up -d --remove-orphans "${svcs[@]+"${svcs[@]}"}"
 	cmd_status
 }
@@ -414,6 +416,13 @@ cmd_exec() {
 }
 
 cmd_logs() { valid_service "${1:-}"; ensure_connection; rcompose --profile '*' logs --no-color --tail "${2:-200}" "$1"; }
+cmd_start() { valid_service "${1:-}"; ensure_connection; rcompose --profile '*' start "$1"; }
+cmd_inspect() {
+	valid_service "${1:-}"
+	[[ $# == 1 ]] || die "inspect: exactly one service expected"
+	ensure_connection
+	rcompose --profile '*' exec -T "$1" sh -c 'test -f tools/inspect.mjs || { echo "Inspection artifact missing: update the Dockerfile template (init --force) and deploy with up core." >&2; exit 1; }; exec node --no-warnings tools/inspect.mjs /data'
+}
 cmd_stop() { valid_service "${1:-}"; ensure_connection; rcompose --profile '*' stop "$1"; }
 # SIGKILL, then an explicit start: a crash plus reboot, whatever the restart policy does with a killed container.
 cmd_kill() { valid_service "${1:-}"; ensure_connection; rcompose --profile '*' kill -s KILL "$1"; rcompose --profile '*' start "$1"; }
@@ -566,6 +575,8 @@ main() {
 		purge-sources) cmd_purge_sources ;;
 		up) cmd_up "$@" ;;
 		status) cmd_status ;;
+		inspect) cmd_inspect "$@" ;;
+		start) cmd_start "$@" ;;
 		test) cmd_test "$@" ;;
 		scenario) cmd_scenario "$@" ;;
 		exec) cmd_exec "$@" ;;

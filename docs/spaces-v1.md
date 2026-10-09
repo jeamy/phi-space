@@ -1,4 +1,9 @@
-# pi-spaces: aktueller lokaler Implementierungsstand
+# pi-spaces: historischer lokaler Implementierungsstand
+
+> **Überholt durch [implementierungsstand.md](implementierungsstand.md).**
+> Diese Momentaufnahme vom 2026-10-07 bleibt nur für die damaligen Kennungen
+> und Entscheidungen erhalten. Insbesondere L2, L3, L7 und L13 sind nicht mehr
+> der aktuelle Status.
 
 Stand: 2026-10-07, Quellen src/core.ts, src/client.ts, src/doc.ts, src/index.ts und lokale Tests.
 Dies ist die lokale Bibliothek; Federation ist der [v3-Zielplan](federation-plan-v3.md).

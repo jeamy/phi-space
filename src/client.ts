@@ -5,11 +5,13 @@ import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import { Space } from "./doc.ts";
-import { NamedSpace, Registry, spaceDoc, UnknownSpaceError } from "./spaces.ts";
+import { NamedSpace, Registry, spaceDoc, hostKey, UnknownSpaceError } from "./spaces.ts";
 import * as claims from "./claims.ts";
 import type { ClaimView, Principal, RequestRef } from "./claims.ts";
 import { meter as defaultMeter, type Meter } from "./meter.ts";
 import type { EntryDraft, Fields, Json, Lease, Template } from "./core.ts";
+import { snapshotPage, type SnapshotPageOptions } from "./snapshot.ts";
+import { mailboxPage, ackMailbox, type MailboxPage } from "./mailbox.ts";
 
 export { NO_WAIT, ANY, FOREVER, DEFAULT_LIMITS, IllegalArgumentError, LimitError, PermissionError, TransactionError, UnknownLeaseError } from "./core.ts";
 export type { EntryDraft, Fields, Json, Lease, Limits, Template } from "./core.ts";
@@ -18,7 +20,7 @@ export { Space };
 /** What the client needs; both `Harness` and a tool's `api` provide it. */
 export type SpaceHost = Pick<Session, "commit" | "watchDoc" | "snapshot">;
 /** `space`: alias or spaceId of a named space (see `createSpace`); omitted: the default space. */
-export type PiSpacesOptions = { space?: string };
+export type PiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal };
 export type Once = { get(tx: Tx): Promise<Json | undefined>; set(tx: Tx, v: Json): Promise<void> };
 export type Snapshot = { readonly entry: Readonly<EntryDraft> };
 export type OpOptions = {
@@ -31,6 +33,8 @@ export type OpOptions = {
 	/** Durable request identity (claims.ts): the outcome is stored with the operation; a retry with the same identity
 	 * and arguments returns it (also after a restart), a pending one continues with its first deadline. */
 	request?: RequestRef;
+	/** Transport response budget; a first immediate result is checked inside the deciding commit. Not hashed. */
+	resultBudget?: number;
 };
 /** Request identity for an immediate mutation. */
 export type Req = { request?: RequestRef };
@@ -51,7 +55,7 @@ export interface SpaceLike {
 	wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string>;
 	readAll(tmpl?: Template, o?: { limit?: number; txn?: string | null }): Promise<Taken[]>;
 	/** One page limited by encoded bytes; continue with `next` (core.listPage). */
-	readPage(tmpl?: Template, o?: { maxBytes?: number; after?: string | null; txn?: string | null }): Promise<core.Page>;
+	readPage(tmpl?: Template, o?: SnapshotPageOptions): Promise<core.Page>;
 	/** Commit batches after a revision (core.changes). */
 	changes(afterRev: number, o?: { maxBytes?: number }): Promise<core.Changes>;
 	count(tmpl?: Template, txn?: string | null): Promise<number>;
@@ -70,15 +74,17 @@ export class PiSpaces implements SpaceLike {
 	private meter: Meter;
 	private as: core.Target | undefined;
 	private space: string | undefined;
-	/** `as`: the conversation acting (tools pass theirs). It owns what it creates and may only touch its own or
-	 * ownerless transactions and leases. Omitted (host code): unrestricted. */
+	private options: PiSpacesOptions;
+	/** `as`: the conversation acting (tools pass theirs). It owns what it creates and may only touch its own
+	 * transactions and leases. Omitted (host code): unrestricted. */
 	constructor(host: SpaceHost, ctx: Context, now: () => number = Date.now, meter: Meter = defaultMeter, as?: core.Target, o: PiSpacesOptions = {}) {
 		this.meter = meter;
 		this.host = host;
 		this.ctx = ctx;
 		this.now = now;
 		this.as = as;
-		this.space = o.space;
+		this.space = o.space === "default" ? undefined : o.space;
+		this.options = o;
 	}
 
 	/** This client's space document inside a commit (registers the default space on first use). */
@@ -102,6 +108,7 @@ export class PiSpaces implements SpaceLike {
 		const id = await this.idOf();
 		return id === r?.defaultSpaceId ? this.host.watchDoc(Space, this.ctx) : this.host.watchDoc(NamedSpace, id, this.ctx);
 	}
+	async configuration(): Promise<{ spaceId?: string; limits: core.Limits }> { const s = await this.snap(); return { spaceId: s?.spaceId, limits: core.limitsOf(s ?? core.initialState()) }; }
 
 	async write(entry: EntryDraft, txn: string | null = null, lease: number = core.ANY, o: Req = {}): Promise<Lease> {
 		const r = await this.mutate("write", { entry, txn, lease } as unknown as Json, o.request, (s, now) => core.write(s, now, entry, txn, lease, this.as));
@@ -114,11 +121,14 @@ export class PiSpaces implements SpaceLike {
 	 * `fresh` is false for a replay (the stored result, nothing executed).
 	 */
 	private async mutate<T>(method: string, args: Json, request: RequestRef | undefined, fn: (s: core.SpaceState, now: number) => T): Promise<{ value: T; fresh: boolean }> {
+		await this.maintain();
 		return this.host.commit(async (tx) => {
 			const s = await this.doc(tx);
 			const now = this.now();
 			if (!request) return { value: fn(s, now), fresh: true };
-			const ad = claims.admit(s, now, request, method, core.plain(args), core.FOREVER);
+			const limits = core.limitsOf(s);
+			const resultBound = method === "cancelOperation" ? limits.maxEntryBytes + 4 * limits.maxTypeChars * limits.maxTypes + 8192 : 1024;
+			const ad = claims.admit(s, now, request, method, core.plain(args), core.FOREVER, resultBound);
 			if (ad.kind === "done") return { value: core.plain(ad.result) as T, fresh: false };
 			if (ad.kind === "cancelled") throw new claims.OperationCancelled(`request ${request.requestId} was cancelled`);
 			const value = fn(s, now);
@@ -129,13 +139,15 @@ export class PiSpaces implements SpaceLike {
 
 	/** A new request generation for `principal`, in this space. Request ids are admitted while it is open. */
 	issueGeneration(principal: Principal): Promise<{ generation: string; admitUntil: number }> {
-		return this.host.commit(async (tx) => claims.issueGeneration(await this.doc(tx), this.now(), principal), this.ctx);
+		return this.host.commit(async (tx) => claims.issueGeneration(await this.doc(tx), this.now(), principal, { key: await hostKey(tx, this.now()), authorityId: this.options.authorityId }), this.ctx);
 	}
 	/** State of a known request, read without a commit. An unknown id is RequestExpired, never a new operation. */
 	async pollOperation(target: RequestRef): Promise<ClaimView> {
 		const s = await this.snap();
 		if (!s) throw new claims.RequestExpired(`request ${target.requestId} is unknown`);
-		return claims.lookup(s, target, this.now());
+		const v = claims.lookup(s, target, this.now());
+		if (v.state !== "pending") return v;
+		return this.host.commit(async tx => { const d = await this.doc(tx); core.settle(d, this.now()); return core.plain(claims.lookup(d, target, this.now())); }, this.ctx);
 	}
 	/** Cancel a pending request (a blocked call then ends with OperationCancelled); a decided one is returned as is. */
 	async cancelOperation(target: RequestRef, o: Req = {}): Promise<ClaimView> {
@@ -151,23 +163,32 @@ export class PiSpaces implements SpaceLike {
 	async notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json } & Req) {
 		if (o.target == null || o.target === "") throw new core.IllegalArgumentError("notify needs a target conversation");
 		const args = { tmpl, target: o.target, txn: o.txn ?? null, lease: o.lease ?? core.ANY, handback: o.handback ?? null } as unknown as Json;
-		return (await this.mutate("notify", args, o.request, (s, now) => core.notify(s, now, tmpl, o.txn ?? null, o.lease ?? core.ANY, o.handback ?? null, o.target, this.as))).value;
+		return (await this.mutate("notify", args, o.request, (s, now) => core.notify(s, now, tmpl, o.txn ?? null, o.lease ?? core.ANY, o.handback ?? null, o.target, this.as, this.options.consumer))).value;
 	}
 	/** Park a read/take for a conversation. The space delivers the entry (or a timeout) to it as input later.
 	 * `timeout` may be FOREVER: the wait stays until served or cancelled, across restarts. */
 	async wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string> {
 		if (o.target == null || o.target === "") throw new core.IllegalArgumentError("wait needs a target conversation");
 		const w = { template: tmpl, take: o.take ?? true, target: o.target, timeout: o.timeout, ...(o.txnLeaseMs === undefined ? {} : { txnLeaseMs: o.txnLeaseMs }), handback: o.handback ?? null };
-		return (await this.mutate("wait", w as unknown as Json, o.request, (s, now) => core.addWaiter(s, now, { ...w, ...(this.as === undefined ? {} : { as: this.as }) }))).value;
+		return (await this.mutate("wait", w as unknown as Json, o.request, (s, now) => core.addWaiter(s, now, { ...w, ...(this.as === undefined ? {} : { as: this.as }), consumer: this.options.consumer }))).value;
+	}
+	async events(principal: Principal, o: { mailboxEpoch?: string; after?: number; maxBytes?: number } = {}, validate?: (page: MailboxPage) => void): Promise<MailboxPage> {
+		if (this.options.consumer && canonicalPrincipal(principal) !== canonicalPrincipal(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
+		await this.maintain();
+		return this.host.commit(async tx => { const s = await this.doc(tx); core.settle(s, this.now()); const p = mailboxPage(s, principal, this.now(), o); validate?.(p); return p; }, this.ctx);
+	}
+	async ack(principal: Principal, mailboxEpoch: string, upTo: number, o: Req = {}): Promise<{ mailboxEpoch: string; acked: number }> {
+		if (this.options.consumer && canonicalPrincipal(principal) !== canonicalPrincipal(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
+		return (await this.mutate("ack", { mailboxEpoch, upTo, principal } as unknown as Json, o.request, s => ackMailbox(s, principal, mailboxEpoch, upTo))).value;
 	}
 	/** Quotas for conversations in this space (host code only; stored in the document). */
 	setLimits(l: Partial<core.Limits>): Promise<core.Limits> {
 		if (this.as !== undefined) throw new core.IllegalArgumentError("only host code may change limits");
-		return this.host.commit(async (tx) => core.setLimits(await this.doc(tx), l), this.ctx);
+		return this.host.commit(async (tx) => core.setLimits(await this.doc(tx), l, this.now()), this.ctx);
 	}
 	/**
-	 * Every entry a `read` with this template would currently see (oldest first, at most `limit`, default and maximum
-	 * 1000). A snapshot read: no commit, no lock, nothing is removed and nobody is woken, so it suits dashboards.
+	 * Every entry a `read` with this template would currently see (oldest first, at most `limit`,
+	 * unbounded unless a limit is supplied). A snapshot read: no commit, no lock, nothing is removed and nobody is woken, so it suits dashboards.
 	 */
 	async readAll(tmpl: Template = null, o: { limit?: number; txn?: string | null } = {}): Promise<Taken[]> {
 		const s = await this.snap();
@@ -176,9 +197,10 @@ export class PiSpaces implements SpaceLike {
 		return out;
 	}
 	/** Like `readAll`, one page limited by encoded bytes (core.listPage). Pass `next` of a page as `after` to continue. */
-	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; txn?: string | null } = {}): Promise<core.Page> {
+	async readPage(tmpl: Template = null, o: SnapshotPageOptions = {}): Promise<core.Page> {
+		if (!(await this.snap())?.spaceId) await this.host.commit(async tx => { await this.doc(tx); }, this.ctx);
 		const s = await this.snap();
-		const page = core.listPage(s ?? core.initialState(), this.now(), tmpl, o.txn ?? null, { maxBytes: o.maxBytes, after: o.after }, this.as);
+		const page = snapshotPage(this.host, s ?? core.initialState(), this.now(), tmpl, o, this.as);
 		this.meter.inc("reads");
 		return page;
 	}
@@ -187,7 +209,7 @@ export class PiSpaces implements SpaceLike {
 		const s = await this.snap();
 		return core.changes(s ?? core.initialState(), afterRev, o);
 	}
-	/** Revision of the newest commit that changed what a plain reader sees (0: none yet), with the stream it belongs to. */
+	/** Revision of the newest domain or internal-state commit (0: none yet), with the stream it belongs to. */
 	async revision(): Promise<{ rev: number; streamId: string }> {
 		const s = (await this.snap()) ?? core.initialState();
 		return { rev: core.revision(s), streamId: core.streamIdOf(s) };
@@ -195,17 +217,30 @@ export class PiSpaces implements SpaceLike {
 	/** Number of entries a `read` with this template would currently see. No commit, no waiting. */
 	async count(tmpl: Template = null, txn: string | null = null): Promise<number> {
 		const s = await this.snap();
-		return s ? core.count(s, this.now(), tmpl, txn) : 0;
+		return s ? core.count(s, this.now(), tmpl, txn, this.as) : 0;
 	}
 	/** Point-in-time gauges: visible entries (total and per type), locked, uncommitted, transactions, waiters, ... */
 	async stats(): Promise<core.SpaceStats> {
 		const s = await this.snap();
 		return core.stats(s ?? core.initialState(), this.now());
 	}
+	/** Service gauges and revision from one immutable storage snapshot. */
+	async countWithRevision(tmpl: Template = null, txn: string | null = null) {
+		const s = (await this.snap()) ?? core.initialState();
+		return { value: core.count(s, this.now(), tmpl, txn, this.as), rev: core.revision(s), streamId: core.streamIdOf(s) };
+	}
+	async statsWithRevision() {
+		const s = (await this.snap()) ?? core.initialState();
+		return { stats: core.stats(s, this.now()), rev: core.revision(s), streamId: core.streamIdOf(s) };
+	}
 	/** A frozen canonical copy. JavaSpaces' snapshot is a serialization cache; this keeps the contract only. */
 	snapshot(entry: EntryDraft): Snapshot { return { entry: Object.freeze(structuredClone(entry)) }; }
 
 	async createTransaction(lease: number = core.ANY, o: Req = {}) { return (await this.mutate("txn.begin", { lease }, o.request, (s, now) => core.createTxn(s, now, lease, this.as))).value; }
+	setCompletionProfiles(profiles: core.CompletionProfile[]): Promise<void> {
+		if (this.as !== undefined) throw new core.PermissionError("only host code may configure completion profiles");
+		return this.host.commit(async tx => core.setCompletionProfiles(await this.doc(tx), profiles, this.now()), this.ctx);
+	}
 	async commit(txn: string, o: Req = {}) { await this.mutate("txn.commit", { txn }, o.request, (s, now) => core.commitTxn(s, now, txn, this.as)); }
 	async abort(txn: string, o: Req = {}) { await this.mutate("txn.abort", { txn }, o.request, (s, now) => core.abortTxn(s, now, txn, this.as)); }
 	async renew(leaseId: string, ms: number, o: Req = {}) { return (await this.mutate("lease.renew", { leaseId, ms }, o.request, (s, now) => core.renew(s, now, leaseId, ms, this.as))).value; }
@@ -223,9 +258,8 @@ export class PiSpaces implements SpaceLike {
 
 	/** `timeout` may be FOREVER. Long waits sleep in timer-sized chunks; every wake-up re-probes, so nothing is lost. */
 	private async op(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean): Promise<Taken | null> {
+		if (o.request) return this.durableOperation(tmpl, timeout, o, take, ifExists);
 		let deadline = o.deadline ?? core.deadlineOf(this.now(), timeout);
-		const method = `${take ? "take" : "read"}${ifExists ? "IfExists" : ""}`;
-		const args = { tmpl, timeout, deadline: o.deadline ?? null, txn: o.txn ?? null } as unknown as Json;
 		const txn = o.txn ?? null;
 		await this.host.commit(async (tx) => { await this.doc(tx); }, this.ctx); // the watch needs the doc to exist
 		// One watch for the whole wait. It is acquired before the first probe and flags every change, so a write that
@@ -243,26 +277,15 @@ export class PiSpaces implements SpaceLike {
 					if (prior !== undefined) return { status: "replay" as const, value: core.plain(prior) as Taken | null };
 					const s = await this.doc(tx);
 					const now = this.now();
-					// A known request continues with the deadline it got first; a decided or cancelled one is answered.
-					let key: string | undefined;
-					let dl = deadline;
-					if (o.request) {
-						const ad = claims.admit(s, now, o.request, method, core.plain(args), deadline);
-						if (ad.kind === "done") return { status: "replay" as const, value: core.plain(ad.result) as Taken | null };
-						if (ad.kind === "cancelled") return { status: "cancelled" as const };
-						key = ad.key;
-						dl = ad.deadline;
-					}
+					const dl = deadline;
 					const p = core.probe(s, now, tmpl, txn, take, this.as);
 					// readIfExists/takeIfExists wait only while matches are locked by other transactions.
 					const miss = p.status !== "found" && ((p.status === "none" && ifExists) || dl <= now);
 					const outcome = p.status === "found" ? (view(p.entry, s.spaceId) as unknown as Json) : null;
 					if (o.once && (p.status === "found" || miss)) await o.once.set(tx, outcome);
-					if (key && (p.status === "found" || miss)) claims.decide(s, now, key, { state: "done", result: outcome });
 					return { ...p, miss, next: core.nextExpiry(s), spaceId: s.spaceId, deadline: dl }; // one commit per round: probe, outcome and next wake-up
 				}, this.ctx);
 				if (r.status === "replay") return r.value; // a replayed call was counted the first time
-				if (r.status === "cancelled") throw new claims.OperationCancelled(`request ${o.request?.requestId} was cancelled`);
 				deadline = r.deadline;
 				if (r.status === "found") { this.meter.inc(take ? "takes" : "reads"); return view(r.entry, r.spaceId); }
 				if (r.miss) { this.meter.inc("misses"); return null; }
@@ -279,4 +302,71 @@ export class PiSpaces implements SpaceLike {
 			await watch?.stop();
 		}
 	}
+
+	/** Admit, probe and persist pending work before acknowledging it. Replays always check the original domain hash. */
+	async beginOperation(tmpl: Template, timeout: number, o: OpOptions & { request: RequestRef }, take: boolean, ifExists: boolean): Promise<ClaimView> {
+		const method = `${take ? "take" : "read"}${ifExists ? "IfExists" : ""}`;
+		const args = { tmpl, timeout, deadline: o.deadline ?? null, txn: o.txn ?? null } as unknown as Json;
+		await this.maintain();
+		return this.host.commit(async tx => {
+			const s = await this.doc(tx), now = this.now();
+			const existing = s.rpc?.claims[claims.keyOf(s, o.request)];
+			if (!existing) {
+				const n = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && canonicalPrincipal(c.principal) === canonicalPrincipal(o.request.principal)).length;
+				if (n >= (this.options.maxPending ?? 32)) throw new core.ResourceExhausted("too many pending operations for this principal");
+				const peerCount = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && c.principal.peerId === o.request.principal.peerId).length;
+				if (peerCount >= (this.options.maxPendingPeer ?? 128)) throw new core.ResourceExhausted("too many pending operations for this peer");
+			}
+			const lim = core.limitsOf(s);
+			const bound = lim.maxEntryBytes + 4 * lim.maxTypeChars * lim.maxTypes + 4096;
+			const ad = claims.admit(s, now, o.request, method, core.plain(args), o.deadline ?? core.deadlineOf(now, timeout), bound);
+			if (ad.kind === "pending") { core.settle(s, now); return core.plain(claims.lookup(s, o.request, now)); }
+			if (ad.kind === "fresh") {
+				if (o.deadline !== undefined && o.deadline < now) { claims.decide(s, now, ad.key, { state: "done", result: null }); return core.plain(claims.lookup(s, o.request, now)); }
+				const p = core.probe(s, now, tmpl, o.txn ?? null, take, this.as);
+				const miss = p.status !== "found" && (ad.deadline <= now || (ifExists && p.status === "none"));
+				const result = p.status === "found" ? core.view(p.entry, s.spaceId) as unknown as Json : null;
+				if (p.status === "found" || miss) {
+					if (o.resultBudget !== undefined && Buffer.byteLength(JSON.stringify(result)) > o.resultBudget) throw new core.ResponseBudgetTooSmall(Buffer.byteLength(JSON.stringify(result)));
+					claims.decide(s, now, ad.key, { state: "done", result });
+				} else core.parkOperation(s, ad.key, tmpl, take, o.txn ?? null, ad.deadline, ifExists, this.as);
+			}
+			return core.plain(claims.lookup(s, o.request, now));
+		}, this.ctx);
+	}
+	private async durableOperation(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean): Promise<Taken | null> {
+		let value = await this.beginOperation(tmpl, timeout, o as OpOptions & { request: RequestRef }, take, ifExists);
+		const watch = await this.watch();
+		let wake: () => void = () => {}, dirty = false;
+		watch?.start(async () => { dirty = true; wake(); });
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			for (;;) {
+				if (value.resultExpired) throw new claims.ResultExpired("the operation's retained result expired");
+				if (value.error) throw value.error.code === "CompletionViolation" ? new core.CompletionViolation(value.error.message) : new core.TransactionError(value.error.message);
+				if (value.state === "cancelled") throw new claims.OperationCancelled("the operation was cancelled");
+				if (value.state === "done") { this.meter.inc(value.result === null ? "misses" : take ? "takes" : "reads"); return (value.result ?? null) as unknown as Taken | null; }
+				if (!dirty) await awaitWithContext(new Promise<void>(res => { wake = res; timer = setTimeout(res, core.timerDelay(Math.min(1000, value.deadline - this.now()))); }), this.ctx);
+				clearTimeout(timer); dirty = false;
+				value = await this.pollOperation(o.request!);
+			}
+		} finally { clearTimeout(timer); await watch?.stop(); }
+	}
+
+	/** Drain due work in separate bounded commits before admitting another domain mutation. */
+	private async maintain(): Promise<void> {
+		for (;;) {
+			const prior = await this.snap();
+			if (!prior || !core.needsMaintenance(prior, this.now())) return;
+			const signature = maintenanceSignature(prior);
+			const outcome = await this.host.commit(async tx => {
+				const s = await this.doc(tx); core.settle(s, this.now());
+				return { more: core.needsMaintenance(s, this.now()), signature: maintenanceSignature(s) };
+			}, this.ctx);
+			if (outcome.more && outcome.signature === signature) throw new core.ResourceExhausted("a maintenance item cannot fit the configured commit budget");
+		}
+	}
 }
+
+const canonicalPrincipal = (p: Principal): string => JSON.stringify([p.peerId, p.agentId ?? null]);
+const maintenanceSignature = (s: Readonly<core.SpaceState>): string => JSON.stringify([s.entries.length, Object.keys(s.txns).length, s.regs.length, s.waiters.length, core.revision(s), s.jobs?.map(j => [j.id, j.cursor, j.retryAt ?? 0]), s.releaseQueue, Object.values(s.mailboxes?.boxes ?? {}).map(b => [b.epoch, b.next, b.acked])]);

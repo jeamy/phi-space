@@ -7,7 +7,6 @@ import type { Context } from "@earendil-works/chord";
 import { defineDoc, defineExtension, defineTool, section, type ConversationId, type Harness, type Tx } from "@earendil-works/pi-durable";
 import { PiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
 import { listSpaces, NamedSpace, Registry, spaceDoc } from "./spaces.ts";
-import { sweep as sweepClaims } from "./claims.ts";
 import * as core from "./core.ts";
 import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
 
@@ -17,10 +16,13 @@ export { canonicalJson } from "./canonical.ts";
 export { ProvingService, MemoryKeyDirectory, generateKey, verifySignature, signedBytes, AUTH_PROTOCOL, CHALLENGE_TTL_MS, DEFAULT_PRIVILEGED, type Algorithm, type Challenge, type KeyDirectory, type PeerKeyRec, type Signer, type AuthState, type ProvingOptions } from "./auth.ts";
 export { startGate, NetbirdDirectory, GateIdentity, DirectoryDown, DEFAULT_GROUP_ROLES, rolesOf, type Gate, type GateOptions, type PeerDirectory, type PeerInfo, type GroupRoles, type NetbirdDirectoryOptions } from "./gate.ts";
 export { serveSpace, socketTransport, type ServeOptions, type SpaceServer, type SocketTransport, type ListenTarget } from "./socket.ts";
+export { withSpaceService, piServerTransport, type RoutedServices, type RoutedAttachment, type RoutedCall } from "./pi-server.ts";
 export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, UnsupportedOperation, type Transport, type RemoteOptions } from "./remote.ts";
 export { SpaceService, StaticIdentity, DEFAULT_POLICY, PROTOCOL_VERSION, METHODS, principalKey, type Call, type Reply, type ErrorCode, type Identity, type IdentityAdapter, type Connection, type Policy, type RolePolicy, type SpaceServiceOptions, type Method } from "./service.ts";
 export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type ClaimState } from "./claims.ts";
 export * as claims from "./claims.ts";
+export { MailboxEpochMismatch, InvalidAck, type MailboxPage, type MailItem, type MailboxState } from "./mailbox.ts";
+export { CompletionViolation, type CompletionProfile } from "./core.ts";
 export * from "./meter.ts";
 export { core };
 
@@ -230,7 +232,7 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
 	const now = o.now ?? Date.now;
 	const retryMs = o.retryMs ?? 1000;
 	const snap = await snapshotOf(harness, o.space, ctx);
-	const events = (snap?.outbox ?? []).filter((e) => (e.retryAt ?? 0) <= now()); // failed ones wait for their backoff
+	const events = (snap?.outbox ?? []).filter((e) => (e.retryAt ?? 0) <= now()).slice(0, 64); // bounded cleanup/release, failed ones wait for backoff
 	const done = new Set<string>(); // submitted
 	const dropped = new Set<string>(); // nobody to deliver to: no target, or the conversation no longer exists
 	const failed = new Set<string>();
@@ -346,7 +348,6 @@ export async function startMaintenance(harness: Harness, ctx: Context, o: Servic
 			const next = await harness.commit(async (tx) => {
 				const s = await spaceDoc(tx, o.space, now());
 				core.settle(s, now());
-				sweepClaims(s, now()); // drop results past their retention (claims.ts)
 				return core.nextExpiry(s);
 			}, ctx);
 			if (next < core.FOREVER) arm(next - now());

@@ -38,7 +38,7 @@ test("hello: identity, limits and features; the call cannot name its principal",
 	assert.equal(r.hostId, "host-1");
 	assert.ok(r.spaceId && r.incarnation !== undefined && r.streamId.includes(r.spaceId));
 	assert.equal(r.limits.maxFrameBytes, 256 * 1024);
-	assert.ok(r.features.includes("write") && !r.features.includes("events"), "mailbox methods are not offered yet");
+	assert.ok(r.features.includes("write") && r.features.includes("events"), "mailbox methods are offered");
 	err(await s.handle({ method: "hello", args: { protocol: 2 } }, as("peer-a")), "UnsupportedProtocol");
 	err(await s.handle({ method: "hello", args: { protocol: 1 } }, as("nobody")), "Unauthenticated");
 	err(await s.handle({ method: "hello", args: { protocol: 1 } }, {}), "Unauthenticated");
@@ -177,8 +177,8 @@ test("frame checks, size limits and bad calls", async () => {
 	err(await a.call("take", { template: "not a template" }), "BadRequest");
 	err(await s.handle({ method: "frobnicate" }, as("peer-a")), "UnsupportedMethod");
 	err(await s.handle("nonsense", as("peer-a")), "BadRequest");
-	err(await s.handle({ method: "wait", args: {} }, as("peer-a")), "UnsupportedMethod");
-	err(await s.handle({ method: "events", args: {} }, as("peer-a")), "UnsupportedMethod");
+	err(await s.handle({ method: "wait", args: {} }, as("peer-a")), "BadRequest");
+	assert.equal(ok(await s.handle({ method: "events", args: {} }, as("peer-a"))).events.length, 0);
 	const big = JSON.stringify({ method: "hello", args: { protocol: 1, pad: "z".repeat(300_000) } });
 	assert.equal(JSON.parse(await s.handleText(big, as("peer-a"))).error.code, "ResourceExhausted");
 	assert.equal(JSON.parse(await s.handleText("{not json", as("peer-a"))).error.code, "BadRequest");

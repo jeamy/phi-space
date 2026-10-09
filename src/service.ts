@@ -4,22 +4,22 @@
 // The identity never comes from the call itself: a call cannot name its principal.
 //
 // Placeholders until the federation stages: `authorityId` and `primaryEpoch` are checked against the configured values
-// (a single host is its own authority, epoch 0); `wait`, `notify`, `events` and `ack` need mailboxes (AP 1.6).
+// (a single host is its own authority, epoch 0). Overlay authentication and grants belong to phase 1b.
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import { PiSpaces, type SpaceHost } from "./client.ts";
-import { listSpaces, snapshotSpace, spaceDoc, UnknownSpaceError, DEFAULT_ALIAS } from "./spaces.ts";
+import { listSpaces, snapshotSpace, spaceDoc, UnknownSpaceError, DEFAULT_ALIAS, Registry } from "./spaces.ts";
 import type { Principal, RequestRef } from "./claims.ts";
 import type { Json } from "./core.ts";
+import { encodedBytes } from "./paging.ts";
+import { principalId, MailboxEpochMismatch, InvalidAck } from "./mailbox.ts";
 
 export const PROTOCOL_VERSION = 1;
 export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
 export type Method = (typeof METHODS)[number];
-/** Needs mailboxes (AP 1.6): answered with UnsupportedMethod for now. */
-const PENDING_FEATURES: readonly Method[] = ["wait", "notify", "events", "ack"];
-const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease"]; // carry a request identity
+const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack"];
 
 // ---- identity and rights
 
@@ -58,7 +58,7 @@ export type Call = {
 export type ErrorCode =
 	| "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
 export type Reply = { ok: true; result: Json } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
 export type SpaceServiceOptions = {
@@ -72,6 +72,9 @@ export type SpaceServiceOptions = {
 	hostId?: string;
 	maxPollMs?: number; // longest wait of a poll (spec: 25 s)
 	maxPendingPerPrincipal?: number;
+	maxPendingPerPeer?: number;
+	maxCallsPerWindow?: number;
+	rateWindowMs?: number;
 };
 
 class Bad extends Error {}
@@ -101,13 +104,15 @@ const duration = (v: unknown, what: string, dflt: number): number => {
 export const principalKey = (p: Principal): string => (p.agentId ? `${p.peerId}/${p.agentId}` : p.peerId);
 
 export class SpaceService {
-	private o: Required<Pick<SpaceServiceOptions, "maxPollMs" | "maxPendingPerPrincipal" | "authorityId" | "primaryEpoch">> & SpaceServiceOptions;
+	private o: Required<Pick<SpaceServiceOptions, "maxPollMs" | "maxPendingPerPrincipal" | "maxPendingPerPeer" | "maxCallsPerWindow" | "rateWindowMs" | "authorityId" | "primaryEpoch">> & SpaceServiceOptions;
 	private policy: Policy;
 	private now: () => number;
-	private inflight = new Map<string, Promise<unknown>>();
+	private rates = new Map<string, { at: number; calls: number }>();
 
 	constructor(o: SpaceServiceOptions) {
-		this.o = { maxPollMs: 25_000, maxPendingPerPrincipal: 32, authorityId: "local", primaryEpoch: 0, ...o };
+		this.o = { maxPollMs: 25_000, maxPendingPerPrincipal: 32, maxPendingPerPeer: 128, maxCallsPerWindow: 1024, rateWindowMs: 1000, authorityId: "local", primaryEpoch: 0, ...o };
+		this.o.maxPollMs = Math.min(this.o.maxPollMs, 25000);
+		for (const value of [this.o.maxPendingPerPrincipal, this.o.maxPendingPerPeer, this.o.maxCallsPerWindow, this.o.rateWindowMs]) if (!Number.isSafeInteger(value) || value < 1) throw new TypeError("service limits must be positive integers");
 		this.policy = o.policy ?? DEFAULT_POLICY;
 		this.now = o.now ?? Date.now;
 	}
@@ -117,11 +122,14 @@ export class SpaceService {
 		if (new TextEncoder().encode(text).length > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", `a call may take at most ${maxFrameBytes} bytes`));
 		let call: unknown;
 		try { call = JSON.parse(text); } catch { return JSON.stringify(fail("BadRequest", "the call is not JSON")); }
-		const reply = await this.handle(call, conn);
-		return JSON.stringify(reply);
+		const reply = await this.handle(call, conn, maxFrameBytes, Buffer.byteLength(text));
+		const textReply = JSON.stringify(reply);
+		if (encodedBytes(reply) > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", "the transport frame cannot carry this response"));
+		return textReply;
 	}
 
-	async handle(call: unknown, conn: Connection): Promise<Reply> {
+	async handle(call: unknown, conn: Connection, transportFrameBytes = core.DEFAULT_LIMITS.maxFrameBytes, rawBytes?: number): Promise<Reply> {
+		let responseFrame = transportFrameBytes;
 		try {
 			if (!isObj(call) || typeof call.method !== "string") throw new Bad("a call is an object with a method");
 			if (!(METHODS as readonly string[]).includes(call.method)) return fail("UnsupportedMethod", `unknown method ${call.method}`);
@@ -130,6 +138,7 @@ export class SpaceService {
 			const args = (call.args ?? {}) as Record<string, Json>;
 			const id = await this.o.identity.authenticate(conn);
 			if (!id) return fail("Unauthenticated", "the connection has no known identity");
+			this.rate(id.principal.peerId);
 			const grant = this.allowed(id, method);
 			const frame = call.frame;
 			if (frame !== undefined) {
@@ -137,7 +146,6 @@ export class SpaceService {
 				if (frame.authorityId !== undefined && frame.authorityId !== this.o.authorityId) return fail("AuthorityMismatch", `this host is authority ${this.o.authorityId}`);
 				if (frame.primaryEpoch !== undefined && frame.primaryEpoch !== this.o.primaryEpoch) return fail("StaleEpoch", `the primary epoch is ${this.o.primaryEpoch}`);
 			}
-			if (PENDING_FEATURES.includes(method)) return fail("UnsupportedMethod", `${method} needs mailboxes, which this host does not have yet`);
 			let request: RequestRef | undefined;
 			if (MUTATING.includes(method)) {
 				const r = call.request;
@@ -145,11 +153,25 @@ export class SpaceService {
 				request = { principal: id.principal, generation: str(r.generation, "request.generation"), requestId: str(r.requestId, "request.requestId") };
 			}
 			const space = call.space === undefined ? undefined : str(call.space, "space");
-			const client = new PiSpaces(this.o.host, this.o.ctx, this.now, undefined, principalKey(id.principal), { space: space === DEFAULT_ALIAS ? undefined : space });
-			return { ok: true, result: await this.dispatch(method, args, { id, request, client, space, grant }) };
+			const client = new PiSpaces(this.o.host, this.o.ctx, this.now, undefined, principalId(id.principal), { space: space === DEFAULT_ALIAS ? undefined : space, authorityId: this.o.authorityId, maxPending: this.o.maxPendingPerPrincipal, maxPendingPeer: this.o.maxPendingPerPeer, consumer: id.principal });
+			const frameBytes = Math.min(transportFrameBytes, (await client.configuration()).limits.maxFrameBytes);
+			responseFrame = frameBytes;
+			if ((rawBytes ?? encodedBytes(call)) > frameBytes) throw new core.ResourceExhausted("the request exceeds the space frame limit");
+			const result = await this.dispatch(method, args, { id, request, client, space, grant, frameBytes });
+			const reply: Reply = { ok: true, result };
+			if (encodedBytes(reply) > frameBytes) throw new core.ResourceExhausted("the configured frame cannot carry the result; use a compatible transport frame");
+			return reply;
 		} catch (e) {
+			if (e instanceof core.ResponseBudgetTooSmall && e.requiredBytes > responseFrame - 21) return fail("ResourceExhausted", "the configured frame cannot hold the next whole element");
 			return this.error(e);
 		}
+	}
+	private rate(peer: string): void {
+		const now = this.now();
+		for (const [key, value] of this.rates) if (value.at + this.o.rateWindowMs <= now) this.rates.delete(key);
+		let r = this.rates.get(peer);
+		if (!r) { if (this.rates.size >= 10000) throw new core.ResourceExhausted("the rate table is full"); r = { at: now, calls: 0 }; this.rates.set(peer, r); }
+		if (++r.calls > this.o.maxCallsPerWindow) throw new core.ResourceExhausted("the peer exceeded its call rate");
 	}
 
 	// ---- rights
@@ -174,7 +196,7 @@ export class SpaceService {
 
 	// ---- methods
 
-	private async dispatch(method: Method, a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; space?: string; grant: { types: ReadonlySet<string> | "*" } }): Promise<Json> {
+	private async dispatch(method: Method, a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; space?: string; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		const { client, request, grant } = c;
 		switch (method) {
 			case "hello": return this.hello(a, c);
@@ -201,18 +223,17 @@ export class SpaceService {
 			case "readAll": {
 				const t = template(a.template);
 				if (grant.types !== "*") this.checkTypes(grant, t?.type ? [t.type] : undefined, "this template");
-				const p = await client.readPage(t, { ...(a.maxBytes === undefined ? {} : { maxBytes: int(a.maxBytes, "maxBytes", 1) }), after: (a.cursor as string | null | undefined) ?? null, txn: (a.txn as string | null | undefined) ?? null });
+				const p = await client.readPage(t, { maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21), ...(a.token === undefined ? {} : { token: str(a.token, "token") }), after: (a.cursor as string | null | undefined) ?? null, txn: (a.txn as string | null | undefined) ?? null });
 				return p as unknown as Json;
 			}
 			case "count": {
 				const t = template(a.template);
 				if (grant.types !== "*") this.checkTypes(grant, t?.type ? [t.type] : undefined, "this template");
-				const { rev, streamId } = await client.revision();
-				return { value: await client.count(t, (a.txn as string | null | undefined) ?? null), rev, streamId };
+				return await client.countWithRevision(t, (a.txn as string | null | undefined) ?? null);
 			}
 			case "stats": {
-				const { rev, streamId } = await client.revision();
-				return { stats: (await client.stats()) as unknown as Json, rev, streamId };
+				if (grant.types !== "*") throw new Denied("aggregate stats need a role without type restrictions");
+				return await client.statsWithRevision() as unknown as Json;
 			}
 			case "txn": {
 				const action = str(a.action, "action");
@@ -230,15 +251,41 @@ export class SpaceService {
 				throw new Bad("action must be renew or cancel");
 			}
 			case "changes": return this.changes(a, c);
+			case "notify": {
+				const t = template(a.template); this.checkTypes(grant, t?.type ? [t.type] : undefined, "this subscription");
+				this.checkConsumer(a.consumer, c.id);
+				return await client.notify(t, { target: principalId(c.id.principal), lease: duration(a.leaseMs, "leaseMs", core.ANY), txn: (a.txn as string | null | undefined) ?? null, handback: a.handback ?? null, request }) as unknown as Json;
+			}
+			case "wait": {
+				const t = template(a.template); this.checkTypes(grant, t?.type ? [t.type] : undefined, "this wait");
+				this.checkConsumer(a.consumer, c.id);
+				if (a.take !== undefined && typeof a.take !== "boolean") throw new Bad("take must be boolean");
+				const operationGrant = this.allowed(c.id, a.take === false ? "read" : "take"); this.checkTypes(operationGrant, t?.type ? [t.type] : undefined, "this wait operation");
+				const id = await client.wait(t, { target: principalId(c.id.principal), timeout: duration(a.timeoutMs, "timeoutMs", core.NO_WAIT), take: a.take !== false, txnLeaseMs: duration(a.txnLeaseMs, "txnLeaseMs", core.ANY), handback: a.handback ?? null, request });
+				return { id };
+			}
+			case "events": {
+				this.checkConsumer(a.consumer, c.id);
+				const end = this.now() + Math.min(optInt(a.waitMs, "waitMs") ?? 0, this.o.maxPollMs);
+				for (;;) {
+					const p = await client.events(c.id.principal, { ...(a.mailboxEpoch === undefined ? {} : { mailboxEpoch: str(a.mailboxEpoch, "mailboxEpoch") }), after: optInt(a.after, "after"), maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21) }, p => { for (const item of p.events) if (item.event.entry) this.checkTypes(grant, item.event.entry.types, "this mailbox event"); });
+					if (p.events.length || p.gap || this.now() >= end) return p as unknown as Json;
+					await awaitWithContext(new Promise<void>(r => setTimeout(r, Math.min(50, Math.max(1, end - this.now())))), this.o.ctx);
+				}
+			}
+			case "ack": this.checkConsumer(a.consumer, c.id); return await client.ack(c.id.principal, str(a.mailboxEpoch, "mailboxEpoch"), int(a.upTo, "upTo"), { request }) as unknown as Json;
 			default: throw new Bad(`${method} is not implemented`);
 		}
 	}
+	private checkConsumer(v: unknown, id: Identity): void {
+		if (v !== undefined && (!isObj(v) || principalId(v as unknown as Principal) !== principalId(id.principal))) throw new Denied("a consumer must be your authenticated principal");
+	}
 
-	private async hello(a: Record<string, Json>, c: { id: Identity; space?: string; client: PiSpaces }): Promise<Json> {
+	private async hello(a: Record<string, Json>, c: { id: Identity; space?: string; client: PiSpaces; frameBytes: number }): Promise<Json> {
 		if (a.protocol !== PROTOCOL_VERSION) throw new UnsupportedProtocol(`this host speaks protocol ${PROTOCOL_VERSION}`);
 		const infos = await listSpaces(this.o.host, this.o.ctx);
 		let info = infos.find((i) => i.alias === (c.space ?? DEFAULT_ALIAS) || i.spaceId === c.space);
-		if (!info && c.space === undefined) { // an untouched session registers its default space on first use
+		if (!info && (c.space === undefined || c.space === DEFAULT_ALIAS)) { // an untouched session registers its default space on first use
 			await this.o.host.commit(async (tx) => { await spaceDoc(tx, undefined, this.now()); }, this.o.ctx);
 			info = (await listSpaces(this.o.host, this.o.ctx)).find((i) => i.alias === DEFAULT_ALIAS);
 		}
@@ -247,12 +294,13 @@ export class SpaceService {
 		const lim = core.limitsOf(s ?? core.initialState());
 		return {
 			protocol: PROTOCOL_VERSION,
-			...(this.o.hostId ? { hostId: this.o.hostId } : {}),
+			hostId: this.o.hostId ?? (await this.o.host.snapshot(Registry, this.o.ctx))!.hostId,
 			spaceId: info.spaceId, alias: info.alias, incarnation: info.incarnation, streamId: core.streamIdOf(s ?? core.initialState()), rev: core.revision(s ?? core.initialState()),
 			authorityId: this.o.authorityId, primaryEpoch: this.o.primaryEpoch, role: "single",
 			principal: principalKey(c.id.principal), roles: c.id.roles,
-			features: METHODS.filter((m) => !PENDING_FEATURES.includes(m)),
-			limits: { maxFrameBytes: lim.maxFrameBytes, maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs },
+			features: [...METHODS],
+			limits: { maxFrameBytes: Math.min(lim.maxFrameBytes, c.frameBytes), maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs, maxPendingPerPrincipal: this.o.maxPendingPerPrincipal, maxPendingPerPeer: this.o.maxPendingPerPeer },
+			capabilities: { snapshotPagination: true, mailboxes: true, completionProfiles: true, transactions: true, blockingTake: true, mode: "single" },
 		} as Json;
 	}
 
@@ -262,40 +310,18 @@ export class SpaceService {
 	}
 
 	/** read/take: `done` with the entry or null, or `pending` while the operation keeps running on the host. */
-	private async readTake(method: "read" | "take", a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; grant: { types: ReadonlySet<string> | "*" } }): Promise<Json> {
+	private async readTake(method: "read" | "take", a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		const { client, request, grant } = c;
 		const t = template(a.template);
 		if (grant.types !== "*") this.checkTypes(grant, t?.type ? [t.type] : undefined, "this template");
 		const timeout = duration(a.timeoutMs, "timeoutMs", core.NO_WAIT);
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? this.o.maxPollMs, this.o.maxPollMs);
-		const txn = (a.txn as string | null | undefined) ?? null;
-		const key = `${principalKey(c.id.principal)}|${request!.generation}|${request!.requestId}`;
-		let run = this.inflight.get(key) as Promise<{ entry: Json | null }> | undefined;
-		if (!run) {
-			await this.checkPending(client, c.id);
-			const opts = { txn, request };
-			const op = a.ifExists === true ? (method === "read" ? client.readIfExists(t, timeout, opts) : client.takeIfExists(t, timeout, opts)) : (method === "read" ? client.read(t, timeout, opts) : client.take(t, timeout, opts));
-			run = op.then((entry) => ({ entry: entry as unknown as Json | null }));
-			this.inflight.set(key, run);
-			const done = () => { if (this.inflight.get(key) === run) this.inflight.delete(key); };
-			run.then(done, done); // the call may have returned `pending` long ago: nobody else observes a late failure
-		}
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		let first: { entry: Json | null } | "pending";
-		try { first = await Promise.race([run, new Promise<"pending">((res) => { timer = setTimeout(() => res("pending"), waitMs); })]); }
-		finally { clearTimeout(timer); } // also when the operation failed: a poll timer must not outlive the call
-		if (first === "pending") {
-			const view = await client.pollOperation(request!).catch(() => undefined);
-			return { state: "pending", ...(view ? { deadline: view.deadline } : {}) };
-		}
-		return { state: "done", entry: first.entry };
-	}
-
-	private async checkPending(client: PiSpaces, id: Identity): Promise<void> {
-		const s = await (client as unknown as { snap(): Promise<Readonly<core.SpaceState> | undefined> }).snap();
-		let n = 0;
-		for (const cl of Object.values(s?.rpc?.claims ?? {})) if (cl.state === "pending" && cl.principal.peerId === id.principal.peerId && cl.principal.agentId === id.principal.agentId) n++;
-		if (n >= this.o.maxPendingPerPrincipal) throw new core.ResourceExhausted(`you already have ${n} pending operations`);
+		let view = await client.beginOperation(t, timeout, { txn: (a.txn as string | null | undefined) ?? null, request: request!, resultBudget: c.frameBytes - 64, ...(a.deadline === undefined ? {} : { deadline: int(a.deadline, "deadline") }) }, method === "take", a.ifExists === true);
+		if (view.state === "pending" && waitMs > 0) view = await this.poll({ targetRequest: { generation: request!.generation, requestId: request!.requestId }, waitMs }, c) as unknown as claims.ClaimView;
+		if (view.resultExpired) throw new claims.ResultExpired("the stored result has expired");
+		if (view.error) throw view.error.code === "CompletionViolation" ? new core.CompletionViolation(view.error.message) : new core.TransactionError(view.error.message);
+		if (view.state === "cancelled") throw new claims.OperationCancelled("the operation was cancelled");
+		return view.state === "done" ? { state: "done", entry: view.result ?? null } : { state: "pending", deadline: view.deadline };
 	}
 
 	/** The state of an own request; waits up to `waitMs` (at most maxPollMs) for it to leave `pending`. Never extends a deadline. */
@@ -305,17 +331,18 @@ export class SpaceService {
 		const end = this.now() + waitMs;
 		for (;;) {
 			const v = await c.client.pollOperation(t);
+			if (v.result && isObj(v.result) && Array.isArray(v.result.types)) this.checkTypes(this.allowed(c.id, "pollOperation"), v.result.types as string[], "this retained result");
 			if (v.state !== "pending" || this.now() >= end) return v as unknown as Json;
 			await awaitWithContext(new Promise<void>((res) => setTimeout(res, Math.min(50, Math.max(1, end - this.now())))), this.o.ctx);
 		}
 	}
 
 	/** Commit batches after a revision; `resync` tells the client to read pages again (history dropped or another stream). */
-	private async changes(a: Record<string, Json>, c: { client: PiSpaces; grant: { types: ReadonlySet<string> | "*" } }): Promise<Json> {
+	private async changes(a: Record<string, Json>, c: { client: PiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		if (c.grant.types !== "*") throw new Denied("the change stream carries every type; it needs a role without type limits");
 		const after = int(a.afterRev, "afterRev", 0);
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
-		const maxBytes = a.maxBytes === undefined ? undefined : int(a.maxBytes, "maxBytes", 1);
+		const maxBytes = Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21);
 		const end = this.now() + waitMs;
 		for (;;) {
 			let r: core.Changes;
@@ -346,6 +373,9 @@ export class SpaceService {
 		if (e instanceof core.LimitError) return fail("ResourceExhausted", e.message); // includes ResourceExhausted itself
 		if (e instanceof core.SnapshotExpired) return fail("SnapshotExpired", e.message);
 		if (e instanceof core.RevisionAhead) return fail("RevisionAhead", e.message);
+		if (e instanceof core.CompletionViolation) return fail("CompletionViolation", e.message);
+		if (e instanceof MailboxEpochMismatch) return fail("MailboxEpochMismatch", e.message);
+		if (e instanceof InvalidAck) return fail("InvalidAck", e.message);
 		if (e instanceof core.TransactionError || e instanceof core.UnknownLeaseError) return fail("TransactionError", (e as Error).message);
 		if (e instanceof core.IllegalArgumentError || e instanceof TypeError) return fail("BadRequest", (e as Error).message);
 		return fail("Internal", e instanceof Error ? e.message : String(e));

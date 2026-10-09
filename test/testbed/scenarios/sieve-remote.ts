@@ -18,7 +18,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, GateIdentity, NetbirdDirectory, PiSpaces, RemoteSpace, SpaceService, StaticIdentity, serveSpace, socketTransport, startGate, type Connection, type Identity, type IdentityAdapter, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
+import { FOREVER, GateIdentity, NetbirdDirectory, PiSpaces, RemoteSpace, createSpace, listSpaces, snapshotSpace, startMaintenance, SpaceService, StaticIdentity, serveSpace, socketTransport, startGate, type Connection, type Identity, type IdentityAdapter, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
 import { segmentedSieve } from "../../../examples/sieve.ts";
 
 const USAGE = `Usage: sieve-remote.ts <serve|client|all> [options]
@@ -83,6 +83,7 @@ async function overlayAddress(): Promise<string> {
 const hostPort = (s: string): { host: string; port: number } => { const m = /^(.+):(\d+)$/.exec(s); if (!m) throw new Error(`HOST:PORT expected, got ${s}`); return { host: m[1]!, port: Number(m[2]) }; };
 
 // ------------------------------------------------------------------------------------------------------------ host
+const SIEVE_SPACE = "sieve-remote";
 const IDS = new StaticIdentity({
 	phone: { principal: { peerId: "phone" }, roles: ["admin"] },
 	worker: { principal: { peerId: "worker", agentId: "pool" }, roles: ["member"] },
@@ -95,7 +96,11 @@ async function serve(o: Opts): Promise<void> {
 	mkdirSync(o.dir, { recursive: true });
 	const storage = await openNodeJsonlStorage(join(o.dir, "data"), ctx);
 	const h = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
-	await new PiSpaces(h, ctx).count(); // registers the default space
+	const sieveInfo = (await listSpaces(h, ctx)).find(info => info.alias === SIEVE_SPACE) ?? await h.commit(tx => createSpace(tx, SIEVE_SPACE, Date.now()), ctx);
+	const local = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: SIEVE_SPACE });
+	// Preserve active transactions on a crash/reopen; the profile is installed before the first task is admitted.
+	if (!(await snapshotSpace(h, sieveInfo.spaceId, ctx))?.completionProfiles?.length) await local.setCompletionProfiles([{ taskType: "SieveTask", resultTypes: ["SieveResult"], equalFields: ["block", "rangeStart", "rangeEnd"], maxResultCount: 1 }]);
+	const stopMaintenance = await startMaintenance(h, ctx, { space: SIEVE_SPACE });
 	const service = new SpaceService({ host: h, ctx, identity: o.gate ? chain(new GateIdentity(), IDS) : IDS, hostId: "host", maxPollMs: 5_000 });
 	const servers: SpaceServer[] = [];
 	servers.push(await serveSpace(service, { listen: { path: join(o.dir, "phone.sock") }, connection: () => ({ peerId: "phone" }) }));
@@ -116,7 +121,7 @@ async function serve(o: Opts): Promise<void> {
 	}
 	say("host", `serving ${servers.length} listeners in ${o.dir}${tcp}`);
 	console.log("READY");
-	const stop = async () => { for (const s of servers) await s.close(); await h.close(ctx); process.exit(0); };
+	const stop = async () => { for (const s of servers) await s.close(); await stopMaintenance(); await h.close(ctx); process.exit(0); };
 	process.on("SIGTERM", () => void stop());
 	process.on("SIGINT", () => void stop());
 }
@@ -129,7 +134,7 @@ function clients(o: Opts): { phone: () => RemoteSpace; worker: () => RemoteSpace
 		const t = socketTransport(target);
 		open.push(t);
 		// attempts and backoff are meant to span a host restart of a second or two
-		return new RemoteSpace(t, { attempts: 60, backoffMs: 100, maxBackoffMs: 500, callTimeoutMs: 8_000, maxClientWaitMs: undefined });
+		return new RemoteSpace(t, { space: SIEVE_SPACE, attempts: 60, backoffMs: 100, maxBackoffMs: 500, callTimeoutMs: 8_000, maxClientWaitMs: undefined });
 	};
 	void make;
 	return { phone: () => make("phone.sock", "phone"), worker: () => make("worker.sock", "worker"), close: () => open.forEach((t) => t.close()) };

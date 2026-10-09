@@ -8,7 +8,7 @@
 // concurrently; the reply carries the id of its call. A frame over the limit is a protocol violation and ends the
 // connection (4.2: frame limit, connection limit, idle limit).
 import net from "node:net";
-import { chmodSync, existsSync, unlinkSync } from "node:fs";
+import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import type { Connection, SpaceService } from "./service.ts";
 import type { Transport } from "./remote.ts";
 import { DEFAULT_LIMITS } from "./core.ts";
@@ -63,16 +63,19 @@ export type SpaceServer = {
 
 export async function serveSpace(service: Pick<SpaceService, "handleText">, o: ServeOptions): Promise<SpaceServer> {
 	const maxFrame = o.maxFrameBytes ?? DEFAULT_LIMITS.maxFrameBytes;
+	if (!Number.isSafeInteger(maxFrame) || maxFrame < 256) throw new Error("maxFrameBytes must be an integer >= 256");
 	const maxConns = o.maxConnections ?? 64;
 	const maxInflight = o.maxInflightPerConnection ?? 32;
 	const idleMs = o.idleMs ?? 5 * 60_000;
 	const open = new Set<net.Socket>();
+	let owned: { dev: number; ino: number } | undefined;
+	if ("path" in o.listen) await prepareSocketPath(o.listen.path);
 	const server = net.createServer((socket) => {
 		if (open.size >= maxConns) { socket.destroy(); return; }
 		open.add(socket);
 		socket.setNoDelay(true);
 		socket.setTimeout(idleMs, () => socket.destroy());
-		const reader = new FrameReader(maxFrame);
+		const reader = new FrameReader(maxFrame - HEADER);
 		let inflight = 0;
 		let conn: Promise<Connection> | undefined;
 		const reply = (id: number, text: string) => { if (!socket.destroyed) socket.write(frame(id, text)); };
@@ -82,7 +85,7 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 					if (inflight >= maxInflight) { reply(id, JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: `at most ${maxInflight} calls at once per connection` } })); return; }
 					inflight++;
 					conn ??= Promise.resolve(o.connection ? o.connection(socket) : {}).then((c) => { if (c === null) { socket.destroy(); throw new Error("refused"); } return c; });
-					conn.then((c) => service.handleText(text, c, maxFrame))
+					conn.then((c) => service.handleText(text, c, maxFrame - HEADER))
 						.then((r) => reply(id, r), (e) => reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: e instanceof Error ? e.message : String(e) } })))
 						.finally(() => { inflight--; });
 				});
@@ -94,8 +97,10 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 	await new Promise<void>((resolve, reject) => {
 		server.once("error", reject);
 		if ("path" in o.listen) {
-			if (existsSync(o.listen.path)) unlinkSync(o.listen.path); // a stale socket file of a killed process
-			server.listen(o.listen.path, () => { chmodSync((o.listen as { path: string }).path, 0o600); resolve(); });
+			server.listen(o.listen.path, () => {
+				try { const path = (o.listen as { path: string }).path; chmodSync(path, 0o600); owned = lstatSync(path); resolve(); }
+				catch (e) { server.close(); reject(e); }
+			});
 		} else server.listen(o.listen.port, o.listen.host, resolve);
 	});
 	return {
@@ -104,9 +109,30 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 		close: async () => {
 			for (const s of open) s.destroy();
 			await new Promise<void>((r) => server.close(() => r()));
-			if ("path" in o.listen && existsSync(o.listen.path)) unlinkSync(o.listen.path);
+			if ("path" in o.listen) {
+				try { const current = lstatSync(o.listen.path); if (owned && current.dev === owned.dev && current.ino === owned.ino) unlinkSync(o.listen.path); }
+				catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+			}
 		},
 	};
+}
+
+async function prepareSocketPath(path: string): Promise<void> {
+	let old;
+	try { old = lstatSync(path); } catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return; throw e; }
+	if (!old.isSocket()) throw new Error(`refusing to replace a non-socket path: ${path}`);
+	const stale = await new Promise<boolean>((resolve, reject) => {
+		const probe = net.createConnection(path);
+		const timer = setTimeout(() => { probe.destroy(); reject(new Error(`socket is busy or unresponsive: ${path}`)); }, 250);
+		probe.once("connect", () => { clearTimeout(timer); probe.destroy(); resolve(false); });
+		probe.once("error", e => { clearTimeout(timer); probe.destroy(); const code = (e as NodeJS.ErrnoException).code; if (code === "ECONNREFUSED" || code === "ENOENT") resolve(true); else reject(e); });
+	});
+	if (!stale) throw new Error(`a server is already listening at ${path}`);
+	try {
+		const current = lstatSync(path);
+		if (!current.isSocket() || current.ino !== old.ino || current.dev !== old.dev) throw new Error("socket path changed during stale-file check");
+		unlinkSync(path);
+	} catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 }
 
 export type SocketTransportOptions = { connectTimeoutMs?: number; maxFrameBytes?: number; /** Source address of the connection (a host with several overlay or loopback addresses). */ localAddress?: string };
@@ -121,15 +147,19 @@ export function socketTransport(target: ListenTarget, o: SocketTransportOptions 
 	const maxFrame = o.maxFrameBytes ?? DEFAULT_LIMITS.maxFrameBytes;
 	let socket: net.Socket | undefined;
 	let connecting: Promise<net.Socket> | undefined;
+	let opening: net.Socket | undefined;
+	let closed = false;
 	let nextId = 1;
-	const pending = new Map<number, { resolve: (t: string) => void; reject: (e: Error) => void }>();
-	const failAll = (e: Error) => { for (const p of pending.values()) p.reject(e); pending.clear(); };
+	const pending = new Map<number, { socket: net.Socket; resolve: (t: string) => void; reject: (e: Error) => void }>();
+	const failAll = (e: Error, source?: net.Socket) => { for (const [id, p] of pending) if (!source || p.socket === source) { p.reject(e); pending.delete(id); } };
 
 	const connect = (): Promise<net.Socket> => {
+		if (closed) return Promise.reject(new Error("closed"));
 		if (socket && !socket.destroyed) return Promise.resolve(socket);
 		connecting ??= new Promise<net.Socket>((resolve, reject) => {
 			const s = "path" in target ? net.createConnection(target.path) : net.createConnection({ port: target.port, host: target.host, ...(o.localAddress ? { localAddress: o.localAddress } : {}) });
-			const reader = new FrameReader(maxFrame);
+			opening = s;
+			const reader = new FrameReader(maxFrame - HEADER);
 			const timer = setTimeout(() => s.destroy(new Error("connect timed out")), o.connectTimeoutMs ?? 5_000);
 			s.setNoDelay(true);
 			s.once("connect", () => { clearTimeout(timer); socket = s; resolve(s); });
@@ -137,20 +167,21 @@ export function socketTransport(target: ListenTarget, o: SocketTransportOptions 
 				try { reader.push(chunk, (id, text) => { const p = pending.get(id); if (p) { pending.delete(id); p.resolve(text); } }); }
 				catch (e) { s.destroy(e as Error); }
 			});
-			s.on("error", (e) => { clearTimeout(timer); reject(e); failAll(e); });
-			s.on("close", () => { clearTimeout(timer); if (socket === s) socket = undefined; failAll(new Error("connection lost")); });
-		}).finally(() => { connecting = undefined; });
+			s.on("error", (e) => { clearTimeout(timer); reject(e); failAll(e, s); });
+			s.on("close", () => { clearTimeout(timer); reject(new Error("connection lost")); if (socket === s) socket = undefined; failAll(new Error("connection lost"), s); });
+		}).finally(() => { connecting = undefined; opening = undefined; });
 		return connecting;
 	};
 	return {
 		async request(text: string): Promise<string> {
+			if (Buffer.byteLength(text) + HEADER > maxFrame) throw new Error("request exceeds maxFrameBytes");
 			const s = await connect();
 			return new Promise<string>((resolve, reject) => {
 				const id = nextId++ >>> 0 || nextId++;
-				pending.set(id, { resolve, reject });
+				pending.set(id, { socket: s, resolve, reject });
 				s.write(frame(id, text), (e) => { if (e) { pending.delete(id); reject(e); } });
 			});
 		},
-		close() { socket?.destroy(); socket = undefined; failAll(new Error("closed")); },
+		close() { closed = true; opening?.destroy(); socket?.destroy(); socket = undefined; failAll(new Error("closed")); },
 	};
 }

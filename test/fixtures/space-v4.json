@@ -1,0 +1,12 @@
+{
+  "nextId": 42,
+  "entries": [
+    {"id":"e40","type":"Old","types":["Old"],"fields":{"marker":"v4"},"expires":9007199254740991,"writtenUnder":null,"takenBy":null,"readBy":[],"owner":null},
+    {"id":"e41","type":"Hidden","types":["Hidden"],"fields":{"marker":"uncommitted"},"expires":9007199254740991,"writtenUnder":"t31","takenBy":null,"readBy":[],"owner":5}
+  ],
+  "txns": {"t31":{"id":"t31","expires":9007199254740991,"owner":5}},
+  "regs": [{"id":"n32","template":{"type":"Old"},"expires":9007199254740991,"txn":null,"handback":{"tag":"v4"},"target":5,"seq":3}],
+  "waiters": [],
+  "outbox": [],
+  "returned": 0
+}

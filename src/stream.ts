@@ -6,9 +6,8 @@
 // `put`/`del` in order, in any prefix, converges to the same visible set, which lets a client combine a (live) page read
 // with `changes` after the revision it saw first.
 //
-// The batch of a commit is found through the identity of the document draft: drafts are new in every commit, so the
-// first change of a commit opens the batch and the later ones in the same commit join it. A plain state object (unit
-// tests) is one "commit" until `seal` is called.
+// spaceDoc opens the batch once per Tx and space. Draft identity is reused across commits and is not a commit id.
+// A plain state object (unit tests) is one batch until `seal` is called.
 import type { Fields, Json, Target } from "./core.ts";
 
 export type Op =
@@ -32,23 +31,27 @@ const open = new WeakMap<object, Open>();
 /** End the current batch of a draft or plain state: the next change gets a new revision. */
 export const seal = (s: object): void => { open.delete(s); };
 
+/** A space mutation without a visible entry delta still participates in its commit's revision. */
+export function touch(s: { stream?: StreamState }, now: number, maxLogBytes: number): void {
+	if (open.has(s)) return;
+	if (!s.stream) s.stream = { rev: 0, floor: 0, bytes: 0, log: [] };
+	const rev = s.stream.rev + 1;
+	s.stream.rev = rev;
+	s.stream.log.push({ rev, at: now, ops: [] });
+	s.stream.bytes += bytesOf({ rev, at: now, ops: [] }) + 1;
+	open.set(s, { rev, at: new Map() });
+	while (s.stream.bytes > maxLogBytes && s.stream.log.length > 1) { const old = s.stream.log[0]!; s.stream.floor = old.rev; s.stream.bytes -= bytesOf(old) + 1; s.stream.log.splice(0, 1); }
+}
+
 /**
  * Record one operation in the batch of the running commit; drops the oldest batches beyond `maxLogBytes`.
  * `s` may be a document draft: values assigned into a draft are copied, so everything after an assignment goes
  * through `s.stream` again instead of through the object that was assigned.
  */
 export function record(s: { stream?: StreamState }, now: number, op: Op, maxLogBytes: number): void {
-	if (!s.stream) s.stream = { rev: 0, floor: 0, bytes: 0, log: [] };
-	let o = open.get(s);
-	if (!o) {
-		const rev = s.stream.rev + 1;
-		s.stream.rev = rev;
-		s.stream.log.push({ rev, at: now, ops: [] });
-		s.stream.bytes += bytesOf({ rev, at: now, ops: [] }) + 1; // the envelope and the separator; operations add their own
-		o = { rev, at: new Map() };
-		open.set(s, o);
-	}
-	const st = s.stream;
+	touch(s, now, maxLogBytes);
+	const o = open.get(s)!;
+	const st = s.stream!;
 	const batch = st.log[o.rev - st.log[0]!.rev]!; // revisions in the log are consecutive
 	const prev = o.at.get(op.id);
 	if (prev !== undefined) { // the last operation per entry wins; position keeps the order of first touch

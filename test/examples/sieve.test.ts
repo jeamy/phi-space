@@ -34,7 +34,7 @@ test("Actual multi-worker sieve finds all 168 primes without duplicate results",
   assert.equal(new Set(primes).size, primes.length);
 });
 
-test("Sieve seeding is atomic and idempotent even with concurrent coordinators", async () => {
+test("Sieve seeding is resumable and idempotent even with concurrent coordinators", async () => {
   const { h, space } = await memory();
   try {
     await Promise.all([prepareSieveRun(h, config), prepareSieveRun(h, config)]);
@@ -104,12 +104,12 @@ test("Sieve collector refuses missing, duplicated or mismatched blocks", async (
   } finally { await h.close(ctx); }
 });
 
-test("Sieve run creation rolls back all tasks when the byte budget is exceeded", async () => {
+test("Sieve run creation keeps a resumable prefix when the byte budget is exceeded", async () => {
   const { h, space } = await memory();
   try {
     await space.setLimits({ maxSpaceBytes: 200 });
     await assert.rejects(prepareSieveRun(h, config), /exceed/);
-    assert.equal(await space.count({ type: "SieveTask" }), 0);
+    assert.equal(await space.count({ type: "SieveTask" }), 1, "accepted seeds and their cursor remain durable");
     await space.setLimits({ maxSpaceBytes: 1_000_000 });
     await prepareSieveRun(h, config);
     assert.equal(await space.count({ type: "SieveTask" }), 8);

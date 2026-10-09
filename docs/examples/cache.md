@@ -43,7 +43,7 @@ veraltete Deletes, Rollback, externe Txn-Konflikte und JSONL-Reopen.
 
 ## Zukünftiger verteilter Cache
 
-LWW, HLC, RemoteSpace und Partition/Resync sind **nicht implementiert** und folgen dem
+LWW, HLC sowie Partition/Resync einer Federation sind **nicht implementiert** und folgen dem
 [v3-Zielplan](../federation-plan-v3.md). Der lokale Versionszähler ist keine verteilte Merge-Regel.
 Ein beidseitig beschreibbarer LWW-Cache kann während einer Partition unterschiedliche Reads liefern;
 Abnahme verlangt deterministische Konvergenz nach vollständigem Austausch. Versionierte Tombstones

@@ -5,9 +5,9 @@
 // template/entry, lease, timeout, txn, target request) are hashed; the renewable frame (authority, epoch, grants,
 // transport) is not part of the hash, so a retry with a renewed frame hits the same claim. Arguments are stored as a
 // hash only; the result is stored in full until its retention ends, then only the hash remains.
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { canonicalJson } from "./canonical.ts";
-import { LimitError, claimBytes, limitsOf, type Json, type SpaceState } from "./core.ts";
+import { LimitError, maintenanceStep, claimBytes, limitsOf, touch, type Json, type SpaceState } from "./core.ts";
 
 const encoder = new TextEncoder();
 const bytesOf = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
@@ -27,10 +27,12 @@ export type ClaimRec = {
 	generation: string;
 	requestId: string;
 	principal: Principal;
+	reservedResultBytes?: number;
+	error?: { code: "TransactionError" | "PermissionDenied" | "CompletionViolation"; message: string };
 };
-export type GenerationRec = { principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number };
-export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number }; // bytes: running tally of claims and generations (AP 0.2)
-export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string };
+export type GenerationRec = { principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number; spaceId?: string | null; authorityId?: string };
+export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number; reservedBytes?: number; signingKey?: string; authorityId?: string; sweepCursor?: string };
+export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"] };
 
 /** Same request id, different method or arguments. */
 export class RequestConflict extends Error {}
@@ -56,17 +58,24 @@ const checkPrincipal = (p: Principal) => {
 
 /** Canonical hash of a request's domain arguments. */
 export const argHash = (method: string, args: Json): string => createHash("sha256").update(canonicalJson({ method, args })).digest("hex");
-const keyOf = (s: SpaceState, r: RequestRef): string => canonicalJson([r.principal as unknown as Json, s.spaceId ?? null, r.generation, r.requestId]);
+export const keyOf = (s: Readonly<SpaceState>, r: RequestRef): string => canonicalJson([r.principal as unknown as Json, s.spaceId ?? null, r.generation, r.requestId]);
 
 /** A new generation for `principal`: it admits new request ids until `admitUntil`. */
-export function issueGeneration(s: SpaceState, now: number, principal: Principal): { generation: string; admitUntil: number } {
+export function issueGeneration(s: SpaceState, now: number, principal: Principal, options: { key?: string; authorityId?: string } = {}): { generation: string; admitUntil: number } {
 	checkPrincipal(principal);
-	const generation = `g${randomBytes(8).toString("hex")}`;
-	const admitUntil = now + limitsOf(s).generationAdmitMs;
-	const rec: GenerationRec = { principal: { ...principal }, incarnation: s.incarnation ?? null, issuedAt: now, admitUntil };
+	sweep(s, now);
 	const st = rpc(s);
+	st.signingKey ??= options.key ?? randomBytes(32).toString("hex");
+	st.authorityId = options.authorityId ?? st.authorityId ?? "local";
+	const nonce = `g${randomBytes(16).toString("hex")}`;
+	const admitUntil = now + limitsOf(s).generationAdmitMs;
+	const rec: GenerationRec = { principal: { ...principal }, incarnation: s.incarnation ?? null, issuedAt: now, admitUntil, spaceId: s.spaceId ?? null, authorityId: st.authorityId };
+	const generation = `${nonce}.${createHmac("sha256", st.signingKey).update(canonicalJson({ nonce, ...rec } as unknown as Json)).digest("hex")}`;
+	const added = bytesOf(rec) + bytesOf(generation) + 2;
+	if (claimBytes(s) + added > limitsOf(s).maxClaimBytes) throw new LimitError("the generation exceeds maxClaimBytes");
 	st.generations[generation] = rec;
-	st.bytes! += bytesOf(rec) + bytesOf(generation) + 2;
+	touch(s, now);
+	st.bytes! += added;
 	return { generation, admitUntil };
 }
 
@@ -80,7 +89,7 @@ export type Admission =
  * even after its generation stopped admitting new ids; an unknown id is only accepted while its generation admits.
  * `deadline` is used for a fresh claim only; a known claim keeps the one it was given first.
  */
-export function admit(s: SpaceState, now: number, r: RequestRef, method: string, args: Json, deadline: number): Admission {
+export function admit(s: SpaceState, now: number, r: RequestRef, method: string, args: Json, deadline: number, resultBytes = 1024): Admission {
 	checkPrincipal(r.principal);
 	if (typeof r.requestId !== "string" || r.requestId === "" || typeof r.generation !== "string") throw new TypeError("request needs a generation and a requestId");
 	sweep(s, now);
@@ -91,33 +100,43 @@ export function admit(s: SpaceState, now: number, r: RequestRef, method: string,
 	if (c) {
 		if (c.method !== method || c.argHash !== hash) throw new RequestConflict(`request ${r.requestId} was used for different arguments`);
 		if (c.state === "pending") return { kind: "pending", key, deadline: c.deadline };
-		if (c.resultExpired) throw new ResultExpired(`request ${r.requestId} was decided; its result is no longer kept`);
+		if (c.resultExpired || (c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now)) throw new ResultExpired(`request ${r.requestId} was decided; its result is no longer kept`);
 		return c.state === "cancelled" ? { kind: "cancelled", key } : { kind: "done", key, result: c.result ?? null };
 	}
 	const g = st.generations[r.generation];
 	if (!g) throw new RequestExpired(`generation ${r.generation} is unknown or expired`);
 	if (g.incarnation !== (s.incarnation ?? null)) throw new IncarnationChanged(`generation ${r.generation} belongs to an earlier incarnation of this space`);
+	if (g.spaceId !== (s.spaceId ?? null) || g.authorityId !== st.authorityId || !st.signingKey || r.generation !== `${r.generation.split(".")[0]}.${createHmac("sha256", st.signingKey).update(canonicalJson({ nonce: r.generation.split(".")[0], ...g } as unknown as Json)).digest("hex")}`) throw new RequestExpired("the generation signature or binding is invalid");
 	if (!samePrincipal(g.principal, r.principal)) throw new RequestExpired(`generation ${r.generation} was issued to another principal`);
 	if (now > g.admitUntil) throw new RequestExpired(`generation ${r.generation} no longer admits new requests`);
 	const lim = limitsOf(s);
-	if (claimBytes(s) >= lim.maxClaimBytes) throw new LimitError(`request claims use ${claimBytes(s)} bytes; the limit is ${lim.maxClaimBytes}`);
-	const rec: ClaimRec = { method, argHash: hash, deadline, state: "pending", generation: r.generation, requestId: r.requestId, principal: { ...r.principal } };
+	const rec: ClaimRec = { method, argHash: hash, deadline, state: "pending", generation: r.generation, requestId: r.requestId, principal: { ...r.principal }, reservedResultBytes: resultBytes };
+	const added = bytesOf(rec) + bytesOf(key) + 2;
+	if (claimBytes(s) + added + resultBytes > lim.maxClaimBytes) throw new LimitError("the request and its reserved result exceed maxClaimBytes");
 	st.claims[key] = rec;
-	st.bytes! += bytesOf(rec) + bytesOf(key) + 2;
+	touch(s, now);
+	st.bytes! += added;
+	st.reservedBytes = (st.reservedBytes ?? 0) + resultBytes;
 	return { kind: "fresh", key, deadline };
 }
 
 /** Record the outcome in the commit that decides it. */
-export function decide(s: SpaceState, now: number, key: string, outcome: { state: "done"; result: Json } | { state: "cancelled" }): void {
+export function decide(s: SpaceState, now: number, key: string, outcome: { state: "done"; result: Json; error?: ClaimRec["error"] } | { state: "cancelled" }): void {
 	const c = rpc(s).claims[key];
 	if (!c) throw new Error(`no claim ${key}`);
 	if (c.state !== "pending") return;
 	const st = rpc(s);
 	const before = bytesOf(c);
+	const resultBytes = bytesOf(outcome.state === "done" ? outcome.result : null);
+	if (c.reservedResultBytes !== undefined && resultBytes > c.reservedResultBytes) throw new LimitError("the result exceeds its admission reservation");
+	st.reservedBytes = Math.max(0, (st.reservedBytes ?? 0) - (c.reservedResultBytes ?? 0));
+	delete c.reservedResultBytes;
 	c.state = outcome.state;
 	c.result = outcome.state === "done" ? outcome.result : null;
 	c.decidedAt = now;
+	if (outcome.state === "done" && outcome.error) c.error = outcome.error;
 	st.bytes! += bytesOf(c) - before;
+	touch(s, now);
 }
 
 /**
@@ -128,7 +147,7 @@ export function lookup(s: Readonly<SpaceState>, r: RequestRef, now: number): Cla
 	const c = (s as SpaceState & { rpc?: RpcState }).rpc?.claims[keyOf(s as SpaceState, r)];
 	if (!c) throw new RequestExpired(`request ${r.requestId} is unknown`);
 	const expired = c.resultExpired || (c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now);
-	return { state: c.state, deadline: c.deadline, method: c.method, ...(expired ? { resultExpired: true as const } : c.state === "pending" ? {} : { result: c.result ?? null }) };
+	return { state: c.state, deadline: c.deadline, method: c.method, ...(c.error ? { error: c.error } : {}), ...(expired ? { resultExpired: true as const } : c.state === "pending" ? {} : { result: c.result ?? null }) };
 }
 
 /** Cancel a pending request. A decided one stays as it is; the returned view says which. */
@@ -146,18 +165,30 @@ export function cancelRequest(s: SpaceState, now: number, target: RequestRef): C
  * least until both that retention and its generation's admission are over; then claim and, once unused, generation go
  * (unknown ids of a gone generation are RequestExpired). Pending claims are never dropped.
  */
-export function sweep(s: SpaceState, now: number): void {
+export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	const st = (s as SpaceState & { rpc?: RpcState }).rpc;
 	if (!st) return;
 	const keep = limitsOf(s).claimResultMs;
-	const used = new Set<string>();
-	for (const [k, c] of Object.entries(st.claims)) {
-		if (c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + keep <= now) {
-			if (!c.resultExpired) { const before = bytesOf(c); delete c.result; c.resultExpired = true; st.bytes = (st.bytes ?? 0) + bytesOf(c) - before; }
-			const g = st.generations[c.generation];
-			if (!g || g.admitUntil < now) { st.bytes = (st.bytes ?? 0) - bytesOf(c) - bytesOf(k) - 2; delete st.claims[k]; continue; }
-		}
-		used.add(c.generation);
+	// Select only expired records. Advancing a scan cursor over live claims would write on every watch tick.
+	const eligible = Object.keys(st.claims).sort().filter(k => {
+		const c = st.claims[k]!, g = st.generations[c.generation];
+		return c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + keep <= now && (!c.resultExpired || !g || g.admitUntil < now);
+	});
+	let changed = false;
+	for (const k of eligible.slice(0, maxRecords)) {
+		if (!maintenanceStep(s, 128, now, `claim:${k}`)) break;
+		const c = st.claims[k]!;
+		if (!c.resultExpired) { const before = bytesOf(c); delete c.result; c.resultExpired = true; st.bytes = (st.bytes ?? 0) + bytesOf(c) - before; }
+		const g = st.generations[c.generation];
+		if (!g || g.admitUntil < now) { st.bytes = (st.bytes ?? 0) - bytesOf(c) - bytesOf(k) - 2; delete st.claims[k]; }
+		changed = true;
 	}
-	for (const [id, g] of Object.entries(st.generations)) if (g.admitUntil < now && !used.has(id)) { st.bytes = (st.bytes ?? 0) - bytesOf(g) - bytesOf(id) - 2; delete st.generations[id]; }
+	delete st.sweepCursor;
+	const used = new Set(Object.values(st.claims).map(c => c.generation));
+	let removed = 0;
+	for (const [id, g] of Object.entries(st.generations)) if (removed < maxRecords && g.admitUntil < now && !used.has(id)) {
+		if (!maintenanceStep(s, 128, now, `generation:${id}`)) break;
+		st.bytes = (st.bytes ?? 0) - bytesOf(g) - bytesOf(id) - 2; delete st.generations[id]; removed++; changed = true;
+	}
+	if (changed) touch(s, now);
 }

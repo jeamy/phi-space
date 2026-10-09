@@ -7,9 +7,10 @@ pi-spaces is a TypeScript space library implemented as an extension for
 The historical JavaSpaces specification (Jini JavaSpaces Service Specification v2.2) is a reference
 for the coordination model. The local pi-spaces client is `PiSpaces`.
 
-**Status.** The library works inside one harness process: entries, templates, leases, transactions, notify, waiters,
-several named spaces, and durable request claims. Everything beyond that (a network service, router, federation,
-replication, mobile control) is a plan, not code: see [Documentation](#documentation).
+**Status.** The library has a local durable space, named spaces, request claims, revisions and a single-host RPC
+service (`SpaceService`, `RemoteSpace`, Unix/TCP sockets). Router, federation, replication, mailbox delivery,
+connection-bound overlay identity and mobile control remain planned; the implemented scope and its limits are in
+[docs/implementierungsstand.md](docs/implementierungsstand.md).
 
 ## Layers
 
@@ -23,6 +24,9 @@ replication, mobile control) is a plan, not code: see [Documentation](#documenta
 | `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section), notify delivery, reaper |
 | `src/meter.ts` | process-local counters and rates |
 | `src/canonical.ts` | canonical JSON (RFC 8785) for field comparison and hashes |
+| `src/stream.ts` | bounded revision log and visible-entry change batches |
+| `src/service.ts` | authenticated, role-checked single-host space RPC |
+| `src/remote.ts`, `src/socket.ts` | retrying remote client and Unix/TCP transport |
 
 A space is one document, so a commit is atomic and survives restarts. The default space is the Session-scoped document
 `pi-spaces.space` (version 5); further named spaces live in the Session-scoped family `pi-spaces.named-space`, keyed by an
@@ -71,9 +75,11 @@ version 4 cannot open a storage that has run this version.
   `issueGeneration(principal)` opens a generation that admits new request ids for `generationAdmitMs` (1 h); known requests stay
   answerable after that. Results are kept `claimResultMs` (24 h) after the decision, then `ResultExpired`; unknown ids of
   a closed generation give `RequestExpired`, never a new mutation. `pollOperation` reads a request, `cancelOperation` ends a
-  pending one (`OperationCancelled`). Generations are not signed yet and claims do not have their own byte budget.
+  pending one (`OperationCancelled`). Generations are not signed yet; claims have their own byte budget
+  (`maxClaimBytes`).
 
-Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in the spec; do not rely on FIFO.
+Ordering is unspecified, as in the spec; do not rely on FIFO. The local API has no `RemoteException`; remote callers
+instead receive a transport outcome or `OutcomeUnknown` and must poll the same request identity.
 
 ## Limits and ownership
 
@@ -105,10 +111,10 @@ Not applicable: `RemoteException` (in-process). Ordering is unspecified, as in t
 
 ## Scope
 
-One harness process is the "space service"; "many agents" means many conversations in it. Pi Durable allows one
-process per storage. Named spaces share that process and its storage; they are not separate hosts. Spaces across several
-processes or hosts need the network service and federation described in [docs/federation-plan-v3.md](docs/federation-plan-v3.md),
-which is not implemented.
+One harness process owns one persistent storage and may expose it as a single-host space service. Named spaces share
+that storage; they are not separate hosts. `SpaceService` and `RemoteSpace` allow clients in other processes to reach
+that host, but do not make several host storages a federation. The federation contract remains
+[docs/federation-plan-v3.md](docs/federation-plan-v3.md).
 `space_take`/`space_read` with `timeoutMs` block the turn and are capped at 60 s; use `space_wait` for long waits.
 
 ## Running it
@@ -163,6 +169,9 @@ source code) in docker containers on a server instead of on this machine: `check
 simulated phone: lost calls and answers with retries under the same request id, app in the background, workers dying
 with a reserved task, a host restart; its evaluation compares the stored state with trial division.
 
+`npm run tui` opens a terminal dashboard with spaces, object details, container controls, tests and reports.
+Use `--dry-run` to preview actions without contacting the server. See [docs/tui.md](docs/tui.md).
+
 ## Examples
 
 | file | what | needs |
@@ -204,7 +213,9 @@ German documents in [docs/](docs/README.md):
 
 | document | what |
 |---|---|
-| [spaces-v1.md](docs/spaces-v1.md) | the current local implementation, gaps and measurements |
+| [implementierungsstand.md](docs/implementierungsstand.md) | implemented scope, evidence and limits |
+| [api.md](docs/api.md) | TypeScript, service and remote API reference |
+| [spaces-v1.md](docs/spaces-v1.md) | historical local snapshot (2026-10-07) |
 | [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (target, not implemented) |
 | [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |
 | [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md) | operating spaces from a phone: architecture, bootstrap, the sieve example |

@@ -45,6 +45,9 @@ const inlinedExamples = {
 const scenarios = await names('test/testbed/scenarios');
 await build({ ...common, entryPoints: scenarios.map((n) => `test/testbed/scenarios/${n}`), outdir: resolve(out, 'scenarios'), outExtension: { '.js': '.mjs' }, plugins: [sharedLibrary, inlinedExamples] });
 
+// Read-only space inspector, using the same shipped library as the scenarios.
+await build({ ...common, entryPoints: ['test/testbed/inspect.ts'], outfile: resolve(out, 'tools/inspect.mjs'), plugins: [sharedLibrary] });
+
 // 4. manifests for `npm ci --omit=dev` (versions come from the lock file)
 await copyFile(resolve(root, 'package.json'), resolve(out, 'package.json'));
 await copyFile(resolve(root, 'package-lock.json'), resolve(out, 'package-lock.json'));

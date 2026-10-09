@@ -12,7 +12,8 @@ Historische Patterns können moderne Beispiele motivieren; der lokale Code ist k
 Referenzimplementierung und kein Leistungsnachweis für Linda, Outrigger, Blitz oder GigaSpaces.
 
 JavaSpaces ergänzt Entries, Templates, Leases, Transaktionen und Benachrichtigungen.
-Die Abbildung im Projekt ist in [spaces-v1.md](../spaces-v1.md) beschrieben. JavaSpace05-Funktionen wie
+Die aktuelle Abbildung im Projekt ist im [Implementierungsstand](../implementierungsstand.md) beschrieben;
+die frühere Momentaufnahme bleibt in [spaces-v1.md](../spaces-v1.md). JavaSpace05-Funktionen wie
 Batch-Operationen und Availability-Events sind nicht vollständig implementiert.
 Eine konzeptionelle API-Nähe ist kein Zertifikat für vollständige Spezifikationskonformität.
 

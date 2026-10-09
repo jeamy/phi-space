@@ -13,6 +13,7 @@ const ALIAS = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 export type SpaceInfo = { spaceId: string; alias: string; incarnation: string; createdAt: number };
 export type RegistryState = {
 	hostId: string | null;
+	hostKey?: string;
 	defaultSpaceId: string | null;
 	spaces: Record<string, SpaceInfo>; // by spaceId, including the default space
 	aliases: Record<string, string>; // alias -> spaceId
@@ -45,9 +46,11 @@ const newSpaceId = (): string => `sp-${randomUUID()}`;
 async function registry(tx: Tx, now: number): Promise<RegistryState> {
 	const r = await tx.doc(Registry);
 	if (r.hostId === null) r.hostId = `host-${randomUUID()}`;
+	if (!r.hostKey) r.hostKey = randomBytes(32).toString("hex");
 	if (r.defaultSpaceId === null) {
 		const d = await tx.doc(Space);
 		const info: SpaceInfo = { spaceId: d.spaceId ?? newSpaceId(), alias: DEFAULT_ALIAS, incarnation: d.incarnation ?? newIncarnation(), createdAt: now };
+		openDocument(tx, info.spaceId, d); core.touch(d, now);
 		d.spaceId = info.spaceId;
 		d.incarnation = info.incarnation;
 		r.defaultSpaceId = info.spaceId;
@@ -67,15 +70,21 @@ export async function resolveSpaceId(tx: Tx, space: string | undefined, now: num
 }
 
 /** The document of a space inside a commit. */
+const touched = new WeakMap<Tx, Set<string>>();
+function openDocument(tx: Tx, id: string, d: core.SpaceState): void {
+	let seen = touched.get(tx); if (!seen) { seen = new Set(); touched.set(tx, seen); }
+	if (!seen.has(id)) { core.beginCommit(d); seen.add(id); }
+}
 export async function spaceDoc(tx: Tx, space: string | undefined, now: number): Promise<core.SpaceState> {
 	const id = await resolveSpaceId(tx, space, now);
 	const r = await tx.doc(Registry);
 	const d = id === r.defaultSpaceId ? await tx.doc(Space) : await tx.doc(NamedSpace, id, null);
-	// A document draft is the same object in every commit, so it cannot tell commits apart: fetching the document is the
-	// start of a commit's work on it, and its changes belong to one new revision (stream.ts).
-	core.seal(d);
+	openDocument(tx, id, d);
 	return d;
 }
+
+/** A persisted host key; never exposed through the space protocol, entry snapshots or change streams. */
+export async function hostKey(tx: Tx, now: number): Promise<string> { return (await registry(tx, now)).hostKey!; }
 
 /**
  * Create a named space, or return the existing one with this alias (idempotent per alias). Its spaceId is generated
@@ -88,6 +97,7 @@ export async function createSpace(tx: Tx, alias: string, now: number): Promise<S
 	if (known !== undefined) return core.plain(r.spaces[known]!);
 	const info: SpaceInfo = { spaceId: newSpaceId(), alias, incarnation: newIncarnation(), createdAt: now };
 	const d = await tx.doc(NamedSpace, info.spaceId, null);
+	openDocument(tx, info.spaceId, d); core.touch(d, now);
 	d.spaceId = info.spaceId;
 	d.incarnation = info.incarnation;
 	r.spaces[info.spaceId] = info;

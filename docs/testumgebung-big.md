@@ -5,9 +5,9 @@ unter produktionsnahen Bedingungen und stellt die Hosts bereit, die die Stufen 1
 [Implementierungsplans](implementierungsplan-v3.md) brauchen. Sie ersetzt weder NetBird noch einen echten Fencing-Adapter
 (Abschnitt 8). **Auf dem Server liegt kein Quellcode.**
 
-**Prüfstand (2026-10-08, auf dem Server ausgeführt, produktionsnahe Fassung):** `purge-sources`, `destroy`, `init --force`,
+**Erster Prüfstand (2026-10-08, auf dem Server ausgeführt, produktionsnahe Fassung):** `purge-sources`, `destroy`, `init --force`,
 `test all` (Smoke, fünf Beispiele, Szenario Primzahlsieb), das Szenario in drei Phasen mit `kill runner` dazwischen und `down`;
-die Härtung des Containers wurde im laufenden Container geprüft. **Noch nicht ausgeführt:** `up federation`, `stop`,
+die Härtung des Containers wurde im laufenden Container geprüft. **In diesem ersten Prüflauf nicht ausgeführt:** `up federation`, `stop`,
 `partition`/`heal`. Der erste Build deckte ein veraltetes `package-lock.json` auf (Abschnitt 9). Die Quelltests (Typecheck,
 `npm test`, `npm run test:examples`) laufen bewusst nur lokal (Abschnitt 1).
 
@@ -50,18 +50,16 @@ Sie auf dem Server auszuführen hieße, Quellen dorthin zu kopieren.
 
 | Punkt | Befund | Folge |
 |---|---|---|
-| Zugang | `ssh big` meldet sich als normaler Benutzer an, nicht als `root`; ein zweiter ssh-Alias führt als `root` auf denselben Host. | Standard ist `big` |
+| Zugang | `ssh big` meldet sich als normaler Benutzer an, nicht als `root`. | SSH-Alias `big` verwenden |
 | Docker | **rootless**, ein Daemon je Benutzer (Socket unter `/run/user/<uid>/`). Der System-Daemon ist maskiert; **`root` erreicht keinen Daemon.** | Skript läuft als der Daemon-Benutzer, nicht als `root` |
-| Verzeichnis | `/media/docker/pi-spaces` existierte, gehörte dem Daemon-Benutzer und war leer; die anderen Projekte unter `/media/docker` gehören ebenfalls ihm. | passt zum Benutzer |
+| Verzeichnis | `/media/docker/pi-spaces` existierte, gehörte dem Daemon-Benutzer und war leer. | passt zum Benutzer |
 | sudo | `sudo -n` verlangt für diesen Benutzer ein Passwort | kein sudo, `TESTBED_SUDO=no` |
 | Ressourcen | geteilter Server mit mehreren laufenden Containern anderer Projekte; die Platte war zu über 90 % belegt | knappe Limits je Container, keine veröffentlichten Ports; `check` zeigt den freien Platz |
 | cgroup | v2, systemd-Treiber; Docker meldet `cpuset` und `io.weight` als nicht unterstützt | Speicher-, CPU- und PID-Limits werden gesetzt; ob die CPU-Quota greift, zeigt der erste Lauf |
 | Werkzeuge | docker 29.8.2, compose 5.6.0, rsync vorhanden | nichts zu installieren |
 
 „Als root“ aus der Aufgabenstellung wurde deshalb als **Projektwurzel** `/media/docker/pi-spaces` unter dem Benutzer
-des Docker-Daemons umgesetzt. Als `root` ginge es nur mit `TESTBED_DOCKER_HOST` auf den Socket dieses Benutzers, und dann
-könnten die Container (deren root dem Host-Benutzer des Daemons entspricht) nicht in root-eigene Verzeichnisse schreiben.
-Das ist nicht empfohlen.
+des Docker-Daemons umgesetzt.
 
 ## 3. Voraussetzungen
 
@@ -107,7 +105,7 @@ Alle Befehle: `npm run testbed -- <befehl>` oder `bash test/testbed/testbed.sh <
    - baut die Artefakte lokal (`build`) und überträgt nur diese nach `build/` (`ship`);
    - baut das Image auf dem Server (die Schicht mit den Produktionsabhängigkeiten bleibt im Cache, solange sich die
      Manifeste nicht ändern);
-   - startet **nur die Container, die nicht laufen**; laufende bleiben unberührt (`docker compose up -d`);
+   - gleicht Container mit Image und Konfiguration ab (`docker compose up -d`); bei Änderungen können auch laufende Container neu erstellt und ihre Prozesse unterbrochen werden; persistente Volumes bleiben erhalten;
    - zeigt den Status.
 4. **Testen:** `test` (Standard `all`) führt vorher `up core` aus, liefert also den aktuellen Stand aus, und prüft im Runner:
    `smoke` (das Bündel lädt und exportiert, was die Laufzeit braucht; Node-Version, `NODE_ENV`, Benutzer und Artefakt-Commit
@@ -223,6 +221,14 @@ Vorbereiten der Aufgaben ist nicht gegen vorzeitige Bearbeitung abgesichert (Bet
 Regressionstest läuft eine kleine Fassung der TypeScript-Quelle lokal in `npm test` (`test-scenario.test.ts`); auf dem Server
 läuft die kompilierte Fassung (`scenarios/sieve-mobile.mjs`).
 
+## 11. TUI und lesende Space-Inspektion
+
+`npm run tui` bietet Space-/Objektansicht, Containeraktionen, Teststart und Auswertungen.
+`npm run testbed -- inspect runner` liest bestätigte JSONL-Daten und Szenarioberichte im laufenden Container;
+`start <dienst>` startet einen vorhandenen gestoppten Container ohne Build oder Auslieferung.
+Der Inspector wird als `tools/inspect.mjs` mitgeliefert. Bei vorhandener alter Dockerfile zuerst `init --force`,
+dann `up core` ausführen. Bedienung, Freigaben, Snapshot-Grenzen und gesperrte geplante Funktionen: [tui.md](tui.md).
+
 ## 12. NetBird (Gate 5, Arbeitspaket 1b.1)
 
 Der NetBird-Management-Server läuft auf `big` als eigenes Compose-Projekt (`spacebird`) im Verzeichnis `<dir>/netbird`, getrennt vom
@@ -323,98 +329,3 @@ und `member-2` → `host-a` auf TCP 7421 blockiert (vorher über die Gruppe erla
 `host-a` führt `member-2` nicht mehr in der Peer-Liste; `host-a` → `host-b` bleibt offen. Die Änderung kam ohne Neustart der Agenten an. Das
 Handy `a34xeea` (`space-admin`) erscheint in der Peer-Liste der Hosts (Status Idle, Verbindung entsteht bei Verkehr). Nicht gemessen: wie schnell
 die Änderung ankommt (hier nach wenigen Sekunden bis Minuten seit Entfernen; Zeitpunkt nicht protokolliert).
-
-## 13. Szenario sieve-remote: Dienst, Sockets und Overlay
-
-`scenarios/sieve-remote.mjs` testet den Weg, den ein Handy später nimmt: Der Host ist ein eigener Prozess mit dem Dienst `space` (`SpaceService`)
-auf Unix-Sockets und optional einem TCP-Port; Telefon und Worker sind Clients (`RemoteSpace` über `socketTransport`) und berühren den Storage des
-Hosts nie direkt. Jede Wirkung läuft über Request-Identität, Claims, Polls und Wiederholungen. Das Telefon (Rolle admin, `phone.sock`) legt die
-Aufgaben an, fünf Worker (Rolle member, `worker.sock`) nehmen sie unter einer Transaktion, schreiben das Ergebnis in derselben Transaktion und committen;
-zwei Worker „sterben“ mit gehaltener Aufgabe (die Lease der Transaktion läuft ab, die Aufgabe kehrt zurück). Die Auswertung vergleicht die
-gespeicherten Primzahlen mit Probedivision, prüft genau ein Ergebnis je Block, keine verbliebene Aufgabe und keine offene Transaktion.
-
-```sh
-npm run testbed -- scenario sieve-remote all --kill-host --fresh   # Host mit SIGKILL beendet bei 40 % und wieder gestartet
-```
-
-Der Befehl ist Teil von `test` (Suite `scenario`). Ergebnis auf big, im produktionsnahen Runner (nur gebautes Bündel, Image gehärtet): bestanden, 16 Blöcke,
-550 Primzahlen, Host-Kill überstanden.
-
-**Über das Overlay.** Mit `up federation` laufen die vier Host-Container im Netzwerk-Namespace ihres NetBird-Agenten (`network_mode: service:nb-<host>`) und
-haben dadurch die Overlay-Schnittstelle `wt0`. Der Dienst lauscht auf `host-b` nur an deren Adresse; ein Client auf `host-a` greift darauf zu:
-
-```sh
-npm run testbed -- exec host-b sh -c 'nohup node scenarios/sieve-remote.mjs serve --fresh --listen overlay:7421 --tcp-peer worker >/tmp/serve.log 2>&1 &'
-npm run testbed -- exec host-a node scenarios/sieve-remote.mjs client --connect <Overlay-Adresse von host-b>:7421 --end 6001 --workers 5 --work-ms 3000
-npm run testbed -- partition nb-host-b      # während des Laufs; danach: heal nb-host-b
-```
-
-Gemessen (2026-10-08, 24 Blöcke, 783 Primzahlen): bestanden, auch mit einer Unterbrechung von 10 s (`partition nb-host-b`, dann `heal`): 6 Transportversuche
-wurden mit derselben Identität wiederholt, kein Block doppelt, kein Block verloren, alle Prüfungen ok (Laufzeit 28 s statt etwa 24 s). Außerdem: Der Port 7421 ist
-nur über die Overlay-Adresse erreichbar (die Adresse im Testnetz verweigert die Verbindung), ein anderer Overlay-Port (8080) ist durch die Policy gesperrt.
-`partition` und `heal` wirken auf den Agenten (`nb-<host>`), weil der Host dessen Netzwerk teilt.
-
-Grenzen: Der Test nutzt eine einzige TCP-Identität (`--tcp-peer`, Rolle member) für Telefon und Worker; die Zuordnung Overlay-Peer → Principal (Schicht A) und die
-App-Challenge (Schicht B) gibt es noch nicht. Das Szenario startet den Server mit `nohup` in einem `exec`; ein `kill` des Containers beendet ihn (kein Neustart-Skript).
-
-## 14. Gate und Schicht A (Identität über das Overlay)
-
-`src/gate.ts` setzt 4.2 und 4.3 (Schicht A) um: Das Gate lauscht nur auf der Overlay-Adresse (eine Wildcard-Adresse wird abgewiesen), löst die Quelladresse einer
-Verbindung über die NetBird-Management-API (`GET /api/peers`) zur unveränderlichen Peer-ID und deren Gruppen auf und bildet die Gruppen auf Rollen ab
-(`space-hosts` → member, `space-admin` → admin, `space-observer` → observer; Vereinigung über alle Gruppen). Ein Peer ohne Rolle bekommt keinen Zugang.
-Die Quelladresse ist durch WireGuard an den Schlüssel des Peers gebunden; die Peer-ID ist der Principal des Dienstes, kein Aufruf kann sie ändern.
-
-- **Cache** höchstens 60 s (die Obergrenze gilt auch bei größerer Vorgabe). Fällt die API aus, trägt der Cache bis zu seinem Alter von 60 s; danach werden neue Verbindungen
-  abgewiesen und kommen mit der API wieder.
-- **Widerruf:** Alle 15 s (und mit `gate.revalidate()`) werden offene Verbindungen gegen ein frisches Verzeichnis geprüft; ein Peer, der verschwunden ist oder dessen Rollen
-  sich geändert haben, wird getrennt (bei geänderten Rollen gelten die neuen für die nächste Verbindung).
-- **Grenzen:** Handshake (Identifizierung) höchstens 5 s, 32 Verbindungen je Peer, Eimer für neue Verbindungen je Quelladresse, Rahmen-, Verbindungs- und Leerlaufgrenzen des
-  Sockets. `onEvent` meldet angenommene, abgewiesene und widerrufene Verbindungen mit Grund (Audit).
-- **Nicht enthalten:** Schicht B (Challenge pro Verbindung mit `PeerKey` im Control Space) und die Grants aus 4.4. Ein Host ohne Schlüssel arbeitet allein mit seinen Gruppenregeln.
-
-Geprüft in `test-gate.test.ts` gegen eine nachgebildete Management-API (Rollen aus Gruppen, kein Zugang ohne Gruppe oder Peer, Cache, API-Ausfall, Widerruf, Handshake-Zeit,
-Verbindungs- und Ratenlimit, Wildcard) und lokal im Szenario (`sieve-remote ... --listen 127.0.0.1:PORT --gate`).
-
-**Auf big** braucht das Gate ein Management-Token mit nur lesenden Rechten (Rolle *Auditor*, nicht das Admin-Token von `netbird setup`), das in den Host-Container gelangt:
-`<dir>/netbird/gate.env` mit `NB_MGMT_URL=https://spacebird.eibrain.org` und `NB_GATE_TOKEN=<token>` (Modus 600; die Datei ist für die Host-Container optional eingebunden, `up federation`
-lädt sie). Dann:
-
-```sh
-npm run testbed -- exec host-b sh -c 'nohup node scenarios/sieve-remote.mjs serve --fresh --listen overlay:7421 --gate >/tmp/serve.log 2>&1 &'
-npm run testbed -- exec host-a node scenarios/sieve-remote.mjs client --connect <Overlay-Adresse von host-b>:7421 --end 6001 --workers 5
-```
-
-Erwartet: `[gate] accepted <Overlay-Adresse von host-a> peer <Peer-ID>` und im Client „connected as <Peer-ID> (member)“. Ein Peer ohne Gruppe `space-hosts` (zum Beispiel `member-2`,
-solange er entfernt ist) wird abgewiesen.
-
-**Gemessen auf big (2026-10-09, echtes NetBird 0.80.0, Gate in `host-b`, Token der Rolle Auditor):**
-
-- Das Gate löst die Overlay-Adresse von `host-a` (100.89.128.128) zur Peer-ID `db3r4ovlh8lg008eup20` und zur Gruppe `space-hosts` auf: Rolle member, das Sieb (24 Blöcke, 783 Primzahlen)
-  läuft über das Gate durch, jede Verbindung steht als `accepted` im Log. `member-1` und `member-2` werden ebenso mit eigener Peer-ID angenommen.
-- **Entzug der Gruppe** (`member-2` aus `space-hosts` entfernt): Der Zugriff fiel innerhalb von höchstens etwa 16 s nach dem Speichern (Wächter: letzter Erfolg, dann
-  `EHOSTUNREACH`). Die Abweisung kam nicht vom Gate: NetBird nimmt dem Peer die Route zum Host, sobald er keine Gruppe mehr hat, die die Policy erlaubt. Auf Netzebene wirkt ein Entzug
-  also in Sekunden; das Gate ist die zweite Linie.
-- **Rollenwechsel bei offenem Netz** (`member-2` von `space-observer` auf `space-hosts`, danach `space-observer` entfernt; beide Gruppen sind in der Policy erlaubt): Eine offene Verbindung mit der
-  Rolle `observer` wurde vom Gate mit `the roles of the peer changed` getrennt und kam mit `member,observer` zurück, nach dem nächsten Wechsel erneut getrennt und mit `member` zurück.
-  Die Trennungen lagen genau 15 s auseinander, auf den Ticks der Revalidierung (Gate-Zeit +1793,2 s und +1808,2 s). `revalidate()` holt dabei jedes Mal eine **frische** Liste und wartet nicht auf
-  das Ende des 60-s-Caches: Der Entzug einer Rolle wirkt am Gate also nach höchstens `revalidateMs` (15 s) plus der Antwortzeit der API, nicht nach 60 s. Die 60 s gelten für neue Verbindungen.
-- Nicht gemessen: der genaue Speicherzeitpunkt im Dashboard (die Grenzen oben sind Obergrenzen aus den Zeiten der Nachrichten), der Ausfall der Management-API gegen das echte NetBird.
-
-## 15. Schicht B: Schlüssel-Challenge (4.3)
-
-`src/auth.ts` ergänzt das Gate um den Beweis eines App-Schlüssels. Privilegierte Rollen (`admin`, `router`, `replicator`, `supervisor`, `host`) werden zurückgehalten, bis die Verbindung einen Schlüssel
-bewiesen hat; `member` und `observer` arbeiten allein mit Schicht A (4.3: „A-only“, nur mit ausdrücklicher Gruppenregel).
-
-- **Ablauf:** Der Client ruft `challenge`; das Gate antwortet mit `{gateHostId, observedPeerId, connNonce (32 Byte), protocol, issuedAt}`. Der Client prüft, dass `gateHostId` der Host ist, den er erreichen will
-  (`expectedGateHostId`), und `observedPeerId` seine eigene Peer-ID (`ownPeerId`); erst dann signiert er die kanonische Kodierung (mit Domänen-Präfix). `prove {keyId, signature, challenge}` prüft Nonce
-  (einmalig, 30 s, nur auf der Verbindung, auf der sie ausgestellt wurde), den Schlüssel (`PeerKey` dieses Peers, Zustand `active`) und die Signatur. Eine relayte Challenge eines anderen Peers wird nicht beantwortet
-  (der Client erkennt die fremde Peer-ID); ein Client mit Signer ohne `expectedGateHostId` und `ownPeerId` wird nicht gebaut.
-- **Rollen:** Mit Beweis gilt die **Schnittmenge** aus den Rollen der Gruppen und den Rollen des Schlüssels; keine Seite kann hinzufügen, was die andere nicht erlaubt. Ohne Beweis bleiben nur die A-only-Rollen.
-  Fehlt dadurch eine Rolle für eine Methode, antwortet das Gate `ProofRequired` statt `PermissionDenied`; `RemoteSpace` beweist dann selbst (ein Versuch) und wiederholt den Aufruf. Nach einem Neuaufbau der Verbindung
-  geschieht das erneut, weil der Beweis an die Verbindung gebunden ist.
-- **Algorithmen:** Ed25519 (öffentlicher Schlüssel roh, 32 Byte) und ECDSA P-256 mit SHA-256 (SPKI-DER, DER-Signaturen: das, was der Android-Keystore liefert, Gate 6). Öffentliche Schlüssel als Base64.
-- **Widerruf:** Das Gate prüft beim Revalidierungs-Tick (15 s) auch den Schlüssel: widerrufen oder Rollen geändert → die Verbindung wird getrennt. Falsche Beweise: höchstens 5 je Verbindung.
-- **Schlüsselverzeichnis:** `KeyDirectory` ist die Schnittstelle; `MemoryKeyDirectory` für Tests und Werkzeuge. Die Anbindung an `PeerKey`-Einträge des Control Space folgt mit dem Control Space (5.1).
-- **Noch nicht enthalten:** Enrollment/Pairing (4.5: ungepaarter Peer, `createEnroll`), die Grants und RouterLease (4.4), das Ablegen der privaten Schlüssel auf den Zielplattformen (Gate 6: Android-Keystore, Desktop-Datei `0600`)
-  und die Prüfung gegen echte Geräte. `test-auth.test.ts` deckt ab: A-only, Beweis mit beiden Algorithmen, Schnittmenge (beide Richtungen), falsche Beweise (unbekannter Schlüssel, Signatur eines anderen Schlüssels,
-  Challenge einer anderen Verbindung, Schlüssel eines anderen Peers, Ablauf, Wiederholung, Widerruf), Relay-Schutz und der Zähler falscher Beweise.

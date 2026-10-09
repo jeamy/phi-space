@@ -1,4 +1,4 @@
-# Lokale Validierung der Beispielkorrekturen
+# Lokale Validierung
 
 Stand: 2026-10-07. Dieser Bericht beschreibt den geprüften lokalen Arbeitsstand, keine Produktionsabnahme.
 
@@ -17,6 +17,16 @@ Stand: 2026-10-07. Dieser Bericht beschreibt den geprüften lokalen Arbeitsstand
 | npm run example:cache | versionsgebundener Ersatz durch Bob, anschließende Löschung und Miss |
 | lokale Dokumentdateiverweise | keine fehlenden Zielpfade |
 | git diff --check | ohne Whitespace-Fehler |
+
+## Ergänzung AP 1.1–1.9 (2026-10-09)
+
+Aktueller Nachweis: [ap1-abnahme.md](ap1-abnahme.md). Typecheck und TypeScript-Build bestanden;
+184 Kern-/Integrations-/TUI-/AP-/pi-server-Tests und 158 Beispieltests bestanden ohne Skips.
+Echter pi-serverd mit neu gebautem Bundle, temporärer SQLite-Datenbank und Unix-Socket geprüft;
+Sessions weiter nutzbar, Space-RPC ohne explizite Konfiguration abgewiesen. Remote-Sieb im benannten
+Space nach Host-SIGKILL/Reopen: 10 Ergebnisse, 168 unabhängig geprüfte Primzahlen, keine Rest-Txns.
+Die untenstehenden Messungen vom 2026-10-07 sind historische Einzelbefunde; sie wurden nicht als
+Performance-Abnahme des neuen Arbeitsstands wiederholt.
 
 ## pi-durable-Machbarkeit (AP 0.3)
 
@@ -47,7 +57,8 @@ speicherte dadurch jedes Mal den vollständigen Space. Jetzt wird nur entfernt, 
 **Folgerung:** Die Kosten wachsen linear mit der Entry-Zahl. Bei 10 000 Entries (dem Lasttestziel aus v3 §12)
 kostet ein einzelner Write knapp 20 ms und ein Take mit spätem Treffer etwa 80 ms. Treiber sind die
 Gesamtbyte-Summe in `write`, der Scan in `settle` und die lineare Template-Suche über Draft-Proxys. Gegenmaßnahmen
-(laufende Bytesumme, Ablauf-Index, Typindex) gehören zu AP 0.2 bzw. AP 1.4 und vor die Lasttests von Gate 4.
+(laufende Bytegrenzen sind inzwischen umgesetzt; Ablauf-Index und Typindex bleiben Optimierungsoptionen) gehören
+vor die Lasttests von Gate 4.
 
 ## Automatische mobile Bundle-Aktualisierung
 

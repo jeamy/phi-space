@@ -10,17 +10,25 @@ Verwaltungskommandos unten sind Vorschläge, keine bereits ausführbare CLI.
 |---|---|
 | pi-durable Harness | führt Conversations/Tasks aus und speichert Dokumente über atomare Commits |
 | pi-spaces | Erweiterung mit Agenten-Tools; Default-Space Version 5 im Scope der Harness-Session; weitere benannte Spaces über Registry und Dokumentfamilie |
-| Lokaler pi-spaces-Client | API-Klasse `PiSpaces` für dieses Dokument; kein Netzwerkclient |
+| pi-spaces-Clients | `PiSpaces` lokal sowie `RemoteSpace` über den vorhandenen Single-Host-RPC; keine Federation |
 | Reaper und Delivery | `startService` verarbeitet Ablauf und lokale Events |
 | Monitoring | `stats`, `count`, `Meter`, `watchLive`; lokale Zustände und prozesslokale Raten |
 | pi-termux-mobile | HTTP-Oberfläche auf dem Handy, Remote-Verbindung per SSH/Unix-Socket zu pi-serverd |
-| pi-serverd im mobilen Projekt | SQLite-Harness, gebündelte Spaces-Erweiterung, Reaper/Delivery; Sessions-/Chat-Protokoll |
-| Benannte Spaces und lokale Request-Claims | in der Bibliothek vorhanden (`src/spaces.ts`, `src/claims.ts`); Signaturen, vollständige Budgets und Netzwerkdienst noch offen |
+| pi-serverd im mobilen Projekt | SQLite-Harness, Spaces/Reaper/Delivery; Sessions-/Chat-Protokoll und opt-in `space`-Dienst über Unix-Socket |
+| Benannte Spaces, Claims und Budgets | AP 1.1–1.9 lokal umgesetzt: signierte Generationen, Snapshot-Seiten, Mailboxes, Budgets und RemoteSpace; Gate/Federation bleiben offen |
 | Federation und Spaces-Seite | v3-Zielbild; im geprüften Code nicht vorhanden |
 
-Der lokale Stand ist in [spaces-v1.md](spaces-v1.md) und im
+Der lokale Stand ist im [Implementierungsstand](implementierungsstand.md) und im
 [Implementierungsfortschritt](implementierungsplan-v3.md#7-fortschritt) beschrieben. Benannte Dokumente in der
 Bibliothek sind noch keine mobile Space-Verwaltung oder Federation-Abnahme.
+Der `space`-Dienst im Daemon wird ausdrücklich mit `PI_SERVERD_SPACE_PRINCIPAL` (Peer-ID) und
+`PI_SERVERD_SPACE_ROLES` (kommagetrennte Rollen) freigeschaltet. Beide Angaben sind erforderlich; ohne sie
+bleibt Space-RPC unauthentifiziert, während Sessions/Chat weiter verfügbar sind. Der private Socket trägt
+eine lokal konfigurierte Identität für alle berechtigten Socket-Benutzer; SSH allein erzeugt keine Space-Rolle.
+Getrennte Netzwerk-Peers und Agentenidentitäten benötigen das geplante Gate. Der Einbau ist mit dem
+neu gebauten Bundle und temporärem SQLite-State im echten Daemon geprüft, ohne Modellaufrufe.
+`PI_SERVERD_STATE_DIR` und `PI_SERVERD_AUTH_FILE` erlauben isolierte Test-Runtimes.
+
 Geprüfte mobile Quellen liegen im Nachbarprojekt: `runtime/server.mjs`, `runtime/pi-serverd.mjs`,
 `runtime/common.mjs`, `runtime/remote-client.mjs`, `runtime/remote-provision.mjs` und
 `runtime/public/constants.js`. Dies ist ein Codebefund, keine ausgeführte mobile E2E-Abnahme.
@@ -652,5 +660,5 @@ Diese Fälle sind verpflichtend und noch nicht als implementiert oder getestet a
 13. Admin entscheidet resolveRunRecovery, dann ACK-Verlust/Controller-Neustart oder Änderung der Views:
     dieselbe Entscheidung wird idempotent fortgesetzt; neue oder widersprüchliche Views erfordern neue Prüfung.
 
-Weitere Verträge: [Sieb](examples/sieve.md), [lokaler Core](spaces-v1.md),
+Weitere Verträge: [Sieb](examples/sieve.md), [lokaler Core](implementierungsstand.md),
 [v3-Stufenplan](federation-plan-v3.md#11-stufenplan).

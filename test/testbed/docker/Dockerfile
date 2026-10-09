@@ -14,6 +14,7 @@ RUN npm ci --omit=dev
 COPY build/pi-spaces.mjs build/MANIFEST.json ./
 COPY build/examples ./examples
 COPY build/scenarios ./scenarios
+COPY build/tools ./tools
 
 # State lives in the /data volume and nowhere else; the process runs unprivileged.
 RUN mkdir -p /data && chown node:node /data

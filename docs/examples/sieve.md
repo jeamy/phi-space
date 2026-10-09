@@ -1,6 +1,6 @@
 # Lokales segmentiertes Primzahlsieb
 
-Stand: 2026-10-07. Implementierung: [sieve.ts](../../examples/sieve.ts).
+Stand: 2026-10-09. Implementierung: [sieve.ts](../../examples/sieve.ts).
 Tests: [sieve.test.ts](../../test/examples/sieve.test.ts). Kein Modell oder Netzwerk erforderlich.
 
 ```bash
@@ -13,9 +13,12 @@ Mehrere async Worker koordinieren sich in einem Harness; sie bieten keine CPU-Pa
 
 ## Aufgaben und Wiederaufnahme
 
-`prepareSieveRun(host, config)` speichert unveränderliche Konfiguration und disjunkte SieveTasks
-mit runId/taskId in einem gemeinsamen Commit. Wiederholte oder konkurrierende Vorbereitung desselben
-Laufs erzeugt keine zusätzlichen Tasks; geänderte Konfiguration wird abgewiesen.
+`prepareSieveRun(host, config, { space? })` speichert unveränderliche Konfiguration und einen
+dauerhaften Seed-Cursor. Jeder disjunkte SieveTask mit runId/taskId und der Cursorfortschritt
+entstehen in einem budgetbegrenzten Commit; Teilfortschritt bleibt nach Überlast oder Crash fortsetzbar. Wiederholte oder konkurrierende Vorbereitung desselben
+Laufs erzeugt keine zusätzlichen Tasks; geänderte Konfiguration wird abgewiesen. Vor dem ersten Task
+installiert der Host das Abschlussprofil: ein Task-Take kann nur mit genau einem zugeordneten
+SieveResult (`runId`/`taskId`) committet werden. Das gilt auch über `RemoteSpace`.
 `processSieveTask(space, runId)` nimmt einen Task unter Txn, berechnet sein Segment und schreibt
 SieveResult unter derselben Txn. Commit entfernt Task und veröffentlicht Ergebnis gemeinsam.
 Ein Fehler führt zu Abort; eine verlassene Reservierung wird nach Txn-Lease-Ablauf wieder verfügbar.
@@ -28,7 +31,8 @@ Basisprimzahlen reichen bis sqrt(end−1); die Tests vergleichen unabhängig mit
 
 Die exportierten Funktionen erlauben JSONL-Storage und Wiederaufnahme unter identischer runId.
 Getestet sind Lease-Ablauf einer verlassenen Reservierung, anschließend JSONL-Reopen und vollständige
-Aggregation ohne Neuseeding. Dies ist kein eigener SIGKILL-Prozesstest für das Sieb.
+Aggregation ohne Neuseeding. Zusätzlich prüft `sieve-remote` den benannten Space über Unix-Sockets mit sterbenden Workern
+und SIGKILL/Neustart des Host-Prozesses; [AP-1-Abnahme](../ap1-abnahme.md).
 
 ## Grenzen
 

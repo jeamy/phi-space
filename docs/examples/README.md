@@ -16,7 +16,8 @@ Die [verbindliche Übersicht](../examples.md) enthält Aufrufe und den aktuellen
 
 Alle ausführbaren Beispiele liegen in [examples/](../../examples/).
 Tests: [test/examples/README.md](../../test/examples/README.md).
-Die Federation, RemoteSpace, HRW und LWW-Replikation sind geplant; kein Beispiel testet sie bereits.
+Federation, HRW und LWW-Replikation sind geplant. `RemoteSpace` ist als Single-Host-RPC-Unterbau implementiert;
+das Remote-Sieb-Szenario liegt im Testbed, nicht in diesen Beispielseiten.
 
 Es gibt keine gemessenen Speedup- oder Durchsatztabellen. „Geskriptet getestet“ bezeichnet feste
 Modellantworten mit echtem lokalem Space, nicht die Qualität eines realen LLMs.

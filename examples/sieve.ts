@@ -4,12 +4,12 @@ import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { core, FOREVER, PiSpaces, Space, canonicalJson, type SpaceHost } from "../src/index.ts";
+import { core, FOREVER, PiSpaces, Space, canonicalJson, type SpaceHost, type SpaceLike, spaceDoc } from "../src/index.ts";
 
 export type SieveConfig = { runId: string; start: number; end: number; blockSize: number };
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
 export type SieveResult = { runId: string; taskId: string; rangeStart: number; rangeEnd: number; primes: number[] };
-const Runs = defineDoc<{ configs: SieveConfig[] }>({
+const Runs = defineDoc<{ configs: SieveConfig[]; seeds?: Record<string, { spaceId: string; next: number }> }>({
   kind: "pi-spaces.example-sieve-runs", version: 1, scope: "session", initial: () => ({ configs: [] })
 });
 
@@ -40,30 +40,39 @@ export function segmentedSieve(start: number, end: number): number[] {
   return primes;
 }
 
-/** Creation and every task are one commit; duplicate coordinators cannot seed a second copy. */
-export async function prepareSieveRun(host: SpaceHost, config: SieveConfig): Promise<string[]> {
+export const SIEVE_COMPLETION_PROFILE = { taskType: "SieveTask", resultTypes: ["SieveResult"], equalFields: ["runId", "taskId"], maxResultCount: 1 };
+
+/** Creation is resumable: each seed and its durable cursor commit together, within the space's byte budget. */
+export async function prepareSieveRun(host: SpaceHost, config: SieveConfig, options: { space?: string } = {}): Promise<string[]> {
   validate(config);
-  return host.commit(async tx => {
-    const runs = await tx.doc(Runs);
-    const prior = runs.configs.find(c => c.runId === config.runId);
-    if (prior && canonicalJson(prior) !== canonicalJson(config)) throw new Error("Sieve run configuration changed");
-    if (!prior && runs.configs.length >= 128) throw new Error("Example supports at most 128 runs per store");
-    const taskIds: string[] = [];
-    const space = await tx.doc(Space);
-    for (let start = config.start, i = 0; start < config.end; start += config.blockSize, i++) {
-      const taskId = `${config.runId}:${i}`;
-      taskIds.push(taskId);
-      if (!prior) core.write(space, Date.now(), {
-        type: "SieveTask", fields: { ...config, taskId, rangeStart: start, rangeEnd: Math.min(start + config.blockSize, config.end) }
-      }, null, FOREVER);
-    }
-    if (!prior) runs.configs.push({ ...config });
-    return taskIds;
-  }, ctx);
+  const count = Math.ceil((config.end - config.start) / config.blockSize);
+  const seedKey = canonicalJson([config.runId]);
+  for (;;) {
+    const done = await host.commit(async tx => {
+      const runs = await tx.doc(Runs);
+      const space = await spaceDoc(tx, options.space, Date.now());
+      const prior = runs.configs.find(c => c.runId === config.runId);
+      if (prior && canonicalJson(prior) !== canonicalJson(config)) throw new Error("Sieve run configuration changed");
+      if (!prior && runs.configs.length >= 128) throw new Error("Example supports at most 128 runs per store");
+      if (!(space.completionProfiles ?? []).some(p => p.taskType === "SieveTask")) core.setCompletionProfiles(space, [...(space.completionProfiles ?? []), SIEVE_COMPLETION_PROFILE]);
+      runs.seeds ??= {};
+      if (!runs.seeds[seedKey]) runs.seeds[seedKey] = { spaceId: space.spaceId!, next: prior ? count : 0 };
+      const seed = runs.seeds[seedKey]!;
+      if (seed.spaceId !== space.spaceId) throw new Error("Sieve run belongs to another space");
+      if (!prior) runs.configs.push({ ...config });
+      if (seed.next < count) {
+        const i = seed.next, start = config.start + i * config.blockSize;
+        core.write(space, Date.now(), { type: "SieveTask", fields: { ...config, taskId: `${config.runId}:${i}`, rangeStart: start, rangeEnd: Math.min(start + config.blockSize, config.end) } }, null, FOREVER);
+        seed.next++;
+      }
+      return seed.next === count;
+    }, ctx);
+    if (done) return Array.from({ length: count }, (_, i) => `${config.runId}:${i}`);
+  }
 }
 
 /** Each worker owns its reservation; results and consumed task are committed together. */
-export async function processSieveTask(space: PiSpaces, runId: string, options: {
+export async function processSieveTask(space: SpaceLike, runId: string, options: {
   leaseMs?: number; crashAfterTake?: boolean; beforeCommit?: () => Promise<void>
 } = {}): Promise<boolean> {
   const txn = await space.createTransaction(options.leaseMs ?? 30_000);
@@ -85,7 +94,7 @@ export async function processSieveTask(space: PiSpaces, runId: string, options: 
 }
 
 /** Look up every expected ID: never infer completeness from a truncated result list/count. */
-export async function collectSieveResults(space: PiSpaces, config: SieveConfig): Promise<number[]> {
+export async function collectSieveResults(space: SpaceLike, config: SieveConfig): Promise<number[]> {
   validate(config);
   const primes: number[] = [];
   for (let start = config.start, i = 0; start < config.end; start += config.blockSize, i++) {

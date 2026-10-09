@@ -58,11 +58,10 @@ test("undelivered events are backpressure: no new subscription or wait above the
 	const s = core.initialState();
 	core.setLimits(s, { maxOutboxBytes: 1024 });
 	core.notify(s, 0, { type: "Job" }, null, core.FOREVER, null, "conv-1");
-	for (let i = 0; i < 20; i++) core.write(s, 0, { type: "Job", fields: { pad: "z".repeat(200), i } }, null, core.FOREVER);
+	let refused = false;
+	for (let i = 0; i < 20; i++) { try { core.write(s, 0, { type: "Job", fields: { pad: "z".repeat(200), i } }, null, core.FOREVER); } catch (e) { assert.ok(e instanceof core.ResourceExhausted); refused = true; break; } }
 	const queued = s.outbox.length;
-	assert.ok(queued > 0 && bytes(s.outbox) > 1024, "events pile up past the budget");
-	assert.throws(() => core.notify(s, 1, { type: "Job" }, null, core.FOREVER, null, "conv-2"), core.LimitError);
-	assert.throws(() => core.addWaiter(s, 1, { template: { type: "Nothing" }, take: false, target: "conv-2", timeout: 1000 }), core.LimitError);
+	assert.ok(queued > 0 && refused && bytes(s.outbox) <= 1024, "writes apply backpressure before crossing the byte limit");
 	assert.equal(s.outbox.length, queued, "nothing was dropped");
 	s.outbox.length = 0; // delivered
 	core.notify(s, 2, { type: "Job" }, null, core.FOREVER, null, "conv-2"); // works again
@@ -113,7 +112,7 @@ test("paging is not capped by the 1000 entries of readAll", () => {
 	fill(s, 1500, () => 0);
 	const got = pages(s, 64_000).flat();
 	assert.equal(got.length, 1500);
-	assert.equal(core.list(s, 1).length, 1000, "readAll keeps its own cap");
+	assert.equal(core.list(s, 1).length, 1500, "readAll no longer truncates at 1000");
 });
 
 test("a budget too small for the next entry: ResponseBudgetTooSmall with requiredBytes, nothing advances, the retry fits", () => {
@@ -153,7 +152,7 @@ test("bad budgets and cursors are rejected, an entry past the frame is a configu
 	fill(s, 3);
 	for (const maxBytes of [0, -5, 1.5, Number.NaN]) assert.throws(() => core.listPage(s, 1, null, null, { maxBytes }), core.IllegalArgumentError);
 	assert.throws(() => core.listPage(s, 1, null, null, { after: "abc" }), core.IllegalArgumentError);
-	core.setLimits(s, { maxFrameBytes: 500, maxCommitBytes: 300 });
+	core.setLimits(s, { maxFrameBytes: 1500, maxCommitBytes: 1200 });
 	assert.ok(core.listPage(s, 1, null, null, { maxBytes: 10_000_000 }).items.length >= 1, "the frame caps a larger request");
 });
 
@@ -185,9 +184,10 @@ test("a write whose commit could exceed maxCommitBytes (entry plus the events of
 	for (let i = 0; i < 6; i++) core.notify(s, 0, { type: "Job" }, null, core.FOREVER, { tag: "h".repeat(400) }, `conv-${i}`);
 	core.setLimits(s, { maxCommitBytes: 3_000, maxEventBytes: 2_000 });
 	const before = core.stats(s, 1).entries;
+	const beforeRev = core.revision(s);
 	assert.throws(() => core.write(s, 1, entryOf(1), null, core.FOREVER), core.ResourceExhausted);
 	assert.equal(core.stats(s, 1).entries, before, "nothing was written");
-	assert.equal(s.stream?.rev ?? 0, 0, "and no revision was used");
+	assert.equal(core.revision(s), beforeRev, "and no revision was used");
 	core.write(s, 1, { type: "Other", fields: {} }, null, core.FOREVER); // nobody listens to it: small commit
 });
 
@@ -204,7 +204,7 @@ test("a transaction reserves room for its completion with every extension; refus
 	assert.ok(written >= 3 && refused > 0, `${written} written, ${refused} refused`);
 	assert.ok((s.txns[t.id]!.reserved ?? 0) + 1024 <= 4_000, "the reservation stays within the budget");
 	// the limit may even be lowered afterwards: completion never fails at a byte limit
-	core.setLimits(s, { maxCommitBytes: 1_000 });
+	assert.throws(() => core.setLimits(s, { maxCommitBytes: 1_000 }), core.ResourceExhausted, "an outstanding completion reservation prevents an unsafe limit reduction");
 	core.commitTxn(s, 2, t.id);
 	assert.equal(core.stats(s, 2).entries, written);
 	const batch = s.stream!.log[s.stream!.log.length - 1]!;
