@@ -385,4 +385,17 @@ npm run testbed -- exec host-a node scenarios/sieve-remote.mjs client --connect 
 ```
 
 Erwartet: `[gate] accepted <Overlay-Adresse von host-a> peer <Peer-ID>` und im Client „connected as <Peer-ID> (member)“. Ein Peer ohne Gruppe `space-hosts` (zum Beispiel `member-2`,
-solange er entfernt ist) wird abgewiesen. Noch nicht auf big gelaufen.
+solange er entfernt ist) wird abgewiesen.
+
+**Gemessen auf big (2026-10-09, echtes NetBird 0.80.0, Gate in `host-b`, Token der Rolle Auditor):**
+
+- Das Gate löst die Overlay-Adresse von `host-a` (100.89.128.128) zur Peer-ID `db3r4ovlh8lg008eup20` und zur Gruppe `space-hosts` auf: Rolle member, das Sieb (24 Blöcke, 783 Primzahlen)
+  läuft über das Gate durch, jede Verbindung steht als `accepted` im Log. `member-1` und `member-2` werden ebenso mit eigener Peer-ID angenommen.
+- **Entzug der Gruppe** (`member-2` aus `space-hosts` entfernt): Der Zugriff fiel innerhalb von höchstens etwa 16 s nach dem Speichern (Wächter: letzter Erfolg, dann
+  `EHOSTUNREACH`). Die Abweisung kam nicht vom Gate: NetBird nimmt dem Peer die Route zum Host, sobald er keine Gruppe mehr hat, die die Policy erlaubt. Auf Netzebene wirkt ein Entzug
+  also in Sekunden; das Gate ist die zweite Linie.
+- **Rollenwechsel bei offenem Netz** (`member-2` von `space-observer` auf `space-hosts`, danach `space-observer` entfernt; beide Gruppen sind in der Policy erlaubt): Eine offene Verbindung mit der
+  Rolle `observer` wurde vom Gate mit `the roles of the peer changed` getrennt und kam mit `member,observer` zurück, nach dem nächsten Wechsel erneut getrennt und mit `member` zurück.
+  Die Trennungen lagen genau 15 s auseinander, auf den Ticks der Revalidierung (Gate-Zeit +1793,2 s und +1808,2 s). `revalidate()` holt dabei jedes Mal eine **frische** Liste und wartet nicht auf
+  das Ende des 60-s-Caches: Der Entzug einer Rolle wirkt am Gate also nach höchstens `revalidateMs` (15 s) plus der Antwortzeit der API, nicht nach 60 s. Die 60 s gelten für neue Verbindungen.
+- Nicht gemessen: der genaue Speicherzeitpunkt im Dashboard (die Grenzen oben sind Obergrenzen aus den Zeiten der Nachrichten), der Ausfall der Management-API gegen das echte NetBird.

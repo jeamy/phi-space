@@ -424,6 +424,9 @@ Peer-Liste (`GET /api/users/current` ist für ihn gesperrt). Gemessen:
   abweist, ist daher offen.
 - Verbindungsaufbau ist verzögert (lazy): ein Peer erscheint zunächst als „Idle“, die P2P-Verbindung entsteht beim ersten Verkehr.
 
+- Gate gegen das echte NetBird (2026-10-09): Die Peer-ID und die Gruppen hinter einer Overlay-Adresse kommen aus `GET /api/peers`; Entzug einer Gruppe trennt auf Netzebene in Sekunden (die Route verschwindet),
+  ein Rollenwechsel bei offenem Netz trennt die offene Verbindung am Gate beim nächsten Revalidierungs-Tick (15 s, mit frischer Liste), neue Verbindungen sehen den Stand des Caches (höchstens 60 s). Siehe testumgebung-big.md Abschnitt 14.
+
 Offen: die vier Ausfallzeilen (Management, Signal, Relay, Management + Relay), Zeitmessung für Gruppenwechsel und Peer-ID-Abfrage
 (Cache-Grenze), Verhalten des Handys. Der kombinierte Container fällt bei Ausfall von Management, Signal und Relay gemeinsam aus; die Zeilen
 „Signal“ und „Relay“ einzeln ließen sich mit diesem Aufbau nicht trennen (NetBird erlaubt externe Signal- und Relay-Server, siehe
