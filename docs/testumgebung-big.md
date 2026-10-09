@@ -349,3 +349,23 @@ die Änderung ankommt (hier nach wenigen Sekunden bis Minuten seit Entfernen; Ze
 `test-enroll.test.ts` (Gate, Management-Nachbildung, `MemoryStorage`): Bootstrap und Wiederholung, Ersatz eines verlorenen Tokens, Host-Token und Rollenbegrenzung, kein Klartext-Token im Control Space, in Claims und Ereignissen,
 die Reihenfolge der Prüfungen, Ratenbegrenzung, Ablauf, einheitliche Ablehnung, nur ungepaarte Peers, `enrollStatus` nur für die eigene Anfrage, Widerruf eines gepaarten Schlüssels.
 Noch nicht: der Supervisor als Prozess, der `createEnroll` aus einem Command eines gepaarten Admin verarbeitet (5.1), Schlüsselrotation (`rotateKey`) und der Lauf auf echten Geräten.
+
+## 17. Supervisor des Control Space (5, 5.1)
+
+`src/supervisor.ts` ist der einzige Schreiber des Control Space außer den `Command`-Einträgen der Admins. Erster Teil, die Kommandos ohne Router:
+
+- `createEnroll` → ein `Enroll`-Eintrag (nur der Hash des Tokens erreicht den Supervisor); Rollen `host`, `member`, `observer`.
+- `revokePeer` → alle aktiven `PeerKey` des Peers werden `revoked`; das Gate trennt die Verbindungen, die diesen Schlüssel bewiesen haben, beim nächsten Tick (15 s).
+
+Jedes Kommando ist **ein Commit**: der `Command` wird genommen, die Wirkung angewendet und das `Result {commandId, kind, state, error?, result?, requestedBy, at}` geschrieben (7 Tage aufbewahrt). Ein Absturz
+hinterlässt entweder das Kommando oder sein Ergebnis; eine wiederholte `commandId` wirkt nie zweimal (das zweite Kommando wird ohne neues Ergebnis verworfen). Ungültige Argumente und unbekannte Kommandos werden zu
+`failed`-Ergebnissen, nichts wird teilweise angewendet. Der Schreiber eines Kommandos (der Eigentümer des Eintrags) muss beim Verarbeiten einen **aktiven Admin-Schlüssel** im Control Space haben, also ein gepaarter Admin,
+nicht „wer auf diesem Host ist“; ein Admin, der sich selbst widerruft, verliert damit sofort seine Befugnis.
+
+`ControlAccess` ist die Netzseite: Auf dem Control Space dürfen über die Leitung nur Admins mit bewiesenem Schlüssel `Command`s schreiben und `Command`, `Result` und `PeerKey` lesen; `Enroll` (Token-Hashes) und
+`Bootstrap` verlassen den Host nie, `take`, `stats`, `changes` und `txn` gibt es dort nicht, jeder andere (Member, Admin-Gruppe ohne Beweis, ungepaarte Peers) ist ausgeschlossen. Die Pairing-Pfade (`hello`, `generation`,
+`challenge`, `prove`, `enroll`, `enrollStatus`) bleiben davon unberührt. Reihenfolge der Schichten: Gate → `EnrollmentService` → `ControlAccess` → `ProvingService` → `SpaceService`.
+
+`test-supervisor.test.ts`: Ablauf Command → Supervisor → Result → `enroll` → `revokePeer` über das Gate; Idempotenz; fehlgeschlagene Kommandos; nur Admins mit Beweis; Schreiber ohne Admin-Schlüssel und der Selbstwiderruf; ein Fehler
+vor dem Commit hinterlässt das Kommando, die Wiederholung ergibt genau ein Ergebnis und eine Wirkung (JSONL und SQLite).
+Noch nicht: `rotateKey` (verlangt den Beweis beider Schlüssel durch das Gerät), das Router-Journal und die Router-Kommandos (`setLimits`, `addMember`, ...), `restoreDataSpace`/`releaseRestored`, die Ausführung als eigener Prozess auf big.

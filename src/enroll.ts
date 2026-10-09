@@ -88,10 +88,40 @@ const checkHash = (h: string) => { if (!/^[0-9a-f]{64}$/.test(h)) throw new core
  * the same hash twice changes nothing. Hosts and members only: an admin token exists only through `bootstrapEnroll`.
  */
 export async function createEnroll(host: Host, ctx: Context, o: CreateEnrollOptions): Promise<EnrollRec> {
+	validateCreateEnroll(o);
+	return writeEnroll(host, ctx, { ...o, bootstrap: false });
+}
+/** The checks of `createEnroll`, before anything is written. */
+export function validateCreateEnroll(o: { tokenHash: string; role: string; allowedPeerId: string }): void {
 	checkHash(o.tokenHash);
 	if (!(ENROLLABLE_ROLES as readonly string[]).includes(o.role)) throw new core.IllegalArgumentError(`createEnroll hands out ${ENROLLABLE_ROLES.join(", ")}; an admin is paired through the bootstrap token`);
 	if (!o.allowedPeerId) throw new core.IllegalArgumentError("a token is bound to the peer id of the device (from the management API)");
-	return writeEnroll(host, ctx, { ...o, bootstrap: false });
+}
+/** `createEnroll` inside a commit on the control space (the supervisor's command processing); idempotent per hash. */
+export function createEnrollIn(s: core.SpaceState, now: number, o: CreateEnrollOptions): EnrollRec {
+	validateCreateEnroll(o);
+	const have = findEnroll(s, now, o.tokenHash);
+	if (have) return core.plain(have);
+	const rec: EnrollRec = { tokenHash: o.tokenHash, role: o.role, scope: o.scope ?? [], allowedPeerId: o.allowedPeerId, expiresAt: now + Math.min(o.ttlMs ?? ENROLL_TTL_MS, ENROLL_TTL_MS), attempts: 0, bootstrap: false, state: "open" };
+	putEnroll(s, now, rec);
+	return rec;
+}
+/** Revoke every active key of a peer inside a commit; returns how many. */
+export function revokePeerKeysIn(s: core.SpaceState, now: number, peerId: string): number {
+	let n = 0;
+	for (const e of core.list(s, now, { type: "PeerKey", fields: { peerId } })) {
+		const f = e.fields as Record<string, Json>;
+		if (f.state !== "active") continue;
+		const p = core.probe(s, now, { id: e.id }, null, true);
+		if (p.status !== "found") continue;
+		core.write(s, now, { type: "PeerKey", fields: { ...core.plain(p.entry.fields), state: "revoked" } as core.Fields }, null, core.FOREVER);
+		n++;
+	}
+	return n;
+}
+/** An admin key of this peer is active (the supervisor checks it when it processes a command). */
+export function hasAdminKey(s: Readonly<core.SpaceState>, now: number, peerId: string): boolean {
+	return core.list(s, now, { type: "PeerKey", fields: { peerId } }).some((e) => { const f = e.fields as Record<string, Json>; return f.state === "active" && (f.roles as string[]).includes("admin"); });
 }
 async function writeEnroll(host: Host, ctx: Context, o: CreateEnrollOptions & { bootstrap: boolean }): Promise<EnrollRec> {
 	const now = (o.now ?? Date.now)();
