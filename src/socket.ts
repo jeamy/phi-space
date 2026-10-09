@@ -48,7 +48,7 @@ export type ListenTarget = { path: string } | { host: string; port: number };
 export type ServeOptions = {
 	listen: ListenTarget;
 	/** What the host knows about the peer of this socket; the identity adapter of the service turns it into an identity. */
-	connection?: (socket: net.Socket) => Connection | Promise<Connection>;
+	connection?: (socket: net.Socket) => Connection | null | Promise<Connection | null>; // null: the peer is refused and the connection closed
 	maxFrameBytes?: number;
 	maxConnections?: number;
 	maxInflightPerConnection?: number;
@@ -81,7 +81,7 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 				reader.push(chunk, (id, text) => {
 					if (inflight >= maxInflight) { reply(id, JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: `at most ${maxInflight} calls at once per connection` } })); return; }
 					inflight++;
-					conn ??= Promise.resolve(o.connection ? o.connection(socket) : {});
+					conn ??= Promise.resolve(o.connection ? o.connection(socket) : {}).then((c) => { if (c === null) { socket.destroy(); throw new Error("refused"); } return c; });
 					conn.then((c) => service.handleText(text, c, maxFrame))
 						.then((r) => reply(id, r), (e) => reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: e instanceof Error ? e.message : String(e) } })))
 						.finally(() => { inflight--; });
@@ -109,7 +109,7 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 	};
 }
 
-export type SocketTransportOptions = { connectTimeoutMs?: number; maxFrameBytes?: number };
+export type SocketTransportOptions = { connectTimeoutMs?: number; maxFrameBytes?: number; /** Source address of the connection (a host with several overlay or loopback addresses). */ localAddress?: string };
 export type SocketTransport = Transport & { close(): void };
 
 /**
@@ -128,7 +128,7 @@ export function socketTransport(target: ListenTarget, o: SocketTransportOptions 
 	const connect = (): Promise<net.Socket> => {
 		if (socket && !socket.destroyed) return Promise.resolve(socket);
 		connecting ??= new Promise<net.Socket>((resolve, reject) => {
-			const s = "path" in target ? net.createConnection(target.path) : net.createConnection(target.port, target.host);
+			const s = "path" in target ? net.createConnection(target.path) : net.createConnection({ port: target.port, host: target.host, ...(o.localAddress ? { localAddress: o.localAddress } : {}) });
 			const reader = new FrameReader(maxFrame);
 			const timer = setTimeout(() => s.destroy(new Error("connect timed out")), o.connectTimeoutMs ?? 5_000);
 			s.setNoDelay(true);

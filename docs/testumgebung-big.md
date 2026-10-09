@@ -356,3 +356,33 @@ nur über die Overlay-Adresse erreichbar (die Adresse im Testnetz verweigert die
 
 Grenzen: Der Test nutzt eine einzige TCP-Identität (`--tcp-peer`, Rolle member) für Telefon und Worker; die Zuordnung Overlay-Peer → Principal (Schicht A) und die
 App-Challenge (Schicht B) gibt es noch nicht. Das Szenario startet den Server mit `nohup` in einem `exec`; ein `kill` des Containers beendet ihn (kein Neustart-Skript).
+
+## 14. Gate und Schicht A (Identität über das Overlay)
+
+`src/gate.ts` setzt 4.2 und 4.3 (Schicht A) um: Das Gate lauscht nur auf der Overlay-Adresse (eine Wildcard-Adresse wird abgewiesen), löst die Quelladresse einer
+Verbindung über die NetBird-Management-API (`GET /api/peers`) zur unveränderlichen Peer-ID und deren Gruppen auf und bildet die Gruppen auf Rollen ab
+(`space-hosts` → member, `space-admin` → admin, `space-observer` → observer; Vereinigung über alle Gruppen). Ein Peer ohne Rolle bekommt keinen Zugang.
+Die Quelladresse ist durch WireGuard an den Schlüssel des Peers gebunden; die Peer-ID ist der Principal des Dienstes, kein Aufruf kann sie ändern.
+
+- **Cache** höchstens 60 s (die Obergrenze gilt auch bei größerer Vorgabe). Fällt die API aus, trägt der Cache bis zu seinem Alter von 60 s; danach werden neue Verbindungen
+  abgewiesen und kommen mit der API wieder.
+- **Widerruf:** Alle 15 s (und mit `gate.revalidate()`) werden offene Verbindungen gegen ein frisches Verzeichnis geprüft; ein Peer, der verschwunden ist oder dessen Rollen
+  sich geändert haben, wird getrennt (bei geänderten Rollen gelten die neuen für die nächste Verbindung).
+- **Grenzen:** Handshake (Identifizierung) höchstens 5 s, 32 Verbindungen je Peer, Eimer für neue Verbindungen je Quelladresse, Rahmen-, Verbindungs- und Leerlaufgrenzen des
+  Sockets. `onEvent` meldet angenommene, abgewiesene und widerrufene Verbindungen mit Grund (Audit).
+- **Nicht enthalten:** Schicht B (Challenge pro Verbindung mit `PeerKey` im Control Space) und die Grants aus 4.4. Ein Host ohne Schlüssel arbeitet allein mit seinen Gruppenregeln.
+
+Geprüft in `test-gate.test.ts` gegen eine nachgebildete Management-API (Rollen aus Gruppen, kein Zugang ohne Gruppe oder Peer, Cache, API-Ausfall, Widerruf, Handshake-Zeit,
+Verbindungs- und Ratenlimit, Wildcard) und lokal im Szenario (`sieve-remote ... --listen 127.0.0.1:PORT --gate`).
+
+**Auf big** braucht das Gate ein Management-Token mit nur lesenden Rechten (Rolle *Auditor*, nicht das Admin-Token von `netbird setup`), das in den Host-Container gelangt:
+`<dir>/netbird/gate.env` mit `NB_MGMT_URL=https://spacebird.eibrain.org` und `NB_GATE_TOKEN=<token>` (Modus 600; die Datei ist für die Host-Container optional eingebunden, `up federation`
+lädt sie). Dann:
+
+```sh
+npm run testbed -- exec host-b sh -c 'nohup node scenarios/sieve-remote.mjs serve --fresh --listen overlay:7421 --gate >/tmp/serve.log 2>&1 &'
+npm run testbed -- exec host-a node scenarios/sieve-remote.mjs client --connect <Overlay-Adresse von host-b>:7421 --end 6001 --workers 5
+```
+
+Erwartet: `[gate] accepted <Overlay-Adresse von host-a> peer <Peer-ID>` und im Client „connected as <Peer-ID> (member)“. Ein Peer ohne Gruppe `space-hosts` (zum Beispiel `member-2`,
+solange er entfernt ist) wird abgewiesen. Noch nicht auf big gelaufen.

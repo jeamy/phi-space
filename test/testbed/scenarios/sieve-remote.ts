@@ -18,7 +18,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, PiSpaces, RemoteSpace, SpaceService, StaticIdentity, serveSpace, socketTransport, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
+import { FOREVER, GateIdentity, NetbirdDirectory, PiSpaces, RemoteSpace, SpaceService, StaticIdentity, serveSpace, socketTransport, startGate, type Connection, type Identity, type IdentityAdapter, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
 import { segmentedSieve } from "../../../examples/sieve.ts";
 
 const USAGE = `Usage: sieve-remote.ts <serve|client|all> [options]
@@ -28,6 +28,9 @@ const USAGE = `Usage: sieve-remote.ts <serve|client|all> [options]
   --work-ms N        simulated work per block (default 150)
   --crash-workers N  workers that die holding a task (default 2); --lease-ms N its transaction lease (default 1200)
   --kill-host        all: SIGKILL the host at 40% of the results, start it again after --down-ms (default 700)
+  --gate             serve: put the space gate in front of the TCP port: the peer behind the source address is looked up in the NetBird
+                     management API (env NB_MGMT_URL and NB_GATE_TOKEN, a read-only token) and its groups give the roles;
+                     --tcp-peer is not used then
   --listen HOST:PORT serve: also listen on a TCP port (HOST "overlay": the address of the interface wt0); --tcp-peer NAME its principal
                      (default worker, a member: tasks, results and reads, nothing administrative)
   --connect HOST:PORT client: reach the host over TCP instead of the sockets (workers and phone alike)
@@ -39,10 +42,10 @@ const t0 = Date.now();
 const say = (who: string, msg: string) => console.log(`+${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s [${who}] ${msg}`);
 const isPrime = (n: number) => { if (n < 2) return false; for (let d = 2; d * d <= n; d++) if (n % d === 0) return false; return true; };
 
-type Opts = { dir: string; end: number; block: number; workers: number; workMs: number; crashWorkers: number; leaseMs: number; killHost: boolean; downMs: number; listen?: string; tcpPeer: string; connect?: string; timeoutS: number; fresh: boolean };
+type Opts = { dir: string; end: number; block: number; workers: number; workMs: number; crashWorkers: number; leaseMs: number; killHost: boolean; downMs: number; listen?: string; tcpPeer: string; gate: boolean; connect?: string; timeoutS: number; fresh: boolean };
 function parse(argv: string[]): { mode: string; o: Opts } {
 	const [mode = "help", ...rest] = argv;
-	const o: Opts = { dir: existsSync("/data") ? "/data/sieve-remote" : join(tmpdir(), "pi-spaces-sieve-remote"), end: 4001, block: 250, workers: 3, workMs: 150, crashWorkers: 2, leaseMs: 1200, killHost: false, downMs: 700, tcpPeer: "worker", timeoutS: 90, fresh: false };
+	const o: Opts = { dir: existsSync("/data") ? "/data/sieve-remote" : join(tmpdir(), "pi-spaces-sieve-remote"), end: 4001, block: 250, workers: 3, workMs: 150, crashWorkers: 2, leaseMs: 1200, killHost: false, downMs: 700, tcpPeer: "worker", gate: false, timeoutS: 90, fresh: false };
 	for (let i = 0; i < rest.length; i++) {
 		const a = rest[i]!;
 		const val = () => { const v = rest[++i]; if (v === undefined) throw new Error(`${a} needs a value`); return v; };
@@ -59,6 +62,7 @@ function parse(argv: string[]): { mode: string; o: Opts } {
 			case "--kill-host": o.killHost = true; break;
 			case "--listen": o.listen = val(); break;
 			case "--tcp-peer": o.tcpPeer = val(); break;
+			case "--gate": o.gate = true; break;
 			case "--connect": o.connect = val(); break;
 			case "--timeout-s": o.timeoutS = num(); break;
 			case "--fresh": o.fresh = true; break;
@@ -84,12 +88,15 @@ const IDS = new StaticIdentity({
 	worker: { principal: { peerId: "worker", agentId: "pool" }, roles: ["member"] },
 });
 
+/** The first adapter that knows the connection decides: gate identities (roles from NetBird groups) before the fixed table of the sockets. */
+const chain = (...a: IdentityAdapter[]): IdentityAdapter => ({ async authenticate(c: Connection): Promise<Identity | null> { for (const x of a) { const i = await x.authenticate(c); if (i) return i; } return null; } });
+
 async function serve(o: Opts): Promise<void> {
 	mkdirSync(o.dir, { recursive: true });
 	const storage = await openNodeJsonlStorage(join(o.dir, "data"), ctx);
 	const h = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
 	await new PiSpaces(h, ctx).count(); // registers the default space
-	const service = new SpaceService({ host: h, ctx, identity: IDS, hostId: "host", maxPollMs: 5_000 });
+	const service = new SpaceService({ host: h, ctx, identity: o.gate ? chain(new GateIdentity(), IDS) : IDS, hostId: "host", maxPollMs: 5_000 });
 	const servers: SpaceServer[] = [];
 	servers.push(await serveSpace(service, { listen: { path: join(o.dir, "phone.sock") }, connection: () => ({ peerId: "phone" }) }));
 	servers.push(await serveSpace(service, { listen: { path: join(o.dir, "worker.sock") }, connection: () => ({ peerId: "worker" }) }));
@@ -97,8 +104,15 @@ async function serve(o: Opts): Promise<void> {
 	if (o.listen) {
 		const hp = hostPort(o.listen);
 		if (hp.host === "overlay") hp.host = await overlayAddress(); // only on the overlay address: peers on the testnet cannot reach it
-		servers.push(await serveSpace(service, { listen: hp, connection: () => ({ peerId: o.tcpPeer }) }));
-		tcp = `, tcp ${hp.host}:${hp.port} as ${o.tcpPeer}`;
+		if (o.gate) {
+			const url = process.env.NB_MGMT_URL, token = process.env.NB_GATE_TOKEN;
+			if (!url || !token) throw new Error("--gate needs NB_MGMT_URL and NB_GATE_TOKEN (a read-only management token) in the environment");
+			servers.push(await startGate(service, { listen: hp, directory: new NetbirdDirectory({ url, token }), onEvent: (e) => say("gate", `${e.event} ${e.ip}${e.peerId ? ` peer ${e.peerId}` : ""}${e.reason ? ` (${e.reason})` : ""}`) }));
+			tcp = `, gate on ${hp.host}:${hp.port} (peers and roles from ${url})`;
+		} else {
+			servers.push(await serveSpace(service, { listen: hp, connection: () => ({ peerId: o.tcpPeer }) }));
+			tcp = `, tcp ${hp.host}:${hp.port} as ${o.tcpPeer}`;
+		}
 	}
 	say("host", `serving ${servers.length} listeners in ${o.dir}${tcp}`);
 	console.log("READY");
@@ -216,7 +230,7 @@ async function client(o: Opts, hostChild?: { kill(): Promise<void>; restart(): P
 function hostProcess(o: Opts) {
 	let child: ChildProcess | undefined;
 	const start = () => new Promise<void>((resolve, reject) => {
-		const args = [...process.execArgv, process.argv[1]!, "serve", "--dir", o.dir, ...(o.listen ? ["--listen", o.listen, "--tcp-peer", o.tcpPeer] : [])];
+		const args = [...process.execArgv, process.argv[1]!, "serve", "--dir", o.dir, ...(o.listen ? ["--listen", o.listen, "--tcp-peer", o.tcpPeer] : []), ...(o.gate ? ["--gate"] : [])];
 		const c = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "inherit"] });
 		child = c;
 		let seen = "";

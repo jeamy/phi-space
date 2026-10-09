@@ -50,6 +50,7 @@ services:
     profiles: [federation]
     network_mode: "service:nb-host-a" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
     depends_on: [nb-host-a]
+    env_file: [{path: ./netbird/gate.env, required: false}] # NB_MGMT_URL and NB_GATE_TOKEN (read-only token) for the gate, when the operator provides them
     environment: {<<: *env, TESTBED_ROLE: coordinator, TESTBED_HOST_ID: host-a}
     volumes: ["host-a-data:/data"]
 
@@ -58,6 +59,7 @@ services:
     profiles: [federation]
     network_mode: "service:nb-host-b" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
     depends_on: [nb-host-b]
+    env_file: [{path: ./netbird/gate.env, required: false}] # NB_MGMT_URL and NB_GATE_TOKEN (read-only token) for the gate, when the operator provides them
     environment: {<<: *env, TESTBED_ROLE: standby, TESTBED_HOST_ID: host-b}
     volumes: ["host-b-data:/data"]
 
@@ -66,6 +68,7 @@ services:
     profiles: [federation]
     network_mode: "service:nb-member-1" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
     depends_on: [nb-member-1]
+    env_file: [{path: ./netbird/gate.env, required: false}] # NB_MGMT_URL and NB_GATE_TOKEN (read-only token) for the gate, when the operator provides them
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-1}
     volumes: ["member-1-data:/data"]
 
@@ -74,6 +77,7 @@ services:
     profiles: [federation]
     network_mode: "service:nb-member-2" # the host lives in its overlay agent's network namespace: wt0 is its only way to the others
     depends_on: [nb-member-2]
+    env_file: [{path: ./netbird/gate.env, required: false}] # NB_MGMT_URL and NB_GATE_TOKEN (read-only token) for the gate, when the operator provides them
     environment: {<<: *env, TESTBED_ROLE: member, TESTBED_HOST_ID: member-2}
     volumes: ["member-2-data:/data"]
 
