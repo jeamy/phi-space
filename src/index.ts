@@ -420,3 +420,9 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 	await run(); // events committed before the watch started
 	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
 }
+
+/** Placeholder for federation setup; currently unused (PI_SERVERD_FEDERATION_CONFIG not set in tests). */
+export async function startConfiguredFederation(harness: Harness, ctx: Context, config: string): Promise<null> {
+	// Federation support is planned but not yet implemented; return null to skip it.
+	return null;
+}
