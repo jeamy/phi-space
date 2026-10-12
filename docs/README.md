@@ -7,6 +7,7 @@
 | [spaces-v1.md](spaces-v1.md) | lokaler Stand vom 2026-10-07 | historisch |
 | [federation-plan-v3.md](federation-plan-v3.md) | Plan für föderierte Spaces, Gates, offene Fragen | **aktuell** |
 | [implementierungsplan-v3.md](implementierungsplan-v3.md) | Reife, Vorab-Entscheidungen, Arbeitspakete und Fortschritt für v3 | AP 1.1–1.9 lokal umgesetzt; weitere Phasen geplant |
+| [ap1b-abnahme.md](ap1b-abnahme.md) | Phase 1b: Laufzeit, Grants, Rotation und Recovery-Bausteine | lokal geprüft; Live-Abnahmen offen |
 | [ap1-abnahme.md](ap1-abnahme.md) | AP 1.1–1.9: Implementierung, Regressionen und native pi-serverd-Abnahme | lokal geprüft |
 | [testumgebung-big.md](testumgebung-big.md) | Docker-Testumgebung auf dem Server big: Skript, Container, Fehlerinjektion, Grenzen | umgesetzt, `test/testbed/` |
 | [tui.md](tui.md) | Terminaloberfläche: Spaces/Objekte, Serveraktionen, Tests und Berichte | umgesetzt; geplante Backends gesperrt |
@@ -25,3 +26,9 @@ Die Beispieldokumente wurden am 2026-10-07 konsolidiert: fachlich falsche Codeko
 und unbelegte Leistungstabellen wurden durch aktuelle Verträge ersetzt. Nachweise unterscheiden Code,
 lokale geskriptete Tests, noch offene Live-Modellprüfung und zukünftige Federation.
 Die v1/v2-Archive dokumentieren frühere Entscheidungen und enthalten verworfene Entwürfe.
+
+- [Phase-1b-Betrieb und Recovery-Schnittstellen](ap1b-betrieb.md) – implementierte Konfiguration und verbleibende Betriebsintegration.
+
+- [AP 2.1/2.8: Router und Simulator](ap2-router-und-simulator.md): implementierter Umfang, Recovery und Nachweise.
+
+- [AP 2.2–2.5: Delegation, Routing und Membership](ap2-delegation-routing-membership.md): APIs, Core-Sperren und persistente/TCP-Nachweise.

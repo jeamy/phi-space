@@ -1,0 +1,36 @@
+TAP version 13
+# (node:2548947) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: mobile pairing persists its identity before the effect and resolves a lost response after reopen
+ok 1 - mobile pairing persists its identity before the effect and resolves a lost response after reopen
+  ---
+  duration_ms: 9.527534
+  type: 'test'
+  ...
+# Subtest: a pending rotation is retained across reopen and activates the new alias only after a completed own command
+ok 2 - a pending rotation is retained across reopen and activates the new alias only after a completed own command
+  ---
+  duration_ms: 2.302568
+  type: 'test'
+  ...
+# Subtest: data access obtains an app-bound grant from a separately authenticated control connection
+ok 3 - data access obtains an app-bound grant from a separately authenticated control connection
+  ---
+  duration_ms: 28.70818
+  type: 'test'
+  ...
+# Subtest: paired status after rotation proves the current key and rejects a revoked key instead of replaying old enrollment
+ok 4 - paired status after rotation proves the current key and rejects a revoked key instead of replaying old enrollment
+  ---
+  duration_ms: 1.094573
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 588.644921

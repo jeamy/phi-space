@@ -4,7 +4,7 @@ import * as core from "./core.ts";
 import { canonicalJson } from "./canonical.ts";
 import { bytePage, encodedBytes } from "./paging.ts";
 
-type Record = { token: string; streamId: string; query: string; owner: core.Target | undefined; rev: number; expires: number; bytes: number; items: core.EntryView[] };
+type Record = { snapshotEpoch:number; token: string; streamId: string; query: string; owner: core.Target | undefined; rev: number; expires: number; bytes: number; items: core.EntryView[] };
 const hosts = new WeakMap<object, Map<string, Record>>();
 export type SnapshotPageOptions = { maxBytes?: number; after?: string | null; token?: string; txn?: string | null };
 
@@ -21,14 +21,14 @@ export function snapshotPage(host: object, state: Readonly<core.SpaceState>, now
 		token = match[1]; offset = Number(match[2]);
 	}
 	let record = token ? cache.get(token) : undefined;
-	if (token && (!record || record.streamId !== streamId)) throw new core.SnapshotExpired("the entry snapshot expired or belongs to another incarnation");
+	if (token && (!record || record.streamId !== streamId || record.snapshotEpoch !== (state.snapshotEpoch??0))) throw new core.SnapshotExpired("the entry snapshot expired or belongs to another incarnation");
 	if (record && (record.owner !== owner || record.query !== query)) throw new core.PermissionError("the snapshot belongs to another principal or query");
 	const fresh = record === undefined;
 	if (!record) {
 		const items = core.list(state, now, tmpl, o.txn ?? null, Number.MAX_SAFE_INTEGER, owner);
 		const bytes = encodedBytes(items);
 		if (bytes > limits.maxSnapshotBytes) throw new core.ResourceExhausted("the snapshot exceeds maxSnapshotBytes");
-		record = { token: `ss${randomBytes(16).toString("hex")}`, streamId, query, owner, rev: core.revision(state), expires: core.until(now, limits.snapshotTtlMs), bytes, items };
+		record = { snapshotEpoch:state.snapshotEpoch??0, token: `ss${randomBytes(16).toString("hex")}`, streamId, query, owner, rev: core.revision(state), expires: core.until(now, limits.snapshotTtlMs), bytes, items };
 	}
 	if (!Number.isSafeInteger(offset) || offset < 0 || offset > record.items.length) throw new core.IllegalArgumentError("invalid snapshot position");
 	const budget = o.maxBytes ?? limits.maxFrameBytes;

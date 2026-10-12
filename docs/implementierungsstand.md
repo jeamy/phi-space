@@ -1,6 +1,6 @@
 # pi-spaces: aktueller Implementierungsstand
 
-Stand: 2026-10-09. Diese Seite ist die Ist-Stand-Referenz für Code und
+Stand: 2026-10-11. Diese Seite ist die Ist-Stand-Referenz für Code und
 automatisierte Nachweise. Der [Föderationsplan v3](federation-plan-v3.md) bleibt
 der Zielvertrag: Seine Garantien gelten nicht allein deshalb, weil einzelne
 Bausteine unten bereits vorhanden sind.
@@ -16,17 +16,22 @@ unveränderlichen `spaceId`s zu; Entry-Views tragen zusätzlich
 Der lokale Client `PiSpaces` und der Dienst `SpaceService` benutzen dieselbe
 Kernsemantik. Der Dienst ist über In-Process-, Unix-Socket- und TCP-Transport
 nutzbar; `RemoteSpace` implementiert dafür den gemeinsamen Basisvertrag
-`SpaceLike`. Das ist ein vorhandener Single-Host-RPC-Unterbau, keine Federation:
-es gibt noch keinen Router, keine Replikation, keine
-Overlay-Peer-Authentisierung mit Challenge und keine v3-Recovery-/Promotion-
-Abnahme.
+`SpaceLike`. Gate, Overlay-Identität, Schlüssel-Challenge, Enrollment, Grants und
+Supervisor sind zu einer persistenten Host-Laufzeit zusammengeführt. Es gibt
+ein persistentes Router-Grundgerüst (AP 2.1) und einen Simulator (AP 2.8),
+aber keine vollständige Phase-2-/Replikations-/Promotion-Abnahme. Die [Phase-1b-Abnahme](ap1b-abnahme.md) trennt lokale Nachweise von den
+abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 
 | Baustein | Vorhanden | Nicht daraus ableitbar |
 |---|---|---|
 | Core | Entries, Templates, Leases, Txns, Notify, Waiter, Limits, Revisionslog und Abschlussprofile | globale Reihenfolge oder externe Exactly-once-Wirkung |
 | Lokaler Client | `PiSpaces`, benannte Spaces, Claims, Seiten, Changes | Zugriff auf einen fremden Host ohne Dienst |
-| Dienst | Rollen-/Typprüfung, signierte Generationen, dauerhafte Pending/Poll, Mailbox-ACK, Token-Seiten und Quoten | Gate, Enrollment oder Federation-Autorität |
-| Remote | `RemoteSpace`, stabile Retries, Notify/Wait/Events/ACK, Unix/TCP und pi-server-Adapter | Overlay-Identität und automatische Federation |
+| Dienst | Rollen-/Typprüfung, signierte Generationen, dauerhafte Pending/Poll, Mailbox-ACK, Token-Seiten und Quoten | Replikation oder abgenommener Recovery-Betrieb |
+| Remote | `RemoteSpace`, stabile Retries, Notify/Wait/Events/ACK, Unix/TCP, pi-server-Adapter, Schlüsselbeweis, Enrollment, Grant-Provider und Rotation | automatische Federation-Provisionierung |
+| Phase 1b | zwei dauerhafte echte NetBird-Gates auf big, unabhängiges Register auf vpsc, private SSH-/TLS-Zugänge, Control-ACK, Control-/Data-Restore-Controller, Member-Installation, native Android-Keystore-Abnahme, echte Handy–big-Kopplung/Objektzugriff/Rotation sowie verteilte Live-Data-/Control-Restores mit bestätigten Member-ACKs, sichtbare Handy-Schlüsselsteuerung, zehn Minuten Bildschirm-aus/Hintergrund und kontrollierter tiefer Doze-Test | F15-Modell und kontrollierte komponentenbezogene Ausfälle abgenommen; keine Phase-2-/Replikations-/Promotion-Freigabe |
+| Router AP 2.1 | Command-Zustandsmaschine, dauerhaft gebundene Unterrequests, Rekonstruktion, getrennte Budgets, unabhängige Admission, Restore-Review und Mailbox-Übernahme | vollständige Phase-2-System- und Lastabnahme |
+| AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
+| Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
 
 ## Daten- und Konsistenzmodell
@@ -99,3 +104,21 @@ prüfen vor Commit Ergebnis-Typ, Zuordnungsfelder und Anzahl; das Sieb setzt sie
 Pending-RPCs benötigen nach Reopen keinen alten Aufrufer: separate persistente Waiter halten die
 Ausführungsdaten, Claims behalten Hash/Deadline/Ergebnisreservierung. `ResultExpired` wiederholt keine Wirkung.
 `count`/`stats` und die mitgelieferte Revision stammen im Dienst aus demselben Snapshot.
+
+## Phase 2
+
+[Router und Simulator](ap2-router-und-simulator.md) sowie
+[AP 2.2–2.5](ap2-delegation-routing-membership.md) sind implementiert:
+RouterLease, Original-Principal-Delegation, persistente Policy, HRW-/Suchregeln,
+journalisierte Federation-Operationen und Membership mit Core-Admission.
+Die neuen APIs sind serverseitige Bausteine mit echtem Member-RPC-Adapter;
+eine virtuelle öffentliche Space-Adresse wird dadurch nicht automatisch gestartet.
+Prüfzahlen und gebaute Artefakte stehen in
+[checks.json](../test/evidence/ap2-2026-10-11/checks.json).
+
+AP 2.6/2.7 sind um Abschlussbudgets, auditierte lokale Admin-Bausteine,
+Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lasttest
+für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweise
+und offenen Grenzen. Die vollständige Phase 2 ist noch nicht freigegeben:
+Journal-Skalierung, verteilter/batchweiser F9-Löschlauf und Drei-Member-Sieb
+über NetBird fehlen. RunGate und Replikation folgen später.

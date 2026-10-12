@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-11T18:07:52.561011+00:00",
+  "passed": true,
+  "faultScope": "two-owned-test-peers-only",
+  "globalServerStopped": false,
+  "cases": [
+    {
+      "name": "management-5m",
+      "requestedSeconds": 300,
+      "elapsedSeconds": 305.3,
+      "samples": 15,
+      "firstDeniedSampleSeconds": 67.3,
+      "successfulObjectSamples": 3,
+      "directTcpSamples": 15,
+      "postFaultObjectsRecovered": true,
+      "explicitAgentReconnectForRecovery": false
+    },
+    {
+      "name": "management-1h",
+      "requestedSeconds": 3600,
+      "elapsedSeconds": 3604.3,
+      "samples": 175,
+      "firstDeniedSampleSeconds": 65.2,
+      "successfulObjectSamples": 3,
+      "directTcpSamples": 175,
+      "postFaultObjectsRecovered": true,
+      "explicitAgentReconnectForRecovery": false
+    },
+    {
+      "name": "signal-10m",
+      "requestedSeconds": 600,
+      "elapsedSeconds": 608.6,
+      "samples": 16,
+      "firstDeniedSampleSeconds": 67.3,
+      "successfulObjectSamples": 3,
+      "directTcpSamples": 3,
+      "postFaultObjectsRecovered": true,
+      "explicitAgentReconnectForRecovery": false
+    },
+    {
+      "name": "relay-30m",
+      "requestedSeconds": 1800,
+      "elapsedSeconds": 1807.3,
+      "samples": 73,
+      "firstDeniedSampleSeconds": 157.4,
+      "successfulObjectSamples": 67,
+      "directTcpSamples": 73,
+      "postFaultObjectsRecovered": true,
+      "explicitAgentReconnectForRecovery": false
+    },
+    {
+      "name": "management-relay-1h",
+      "requestedSeconds": 3600,
+      "elapsedSeconds": 3604.0,
+      "samples": 173,
+      "firstDeniedSampleSeconds": 50.9,
+      "successfulObjectSamples": 2,
+      "directTcpSamples": 173,
+      "postFaultObjectsRecovered": true,
+      "explicitAgentReconnectForRecovery": false
+    }
+  ],
+  "desktopRelayUnavailableDuringRelayFault": true,
+  "cleanupSuccess": true,
+  "fullFederationPhase2Accepted": false,
+  "limitations": [
+    "controlled component reachability failures, not global server/database crash",
+    "sampled denial times include sampling/probe delay",
+    "signal reconnect explicitly broke only own host-b tunnel",
+    "screen-off and Doze are bounded instrumented intervals"
+  ],
+  "desktopPostFaultObjectsRecovered": true,
+  "temporaryDesktopReplyRuleRemoved": true,
+  "ownRootProxyStopped": true,
+  "mainServicesActive": true
+}

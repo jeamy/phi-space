@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-11T18:58:20.039917+00:00",
+  "mainSuite": {
+    "passed": 345,
+    "failed": 0,
+    "skipped": 0
+  },
+  "routerSimulatorCases": 45,
+  "delegationCases": 26,
+  "policyCases": 9,
+  "federatedSpaceCases": 16,
+  "membershipCases": 14,
+  "backends": [
+    "jsonl",
+    "sqlite"
+  ],
+  "typecheckPassed": true,
+  "examplesSuite": {
+    "passed": 158,
+    "failed": 0,
+    "skipped": 0
+  },
+  "mobileSuite": {
+    "passed": 4,
+    "failed": 0,
+    "skipped": 0
+  },
+  "serverBuiltArtifactSuite": {
+    "passed": 65,
+    "failed": 0,
+    "skipped": 0
+  },
+  "builtArtifacts": 22,
+  "bundleSha256": "4f4f83e0ebda35048c86d0b7163ea6cecf644d28729bee5d5b7c3338a7005f22",
+  "mobileBundleSha256": "4f4f83e0ebda35048c86d0b7163ea6cecf644d28729bee5d5b7c3338a7005f22",
+  "mobileBundleMatchesServerArtifact": true,
+  "ordinaryAndroidApkBuiltOffline": true,
+  "ordinaryApkContainsUiInstrumentation": false,
+  "finalApkInstalledOnPhone": false,
+  "phoneUpdateBlockedBy": "no current WLAN-ADB device and no NetBird ping reply",
+  "apkSha256": "0ee39d660376828d4775597f70da04d5421a8f7c6558fbec84d3ca710f73f933",
+  "productionRouterLeaseDelegationWired": true,
+  "mainOverlayServicesRolledOutWithPhase2Router": false,
+  "phase2FullyAccepted": false,
+  "remainingWorkPackages": [
+    "2.6",
+    "2.7",
+    "2.9",
+    "full phase-2 system acceptance"
+  ]
+}

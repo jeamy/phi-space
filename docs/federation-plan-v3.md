@@ -215,7 +215,7 @@ Replikationslag und Mailbox-/Journal-Budgets pro VPS.
 - Nur `serviceId: space`. `sessions`/`chat` bleiben auf diesem Eingang gesperrt.
 - `pi-client` erhält eine TCP-Transport-Factory; Kompatibilität des Byte-/CBOR-Transports vor Umsetzung prüfen.
 
-**Kein mTLS in v3.** Begründung: WireGuard liefert Verschlüsselung und Peer-Bindung; die App-Challenge (4.3)
+**Kein mTLS auf dem Space-Port in v3.** Begründung: WireGuard liefert Verschlüsselung und Peer-Bindung; die App-Challenge (4.3)
 liefert Schlüsselbesitz und Bindung an die Verbindung. mTLS würde eine zweite PKI (X.509, Ausstellung, Rotation,
 Widerruf) erfordern, die Node ohne `openssl` oder Zusatzbibliothek nicht erzeugen kann, ohne neue Garantie. TLS
 kommt nur am Browser-Gateway zum Einsatz (Abschnitt 10). Offene Frage F3.
@@ -412,7 +412,7 @@ Ergebnis wird in diesem Abschnitt nachgetragen.
 | Management | 5 min, 1 h | bestehende Tunnel bleiben; neue Peers/Policy-Änderungen nicht möglich; Schicht-A-Cache läuft ab → Zugriff wird abgewiesen |
 | Signal | 10 min | bestehende Tunnel bleiben; Neuverbindungen nach Tunnelabbruch scheitern |
 | Relay | 30 min | direkte Verbindungen bleiben; relayed Verbindungen brechen ab |
-| Management + Relay | 1 h | nur direkt erreichbare Peers kommunizieren |
+| Management + Relay | 1 h | direkte Tunnel können bestehen bleiben; ohne autoritative Gate-Erneuerung wird Space-RPC nach Cache-Ablauf gesperrt |
 | Peer entfernt | – | Tunnel endet; Gate weist binnen Cache-Laufzeit ab |
 
 **Ergebnisse (Stand 2026-10-08, Testumgebung auf `big`, Einzelheiten in [testumgebung-big.md](testumgebung-big.md) Abschnitt 12).**
@@ -428,10 +428,30 @@ Peer-Liste (`GET /api/users/current` ist für ihn gesperrt). Gemessen:
   abweist, ist daher offen.
 - Verbindungsaufbau ist verzögert (lazy): ein Peer erscheint zunächst als „Idle“, die P2P-Verbindung entsteht beim ersten Verkehr.
 
-Offen: die vier Ausfallzeilen (Management, Signal, Relay, Management + Relay), Zeitmessung für Gruppenwechsel und Peer-ID-Abfrage
-(Cache-Grenze), Verhalten des Handys. Der kombinierte Container fällt bei Ausfall von Management, Signal und Relay gemeinsam aus; die Zeilen
-„Signal“ und „Relay“ einzeln ließen sich mit diesem Aufbau nicht trennen (NetBird erlaubt externe Signal- und Relay-Server, siehe
-config.yaml `signalUri` und `relays`).
+**Ergänzung 2026-10-11:** Ein separater administrativer Komponentenproxy begrenzt
+Fehler auf die eigenen Test-Peers host-b/member-2; der produktive Endpunkt und
+übrige VPN-Nutzer bleiben aktiv. Im vollständigen 5-min-Management-Fall blieben
+Signal, Relay und direkter TCP-Tunnel erhalten. Nach Cache-Ablauf verweigerte das
+echte Data-Gate den Objektzugriff; nach 305 Sekunden Fehlerphase und Aufhebung
+des Fehlers war dieser wieder erfolgreich. Dies bestätigt die Sicherheits-
+hypothese für den gezielten Erreichbarkeitsausfall dieser Peers, nicht einen
+globalen Management-Serverabsturz. Messpunkte stehen in
+[netbird-management-5m.json](../test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
+
+**Vollständige Abnahme vom 2026-10-11:** Management 305,3 s und 3604,3 s,
+Signal 608,6 s, Relay 1807,3 s und Management + Relay 3604,0 s sind abgeschlossen.
+Jeder Fall endet mit erfolgreichem Objektzugriff. Gruppenentzug und echtes
+Peer-DELETE sperrten den Zugriff nach 2,895 s beziehungsweise 2,823 s.
+Frische Handy-Erstkopplung, Schlüsselsteuerung, Hintergrund und kontrollierter
+Doze sind ebenfalls geprüft. [Abnahme und Grenzen](ap1b-abnahme.md),
+[Messungen](../test/evidence/ap1b-2026-10-11/acceptance-summary.json).
+
+Der begrenzte Testproxy unterbrach komponentenweise die Erreichbarkeit für zwei
+eigene Peers. Der globale kombinierte Server und seine Datenbank wurden dabei
+nicht gestoppt. Direkter TCP-Zugriff ist kein Beweis für gültigen Space-Zugriff:
+Bei Management-Ausfall blieb der Tunnel bestehen, das Gate verweigerte nach
+Cache-Ablauf. Signal-Reconnect wurde durch Neustart nur des eigenen Testagenten
+ausgelöst. Alle eigenen Fault-Regeln und die Desktop-Ausnahme wurden entfernt.
 
 ## 5. Control Space, Router, Supervisor, Recovery
 
@@ -1039,7 +1059,11 @@ type Policy = {
   primary-Regeln vorkommen. Steht er zusätzlich in einer expand-Regel, wäre das der RAID-10-Fall (7.3). Steht er
   in einer lww/set-Regel, würden dieselben Entries über zwei Replikationspfade laufen. Beides weist die
   Policy-Validierung ab. Members von expand- und lww/set-Regeln haben keine primary-Replikate.
-- Pro Typ genau eine Regel; Supertypen im Template erweitern die Suche auf alle betroffenen Regeln. `local` meint
+- Pro Typ genau eine Regel; Supertypen im Template erweitern die Suche auf alle betroffenen Regeln.
+  Verwaltete Regeln deklarieren dafür optional `supertypes: string[]`; der Router bildet die azyklische
+  transitive Hülle. Verwaltete Entries dürfen keine nicht deklarierte Supertypen einschleusen. Writes tragen die
+  vollständige deklarierte Hülle; Member prüfen sie ebenfalls. Die Hierarchie vorhandener Typen bleibt
+  wie deren Platzierung unveränderlich, damit Suchen keinen bereits vorhandenen Bestand übersehen. `local` meint
   den explizit benannten Member, nie implizit den Host des Clients.
 - Direkte Member-Zugriffe prüfen dieselben Modus-, Rechte- und Routinggrenzen; verwaltete expand-Typen dürfen
   außerhalb ihres Members nicht direkt geschrieben werden.
@@ -1399,7 +1423,7 @@ Pause-, Run- und Worker-Garantien der Erweiterung werden zusätzlich nach
 Festgelegt in v3:
 
 1. Grundlage ist der Vertrag aus 2.1; kein allgemeines Exactly-once für externe Wirkungen.
-2. Kein mTLS; WireGuard plus verbindungsgebundene App-Challenge (4.2, 4.3) – vorbehaltlich F3.
+2. Kein mTLS auf dem Space-Port; WireGuard plus verbindungsgebundene App-Challenge (4.2, 4.3) – vorbehaltlich F3.
 3. Control Space in 1b–2 single mit asynchronem Snapshot und Restore nach 5.2.1 (Fencing, neue Autorität, erneute Rechtefreigabe, Generationsende); primary/sync ab Stufe 3.
 4. Keine automatische Promotion; manuelle Promotion nur nach verifiziertem Fencing (Marker nur im Simulator).
    Einzige Ausnahme: Restore im Single-Betrieb (5.2.1, 5.2.2) vor Gate 2 mit dokumentierter Konsolensperre (F15).

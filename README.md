@@ -8,8 +8,9 @@ The historical JavaSpaces specification (Jini JavaSpaces Service Specification v
 for the coordination model. The local pi-spaces client is `PiSpaces`.
 
 **Status.** The library has a local durable space, named spaces, request claims, revisions and a single-host RPC
-service (`SpaceService`, `RemoteSpace`, Unix/TCP sockets). Router, federation, replication, mailbox delivery,
-connection-bound overlay identity and mobile control remain planned; the implemented scope and its limits are in
+service (`SpaceService`, `RemoteSpace`, Unix/TCP sockets), durable mailboxes and a composed federation host
+with overlay identity, key proof, enrollment, signed grants and key rotation. Router, replication, the full
+recovery workflow and mobile federation controls remain planned; the implemented scope and its limits are in
 [docs/implementierungsstand.md](docs/implementierungsstand.md).
 
 ## Layers
@@ -215,6 +216,7 @@ German documents in [docs/](docs/README.md):
 |---|---|
 | [implementierungsstand.md](docs/implementierungsstand.md) | implemented scope, evidence and limits |
 | [api.md](docs/api.md) | TypeScript, service and remote API reference |
+| [ap1b-abnahme.md](docs/ap1b-abnahme.md) | phase 1b integration evidence and remaining operational gates |
 | [spaces-v1.md](docs/spaces-v1.md) | historical local snapshot (2026-10-07) |
 | [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (target, not implemented) |
 | [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |

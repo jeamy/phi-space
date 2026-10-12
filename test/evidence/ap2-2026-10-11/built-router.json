@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-11",
+  "simulatedTransport": true,
+  "results": [
+    {
+      "backend": "jsonl",
+      "builtProductionArtifact": true,
+      "duplicateAndLostReply": true,
+      "routerCrashReopen": true,
+      "completed": true,
+      "remainingEntries": 0
+    },
+    {
+      "backend": "sqlite",
+      "builtProductionArtifact": true,
+      "duplicateAndLostReply": true,
+      "routerCrashReopen": true,
+      "completed": true,
+      "remainingEntries": 0
+    }
+  ]
+}

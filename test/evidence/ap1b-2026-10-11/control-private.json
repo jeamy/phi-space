@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-11T10:00:35.915Z",
+  "targetHostId": "phase1b-host-a",
+  "privateSignedRpcViaForcedSsh": true,
+  "foreignSignerDenied": true,
+  "authorizedOperatorReachesTupleValidation": true,
+  "arbitraryCommitDenied": true,
+  "validRestoreAckExercisedLive": false
+}

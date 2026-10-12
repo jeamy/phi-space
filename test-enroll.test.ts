@@ -162,11 +162,11 @@ test("one attempt per peer and minute, bad keys and unknown tokens are refused a
 	assert.deepEqual(g.events.map((e) => e.outcome), ["unknown-token", "rate-limited", "bad-key", "expired"]);
 });
 
-test("only an unpaired peer may enroll; a member and a paired host cannot", async (tc) => {
+test("only unpaired peers may start enrollment; an unproven member cannot resolve it", async (tc) => {
 	const g = await setup(tc);
 	const token = newEnrollToken();
 	await createEnroll(g.host, ctx, { tokenHash: hashToken(token), role: "host", allowedPeerId: "p-member", now: g.clock.now });
-	await assert.rejects(g.device("127.0.0.5", "p-member", generateKey("ed25519", "k").signer).enroll(token), (e: unknown) => e instanceof core.PermissionError && /only an unpaired peer/.test((e as Error).message));
+	await assert.rejects(g.device("127.0.0.5", "p-member", generateKey("ed25519", "k").signer).enroll(token), (e: unknown) => e instanceof core.PermissionError && /requires a current app-key proof/.test((e as Error).message));
 	assert.equal((await g.entries("Enroll"))[0]!.state, "open");
 });
 

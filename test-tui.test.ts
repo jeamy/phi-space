@@ -94,3 +94,8 @@ test("terminal control sequences are stripped from object content and rendering 
 	}
 	assert.equal(clean("\x1b[31mFAIL\x1b[0m"), "FAIL");
 });
+
+test("inspector sees live SQLite spaces through a consistent private backup",async()=>{
+ const {PersistentHome,ctx}=await import("./test/support/persistent.ts"),{PiSpaces}=await import("./src/index.ts"),{inspect}=await import("./test/testbed/inspect.ts");
+ const home=new PersistentHome("sqlite"),h=await home.open();try{const local=new PiSpaces(h,ctx);await local.write({type:"LiveSQLite",fields:{n:1}});const before=await local.stats();const result=await inspect(home.dir);assert.equal(result.errors.length,0);assert.equal(result.spaces.length,1);assert.ok(result.spaces[0]!.items.some(i=>i.type==="LiveSQLite"));assert.deepEqual(await local.stats(),before);}finally{await home.dispose();}
+});

@@ -1,0 +1,74 @@
+{
+  "passed": true,
+  "scope": "persistent-member-load",
+  "fullPhase2Accepted": false,
+  "backend": "sqlite",
+  "entries": 10000,
+  "members": 3,
+  "workers": 6,
+  "jobs": 1000,
+  "primes": 9592,
+  "sum": 454396537,
+  "elapsedMs": 386897.29643499997,
+  "sampledPeakRssBytes": 213032960,
+  "writeBatchMeanPerEntryLatency": {
+    "count": 501,
+    "p95Ms": 40.027322699999786,
+    "p99Ms": 49.51656460000013,
+    "maxMs": 66.02294675000012
+  },
+  "taskLatency": {
+    "count": 1000,
+    "p95Ms": 1446.9341090000235,
+    "p99Ms": 1612.1130389999598,
+    "maxMs": 1766.6708169999765
+  },
+  "docsBefore": [
+    {
+      "entries": 3340,
+      "fullDocumentBytes": 9521055,
+      "claimBytes": 1963943,
+      "streamBytes": 3701474
+    },
+    {
+      "entries": 3313,
+      "fullDocumentBytes": 9375103,
+      "claimBytes": 1948342,
+      "streamBytes": 3636958
+    },
+    {
+      "entries": 3347,
+      "fullDocumentBytes": 9496383,
+      "claimBytes": 1968222,
+      "streamBytes": 3686874
+    }
+  ],
+  "docsAfter": [
+    {
+      "fullDocumentBytes": 10262859,
+      "claimsBytes": 2561927,
+      "streamBytes": 3822686
+    },
+    {
+      "fullDocumentBytes": 10191644,
+      "claimsBytes": 2607095,
+      "streamBytes": 3770173
+    },
+    {
+      "fullDocumentBytes": 10292303,
+      "claimsBytes": 2609854,
+      "streamBytes": 3816920
+    }
+  ],
+  "replicationLag": "not applicable: phase-2 single Members",
+  "limits": {
+    "maxFrameBytes": 262144,
+    "maxCommitBytes": 196608,
+    "generationAdmitMs": 3600000
+  },
+  "remaining": [
+    "virtual Router journal scalability",
+    "real NetBird three-Member sieve",
+    "full crash boundary matrix"
+  ]
+}

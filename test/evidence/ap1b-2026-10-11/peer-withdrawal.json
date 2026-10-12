@@ -1,0 +1,25 @@
+{
+  "realNetbird": true,
+  "existingPeersUntouched": true,
+  "samples": [
+    {
+      "case": "group-withdrawal",
+      "seconds": 2.895,
+      "passed": false
+    },
+    {
+      "case": "peer-deletion",
+      "seconds": 2.823,
+      "passed": false
+    }
+  ],
+  "baselineChallengePassed": true,
+  "peerId": "db5rnuflh8lg00879tl0",
+  "ip": "100.89.87.230",
+  "groupDeniedSeconds": 2.895,
+  "groupRestoredChallengePassed": true,
+  "peerDeletedDeniedSeconds": 2.823,
+  "peerAbsentFromManagement": true,
+  "passed": true,
+  "temporaryContainerAndCredentialsRemoved": true
+}

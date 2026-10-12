@@ -1,0 +1,1663 @@
+{
+  "state": "finished",
+  "samples": [
+    {
+      "date": "2026-10-11T16:22:31Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:22:58Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:23:25Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:23:52Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:24:19Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:24:46Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:25:14Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:25:41Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:26:09Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:26:36Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:27:03Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:27:30Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:27:57Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:28:24Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:28:51Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:29:18Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:29:45Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:30:14Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:30:41Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:31:09Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:31:36Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:32:05Z",
+      "phase": "signal-10m",
+      "serverState": "running",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    },
+    {
+      "date": "2026-10-11T16:32:42Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:33:19Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:33:57Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:34:35Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:35:12Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:35:50Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:36:27Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:37:04Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:37:41Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:38:19Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:38:57Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:39:34Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:40:12Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:40:49Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:41:26Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:42:04Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:42:42Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:43:19Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:43:56Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:44:34Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:45:11Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:45:49Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:46:27Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:47:04Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:47:42Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:48:20Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:48:57Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:49:35Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:50:13Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:50:50Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:51:28Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:52:06Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:52:44Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:53:22Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:53:59Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:54:38Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:55:16Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:55:54Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:56:31Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:57:09Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:57:46Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:58:23Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:59:01Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T16:59:38Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:00:17Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:00:54Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:01:32Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:02:09Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:02:47Z",
+      "phase": "relay-30m",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:03:24Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:04:02Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:04:40Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:05:18Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:05:56Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:06:33Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:07:10Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:07:47Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:08:25Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:09:03Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:09:41Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:10:19Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:10:57Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:11:35Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:12:12Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:12:50Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:13:28Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:14:05Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:14:43Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:15:21Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:15:59Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:16:37Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:17:14Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:17:52Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:18:29Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:19:07Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:19:45Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:20:23Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:21:01Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:21:39Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:22:17Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:22:55Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:23:33Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:24:11Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:24:49Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:25:26Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:26:04Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:26:42Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:27:20Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:27:58Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:28:36Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:29:13Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:29:51Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:30:29Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:31:07Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:31:45Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:32:22Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:33:00Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:33:37Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:34:15Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:34:53Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:35:30Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:36:08Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:36:46Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:37:24Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:38:02Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:38:40Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:39:18Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:39:56Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:40:34Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:41:12Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:41:50Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:42:28Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:43:05Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:43:43Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:44:21Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:44:59Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:45:37Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:46:15Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:46:53Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:47:31Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:48:09Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:48:47Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:49:25Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:50:03Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:50:40Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:51:18Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:51:56Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:52:34Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:53:12Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:53:50Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:54:27Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:55:05Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:55:43Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:56:22Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:56:59Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:57:37Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:58:15Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:58:53Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T17:59:30Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:00:08Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:00:46Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:01:24Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:02:01Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:02:40Z",
+      "phase": "management-relay-1h",
+      "serverState": "running",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:03:17Z",
+      "phase": "management-relay-1h",
+      "serverState": "finished",
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      }
+    },
+    {
+      "date": "2026-10-11T18:03:45Z",
+      "phase": "management-relay-1h",
+      "serverState": "finished",
+      "objects": {
+        "passed": true,
+        "objects": 1
+      }
+    }
+  ],
+  "temporaryReplyRuleRemoved": true
+}

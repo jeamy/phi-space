@@ -1,0 +1,43 @@
+// Check every implemented Root journal in the same Control transaction as removal.
+import type {Tx} from '@earendil-works/pi-durable';
+import {createHash} from 'node:crypto';
+
+import {canonicalJson} from './canonical.ts';
+import {FederationOperations} from './federated-space.ts';
+import {RouterCommands, RouterJournal} from './router.ts';
+import {spaceDoc} from './spaces.ts';
+
+export async function memberReferencesIn(
+    tx: Tx, o: {controlSpaceId: string; routerId : string; federationId : string}, memberId: string,
+    spaceId: string): Promise<boolean> {
+    const index = await tx.doc(RouterJournal, o.routerId, null);
+    for (const [id, ref] of Object.entries(index.refs)) {
+        if ([ 'completed', 'failed' ].includes(ref.state) || ref.released)
+            continue;
+        const key = createHash('sha256').update(canonicalJson([ o.routerId, id ])).digest('hex'),
+              command = (await tx.doc(RouterCommands, key, null)).command;
+        if (!command)
+            throw new Error('incomplete Router reference reconstruction');
+        if (command.steps.some(s => s.target.spaceId === spaceId))
+            return true;
+    }
+    const operations = (await tx.doc(FederationOperations, o.federationId, null)).operations;
+    for (const op of Object.values(operations)) {
+        if (!op.members.includes(memberId))
+            continue;
+        if (op.phase !== 'done')
+            return true;
+        if (op.kind === 'txn' && (op.args as any).action === 'begin' &&
+            !Object.values(operations)
+                 .some(done => done.kind === 'txn' && done.phase === 'done' &&
+                               (done.args as any).originId === op.id &&
+                               [ 'commit', 'abort' ].includes((done.args as any).action)))
+            return true;
+    }
+    const control = await spaceDoc(tx, o.controlSpaceId, Date.now());
+    return control.entries.some(
+        e => !['Command', 'Result', 'PeerKey', 'Enroll', 'RouterLease', 'Capability', 'MemberStatus'].includes(e.type) &&
+             !['completed', 'failed', 'stopped', 'cancelled'].includes(String(e.fields.state)) &&
+             (e.fields.memberId === memberId || e.fields.spaceId === spaceId ||
+              Array.isArray(e.fields.members) && e.fields.members.includes(memberId)));
+}

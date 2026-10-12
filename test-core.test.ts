@@ -452,3 +452,21 @@ test("L7: the whole space is limited in bytes, for the host too; freed space can
 	c.cancel(s, 1, e.id);
 	c.write(s, 2, big(40), null, c.FOREVER);
 });
+
+test("profile budgets also apply to active transactions; bad commits remain abortable", () => {
+ const profile = {taskType:"SieveTask", resultTypes:["SieveResult"], equalFields:["rangeStart","rangeEnd"], maxResultCount:1, maxResultBytes:180, maxLeaseMs:1000};
+ for (const bad of ["missing","two","wrong","extra","oversize"]) {
+  const s=mk(); c.setCompletionProfiles(s,[profile],0);
+  c.write(s,0,{type:"SieveTask",fields:{rangeStart:1,rangeEnd:10}},null,c.FOREVER);
+  const t=c.createTxn(s,0,c.FOREVER); c.probe(s,1,T("SieveTask"),t.id,true);
+  assert.equal(s.txns[t.id]!.expires,1001);
+  assert.throws(()=>c.renew(s,2,t.id,1000),c.CompletionViolation);
+  if(bad!=="missing") c.write(s,2,{type:"SieveResult",fields:{rangeStart:bad==="wrong"?2:1,rangeEnd:10,...(bad==="oversize"?{payload:"x".repeat(200)}:{})}},t.id,c.FOREVER);
+  if(bad==="two"||bad==="extra") c.write(s,2,{type:"SieveResult",fields:{rangeStart:bad==="extra"?2:1,rangeEnd:10}},t.id,c.FOREVER);
+  assert.throws(()=>c.commitTxn(s,3,t.id),c.CompletionViolation,bad);
+  c.abortTxn(s,4,t.id); assert.equal(c.list(s,5,T("SieveTask")).length,1); assert.equal(c.list(s,5,T("SieveResult")).length,0);
+ }
+ const s=mk(); c.setCompletionProfiles(s,[profile],0); c.write(s,0,{type:"SieveTask",fields:{rangeStart:1,rangeEnd:10}},null,c.FOREVER);
+ const t=c.createTxn(s,0,c.FOREVER); c.probe(s,1,T("SieveTask"),t.id,true); c.write(s,2,{type:"SieveResult",fields:{rangeStart:1,rangeEnd:10}},t.id,c.FOREVER); c.commitTxn(s,3,t.id);
+ assert.equal(c.list(s,4,T("SieveTask")).length,0); assert.equal(c.list(s,4,T("SieveResult")).length,1);
+});

@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-11T10:51:33.038818+00:00",
+  "scenario": "isolated-live-data-restore",
+  "sourceHost": "phase1b-restore-source",
+  "targetHost": "phase1b-restore-target",
+  "controlHost": "phase1b-host-a",
+  "registerHost": "vpsc",
+  "realNetbird": true,
+  "snapshotFromLiveSqliteBackup": true,
+  "sourceFencedWithPersistentRestartLock": true,
+  "sourceRestartActuallyRefused": true,
+  "signedHostControlAckPassed": true,
+  "durableControlReceiptTuple": {
+    "recoveryId": "live-data-restore-20261011",
+    "space": "sp-12f232cc-1637-4187-9036-a593b82098a1",
+    "incarnation": "1f219883",
+    "primaryEpoch": 2,
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "targetHostId": "phase1b-restore-target",
+    "argsHash": "289c346b040be9c6228b735d07b2a9da538f71ec0b4ed64b2bf65083cac454d1"
+  },
+  "recoveryProcessKilledAndPersistentWaitingJobReopened": true,
+  "state": "completed",
+  "incarnation": "1f219883",
+  "primaryEpoch": 2,
+  "quarantine": {
+    "restoredObjectsReadable": true,
+    "quarantineBlocksTake": true,
+    "objects": 1,
+    "space": "sp-12f232cc-1637-4187-9036-a593b82098a1",
+    "incarnation": "1f219883"
+  },
+  "idempotentScopedRelease": {
+    "count": 1,
+    "completed": true
+  },
+  "operatorCredentialsRemovedBeforeNormalStart": true,
+  "phoneTarget": {
+    "passed": true,
+    "realNetbird": true,
+    "hostId": "phase1b-restore-target",
+    "space": "sp-12f232cc-1637-4187-9036-a593b82098a1",
+    "objects": 1,
+    "restoredObjectTakenAfterRelease": true
+  },
+  "originalPhoneJobsAccessPassed": true,
+  "fullSuite": {
+    "passed": 232,
+    "failed": 0,
+    "skipped": 0
+  },
+  "scope": "Single-mode Data restore using F15 process/service fencing; no promotion or control-authority restore"
+}

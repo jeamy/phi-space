@@ -1,0 +1,367 @@
+{
+  "date": "2026-10-11T10:16:29.481389+00:00",
+  "device": "M2007J17G",
+  "android": 12,
+  "realNetbird": true,
+  "controlHost": "phase1b-host-a",
+  "nativeKeystore": true,
+  "enrollmentPassed": true,
+  "scope": [
+    "jobs"
+  ],
+  "authenticationPassed": true,
+  "temporaryEnrollmentMembershipRemoved": true,
+  "objectsPassed": true,
+  "overlayMemberRoleMissing": false,
+  "additionalGroupMembershipApprovalPending": false,
+  "visibleUiAcceptance": false,
+  "longBackgroundOrScreenOffAcceptance": false,
+  "shortBackgroundAuthenticationPassed": true,
+  "backgroundLimit": "Ten minute continuously sampled screen-off background run with six successful object checks; natural long-term Doze remains separate",
+  "phoneSpaceGroups": [
+    "space-hosts",
+    "space-admin"
+  ],
+  "rotationPassed": true,
+  "oldKeyRejected": true,
+  "pendingRotationResolvedAfterAppRestart": true,
+  "objectsPassedAfterAppRestart": true,
+  "mobileTests": {
+    "passed": 4,
+    "failed": 0,
+    "regressionReproducesOriginalGrantBug": true
+  },
+  "grantBugFixed": "Authenticate the separate control connection before obtaining a data grant",
+  "apkSha256": "b01513f520cca812e7e1baf9e653d415b7dc1576adaad58d55f7a68b38468771",
+  "screenOffAttempt": {
+    "durationRequestedSeconds": 90,
+    "passed": true,
+    "samples": [
+      {
+        "seconds": 1.6,
+        "wakefulness": "Dozing"
+      },
+      {
+        "seconds": 3.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 6.2,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 8.3,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 10.6,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 12.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 15.3,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 17.6,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 20.0,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 22.1,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 24.3,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 26.5,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 28.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 31.6,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 33.9,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 36.1,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 38.7,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 41.2,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 43.4,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 45.6,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 47.9,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 50.1,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 52.4,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 54.7,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 56.9,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 59.1,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 61.3,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 63.5,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 66.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 69.0,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 71.4,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 74.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 77.3,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 79.5,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 81.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 84.1,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 86.2,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 88.5,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 91.6,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 93.9,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 96.1,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 98.3,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 100.5,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 102.7,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 105.2,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 107.6,
+        "wakefulness": "Asleep"
+      }
+    ],
+    "objectsPassed": true,
+    "objects": 1,
+    "finalWakefulness": "Asleep",
+    "elapsedSeconds": 115.2,
+    "accepted": true
+  },
+  "previousObjectsDeniedReason": "no current effect rights",
+  "visibleObjectUiPassed": true,
+  "visibleObjectUi": {
+    "objectButtonClicked": true,
+    "resultMessageReceived": true,
+    "acceptanceObjectVisible": true
+  },
+  "liveRestoredTargetAccessPassed": true,
+  "previousInterruptedScreenOffAttempt": {
+    "durationRequestedSeconds": 90,
+    "passed": false,
+    "samples": [
+      {
+        "seconds": 0.3,
+        "wakefulness": "Dozing"
+      },
+      {
+        "seconds": 2.5,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 4.8,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 6.9,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 9.2,
+        "wakefulness": "Asleep"
+      },
+      {
+        "seconds": 11.3,
+        "wakefulness": "Awake"
+      }
+    ],
+    "reason": "Screen-off interval interrupted or not established",
+    "elapsedSeconds": 11.4,
+    "accepted": false
+  },
+  "shortScreenOffObjectsPassed": true,
+  "screenOffLimit": "Continuous short interval only; no long-term background or forced Doze acceptance",
+  "objectsPassedAfterControlTestCleanup": true,
+  "visibleKeyUiActionsPassed": true,
+  "rotationCurrentKeyId": "d3523e8f24bed9d541423f975a8cde09",
+  "interruptedLongScreenOffAttempt": {
+    "requestedSeconds": 600,
+    "passed": false,
+    "samples": [
+      {
+        "seconds": 0.0,
+        "wakefulness": "Dozing",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 15.2,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 30.5,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 45.8,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 61.1,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 76.3,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 91.6,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 107.4,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 122.8,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 145.0,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 160.2,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 176.6,
+        "wakefulness": "Asleep",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      },
+      {
+        "seconds": 192.0,
+        "wakefulness": "Awake",
+        "idleState": "ACTIVE mLightState=ACTIVE"
+      }
+    ],
+    "objectChecks": [
+      {
+        "seconds": 0,
+        "passed": true,
+        "objects": 1
+      },
+      {
+        "seconds": 122.8,
+        "passed": true,
+        "objects": 1
+      }
+    ],
+    "reason": "continuous screen-off interrupted",
+    "elapsedSeconds": 192.3
+  },
+  "background10MinutesPassed": true,
+  "screenOff10MinutesPassed": true,
+  "forcedDeepDozePassed": true,
+  "forcedDozeRemoved": true,
+  "forcedDozeDurationSeconds": 187.8
+}

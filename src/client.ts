@@ -1,5 +1,7 @@
+import {assertMemberAdmission,permitRoutedWrite} from "./member-admission.ts";
 // The local pi-spaces client over the Session-scoped Space document. Host code, tasks and tools all use this.
 // Everything here runs against one harness: the harness process is the "space service".
+import type { DecisionAuthorization } from "./service.ts";
 import type { Session, Tx } from "@earendil-works/pi-durable";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Context } from "@earendil-works/chord";
@@ -20,7 +22,7 @@ export { Space };
 /** What the client needs; both `Harness` and a tool's `api` provide it. */
 export type SpaceHost = Pick<Session, "commit" | "watchDoc" | "snapshot">;
 /** `space`: alias or spaceId of a named space (see `createSpace`); omitted: the default space. */
-export type PiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal };
+export type PiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal; authorization?: DecisionAuthorization };
 export type Once = { get(tx: Tx): Promise<Json | undefined>; set(tx: Tx, v: Json): Promise<void> };
 export type Snapshot = { readonly entry: Readonly<EntryDraft> };
 export type OpOptions = {
@@ -88,7 +90,7 @@ export class PiSpaces implements SpaceLike {
 	}
 
 	/** This client's space document inside a commit (registers the default space on first use). */
-	private doc(tx: Tx): Promise<core.SpaceState> { return spaceDoc(tx, this.space, this.now()); }
+	private async doc(tx: Tx): Promise<core.SpaceState> { const s=await spaceDoc(tx, this.space, this.now()); await this.options.authorization?.checkTx?.(tx); permitRoutedWrite(s,!!this.options.authorization?.routerEpoch); return s; }
 	/** Committed state for snapshot reads. The default space reads its document directly, even before registration. */
 	private async snap(): Promise<Readonly<core.SpaceState> | undefined> {
 		if (this.space === undefined) return this.host.snapshot(Space, this.ctx);
@@ -125,12 +127,15 @@ export class PiSpaces implements SpaceLike {
 		return this.host.commit(async (tx) => {
 			const s = await this.doc(tx);
 			const now = this.now();
+			this.options.authorization?.check();
 			if (!request) return { value: fn(s, now), fresh: true };
+			if(!s.rpc?.claims[claims.keyOf(s,request)])assertMemberAdmission(s,method);
 			const limits = core.limitsOf(s);
 			const resultBound = method === "cancelOperation" ? limits.maxEntryBytes + 4 * limits.maxTypeChars * limits.maxTypes + 8192 : 1024;
 			const ad = claims.admit(s, now, request, method, core.plain(args), core.FOREVER, resultBound);
 			if (ad.kind === "done") return { value: core.plain(ad.result) as T, fresh: false };
 			if (ad.kind === "cancelled") throw new claims.OperationCancelled(`request ${request.requestId} was cancelled`);
+			this.claimMetadata(s,ad.key);
 			const value = fn(s, now);
 			claims.decide(s, now, ad.key, { state: "done", result: core.plain((value ?? null) as Json) });
 			return { value, fresh: true };
@@ -139,15 +144,15 @@ export class PiSpaces implements SpaceLike {
 
 	/** A new request generation for `principal`, in this space. Request ids are admitted while it is open. */
 	issueGeneration(principal: Principal): Promise<{ generation: string; admitUntil: number }> {
-		return this.host.commit(async (tx) => claims.issueGeneration(await this.doc(tx), this.now(), principal, { key: await hostKey(tx, this.now()), authorityId: this.options.authorityId }), this.ctx);
+		return this.host.commit(async (tx) => { const s = await this.doc(tx), key = await hostKey(tx, this.now()); this.options.authorization?.check(); return claims.issueGeneration(s, this.now(), principal, { key, authorityId: this.options.authorityId }); }, this.ctx);
 	}
 	/** State of a known request, read without a commit. An unknown id is RequestExpired, never a new operation. */
 	async pollOperation(target: RequestRef): Promise<ClaimView> {
 		const s = await this.snap();
 		if (!s) throw new claims.RequestExpired(`request ${target.requestId} is unknown`);
 		const v = claims.lookup(s, target, this.now());
-		if (v.state !== "pending") return v;
-		return this.host.commit(async tx => { const d = await this.doc(tx); core.settle(d, this.now()); return core.plain(claims.lookup(d, target, this.now())); }, this.ctx);
+		if (v.state !== "pending" || v.restoredHistory) return v;
+		return this.host.commit(async tx => { const d = await this.doc(tx); this.options.authorization?.check(); this.authorizePending(d, target); core.settle(d, this.now()); return core.plain(claims.lookup(d, target, this.now())); }, this.ctx);
 	}
 	/** Cancel a pending request (a blocked call then ends with OperationCancelled); a decided one is returned as is. */
 	async cancelOperation(target: RequestRef, o: Req = {}): Promise<ClaimView> {
@@ -167,15 +172,18 @@ export class PiSpaces implements SpaceLike {
 	}
 	/** Park a read/take for a conversation. The space delivers the entry (or a timeout) to it as input later.
 	 * `timeout` may be FOREVER: the wait stays until served or cancelled, across restarts. */
-	async wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string> {
+	async wait(tmpl: Template, o: { deadline?:number; take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string> {
 		if (o.target == null || o.target === "") throw new core.IllegalArgumentError("wait needs a target conversation");
-		const w = { template: tmpl, take: o.take ?? true, target: o.target, timeout: o.timeout, ...(o.txnLeaseMs === undefined ? {} : { txnLeaseMs: o.txnLeaseMs }), handback: o.handback ?? null };
-		return (await this.mutate("wait", w as unknown as Json, o.request, (s, now) => core.addWaiter(s, now, { ...w, ...(this.as === undefined ? {} : { as: this.as }), consumer: this.options.consumer }))).value;
+		const w = { ...(o.deadline===undefined?{}:{deadline:o.deadline}), template: tmpl, take: o.take ?? true, target: o.target, timeout: o.timeout, ...(o.txnLeaseMs === undefined ? {} : { txnLeaseMs: o.txnLeaseMs }), handback: o.handback ?? null };
+		return (await this.mutate("wait", w as unknown as Json, o.request, (s, now) => core.addWaiter(s, now, { ...w, ...(o.request?{originRequestKey:claims.keyOf(s,o.request)}:{}), ...(this.as === undefined ? {} : { as: this.as }), consumer: this.options.consumer, ...(this.options.authorization ? { authorizedUntil: this.options.authorization.validUntil } : {}) }))).value;
 	}
 	async events(principal: Principal, o: { mailboxEpoch?: string; after?: number; maxBytes?: number } = {}, validate?: (page: MailboxPage) => void): Promise<MailboxPage> {
 		if (this.options.consumer && canonicalPrincipal(principal) !== canonicalPrincipal(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
 		await this.maintain();
-		return this.host.commit(async tx => { const s = await this.doc(tx); core.settle(s, this.now()); const p = mailboxPage(s, principal, this.now(), o); validate?.(p); return p; }, this.ctx);
+		return this.host.commit(async tx => { const s = await this.doc(tx); this.options.authorization?.check();
+			const authorization = this.options.authorization;
+			if (authorization) for (const w of s.waiters) if ((authorization.renewalWaiterId === undefined || authorization.renewalWaiterId === w.id) && w.consumer && canonicalPrincipal(w.consumer) === canonicalPrincipal(principal) && authorization.canExecutePending(w.take ? "take" : "read", w.template)) { w.authorizedUntil = authorization.validUntil; core.touch(s, this.now()); }
+			core.settle(s, this.now()); const p = mailboxPage(s, principal, this.now(), o); validate?.(p); return p; }, this.ctx);
 	}
 	async ack(principal: Principal, mailboxEpoch: string, upTo: number, o: Req = {}): Promise<{ mailboxEpoch: string; acked: number }> {
 		if (this.options.consumer && canonicalPrincipal(principal) !== canonicalPrincipal(this.options.consumer)) throw new core.PermissionError("another consumer's mailbox");
@@ -241,10 +249,28 @@ export class PiSpaces implements SpaceLike {
 		if (this.as !== undefined) throw new core.PermissionError("only host code may configure completion profiles");
 		return this.host.commit(async tx => core.setCompletionProfiles(await this.doc(tx), profiles, this.now()), this.ctx);
 	}
-	async commit(txn: string, o: Req = {}) { await this.mutate("txn.commit", { txn }, o.request, (s, now) => core.commitTxn(s, now, txn, this.as)); }
+	private checkTransactionRights(s: core.SpaceState, txn: string): void {
+		const authorization = this.options.authorization;
+		if (!authorization) return;
+		for (const e of s.entries) {
+			const methods = [...(e.writtenUnder === txn ? ["write"] : []), ...(e.takenBy === txn ? ["take"] : []), ...(e.readBy.includes(txn) ? ["read"] : [])];
+			for (const method of methods) if (!e.types.some(type => authorization.canExecutePending(method, { type }))) throw new core.PermissionError(`current grant cannot ${method} transaction entry ${e.id}`);
+		}
+	}
+	async transactionState(id:string):Promise<{state:"active"|"inactive";expires?:number}>{return this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();core.settle(s,this.now());const t=s.txns[id];if(t&&this.as!==undefined&&t.owner!==this.as)throw new core.PermissionError("another principal's transaction");return t?{state:"active",expires:t.expires}:{state:"inactive"};},this.ctx);}
+
+	async commit(txn: string, o: Req = {}) { await this.mutate("txn.commit", { txn }, o.request, (s, now) => { this.checkTransactionRights(s, txn); core.commitTxn(s, now, txn, this.as); }); }
 	async abort(txn: string, o: Req = {}) { await this.mutate("txn.abort", { txn }, o.request, (s, now) => core.abortTxn(s, now, txn, this.as)); }
-	async renew(leaseId: string, ms: number, o: Req = {}) { return (await this.mutate("lease.renew", { leaseId, ms }, o.request, (s, now) => core.renew(s, now, leaseId, ms, this.as))).value; }
-	async cancel(leaseId: string, o: Req = {}) { await this.mutate("lease.cancel", { leaseId }, o.request, (s, now) => core.cancel(s, now, leaseId, this.as)); }
+	async renew(leaseId: string, ms: number, o: Req = {}) { return (await this.mutate("lease.renew", { leaseId, ms }, o.request, (s, now) => {
+		const authorization = this.options.authorization;
+		if (authorization) {
+			if (s.txns[leaseId]) this.checkTransactionRights(s, leaseId);
+			const entry = s.entries.find(e => e.id === leaseId), registration = s.regs.find(r => r.id === leaseId), waiter = s.waiters.find(w => w.id === leaseId);
+			if (entry && !entry.types.some(type => authorization.canExecutePending("write", { type })) || registration && !authorization.canExecutePending("notify", registration.template) || waiter && !authorization.canExecutePending(waiter.take ? "take" : "read", waiter.template)) throw new core.PermissionError("current grant cannot renew the original lease operation");
+		}
+		return core.renew(s, now, leaseId, ms, this.as);
+	})).value; }
+	async cancel(leaseId: string, o: Req = {}) { await this.mutate("lease.cancel", { leaseId }, o.request, (s, now) => (()=>{try{core.cancel(s,now,leaseId,this.as);}catch(e){if(!(e instanceof core.UnknownLeaseError)||!this.options.authorization?.allowClosedWaiter)throw e;}})()); }
 
 	/**
 	 * Debounce: after a change wakes a blocked op, wait a moment (jittered) before probing again, so a burst of writes
@@ -310,18 +336,21 @@ export class PiSpaces implements SpaceLike {
 		await this.maintain();
 		return this.host.commit(async tx => {
 			const s = await this.doc(tx), now = this.now();
+			this.options.authorization?.check();
 			const existing = s.rpc?.claims[claims.keyOf(s, o.request)];
 			if (!existing) {
+				assertMemberAdmission(s,method);
 				const n = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && canonicalPrincipal(c.principal) === canonicalPrincipal(o.request.principal)).length;
 				if (n >= (this.options.maxPending ?? 32)) throw new core.ResourceExhausted("too many pending operations for this principal");
-				const peerCount = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && c.principal.peerId === o.request.principal.peerId).length;
+				const peerCount = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && (c.principal.peerId === o.request.principal.peerId || (!!this.options.authorization?.transportPeerId && c.transportPeerId===this.options.authorization.transportPeerId))).length;
 				if (peerCount >= (this.options.maxPendingPeer ?? 128)) throw new core.ResourceExhausted("too many pending operations for this peer");
 			}
 			const lim = core.limitsOf(s);
 			const bound = lim.maxEntryBytes + 4 * lim.maxTypeChars * lim.maxTypes + 4096;
 			const ad = claims.admit(s, now, o.request, method, core.plain(args), o.deadline ?? core.deadlineOf(now, timeout), bound);
-			if (ad.kind === "pending") { core.settle(s, now); return core.plain(claims.lookup(s, o.request, now)); }
+			if (ad.kind === "pending") { this.authorizePending(s, o.request); core.settle(s, now); return core.plain(claims.lookup(s, o.request, now)); }
 			if (ad.kind === "fresh") {
+				this.claimMetadata(s,ad.key);
 				if (o.deadline !== undefined && o.deadline < now) { claims.decide(s, now, ad.key, { state: "done", result: null }); return core.plain(claims.lookup(s, o.request, now)); }
 				const p = core.probe(s, now, tmpl, o.txn ?? null, take, this.as);
 				const miss = p.status !== "found" && (ad.deadline <= now || (ifExists && p.status === "none"));
@@ -329,11 +358,20 @@ export class PiSpaces implements SpaceLike {
 				if (p.status === "found" || miss) {
 					if (o.resultBudget !== undefined && Buffer.byteLength(JSON.stringify(result)) > o.resultBudget) throw new core.ResponseBudgetTooSmall(Buffer.byteLength(JSON.stringify(result)));
 					claims.decide(s, now, ad.key, { state: "done", result });
-				} else core.parkOperation(s, ad.key, tmpl, take, o.txn ?? null, ad.deadline, ifExists, this.as);
+				} else { core.parkOperation(s, ad.key, tmpl, take, o.txn ?? null, ad.deadline, ifExists, this.as); this.authorizePending(s, o.request); }
 			}
 			return core.plain(claims.lookup(s, o.request, now));
 		}, this.ctx);
 	}
+	private claimMetadata(s:core.SpaceState,key:string):void { const a=this.options.authorization;if(a)claims.setMetadata(s,key,{policyVersion:a.policyVersion,transportPeerId:a.transportPeerId,routerEpoch:a.routerEpoch,controlPrimaryEpoch:a.controlPrimaryEpoch}); }
+
+	private authorizePending(s: core.SpaceState, request: RequestRef): void {
+		const a = this.options.authorization;
+		if (!a) return;
+		const key = claims.keyOf(s, request);
+		for (const w of s.waiters) if (w.claimKey === key && a.canExecutePending(w.take ? "take" : "read", w.template)) { this.claimMetadata(s,key); w.authorizedUntil = a.validUntil; core.touch(s, this.now()); }
+	}
+
 	private async durableOperation(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean): Promise<Taken | null> {
 		let value = await this.beginOperation(tmpl, timeout, o as OpOptions & { request: RequestRef }, take, ifExists);
 		const watch = await this.watch();

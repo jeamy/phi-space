@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-11T18:58:20.039917+00:00",
+  "host": "big",
+  "image": "pi-spaces-test-node:local",
+  "productionBundleSha256": "4f4f83e0ebda35048c86d0b7163ea6cecf644d28729bee5d5b7c3338a7005f22",
+  "compiledTestsOnly": true,
+  "sourceFilesShipped": false,
+  "containerReadOnly": true,
+  "containerRemoved": true,
+  "externalNetwork": "none",
+  "controlledManagementDirectoryFixtures": true,
+  "loopbackTcpProofAndDelegation": true,
+  "backends": [
+    "jsonl",
+    "sqlite"
+  ],
+  "results": {
+    "passed": 65,
+    "failed": 0,
+    "skipped": 0
+  },
+  "fullPhase2OverlayAcceptance": false
+}

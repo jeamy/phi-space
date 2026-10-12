@@ -1,3 +1,4 @@
+import {assertMemberAdmission,initializeMemberTxn,assertMemberWrite,chargeMemberWrite,assertMemberTake,assertMemberRenew,type MemberAdmission,type CompletionAllowance} from "./member-admission.ts";
 // Pure JavaSpaces semantics (Jini JavaSpaces spec v2.2) over a plain JSON state. No pi imports.
 // Functions mutate `state` in place (it is a document draft inside a commit) and take `now` explicitly.
 import { collect, record, touch as touchStream, revisionOf, seal as sealStream, type Batch, type Op, type StreamState } from "./stream.ts";
@@ -78,6 +79,7 @@ export type EntryDraft = { type: string; types?: string[]; fields: Fields };
 export type Template = { type?: string | null; fields?: Fields; id?: string | null } | null;
 
 export type EntryRec = {
+	restoredUnverified?: true;
 	id: string;
 	type: string;
 	types: string[];
@@ -90,8 +92,8 @@ export type EntryRec = {
 	size?: number; // JSON bytes of `fields`, for the space-wide limit
 };
 /** `owner`: the only conversation that may use, commit, abort, renew or cancel it; null: host code only. */
-export type TxnRec = { id: string; expires: number; owner: Target | null; reserved?: number; takenTasks?: Array<{ id: string; types: string[]; fields: Fields }> };
-export type CompletionProfile = { taskType: string; resultTypes: string[]; equalFields: string[]; maxResultCount: number };
+export type TxnRec = { completion?: CompletionAllowance; completionDeadline?: number; originRequestKey?: string; id: string; expires: number; owner: Target | null; reserved?: number; takenTasks?: Array<{ id: string; types: string[]; fields: Fields }> };
+export type CompletionProfile = { taskType: string; resultTypes: string[]; equalFields: string[]; maxResultCount: number; maxResultBytes?: number; maxLeaseMs?: number };
 export type FanoutJob = { id: string; at: number; cursor: number; retryAt?: number; events: Array<{ event: SpaceEvent; consumer?: Principal }> };
 export type RegRec = {
 	id: string; // event id
@@ -110,9 +112,9 @@ export type RegRec = {
 	consumer?: Principal;
 };
 /** A parked read/take for a conversation: served by the space when a match appears, instead of a blocked call. */
-export type WaiterRec = { id: string; template: Template; take: boolean; target: Target | null; deadline: number; txnLeaseMs: number; handback: Json; claimKey?: string; requestTxn?: string | null; ifExists?: boolean; consumer?: Principal };
+export type WaiterRec = { originRequestKey?: string; id: string; template: Template; take: boolean; target: Target | null; deadline: number; txnLeaseMs: number; handback: Json; claimKey?: string; requestTxn?: string | null; ifExists?: boolean; consumer?: Principal; authorizedUntil?: number };
 /** `owner`: who wrote it (a conversation id), or null for host code, so a reader can judge where content comes from. */
-export type EntryView = { id: string; gid?: string; type: string; types: string[]; fields: Fields; owner: Target | null };
+export type EntryView = { id: string; gid?: string; type: string; types: string[]; fields: Fields; owner: Target | null; restoredUnverified?: true };
 export type SpaceEvent = {
 	kind: "entry" | "waiter" | "timeout" | "registrationClosed";
 	eventId: string;
@@ -124,7 +126,7 @@ export type SpaceEvent = {
 	tries?: number; // failed deliveries so far
 	retryAt?: number; // not before this time (backoff after a failed delivery)
 	txn?: string; // a served take-waiter holds the entry under this transaction until committed or its lease lapses
-	reason?: "expired" | "cancelled" | "transactionEnded";
+	reason?: "expired" | "cancelled" | "transactionEnded" | "removing";
 };
 /** `returned`: entries given back by aborted or expired transactions, ever. Only changes in commits that change the
  * space anyway (a transaction ends), so keeping it durable wakes nobody. */
@@ -132,7 +134,7 @@ export type SpaceEvent = {
  * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
  * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
  */
-export type SpaceState = { nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string } };
+export type SpaceState = { snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed" }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; invalidGenerations?: Record<string, true> };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
@@ -149,11 +151,20 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		...(typeof v.incarnation === "string" ? { incarnation: v.incarnation } : {}),
 		...(v.rpc ? { rpc: v.rpc } : {}), // request claims (claims.ts)
 		...(v.stream ? { stream: v.stream } : {}), // revisions and change batches (stream.ts)
+		...(v.membership ? { membership: v.membership } : {}),
+		...(v.snapshotEpoch===undefined?{}:{snapshotEpoch:v.snapshotEpoch}),
 		...(v.completionProfiles ? { completionProfiles: v.completionProfiles } : {}),
 		...(v.mailboxes ? { mailboxes: v.mailboxes } : {}),
 		...(v.jobs ? { jobs: v.jobs } : {}),
 		...(v.releaseQueue ? { releaseQueue: v.releaseQueue } : {}),
 		...(v.maintenance ? { maintenance: v.maintenance } : {}),
+		...(v.primaryEpoch !== undefined ? { primaryEpoch: v.primaryEpoch } : {}),
+		...(v.acceptedAuthorityId ? { acceptedAuthorityId: v.acceptedAuthorityId } : {}),
+		...(v.authorityTransition ? { authorityTransition: v.authorityTransition } : {}),
+		...(v.authorityCounters ? { authorityCounters: v.authorityCounters } : {}),
+		...(v.restore ? { restore: v.restore } : {}),
+		...(v.restoredClaims ? { restoredClaims: v.restoredClaims } : {}),
+		...(v.invalidGenerations ? { invalidGenerations: v.invalidGenerations } : {}),
 		returned: v.returned ?? d.returned,
 	};
 };
@@ -205,14 +216,15 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
 /** Bytes of the parts of the document that are not entries (claims by their running tally). */
 export function overheadBytes(s: Readonly<SpaceState>): number {
-	return claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {});
+	return jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {});
 }
 /** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
 export function claimBytes(s: Readonly<SpaceState>): number {
 	const r = s.rpc;
-	if (!r) return 0;
-	if (r.bytes === undefined) return jsonBytes(r.claims) + jsonBytes(r.generations);
-	return r.bytes + (r.reservedBytes ?? 0);
+	const history = (s.restoredClaims ? jsonBytes(s.restoredClaims) : 0) + (s.invalidGenerations ? jsonBytes(s.invalidGenerations) : 0);
+	if (!r) return history;
+	if (r.bytes === undefined) return history + jsonBytes(r.claims) + jsonBytes(r.generations);
+	return history + r.bytes + (r.reservedBytes ?? 0);
 }
 /**
  * An event carries the entry, a handback and metadata. A conservative bound (the largest handback of any registration or
@@ -438,7 +450,9 @@ function expire(s: SpaceState, at: number): boolean {
  * `as` is the conversation acting. Omitted (host code), nothing is checked. Given, it may only use transactions and
  * leases it owns (never ownerless ones: those are the host's), it owns what it creates, and the limits apply.
  */
+const directoryEntry = (e: {types?:string[];type:string}) => [e?.type,...(Array.isArray(e?.types)?e.types:[])].some(t=>t==="Capability"||t==="MemberStatus");
 export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string | null, lease: number, as?: Target): Lease {
+	if (directoryEntry(entry)) { if(as!==undefined || txn!==null) throw new PermissionError("directory entries require trusted publication"); assertMemberAdmission(s,"write"); if(s.membership && s.membership.state!=="active") throw new PermissionError("directory publication requires active Member"); } else assertMemberWrite(s, entry, txn, now);
 	settle(s, now);
 	if (typeof entry?.type !== "string" || entry.type === "") throw new IllegalArgumentError("entry needs a type");
 	if (entry.fields === null || typeof entry.fields !== "object" || Array.isArray(entry.fields)) throw new IllegalArgumentError("entry fields must be an object");
@@ -479,6 +493,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	charge(s, jsonBytes(rec));
 	s.nextId++;
 	s.entries.push(rec);
+	chargeMemberWrite(s, entry, txn);
 	touch(s, now);
 	if (txn === null) logPut(s, now, rec); // visible at once; under a transaction it appears at commit
 	notifyWrite(s, rec, txn, now);
@@ -535,21 +550,24 @@ export type Probe = { status: "found"; entry: EntryRec } | { status: "none" } | 
 
 /** One non-waiting attempt. `locked` means matches exist, but every one conflicts with another transaction. */
 export function probe(s: SpaceState, now: number, tmpl: Template, txn: string | null, take: boolean, as?: Target): Probe {
+	assertMemberAdmission(s, take ? "take" : "read");
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn, as);
 	const f = find(s, tmpl, txn, take);
+	if (f.status === "found" && as !== undefined && directoryEntry(f.rec) && (take || txn !== null)) throw new PermissionError("directory entries cannot be consumed or locked");
+	if (f.status === "found" && take) assertMemberTake(s,f.rec,txn,now);
 	if (f.status === "found" && take && txn === null && (s.completionProfiles ?? []).some(p => f.rec.types.includes(p.taskType))) throw new CompletionViolation("profiled tasks must be taken under a transaction");
 	if (f.status === "found" && take && txn !== null && f.rec.writtenUnder !== txn) reserve(s, txn, publishCost(s, f.rec), limitsOf(s)); // an abort puts it back
 	return f.status === "found" ? { status: "found", entry: apply(s, now, f.rec, txn, take) } : f;
 }
 
 /** What callers see of an entry. With the space's id it also carries the global id. */
-export const view = (e: EntryRec, spaceId?: string): EntryView => ({ id: e.id, ...(spaceId ? { gid: gidOf(spaceId, e.id) } : {}), type: e.type, types: [...e.types], fields: clone(e.fields), owner: e.owner });
+export const view = (e: EntryRec, spaceId?: string): EntryView => ({ id: e.id, ...(spaceId ? { gid: gidOf(spaceId, e.id) } : {}), type: e.type, types: [...e.types], fields: clone(e.fields), owner: e.owner, ...(e.restoredUnverified ? { restoredUnverified: true as const } : {}) });
 
 function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean): { status: "found"; rec: EntryRec } | { status: "none" } | { status: "locked" } {
 	let locked = false;
 	for (const e of s.entries) {
-		if (!matches(tmpl, e)) continue;
+		if (!matches(tmpl, e) || (e.restoredUnverified && (take || txn !== null))) continue;
 		const mine = txn !== null && e.writtenUnder === txn;
 		if (e.writtenUnder !== null && !mine) continue; // not yet committed elsewhere: invisible, not a conflict
 		if (e.takenBy !== null) {
@@ -571,6 +589,10 @@ function apply(s: SpaceState, now: number, e: EntryRec, txn: string | null, take
 			const fields: Fields = {};
 			for (const p of profiles) for (const name of p.equalFields) if (Object.hasOwn(e.fields, name)) fields[name] = clone(e.fields[name]!);
 			const capture = { id: e.id, types: [...e.types], fields };
+			const deadline = Math.min(...profiles.map(p => p.maxLeaseMs === undefined ? FOREVER : now + p.maxLeaseMs));
+			const t = s.txns[txn]!;
+			t.completionDeadline = Math.min(t.completionDeadline ?? FOREVER, deadline);
+			t.expires = Math.min(t.expires, t.completionDeadline);
 			reserve(s, txn, jsonBytes(capture) + 64, limitsOf(s));
 			s.txns[txn]!.takenTasks ??= []; s.txns[txn]!.takenTasks!.push(capture);
 		}
@@ -586,6 +608,8 @@ export function createTxn(s: SpaceState, now: number, lease: number, as?: Target
 	settle(s, now);
 	if (as !== undefined && Object.values(s.txns).filter(ownedBy(as)).length >= limitsOf(s).maxTxnsPerOwner) throw new LimitError(`you already have ${limitsOf(s).maxTxnsPerOwner} open transactions`);
 	const t: TxnRec = { id: newId(s, "t"), expires: grant(lease, now), owner: as ?? null };
+	initializeMemberTxn(s,t,now);
+	if(t.completion && s.entries.reduce((n,e)=>n+(e.size??jsonBytes(e.fields)),0)+overheadBytes(s)+t.completion.remainingBytes+jsonBytes(t)>limitsOf(s).maxDocBytes)throw new ResourceExhausted("completion reservation exceeds Member document budget");
 	s.txns[t.id] = t;
 	touch(s, now);
 	return { id: t.id, expires: t.expires };
@@ -603,6 +627,7 @@ export function setCompletionProfiles(s: SpaceState, profiles: CompletionProfile
 	const seen = new Set<string>();
 	for (const p of profiles) {
 		if (!p || typeof p.taskType !== "string" || !p.taskType || seen.has(p.taskType) || !Array.isArray(p.resultTypes) || !p.resultTypes.length || !p.resultTypes.every(t => typeof t === "string" && t.length > 0) || !Array.isArray(p.equalFields) || !p.equalFields.every(f => typeof f === "string" && f.length > 0) || !Number.isSafeInteger(p.maxResultCount) || p.maxResultCount < 1) throw new IllegalArgumentError("invalid completion profile");
+		if ((p.maxResultBytes !== undefined && (!Number.isSafeInteger(p.maxResultBytes) || p.maxResultBytes < 1)) || (p.maxLeaseMs !== undefined && (!Number.isSafeInteger(p.maxLeaseMs) || p.maxLeaseMs < 1))) throw new IllegalArgumentError("invalid completion budget");
 		seen.add(p.taskType);
 	}
 	s.completionProfiles = clone(profiles);
@@ -615,11 +640,13 @@ function checkCompletion(s: SpaceState, id: string): void {
 		for (const task of tasks) {
 			const results = s.entries.filter(e => e.writtenUnder === id && e.takenBy === null && !assigned.has(e.id) && e.types.some(t => p.resultTypes.includes(t)) && p.equalFields.every(f => Object.hasOwn(task.fields, f) && Object.hasOwn(e.fields, f) && canonicalJson(task.fields[f]!) === canonicalJson(e.fields[f]!)));
 			if (!results.length || results.length > p.maxResultCount) throw new CompletionViolation(`task ${task.id} needs 1..${p.maxResultCount} matching results in transaction ${id}`);
+			if (p.maxResultBytes !== undefined && results.reduce((n,r) => n + jsonBytes({type:r.type,types:r.types,fields:r.fields}), 0) > p.maxResultBytes) throw new CompletionViolation("completion results exceed maxResultBytes");
 			for (const r of results) assigned.add(r.id);
 		}
+		if (tasks.length && s.entries.some(e => e.writtenUnder === id && e.takenBy === null && e.types.some(t => p.resultTypes.includes(t)) && !assigned.has(e.id))) throw new CompletionViolation("unmatched completion result");
 	}
 }
-export const commitTxn = (s: SpaceState, now: number, id: string, as?: Target) => { settle(s, now); requireTxn(s, id, as); checkCompletion(s, id); charge(s, s.txns[id]!.reserved ?? 0); finish(s, id, true, now); serve(s, now); };
+export const commitTxn = (s: SpaceState, now: number, id: string, as?: Target) => { assertMemberAdmission(s,"txn.commit"); settle(s, now); requireTxn(s, id, as); checkCompletion(s, id); charge(s, s.txns[id]!.reserved ?? 0); finish(s, id, true, now); serve(s, now); };
 export const abortTxn = (s: SpaceState, now: number, id: string, as?: Target) => { settle(s, now); requireTxn(s, id, as); charge(s, s.txns[id]!.reserved ?? 0); finish(s, id, false, now); serve(s, now); };
 /** Abort `id` if it is still active (host side, e.g. when the holder of a served take can no longer be reached). */
 export function releaseTxn(s: SpaceState, now: number, id: string): boolean {
@@ -636,8 +663,9 @@ export function releaseTxn(s: SpaceState, now: number, id: string): boolean {
 }
 
 /** Park a read/take for `target`; the space serves it later (or reports a timeout) through the outbox. */
-export function addWaiter(s: SpaceState, now: number, w: { template: Template; take: boolean; target: Target | null; timeout: number; txnLeaseMs?: number; handback?: Json; as?: Target; consumer?: Principal }): string {
-	const deadline = deadlineOf(now, w.timeout); // FOREVER: waits until served or cancelled
+export function addWaiter(s: SpaceState, now: number, w: { template: Template; take: boolean; target: Target | null; timeout: number; deadline?:number; txnLeaseMs?: number; handback?: Json; as?: Target; consumer?: Principal; authorizedUntil?: number; originRequestKey?:string }): string {
+	assertMemberAdmission(s,"wait");
+	const deadline = w.deadline ?? deadlineOf(now, w.timeout);if(!Number.isFinite(deadline)&&deadline!==FOREVER||deadline<0)throw new IllegalArgumentError("invalid waiter deadline"); // FOREVER: waits until served or cancelled
 	settle(s, now);
 	if (w.as !== undefined) {
 		const lim = limitsOf(s);
@@ -647,7 +675,7 @@ export function addWaiter(s: SpaceState, now: number, w: { template: Template; t
 	checkOutbox(s);
 	if (jsonBytes(w.handback ?? null) + EVENT_OVERHEAD > limitsOf(s).maxEventBytes) throw new ResourceExhausted("the wait's metadata exceeds maxEventBytes");
 	const txnLeaseMs = grant(w.txnLeaseMs ?? ANY, now) - now; // same rules as every other lease: ANY, FOREVER, no negatives
-	const rec: WaiterRec = { id: newId(s, "w"), template: w.template, take: w.take, target: w.target, deadline, txnLeaseMs, handback: w.handback ?? null, ...(w.consumer ? { consumer: { ...w.consumer } } : {}) };
+	const rec: WaiterRec = { ...(w.originRequestKey?{originRequestKey:w.originRequestKey}:{}), id: newId(s, "w"), template: w.template, take: w.take, target: w.target, deadline, txnLeaseMs, handback: w.handback ?? null, ...(w.consumer ? { consumer: { ...w.consumer } } : {}), ...(w.authorizedUntil === undefined ? {} : { authorizedUntil: w.authorizedUntil }) };
 	const updated = refreshReservations(s, { waiter: rec });
 	for (const e of s.entries) if (matches(rec.template, e) && jsonBytes(view(e, s.spaceId)) + jsonBytes(rec.handback) + EVENT_OVERHEAD > limitsOf(s).maxEventBytes) throw new ResourceExhausted("the wait would create an oversized event");
 	s.waiters.push(rec);
@@ -666,10 +694,15 @@ export function cancelWaiter(s: SpaceState, id: string, now = Date.now()): boole
 // A take-waiter takes its entry under a fresh transaction, so a lost delivery is not a lost job: the entry returns
 // when that transaction's lease lapses unless the receiver commits it.
 function serve(s: SpaceState, now: number): void {
+	if(s.membership && ["adding","removing","detached","recoveryBlocked"].includes(s.membership.state))return;
 	for (const w of [...s.waiters]) {
 		if (w.claimKey) {
 			const claim = s.rpc?.claims[w.claimKey];
 			if (!claim || claim.state !== "pending") { s.waiters.splice(s.waiters.indexOf(w), 1); continue; }
+			if (w.authorizedUntil !== undefined && now >= w.authorizedUntil) {
+				if (w.deadline <= now) { decideClaim(s, now, w.claimKey, { state: "done", result: null }); s.waiters.splice(s.waiters.indexOf(w), 1); }
+				continue;
+			}
 			const txn = w.requestTxn ?? null;
 			if (txn !== null && !active(s, txn, now)) {
 				decideClaim(s, now, w.claimKey, { state: "done", result: null, error: { code: "TransactionError", message: `transaction ${txn} is not active` } });
@@ -678,6 +711,8 @@ function serve(s: SpaceState, now: number): void {
 			const found = find(s, w.template, txn, w.take);
 			const miss = found.status !== "found" && (w.deadline <= now || (w.ifExists && found.status === "none"));
 			if (found.status === "found") {
+				if (directoryEntry(found.rec) && w.target !== null && (w.take || txn !== null)) { decideClaim(s,now,w.claimKey,{state:"done",result:null,error:{code:"PermissionDenied",message:"directory entries cannot be consumed or locked"}}); s.waiters.splice(s.waiters.indexOf(w),1); continue; }
+				if(w.take) {try{assertMemberTake(s,found.rec,txn,now);}catch(e){if(s.membership?.state!=="draining")throw e;continue;}}
 				if (w.take && txn === null && (s.completionProfiles ?? []).some(p => found.rec.types.includes(p.taskType))) {
 					decideClaim(s, now, w.claimKey, { state: "done", result: null, error: { code: "CompletionViolation", message: "profiled tasks require a transaction" } });
 					s.waiters.splice(s.waiters.indexOf(w), 1); continue;
@@ -691,8 +726,11 @@ function serve(s: SpaceState, now: number): void {
 			else continue;
 			s.waiters.splice(s.waiters.indexOf(w), 1); continue;
 		}
+		if (w.authorizedUntil !== undefined && now >= w.authorizedUntil) continue;
 		const f = find(s, w.template, null, w.take);
 		if (f.status !== "found") continue;
+		if (directoryEntry(f.rec) && w.target !== null && w.take) continue;
+		if(s.membership?.state==="draining" && w.take && !s.membership.policy?.completionProfiles.some(p=>f.rec.types.includes(p.taskType)))continue;
 		const event: SpaceEvent = { kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(f.rec, s.spaceId) };
 		if (!canCharge(s, jsonBytes(event) + 256)) { deferMaintenance(s, now, w.id); continue; }
 		try {
@@ -703,7 +741,10 @@ function serve(s: SpaceState, now: number): void {
 		s.waiters.splice(s.waiters.indexOf(w), 1);
 		if (!w.take) { queueEvent(s, now, event, w.consumer); continue; }
 		const t: TxnRec = { id: newId(s, "t"), expires: until(now, w.txnLeaseMs), owner: w.target }; // the receiver commits it
-		s.txns[t.id] = t;
+		initializeMemberTxn(s,t,now);
+	const originRequestKey=w.originRequestKey ?? Object.entries(s.rpc?.claims??{}).find(([,c])=>c.method==="wait"&&c.result===w.id)?.[0];if(originRequestKey!==undefined)t.originRequestKey=originRequestKey;
+	s.txns[t.id] = t;
+		assertMemberTake(s,f.rec,t.id,now);
 		reserve(s, t.id, publishCost(s, f.rec), limitsOf(s));
 		queueEvent(s, now, { ...event, entry: view(apply(s, now, f.rec, t.id, true), s.spaceId), txn: t.id }, w.consumer);
 	}
@@ -738,6 +779,7 @@ function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 }
 
 export function notify(s: SpaceState, now: number, tmpl: Template, txn: string | null, lease: number, handback: Json, target: Target | null, as?: Target, consumer?: Principal): { eventId: string; lease: Lease } {
+	assertMemberAdmission(s,"notify");
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn, as);
 	if (as !== undefined) {
@@ -763,6 +805,7 @@ export function notify(s: SpaceState, now: number, tmpl: Template, txn: string |
 function leased(s: SpaceState, id: string, as: Target | undefined): { set(v: number): void; waiter: boolean } {
 	const w = s.waiters.find((x) => x.id === id);
 	const e = s.entries.find((x) => x.id === id);
+	if(e && directoryEntry(e) && as !== undefined) throw new PermissionError("directory leases require trusted publication");
 	const t = s.txns[id] as TxnRec | undefined;
 	const r = s.regs.find((x) => x.id === id);
 	const l = w ? { owner: w.target, set: (v: number) => { w.deadline = v; }, waiter: true }
@@ -778,6 +821,8 @@ export function renew(s: SpaceState, now: number, id: string, ms: number, as?: T
 	settle(s, now);
 	const l = leased(s, id, as);
 	const v = grant(ms, now);
+	assertMemberRenew(s,id,v);
+	if (s.txns[id]?.completionDeadline !== undefined && v > s.txns[id]!.completionDeadline!) throw new CompletionViolation("lease exceeds task completion boundary");
 	l.set(v);
 	touch(s, now);
 	const e = s.entries.find((x) => x.id === id);
@@ -840,6 +885,7 @@ export function count(s: Readonly<SpaceState>, now: number, tmpl: Template = nul
 	const mine = active(s, txn, now);
 	let n = 0;
 	for (const e of s.entries) {
+		if (e.restoredUnverified && txn !== null) continue;
 		const st = standing(s, e, now); // what `txn` itself took is "locked": a transaction does not see its own takes
 		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) n++;
 	}
@@ -857,6 +903,7 @@ export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null
 	const mine = active(s, txn, now);
 	const out: EntryView[] = [];
 	for (const e of s.entries) {
+		if (e.restoredUnverified && txn !== null) continue;
 		if (out.length >= limit) break;
 		const st = standing(s, e, now); // the same view of the space as count() has
 		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) out.push(view(e, s.spaceId));
@@ -886,14 +933,32 @@ export function listPage(s: Readonly<SpaceState>, now: number, tmpl: Template = 
 	const after = o.after == null ? 0 : Number(o.after);
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
-	const eligible = s.entries.filter(e => seqOf(e.id) > after && (standing(s, e, now) === "visible" || (standing(s, e, now) === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)).map(e => view(e, s.spaceId));
+	const eligible = s.entries.filter(e => !(e.restoredUnverified && txn !== null) && seqOf(e.id) > after && (standing(s, e, now) === "visible" || (standing(s, e, now) === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)).map(e => view(e, s.spaceId));
 	return bytePage(eligible, 0, cap, (items, next) => ({ items, next: next === null ? null : String(seqOf(eligible[next - 1]!.id)), rev: revisionOf(s), streamId: streamIdOf(s) }));
 }
 
 // ---- revisions and the change stream (src/stream.ts)
 
-const putOp = (e: EntryRec): Op => ({ op: "put", id: e.id, type: e.type, types: [...e.types], fields: clone(e.fields), expires: e.expires, owner: e.owner });
+const putOp = (e: EntryRec): Op => ({ op: "put", id: e.id, type: e.type, types: [...e.types], fields: clone(e.fields), expires: e.expires, owner: e.owner, ...(e.restoredUnverified ? { restoredUnverified: true as const } : {}) });
 function logPut(s: SpaceState, now: number, e: EntryRec): void { record(s, now, putOp(e), limitsOf(s).maxLogBytes); }
+export function importRestoredEntry(s: SpaceState, now: number, e: EntryRec): boolean {
+	const cost = jsonBytes(e) + jsonBytes(putOp(e)) + 256;
+	const lim = limitsOf(s), used = s.entries.reduce((n, x) => n + (x.size ?? jsonBytes(x.fields)), 0) + jsonBytes(e.fields);
+	if (s.entries.some(x => x.id === e.id) || s.entries.length >= lim.maxEntries || jsonBytes(e.fields) > lim.maxEntryBytes || used > lim.maxSpaceBytes || used + overheadBytes(s) + cost > lim.maxDocBytes) throw new ResourceExhausted("restored entry violates current space limits or has a duplicate id");
+	if (cost + 1024 > lim.maxCommitBytes) throw new ResourceExhausted("restored entry cannot fit the commit budget");
+	if (!maintenanceStep(s, cost, now, `restore-entry:${e.id}`)) return false;
+	s.entries.push(clone(e)); logPut(s, now, e); return true;
+}
+export function releaseRestoredEntry(s: SpaceState, now: number, e: EntryRec): boolean {
+	const lim = limitsOf(s), preview = clone(e); delete preview.restoredUnverified;
+	checkEventSize(s, preview, lim);
+	const publication = publishCost(s, preview), update = jsonBytes(preview) + 256;
+	if (publication + update + COMMIT_FIXED > lim.maxCommitBytes) throw new ResourceExhausted("restored release and fanout cannot fit the commit budget");
+	if (!canCharge(s, publication + update)) { deferMaintenance(s, now, `release:${e.id}`); return false; }
+	reserve(s, null, publication, lim); charge(s, update);
+	delete e.restoredUnverified; logPut(s, now, e); notifyWrite(s, e, null, now, true); return true;
+}
+
 function logDel(s: SpaceState, now: number, id: string): void { record(s, now, { op: "del", id }, limitsOf(s).maxLogBytes); }
 
 /** The stream this revision belongs to: revisions of different streams (spaces, incarnations) are not comparable. */
@@ -956,4 +1021,18 @@ export function stats(s: Readonly<SpaceState>, now: number): SpaceStats {
 	for (const g of s.regs) if (g.expires > now) r.registrations++;
 	r.bytes!.total = jsonBytes(s); // the whole document as stored
 	return r;
+}
+
+/** Host lifecycle action; each closing event uses the existing bounded mailbox/fanout path. */
+export function closeRegistrationsForRemoval(s:SpaceState,now:number):void {for(const r of [...s.regs]){queueEvent(s,now,{kind:"registrationClosed",eventId:r.id,seq:++r.seq,handback:r.handback,target:r.target,reason:"removing"},r.consumer,true);s.regs.splice(s.regs.indexOf(r),1);}touch(s,now);}
+
+/** Trusted administrative purge only; the caller must commit a separately scoped audit atomically. */
+export function purgeTasks(s:SpaceState,now:number,template:Template):number {
+ settle(s,now);
+ const tasks=s.entries.filter(e=>matches(template,e));
+ if(tasks.some(e=>!(s.completionProfiles??[]).some(p=>e.types.includes(p.taskType))))throw new PermissionError("purgeTasks accepts only profiled tasks");
+ if(tasks.some(e=>e.takenBy!==null||e.writtenUnder!==null||e.readBy.length))throw new TransactionError("purgeTasks cannot erase reserved work");
+ const cost=tasks.reduce((n,e)=>n+publishCost(s,e),0);charge(s,cost);
+ for(const e of tasks){logDel(s,now,e.id);s.entries.splice(s.entries.indexOf(e),1);}
+ touch(s,now);return tasks.length;
 }

@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-11T12:06:39.758Z",
+  "recoveryId": "live-control-restore-20261011",
+  "authorityId": "a-de6377f2-2916-46ad-be65-8869dbc541c7",
+  "completed": true,
+  "missingMemberAckRejected": true,
+  "missingFreshAdminRejected": true,
+  "memberInstalledWithPublicOperatorPinOnly": true,
+  "memberRegisterWritesScoped": true,
+  "normalGatesStartedAfterRecoveryCredentialsRemoved": true,
+  "freshAdminAuthenticated": true,
+  "newControlGrantIssued": true,
+  "oldAdminKeyRejected": true,
+  "memberOriginalObjectReadable": true,
+  "memberWriteTake": true,
+  "fullSuite": {
+    "passed": 233,
+    "failed": 0,
+    "skipped": 0
+  },
+  "cleanup": {
+    "originalServicesRestored": true,
+    "temporaryMemberWriterRemoved": true,
+    "temporaryFirewallRulesRemoved": true,
+    "extraControlGatesStopped": true,
+    "sourceRemainsFenced": true,
+    "originalPcAndPhoneObjectAccessPassed": true,
+    "independentRegisterServicesActive": true
+  }
+}

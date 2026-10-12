@@ -1,0 +1,274 @@
+{
+  "requestedSeconds": 600,
+  "passed": true,
+  "screenOffContinuous": true,
+  "samples": [
+    {
+      "seconds": 0.0,
+      "wakefulness": "Dozing",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 15.4,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 30.8,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 46.3,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 61.8,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 77.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 94.0,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 109.7,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 125.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 147.8,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 163.5,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 179.9,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 195.4,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 210.8,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 226.3,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 241.8,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 264.0,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 279.5,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 295.3,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 310.9,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 327.4,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 343.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 358.9,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 374.6,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 397.5,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 413.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 429.5,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 445.7,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 461.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 476.7,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 492.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 516.8,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 532.2,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 547.6,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 563.0,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 578.7,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 594.1,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    },
+    {
+      "seconds": 600.5,
+      "wakefulness": "Asleep",
+      "idleState": "ACTIVE mLightState=ACTIVE",
+      "appResumed": false
+    }
+  ],
+  "objectChecks": [
+    {
+      "seconds": 0,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 125.2,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 241.8,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 374.6,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 492.2,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 600.5,
+      "passed": true,
+      "objects": 1
+    }
+  ],
+  "elapsedSeconds": 608.0,
+  "independentActivityCheck": {
+    "state": "STOPPED",
+    "visible": false,
+    "method": "dumpsys activity activities sampled during run"
+  },
+  "activitySampleLimit": "Legacy resumed-activity field may be absent; background was established with HOME and independently checked as STOPPED"
+}

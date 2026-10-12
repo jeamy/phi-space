@@ -1,0 +1,21 @@
+{
+  "phase2Accepted": false,
+  "typecheck": true,
+  "tests": 354,
+  "examples": 158,
+  "serverBuiltTests": 119,
+  "mobileTests": 4,
+  "serverMemberLoadPassed": true,
+  "serverMemberLoadNetwork": "none",
+  "phoneObjectReadViaNetbirdPassed": true,
+  "artifactSha256": "3d7415c0a36b05f662b8feb32874d0256479eaaaa301c067c199da11634d6d28",
+  "mobileBundleSha256": "3d7415c0a36b05f662b8feb32874d0256479eaaaa301c067c199da11634d6d28",
+  "artifactMatchesMobileBundle": true,
+  "open": [
+    "bounded Router/parent history scalability",
+    "distributed and batched principal deletion incl Router history",
+    "controlled completion-profile transition",
+    "production directory provisioning",
+    "three-Member sieve over real NetBird and full crash boundary matrix"
+  ]
+}

@@ -30,6 +30,7 @@ export type PeerKeyRec = {
 	principal: string; // who holds it (for the audit trail)
 	algorithm: Algorithm;
 	publicKey: string; // base64
+	scope?: string[];
 	roles: string[]; // what this key may be: intersected with the roles of the groups
 	state: "active" | "revoked";
 };
@@ -90,7 +91,7 @@ export type Challenge = { gateHostId: string; observedPeerId: string; connNonce:
 /** Per-connection state the gate owns and the proving service reads and writes (Connection.state). */
 export type AuthState = {
 	challenge?: { value: Challenge; used: boolean };
-	proof?: { keyId: string; principal: string; roles: string[]; at: number };
+	proof?: { keyId: string; principal: string; roles: string[]; scope?: string[]; at: number };
 	failures?: number;
 };
 
@@ -180,7 +181,7 @@ export class ProvingService {
 		if (key.state !== "active") return fail("the key is revoked");
 		if (!verifySignature(key, ch.value, args.signature)) return fail("the signature does not match");
 		ch.used = true;
-		st.proof = { keyId: key.keyId, principal: key.principal, roles: [...key.roles], at: now };
+		st.proof = { keyId: key.keyId, principal: key.principal, roles: [...key.roles], ...(key.scope ? { scope: [...key.scope] } : {}), at: now };
 		return { ok: true, result: { keyId: key.keyId, principal: key.principal, roles: key.roles } };
 	}
 }

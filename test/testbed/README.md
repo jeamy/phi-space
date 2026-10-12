@@ -11,6 +11,7 @@ cp test/testbed/testbed.env.example test/testbed/testbed.env   # server, directo
 npm run testbed -- check          # read-only: ssh, docker, compose, rsync, directory
 npm run testbed -- test           # build + ship + image + start the runner; smoke, examples, scenario
 npm run testbed -- scenario sieve-mobile create|run|evaluate|all
+npm run testbed -- scenario federation-runtime
 npm run testbed -- up federation  # also start host-a, host-b, member-1, member-2
 npm run tui                      # spaces, objects, controls, tests and reports
 npm run testbed -- inspect runner # read-only JSON snapshot from the shipped inspector
@@ -33,4 +34,20 @@ The source tests (`npm run typecheck`, `npm test`, `npm run test:examples`) read
 
 Procedure, container roles, limits and troubleshooting: [docs/testumgebung-big.md](../../docs/testumgebung-big.md) (German).
 
-Terminal controls: [docs/tui.md](../../docs/tui.md). The inspector opens only a private temporary copy of JSONL state, never a second harness on a live directory. Planned controls without a backend are disabled.
+Terminal controls: [docs/tui.md](../../docs/tui.md). The inspector opens only a private temporary copy of JSONL state or a consistent SQLite backup, never a second harness on a live directory. Planned controls without a backend are disabled.
+
+`federation-runtime` verifies the built library with two persistent hosts and real TCP gates, on JSONL and SQLite. Its overlay directory and clock are fixtures; it does not certify the live NetBird outage matrix or Android Keystore integration. See [Phase 1b acceptance](../../docs/ap1b-abnahme.md).
+
+
+`tools/federation-host.mjs` provides the provisioned production-mode daemon. On big, host-a and member-1 now run separate SQLite harnesses and real NetBird gates with the independent register on vpsc. Their user services are `pi-spaces-phase1b-host-a.service` and `pi-spaces-phase1b-member-1.service`; state lives in each container's `/data/phase1b`. See [operations](../../docs/ap1b-betrieb.md) and [public live evidence](../evidence/ap1b-2026-10-11/README.md). The daemon refuses normal startup while `restart.lock` exists and requires exclusive harness ownership. Recovery mode starts no normal gate or agents; SSH fencing needs an existing SSH-capable administrative runtime.
+
+The SQLite inspector uses read-only online backup into a temporary directory. It never opens a second harness on a live database. Do not use `kill`/container recreation as proof of F15 fencing: the fixed SSH adapter checks the actual process, service and persistent restart lock.
+
+### Phase-2-Member-Lasttest
+
+`scenarios/phase2-load.ts` prüft 10.000 Entries, drei SQLite-Stores und das
+HRW-Sieb mit 1.000 Aufgaben/sechs Workern. Auf dem Server ausschließlich das
+gebaute `scenarios/phase2-load.mjs` ausführen. Der Lauf benötigt einen eigenen
+Container mit temporärem Schreibspeicher und liefert einen JSON-Bericht.
+Er ist ein Member-Lasttest; virtuelle Router- und NetBird-Systemabnahme sowie
+die offenen Journal-/Löschgrenzen stehen in [ap2-abnahme.md](../../docs/ap2-abnahme.md).

@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-11",
+  "device": "M2007J17G Android 12",
+  "realNetbird": true,
+  "nativeAndroidKeystore": true,
+  "freshIdentityReplacedRevokedPreviousIdentity": true,
+  "currentKeyId": "b64fef053d879d8afadcd0a9fbea0f47",
+  "previousKeyRejected": true,
+  "temporaryEnrollmentGroupRemoved": true,
+  "consumedPrivateQrPayloadRemoved": true,
+  "actualUiFormSubmission": {
+    "prepare": true,
+    "pair": true,
+    "data": true,
+    "authenticate": true,
+    "objects": true
+  },
+  "displayedObjects": 1,
+  "tokenFieldCleared": true,
+  "cameraScannerRequiredByPhase1bContract": false,
+  "ordinaryApiObjectsAfterUiTest": true,
+  "ordinaryApkWithoutUiInstrumentation": true,
+  "debugTestClassExcludedFromDex": true,
+  "postUpdateObjectsPassed": true
+}

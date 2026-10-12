@@ -1,0 +1,119 @@
+{
+  "requestedSeconds": 180,
+  "forcedTest": true,
+  "passed": true,
+  "samples": [
+    {
+      "seconds": 0.0,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 21.9,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 37.0,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 52.1,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 67.2,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 93.0,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 108.1,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 123.2,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 145.8,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 161.0,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 176.1,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    },
+    {
+      "seconds": 180.2,
+      "mForceIdle": "true",
+      "mState": "IDLE",
+      "mLightState": "OVERRIDE"
+    }
+  ],
+  "objectChecks": [
+    {
+      "seconds": 0.0,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 67.2,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 123.2,
+      "passed": true,
+      "objects": 1
+    },
+    {
+      "seconds": 180.2,
+      "passed": true,
+      "objects": 1
+    }
+  ],
+  "before": {
+    "mForceIdle": "false",
+    "mState": "ACTIVE",
+    "mLightState": "ACTIVE"
+  },
+  "initial": {
+    "mForceIdle": "true",
+    "mState": "IDLE",
+    "mLightState": "OVERRIDE"
+  },
+  "after": {
+    "mForceIdle": "false",
+    "mState": "ACTIVE",
+    "mLightState": "ACTIVE"
+  },
+  "forcedIdleRemoved": true,
+  "elapsedSeconds": 187.8,
+  "limit": "Controlled forced deep-Doze test with WLAN ADB instrumentation; not a natural uninstrumented overnight measurement"
+}

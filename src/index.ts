@@ -11,6 +11,18 @@ import * as core from "./core.ts";
 import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
 
 export * from "./client.ts";
+export { privateFile, provisionFileSigner, loadFileSigner } from "./keys.ts";
+export { serveRegister, SocketRecoveryRegister } from "./register-service.ts";
+export { serveRecovery, RecoveryClient, recoveryBytes, type RecoveryCall, type SignedRecoveryCall } from "./recovery-service.ts";
+export { RecoveryController, RecoveryJobs, dataRecoveryHandler, type DataRestoreRequest, type RecoveryJob, type RecoveryControllerOptions } from "./recovery-controller.ts";
+export { startConfiguredFederation, type FederationConfig } from "./configured-runtime.ts";
+export { beginRestore, restoreBatch, completeRestore, releaseRestored, snapshotHash, type RestoreArgs, type RestoreState } from "./restore.ts";
+export { SqliteRecoveryRegister, RegisterConflict, type RecoveryRegister, type RegisterRecord } from "./recovery-register.ts";
+export { RecoveryCoordinator, RecoveryBlocked, installAuthorityTransition, type AuthorityTransition, type SignedAuthorityTransition, type AuthorityRecord } from "./recovery.ts";
+export { installBootGuard, BootBlocked, type HostBootState, type SpaceBootPermit } from "./boot.ts";
+export { RotationService, createRotationChallenge, rotateKeyIn, rotationBytes, type RotationChallenge } from "./rotation.ts";
+export { startFederationHost, type FederationHostOptions } from "./runtime.ts";
+export { GrantAuthority, GrantVerifier, GrantDenied, verifyDetached, type Grant, type SignedGrant } from "./grants.ts";
 export { createSpace, listSpaces, snapshotSpace, resolveSpaceId, spaceDoc, Registry, NamedSpace, UnknownSpaceError, DEFAULT_ALIAS, type SpaceInfo, type RegistryState } from "./spaces.ts";
 export { canonicalJson } from "./canonical.ts";
 export { Supervisor, ControlAccess, COMMAND_KINDS, RESULT_RETENTION_MS, type CommandKind, type CommandResult, type SupervisorOptions, type ControlAccessOptions } from "./supervisor.ts";
@@ -23,7 +35,7 @@ export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, Unsupport
 export { SpaceService, StaticIdentity, DEFAULT_POLICY, PROTOCOL_VERSION, METHODS, principalKey, type Call, type Reply, type ErrorCode, type Identity, type IdentityAdapter, type Connection, type Policy, type RolePolicy, type SpaceServiceOptions, type Method } from "./service.ts";
 export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type ClaimState } from "./claims.ts";
 export * as claims from "./claims.ts";
-export { MailboxEpochMismatch, InvalidAck, type MailboxPage, type MailItem, type MailboxState } from "./mailbox.ts";
+export { principalId, MailboxEpochMismatch, InvalidAck, type MailboxPage, type MailItem, type MailboxState } from "./mailbox.ts";
 export { CompletionViolation, type CompletionProfile } from "./core.ts";
 export * from "./meter.ts";
 export { core };
@@ -421,3 +433,41 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 	await run(); // events committed before the watch started
 	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
 }
+
+export { SshRecoveryRegister } from "./ssh-register.ts";
+
+export { verifySshFence } from "./fencing.ts";
+export { ControlAckService, RecoveryReceipts, type ControlAck } from "./control-ack.ts";
+
+export { sshRecoveryTransport } from "./ssh-recovery.ts";
+export { startConfiguredRecovery, type PrivateRecoveryConfig } from "./configured-recovery.ts";
+export { MemberTransitionInstaller, type MemberAuthorityAck, type MemberTransitionOptions } from "./member-transition.ts";
+
+export { TlsRecoveryRegister, serveTlsRegister, type RegisterTlsClient, type RegisterTlsIdentity } from "./tls-register.ts";
+export { ControlRecoveryController, ControlRecoveryJobs, controlRecoveryHandler, type ControlRestoreRequest, type ControlRestoreJob, type ControlRecoveryOptions, type ReauthorizeKey } from "./control-recovery.ts";
+export { startRecoveryOnly, startMemberRecoveryOnly, type MemberRecoveryOnlyConfig, type RecoveryOnlyConfig } from "./recovery-only.ts";
+
+export { RouterController, RouterBlocked, RouterConflict, RouterBudgetExceeded, DEFAULT_ROUTER_LIMITS } from "./router.ts";
+export type { RouterTarget, RouterOptions, RouterLimits, RouterCommandSpec, RouterStepSpec, RouterCommand, RouterStep, RouterReceipt, TargetBinding, CommandState, RouterOperation } from "./router.ts";
+export {RouterLeaseAuthority,DelegationVerifier,DelegationDenied,signDelegation,delegationForCall} from './delegation.ts';
+export type {RouterLease,SignedRouterLease,Delegation,SignedDelegation,TargetRequest,EpochNotice,SignedEpochNotice} from './delegation.ts';
+export {rpcDomain} from './rpc-domain.ts';
+export {FederationPolicyAuthority,validateFederationPolicy,verifyFederationPolicy,hrw,writeMember,searchMembers,normalizeFederatedEntry,RoutingConflict,MigrationRequired,MemberDrained,CapacityUnavailable,NoCapableMember} from './federation-policy.ts';
+export type {FederationPolicy,FederationRule,FederationMember,FederationCompletionProfile,SignedFederationPolicy} from './federation-policy.ts';
+
+export * from "./federated-space.ts";
+
+export * from "./membership.ts";
+
+export * from "./federation-rpc.ts";
+
+export * from "./federation-references.ts";
+
+export * from "./federation-controller.ts";
+
+export {renewableRouterLease} from "./delegation.ts";
+export {FederationRouting} from "./federation-policy.ts";
+
+export * from "./capability-directory.ts";
+
+export {DataAdminController} from "./data-admin.ts";

@@ -1,0 +1,6014 @@
+{
+  "name": "relay-30m",
+  "requestedSeconds": 1800,
+  "blocked": [
+    "relay"
+  ],
+  "samples": [
+    {
+      "seconds": 0.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Idle",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 21.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 44.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 66.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 90.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 112.3,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 134.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 157.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "PermissionError",
+        "message": "no open challenge: call challenge first"
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 184.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 206.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 233.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 256.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 280.3,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 302.8,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 325.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 348.3,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 380.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 404.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 427.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 459.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "the call timed out"
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 498.8,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.87.230",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.87.230",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 522.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "PermissionError",
+        "message": "no open challenge: call challenge first"
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 552.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "PermissionError",
+        "message": "no open challenge: call challenge first"
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 579.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 602.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 625.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 647.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 670.3,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 693.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "PermissionError",
+        "message": "no open challenge: call challenge first"
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 729.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 752.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 774.8,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 801.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 825.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 852.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 875.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 901.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 923.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 946.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 972.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 994.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1021.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1045.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1076.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1101.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "PermissionError",
+        "message": "no open challenge: call challenge first"
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1136.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1160.3,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1186.8,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1214.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1240.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1266.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1290.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1319.9,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1342.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1364.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1387.1,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1409.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1432.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1460.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1482.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1505.4,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1532.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1555.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1579.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1601.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1625.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1648.5,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1671.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1699.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1722.7,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1746.8,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1777.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 1800.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": false,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connecting",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    }
+  ],
+  "elapsedSeconds": 1807.3,
+  "recoveredObjects": true,
+  "finished": true
+}

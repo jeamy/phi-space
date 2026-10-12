@@ -33,7 +33,7 @@ enthält. Anschließend liefert `up core` das neue Inspektionsartefakt aus. Vorh
 ## Lesezugriff auf Spaces
 
 `testbed inspect <dienst>` führt nur `tools/inspect.mjs /data` im vorhandenen Container aus. Der Inspector sucht
-JSONL-Storages und Szenarioberichte bis vier Verzeichnisebenen unter `/data`. Symlinks werden nicht verfolgt.
+JSONL-Storages, `harness.sqlite` und Szenarioberichte bis vier Verzeichnisebenen unter `/data`. Symlinks werden nicht verfolgt.
 Für jedes Storage kopiert er die Hauptdatei und Sidecars in ein privates temporäres Verzeichnis. Die Hauptdatei
 muss vor/nach dem Kopieren identisch sein; Änderungen/Recovery-Fehler führen zu höchstens drei Versuchen.
 Der Harness wird nur auf dieser Kopie geöffnet. Seine Recovery kann deshalb niemals das Original reparieren,
@@ -42,7 +42,11 @@ verkürzen oder durch einen zweiten Schreiber verändern. Die Kopie wird anschli
 Die Anzeige ist eine Beobachtung bestätigter Daten, kein atomarer Snapshot über mehrere Storages/Hosts.
 Bei fortlaufenden Änderungen kann das Lesen scheitern; die TUI behält dann die letzte erfolgreiche Ansicht und
 markiert sie als veraltet. Pro Space werden höchstens 20.000 Objekte übertragen; Kürzungen sind sichtbar.
-SQLite- und Memory-Storages benötigen einen künftigen Snapshot-Endpunkt im laufenden Dienst und werden hier nicht gelesen.
+SQLite wird über eine read-only Datenbankverbindung und konsistentes SQLite-Backup
+in die private Kopie übernommen; WAL-/Journalzustand wird nicht durch loses
+Dateikopieren zusammengesetzt. Der Harness öffnet anschließend nur das Backup.
+Memory-Storages werden hier nicht gelesen. Historische Claims, ungültige
+Generationen und Restore-/Authority-Zustände erscheinen als eigene Objekte.
 
 ## Aktionen, Abbruch und Nachweise
 

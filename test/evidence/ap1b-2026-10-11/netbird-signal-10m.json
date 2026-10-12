@@ -1,0 +1,959 @@
+{
+  "name": "signal-10m",
+  "requestedSeconds": 600,
+  "blocked": [
+    "signal"
+  ],
+  "samples": [
+    {
+      "seconds": 0.0,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 22.2,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 44.6,
+      "hostB": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.116.183",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          }
+        ]
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": true,
+        "objects": 1
+      },
+      "directTcpConnect": true
+    },
+    {
+      "seconds": 67.3,
+      "hostB": {
+        "management": false,
+        "signal": false,
+        "relayAvailable": false,
+        "peers": []
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connected",
+            "type": "P2P"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 87.4,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 132.0,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 176.5,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 221.2,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 265.8,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 310.4,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 355.2,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 399.7,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 444.6,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 489.3,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 534.0,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    },
+    {
+      "seconds": 578.6,
+      "hostB": {
+        "management": null,
+        "signal": null,
+        "relayAvailable": null,
+        "peers": [],
+        "statusUnavailable": true,
+        "reason": "CLI timeout or unavailable"
+      },
+      "member2": {
+        "management": true,
+        "signal": true,
+        "relayAvailable": true,
+        "peers": [
+          {
+            "ip": "100.89.5.70",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.73.234",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.128.128",
+            "state": "Connected",
+            "type": "P2P"
+          },
+          {
+            "ip": "100.89.186.250",
+            "state": "Idle",
+            "type": "-"
+          },
+          {
+            "ip": "100.89.218.189",
+            "state": "Connected",
+            "type": "Relayed"
+          },
+          {
+            "ip": "100.89.240.87",
+            "state": "Connecting",
+            "type": "-"
+          }
+        ]
+      },
+      "objects": {
+        "passed": false,
+        "error": "TransportFailure",
+        "message": "connect EHOSTUNREACH 100.89.128.128:7421"
+      },
+      "directTcpConnect": false
+    }
+  ],
+  "elapsedSeconds": 608.6,
+  "hostBReconnectRequestedAtSeconds": 67.3,
+  "recoveredObjects": true,
+  "finished": true
+}

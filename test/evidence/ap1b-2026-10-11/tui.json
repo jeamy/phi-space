@@ -1,0 +1,37 @@
+{
+  "liveSqliteInspection": true,
+  "hosts": [
+    {
+      "host": "host-a",
+      "spaces": [
+        {
+          "alias": "default",
+          "objects": 0,
+          "storage": "/data/phase1b/harness.sqlite"
+        },
+        {
+          "alias": "control",
+          "objects": 14,
+          "storage": "/data/phase1b/harness.sqlite"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "host": "member-1",
+      "spaces": [
+        {
+          "alias": "default",
+          "objects": 0,
+          "storage": "/data/phase1b/harness.sqlite"
+        },
+        {
+          "alias": "jobs",
+          "objects": 9,
+          "storage": "/data/phase1b/harness.sqlite"
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

@@ -17,6 +17,11 @@ export type Principal = { peerId: string; agentId?: string };
 export type RequestRef = { principal: Principal; generation: string; requestId: string };
 export type ClaimState = "pending" | "done" | "cancelled";
 export type ClaimRec = {
+	policyVersion?: number;
+	routerEpoch?: number;
+	controlPrimaryEpoch?: number;
+	transportPeerId?: string;
+	orphanedAfterRestore?: { recoveryId: string; authorityId: string };
 	method: string;
 	argHash: string;
 	deadline: number; // fixed once, at the first accepted call
@@ -32,7 +37,7 @@ export type ClaimRec = {
 };
 export type GenerationRec = { principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number; spaceId?: string | null; authorityId?: string };
 export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number; reservedBytes?: number; signingKey?: string; authorityId?: string; sweepCursor?: string };
-export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"] };
+export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"]; restoredHistory?: true; unknownOutcome?: true; orphanedAfterRestore?: ClaimRec["orphanedAfterRestore"] };
 
 /** Same request id, different method or arguments. */
 export class RequestConflict extends Error {}
@@ -97,12 +102,14 @@ export function admit(s: SpaceState, now: number, r: RequestRef, method: string,
 	const key = keyOf(s, r);
 	const hash = argHash(method, args);
 	const c = st.claims[key];
+	if (s.restoredClaims?.[key]) throw new IncarnationChanged("request belongs to historical restored data; replay is forbidden");
 	if (c) {
 		if (c.method !== method || c.argHash !== hash) throw new RequestConflict(`request ${r.requestId} was used for different arguments`);
 		if (c.state === "pending") return { kind: "pending", key, deadline: c.deadline };
 		if (c.resultExpired || (c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now)) throw new ResultExpired(`request ${r.requestId} was decided; its result is no longer kept`);
 		return c.state === "cancelled" ? { kind: "cancelled", key } : { kind: "done", key, result: c.result ?? null };
 	}
+	if (s.invalidGenerations?.[r.generation]) throw new IncarnationChanged("generation belongs to restored data");
 	const g = st.generations[r.generation];
 	if (!g) throw new RequestExpired(`generation ${r.generation} is unknown or expired`);
 	if (g.incarnation !== (s.incarnation ?? null)) throw new IncarnationChanged(`generation ${r.generation} belongs to an earlier incarnation of this space`);
@@ -144,10 +151,12 @@ export function decide(s: SpaceState, now: number, key: string, outcome: { state
  * retention is judged by `now`, whether or not a commit has swept the claim yet.
  */
 export function lookup(s: Readonly<SpaceState>, r: RequestRef, now: number): ClaimView {
-	const c = (s as SpaceState & { rpc?: RpcState }).rpc?.claims[keyOf(s as SpaceState, r)];
+	const key = keyOf(s, r);
+	const historical = s.restoredClaims?.[key];
+	const c = (s as SpaceState & { rpc?: RpcState }).rpc?.claims[key] ?? historical;
 	if (!c) throw new RequestExpired(`request ${r.requestId} is unknown`);
 	const expired = c.resultExpired || (c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now);
-	return { state: c.state, deadline: c.deadline, method: c.method, ...(c.error ? { error: c.error } : {}), ...(expired ? { resultExpired: true as const } : c.state === "pending" ? {} : { result: c.result ?? null }) };
+	return { state: c.state, deadline: c.deadline, method: c.method, ...(c.orphanedAfterRestore ? { orphanedAfterRestore: c.orphanedAfterRestore } : {}), ...(historical ? { restoredHistory: true as const, ...(c.state === "pending" ? { unknownOutcome: true as const } : {}) } : {}), ...(c.error ? { error: c.error } : {}), ...(expired ? { resultExpired: true as const } : c.state === "pending" ? {} : { result: c.result ?? null }) };
 }
 
 /** Cancel a pending request. A decided one stays as it is; the returned view says which. */
@@ -191,4 +200,11 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 		st.bytes = (st.bytes ?? 0) - bytesOf(g) - bytesOf(id) - 2; delete st.generations[id]; removed++; changed = true;
 	}
 	if (changed) touch(s, now);
+}
+
+/** Bounded authenticated metadata is counted in the same admission/decision commit. */
+export function setMetadata(s:SpaceState,key:string,meta:{policyVersion?:number;transportPeerId?:string;routerEpoch?:number;controlPrimaryEpoch?:number}):void {
+ const st=rpc(s),c=st.claims[key];if(!c)throw new RequestExpired("metadata requires known claim");const before=bytesOf(c);
+ for(const [k,v] of Object.entries(meta))if(v!==undefined)(c as any)[k]=v;
+ const delta=bytesOf(c)-before;if(claimBytes(s)+delta>limitsOf(s).maxClaimBytes)throw new LimitError("authenticated claim metadata exceeds budget");st.bytes!+=delta;
 }

@@ -1,3 +1,5 @@
+import {defineDocFamily} from "@earendil-works/pi-durable";
+import {canonicalJson} from "./canonical.ts";
 // The supervisor of the control space (federation-plan-v3.md 5 and 5.1, AP 1b.5): the only writer of everything in the
 // control space except the `Command` entries of admins. This is its first part, the commands that need no router:
 //   createEnroll  -> an `Enroll` entry (the plain token never reaches this code, only its hash)
@@ -8,6 +10,7 @@
 //
 // `ControlAccess` is the network side of that rule: on the control space the wire may carry only `Command` writes of admins and
 // reads of `Command`, `Result` and `PeerKey`; `Enroll` (token hashes) and `Bootstrap` never leave the host.
+import { rotateKeyIn, type RotationChallenge } from "./rotation.ts";
 import type { Context } from "@earendil-works/chord";
 import type { Session } from "@earendil-works/pi-durable";
 import * as core from "./core.ts";
@@ -18,13 +21,17 @@ import type { Json } from "./core.ts";
 
 type Host = Pick<Session, "commit" | "snapshot" | "watchDoc">;
 
-export const COMMAND_KINDS = ["createEnroll", "revokePeer"] as const;
+export const COMMAND_KINDS = ["createEnroll", "revokePeer", "rotateKey"] as const;
 export type CommandKind = (typeof COMMAND_KINDS)[number];
 export const RESULT_RETENTION_MS = 7 * 24 * 3600 * 1000;
 export type CommandResult = { commandId: string; kind: string; state: "completed" | "failed"; error?: string; result?: Json; requestedBy: string; at: number };
 
 export type SupervisorOptions = {
 	now?: () => number;
+	/** Durable remote handlers execute outside Control commits and retain unknown outcomes. */
+	asyncCommands?: Record<string,(commandId:string,args:Record<string,Json>,requestedBy:string)=>Promise<Json>>;
+	/** Trusted synchronous control-only handlers; remote effects must use the router journal. */
+	commands?: Record<string,(tx:import("@earendil-works/pi-durable").Tx,args:Record<string,Json>,requestedBy:string)=>Promise<Json>>;
 	/** Called after each processed command (audit): never carries tokens, only ids, kinds and states. */
 	onEvent?: (e: { commandId: string; kind: string; state: string; requestedBy: string; error?: string }) => void;
 	onError?: (e: unknown) => void;
@@ -34,6 +41,7 @@ const str = (v: unknown): string | undefined => (typeof v === "string" && v !== 
 /** The owner of an entry is the principal id of its writer (mailbox.ts: canonical JSON [peerId, agentId]); a plain peer id works too. */
 const peerOf = (owner: string): string => { try { const v = JSON.parse(owner); if (Array.isArray(v) && typeof v[0] === "string") return v[0]; } catch { /* not JSON */ } return owner.split("/")[0]!; };
 
+const SupervisorJobs=defineDocFamily<{jobs:Record<string,{commandId:string;kind:string;args:Record<string,Json>;requestedBy:string;hash:string}>},null>({kind:"pi-spaces.supervisor-jobs",version:1,scope:"session",family:true,initial:()=>({jobs:{}})});
 export class Supervisor {
 	private host: Host; private ctx: Context; private o: SupervisorOptions;
 	constructor(host: Host, ctx: Context, o: SupervisorOptions = {}) { this.host = host; this.ctx = ctx; this.o = o; }
@@ -47,7 +55,7 @@ export class Supervisor {
 	/** Process every waiting command, oldest first; returns how many. */
 	async tick(): Promise<number> {
 		const id = await this.controlId();
-		let n = 0;
+		let n = await this.resumeJobs(id);
 		for (;;) {
 			const done = await this.host.commit(async (tx) => {
 				const now = this.now();
@@ -67,9 +75,12 @@ export class Supervisor {
 					core.write(s, now, { type: "Result", fields: res as unknown as core.Fields }, null, RESULT_RETENTION_MS);
 					return { commandId, kind, state, requestedBy, ...(extra.error ? { error: extra.error } : {}) };
 				};
-				if (!requestedBy || !hasAdminKey(s, now, requestedBy)) return finish("failed", { error: "the writer of this command holds no active admin key" });
+				if (!requestedBy || (kind !== "rotateKey" && !hasAdminKey(s, now, requestedBy))) return finish("failed", { error: "the writer of this command holds no active admin key" });
 				const args = (f.args && typeof f.args === "object" && !Array.isArray(f.args) ? f.args : {}) as Record<string, Json>;
 				try {
+					if(this.o.asyncCommands?.[kind]) {const jobs=await tx.doc(SupervisorJobs,id,null),hash=canonicalJson([kind,args,requestedBy]);const old=jobs.jobs[commandId];if(old&&old.hash!==hash)throw new core.IllegalArgumentError("command ID changed remote arguments");if(!old&&Object.keys(jobs.jobs).length>=64)throw new core.ResourceExhausted("remote command admission full");jobs.jobs[commandId]={commandId,kind,args:core.plain(args),requestedBy,hash};return {commandId,kind,state:"applying",requestedBy,async:true};}
+					if(this.o.commands?.[kind])return finish("completed",{result:await this.o.commands[kind]!(tx,args,requestedBy)});
+					if (kind === "rotateKey") return finish("completed", { result: rotateKeyIn(s, now, { challenge: args.challenge as unknown as RotationChallenge, oldSignature: String(args.oldSignature ?? ""), newSignature: String(args.newSignature ?? "") }, requestedBy) });
 					if (kind === "createEnroll") {
 						const rec = createEnrollIn(s, now, { tokenHash: String(args.tokenHash ?? ""), role: String(args.role ?? ""), allowedPeerId: String(args.allowedPeerId ?? ""), scope: Array.isArray(args.scope) ? (args.scope as string[]) : [], ...(typeof args.ttlMs === "number" ? { ttlMs: args.ttlMs } : {}) });
 						return finish("completed", { result: { tokenHash: rec.tokenHash, role: rec.role, allowedPeerId: rec.allowedPeerId, expiresAt: rec.expiresAt } });
@@ -81,14 +92,25 @@ export class Supervisor {
 					}
 					return finish("failed", { error: `unknown command ${kind}` });
 				} catch (e) {
+					if (e instanceof core.ResourceExhausted || e instanceof core.LimitError) throw e; // Roll back the command and every partial effect.
 					return finish("failed", { error: e instanceof Error ? e.message : String(e) });
 				}
 			}, this.ctx);
 			if (!done) return n;
 			n++;
+			if((done as any).async){await this.resumeJobs(id);return n;}
 			try { this.o.onEvent?.(done as { commandId: string; kind: string; state: string; requestedBy: string }); } catch { /* an audit hook must not stop the supervisor */ }
 		}
 	}
+
+ private async resumeJobs(id:string):Promise<number> {
+  const jobs=(await this.host.snapshot(SupervisorJobs,id,this.ctx))?.jobs??{};let n=0;
+  for(const job of Object.values(jobs)){const handler=this.o.asyncCommands?.[job.kind];if(!handler)continue;
+   const active=await this.host.commit(async tx=>hasAdminKey(await spaceDoc(tx,id,this.now()),this.now(),job.requestedBy),this.ctx);if(!active)continue;
+   let result:Json;try{result=await handler(job.commandId,core.plain(job.args),job.requestedBy);}catch{continue;} // no transport error proves a failed effect
+   await this.host.commit(async tx=>{const j=await tx.doc(SupervisorJobs,id,null);if(j.jobs[job.commandId]?.hash!==job.hash)throw new core.IllegalArgumentError("remote command binding changed");const s=await spaceDoc(tx,id,this.now());if(!core.list(s,this.now(),{type:"Result",fields:{commandId:job.commandId}}).length)core.write(s,this.now(),{type:"Result",fields:{commandId:job.commandId,kind:job.kind,state:(result as any)?.phase==="failed"?"failed":"completed",requestedBy:job.requestedBy,at:this.now(),result}},null,RESULT_RETENTION_MS);delete j.jobs[job.commandId];},this.ctx);n++;
+  }return n;
+ }
 
 	/** Process commands as they arrive (a watch on the control space plus a first pass); returns the function that stops it. */
 	async start(): Promise<() => Promise<void>> {
@@ -105,7 +127,8 @@ export class Supervisor {
 		const watch = await this.host.watchDoc(NamedSpace, id, this.ctx);
 		watch?.start(run);
 		await run();
-		return async () => { stopped = true; await watch?.stop(); };
+		const retry=this.o.asyncCommands?setInterval(()=>{void run();},1000):undefined;
+		return async () => { stopped = true; if(retry)clearInterval(retry); await watch?.stop(); };
 	}
 }
 
@@ -146,7 +169,9 @@ export class ControlAccess {
 		const deny = (message: string): Reply => ({ ok: false, error: { code: "PermissionDenied", message } });
 		if (["hello", "generation", "challenge", "prove", "enroll", "enrollStatus", "pollOperation"].includes(c.method)) return undefined; // the pairing and proof paths (their own checks apply)
 		const id = await this.o.identity.authenticate(conn);
-		if (!id || !id.roles.includes("admin")) return deny("the control space is for admins who proved their key");
+		const directoryRead = ["read","readAll","count"].includes(c.method) && ["Capability","MemberStatus"].includes(String((c.args?.template as any)?.type));
+        if(id && directoryRead && id.roles.some(r=>["host","member","observer","admin","router"].includes(r)) && c.args?.txn == null) return undefined;
+        if (!id || !id.roles.includes("admin")) return deny("the control space is for admins who proved their key");
 		const a = c.args ?? {};
 		switch (c.method) {
 			case "write": {

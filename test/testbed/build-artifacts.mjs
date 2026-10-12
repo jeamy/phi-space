@@ -48,6 +48,15 @@ await build({ ...common, entryPoints: scenarios.map((n) => `test/testbed/scenari
 // Read-only space inspector, using the same shipped library as the scenarios.
 await build({ ...common, entryPoints: ['test/testbed/inspect.ts'], outfile: resolve(out, 'tools/inspect.mjs'), plugins: [sharedLibrary] });
 
+// Provisioned production-mode federation daemon, no TypeScript shipped.
+await build({ ...common, entryPoints: ['test/testbed/federation-host.ts'], outfile: resolve(out, 'tools/federation-host.mjs'), plugins: [sharedLibrary] });
+
+// Administrative backup/data-recovery helper; requires an explicitly provisioned exclusive runtime.
+await build({ ...common, entryPoints: ['test/testbed/recovery-data-host.ts'], outfile: resolve(out, 'tools/recovery-data-host.mjs'), plugins: [sharedLibrary] });
+
+// Administrative component fault proxy; built artifact, no source shipped.
+await build({ ...common, entryPoints: ['test/testbed/netbird/fault-proxy.mjs'], outfile: resolve(out, 'tools/fault-proxy.mjs') });
+
 // 4. manifests for `npm ci --omit=dev` (versions come from the lock file)
 await copyFile(resolve(root, 'package.json'), resolve(out, 'package.json'));
 await copyFile(resolve(root, 'package-lock.json'), resolve(out, 'package-lock.json'));

@@ -176,3 +176,10 @@ test("a command is processed in one commit: a fault before it leaves the command
 		assert.equal(core.list(await control(), clock.now(), { type: "Enroll" }).length, 1, "and exactly one effect");
 	});
 });
+
+test('persistent remote admin command runs outside Control commit and resumes after lost answer',async()=>{
+ await forEachBackend(async home=>{let host=await home.open();const now=()=>100000;const info=await host.commit(tx=>createSpace(tx,CONTROL_SPACE,now()),ctx);await host.commit(async tx=>{const s=await spaceDoc(tx,info.spaceId,now());core.write(s,now(),{type:'PeerKey',fields:{peerId:'admin',principal:'admin',keyId:'k',state:'active',roles:['admin'],scope:['*'],algorithm:'ed25519',publicKey:'fixture'}},null,FOREVER);core.write(s,now(),{type:'Command',fields:{commandId:'remote-1',kind:'remote',args:{value:7}}},null,FOREVER,'admin');},ctx);
+ let effect=false,attempts=0;const make=()=>new Supervisor(host,ctx,{now,asyncCommands:{remote:async(id,args,by)=>{assert.equal(id,'remote-1');assert.equal(by,'admin');await host.commit(async tx=>{await spaceDoc(tx,info.spaceId,now());},ctx);attempts++;if(!effect){effect=true;throw Error('committed reply lost');}return{value:args.value!};}}});
+ await make().tick();assert.equal((await new PiSpaces(host,ctx,now,undefined,undefined,{space:CONTROL_SPACE}).readAll({type:'Result'})).length,0);home.crash(host);host=await home.open();await make().tick();const r=await new PiSpaces(host,ctx,now,undefined,undefined,{space:CONTROL_SPACE}).readAll({type:'Result'});assert.equal(r.length,1);assert.equal(r[0]!.fields.state,'completed');assert.equal(attempts,2);await make().tick();assert.equal(attempts,2);
+ });
+});

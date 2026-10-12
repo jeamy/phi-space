@@ -12,7 +12,7 @@ export type RoutedAttachment = {
 export type RoutedServices = { attachClient(presentation: any, context: any): RoutedAttachment | Promise<RoutedAttachment> };
 
 /** Extend the existing server-services attachment; sessions/chat and all other services keep their original route. */
-export function withSpaceService(base: RoutedServices, space: SpaceService, trustedConnection: () => Connection | Promise<Connection>): RoutedServices {
+export function withSpaceService(base: RoutedServices, space: Pick<SpaceService, "handle">, trustedConnection: () => Connection | Promise<Connection>): RoutedServices {
 	return {
 		async attachClient(presentation, context) {
 			const original = await base.attachClient(presentation, context);

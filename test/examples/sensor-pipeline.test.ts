@@ -160,10 +160,11 @@ describe("sensor-pipeline.ts", () => {
     test("T8.2.3: Analyse mit Duplikaten", async () => {
       await openWindow(host, TEST_WINDOW, TEST_SOURCES);
       
-      // Station liefert Duplikat
+      // Both samples must share exactly the same timestamp, even across a clock tick.
+      const duplicateTimestamp = Date.now();
       await collect(host, "station", TEST_WINDOW, [
-        { ts: Date.now(), kind: "temp", value: 20 },
-        { ts: Date.now(), kind: "temp", value: 20 } // Gleiches ts, kind für station
+        { ts: duplicateTimestamp, kind: "temp", value: 20 },
+        { ts: duplicateTimestamp, kind: "temp", value: 20 } // Gleiches ts, kind für station
       ]);
       
       await collect(host, "forecast", TEST_WINDOW, [{ ts: Date.now() + 1, kind: "temp", value: 21 }]);

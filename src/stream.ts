@@ -11,7 +11,7 @@
 import type { Fields, Json, Target } from "./core.ts";
 
 export type Op =
-	| { op: "put"; id: string; type: string; types: string[]; fields: Fields; expires: number; owner: Target | null }
+	| { op: "put"; id: string; type: string; types: string[]; fields: Fields; expires: number; owner: Target | null; restoredUnverified?: true }
 	| { op: "del"; id: string };
 export type Batch = { rev: number; at: number; ops: Op[] };
 export type StreamState = {

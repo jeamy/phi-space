@@ -36,7 +36,7 @@ export const MAX_FAILED_ATTEMPTS = 3;
 export const ATTEMPT_INTERVAL_MS = 60_000;
 export const UNPAIRED_ROLE = "unpaired";
 /** Roles an admin's `createEnroll` may hand out; the admin role only comes through the bootstrap token. */
-export const ENROLLABLE_ROLES = ["host", "member", "observer"] as const;
+export const ENROLLABLE_ROLES = ["host", "member", "observer", "router"] as const;
 
 export type EnrollRec = {
 	tokenHash: string;
@@ -194,6 +194,7 @@ export async function revokePeerKey(host: Host, ctx: Context, peerId: string, ke
 export type EnrollOutcome = { ok: true; keyId: string; role: string; peerId: string; scope: string[] } | { ok: false; reason: "unknown-token" | "wrong-peer" | "expired" | "too-many-attempts" | "bad-signature" | "bad-key" | "rate-limited" | "bad-challenge" };
 
 export type EnrollmentOptions = {
+	keys?: KeyDirectory;
 	host: Host;
 	ctx: Context;
 	now?: () => number;
@@ -226,14 +227,20 @@ export class EnrollmentService {
 		const m = (call as { method?: unknown } | null)?.method;
 		if (m !== "enroll" && m !== "enrollStatus") return this.inner.handle(call, conn);
 		const roles = (conn.credentials as { roles?: string[] } | undefined)?.roles ?? [];
-		if (!conn.peerId || !roles.includes(UNPAIRED_ROLE)) return refuse("only an unpaired peer may enroll");
-		try { return m === "enroll" ? await this.enroll(call as { args?: Record<string, Json>; request?: Record<string, Json> }, conn) : await this.status(call as { request?: Record<string, Json>; args?: Record<string, Json> }, conn); }
+		if (!conn.peerId) return refuse();
+		const unpaired = roles.includes(UNPAIRED_ROLE);
+		if (!unpaired) {
+			const proof = (conn.state as AuthState | undefined)?.proof;
+			const key = proof && await this.o.keys?.find(conn.peerId, proof.keyId);
+			if (!key || key.state !== "active") return refuse("paired enrollment resolution requires a current app-key proof");
+		}
+		try { return m === "enroll" ? await this.enroll(call as { args?: Record<string, Json>; request?: Record<string, Json> }, conn, !unpaired) : await this.status(call as { request?: Record<string, Json>; args?: Record<string, Json> }, conn); }
 		catch (e) { return refuse(e instanceof EnrollError ? e.message : "enrollment refused"); }
 	}
 
 	private event(peerId: string, outcome: string, keyId?: string) { try { this.o.onEvent?.({ peerId, outcome, ...(keyId ? { keyId } : {}) }); } catch { /* audit must not break the handler */ } }
 
-	private async enroll(call: { args?: Record<string, Json>; request?: Record<string, Json> }, conn: Connection): Promise<Reply> {
+	private async enroll(call: { args?: Record<string, Json>; request?: Record<string, Json> }, conn: Connection, replayOnly = false): Promise<Reply> {
 		const now = (this.o.now ?? Date.now)();
 		const peerId = conn.peerId!;
 		const a = call.args ?? {};
@@ -255,6 +262,7 @@ export class EnrollmentService {
 				if (ad.kind === "done") return { replay: core.plain(ad.result) };
 				throw new EnrollError("enrollment refused");
 			}
+			if (replayOnly) throw new EnrollError("paired peers may only resolve existing enrollment requests");
 			// one attempt per peer and minute: any new attempt counts, whatever its outcome (answers from a claim above do not)
 			const last = this.lastAttempt.get(peerId);
 			if (last !== undefined && now - last < ATTEMPT_INTERVAL_MS) return { ok: false, reason: "rate-limited" };
@@ -282,7 +290,7 @@ export class EnrollmentService {
 			// success: consume the token, create the key, store the answer, all in this commit
 			const keyId = keyFingerprint(a.publicKey as string);
 			restore({ ...taken, state: "consumed" });
-			core.write(s, now, { type: "PeerKey", fields: { peerId, keyId, principal: `enrolled:${peerId}`, algorithm, publicKey: a.publicKey as string, roles: [taken.role], state: "active" } }, null, core.FOREVER);
+			core.write(s, now, { type: "PeerKey", fields: { peerId, keyId, principal: `enrolled:${peerId}`, algorithm, publicKey: a.publicKey as string, roles: [taken.role], scope: taken.scope, state: "active" } }, null, core.FOREVER);
 			if (taken.bootstrap) { // the bootstrap power ends with its first use
 				core.probe(s, now, { type: "Bootstrap" }, null, true);
 				core.write(s, now, { type: "Bootstrap", fields: { state: "closed" } }, null, core.FOREVER);
@@ -319,6 +327,7 @@ export class EnrollmentService {
 		if (!s) return { ok: true, result: { state: "unknown" } };
 		try {
 			const v = claims.lookup(s, { principal: { peerId: conn.peerId! }, generation: r.generation, requestId: r.requestId }, now);
+			if (v.method !== "enroll") return { ok: true, result: { state: "unknown" } };
 			return { ok: true, result: { state: v.state, ...(v.state === "done" ? { result: (v.result ?? {}) as Json } : {}) } };
 		} catch { return { ok: true, result: { state: "unknown" } }; }
 	}

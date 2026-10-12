@@ -1,0 +1,538 @@
+import type {Context} from '@earendil-works/chord';
+import {defineDocFamily} from '@earendil-works/pi-durable';
+// Composite operations bind their complete routing plan before sending any effect.
+import {createHash} from 'node:crypto';
+
+import {canonicalJson} from './canonical.ts';
+import type {Principal} from './claims.ts';
+import type {SpaceHost, Taken} from './client.ts';
+import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
+import {FederationRouting} from "./federation-policy.ts";
+import {MembershipJournal} from "./membership.ts";
+import {RouterController, type RouterOperation, type RouterStepSpec} from './router.ts';
+import {
+    normalizeFederatedEntry,
+    RoutingConflict,
+    type RoutingState,
+    searchMembers,
+    writeMember
+} from './routing-semantics.ts';
+
+export class FederationUnavailable extends Error {}
+export class FederationPending extends Error {
+    requestId: string;
+    constructor(id: string) {
+        super('bound child outcome is unresolved');
+        this.requestId = id;
+    }
+}
+export interface FederationIO {
+    step(member: string, principal: Principal, method: RouterOperation, args: Json,
+         policyVersion?: number,
+         origin?: Readonly<import("./router.ts").RouterStep>): Promise<RouterStepSpec>;
+    snapshot(member: string, principal: Principal, template: Template,
+             txn?: string): Promise<{entries : Taken[]; revision : number}>;
+    events(member: string, principal: Principal, registration: Readonly<RouterStepSpec>): Promise<
+        {epoch : string; events : Array<{seq : number; event : SpaceEvent}>; gap?: boolean}>;
+    ack(member: string, principal: Principal, epoch: string, seq: number): Promise<void>;
+    txnActive(member: string, principal: Principal, txn: string,
+              registration?: Readonly<RouterStepSpec>): Promise<boolean>;
+}
+type Operation = {
+    id: string; hash : string; principal : Principal; policyVersion : number; members : string[];
+    kind : 'write' | 'read' | 'take' | 'race' | 'txn';
+    args : Json;
+    targets?: import("./router.ts").TargetBinding[];
+    phase : 'admitting' | 'ready' | 'done' | 'needsReview';
+    children : Record<string, string>;
+    registrations : Record<string, string>;
+    cursor : number;
+    deadline?: number;
+    winner?: {member : string; txn : string; entry : Taken};
+    candidates : Record<string,
+                        {
+                            member: string;
+                            txn?: string;
+                            entry?: Taken;
+                            event: SpaceEvent
+                        }>;
+    result?: Json;
+    userTxn?: {member : string; id : string}
+};
+export const FederationOperations =
+    defineDocFamily<{operations : Record<string, Operation>; reservedBytes : number}, null>({
+        kind : 'pi-spaces.federation-operations',
+        version : 1,
+        scope : 'session',
+        family : true,
+        initial : () => ({operations : {}, reservedBytes : 0})
+    });
+const copy = <T>(v: T): T => structuredClone(v);
+const hash = (v: unknown) => createHash('sha256').update(canonicalJson(v as Json)).digest('hex');
+const child = (id: string, label: string) => 'f-' + hash([ id, label ]);
+export type FederationRequest = {
+    id: string; principal : Principal;
+    txn?: {member : string; id : string; originId?: string}
+};
+/** Server-side API. The authority guard must fence owners of both journals. */
+export class FederatedSpace {
+    private o: {
+        host: SpaceHost; ctx : Context; id : string; router : RouterController;
+        state : () => Promise<RoutingState>;
+        io : FederationIO;
+        assertAuthority : () => Promise<void>;
+        now?: () => number;
+        controlSpaceId?: string
+    };
+    private tail: Promise < unknown >= Promise.resolve();
+    constructor(o: FederatedSpace['o']) { this.o = o; }
+    private serial<T>(fn: () => Promise<T>): Promise<T> {
+        const r = this.tail.then(fn);
+        this.tail = r.catch(() => {});
+        return r;
+    }
+    private async change<T>(f: (d: {operations: Record<string, Operation>; reservedBytes : number},
+                                tx: import("@earendil-works/pi-durable").Tx) => T | Promise<T>):
+        Promise<T> {
+        await this.o.assertAuthority();
+        return this.o.host.commit(async tx => {
+            await this.o.assertAuthority();
+            const d = await tx.doc(FederationOperations, this.o.id, null);
+            const r = await f(d, tx);
+            if (Buffer.byteLength(JSON.stringify(d)) > d.reservedBytes + 4096)
+                throw new RoutingConflict('composite journal exceeded reserved bytes');
+            return r;
+        }, this.o.ctx);
+    }
+    /** Reconcile parents too, including completed and not-yet-sent children. No replay. */
+    async reconcileDataRestore(o: {hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string}): Promise<string[]> {
+        return this.serial(async () => {
+            const children = new Set(await this.o.router.reconcileDataRestore(o));
+            const st = await this.o.state();
+            const affectedMembers = new Set(Object.values(st.members).filter(m =>
+                m.target.hostId === o.hostId && m.target.spaceId === o.spaceId &&
+                m.target.dataIncarnation === o.oldIncarnation).map(m => m.id));
+            return this.change(d => {
+                const affected:string[] = [];
+                for (const op of Object.values(d.operations)) {
+                    if (!op.targets?.some(t => t.hostId === o.hostId && t.spaceId === o.spaceId && t.dataIncarnation === o.oldIncarnation) && !op.members.some(m => affectedMembers.has(m)) &&
+                        !Object.values(op.children).some(c => children.has(c))) continue;
+                    op.phase = "needsReview";
+                    affected.push(op.id);
+                }
+                return affected;
+            });
+        });
+    }
+    private async get(id: string) {
+        await this.o.assertAuthority();
+        return copy((await this.o.host.snapshot(FederationOperations, this.o.id, this.o.ctx))
+                        ?.operations[id]);
+    }
+    private async prepare(kind: Operation['kind'], args: Json,
+                          q: FederationRequest): Promise<Operation> {
+        if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(q.id) ||
+            [ 'constructor', 'prototype', '__proto__' ].includes(q.id))
+            throw new RoutingConflict('invalid operation ID');
+        const h = hash([ kind, args, q.principal, q.txn ?? null ]);
+        let op = await this.get(q.id);
+        if (op) {
+            if (op.hash !== h)
+                throw new RoutingConflict('operation ID changed arguments');
+            return op;
+        }
+        const st = await this.o.state(), p = st.policy;
+        if (!p)
+            throw new RoutingConflict('no installed policy');
+        let ids =
+            kind === 'txn' ? [ (args as any).member ]
+            : kind === 'write'
+                ? [ writeMember(p, st.members, (args as any).entry, (this.o.now ?? Date.now)()) ]
+                : searchMembers(p, (args as any).template);
+        if (q.txn) {
+            const origin = q.txn.originId ? await this.get(q.txn.originId) : undefined;
+            if (!origin || origin.kind !== "txn" || origin.phase !== "done" ||
+                origin.members[0] !== q.txn.member || (origin.result as any)?.id !== q.txn.id ||
+                hash(origin.principal) !== hash(q.principal))
+                throw new RoutingConflict("transaction has no original principal/Member binding");
+            if (ids.some(id => id !== q.txn!.member))
+                throw new RoutingConflict('transaction is bound to another Member');
+            ids = [ q.txn.member ];
+        }
+        if (!ids.length || ids.length > 8)
+            throw new RoutingConflict('composite target set exceeds bounded fanout');
+        op = {
+            id : q.id,
+            hash : h,
+            principal : copy(q.principal),
+            policyVersion : p.policyVersion,
+            members : ids,
+            targets: ids.map(id => copy(st.members[id]!.target)),
+            kind,
+            args : copy(args),
+            phase : 'admitting',
+            ...((args as any).timeoutMs > 0
+                    ? {deadline : (this.o.now ?? Date.now)() + (args as any).timeoutMs}
+                    : {}),
+            children : {},
+            registrations : {},
+            cursor : 0,
+            candidates : {},
+            ...(q.txn ? {userTxn : copy(q.txn)} : {})
+        };
+        await this.change(async (d, tx) => {
+            if (this.o.controlSpaceId) {
+                const current = await tx.doc(FederationRouting, this.o.controlSpaceId, null),
+                      jobs = await tx.doc(MembershipJournal, this.o.controlSpaceId, null);
+                if (current.policy?.policyVersion !== op!.policyVersion ||
+                    ids.some(id => !current.members[id] ||
+                                   !["active", "draining"].includes(current.members[id]!.state)) ||
+                    Object.values(jobs.operations)
+                        .some(job => !["completed", "failed"].includes(job.phase) &&
+                                     ids.includes(job.member.id)))
+                    throw new RoutingConflict("routing/membership changed before admission");
+            }
+            if (Object.keys(d.operations).length >= 16)
+                throw new RoutingConflict('composite operation history full');
+            if (d.operations[q.id])
+                throw new RoutingConflict('concurrent admission');
+            d.operations[q.id] = op!;
+            d.reservedBytes += 128 * 1024;
+        });
+        return op;
+    }
+    private async save(op: Operation) {
+        if (Buffer.byteLength(JSON.stringify(op)) > 128 * 1024)
+            throw new RoutingConflict('operation result/event budget exceeded');
+        await this.change(d => { d.operations[op.id] = copy(op); });
+    }
+    private async admit(op: Operation) {
+        if (op.phase !== 'admitting')
+            return op;
+        await this.o.router.reserveFuture(
+            child(op.id, 'budget'), op.members.length * (op.kind === 'race' ? 4 : 1), 64 * 1024);
+        for (const member of op.members) {
+            const label = 'initial:' + member, id = child(op.id, label);
+            let method: RouterOperation = op.kind === 'race' ? 'wait' : op.kind;
+            const a: any = copy(op.args);
+            if (op.deadline !== undefined)
+                a.deadline = op.deadline;
+            if (op.kind === 'race') {
+                a.take = (op.args as any).take !== false;
+                a.handback = {federationOperation : op.id};
+            }
+            if (op.userTxn)
+                a.txn = op.userTxn.id;
+            const prior = await this.o.router.get(id);
+            if (prior) {
+                op.children[member] = id;
+                await this.save(op);
+                continue;
+            }
+            const spec = await this.o.io.step(member, op.principal, method, a, op.policyVersion,
+                                              op.kind === "txn" && a.originId
+                                                  ? (await this.o.router.get((await this.get(
+                                                        a.originId))!.children[member]!))!.steps[0]
+                                                  : undefined);
+            const expected = (await this.o.state()).members[member]?.target;
+            if (!expected || hash(spec.target) !== hash(expected) ||
+                hash(spec.principal) !== hash(op.principal))
+                throw new RoutingConflict('target/principal adapter binding mismatch');
+            await this.o.router.submit({id, area : 'federation', steps : [ spec ]},
+                                       child(op.id, 'budget'));
+            op.children[member] = id;
+            await this.save(op);
+        }
+        op.phase = 'ready';
+        await this.save(op);
+        return op;
+    }
+    private async finish(op: Operation, result: Json) {
+        op.phase = 'done';
+        op.result = result;
+        await this.save(op);
+        await this.o.router.releaseFuture(child(op.id, 'budget'));
+        return copy(result);
+    }
+    private async decide(op: Operation) {
+        if (op.phase === 'done')
+            return copy(op.result!);
+        if (op.phase === 'needsReview')
+            throw new FederationUnavailable('operation needs explicit review');
+        op = await this.admit(op);
+        for (; op.cursor < op.members.length; op.cursor++) {
+            const m = op.members[op.cursor]!, c = await this.o.router.advance(op.children[m]!);
+            if (c.state === 'needsReview') {
+                op.phase = 'needsReview';
+                await this.save(op);
+                throw new FederationUnavailable('child needs review');
+            }
+            if (c.state !== 'completed') {
+                if (op.kind === 'read')
+                    continue;
+                throw new FederationPending(op.id);
+            }
+            const r: any = c.steps[0]!.result;
+            if (op.kind === 'write' || op.kind === 'txn')
+                return this.finish(op, r);
+            if (r !== null && r !== undefined)
+                return this.finish(op, r);
+            await this.save({...op, cursor : op.cursor + 1});
+        }
+        if (op.kind === "read" &&
+            (await Promise.all(op.members.map(m => this.o.router.get(op.children[m]!))))
+                .some(c => c?.state !== "completed")) {
+            op.cursor = 0;
+            await this.save(op);
+            throw new FederationUnavailable("some required read outcomes unavailable");
+        }
+        return this.finish(op, null);
+    }
+    async write(entry: EntryDraft, q: FederationRequest, leaseMs?: number) {
+        return this.serial(async () => {
+            const old = await this.get(q.id);
+            let e = entry;
+            if (!old) {
+                const p = (await this.o.state()).policy;
+                if (!p)
+                    throw new RoutingConflict('no policy');
+                e = normalizeFederatedEntry(p, entry);
+            } else {
+                const previous = (old.args as any).entry;
+                if (entry.types?.some(t => t !== entry.type && !previous.types.includes(t)))
+                    throw new RoutingConflict("undeclared retry supertype");
+                e = {...copy(entry), types : previous.types};
+            }
+            return this.decide(await this.prepare(
+                'write', {entry : e, ...(leaseMs === undefined ? {} : {leaseMs})}, q));
+        });
+    }
+    async createTransaction(member: string, leaseMs: number, q: FederationRequest) {
+        return this.serial(async () => {
+            if (q.txn || !Number.isSafeInteger(leaseMs) || leaseMs < 1 || leaseMs > 60000)
+                throw new RoutingConflict('transaction requires finite bounded lease');
+            const result: any = await this.decide(
+                await this.prepare('txn', {member, action : 'begin', leaseMs}, q));
+            return {...result, member, originId : q.id};
+        });
+    }
+    async finishTransaction(originId: string, action: 'commit'|'abort', q: FederationRequest) {
+        return this.serial(async () => {
+            const origin = await this.get(originId);
+            if (!origin || origin.kind !== 'txn' || origin.phase !== 'done' ||
+                hash(origin.principal) !== hash(q.principal))
+                throw new RoutingConflict('transaction is not bound to this principal');
+            const lease = origin.result as any;
+            if (!lease?.id)
+                throw new RoutingConflict('transaction result unavailable');
+            return this.decide(await this.prepare(
+                'txn', {member : origin.members[0]!, action, id : lease.id, originId}, q));
+        });
+    }
+
+    async read(template: Template, q: FederationRequest) {
+        return this.serial(
+            async () => this.decide(await this.prepare('read', {template, timeoutMs : 0}, q)));
+    }
+    async take(template: Template, q: FederationRequest) {
+        return this.serial(
+            async () => this.decide(await this.prepare('take', {template, timeoutMs : 0}, q)));
+    }
+    async readAll(template: Template, principal: Principal, o: {
+        allowPartial?: boolean;
+        waitForCompleteMs?: number;
+        txn?: {member : string; id : string}
+    } = {}) {
+        const st = await this.o.state();
+        if (!st.policy)
+            throw new RoutingConflict('no policy');
+        const ids = searchMembers(st.policy, template);
+        if (o.txn && ids.some(id => id !== o.txn!.member))
+            throw new RoutingConflict('transaction crosses Members');
+        if (o.allowPartial && o.waitForCompleteMs !== undefined)
+            throw new RoutingConflict('choose partial or wait-for-complete');
+        const duration = o.waitForCompleteMs ?? 0;
+        if (!Number.isSafeInteger(duration) || duration < 0 || duration > 60000)
+            throw new RoutingConflict('invalid complete-wait bound');
+        const end = Date.now() + duration;
+        for (;;) {
+            await this.o.assertAuthority();
+            const entries: Taken[] = [], revisions: Record < string, number >= {},
+                           missing: string[] = [];
+            for (const id of ids) {
+                try {
+                    const s = await this.o.io.snapshot(id, principal, template, o.txn?.id);
+                    entries.push(...s.entries);
+                    revisions[id] = s.revision;
+                } catch {
+                    missing.push(id);
+                }
+            }
+            if (!missing.length || o.allowPartial)
+                return {
+                    entries,
+                    complete : !missing.length,
+                    missingMembers : missing,
+                    revisions,
+                    consistentSnapshot : false as const
+                };
+            if (Date.now() >= end)
+                throw new FederationUnavailable('required Member snapshots unavailable: ' +
+                                                missing.join(','));
+            await new Promise(r => setTimeout(r, Math.min(50, end - Date.now())));
+        }
+    }
+    async count(template: Template, principal: Principal,
+                o: Parameters<FederatedSpace['readAll']>[ 2 ] = {}) {
+        const r = await this.readAll(template, principal, o);
+        const {entries,...rest}=r;return{...rest,count:entries.length};
+    }
+    async takeWaiting(template: Template, timeoutMs: number, txnLeaseMs: number,
+                      q: FederationRequest) {
+        return this.serial(async () => {
+            if (q.txn)
+                return this.decide(await this.prepare('take', {template, timeoutMs}, q));
+            if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 3600000 ||
+                !Number.isSafeInteger(txnLeaseMs) || txnLeaseMs < 1 || txnLeaseMs > 60000)
+                throw new RoutingConflict('race requires finite bounded leases');
+            const op = await this.prepare('race', {template, timeoutMs, txnLeaseMs}, q);
+            return this.progressRace(op);
+        });
+    }
+    async readWaiting(template:Template,timeoutMs:number,q:FederationRequest){return this.serial(async()=>{if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>3600000)throw new RoutingConflict('read waiting requires bounded timeout');if(q.txn)return this.decide(await this.prepare('read',{template,timeoutMs},q));return this.progressRace(await this.prepare('race',{template,timeoutMs,txnLeaseMs:1,take:false},q));});}
+    private async effect(op: Operation, m: string, label: string, method: RouterOperation,
+                         args: Json) {
+        const id = child(op.id, label);
+        let c = await this.o.router.get(id);
+        if (!c) {
+            const step = await this.o.io.step(m, op.principal, method, args, op.policyVersion,
+                                              (await this.o.router.get(op.children[m]!))!.steps[0]);
+            await this.o.router.submit({id, area : 'federation', steps : [ step ]},
+                                       child(op.id, 'budget'));
+        }
+        c = await this.o.router.advance(id);
+        if (c.state === 'failed' &&
+            (label.startsWith('cancel:') &&
+                 [ 'UnknownLeaseError', 'TransactionError' ].includes(c.steps[0]!.evidence!) ||
+             label.startsWith('abort:') && c.steps[0]!.evidence === 'TransactionError'))
+            return null;
+        if (c.state === 'failed' || c.state === 'needsReview') {
+            op.phase = 'needsReview';
+            await this.save(op);
+            throw new FederationUnavailable('definitive child failure needs review');
+        }
+        if (c.state !== 'completed')
+            throw new FederationPending(op.id);
+        return c.steps[0]!.result;
+    }
+    private async collectRaceEvents(op: Operation) {
+        for (const m of op.members) {
+            const c = (await this.o.router.get(op.children[m]!))!,
+                  page = await this.o.io.events(m, op.principal, c.steps[0]!);
+            if (page.gap) {
+                op.phase = 'needsReview';
+                await this.save(op);
+                throw new FederationUnavailable('race mailbox gap needs review');
+            }
+            for (const item of page.events) {
+                const e = item.event, key = hash([ m, page.epoch, item.seq ]);
+                if (!op.candidates[key]) {
+                    const candidate = {
+                        member : m,
+                        event : copy(e),
+                        ...(e.txn ? {txn : e.txn} : {}),
+                        ...(e.entry ? {entry : e.entry} : {})
+                    };
+                    const ownerId = (e.handback as any)?.federationOperation;
+                    if (typeof ownerId === 'string' && ownerId !== op.id) {
+                        await this.change(d => {
+                            const owner = d.operations[ownerId];
+                            if (!owner || hash(owner.principal) !== hash(op.principal) ||
+                                !owner.members.includes(m))
+                                throw new RoutingConflict(
+                                    'mailbox event has no bound operation owner');
+                            owner.candidates[key] = copy(candidate);
+                            if (Buffer.byteLength(JSON.stringify(owner)) > 128 * 1024)
+                                throw new RoutingConflict('mailbox owner budget exceeded');
+                        });
+                    } else if (e.eventId === op.registrations[m]) {
+                        op.candidates[key] = candidate;
+                        await this.save(op);
+                    } else
+                        throw new FederationUnavailable(
+                            'unrelated mailbox event requires its owning dispatcher');
+                }
+                await this.o.io.ack(m, op.principal, page.epoch, item.seq);
+            }
+        }
+    }
+    private async progressRace(op: Operation): Promise<Json> {
+        if (op.phase === 'done')
+            return copy(op.result!);
+        op = await this.admit(op);
+        for (const m of op.members) {
+            const c = await this.o.router.advance(op.children[m]!);
+            if (c.state !== 'completed') {
+                if (op.kind === 'read')
+                    continue;
+                throw new FederationPending(op.id);
+            }
+            const r: any = c.steps[0]!.result;
+            op.registrations[m] = typeof r === 'string' ? r : r.id;
+            await this.save(op);
+        }
+        await this.collectRaceEvents(op);
+        if (!op.winner) {
+            for (const candidate of Object.values(op.candidates)) {
+                if (candidate.event.eventId === op.registrations[candidate.member] &&
+                    candidate.entry && ((op.args as any).take === false || candidate.txn &&
+                    await this.o.io.txnActive(
+                        candidate.member, op.principal, candidate.txn,
+                        (await this.o.router.get(op.children[candidate.member]!))!.steps[0]))) {
+                    op.winner = {
+                        member : candidate.member,
+                        txn : candidate.txn ?? "",
+                        entry : candidate.entry
+                    };
+                    await this.save(op);
+                    break;
+                }
+            }
+        }
+        if (op.winner?.txn) {
+            const w = op.winner;
+            await this.effect(op, w.member, 'winner-commit', 'txn',
+                              {action : 'commit', id : w.txn});
+        }
+        const timedOut = op.members.every(
+            m => Object.values(op.candidates)
+                     .some(c => c.member === m && c.event.eventId === op.registrations[m] &&
+                                c.event.kind === 'timeout'));
+        if (!op.winner && !timedOut)
+            throw new FederationPending(op.id);
+        for (const m of op.members) {
+            const id = op.registrations[m];
+            await this.effect(op, m, 'cancel:' + m, 'lease', {action : 'cancel', id});
+        }
+        await this.collectRaceEvents(op);
+        for (const m of op.members) {
+            for (const c of Object.values(op.candidates))
+                if (c.member === m && c.event.eventId === op.registrations[m] && c.txn &&
+                    c.txn !== op.winner?.txn)
+                    await this.effect(op, m, 'abort:' + m, 'txn', {action : 'abort', id : c.txn});
+        }
+        if (op.winner)
+            return this.finish(op, op.winner.entry as unknown as Json);
+        if (timedOut)
+            return this.finish(op, null);
+        throw new FederationPending(op.id);
+    }
+    async resume(id: string) {
+        return this.serial(async () => {
+            const op = await this.get(id);
+            if (!op)
+                throw new RoutingConflict('unknown federation operation');
+            return op.kind === 'race' ? this.progressRace(op) : this.decide(op);
+        });
+    }
+}

@@ -1,3 +1,4 @@
+import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semantics.ts";
 // The `space` service (federation-plan-v3.md 6.2, AP 1.8): the methods of a space as one transport-independent function
 // from an authenticated call to a reply. No network here. A transport (in-process, unix socket, the gate on the overlay)
 // authenticates the connection, hands over the identity it established and the decoded call, and writes the reply back.
@@ -39,7 +40,9 @@ export type Policy = { roles: Record<string, RolePolicy> };
 export const DEFAULT_POLICY: Policy = {
 	roles: {
 		admin: { methods: "*" },
+		host: { methods: ["hello","generation","write","read","take","pollOperation","cancelOperation","readAll","count","stats","txn","lease","changes","wait","notify","events","ack"] },
 		member: { methods: ["hello", "generation", "write", "read", "take", "pollOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] },
+		resolution: { methods: ["hello", "pollOperation", "cancelOperation", "txn", "lease"] },
 		observer: { methods: ["hello", "generation", "read", "pollOperation", "cancelOperation", "readAll", "count", "stats", "changes", "notify", "events", "ack"] }, // own read and notify results, never a write
 		unpaired: { methods: ["hello", "generation"] }, // a device in the enrollment group: nothing but its own pairing (enroll.ts handles `enroll` and `enrollStatus` before the service)
 	},
@@ -53,16 +56,18 @@ export type Call = {
 	space?: string;
 	request?: { generation: string; requestId: string };
 	/** The renewable frame; checked on every call, never part of the argument hash. */
-	frame?: { authorityId?: string; primaryEpoch?: number };
+	frame?: { authorityId?: string; primaryEpoch?: number; grant?: Json; delegation?: Json };
 	args?: Record<string, Json>;
 };
 export type ErrorCode =
-	| "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
+	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
 	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
 export type Reply = { ok: true; result: Json } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
+export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("@earendil-works/pi-durable").Tx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
 export type SpaceServiceOptions = {
+	authorize?: (call: Call, id: Identity, conn: Connection) => Promise<DecisionAuthorization>;
 	host: SpaceHost;
 	ctx: Context;
 	identity: IdentityAdapter;
@@ -70,6 +75,8 @@ export type SpaceServiceOptions = {
 	now?: () => number;
 	authorityId?: string;
 	primaryEpoch?: number;
+	/** Resolve the current persisted epoch for the addressed space. */
+	epochForSpace?: (space: string | undefined) => Promise<number>;
 	hostId?: string;
 	maxPollMs?: number; // longest wait of a poll (spec: 25 s)
 	maxPendingPerPrincipal?: number;
@@ -137,24 +144,28 @@ export class SpaceService {
 			const method = call.method as Method;
 			if (call.args !== undefined && !isObj(call.args)) throw new Bad("args must be an object");
 			const args = (call.args ?? {}) as Record<string, Json>;
-			const id = await this.o.identity.authenticate(conn);
-			if (!id) return fail("Unauthenticated", "the connection has no known identity");
+			const authenticated = await this.o.identity.authenticate(conn);
+			if (!authenticated) return fail("Unauthenticated", "the connection has no known identity");
+			const id = { ...authenticated, roles: [...authenticated.roles] };
 			this.rate(id.principal.peerId);
+			const authorization = await this.o.authorize?.(call as unknown as Call, id, conn);
+			if (authorization) { id.roles = authorization.roles; if(authorization.principal)id.principal=authorization.principal; }
 			const grant = this.allowed(id, method);
 			const frame = call.frame;
 			if (frame !== undefined) {
 				if (!isObj(frame)) throw new Bad("frame must be an object");
 				if (frame.authorityId !== undefined && frame.authorityId !== this.o.authorityId) return fail("AuthorityMismatch", `this host is authority ${this.o.authorityId}`);
-				if (frame.primaryEpoch !== undefined && frame.primaryEpoch !== this.o.primaryEpoch) return fail("StaleEpoch", `the primary epoch is ${this.o.primaryEpoch}`);
+				const epoch = await this.o.epochForSpace?.(call.space as string | undefined) ?? this.o.primaryEpoch;
+				if (frame.primaryEpoch !== undefined && frame.primaryEpoch !== epoch && !(authorization?.knownRequest && typeof frame.primaryEpoch==="number" && Number.isSafeInteger(frame.primaryEpoch) && frame.primaryEpoch<epoch)) return fail("StaleEpoch", `the primary epoch is ${epoch}`);
 			}
 			let request: RequestRef | undefined;
-			if (MUTATING.includes(method)) {
+			if (MUTATING.includes(method) && !(method === "txn" && call.args?.action === "status")) {
 				const r = call.request;
 				if (!isObj(r)) throw new Bad(`${method} needs a request {generation, requestId}`);
 				request = { principal: id.principal, generation: str(r.generation, "request.generation"), requestId: str(r.requestId, "request.requestId") };
 			}
 			const space = call.space === undefined ? undefined : str(call.space, "space");
-			const client = new PiSpaces(this.o.host, this.o.ctx, this.now, undefined, principalId(id.principal), { space: space === DEFAULT_ALIAS ? undefined : space, authorityId: this.o.authorityId, maxPending: this.o.maxPendingPerPrincipal, maxPendingPeer: this.o.maxPendingPerPeer, consumer: id.principal });
+			const client = new PiSpaces(this.o.host, this.o.ctx, this.now, undefined, principalId(id.principal), { space: space === DEFAULT_ALIAS ? undefined : space, authorityId: this.o.authorityId, maxPending: this.o.maxPendingPerPrincipal, maxPendingPeer: this.o.maxPendingPerPeer, consumer: id.principal, authorization });
 			const frameBytes = Math.min(transportFrameBytes, (await client.configuration()).limits.maxFrameBytes);
 			responseFrame = frameBytes;
 			if ((rawBytes ?? encodedBytes(call)) > frameBytes) throw new core.ResourceExhausted("the request exceeds the space frame limit");
@@ -240,6 +251,7 @@ export class SpaceService {
 				const action = str(a.action, "action");
 				if (action === "begin") return (await client.createTransaction(duration(a.leaseMs, "leaseMs", core.ANY), { request })) as unknown as Json;
 				const id = str(a.id, "id");
+				if(action==="status")return await client.transactionState(id) as unknown as Json;
 				if (action === "commit") { await client.commit(id, { request }); return { state: "committed" }; }
 				if (action === "abort") { await client.abort(id, { request }); return { state: "aborted" }; }
 				throw new Bad("action must be begin, commit or abort");
@@ -262,7 +274,7 @@ export class SpaceService {
 				this.checkConsumer(a.consumer, c.id);
 				if (a.take !== undefined && typeof a.take !== "boolean") throw new Bad("take must be boolean");
 				const operationGrant = this.allowed(c.id, a.take === false ? "read" : "take"); this.checkTypes(operationGrant, t?.type ? [t.type] : undefined, "this wait operation");
-				const id = await client.wait(t, { target: principalId(c.id.principal), timeout: duration(a.timeoutMs, "timeoutMs", core.NO_WAIT), take: a.take !== false, txnLeaseMs: duration(a.txnLeaseMs, "txnLeaseMs", core.ANY), handback: a.handback ?? null, request });
+				const id = await client.wait(t, { target: principalId(c.id.principal), timeout: duration(a.timeoutMs, "timeoutMs", core.NO_WAIT), ...(a.deadline===undefined?{}:{deadline:int(a.deadline,"deadline",0)}), take: a.take !== false, txnLeaseMs: duration(a.txnLeaseMs, "txnLeaseMs", core.ANY), handback: a.handback ?? null, request });
 				return { id };
 			}
 			case "events": {
@@ -297,7 +309,7 @@ export class SpaceService {
 			protocol: PROTOCOL_VERSION,
 			hostId: this.o.hostId ?? (await this.o.host.snapshot(Registry, this.o.ctx))!.hostId,
 			spaceId: info.spaceId, alias: info.alias, incarnation: info.incarnation, streamId: core.streamIdOf(s ?? core.initialState()), rev: core.revision(s ?? core.initialState()),
-			authorityId: this.o.authorityId, primaryEpoch: this.o.primaryEpoch, role: "single",
+			authorityId: this.o.authorityId, primaryEpoch: await this.o.epochForSpace?.(info.spaceId) ?? this.o.primaryEpoch, role: "single",
 			principal: principalKey(c.id.principal), roles: c.id.roles,
 			features: [...METHODS],
 			limits: { maxFrameBytes: Math.min(lim.maxFrameBytes, c.frameBytes), maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs, maxPendingPerPrincipal: this.o.maxPendingPerPrincipal, maxPendingPerPeer: this.o.maxPendingPerPeer },
@@ -333,7 +345,7 @@ export class SpaceService {
 		for (;;) {
 			const v = await c.client.pollOperation(t);
 			if (v.result && isObj(v.result) && Array.isArray(v.result.types)) this.checkTypes(this.allowed(c.id, "pollOperation"), v.result.types as string[], "this retained result");
-			if (v.state !== "pending" || this.now() >= end) return v as unknown as Json;
+			if (v.state !== "pending" || v.restoredHistory || this.now() >= end) return v as unknown as Json;
 			await awaitWithContext(new Promise<void>((res) => setTimeout(res, Math.min(50, Math.max(1, end - this.now())))), this.o.ctx);
 		}
 	}
@@ -361,6 +373,7 @@ export class SpaceService {
 	// ---- errors
 
 	private error(e: unknown): Reply {
+		if(e instanceof RoutingConflict)return fail("RoutingConflict",e.message);if(e instanceof MemberDrained)return fail("MemberDrained",e.message);if(e instanceof MigrationRequired)return fail("MigrationRequired",e.message);
 		if (e instanceof Bad) return fail("BadRequest", e.message);
 		if (e instanceof Denied || e instanceof core.PermissionError) return fail("PermissionDenied", (e as Error).message);
 		if (e instanceof UnsupportedProtocol) return fail("UnsupportedProtocol", e.message);

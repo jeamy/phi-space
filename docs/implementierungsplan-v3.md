@@ -1,6 +1,6 @@
 # Implementierungsplan Federation v3
 
-Stand: 2026-10-08. Setzt [federation-plan-v3.md](federation-plan-v3.md) (Vertrag) und
+Stand: 2026-10-11. Setzt [federation-plan-v3.md](federation-plan-v3.md) (Vertrag) und
 [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) (Betriebserweiterung) in
 Arbeitspakete um. Grundlage ist der [Implementierungsstand](implementierungsstand.md): Der Default-Space bleibt das
 session-scoped Dokument `pi-spaces.space` v5; weitere Spaces liegen in der Familie `pi-spaces.named-space`.
@@ -137,6 +137,8 @@ pi-serverd plus Gates auf localhost und Test-Identitätsadapter, dann in der ech
 | 2.8 | **Simulator:** mehrere Harnesses, deterministische Latenz, Verlust, Duplikate, Partitionen, Uhrsprünge; Gegenmodell für Reservierungen und Requestzustände. Beginn parallel zu 2.1, weil 2.4/2.5 ohne ihn kaum abnehmbar sind. | L |
 | 2.9 | **Lasttest** (Gate 4): 10 000 Entries, 3 Members; finale Werte für Frame, `maxCommitBytes`, Generationslaufzeit. | M |
 
+Aktueller Nachweis und noch offene Freigabepunkte: [Phase-2-Abnahme](ap2-abnahme.md).
+
 **Abnahme Phase 2:** v3 §11 Stufe 2 und alle Zeilen „2“ aus §12.1; Sieb über drei Members mit HRW nach
 `taskId` (Betrieb §6).
 
@@ -180,8 +182,11 @@ Desktop/CLI-Paket `pi-spaces-client` (RemoteSpace, TCP-Transport, Pairing); Brow
 
 Kritischer Pfad: 0.1/0.3 → 1.1 → 1.3 → 1.5 → 1.8 → 1b.2/1b.3 → 1b.4 → 2.1 → 2.2 → 2.4 → 3.1 → 3.2 → 3.4.
 
-Als Nächstes folgt Phase 1b: NetBird-Ausfallmatrix und Peer-Auflösung nachweisen, Gate und
-Challenge/Grant-Grenze umsetzen, dann Control Space und Recovery-Verträge abnehmen. Die lokalen
+Phase 1b ist im geprüften F15-Modell abgenommen: Gate, Challenge, Enrollment, Grants und Supervisor
+sind integriert. Zwei echte Overlay-Laufzeiten und ein unabhängiges Register
+sind dauerhaft provisioniert; nativer Android-Keystore und begrenztes F15-Fencing
+sind geprüft. Offen bleiben Handy–big/UI, die NetBird-Ausfallmatrix und die
+verteilte Live-Restore-Abnahme. Die lokalen
 Pakete 0.1–0.4 und 1.1–1.9 sind implementiert; [ap1-abnahme.md](ap1-abnahme.md) hält
 die aktuellen automatisierten Nachweise fest. Entscheidungen F2–F7 bleiben vor Federation-Betrieb relevant.
 
@@ -218,5 +223,18 @@ die aktuellen automatisierten Nachweise fest. Entscheidungen F2–F7 bleiben vor
 | 1.9 | umgesetzt: `RemoteSpace`, Socket- und pi-server-Transport | Stabile IDs/Argumentkopien bei Retry, Polls und echte Client-Frist auch bei hängendem Transport; `ResultExpired` bleibt ein Fehler. Alle SpaceLike-Funktionen einschließlich Mailboxes. Native Integration über vorhandene pi-server/pi-client-Pakete und gebauten Daemon nachgewiesen. |
 | 1.9 (Socket) | umgesetzt: `serveSpace`/`socketTransport` | Frame-Grenze inklusive 8-Byte-Header; Multiplexing und Wiederverbindung. Reguläre Dateien, Symlinks und lebende Unix-Sockets werden nicht entfernt; nur bestätigte verwaiste Sockets, Cleanup nur des eigenen Inodes. TCP weiterhin Testtransport mit fest zugewiesener Identität; produktives Gate folgt in 1b. |
 | 1b (Vorabtest) | umgesetzt: Szenario `sieve-remote` (`test/testbed/scenarios/sieve-remote.ts`), Host-Container im Netzwerk-Namespace ihrer NetBird-Agenten, `RemoteSpace.counters` | Der Dienst `space` über Unix-Socket und über das Overlay (TCP 7421 nur an der Overlay-Adresse) im produktionsnahen Testbed auf `big`: Primzahlsieb mit sterbenden Workern, Host-Kill und 10 s Netzunterbrechung (`partition`/`heal`), alle Prüfungen ok. Siehe [testumgebung-big.md](testumgebung-big.md) Abschnitt 13. Noch ohne Schicht A/B, Gate und RouterLease. |
-| 1b.4 | umgesetzt (Kern ohne Supervisor-Prozess): `src/enroll.ts` (`createEnroll`, `bootstrapEnroll`, `EnrollmentService`, `SpaceKeyDirectory`, `revokePeerKey`, Token-Hilfen), `RemoteSpace.enroll`/`enrollStatus`, Rolle `unpaired` und Gruppe `space-enroll`, `test-enroll.test.ts` | Reihenfolge der Prüfungen, Zähler, Ratenlimit, Bootstrap-Befugnis einmalig und ersetzbar bis zum Verbrauch, Token nie gespeichert (nur Hash), Verbrauch plus `PeerKey` plus Ergebnisclaim in einem Commit, Wiederholung aus dem Claim, einheitliche Ablehnung. Offen: Verarbeitung von `createEnroll` als Command durch den Supervisor (5.1, Router-Journal), `rotateKey`, Lauf auf echten Geräten (Handy, QR), Control-Space-Berechtigungen für `Enroll`/`PeerKey` (nur Supervisor/Admin lesen). |
-| 1b.5 | umgesetzt (Supervisor ohne Router): `src/supervisor.ts` (`Supervisor`, `ControlAccess`), `createEnrollIn`/`revokePeerKeysIn`/`hasAdminKey` in `enroll.ts`, `test-supervisor.test.ts` | `createEnroll` und `revokePeer` als Kommandos: ein Commit je Kommando (Command nehmen, Wirkung, Result), Wiederholung der `commandId` wirkt nie zweimal, Fehler werden `failed`-Ergebnisse, der Schreiber muss einen aktiven Admin-Schlüssel haben; auf der Leitung sind im Control Space nur `Command`-Writes und Lesen von `Command`/`Result`/`PeerKey` für Admins mit Beweis möglich. Offen: `rotateKey`, Router-Journal und Router-Kommandos (5.1), `restoreDataSpace`/`releaseRestored` (5.2), Betrieb als Prozess auf big. |
+| 1b.2/1b.3 | umgesetzt: Gate, Schicht A/B und persistente Komposition in `src/runtime.ts` | Zwei TCP-Gates mit getrennten persistenten Hosts und aktuellem Schlüsselverzeichnis über die Leitung geprüft. Android-Keystore auf dem realen Handy geprüft; zwei echte NetBird-Gates dauerhaft auf big. Handy–big, native Keystore-Identität und frische Formular-/QR-Payload-Kopplung bestanden. Vollständige fünfteilige NetBird-Ausfallmatrix bestanden, Zugriff wiederhergestellt und eigene Fault-Regeln entfernt. |
+| 1b.4 | umgesetzt: geschützter Control Space, Enrollment und signierte Grants in `src/grants.ts` | Maximal 60 Sekunden, zwei Sekunden Zeitunsicherheit, Principal-/Schlüssel-/Scope-Bindung, Prüfung vor Mutation; Resolution führt keine Pending-Effekte aus. Aktuelle Rollen auch bei Txn-Commit/Lease-Renew. Privater Control-Signer und konfigurierter Start implementiert. Deployment mit getrennten Control-/Data-Hosts, Grants und Rotation über echtes Overlay geprüft. Verteilte Live-Restores und Handy-Bedienung bestanden; vollständige NetBird-Ausfallmatrix einschließlich Wiederaufnahme bestanden. |
+| 1b.5 | umgesetzt: `createEnroll`, `revokePeer`, `rotateKey` im Supervisor, eigene Rotation mit alter/neuer Signatur | Kommandos und Result atomar, Rollen/Scope der Rotation bleiben erhalten, Data-Member kann eigenes Schlüsselmaterial rotieren, ohne Control-Daten zu lesen. Selbständiger Dienststart auf big installiert; echter createEnroll-/Rotationsablauf bestanden. Router-Journal später in Phase 2. |
+| 1b.6 | umgesetzt und live geprüft: unabhängige CAS-Schnittstelle, SQLite-Register und signierter Autoritätswechsel | Konkurrierende Nachfolger, falsches Fencing und Rollback geprüft. Private Reader-/CAS- und signierte Recovery-Sockets, Forced-Command-Bridges und F15-Adapter implementiert. Register auf vpsc aktiv, Reader-/Operator-Trennung und Neustartpersistenz live geprüft; fest begrenztes Docker-/systemd-F15 und privater signierter SSH-Zugang bestanden. Verteilter Control-/Data-Live-Restore mit explizitem F15-Fencing bestanden. |
+| 1b.7 | umgesetzt und persistent/live geprüft: begrenzte Restore-Funktionen, dauerhafter Cursor, historische Claims, Quarantäne und explizite Freigabe | Crash/Reopen auf JSONL und SQLite; keine Fortsetzung alter Pending-Arbeit, aktuelle Quoten und Fanout-Budgets. Data-Recovery-Journal, Admission-Sperre, Registry-Update, exakter ACK-/Boot-Abgleich und private RPC-Bindung implementiert. Control-Import schließt Bootstrap/Policy und setzt Epoche auf 1. ACK-Dienst/SSH-Kanal auf big installiert. Control-Controller, exklusiver Recovery-Start, Member-ACK-Replay und neue Adminfreigabe auf beiden Backends geprüft. Verteilter Live-Data-/Control-Restore einschließlich Member-ACKs und neuer Adminfreigabe bestanden. |
+| 1b.8 | umgesetzt als Laufzeitbaustein: externe und lokal installierte Boot-Berechtigung je Space | Host-/Space-Zustand, Autorität, Inkarnation, Rolle und Epoche; Reads ebenfalls gesperrt, Registerversionen vor Commit erneut geprüft. Laufzeit verlangt den Guard. Provisionierter Start mit Socket, read-only SSH oder Register-TLS implementiert. Zwei produktionsnahe Daemons mit passendem externem/lokalem Boot-Nachweis auf big. Verteilter Live-Control-Restore mit gesperrtem altem Source und bestätigten Member-ACKs bestanden. |
+
+| 2.1 | umgesetzt und persistent geprüft: `src/router.ts`, Command-Zustände, stabile Unterrequests, Recovery, Budgets, Restore-Review | Kein automatischer Zielwechsel; unklarer Ausgang bleibt offen oder `needsReview`; RouterLease/Delegation sind separat in 2.2 implementiert. |
+| 2.2 | umgesetzt und persistent/TCP geprüft | signierte Lease, Original-Principal-Delegation, aktuelle Rechte, dauerhaftes Epoch-Fencing und gebundene Waiter-Erneuerung. |
+| 2.3 | umgesetzt und persistent geprüft | atomare signierte Policy, unveränderliche HRW-/Typ-Platzierung, Capacity-/Capability-Auswahl und deklarierter Typkatalog. |
+| 2.4 | umgesetzt und persistent/TCP geprüft | feste Routing-Pläne und Budgets, sequenzielle Takes, Teilabfragen, Txn-Bindung, journalisierter Waiter-Gewinner und Verlierer-Abort. Server-API; virtuelle öffentliche Space-Adresse ist keine automatische Folge. |
+| 2.5 | umgesetzt und persistent/TCP geprüft | signierte Aufnahme/Drain/Freeze/Entfernung, gemeinsame lokale/Remote-Core-Sperren, EmptyProof und atomare Root-Referenzprüfung. |
+| 2.8 | umgesetzt und geprüft: `test/support/federation-simulator.ts`, mehrere Harnesses, deterministische Latenz/Verlust/Duplikate/Partitionen/Uhrsprünge, Reservierungs-/Request-Gegenmodell | 45 neue Fälle in `test-router.test.ts`; kein Ersatz für echte Overlay-, Replikations- oder Lastabnahme. |
+
+Nachweise, genaue Grenzen und nächste Betriebsschritte: [Phase-1b-Abnahme](ap1b-abnahme.md).

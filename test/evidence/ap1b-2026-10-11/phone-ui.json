@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-11T12:41:09.150600+00:00",
+  "device": "M2007J17G",
+  "nativeVisibleButtons": true,
+  "pairingStatusAfterRotationPassed": true,
+  "authenticateButtonPassed": true,
+  "rotationButtonAccepted": true,
+  "rotationStatusCompleted": true,
+  "completedRotationStatusRepeatPassed": true,
+  "objectButtonAfterRotationPassed": true,
+  "objects": 1,
+  "keyId": "d3523e8f24bed9d541423f975a8cde09",
+  "fixedLiveBug": "Pairing status used the original enrollment claim key after rotation",
+  "mobileRegressionTests": {
+    "passed": 4,
+    "failed": 0
+  },
+  "apkSha256": "b01513f520cca812e7e1baf9e653d415b7dc1576adaad58d55f7a68b38468771",
+  "freshVisiblePrepareEnrollmentNotRepeated": true,
+  "cameraQrAcceptance": false
+}

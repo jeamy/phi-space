@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-11T09:34:03.730Z",
+  "hostId": "phase1b-member-1",
+  "forcedSsh": true,
+  "normalProcessStopped": true,
+  "systemdStopped": true,
+  "persistentRestartLock": true,
+  "restartRefused": true,
+  "mode": "maintenance-acceptance-without-restore",
+  "originalAuthorityAndBootUnchanged": true
+}

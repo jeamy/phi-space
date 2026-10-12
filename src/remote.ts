@@ -36,6 +36,10 @@ export class OutcomeUnknown extends Error {
 export class UnsupportedOperation extends Error {}
 
 export type RemoteOptions = {
+	/** Obtain a fresh control-primary grant. Client-selected roles are never accepted. */
+	grantProvider?: (call: Call) => Promise<Json>;
+	/** Renewable signed router delegation; original principal grant is supplied separately. */
+	delegationProvider?: (call: Call, grant?: Json) => Promise<Json>;
 	/** Stable space id or alias; omitted: the default space. */
 	space?: string;
 	/** Transport attempts per call (default 5), pause before the n-th retry: min(backoffMs * 2^n, maxBackoffMs) plus jitter. */
@@ -87,7 +91,7 @@ class TransportFailure extends Error {}
 
 export class RemoteSpace implements SpaceLike {
 	private t: Transport;
-	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction" | "signer" | "expectedGateHostId" | "ownPeerId">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId">;
+	private o: Required<Omit<RemoteOptions, "space" | "maxClientWaitMs" | "frameFraction" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">> & Pick<RemoteOptions, "space" | "maxClientWaitMs" | "signer" | "expectedGateHostId" | "ownPeerId" | "grantProvider" | "delegationProvider">;
 	private proving?: Promise<unknown>;
 	private enrollRequest?: { generation: string; requestId: string };
 	/** What the link cost so far: transport attempts repeated with the same identity, and calls given up as OutcomeUnknown. */
@@ -116,13 +120,17 @@ export class RemoteSpace implements SpaceLike {
 	// ---- transport with identity-preserving retries
 
 	private async roundTrip(call: Call, end?: number): Promise<Reply> {
-		const text = JSON.stringify(call);
-		const limit = this.frameLimit; // not read from `hello`: the retries of `hello` itself must not wait for it
-		if (new TextEncoder().encode(text).length > limit) throw new core.ResourceExhausted(`a call may take at most ${limit} bytes`);
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		try {
 			const raw = await Promise.race([
-				this.t.request(text),
+				(async () => {
+					const grant = this.o.grantProvider && !["challenge", "prove", "enroll", "enrollStatus", "grant"].includes(call.method) ? await this.o.grantProvider(call) : undefined;
+					const delegation=this.o.delegationProvider && !["challenge","prove","enroll","enrollStatus","grant","keyLookup","routerLease","epochNotice","routingPolicy","membershipInstruction","capabilityHeartbeat"].includes(call.method) ? await this.o.delegationProvider(call,grant) : undefined;
+					const text = JSON.stringify(grant||delegation ? { ...call, frame: { ...call.frame, ...(grant?{grant}:{}), ...(delegation?{delegation}: {}) } } : call);
+					const limit = this.frameLimit; // not read from `hello`: the retries of `hello` itself must not wait for it
+					if (new TextEncoder().encode(text).length > limit) throw new core.ResourceExhausted(`a call may take at most ${limit} bytes`);
+					return this.t.request(text);
+				})(),
 				new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new TransportFailure("the call timed out")), Math.max(1, Math.min(this.o.callTimeoutMs, end === undefined ? Infinity : end - performance.now()))); }),
 			]);
 			try {
@@ -164,6 +172,35 @@ export class RemoteSpace implements SpaceLike {
 	}
 	private rawCall(method: Call["method"], args: Record<string, Json> = {}): Promise<Json> { return this.send({ method, args }); }
 
+	/** Router adapter entry point: preserves externally journaled request identity. */
+	async requestBound(call:Call):Promise<Json>{return this.send(call);}
+	async requestGeneration():Promise<{generation:string;admitUntil:number}>{return await this.rawCall("generation") as any;}
+	async publishCapability(report:import("./capability-directory.ts").CapabilityReport):Promise<import("./core.ts").Lease>{return await this.send({method:"capabilityHeartbeat" as any,args:{report:report as any}}) as any;}
+	async requestMembership(instruction:import("./membership.ts").SignedMembership<import("./membership.ts").MembershipInstruction>):Promise<import("./membership.ts").SignedMembership<import("./membership.ts").MembershipProof>>{return await this.send({method:"membershipInstruction" as any,args:{instruction:instruction as any}}) as any;}
+
+	/** Ask the authoritative control runtime; replicas and data members do not implement this method. */
+	async requestGrant(purpose: "effect" | "resolution" = "effect", agentId?:string): Promise<Json> {
+		return this.send({ method: "grant" as Call["method"], args: { purpose,...(agentId===undefined?{}:{agentId}) } });
+	}
+	async requestRouterLease(renew?:{id:string;routerEpoch:number}):Promise<import("./delegation.ts").SignedRouterLease>{return await this.send({method:"routerLease" as Call["method"],args:renew?{renew}: {}}) as unknown as import("./delegation.ts").SignedRouterLease;}
+	async requestRoutingPolicy():Promise<import("./federation-policy.ts").SignedFederationPolicy>{return await this.send({method:"routingPolicy" as Call["method"]}) as unknown as import("./federation-policy.ts").SignedFederationPolicy;}
+
+	async lookupPeerKey(peerId: string, keyId: string): Promise<import("./auth.ts").PeerKeyRec | null> {
+		return await this.send({ method: "keyLookup" as Call["method"], args: { peerId, keyId } }) as unknown as import("./auth.ts").PeerKeyRec | null;
+	}
+	async rotationChallenge(algorithm: Signer["algorithm"], publicKey: string): Promise<import("./rotation.ts").RotationChallenge> {
+		return await this.send({ method: "rotationChallenge" as Call["method"], args: { algorithm, publicKey } }) as unknown as import("./rotation.ts").RotationChallenge;
+	}
+	async rotateKey(challenge: import("./rotation.ts").RotationChallenge, replacement: Signer, prepared?: { request?: { generation: string; requestId: string }; beforeSend?: (request: { generation: string; requestId: string }) => Promise<void> }): Promise<{ state: string; commandId: string }> {
+		if (!this.o.signer) throw new UnsupportedOperation("rotation needs the old signer");
+		const bytes = (await import("./rotation.ts")).rotationBytes(challenge);
+		const args = { challenge: challenge as unknown as Json, oldSignature: Buffer.from(await this.o.signer.sign(bytes)).toString("base64"), newSignature: Buffer.from(await replacement.sign(bytes)).toString("base64") };
+		const request = prepared?.request ?? { generation: ((await this.send({ method: "rotationGeneration" as Call["method"] })) as { generation: string }).generation, requestId: this.o.newRequestId() };
+		await prepared?.beforeSend?.(request);
+		return await this.send({ method: "rotateKey" as Call["method"], args, request }, () => new OutcomeUnknown(request, "the rotation answer was lost")) as unknown as { state: string; commandId: string };
+	}
+	async rotationStatus(commandId: string): Promise<Json> { return this.send({ method: "rotationStatus" as Call["method"], args: { commandId } }); }
+
 	/**
 	 * Layer B (4.3): prove the app key on this connection. The host's challenge must name the host this client means to reach
 	 * and this client's own peer id before anything is signed, so a challenge that another peer relays is not answered.
@@ -189,11 +226,12 @@ export class RemoteSpace implements SpaceLike {
 	 * the first attempt is kept: a retry after a lost answer is answered from the stored claim, also when the token is spent
 	 * by then. Returns the id and role of the new key; afterwards `authenticate()` proves it as usual.
 	 */
-	async enroll(token: string): Promise<{ keyId: string; role: string; peerId: string; scope?: string[] }> {
+	async enroll(token: string, prepared?: { request?: { generation: string; requestId: string }; beforeSend?: (request: { generation: string; requestId: string }) => Promise<void> }): Promise<{ keyId: string; role: string; peerId: string; scope?: string[] }> {
 		const signer = this.o.signer;
 		if (!signer?.publicKey) throw new UnsupportedOperation("enroll needs a signer with its public key");
-		await this.info();
-		this.enrollRequest ??= { generation: await this.generation(), requestId: this.o.newRequestId() };
+		if (!prepared?.request) await this.info();
+		this.enrollRequest ??= prepared?.request ?? { generation: await this.generation(), requestId: this.o.newRequestId() };
+		await prepared?.beforeSend?.(this.enrollRequest);
 		const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
 		if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
 		if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}`);
@@ -206,7 +244,6 @@ export class RemoteSpace implements SpaceLike {
 	async enrollStatus(request?: { generation: string; requestId: string }): Promise<{ state: string; result?: Json }> {
 		const target = request ?? this.enrollRequest;
 		if (!target) throw new UnsupportedOperation("no enrollment was started");
-		await this.info();
 		return (await this.send({ method: "enrollStatus" as Call["method"], args: { targetRequest: target as unknown as Json } })) as { state: string; result?: Json };
 	}
 
@@ -252,6 +289,7 @@ export class RemoteSpace implements SpaceLike {
 			if (this.o.maxClientWaitMs !== undefined && performance.now() - started >= this.o.maxClientWaitMs) throw new OutcomeUnknown(request, "the client stopped waiting; the operation continues on the host");
 			const view = (await this.send({ method: "pollOperation", args: { targetRequest: request as unknown as Json, waitMs: this.pollMs(end) } }, unknown("the client stopped waiting while polling"), end)) as unknown as ClaimView;
 			if (view.resultExpired) throw new claims.ResultExpired("the operation's retained result expired");
+			if (view.unknownOutcome) throw new OutcomeUnknown(request, "restored history cannot establish the original outcome");
 			if (view.error) throw toError(view.error);
 			if (view.state === "cancelled") throw new claims.OperationCancelled(`request ${request.requestId} was cancelled`);
 			if (view.state === "done") return ((view.result ?? null) as unknown as Taken | null);

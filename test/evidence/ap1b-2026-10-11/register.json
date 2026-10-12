@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-11T10:00:37.963Z",
+  "registerHost": "vpsc",
+  "target": "207.180.233.218:17422",
+  "readerGet": true,
+  "readerCasDenied": true,
+  "operatorCasConflict": true,
+  "persistedRecordVersion": 1
+}

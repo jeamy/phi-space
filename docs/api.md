@@ -1,6 +1,6 @@
 # pi-spaces API
 
-Stand: 2026-10-09. Diese Referenz dokumentiert die öffentliche TypeScript-API
+Stand: 2026-10-11. Diese Referenz dokumentiert die öffentliche TypeScript-API
 des lokalen Clients `PiSpaces`, des Remote-Clients `RemoteSpace` und den
 Servicevertrag. Sie beschreibt keine Federation-Garantie; dafür ist
 [federation-plan-v3.md](federation-plan-v3.md) maßgeblich.
@@ -139,3 +139,189 @@ Host-Operation aber weiterlaufen.
 Die API garantiert keine FIFO-Auswahl und keine Exactly-once-Ausführung
 außerhalb atomarer Space-Mutationen. Anwendungen müssen externe Effekte über
 eine eigene Idempotenz-ID oder eine gemeinsame Transaktion absichern.
+
+## Phase-1b-Laufzeit und Grants
+
+`startFederationHost(harness, context, options)` startet die persistente Komposition
+von Gate, Schicht A/B, Control-Berechtigungen, Enrollment, Rotation, Supervisor und
+Wartung. `options` enthält `hostId`, `authorityId`, `keys`, `verifier`, Gate-Konfiguration
+und `boot: { external, installed }`. Nur die Control-Seite setzt
+`control: { host: harness, authority }`. Ohne Boot-Register/Installation scheitert
+der Start; `unsafeSkipBootGuardForTests` ist ausschließlich für Fixtures.
+
+`GrantAuthority.issue(connection, purpose)` benötigt eine frische Overlay-Identität,
+einen provisionierten Signer und das aktuelle Schlüsselverzeichnis. `purpose` ist
+`effect` oder `resolution`. `GrantVerifier.check(token, identity, call, connection)`
+prüft Signatur, Principal, bewiesenen App-Schlüssel, Scope, Authority und Frist.
+
+Ein `RemoteSpace` erhält über `grantProvider(call)` vor jedem fachlichen Aufruf
+und jedem Retry einen aktuellen Grant; dieser Frame verändert weder fachliche
+Argumente noch Request-Identität. Die Control-Verbindung bietet:
+
+- `requestGrant(purpose = "effect")`
+- `lookupPeerKey(peerId, keyId)` für bewiesene Hosts/Admins
+- `rotationChallenge(algorithm, publicKey)`
+- `rotateKey(challenge, replacementSigner)` mit alter und neuer Signatur
+- `rotationStatus(commandId)` für das eigene Ergebnis
+
+Eigene Rotation verwendet einen eigenen Generation-Aufruf und funktioniert auch
+bei einem auf Data-Spaces beschränkten Schlüssel; dadurch werden keine Control-
+Entries freigegeben. Alte Schlüssel werden atomar widerrufen, Rollen und Scope
+übernommen. Grants und eine erfolgreiche Rotation sind keine Nachweise externer
+Exactly-once-Wirkung.
+
+Die Recovery-Exporte (`SqliteRecoveryRegister`, `RecoveryCoordinator`,
+`installAuthorityTransition`, `installBootGuard`, `beginRestore`, `restoreBatch`,
+`completeRestore`, `releaseRestored`) sind Bausteine für einen administrativen
+Pfad. Fencing, Admission-Sperre, Registry-Update, Control-ACK und Boot-Installation
+muss der aufrufende Dienst nachweisen. Näheres und offene Verdrahtung stehen in
+[ap1b-abnahme.md](ap1b-abnahme.md).
+
+## Provisionierter Betrieb und privater Recovery-Zugang
+
+`startConfiguredFederation(host, ctx, privateConfigFile)` prüft private
+Schlüssel-/Konfigurationsdateien, den Besitz der Listen-IP laut NetBird,
+externe Autorität und Boot-Berechtigung. Die zurückgegebene `service` dient dem
+nativen pi-server-Adapter: ihre Peer-ID und Gruppen werden serverseitig pro
+Aufruf neu bestimmt. `trustedConnection()` erzeugt den zugehörigen Kontext;
+`close()` beendet Gate, Supervisor, Wartung und eigene Register-Verbindungen.
+Konfiguration und SSH-Endpunkte sind in [ap1b-betrieb.md](ap1b-betrieb.md) erklärt.
+
+- `provisionFileSigner(path, algorithm)` erzeugt einmalig einen privaten
+  Desktop-/Dienstschlüssel; `loadFileSigner(path)` lädt ihn ohne Ersatzidentität.
+- `serveRegister(register, socket, { writable })` trennt Reader und Operator;
+  `SocketRecoveryRegister` und `SshRecoveryRegister` erlauben Member-Lesezugriff.
+- `serveRecovery({ path, hostId, operator, supervisor?, handle })` verlangt
+  signierte, zeitlich begrenzte Anfragen für das festgelegte Host-Ziel.
+  `RecoveryClient.call(method, args, requestId?)` sendet diese Anfragen.
+- `RecoveryController.submit(request)`, `advance(recoveryId)`,
+  `status(recoveryId)` und `release({ commandId, recoveryId, scope })`
+  bilden einen journalisierten Data-Restore. `dataRecoveryHandler(controller)`
+  bindet ausschließlich diese Methoden an den privaten Dienst.
+- `verifySshFence(register, hostId, targets)` verlangt über einen fest
+  provisionierten SSH-Zugang einen gestoppten Dienst und eine dauerhafte
+  Wiederanlaufsperre; Sync-/Replikat-Konfigurationen werden verweigert.
+
+Der Recovery-Controller benötigt privilegierte `commit`-/`snapshot`-Funktionen
+desselben Harness, die vor Installation des normalen Boot-Guards gebunden
+werden. Ein zweiter gleichzeitig geöffneter Harness ist dafür kein Ersatz.
+Diese Funktionen und die schreibende Register-Capability bleiben ausschließlich
+im privaten Recovery-Dienst. Der Snapshot-Lader und der tatsächliche dauerhafte
+Control-ACK-Kanal werden ausdrücklich administrativ bereitgestellt. `ControlRecoveryController` und `MemberTransitionInstaller` implementieren den
+Control-/Member-Ablauf; `startRecoveryOnly` bindet ihn an einen eigenen privaten
+Dienst unter exklusivem Harness-Besitz, ohne normalen Gate-/Agentenstart.
+Die verteilte Live-Restore-Abnahme ist weiterhin offen.
+
+- `TlsRecoveryRegister` / `serveTlsRegister`: unabhängiges Register mit gepinntem
+  CA-Vertrauen und freigegebenen Client-Zertifikaten; Reader, explizit begrenzte
+  `writeKeys` und Operator-CAS werden serverseitig getrennt.
+- `ControlAckService.acknowledge(tuple, requireHostKey?)`: dauerhafter Receipt für
+  die registrierte Data-Transition; aktuelle Authority-/Boot-/Transition-Versionen
+  und bei Host-Signatur der weiterhin aktive eingeschriebene Schlüssel werden im
+  Commit erneut geprüft.
+- `MemberTransitionInstaller.advance(proof)`: gestoppter Normalbetrieb mit
+  Neustartsperre, begrenzte Bereinigung, historische Pending-Claims, ungültige
+  Generationen, `orphanedAfterRestore`, Epoche 1 und lokales/externes ACK. Ein nach
+  lokalem ACK verlorener externer ACK wird beim Retry erneut veröffentlicht.
+- `ControlRecoveryController.submit(request)`, `advance(recoveryId)`,
+  `authorizeKey(recoveryId, key)` und `status(recoveryId)`: Import mit neuer
+  Authority, geschlossenen alten Rechten, erster expliziter Admin-Freigabe,
+  bestätigten Member-ACKs und Ablauf der alten Grant-/Lease-Frist.
+- `controlRecoveryHandler(controller, member)` akzeptiert nur den gepinnten
+  Recovery-Operator. `startRecoveryOnly(host, ctx, configFile, assertQuiesced)`
+  startet dafür ausschließlich den privaten Socket.
+- `startMemberRecoveryOnly(host, ctx, configFile, assertQuiesced)` startet den
+  ausschließlich für OP-signiertes `installAuthority` vorgesehenen Member-Socket.
+  Die Konfiguration enthält einen öffentlichen `operator`-Pin und einen
+  `registerTls`-Zugang mit Schreibrechten nur für den eigenen Boot-/ACK-Eintrag;
+  private OP-/Control-Signierschlüssel sind nicht erforderlich. Normalbetrieb
+  muss gestoppt und persistent gegen Wiederanlauf gesperrt sein.
+
+## `RouterController` (AP 2.1)
+
+```ts
+const router = new RouterController({
+  host: harness, ctx, routerId, authorityId,
+  target: idempotentRpcTarget,
+  assertAuthority: verifyCurrentRouterOwnership,
+});
+await router.recover();
+await router.submit({ id, area, blocksArea: false, steps });
+const state = await router.advance(id);
+```
+
+`steps` enthalten unveränderliches Ziel `{hostId, spaceId, authorityId,
+dataIncarnation, primaryEpoch}`, Principal, Generation, RPC-Methode, Argumente
+und optional `resultBudgetBytes`. Der Controller vergibt stabile Unterrequest-IDs;
+Zieladapter müssen sie unverändert als RPC-`requestId` verwenden.
+
+| Methode | Wirkung |
+|---|---|
+| `recover()` | Rekonstruiert Bindings und Reservierungen; löst alte Unterrequests auf, sendet keine neue Wirkung |
+| `submit(spec)` | Persistiert einen Command; dieselbe ID mit anderen Argumenten ist `RouterConflict` |
+| `advance(id)` | Führt gebundene Schritte weiter; ungelöste Transporte bleiben `applying` |
+| `get(id)` | Liefert aktuellen Command einschließlich Teilresultaten und Review-Nachweisen |
+| `ingest(spec, ack)` | Dauerhafte deduplizierte Aufnahme vor Mailbox-ACK |
+| `reconcileDataRestore({hostId, spaceId, oldIncarnation, recoveryId})` | Persistiert Restore-Reviews unter Beibehaltung historischer Resultate |
+| `review(id, admin, note, releaseArea, authorize)` | Separater autorisierter Audit; verändert `needsReview` nicht in Erfolg |
+
+`RouterBlocked` sperrt fehlende Rekonstruktion/Autorität oder abhängige Bereiche;
+`RouterBudgetExceeded` verweigert neue Arbeit vor Wirkung. `RouterTarget` ist
+bewusst ein Adaptervertrag. Produktive RouterLease/Delegation ist AP 2.2.
+Details und Simulator: [AP 2.1/2.8](ap2-router-und-simulator.md).
+
+## Federation-Controller (AP 2.2–2.5)
+
+`createFederationController` verbindet `RouterController`, `FederationRpc`,
+`FederatedSpace`, `FederationPolicyAuthority` und `MembershipController`.
+`renewableRouterLease` betreut den signierten Lease. `MemberLifecycle` installiert
+signierte Control-Anweisungen; `startConfiguredFederation` aktiviert dies mit
+`membership: {memberId, spaceId}`. Diese APIs gehören zum serverseitigen Router;
+sie ersetzen nicht die Signaturen des bestehenden `RemoteSpace`.
+
+Parameter, Rückgaben, Rechte, Budgets und Grenzen:
+[Delegation, Routing und Membership](ap2-delegation-routing-membership.md).
+
+## Directory und lokale Admin-Bausteine (AP 2.6/2.7)
+
+`RemoteSpace.publishCapability(report)` veröffentlicht einen `CapabilityReport`
+über den geschützten Control-RPC `capabilityHeartbeat`. Der Report enthält
+`hostId`, `resources`, `tools`, `models` und `metrics`. Aktueller Host-Key,
+Host-Rolle, Grant und eine passende Peer/Host-Bindung sind erforderlich.
+Lease und Zeitstempel legt der Empfänger fest: 120 Sekunden bzw. seine Uhr.
+Normales `write`, Take, Txn-Locking und Lease-Änderungen an Directory-Entries
+stehen Clients nicht zur Verfügung, auch nicht über Supertypes.
+
+`CapabilityDirectory.heartbeat(report, authenticatedIdentity)` ist die interne
+Host-API; ihre Identität muss vom bewiesenen Verbindungszustand stammen.
+`MemberStatusDirectory.refresh()` übernimmt aktuelle, an den Ziel-Tupel
+gebundene Probes. `start()` erneuert sie alle 15 Sekunden und liefert einen
+asynchronen Stopper. Status-Lease: 30 Sekunden. Fehlgeschlagene oder veraltete
+Probes entfernen Kapazitäts-/Capability-Beobachtungen aus der Routing-Tabelle.
+Directory-Veröffentlichung registriert keinen Routing-Member.
+
+Die provisionierte Runtime-Konfiguration `capabilities` kann `dataSpaces`,
+`tools`, `models` und im Control `hostBindings` enthalten. Letzteres ordnet
+technische Peer-IDs den eigenen Host-IDs zu. Die Runtime veröffentlicht nur
+bei dieser expliziten Konfiguration automatisch, im Abstand von 60 Sekunden.
+Lesen erfolgt über `readAll({type:"Capability"})` bzw. das vorhandene
+`space_list`, innerhalb des eigenen Space-Scopes.
+
+`DataAdminController.execute(commandId, kind, spaceId, admin, input)` akzeptiert
+`kind = "purgeTasks" | "deletePrincipal"`. Input ist ein Task-Template bzw.
+ein strukturierter Principal. Die vom Betreiber bereitgestellte `authorize`
+prüft den gesonderten Scope pro Kind/Space; `assertAuthority` prüft die aktuelle
+Autorität. Beide Prüfungen laufen erneut im Commit. Erfolgreiche Wirkungen und
+Audit sind atomar; dieselbe Command-ID mit verändertem Inhalt wird abgelehnt.
+Ein im Control-Runtime provisionierter `dataAdmin` bindet die Supervisor-
+Commands mit `args.spaceId` und `args.template` bzw. `args.principal` ein.
+
+`purgeTasks` akzeptiert nur profilierte, unreservierte Tasks. `deletePrincipal`
+setzt einen ruhenden lokalen Space voraus und lehnt oberhalb des Commit-Budgets
+atomar ab. Große oder verteilte Löschungen sind damit noch nicht implementiert.
+
+`FederatedSpace.reconcileDataRestore({hostId,spaceId,oldIncarnation,recoveryId})`
+markiert Child-Requests und Parents `needsReview`, ohne neue Wirkungen.
+Es muss als Reconciliation-Hook vor der Control-Restore-Bestätigung eingebunden
+werden. Verwaltete Spaces erhalten ohne diesen Hook kein Control-Receipt.
+[Abnahmestand und Grenzen](ap2-abnahme.md).
