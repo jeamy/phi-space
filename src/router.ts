@@ -139,6 +139,7 @@ export class RouterController {
         for (const v of Object.values(this.limits))
             if (!Number.isSafeInteger(v) || v <= 0) throw new TypeError("invalid router budget");
     }
+    get journalId(): string { return this.o.routerId; }
     private serial<T>(f: () => Promise<T>): Promise<T> {
         const p = this.tail.then(f);
         this.tail = p.catch(() => {});

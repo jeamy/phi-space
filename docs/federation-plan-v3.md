@@ -508,6 +508,11 @@ Command-Verarbeitung ist eine dauerhafte Zustandsmaschine
   die fachliche Entscheidung separat; er schreibt den historischen Ausgang nicht in einen erfundenen Erfolg
   um. Kein automatischer Ersatzrequest und kein zweiter Gewinner. Unabhängige Arbeit bleibt möglich;
   notwendige abhängige Ressourcen bleiben bis zur dokumentierten Klärung gesperrt.
+- Eine Aufteilung in feste Journal-Partitionen muss Anzahl, Router-IDs und ID-Zuordnung dauerhaft binden.
+  Alle Kinder eines Parents behalten ihren Router; bekannte IDs dürfen durch Umkonfiguration nicht unsichtbar
+  werden. Einzel- und Gesamtbudgets sind endlich. Restore und Remove prüfen sämtliche Partitionen;
+  ein unvollständiger partitionenübergreifender Restore hält eine dauerhafte Sperre bis zur Wiederaufnahme.
+  Eine Migration oder Größenänderung verlangt ein eigenes Verfahren, keine automatische Neuverteilung.
 - Journal und Deduplizierung haben dieselbe Schutz- und Replikationsklasse wie der Control Space; ihre Bytes
   werden getrennt budgetiert. Mailbox-ACKs erst nach dauerhafter Übernahme des Events.
 

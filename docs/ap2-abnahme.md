@@ -99,13 +99,32 @@ ersetzt dieser Lauf weder den virtuellen Router noch die Overlay-Abnahme.
 Frame 256 KiB, Commit 192 KiB und Generationslaufzeit 1 Stunde bleiben bis zu
 deren vollständigem Nachweis Startwerte.
 
-**Nachgewiesene Systemlücke:** `FederatedSpace` behält höchstens 16 verschiedene
-Parent-Operationen; das Router-Journal begrenzt ebenfalls die aufbewahrte
-Historie. Der neue Test prüft die Ablehnung der 17. Operation ohne zusätzliche
-Wirkung und die Wiederauflösung einer bekannten ID nach Neustart. Unbegrenztes
-Hochsetzen oder Löschen der Historie würde Budgets bzw. Dedup verletzen.
-Für die Abnahme sind eine begrenzte, generationengebundene Aufbewahrung oder
-Journal-Aufteilung sowie deren Crash- und Retry-Nachweise nötig.
+**Journal-Aufteilung implementiert:** Der kompatible Standard behält weiterhin
+16 Parents und ein Router-Journal. Für neue Root-Journale kann
+`createFederationController({journalPartitions: N, ...})` eine feste Aufteilung
+von 1 bis 1024 Partitionen provisionieren. Ein persistentes Manifest bindet
+Anzahl und Router-IDs; SHA-256 ordnet jede Parent-ID dauerhaft einer Partition
+zu. Alle Kinder und Zukunftsreservierungen eines Parents bleiben beim selben
+Router. Je Partition gelten unverändert 16 Parents à 128 KiB sowie die
+Router-Budgets von 128 Commands, 32 KiB Index und 4 MiB Journal. Es werden keine
+historischen IDs gelöscht. Eine volle Partition lehnt neue Arbeit vor Wirkung
+ab; unabhängige Partitionen und bekannte IDs bleiben nutzbar.
+
+Die Gesamtkapazität ist endlich und wird vor dem Betrieb über N festgelegt:
+maximal N × 2 MiB Parent-Reservierung und N × 4 MiB Router-Journal, zusätzlich
+zum gemeinsamen Control-Router und Manifest. Hash-Verteilung garantiert keine
+vollständige Ausnutzung sämtlicher Plätze. Ein geändertes Manifest oder der
+stille Wechsel eines vorhandenen Ein-Journal-Bestands wird abgelehnt; eine
+Migration vorhandener Historie ist nicht implementiert.
+
+Der neue Lastfall prüft 1000 virtuelle Writes auf drei persistenten Members
+bei 256 Partitionen, Neustart und Wiederholung alter IDs. Weitere Fälle prüfen
+volle Partitionen, partitionenübergreifende Transaktionsursprünge, Root-
+Referenzen vor Remove sowie verlorene Wirkungsantworten. Restore gleicht alle
+Router und Parents ab und hält bei einem Crash zwischen Partitionen eine
+dauerhafte Gesamtsperre bis zur abgeschlossenen Wiederholung.
+Diese Nachweise ersetzen noch nicht den vollständigen 10.000-Entry-/1000-Job-
+Lastfall mit sechs Workern über den virtuellen Router und echte NetBird-Hosts.
 
 | Abnahmepunkt | Nachweis / offener Schritt |
 |---|---|
@@ -115,7 +134,7 @@ Journal-Aufteilung sowie deren Crash- und Retry-Nachweise nötig.
 | Capability und MemberStatus | JSONL-/SQLite-Tests plus zusammengesetzter Host-TCP-RPC-Test; produktive Provisionierung offen |
 | Admin-Purge und F9 | Lokale batchweise Löschung mit Sperre/Crash-Recovery geprüft; verteilter Löschlauf und Router-Historien offen |
 | 10.000 Entries, drei Members, 1.000 Jobs, sechs Worker | Member-Lasttest; finaler Bericht in den verlinkten Nachweisen |
-| Virtueller Router unter dieser Last | Nicht erfüllt: dokumentierte Historiengrenzen |
+| Virtueller Router unter dieser Last | Feste Journal-Aufteilung implementiert; 1000 Writes auf drei persistenten Members geprüft; vollständiger Job-/Worker-Lastfall offen |
 | Crash nach jeder Journal-/RPC-/ACK-Grenze unter voller Last | Vollständige Lastmatrix offen; vorhandene gezielte Crash-Tests bleiben gültig |
 | Drei-Member-Sieb über echte NetBird-Verbindungen | Offen; Member-Lasttest ist ausdrücklich kein Ersatz |
 | Handy mit aktuellem APK | Installation und Objektlesen über echte NetBird-Verbindung nachgewiesen |
@@ -136,3 +155,10 @@ Die Löschung betrifft den aktuell zugänglichen Zustand; physische Bereinigung
 von Backend-Historien, Snapshots und Backups ist damit nicht nachgewiesen.
 
 Aktuelle Nachweise: [Prüfstand 2026-10-12](../test/evidence/ap2-batches-2026-10-12/).
+
+## Nachtrag 2026-10-12: partitionierte Root-Journale
+
+[Prüfberichte](../test/evidence/ap2-journals-2026-10-12/) enthalten die aktuellen
+lokalen, Mobile- und Server-Artefaktprüfungen. Die Produktion wurde für diese
+Prüfung nicht umgestellt. Der Testtransport der drei persistenten Members ist
+simuliert; es wird keine neue NetBird- oder Handy-Abnahme behauptet.

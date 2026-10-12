@@ -8,6 +8,7 @@ import type {Principal} from './claims.ts';
 import type {SpaceHost, Taken} from './client.ts';
 import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
 import {FederationRouting} from "./federation-policy.ts";
+import {FederationJournalLayout, operationPartition, parentJournalKey, validateJournalPartitions} from './federation-journals.ts';
 import {MembershipJournal} from "./membership.ts";
 import {RouterController, type RouterOperation, type RouterStepSpec} from './router.ts';
 import {
@@ -38,7 +39,7 @@ export interface FederationIO {
     txnActive(member: string, principal: Principal, txn: string,
               registration?: Readonly<RouterStepSpec>): Promise<boolean>;
 }
-type Operation = {
+export type FederationOperation = {
     id: string; hash : string; principal : Principal; policyVersion : number; members : string[];
     kind : 'write' | 'read' | 'take' | 'race' | 'txn';
     args : Json;
@@ -59,6 +60,7 @@ type Operation = {
     result?: Json;
     userTxn?: {member : string; id : string}
 };
+type Operation = FederationOperation;
 export const FederationOperations =
     defineDocFamily<{operations : Record<string, Operation>; reservedBytes : number}, null>({
         kind : 'pi-spaces.federation-operations',
@@ -82,52 +84,120 @@ export class FederatedSpace {
         io : FederationIO;
         assertAuthority : () => Promise<void>;
         now?: () => number;
+        journalPartitions?: number;
+        partitionRouters?: readonly RouterController[];
         controlSpaceId?: string
     };
     private tail: Promise < unknown >= Promise.resolve();
-    constructor(o: FederatedSpace['o']) { this.o = o; }
+    private partitions: number;
+    private routers: readonly RouterController[];
+    constructor(o: FederatedSpace['o']) {
+        this.o = o; this.partitions = o.journalPartitions ?? 1;
+        validateJournalPartitions(this.partitions);
+        this.routers = [...(o.partitionRouters ?? [o.router])];
+        if(this.routers.length !== this.partitions || new Set(this.routers.map(r=>r.journalId)).size !== this.partitions || this.partitions>1 && this.routers.some(r=>r.journalId===o.router.journalId))
+            throw new TypeError('distinct fixed partition routers required');
+    }
+    private router(id:string):RouterController {return this.routers[operationPartition(id,this.partitions)]!;}
+    private async layoutIn(tx:import('@earendil-works/pi-durable').Tx) {
+        const layout=await tx.doc(FederationJournalLayout,this.o.id,null),ids=this.routers.map(r=>r.journalId);
+        if(layout.partitions===null) {
+            // An existing legacy journal cannot silently become invisible in another topology.
+            const legacy=await tx.doc(FederationOperations,this.o.id,null);
+            if(this.partitions>1 && Object.keys(legacy.operations).length)
+                throw new RoutingConflict('legacy history requires explicit journal migration');
+            layout.partitions=this.partitions; layout.routerIds=ids;
+        } else if(layout.partitions!==this.partitions || hash(layout.routerIds)!==hash(ids))
+            throw new RoutingConflict('persisted journal topology differs; explicit migration required');
+    }
+    async initializeJournals():Promise<void> {
+        await this.o.assertAuthority();
+        await this.o.host.commit(async tx=>{await this.layoutIn(tx);await this.o.assertAuthority();},this.o.ctx);
+    }
+    private async ensureLayout(allowReconciliation=false) {
+        const layout=await this.o.host.snapshot(FederationJournalLayout,this.o.id,this.o.ctx);
+        if(!layout || layout.partitions===null) return this.initializeJournals();
+        if(layout.reconciliation && !allowReconciliation) throw new FederationUnavailable('journal restore reconciliation is incomplete');
+        if(layout.partitions!==this.partitions || hash(layout.routerIds)!==hash(this.routers.map(r=>r.journalId)))
+            throw new RoutingConflict('persisted journal topology differs; explicit migration required');
+    }
     private serial<T>(fn: () => Promise<T>): Promise<T> {
         const r = this.tail.then(fn);
         this.tail = r.catch(() => {});
         return r;
     }
-    private async change<T>(f: (d: {operations: Record<string, Operation>; reservedBytes : number},
-                                tx: import("@earendil-works/pi-durable").Tx) => T | Promise<T>):
+    private async change<T>(id: string | number, f: (d: {operations: Record<string, Operation>; reservedBytes : number},
+                                tx: import("@earendil-works/pi-durable").Tx) => T | Promise<T>, allowReconciliation=false):
         Promise<T> {
         await this.o.assertAuthority();
         return this.o.host.commit(async tx => {
             await this.o.assertAuthority();
-            const d = await tx.doc(FederationOperations, this.o.id, null);
+            await this.layoutIn(tx);
+            if((await tx.doc(FederationJournalLayout,this.o.id,null)).reconciliation && !allowReconciliation) throw new FederationUnavailable('journal restore reconciliation is incomplete');
+            const partition=typeof id==='number'?id:operationPartition(id,this.partitions);
+            const d = await tx.doc(FederationOperations, parentJournalKey(this.o.id,this.partitions,partition), null);
+            this.verifyParentJournal(d,partition);
             const r = await f(d, tx);
+            this.verifyParentJournal(d,partition);
             if (Buffer.byteLength(JSON.stringify(d)) > d.reservedBytes + 4096)
                 throw new RoutingConflict('composite journal exceeded reserved bytes');
+            await this.o.assertAuthority();
             return r;
         }, this.o.ctx);
+    }
+    private verifyParentJournal(d:{operations:Record<string,Operation>;reservedBytes:number},partition:number) {
+        const entries=Object.entries(d.operations);
+        if(entries.length>16 || d.reservedBytes!==entries.length*128*1024 || entries.some(([id,op])=>op.id!==id || operationPartition(id,this.partitions)!==partition || Buffer.byteLength(JSON.stringify(op))>128*1024))
+            throw new RoutingConflict('incomplete or corrupt parent journal reconstruction');
     }
     /** Reconcile parents too, including completed and not-yet-sent children. No replay. */
     async reconcileDataRestore(o: {hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string}): Promise<string[]> {
         return this.serial(async () => {
-            const children = new Set(await this.o.router.reconcileDataRestore(o));
+            for(const [key,value] of Object.entries(o))if(!['hostId','spaceId','oldIncarnation','recoveryId'].includes(key)||typeof value!=='string'||!value||value.length>256)
+                throw new RoutingConflict('invalid restore journal binding');
+            if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(o.recoveryId)||['constructor','prototype','__proto__'].includes(o.recoveryId))throw new RoutingConflict('invalid recovery ID');
+            await this.ensureLayout(true);
+            await this.o.host.commit(async tx=>{
+                await this.o.assertAuthority();await this.layoutIn(tx);
+                const layout=await tx.doc(FederationJournalLayout,this.o.id,null);
+                if(layout.reconciliation && hash(layout.reconciliation)!==hash(o))
+                    throw new RoutingConflict('another journal restore reconciliation is incomplete');
+                layout.reconciliation=copy(o);await this.o.assertAuthority();
+            },this.o.ctx);
+            const children = new Set<string>();
+            for(const router of new Set([this.o.router,...this.routers]))
+                for(const id of await router.reconcileDataRestore(o)) children.add(id);
             const st = await this.o.state();
             const affectedMembers = new Set(Object.values(st.members).filter(m =>
                 m.target.hostId === o.hostId && m.target.spaceId === o.spaceId &&
                 m.target.dataIncarnation === o.oldIncarnation).map(m => m.id));
-            return this.change(d => {
-                const affected:string[] = [];
-                for (const op of Object.values(d.operations)) {
-                    if (!op.targets?.some(t => t.hostId === o.hostId && t.spaceId === o.spaceId && t.dataIncarnation === o.oldIncarnation) && !op.members.some(m => affectedMembers.has(m)) &&
-                        !Object.values(op.children).some(c => children.has(c))) continue;
-                    op.phase = "needsReview";
-                    affected.push(op.id);
-                }
-                return affected;
-            });
+            const affected:string[] = [];
+            // One bounded parent document per commit; partial reconciliation is retryable.
+            for(let partition=0;partition<this.partitions;partition++)
+                affected.push(...await this.change(partition,d => {
+                    const ids:string[]=[];
+                    for (const op of Object.values(d.operations)) {
+                        if (!op.targets?.some(t => t.hostId === o.hostId && t.spaceId === o.spaceId && t.dataIncarnation === o.oldIncarnation) && !op.members.some(m => affectedMembers.has(m)) &&
+                            !Object.values(op.children).some(c => children.has(c))) continue;
+                        op.phase = 'needsReview'; ids.push(op.id);
+                    }
+                    return ids;
+                },true));
+            await this.o.host.commit(async tx=>{
+                await this.o.assertAuthority();await this.layoutIn(tx);
+                const layout=await tx.doc(FederationJournalLayout,this.o.id,null);
+                if(hash(layout.reconciliation)!==hash(o))throw new RoutingConflict('restore reconciliation changed');
+                delete layout.reconciliation;await this.o.assertAuthority();
+            },this.o.ctx);
+            return affected;
         });
     }
     private async get(id: string) {
         await this.o.assertAuthority();
-        return copy((await this.o.host.snapshot(FederationOperations, this.o.id, this.o.ctx))
-                        ?.operations[id]);
+        await this.ensureLayout();
+        const partition=operationPartition(id,this.partitions),d=await this.o.host.snapshot(FederationOperations,parentJournalKey(this.o.id,this.partitions,partition),this.o.ctx);
+        if(d)this.verifyParentJournal(d,partition);
+        return copy(d?.operations[id]);
     }
     private async prepare(kind: Operation['kind'], args: Json,
                           q: FederationRequest): Promise<Operation> {
@@ -180,7 +250,7 @@ export class FederatedSpace {
             candidates : {},
             ...(q.txn ? {userTxn : copy(q.txn)} : {})
         };
-        await this.change(async (d, tx) => {
+        await this.change(q.id, async (d, tx) => {
             if (this.o.controlSpaceId) {
                 const current = await tx.doc(FederationRouting, this.o.controlSpaceId, null),
                       jobs = await tx.doc(MembershipJournal, this.o.controlSpaceId, null);
@@ -204,12 +274,12 @@ export class FederatedSpace {
     private async save(op: Operation) {
         if (Buffer.byteLength(JSON.stringify(op)) > 128 * 1024)
             throw new RoutingConflict('operation result/event budget exceeded');
-        await this.change(d => { d.operations[op.id] = copy(op); });
+        await this.change(op.id,d => {if(d.operations[op.id]?.hash!==op.hash)throw new RoutingConflict('missing or conflicting parent history');d.operations[op.id] = copy(op);});
     }
     private async admit(op: Operation) {
         if (op.phase !== 'admitting')
             return op;
-        await this.o.router.reserveFuture(
+        await this.router(op.id).reserveFuture(
             child(op.id, 'budget'), op.members.length * (op.kind === 'race' ? 4 : 1), 64 * 1024);
         for (const member of op.members) {
             const label = 'initial:' + member, id = child(op.id, label);
@@ -223,7 +293,7 @@ export class FederatedSpace {
             }
             if (op.userTxn)
                 a.txn = op.userTxn.id;
-            const prior = await this.o.router.get(id);
+            const prior = await this.router(op.id).get(id);
             if (prior) {
                 op.children[member] = id;
                 await this.save(op);
@@ -231,14 +301,14 @@ export class FederatedSpace {
             }
             const spec = await this.o.io.step(member, op.principal, method, a, op.policyVersion,
                                               op.kind === "txn" && a.originId
-                                                  ? (await this.o.router.get((await this.get(
+                                                  ? (await this.router(a.originId).get((await this.get(
                                                         a.originId))!.children[member]!))!.steps[0]
                                                   : undefined);
             const expected = (await this.o.state()).members[member]?.target;
             if (!expected || hash(spec.target) !== hash(expected) ||
                 hash(spec.principal) !== hash(op.principal))
                 throw new RoutingConflict('target/principal adapter binding mismatch');
-            await this.o.router.submit({id, area : 'federation', steps : [ spec ]},
+            await this.router(op.id).submit({id, area : 'federation', steps : [ spec ]},
                                        child(op.id, 'budget'));
             op.children[member] = id;
             await this.save(op);
@@ -251,7 +321,7 @@ export class FederatedSpace {
         op.phase = 'done';
         op.result = result;
         await this.save(op);
-        await this.o.router.releaseFuture(child(op.id, 'budget'));
+        await this.router(op.id).releaseFuture(child(op.id, 'budget'));
         return copy(result);
     }
     private async decide(op: Operation) {
@@ -261,7 +331,7 @@ export class FederatedSpace {
             throw new FederationUnavailable('operation needs explicit review');
         op = await this.admit(op);
         for (; op.cursor < op.members.length; op.cursor++) {
-            const m = op.members[op.cursor]!, c = await this.o.router.advance(op.children[m]!);
+            const m = op.members[op.cursor]!, c = await this.router(op.id).advance(op.children[m]!);
             if (c.state === 'needsReview') {
                 op.phase = 'needsReview';
                 await this.save(op);
@@ -280,7 +350,7 @@ export class FederatedSpace {
             await this.save({...op, cursor : op.cursor + 1});
         }
         if (op.kind === "read" &&
-            (await Promise.all(op.members.map(m => this.o.router.get(op.children[m]!))))
+            (await Promise.all(op.members.map(m => this.router(op.id).get(op.children[m]!))))
                 .some(c => c?.state !== "completed")) {
             op.cursor = 0;
             await this.save(op);
@@ -343,6 +413,7 @@ export class FederatedSpace {
         waitForCompleteMs?: number;
         txn?: {member : string; id : string}
     } = {}) {
+        await this.o.assertAuthority();await this.ensureLayout();
         const st = await this.o.state();
         if (!st.policy)
             throw new RoutingConflict('no policy');
@@ -403,14 +474,14 @@ export class FederatedSpace {
     private async effect(op: Operation, m: string, label: string, method: RouterOperation,
                          args: Json) {
         const id = child(op.id, label);
-        let c = await this.o.router.get(id);
+        let c = await this.router(op.id).get(id);
         if (!c) {
             const step = await this.o.io.step(m, op.principal, method, args, op.policyVersion,
-                                              (await this.o.router.get(op.children[m]!))!.steps[0]);
-            await this.o.router.submit({id, area : 'federation', steps : [ step ]},
+                                              (await this.router(op.id).get(op.children[m]!))!.steps[0]);
+            await this.router(op.id).submit({id, area : 'federation', steps : [ step ]},
                                        child(op.id, 'budget'));
         }
-        c = await this.o.router.advance(id);
+        c = await this.router(op.id).advance(id);
         if (c.state === 'failed' &&
             (label.startsWith('cancel:') &&
                  [ 'UnknownLeaseError', 'TransactionError' ].includes(c.steps[0]!.evidence!) ||
@@ -427,7 +498,7 @@ export class FederatedSpace {
     }
     private async collectRaceEvents(op: Operation) {
         for (const m of op.members) {
-            const c = (await this.o.router.get(op.children[m]!))!,
+            const c = (await this.router(op.id).get(op.children[m]!))!,
                   page = await this.o.io.events(m, op.principal, c.steps[0]!);
             if (page.gap) {
                 op.phase = 'needsReview';
@@ -445,7 +516,7 @@ export class FederatedSpace {
                     };
                     const ownerId = (e.handback as any)?.federationOperation;
                     if (typeof ownerId === 'string' && ownerId !== op.id) {
-                        await this.change(d => {
+                        await this.change(ownerId,d => {
                             const owner = d.operations[ownerId];
                             if (!owner || hash(owner.principal) !== hash(op.principal) ||
                                 !owner.members.includes(m))
@@ -471,7 +542,7 @@ export class FederatedSpace {
             return copy(op.result!);
         op = await this.admit(op);
         for (const m of op.members) {
-            const c = await this.o.router.advance(op.children[m]!);
+            const c = await this.router(op.id).advance(op.children[m]!);
             if (c.state !== 'completed') {
                 if (op.kind === 'read')
                     continue;
@@ -488,7 +559,7 @@ export class FederatedSpace {
                     candidate.entry && ((op.args as any).take === false || candidate.txn &&
                     await this.o.io.txnActive(
                         candidate.member, op.principal, candidate.txn,
-                        (await this.o.router.get(op.children[candidate.member]!))!.steps[0]))) {
+                        (await this.router(op.id).get(op.children[candidate.member]!))!.steps[0]))) {
                     op.winner = {
                         member : candidate.member,
                         txn : candidate.txn ?? "",

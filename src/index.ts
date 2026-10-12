@@ -471,3 +471,5 @@ export {FederationRouting} from "./federation-policy.ts";
 export * from "./capability-directory.ts";
 
 export {DataAdminController} from "./data-admin.ts";
+
+export * from "./federation-journals.ts";

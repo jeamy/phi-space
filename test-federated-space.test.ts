@@ -3,12 +3,16 @@ import test from 'node:test';
 
 import {PiSpaces} from './src/client.ts';
 import {Space} from './src/doc.ts';
+import {createSpace} from './src/spaces.ts';
 import {
     FederatedSpace,
     type FederationIO,
     FederationPending,
     FederationUnavailable
 } from './src/federated-space.ts';
+import {FederationJournalLayout,operationPartition,parentJournalKey,partitionRouterId} from './src/federation-journals.ts';
+import {memberReferencesIn} from './src/federation-references.ts';
+import {FederationOperations} from './src/federated-space.ts';
 import {RouterController} from './src/router.ts';
 import {RoutingConflict, type RoutingState} from './src/routing-semantics.ts';
 import {FederationSimulator} from './test/support/federation-simulator.ts';
@@ -18,12 +22,14 @@ const principal = {
     peerId : 'client',
     agentId : 'worker'
 };
-async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>) {
+async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>, partitions=1) {
     const sim = new FederationSimulator(b), home = new PersistentHome(b);
     try {
         await sim.add('a');
         await sim.add('b');
+        if(partitions>1)await sim.add('c');
         let host = await home.open();
+        const controlId=(await host.commit(tx=>createSpace(tx,"test-control",1000),ctx)).spaceId;
         const first = await sim.step('a', 'read', {});
         const p = first.principal;
         const state: RoutingState = {
@@ -32,7 +38,7 @@ async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>
                 policyVersion : 1,
                 default : {mode : 'local', member : 'a'},
                 completionProfiles : [],
-                rules : [ {type : 'Job', mode : 'expand', by : 'capacity', members : [ 'a', 'b' ]} ]
+                rules : [ {type : 'Job', mode : 'expand', by : 'capacity', members : partitions>1?[ 'a', 'b', 'c' ]:[ 'a', 'b' ]} ]
             },
             members : Object.fromEntries([...sim.nodes ].map(
                 ([ id, n ]) => [id, {
@@ -51,7 +57,8 @@ async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>
             assertAuthority : async () => {}
         });
         let router = new RouterController(options());
-        await router.recover();
+        let partitionRouters=partitions===1?[router]:Array.from({length:partitions},(_,n)=>new RouterController({...options(),routerId:partitionRouterId('federation',n)}));
+        for(const r of new Set([router,...partitionRouters]))await r.recover();
         const unavailable = new Set<string>();
         const io: FederationIO = {
             step : async (id, principal, method, args, policyVersion, origin) => {
@@ -100,26 +107,34 @@ async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>
             ctx,
             id : 'federation',
             router,
+            journalPartitions:partitions,
+            partitionRouters,
             state : async () => state,
             io,
             assertAuthority : async () => {},
             now : () => sim.clock.now('a')
         });
         let f = make();
+        await f.initializeJournals();
         await fn({
             sim,
             home,
+            controlId,
             state,
             p,
             io,
             unavailable,
+            get host() {return host;},
+            get partitionRouters(){return partitionRouters;},
+            makeWith:(n:number)=>new FederatedSpace({host,ctx,id:"federation",router,journalPartitions:n,partitionRouters:Array.from({length:n},(_,i)=>new RouterController({...options(),routerId:partitionRouterId("federation",i)})),state:async()=>state,io,assertAuthority:async()=>{}}),
             get f() { return f; },
             reopen : async () => {
                 home.crash(host);
                 host = await home.open();
                 router = new RouterController(options());
-                await router.recover();
-                f = make();
+                partitionRouters=partitions===1?[router]:Array.from({length:partitions},(_,n)=>new RouterController({...options(),routerId:partitionRouterId('federation',n)}));
+                for(const r of new Set([router,...partitionRouters]))await r.recover();
+                f = make();await f.initializeJournals();
             }
         });
     } finally {
@@ -283,3 +298,76 @@ for(const b of BACKENDS)test(`${b}: bounded composite history denies admission w
  await o.reopen();await o.f.write({type:'Job',fields:{n:0}},{id:'history-0',principal:o.p});
  assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,16,'known ID resolves from durable history');
 }));
+
+for(const b of BACKENDS) {
+ test(`${b}: partitioned history accepts 1000 fixed operations on three Members and retains retries after reopen`,()=>fixture(b,async o=>{
+  for(let n=0;n<1000;n++) {
+   for(const [i,id] of ['a','b','c'].entries())o.state.members[id].capacity.free=i===n%3?100:1;
+   await o.f.write({type:'Job',fields:{n}},{id:'partition-load-'+n,principal:o.p});
+  }
+  assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,1000);
+  for(const id of ['a','b','c'])assert.ok(await new PiSpaces(o.sim.nodes.get(id).host,ctx,()=>o.sim.clock.now(id)).count()>300);
+  await o.reopen();
+  for(const n of [0,1,17,999])await o.f.write({type:'Job',fields:{n}},{id:'partition-load-'+n,principal:o.p});
+  assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,1000);
+  await assert.rejects(o.f.write({type:'Job',fields:{n:9999}},{id:'partition-load-0',principal:o.p}),RoutingConflict);
+  await assert.rejects(o.makeWith(128).initializeJournals(),/topology differs/);
+  let total=0;for(let n=0;n<256;n++) {
+   const d=await o.host.snapshot(FederationOperations,parentJournalKey('federation',256,n),ctx);
+   if(d){assert.ok(Object.keys(d.operations).length<=16);assert.equal(d.reservedBytes,Object.keys(d.operations).length*128*1024);total+=Object.keys(d.operations).length;}
+  }
+  assert.equal(total,1000);
+ },256));
+ test(`${b}: cross-partition transaction origin and Root removal references remain bound`,()=>fixture(b,async o=>{
+  const origin='partition-txn';let finish='partition-finish';while(operationPartition(origin,8)===operationPartition(finish,8))finish+='x';
+  const txn=await o.f.createTransaction('a',5000,{id:origin,principal:o.p});
+  const refs=()=>o.host.commit((tx:any)=>memberReferencesIn(tx,{controlSpaceId:o.controlId,routerId:'federated-router',federationId:'federation'},'a',o.state.members.a.target.spaceId),ctx);
+  assert.equal(await refs(),true);
+  await o.f.write({type:'Other',fields:{n:1}},{id:'partition-txn-write',principal:o.p,txn});
+  await o.f.finishTransaction(origin,'commit',{id:finish,principal:o.p});
+  assert.equal(await refs(),false);
+  await o.reopen();await o.f.finishTransaction(origin,'commit',{id:finish,principal:o.p});
+  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+ },8));
+ test(`${b}: a full partition rejects new work while other partitions and known IDs still work`,()=>fixture(b,async o=>{
+  const ids:string[]=[];for(let n=0;ids.length<17;n++)if(operationPartition('full-'+n,2)===0)ids.push('full-'+n);
+  for(const id of ids.slice(0,16))await o.f.write({type:'Job',fields:{id}},{id,principal:o.p});
+  await assert.rejects(o.f.write({type:'Job',fields:{id:ids[16]}},{id:ids[16],principal:o.p}),/history full/);
+  let independent='other';while(operationPartition(independent,2)===0)independent+='x';
+  await o.f.write({type:'Job',fields:{id:independent}},{id:independent,principal:o.p});
+  await o.reopen();await o.f.write({type:'Job',fields:{id:ids[0]}},{id:ids[0],principal:o.p});
+  assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,17);
+ },2));
+ test(`${b}: existing legacy IDs cannot disappear behind a new partition topology`,()=>fixture(b,async o=>{
+  await o.f.write({type:'Job',fields:{n:1}},{id:'legacy',principal:o.p});
+  await assert.rejects(o.makeWith(2).initializeJournals(),/topology differs/);
+  await o.host.commit(async(tx:any)=>{const d=await tx.doc(FederationJournalLayout,'federation',null);d.partitions=null;d.routerIds=null;},ctx);
+  await assert.rejects(o.makeWith(2).initializeJournals(),/legacy history/);
+  await o.f.write({type:'Job',fields:{n:1}},{id:'legacy',principal:o.p});
+  assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,1);
+ }));
+ for(const fault of ['failBeforeCommit','loseAnswer'] as const)
+ test(`${b}: interrupted partition restore ${fault} fences all parents until replay completes`,()=>fixture(b,async o=>{
+  for(let n=0;n<20;n++)await o.f.write({type:'Job',fields:{n}},{id:'restore-partition-'+n,principal:o.p});
+  const target=o.state.members.a.target;
+  const restore={hostId:target.hostId,spaceId:target.spaceId,oldIncarnation:target.dataIncarnation,recoveryId:'restore-partitions'};
+  let count=0;o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>w.type==='document.change' && w.content.kind==='delta' && JSON.stringify(w.content.ops).includes('"operations"'))&&++count===2);
+  await assert.rejects(o.f.reconcileDataRestore(restore));assert.equal(o.home.faults.fired,1);
+  await o.reopen();
+  await assert.rejects(o.f.write({type:'Job',fields:{n:0}},{id:'restore-partition-0',principal:o.p}),/reconciliation is incomplete/);
+  await assert.rejects(o.f.write({type:'Job',fields:{n:21}},{id:'new-during-review',principal:o.p}),/reconciliation is incomplete/);
+  assert.equal((await o.host.snapshot(FederationJournalLayout,'federation',ctx)).reconciliation.recoveryId,restore.recoveryId);
+  assert.equal((await o.f.reconcileDataRestore(restore)).length,20);
+  await assert.rejects(o.f.write({type:'Job',fields:{n:0}},{id:'restore-partition-0',principal:o.p}),/review/);
+ },8));
+}
+
+for(const b of BACKENDS)test(`${b}: lost partitioned effect reply recovers the same child without selecting a new Member`,()=>fixture(b,async o=>{
+ o.sim.fault('a',{dropReply:true});
+ const request={id:'partition-lost',principal:o.p},entry={type:'Job',fields:{n:1}};
+ await assert.rejects(o.f.write(entry,request),FederationPending);
+ o.state.members.a.capacity.free=1;o.state.members.b.capacity.free=100;
+ await o.reopen();await o.f.write(entry,request);
+ assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+ assert.equal(await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
+},8));

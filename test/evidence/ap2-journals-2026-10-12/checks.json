@@ -1,0 +1,52 @@
+{
+  "phase2Accepted": false,
+  "typecheck": true,
+  "tests": 402,
+  "examples": 158,
+  "serverBuiltTests": 167,
+  "mobileRemoteTests": 24,
+  "partitionCompositionLocalTests": 2,
+  "partitionCompositionBuiltServerTests": 2,
+  "artifactSha256": "e5393399848cfca5365f0aa9ca87d733cc0e724401f2abc870db2cbc52fcaeaf",
+  "mobileBundleSha256": "e5393399848cfca5365f0aa9ca87d733cc0e724401f2abc870db2cbc52fcaeaf",
+  "artifactMatchesMobileBundle": true,
+  "serverBuiltTestsNetwork": "none",
+  "productionServicesReplaced": false,
+  "phoneRetestedThisCheckpoint": false,
+  "partitionLoad": {
+    "backends": [
+      "JSONL",
+      "SQLite"
+    ],
+    "persistentMembers": 3,
+    "transport": "simulated",
+    "operationsPerBackend": 1000,
+    "operation": "write",
+    "partitions": 256,
+    "usedPartitions": 252,
+    "maxObservedParentsPerPartition": 10,
+    "maxAllowedParentsPerPartition": 16,
+    "reopenAndHistoricalRetryPassed": true
+  },
+  "crashTests": {
+    "backends": [
+      "JSONL",
+      "SQLite"
+    ],
+    "restoreModes": [
+      "before parent commit",
+      "lost parent commit reply"
+    ],
+    "globalPersistentRestoreFence": true,
+    "lostChildEffectResponseReplay": true
+  },
+  "open": [
+    "full virtual-Router 10000-entry / 1000-job / six-worker workload",
+    "three-Member sieve over real NetBird and full crash boundary matrix",
+    "explicit migration or resizing of existing journal topology",
+    "distributed principal deletion including Router/parent histories",
+    "physical archive and backup deletion policy",
+    "controlled completion-profile transition",
+    "production directory provisioning"
+  ]
+}

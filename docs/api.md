@@ -279,6 +279,24 @@ signierte Control-Anweisungen; `startConfiguredFederation` aktiviert dies mit
 `membership: {memberId, spaceId}`. Diese APIs gehören zum serverseitigen Router;
 sie ersetzen nicht die Signaturen des bestehenden `RemoteSpace`.
 
+Optional provisioniert `journalPartitions` (1 bis 1024, Standard 1) feste,
+persistente Parent-/Router-Partitionen. Die Rückgabe enthält zusätzlich
+`partitionRouters`; `router` bleibt der gemeinsame Control-Router. Die Anzahl
+und IDs sind nach Initialisierung unveränderlich. Bestehende Historie wird
+nicht automatisch migriert, und alte Request-IDs werden nicht verworfen.
+Jede Partition behält die bisherigen Einzelbudgets; die Gesamtreservierung
+wächst mit der festgelegten Anzahl. Der Default bleibt kompatibel mit alten
+Ein-Journal-Beständen. Direkte `FederatedSpace`-Komposition verlangt passend
+viele unterschiedliche `partitionRouters` sowie `initializeJournals()` vor dem
+Betrieb; alle Router müssen vorher rekonstruiert sein. Die Factory übernimmt
+die Initialisierung und Rekonstruktion vor ihrer Rückgabe. Cross-Partition-
+Transaktionen lesen ihre ursprüngliche Child-Bindung aus der Ursprungspartition.
+
+Restore setzt vor dem ersten Abgleich eine persistente Gesamtsperre und hebt
+sie erst nach allen Partitionen auf. Ein unterbrochener Abgleich wird mit
+demselben Restore-Tupel fortgesetzt. Die Mitgliedsentfernung berücksichtigt
+das Manifest und sämtliche zugehörigen Router-/Parent-Referenzen.
+
 Parameter, Rückgaben, Rechte, Budgets und Grenzen:
 [Delegation, Routing und Membership](ap2-delegation-routing-membership.md).
 

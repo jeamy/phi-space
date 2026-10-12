@@ -7,6 +7,7 @@ import {canonicalJson} from './canonical.ts';
 import type {Principal} from './claims.ts';
 import type {SpaceHost} from './client.ts';
 import type {SignedRouterLease} from './delegation.ts';
+import {partitionRouterId, validateJournalPartitions} from './federation-journals.ts';
 import {FederatedSpace} from './federated-space.ts';
 import {FederationPolicyAuthority} from './federation-policy.ts';
 import {memberReferencesIn} from './federation-references.ts';
@@ -33,6 +34,7 @@ export async function createFederationController(o: {
     assertAuthority : () => Promise<void>;
     authorizeAdmin : () => Promise<void>;
     probeStatus?: (memberId:string,target:Readonly<import("./router.ts").TargetBinding>)=>Promise<{revision:number;free:number;lag:number|null}>;
+    journalPartitions?: number;
     now?: () => number
 }) {
     const now = o.now ?? Date.now, guard = async () => {
@@ -78,18 +80,28 @@ export async function createFederationController(o: {
         assertAuthority : guard,
         now
     });
-    await router.recover();
+    const partitions=o.journalPartitions??1;
+    validateJournalPartitions(partitions);
+    const partitionRouters=partitions===1?[router]:Array.from({length:partitions},(_,n)=>new RouterController({
+        host:o.host,ctx:o.ctx,routerId:partitionRouterId(o.id,n),authorityId:o.authorityId,
+        target:rpc,assertAuthority:guard,now
+    }));
     const space = new FederatedSpace({
         host : o.host,
         ctx : o.ctx,
         id : o.id,
         router,
+        journalPartitions:partitions,
+        partitionRouters,
         state : () => policy.state(),
         io : rpc,
         assertAuthority : guard,
         now,
         controlSpaceId : o.controlSpaceId
     });
+    await space.initializeJournals();
+    await router.recover();
+    for(const partitionRouter of partitionRouters) if(partitionRouter!==router) await partitionRouter.recover();
     const refs = {controlSpaceId : o.controlSpaceId, routerId : o.id, federationId : o.id};
     const membership = new MembershipController({
         host : o.host,
@@ -124,5 +136,5 @@ export async function createFederationController(o: {
         }
     });
     const directory=o.probeStatus?new MemberStatusDirectory({host:o.host,ctx:o.ctx,controlSpaceId:o.controlSpaceId,assertAuthority:guard,now,probe:o.probeStatus}):undefined;
-    return {space, router, rpc, membership, policy, directory};
+    return {space, router, partitionRouters: Object.freeze(partitionRouters), rpc, membership, policy, directory};
 }
