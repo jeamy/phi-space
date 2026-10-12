@@ -103,4 +103,3 @@ Siehe **[ui-dashboard.md](ui-dashboard.md)** für:
 2. **Backend-Team:** API-Endpoints für Space Stats, Live Updates implementieren
 3. **UX-Testing:** Dashboard mit echten Daten testen
 4. **Iteration:** Basierend auf Feedback anpassen
-

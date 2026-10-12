@@ -4,6 +4,8 @@
 |---|---|---|
 | [implementierungsstand.md](implementierungsstand.md) | implementierter Umfang, Nachweise und Grenzen | **aktuell** |
 | [api.md](api.md) | TypeScript-, Dienst- und Remote-API | **aktuell** |
+| [umstellung-ohne-pi-durable.md](umstellung-ohne-pi-durable.md) | eigenständiger Space-Host, Haltbarkeit, Datenmigration und Abnahme ohne pi-durable | detaillierter Ziel- und Arbeitsplan; nicht implementiert |
+| [UI-Mockups](ui-mockups/UI-MOCKUPS.md) | Galerie der Dashboard-Entwürfe | UI-Konzept |
 | [spaces-v1.md](spaces-v1.md) | lokaler Stand vom 2026-10-07 | historisch |
 | [federation-plan-v3.md](federation-plan-v3.md) | Plan für föderierte Spaces, Gates, offene Fragen | **aktuell** |
 | [implementierungsplan-v3.md](implementierungsplan-v3.md) | Reife, Vorab-Entscheidungen, Arbeitspakete und Fortschritt für v3 | AP 1.1–1.9 lokal umgesetzt; weitere Phasen geplant |

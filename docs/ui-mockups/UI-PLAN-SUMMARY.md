@@ -2,6 +2,14 @@
 
 Alle Dateien für die Implementierung einer Live-Dashboard UI für pi-spaces.
 
+> **Umsetzungsstand (Phase 1, implementiert):** Die erste Version ist als schreibgeschütztes Dashboard
+> umgesetzt — [docs/dashboard.md](../dashboard.md), `src/dashboard.ts` + `src/dashboard/`,
+> `npm run dashboard`. Bewusste Abweichungen von diesem Plan: keine neuen Abhängigkeiten (kein Express,
+> kein `ws`, kein Vue/React, kein Chart.js) — stattdessen `node:http`, Server-Sent Events statt WebSocket,
+> native Web Components und SVG-Sparklines; keine parallele `DashboardSpaceService`-API, sondern eine
+> Projektion der vorhandenen `SpaceService`-Grenzen; kein JWT, sondern Loopback-Bindung und die
+> vertrauenswürdige lokale Socket-Grenze. Die REST-Endpunkte hier sind weitgehend 1:1 übernommen.
+
 ## Überblick: Was wurde dokumentiert?
 
 ### Visuelle Mockups (5 PNG Dateien, 190 KB)
@@ -271,20 +279,20 @@ Zugänglich unter:
    - Security Hardening
    - Documentation
 
-## Dateien in /work/docs/
+## Dateien in docs/ui-mockups/
 
 ```
 ui-implementation-plan.md       (919 Zeilen) - Vollständiger Implementierungsplan
 ui-event-flows.md               (500+ Zeilen) - Sequenzdiagramme & Flows
 ui-dashboard.md                 (7 KB) - Design-Dokumentation
-UI-MOCKUPS.md                   (1 KB) - Galerie
+UI-MOCKUPS.md                              (1 KB) - Galerie
 UI-PLAN-SUMMARY.md             (diese Datei)
 
-ui-mockup-dashboard.png         (46 KB) - Dashboard Overview
-ui-mockup-space-detail.png      (38 KB) - Space Details
-ui-mockup-agents.png            (35 KB) - Agent Monitoring
-ui-mockup-mobiles.png           (38 KB) - Mobile Devices
-ui-mockup-metrics.png           (37 KB) - Performance Metrics
+ui-mockup-dashboard.png                    (46 KB) - Dashboard Overview
+ui-mockup-space-detail.png                 (38 KB) - Space Details
+ui-mockup-agents.png                       (35 KB) - Agent Monitoring
+ui-mockup-mobiles.png                      (38 KB) - Mobile Devices
+ui-mockup-metrics.png                      (37 KB) - Performance Metrics
 ```
 
 ## Kontakt & Fragen
