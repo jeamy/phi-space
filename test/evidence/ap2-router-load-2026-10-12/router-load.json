@@ -1,0 +1,129 @@
+{
+  "passed": true,
+  "scope": "persistent-virtual-router-load",
+  "fullPhase2Accepted": false,
+  "transport": "in-process SpaceService with fixture identities (no NetBird/delegation)",
+  "backend": "sqlite",
+  "entries": 10000,
+  "jobs": 1000,
+  "members": 3,
+  "workers": 6,
+  "workerJobs": [
+    168,
+    168,
+    168,
+    168,
+    168,
+    160
+  ],
+  "journalPartitions": 1024,
+  "backgroundEntriesSeededLocally": 9000,
+  "jobEffectsThroughRouter": 5000,
+  "invokes": 5000,
+  "lostReplies": 36,
+  "retries": 36,
+  "lossEvery": 137,
+  "rootReopenAndHistoricalRetryPassed": true,
+  "primes": 9592,
+  "sum": 454396537,
+  "elapsedMs": 227517.813646,
+  "sampledPeakRssBytes": 270274560,
+  "latencies": {
+    "write": {
+      "count": 1000,
+      "p95Ms": 37.36110299999564,
+      "p99Ms": 46.87512799999968,
+      "maxMs": 74.65054699999746
+    },
+    "begin": {
+      "count": 1000,
+      "p95Ms": 345.4609610000043,
+      "p99Ms": 392.52177999998094,
+      "maxMs": 425.74103400000604
+    },
+    "take": {
+      "count": 1000,
+      "p95Ms": 361.1822159999865,
+      "p99Ms": 435.5005620000011,
+      "maxMs": 677.9559620000073
+    },
+    "result": {
+      "count": 1000,
+      "p95Ms": 360.33660099998815,
+      "p99Ms": 418.62075000000186,
+      "maxMs": 445.3661629999988
+    },
+    "commit": {
+      "count": 1000,
+      "p95Ms": 381.7890789999801,
+      "p99Ms": 461.7251969999925,
+      "maxMs": 610.6895510000177
+    },
+    "task": {
+      "count": 1000,
+      "p95Ms": 1309.1294979999948,
+      "p99Ms": 1382.0788439999887,
+      "maxMs": 1627.227022999985
+    }
+  },
+  "docsBefore": [
+    {
+      "entries": 3386,
+      "fullDocumentBytes": 7847685,
+      "claimsBytes": 257329,
+      "streamBytes": 3724147
+    },
+    {
+      "entries": 3292,
+      "fullDocumentBytes": 7661269,
+      "claimsBytes": 232409,
+      "streamBytes": 3644841
+    },
+    {
+      "entries": 3322,
+      "fullDocumentBytes": 7751204,
+      "claimsBytes": 223153,
+      "streamBytes": 3693478
+    }
+  ],
+  "docsAfter": [
+    {
+      "entries": 3386,
+      "fullDocumentBytes": 9118310,
+      "claimsBytes": 1333666,
+      "streamBytes": 3893126
+    },
+    {
+      "entries": 3292,
+      "fullDocumentBytes": 8809195,
+      "claimsBytes": 1204589,
+      "streamBytes": 3797566
+    },
+    {
+      "entries": 3322,
+      "fullDocumentBytes": 8852772,
+      "claimsBytes": 1156653,
+      "streamBytes": 3839773
+    }
+  ],
+  "journal": {
+    "parents": 5000,
+    "commands": 5000,
+    "parentDocumentBytes": 3683379,
+    "routerIndexBytes": 1478811,
+    "routerReservedBytes": 130028248,
+    "maxParentsPerPartition": 13,
+    "maxParentDocumentBytes": 9823,
+    "maxRouterIndexBytes": 3417
+  },
+  "limits": {
+    "maxFrameBytes": 262144,
+    "maxCommitBytes": 196608,
+    "generationAdmitMs": 3600000
+  },
+  "remaining": [
+    "real NetBird three-Member sieve",
+    "full crash boundary matrix",
+    "production composition provisioning"
+  ]
+}

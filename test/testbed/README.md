@@ -51,3 +51,20 @@ gebaute `scenarios/phase2-load.mjs` ausführen. Der Lauf benötigt einen eigenen
 Container mit temporärem Schreibspeicher und liefert einen JSON-Bericht.
 Er ist ein Member-Lasttest; virtuelle Router- und NetBird-Systemabnahme sowie
 die offenen Journal-/Löschgrenzen stehen in [ap2-abnahme.md](../../docs/ap2-abnahme.md).
+
+
+### Phase-2 virtual Router load
+
+`scenarios/phase2-router-load.ts` runs the full inventory/job/worker workload through fixed Root journal partitions on real SQLite stores. It seeds 9,000 background entries in bounded Member commits and routes all 1,000 job writes plus transaction begin, take, result write and commit through `FederatedSpace` and `RouterController`. Six workers use the keyed HRW placement and member-bound transactions.
+
+The default run uses 1,024 fixed journal partitions, 10,000 entries and 1,000 jobs. Each Member uses an explicit per-owner entry quota of 10,000; frame, commit and generation budgets retain their defaults. Parent occupancy is checked before admitting work. A small local check is:
+
+```sh
+PI_LOAD_ENTRIES=120 PI_LOAD_JOBS=12 PI_LOAD_PARTITIONS=16   node --experimental-strip-types test/testbed/scenarios/phase2-router-load.ts /tmp/router-load-smoke
+```
+
+Build with the existing artifact builder and run only the built `scenarios/phase2-router-load.mjs` on the server. Use an isolated container with a writable scratch directory for SQLite (`TMPDIR`) and reports, 2 CPUs and 1 GiB RAM. The rootless container UID must have write access to that scratch directory. Keep the library and scenario mounts read-only; no network or host-service replacement is needed.
+
+The scenario loses replies after durable effects, repeats the same Parent API request, reopens the Root harness from SQLite and retries historical writes/commits. Its JSON report records worker counts, the independently verified prime list, per-operation and task latencies, full Member document sizes, Root journal sizes and sampled RSS. It asserts exactly 5,000 retained completed Parent/Child commands for the full run.
+
+The transport calls the real `SpaceService` in process with fixture identities. It does not exercise overlay authentication, grants or production delegation, three separate hosts, replication, or every crash boundary. Those acceptance gates remain separate. The workload is a standalone operator scenario, not automatically included in the routine test-bed service suite.

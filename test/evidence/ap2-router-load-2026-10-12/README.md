@@ -1,0 +1,15 @@
+# Full virtual Router workload — 2026-10-12
+
+The built scenario passed on `big`: 10,000 entries, three SQLite Members, a fourth SQLite Root store, 1,000 jobs and six active workers. All job writes, transaction begins, takes, result writes and commits go through `FederatedSpace`/`RouterController`: exactly 5,000 completed Parents and Child commands. The 9,000 background entries are seeded locally in bounded Member commits; their writes do not go through the Root.
+
+36 replies were lost after durable effects and recovered with 36 retries of the same Parent API request. After reopening the Root harness from SQLite, historical writes and commits were retried with no new Tasks or Results. Exactly 1,000 unique Results, zero Tasks, and the full prime list through 100,000 passed: 9,592 primes, sum 454,396,537. Workers processed 168/168/168/168/168/160 jobs. Workers receive distinct Task IDs; contention on one Task is covered by the separate race tests.
+
+The run completed in 227.518 seconds; sampled peak RSS was 270,274,560 bytes. The immutable topology has 1,024 partitions; the largest holds 13 Parents against a limit of 16. `router-load.json` contains actual Member document sizes including Claims and Stream, Parent/index sizes, command reservations, and per-call/task p95/p99 latencies. Command reservations are not measured physical storage or actual command-document bytes. Latencies include Root queues, local RPC, persistence and retries; they are not network-only measurements.
+
+The container had 2 CPUs, 1 GiB RAM, disabled network, a read-only root filesystem, all capabilities dropped and no-new-privileges. Writable SQLite files were confined to a dedicated scratch bind mount, removed by the scenario after completion. Container UID 0 is inside the existing rootless Docker user namespace; it is not host root. Only built JavaScript was shipped. Production services and the phone were not redeployed.
+
+The scenario calls the real SpaceService in process with fixture identities. It does not exercise NetBird, signed delegation/grants, replication, an actual OS-process crash, or every crash boundary. Per-owner entry quotas are explicitly raised to 10,000 for the inventory; frame/commit/generation defaults remain unchanged. Full Phase 2 acceptance remains open.
+
+Verification was isolated from concurrent dashboard changes in the main working directory. The base repository suite passed 400 tests and skipped two native pi-server cases; those two passed in a separate follow-up using the installed sibling runtime. Typecheck and 24 mobile/remote tests passed. The local and built-server 12-job smoke runs also passed. `checks.json` records hashes, configuration and open gates.
+
+The final typecheck in the shared working directory remains blocked by eight errors in the concurrently added `src/dashboard.ts`. The reviewed load-test files pass in the isolated checkout; the dashboard files are outside this checkpoint. `shared-checkout-typecheck.log` preserves that limitation.

@@ -1,0 +1,40 @@
+{
+  "phase2Accepted": false,
+  "isolatedCheckoutBase": "027e08c",
+  "typecheckIsolatedCheckout": true,
+  "localSuite": {
+    "tests": 402,
+    "passed": 400,
+    "skipped": 2,
+    "failed": 0
+  },
+  "nativePiServerFollowup": {
+    "tests": 2,
+    "passed": 2,
+    "skipped": 0
+  },
+  "mobileRemoteTestsPassed": 24,
+  "serverFullRouterLoadPassed": true,
+  "artifactSha256": "067a555560f940d67f4a948af21f95a430eca9f755e6715ddd5c44b074e5e36f",
+  "scenarioArtifactSha256": "39591e1f551792e82eaecfd58409ba5875ecaa79ed2d7ca09bc553d0bb82a25b",
+  "scenarioSourceSha256": "14a2b52e195daba6ab3b108bc729a91543b14b6919224d6ad4041cda4346dbe8",
+  "mobileBundleSha256": "067a555560f940d67f4a948af21f95a430eca9f755e6715ddd5c44b074e5e36f",
+  "cpuLimit": 2,
+  "memoryLimitBytes": 1073741824,
+  "network": "none",
+  "readOnlyRootFilesystem": true,
+  "productionServicesReplaced": false,
+  "containerUser": "0:0 inside existing rootless Docker user namespace",
+  "memberPerOwnerEntryQuota": 10000,
+  "open": [
+    "three-Member sieve over real NetBird",
+    "full crash-boundary matrix",
+    "production Root/directory composition provisioning",
+    "distributed principal deletion including Router/parent histories",
+    "physical archive and backup deletion policy",
+    "controlled completion-profile transition",
+    "journal topology migration/resizing"
+  ],
+  "sharedCheckoutTypecheckPassed": false,
+  "sharedCheckoutTypecheckBlocker": "8 TypeScript errors in concurrently added src/dashboard.ts; isolated load-test checkout passes"
+}

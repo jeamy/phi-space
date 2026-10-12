@@ -1,0 +1,12 @@
+
+> pi-spaces@0.0.1 typecheck
+> tsc
+
+src/dashboard.ts(23,32): error TS2459: Module '"./spaces.ts"' declares 'Space' locally, but it is not exported.
+src/dashboard.ts(24,26): error TS2724: '"./service.ts"' has no exported member named 'GateIdentity'. Did you mean 'Identity'?
+src/dashboard.ts(58,66): error TS2532: Object is possibly 'undefined'.
+src/dashboard.ts(58,110): error TS2339: Property 'map' does not exist on type 'Readonly<SpaceState>'.
+src/dashboard.ts(58,115): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/dashboard.ts(96,76): error TS2532: Object is possibly 'undefined'.
+src/dashboard.ts(96,115): error TS2339: Property 'map' does not exist on type 'Readonly<SpaceState>'.
+src/dashboard.ts(96,120): error TS7006: Parameter 's' implicitly has an 'any' type.

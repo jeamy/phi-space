@@ -473,3 +473,6 @@ export * from "./capability-directory.ts";
 export {DataAdminController} from "./data-admin.ts";
 
 export * from "./federation-journals.ts";
+
+export {RouterJournal} from "./router.ts";
+export type {RoutingState} from "./routing-semantics.ts";

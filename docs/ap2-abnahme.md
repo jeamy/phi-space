@@ -123,8 +123,9 @@ volle Partitionen, partitionenübergreifende Transaktionsursprünge, Root-
 Referenzen vor Remove sowie verlorene Wirkungsantworten. Restore gleicht alle
 Router und Parents ab und hält bei einem Crash zwischen Partitionen eine
 dauerhafte Gesamtsperre bis zur abgeschlossenen Wiederholung.
-Diese Nachweise ersetzen noch nicht den vollständigen 10.000-Entry-/1000-Job-
-Lastfall mit sechs Workern über den virtuellen Router und echte NetBird-Hosts.
+Der einzelne Write-Lastfall ersetzt keinen Job-Lebenszyklus oder Overlay-Test.
+Der vollständige virtuelle Job-Lauf ist im folgenden Nachtrag separat belegt;
+die Abnahme über echte NetBird-Hosts bleibt offen.
 
 | Abnahmepunkt | Nachweis / offener Schritt |
 |---|---|
@@ -134,7 +135,7 @@ Lastfall mit sechs Workern über den virtuellen Router und echte NetBird-Hosts.
 | Capability und MemberStatus | JSONL-/SQLite-Tests plus zusammengesetzter Host-TCP-RPC-Test; produktive Provisionierung offen |
 | Admin-Purge und F9 | Lokale batchweise Löschung mit Sperre/Crash-Recovery geprüft; verteilter Löschlauf und Router-Historien offen |
 | 10.000 Entries, drei Members, 1.000 Jobs, sechs Worker | Member-Lasttest; finaler Bericht in den verlinkten Nachweisen |
-| Virtueller Router unter dieser Last | Feste Journal-Aufteilung implementiert; 1000 Writes auf drei persistenten Members geprüft; vollständiger Job-/Worker-Lastfall offen |
+| Virtueller Router unter dieser Last | Feste Journal-Aufteilung; vollständiger SQLite-Lastlauf im neuen Szenario separat dokumentiert; NetBird- und volle Crash-Abnahme bleiben offen |
 | Crash nach jeder Journal-/RPC-/ACK-Grenze unter voller Last | Vollständige Lastmatrix offen; vorhandene gezielte Crash-Tests bleiben gültig |
 | Drei-Member-Sieb über echte NetBird-Verbindungen | Offen; Member-Lasttest ist ausdrücklich kein Ersatz |
 | Handy mit aktuellem APK | Installation und Objektlesen über echte NetBird-Verbindung nachgewiesen |
@@ -162,3 +163,61 @@ Aktuelle Nachweise: [Prüfstand 2026-10-12](../test/evidence/ap2-batches-2026-10
 lokalen, Mobile- und Server-Artefaktprüfungen. Die Produktion wurde für diese
 Prüfung nicht umgestellt. Der Testtransport der drei persistenten Members ist
 simuliert; es wird keine neue NetBird- oder Handy-Abnahme behauptet.
+
+## Vollständiger virtueller Router-Lastfall
+
+`test/testbed/scenarios/phase2-router-load.ts` erweitert den Prüfstand um den
+vollständigen Job-Lebenszyklus über `FederatedSpace` und `RouterController`:
+1.000 Task-Writes, 1.000 Transaktionsbeginne, 1.000 Takes, 1.000 Ergebnis-Writes
+und 1.000 Commits. Sechs Worker verwenden die HRW-Bindung des jeweiligen
+`taskId`; jede Transaktion bleibt an genau einen Member gebunden. 9.000
+Hintergrund-Entries werden zuvor lokal in begrenzten Member-Commits angelegt.
+Damit liegen vor der Verarbeitung insgesamt 10.000 Entries auf drei echten
+SQLite-Member-Stores. Der Root verwendet einen vierten SQLite-Store und
+1.024 vorab festgelegte Journal-Partitionen. Die Entry-Quote je Owner ist
+explizit auf 10.000 gesetzt; Frame, Commit und Generationslaufzeit behalten
+ihre Standardbudgets.
+
+Der Testtransport ruft den echten `SpaceService` innerhalb eines Prozesses
+mit Fixture-Identitäten auf. Grants, signierte Delegation und NetBird sind
+kein Bestandteil dieses Lastfalls. Verlorene Antworten werden nach einer
+dauerhaften Zielwirkung erzeugt; Wiederholungen behalten Parent- und Child-ID.
+Anschließend wird der Root-Harness aus SQLite neu geöffnet und historische
+Writes/Commits werden erneut abgefragt. Genau 1.000 einzigartige Ergebnisse,
+keine verbleibenden Tasks, vollständiger Primzahlvergleich und genau 5.000
+abgeschlossene Parents/Child-Commands sind Pflichtprüfungen.
+
+[Messwerte und Nachweise](../test/evidence/ap2-router-load-2026-10-12/)
+dokumentieren den konkreten Serverlauf. Er ersetzt weiterhin weder die
+Drei-Host-NetBird-Abnahme noch die vollständige Crash-Grenzen-Matrix.
+
+Der gebaute Serverlauf bestand am 2026-10-12 mit 2 CPUs und 1 GiB RAM in
+227,518 Sekunden. Alle sechs Worker arbeiteten (168/168/168/168/168/160 Jobs).
+36 nach dauerhafter Wirkung verlorene Antworten wurden mit 36 Parent-Retries
+aufgelöst. Nach Root-Reopen blieben exakt 1.000 Ergebnisse und null Tasks;
+9.592 Primzahlen mit Summe 454.396.537 stimmen mit der vollständigen Referenz
+überein. Alle 5.000 Parents und Child-Commands sind abgeschlossen. Die größte
+Partition enthält 13 Parents bei einem Limit von 16.
+
+| Messgröße | p95 | p99 |
+|---|---:|---:|
+| Virtueller Task-Write | 37,361 ms | 46,875 ms |
+| Transaktion beginnen | 345,461 ms | 392,522 ms |
+| Task nehmen | 361,182 ms | 435,501 ms |
+| Ergebnis schreiben | 360,337 ms | 418,621 ms |
+| Commit | 381,789 ms | 461,725 ms |
+| Vollständiger Job | 1.309,129 ms | 1.382,079 ms |
+
+Dies sind Latenzen der jeweiligen virtuellen API-Aufrufe einschließlich
+Warteschlange, Persistenz und ggf. Retry; keine reinen Netzwerk-RPC-Latenzen.
+Der gesampelte Spitzen-RSS beträgt 270.274.560 Byte (rund 258 MiB). Die drei
+Member-Dokumente wachsen von 7.847.685/7.661.269/7.751.204 auf
+9.118.310/8.809.195/8.852.772 Byte einschließlich Claims und Stream.
+Root-Parents belegen 3.683.379 Byte, die Router-Indizes 1.478.811 Byte;
+für Commands sind 130.028.248 Byte reserviert. Reservierungen sind keine
+Messung der tatsächlichen Command-Dokumentbytes oder des physischen Speichers.
+Die Worker erhalten unterschiedliche Task-IDs; Konkurrenz mehrerer Worker um
+denselben Task wird durch die separaten Wettlauf-/Crash-Tests geprüft.
+Frame 256 KiB, Commit 192 KiB und Generation eine Stunde bleiben bis zur
+vollständigen Overlay-/Crash-Abnahme Startwerte. Eine Gesamtfreigabe Phase 2
+ist weiterhin nicht erteilt.
