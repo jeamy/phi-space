@@ -311,14 +311,22 @@ Lesen erfolgt über `readAll({type:"Capability"})` bzw. das vorhandene
 `kind = "purgeTasks" | "deletePrincipal"`. Input ist ein Task-Template bzw.
 ein strukturierter Principal. Die vom Betreiber bereitgestellte `authorize`
 prüft den gesonderten Scope pro Kind/Space; `assertAuthority` prüft die aktuelle
-Autorität. Beide Prüfungen laufen erneut im Commit. Erfolgreiche Wirkungen und
-Audit sind atomar; dieselbe Command-ID mit verändertem Inhalt wird abgelehnt.
+Autorität. `spaceId` muss die unveränderliche Space-ID sein; Aliasnamen werden
+abgelehnt. Beide Prüfungen laufen erneut im Commit. Jeder erfolgreiche Batch und
+sein Fortschritt sind atomar; dieselbe Command-ID mit verändertem Inhalt wird abgelehnt.
 Ein im Control-Runtime provisionierter `dataAdmin` bindet die Supervisor-
 Commands mit `args.spaceId` und `args.template` bzw. `args.principal` ein.
 
 `purgeTasks` akzeptiert nur profilierte, unreservierte Tasks. `deletePrincipal`
-setzt einen ruhenden lokalen Space voraus und lehnt oberhalb des Commit-Budgets
-atomar ab. Große oder verteilte Löschungen sind damit noch nicht implementiert.
+setzt zunächst einen ruhenden lokalen Space voraus. `execute` verarbeitet
+den Löschlauf in begrenzten Commits bis zum Abschluss. Alternativ starten
+`startDeletion(commandId, spaceId, admin, principal)` und
+`advanceDeletion(commandId, spaceId, admin, principal)` einen Lauf bzw. genau
+einen Batch; das Ergebnis enthält Phase und Batch-Anzahl. Derselbe Command
+setzt nach Neustart oder verlorener Antwort fort. Währenddessen blockiert
+eine persistente Space-Sperre neue Wirkungen und Objektabfragen. Ein geänderter
+Ziel-Tupel verlangt Review. Remote-Members und Router-Historien werden damit
+noch nicht gelöscht.
 
 `FederatedSpace.reconcileDataRestore({hostId,spaceId,oldIncarnation,recoveryId})`
 markiert Child-Requests und Parents `needsReview`, ohne neue Wirkungen.

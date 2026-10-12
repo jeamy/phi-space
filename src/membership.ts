@@ -141,6 +141,7 @@ export class MemberLifecycle {
             if (Object.keys(d.steps).length >= 128)
                 throw new RoutingConflict('transition history full');
             const now = (this.o.now ?? Date.now)(), s = await spaceDoc(tx, this.o.spaceId, now);
+            core.assertAdminIdle(s);
             core.settle(s, now);
             const a = s.membership;
             if (q.expectedAdmissionVersion !== undefined &&

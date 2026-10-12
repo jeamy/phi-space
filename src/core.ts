@@ -134,7 +134,7 @@ export type SpaceEvent = {
  * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
  * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
  */
-export type SpaceState = { snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed" }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; invalidGenerations?: Record<string, true> };
+export type SpaceState = { adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed" }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; invalidGenerations?: Record<string, true> };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
@@ -152,6 +152,7 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		...(v.rpc ? { rpc: v.rpc } : {}), // request claims (claims.ts)
 		...(v.stream ? { stream: v.stream } : {}), // revisions and change batches (stream.ts)
 		...(v.membership ? { membership: v.membership } : {}),
+		...(v.adminMaintenance?{adminMaintenance:v.adminMaintenance}:{}),
 		...(v.snapshotEpoch===undefined?{}:{snapshotEpoch:v.snapshotEpoch}),
 		...(v.completionProfiles ? { completionProfiles: v.completionProfiles } : {}),
 		...(v.mailboxes ? { mailboxes: v.mailboxes } : {}),
@@ -216,7 +217,7 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
 /** Bytes of the parts of the document that are not entries (claims by their running tally). */
 export function overheadBytes(s: Readonly<SpaceState>): number {
-	return jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {});
+	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {});
 }
 /** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
 export function claimBytes(s: Readonly<SpaceState>): number {
@@ -375,7 +376,9 @@ export function matches(t: Template, e: { id?: string; types: string[]; fields: 
  * this. Lapses are replayed in time order, so when nobody looked for a while the outcome is still what it would have
  * been at each moment: an entry returned by a transaction that expired before a waiter's deadline serves that waiter.
  */
+export function assertAdminIdle(s: Readonly<SpaceState>):void {if(s.adminMaintenance)throw new PermissionError("Space has a pending administrative deletion");}
 export function settle(s: SpaceState, now: number): void {
+	if(s.adminMaintenance)return;
 	const ownBudget = !commitBudgets.has(s);
 	if (ownBudget) commitBudgets.set(s, { used: 0 });
 	try { settleBatch(s, now); } finally { if (ownBudget) commitBudgets.delete(s); }
@@ -605,6 +608,7 @@ function apply(s: SpaceState, now: number, e: EntryRec, txn: string | null, take
 }
 
 export function createTxn(s: SpaceState, now: number, lease: number, as?: Target): Lease {
+	assertAdminIdle(s);
 	settle(s, now);
 	if (as !== undefined && Object.values(s.txns).filter(ownedBy(as)).length >= limitsOf(s).maxTxnsPerOwner) throw new LimitError(`you already have ${limitsOf(s).maxTxnsPerOwner} open transactions`);
 	const t: TxnRec = { id: newId(s, "t"), expires: grant(lease, now), owner: as ?? null };
@@ -694,6 +698,7 @@ export function cancelWaiter(s: SpaceState, id: string, now = Date.now()): boole
 // A take-waiter takes its entry under a fresh transaction, so a lost delivery is not a lost job: the entry returns
 // when that transaction's lease lapses unless the receiver commits it.
 function serve(s: SpaceState, now: number): void {
+	if(s.adminMaintenance)return;
 	if(s.membership && ["adding","removing","detached","recoveryBlocked"].includes(s.membership.state))return;
 	for (const w of [...s.waiters]) {
 		if (w.claimKey) {
@@ -818,6 +823,7 @@ function leased(s: SpaceState, id: string, as: Target | undefined): { set(v: num
 	return l;
 }
 export function renew(s: SpaceState, now: number, id: string, ms: number, as?: Target): number {
+	assertAdminIdle(s);
 	settle(s, now);
 	const l = leased(s, id, as);
 	const v = grant(ms, now);
@@ -881,6 +887,7 @@ function standing(s: Readonly<SpaceState>, e: EntryRec, now: number): Standing {
 
 /** How many entries match, as `read` would see them (under `txn`, if given). Does not modify anything. */
 export function count(s: Readonly<SpaceState>, now: number, tmpl: Template = null, txn: string | null = null, as?: Target): number {
+	assertAdminIdle(s);
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
 	let n = 0;
@@ -898,6 +905,7 @@ export const MAX_LIST = 1000;
  * anything, so it is safe for dashboards. `as` is checked against `txn` like for any other use of a transaction.
  */
 export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null, txn: string | null = null, limit = Number.MAX_SAFE_INTEGER, as?: Target): EntryView[] {
+	assertAdminIdle(s);
 	if (!Number.isInteger(limit) || limit < 1) throw new IllegalArgumentError("limit must be a positive integer");
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
@@ -981,6 +989,7 @@ export type Changes = { streamId: string; batches: Batch[]; next: number; rev: n
  * history `SnapshotExpired`. Pure, so it runs on any snapshot.
  */
 export function changes(s: Readonly<SpaceState>, afterRev: number, o: { maxBytes?: number } = {}): Changes {
+	assertAdminIdle(s);
 	const lim = limitsOf(s);
 	const budget = o.maxBytes === undefined ? lim.maxFrameBytes : o.maxBytes;
 	if (!Number.isInteger(budget) || budget <= 0) throw new IllegalArgumentError("maxBytes must be a positive integer");
@@ -1028,6 +1037,7 @@ export function closeRegistrationsForRemoval(s:SpaceState,now:number):void {for(
 
 /** Trusted administrative purge only; the caller must commit a separately scoped audit atomically. */
 export function purgeTasks(s:SpaceState,now:number,template:Template):number {
+	assertAdminIdle(s);
  settle(s,now);
  const tasks=s.entries.filter(e=>matches(template,e));
  if(tasks.some(e=>!(s.completionProfiles??[]).some(p=>e.types.includes(p.taskType))))throw new PermissionError("purgeTasks accepts only profiled tasks");

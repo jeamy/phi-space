@@ -120,5 +120,7 @@ AP 2.6/2.7 sind um Abschlussbudgets, auditierte lokale Admin-Bausteine,
 Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lasttest
 für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweise
 und offenen Grenzen. Die vollständige Phase 2 ist noch nicht freigegeben:
-Journal-Skalierung, verteilter/batchweiser F9-Löschlauf und Drei-Member-Sieb
-über NetBird fehlen. RunGate und Replikation folgen später.
+Journal-Skalierung, verteilter F9-Löschlauf und Drei-Member-Sieb
+über NetBird fehlen. Die lokale batchweise Principal-Löschung mit dauerhaftem
+Fortschritt, Space-Sperre und Crash-Recovery ist inzwischen implementiert und
+auf beiden Speicher-Backends geprüft. RunGate und Replikation folgen später.

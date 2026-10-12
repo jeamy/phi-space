@@ -9,6 +9,7 @@ const hosts = new WeakMap<object, Map<string, Record>>();
 export type SnapshotPageOptions = { maxBytes?: number; after?: string | null; token?: string; txn?: string | null };
 
 export function snapshotPage(host: object, state: Readonly<core.SpaceState>, now: number, tmpl: core.Template, o: SnapshotPageOptions, owner?: core.Target): core.Page {
+	core.assertAdminIdle(state);
 	let cache = hosts.get(host); if (!cache) { cache = new Map(); hosts.set(host, cache); }
 	for (const [key, s] of cache) if (s.expires <= now) cache.delete(key);
 	const limits = core.limitsOf(state), streamId = core.streamIdOf(state);

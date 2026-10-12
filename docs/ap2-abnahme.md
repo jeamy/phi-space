@@ -14,7 +14,7 @@ Lokale Übergangsprofile bleiben für nicht verwaltete Spaces kompatibel.
 
 `DataAdminController` implementiert `purgeTasks` sowie `deletePrincipal` mit
 separater Autorisierung pro Command/Space, Autoritätsprüfung im Commit und
-atomarer, deduplizierter Audit-Aufzeichnung. `purgeTasks` löscht ausschließlich
+pro Batch atomarer, deduplizierter Fortschritts- und Audit-Aufzeichnung. `purgeTasks` löscht ausschließlich
 unreservierte profilierte Tasks. Bei der Principal-Löschung werden eigene Entries,
 Claims, Generations und Mailboxes entfernt. Fremde Mailboxes mit betroffenen
 Entries erhalten eine neue Epoche und Gap; betroffene fremde Claim-Ergebnisse
@@ -22,9 +22,21 @@ verfallen ohne erneute Wirkung. Stream-Historie wird verworfen und alte
 Snapshot-Tokens werden ungültig. Der Supervisor bindet die Handler nur ein,
 wenn ein autorisierter Controller provisioniert ist.
 
-**Grenze:** Principal-Löschung setzt derzeit einen ruhenden lokalen Space voraus
-und lehnt Änderungen oberhalb `maxCommitBytes` atomar ab. Der mehrstufige
-Löschlauf über große Bestände, Remote-Members und Router-Historien fehlt noch.
+Der lokale Principal-Löschlauf verarbeitet große Bestände in höchstens 32
+Mutationen pro Commit und belastet das vorhandene Commit-Budget. Command-ID,
+Argument-Hash, Phase, Anzahl und Ziel-Tupel bleiben dauerhaft gespeichert.
+Der Space ist währenddessen für neue Wirkungen, Generations und Objektabfragen
+gesperrt; Snapshot-Tokens werden zu Beginn und Abschluss ungültig. Nach Crash
+oder verlorener Commit-Antwort setzt derselbe Command an der gespeicherten
+Phase fort. Scope und Autorität werden vor und innerhalb jedes Batches erneut
+geprüft. Ein Inkarnations-/Autoritätswechsel verlangt Review, auch beim Replay
+eines bereits abgeschlossenen neuen Lösch-Commands.
+
+**Grenze:** Die Löschung benötigt zunächst einen ruhenden lokalen Space.
+Die Sperre bleibt bei Widerruf oder unklarem Restore erhalten. Ein einzelner
+Metadaten-Tombstone, der nicht ins Budget passt, wird ohne Teil-Commit
+abgewiesen; die laufende Löschung bleibt gesperrt. Der Löschlauf über
+Remote-Members und Router-Historien fehlt noch.
 Daher ist F9 noch nicht vollständig erfüllt. Profiländerungen an bestehenden
 Task-Typen bleiben `MigrationRequired`; ein kontrollierter Umstellungsablauf
 wird dadurch nicht ersetzt.
@@ -101,7 +113,7 @@ Journal-Aufteilung sowie deren Crash- und Retry-Nachweise nötig.
 | Stabile Child-IDs, Retry, Restore | Router-/Parent-Tests auf JSONL und SQLite; Reconciliation-Hook bei tatsächlichem Root zu provisionieren |
 | Drain, Ergebnis-Commit, Remove, Notify und EmptyProof | Membership- und Core-Tests einschließlich globaler Abschlussbudgets |
 | Capability und MemberStatus | JSONL-/SQLite-Tests plus zusammengesetzter Host-TCP-RPC-Test; produktive Provisionierung offen |
-| Admin-Purge und F9 | Lokaler, atomarer, auditierter Baustein geprüft; verteilter/batchweiser Löschlauf offen |
+| Admin-Purge und F9 | Lokale batchweise Löschung mit Sperre/Crash-Recovery geprüft; verteilter Löschlauf und Router-Historien offen |
 | 10.000 Entries, drei Members, 1.000 Jobs, sechs Worker | Member-Lasttest; finaler Bericht in den verlinkten Nachweisen |
 | Virtueller Router unter dieser Last | Nicht erfüllt: dokumentierte Historiengrenzen |
 | Crash nach jeder Journal-/RPC-/ACK-Grenze unter voller Last | Vollständige Lastmatrix offen; vorhandene gezielte Crash-Tests bleiben gültig |
@@ -110,3 +122,17 @@ Journal-Aufteilung sowie deren Crash- und Retry-Nachweise nötig.
 | Gesamtfreigabe Phase 2 / finale Gate-4-Werte | Nicht erteilt |
 
 Nachweise und Prüfzahlen: [Abnahmeverzeichnis](../test/evidence/ap2-final-2026-10-11/).
+
+## Nachtrag 2026-10-12: lokale batchweise Löschung
+
+Die Tests löschen 240 Entries samt Claims aus einem Bestand über 1 MiB bei
+`maxCommitBytes = 4096`. Dabei wird die kombinierte Größe der tatsächlich
+persistierten Änderungs-Deltas beider betroffenen Dokumente geprüft. Speicher-
+Checkpoints sind vollständige Zustandssnapshots und werden separat von
+Mutations-Deltas betrachtet. Alle sechs Phasen werden auf JSONL und SQLite
+mit Crash vor dem Commit und verlorener Antwort nach dem Commit geprüft.
+Fremde Entries bleiben erhalten; neue Wirkungen sind bis zum Abschluss gesperrt.
+Die Löschung betrifft den aktuell zugänglichen Zustand; physische Bereinigung
+von Backend-Historien, Snapshots und Backups ist damit nicht nachgewiesen.
+
+Aktuelle Nachweise: [Prüfstand 2026-10-12](../test/evidence/ap2-batches-2026-10-12/).

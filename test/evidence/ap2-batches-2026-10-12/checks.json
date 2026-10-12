@@ -1,0 +1,39 @@
+{
+  "phase2Accepted": false,
+  "typecheck": true,
+  "tests": 388,
+  "examples": 158,
+  "serverBuiltTests": 153,
+  "mobileRemoteTests": 24,
+  "artifactSha256": "bb445ba0ca8fa073485a6cee38fd8ceaa970f1d4ac71b07d68719732c3bee6c2",
+  "mobileBundleSha256": "bb445ba0ca8fa073485a6cee38fd8ceaa970f1d4ac71b07d68719732c3bee6c2",
+  "artifactMatchesMobileBundle": true,
+  "serverBuiltTestsNetwork": "none",
+  "productionServicesReplaced": false,
+  "phoneRetestedThisCheckpoint": false,
+  "localPrincipalDeletion": {
+    "backends": [
+      "JSONL",
+      "SQLite"
+    ],
+    "entries": 240,
+    "initialStateBytes": ">1048576",
+    "maxCommitBytes": 4096,
+    "batchesPerBackend": 99,
+    "maxObservedCombinedPersistedMutationDeltaBytes": 1293,
+    "crashPhases": 6,
+    "crashModes": [
+      "before commit",
+      "lost response after commit"
+    ],
+    "restartScopeAndAuthorityChecksPassed": true
+  },
+  "open": [
+    "distributed principal deletion including Router/parent histories",
+    "physical archive and backup deletion policy",
+    "bounded Router/parent history scalability",
+    "controlled completion-profile transition",
+    "production directory provisioning",
+    "three-Member sieve over real NetBird and full crash boundary matrix"
+  ]
+}

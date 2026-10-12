@@ -25,6 +25,7 @@ export type CompletionAllowance = {
 const routerPermit = new WeakMap<object, boolean>();
 export function permitRoutedWrite(s: SpaceState, proven: boolean) { routerPermit.set(s, proven); }
 export function assertMemberAdmission(s: SpaceState, method: string) {
+    if(s.adminMaintenance)throw new MemberDrained("Space has a pending administrative deletion");
     const a = s.membership;
     if (a && [ 'adding', 'removing', 'detached', 'recoveryBlocked' ].includes(a.state) &&
         !['ack', 'cancelOperation', 'txn.abort'].includes(method))
@@ -47,9 +48,9 @@ export function initializeMemberTxn(s: SpaceState, t: TxnRec, now: number) {
 }
 export function assertMemberWrite(s: SpaceState, entry: EntryDraft, txn: string|null, now: number) {
     const a = s.membership;
+    assertMemberAdmission(s, 'write');
     if (!a)
         return;
-    assertMemberAdmission(s, 'write');
     if (!a.policy)
         throw new RoutingConflict('Member policy is not installed');
     const p = a.policy, r = ruleFor(p, entry.type), parents = declaredSupertypes(p, entry.type),

@@ -7,7 +7,7 @@
 // hash only; the result is stored in full until its retention ends, then only the hash remains.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { canonicalJson } from "./canonical.ts";
-import { LimitError, maintenanceStep, claimBytes, limitsOf, touch, type Json, type SpaceState } from "./core.ts";
+import { LimitError, assertAdminIdle, maintenanceStep, claimBytes, limitsOf, touch, type Json, type SpaceState } from "./core.ts";
 
 const encoder = new TextEncoder();
 const bytesOf = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
@@ -67,6 +67,7 @@ export const keyOf = (s: Readonly<SpaceState>, r: RequestRef): string => canonic
 
 /** A new generation for `principal`: it admits new request ids until `admitUntil`. */
 export function issueGeneration(s: SpaceState, now: number, principal: Principal, options: { key?: string; authorityId?: string } = {}): { generation: string; admitUntil: number } {
+	assertAdminIdle(s);
 	checkPrincipal(principal);
 	sweep(s, now);
 	const st = rpc(s);
@@ -95,6 +96,7 @@ export type Admission =
  * `deadline` is used for a fresh claim only; a known claim keeps the one it was given first.
  */
 export function admit(s: SpaceState, now: number, r: RequestRef, method: string, args: Json, deadline: number, resultBytes = 1024): Admission {
+	assertAdminIdle(s);
 	checkPrincipal(r.principal);
 	if (typeof r.requestId !== "string" || r.requestId === "" || typeof r.generation !== "string") throw new TypeError("request needs a generation and a requestId");
 	sweep(s, now);

@@ -1,0 +1,1498 @@
+
+> pi-spaces@0.0.1 test:examples
+> node --experimental-strip-types --test test/examples/*.test.ts
+
+TAP version 13
+# (node:2799451) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: arxiv-research.ts
+    # Subtest: Paper-Sammlung
+        # Subtest: T9.1.1: Collector schreibt Paper in Space
+        ok 1 - T9.1.1: Collector schreibt Paper in Space
+          ---
+          duration_ms: 187.548615
+          type: 'test'
+          ...
+        # Subtest: T9.1.2: Collector schreibt CollectorDone
+        ok 2 - T9.1.2: Collector schreibt CollectorDone
+          ---
+          duration_ms: 66.833037
+          type: 'test'
+          ...
+        # Subtest: T9.1.3: Mehrere Collector - keine Duplikate
+        ok 3 - T9.1.3: Mehrere Collector - keine Duplikate
+          ---
+          duration_ms: 160.507619
+          type: 'test'
+          ...
+        1..3
+    ok 1 - Paper-Sammlung
+      ---
+      duration_ms: 416.880409
+      type: 'suite'
+      ...
+    # Subtest: Analyse
+        # Subtest: T9.2.1: Analyst findet alle Paper
+        ok 1 - T9.2.1: Analyst findet alle Paper
+          ---
+          duration_ms: 123.015436
+          type: 'test'
+          ...
+        # Subtest: T9.2.2: Analyst erstellt Gesamtsicht (order=99)
+        ok 2 - T9.2.2: Analyst erstellt Gesamtsicht (order=99)
+          ---
+          duration_ms: 123.080127
+          type: 'test'
+          ...
+        1..2
+    ok 2 - Analyse
+      ---
+      duration_ms: 246.645325
+      type: 'suite'
+      ...
+    # Subtest: Präsentation
+        # Subtest: T9.3.1: Presenter erstellt Report
+        ok 1 - T9.3.1: Presenter erstellt Report
+          ---
+          duration_ms: 101.147829
+          type: 'test'
+          ...
+        1..1
+    ok 3 - Präsentation
+      ---
+      duration_ms: 101.968361
+      type: 'suite'
+      ...
+    # Subtest: Komplette Pipeline
+        # Subtest: T9.4.1: Vollständiger Durchlauf - 3 Collector, Analyst, Presenter
+        ok 1 - T9.4.1: Vollständiger Durchlauf - 3 Collector, Analyst, Presenter
+          ---
+          duration_ms: 172.709683
+          type: 'test'
+          ...
+        1..1
+    ok 4 - Komplette Pipeline
+      ---
+      duration_ms: 172.960633
+      type: 'suite'
+      ...
+    # Subtest: Notizen und Messages
+        # Subtest: T9.5.1: Collector schreibt Msg an Analyst
+        ok 1 - T9.5.1: Collector schreibt Msg an Analyst
+          ---
+          duration_ms: 25.60948
+          type: 'test'
+          ...
+        # Subtest: T9.5.2: Analyst liest Msg-Notizen
+        ok 2 - T9.5.2: Analyst liest Msg-Notizen
+          ---
+          duration_ms: 97.498296
+          type: 'test'
+          ...
+        1..2
+    ok 5 - Notizen und Messages
+      ---
+      duration_ms: 123.518249
+      type: 'suite'
+      ...
+    1..5
+ok 1 - arxiv-research.ts
+  ---
+  duration_ms: 1064.062524
+  type: 'suite'
+  ...
+# Subtest: blocking-tool.ts
+    # Subtest: Grundlegende Timeout-Handhabung
+        # Subtest: sollte Task mit sofortiger Verfügbarkeit nehmen
+        ok 1 - sollte Task mit sofortiger Verfügbarkeit nehmen
+          ---
+          duration_ms: 30.818039
+          type: 'test'
+          ...
+        # Subtest: sollte Task mit Verzögerung nehmen
+        ok 2 - sollte Task mit Verzögerung nehmen
+          ---
+          duration_ms: 141.507902
+          type: 'test'
+          ...
+        # Subtest: sollte nach Timeout scheitern
+        ok 3 - sollte nach Timeout scheitern
+          ---
+          duration_ms: 1005.478786
+          type: 'test'
+          ...
+        1..3
+    ok 1 - Grundlegende Timeout-Handhabung
+      ---
+      duration_ms: 1179.273333
+      type: 'suite'
+      ...
+    # Subtest: take mit Timeout-Parameter
+        # Subtest: sollte Timeout-Parameter akzeptieren
+        ok 1 - sollte Timeout-Parameter akzeptieren
+          ---
+          duration_ms: 7.462156
+          type: 'test'
+          ...
+        # Subtest: sollte bei Timeout null zurückgeben
+        ok 2 - sollte bei Timeout null zurückgeben
+          ---
+          duration_ms: 103.711328
+          type: 'test'
+          ...
+        1..2
+    ok 2 - take mit Timeout-Parameter
+      ---
+      duration_ms: 111.736227
+      type: 'suite'
+      ...
+    # Subtest: Wettlauf-Bedingungen
+        # Subtest: sollte nur einen Worker den Task erhalten lassen
+        ok 1 - sollte nur einen Worker den Task erhalten lassen
+          ---
+          duration_ms: 9.447784
+          type: 'test'
+          ...
+        # Subtest: sollte atomares take gewährleisten
+        ok 2 - sollte atomares take gewährleisten
+          ---
+          duration_ms: 4.613097
+          type: 'test'
+          ...
+        1..2
+    ok 3 - Wettlauf-Bedingungen
+      ---
+      duration_ms: 14.462111
+      type: 'suite'
+      ...
+    # Subtest: Reihenfolge der Operationen
+        # Subtest: sollte write vor take ausführen
+        ok 1 - sollte write vor take ausführen
+          ---
+          duration_ms: 83.435516
+          type: 'test'
+          ...
+        # Subtest: sollte bei write nach timeout scheitern
+        ok 2 - sollte bei write nach timeout scheitern
+          ---
+          duration_ms: 103.338697
+          type: 'test'
+          ...
+        1..2
+    ok 4 - Reihenfolge der Operationen
+      ---
+      duration_ms: 187.191905
+      type: 'suite'
+      ...
+    # Subtest: Mehrfaches take
+        # Subtest: sollte mehrere Takes in Reihe ausführen
+        ok 1 - sollte mehrere Takes in Reihe ausführen
+          ---
+          duration_ms: 6.903974
+          type: 'test'
+          ...
+        # Subtest: sollte nach Leerwerden null zurückgeben
+        ok 2 - sollte nach Leerwerden null zurückgeben
+          ---
+          duration_ms: 104.54991
+          type: 'test'
+          ...
+        1..2
+    ok 5 - Mehrfaches take
+      ---
+      duration_ms: 111.851026
+      type: 'suite'
+      ...
+    # Subtest: Performance-Tests
+        # Subtest: sollte schnelle takes durchführen
+        ok 1 - sollte schnelle takes durchführen
+          ---
+          duration_ms: 21.481676
+          type: 'test'
+          ...
+        # Subtest: sollte Timeout schnell erkennen
+        ok 2 - sollte Timeout schnell erkennen
+          ---
+          duration_ms: 51.046931
+          type: 'test'
+          ...
+        1..2
+    ok 6 - Performance-Tests
+      ---
+      duration_ms: 72.842278
+      type: 'suite'
+      ...
+    # Subtest: Fehlerbehandlung
+        # Subtest: sollte mit ungültigem Template umgehen
+        ok 1 - sollte mit ungültigem Template umgehen
+          ---
+          duration_ms: 100.934268
+          type: 'test'
+          ...
+        # Subtest: sollte mit null/undefined umgehen
+        ok 2 - sollte mit null/undefined umgehen
+          ---
+          duration_ms: 203.957383
+          type: 'test'
+          ...
+        1..2
+    ok 7 - Fehlerbehandlung
+      ---
+      duration_ms: 305.494774
+      type: 'suite'
+      ...
+    1..7
+ok 2 - blocking-tool.ts
+  ---
+  duration_ms: 1995.202956
+  type: 'suite'
+  ...
+# Subtest: blocking-tool.ts – Mock-Timer-Tests
+    # Subtest: sollte mit verzögertem Write einen wartenden Take wecken
+    ok 1 - sollte mit verzögertem Write einen wartenden Take wecken
+      ---
+      duration_ms: 140.632429
+      type: 'test'
+      ...
+    1..1
+ok 3 - blocking-tool.ts – Mock-Timer-Tests
+  ---
+  duration_ms: 143.469169
+  type: 'suite'
+  ...
+# Subtest: blocking-tool.ts – Konsolenausgabe
+    # Subtest: sollte keine Fehler bei normaler Ausführung loggen
+    ok 1 - sollte keine Fehler bei normaler Ausführung loggen
+      ---
+      duration_ms: 1.957688
+      type: 'test'
+      ...
+    1..1
+ok 4 - blocking-tool.ts – Konsolenausgabe
+  ---
+  duration_ms: 2.73659
+  type: 'suite'
+  ...
+# (node:2799453) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: Cache distinguishes a cached null from a miss and isolates namespaces
+ok 5 - Cache distinguishes a cached null from a miss and isolates namespaces
+  ---
+  duration_ms: 44.634568
+  type: 'test'
+  ...
+# Subtest: Cache concurrent replacements leave one key and increasing persistent versions
+ok 6 - Cache concurrent replacements leave one key and increasing persistent versions
+  ---
+  duration_ms: 71.025262
+  type: 'test'
+  ...
+# Subtest: Cache compare-and-set has one winner and failed CAS preserves the current value
+ok 7 - Cache compare-and-set has one winner and failed CAS preserves the current value
+  ---
+  duration_ms: 11.28475
+  type: 'test'
+  ...
+# Subtest: Cache TTL, renewal, zero TTL and stale delete use a deterministic clock
+ok 8 - Cache TTL, renewal, zero TTL and stale delete use a deterministic clock
+  ---
+  duration_ms: 9.407924
+  type: 'test'
+  ...
+# Subtest: Cache byte-limit failure rolls replacement back, and values are detached
+ok 9 - Cache byte-limit failure rolls replacement back, and values are detached
+  ---
+  duration_ms: 13.438628
+  type: 'test'
+  ...
+# Subtest: Cache external transaction conflicts do not overwrite a reservation
+ok 10 - Cache external transaction conflicts do not overwrite a reservation
+  ---
+  duration_ms: 29.804136
+  type: 'test'
+  ...
+# Subtest: Cache survives JSONL reopen without reusing old versions after delete
+ok 11 - Cache survives JSONL reopen without reusing old versions after delete
+  ---
+  duration_ms: 78.335958
+  type: 'test'
+  ...
+# Subtest: Actual cache demo replaces and deletes its value
+ok 12 - Actual cache demo replaces and deletes its value
+  ---
+  duration_ms: 8.56034
+  type: 'test'
+  ...
+# (node:2799454) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: chat.ts
+    # Subtest: Ring-Struktur
+        # Subtest: T6.1.1: Nachrichten folgen Ring-Topologie
+        ok 1 - T6.1.1: Nachrichten folgen Ring-Topologie
+          ---
+          duration_ms: 1074.42398
+          type: 'test'
+          ...
+        # Subtest: T6.1.2: Nachrichten-Zählung (exakte Anzahl)
+        ok 2 - T6.1.2: Nachrichten-Zählung (exakte Anzahl)
+          ---
+          duration_ms: 112.494799
+          type: 'test'
+          ...
+        # Subtest: T6.1.3: Determinismus - gleiche Eingabe = gleiche Ausgabe
+        ok 3 - T6.1.3: Determinismus - gleiche Eingabe = gleiche Ausgabe
+          ---
+          duration_ms: 2018.635819
+          type: 'test'
+          ...
+        1..3
+    ok 1 - Ring-Struktur
+      ---
+      duration_ms: 3207.830757
+      type: 'suite'
+      ...
+    # Subtest: Notify-Funktionalität
+        # Subtest: T6.2.1: Agent wird durch Notify aktiviert
+        ok 1 - T6.2.1: Agent wird durch Notify aktiviert
+          ---
+          duration_ms: 510.628981
+          type: 'test'
+          ...
+        # Subtest: T6.2.2: Mehrere Räume bleiben isoliert
+        ok 2 - T6.2.2: Mehrere Räume bleiben isoliert
+          ---
+          duration_ms: 4.363336
+          type: 'test'
+          ...
+        1..2
+    ok 2 - Notify-Funktionalität
+      ---
+      duration_ms: 515.487878
+      type: 'suite'
+      ...
+    # Subtest: Performance
+        # Subtest: T6.4.1: Durchsatz - 100 Nachrichten
+        ok 1 - T6.4.1: Durchsatz - 100 Nachrichten
+          ---
+          duration_ms: 138.736612
+          type: 'test'
+          ...
+        # Subtest: T6.4.2: Latenz - Single Message Round-Trip
+        ok 2 - T6.4.2: Latenz - Single Message Round-Trip
+          ---
+          duration_ms: 8.117489
+          type: 'test'
+          ...
+        1..2
+    ok 3 - Performance
+      ---
+      duration_ms: 147.484833
+      type: 'suite'
+      ...
+    # Subtest: Edge Cases
+        # Subtest: T6.5.1: Leere Raum-Name
+        ok 1 - T6.5.1: Leere Raum-Name
+          ---
+          duration_ms: 4.479196
+          type: 'test'
+          ...
+        # Subtest: T6.5.2: Lange Nachrichtentext
+        ok 2 - T6.5.2: Lange Nachrichtentext
+          ---
+          duration_ms: 3.099251
+          type: 'test'
+          ...
+        # Subtest: T6.5.3: Spezielle Charaktere in Text
+        ok 3 - T6.5.3: Spezielle Charaktere in Text
+          ---
+          duration_ms: 2.263558
+          type: 'test'
+          ...
+        1..3
+    ok 4 - Edge Cases
+      ---
+      duration_ms: 10.091006
+      type: 'suite'
+      ...
+    1..4
+ok 13 - chat.ts
+  ---
+  duration_ms: 3882.835731
+  type: 'suite'
+  ...
+# Subtest: chat.ts Integration Tests
+    # Subtest: Full Chat Cycle - 3 Agenten, 5 Runden
+    ok 1 - Full Chat Cycle - 3 Agenten, 5 Runden
+      ---
+      duration_ms: 209.835255
+      type: 'test'
+      ...
+    1..1
+ok 14 - chat.ts Integration Tests
+  ---
+  duration_ms: 210.547977
+  type: 'suite'
+  ...
+# (node:2799455) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: dark-energy-research.ts
+    # Subtest: Crawling-Phase
+        # Subtest: T10.1.1: Crawler schreibt PaperMetadata
+        ok 1 - T10.1.1: Crawler schreibt PaperMetadata
+          ---
+          duration_ms: 192.304323
+          type: 'test'
+          ...
+        # Subtest: T10.1.2: Crawler schreibt CrawlDone
+        ok 2 - T10.1.2: Crawler schreibt CrawlDone
+          ---
+          duration_ms: 82.679123
+          type: 'test'
+          ...
+        # Subtest: T10.1.3: Deduplizierung - gleiche Paper nicht doppelt
+        ok 3 - T10.1.3: Deduplizierung - gleiche Paper nicht doppelt
+          ---
+          duration_ms: 45.344251
+          type: 'test'
+          ...
+        1..3
+    ok 1 - Crawling-Phase
+      ---
+      duration_ms: 321.738411
+      type: 'suite'
+      ...
+    # Subtest: Klassifizierungs-Phase
+        # Subtest: T10.2.1: Classifier klassifiziert alle Paper
+        ok 1 - T10.2.1: Classifier klassifiziert alle Paper
+          ---
+          duration_ms: 164.720884
+          type: 'test'
+          ...
+        # Subtest: T10.2.2: Classifier schreibt ClassificationDone
+        ok 2 - T10.2.2: Classifier schreibt ClassificationDone
+          ---
+          duration_ms: 166.112059
+          type: 'test'
+          ...
+        # Subtest: T10.2.3: Klassifizierung erkennt Relevanz
+        ok 3 - T10.2.3: Klassifizierung erkennt Relevanz
+          ---
+          duration_ms: 109.089157
+          type: 'test'
+          ...
+        1..3
+    ok 2 - Klassifizierungs-Phase
+      ---
+      duration_ms: 441.515086
+      type: 'suite'
+      ...
+    # Subtest: Zusammenfassungs-Phase
+        # Subtest: T10.3.1: Summarizer fasst high-relevance Paper zusammen
+        ok 1 - T10.3.1: Summarizer fasst high-relevance Paper zusammen
+          ---
+          duration_ms: 116.001132
+          type: 'test'
+          ...
+        # Subtest: T10.3.2: Summarizer schreibt SummarizationDone
+        ok 2 - T10.3.2: Summarizer schreibt SummarizationDone
+          ---
+          duration_ms: 103.915668
+          type: 'test'
+          ...
+        1..2
+    ok 3 - Zusammenfassungs-Phase
+      ---
+      duration_ms: 220.585112
+      type: 'suite'
+      ...
+    # Subtest: Analyse-Phase
+        # Subtest: T10.4.1: Analyst führt alle Analysen durch
+        ok 1 - T10.4.1: Analyst führt alle Analysen durch
+          ---
+          duration_ms: 119.773845
+          type: 'test'
+          ...
+        # Subtest: T10.4.2: Analyst schreibt PresentTask
+        ok 2 - T10.4.2: Analyst schreibt PresentTask
+          ---
+          duration_ms: 98.937411
+          type: 'test'
+          ...
+        1..2
+    ok 4 - Analyse-Phase
+      ---
+      duration_ms: 219.101537
+      type: 'suite'
+      ...
+    # Subtest: Präsentations-Phase
+        # Subtest: T10.5.1: Presenter erstellt Präsentation
+        ok 1 - T10.5.1: Presenter erstellt Präsentation
+          ---
+          duration_ms: 111.485136
+          type: 'test'
+          ...
+        1..1
+    ok 5 - Präsentations-Phase
+      ---
+      duration_ms: 111.769176
+      type: 'suite'
+      ...
+    # Subtest: Monitoring
+        # Subtest: T10.6.1: Monitor erstellt SystemStatus
+        ok 1 - T10.6.1: Monitor erstellt SystemStatus
+          ---
+          duration_ms: 1087.202246
+          type: 'test'
+          ...
+        # Subtest: T10.6.2: SystemStatus enthält korrekte Statistik
+        ok 2 - T10.6.2: SystemStatus enthält korrekte Statistik
+          ---
+          duration_ms: 1092.522605
+          type: 'test'
+          ...
+        1..2
+    ok 6 - Monitoring
+      ---
+      duration_ms: 2180.210542
+      type: 'suite'
+      ...
+    # Subtest: Chat-Funktionalität
+        # Subtest: T10.7.1: Chat-Agent beantwortet UserQuery
+        ok 1 - T10.7.1: Chat-Agent beantwortet UserQuery
+          ---
+          duration_ms: 98.165019
+          type: 'test'
+          ...
+        # Subtest: T10.7.2: QueryResponse enthält Quellen
+        ok 2 - T10.7.2: QueryResponse enthält Quellen
+          ---
+          duration_ms: 96.293961
+          type: 'test'
+          ...
+        1..2
+    ok 7 - Chat-Funktionalität
+      ---
+      duration_ms: 194.793531
+      type: 'suite'
+      ...
+    # Subtest: Komplette Pipeline
+        # Subtest: T10.8.1: Alle Phasen durchlaufen
+        ok 1 - T10.8.1: Alle Phasen durchlaufen
+          ---
+          duration_ms: 233.294798
+          type: 'test'
+          ...
+        1..1
+    ok 8 - Komplette Pipeline
+      ---
+      duration_ms: 233.541348
+      type: 'suite'
+      ...
+    1..8
+ok 15 - dark-energy-research.ts
+  ---
+  duration_ms: 3925.902214
+  type: 'suite'
+  ...
+# (node:2799456) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: BitSet Implementation
+    # Subtest: T9.1.1: BitSet - set und get
+    ok 1 - T9.1.1: BitSet - set und get
+      ---
+      duration_ms: 2.62575
+      type: 'test'
+      ...
+    # Subtest: T9.1.2: BitSet - toArray
+    ok 2 - T9.1.2: BitSet - toArray
+      ---
+      duration_ms: 3.660193
+      type: 'test'
+      ...
+    # Subtest: T9.1.3: BitSet - fromArray
+    ok 3 - T9.1.3: BitSet - fromArray
+      ---
+      duration_ms: 4.424636
+      type: 'test'
+      ...
+    # Subtest: T9.1.4: BitSet - clone
+    ok 4 - T9.1.4: BitSet - clone
+      ---
+      duration_ms: 0.907574
+      type: 'test'
+      ...
+    # Subtest: T9.1.5: BitSet - Auto-Expand
+    ok 5 - T9.1.5: BitSet - Auto-Expand
+      ---
+      duration_ms: 2.62245
+      type: 'test'
+      ...
+    1..5
+ok 16 - BitSet Implementation
+  ---
+  duration_ms: 17.664423
+  type: 'suite'
+  ...
+# Subtest: GolombRuler Utilities
+    # Subtest: isValid
+        # Subtest: T9.2.1: Gültiges Golomb-Lineal (Ordnung 4)
+        ok 1 - T9.2.1: Gültiges Golomb-Lineal (Ordnung 4)
+          ---
+          duration_ms: 5.273149
+          type: 'test'
+          ...
+        # Subtest: T9.2.2: Gültiges Golomb-Lineal (Ordnung 5)
+        ok 2 - T9.2.2: Gültiges Golomb-Lineal (Ordnung 5)
+          ---
+          duration_ms: 11.976552
+          type: 'test'
+          ...
+        # Subtest: T9.2.3: Ungültiges Lineal - Duplikate Differenzen
+        ok 3 - T9.2.3: Ungültiges Lineal - Duplikate Differenzen
+          ---
+          duration_ms: 0.946653
+          type: 'test'
+          ...
+        # Subtest: T9.2.4: Ungültiges Lineal - Negative Positionen
+        ok 4 - T9.2.4: Ungültiges Lineal - Negative Positionen
+          ---
+          duration_ms: 0.528112
+          type: 'test'
+          ...
+        # Subtest: T9.2.5: Ungültiges Lineal - Nicht sortiert
+        ok 5 - T9.2.5: Ungültiges Lineal - Nicht sortiert
+          ---
+          duration_ms: 0.963753
+          type: 'test'
+          ...
+        # Subtest: T9.2.6: Einfaches Lineal (Ordnung 2)
+        ok 6 - T9.2.6: Einfaches Lineal (Ordnung 2)
+          ---
+          duration_ms: 0.698082
+          type: 'test'
+          ...
+        # Subtest: T9.2.7: Einfaches Lineal (Ordnung 3)
+        ok 7 - T9.2.7: Einfaches Lineal (Ordnung 3)
+          ---
+          duration_ms: 0.222421
+          type: 'test'
+          ...
+        1..7
+    ok 1 - isValid
+      ---
+      duration_ms: 21.653946
+      type: 'suite'
+      ...
+    # Subtest: getDistances
+        # Subtest: T9.2.8: Distanzen für Ordnung 4
+        ok 1 - T9.2.8: Distanzen für Ordnung 4
+          ---
+          duration_ms: 0.539322
+          type: 'test'
+          ...
+        # Subtest: T9.2.9: Distanzen für Ordnung 3
+        ok 2 - T9.2.9: Distanzen für Ordnung 3
+          ---
+          duration_ms: 0.244451
+          type: 'test'
+          ...
+        1..2
+    ok 2 - getDistances
+      ---
+      duration_ms: 1.010584
+      type: 'suite'
+      ...
+    # Subtest: getMissingDistances
+        # Subtest: T9.2.10: Fehlende Distanzen für Ordnung 4
+        ok 1 - T9.2.10: Fehlende Distanzen für Ordnung 4
+          ---
+          duration_ms: 0.387521
+          type: 'test'
+          ...
+        # Subtest: T9.2.11: Fehlende Distanzen für unvollständiges Lineal
+        ok 2 - T9.2.11: Fehlende Distanzen für unvollständiges Lineal
+          ---
+          duration_ms: 0.406641
+          type: 'test'
+          ...
+        1..2
+    ok 3 - getMissingDistances
+      ---
+      duration_ms: 0.984893
+      type: 'suite'
+      ...
+    # Subtest: length
+        # Subtest: T9.2.12: Länge ist letzte Position
+        ok 1 - T9.2.12: Länge ist letzte Position
+          ---
+          duration_ms: 0.275551
+          type: 'test'
+          ...
+        # Subtest: T9.2.13: Länge für Ordnung 1
+        ok 2 - T9.2.13: Länge für Ordnung 1
+          ---
+          duration_ms: 0.177271
+          type: 'test'
+          ...
+        1..2
+    ok 4 - length
+      ---
+      duration_ms: 0.621772
+      type: 'suite'
+      ...
+    1..4
+ok 17 - GolombRuler Utilities
+  ---
+  duration_ms: 24.954148
+  type: 'suite'
+  ...
+# Subtest: Bekannte optimale Lösungen
+    # Subtest: T9.3.1: Alle bekannten optimalen Lineale sind gültig
+    ok 1 - T9.3.1: Alle bekannten optimalen Lineale sind gültig
+      ---
+      duration_ms: 0.458652
+      type: 'test'
+      ...
+    # Subtest: T9.3.2: Bekannte optimale Längen sind korrekt
+    ok 2 - T9.3.2: Bekannte optimale Längen sind korrekt
+      ---
+      duration_ms: 0.440761
+      type: 'test'
+      ...
+    # Subtest: T9.3.3: Perfekte Lineale (n ≤ 4) haben keine fehlenden Distanzen
+    ok 3 - T9.3.3: Perfekte Lineale (n ≤ 4) haben keine fehlenden Distanzen
+      ---
+      duration_ms: 0.297431
+      type: 'test'
+      ...
+    # Subtest: T9.3.3b: Größere Lineale haben Lücken, aber alle Distanzen sind eindeutig
+    ok 4 - T9.3.3b: Größere Lineale haben Lücken, aber alle Distanzen sind eindeutig
+      ---
+      duration_ms: 0.388411
+      type: 'test'
+      ...
+    1..4
+ok 18 - Bekannte optimale Lösungen
+  ---
+  duration_ms: 1.949456
+  type: 'suite'
+  ...
+# Subtest: Golomb Pipeline Integration
+    # Subtest: T9.4.1: Vollständige Suche nach Ordnung 4 (sollte schnell sein)
+    ok 1 - T9.4.1: Vollständige Suche nach Ordnung 4 (sollte schnell sein)
+      ---
+      duration_ms: 115.065158
+      type: 'test'
+      ...
+    # Subtest: T9.4.2: Bekannte optimale Lösung wird geladen
+    ok 2 - T9.4.2: Bekannte optimale Lösung wird geladen
+      ---
+      duration_ms: 19.72295
+      type: 'test'
+      ...
+    # Subtest: T9.4.3: Summary wird korrekt erstellt
+    ok 3 - T9.4.3: Summary wird korrekt erstellt
+      ---
+      duration_ms: 20.795613
+      type: 'test'
+      ...
+    1..3
+ok 19 - Golomb Pipeline Integration
+  ---
+  duration_ms: 156.376274
+  type: 'suite'
+  ...
+# Subtest: Validierung von Golomb-Lösungen
+    # Subtest: T9.5.1: Validierung eines bereits bekannten optimalen Lineals
+    ok 1 - T9.5.1: Validierung eines bereits bekannten optimalen Lineals
+      ---
+      duration_ms: 0.401661
+      type: 'test'
+      ...
+    # Subtest: T9.5.2: Generierung aller Differenzen für Ordnung 10
+    ok 2 - T9.5.2: Generierung aller Differenzen für Ordnung 10
+      ---
+      duration_ms: 0.229491
+      type: 'test'
+      ...
+    # Subtest: T9.5.3: Überprüfung aller bekannten Lösungen
+    ok 3 - T9.5.3: Überprüfung aller bekannten Lösungen
+      ---
+      duration_ms: 1.123534
+      type: 'test'
+      ...
+    1..3
+ok 20 - Validierung von Golomb-Lösungen
+  ---
+  duration_ms: 2.006727
+  type: 'suite'
+  ...
+# Subtest: Edge Cases
+    # Subtest: T9.6.1: Leere Positionen-Liste
+    ok 1 - T9.6.1: Leere Positionen-Liste
+      ---
+      duration_ms: 0.298901
+      type: 'test'
+      ...
+    # Subtest: T9.6.2: Einzelne Position (Ordnung 1)
+    ok 2 - T9.6.2: Einzelne Position (Ordnung 1)
+      ---
+      duration_ms: 0.237241
+      type: 'test'
+      ...
+    # Subtest: T9.6.3: Nicht-ganzzahlige Positionen
+    ok 3 - T9.6.3: Nicht-ganzzahlige Positionen
+      ---
+      duration_ms: 0.177981
+      type: 'test'
+      ...
+    # Subtest: T9.6.4: Negative Differenzen (nicht aufsteigend sortiert)
+    ok 4 - T9.6.4: Negative Differenzen (nicht aufsteigend sortiert)
+      ---
+      duration_ms: 0.169261
+      type: 'test'
+      ...
+    # Subtest: T9.6.5: BitSet mit negativen Indizes
+    ok 5 - T9.6.5: BitSet mit negativen Indizes
+      ---
+      duration_ms: 0.235731
+      type: 'test'
+      ...
+    1..5
+ok 21 - Edge Cases
+  ---
+  duration_ms: 1.414915
+  type: 'suite'
+  ...
+# Subtest: Performance Tests
+    # Subtest: T9.7.1: BitSet Performance - 1 Million Bits
+    ok 1 - T9.7.1: BitSet Performance - 1 Million Bits
+      ---
+      duration_ms: 70.118108
+      type: 'test'
+      ...
+    # Subtest: T9.7.2: Validierung Performance - Ordnung 10
+    ok 2 - T9.7.2: Validierung Performance - Ordnung 10
+      ---
+      duration_ms: 15.678035
+      type: 'test'
+      ...
+    # Subtest: T9.7.3: Distanz-Berechnung Performance - Ordnung 10
+    ok 3 - T9.7.3: Distanz-Berechnung Performance - Ordnung 10
+      ---
+      duration_ms: 9.028412
+      type: 'test'
+      ...
+    1..3
+ok 22 - Performance Tests
+  ---
+  duration_ms: 95.169608
+  type: 'suite'
+  ...
+# (node:2799457) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# [Master] order=4, searching rulers with length ≤ 6 (known optimal 6)
+# [Master] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Master] 1 tasks (0 already done)
+# [Master] 0/1 tasks done, 0 rulers, best=6
+# [Worker-w] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Worker-w] ruler length=6 [0,1,4,6]
+# [Worker-w] task golomb-4-task-0 done in 9ms: 1 rulers, 11 nodes
+# [Master] 1/1 tasks done, 1 rulers, best=6
+# [Master] order=4, searching rulers with length ≤ 6 (known optimal 6)
+# [Master] 1 tasks (1 already done)
+# [Master] 1/1 tasks done, 1 rulers, best=6
+# [Worker-w] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Worker-w] ruler length=6 [0,1,4,6]
+# [Worker-w] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Worker-w] ruler length=6 [0,1,4,6]
+# [Worker-w] task golomb-4-task-0 done in 4ms: 1 rulers, 11 nodes
+# Subtest: Golomb executes the real search and resumes a completed persistent run
+ok 23 - Golomb executes the real search and resumes a completed persistent run
+  ---
+  duration_ms: 2154.459421
+  type: 'test'
+  ...
+# Subtest: Golomb failure returns the task and hides uncommitted results
+ok 24 - Golomb failure returns the task and hides uncommitted results
+  ---
+  duration_ms: 7.225986
+  type: 'test'
+  ...
+# Subtest: Legacy partial checkpoint cannot skip unpersisted solutions
+ok 25 - Legacy partial checkpoint cannot skip unpersisted solutions
+  ---
+  duration_ms: 5.203859
+  type: 'test'
+  ...
+# [Worker-recovered] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Master] order=4, searching rulers with length ≤ 6 (known optimal 6)
+# [Worker-recovered] ruler length=6 [0,1,4,6]
+# [Master] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Master] 1 tasks (0 already done)
+# [Worker-recovered] task golomb-4-task-0 done in 7ms: 1 rulers, 11 nodes
+# [Master] 0/1 tasks done, 0 rulers, best=6
+# [Worker-recovered] task golomb-4-task-0: a2 ∈ [1, 4)
+# [Worker-recovered] ruler length=6 [0,1,4,6]
+# [Worker-recovered] task golomb-4-task-0 done in 4ms: 1 rulers, 11 nodes
+# [Master] 2/1 tasks done, 2 rulers, best=6
+# Subtest: Killed Golomb process leaves a recoverable reservation on JSONL
+ok 26 - Killed Golomb process leaves a recoverable reservation on JSONL
+  ---
+  duration_ms: 2811.807263
+  type: 'test'
+  ...
+# Subtest: Sensor validation precedes deduplication and presenter rolls back failures
+ok 27 - Sensor validation precedes deduplication and presenter rolls back failures
+  ---
+  duration_ms: 15.137314
+  type: 'test'
+  ...
+# Subtest: Sensor refuses an oversized window instead of publishing a partial summary
+ok 28 - Sensor refuses an oversized window instead of publishing a partial summary
+  ---
+  duration_ms: 5.742211
+  type: 'test'
+  ...
+# Subtest: arXiv parser preserves date, full author list and full abstract
+ok 29 - arXiv parser preserves date, full author list and full abstract
+  ---
+  duration_ms: 1.574065
+  type: 'test'
+  ...
+# model faux/faux-1
+# topic test
+# state /tmp/research-runner-JavCnl
+# papers 0, done 0/3, analyses 0, report 0
+# papers 0, done 0/3, analyses 0, report 0
+# papers 0, done 0/3, analyses 0, report 0
+# papers 0, done 0/3, analyses 0, report 0
+# papers 2, done 1/3, analyses 0, report 0
+# papers 2, done 2/3, analyses 0, report 0
+# papers 3, done 3/3, analyses 0, report 0
+# papers 3, done 3/3, analyses 0, report 0
+# papers 3, done 3/3, analyses 0, report 0
+# papers 3, done 3/3, analyses 0, report 0
+# papers 3, done 3/3, analyses 0, report 0
+# papers 3, done 3/3, analyses 1, report 0
+# papers 3, done 3/3, analyses 1, report 0
+# papers 3, done 3/3, analyses 1, report 0
+# papers 3, done 3/3, analyses 1, report 0
+# papers 3, done 3/3, analyses 1, report 1
+# \# Scripted report
+# report written to /tmp/research-runner-JavCnl/report.md
+# space: {"entries":8,"byType":{"Paper":3,"CollectorDone":3,"Analysis":1,"Report":1},"locked":0,"uncommitted":0,"expired":0,"txns":0,"waiters":0,"registrations":0,"outbox":0,"returned":0,"bytes":{"entries":381,"outbox":2,"claims":0,"waiters":2,"registrations":2,"txns":2,"total":3895}}
+# model faux/faux-1
+# topic test
+# state /tmp/research-runner-0QRCqV
+# Phase 1: Crawling...
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 1 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✗, Summarize=✗, Present=✗
+# Phase 2: Classification...
+# [CLASSIFY] Papers: 1 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✗, Summarize=✗, Present=✗
+# [CLASSIFY] Papers: 1 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✗, Summarize=✗, Present=✗
+# [CLASSIFY] Papers: 1 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✗, Summarize=✗, Present=✗
+# [CLASSIFY] Papers: 1 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✗, Summarize=✗, Present=✗
+# [CLASSIFY] Papers: 1 (classified: 1, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✗, Present=✗
+# Phase 3: Summarization...
+# [SUMMARIZE] Papers: 1 (classified: 1, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✗, Present=✗
+# [SUMMARIZE] Papers: 1 (classified: 1, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✗, Present=✗
+# [SUMMARIZE] Papers: 1 (classified: 1, summarized: 1) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✓, Present=✗
+# Phase 4: Analysis...
+# [ANALYZE] Papers: 1 (classified: 1, summarized: 1) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✓, Present=✗
+# [ANALYZE] Papers: 1 (classified: 1, summarized: 1) | Analyses: 1 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✓, Present=✗
+# Phase 5: Presentation...
+# [PRESENT] Papers: 1 (classified: 1, summarized: 1) | Analyses: 1 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✓, Present=✗
+# [PRESENT] Papers: 1 (classified: 1, summarized: 1) | Analyses: 1 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✓, Present=✓
+# 📄 Report written to /tmp/research-runner-0QRCqV/report.md
+# 📊 Dashboard data written to /tmp/research-runner-0QRCqV/dashboard.json
+# \# Scripted report
+# === Final Statistics ===
+# Papers: 1 (classified: 1, summarized: 1) | Analyses: 1 | Queries: 0 (responded: 0) | Done: Crawl=✓, Classify=✓, Summarize=✓, Present=✓
+# space: {"entries":9,"byType":{"SystemStatus":1,"PaperMetadata":1,"CrawlDone":1,"ClassifiedPaper":1,"ClassificationDone":1,"PaperSummary":1,"SummarizationDone":1,"Analysis":1,"Presentation":1},"locked":0,"uncommitted":0,"expired":0,"txns":0,"waiters":0,"registrations":0,"outbox":0,"returned":0,"bytes":{"entries":759,"outbox":2,"claims":0,"waiters":2,"registrations":2,"txns":2,"total":5436}}
+# Subtest: Real research runners produce committed reports with scripted models
+ok 30 - Real research runners produce committed reports with scripted models
+  ---
+  duration_ms: 835.996715
+  type: 'test'
+  ...
+# Subtest: Research result enforcement refuses a missing transaction
+ok 31 - Research result enforcement refuses a missing transaction
+  ---
+  duration_ms: 1.310825
+  type: 'test'
+  ...
+# model faux/faux-1
+# topic Dunkle Energie und Dunkle Materie: Von ersten Anzeichen bis zum heutigen Stand
+# state /tmp/research-timeout-6tQjpM
+# Phase 1: Crawling...
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# [CRAWL] Papers: 0 (classified: 0, summarized: 0) | Analyses: 0 | Queries: 0 (responded: 0) | Done: Crawl=✗, Classify=✗, Summarize=✗, Present=✗
+# model: faux/faux-1
+# topic: test
+# Subtest: Research timeouts fail instead of reporting successful incomplete work
+ok 32 - Research timeouts fail instead of reporting successful incomplete work
+  ---
+  duration_ms: 132.599261
+  type: 'test'
+  ...
+# \#0 host → alice: test
+# \#1 alice → bob: alice zu host: "test…" – Runde 1.
+# \#2 bob → carol: bob zu alice: "alice zu host: "test…" – Runde 1.…" – Runde 2.
+# \#3 carol → alice: carol zu bob: "bob zu alice: "alice zu host: "test…" – …" – Runde 3.
+# Subtest: Actual scripted chat finishes its bounded ring
+ok 33 - Actual scripted chat finishes its bounded ring
+  ---
+  duration_ms: 216.750199
+  type: 'test'
+  ...
+# (node:2799458) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: sensor-pipeline.ts
+    # Subtest: Grundlegende Funktionalität
+        # Subtest: T8.1.1: Window-Erstellung
+        ok 1 - T8.1.1: Window-Erstellung
+          ---
+          duration_ms: 51.987334
+          type: 'test'
+          ...
+        # Subtest: T8.1.2: Collect mit gültigen Daten
+        ok 2 - T8.1.2: Collect mit gültigen Daten
+          ---
+          duration_ms: 25.317479
+          type: 'test'
+          ...
+        # Subtest: T8.1.3: Collect mit Done-Signal
+        ok 3 - T8.1.3: Collect mit Done-Signal
+          ---
+          duration_ms: 14.660382
+          type: 'test'
+          ...
+        # Subtest: T8.1.4: Collect ohne Done (done=false)
+        ok 4 - T8.1.4: Collect ohne Done (done=false)
+          ---
+          duration_ms: 15.377945
+          type: 'test'
+          ...
+        1..4
+    ok 1 - Grundlegende Funktionalität
+      ---
+      duration_ms: 109.023567
+      type: 'suite'
+      ...
+    # Subtest: Analyse-Funktionalität
+        # Subtest: T8.2.1: Analyse mit allen Done-Signalen
+        ok 1 - T8.2.1: Analyse mit allen Done-Signalen
+          ---
+          duration_ms: 77.809536
+          type: 'test'
+          ...
+        # Subtest: T8.2.2: Analyse mit fehlendem Done-Signal
+        ok 2 - T8.2.2: Analyse mit fehlendem Done-Signal
+          ---
+          duration_ms: 125.252144
+          type: 'test'
+          ...
+        # Subtest: T8.2.3: Analyse mit Duplikaten
+        ok 3 - T8.2.3: Analyse mit Duplikaten
+          ---
+          duration_ms: 27.696628
+          type: 'test'
+          ...
+        # Subtest: T8.2.4: Analyse mit ungültigen Werten
+        ok 4 - T8.2.4: Analyse mit ungültigen Werten
+          ---
+          duration_ms: 35.676497
+          type: 'test'
+          ...
+        # Subtest: T8.2.5: Analyse mit Infinity-Wert
+        ok 5 - T8.2.5: Analyse mit Infinity-Wert
+          ---
+          duration_ms: 30.264987
+          type: 'test'
+          ...
+        1..5
+    ok 2 - Analyse-Funktionalität
+      ---
+      duration_ms: 298.539189
+      type: 'suite'
+      ...
+    # Subtest: Transaktionen
+        # Subtest: T8.3.1: Atomare Window-Consumption + Summary-Writing
+        ok 1 - T8.3.1: Atomare Window-Consumption + Summary-Writing
+          ---
+          duration_ms: 29.495674
+          type: 'test'
+          ...
+        # Subtest: T8.3.2: Crash vor Commit - Window bleibt verfügbar
+        ok 2 - T8.3.2: Crash vor Commit - Window bleibt verfügbar
+          ---
+          duration_ms: 321.036308
+          type: 'test'
+          ...
+        # Subtest: T8.3.3: Transaktions-Timeout
+        ok 3 - T8.3.3: Transaktions-Timeout
+          ---
+          duration_ms: 209.829874
+          type: 'test'
+          ...
+        1..3
+    ok 3 - Transaktionen
+      ---
+      duration_ms: 560.859999
+      type: 'suite'
+      ...
+    # Subtest: Präsentator
+        # Subtest: T8.4.1: Präsentation aus Summary
+        ok 1 - T8.4.1: Präsentation aus Summary
+          ---
+          duration_ms: 16.426338
+          type: 'test'
+          ...
+        # Subtest: T8.4.2: Präsentation mit Missing-Sources
+        ok 2 - T8.4.2: Präsentation mit Missing-Sources
+          ---
+          duration_ms: 115.260149
+          type: 'test'
+          ...
+        # Subtest: T8.4.3: Präsentation mit Duplikaten und Rejected
+        ok 3 - T8.4.3: Präsentation mit Duplikaten und Rejected
+          ---
+          duration_ms: 20.736024
+          type: 'test'
+          ...
+        # Subtest: T8.4.4: Präsentation-Timeout
+        ok 4 - T8.4.4: Präsentation-Timeout
+          ---
+          duration_ms: 13.89414
+          type: 'test'
+          ...
+        1..4
+    ok 4 - Präsentator
+      ---
+      duration_ms: 166.826941
+      type: 'suite'
+      ...
+    # Subtest: Statistik-Berechnung
+        # Subtest: T8.5.1: Statistik für eine Messgröße
+        ok 1 - T8.5.1: Statistik für eine Messgröße
+          ---
+          duration_ms: 16.315808
+          type: 'test'
+          ...
+        # Subtest: T8.5.2: Statistik für mehrere Messgrößen
+        ok 2 - T8.5.2: Statistik für mehrere Messgrößen
+          ---
+          duration_ms: 27.219436
+          type: 'test'
+          ...
+        1..2
+    ok 5 - Statistik-Berechnung
+      ---
+      duration_ms: 43.745945
+      type: 'suite'
+      ...
+    # Subtest: Wettbewerb zwischen Analysts
+        # Subtest: T8.6.1: Mehrere Analysts - nur einer gewinnt
+        ok 1 - T8.6.1: Mehrere Analysts - nur einer gewinnt
+          ---
+          duration_ms: 20.275902
+          type: 'test'
+          ...
+        # Subtest: T8.6.2: Analysts mit unterschiedlichen Geschwindigkeiten
+        ok 2 - T8.6.2: Analysts mit unterschiedlichen Geschwindigkeiten
+          ---
+          duration_ms: 78.936979
+          type: 'test'
+          ...
+        1..2
+    ok 6 - Wettbewerb zwischen Analysts
+      ---
+      duration_ms: 99.646263
+      type: 'suite'
+      ...
+    # Subtest: Komplette Pipeline
+        # Subtest: T8.7.1: Vollständiger Durchlauf - 2 Fenster, 3 Quellen, 2 Analysts, 1 Presenter
+        ok 1 - T8.7.1: Vollständiger Durchlauf - 2 Fenster, 3 Quellen, 2 Analysts, 1 Presenter
+          ---
+          duration_ms: 530.22119
+          type: 'test'
+          ...
+        1..1
+    ok 7 - Komplette Pipeline
+      ---
+      duration_ms: 530.449821
+      type: 'suite'
+      ...
+    1..7
+ok 34 - sensor-pipeline.ts
+  ---
+  duration_ms: 1811.442194
+  type: 'suite'
+  ...
+# Subtest: sensor-pipeline Performance
+    # Subtest: T8.8.1: Durchsatz - 100 Readings
+    ok 1 - T8.8.1: Durchsatz - 100 Readings
+      ---
+      duration_ms: 144.940684
+      type: 'test'
+      ...
+    # Subtest: T8.8.2: Latenz - Single Window Processing
+    ok 2 - T8.8.2: Latenz - Single Window Processing
+      ---
+      duration_ms: 16.440028
+      type: 'test'
+      ...
+    1..2
+ok 35 - sensor-pipeline Performance
+  ---
+  duration_ms: 161.616704
+  type: 'suite'
+  ...
+# (node:2799469) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: Segmented sieve matches trial division, including prime-square and block boundaries
+ok 36 - Segmented sieve matches trial division, including prime-square and block boundaries
+  ---
+  duration_ms: 7.472956
+  type: 'test'
+  ...
+# Subtest: Actual multi-worker sieve finds all 168 primes without duplicate results
+ok 37 - Actual multi-worker sieve finds all 168 primes without duplicate results
+  ---
+  duration_ms: 213.431397
+  type: 'test'
+  ...
+# Subtest: Sieve seeding is resumable and idempotent even with concurrent coordinators
+ok 38 - Sieve seeding is resumable and idempotent even with concurrent coordinators
+  ---
+  duration_ms: 25.3318
+  type: 'test'
+  ...
+# Subtest: Sieve commit failure returns task and discards staged result
+ok 39 - Sieve commit failure returns task and discards staged result
+  ---
+  duration_ms: 50.573809
+  type: 'test'
+  ...
+# Subtest: Sieve reservation returns at lease expiry and completed work survives JSONL reopen
+ok 40 - Sieve reservation returns at lease expiry and completed work survives JSONL reopen
+  ---
+  duration_ms: 202.825129
+  type: 'test'
+  ...
+# Subtest: Sieve collector refuses missing, duplicated or mismatched blocks
+ok 41 - Sieve collector refuses missing, duplicated or mismatched blocks
+  ---
+  duration_ms: 8.4729
+  type: 'test'
+  ...
+# Subtest: Sieve run creation keeps a resumable prefix when the byte budget is exceeded
+ok 42 - Sieve run creation keeps a resumable prefix when the byte budget is exceeded
+  ---
+  duration_ms: 10.103376
+  type: 'test'
+  ...
+# (node:2799475) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: workers.ts
+    # Subtest: Grundlegende Operationen
+        # Subtest: sollte Jobs schreiben und nehmen können
+        ok 1 - sollte Jobs schreiben und nehmen können
+          ---
+          duration_ms: 156.861866
+          type: 'test'
+          ...
+        # Subtest: sollte mehrere Jobs verarbeiten können
+        ok 2 - sollte mehrere Jobs verarbeiten können
+          ---
+          duration_ms: 40.071552
+          type: 'test'
+          ...
+        1..2
+    ok 1 - Grundlegende Operationen
+      ---
+      duration_ms: 198.162543
+      type: 'suite'
+      ...
+    # Subtest: Job-Verwaltung
+        # Subtest: sollte Jobs mit richtigen Feldern erstellen
+        ok 1 - sollte Jobs mit richtigen Feldern erstellen
+          ---
+          duration_ms: 9.361433
+          type: 'test'
+          ...
+        # Subtest: sollte Job-Fields korrekt parsen
+        ok 2 - sollte Job-Fields korrekt parsen
+          ---
+          duration_ms: 5.322189
+          type: 'test'
+          ...
+        1..2
+    ok 2 - Job-Verwaltung
+      ---
+      duration_ms: 15.563746
+      type: 'suite'
+      ...
+    # Subtest: Space-Operationen
+        # Subtest: sollte Space.count korrekt zurückgeben
+        ok 1 - sollte Space.count korrekt zurückgeben
+          ---
+          duration_ms: 6.892075
+          type: 'test'
+          ...
+        # Subtest: sollte Space.readAll alle Jobs zurückgeben
+        ok 2 - sollte Space.readAll alle Jobs zurückgeben
+          ---
+          duration_ms: 9.522854
+          type: 'test'
+          ...
+        # Subtest: sollte Space.read erste Übereinstimmung zurückgeben
+        ok 3 - sollte Space.read erste Übereinstimmung zurückgeben
+          ---
+          duration_ms: 13.484518
+          type: 'test'
+          ...
+        # Subtest: sollte Space.take Entry entfernen
+        ok 4 - sollte Space.take Entry entfernen
+          ---
+          duration_ms: 12.430864
+          type: 'test'
+          ...
+        # Subtest: sollte Space.take null zurückgeben, wenn keine Entry verfügbar
+        ok 5 - sollte Space.take null zurückgeben, wenn keine Entry verfügbar
+          ---
+          duration_ms: 2.970141
+          type: 'test'
+          ...
+        1..5
+    ok 3 - Space-Operationen
+      ---
+      duration_ms: 46.513255
+      type: 'suite'
+      ...
+    # Subtest: Template-Matching
+        # Subtest: sollte nach op-Feld filtern
+        ok 1 - sollte nach op-Feld filtern
+          ---
+          duration_ms: 3.669474
+          type: 'test'
+          ...
+        # Subtest: sollte nach file-Feld filtern
+        ok 2 - sollte nach file-Feld filtern
+          ---
+          duration_ms: 5.013378
+          type: 'test'
+          ...
+        # Subtest: sollte bei nicht vorhandenem Job null zurückgeben
+        ok 3 - sollte bei nicht vorhandenem Job null zurückgeben
+          ---
+          duration_ms: 2.040567
+          type: 'test'
+          ...
+        1..3
+    ok 4 - Template-Matching
+      ---
+      duration_ms: 11.10227
+      type: 'suite'
+      ...
+    # Subtest: Mehrere Worker
+        # Subtest: sollte mit mehreren Workern funktionieren
+        ok 1 - sollte mit mehreren Workern funktionieren
+          ---
+          duration_ms: 5.911841
+          type: 'test'
+          ...
+        # Subtest: sollte kein take durchführen, wenn keine Jobs verfügbar
+        ok 2 - sollte kein take durchführen, wenn keine Jobs verfügbar
+          ---
+          duration_ms: 4.784486
+          type: 'test'
+          ...
+        1..2
+    ok 5 - Mehrere Worker
+      ---
+      duration_ms: 10.986959
+      type: 'suite'
+      ...
+    # Subtest: Statistiken
+        # Subtest: sollte korrekte Statistiken zurückgeben
+        ok 1 - sollte korrekte Statistiken zurückgeben
+          ---
+          duration_ms: 6.253052
+          type: 'test'
+          ...
+        # Subtest: sollte Statistiken nach take aktualisieren
+        ok 2 - sollte Statistiken nach take aktualisieren
+          ---
+          duration_ms: 8.851452
+          type: 'test'
+          ...
+        1..2
+    ok 6 - Statistiken
+      ---
+      duration_ms: 15.479835
+      type: 'suite'
+      ...
+    1..6
+ok 43 - workers.ts
+  ---
+  duration_ms: 307.48302
+  type: 'suite'
+  ...
+# Subtest: workers.ts – Faux-Provider-Tests
+    # Subtest: sollte mit Faux-Provider deterministisch sein
+    ok 1 - sollte mit Faux-Provider deterministisch sein
+      ---
+      duration_ms: 32.192884
+      type: 'test'
+      ...
+    1..1
+ok 44 - workers.ts – Faux-Provider-Tests
+  ---
+  duration_ms: 32.351625
+  type: 'suite'
+  ...
+# Subtest: workers.ts – Edge Cases
+    # Subtest: sollte mit 0 Jobs funktionieren
+    ok 1 - sollte mit 0 Jobs funktionieren
+      ---
+      duration_ms: 56.723092
+      type: 'test'
+      ...
+    # Subtest: sollte mit vielen Jobs funktionieren
+    ok 2 - sollte mit vielen Jobs funktionieren
+      ---
+      duration_ms: 155.10103
+      type: 'test'
+      ...
+    # Subtest: sollte mit vielen Workern funktionieren
+    ok 3 - sollte mit vielen Workern funktionieren
+      ---
+      duration_ms: 18.945507
+      type: 'test'
+      ...
+    1..3
+ok 45 - workers.ts – Edge Cases
+  ---
+  duration_ms: 232.308034
+  type: 'suite'
+  ...
+1..45
+# tests 158
+# suites 60
+# pass 158
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11851.444572
