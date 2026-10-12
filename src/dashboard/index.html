@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pi-spaces · Live Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+	<h1>pi-spaces <span class="sub">Live Dashboard</span></h1>
+	<span id="conn" class="conn offline"><i class="dot"></i><span id="conn-label">verbinde…</span></span>
+	<button id="theme" title="Farbschema wechseln">◑</button>
+</header>
+<main id="layout">
+	<spaces-panel id="spaces"></spaces-panel>
+	<space-detail id="detail"></space-detail>
+	<aside class="stack">
+		<live-metrics id="metrics"></live-metrics>
+		<empty-panel heading="Agents" note="Phase 1 hat keine Datenquelle für Agent-Ressourcen. Sichtbar sind die Wirkungen: Entries, Claims und Waits der verbundenen Clients."></empty-panel>
+		<empty-panel heading="Mobile Devices" note="Termux-Geräte melden in Phase 1 keinen Status. Sobald sie Heartbeats in einen Space schreiben, erscheinen sie hier."></empty-panel>
+	</aside>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

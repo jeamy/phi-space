@@ -19,6 +19,8 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
   `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
   docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local JSONL state. Docs: `docs/tui.md`.
+- Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
+  `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background. Docs: `docs/dashboard.md`.
 - Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
 - Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`
 
