@@ -42,7 +42,8 @@ muss vor dem Receipt erfolgreich und wiederholbar ausgeführt werden.
 `CapabilityDirectory` veröffentlicht Host-Ressourcen, Werkzeuge, Modelle und
 Metriken mit 120 Sekunden Lease. `capabilityHeartbeat` ist ein eigener RPC-Pfad:
 NetBird-Identität, aktueller App-Schlüssel, Host-Rolle und Grant sind erforderlich.
-Der Body darf keinen fremden Host vertreten. Unterschiedliche technische
+Die Host-Rolle muss sowohl im aktuellen App-Key als auch im signierten Grant enthalten sein;
+die Prüfung wird vor dem Commit erneut vorgenommen. Der Body darf keinen fremden Host vertreten. Unterschiedliche technische
 Host-IDs und Peer-IDs benötigen provisionierte `hostBindings`.
 
 `startConfiguredFederation` kann über `capabilities` die lokalen `dataSpaces`

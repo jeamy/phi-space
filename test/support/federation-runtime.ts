@@ -39,6 +39,17 @@ export async function exerciseFederationRuntime() {
 			hostControl = make((root.address() as any).port, "127.0.0.2", "data-host", "control-host", { ...hostKey.signer, keyId: hostPaired.keyId }, () => hostControl.requestGrant()); await hostControl.authenticate();
             await hostControl.publishCapability({hostId:"data-host",resources:{cpus:2},tools:["sieve"],models:[],metrics:{freeMemoryBytes:1000}});
             assert.equal((await hostControl.readAll({type:"Capability"})).length,1);
+            const hostRecord=(await keys.find("data-host",hostPaired.keyId))!;
+            const limitedIdentity={principal:{peerId:"data-host"},roles:["member"]};
+            const memberOnlyIssuer=new GrantAuthority({authorityId:"authority",hostId:"control-host",signer:rootKey.signer,
+                keys:{find:async()=>({...hostRecord,roles:["member"]})},identity:{authenticate:()=>limitedIdentity},
+                refreshIdentity:async()=>limitedIdentity,now:clock});
+            const memberOnlyGrant=await memberOnlyIssuer.issue({peerId:"data-host",state:{proof:{keyId:hostPaired.keyId}}} as any);
+            const restrictedHost=make((root.address() as any).port,"127.0.0.2","data-host","control-host",{...hostKey.signer,keyId:hostPaired.keyId},()=>memberOnlyGrant);
+            await restrictedHost.authenticate();
+            await assert.rejects(restrictedHost.publishCapability({hostId:"data-host",resources:{},tools:["forged"],models:[],metrics:{}}),/grant.*host/);
+            assert.deepEqual((await hostControl.readAll({type:"Capability"}))[0]!.fields.tools,["sieve"],"denied publication changed no directory data");
+
             await assert.rejects(hostControl.publishCapability({hostId:"other-host",resources:{},tools:[],models:[],metrics:{}}),/associated/);
             await assert.rejects(admin.write({type:"Capability",fields:{hostId:"forged"}},null,FOREVER),/Command/);
 

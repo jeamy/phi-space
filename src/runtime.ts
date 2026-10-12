@@ -62,9 +62,10 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 					}
                     if((c as any)?.method==="capabilityHeartbeat") {
                      try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;
-                      if(!id||!proof||!key||key.state!=="active"||!id.roles.includes("host")||!o.control!.directory)throw Error("capability requires a currently proven host");
+                      if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.directory)throw Error("capability requires a currently proven host");
                       const auth=o.verifier.check((c as any).frame?.grant,id,{method:"write",space:"control"},conn);auth.check();
-                      const lease=await o.control!.directory.heartbeat((c as any).args?.report,{peerId:id.principal.peerId,roles:id.roles,check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active")throw Error("host key no longer active");}});return{ok:true,result:lease as any};
+                      if(!auth.roles.includes("host"))throw Error("capability grant does not authorize host publication");
+                      const lease=await o.control!.directory.heartbeat((c as any).args?.report,{peerId:id.principal.peerId,roles:auth.roles,check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:lease as any};
                      }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
                     }
 					if((c as any)?.method==="routingPolicy") {
