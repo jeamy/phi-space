@@ -274,7 +274,13 @@ Details und Simulator: [AP 2.1/2.8](ap2-router-und-simulator.md).
 
 `createFederationController` verbindet `RouterController`, `FederationRpc`,
 `FederatedSpace`, `FederationPolicyAuthority` und `MembershipController`.
-`renewableRouterLease` betreut den signierten Lease. `MemberLifecycle` installiert
+`renewableRouterLease` betreut den signierten Lease. Die Root-Komposition
+führt den `lease`-Callback außerhalb von Journal-Commits aus; dort darf eine
+Erneuerung den Control-Host selbst verwenden. Innerhalb eines Journal-Commits
+prüft sie den bereits bezogenen Lease und die aktuellen Control-Zähler erneut.
+Ein abgelaufener oder ersetzter Lease wird weiterhin abgelehnt. Der separat
+injektierte `assertAuthority` bleibt eine reine Autoritätsprüfung; er darf
+keinen verschachtelten Commit auf demselben Host anfordern. `MemberLifecycle` installiert
 signierte Control-Anweisungen; `startConfiguredFederation` aktiviert dies mit
 `membership: {memberId, spaceId}`. Diese APIs gehören zum serverseitigen Router;
 sie ersetzen nicht die Signaturen des bestehenden `RemoteSpace`.

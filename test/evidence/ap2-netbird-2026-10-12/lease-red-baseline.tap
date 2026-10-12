@@ -1,0 +1,61 @@
+TAP version 13
+# (node:2845292) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: complete Root composition rejects a superseded owner lease
+not ok 1 - jsonl: complete Root composition rejects a superseded owner lease
+  ---
+  duration_ms: 87.440819
+  type: 'test'
+  location: '/tmp/pi-netbird-phase2-work/test-delegation.test.ts:592:31'
+  failureType: 'testCodeFailure'
+  error: |-
+    lease renewal must never run inside the journal commit
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    Object.lease (file:///tmp/pi-netbird-phase2-work/test-delegation.test.ts:598:456)
+    Object.guard [as assertAuthority] (file:///tmp/pi-netbird-phase2-work/src/federation-controller.ts:42:27)
+    async file:///tmp/pi-netbird-phase2-work/src/federated-space.ts:115:69
+    async file:///tmp/pi-netbird-phase2-work/test-delegation.test.ts:597:164
+    async #runCommit (file:///media/data/programming/pi-spaces/node_modules/@earendil-works/pi-durable/dist/session/session.js:255:22)
+  ...
+# Subtest: sqlite: complete Root composition rejects a superseded owner lease
+not ok 2 - sqlite: complete Root composition rejects a superseded owner lease
+  ---
+  duration_ms: 33.353352
+  type: 'test'
+  location: '/tmp/pi-netbird-phase2-work/test-delegation.test.ts:592:31'
+  failureType: 'testCodeFailure'
+  error: |-
+    lease renewal must never run inside the journal commit
+
+    true !== false
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    Object.lease (file:///tmp/pi-netbird-phase2-work/test-delegation.test.ts:598:456)
+    Object.guard [as assertAuthority] (file:///tmp/pi-netbird-phase2-work/src/federation-controller.ts:42:27)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async file:///tmp/pi-netbird-phase2-work/src/federated-space.ts:115:69
+    async file:///tmp/pi-netbird-phase2-work/test-delegation.test.ts:597:164
+    async #runCommit (file:///media/data/programming/pi-spaces/node_modules/@earendil-works/pi-durable/dist/session/session.js:255:22)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 923.816095

@@ -1,3 +1,4 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {MemberStatusDirectory} from "./capability-directory.ts";
 // Complete server-side Phase-2 composition; guards and original grants stay external inputs.
 import type {Context} from '@earendil-works/chord';
@@ -37,9 +38,19 @@ export async function createFederationController(o: {
     journalPartitions?: number;
     now?: () => number
 }) {
+    const inCommit=new AsyncLocalStorage<boolean>();
+    // Lease renewal may commit to the same Control host. Never invoke it inside a journal commit.
+    const host=new Proxy(o.host,{get(target,property){
+        if(property==='commit')return (fn:any,ctx:Context)=>target.commit(tx=>inCommit.run(true,()=>fn(tx)),ctx);
+        const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;
+    }});
+    let cachedLease:SignedRouterLease|undefined;
+    const lease=async()=>{const t=await o.lease();cachedLease=structuredClone(t);return t;};
     const now = o.now ?? Date.now, guard = async () => {
         await o.assertAuthority();
-        const t = await o.lease(), l = t.lease;
+        const t=inCommit.getStore()?cachedLease:await lease();
+        if(!t)throw new Error('RouterLease was not validated before journal commit');
+        const l=t.lease;
         if (t.issuer !== o.controlPeerId || t.algorithm !== o.controlSigner.algorithm ||
             !verifyDetached(t.algorithm, o.controlPublicKey,
                             Buffer.from('pi-spaces/router-lease/v1\n' + canonicalJson(l as any)),
@@ -54,7 +65,7 @@ export async function createFederationController(o: {
             throw new Error('RouterLease was superseded by Control');
     };
     const policy = new FederationPolicyAuthority({
-        host : o.host,
+        host,
         ctx : o.ctx,
         controlSpaceId : o.controlSpaceId,
         authorityId : o.authorityId,
@@ -67,12 +78,12 @@ export async function createFederationController(o: {
         transport : o.transport,
         signer : o.routerSigner,
         peerId : o.routerPeerId,
-        lease : o.lease,
+        lease,
         grant : o.grant,
         now
     });
     const router = new RouterController({
-        host : o.host,
+        host,
         ctx : o.ctx,
         routerId : o.id,
         authorityId : o.authorityId,
@@ -83,11 +94,11 @@ export async function createFederationController(o: {
     const partitions=o.journalPartitions??1;
     validateJournalPartitions(partitions);
     const partitionRouters=partitions===1?[router]:Array.from({length:partitions},(_,n)=>new RouterController({
-        host:o.host,ctx:o.ctx,routerId:partitionRouterId(o.id,n),authorityId:o.authorityId,
+        host,ctx:o.ctx,routerId:partitionRouterId(o.id,n),authorityId:o.authorityId,
         target:rpc,assertAuthority:guard,now
     }));
     const space = new FederatedSpace({
-        host : o.host,
+        host,
         ctx : o.ctx,
         id : o.id,
         router,
@@ -104,7 +115,7 @@ export async function createFederationController(o: {
     for(const partitionRouter of partitionRouters) if(partitionRouter!==router) await partitionRouter.recover();
     const refs = {controlSpaceId : o.controlSpaceId, routerId : o.id, federationId : o.id};
     const membership = new MembershipController({
-        host : o.host,
+        host,
         ctx : o.ctx,
         controlSpaceId : o.controlSpaceId,
         authorityId : o.authorityId,
@@ -112,7 +123,7 @@ export async function createFederationController(o: {
         signer : o.controlSigner,
         assertAuthority : guard,
         authorize : o.authorizeAdmin,
-        hasReferences : async id => o.host.commit(
+        hasReferences : async id => host.commit(
             async tx => {
                 const m = (await policy.state()).members[id];
                 return !!m && memberReferencesIn(tx, refs, id, m.target.spaceId);
@@ -135,6 +146,6 @@ export async function createFederationController(o: {
             }
         }
     });
-    const directory=o.probeStatus?new MemberStatusDirectory({host:o.host,ctx:o.ctx,controlSpaceId:o.controlSpaceId,assertAuthority:guard,now,probe:o.probeStatus}):undefined;
+    const directory=o.probeStatus?new MemberStatusDirectory({host,ctx:o.ctx,controlSpaceId:o.controlSpaceId,assertAuthority:guard,now,probe:o.probeStatus}):undefined;
     return {space, router, partitionRouters: Object.freeze(partitionRouters), rpc, membership, policy, directory};
 }

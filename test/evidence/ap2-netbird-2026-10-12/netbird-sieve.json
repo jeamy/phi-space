@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "date": "2026-10-12T19:11:00.065Z",
+  "scope": "real-netbird-signed-wire-fixture",
+  "jobs": 1000,
+  "workers": 6,
+  "workerJobs": [
+    167,
+    167,
+    167,
+    167,
+    166,
+    166
+  ],
+  "members": [
+    {
+      "id": "a",
+      "peerId": "db3r4p7lh8lg008eup6g",
+      "ip": "100.89.240.87"
+    },
+    {
+      "id": "b",
+      "peerId": "db3r4pflh8lg008eupq0",
+      "ip": "100.89.5.70"
+    },
+    {
+      "id": "c",
+      "peerId": "db3r4p7lh8lg008eupb0",
+      "ip": "100.89.116.183"
+    }
+  ],
+  "routerPeerId": "db3r4ovlh8lg008eup20",
+  "independentNetworkNamespaces": 4,
+  "physicalServers": 1,
+  "layerA": true,
+  "layerB": true,
+  "signedGrants": true,
+  "signedDelegation": true,
+  "signedRouterLease": true,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "fullPhase2Accepted": false,
+  "primes": 9592,
+  "sum": 454396537,
+  "elapsedMs": 395538.109367
+}

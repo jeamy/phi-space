@@ -13,7 +13,7 @@ import {
 import {FederationJournalLayout,operationPartition,parentJournalKey,partitionRouterId} from './src/federation-journals.ts';
 import {memberReferencesIn} from './src/federation-references.ts';
 import {FederationOperations} from './src/federated-space.ts';
-import {RouterController} from './src/router.ts';
+import {RouterController,RouterJournal} from './src/router.ts';
 import {RoutingConflict, type RoutingState} from './src/routing-semantics.ts';
 import {FederationSimulator} from './test/support/federation-simulator.ts';
 import {BACKENDS, ctx, PersistentHome} from './test/support/persistent.ts';
@@ -371,3 +371,18 @@ for(const b of BACKENDS)test(`${b}: lost partitioned effect reply recovers the s
  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
  assert.equal(await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
 },8));
+
+for(const b of BACKENDS)for(const boundary of ['candidate','winner','completed','ack'] as const)for(const fault of ['failBeforeCommit','loseAnswer'] as const)
+ test(`${b}: race ${boundary} ${fault} reopens with one winner and releases future reservations`,()=>fixture(b,async o=>{
+  const id='race-boundary';await assert.rejects(o.f.takeWaiting({type:'Job'},10000,5000,{id,principal:o.p}),FederationPending);
+  for(const member of ['a','b'])await new PiSpaces(o.sim.nodes.get(member).host,ctx,()=>o.sim.clock.now(member)).write({type:'Job',fields:{member}});
+  let fired=false;const ack=o.io.ack;
+  if(boundary==='ack')o.io.ack=async(...args:any[])=>{if(!fired&&fault==='failBeforeCommit'){fired=true;throw new Error('injected before ACK');}await ack(...args);if(!fired){fired=true;throw new Error('injected lost ACK reply');}};
+  else o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>w.type==='document.change'&&w.content.kind==='delta'&&JSON.stringify(w.content.ops).includes('"operations"')&&(boundary==='candidate'?JSON.stringify(w.content.ops).includes('"candidates"')&&JSON.stringify(w.content.ops).includes('"event"')&&!JSON.stringify(w.content.ops).includes('"winner"'):boundary==='winner'?JSON.stringify(w.content.ops).includes('"winner"')&&!JSON.stringify(w.content.ops).includes('"done"'):JSON.stringify(w.content.ops).includes('"phase":"done"'))));
+  await assert.rejects(o.f.resume(id));assert.ok(fired||o.home.faults.fired===1,'the selected boundary must be interrupted');
+  o.io.ack=ack;await o.reopen();const result=await o.f.resume(id);assert.equal(result.fields.member,'a');
+  await o.reopen();assert.deepEqual(await o.f.resume(id),result);
+  let entries=0;for(const member of ['a','b']){const h=o.sim.nodes.get(member).host;entries+=await new PiSpaces(h,ctx,()=>o.sim.clock.now(member)).count();assert.equal(Object.keys((await h.snapshot(Space,ctx)).txns).length,0);}
+  assert.equal(entries,1,'exactly one committed winner and one returned loser');
+  for(const r of o.partitionRouters){const journal=await o.host.snapshot(RouterJournal,r.journalId,ctx);assert.deepEqual(journal?.future??{},{});}
+ },8));

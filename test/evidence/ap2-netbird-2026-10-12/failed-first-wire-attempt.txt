@@ -1,0 +1,18 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"written","jobs":100}
+{"stage":"written","jobs":200}
+{"stage":"written","jobs":300}
+{"stage":"written","jobs":400}
+{"stage":"written","jobs":500}
+{"stage":"written","jobs":600}
+{"stage":"written","jobs":700}
+{"stage":"written","jobs":800}
+{"stage":"written","jobs":900}
+{"stage":"written","jobs":1000}
+{"stage":"completed","jobs":100}
+{"stage":"completed","jobs":200}
+{"stage":"completed","jobs":300}
+Warning: Detected unsettled top-level await at file:///opt/app/scenarios/phase2-netbird.mjs:137
+      await Promise.all(Array.from({ length: 6 }, async (_, w) => {
+      ^

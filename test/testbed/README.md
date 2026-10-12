@@ -68,3 +68,23 @@ Build with the existing artifact builder and run only the built `scenarios/phase
 The scenario loses replies after durable effects, repeats the same Parent API request, reopens the Root harness from SQLite and retries historical writes/commits. Its JSON report records worker counts, the independently verified prime list, per-operation and task latencies, full Member document sizes, Root journal sizes and sampled RSS. It asserts exactly 5,000 retained completed Parent/Child commands for the full run.
 
 The transport calls the real `SpaceService` in process with fixture identities. It does not exercise overlay authentication, grants or production delegation, three separate hosts, replication, or every crash boundary. Those acceptance gates remain separate. The workload is a standalone operator scenario, not automatically included in the routine test-bed service suite.
+
+
+### Phase-2 signed wire fixture over NetBird
+
+`scenarios/phase2-netbird.ts` has `prepare`, `member` and `run` modes. It uses fresh private fixture state, three persistent Data stores and one Control/Router store. Four isolated test containers share the existing four NetBird agents' network namespaces. Members listen only on their overlay addresses at TCP 7423. The original gates and fenced restore sources remain outside this fixture.
+
+Provision only the public Control key and Router key record to the Member services; keep private signing keys in the Root's own data directory. The read-only Management API credential is provided through a private secret file. The orchestrator must create its own four-peer `space-ap2-test` group and a narrowly scoped TCP-7423 policy and remove both in `finally`. Copy only built library/scenario artifacts to the server. Fresh run directories are required; this fixture does not overwrite or migrate an existing Member/Control store.
+
+The wire path exercises real NetBird peer resolution, key challenge proofs, signed grants, signed RouterLease and per-call delegation through `FederationRpc`. The Control signing key, grants and policy are fixture-provisioned locally. This is not production enrollment or a new independent boot/fencing acceptance test. The network namespaces share one physical server. The default workload is 1,000 jobs on six workers, with a full prime-reference comparison. A small run can set `jobs: 12` in its private config.
+
+
+The local operator driver uses the existing `big` SSH target and NetBird test installation:
+
+```sh
+node test/testbed/build-artifacts.mjs /tmp/phase2-wire-artifacts
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-wire-artifacts --jobs 12
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-wire-artifacts --jobs 1000
+```
+
+Each run requires a fresh directory and unique run ID. The driver refuses an existing `space-ap2-test` group rather than adopting another run's objects. Progress and redacted reports go to `--output`; management credentials remain on `big`. The driver cleans up only the container names and policy/group IDs it created. A failed policy/group cleanup is reported as an error.

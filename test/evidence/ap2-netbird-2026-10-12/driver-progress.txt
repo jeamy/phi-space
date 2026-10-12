@@ -1,0 +1,5 @@
+build-ready
+provisioning
+running
+passed
+cleanup-finished

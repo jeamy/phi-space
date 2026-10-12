@@ -137,7 +137,7 @@ die Abnahme über echte NetBird-Hosts bleibt offen.
 | 10.000 Entries, drei Members, 1.000 Jobs, sechs Worker | Member-Lasttest; finaler Bericht in den verlinkten Nachweisen |
 | Virtueller Router unter dieser Last | Feste Journal-Aufteilung; vollständiger SQLite-Lastlauf im neuen Szenario separat dokumentiert; NetBird- und volle Crash-Abnahme bleiben offen |
 | Crash nach jeder Journal-/RPC-/ACK-Grenze unter voller Last | Vollständige Lastmatrix offen; vorhandene gezielte Crash-Tests bleiben gültig |
-| Drei-Member-Sieb über echte NetBird-Verbindungen | Offen; Member-Lasttest ist ausdrücklich kein Ersatz |
+| Drei-Member-Sieb über echte NetBird-Verbindungen | 1.000 Jobs / sechs Worker mit signierten Grants, RouterLease und Delegation in vier NetBird-Netzräumen auf big bestanden; Fixture-Provisionierung und ein physischer Server |
 | Handy mit aktuellem APK | Installation und Objektlesen über echte NetBird-Verbindung nachgewiesen |
 | Gesamtfreigabe Phase 2 / finale Gate-4-Werte | Nicht erteilt |
 
@@ -221,3 +221,58 @@ denselben Task wird durch die separaten Wettlauf-/Crash-Tests geprüft.
 Frame 256 KiB, Commit 192 KiB und Generation eine Stunde bleiben bis zur
 vollständigen Overlay-/Crash-Abnahme Startwerte. Eine Gesamtfreigabe Phase 2
 ist weiterhin nicht erteilt.
+
+## NetBird-Wire-Prüfung und zusätzliche Crash-Grenzen
+
+`test/testbed/scenarios/phase2-netbird.ts` ergänzt eine isolierte Wire-Fixture
+mit einem Router und drei Members in vier echten NetBird-Netzräumen auf big.
+Die Gate-Schicht fragt die NetBird-Management-API ab, prüft den App-Key und
+verifiziert signierte Original-Grants, RouterLease und Delegation. Eigene
+SQLite-Stores und TCP-Port 7423 trennen den Lauf von den bestehenden Gates.
+Eine temporäre Vier-Peer-Gruppe und eine auf TCP 7423 begrenzte Policy werden
+nach dem Lauf wieder entfernt. Der Zustand wird mit neuen Fixture-Schlüsseln
+provisioniert; Enrollment, unabhängiges Boot-Register, OS-Fencing und
+Produktiv-Provisionierung werden in dieser Prüfung nicht erneut abgenommen.
+Die vier Netzräume teilen einen physischen Server; das ist kein Nachweis
+unabhängiger VPS-Ausfalldomänen.
+
+Der erste große Wire-Lauf blieb während einer Lease-Erneuerung stehen:
+`lease()` konnte innerhalb eines Journal-Commits einen weiteren Commit auf
+demselben Control-Harness anfordern. Die Root-Komposition erfragt/erneuert
+Leases jetzt außerhalb der Journal-Transaktionen. Innerhalb prüft sie den
+zuletzt erhaltenen signierten Lease sowie aktuelle Control-Zähler erneut;
+Ablauf oder Supersession führen weiterhin zur Ablehnung. Die JSONL-/SQLite-
+Regression lässt den Lease-Callback selbst auf demselben Host committen und
+verlangt, dass er niemals innerhalb eines offenen Journal-Commits läuft.
+
+Weitere 16 Fälle prüfen Kandidatenaufnahme, Gewinnerwahl, Parent-Abschluss
+und Mailbox-ACK, jeweils vor Commit bzw. bei verlorener Antwort, auf JSONL
+und SQLite. Nach Reopen bleibt genau ein Gewinner committet; der andere
+Entry ist wieder verfügbar, ohne offene Transaktionen. Wiederholung eines
+bereits abgeschlossenen Parents gibt ungenutzte Child-Zukunftsreservierungen
+idempotent frei. Damit ist auch die Lücke zwischen Parent-Abschluss und
+Freigabe des reservierten Child-Budgets geschlossen.
+
+[Nachweise](../test/evidence/ap2-netbird-2026-10-12/) dokumentieren den konkreten
+Wire-Lauf und die aktuellen Artefaktprüfungen. Die vollständige Crash-Matrix
+unter voller Overlay-Last bleibt ein separater Abnahmeschritt; die zusätzlichen
+gezielten Fälle ersetzen sie nicht. Phase 2 ist insgesamt weiterhin offen.
+
+Der korrigierte NetBird-Lauf bestand am 2026-10-12 in 395,538 Sekunden:
+1.000 Jobs, 1.000 eindeutige Ergebnisse, null verbleibende Tasks und der
+vollständige Primzahlvergleich bis 100.000 (9.592 Primzahlen, Summe
+454.396.537). Die sechs Worker bearbeiteten 167/167/167/167/166/166 Jobs.
+Alle drei Member-Pfade waren aktive NetBird-P2P-Verbindungen. Der Lauf
+überschritt mehrere Lease-Erneuerungsintervalle, ohne den früheren Deadlock.
+Jeder Testprozess hatte eine eigene Grenze von 2 CPUs/1 GiB RAM; dies ist
+kein gemeinsames Ressourcenbudget für alle vier Prozesse. Der erste,
+festgefahrene Lauf ist als fehlgeschlagener Versuch separat dokumentiert.
+
+418 lokale Tests, 183 Tests am gebauten Server-Artefakt, 24 Mobile-/Remote-
+Tests und die Beispieltests sind im isolierten, aktuellen Quellstand geprüft.
+Die Lease-Regression schlägt mit dem alten Controller auf beiden Backends
+gezielt fehl und besteht mit dem korrigierten Controller. Der Operator-Treiber
+`test/testbed/netbird/run-phase2-sieve.py` führt den Aufbau und die eigene
+Bereinigung reproduzierbar aus. Seine Bereinigung verwendet tatsächlich
+von diesem Lauf erzeugte Container-IDs und die selbst erzeugten Policy-/
+Gruppen-IDs. Vorhandene Testzustände werden nicht überschrieben.

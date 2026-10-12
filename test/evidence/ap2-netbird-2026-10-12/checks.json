@@ -1,0 +1,41 @@
+{
+  "phase2Accepted": false,
+  "isolatedCheckoutBase": "5b56033",
+  "typecheck": true,
+  "localTestsPassed": 418,
+  "serverBuiltTestsPassed": 183,
+  "mobileRemoteTestsPassed": 24,
+  "exampleTestsPassed": 158,
+  "wireJobs": 1000,
+  "wireMembers": 3,
+  "wireWorkers": 6,
+  "networkNamespaces": 4,
+  "physicalServers": 1,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "wireElapsedMs": 395538.109367,
+  "additionalCrashBoundaryCases": 16,
+  "crashBackends": [
+    "JSONL",
+    "SQLite"
+  ],
+  "leaseRegressionRejectsOldController": true,
+  "firstFullWireAttemptPassed": false,
+  "firstFullWireAttemptReason": "same-host lease refresh invoked inside journal commit; nested commit deadlock, stopped own fixture",
+  "artifactSha256": "8e210a351054e744b29945f374f9ca886cf6cd81f286c48d3980680715f02c5d",
+  "scenarioArtifactSha256": "46f83302763f1e82c4d5b9b7d9d16e5bc170668595238c65239ef082929740c0",
+  "scenarioSourceSha256": "ad81785c28de72559af28e64f5eb8fe9b251f580180c2bf55f6422f430ef0162",
+  "mobileBundleSha256": "8e210a351054e744b29945f374f9ca886cf6cd81f286c48d3980680715f02c5d",
+  "temporaryServicesAndNetbirdPolicyRemoved": true,
+  "open": [
+    "full journal/RPC/ACK crash-boundary matrix under full overlay load",
+    "production Root and directory provisioning with independent boot/fencing",
+    "multiple physical failure domains",
+    "distributed principal deletion including Router/parent histories",
+    "physical archive and backup deletion policy",
+    "controlled completion-profile transition",
+    "journal topology migration/resizing"
+  ],
+  "sharedCheckoutTypecheckPassed": true
+}

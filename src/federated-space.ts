@@ -325,8 +325,11 @@ export class FederatedSpace {
         return copy(result);
     }
     private async decide(op: Operation) {
-        if (op.phase === 'done')
+        if (op.phase === 'done') {
+            // A crash after the Parent commit can precede releasing unused child reservations.
+            await this.router(op.id).releaseFuture(child(op.id, 'budget'));
             return copy(op.result!);
+        }
         if (op.phase === 'needsReview')
             throw new FederationUnavailable('operation needs explicit review');
         op = await this.admit(op);
@@ -538,8 +541,11 @@ export class FederatedSpace {
         }
     }
     private async progressRace(op: Operation): Promise<Json> {
-        if (op.phase === 'done')
+        if (op.phase === 'done') {
+            // A crash after the Parent commit can precede releasing unused child reservations.
+            await this.router(op.id).releaseFuture(child(op.id, 'budget'));
             return copy(op.result!);
+        }
         op = await this.admit(op);
         for (const m of op.members) {
             const c = await this.router(op.id).advance(op.children[m]!);
