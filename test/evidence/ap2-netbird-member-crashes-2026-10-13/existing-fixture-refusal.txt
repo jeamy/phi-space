@@ -1,0 +1,18 @@
+build-ready
+cleanup-finished
+Traceback (most recent call last):
+  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 42, in <module>
+    ssh('test ! -e '+shlex.quote(base))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 31, in ssh
+    def ssh(cmd,input=None,timeout=60):return subprocess.check_output(['ssh','-oBatchMode=yes','-oConnectTimeout=10','-oServerAliveInterval=5','-oServerAliveCountMax=3','big',cmd],input=input,text=True,stderr=subprocess.PIPE,timeout=timeout)
+                                              ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/subprocess.py", line 473, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               **kwargs).stdout
+               ^^^^^^^^^
+  File "/usr/lib64/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['ssh', '-oBatchMode=yes', '-oConnectTimeout=10', '-oServerAliveInterval=5', '-oServerAliveCountMax=3', 'big', 'test ! -e /home/mux/.local/share/pi-spaces-operations/ap2-netbird-member-fixed-full-20261013']' returned non-zero exit status 1.

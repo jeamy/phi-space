@@ -9,6 +9,7 @@ import type {SpaceHost, Taken} from './client.ts';
 import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
 import {FederationRouting} from "./federation-policy.ts";
 import {FederationJournalLayout, operationPartition, parentJournalKey, validateJournalPartitions} from './federation-journals.ts';
+import {TransportFailure} from './remote.ts';
 import {MembershipJournal} from "./membership.ts";
 import {RouterController, type RouterOperation, type RouterStepSpec} from './router.ts';
 import {
@@ -299,11 +300,18 @@ export class FederatedSpace {
                 await this.save(op);
                 continue;
             }
-            const spec = await this.o.io.step(member, op.principal, method, a, op.policyVersion,
-                                              op.kind === "txn" && a.originId
-                                                  ? (await this.router(a.originId).get((await this.get(
-                                                        a.originId))!.children[member]!))!.steps[0]
-                                                  : undefined);
+            let spec: RouterStepSpec;
+            try {
+                spec = await this.o.io.step(member, op.principal, method, a, op.policyVersion,
+                                                  op.kind === "txn" && a.originId
+                                                      ? (await this.router(a.originId).get((await this.get(
+                                                            a.originId))!.children[member]!))!.steps[0]
+                                                      : undefined);
+            } catch (e) {
+                // No effect has been dispatched; keep the persisted routing plan and reservation.
+                if (e instanceof TransportFailure) throw new FederationPending(op.id);
+                throw e;
+            }
             const expected = (await this.o.state()).members[member]?.target;
             if (!expected || hash(spec.target) !== hash(expected) ||
                 hash(spec.principal) !== hash(op.principal))

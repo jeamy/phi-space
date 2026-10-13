@@ -1,0 +1,44 @@
+{
+  "passed": true,
+  "rootStarts": 1,
+  "rootExitCode": 0,
+  "memberSigkills": 30,
+  "members": [
+    {
+      "member": "a",
+      "starts": 11,
+      "target": {
+        "hostId": "ap2-wire-a",
+        "spaceId": "sp-c2a6d5e9-4341-402c-9537-1c1e9d61762f",
+        "dataIncarnation": "e329e8a1",
+        "authorityId": "ap2-wire-b88c1c23-55a3-4c83-a15e-a3692a872f23",
+        "primaryEpoch": 1
+      },
+      "reopenedSameTarget": true
+    },
+    {
+      "member": "b",
+      "starts": 11,
+      "target": {
+        "hostId": "ap2-wire-b",
+        "spaceId": "sp-a33daafb-32bc-48c8-8b98-956532033d5e",
+        "dataIncarnation": "92885a2e",
+        "authorityId": "ap2-wire-b88c1c23-55a3-4c83-a15e-a3692a872f23",
+        "primaryEpoch": 1
+      },
+      "reopenedSameTarget": true
+    },
+    {
+      "member": "c",
+      "starts": 11,
+      "target": {
+        "hostId": "ap2-wire-c",
+        "spaceId": "sp-d5753e85-1df7-438a-9e50-a26df2252375",
+        "dataIncarnation": "d76473e2",
+        "authorityId": "ap2-wire-b88c1c23-55a3-4c83-a15e-a3692a872f23",
+        "primaryEpoch": 1
+      },
+      "reopenedSameTarget": true
+    }
+  ]
+}

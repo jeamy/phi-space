@@ -33,8 +33,9 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
 | Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport mit Fixture-Identitäten im selben Prozess; Drei-Host-NetBird- und vollständige Crash-Abnahme bleiben offen |
 | NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; volle Overlay-Crash-Matrix und Produktions-Provisionierung bleiben offen |
-| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Sieben weitere Testblöcke und Gesamtfreigabe offen; Liste in der Phase-2-Abnahme |
-| NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Member-Prozessverluste, ACKs und sämtliche gezielten Journal-Grenzen über NetBird sowie Produktions-Boot/Fencing bleiben offen |
+| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Sechs weitere Testblöcke und Gesamtfreigabe offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
+| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Sechs weitere Testblöcke und Gesamtfreigabe offen; Liste in der Phase-2-Abnahme |
+| NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen und Produktions-Boot/Fencing bleiben offen; ACK- und Member-Nachweise stehen getrennt |
 | Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; Kombination mit NetBird-Volllast und unabhängigen Hosts bleibt offen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
@@ -148,3 +149,12 @@ unveränderten Primary schließbar. Bekannte Pending-Claims behalten ihre
 Deadline- und Autorisierungsprüfung. Nach Promotion, Restore oder Ablauf
 bleibt `needsReview`; terminale `NotCommitted`-Negativclaims mit vollständigem
 Promotionsnachweis sind weiterhin ein eigener, nicht abgenommener Schritt.
+
+
+Der NetBird-Volllastnachweis individueller Member-Prozessabbrüche vom
+2026-10-13 schließt Testblock 2. Die aktuelle Liste umfasst sechs offene
+Testblöcke plus Gesamtfreigabe. Bei Transportverlust während der Child-
+Vorbereitung bleibt ein bereits gespeicherter Parent jetzt als Pending mit
+unverändertem Routingplan wiederaufnehmbar. Die Fehlerklassifikation wird auf
+JSONL und SQLite geprüft; fachliche und Berechtigungsfehler bleiben definitive
+Fehler. Details und Grenzen stehen in der [Phase-2-Abnahme](ap2-abnahme.md).

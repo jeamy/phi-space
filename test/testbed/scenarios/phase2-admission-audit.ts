@@ -12,10 +12,10 @@ import {rpcDomain} from '../../../src/rpc-domain.ts';
 const fixture=process.argv[2]!,output=process.argv[3]!;
 const config=JSON.parse(readFileSync(join(fixture,'shared/config.json'),'utf8')),report=JSON.parse(readFileSync(join(fixture,'shared/netbird-sieve.json'),'utf8'));
 assert.equal(report.passed,true);
-const allFaults=report.processCrashesExercised?report.processCrashes:report.faults;
+const allFaults=report.memberProcessCrashesExercised?report.memberProcessCrashes:report.processCrashesExercised?report.processCrashes:report.faults;
 const ackFaults=allFaults.filter((f:any)=>f.effect==='ack'),faultedRequests=allFaults.filter((f:any)=>f.effect!=='ack'),probes=report.ackProbes??[];
-const expectedFaults=report.mailboxAckFaultsExercised?0:report.processCrashesExercised?(report.processCrashEffects??[report.processCrashEffect]).length*report.processCrashMembers.length*(report.processCrashBoundary==='both'?2:1):30;
-if(!report.processCrashesExercised)assert.equal(report.rpcFaultBoundary,'both');
+const expectedFaults=report.memberProcessCrashesExercised?30:report.mailboxAckFaultsExercised?0:report.processCrashesExercised?(report.processCrashEffects??[report.processCrashEffect]).length*report.processCrashMembers.length*(report.processCrashBoundary==='both'?2:1):30;
+if(!report.processCrashesExercised&&!report.memberProcessCrashesExercised)assert.equal(report.rpcFaultBoundary,'both');
 assert.equal(faultedRequests.length,expectedFaults);
 if(report.mailboxAckFaultsExercised){assert.equal(ackFaults.length,6);assert.equal(probes.length,6);}
 const hosts:Harness[]=[];
@@ -64,9 +64,9 @@ try{
    const entries:core.EntryRec[]=space.entries.filter(e=>e.type==='AckProbe'&&e.fields.probeId===probe.probeId);assert.equal(entries.length,member.id==='a'?0:1);for(const e of entries){assert.equal(e.takenBy,null);assert.equal(e.writtenUnder,null);}
   }
   for(const fault of faultedRequests.filter((f:any)=>f.member===member.id)){
-   const step=steps.get(JSON.stringify([member.hostId,fault.generation,fault.requestId]));assert.ok(step,'faulted request must remain in its original completed journal');assert.deepEqual(step.target,target);
+   const step=steps.get(JSON.stringify([member.hostId,fault.generation,fault.requestId]));assert.ok(step,'faulted request must remain in its original completed journal');assert.deepEqual(step.target,target);if(report.memberProcessCrashesExercised){assert.deepEqual(fault.target,target);assert.deepEqual(fault.principal,step.principal);assert.equal(fault.claimState,fault.boundary==='beforeHandle'?'notAdmitted':'done');}
    const reference={principal:step.principal,generation:fault.generation,requestId:fault.requestId};const claim:claims.ClaimRec|undefined=space.rpc?.claims[claims.keyOf(space,reference)];assert.ok(claim,'original request must have a retained claim on original Member');
-   const domain=rpcDomain({method:step.method,args:step.args as any},step.principal);assert.equal(claim.method,domain.method);assert.equal(claim.argHash,claims.argHash(domain.method,domain.args));assert.equal(claim.state,'done');assert.equal(claim.policyVersion,1);assert.deepEqual(claim.principal,step.principal);assert.equal(claim.principal.peerId,report.routerPeerId);
+   const domain=rpcDomain({method:step.method,args:step.args as any},step.principal);assert.equal(claim.method,domain.method);assert.equal(claim.argHash,claims.argHash(domain.method,domain.args));if(report.memberProcessCrashesExercised)assert.equal(claim.argHash,fault.argumentHash);assert.equal(claim.state,'done');assert.equal(claim.policyVersion,1);assert.deepEqual(claim.principal,step.principal);assert.equal(claim.principal.peerId,report.routerPeerId);
    const generation:claims.GenerationRec|undefined=space.rpc!.generations[fault.generation];assert.ok(generation);claims.validateGeneration(space,generation.issuedAt,reference);assert.equal(generation.spaceId,target.spaceId);assert.equal(generation.incarnation,target.dataIncarnation);assert.equal(generation.authorityId,target.authorityId);assert.equal(generation.primaryEpoch,target.primaryEpoch);
    checked.push({member:member.id,boundary:fault.boundary,requestId:fault.requestId,claimState:claim.state});
   }

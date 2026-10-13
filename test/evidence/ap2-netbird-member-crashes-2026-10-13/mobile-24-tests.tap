@@ -1,0 +1,156 @@
+TAP version 13
+# Subtest: Node engines >=22.19.0 (not any Node 22)
+ok 1 - Node engines >=22.19.0 (not any Node 22)
+  ---
+  duration_ms: 6.091249
+  type: 'test'
+  ...
+# Subtest: SSH target validation and port
+ok 2 - SSH target validation and port
+  ---
+  duration_ms: 3.57509
+  type: 'test'
+  ...
+# Subtest: release hash is stable, dependency hash differs
+ok 3 - release hash is stable, dependency hash differs
+  ---
+  duration_ms: 13.18889
+  type: 'test'
+  ...
+# Subtest: release hash detects changed, added and removed bundled examples
+ok 4 - release hash detects changed, added and removed bundled examples
+  ---
+  duration_ms: 4.657904
+  type: 'test'
+  ...
+# Subtest: fresh checkout works without generated examples; present examples are hashed
+ok 5 - fresh checkout works without generated examples; present examples are hashed
+  ---
+  duration_ms: 2.765368
+  type: 'test'
+  ...
+# Subtest: rollback restores the preceding release: between-renames
+ok 6 - rollback restores the preceding release: between-renames
+  ---
+  duration_ms: 85.137988
+  type: 'test'
+  ...
+# Subtest: rollback restores the preceding release: promoted
+ok 7 - rollback restores the preceding release: promoted
+  ---
+  duration_ms: 480.881326
+  type: 'test'
+  ...
+# Subtest: rollback restores the preceding release: before-renames
+ok 8 - rollback restores the preceding release: before-renames
+  ---
+  duration_ms: 37.090583
+  type: 'test'
+  ...
+# Subtest: rollback restores the preceding release: first-install
+ok 9 - rollback restores the preceding release: first-install
+  ---
+  duration_ms: 400.334232
+  type: 'test'
+  ...
+# Subtest: full provisioning rollback restarts the old release after promotion failure
+ok 10 - full provisioning rollback restarts the old release after promotion failure
+  ---
+  duration_ms: 2927.085793
+  type: 'test'
+  ...
+# Subtest: full provisioning rollback restarts the old release after startup failure
+ok 11 - full provisioning rollback restarts the old release after startup failure
+  ---
+  duration_ms: 1892.888992
+  type: 'test'
+  ...
+# Subtest: sshRun bounds hung commands and handles an early upload pipe failure
+ok 12 - sshRun bounds hung commands and handles an early upload pipe failure
+  ---
+  duration_ms: 63.287782
+  type: 'test'
+  ...
+# Subtest: metadata commands and silent protocol handshakes have deadlines
+ok 13 - metadata commands and silent protocol handshakes have deadlines
+  ---
+  duration_ms: 1270.110876
+  type: 'test'
+  ...
+# Subtest: rename routes to sessions; deleted sessions reject every existing attachment
+ok 14 - rename routes to sessions; deleted sessions reject every existing attachment
+  ---
+  duration_ms: 2273.417924
+  type: 'test'
+  ...
+# Subtest: hung RPC times out and disconnect during reconnect cancels the tunnel
+ok 15 - hung RPC times out and disconnect during reconnect cancels the tunnel
+  ---
+  duration_ms: 2242.539481
+  type: 'test'
+  ...
+# Subtest: disconnect during reconnect does not resurrect connection or reattach
+ok 16 - disconnect during reconnect does not resurrect connection or reattach
+  ---
+  duration_ms: 7.807634
+  type: 'test'
+  ...
+# Subtest: disconnect during reattach leaves disconnected state
+ok 17 - disconnect during reattach leaves disconnected state
+  ---
+  duration_ms: 2.687838
+  type: 'test'
+  ...
+# Subtest: obsolete provisioning failure cannot clobber a newer host
+ok 18 - obsolete provisioning failure cannot clobber a newer host
+  ---
+  duration_ms: 4.822004
+  type: 'test'
+  ...
+# Subtest: simultaneous connect requests give ownership to the newest generation
+ok 19 - simultaneous connect requests give ownership to the newest generation
+  ---
+  duration_ms: 0.845693
+  type: 'test'
+  ...
+# Subtest: healthy recovery reattaches the selected session
+ok 20 - healthy recovery reattaches the selected session
+  ---
+  duration_ms: 0.648292
+  type: 'test'
+  ...
+# (node:3154906) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: mobile pairing persists its identity before the effect and resolves a lost response after reopen
+ok 21 - mobile pairing persists its identity before the effect and resolves a lost response after reopen
+  ---
+  duration_ms: 14.943865
+  type: 'test'
+  ...
+# Subtest: a pending rotation is retained across reopen and activates the new alias only after a completed own command
+ok 22 - a pending rotation is retained across reopen and activates the new alias only after a completed own command
+  ---
+  duration_ms: 3.734631
+  type: 'test'
+  ...
+# Subtest: data access obtains an app-bound grant from a separately authenticated control connection
+ok 23 - data access obtains an app-bound grant from a separately authenticated control connection
+  ---
+  duration_ms: 49.8038
+  type: 'test'
+  ...
+# Subtest: paired status after rotation proves the current key and rejects a revoked key instead of replaying old enrollment
+ok 24 - paired status after rotation proves the current key and rejects a revoked key instead of replaying old enrollment
+  ---
+  duration_ms: 1.619285
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6982.915265

@@ -1,0 +1,16 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"root-started","produced":0,"completed":0,"priorCrashes":0,"routerEpoch":1,"leaseId":"738d35ea-3501-4d6e-8902-29a1017cc3db"}
+{"stage":"inventory-ready","entries":180,"jobs":60}
+file:///opt/app/pi-spaces.mjs:3733
+    if (!s.isFile() || current.isSymbolicLink() || s.ino !== current.ino || s.dev !== current.dev || s.nlink !== 1 || process.getuid && s.uid !== process.getuid() || (s.mode & 63) !== 0) throw new Error("provisioned file must be a regular private file (0600)");
+                                                                                                                                                                                                 ^
+
+Error: provisioned file must be a regular private file (0600)
+    at privateFile (file:///opt/app/pi-spaces.mjs:3733:194)
+    at file:///opt/app/scenarios/phase2-netbird.mjs:418:92
+    at Array.flatMap (<anonymous>)
+    at file:///opt/app/scenarios/phase2-netbird.mjs:418:66
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+Node.js v22.23.3

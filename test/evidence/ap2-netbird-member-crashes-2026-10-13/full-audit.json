@@ -1,0 +1,196 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 5000,
+  "commands": 5000,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "allOriginalClaimsChecked": 5000,
+  "ackBoundariesChecked": 0,
+  "checkedAcks": [],
+  "faultedClaimsChecked": 30,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": [
+    {
+      "member": "a",
+      "boundary": "beforeHandle",
+      "requestId": "router-298effa6f76f33943de8d998be3e52d431501cab5de447339afe031ae3d6063b",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterCommit",
+      "requestId": "router-9c7e44970c5d91860e2cb3371f5ae5e1466b4dd62c1c04102c8c2ae226335305",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeHandle",
+      "requestId": "router-2029d99a83368b663cf6e8f4d13be101be6eb461777b79d2ec7ad39b47ae76be",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeHandle",
+      "requestId": "router-3d0c5faa62d66ce0e8409492562559ea070258499d1aeea49b75c3a9b50ae9de",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterCommit",
+      "requestId": "router-717ae3e155d775576bcaf3949dc6ae489c41d671b7cee76571432e7b848c2d94",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeHandle",
+      "requestId": "router-f911de4a12b6e757e39e4c0345149707dac6ea575cfd483757032c06c1ebe47e",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterCommit",
+      "requestId": "router-befa5c4372a56b60fa1b1d6eb031308e1099a0528f4582ecec0877daf5c646ea",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterCommit",
+      "requestId": "router-3fab6afd129443566f7194356c942614be12319e07c8820fb79f423a8c31ae51",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeHandle",
+      "requestId": "router-27440a1015e29f8a32c172e8d062f06f010e19c7c35c90b2bcea4c331f366045",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterCommit",
+      "requestId": "router-8eaa5b26fd34100b71f265da93d223b1715ef99e10da3dd213e7b892d28d3caa",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeHandle",
+      "requestId": "router-8bbfda0f9c2e44141f0b4748ecadb707a1effc401b730d398be89ac1e15114f5",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterCommit",
+      "requestId": "router-e6953968ca884a0c738955411f3503d26f06d92fc28df09525f4ca119f44b671",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeHandle",
+      "requestId": "router-188828109a5bd1d82c82ff321554306e54b7fdb07aa7c531e4845b8a9aebeeb2",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterCommit",
+      "requestId": "router-cb9d8495f86e08f64353d5558826bcd2b0480070f1b49bc08199b586ba543adc",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeHandle",
+      "requestId": "router-511091fede8ff106fff15cd52210d2adddb0bed35321880ea891395f66cdba59",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeHandle",
+      "requestId": "router-7dbe3db886986c9893a5fcda2fcc8cbbf606dc2d68bbb217cbee9a92bb54d0b9",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterCommit",
+      "requestId": "router-57a53d639d950a962ce00a34569d7cb2cc1f5045a9cfff58c67ef0b75e880f86",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeHandle",
+      "requestId": "router-05d66aadffc8cb8deb22c55088062fc0d48022093ce5e318c3b116dd6b933394",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterCommit",
+      "requestId": "router-30b3bc5557bf42096bd830c1976de08ad25ac66e0818e9d3c5113af9a8cdfb42",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterCommit",
+      "requestId": "router-7242242814b62fa9d88e4c913925774dc242810ce6124b84ac3f52a4dc480a79",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeHandle",
+      "requestId": "router-4b35f263b0ed31070b5c6a0f788047860044f3620e37ded9ad5f5e6b07e63c97",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterCommit",
+      "requestId": "router-9f00b4c1747469db59384cf9151bb7aa3f081a24c2f8580650b7bb258e71f4cb",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeHandle",
+      "requestId": "router-00630b5d219fb6a7ba5ec456f2fb3d0747c0aebfc0dd448b7cc9773d365d1065",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterCommit",
+      "requestId": "router-e78e8b6906041eb206140e578483259c596241cf30bb674896c20f6641eebc1e",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeHandle",
+      "requestId": "router-6ba73ed0ba49384efd94c841cf42f480ac6da4d9357f7507171cfab8f612fd5b",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterCommit",
+      "requestId": "router-9fb8130d0aabc3a4a5dd5f0a61a98a427491ccf085e145b377993181ce89a69c",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeHandle",
+      "requestId": "router-5dcd9878b14c9b76ed6c22bf08226722d7d4e643761b8ca0376a5573f8df9166",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeHandle",
+      "requestId": "router-a8695d204af364ae2cfaea7c0528cbab820b5d9ebae54e1c08fb3c27551c1dcd",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterCommit",
+      "requestId": "router-e99d0dc9f1d3db5c9e075fe69c85e5532f6dcb30823df623ab5437b779c9b9be",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterCommit",
+      "requestId": "router-ac1e4b9589fb736264a8af7ffca1e0249621c0dfee61e4d211e465be694afc91",
+      "claimState": "done"
+    }
+  ]
+}

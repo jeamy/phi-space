@@ -1,0 +1,36 @@
+TAP version 13
+# (node:13) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: transport loss preparing a child retains the admitted Parent for same-ID recovery
+ok 1 - jsonl: transport loss preparing a child retains the admitted Parent for same-ID recovery
+  ---
+  duration_ms: 149.186661
+  type: 'test'
+  ...
+# Subtest: jsonl: child preparation does not turn authority or adapter errors into pending retries
+ok 2 - jsonl: child preparation does not turn authority or adapter errors into pending retries
+  ---
+  duration_ms: 34.073689
+  type: 'test'
+  ...
+# Subtest: sqlite: transport loss preparing a child retains the admitted Parent for same-ID recovery
+ok 3 - sqlite: transport loss preparing a child retains the admitted Parent for same-ID recovery
+  ---
+  duration_ms: 70.033096
+  type: 'test'
+  ...
+# Subtest: sqlite: child preparation does not turn authority or adapter errors into pending retries
+ok 4 - sqlite: child preparation does not turn authority or adapter errors into pending retries
+  ---
+  duration_ms: 29.153468
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 617.974154

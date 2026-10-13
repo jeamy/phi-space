@@ -1,0 +1,12 @@
+{
+  "existingServices": [
+    "active",
+    "active",
+    "active"
+  ],
+  "fixtureContainers": [],
+  "temporaryGroupPresent": false,
+  "temporaryPolicyPresent": false,
+  "ownedCidFilesRecorded": 4,
+  "serverLibrarySha256": "3d7f2f0a8496d8fa07534786e579127c5143d4b704d37c23bffb7e3983d37a94"
+}

@@ -1,0 +1,39 @@
+build-ready
+provisioning
+running
+restarting-member-c-1
+restarting-member-c-2
+restarting-member-b-1
+restarting-member-b-2
+restarting-member-a-1
+restarting-member-a-2
+restarting-member-b-3
+restarting-member-c-3
+restarting-member-a-3
+restarting-member-b-4
+restarting-member-c-4
+restarting-member-a-4
+restarting-member-b-5
+restarting-member-c-5
+restarting-member-a-5
+restarting-member-b-6
+restarting-member-c-6
+restarting-member-a-6
+restarting-member-a-7
+restarting-member-a-8
+restarting-member-b-7
+restarting-member-a-9
+restarting-member-b-8
+restarting-member-c-7
+restarting-member-b-9
+restarting-member-c-8
+restarting-member-a-10
+restarting-member-b-10
+restarting-member-c-9
+restarting-member-c-10
+cleanup-finished
+Traceback (most recent call last):
+  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 98, in <module>
+    assert root_state['ExitCode']==0 and not root_state['OOMKilled'],'Root failed during Member recovery; see Root log'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Root failed during Member recovery; see Root log

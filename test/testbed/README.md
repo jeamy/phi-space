@@ -211,3 +211,49 @@ must include this correction before running the concurrent ACK scenario.
 
 The remaining seven Phase-2 acceptance blocks and the separate overall release
 are tracked in [the current acceptance document](../../docs/ap2-abnahme.md).
+
+### NetBird load with individual Member process crashes
+
+```sh
+node test/testbed/build-artifacts.mjs /tmp/phase2-member-wire-artifacts
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-member-wire-artifacts --jobs 60 --entries 180 --member-crashes
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-member-wire-artifacts --jobs 1000 --entries 10000 --member-crashes
+```
+
+This separate fault mode requires 30 real SIGKILLs: three Members × task write,
+transaction begin, take, result write and transaction commit × before admission
+and after the durable effect but before its reply. The hook runs inside the
+Member service after the Router key proof. It reads the original claim before
+recording each boundary: absent before admission, completed after the effect.
+Crashes are spread across job progress. The Root remains running.
+
+Only the owned Member container IDs are restarted, with Docker init and their
+original SQLite stores. Reopen verifies membership, policy, Space ID,
+incarnation, authority and primary epoch; it does not seed background Entries
+again. Private Root signers stay in the Root directory. Shared injection state
+contains only public targets and workload counters. Each observed death must
+have exit code 137, no OOM flag and exactly one new durable boundary marker.
+The process observations require eleven starts per Member and one Root start.
+
+During recovery, the operator retries only `FederationPending`, with the same
+Parent request and a 30-second retry deadline. The production client preserves
+an admitted Parent when transport loss interrupts proof/generation preparation
+before a Child is dispatched. A new generation may be obtained only while no
+Child is journaled; persisted Child request identities remain unchanged.
+Authority, permission and other definitive errors are not converted into
+pending retries. Original transaction deadlines remain unchanged.
+
+The closed-store audit verifies all original Child claims and the 30 faulted
+bindings/hashes on read-only source mounts and private SQLite copies. This
+proves process recovery at unchanged bindings, not promotion, independent host
+failure, power-loss durability, production boot authorization or every explicit
+Root journal boundary. Other fault modes cannot be combined with this run.
+
+
+The Member observer batches status checks, marker copying and restarts in one
+server command, with a 25-second SSH limit and five-second Docker command
+limits. Other helper SSH calls have a 60-second limit and connection/keepalive
+limits. An observer failure ends the fixture instead of leaving a Member
+offline indefinitely. Cleanup recovers lost container-start responses from
+CID files only after this invocation successfully created its fresh directory;
+a refused existing directory never grants ownership of its containers.

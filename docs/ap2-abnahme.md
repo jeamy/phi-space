@@ -6,13 +6,13 @@ Die bisherigen Nachweise zu AP 1b bleiben bestehen.
 
 ## Aktuelle verbleibende Testblöcke (2026-10-13)
 
-Die offenen Abnahmen sind in acht technische Blöcke gebündelt; jeder Block
-umfasst mehrere Einzeltests. Block 1 ist inzwischen abgenommen, **sieben
+Die Phase-2-Abnahmen sind in acht technische Blöcke gebündelt; jeder Block
+umfasst mehrere Einzeltests. Blöcke 1 und 2 sind inzwischen abgenommen, **sechs
 Blöcke bleiben offen**, danach folgt die Gesamtfreigabe mit finalen Gate-4-Werten.
 Die Blöcke 4–8 benötigen teilweise noch Implementierung oder Betriebsentscheidungen.
 
 - [x] 1. Mailbox-ACK-Abbrüche über NetBird unter voller Joblast.
-- [ ] 2. Individuelle Member-Prozessabbrüche und Wiederaufnahme.
+- [x] 2. Individuelle Member-Prozessabbrüche und Wiederaufnahme.
 - [ ] 3. Gezielt unterbrochene Journal-Commits über NetBird.
 - [ ] 4. Produktive Root-/Directory-Provisionierung samt Boot-/Fencing-Prüfung.
 - [ ] 5. Nachweis über unabhängige physische Ausfalldomänen.
@@ -453,10 +453,10 @@ Typecheck und 428 Regressionstests bestanden; der erweiterte Audit ist auch
 gegen den vorherigen Admission-Volllastlauf geprüft.
 [Nachweise](../test/evidence/ap2-netbird-process-crashes-2026-10-13/).
 
-**Noch offen:** Der Nachweis betrifft Root-Abbrüche an RPC-Grenzen bei laufenden
-Members. Gezielt unterbrochene Mailbox-ACKs und sämtliche Journal-Commit-
-Grenzen über NetBird sowie individuelle Member-Prozessabbrüche sind damit noch
-nicht abgenommen. Die vier Netzräume bleiben auf einem physischen Server;
+**Grenzen dieses Root-RPC-Nachweises:** Er betrifft Root-Abbrüche bei laufenden
+Members und deckt gezielte Mailbox-ACKs, explizite Journal-Commit-Grenzen
+oder individuelle Member-Abbrüche nicht ab. Separate ACK- und Member-Nachweise
+stehen in den folgenden Abschnitten; explizite Root-Journal-Grenzen bleiben offen. Die vier Netzräume bleiben auf einem physischen Server;
 Produktions-Provisionierung, unabhängige Boot-/Fencing-Berechtigung und die
 weiteren Admin-/Profil-Gates bleiben offen. Phase 2 ist nicht vollständig
 abgenommen. Temporäre Fixture-Container und NetBird-Objekte wurden entfernt;
@@ -498,6 +498,57 @@ und Typecheck bestanden. Der Mobile-Bundle ist synchronisiert; ein neuer
 Handy-Deployment-Nachweis wird damit nicht behauptet.
 [Nachweise](../test/evidence/ap2-netbird-ack-2026-10-13/).
 
-Member-Abbrüche und sämtliche expliziten Journal-Grenzen über NetBird bleiben
-separate offene Blöcke. Alle Fixture-Container und temporären NetBird-Objekte
+Dieser ACK-Nachweis umfasst keine Member-Abbrüche oder sämtliche expliziten
+Journal-Grenzen über NetBird. Der anschließende Member-Nachweis folgt unten. Alle Fixture-Container und temporären NetBird-Objekte
 sind entfernt; vorhandene Dienste bleiben aktiv. Die Gesamtfreigabe bleibt offen.
+
+
+## Individuelle Member-Abbrüche unter NetBird-Volllast (2026-10-13)
+
+**Testblock 2 ist abgenommen.** Der volle Lauf mit 10.000 initialen Entries,
+1.000 Jobs, drei Members und sechs Workern bestand 30 tatsächliche Member-
+SIGKILLs: fünf Effektarten × drei Members × vor Annahme/nach dauerhaftem
+Abschluss vor Antwort. Sechs Abbrüche betreffen die Task-Produktion; bei allen
+24 Abbrüchen an Worker-Wirkungen laufen sechs Worker. Der Root startet einmal
+und endet regulär; jeder Member startet elfmal auf seinem ursprünglichen Store.
+Space-ID, Inkarnation, Autorität, Primary-Epoche, Membership und Policy bleiben
+unverändert. Hintergrund-Entries werden beim Reopen nicht erneut angelegt.
+Der Lauf dauerte 435,357 Sekunden einschließlich Member-Neustarts.
+
+Vor jedem Abbruch prüft der Test den ursprünglichen Claim: 15 Requests sind
+noch nicht angenommen, 15 bereits abgeschlossen. Nach Wiederaufnahme prüfen
+private Kopien der read-only gemounteten Stores alle 5.000 ursprünglichen
+Child-Claims samt Principal, Generation, Request-ID, Target und Argument-Hash.
+Alle 5.000 Parents/Children sind abgeschlossen; keine aktive Transaktion oder
+ungenutzte Zukunftsreservierung bleibt zurück. 1.000 eindeutige Ergebnisse,
+null Tasks, 9.000 Hintergrund-Entries und der vollständige Primzahlvergleich
+sind bestätigt.
+
+Der Probelauf fand eine Admission-Lücke: Ein Transportverlust bei Proof oder
+Generation vor Child-Dispatch ließ den schon gespeicherten Parent-Aufruf
+abbrechen. Dieser typisierte Transportfehler meldet jetzt `FederationPending`
+mit derselben Parent-ID; Routingplan und Reservierung bleiben bestehen.
+Erst solange kein Child journalisiert ist, darf eine neue Generation beschafft
+werden. Journalisierte Child-IDs werden unverändert wiederholt. Fachliche,
+Berechtigungs- und Autoritätsfehler werden nicht in Pending umgedeutet.
+Der Testtreiber wiederholt Pending mit 30 Sekunden Retry-Frist, ohne bestehende
+Transaktions-Deadlines zu verlängern. Zwei positive und zwei negative Fälle
+für JSONL/SQLite, 436 lokale Tests, vier gebaute Server-Recovery-Tests,
+24 Mobile-Tests und Typecheck bestehen. Ein Fehler der Bericht-Dateirechte
+im 60-Job-Probelauf ist vor dem erfolgreichen Volllastlauf behoben; fehlgeschlagene
+Läufe werden getrennt dokumentiert.
+Ein erster Volllastlauf scheiterte an einem hängenden SSH-Beobachter im
+Testtreiber: Ein abgebrochener Member blieb unerreichbar; der Root beendete
+seinen Pending-Retry nach der gesetzten Frist. SSH-Aufrufe sind jetzt begrenzt;
+der Member-Beobachter prüft und startet die eigenen Container gebündelt auf
+dem Server. Die erfolgreiche Abnahme nutzt eine frische Fixture. Ein verweigertes
+vorhandenes Testverzeichnis berechtigt nicht zur Übernahme seiner CID-Dateien;
+diese Aufräumgrenze ist separat mit dem laufenden eigenen Fixture geprüft.
+
+[Nachweise](../test/evidence/ap2-netbird-member-crashes-2026-10-13/).
+
+Alle eigenen Fixture-Container und temporären NetBird-Objekte sind entfernt;
+bestehende Produktionsdienste bleiben aktiv. Der Nachweis ersetzt weder
+Promotion/Boot/Fencing noch unabhängige physische Ausfalldomänen oder Power-Loss-
+Prüfung. **Sechs Testblöcke sowie die Gesamtfreigabe bleiben offen.** Als nächstes
+folgt Testblock 3 mit gezielt unterbrochenen expliziten Root-Journal-Commits.

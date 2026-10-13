@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {PiSpaces} from './src/client.ts';
 import {Space} from './src/doc.ts';
+import {TransportFailure} from './src/remote.ts';
+import {PermissionError} from './src/core.ts';
 import {createSpace} from './src/spaces.ts';
 import {
     FederatedSpace,
@@ -386,3 +388,27 @@ for(const b of BACKENDS)for(const boundary of ['candidate','winner','completed',
   assert.equal(entries,1,'exactly one committed winner and one returned loser');
   for(const r of o.partitionRouters){const journal=await o.host.snapshot(RouterJournal,r.journalId,ctx);assert.deepEqual(journal?.future??{},{});}
  },8));
+
+for(const b of BACKENDS){
+ test(`${b}: transport loss preparing a child retains the admitted Parent for same-ID recovery`,()=>fixture(b,async o=>{
+  const step=o.io.step,request={id:'prepare-outage',principal:o.p},entry={type:'Job',fields:{n:1}};
+  o.io.step=async()=>{throw new TransportFailure('Member unavailable during proof/generation');};
+  await assert.rejects(o.f.write(entry,request),(e:any)=>e instanceof FederationPending&&e.requestId===request.id);
+  const key=parentJournalKey('federation',8,operationPartition(request.id,8));
+  const parent=(await o.host.snapshot(FederationOperations,key,ctx)).operations[request.id];
+  assert.equal(parent.phase,'admitting');assert.deepEqual(parent.members,['a']);assert.deepEqual(parent.children,{});
+  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
+  await assert.rejects(o.f.write({...entry,fields:{n:2}},request),RoutingConflict);
+  o.state.members.a.capacity.free=1;o.state.members.b.capacity.free=100;
+  await o.reopen();o.io.step=step;await o.f.write(entry,request);await o.f.write(entry,request);
+  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+  assert.equal(await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
+  const done=(await o.host.snapshot(FederationOperations,key,ctx)).operations[request.id];assert.equal(done.phase,'done');assert.deepEqual(done.targets,parent.targets);assert.equal(done.hash,parent.hash);
+  for(const router of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,router.journalId,ctx))?.future??{},{});
+ },8));
+ test(`${b}: child preparation does not turn authority or adapter errors into pending retries`,()=>fixture(b,async o=>{
+  for(const [id,error] of [['denied',new PermissionError('revoked')],['adapter',new Error('invalid adapter')]] as const){
+   o.io.step=async()=>{throw error;};await assert.rejects(o.f.write({type:'Job',fields:{id}},{id,principal:o.p}),(e:any)=>e===error);
+  }
+ }));
+}

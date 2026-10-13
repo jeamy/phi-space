@@ -1,0 +1,15 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"root-started","produced":0,"completed":0,"priorCrashes":0,"routerEpoch":1,"leaseId":"3c1feca0-4223-4b44-aedf-023f9f2d1815"}
+{"stage":"inventory-ready","entries":180,"jobs":60}
+file:///opt/app/pi-spaces.mjs:5425
+      throw e instanceof TransportFailure || e instanceof ResourceExhausted ? e : new TransportFailure(e instanceof Error ? e.message : String(e));
+                                                                                  ^
+
+TransportFailure [Error]: connect ECONNREFUSED 100.89.116.183:7423
+    at RemoteSpace.roundTrip (file:///opt/app/pi-spaces.mjs:5425:83)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async RemoteSpace.send (file:///opt/app/pi-spaces.mjs:5444:19)
+    at async file:///opt/app/pi-spaces.mjs:5516:18
+
+Node.js v22.23.3

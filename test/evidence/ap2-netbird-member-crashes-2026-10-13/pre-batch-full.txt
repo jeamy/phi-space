@@ -1,0 +1,26 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"root-started","produced":0,"completed":0,"priorCrashes":0,"routerEpoch":1,"leaseId":"ecdedeae-2490-4023-862e-5cf41ae32a91"}
+{"stage":"written","jobs":100}
+{"stage":"written","jobs":200}
+{"stage":"written","jobs":300}
+{"stage":"written","jobs":400}
+{"stage":"written","jobs":500}
+{"stage":"written","jobs":600}
+{"stage":"written","jobs":700}
+{"stage":"written","jobs":800}
+{"stage":"written","jobs":900}
+{"stage":"written","jobs":1000}
+{"stage":"inventory-ready","entries":10000,"jobs":1000}
+{"stage":"completed","jobs":100}
+file:///opt/app/pi-spaces.mjs:8179
+        throw new FederationPending(op.id);
+              ^
+
+FederationPending [Error]: bound child outcome is unresolved
+    at FederatedSpace.decide (file:///opt/app/pi-spaces.mjs:8179:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  requestId: 'take-150'
+}
+
+Node.js v22.23.3

@@ -99,7 +99,7 @@ const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> 
 };
 const toError = (e: { code: ErrorCode; message: string; requiredBytes?: number }): Error => CODE_ERRORS[e.code]?.(e.message, e.requiredBytes) ?? new RemoteError(e.code, e.message, e.requiredBytes);
 
-class TransportFailure extends Error {}
+export class TransportFailure extends Error {}
 
 export class RemoteSpace implements SpaceLike {
 	private t: Transport;

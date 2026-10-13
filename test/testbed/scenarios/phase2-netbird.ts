@@ -7,7 +7,7 @@ import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
 import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
-import {core,canonicalJson,principalId,FederationOperations,operationPartition,parentJournalKey,searchMembers,createSpace,spaceDoc,snapshotSpace,provisionFileSigner,loadFileSigner,privateFile,MemoryKeyDirectory,
+import {core,claims,canonicalJson,principalId,FederationOperations,operationPartition,parentJournalKey,searchMembers,createSpace,spaceDoc,snapshotSpace,provisionFileSigner,loadFileSigner,privateFile,MemoryKeyDirectory,
  NetbirdDirectory,GateIdentity,SpaceService,ProvingService,startGate,GrantVerifier,GrantAuthority,DelegationVerifier,
  RouterLeaseAuthority,createFederationController,FederationRouting,socketTransport,RemoteSpace,
  FederationPending,type Transport,type FederationPolicy,type SignedRouterLease,type Principal,type PeerKeyRec,type Taken} from '../../../src/index.ts';
@@ -64,7 +64,7 @@ function faultTransport(member:string,s:Transport):Transport{return{request:asyn
  if(config.rpcFaultBoundary!=='beforeSend'&&JSON.parse(reply).ok&&!faultSlots.has(after)){faultSlots.add(after);faults.push(record('afterReply'));throw new Error('fixture discarded successful RPC reply');}
  return reply;
 }};}
-async function effect<T>(fn:()=>Promise<T>):Promise<T>{for(let n=0;n<6;n++){try{return await fn();}catch(e){if(!(e instanceof FederationPending))throw e;retries++;}}throw new Error('wire fixture exceeded bounded same-Parent retries');}
+async function effect<T>(fn:()=>Promise<T>):Promise<T>{const deadline=Date.now()+30000;for(let n=0;n<(config.memberCrashes?120:6);n++){try{return await fn();}catch(e){if(!(e instanceof FederationPending))throw e;retries++;if(config.memberCrashes&&Date.now()>=deadline)throw e;if(config.memberCrashes)await new Promise(r=>setTimeout(r,250));}}throw new Error('wire fixture exceeded bounded same-Parent retries');}
 const keys=new MemoryKeyDirectory();let close:undefined|(()=>Promise<void>);const sockets:ReturnType<typeof socketTransport>[]=[];
 try {
  if(mode==='prepare') {
@@ -77,17 +77,40 @@ try {
   const pub=JSON.parse(privateFile(join(common,'public.json')).toString());keys.add(pub.routerRecord);
   if(mode==='member') {
    const m=config.members.find((m:any)=>m.id===memberId);assert.ok(m);
-   const sid=(await host.commit(tx=>createSpace(tx,'jobs',Date.now()),ctx)).spaceId;
+   const targetFile=join(common,m.id+'.json'),retainedTarget=existsSync(targetFile)?JSON.parse(privateFile(targetFile).toString()):undefined;
+   if(config.memberCrashes)assert.notEqual(process.pid,1,'Member crash fixture requires init');
+   const sid=retainedTarget?.spaceId??(await host.commit(tx=>createSpace(tx,'jobs',Date.now()),ctx)).spaceId;
+   if(!retainedTarget){
    await host.commit(async tx=>{const s=await spaceDoc(tx,sid,Date.now());core.setCompletionProfiles(s,policy.completionProfiles,Date.now());core.setLimits(s,{maxEntriesPerOwner:10000},Date.now());},ctx);
    const memberIndex=config.members.findIndex((x:any)=>x.id===m.id),background:number[]=[];
    for(let n=config.jobs;n<(config.entries??config.jobs);n++)if(n%3===memberIndex)background.push(n);
    for(let offset=0;offset<background.length;offset+=20)await host.commit(async tx=>{const s=await spaceDoc(tx,sid,Date.now());for(const n of background.slice(offset,offset+20))core.write(s,Date.now(),{type:'Load',fields:{n,payload:'x'.repeat(1024)}},null,core.FOREVER,'fixture-background');},ctx);
    await host.commit(async tx=>{(await spaceDoc(tx,sid,Date.now())).membership={memberId:m.id,authorityId,policy,state:'active',admissionVersion:1,transitionId:'isolated-wire-fixture'};},ctx);
+   }else{const retainedSpace=await snapshotSpace(host,sid,ctx);assert.ok(retainedSpace);assert.deepEqual(retainedSpace.membership,{memberId:m.id,authorityId,policy,state:'active',admissionVersion:1,transitionId:'isolated-wire-fixture'});}
    const verifier=new GrantVerifier({authorityId,issuerHostId:'ap2-control',publicKey:pub.controlPublicKey,algorithm:pub.controlAlgorithm});
    const delegation=new DelegationVerifier({host,ctx,authorityId,controlSpaceId:pub.controlSpaceId,supervisorPeerId:controlPeerId,supervisorKey:{algorithm:pub.controlAlgorithm,publicKey:pub.controlPublicKey},keys,grants:verifier,policy:async()=>({authorityId,policyVersion:1})});
    const identity=new GateIdentity();const service=new SpaceService({host,ctx,identity,hostId:m.hostId,authorityId,primaryEpoch:1,authorize:(call,id,conn)=>delegation.check(call,id,conn)});
+   if(config.memberCrashes){
+    const crashFile=join(home,'member-crashes.json'),memberCrashes:any[]=existsSync(crashFile)?JSON.parse(privateFile(crashFile).toString()):[],originalHandle=service.handle.bind(service);
+    const killAt=async(boundary:string,call:any,conn:any)=>{
+     const effect=call?.method==='txn'?'txn-'+call.args?.action:call?.method==='write'?call.args?.entry?.type:call?.method==='take'?'take':undefined;
+     if(!['SieveTask','SieveResult','take','txn-begin','txn-commit'].includes(effect)||!call.request||(conn.peerId!==controlPeerId||conn.state?.proof?.keyId!==pub.routerRecord.keyId))return;
+     if(memberCrashes.some(f=>f.effect===effect&&f.boundary===boundary))return;
+     const workload=JSON.parse(privateFile(join(common,'workload-progress.json')).toString()),gap=Math.floor(config.jobs/20);
+     const prior=memberCrashes.filter(f=>effect==='SieveTask'?f.effect==='SieveTask':f.effect!=='SieveTask').length;
+     if((effect==='SieveTask'?workload.produced:workload.completed)<prior*gap)return;
+     const principal=call.frame.delegation.delegation.principal,reference={principal,...call.request},space=await snapshotSpace(host,sid,ctx);assert.ok(space);
+     const claim=space.rpc?.claims[claims.keyOf(space,reference)];
+     if(boundary==='beforeHandle')assert.equal(claim,undefined,'selected original request must not be admitted');
+     else{assert.ok(claim);assert.equal(claim.state,'done');assert.equal(claim.error,undefined);assert.deepEqual(claim.principal,principal);assert.equal(claim.argHash,call.frame.delegation.delegation.argumentHash);}
+     const fault={member:m.id,boundary,effect,generation:call.request.generation,requestId:call.request.requestId,principal,argumentHash:call.frame.delegation.delegation.argumentHash,target:retainedTarget??JSON.parse(privateFile(targetFile).toString()),claimState:claim?.state??'notAdmitted',activeWorkers:workload.activeWorkers,completedJobs:workload.completed,at:new Date().toISOString()};
+     memberCrashes.push(fault);atomicJson(crashFile,memberCrashes);console.log(JSON.stringify({stage:'member-sigkill',...fault}));process.kill(process.pid,'SIGKILL');throw new Error('SIGKILL returned');
+    };
+    service.handle=async(call,conn,...rest)=>{await killAt('beforeHandle',call,conn);const reply=await originalHandle(call,conn,...rest);if(reply.ok)await killAt('afterCommit',call,conn);return reply;};
+   }
    const gate=await startGate(new ProvingService(service,{gateHostId:m.hostId,keys}) as any,{listen:{host:m.ip,port:7423},directory,keys,groupRoles:{'space-ap2-test':['router','host','member']}});close=()=>gate.close();
-   const s=await snapshotSpace(host,sid,ctx);writeFileSync(join(common,m.id+'.json'),JSON.stringify({hostId:m.hostId,spaceId:sid,dataIncarnation:s!.incarnation,authorityId,primaryEpoch:1}),{mode:0o600});
+   const s=await snapshotSpace(host,sid,ctx),target={hostId:m.hostId,spaceId:sid,dataIncarnation:s!.incarnation,authorityId,primaryEpoch:1};if(retainedTarget)assert.deepEqual(target,retainedTarget);else atomicJson(targetFile,target);
+   atomicJson(join(home,'member-start.json'),{target,reopened:!!retainedTarget,at:new Date().toISOString()});
    console.log(JSON.stringify({ready:true,member:m.id,ip:m.ip}));await new Promise<void>(r=>{process.once('SIGTERM',r);process.once('SIGINT',r);});
   }else if(mode==='run') {
    const router=loadFileSigner(join(home,'router-key.json')),control=loadFileSigner(join(home,'control-key.json'));await directory.refresh();
@@ -107,20 +130,21 @@ try {
     await controller.policy.install(policy,0,async()=>{});
    }else{const state=await controller.policy.state();assert.deepEqual(state.policy,policy);for(const m of config.members)assert.deepEqual(state.members[m.id]!.target,JSON.parse(privateFile(join(common,m.id+'.json')).toString()));}
    const jobs=config.jobs??1000,producer={peerId:controlPeerId,agentId:'producer'},done=new Set<number>(progress.done),workers:number[]=progress.workers;
+   const publishWorkload=()=>{if(config.memberCrashes)atomicJson(join(common,'workload-progress.json'),{produced:progress.produced,completed:done.size,activeWorkers});};publishWorkload();
    atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'root-started',produced:progress.produced,completed:done.size,priorCrashes:progress.crashes.length,routerEpoch:current.lease.routerEpoch,leaseId:current.lease.id}));
    const primes=(start:number,end:number)=>{const a:number[]=[];for(let n=Math.max(2,start);n<=end;n++){let ok=true;for(let d=2;d*d<=n;d++)if(n%d===0){ok=false;break;}if(ok)a.push(n);}return a;};
-   for(let n=progress.produced;n<jobs;n++){await effect(()=>controller.space.write({type:'SieveTask',fields:{taskId:'wire-'+n,rangeStart:n*100+1,rangeEnd:(n+1)*100}},{id:'produce-'+n,principal:producer},core.FOREVER));progress.produced=n+1;atomicJson(progressFile,progress);if(n%100===99)console.log(JSON.stringify({stage:'written',jobs:n+1}));}
+   for(let n=progress.produced;n<jobs;n++){await effect(()=>controller.space.write({type:'SieveTask',fields:{taskId:'wire-'+n,rangeStart:n*100+1,rangeEnd:(n+1)*100}},{id:'produce-'+n,principal:producer},core.FOREVER));progress.produced=n+1;publishWorkload();atomicJson(progressFile,progress);if(n%100===99)console.log(JSON.stringify({stage:'written',jobs:n+1}));}
    if(!progress.inventoryVerified){const inventoryTasks=await controller.space.count({type:'SieveTask'},producer),inventoryBackground=await controller.space.count({type:'Load'},producer);
     assert.equal(inventoryTasks.count,jobs);assert.equal(inventoryBackground.count,(config.entries??jobs)-jobs);progress.inventoryVerified=true;atomicJson(progressFile,progress);
     console.log(JSON.stringify({stage:'inventory-ready',entries:inventoryTasks.count+inventoryBackground.count,jobs}));}
 
    const st=await controller.policy.state();
-   const workerRun=Promise.all(Array.from({length:6},async(_,w)=>{activeWorkers++;try{for(let n=w;n<jobs;n+=6){if(done.has(n))continue;const p={peerId:controlPeerId,agentId:'worker-'+w},taskId='wire-'+n;
+   const workerRun=Promise.all(Array.from({length:6},async(_,w)=>{activeWorkers++;publishWorkload();try{for(let n=w;n<jobs;n+=6){if(done.has(n))continue;const p={peerId:controlPeerId,agentId:'worker-'+w},taskId='wire-'+n;
     const targets=(await import('../../../src/index.ts')).searchMembers(policy,{type:'SieveTask',fields:{taskId}}),m=targets[0]!;assert.ok(st.members[m]);
     const txn=await effect(()=>controller.space.createTransaction(m,60000,{id:'begin-'+n,principal:p}));const task=await effect(()=>controller.space.take({type:'SieveTask',fields:{taskId}},{id:'take-'+n,principal:p,txn})) as Taken;assert.equal(task.fields.taskId,taskId);
     await effect(()=>controller.space.write({type:'SieveResult',fields:{...task.fields,primes:primes(Number(task.fields.rangeStart),Number(task.fields.rangeEnd))}},{id:'result-'+n,principal:p,txn},core.FOREVER));
-    await effect(()=>controller.space.finishTransaction('begin-'+n,'commit',{id:'commit-'+n,principal:p}));assert.equal(done.has(n),false);done.add(n);workers[w]++;progress.done=[...done];atomicJson(progressFile,progress);if(done.size%100===0)console.log(JSON.stringify({stage:'completed',jobs:done.size}));
-   }}finally{activeWorkers--;}}));
+    await effect(()=>controller.space.finishTransaction('begin-'+n,'commit',{id:'commit-'+n,principal:p}));assert.equal(done.has(n),false);done.add(n);workers[w]++;progress.done=[...done];publishWorkload();atomicJson(progressFile,progress);if(done.size%100===0)console.log(JSON.stringify({stage:'completed',jobs:done.size}));
+   }}finally{activeWorkers--;publishWorkload();}}));
    const ackRun=async()=>{
     if(!config.ackCrashes)return;
     const cases=config.members.flatMap((m:any)=>['beforeSend','afterReply'].map(boundary=>({member:m.id,boundary})));
@@ -146,7 +170,8 @@ try {
    if(config.rpcFaults)assert.equal(faultSlots.size,config.rpcFaultBoundary==='both'?30:15,'all requested RPC boundaries, five effect kinds and all three Members must be exercised');
    const expectedCrashes=(config.processCrashes?config.processCrashEffects.length*config.processCrashMembers.length*(config.processCrashBoundary==='both'?2:1):0)+(config.ackCrashes?6:0);assert.equal(progress.crashes.length,expectedCrashes,'all selected process boundaries must have killed the Root');assert.equal(done.size,jobs);
    if(config.ackCrashes){assert.equal(progress.ackResults.length,6);assert.equal(new Set(progress.ackResults.map((r:any)=>r.winner.gid)).size,6);if(jobs===1000)assert.ok(progress.crashes.every((f:any)=>f.activeWorkers===6),'full ACK matrix must interrupt six running Workers');}
-   const report={ackProbes:progress.ackResults,expectedProcessCrashes:expectedCrashes,ackCrashesUnderWorkerLoad:config.ackCrashes?progress.crashes.every((f:any)=>f.activeWorkers===6):false,processCrashEffects:config.processCrashEffects,processCrashGapJobs:Math.floor(config.jobs/(config.processCrashEffects.length*config.processCrashMembers.length*2+10)),processCrashEffect:config.processCrashEffect,processCrashBoundary:config.processCrashBoundary,processCrashMembers:config.processCrashMembers,processCrashes:progress.crashes,routerEpoch:current.lease.routerEpoch,routerLeaseId:current.lease.id,stableWorkerAssignment:true,rpcFaults:!!config.rpcFaults,rpcFaultBoundary:config.rpcFaultBoundary,faults,sameParentRetries:retries,processCrashesExercised:!!(config.processCrashes||config.ackCrashes),mailboxAckFaultsExercised:!!config.ackCrashes,passed:true,date:new Date().toISOString(),scope:'real-netbird-signed-wire-fixture',entries:config.entries??jobs,backgroundEntriesSeededLocally:(config.entries??jobs)-jobs,jobs,workers:6,workerJobs:workers,members:config.members.map((m:any)=>({id:m.id,peerId:m.peerId,ip:m.ip})),routerPeerId:controlPeerId,independentNetworkNamespaces:4,physicalServers:1,layerA:true,layerB:true,signedGrants:true,signedDelegation:true,signedRouterLease:true,fixtureProvisioning:true,independentBootRegisterExercised:false,productionServicesChanged:false,fullPhase2Accepted:false,primes:actual.length,sum:actual.reduce((a,b)=>a+b,0),elapsedMs:Date.now()-progress.startedAt};
+   const memberFaults=config.memberCrashes?config.members.flatMap((m:any)=>JSON.parse(privateFile(join(common,m.id+'-crashes.json')).toString())):[];if(config.memberCrashes){assert.equal(memberFaults.length,30);assert.equal(new Set(memberFaults.map((f:any)=>[f.member,f.boundary,f.effect].join(':'))).size,30);if(jobs===1000)assert.ok(memberFaults.filter((f:any)=>f.effect!=='SieveTask').every((f:any)=>f.activeWorkers===6),'all Member worker-effect deaths must interrupt six running Workers');}
+   const report={memberProcessCrashesExercised:!!config.memberCrashes,memberProcessCrashes:memberFaults,memberCrashesUnderWorkerLoad:config.memberCrashes?memberFaults.filter((f:any)=>f.effect!=='SieveTask').every((f:any)=>f.activeWorkers===6):false,ackProbes:progress.ackResults,expectedProcessCrashes:expectedCrashes+(config.memberCrashes?30:0),expectedRootProcessCrashes:expectedCrashes,ackCrashesUnderWorkerLoad:config.ackCrashes?progress.crashes.every((f:any)=>f.activeWorkers===6):false,processCrashEffects:config.processCrashEffects,processCrashGapJobs:Math.floor(config.jobs/(config.processCrashEffects.length*config.processCrashMembers.length*2+10)),processCrashEffect:config.processCrashEffect,processCrashBoundary:config.processCrashBoundary,processCrashMembers:config.processCrashMembers,processCrashes:progress.crashes,routerEpoch:current.lease.routerEpoch,routerLeaseId:current.lease.id,stableWorkerAssignment:true,rpcFaults:!!config.rpcFaults,rpcFaultBoundary:config.rpcFaultBoundary,faults,sameParentRetries:retries,processCrashesExercised:!!(config.processCrashes||config.ackCrashes),mailboxAckFaultsExercised:!!config.ackCrashes,passed:true,date:new Date().toISOString(),scope:'real-netbird-signed-wire-fixture',entries:config.entries??jobs,backgroundEntriesSeededLocally:(config.entries??jobs)-jobs,jobs,workers:6,workerJobs:workers,members:config.members.map((m:any)=>({id:m.id,peerId:m.peerId,ip:m.ip})),routerPeerId:controlPeerId,independentNetworkNamespaces:4,physicalServers:1,layerA:true,layerB:true,signedGrants:true,signedDelegation:true,signedRouterLease:true,fixtureProvisioning:true,independentBootRegisterExercised:false,productionServicesChanged:false,fullPhase2Accepted:false,primes:actual.length,sum:actual.reduce((a,b)=>a+b,0),elapsedMs:Date.now()-progress.startedAt};
    writeFileSync(join(common,'netbird-sieve.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
   }else throw new Error('use prepare, member or run');
  }
