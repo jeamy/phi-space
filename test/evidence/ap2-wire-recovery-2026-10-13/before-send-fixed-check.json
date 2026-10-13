@@ -1,0 +1,9 @@
+{
+  "expectedRefusalObserved": true,
+  "scope": "real NetBird request failed before send; absent claim cannot authorize status delegation",
+  "classification": "needsReview",
+  "resolutionRefusals": 1,
+  "automaticReplacementAllowed": false,
+  "fullWorkloadPassed": false,
+  "cleanupFinished": true
+}

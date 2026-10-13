@@ -32,7 +32,7 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | Router AP 2.1 | Command-Zustandsmaschine, dauerhaft gebundene Unterrequests, Rekonstruktion, getrennte Budgets, feste optionale Journal-Partitionen, unabhängige Admission, Restore-Review und Mailbox-Übernahme | vollständige Phase-2-System- und Lastabnahme |
 | AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
 | Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport mit Fixture-Identitäten im selben Prozess; Drei-Host-NetBird- und vollständige Crash-Abnahme bleiben offen |
-| NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; Lease-Deadlock und Parent-Reservierungsfreigabe regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; volle Overlay-Crash-Matrix und Produktions-Provisionierung bleiben offen |
+| NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; volle Overlay-Crash-Matrix und Produktions-Provisionierung bleiben offen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
 
@@ -122,7 +122,17 @@ AP 2.6/2.7 sind um Abschlussbudgets, auditierte lokale Admin-Bausteine,
 Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lasttest
 für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweise
 und offenen Grenzen. Die vollständige Phase 2 ist noch nicht freigegeben:
-Journal-Skalierung, verteilter F9-Löschlauf und Drei-Member-Sieb
-über NetBird fehlen. Die lokale batchweise Principal-Löschung mit dauerhaftem
+Die feste Journal-Aufteilung und das signierte Drei-Member-Sieb über NetBird
+sind nachgewiesen. Offen bleiben die vollständige Overlay-Crash-Matrix,
+produktive Root-/Directory-Provisionierung, verteilte F9-Löschung einschließlich
+Historien/Archiven und kontrollierte Abschlussprofil-Umstellung. Die vier
+Netzräume auf big ersetzen keine unabhängigen physischen Ausfalldomänen. Die lokale batchweise Principal-Löschung mit dauerhaftem
 Fortschritt, Space-Sperre und Crash-Recovery ist inzwischen implementiert und
 auf beiden Speicher-Backends geprüft. RunGate und Replikation folgen später.
+
+Die Wire-Recovery-Prüfung vom 2026-10-13 ergänzt gezielt verlorene erfolgreiche
+RPC-Antworten. Typisierte definitive Fehler bei der Claim-Auflösung führen
+jetzt dauerhaft zu `needsReview` statt zu einer Endlosschleife von Transport-
+Retries. Vor Annahme ausgefallene Requests benötigen weiterhin eine sichere
+autoritative Negativauflösung; vorhandene Status-Delegationen verlangen einen
+bereits gebundenen Claim. Details stehen in der [Phase-2-Abnahme](ap2-abnahme.md).

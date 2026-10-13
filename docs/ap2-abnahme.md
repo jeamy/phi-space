@@ -125,17 +125,19 @@ Router und Parents ab und hält bei einem Crash zwischen Partitionen eine
 dauerhafte Gesamtsperre bis zur abgeschlossenen Wiederholung.
 Der einzelne Write-Lastfall ersetzt keinen Job-Lebenszyklus oder Overlay-Test.
 Der vollständige virtuelle Job-Lauf ist im folgenden Nachtrag separat belegt;
-die Abnahme über echte NetBird-Hosts bleibt offen.
+Der signierte Drei-Member-NetBird-Lauf auf big ist nachgewiesen;
+unabhängige physische Ausfalldomänen und die vollständige Crash-Matrix
+bleiben offen.
 
 | Abnahmepunkt | Nachweis / offener Schritt |
 |---|---|
-| Signierte Lease, Delegation, Rechte-/Policy-/Epochengrenzen | Bestehende Delegations-, Routing- und TCP-Tests; keine neue Overlay-Abnahme |
+| Signierte Lease, Delegation, Rechte-/Policy-/Epochengrenzen | Delegations-, Routing- und TCP-Tests sowie signierter NetBird-Lauf mit drei Members; produktive Provisionierung offen |
 | Stabile Child-IDs, Retry, Restore | Router-/Parent-Tests auf JSONL und SQLite; Reconciliation-Hook bei tatsächlichem Root zu provisionieren |
 | Drain, Ergebnis-Commit, Remove, Notify und EmptyProof | Membership- und Core-Tests einschließlich globaler Abschlussbudgets |
 | Capability und MemberStatus | JSONL-/SQLite-Tests plus zusammengesetzter Host-TCP-RPC-Test; produktive Provisionierung offen |
 | Admin-Purge und F9 | Lokale batchweise Löschung mit Sperre/Crash-Recovery geprüft; verteilter Löschlauf und Router-Historien offen |
 | 10.000 Entries, drei Members, 1.000 Jobs, sechs Worker | Member-Lasttest; finaler Bericht in den verlinkten Nachweisen |
-| Virtueller Router unter dieser Last | Feste Journal-Aufteilung; vollständiger SQLite-Lastlauf im neuen Szenario separat dokumentiert; NetBird- und volle Crash-Abnahme bleiben offen |
+| Virtueller Router unter dieser Last | Feste Journal-Aufteilung; vollständiger SQLite-Lastlauf im neuen Szenario separat dokumentiert; Signierter NetBird-Lauf bestanden; volle Crash-Abnahme bleibt offen |
 | Crash nach jeder Journal-/RPC-/ACK-Grenze unter voller Last | Vollständige Lastmatrix offen; vorhandene gezielte Crash-Tests bleiben gültig |
 | Drei-Member-Sieb über echte NetBird-Verbindungen | 1.000 Jobs / sechs Worker mit signierten Grants, RouterLease und Delegation in vier NetBird-Netzräumen auf big bestanden; Fixture-Provisionierung und ein physischer Server |
 | Handy mit aktuellem APK | Installation und Objektlesen über echte NetBird-Verbindung nachgewiesen |
@@ -276,3 +278,59 @@ gezielt fehl und besteht mit dem korrigierten Controller. Der Operator-Treiber
 Bereinigung reproduzierbar aus. Seine Bereinigung verwendet tatsächlich
 von diesem Lauf erzeugte Container-IDs und die selbst erzeugten Policy-/
 Gruppen-IDs. Vorhandene Testzustände werden nicht überschrieben.
+
+## Wire-Recovery unter Last vom 2026-10-13
+
+Der NetBird-Treiber unterstützt `--rpc-faults` und
+`--rpc-fault-boundary afterReply|beforeSend|both`. Für jeden der drei Members
+werden Task-Write, Transaktionsbeginn, Take, Result-Write und Commit getrennt
+getroffen. Der Standard `afterReply` verwirft je eine tatsächlich erfolgreiche
+Wire-Antwort pro Kombination, insgesamt 15 Antworten. Der Parent wiederholt
+seine bestehende ID und löst den ursprünglichen Child-Request auf. Er erzeugt
+keinen Ersatzauftrag und wechselt nicht zu einem anderen Member.
+
+`--entries 10000 --jobs 1000` provisioniert außerdem 9.000 unveränderte
+Hintergrund-Entries in begrenzten lokalen Bootstrap-Commits vor Aktivierung
+der Fixture-Policy. Die 1.000 fachlichen Jobs und ihre fünf Effekte laufen
+über den signierten Root-/Member-Wire-Pfad. Initiales Inventar, vollständiger
+Primzahlvergleich, eindeutige Ergebnisse, leere Task-Menge und erhaltenes
+Hintergrundinventar werden geprüft. Hintergrund-Provisionierung ist keine
+Abnahme des produktiven Membership-Aufnahmeprotokolls.
+
+Ein erster `beforeSend`-Versuch zeigte eine Fehlerklassifikationslücke:
+`RemoteSpace` wandelt `PermissionDenied`, `RequestExpired`, `ResultExpired`
+und `IncarnationChanged` in konkrete Fehlerklassen um; der RPC-Adapter
+erkannte bisher nur `RemoteError` mit Code. Die konkreten Fehler führten
+dadurch wiederholt zu `unknown` statt zum dauerhaften Zustand `needsReview`.
+Der Adapter erkennt jetzt beide Formen. Die JSONL-/SQLite-Regression prüft
+alle vier Wire-Antworten, erhaltenen Review-Zustand nach Rekonstruktion,
+genau einen Sendeversuch und null fachliche Wirkungen.
+
+**Verbleibende Recovery-Grenze:** Ohne angenommenen Claim verweigert die
+Delegationsprüfung den `targetRequest` des Statusabrufs. Das liefert keinen
+verbindlichen Negativnachweis, dass der ursprüngliche Request niemals wirken
+kann. Ein Ausfall vor Annahme wird deshalb konservativ `needsReview`; der
+Treiber darf hier keinen automatischen Ersatzrequest oder grünen Lastlauf
+erzwingen. Die autoritative Negativauflösung mit allen Bindungs-/Historien-
+prüfungen und die vollständige Prozess-/Journal-/Mailbox-ACK-Matrix unter
+Overlay-Last bleiben offen. Die 15 Antwortverluste ersetzen diese Matrix
+nicht. Phase 2 bleibt ohne Gesamtfreigabe.
+
+Der vollständige Antwortverlust-Lauf bestand mit 10.000 Entries, 1.000 Jobs
+und sechs Workern in 462,309 Sekunden. Alle 15 Fehlerstellen wurden getroffen
+und mit 15 Wiederholungen derselben Parent-IDs aufgelöst. Die Worker
+bearbeiteten 167/167/167/166/167/166 Jobs; alle 1.000 Ergebnisse waren eindeutig,
+keine Tasks blieben übrig und die 9.000 Hintergrund-Entries blieben erhalten.
+Der Referenzvergleich ergab 9.592 Primzahlen bis 100.000, Summe 454.396.537.
+422 lokale Tests, 185 Tests am gebauten Server-Artefakt und 24 Mobile-/Remote-
+Runtime-Tests bestanden. Der alte Adapter scheitert gezielt auf beiden
+Backends an der neuen Fehlerklassifikations-Regression.
+[Nachweise](../test/evidence/ap2-wire-recovery-2026-10-13/) enthalten die
+Berichte und die getrennt bezeichneten Fehlerversuche.
+
+Der separate echte NetBird-Versuch mit `beforeSend` bestätigt den sicheren
+Abbruch mit dem korrigierten Artefakt: genau eine abgewiesene Statusauflösung,
+anschließend `FederationUnavailable: child needs review`, ohne die frühere
+Retry-Schleife. Der erwartete Prüfzustand ist nachgewiesen; dieser Versuch
+ist ausdrücklich kein bestandener fachlicher Lastlauf. Beide isolierten
+Läufe haben ihre eigenen Container, Gruppen und Policies vollständig entfernt.

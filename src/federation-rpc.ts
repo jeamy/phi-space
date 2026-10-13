@@ -1,7 +1,7 @@
 // Production wire adapter: app-key proof, original grants and per-call signed delegation.
 import type {Signer} from './auth.ts';
-import {argHash, type ClaimView, type Principal} from './claims.ts';
-import type {Json, Template} from './core.ts';
+import {argHash, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
+import {PermissionError, type Json, type Template} from './core.ts';
 import {
     delegationForCall,
     signDelegation,
@@ -141,6 +141,9 @@ export class FederationRpc implements RouterTarget, FederationIO {
                                                           : 'pending',
                                 v.result, v.error?.code);
         } catch (e) {
+            if (e instanceof RequestExpired || e instanceof ResultExpired ||
+                e instanceof IncarnationChanged || e instanceof PermissionError)
+                return this.receipt(s, 'needsReview', undefined, e.constructor.name);
             if (e instanceof RemoteError && [
                     'RequestExpired', 'ResultExpired', 'IncarnationChanged', 'PermissionDenied'
                 ].includes(e.code))

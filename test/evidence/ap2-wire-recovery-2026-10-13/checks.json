@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-13",
+  "baseCommit": "808b05f",
+  "typecheckPassed": true,
+  "localTests": {
+    "passed": 422,
+    "failed": 0,
+    "skipped": 0
+  },
+  "builtServerTests": {
+    "passed": 185,
+    "failed": 0,
+    "skipped": 0
+  },
+  "mobileRemoteRuntimeTests": {
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0
+  },
+  "oldAdapterRegression": {
+    "expectedFailures": 2,
+    "scope": "new typed-error regression against unchanged adapter on JSONL and SQLite"
+  },
+  "builtLibrarySha256": "162eadd91ec1978092bef8d4d00e1828141d9bdb4668b32d371351a109acddd7",
+  "fullSignedNetbirdReplyLossRunPassed": true,
+  "entries": 10000,
+  "jobs": 1000,
+  "workers": 6,
+  "members": 3,
+  "replyLossBoundaries": 15,
+  "sameParentRetries": 15,
+  "processCrashesExercised": false,
+  "mailboxAckFaultsExercised": false,
+  "independentPhysicalFailureDomains": false,
+  "fullPhase2Accepted": false,
+  "remaining": [
+    "authoritative negative resolution of requests without an admitted claim",
+    "full journal/RPC/ACK process crash matrix under overlay load",
+    "production Root/directory provisioning with independent boot/fencing",
+    "multiple physical failure domains",
+    "distributed principal deletion including Router/parent histories",
+    "physical archives/backup deletion policy",
+    "controlled completion-profile transition"
+  ],
+  "optionalOperation": "journal topology migration/resizing; fixed bounded topology is implemented",
+  "beforeSendExpectedReviewRefusal": {
+    "expectedRefusalObserved": true,
+    "scope": "real NetBird request failed before send; absent claim cannot authorize status delegation",
+    "classification": "needsReview",
+    "resolutionRefusals": 1,
+    "automaticReplacementAllowed": false,
+    "fullWorkloadPassed": false,
+    "cleanupFinished": true
+  }
+}

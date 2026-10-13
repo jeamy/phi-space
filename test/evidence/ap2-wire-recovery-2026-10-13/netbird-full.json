@@ -1,0 +1,161 @@
+{
+  "rpcFaults": true,
+  "rpcFaultBoundary": "afterReply",
+  "faults": [
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "effect": "SieveTask",
+      "generation": "gfcd520bb33d0fdee84f1f67755db0941.684ed919f6eccbb9c8c711f6f58d6c3efea6ed87ebb9b3d88b57ea963a8ce4e2",
+      "requestId": "router-4b35f263b0ed31070b5c6a0f788047860044f3620e37ded9ad5f5e6b07e63c97"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "effect": "SieveTask",
+      "generation": "g73f3b443cfd129e7ecaa3eedf5d90565.a30f2c2d41e5691781998f9d708751890e59e80b8995a9d906f36755bde22e2d",
+      "requestId": "router-8bbfda0f9c2e44141f0b4748ecadb707a1effc401b730d398be89ac1e15114f5"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "effect": "SieveTask",
+      "generation": "gd613c01200930cb307e1d62ccec23e28.2be873a27d412e34cfceb8a5a1e8d8b1fdc799843769db10469fcd2491430e9a",
+      "requestId": "router-298effa6f76f33943de8d998be3e52d431501cab5de447339afe031ae3d6063b"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "effect": "txn-begin",
+      "generation": "gb8da064302435d6d62a6cc87b4d152a4.c2b8dfb0a4fb09261ea83a458739f677ff1ed74957e6167db78ad805b196680f",
+      "requestId": "router-00630b5d219fb6a7ba5ec456f2fb3d0747c0aebfc0dd448b7cc9773d365d1065"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "effect": "txn-begin",
+      "generation": "g5f71f94bb9b8822cfc2b37166c51eb11.6cb6269a5fc7deb3ed667983c712dc838de7d65a3033a53d7ef456893e1a15cc",
+      "requestId": "router-188828109a5bd1d82c82ff321554306e54b7fdb07aa7c531e4845b8a9aebeeb2"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "effect": "take",
+      "generation": "g339ec4f26d068beba80a208259216505.d7e6a14279f7b9d98057891da7ffffab1c1615e055c3b1b3009264df3d197db4",
+      "requestId": "router-82fa4ee7c0c6fad7c528b8b7e9bc073fde882851056991fa505d469ae5bfe26c"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "effect": "SieveResult",
+      "generation": "g98497932f08d1a2c4d108346de116a4e.0f3e739bd1fcf362cf6755f0883c56d402a1bcdd5fc234f8ee6892ecefe35b59",
+      "requestId": "router-263d84d53737348320c15799892a60fac84eeca90531644fc980683c18fbc825"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "effect": "take",
+      "generation": "g646027811d81fa9e216801d9f407827b.0725f7358e9e09840b124f071fc7055932ca357dc72f34edb4cc61c6d95e0be4",
+      "requestId": "router-a29e4b460c2658125b35ffadae74e2774d0bc4f9d350e6b3350bae7d14ceac5f"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "effect": "txn-commit",
+      "generation": "ga209528599fbba7ddb89eac85f267b41.afbbecd26f35492450adf31517c22c5490281cb159e30a6c73b2dde1b6d2466b",
+      "requestId": "router-67c4945ba672a807557d2d0040549b3bfc126df84f45b449365d1f0721a046d3"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "effect": "SieveResult",
+      "generation": "g6d57f40837d2aa1e9ac1caa9bb03ef9e.c5a28e3b6989c0846f783407dffece393df679e63aa7ed81ec465bd33dba6a7f",
+      "requestId": "router-f51df780e7117853aed46e22ad40792eb2981c0f54675ad0c944a2775f756983"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "effect": "txn-begin",
+      "generation": "g73fd2b68c59d5d39c8ae95aac7d4236a.291495f640786b16fa26821dfde0cb9afdd2f4b83de2353436f7793e54443f52",
+      "requestId": "router-66c25b534a5f1b16ac7a1e033338ae4ca58d9374ec88b89875ce3369408eeb04"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "effect": "take",
+      "generation": "g79da78a0d152452316c2535cf123d17c.d2fc6840fe644b507d67ac590ec25b9ab4468bb91d5a0635ba59d6a3e8359646",
+      "requestId": "router-d5e80d9d079a460416dbc46085ada6437be28f6465cfbe1fe75faa6674f96f78"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "effect": "txn-commit",
+      "generation": "ga9bc10285403fa59bfccdac8188dec68.e0385a76bd98990e7a2893bf38c6191fb1f9e5b2a043cfdf21777bada9127d7c",
+      "requestId": "router-a5eba4d3d042ae1cfda5d27ee8b412eb3dcd66af46eaddaf9387efda5fb92ccc"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "effect": "SieveResult",
+      "generation": "gf35d7516753fdd420483e330376f8d27.78dd64cc2293c66f49d737f957f0a08f4fe98cc8831ce9e107d201269fe79ffe",
+      "requestId": "router-9d1a41aa7092e268457c88c97263ff0e17e7dfefd25cef33df540f5110186429"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "effect": "txn-commit",
+      "generation": "gaebbcb6a13bdfc36fad81488cdefd26f.47297a2e3db6bfd82f25d01a6da2d88b6fdac829acdd376766a1f2432306b707",
+      "requestId": "router-4e45a00c2956e6021699edb4c824405fa26fab6b050cada319e88e49000ea35c"
+    }
+  ],
+  "sameParentRetries": 15,
+  "processCrashesExercised": false,
+  "mailboxAckFaultsExercised": false,
+  "passed": true,
+  "date": "2026-10-13T03:58:19.910Z",
+  "scope": "real-netbird-signed-wire-fixture",
+  "entries": 10000,
+  "backgroundEntriesSeededLocally": 9000,
+  "jobs": 1000,
+  "workers": 6,
+  "workerJobs": [
+    167,
+    167,
+    167,
+    166,
+    167,
+    166
+  ],
+  "members": [
+    {
+      "id": "a",
+      "peerId": "db3r4p7lh8lg008eup6g",
+      "ip": "100.89.240.87"
+    },
+    {
+      "id": "b",
+      "peerId": "db3r4pflh8lg008eupq0",
+      "ip": "100.89.5.70"
+    },
+    {
+      "id": "c",
+      "peerId": "db3r4p7lh8lg008eupb0",
+      "ip": "100.89.116.183"
+    }
+  ],
+  "routerPeerId": "db3r4ovlh8lg008eup20",
+  "independentNetworkNamespaces": 4,
+  "physicalServers": 1,
+  "layerA": true,
+  "layerB": true,
+  "signedGrants": true,
+  "signedDelegation": true,
+  "signedRouterLease": true,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "fullPhase2Accepted": false,
+  "primes": 9592,
+  "sum": 454396537,
+  "elapsedMs": 462308.753831
+}

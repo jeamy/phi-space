@@ -1,0 +1,63 @@
+TAP version 13
+# (node:2947847) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: typed wire resolution errors persist review and never resend effects
+not ok 1 - jsonl: typed wire resolution errors persist review and never resend effects
+  ---
+  duration_ms: 99.709107
+  type: 'test'
+  location: '/tmp/pi-wire-old-adapter/test-delegation.test.ts:604:31'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 'applying'
+    - 'needsReview'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'needsReview'
+  actual: 'applying'
+  operator: 'strictEqual'
+  stack: |-
+    file:///tmp/pi-wire-old-adapter/test-delegation.test.ts:618:11
+    async fixture (file:///tmp/pi-wire-old-adapter/test-delegation.test.ts:156:9)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: sqlite: typed wire resolution errors persist review and never resend effects
+not ok 2 - sqlite: typed wire resolution errors persist review and never resend effects
+  ---
+  duration_ms: 43.653366
+  type: 'test'
+  location: '/tmp/pi-wire-old-adapter/test-delegation.test.ts:604:31'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 'applying'
+    - 'needsReview'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'needsReview'
+  actual: 'applying'
+  operator: 'strictEqual'
+  stack: |-
+    file:///tmp/pi-wire-old-adapter/test-delegation.test.ts:618:11
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async fixture (file:///tmp/pi-wire-old-adapter/test-delegation.test.ts:156:9)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 781.969029

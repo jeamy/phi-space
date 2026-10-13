@@ -1,0 +1,33 @@
+{
+  "builtAt": "2026-10-13T03:50:08.412Z",
+  "commit": "808b05f",
+  "dirty": true,
+  "node": "v22.23.1",
+  "files": {
+    "examples/arxiv-research.mjs": "fb853de761cfa13d",
+    "examples/arxiv-tool.mjs": "da7e3bc27157df53",
+    "examples/blocking-tool.mjs": "6b2613ea1ea9b797",
+    "examples/cache.mjs": "0572fd3b6fd81fb6",
+    "examples/chat.mjs": "1aef9ab0d1afb69e",
+    "examples/dark-energy-research.mjs": "1b286bbdb813e26b",
+    "examples/golomb.mjs": "f0f04df499709e17",
+    "examples/live-models.mjs": "0c246bae8cbd8f9e",
+    "examples/research-support.mjs": "6fc76027335c4284",
+    "examples/sensor-pipeline.mjs": "524e22b348188232",
+    "examples/sieve.mjs": "b7b69f864a5656e9",
+    "examples/workers.mjs": "2f517ac520a1ffdb",
+    "package-lock.json": "f3e62502000ca9d2",
+    "package.json": "65ec76a78aaef437",
+    "pi-spaces.mjs": "162eadd91ec19780",
+    "scenarios/federation-runtime.mjs": "43f68d8ab05725c3",
+    "scenarios/phase2-load.mjs": "e59f13d0a36f7d4e",
+    "scenarios/phase2-netbird.mjs": "abd52c289740cc45",
+    "scenarios/phase2-router-load.mjs": "39591e1f551792e8",
+    "scenarios/sieve-mobile.mjs": "c3e989d225beb1fd",
+    "scenarios/sieve-remote.mjs": "0ff70768fb1d65d8",
+    "tools/fault-proxy.mjs": "1bfa51f8b39bef05",
+    "tools/federation-host.mjs": "57883c880ab04914",
+    "tools/inspect.mjs": "dd0e6918217846d1",
+    "tools/recovery-data-host.mjs": "7389f4f5ea1109af"
+  }
+}

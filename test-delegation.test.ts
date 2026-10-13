@@ -600,3 +600,24 @@ for(const backend of BACKENDS)test(`${backend}: complete Root composition reject
  await controller.policy.install({authorityId:'authority',policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'member'}},0,async()=>{});await controller.space.write({type:'Job',fields:{n:1}},{id:'composition-write',principal:{peerId:'user'}});await o.leases.issue('router',o.routerKey.signer.keyId);await assert.rejects(controller.space.take({type:'Job'},{id:'old-owner-take',principal:{peerId:'user'}}),/superseded/);assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
  }finally{socket.close();await server.close();}
 }));
+
+for(const backend of BACKENDS)test(`${backend}: typed wire resolution errors persist review and never resend effects`,()=>fixture(backend,async o=>{
+ const server=await serveSpace(new ProvingService(o.service(),{keys:o.keys,gateHostId:'member',now:o.clock}),{listen:{host:'127.0.0.1',port:0},connection:()=>({peerId:'router',credentials:{roles:['router']}})});
+ const socket=socketTransport({host:'127.0.0.1',port:(server.address() as any).port});
+ try {
+  const target={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1};
+  const state:any={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'member'},rules:[],completionProfiles:[]},members:{member:{id:'member',target,state:'active'}}};
+  for(const code of ['PermissionDenied','RequestExpired','ResultExpired','IncarnationChanged']) {
+   let sends=0,polls=0;
+   const transport={request:async(text:string)=>{const call=JSON.parse(text);if(call.method==='write'){sends++;throw new Error('failure before send');}if(call.method==='pollOperation'){polls++;return JSON.stringify({ok:false,error:{code,message:'fixture resolution refusal'}});}return socket.request(text);}};
+   const rpc=new FederationRpc({state:async()=>state,transport:()=>transport,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
+   const router=new RouterController({host:o.root,ctx,routerId:'review-'+code,authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
+   const spec=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{code}},txn:null,leaseMs:60000},1);
+   await router.submit({id:'lost-'+code,area:'federation',steps:[spec]});
+   assert.equal((await router.advance('lost-'+code)).steps[0]!.state,'unknown');
+   assert.equal((await router.advance('lost-'+code)).state,'needsReview');
+   await router.recover();assert.equal((await router.advance('lost-'+code)).state,'needsReview');
+   assert.equal(sends,1);assert.equal(polls,1);assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),0);
+  }
+ }finally{socket.close();await server.close();}
+}));

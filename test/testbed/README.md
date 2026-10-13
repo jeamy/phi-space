@@ -83,8 +83,10 @@ The local operator driver uses the existing `big` SSH target and NetBird test in
 
 ```sh
 node test/testbed/build-artifacts.mjs /tmp/phase2-wire-artifacts
-python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-wire-artifacts --jobs 12
-python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-wire-artifacts --jobs 1000
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-wire-artifacts --jobs 12 --entries 12
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-wire-artifacts --jobs 1000 --entries 10000 --rpc-faults
 ```
 
-Each run requires a fresh directory and unique run ID. The driver refuses an existing `space-ap2-test` group rather than adopting another run's objects. Progress and redacted reports go to `--output`; management credentials remain on `big`. The driver cleans up only the container names and policy/group IDs it created. A failed policy/group cleanup is reported as an error.
+Each run requires a fresh directory and unique run ID. The driver refuses an existing `space-ap2-test` group rather than adopting another run's objects. Progress and redacted reports go to `--output`; management credentials remain on `big`. The driver cleans up only the container IDs and policy/group IDs it created. A failed policy/group cleanup is reported as an error.
+
+`--entries` defaults to 10,000; background entries are seeded in bounded local bootstrap commits before the fixture policy is activated. `--rpc-faults` defaults to `--rpc-fault-boundary afterReply`: one successful reply is discarded for each of five effect kinds on each of three Members. All 15 slots must be exercised. This tests signed-wire outcome resolution with stable Parent/Child identities, not process crashes or mailbox ACK boundaries. `beforeSend` and `both` intentionally expose the remaining negative-resolution gate: an absent claim cannot authorize a status delegation, so the request requires explicit review rather than automatic replacement. Member logs are captured before cleanup, and exited Member containers are retained until the driver removes its own IDs.
