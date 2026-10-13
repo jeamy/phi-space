@@ -1,0 +1,30 @@
+(node:7) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"root-started","produced":0,"completed":0,"priorCrashes":0,"routerEpoch":1,"leaseId":"abbf13ab-8b9e-48ea-b126-a0100c8e2769"}
+{"stage":"written","jobs":100}
+{"stage":"written","jobs":200}
+{"stage":"written","jobs":300}
+{"stage":"written","jobs":400}
+{"stage":"written","jobs":500}
+{"stage":"written","jobs":600}
+{"stage":"written","jobs":700}
+{"stage":"written","jobs":800}
+{"stage":"written","jobs":900}
+{"stage":"written","jobs":1000}
+{"stage":"inventory-ready","entries":10000,"jobs":1000}
+{"stage":"root-sigkill","member":"a","boundary":"beforeSend","effect":"ack","generation":"gc0d9f84981ce11568636b076156ccd93.8d5e4317e542c3d48e81c388553f2d2abd268470538785357e6ba8acb568b7ab","requestId":"qmv714t846bl5bq6u","principal":{"peerId":"db3r4ovlh8lg008eup20","agentId":"ack-worker-0"},"target":{"hostId":"ap2-wire-a","spaceId":"sp-01c589b8-16ca-4677-8a2f-d6b0b7c50784","dataIncarnation":"d2577d0e","authorityId":"ap2-wire-a7370cfc-59cc-4e34-b676-f5600c21028b","primaryEpoch":1},"argumentHash":"a1ee655679efce90b6006a52ebd06450f455902d99ebbf6a09703044c3bd7813","parentId":"ack-race-0","candidateKey":"c56f6257e1f9270700d8673e06096ca51e6a17659013b0d1a9b8650a93bca06a","candidate":{"member":"a","event":{"kind":"waiter","eventId":"wd2577d0e-3326","seq":1,"handback":{"federationOperation":"ack-race-0"},"target":"[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]","entry":{"id":"ed2577d0e-3327","gid":"sp-01c589b8-16ca-4677-8a2f-d6b0b7c50784/ed2577d0e-3327","type":"AckProbe","types":["AckProbe"],"fields":{"taskId":"ack-probe-0-2","probeId":"ack-probe-0","member":"a"},"owner":"[\"db3r4ovlh8lg008eup20\",\"producer\"]"},"txn":"td2577d0e-3328"},"txn":"td2577d0e-3328","entry":{"id":"ed2577d0e-3327","gid":"sp-01c589b8-16ca-4677-8a2f-d6b0b7c50784/ed2577d0e-3327","type":"AckProbe","types":["AckProbe"],"fields":{"taskId":"ack-probe-0-2","probeId":"ack-probe-0","member":"a"},"owner":"[\"db3r4ovlh8lg008eup20\",\"producer\"]"}},"mailboxEpoch":"mbba14ec7262336e099706b4b95297a4de","upTo":1,"activeWorkers":6,"completedJobs":6,"at":"2026-10-13T18:43:49.877Z"}
+(node:7) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"root-started","produced":1000,"completed":6,"priorCrashes":1,"routerEpoch":1,"leaseId":"abbf13ab-8b9e-48ea-b126-a0100c8e2769"}
+file:///opt/app/pi-spaces.mjs:8269
+        throw new FederationUnavailable("required Member snapshots unavailable: " + missing.join(","));
+              ^
+
+FederationUnavailable [Error]: required Member snapshots unavailable: b
+    at FederatedSpace.readAll (file:///opt/app/pi-spaces.mjs:8269:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async ackRun (file:///opt/app/scenarios/phase2-netbird.mjs:326:25)
+    at async Promise.all (index 1)
+    at async file:///opt/app/scenarios/phase2-netbird.mjs:345:7
+
+Node.js v22.23.3

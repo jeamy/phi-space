@@ -8,12 +8,14 @@ parser.add_argument('--process-crashes',action='store_true',help='SIGKILL and re
 parser.add_argument('--process-crash-effect',choices=['SieveTask','SieveResult','take','txn-begin','txn-commit','all'],default='txn-commit')
 parser.add_argument('--process-crash-boundary',choices=['beforeSend','afterReply','both'],default='both')
 parser.add_argument('--process-crash-members',nargs='+',choices=['a','b','c'],default=['a','b','c'])
+parser.add_argument('--ack-crashes',action='store_true',help='Six real Root SIGKILLs before/after mailbox ACKs, with waiting-take races concurrent with the job Workers')
 parser.add_argument('--entries',type=int,default=10000,help='Initial total inventory; non-job entries are seeded locally in bounded Member commits')
 parser.add_argument('--jobs',type=int,default=1000)
 parser.add_argument('--run-id',default=str(int(time.time())))
 parser.add_argument('--artifacts',type=pathlib.Path,required=True)
 parser.add_argument('--output',type=pathlib.Path,default=pathlib.Path('/tmp/pi-spaces-netbird-phase2'))
 args=parser.parse_args();jobs=args.jobs;tag=args.run_id
+if args.ack_crashes and (args.process_crashes or args.rpc_faults):parser.error('run ACK crashes separately from other faults')
 if args.process_crashes and args.rpc_faults:parser.error('run process crashes and transport exceptions separately')
 if len(set(args.process_crash_members))!=len(args.process_crash_members):parser.error('process-crash-members must be unique')
 if not jobs<=args.entries<=10000:parser.error('entries must be jobs..10000')
@@ -46,7 +48,7 @@ g=call('POST','/groups',{'name':'space-ap2-test','peers':[p['id'] for p in peers
 print(json.dumps({'groupId':g['id'],'peers':{n:{k:p[k] for k in ['id','ip']} for n,p in peers.items()}}))
 ''');owned['groupId']=result['groupId'];peers=result['peers']
  pol=remote(api+"\np=call('POST','/policies',"+repr({'name':'pi-spaces-ap2-isolated','description':'temporary signed wire fixture on tcp7423','enabled':True,'rules':[{'name':'ap2-wire','enabled':True,'action':'accept','bidirectional':False,'protocol':'tcp','ports':['7423'],'sources':[owned['groupId']],'destinations':[owned['groupId']]}]})+");print(json.dumps({'policyId':p['id']}))\n");owned.update(pol)
- config={'authorityId':'ap2-wire-'+str(uuid.uuid4()),'root':{'peerId':peers['host-a']['id'],'ip':peers['host-a']['ip']},'managementUrl':'https://spacebird.eibrain.org','jobs':jobs,'entries':args.entries,'processCrashes':args.process_crashes,'processCrashEffects':['SieveTask','SieveResult','take','txn-begin','txn-commit'] if args.process_crash_effect=='all' else [args.process_crash_effect],'processCrashEffect':args.process_crash_effect,'processCrashBoundary':args.process_crash_boundary,'processCrashMembers':args.process_crash_members,'rpcFaults':args.rpc_faults,'rpcFaultBoundary':args.rpc_fault_boundary,'members':[{'id':key,'hostId':'ap2-wire-'+key,'peerId':peers[name]['id'],'ip':peers[name]['ip'],'namespace':'pi-spaces-test-nb-'+name+'-1'} for key,name in [('a','host-b'),('b','member-1'),('c','member-2')]]}
+ config={'authorityId':'ap2-wire-'+str(uuid.uuid4()),'root':{'peerId':peers['host-a']['id'],'ip':peers['host-a']['ip']},'managementUrl':'https://spacebird.eibrain.org','jobs':jobs,'entries':args.entries,'ackCrashes':args.ack_crashes,'processCrashes':args.process_crashes,'processCrashEffects':['SieveTask','SieveResult','take','txn-begin','txn-commit'] if args.process_crash_effect=='all' else [args.process_crash_effect],'processCrashEffect':args.process_crash_effect,'processCrashBoundary':args.process_crash_boundary,'processCrashMembers':args.process_crash_members,'rpcFaults':args.rpc_faults,'rpcFaultBoundary':args.rpc_fault_boundary,'members':[{'id':key,'hostId':'ap2-wire-'+key,'peerId':peers[name]['id'],'ip':peers[name]['ip'],'namespace':'pi-spaces-test-nb-'+name+'-1'} for key,name in [('a','host-b'),('b','member-1'),('c','member-2')]]}
  remote('import pathlib,json\nb=pathlib.Path('+repr(base)+")\n(b/'shared/config.json').write_text("+repr(json.dumps(config))+''');(b/'shared/config.json').chmod(0o600)
 e=dict(l.strip().split('=',1) for l in pathlib.Path('/media/docker/pi-spaces/netbird/gate.env').read_text().splitlines() if '=' in l and not l.startswith('#'))
 p=b/'secrets/management-token';p.write_text(e['NB_GATE_TOKEN'].strip().strip(chr(34)).strip(chr(39)));p.chmod(0o600)
@@ -54,7 +56,7 @@ print('{}')
 ''')
  def cmd(name,namespace,data,mode,detach=False):
   args=['docker','run','--rm','--user','0:0','--name',name,'--network','container:'+namespace,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','2','--memory','1g','--tmpfs','/tmp:rw,nosuid,nodev,size=64m']
-  if mode=='run' and config['processCrashes']:args+=['--init']
+  if mode=='run' and (config['processCrashes'] or config['ackCrashes']):args+=['--init']
   if detach:args.remove('--rm');args+=['--detach']
   if mode=='run':args+=['--cidfile',base+'/root/run.cid']
   for src,target in [('pi-spaces.mjs','/opt/app/pi-spaces.mjs:ro'),('scenarios','/opt/app/scenarios:ro'),('shared','/shared:rw'),('secrets','/secrets:ro'),(data,'/data:rw')]:args+=['-v',base+'/'+src+':'+target]
@@ -74,9 +76,9 @@ print('{}')
  else:
   raise RuntimeError('Member startup timed out')
  progress('running');root_launched=True
- if args.process_crashes:
+ if args.process_crashes or args.ack_crashes:
   cid=ssh(cmd(names[0],'pi-spaces-test-nb-host-a-1','root','run',True)).strip();assert re.fullmatch('[a-f0-9]{64}',cid);created.append(cid)
-  expected=len(config['processCrashEffects'])*len(args.process_crash_members)*(2 if args.process_crash_boundary=='both' else 1);restarts=[];deadline=time.monotonic()+1800
+  expected=6 if args.ack_crashes else len(config['processCrashEffects'])*len(args.process_crash_members)*(2 if args.process_crash_boundary=='both' else 1);restarts=[];deadline=time.monotonic()+1800
   while True:
    result=subprocess.run(['ssh','-oBatchMode=yes','big','docker wait '+shlex.quote(cid)],capture_output=True,text=True,timeout=max(1,deadline-time.monotonic()))
    if result.returncode:raise RuntimeError('Cannot observe owned Root container exit')

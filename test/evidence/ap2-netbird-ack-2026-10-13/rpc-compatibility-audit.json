@@ -1,0 +1,196 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 5000,
+  "commands": 5000,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "allOriginalClaimsChecked": 5000,
+  "ackBoundariesChecked": 0,
+  "checkedAcks": [],
+  "faultedClaimsChecked": 30,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": [
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-f11defeeabc2e08eb434b2cadaa87879899bd50ecdc0c09bc139690582fa622c",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-5e64df489bf74c42231b44665259500bd9f9631e6d24ee4a8e625a19f5123387",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-e67651e2de230d74c6587fdd7c140abfbbd1303e525461d8b1b3c2c18f454ed9",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-7b65e20be09fbb765a66e861f16f67b3e17ab6ed3c27a77c40fc57ddd78aa542",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-51625a7b8151caec53344c55478897960b5f0917c4379ca12fab0abecb6f98c3",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-b0c644263522ab7a08fa7b537db8a204fea557a0943617aed6bdfbe31773e31b",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-aad92d2ee351b1dc35ade7db11a2af0b317fe6c8a004fc59d665ab712453d60a",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-0dcaa41c89ab5953e9119f8c25c6623a896831fb55837e5337e7eed6fe2d20b1",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-e8ccfcc0f1ffdf561edbed215379bb03dd7b7e72fb0435f1c7792cc66b6f45a5",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-67617cb7de890a71e67ae1d5140f4c3b7a4655409f3afd3834ac3c0ecee44caa",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-0101794300a45399713b9dbd582ea0dd4c97bf68508b59edf11791310ce58773",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-6a6875536b8e3b997449a046c4974a3891c2554aa13583701b28e1939ce6f212",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-f8bc1bdabdf724800d6c600c370b6cdbe486444e43ff33db8d3aac0865595ff2",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-1b2faf42c267fbb8a45ebc1e569cab192f0aae86ca1f41c38bfcd145a2ca3981",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-eed99d1a092258802670fbc30f9be55e7bbe5a29af6eb7ae0ea59c1cac29a288",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-1ec89cd3eb563f51b8f6c102bc8f1ab243af8293b93badeb103b5f3b28d33b66",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-543addd31f7972464bbfc946506b211719b88df5521cd311d9426b439087f6b5",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-0712c40d502d1b83124ad42024aa55548ee8f114303a4e4484c58345a6abcc70",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-5b08b1799261188683459326773da2a13b76df30cf5dbf336198414958e7e91a",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-94f86f1c0c020b7ae38500f28b88bf3b03c2f5866fabb43d906898ce676b898a",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-4b35f263b0ed31070b5c6a0f788047860044f3620e37ded9ad5f5e6b07e63c97",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-9f00b4c1747469db59384cf9151bb7aa3f081a24c2f8580650b7bb258e71f4cb",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-00630b5d219fb6a7ba5ec456f2fb3d0747c0aebfc0dd448b7cc9773d365d1065",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-d607aca796656ad7c5b5e322b2f22876accc31c7b54f5b4067bc1177747e18ec",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-8c35c5c2da2e49e3c7d7c032e26d6d1ae735cbfe42008b88e5d5c19c9577eee7",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-fa17a7b661e469e72f4e11de5f17b3526db3016d8022c78361a5412f6265e22f",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-0cd66716285d112cf255daa7f6d56fe9d4e67214f9eb8059f6320c9000df9e79",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-433d8890b41967b1048ff3ca9fccdff074d4ccbffa2c6458ed62b57f43385fd8",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-e4aac7faafaa32c35ad917a3d412584bb6fb23c2fd8006e86871bdcd23abcda5",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-2b6858394eaa0133944a73c183ee468544beddc41cc879c1d247b7a39298a1d2",
+      "claimState": "done"
+    }
+  ]
+}

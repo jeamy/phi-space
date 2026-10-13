@@ -17,6 +17,18 @@ import { performance } from "node:perf_hooks";
 /** One round trip: the encoded call out, the encoded reply back. It may fail or hang; the caller decides what that means. */
 export interface Transport { request(text: string): Promise<string> }
 
+// The server keeps one open challenge per connection. Separate clients sharing a transport
+// must complete challenge/sign/prove in order; no successful proof or principal is cached here.
+const proofQueues = new WeakMap<Transport, Promise<void>>();
+function orderedProof<T>(transport: Transport, run: () => Promise<T>): Promise<T> {
+ const previous = proofQueues.get(transport) ?? Promise.resolve();
+ const result = previous.then(run);
+ const tail = result.then(() => {}, () => {});
+ proofQueues.set(transport, tail);
+ void tail.then(() => { if (proofQueues.get(transport) === tail) proofQueues.delete(transport); });
+ return result;
+}
+
 /** Hands calls straight to a service in the same process. */
 export function inProcessTransport(service: { handleText(text: string, conn: import("./service.ts").Connection, maxFrameBytes?: number): Promise<string> }, conn: import("./service.ts").Connection): Transport {
 	return { request: (text) => service.handleText(text, conn) };
@@ -210,14 +222,14 @@ export class RemoteSpace implements SpaceLike {
 	authenticate(): Promise<{ keyId: string; principal: string; roles: string[] }> {
 		const signer = this.o.signer;
 		if (!signer) return Promise.reject(new UnsupportedOperation("this RemoteSpace has no signer"));
-		this.proving ??= (async () => {
+		this.proving ??= orderedProof(this.t, async () => {
 			const ch = (await this.send({ method: "challenge" as Call["method"], args: { protocol: AUTH_PROTOCOL } })) as unknown as Challenge & { expiresAt?: number };
 			if (ch.gateHostId !== this.o.expectedGateHostId) throw new RemoteError("AuthorityMismatch", `the challenge comes from host ${ch.gateHostId}, not from ${this.o.expectedGateHostId}`);
 			if (ch.observedPeerId !== this.o.ownPeerId) throw new RemoteError("AuthorityMismatch", `the host saw peer ${ch.observedPeerId} on this connection, not ${this.o.ownPeerId}: a challenge for another peer is not signed`);
 			const { expiresAt: _expires, ...challenge } = ch;
 			const signature = Buffer.from(await signer.sign(signedBytes(challenge))).toString("base64");
 			return this.send({ method: "prove" as Call["method"], args: { keyId: signer.keyId, signature, challenge: challenge as unknown as Json } });
-		})().finally(() => { this.proving = undefined; });
+		}).finally(() => { this.proving = undefined; });
 		return this.proving as Promise<{ keyId: string; principal: string; roles: string[] }>;
 	}
 

@@ -1,0 +1,72 @@
+TAP version 13
+# (node:3139857) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: without a proof only the A-only roles remain: a member works, the withheld admin role says ProofRequired
+ok 1 - without a proof only the A-only roles remain: a member works, the withheld admin role says ProofRequired
+  ---
+  duration_ms: 76.1647
+  type: 'test'
+  ...
+# Subtest: with a proof the roles are the intersection of groups and key: Ed25519 and ECDSA P-256
+ok 2 - with a proof the roles are the intersection of groups and key: Ed25519 and ECDSA P-256
+  ---
+  duration_ms: 40.358871
+  type: 'test'
+  ...
+# Subtest: neither side can add roles: a key of fewer roles, or a group of fewer roles, grants less
+ok 3 - neither side can add roles: a key of fewer roles, or a group of fewer roles, grants less
+  ---
+  duration_ms: 13.1576
+  type: 'test'
+  ...
+# Subtest: wrong proofs are refused: unknown key, another peer's key, other connection's challenge, replay, expiry, revoked key
+ok 4 - wrong proofs are refused: unknown key, another peer's key, other connection's challenge, replay, expiry, revoked key
+  ---
+  duration_ms: 19.257818
+  type: 'test'
+  ...
+# Subtest: the client signs only for the host and the peer it means: a relayed or foreign challenge is not answered
+ok 5 - the client signs only for the host and the peer it means: a relayed or foreign challenge is not answered
+  ---
+  duration_ms: 12.634618
+  type: 'test'
+  ...
+# Subtest: an open proven connection ends when its key is revoked, and the failure count ends a guessing connection
+ok 6 - an open proven connection ends when its key is revoked, and the failure count ends a guessing connection
+  ---
+  duration_ms: 19.493369
+  type: 'test'
+  ...
+# Subtest: concurrent RemoteSpace instances share one transport without replacing ed25519 challenges
+ok 7 - concurrent RemoteSpace instances share one transport without replacing ed25519 challenges
+  ---
+  duration_ms: 96.503061
+  type: 'test'
+  ...
+# Subtest: concurrent RemoteSpace instances share one transport without replacing ecdsa-p256 challenges
+ok 8 - concurrent RemoteSpace instances share one transport without replacing ecdsa-p256 challenges
+  ---
+  duration_ms: 97.666505
+  type: 'test'
+  ...
+# Subtest: a rejected shared-transport proof releases the next authentication and preserves host pinning
+ok 9 - a rejected shared-transport proof releases the next authentication and preserves host pinning
+  ---
+  duration_ms: 9.83173
+  type: 'test'
+  ...
+# Subtest: an unfinished authentication does not block another transport
+ok 10 - an unfinished authentication does not block another transport
+  ---
+  duration_ms: 7.134122
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1053.921316

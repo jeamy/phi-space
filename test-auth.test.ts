@@ -188,3 +188,32 @@ test("an open proven connection ends when its key is revoked, and the failure co
 	}
 	assert.ok(messages.some((m) => /too many wrong proofs/.test(m)), messages.join(" | "));
 });
+
+for (const algorithm of ['ed25519','ecdsa-p256'] as const)
+test(`concurrent RemoteSpace instances share one transport without replacing ${algorithm} challenges`, async tc => {
+ const g=await setup(tc),base=g.withKey('p-admin',algorithm,['admin','member'],'shared-'+algorithm),transport=g.transport('127.0.0.3');
+ const delayed:Signer={...base,sign:async bytes=>{await new Promise(r=>setTimeout(r,10));return base.sign(bytes);}};
+ const clients=Array.from({length:8},()=>new RemoteSpace(transport,{...admin(delayed),attempts:1}));
+ const replies=await Promise.all(clients.map(c=>c.authenticate()));
+ assert.ok(replies.every(r=>r.keyId===base.keyId));for(const r of replies)assert.deepEqual(r.roles,['admin','member']);
+ assert.equal(await clients[0]!.count(),0);
+});
+
+test('a rejected shared-transport proof releases the next authentication and preserves host pinning',async tc=>{
+ const g=await setup(tc),good=g.withKey('p-admin','ed25519',['admin','member'],'queue-good'),other=generateKey('ed25519','queue-good'),transport=g.transport('127.0.0.3');
+ const wrongHost=new RemoteSpace(transport,{...admin(good),expectedGateHostId:'foreign-host',attempts:1});
+ const badKey=new RemoteSpace(transport,{...admin(other.signer),attempts:1}),valid=new RemoteSpace(transport,{...admin(good),attempts:1});
+ const replies=await Promise.allSettled([wrongHost.authenticate(),badKey.authenticate(),valid.authenticate()]);
+ assert.equal(replies[0]!.status,'rejected');if(replies[0]!.status==='rejected')assert.equal(replies[0]!.reason.code,'AuthorityMismatch');
+ assert.equal(replies[1]!.status,'rejected');if(replies[1]!.status==='rejected')assert.ok(replies[1]!.reason instanceof core.PermissionError);
+ assert.equal(replies[2]!.status,'fulfilled');assert.equal(await valid.count(),0);
+});
+
+test('an unfinished authentication does not block another transport',async tc=>{
+ const g=await setup(tc),base=g.withKey('p-admin','ed25519',['admin','member'],'parallel-transports');
+ let started!:()=>void,release!:()=>void;const signing=new Promise<void>(r=>{started=r;}),resume=new Promise<void>(r=>{release=r;});
+ const delayed:Signer={...base,sign:async bytes=>{started();await resume;return base.sign(bytes);}};
+ const first=g.client('127.0.0.3',admin(delayed)),second=g.client('127.0.0.3',admin(base));
+ const pending=first.authenticate();await signing;
+ try{assert.equal((await second.authenticate()).keyId,base.keyId);}finally{release();await pending;}
+});

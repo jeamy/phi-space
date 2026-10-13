@@ -170,3 +170,44 @@ Member need not refer to the same request when six Workers are concurrent.
 The `sameParentRetries` counter covers explicit `FederationPending` retries in
 the final Root process. It does not total earlier processes or recovery-time
 resolutions; use the separate crash/restart reports for process counts.
+
+
+### ACK crashes with concurrent job Workers
+
+```sh
+node test/testbed/build-artifacts.mjs /tmp/phase2-ack-artifacts
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-ack-artifacts --jobs 12 --entries 12 --ack-crashes
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-ack-artifacts --jobs 1000 --entries 10000 --ack-crashes
+```
+
+Run ACK crashes separately from `--process-crashes` and `--rpc-faults`.
+Six waiting-take races run alongside the six fixed job Workers. Each race
+writes one additional unprofiled `AckProbe` to each Member using pinned HRW
+keys. The Root is killed exactly once per race, before or after ACK on the
+selected Member. The fault marker includes the candidate read back from the
+committed Parent journal, its mailbox epoch/prefix and principal. A replay
+must preserve the same winner, return two losers and leave no mailbox gap or
+unread event. The full 1,000-job run requires six active Workers at every
+selected crash; the small smoke does not claim that load condition.
+
+The 18 probe Entries are additional to the verified initial workload; six
+are consumed and twelve remain returned. They do not replace job Entries.
+Probe progress is retained across Root restarts without extending its original
+60-second wait/transaction deadlines. The closed-store audit checks completed
+race Parents/Children, preserved candidates, one winner and two returned
+Entries per race, and the original interrupted ACK claims. A before-send ACK
+is not admitted; after-reply ACK has a completed claim. Re-ACK can use a fresh
+request ID, but it must retain the original Member, principal, mailbox epoch
+and delivered prefix. Its purpose is confirming mailbox delivery, not taking
+or committing another Entry.
+
+Concurrent RemoteSpace objects sharing one transport now order the full
+challenge/sign/prove sequence. The server still keeps one open challenge per
+connection, validates pinned host/peer and active key, and does not reuse a
+cached successful proof. Failed proofs release the next queued authentication;
+other transports remain independent. This protects concurrent snapshot queries
+and Worker effects from replacing each other's challenge. The runtime library
+must include this correction before running the concurrent ACK scenario.
+
+The remaining seven Phase-2 acceptance blocks and the separate overall release
+are tracked in [the current acceptance document](../../docs/ap2-abnahme.md).

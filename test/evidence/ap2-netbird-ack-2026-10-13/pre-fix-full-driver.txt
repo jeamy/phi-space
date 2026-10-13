@@ -1,0 +1,10 @@
+build-ready
+provisioning
+running
+restarting-root-1
+cleanup-finished
+Traceback (most recent call last):
+  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 89, in <module>
+    if code!=137 or len(restarts)>=expected:raise RuntimeError('Unexpected Root exit; see '+str(args.output/(tag+'.log')))
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Unexpected Root exit; see /tmp/pi-ack-wire/ack-full-20261013.log

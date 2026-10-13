@@ -1,0 +1,81 @@
+TAP version 13
+# (node:3139446) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: concurrent RemoteSpace instances share one transport without replacing ed25519 challenges
+not ok 1 - concurrent RemoteSpace instances share one transport without replacing ed25519 challenges
+  ---
+  duration_ms: 76.842382
+  type: 'test'
+  location: '/media/data/programming/pi-spaces/test-auth.test.ts:193:1'
+  failureType: 'testCodeFailure'
+  error: 'this is not the challenge issued on this connection'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.PermissionDenied (file:///media/data/programming/pi-spaces/src/remote.ts:81:27)
+    toError (file:///media/data/programming/pi-spaces/src/remote.ts:88:114)
+    RemoteSpace.send (file:///media/data/programming/pi-spaces/src/remote.ts:161:22)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Promise.all (index 0)
+    async TestContext.<anonymous> (file:///media/data/programming/pi-spaces/test-auth.test.ts:197:16)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: concurrent RemoteSpace instances share one transport without replacing ecdsa-p256 challenges
+not ok 2 - concurrent RemoteSpace instances share one transport without replacing ecdsa-p256 challenges
+  ---
+  duration_ms: 25.619548
+  type: 'test'
+  location: '/media/data/programming/pi-spaces/test-auth.test.ts:193:1'
+  failureType: 'testCodeFailure'
+  error: 'this is not the challenge issued on this connection'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.PermissionDenied (file:///media/data/programming/pi-spaces/src/remote.ts:81:27)
+    toError (file:///media/data/programming/pi-spaces/src/remote.ts:88:114)
+    RemoteSpace.send (file:///media/data/programming/pi-spaces/src/remote.ts:161:22)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Promise.all (index 0)
+    async TestContext.<anonymous> (file:///media/data/programming/pi-spaces/test-auth.test.ts:197:16)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: a rejected shared-transport proof releases the next authentication and preserves host pinning
+not ok 3 - a rejected shared-transport proof releases the next authentication and preserves host pinning
+  ---
+  duration_ms: 13.724542
+  type: 'test'
+  location: '/media/data/programming/pi-spaces/test-auth.test.ts:202:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 'rejected'
+    - 'fulfilled'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'fulfilled'
+  actual: 'rejected'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///media/data/programming/pi-spaces/test-auth.test.ts:209:9)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: an unfinished authentication does not block another transport
+ok 4 - an unfinished authentication does not block another transport
+  ---
+  duration_ms: 12.612228
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 1
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 898.045485

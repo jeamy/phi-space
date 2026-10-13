@@ -4,6 +4,22 @@
 Bausteintests, den Member-Lasttest und den noch offenen Verbundbetrieb.
 Die bisherigen Nachweise zu AP 1b bleiben bestehen.
 
+## Aktuelle verbleibende Testblöcke (2026-10-13)
+
+Die offenen Abnahmen sind in acht technische Blöcke gebündelt; jeder Block
+umfasst mehrere Einzeltests. Block 1 ist inzwischen abgenommen, **sieben
+Blöcke bleiben offen**, danach folgt die Gesamtfreigabe mit finalen Gate-4-Werten.
+Die Blöcke 4–8 benötigen teilweise noch Implementierung oder Betriebsentscheidungen.
+
+- [x] 1. Mailbox-ACK-Abbrüche über NetBird unter voller Joblast.
+- [ ] 2. Individuelle Member-Prozessabbrüche und Wiederaufnahme.
+- [ ] 3. Gezielt unterbrochene Journal-Commits über NetBird.
+- [ ] 4. Produktive Root-/Directory-Provisionierung samt Boot-/Fencing-Prüfung.
+- [ ] 5. Nachweis über unabhängige physische Ausfalldomänen.
+- [ ] 6. Verteilte Principal-Löschung einschließlich Router-/Parent-Historien.
+- [ ] 7. Physische Löschung bzw. verbindliche Löschregeln für Archive und Backups.
+- [ ] 8. Kontrollierte Umstellung bestehender Abschlussprofile.
+
 ## AP 2.6
 
 Policy-Profile gelten jetzt auch bei aktiven Members: Jeder Task-Commit prüft
@@ -445,3 +461,43 @@ Produktions-Provisionierung, unabhängige Boot-/Fencing-Berechtigung und die
 weiteren Admin-/Profil-Gates bleiben offen. Phase 2 ist nicht vollständig
 abgenommen. Temporäre Fixture-Container und NetBird-Objekte wurden entfernt;
 bestehende Produktionsdienste bleiben aktiv.
+
+
+## ACK-Abbrüche bei sechs laufenden Workern (2026-10-13)
+
+**Testblock 1 ist abgenommen.** Der korrigierte NetBird-Volllastlauf mit 10.000
+initialen Entries und 1.000 Jobs bestand sechs bestätigte Root-SIGKILLs:
+vor Versand und nach erfolgreicher ACK-Antwort auf jedem der drei Members.
+Bei jedem Abbruch liefen alle sechs Job-Worker. Der Root prüft vor dem Abbruch
+den bereits dauerhaft gespeicherten Kandidaten im Parent-Journal. Die sieben
+Starts behalten Lease-ID und Epoche. Der Lauf dauerte 512,945 Sekunden.
+
+Sechs zusätzliche Waiting-Take-Rennen behalten je einen identischen Gewinner
+beim Replay; zwölf Verlierer sind wieder verfügbar. Ihre 18 Probe-Entries sind
+zusätzlich zum anfänglich geprüften 10.000er Job-/Hintergrundbestand angelegt.
+Alle 1.000 Sieb-Ergebnisse und 9.000 Hintergrund-Entries bleiben korrekt.
+Der Audit privater Store-Kopien prüft 5.024 Parents, 5.072 Children samt
+ursprünglichen Member-Claims sowie die sechs ACK-Kandidaten und Mailbox-Cursor.
+Drei vor Versand unterbrochene ACK-IDs bleiben nicht angenommen; drei nach
+Antwort unterbrochene ACK-Claims sind abgeschlossen. Ein ACK-Replay darf eine
+neue Request-ID verwenden, erhält aber denselben Member, Principal,
+Mailbox-Epoche und bestätigten Präfix. Die Parent-/Child-Identitäten der
+Datenwirkungen bleiben unverändert. Keine aktive Transaktion, kein Gap und
+keine ungenutzte Zukunftsreservierung blieb zurück.
+
+Der erste volle Lauf fand eine Challenge-Kollision bei paralleler Abfrage und
+Worker-Wirkung. Mehrere `RemoteSpace`-Instanzen auf demselben Transport dürfen
+nicht gleichzeitig Challenge/Sign/Prove durchführen: der Server hält eine
+offene Challenge pro Verbindung. Die Client-Bibliothek ordnet jetzt komplette
+Proof-Abläufe pro Transport; andere Verbindungen bleiben unabhängig.
+Fehlgeschlagene Proofs geben die Warteschlange frei; Host-/Peer-Pinning,
+Schlüsselprüfung und frische Proofs bleiben bestehen. Die Kollision ist mit
+Ed25519 und P-256 über echte TCP-Verbindungen reproduziert und regressionsgesichert.
+432 lokale Tests, zehn gebaute Server-Authentifizierungsfälle, 24 Mobile-Tests
+und Typecheck bestanden. Der Mobile-Bundle ist synchronisiert; ein neuer
+Handy-Deployment-Nachweis wird damit nicht behauptet.
+[Nachweise](../test/evidence/ap2-netbird-ack-2026-10-13/).
+
+Member-Abbrüche und sämtliche expliziten Journal-Grenzen über NetBird bleiben
+separate offene Blöcke. Alle Fixture-Container und temporären NetBird-Objekte
+sind entfernt; vorhandene Dienste bleiben aktiv. Die Gesamtfreigabe bleibt offen.

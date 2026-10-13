@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 84,
+  "commands": 132,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "allOriginalClaimsChecked": 132,
+  "ackBoundariesChecked": 6,
+  "checkedAcks": [
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "parentId": "ack-race-0",
+      "claimState": "notAdmitted",
+      "durableCandidatePreserved": true
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "parentId": "ack-race-1",
+      "claimState": "done",
+      "durableCandidatePreserved": true
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "parentId": "ack-race-2",
+      "claimState": "notAdmitted",
+      "durableCandidatePreserved": true
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "parentId": "ack-race-3",
+      "claimState": "done",
+      "durableCandidatePreserved": true
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "parentId": "ack-race-4",
+      "claimState": "notAdmitted",
+      "durableCandidatePreserved": true
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "parentId": "ack-race-5",
+      "claimState": "done",
+      "durableCandidatePreserved": true
+    }
+  ],
+  "faultedClaimsChecked": 0,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": []
+}
