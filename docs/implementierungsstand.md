@@ -136,3 +136,12 @@ jetzt dauerhaft zu `needsReview` statt zu einer Endlosschleife von Transport-
 Retries. Vor Annahme ausgefallene Requests benötigen weiterhin eine sichere
 autoritative Negativauflösung; vorhandene Status-Delegationen verlangen einen
 bereits gebundenen Claim. Details stehen in der [Phase-2-Abnahme](ap2-abnahme.md).
+
+`resolveOperation` ergänzt jetzt die Admission-Auflösung für einen fehlenden
+eigenen Claim in einer gültigen, auf dieselbe Primary-Epoche gebundenen
+Generation. Der Router prüft alle Ziel-/Request-/Hash-Bindungen und wiederholt
+ausschließlich denselben Child. Damit ist der Vor-Versand-RPC-Fall beim
+unveränderten Primary schließbar. Bekannte Pending-Claims behalten ihre
+Deadline- und Autorisierungsprüfung. Nach Promotion, Restore oder Ablauf
+bleibt `needsReview`; terminale `NotCommitted`-Negativclaims mit vollständigem
+Promotionsnachweis sind weiterhin ein eigener, nicht abgenommener Schritt.

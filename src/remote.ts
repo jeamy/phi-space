@@ -174,6 +174,7 @@ export class RemoteSpace implements SpaceLike {
 
 	/** Router adapter entry point: preserves externally journaled request identity. */
 	async requestBound(call:Call):Promise<Json>{return this.send(call);}
+ async resolveOperation(target:{generation:string;requestId:string},method:string,argumentHash:string,primaryEpoch:number):Promise<claims.AdmissionResolution>{return await this.send({method:'resolveOperation',args:{targetRequest:target,method,argumentHash,primaryEpoch}}) as unknown as claims.AdmissionResolution;}
 	async requestGeneration():Promise<{generation:string;admitUntil:number}>{return await this.rawCall("generation") as any;}
 	async publishCapability(report:import("./capability-directory.ts").CapabilityReport):Promise<import("./core.ts").Lease>{return await this.send({method:"capabilityHeartbeat" as any,args:{report:report as any}}) as any;}
 	async requestMembership(instruction:import("./membership.ts").SignedMembership<import("./membership.ts").MembershipInstruction>):Promise<import("./membership.ts").SignedMembership<import("./membership.ts").MembershipProof>>{return await this.send({method:"membershipInstruction" as any,args:{instruction:instruction as any}}) as any;}

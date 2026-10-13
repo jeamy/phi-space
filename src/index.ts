@@ -33,7 +33,7 @@ export { serveSpace, socketTransport, type ServeOptions, type SpaceServer, type 
 export { withSpaceService, piServerTransport, type RoutedServices, type RoutedAttachment, type RoutedCall } from "./pi-server.ts";
 export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, UnsupportedOperation, type Transport, type RemoteOptions } from "./remote.ts";
 export { SpaceService, StaticIdentity, DEFAULT_POLICY, PROTOCOL_VERSION, METHODS, principalKey, type Call, type Reply, type ErrorCode, type Identity, type IdentityAdapter, type Connection, type Policy, type RolePolicy, type SpaceServiceOptions, type Method } from "./service.ts";
-export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type ClaimState } from "./claims.ts";
+export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type AdmissionResolution, type ClaimState } from "./claims.ts";
 export * as claims from "./claims.ts";
 export { principalId, MailboxEpochMismatch, InvalidAck, type MailboxPage, type MailItem, type MailboxState } from "./mailbox.ts";
 export { CompletionViolation, type CompletionProfile } from "./core.ts";

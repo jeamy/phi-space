@@ -3,7 +3,7 @@
 import subprocess,json,uuid,pathlib,shlex,time,sys,argparse,re
 parser=argparse.ArgumentParser(description='Run isolated pi-spaces signed-wire acceptance over the existing NetBird peers')
 parser.add_argument('--rpc-faults',action='store_true',help='Inject before-send failures and discard successful replies for each effect kind on each Member (not process crashes)')
-parser.add_argument('--rpc-fault-boundary',choices=['beforeSend','afterReply','both'],default='afterReply',help='beforeSend/both currently require explicit review when the Member has no retained claim')
+parser.add_argument('--rpc-fault-boundary',choices=['beforeSend','afterReply','both'],default='afterReply',help='Inject only before send, only after successful reply, or both; missing outcomes require a current-epoch admission proof')
 parser.add_argument('--entries',type=int,default=10000,help='Initial total inventory; non-job entries are seeded locally in bounded Member commits')
 parser.add_argument('--jobs',type=int,default=1000)
 parser.add_argument('--run-id',default=str(int(time.time())))

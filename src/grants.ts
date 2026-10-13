@@ -9,7 +9,7 @@ import * as core from "./core.ts";
 export type Grant = { id: string; authorityId: string; issuerHostId: string; principal: Principal; keyId?: string; scope: string[]; roles: string[]; issuedAt: number; expiresAt: number; purpose: "effect" | "resolution" };
 export type SignedGrant = { grant: Grant; algorithm: Signer["algorithm"]; signature: string };
 const bytes = (g: Grant) => Buffer.from("pi-spaces/grant/v1\n" + canonicalJson(g as unknown as core.Json));
-const RESOLUTION = new Set(["hello", "pollOperation", "cancelOperation", "txn", "lease", "rotationStatus"]);
+const RESOLUTION = new Set(["hello", "pollOperation", "resolveOperation", "cancelOperation", "txn", "lease", "rotationStatus"]);
 export class GrantDenied extends core.PermissionError {}
 
 /** Only instantiate on the authoritative control host, with its durable/provisioned signing key. */

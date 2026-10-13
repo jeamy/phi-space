@@ -5,7 +5,7 @@ import {randomUUID} from "node:crypto";
 
 import type {Algorithm, AuthState, KeyDirectory, Signer} from "./auth.ts";
 import {canonicalJson} from "./canonical.ts";
-import {argHash, keyOf, type Principal, type RequestRef} from "./claims.ts";
+import {argHash, keyOf, resolveAdmission, type Principal, type RequestRef} from "./claims.ts";
 import type {SpaceHost} from "./client.ts";
 import * as core from "./core.ts";
 import {GrantVerifier, type SignedGrant, verifyDetached} from "./grants.ts";
@@ -301,31 +301,37 @@ export class DelegationVerifier {
                 requestId : d.targetRequest.requestId
             };
             reference = s.rpc?.claims[keyOf(s, r)] ?? s.restoredClaims?.[keyOf(s, r)];
-            if (!reference || reference.method !== d.targetRequest.method ||
+            const missingResolution=call.method==='resolveOperation'&&!reference;
+            if(missingResolution){
+                if(d.policyVersion!==d.targetRequest.policyVersion||call.args?.method!==d.targetRequest.method||call.args?.argumentHash!==d.targetRequest.argumentHash||call.args?.primaryEpoch!==d.targetPrimaryEpoch)throw new DelegationDenied('missing resolution binding differs');
+                resolveAdmission(s,this.now(),r,d.targetRequest.method,d.targetRequest.argumentHash,d.targetPrimaryEpoch!);
+            }
+            if (!missingResolution && (!reference || reference.method !== d.targetRequest.method ||
                 reference.argHash !== d.targetRequest.argumentHash ||
                 (reference.policyVersion ?? 1) !== d.targetRequest.policyVersion ||
-                d.policyVersion !== d.targetRequest.policyVersion)
+                d.policyVersion !== d.targetRequest.policyVersion))
                 throw new DelegationDenied("targetRequest does not name own bound claim");
-            if (call.method === "pollOperation" || call.method === "cancelOperation") {
+            if (call.method === "pollOperation" || call.method === "resolveOperation" || call.method === "cancelOperation") {
                 const a = call.args?.targetRequest as any;
+                if(call.method==='resolveOperation'&&(call.args?.method!==d.targetRequest.method||call.args?.argumentHash!==d.targetRequest.argumentHash||call.args?.primaryEpoch!==d.targetPrimaryEpoch))throw new DelegationDenied('wire resolution binding differs');
                 if (!a || a.generation !== r.generation || a.requestId !== r.requestId)
                     throw new DelegationDenied("wire targetRequest differs");
             } else if (call.method === "txn" || call.method === "lease") {
-                const result = reference.result as any;
-                const ownWaitLease = call.method === "lease" && reference.method === "wait" &&
+                const result = reference!.result as any;
+                const ownWaitLease = call.method === "lease" && reference!.method === "wait" &&
                                      call.args?.id === result;
                 const ownWaitTxn =
-                    reference.method === "wait" &&
+                    reference!.method === "wait" &&
                     (s.txns[String(call.args?.id)]?.originRequestKey === keyOf(s, r) || !!known);
                 if (!ownWaitLease && !ownWaitTxn &&
                     (!result || call.args?.id !== (result.txn?.id ?? result.txn ?? result.id)))
                     throw new DelegationDenied("txn follow-up is not bound to target result");
             } else if (call.method === "events") {
-                if (reference.method !== "wait" || typeof reference.result !== "string")
+                if (reference!.method !== "wait" || typeof reference!.result !== "string")
                     throw new DelegationDenied("events renewal must name own waiter registration");
             } else
                 throw new DelegationDenied("targetRequest forbidden for this follow-up");
-        } else if ([ "pollOperation", "cancelOperation" ].includes(call.method) ||
+        } else if ([ "pollOperation", "resolveOperation", "cancelOperation" ].includes(call.method) ||
                    (call.method === "txn" && call.args?.action !== "begin" ||
                     call.method === "lease"))
             throw new DelegationDenied("follow-up requires targetRequest");

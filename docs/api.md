@@ -55,6 +55,7 @@ Ohne `space` verwendet der Client den Default-Space. Ein gesetztes
 | `renew(leaseId, ms, { request? })` / `cancel(...)` | Ablaufzeit / `void` | Erneuert bzw. beendet eigene Leases. |
 | `issueGeneration(principal)` | Generation | Öffnet eine Claim-Generation. |
 | `pollOperation(request)` / `cancelOperation(request)` | Claim-Status | Liest bzw. beendet eine bekannte Claim-Operation. |
+| `resolveOperation(request, method, argumentHash, primaryEpoch)` | `AdmissionResolution` | Prüft bekannte Claim-Bindungen oder erlaubt bei gültiger Generation derselben Epoche ausschließlich Retry derselben ID. |
 | `events(principal, options?)` / `ack(principal, epoch, upTo, options?)` | Mailbox-Seite / ACK-Stand | Eigene Consumer-Mailbox, Präfix-ACK ist kein Txn-Commit. |
 | `setCompletionProfiles(profiles)` | `void` | Nur Host-Code; Ergebnisvertrag vor Arbeit installieren. |
 | `setLimits(partialLimits)` | `Limits` | Nur Host-Code: setzt Grenzen dieses Space. |
@@ -103,7 +104,7 @@ fehlgeschlagen ist: mit `pollOperation` dieselbe Request-ID weiter verfolgen
 oder gezielt `cancelOperation` verwenden.
 
 Der Service akzeptiert die Methoden `hello`, `generation`, `write`, `read`,
-`take`, `pollOperation`, `cancelOperation`, `readAll`, `count`, `stats`, `txn`,
+`take`, `pollOperation`, `resolveOperation`, `cancelOperation`, `readAll`, `count`, `stats`, `txn`,
 `lease` und `changes`. Mutationen benötigen `{ generation, requestId }`.
 `read` und `take` können `{ state: "pending" }` zurückgeben und werden über
 `pollOperation` fortgesetzt. `readAll` ist der paginierte Seitenaufruf.
@@ -357,3 +358,21 @@ markiert Child-Requests und Parents `needsReview`, ohne neue Wirkungen.
 Es muss als Reconciliation-Hook vor der Control-Restore-Bestätigung eingebunden
 werden. Verwaltete Spaces erhalten ohne diesen Hook kein Control-Receipt.
 [Abnahmestand und Grenzen](ap2-abnahme.md).
+
+`PiSpaces.resolveOperation` erhält einen `RequestRef` einschließlich Principal;
+`RemoteSpace.resolveOperation` erhält `{generation, requestId}` und verwendet
+die authentifizierte Identität. Methode und Hash bezeichnen die ursprünglichen
+normalisierten Claim-Argumente (`write`, `take`, `txn.begin` usw.). Der neue
+Wire-Aufruf verlangt bei Delegation eine signierte `targetRequest`-Referenz
+mit denselben Bindungen. Die lokalen Kontroll-/Admin-Prüfungen werden auch bei
+der Auflösung wiederholt. Eine signierte Generation enthält jetzt ihre
+Ausstellungs-Primary-Epoche; ältere Generationen bleiben für vorhandene Claims
+kompatibel, erlauben aber keinen neuen Fehl-Claim-Nachweis.
+
+`AdmissionResolution.state === "notAdmitted"` bedeutet ausschließlich, dass
+der identische Request beim unveränderten Primary erneut gesendet werden
+kann. Die Antwort ist kein terminales `NotCommitted` und erlaubt keine
+Ersatz-ID. Bekannte Claims liefern weiterhin `pending`, `done` oder `cancelled`
+mit bisherigen Retention-/Restore-Markierungen. Für alte Members ohne
+`resolveOperation` fällt der Router auf `pollOperation` für bekannte Claims
+zurück; ein unbekannter Ausgang bleibt dort konservativ `needsReview`.

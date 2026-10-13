@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-13",
+  "baseCommit": "e1794b8",
+  "builtLibrarySha256": "930faec9901bb54376db07124ade5c3db480ad43accec4328481f54dc8da294a",
+  "typecheckPassed": true,
+  "localTests": {
+    "passed": 428,
+    "failed": 0,
+    "skipped": 0
+  },
+  "builtServerFullSuite": {
+    "passed": 199,
+    "failed": 0,
+    "skipped": 0
+  },
+  "builtServerUpdatedCompatibilitySuite": {
+    "passed": 43,
+    "failed": 0,
+    "skipped": 0,
+    "note": "42 overlapping cases plus one additional legacy-generation test; not 242 distinct tests"
+  },
+  "mobileRemoteRuntimeTests": {
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0
+  },
+  "signedNetbirdBothRpcBoundariesPassed": true,
+  "entries": 10000,
+  "jobs": 1000,
+  "members": 3,
+  "workers": 6,
+  "faultBoundaries": 30,
+  "sameParentRetries": 30,
+  "journalAuditPassed": true,
+  "parents": 5000,
+  "children": 5000,
+  "originalFaultedClaimsChecked": 30,
+  "unusedFutureReservations": 0,
+  "terminalNotCommittedImplemented": false,
+  "processCrashMatrixAccepted": false,
+  "mailboxAckFaultMatrixAccepted": false,
+  "productionProvisioningAccepted": false,
+  "independentPhysicalFailureDomains": false,
+  "fullPhase2Accepted": false,
+  "remaining": [
+    "full process/journal/ACK crash matrix under overlay load",
+    "production Root/directory provisioning with independent boot/fencing",
+    "multiple physical failure domains",
+    "distributed principal deletion including Router/parent histories and physical archives/backups",
+    "controlled completion-profile transition"
+  ],
+  "promotionGate": "terminal negative claims and complete fencing/history proof remain a separate later promotion gate"
+}

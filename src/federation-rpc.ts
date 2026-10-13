@@ -1,6 +1,6 @@
 // Production wire adapter: app-key proof, original grants and per-call signed delegation.
 import type {Signer} from './auth.ts';
-import {argHash, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
+import {argHash, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
 import {PermissionError, type Json, type Template} from './core.ts';
 import {
     delegationForCall,
@@ -74,7 +74,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
                         primaryEpoch : m.target.primaryEpoch,
                         grant : g as unknown as SignedGrant,
                         targetRequest : [
-                            'pollOperation', 'cancelOperation', 'events', 'txn', 'lease'
+                            'pollOperation', 'resolveOperation', 'cancelOperation', 'events', 'txn', 'lease'
                         ].includes(call.method)
                                             ? ref
                                             : undefined,
@@ -119,19 +119,30 @@ export class FederationRpc implements RouterTarget, FederationIO {
     async invoke(s: Readonly<RouterStep>) {
         const id = await this.member(s.target),
               r = await this.remote(id, s.principal, s.policyVersion, s.targetRequest);
-        const result = await r.requestBound({
+        try { await r.requestBound({
             method : s.method,
             args : s.args as any,
             request : {generation : s.generation, requestId : s.requestId},
             frame : {authorityId : s.target.authorityId, primaryEpoch : s.target.primaryEpoch}
-        });
+        }); }catch(e){
+            if(e instanceof RequestConflict||e instanceof RequestExpired||e instanceof ResultExpired||e instanceof IncarnationChanged||e instanceof PermissionError)return this.receipt(s,'needsReview',undefined,e.constructor.name);
+            throw e;
+        }
         return this.resolve(s);
     }
     async resolve(s: Readonly<RouterStep>) {
         const id = await this.member(s.target),
               r = await this.remote(id, s.principal, s.policyVersion, this.reference(s));
         try {
-            const v = await r.pollOperation({generation : s.generation, requestId : s.requestId});
+            const ref=this.reference(s);
+            let v:import('./claims.ts').AdmissionResolution;
+            try{v=await r.resolveOperation({generation:s.generation,requestId:s.requestId},ref.method,ref.argumentHash,s.target.primaryEpoch);}catch(e){if(e instanceof RemoteError&&e.code==='UnsupportedMethod')v=await r.pollOperation({generation:s.generation,requestId:s.requestId});else throw e;}
+            if(!v||typeof v!=='object')return this.receipt(s,'needsReview',undefined,'invalid resolution response');
+            if(v.state==='notAdmitted'){
+                if(v.spaceId!==s.target.spaceId||v.authorityId!==s.target.authorityId||v.incarnation!==s.target.dataIncarnation||v.primaryEpoch!==s.target.primaryEpoch||v.generation!==s.generation||v.requestId!==s.requestId||v.method!==ref.method||v.argumentHash!==ref.argumentHash)return this.receipt(s,'needsReview',undefined,'invalid current-epoch admission proof');
+                return this.receipt(s,'notAdmitted');
+            }
+            if(!['pending','done','cancelled'].includes(v.state)||v.method!==ref.method)return this.receipt(s,'needsReview',undefined,'invalid retained claim response');
             if (v.resultExpired || v.unknownOutcome || v.restoredHistory)
                 return this.receipt(s, 'needsReview', undefined, 'retained outcome unavailable');
             return this.receipt(s,
@@ -141,11 +152,11 @@ export class FederationRpc implements RouterTarget, FederationIO {
                                                           : 'pending',
                                 v.result, v.error?.code);
         } catch (e) {
-            if (e instanceof RequestExpired || e instanceof ResultExpired ||
+            if (e instanceof RequestConflict || e instanceof RequestExpired || e instanceof ResultExpired ||
                 e instanceof IncarnationChanged || e instanceof PermissionError)
                 return this.receipt(s, 'needsReview', undefined, e.constructor.name);
             if (e instanceof RemoteError && [
-                    'RequestExpired', 'ResultExpired', 'IncarnationChanged', 'PermissionDenied'
+                    'RequestConflict', 'RequestExpired', 'ResultExpired', 'IncarnationChanged', 'PermissionDenied'
                 ].includes(e.code))
                 return this.receipt(s, 'needsReview', undefined, e.code);
             throw e;

@@ -143,9 +143,15 @@ export class PiSpaces implements SpaceLike {
 	}
 
 	/** A new request generation for `principal`, in this space. Request ids are admitted while it is open. */
-	issueGeneration(principal: Principal): Promise<{ generation: string; admitUntil: number }> {
-		return this.host.commit(async (tx) => { const s = await this.doc(tx), key = await hostKey(tx, this.now()); this.options.authorization?.check(); return claims.issueGeneration(s, this.now(), principal, { key, authorityId: this.options.authorityId }); }, this.ctx);
+	issueGeneration(principal: Principal, options:{primaryEpoch?:number}={}): Promise<{ generation: string; admitUntil: number }> {
+		return this.host.commit(async (tx) => { const s = await this.doc(tx), key = await hostKey(tx, this.now()); this.options.authorization?.check(); return claims.issueGeneration(s, this.now(), principal, { key, authorityId: this.options.authorityId, primaryEpoch:options.primaryEpoch }); }, this.ctx);
 	}
+	/** Resolve a journaled identity; a miss only authorizes retry of that same identity on this epoch. */
+ async resolveOperation(target:RequestRef, method:string, argumentHash:string, primaryEpoch:number):Promise<claims.AdmissionResolution>{
+  if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
+  const view=await this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();return core.plain(claims.resolveAdmission(s,this.now(),target,method,argumentHash,primaryEpoch) as unknown as Json) as unknown as claims.AdmissionResolution;},this.ctx);
+  return view.state==='pending'&&!view.restoredHistory?this.pollOperation(target):view;
+ }
 	/** State of a known request, read without a commit. An unknown id is RequestExpired, never a new operation. */
 	async pollOperation(target: RequestRef): Promise<ClaimView> {
 		const s = await this.snap();

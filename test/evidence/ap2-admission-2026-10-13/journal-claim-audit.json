@@ -1,0 +1,193 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 5000,
+  "commands": 5000,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "faultedClaimsChecked": 30,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": [
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-298effa6f76f33943de8d998be3e52d431501cab5de447339afe031ae3d6063b",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-298effa6f76f33943de8d998be3e52d431501cab5de447339afe031ae3d6063b",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-66c25b534a5f1b16ac7a1e033338ae4ca58d9374ec88b89875ce3369408eeb04",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-f6a84005545974f9deaf96afc86c5ebf33e0e19714448809d9ddced5a7d0bfbc",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-698cff971b1878667ab267caa47d70bfc2e939789b534ecd53e9d2cdaefe9cda",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-d5e80d9d079a460416dbc46085ada6437be28f6465cfbe1fe75faa6674f96f78",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-9d1a41aa7092e268457c88c97263ff0e17e7dfefd25cef33df540f5110186429",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-5cbb5b463dde0cfbc8a145cbab22701cd9e6a54d9ae6065baa932220895c6b78",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-dfc3362fa6f54adf9d94c268bb574b232f5c1c64cb5c56b0b8a7b8fbb79d856c",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-4e45a00c2956e6021699edb4c824405fa26fab6b050cada319e88e49000ea35c",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-8bbfda0f9c2e44141f0b4748ecadb707a1effc401b730d398be89ac1e15114f5",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-8bbfda0f9c2e44141f0b4748ecadb707a1effc401b730d398be89ac1e15114f5",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-188828109a5bd1d82c82ff321554306e54b7fdb07aa7c531e4845b8a9aebeeb2",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-188828109a5bd1d82c82ff321554306e54b7fdb07aa7c531e4845b8a9aebeeb2",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-a29e4b460c2658125b35ffadae74e2774d0bc4f9d350e6b3350bae7d14ceac5f",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-a29e4b460c2658125b35ffadae74e2774d0bc4f9d350e6b3350bae7d14ceac5f",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-f51df780e7117853aed46e22ad40792eb2981c0f54675ad0c944a2775f756983",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-08d937326fc4f4af0fbbbdb4782f9982359a9e6127edf6a5f1603a7701fd5f63",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-a5eba4d3d042ae1cfda5d27ee8b412eb3dcd66af46eaddaf9387efda5fb92ccc",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-101ff3cdcb4e858848039566b59b4758c005e82901c9edcf41aadfc55b7e603f",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-4b35f263b0ed31070b5c6a0f788047860044f3620e37ded9ad5f5e6b07e63c97",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-4b35f263b0ed31070b5c6a0f788047860044f3620e37ded9ad5f5e6b07e63c97",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-00630b5d219fb6a7ba5ec456f2fb3d0747c0aebfc0dd448b7cc9773d365d1065",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-127c0dccdcac8d442acd9f1d5eec4e0226fdc8bc9f9adf1225616307ebe75683",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-c6a79f17fa3b0705a204a1015eebe9cf46ea87c96a9834376b72cd6825a9b29a",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-b3657e5de0a8acf809c91743b6af654d7f0b1563cf60289a52cc659b5115da8b",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-217c481253f9e108a608a8572ef51436647d4b614f351fd5bdb349b58ddcbf8b",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-4e4e66d55be21c794734369d7738c8a3eb651cebdaf256379bb9f824a67978ac",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-c20599317d9a921d0a1c25b82c6601eb02f8d5961efe4d3a5e84e54626446df5",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-f25265b572d72da2ef0ef729df71830eb4c0c268417dfa8bd308a9ce90431b1c",
+      "claimState": "done"
+    }
+  ]
+}

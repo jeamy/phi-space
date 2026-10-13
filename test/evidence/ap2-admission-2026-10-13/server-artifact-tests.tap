@@ -1,0 +1,1222 @@
+TAP version 13
+# (node:13) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: protected capabilities, bounded renewal, status expiry and no implicit Member
+ok 1 - jsonl: protected capabilities, bounded renewal, status expiry and no implicit Member
+  ---
+  duration_ms: 64.871401
+  type: 'test'
+  ...
+# Subtest: sqlite: protected capabilities, bounded renewal, status expiry and no implicit Member
+ok 2 - sqlite: protected capabilities, bounded renewal, status expiry and no implicit Member
+  ---
+  duration_ms: 27.263408
+  type: 'test'
+  ...
+# (node:25) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: take with lost answer: the retry returns the stored result after reopen, no second take, no plaintext args
+ok 3 - take with lost answer: the retry returns the stored result after reopen, no second take, no plaintext args
+  ---
+  duration_ms: 90.337997
+  type: 'test'
+  ...
+# Subtest: immediate mutations: write and txn begin replay their stored result, also after a lost answer
+ok 4 - immediate mutations: write and txn begin replay their stored result, also after a lost answer
+  ---
+  duration_ms: 54.025662
+  type: 'test'
+  ...
+# Subtest: same request id with different arguments or method is a RequestConflict
+ok 5 - same request id with different arguments or method is a RequestConflict
+  ---
+  duration_ms: 8.42817
+  type: 'test'
+  ...
+# Subtest: a pending request outlives its generation's admission; new ids in that generation are rejected
+ok 6 - a pending request outlives its generation's admission; new ids in that generation are rejected
+  ---
+  duration_ms: 44.359131
+  type: 'test'
+  ...
+# Subtest: the deadline is fixed by the first accepted call, not by a retry
+ok 7 - the deadline is fixed by the first accepted call, not by a retry
+  ---
+  duration_ms: 66.057426
+  type: 'test'
+  ...
+# Subtest: results are kept from their decision; then ResultExpired; after admission and retention RequestExpired
+ok 8 - results are kept from their decision; then ResultExpired; after admission and retention RequestExpired
+  ---
+  duration_ms: 37.190485
+  type: 'test'
+  ...
+# Subtest: cancelOperation ends a pending take; a decided request stays decided
+ok 9 - cancelOperation ends a pending take; a decided request stays decided
+  ---
+  duration_ms: 37.476435
+  type: 'test'
+  ...
+# Subtest: a generation of an earlier incarnation admits no new ids (IncarnationChanged)
+ok 10 - a generation of an earlier incarnation admits no new ids (IncarnationChanged)
+  ---
+  duration_ms: 5.274125
+  type: 'test'
+  ...
+# Subtest: claims and generations survive the v4 -> v5 migration path
+ok 11 - claims and generations survive the v4 -> v5 migration path
+  ---
+  duration_ms: 0.699111
+  type: 'test'
+  ...
+# Subtest: current-epoch miss survives reopen and late original/retry commit exactly once
+ok 12 - current-epoch miss survives reopen and late original/retry commit exactly once
+  ---
+  duration_ms: 26.690487
+  type: 'test'
+  ...
+# Subtest: missing-request proof rejects expired, forged, foreign, promoted and restored generations
+ok 13 - missing-request proof rejects expired, forged, foreign, promoted and restored generations
+  ---
+  duration_ms: 20.665261
+  type: 'test'
+  ...
+# Subtest: resolution of an existing pending claim still settles its deadline outside the proof commit
+ok 14 - resolution of an existing pending claim still settles its deadline outside the proof commit
+  ---
+  duration_ms: 77.451899
+  type: 'test'
+  ...
+# (node:37) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: two takes never return the same entry
+ok 15 - two takes never return the same entry
+  ---
+  duration_ms: 6.381391
+  type: 'test'
+  ...
+# Subtest: null template matches any; null field is wildcard; fields match exactly
+ok 16 - null template matches any; null field is wildcard; fields match exactly
+  ---
+  duration_ms: 0.558391
+  type: 'test'
+  ...
+# Subtest: subtype matching
+ok 17 - subtype matching
+  ---
+  duration_ms: 0.490057
+  type: 'test'
+  ...
+# Subtest: lease: expired entry is invisible; reduced lease; negative throws
+ok 18 - lease: expired entry is invisible; reduced lease; negative throws
+  ---
+  duration_ms: 0.79046
+  type: 'test'
+  ...
+# Subtest: FOREVER is forever and long leases are granted as asked, without overflow
+ok 19 - FOREVER is forever and long leases are granted as asked, without overflow
+  ---
+  duration_ms: 2.062794
+  type: 'test'
+  ...
+# Subtest: bad timeouts and entries are rejected instead of silently dropped
+ok 20 - bad timeouts and entries are rejected instead of silently dropped
+  ---
+  duration_ms: 0.247974
+  type: 'test'
+  ...
+# Subtest: lazy settle replays lapses in time order: a txn expiring before a waiter's deadline serves the waiter
+ok 21 - lazy settle replays lapses in time order: a txn expiring before a waiter's deadline serves the waiter
+  ---
+  duration_ms: 1.384082
+  type: 'test'
+  ...
+# Subtest: ownership: a conversation uses only its own transactions and leases (never ownerless ones); host code may do anything
+ok 22 - ownership: a conversation uses only its own transactions and leases (never ownerless ones); host code may do anything
+  ---
+  duration_ms: 1.505826
+  type: 'test'
+  ...
+# Subtest: a served take-waiter's transaction belongs to the waiting conversation
+ok 23 - a served take-waiter's transaction belongs to the waiting conversation
+  ---
+  duration_ms: 0.632262
+  type: 'test'
+  ...
+# Subtest: releaseTxn aborts an active transaction and serves the returned entry; a finished one is ignored
+ok 24 - releaseTxn aborts an active transaction and serves the returned entry; a finished one is ignored
+  ---
+  duration_ms: 0.706833
+  type: 'test'
+  ...
+# Subtest: lease renew and cancel
+ok 25 - lease renew and cancel
+  ---
+  duration_ms: 0.366571
+  type: 'test'
+  ...
+# Subtest: entry written under txn is invisible outside until commit; abort discards
+ok 26 - entry written under txn is invisible outside until commit; abort discards
+  ---
+  duration_ms: 0.315625
+  type: 'test'
+  ...
+# Subtest: take under txn locks; abort restores; commit removes
+ok 27 - take under txn locks; abort restores; commit removes
+  ---
+  duration_ms: 0.282615
+  type: 'test'
+  ...
+# Subtest: crashed worker: txn lease expiry returns the taken entry
+ok 28 - crashed worker: txn lease expiry returns the taken entry
+  ---
+  duration_ms: 0.264377
+  type: 'test'
+  ...
+# Subtest: read lock: others may read but not take
+ok 29 - read lock: others may read but not take
+  ---
+  duration_ms: 0.29307
+  type: 'test'
+  ...
+# Subtest: operation under unknown/expired txn throws TransactionError
+ok 30 - operation under unknown/expired txn throws TransactionError
+  ---
+  duration_ms: 0.180361
+  type: 'test'
+  ...
+# Subtest: notify: seq strictly increases; fires on commit; not for written-and-taken in one txn
+ok 31 - notify: seq strictly increases; fires on commit; not for written-and-taken in one txn
+  ---
+  duration_ms: 0.613383
+  type: 'test'
+  ...
+# Subtest: notify under txn also sees writes under that txn, dropped on completion
+ok 32 - notify under txn also sees writes under that txn, dropped on completion
+  ---
+  duration_ms: 0.234774
+  type: 'test'
+  ...
+# Subtest: waiter: served by a later write, entry taken under a txn that returns on lease expiry
+ok 33 - waiter: served by a later write, entry taken under a txn that returns on lease expiry
+  ---
+  duration_ms: 0.43265
+  type: 'test'
+  ...
+# Subtest: waiter: commit of the held txn makes the take permanent
+ok 34 - waiter: commit of the held txn makes the take permanent
+  ---
+  duration_ms: 0.298879
+  type: 'test'
+  ...
+# Subtest: waiter: read-waiter does not remove; timeout event when nothing arrives
+ok 35 - waiter: read-waiter does not remove; timeout event when nothing arrives
+  ---
+  duration_ms: 0.316386
+  type: 'test'
+  ...
+# Subtest: waiter: entry returned by an aborted txn serves a waiting taker; two waiters get distinct entries
+ok 36 - waiter: entry returned by an aborted txn serves a waiting taker; two waiters get distinct entries
+  ---
+  duration_ms: 0.516436
+  type: 'test'
+  ...
+# Subtest: nextExpiry covers registrations and waiters, and survives huge states
+ok 37 - nextExpiry covers registrations and waiters, and survives huge states
+  ---
+  duration_ms: 157.213906
+  type: 'test'
+  ...
+# Subtest: waiters can be cancelled and renewed through the lease API; cancel sends no timeout
+ok 38 - waiters can be cancelled and renewed through the lease API; cancel sends no timeout
+  ---
+  duration_ms: 0.671591
+  type: 'test'
+  ...
+# Subtest: waiter txn lease follows lease rules: ANY gets the default, negatives throw
+ok 39 - waiter txn lease follows lease rules: ANY gets the default, negatives throw
+  ---
+  duration_ms: 0.596338
+  type: 'test'
+  ...
+# Subtest: undefined template fields are wildcards like null
+ok 40 - undefined template fields are wildcards like null
+  ---
+  duration_ms: 0.277036
+  type: 'test'
+  ...
+# Subtest: types are preserved in what read/take return and deduplicated on write
+ok 41 - types are preserved in what read/take return and deduplicated on write
+  ---
+  duration_ms: 0.354633
+  type: 'test'
+  ...
+# Subtest: migrate normalizes old documents
+ok 42 - migrate normalizes old documents
+  ---
+  duration_ms: 0.588877
+  type: 'test'
+  ...
+# Subtest: lease 0: the entry is born expired and is never announced, served or held
+ok 43 - lease 0: the entry is born expired and is never announced, served or held
+  ---
+  duration_ms: 0.326812
+  type: 'test'
+  ...
+# Subtest: a registration under txn T also receives plain committed writes (spec: in addition)
+ok 44 - a registration under txn T also receives plain committed writes (spec: in addition)
+  ---
+  duration_ms: 0.627094
+  type: 'test'
+  ...
+# Subtest: count and stats see only what a read would see, and break the rest down
+ok 45 - count and stats see only what a read would see, and break the rest down
+  ---
+  duration_ms: 1.267536
+  type: 'test'
+  ...
+# Subtest: count and stats on an unsettled snapshot agree with what a read would see after settling
+ok 46 - count and stats on an unsettled snapshot agree with what a read would see after settling
+  ---
+  duration_ms: 1.068858
+  type: 'test'
+  ...
+# Subtest: returned counts entries given back by aborted and expired transactions, durably
+ok 47 - returned counts entries given back by aborted and expired transactions, durably
+  ---
+  duration_ms: 0.707274
+  type: 'test'
+  ...
+# Subtest: agents cannot renew, cancel or abort what the host created
+ok 48 - agents cannot renew, cancel or abort what the host created
+  ---
+  duration_ms: 0.547584
+  type: 'test'
+  ...
+# Subtest: limits: entry size, types, counts per owner and in total; host code is not limited
+ok 49 - limits: entry size, types, counts per owner and in total; host code is not limited
+  ---
+  duration_ms: 2.166369
+  type: 'test'
+  ...
+# Subtest: limits free up when entries are taken or expire
+ok 50 - limits free up when entries are taken or expire
+  ---
+  duration_ms: 0.568336
+  type: 'test'
+  ...
+# Subtest: a conversation's subscription needs a type or a field; host code may subscribe to everything
+ok 51 - a conversation's subscription needs a type or a field; host code may subscribe to everything
+  ---
+  duration_ms: 0.298159
+  type: 'test'
+  ...
+# Subtest: notify rate limit: bursts are bundled into one event with a count, sent when the interval is over
+ok 52 - notify rate limit: bursts are bundled into one event with a count, sent when the interval is over
+  ---
+  duration_ms: 1.307767
+  type: 'test'
+  ...
+# Subtest: a pending bundle is sent when its subscription expires; host subscriptions are not limited
+ok 53 - a pending bundle is sent when its subscription expires; host subscriptions are not limited
+  ---
+  duration_ms: 0.51154
+  type: 'test'
+  ...
+# Subtest: entry views carry the owner so readers can judge where content comes from
+ok 54 - entry views carry the owner so readers can judge where content comes from
+  ---
+  duration_ms: 0.281223
+  type: 'test'
+  ...
+# Subtest: list returns what a read could see, oldest first, capped, without locking anything
+ok 55 - list returns what a read could see, oldest first, capped, without locking anything
+  ---
+  duration_ms: 0.813945
+  type: 'test'
+  ...
+# Subtest: B1: a template with an id matches exactly that entry (other fields still apply)
+ok 56 - B1: a template with an id matches exactly that entry (other fields still apply)
+  ---
+  duration_ms: 0.371429
+  type: 'test'
+  ...
+# Subtest: B2: cancelling a throttled subscription drops its bundled event
+ok 57 - B2: cancelling a throttled subscription drops its bundled event
+  ---
+  duration_ms: 0.343016
+  type: 'test'
+  ...
+# Subtest: B3: a changed notify interval also applies to existing subscriptions
+ok 58 - B3: a changed notify interval also applies to existing subscriptions
+  ---
+  duration_ms: 1.285063
+  type: 'test'
+  ...
+# Subtest: L7: the whole space is limited in bytes, for the host too; freed space can be used again
+ok 59 - L7: the whole space is limited in bytes, for the host too; freed space can be used again
+  ---
+  duration_ms: 1.100155
+  type: 'test'
+  ...
+# Subtest: profile budgets also apply to active transactions; bad commits remain abortable
+ok 60 - profile budgets also apply to active transactions; bad commits remain abortable
+  ---
+  duration_ms: 1.926849
+  type: 'test'
+  ...
+# (node:45) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: scoped, audited purge and principal erasure reject replay and old snapshots
+ok 61 - jsonl: scoped, audited purge and principal erasure reject replay and old snapshots
+  ---
+  duration_ms: 101.349926
+  type: 'test'
+  ...
+# Subtest: sqlite: scoped, audited purge and principal erasure reject replay and old snapshots
+ok 62 - sqlite: scoped, audited purge and principal erasure reject replay and old snapshots
+  ---
+  duration_ms: 32.586708
+  type: 'test'
+  ...
+# Subtest: jsonl: large deletion resumes bounded commits and excludes concurrent writers
+ok 63 - jsonl: large deletion resumes bounded commits and excludes concurrent writers
+  ---
+  duration_ms: 1382.452477
+  type: 'test'
+  ...
+# batches=99; maxPersistedMutationDeltaBytes=1293; budget=4096
+# Subtest: sqlite: large deletion resumes bounded commits and excludes concurrent writers
+ok 64 - sqlite: large deletion resumes bounded commits and excludes concurrent writers
+  ---
+  duration_ms: 1182.554747
+  type: 'test'
+  ...
+# batches=99; maxPersistedMutationDeltaBytes=1293; budget=4096
+# Subtest: jsonl: deletion failBeforeCommit at registrations resumes without replay or premature admission
+ok 65 - jsonl: deletion failBeforeCommit at registrations resumes without replay or premature admission
+  ---
+  duration_ms: 19.808382
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion failBeforeCommit at mailboxes resumes without replay or premature admission
+ok 66 - jsonl: deletion failBeforeCommit at mailboxes resumes without replay or premature admission
+  ---
+  duration_ms: 16.152613
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion failBeforeCommit at claims resumes without replay or premature admission
+ok 67 - jsonl: deletion failBeforeCommit at claims resumes without replay or premature admission
+  ---
+  duration_ms: 18.046291
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion failBeforeCommit at generations resumes without replay or premature admission
+ok 68 - jsonl: deletion failBeforeCommit at generations resumes without replay or premature admission
+  ---
+  duration_ms: 19.057353
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion failBeforeCommit at entries resumes without replay or premature admission
+ok 69 - jsonl: deletion failBeforeCommit at entries resumes without replay or premature admission
+  ---
+  duration_ms: 18.942249
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion failBeforeCommit at history resumes without replay or premature admission
+ok 70 - jsonl: deletion failBeforeCommit at history resumes without replay or premature admission
+  ---
+  duration_ms: 16.618444
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion loseAnswer at registrations resumes without replay or premature admission
+ok 71 - jsonl: deletion loseAnswer at registrations resumes without replay or premature admission
+  ---
+  duration_ms: 19.514281
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion loseAnswer at mailboxes resumes without replay or premature admission
+ok 72 - jsonl: deletion loseAnswer at mailboxes resumes without replay or premature admission
+  ---
+  duration_ms: 25.026084
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion loseAnswer at claims resumes without replay or premature admission
+ok 73 - jsonl: deletion loseAnswer at claims resumes without replay or premature admission
+  ---
+  duration_ms: 28.611448
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion loseAnswer at generations resumes without replay or premature admission
+ok 74 - jsonl: deletion loseAnswer at generations resumes without replay or premature admission
+  ---
+  duration_ms: 20.252151
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion loseAnswer at entries resumes without replay or premature admission
+ok 75 - jsonl: deletion loseAnswer at entries resumes without replay or premature admission
+  ---
+  duration_ms: 21.207347
+  type: 'test'
+  ...
+# Subtest: jsonl: deletion loseAnswer at history resumes without replay or premature admission
+ok 76 - jsonl: deletion loseAnswer at history resumes without replay or premature admission
+  ---
+  duration_ms: 18.464431
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion failBeforeCommit at registrations resumes without replay or premature admission
+ok 77 - sqlite: deletion failBeforeCommit at registrations resumes without replay or premature admission
+  ---
+  duration_ms: 18.047915
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion failBeforeCommit at mailboxes resumes without replay or premature admission
+ok 78 - sqlite: deletion failBeforeCommit at mailboxes resumes without replay or premature admission
+  ---
+  duration_ms: 18.316038
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion failBeforeCommit at claims resumes without replay or premature admission
+ok 79 - sqlite: deletion failBeforeCommit at claims resumes without replay or premature admission
+  ---
+  duration_ms: 13.723599
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion failBeforeCommit at generations resumes without replay or premature admission
+ok 80 - sqlite: deletion failBeforeCommit at generations resumes without replay or premature admission
+  ---
+  duration_ms: 18.017247
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion failBeforeCommit at entries resumes without replay or premature admission
+ok 81 - sqlite: deletion failBeforeCommit at entries resumes without replay or premature admission
+  ---
+  duration_ms: 11.039729
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion failBeforeCommit at history resumes without replay or premature admission
+ok 82 - sqlite: deletion failBeforeCommit at history resumes without replay or premature admission
+  ---
+  duration_ms: 13.531679
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion loseAnswer at registrations resumes without replay or premature admission
+ok 83 - sqlite: deletion loseAnswer at registrations resumes without replay or premature admission
+  ---
+  duration_ms: 11.499223
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion loseAnswer at mailboxes resumes without replay or premature admission
+ok 84 - sqlite: deletion loseAnswer at mailboxes resumes without replay or premature admission
+  ---
+  duration_ms: 9.522748
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion loseAnswer at claims resumes without replay or premature admission
+ok 85 - sqlite: deletion loseAnswer at claims resumes without replay or premature admission
+  ---
+  duration_ms: 12.765065
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion loseAnswer at generations resumes without replay or premature admission
+ok 86 - sqlite: deletion loseAnswer at generations resumes without replay or premature admission
+  ---
+  duration_ms: 12.838296
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion loseAnswer at entries resumes without replay or premature admission
+ok 87 - sqlite: deletion loseAnswer at entries resumes without replay or premature admission
+  ---
+  duration_ms: 9.973044
+  type: 'test'
+  ...
+# Subtest: sqlite: deletion loseAnswer at history resumes without replay or premature admission
+ok 88 - sqlite: deletion loseAnswer at history resumes without replay or premature admission
+  ---
+  duration_ms: 13.520342
+  type: 'test'
+  ...
+# Subtest: jsonl: restore tuple and conflicting admin command keep an incomplete deletion fenced
+ok 89 - jsonl: restore tuple and conflicting admin command keep an incomplete deletion fenced
+  ---
+  duration_ms: 10.249562
+  type: 'test'
+  ...
+# Subtest: sqlite: restore tuple and conflicting admin command keep an incomplete deletion fenced
+ok 90 - sqlite: restore tuple and conflicting admin command keep an incomplete deletion fenced
+  ---
+  duration_ms: 6.751108
+  type: 'test'
+  ...
+# Subtest: jsonl: completed deletion never reports fresh success for restored data
+ok 91 - jsonl: completed deletion never reports fresh success for restored data
+  ---
+  duration_ms: 22.444779
+  type: 'test'
+  ...
+# Subtest: sqlite: completed deletion never reports fresh success for restored data
+ok 92 - sqlite: completed deletion never reports fresh success for restored data
+  ---
+  duration_ms: 15.351678
+  type: 'test'
+  ...
+# Subtest: jsonl: scope revoked at the final decision check rolls back a deletion batch
+ok 93 - jsonl: scope revoked at the final decision check rolls back a deletion batch
+  ---
+  duration_ms: 26.822255
+  type: 'test'
+  ...
+# Subtest: sqlite: scope revoked at the final decision check rolls back a deletion batch
+ok 94 - sqlite: scope revoked at the final decision check rolls back a deletion batch
+  ---
+  duration_ms: 9.266951
+  type: 'test'
+  ...
+# Subtest: jsonl: admin commands reject alias targets and oversized audit actors without a fence
+ok 95 - jsonl: admin commands reject alias targets and oversized audit actors without a fence
+  ---
+  duration_ms: 7.998634
+  type: 'test'
+  ...
+# Subtest: sqlite: admin commands reject alias targets and oversized audit actors without a fence
+ok 96 - sqlite: admin commands reject alias targets and oversized audit actors without a fence
+  ---
+  duration_ms: 5.344281
+  type: 'test'
+  ...
+# (node:57) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: signed delegation executes as original principal and deduplicates after restart
+ok 97 - jsonl: signed delegation executes as original principal and deduplicates after restart
+  ---
+  duration_ms: 81.189024
+  type: 'test'
+  ...
+# Subtest: jsonl: authority, audience, principal, operation, request, hashes and expiry are bound
+ok 98 - jsonl: authority, audience, principal, operation, request, hashes and expiry are bound
+  ---
+  duration_ms: 38.431742
+  type: 'test'
+  ...
+# Subtest: jsonl: both signatures and active router/original keys are required
+ok 99 - jsonl: both signatures and active router/original keys are required
+  ---
+  duration_ms: 17.567813
+  type: 'test'
+  ...
+# Subtest: jsonl: policy changes permit bound old resolution, not old new requests
+ok 100 - jsonl: policy changes permit bound old resolution, not old new requests
+  ---
+  duration_ms: 44.566253
+  type: 'test'
+  ...
+# Subtest: jsonl: higher epoch durably disables old pending effects and old router frames
+ok 101 - jsonl: higher epoch durably disables old pending effects and old router frames
+  ---
+  duration_ms: 43.266136
+  type: 'test'
+  ...
+# Subtest: jsonl: lease is not signed before durable commit and renewal preserves epoch
+ok 102 - jsonl: lease is not signed before durable commit and renewal preserves epoch
+  ---
+  duration_ms: 19.490604
+  type: 'test'
+  ...
+# Subtest: sqlite: signed delegation executes as original principal and deduplicates after restart
+ok 103 - sqlite: signed delegation executes as original principal and deduplicates after restart
+  ---
+  duration_ms: 36.145283
+  type: 'test'
+  ...
+# Subtest: sqlite: authority, audience, principal, operation, request, hashes and expiry are bound
+ok 104 - sqlite: authority, audience, principal, operation, request, hashes and expiry are bound
+  ---
+  duration_ms: 19.296033
+  type: 'test'
+  ...
+# Subtest: sqlite: both signatures and active router/original keys are required
+ok 105 - sqlite: both signatures and active router/original keys are required
+  ---
+  duration_ms: 16.066143
+  type: 'test'
+  ...
+# Subtest: sqlite: policy changes permit bound old resolution, not old new requests
+ok 106 - sqlite: policy changes permit bound old resolution, not old new requests
+  ---
+  duration_ms: 29.895269
+  type: 'test'
+  ...
+# Subtest: sqlite: higher epoch durably disables old pending effects and old router frames
+ok 107 - sqlite: higher epoch durably disables old pending effects and old router frames
+  ---
+  duration_ms: 23.438235
+  type: 'test'
+  ...
+# Subtest: sqlite: lease is not signed before durable commit and renewal preserves epoch
+ok 108 - sqlite: lease is not signed before durable commit and renewal preserves epoch
+  ---
+  duration_ms: 15.543455
+  type: 'test'
+  ...
+# Subtest: jsonl: new epoch arriving between authorization and commit fences the effect
+ok 109 - jsonl: new epoch arriving between authorization and commit fences the effect
+  ---
+  duration_ms: 20.952294
+  type: 'test'
+  ...
+# Subtest: sqlite: new epoch arriving between authorization and commit fences the effect
+ok 110 - sqlite: new epoch arriving between authorization and commit fences the effect
+  ---
+  duration_ms: 13.395465
+  type: 'test'
+  ...
+# Subtest: jsonl: changed domain under same request fails, expired generation cannot create follow-up ID
+ok 111 - jsonl: changed domain under same request fails, expired generation cannot create follow-up ID
+  ---
+  duration_ms: 35.527644
+  type: 'test'
+  ...
+# Subtest: sqlite: changed domain under same request fails, expired generation cannot create follow-up ID
+ok 112 - sqlite: changed domain under same request fails, expired generation cannot create follow-up ID
+  ---
+  duration_ms: 24.519831
+  type: 'test'
+  ...
+# Subtest: jsonl: alias epoch notice fences the same stable Space ID
+ok 113 - jsonl: alias epoch notice fences the same stable Space ID
+  ---
+  duration_ms: 26.482964
+  type: 'test'
+  ...
+# Subtest: jsonl: delegated events renew only the referenced waiter
+ok 114 - jsonl: delegated events renew only the referenced waiter
+  ---
+  duration_ms: 39.777727
+  type: 'test'
+  ...
+# Subtest: sqlite: alias epoch notice fences the same stable Space ID
+ok 115 - sqlite: alias epoch notice fences the same stable Space ID
+  ---
+  duration_ms: 21.50081
+  type: 'test'
+  ...
+# Subtest: sqlite: delegated events renew only the referenced waiter
+ok 116 - sqlite: delegated events renew only the referenced waiter
+  ---
+  duration_ms: 25.592275
+  type: 'test'
+  ...
+# Subtest: jsonl: real TCP proof and FederationRpc preserve original principal and waiter winner
+ok 117 - jsonl: real TCP proof and FederationRpc preserve original principal and waiter winner
+  ---
+  duration_ms: 247.643826
+  type: 'test'
+  ...
+# Subtest: sqlite: real TCP proof and FederationRpc preserve original principal and waiter winner
+ok 118 - sqlite: real TCP proof and FederationRpc preserve original principal and waiter winner
+  ---
+  duration_ms: 150.531022
+  type: 'test'
+  ...
+# Subtest: jsonl: composed Control Gate issues RouterLease and pinned policy only to proven router
+ok 119 - jsonl: composed Control Gate issues RouterLease and pinned policy only to proven router
+  ---
+  duration_ms: 32.465295
+  type: 'test'
+  ...
+# Subtest: sqlite: composed Control Gate issues RouterLease and pinned policy only to proven router
+ok 120 - sqlite: composed Control Gate issues RouterLease and pinned policy only to proven router
+  ---
+  duration_ms: 23.37533
+  type: 'test'
+  ...
+# Subtest: jsonl: complete Root composition rejects a superseded owner lease
+ok 121 - jsonl: complete Root composition rejects a superseded owner lease
+  ---
+  duration_ms: 119.646786
+  type: 'test'
+  ...
+# Subtest: sqlite: complete Root composition rejects a superseded owner lease
+ok 122 - sqlite: complete Root composition rejects a superseded owner lease
+  ---
+  duration_ms: 81.050827
+  type: 'test'
+  ...
+# Subtest: jsonl: typed wire resolution errors persist review and never resend effects
+ok 123 - jsonl: typed wire resolution errors persist review and never resend effects
+  ---
+  duration_ms: 126.370313
+  type: 'test'
+  ...
+# Subtest: sqlite: typed wire resolution errors persist review and never resend effects
+ok 124 - sqlite: typed wire resolution errors persist review and never resend effects
+  ---
+  duration_ms: 76.00154
+  type: 'test'
+  ...
+# Subtest: jsonl: signed current-epoch admission resolution retries one identity before send and after reply loss
+ok 125 - jsonl: signed current-epoch admission resolution retries one identity before send and after reply loss
+  ---
+  duration_ms: 52.634051
+  type: 'test'
+  ...
+# Subtest: sqlite: signed current-epoch admission resolution retries one identity before send and after reply loss
+ok 126 - sqlite: signed current-epoch admission resolution retries one identity before send and after reply loss
+  ---
+  duration_ms: 39.85853
+  type: 'test'
+  ...
+# (node:69) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: unknown take never reaches next Member; replay and Root reopen preserve winner
+ok 127 - jsonl: unknown take never reaches next Member; replay and Root reopen preserve winner
+  ---
+  duration_ms: 166.91904
+  type: 'test'
+  ...
+# Subtest: jsonl: confirmed miss advances; complete/partial snapshots and Txn binding
+ok 128 - jsonl: confirmed miss advances; complete/partial snapshots and Txn binding
+  ---
+  duration_ms: 62.954709
+  type: 'test'
+  ...
+# Subtest: jsonl: selected capacity placement remains fixed on unknown outcome
+ok 129 - jsonl: selected capacity placement remains fixed on unknown outcome
+  ---
+  duration_ms: 51.513265
+  type: 'test'
+  ...
+# Subtest: jsonl: waiting take does not cancel registrations before a winner
+ok 130 - jsonl: waiting take does not cancel registrations before a winner
+  ---
+  duration_ms: 61.562406
+  type: 'test'
+  ...
+# Subtest: sqlite: unknown take never reaches next Member; replay and Root reopen preserve winner
+ok 131 - sqlite: unknown take never reaches next Member; replay and Root reopen preserve winner
+  ---
+  duration_ms: 43.332356
+  type: 'test'
+  ...
+# Subtest: sqlite: confirmed miss advances; complete/partial snapshots and Txn binding
+ok 132 - sqlite: confirmed miss advances; complete/partial snapshots and Txn binding
+  ---
+  duration_ms: 34.698276
+  type: 'test'
+  ...
+# Subtest: sqlite: selected capacity placement remains fixed on unknown outcome
+ok 133 - sqlite: selected capacity placement remains fixed on unknown outcome
+  ---
+  duration_ms: 27.64255
+  type: 'test'
+  ...
+# Subtest: sqlite: waiting take does not cancel registrations before a winner
+ok 134 - sqlite: waiting take does not cancel registrations before a winner
+  ---
+  duration_ms: 36.322831
+  type: 'test'
+  ...
+# Subtest: jsonl: two real waiter reservations produce one committed winner and one returned loser
+ok 135 - jsonl: two real waiter reservations produce one committed winner and one returned loser
+  ---
+  duration_ms: 150.709924
+  type: 'test'
+  ...
+# Subtest: sqlite: two real waiter reservations produce one committed winner and one returned loser
+ok 136 - sqlite: two real waiter reservations produce one committed winner and one returned loser
+  ---
+  duration_ms: 86.807507
+  type: 'test'
+  ...
+# Subtest: jsonl: lost winner commit response survives reopen without choosing another candidate
+ok 137 - jsonl: lost winner commit response survives reopen without choosing another candidate
+  ---
+  duration_ms: 134.389388
+  type: 'test'
+  ...
+# Subtest: sqlite: lost winner commit response survives reopen without choosing another candidate
+ok 138 - sqlite: lost winner commit response survives reopen without choosing another candidate
+  ---
+  duration_ms: 71.432416
+  type: 'test'
+  ...
+# Subtest: jsonl: transaction origin binds member, principal and finish request ID
+ok 139 - jsonl: transaction origin binds member, principal and finish request ID
+  ---
+  duration_ms: 71.639747
+  type: 'test'
+  ...
+# Subtest: sqlite: transaction origin binds member, principal and finish request ID
+ok 140 - sqlite: transaction origin binds member, principal and finish request ID
+  ---
+  duration_ms: 45.213898
+  type: 'test'
+  ...
+# Subtest: jsonl: waiting read returns a late entry without reserving or consuming it
+ok 141 - jsonl: waiting read returns a late entry without reserving or consuming it
+  ---
+  duration_ms: 83.464428
+  type: 'test'
+  ...
+# Subtest: sqlite: waiting read returns a late entry without reserving or consuming it
+ok 142 - sqlite: waiting read returns a late entry without reserving or consuming it
+  ---
+  duration_ms: 49.054786
+  type: 'test'
+  ...
+# Subtest: jsonl: restored child and completed parent require review after target update
+ok 143 - jsonl: restored child and completed parent require review after target update
+  ---
+  duration_ms: 50.558148
+  type: 'test'
+  ...
+# Subtest: sqlite: restored child and completed parent require review after target update
+ok 144 - sqlite: restored child and completed parent require review after target update
+  ---
+  duration_ms: 26.844309
+  type: 'test'
+  ...
+# Subtest: jsonl: bounded composite history denies admission without sending another effect
+ok 145 - jsonl: bounded composite history denies admission without sending another effect
+  ---
+  duration_ms: 543.260153
+  type: 'test'
+  ...
+# Subtest: sqlite: bounded composite history denies admission without sending another effect
+ok 146 - sqlite: bounded composite history denies admission without sending another effect
+  ---
+  duration_ms: 255.640179
+  type: 'test'
+  ...
+# Subtest: jsonl: partitioned history accepts 1000 fixed operations on three Members and retains retries after reopen
+ok 147 - jsonl: partitioned history accepts 1000 fixed operations on three Members and retains retries after reopen
+  ---
+  duration_ms: 27471.258918
+  type: 'test'
+  ...
+# Subtest: jsonl: cross-partition transaction origin and Root removal references remain bound
+ok 148 - jsonl: cross-partition transaction origin and Root removal references remain bound
+  ---
+  duration_ms: 114.414294
+  type: 'test'
+  ...
+# Subtest: jsonl: a full partition rejects new work while other partitions and known IDs still work
+ok 149 - jsonl: a full partition rejects new work while other partitions and known IDs still work
+  ---
+  duration_ms: 412.661616
+  type: 'test'
+  ...
+# Subtest: jsonl: existing legacy IDs cannot disappear behind a new partition topology
+ok 150 - jsonl: existing legacy IDs cannot disappear behind a new partition topology
+  ---
+  duration_ms: 30.363307
+  type: 'test'
+  ...
+# Subtest: jsonl: interrupted partition restore failBeforeCommit fences all parents until replay completes
+ok 151 - jsonl: interrupted partition restore failBeforeCommit fences all parents until replay completes
+  ---
+  duration_ms: 452.491436
+  type: 'test'
+  ...
+# Subtest: jsonl: interrupted partition restore loseAnswer fences all parents until replay completes
+ok 152 - jsonl: interrupted partition restore loseAnswer fences all parents until replay completes
+  ---
+  duration_ms: 613.244027
+  type: 'test'
+  ...
+# Subtest: sqlite: partitioned history accepts 1000 fixed operations on three Members and retains retries after reopen
+ok 153 - sqlite: partitioned history accepts 1000 fixed operations on three Members and retains retries after reopen
+  ---
+  duration_ms: 17165.256458
+  type: 'test'
+  ...
+# Subtest: sqlite: cross-partition transaction origin and Root removal references remain bound
+ok 154 - sqlite: cross-partition transaction origin and Root removal references remain bound
+  ---
+  duration_ms: 56.194117
+  type: 'test'
+  ...
+# Subtest: sqlite: a full partition rejects new work while other partitions and known IDs still work
+ok 155 - sqlite: a full partition rejects new work while other partitions and known IDs still work
+  ---
+  duration_ms: 243.435282
+  type: 'test'
+  ...
+# Subtest: sqlite: existing legacy IDs cannot disappear behind a new partition topology
+ok 156 - sqlite: existing legacy IDs cannot disappear behind a new partition topology
+  ---
+  duration_ms: 24.112332
+  type: 'test'
+  ...
+# Subtest: sqlite: interrupted partition restore failBeforeCommit fences all parents until replay completes
+ok 157 - sqlite: interrupted partition restore failBeforeCommit fences all parents until replay completes
+  ---
+  duration_ms: 226.107248
+  type: 'test'
+  ...
+# Subtest: sqlite: interrupted partition restore loseAnswer fences all parents until replay completes
+ok 158 - sqlite: interrupted partition restore loseAnswer fences all parents until replay completes
+  ---
+  duration_ms: 227.164398
+  type: 'test'
+  ...
+# Subtest: jsonl: lost partitioned effect reply recovers the same child without selecting a new Member
+ok 159 - jsonl: lost partitioned effect reply recovers the same child without selecting a new Member
+  ---
+  duration_ms: 66.051158
+  type: 'test'
+  ...
+# Subtest: sqlite: lost partitioned effect reply recovers the same child without selecting a new Member
+ok 160 - sqlite: lost partitioned effect reply recovers the same child without selecting a new Member
+  ---
+  duration_ms: 40.573182
+  type: 'test'
+  ...
+# Subtest: jsonl: race candidate failBeforeCommit reopens with one winner and releases future reservations
+ok 161 - jsonl: race candidate failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 206.352293
+  type: 'test'
+  ...
+# Subtest: jsonl: race candidate loseAnswer reopens with one winner and releases future reservations
+ok 162 - jsonl: race candidate loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 157.248446
+  type: 'test'
+  ...
+# Subtest: jsonl: race winner failBeforeCommit reopens with one winner and releases future reservations
+ok 163 - jsonl: race winner failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 217.673638
+  type: 'test'
+  ...
+# Subtest: jsonl: race winner loseAnswer reopens with one winner and releases future reservations
+ok 164 - jsonl: race winner loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 209.32827
+  type: 'test'
+  ...
+# Subtest: jsonl: race completed failBeforeCommit reopens with one winner and releases future reservations
+ok 165 - jsonl: race completed failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 190.789866
+  type: 'test'
+  ...
+# Subtest: jsonl: race completed loseAnswer reopens with one winner and releases future reservations
+ok 166 - jsonl: race completed loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 242.641991
+  type: 'test'
+  ...
+# Subtest: jsonl: race ack failBeforeCommit reopens with one winner and releases future reservations
+ok 167 - jsonl: race ack failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 225.938306
+  type: 'test'
+  ...
+# Subtest: jsonl: race ack loseAnswer reopens with one winner and releases future reservations
+ok 168 - jsonl: race ack loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 199.953035
+  type: 'test'
+  ...
+# Subtest: sqlite: race candidate failBeforeCommit reopens with one winner and releases future reservations
+ok 169 - sqlite: race candidate failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 97.330254
+  type: 'test'
+  ...
+# Subtest: sqlite: race candidate loseAnswer reopens with one winner and releases future reservations
+ok 170 - sqlite: race candidate loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 90.538635
+  type: 'test'
+  ...
+# Subtest: sqlite: race winner failBeforeCommit reopens with one winner and releases future reservations
+ok 171 - sqlite: race winner failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 91.687896
+  type: 'test'
+  ...
+# Subtest: sqlite: race winner loseAnswer reopens with one winner and releases future reservations
+ok 172 - sqlite: race winner loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 103.660622
+  type: 'test'
+  ...
+# Subtest: sqlite: race completed failBeforeCommit reopens with one winner and releases future reservations
+ok 173 - sqlite: race completed failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 85.702969
+  type: 'test'
+  ...
+# Subtest: sqlite: race completed loseAnswer reopens with one winner and releases future reservations
+ok 174 - sqlite: race completed loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 82.013238
+  type: 'test'
+  ...
+# Subtest: sqlite: race ack failBeforeCommit reopens with one winner and releases future reservations
+ok 175 - sqlite: race ack failBeforeCommit reopens with one winner and releases future reservations
+  ---
+  duration_ms: 98.371573
+  type: 'test'
+  ...
+# Subtest: sqlite: race ack loseAnswer reopens with one winner and releases future reservations
+ok 176 - sqlite: race ack loseAnswer reopens with one winner and releases future reservations
+  ---
+  duration_ms: 79.338794
+  type: 'test'
+  ...
+# (node:81) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: add locks local writes across lost reply and replays stable transition
+ok 177 - jsonl: add locks local writes across lost reply and replays stable transition
+  ---
+  duration_ms: 67.109791
+  type: 'test'
+  ...
+# Subtest: jsonl: draining allows only finite profile-bound completion; removal retains notify mailbox
+ok 178 - jsonl: draining allows only finite profile-bound completion; removal retains notify mailbox
+  ---
+  duration_ms: 109.977747
+  type: 'test'
+  ...
+# Subtest: jsonl: physical invisible entries and Root references block EmptyProof
+ok 179 - jsonl: physical invisible entries and Root references block EmptyProof
+  ---
+  duration_ms: 68.036466
+  type: 'test'
+  ...
+# Subtest: jsonl: fixed HRW removal requires migration
+ok 180 - jsonl: fixed HRW removal requires migration
+  ---
+  duration_ms: 47.041975
+  type: 'test'
+  ...
+# Subtest: sqlite: add locks local writes across lost reply and replays stable transition
+ok 181 - sqlite: add locks local writes across lost reply and replays stable transition
+  ---
+  duration_ms: 24.221977
+  type: 'test'
+  ...
+# Subtest: sqlite: draining allows only finite profile-bound completion; removal retains notify mailbox
+ok 182 - sqlite: draining allows only finite profile-bound completion; removal retains notify mailbox
+  ---
+  duration_ms: 51.22556
+  type: 'test'
+  ...
+# Subtest: sqlite: physical invisible entries and Root references block EmptyProof
+ok 183 - sqlite: physical invisible entries and Root references block EmptyProof
+  ---
+  duration_ms: 38.736578
+  type: 'test'
+  ...
+# Subtest: sqlite: fixed HRW removal requires migration
+ok 184 - sqlite: fixed HRW removal requires migration
+  ---
+  duration_ms: 41.447838
+  type: 'test'
+  ...
+# Subtest: jsonl: composed Gate accepts only pinned signed membership instruction over TCP
+ok 185 - jsonl: composed Gate accepts only pinned signed membership instruction over TCP
+  ---
+  duration_ms: 59.469595
+  type: 'test'
+  ...
+# Subtest: sqlite: composed Gate accepts only pinned signed membership instruction over TCP
+ok 186 - sqlite: composed Gate accepts only pinned signed membership instruction over TCP
+  ---
+  duration_ms: 24.943142
+  type: 'test'
+  ...
+# Subtest: jsonl: conflicting stock is rejected before policy commit and local admission is safely restored
+ok 187 - jsonl: conflicting stock is rejected before policy commit and local admission is safely restored
+  ---
+  duration_ms: 52.239446
+  type: 'test'
+  ...
+# Subtest: sqlite: conflicting stock is rejected before policy commit and local admission is safely restored
+ok 188 - sqlite: conflicting stock is rejected before policy commit and local admission is safely restored
+  ---
+  duration_ms: 27.900823
+  type: 'test'
+  ...
+# Subtest: jsonl: a Root reference appearing after EmptyProof blocks the atomic removal commit
+ok 189 - jsonl: a Root reference appearing after EmptyProof blocks the atomic removal commit
+  ---
+  duration_ms: 61.824519
+  type: 'test'
+  ...
+# Subtest: sqlite: a Root reference appearing after EmptyProof blocks the atomic removal commit
+ok 190 - sqlite: a Root reference appearing after EmptyProof blocks the atomic removal commit
+  ---
+  duration_ms: 38.054633
+  type: 'test'
+  ...
+# (node:93) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: HRW uses field value and member set only; tasks and results colocate
+ok 191 - HRW uses field value and member set only; tasks and results colocate
+  ---
+  duration_ms: 25.271026
+  type: 'test'
+  ...
+# Subtest: supertypes are complete, declared and acyclic
+ok 192 - supertypes are complete, declared and acyclic
+  ---
+  duration_ms: 0.935627
+  type: 'test'
+  ...
+# Subtest: existing HRW/fixed/default placement changes require migration
+ok 193 - existing HRW/fixed/default placement changes require migration
+  ---
+  duration_ms: 1.591446
+  type: 'test'
+  ...
+# Subtest: capacity/capability selection is fresh, deterministic and keeps previous search members
+ok 194 - capacity/capability selection is fresh, deterministic and keeps previous search members
+  ---
+  duration_ms: 0.862076
+  type: 'test'
+  ...
+# Subtest: drain never reroutes an HRW key
+ok 195 - drain never reroutes an HRW key
+  ---
+  duration_ms: 0.441103
+  type: 'test'
+  ...
+# Subtest: primary/expand mixing and undeclared merge semantics are rejected
+ok 196 - primary/expand mixing and undeclared merge semantics are rejected
+  ---
+  duration_ms: 0.583207
+  type: 'test'
+  ...
+# Subtest: jsonl: policy persists atomically, is signed and survives reopen
+ok 197 - jsonl: policy persists atomically, is signed and survives reopen
+  ---
+  duration_ms: 81.060344
+  type: 'test'
+  ...
+# Subtest: sqlite: policy persists atomically, is signed and survives reopen
+ok 198 - sqlite: policy persists atomically, is signed and survives reopen
+  ---
+  duration_ms: 28.419984
+  type: 'test'
+  ...
+# Subtest: supertype search also covers unruled direct instances at the default Member
+ok 199 - supertype search also covers unruled direct instances at the default Member
+  ---
+  duration_ms: 0.454023
+  type: 'test'
+  ...
+1..199
+# tests 199
+# suites 0
+# pass 199
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 61221.638042

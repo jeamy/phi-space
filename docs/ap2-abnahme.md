@@ -334,3 +334,47 @@ anschließend `FederationUnavailable: child needs review`, ohne die frühere
 Retry-Schleife. Der erwartete Prüfzustand ist nachgewiesen; dieser Versuch
 ist ausdrücklich kein bestandener fachlicher Lastlauf. Beide isolierten
 Läufe haben ihre eigenen Container, Gruppen und Policies vollständig entfernt.
+
+## Aktuelle Admission-Auflösung vom 2026-10-13
+
+`resolveOperation` schließt den vorstehend beschriebenen Vor-Versand-Fall
+beim unveränderten Primary. Die Delegation kann den noch fehlenden eigenen
+Claim nur mit gültiger signierter Generation, aktuellem Principal-/Space-/
+Autoritäts-/Inkarnationsbezug sowie Ausstellungs- und Ziel-Epoche prüfen.
+Generation und Request-ID bleiben unverändert; der verspätete Originalaufruf
+und der Retry treffen denselben Claim. Der Router prüft die vollständige
+Antwortbindung gegen seinen gespeicherten Child und gibt keine Ersatz-ID
+oder Ausweichroute frei. Definitive Bindungs- und Berechtigungsfehler bleiben
+`needsReview`. Für ältere Members wird nur die bisherige bekannte-Claim-
+Auflösung weiter verwendet.
+
+Die aktuellen JSONL-/SQLite-Tests prüfen fehlenden Claim ohne Zustandsänderung,
+Reopen, verspätetes Original und parallelen Retry mit genau einer Wirkung,
+fremde/gefälschte/abgelaufene Generationen, Epochenwechsel, Restore-Markierung,
+Methoden-/Hash-Konflikte und weiterhin ablaufende Pending-Claims. Signierte
+TCP-Tests kombinieren Vor-Versand-Ausfall und verlorene erfolgreiche Antwort
+mit identischer Generation/Request-ID. Der NetBird-Smoke-Test traf alle
+30 Kombinationen (fünf Effekte × drei Members × zwei RPC-Grenzen).
+
+Das frühere `beforeSend`-Prüfergebnis ist historisch gültig für den damaligen
+Adapter. Der neue gleiche-Epoche-Pfad ersetzt den dortigen pauschalen Review
+bei einer noch gültigen Generation. Nach Promotion, verlorener Historie,
+Restore, abgelaufener oder älterer Generation ohne Epochenbindung bleibt
+kein solcher Retry-Nachweis verfügbar. Ein terminaler Negativclaim samt
+Promotions-/Fencing-Nachweis aus Plan 6.2 ist damit nicht implementiert.
+Prozess-, Journal- und Mailbox-ACK-Crash-Matrix sowie Produktions-Provisionierung
+bleiben getrennte offene Abnahmen.
+
+Der vollständige aktuelle Admission-Lauf bestand mit 10.000 Entries, 1.000
+Jobs und sechs Workern in 438,837 Sekunden. Alle 30 RPC-Fehlerstellen wurden
+mit 30 Wiederholungen derselben Parents aufgelöst. 1.000 eindeutige Ergebnisse,
+null Tasks, 9.000 erhaltene Hintergrund-Entries und der vollständige
+Primzahlvergleich sind bestätigt. Ein zusätzlicher Audit auf privaten Kopien
+der abgeschlossenen Stores prüfte alle 5.000 Parents/Children sowie jeden
+ursprünglichen faulted Member-Claim einschließlich Argument-Hash und Ziel.
+Keine ungenutzte Child-Zukunftsreservierung blieb übrig.
+428 lokale Tests, 199 Server-Artefakt-Tests, eine aktualisierte 43-Fälle-
+Kompatibilitätsprüfung am Server (mit 42 überlappenden Fällen und einem neuen
+Legacy-Fall) und 24 Mobile-/Remote-Tests bestanden.
+[Nachweise](../test/evidence/ap2-admission-2026-10-13/) unterscheiden diesen
+aktuellen Wire-Nachweis von der weiterhin offenen Prozess-/Journal-/ACK-Matrix.

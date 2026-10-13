@@ -22,7 +22,7 @@ const transports=new Map<string,Transport>();
 const faults:Array<{member:string;boundary:string;effect:string;generation:string;requestId:string}>=[],faultSlots=new Set<string>();let retries=0;
 function faultTransport(member:string,s:Transport):Transport{return{request:async text=>{
  const call=JSON.parse(text),effect=call.method==='txn'?'txn-'+call.args?.action:call.method==='write'?call.args?.entry?.type:call.method==='take'?'take':undefined;
- if(!config.rpcFaults||!['SieveTask','SieveResult','take','txn-begin','txn-commit'].includes(effect)||!call.request){const reply=await s.request(text);if(config.rpcFaults&&call.method==='pollOperation'&&!JSON.parse(reply).ok)console.log(JSON.stringify({stage:'resolution-error',member,error:JSON.parse(reply).error}));return reply;}
+ if(!config.rpcFaults||!['SieveTask','SieveResult','take','txn-begin','txn-commit'].includes(effect)||!call.request){const reply=await s.request(text);if(config.rpcFaults&&['pollOperation','resolveOperation'].includes(call.method)&&!JSON.parse(reply).ok)console.log(JSON.stringify({stage:'resolution-error',member,error:JSON.parse(reply).error}));return reply;}
  const record=(boundary:string)=>({member,boundary,effect,generation:call.request.generation,requestId:call.request.requestId});
  const before=member+':'+effect+':beforeSend';
  if(config.rpcFaultBoundary!=='afterReply'&&!faultSlots.has(before)){faultSlots.add(before);faults.push(record('beforeSend'));throw new Error('fixture failure before RPC send');}

@@ -1,6 +1,6 @@
 # Föderierte Spaces v3 – konsolidierter Plan
 
-Stand: 2026-10-08 (vierte Konsistenzprüfung: Nachweis für `NotCommitted`, historische Pending-Arbeit, Lauf-Recovery, Boot-Berechtigungen je Space und zu kleine Seitenbudgets präzisiert). Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
+Stand: 2026-10-13 (aktuelle Admission-Auflösung ergänzt; vierte Konsistenzprüfung: Nachweis für `NotCommitted`, historische Pending-Arbeit, Lauf-Recovery, Boot-Berechtigungen je Space und zu kleine Seitenbudgets präzisiert). Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
 
 **Status:** Zielvertrag mit teilweise implementierten lokalen Grundlagen: Doc-Version 5, benannte Spaces,
 Identitäten, lokale Request-Claims und persistente Testhilfen sind vorhanden. Der aktuelle Umfang und die offenen
@@ -940,6 +940,29 @@ explizit (4.4). Pending-Claims werden durch Generationsablauf nie gelöscht. Erg
 Abschluss; Hash-Einträge bleiben mindestens bis zum Ende von Zulassungsfrist und Ergebnisfrist erhalten.
 Danach ist `RequestExpired` statt `ResultExpired` zulässig, niemals eine neue Wirkung. Neue mutierende
 Folgeaufrufe beziehen eine aktuelle eigene Generation; die referenzierte Ursprungsgeneration darf abgelaufen sein.
+
+**Admission-Auflösung beim unveränderten Primary (`resolveOperation`):** Der
+Router kann einen eigenen journalisierten Request anhand von Generation,
+Request-ID, ursprünglicher Methode und Argument-Hash auflösen. Bekannte Claims
+werden erst nach Prüfung dieser Bindung zurückgegeben; Pending-Claims behalten
+ihre bisherige Deadline-/Autorisierungsprüfung. Ein fehlender Claim darf nur
+`notAdmitted` liefern, wenn die signierte Generation noch gültig ist, zum
+Principal, Space, Autorität und zur Dateninkarnation gehört und auf genau die
+aktuelle Primary-Epoche ausgestellt wurde. Generationen ohne diese historische
+Epochenbindung, Restore-/Authority-Transition und verlorene oder abgelaufene
+Generationen liefern keinen Nachweis. Rechte, aktuelle Policy und Router-/
+Control-Epochen werden bei Delegation und im serialisierten Host-Zugriff erneut
+geprüft. Der bestehende Boot-/Fencing-Vertrag bleibt Voraussetzung des Hosts.
+
+Die Antwort bindet Space, Autorität, Inkarnation, Primary-Epoche, Generation,
+Request-ID, Methode und Argument-Hash. Der Router prüft alle Felder gegen
+seinen unveränderten Child-Journal-Eintrag und darf nur diesen Request mit
+**derselben ID, Generation, Argumenten und demselben Ziel** erneut senden.
+Ein verspäteter Originalaufruf kann weiterhin zuerst ankommen; beide treffen
+dann denselben atomaren Claim. Deshalb ist `notAdmitted` kein terminaler
+Negativclaim, kein `NotCommitted` und keine Erlaubnis für eine neue ID oder
+einen anderen Member. Insbesondere beweist diese Antwort nichts über alte
+Primary-Epochen. Dafür gilt ausschließlich der nachstehende Promotionsnachweis.
 
 **Auflösung unbekannter IDs nach Promotion:** Nach Authentifizierung, aktueller Rechteprüfung und Prüfung der
 Zielreferenz gilt diese Reihenfolge; ein Fehler ermächtigt nie allein zum automatischen Ersatzrequest:

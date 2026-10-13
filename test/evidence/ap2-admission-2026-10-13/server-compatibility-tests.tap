@@ -1,0 +1,272 @@
+TAP version 13
+# (node:13) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: take with lost answer: the retry returns the stored result after reopen, no second take, no plaintext args
+ok 1 - take with lost answer: the retry returns the stored result after reopen, no second take, no plaintext args
+  ---
+  duration_ms: 65.433165
+  type: 'test'
+  ...
+# Subtest: immediate mutations: write and txn begin replay their stored result, also after a lost answer
+ok 2 - immediate mutations: write and txn begin replay their stored result, also after a lost answer
+  ---
+  duration_ms: 34.83684
+  type: 'test'
+  ...
+# Subtest: same request id with different arguments or method is a RequestConflict
+ok 3 - same request id with different arguments or method is a RequestConflict
+  ---
+  duration_ms: 7.257335
+  type: 'test'
+  ...
+# Subtest: a pending request outlives its generation's admission; new ids in that generation are rejected
+ok 4 - a pending request outlives its generation's admission; new ids in that generation are rejected
+  ---
+  duration_ms: 36.198399
+  type: 'test'
+  ...
+# Subtest: the deadline is fixed by the first accepted call, not by a retry
+ok 5 - the deadline is fixed by the first accepted call, not by a retry
+  ---
+  duration_ms: 64.483557
+  type: 'test'
+  ...
+# Subtest: results are kept from their decision; then ResultExpired; after admission and retention RequestExpired
+ok 6 - results are kept from their decision; then ResultExpired; after admission and retention RequestExpired
+  ---
+  duration_ms: 41.699529
+  type: 'test'
+  ...
+# Subtest: cancelOperation ends a pending take; a decided request stays decided
+ok 7 - cancelOperation ends a pending take; a decided request stays decided
+  ---
+  duration_ms: 36.83652
+  type: 'test'
+  ...
+# Subtest: a generation of an earlier incarnation admits no new ids (IncarnationChanged)
+ok 8 - a generation of an earlier incarnation admits no new ids (IncarnationChanged)
+  ---
+  duration_ms: 3.090872
+  type: 'test'
+  ...
+# Subtest: claims and generations survive the v4 -> v5 migration path
+ok 9 - claims and generations survive the v4 -> v5 migration path
+  ---
+  duration_ms: 0.662686
+  type: 'test'
+  ...
+# Subtest: current-epoch miss survives reopen and late original/retry commit exactly once
+ok 10 - current-epoch miss survives reopen and late original/retry commit exactly once
+  ---
+  duration_ms: 30.364587
+  type: 'test'
+  ...
+# Subtest: missing-request proof rejects expired, forged, foreign, promoted and restored generations
+ok 11 - missing-request proof rejects expired, forged, foreign, promoted and restored generations
+  ---
+  duration_ms: 12.859217
+  type: 'test'
+  ...
+# Subtest: resolution of an existing pending claim still settles its deadline outside the proof commit
+ok 12 - resolution of an existing pending claim still settles its deadline outside the proof commit
+  ---
+  duration_ms: 73.597625
+  type: 'test'
+  ...
+# Subtest: legacy signed generations still replay known claims but never prove a missing request
+ok 13 - legacy signed generations still replay known claims but never prove a missing request
+  ---
+  duration_ms: 21.751192
+  type: 'test'
+  ...
+# (node:25) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: signed delegation executes as original principal and deduplicates after restart
+ok 14 - jsonl: signed delegation executes as original principal and deduplicates after restart
+  ---
+  duration_ms: 77.687082
+  type: 'test'
+  ...
+# Subtest: jsonl: authority, audience, principal, operation, request, hashes and expiry are bound
+ok 15 - jsonl: authority, audience, principal, operation, request, hashes and expiry are bound
+  ---
+  duration_ms: 26.319588
+  type: 'test'
+  ...
+# Subtest: jsonl: both signatures and active router/original keys are required
+ok 16 - jsonl: both signatures and active router/original keys are required
+  ---
+  duration_ms: 15.110326
+  type: 'test'
+  ...
+# Subtest: jsonl: policy changes permit bound old resolution, not old new requests
+ok 17 - jsonl: policy changes permit bound old resolution, not old new requests
+  ---
+  duration_ms: 45.470126
+  type: 'test'
+  ...
+# Subtest: jsonl: higher epoch durably disables old pending effects and old router frames
+ok 18 - jsonl: higher epoch durably disables old pending effects and old router frames
+  ---
+  duration_ms: 38.77775
+  type: 'test'
+  ...
+# Subtest: jsonl: lease is not signed before durable commit and renewal preserves epoch
+ok 19 - jsonl: lease is not signed before durable commit and renewal preserves epoch
+  ---
+  duration_ms: 20.93346
+  type: 'test'
+  ...
+# Subtest: sqlite: signed delegation executes as original principal and deduplicates after restart
+ok 20 - sqlite: signed delegation executes as original principal and deduplicates after restart
+  ---
+  duration_ms: 32.422856
+  type: 'test'
+  ...
+# Subtest: sqlite: authority, audience, principal, operation, request, hashes and expiry are bound
+ok 21 - sqlite: authority, audience, principal, operation, request, hashes and expiry are bound
+  ---
+  duration_ms: 17.603108
+  type: 'test'
+  ...
+# Subtest: sqlite: both signatures and active router/original keys are required
+ok 22 - sqlite: both signatures and active router/original keys are required
+  ---
+  duration_ms: 11.279389
+  type: 'test'
+  ...
+# Subtest: sqlite: policy changes permit bound old resolution, not old new requests
+ok 23 - sqlite: policy changes permit bound old resolution, not old new requests
+  ---
+  duration_ms: 20.654241
+  type: 'test'
+  ...
+# Subtest: sqlite: higher epoch durably disables old pending effects and old router frames
+ok 24 - sqlite: higher epoch durably disables old pending effects and old router frames
+  ---
+  duration_ms: 30.322163
+  type: 'test'
+  ...
+# Subtest: sqlite: lease is not signed before durable commit and renewal preserves epoch
+ok 25 - sqlite: lease is not signed before durable commit and renewal preserves epoch
+  ---
+  duration_ms: 11.48608
+  type: 'test'
+  ...
+# Subtest: jsonl: new epoch arriving between authorization and commit fences the effect
+ok 26 - jsonl: new epoch arriving between authorization and commit fences the effect
+  ---
+  duration_ms: 21.399472
+  type: 'test'
+  ...
+# Subtest: sqlite: new epoch arriving between authorization and commit fences the effect
+ok 27 - sqlite: new epoch arriving between authorization and commit fences the effect
+  ---
+  duration_ms: 19.63061
+  type: 'test'
+  ...
+# Subtest: jsonl: changed domain under same request fails, expired generation cannot create follow-up ID
+ok 28 - jsonl: changed domain under same request fails, expired generation cannot create follow-up ID
+  ---
+  duration_ms: 23.553665
+  type: 'test'
+  ...
+# Subtest: sqlite: changed domain under same request fails, expired generation cannot create follow-up ID
+ok 29 - sqlite: changed domain under same request fails, expired generation cannot create follow-up ID
+  ---
+  duration_ms: 21.128264
+  type: 'test'
+  ...
+# Subtest: jsonl: alias epoch notice fences the same stable Space ID
+ok 30 - jsonl: alias epoch notice fences the same stable Space ID
+  ---
+  duration_ms: 16.401889
+  type: 'test'
+  ...
+# Subtest: jsonl: delegated events renew only the referenced waiter
+ok 31 - jsonl: delegated events renew only the referenced waiter
+  ---
+  duration_ms: 33.94048
+  type: 'test'
+  ...
+# Subtest: sqlite: alias epoch notice fences the same stable Space ID
+ok 32 - sqlite: alias epoch notice fences the same stable Space ID
+  ---
+  duration_ms: 11.465398
+  type: 'test'
+  ...
+# Subtest: sqlite: delegated events renew only the referenced waiter
+ok 33 - sqlite: delegated events renew only the referenced waiter
+  ---
+  duration_ms: 17.453222
+  type: 'test'
+  ...
+# Subtest: jsonl: real TCP proof and FederationRpc preserve original principal and waiter winner
+ok 34 - jsonl: real TCP proof and FederationRpc preserve original principal and waiter winner
+  ---
+  duration_ms: 240.389397
+  type: 'test'
+  ...
+# Subtest: sqlite: real TCP proof and FederationRpc preserve original principal and waiter winner
+ok 35 - sqlite: real TCP proof and FederationRpc preserve original principal and waiter winner
+  ---
+  duration_ms: 132.968797
+  type: 'test'
+  ...
+# Subtest: jsonl: composed Control Gate issues RouterLease and pinned policy only to proven router
+ok 36 - jsonl: composed Control Gate issues RouterLease and pinned policy only to proven router
+  ---
+  duration_ms: 40.018108
+  type: 'test'
+  ...
+# Subtest: sqlite: composed Control Gate issues RouterLease and pinned policy only to proven router
+ok 37 - sqlite: composed Control Gate issues RouterLease and pinned policy only to proven router
+  ---
+  duration_ms: 19.297438
+  type: 'test'
+  ...
+# Subtest: jsonl: complete Root composition rejects a superseded owner lease
+ok 38 - jsonl: complete Root composition rejects a superseded owner lease
+  ---
+  duration_ms: 96.198467
+  type: 'test'
+  ...
+# Subtest: sqlite: complete Root composition rejects a superseded owner lease
+ok 39 - sqlite: complete Root composition rejects a superseded owner lease
+  ---
+  duration_ms: 61.307766
+  type: 'test'
+  ...
+# Subtest: jsonl: typed wire resolution errors persist review and never resend effects
+ok 40 - jsonl: typed wire resolution errors persist review and never resend effects
+  ---
+  duration_ms: 108.373714
+  type: 'test'
+  ...
+# Subtest: sqlite: typed wire resolution errors persist review and never resend effects
+ok 41 - sqlite: typed wire resolution errors persist review and never resend effects
+  ---
+  duration_ms: 75.554692
+  type: 'test'
+  ...
+# Subtest: jsonl: signed current-epoch admission resolution retries one identity before send and after reply loss
+ok 42 - jsonl: signed current-epoch admission resolution retries one identity before send and after reply loss
+  ---
+  duration_ms: 59.422459
+  type: 'test'
+  ...
+# Subtest: sqlite: signed current-epoch admission resolution retries one identity before send and after reply loss
+ok 43 - sqlite: signed current-epoch admission resolution retries one identity before send and after reply loss
+  ---
+  duration_ms: 41.376233
+  type: 'test'
+  ...
+1..43
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2759.009872

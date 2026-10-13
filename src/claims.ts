@@ -35,7 +35,7 @@ export type ClaimRec = {
 	reservedResultBytes?: number;
 	error?: { code: "TransactionError" | "PermissionDenied" | "CompletionViolation"; message: string };
 };
-export type GenerationRec = { principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number; spaceId?: string | null; authorityId?: string };
+export type GenerationRec = { primaryEpoch?: number; principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number; spaceId?: string | null; authorityId?: string };
 export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number; reservedBytes?: number; signingKey?: string; authorityId?: string; sweepCursor?: string };
 export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"]; restoredHistory?: true; unknownOutcome?: true; orphanedAfterRestore?: ClaimRec["orphanedAfterRestore"] };
 
@@ -66,7 +66,7 @@ export const argHash = (method: string, args: Json): string => createHash("sha25
 export const keyOf = (s: Readonly<SpaceState>, r: RequestRef): string => canonicalJson([r.principal as unknown as Json, s.spaceId ?? null, r.generation, r.requestId]);
 
 /** A new generation for `principal`: it admits new request ids until `admitUntil`. */
-export function issueGeneration(s: SpaceState, now: number, principal: Principal, options: { key?: string; authorityId?: string } = {}): { generation: string; admitUntil: number } {
+export function issueGeneration(s: SpaceState, now: number, principal: Principal, options: { key?: string; authorityId?: string; primaryEpoch?: number } = {}): { generation: string; admitUntil: number } {
 	assertAdminIdle(s);
 	checkPrincipal(principal);
 	sweep(s, now);
@@ -75,7 +75,7 @@ export function issueGeneration(s: SpaceState, now: number, principal: Principal
 	st.authorityId = options.authorityId ?? st.authorityId ?? "local";
 	const nonce = `g${randomBytes(16).toString("hex")}`;
 	const admitUntil = now + limitsOf(s).generationAdmitMs;
-	const rec: GenerationRec = { principal: { ...principal }, incarnation: s.incarnation ?? null, issuedAt: now, admitUntil, spaceId: s.spaceId ?? null, authorityId: st.authorityId };
+	const rec: GenerationRec = { primaryEpoch: options.primaryEpoch ?? s.primaryEpoch ?? 1, principal: { ...principal }, incarnation: s.incarnation ?? null, issuedAt: now, admitUntil, spaceId: s.spaceId ?? null, authorityId: st.authorityId };
 	const generation = `${nonce}.${createHmac("sha256", st.signingKey).update(canonicalJson({ nonce, ...rec } as unknown as Json)).digest("hex")}`;
 	const added = bytesOf(rec) + bytesOf(generation) + 2;
 	if (claimBytes(s) + added > limitsOf(s).maxClaimBytes) throw new LimitError("the generation exceeds maxClaimBytes");
@@ -111,13 +111,7 @@ export function admit(s: SpaceState, now: number, r: RequestRef, method: string,
 		if (c.resultExpired || (c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now)) throw new ResultExpired(`request ${r.requestId} was decided; its result is no longer kept`);
 		return c.state === "cancelled" ? { kind: "cancelled", key } : { kind: "done", key, result: c.result ?? null };
 	}
-	if (s.invalidGenerations?.[r.generation]) throw new IncarnationChanged("generation belongs to restored data");
-	const g = st.generations[r.generation];
-	if (!g) throw new RequestExpired(`generation ${r.generation} is unknown or expired`);
-	if (g.incarnation !== (s.incarnation ?? null)) throw new IncarnationChanged(`generation ${r.generation} belongs to an earlier incarnation of this space`);
-	if (g.spaceId !== (s.spaceId ?? null) || g.authorityId !== st.authorityId || !st.signingKey || r.generation !== `${r.generation.split(".")[0]}.${createHmac("sha256", st.signingKey).update(canonicalJson({ nonce: r.generation.split(".")[0], ...g } as unknown as Json)).digest("hex")}`) throw new RequestExpired("the generation signature or binding is invalid");
-	if (!samePrincipal(g.principal, r.principal)) throw new RequestExpired(`generation ${r.generation} was issued to another principal`);
-	if (now > g.admitUntil) throw new RequestExpired(`generation ${r.generation} no longer admits new requests`);
+	validateGeneration(s, now, r);
 	const lim = limitsOf(s);
 	const rec: ClaimRec = { method, argHash: hash, deadline, state: "pending", generation: r.generation, requestId: r.requestId, principal: { ...r.principal }, reservedResultBytes: resultBytes };
 	const added = bytesOf(rec) + bytesOf(key) + 2;
@@ -209,4 +203,31 @@ export function setMetadata(s:SpaceState,key:string,meta:{policyVersion?:number;
  const st=rpc(s),c=st.claims[key];if(!c)throw new RequestExpired("metadata requires known claim");const before=bytesOf(c);
  for(const [k,v] of Object.entries(meta))if(v!==undefined)(c as any)[k]=v;
  const delta=bytesOf(c)-before;if(claimBytes(s)+delta>limitsOf(s).maxClaimBytes)throw new LimitError("authenticated claim metadata exceeds budget");st.bytes!+=delta;
+}
+
+/** Validates an extant admission generation without admitting or changing a request. */
+export function validateGeneration(s: Readonly<SpaceState>, now: number, r: RequestRef): GenerationRec {
+ checkPrincipal(r.principal);
+ const st=s.rpc;
+ if(!st)throw new RequestExpired('generation is unknown');
+	if (s.invalidGenerations?.[r.generation]) throw new IncarnationChanged("generation belongs to restored data");
+	const g = st.generations[r.generation];
+	if (!g) throw new RequestExpired(`generation ${r.generation} is unknown or expired`);
+	if (g.incarnation !== (s.incarnation ?? null)) throw new IncarnationChanged(`generation ${r.generation} belongs to an earlier incarnation of this space`);
+	if (g.spaceId !== (s.spaceId ?? null) || g.authorityId !== st.authorityId || !st.signingKey || r.generation !== `${r.generation.split(".")[0]}.${createHmac("sha256", st.signingKey).update(canonicalJson({ nonce: r.generation.split(".")[0], ...g } as unknown as Json)).digest("hex")}`) throw new RequestExpired("the generation signature or binding is invalid");
+	if (!samePrincipal(g.principal, r.principal)) throw new RequestExpired(`generation ${r.generation} was issued to another principal`);
+	if (now > g.admitUntil) throw new RequestExpired(`generation ${r.generation} no longer admits new requests`);
+ return g;
+}
+export type AdmissionResolution = ClaimView | {state:'notAdmitted';spaceId:string|null;authorityId:string;incarnation:string|null;primaryEpoch:number;generation:string;requestId:string;method:string;argumentHash:string};
+/** A current-epoch miss permits only retrying the identical request, never a new ID or NotCommitted. */
+export function resolveAdmission(s: Readonly<SpaceState>, now:number, r:RequestRef, method:string, argumentHash:string, primaryEpoch:number):AdmissionResolution {
+ assertAdminIdle(s as SpaceState);
+ if(!r.requestId||!method||!/^[a-f0-9]{64}$/.test(argumentHash)||!Number.isSafeInteger(primaryEpoch)||primaryEpoch<0)throw new TypeError('invalid admission resolution binding');
+ const key=keyOf(s,r),known=s.rpc?.claims[key]??s.restoredClaims?.[key];
+ if(known){if(known.method!==method||known.argHash!==argumentHash)throw new RequestConflict('resolution changed original method/arguments');return lookup(s,r,now);}
+ const generation=validateGeneration(s,now,r);
+ if(generation.primaryEpoch!==primaryEpoch || s.primaryEpoch!==undefined&&s.primaryEpoch!==primaryEpoch)throw new IncarnationChanged('missing request cannot be resolved across epochs or legacy generations');
+ if(s.restore || s.authorityTransition || s.membership?.state==='recoveryBlocked')throw new IncarnationChanged('missing request requires uninterrupted current history');
+ return {state:'notAdmitted',spaceId:s.spaceId??null,authorityId:s.rpc!.authorityId!,incarnation:s.incarnation??null,primaryEpoch,generation:r.generation,requestId:r.requestId,method,argumentHash};
 }

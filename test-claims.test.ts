@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
-	PiSpaces, FOREVER, Space, core, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled,
+	PiSpaces, FOREVER, Space, core, claims, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled,
 	type Principal, type RequestRef,
 } from "./src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./test/support/persistent.ts";
@@ -178,4 +178,41 @@ test("claims and generations survive the v4 -> v5 migration path", () => {
 	assert.equal(m.spaceId, "sp-1");
 	assert.equal(m.incarnation, "abcd0123");
 	assert.ok(m.rpc?.generations.g1);
+});
+
+test('current-epoch miss survives reopen and late original/retry commit exactly once',async()=>{
+ await forEachBackend(async home=>{let h=await home.open();const c=new Clock();let s=client(h,c);const {generation}=await s.issueGeneration(alice),r=req(generation,'late-original'),entry={type:'Job',fields:{n:1}},hash=claims.argHash('write',{entry,txn:null,lease:FOREVER});
+ const before=await h.snapshot(Space,ctx);const proof=await s.resolveOperation(r,'write',hash,1);assert.equal(proof.state,'notAdmitted');assert.deepEqual(await h.snapshot(Space,ctx),before);assert.equal(await s.count(),0);
+ home.crash(h);h=await home.open();s=client(h,c);assert.equal((await s.resolveOperation(r,'write',hash,1)).state,'notAdmitted');
+ await Promise.all([s.write(entry,null,FOREVER,{request:r}),s.write(entry,null,FOREVER,{request:r})]);assert.equal(await s.count(),1);assert.equal((await s.resolveOperation(r,'write',hash,1)).state,'done');
+ await assert.rejects(s.resolveOperation(r,'take',hash,1),RequestConflict);await assert.rejects(s.resolveOperation(r,'write','0'.repeat(64),1),RequestConflict);
+ home.crash(h);h=await home.open();s=client(h,c);await s.write(entry,null,FOREVER,{request:r});assert.equal(await s.count(),1);
+ });
+});
+test('missing-request proof rejects expired, forged, foreign, promoted and restored generations',async()=>{
+ await forEachBackend(async home=>{const h=await home.open(),c=new Clock(),s=client(h,c),g=await s.issueGeneration(alice),r=req(g.generation,'absent'),hash=claims.argHash('write',{entry:{type:'Job',fields:{}},txn:null,lease:FOREVER});
+ await assert.rejects(s.resolveOperation({...r,principal:{peerId:'other'}},'write',hash,1),RequestExpired);
+ await assert.rejects(s.resolveOperation({...r,generation:r.generation+'forged'},'write',hash,1),RequestExpired);
+ await assert.rejects(s.resolveOperation(r,'write',hash,2),IncarnationChanged);
+ await h.commit(async tx=>{(await tx.doc(Space)).primaryEpoch=2;},ctx);await assert.rejects(s.resolveOperation(r,'write',hash,1),IncarnationChanged);
+ await h.commit(async tx=>{(await tx.doc(Space)).primaryEpoch=1;(await tx.doc(Space)).invalidGenerations={[r.generation]:true};},ctx);await assert.rejects(s.resolveOperation(r,'write',hash,1),IncarnationChanged);
+ await h.commit(async tx=>{delete (await tx.doc(Space)).invalidGenerations;},ctx);c.t=g.admitUntil+1;await assert.rejects(s.resolveOperation(r,'write',hash,1),RequestExpired);assert.equal(await s.count(),0);
+ });
+});
+
+test('resolution of an existing pending claim still settles its deadline outside the proof commit',async()=>{
+ await forEachBackend(async home=>{const h=await home.open(),c=new Clock(),s=client(h,c),{generation}=await s.issueGeneration(alice),r=req(generation,'deadline-take'),tmpl={type:'Job'},hash=claims.argHash('take',{tmpl,timeout:1000,deadline:null,txn:null});
+ const pending=s.take(tmpl,1000,{request:r});await tick();assert.equal((await s.resolveOperation(r,'take',hash,1)).state,'pending');c.t+=1001;
+ const view=await s.resolveOperation(r,'take',hash,1);assert.equal(view.state,'done');assert.equal('result' in view?view.result:undefined,null);assert.equal(await pending,null);
+ });
+});
+
+test('legacy signed generations still replay known claims but never prove a missing request',async()=>{
+ const {createHmac}=await import('node:crypto');
+ await forEachBackend(async home=>{const h=await home.open(),c=new Clock(),s=client(h,c),{generation}=await s.issueGeneration(alice);
+ const legacy=await h.commit(async tx=>{const state=await tx.doc(Space),st=state.rpc!,record={...st.generations[generation]!};delete record.primaryEpoch;const nonce=generation.split('.')[0]!,input={nonce,...record},keys=[...new Set([...Object.keys(input),'agentId','peerId'])].sort(),signed=nonce+'.'+createHmac('sha256',st.signingKey!).update(JSON.stringify(input,keys)).digest('hex');delete st.generations[generation];st.generations[signed]=record;delete st.bytes;return signed;},ctx);
+ const r=req(legacy,'legacy'),entry={type:'Job',fields:{n:1}},hash=claims.argHash('write',{entry,txn:null,lease:FOREVER});
+ await assert.rejects(s.resolveOperation(r,'write',hash,1),IncarnationChanged);await s.write(entry,null,FOREVER,{request:r});
+ assert.equal((await s.resolveOperation(r,'write',hash,1)).state,'done');home.crash(h);const reopened=await home.open(),again=client(reopened,c);await again.write(entry,null,FOREVER,{request:r});assert.equal(await again.count(),1);
+ });
 });

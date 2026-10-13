@@ -18,7 +18,7 @@ import { encodedBytes } from "./paging.ts";
 import { principalId, MailboxEpochMismatch, InvalidAck } from "./mailbox.ts";
 
 export const PROTOCOL_VERSION = 1;
-export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
+export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
 export type Method = (typeof METHODS)[number];
 const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack"];
 
@@ -40,10 +40,10 @@ export type Policy = { roles: Record<string, RolePolicy> };
 export const DEFAULT_POLICY: Policy = {
 	roles: {
 		admin: { methods: "*" },
-		host: { methods: ["hello","generation","write","read","take","pollOperation","cancelOperation","readAll","count","stats","txn","lease","changes","wait","notify","events","ack"] },
-		member: { methods: ["hello", "generation", "write", "read", "take", "pollOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] },
-		resolution: { methods: ["hello", "pollOperation", "cancelOperation", "txn", "lease"] },
-		observer: { methods: ["hello", "generation", "read", "pollOperation", "cancelOperation", "readAll", "count", "stats", "changes", "notify", "events", "ack"] }, // own read and notify results, never a write
+		host: { methods: ["hello","generation","write","read","take","pollOperation", "resolveOperation","cancelOperation","readAll","count","stats","txn","lease","changes","wait","notify","events","ack"] },
+		member: { methods: ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] },
+		resolution: { methods: ["hello", "pollOperation", "resolveOperation", "cancelOperation", "txn", "lease"] },
+		observer: { methods: ["hello", "generation", "read", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "changes", "notify", "events", "ack"] }, // own read and notify results, never a write
 		unpaired: { methods: ["hello", "generation"] }, // a device in the enrollment group: nothing but its own pairing (enroll.ts handles `enroll` and `enrollStatus` before the service)
 	},
 };
@@ -213,7 +213,7 @@ export class SpaceService {
 		switch (method) {
 			case "hello": return this.hello(a, c);
 			case "generation": {
-				const g = await client.issueGeneration(c.id.principal);
+				const g = await client.issueGeneration(c.id.principal,{primaryEpoch:await this.o.epochForSpace?.(c.space)??this.o.primaryEpoch});
 				return { generation: g.generation, admitUntil: g.admitUntil };
 			}
 			case "write": {
@@ -228,6 +228,15 @@ export class SpaceService {
 			case "read":
 			case "take": return this.readTake(method, a, c);
 			case "pollOperation": return this.poll(a, c);
+   case "resolveOperation": {
+    const target=this.target(a.targetRequest,c.id),method=str(a.method,'method'),hash=str(a.argumentHash,'argumentHash'),epoch=int(a.primaryEpoch,'primaryEpoch');
+    const current=await this.o.epochForSpace?.(c.space)??this.o.primaryEpoch;
+    if(epoch>current)throw new claims.IncarnationChanged('resolution epoch is ahead of Member');
+    const view=await client.resolveOperation(target,method,hash,epoch);
+    if(view.state==='notAdmitted'&&epoch!==current)throw new claims.IncarnationChanged('missing request requires current Member epoch');
+    if('result' in view&&view.result&&isObj(view.result)&&Array.isArray(view.result.types))this.checkTypes(grant,view.result.types as string[],'this retained result');
+    return view as unknown as Json;
+   }
 			case "cancelOperation": {
 				const t = this.target(a.targetRequest, c.id);
 				return (await client.cancelOperation(t, { request })) as unknown as Json;
