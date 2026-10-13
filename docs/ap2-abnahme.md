@@ -378,3 +378,28 @@ Kompatibilitätsprüfung am Server (mit 42 überlappenden Fällen und einem neue
 Legacy-Fall) und 24 Mobile-/Remote-Tests bestanden.
 [Nachweise](../test/evidence/ap2-admission-2026-10-13/) unterscheiden diesen
 aktuellen Wire-Nachweis von der weiterhin offenen Prozess-/Journal-/ACK-Matrix.
+
+
+## Echte Prozessabbrüche an Journal-, RPC- und ACK-Grenzen (2026-10-13)
+
+Das neue Szenario `phase2-process-crashes` bestand lokal und als gebautes
+Server-Artefakt dieselben 20 Fälle: JSONL/SQLite × vor/nach × Candidate-Commit,
+Winner-Commit, Parent-Abschluss, Mailbox-ACK und Router-RPC-Versand/Antwort.
+Jeder Abbruch ist ein bestätigter SIGKILL. Root und drei Members werden danach
+mit denselben Stores in einem frischen Prozess geöffnet; ein zweiter frischer
+Prozess prüft den abgeschlossenen Replay.
+
+Alle Fälle behalten den Gewinner und die ursprünglichen Target-, Principal-,
+Generation-, Request-ID-, Methoden-, Argument- und Hash-Bindungen. Genau ein
+Gewinner wird konsumiert, zwei Verlierer zurückgegeben. Keine Transaktion,
+kein Mailbox-Ereignis und keine ungenutzte Zukunftsreservierung bleibt offen.
+Typecheck und 428 Regressionstests bestanden. Bestehende Serverdienste bleiben
+aktiv; die Produktionsbibliothek und der Mobile-Bundle bleiben unverändert.
+[Nachweise](../test/evidence/ap2-process-crashes-2026-10-13/).
+
+**Grenze:** Der gekillte Prozess besitzt alle vier Stores; RPC verwendet
+Fixture-Identitäten im selben Prozess und die Uhr ist fest. Dies ergänzt die
+bisherigen Fehler-/Reopen-Tests um echten Prozessverlust, erfüllt aber noch
+nicht die vollständige Crash-Matrix unter NetBird-Volllast, unabhängigem
+Host-Ausfall oder Produktions-Boot/Fencing. Strom-/Datenträgerausfall wird
+nicht geprüft. Phase 2 bleibt offen.

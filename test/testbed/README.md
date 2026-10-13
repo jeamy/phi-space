@@ -92,3 +92,30 @@ Each run requires a fresh directory and unique run ID. The driver refuses an exi
 `--entries` defaults to 10,000; background entries are seeded in bounded local bootstrap commits before the fixture policy is activated. `--rpc-faults` defaults to `--rpc-fault-boundary afterReply`: one successful reply is discarded for each of five effect kinds on each of three Members. All 15 slots must be exercised. This tests signed-wire outcome resolution with stable Parent/Child identities, not process crashes or mailbox ACK boundaries. `beforeSend` and `both` also exercise the current-epoch admission proof: the Router retries exactly the journaled identity when a valid, same-epoch generation proves that it is not yet admitted. Expired, restored, legacy or old-epoch generations still require review. This is not terminal NotCommitted or promotion acceptance. Member logs are captured before cleanup, and exited Member containers are retained until the driver removes its own IDs.
 
 The built `scenarios/phase2-admission-audit.mjs <fixtureDir> <reportFile>` checks the closed stores after a `both` run. Mount the fixture read-only and provide a private writable `/tmp` for SQLite copies; the existing rootless Docker image needs `--user 0:0` to read owner-only fixture files. The audit never opens original stores for writing, uses no network, and refuses effects or Router commits. It verifies completed Parent/Child journals, zero unused future reservations and each faulted original Member claim against journaled targets and argument hashes.
+
+
+### Phase-2 process crash matrix
+
+`scenarios/phase2-process-crashes.ts` runs 20 isolated cases: JSONL and SQLite,
+with SIGKILL before/after candidate persistence, winner persistence, Parent
+completion, mailbox ACK, and Router RPC dispatch/reply. Each case creates a
+Root and three persistent Members, starts a waiting take, makes all three
+Members candidates, kills the worker process, and reopens every store in a
+fresh process. A second fresh process verifies stable replay, original request
+bindings, one consumed winner, two returned losers, empty mailboxes, no active
+transactions, and no unused future reservations.
+
+```sh
+node --experimental-strip-types test/testbed/scenarios/phase2-process-crashes.ts
+# On the server, use only the built artifacts and the existing test image:
+node /opt/app/scenarios/phase2-process-crashes.mjs
+```
+
+Run the server command in an isolated container with `--network none`, a
+writable private `/tmp`, and read-only library/scenario mounts. The orchestrator
+checks that every crash child actually exited with SIGKILL; missed boundaries,
+timeouts, or other signals fail the run. Temporary stores are deleted in
+`finally`. RPC uses fixture identities in process and a fixed clock to isolate
+crash ordering from lease timing. The killed process owns all four stores.
+This is process-recovery evidence, not a NetBird load/crash combination,
+independent host failure, production boot/fencing, or power-loss proof.
