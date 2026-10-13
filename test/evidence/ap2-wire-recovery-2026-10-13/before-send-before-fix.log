@@ -1,0 +1,17 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"resolution-error","member":"c","error":{"code":"PermissionDenied","message":"targetRequest does not name own bound claim"}}
+{"stage":"resolution-error","member":"c","error":{"code":"PermissionDenied","message":"targetRequest does not name own bound claim"}}
+{"stage":"resolution-error","member":"c","error":{"code":"PermissionDenied","message":"targetRequest does not name own bound claim"}}
+{"stage":"resolution-error","member":"c","error":{"code":"PermissionDenied","message":"targetRequest does not name own bound claim"}}
+{"stage":"resolution-error","member":"c","error":{"code":"PermissionDenied","message":"targetRequest does not name own bound claim"}}
+file:///opt/app/scenarios/phase2-netbird.mjs:80
+  throw new Error("wire fixture exceeded bounded same-Parent retries");
+        ^
+
+Error: wire fixture exceeded bounded same-Parent retries
+    at effect (file:///opt/app/scenarios/phase2-netbird.mjs:80:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async file:///opt/app/scenarios/phase2-netbird.mjs:173:9
+
+Node.js v22.23.3

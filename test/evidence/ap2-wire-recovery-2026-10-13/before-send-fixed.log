@@ -1,0 +1,12 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"stage":"resolution-error","member":"c","error":{"code":"PermissionDenied","message":"targetRequest does not name own bound claim"}}
+file:///opt/app/pi-spaces.mjs:8105
+        throw new FederationUnavailable("child needs review");
+              ^
+
+FederationUnavailable [Error]: child needs review
+    at FederatedSpace.decide (file:///opt/app/pi-spaces.mjs:8105:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+Node.js v22.23.3
