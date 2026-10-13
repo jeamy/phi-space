@@ -119,3 +119,54 @@ timeouts, or other signals fail the run. Temporary stores are deleted in
 crash ordering from lease timing. The killed process owns all four stores.
 This is process-recovery evidence, not a NetBird load/crash combination,
 independent host failure, production boot/fencing, or power-loss proof.
+
+
+### NetBird load with real Root process crashes
+
+The same isolated wire fixture supports an owned Root restart loop:
+
+```sh
+node test/testbed/build-artifacts.mjs /tmp/phase2-process-wire-artifacts
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-process-wire-artifacts --jobs 12 --entries 12 --process-crashes
+python3 test/testbed/netbird/run-phase2-sieve.py --artifacts /tmp/phase2-process-wire-artifacts --jobs 1000 --entries 10000 --process-crashes --process-crash-effect all
+```
+
+`--process-crash-effect` selects `SieveTask`, `SieveResult`, `take`, `txn-begin`,
+`txn-commit` (the default), or `all`. `--process-crash-boundary` selects
+`beforeSend`, `afterReply`, or `both` (the default). Select Members with
+`--process-crash-members a b c`. `all` with all three Members and both boundaries
+requires 30 actual Root process deaths. This option cannot be combined with
+`--rpc-faults`; exceptions and process death are distinct tests.
+
+The Root runs with Docker init because a container PID 1 ignores this
+self-directed SIGKILL. The driver must observe exit 137, reject OOM termination,
+verify exactly one newly persisted fault marker, and restart only its owned
+container ID. Missing deaths fail the run even if the scenario printed a
+successful result. It stores restart observations separately from scenario
+reports. The CID file also supports cleanup after a lost start response.
+
+Worker assignment is fixed by job number modulo six. Completed job IDs and
+the producer cursor are written atomically in the Root's private fixture data;
+unconfirmed completions replay their existing Parents. The Root keeps its
+original lease ID and epoch, renews only that lease, and checks the existing
+policy and Member targets rather than replacing them. An expired or superseded
+lease fails the fixture. This is controlled same-authority process restart,
+not production boot/fencing or promotion.
+
+Crash points are spaced across production/job progress (reported as
+`processCrashGapJobs`) so the test does not substitute a prolonged sequence of
+outages for bounded job processing. Small cases have no spacing and must stay
+within the original lease limits. The scenario does not renew or extend a job
+transaction beyond its completion profile. Task-write crashes occur while
+seeding the workload; the processing-stage crashes follow the verified full
+initial inventory. Members stay running in their own NetBird namespaces.
+Mailbox ACK, Member process death, arbitrary journal commit boundaries,
+independent physical hosts, and power loss remain separate acceptance cases.
+
+The closed-store admission audit also accepts process-crash reports. It checks
+each interrupted original request individually; before/after slots on one
+Member need not refer to the same request when six Workers are concurrent.
+
+The `sameParentRetries` counter covers explicit `FederationPending` retries in
+the final Root process. It does not total earlier processes or recovery-time
+resolutions; use the separate crash/restart reports for process counts.

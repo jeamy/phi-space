@@ -1,0 +1,11 @@
+{
+  "existingServices": [
+    "active",
+    "active",
+    "active"
+  ],
+  "fixtureContainers": [],
+  "temporaryGroupPresent": false,
+  "temporaryPolicyPresent": false,
+  "finalCidFileRecorded": true
+}

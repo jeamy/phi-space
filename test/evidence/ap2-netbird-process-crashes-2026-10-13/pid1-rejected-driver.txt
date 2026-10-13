@@ -1,0 +1,9 @@
+build-ready
+provisioning
+running
+cleanup-finished
+Traceback (most recent call last):
+  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 92, in <module>
+    assert len(restarts)==expected,'all configured real process crashes must be observed'
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: all configured real process crashes must be observed

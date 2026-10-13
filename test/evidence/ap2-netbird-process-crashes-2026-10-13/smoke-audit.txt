@@ -1,0 +1,3 @@
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"passed":true,"parents":60,"commands":60,"allOriginalClaimsChecked":60,"faultedClaimsChecked":6}

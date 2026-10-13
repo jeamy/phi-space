@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 60,
+  "commands": 60,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "allOriginalClaimsChecked": 60,
+  "faultedClaimsChecked": 6,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": [
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "requestId": "router-dfc3362fa6f54adf9d94c268bb574b232f5c1c64cb5c56b0b8a7b8fbb79d856c",
+      "claimState": "done"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "requestId": "router-dfc3362fa6f54adf9d94c268bb574b232f5c1c64cb5c56b0b8a7b8fbb79d856c",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "requestId": "router-a5eba4d3d042ae1cfda5d27ee8b412eb3dcd66af46eaddaf9387efda5fb92ccc",
+      "claimState": "done"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "requestId": "router-404731b986c3fa07d142f61834da5180298d74c312102fa6e2e4d74857230c5c",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "requestId": "router-083499713a8e620f53ac42674662c03c2757f1954f957b2a43cc78c1e99d772f",
+      "claimState": "done"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "requestId": "router-083499713a8e620f53ac42674662c03c2757f1954f957b2a43cc78c1e99d772f",
+      "claimState": "done"
+    }
+  ]
+}

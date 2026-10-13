@@ -403,3 +403,45 @@ bisherigen Fehler-/Reopen-Tests um echten Prozessverlust, erfüllt aber noch
 nicht die vollständige Crash-Matrix unter NetBird-Volllast, unabhängigem
 Host-Ausfall oder Produktions-Boot/Fencing. Strom-/Datenträgerausfall wird
 nicht geprüft. Phase 2 bleibt offen.
+
+
+## NetBird-Volllast mit 30 tatsächlichen Root-Abbrüchen (2026-10-13)
+
+Der vollständige Wire-Lauf mit 10.000 initialen Entries, 1.000 Jobs, sechs
+fest zugeordneten Workern und drei persistenten Members bestand nach 30
+SIGKILL-Abbrüchen des Roots. Geprüft wurden vor Versand und nach erfolgreicher
+Antwort jeweils Task-Schreiben, Txn-Beginn, Take, Result-Schreiben und
+Txn-Commit auf allen drei Members. Task-Schreibabbrüche liegen während der
+Bestandserzeugung; die Verarbeitungsabbrüche folgen dem geprüften Gesamtbestand.
+Der Treiber beobachtete für jeden Abbruch Exit 137 und keinen OOM-Kill.
+Alle 31 Root-Starts behalten dieselbe Lease-ID und Router-Epoche.
+Ein zunächst als Container-PID 1 gestarteter Root wurde vom Treiber wegen
+fehlender tatsächlicher Abbrüche abgelehnt; Docker-Init behebt diesen Testaufbau.
+
+Der Root setzt nur seine gespeicherten Operationen mit festen Principal-/Job-
+Zuordnungen fort. Abgeschlossene Job-IDs und Producer-Fortschritt sind atomar
+im privaten Fixture-Verzeichnis gespeichert. Unbestätigte Abschlüsse werden
+mit denselben Parent-/Child-Identitäten wiederholt. Die Lease wird auf derselben
+Epoche erneuert; bei verfallener oder überholter Lease bricht der Test ab.
+Policy und Member-Targets werden beim Neustart geprüft und nicht neu installiert.
+
+Der Lauf dauerte 727,978 Sekunden einschließlich Root-Neustarts.
+1.000 eindeutige Ergebnisse, null verbliebene Tasks, 9.000 erhaltene
+Hintergrund-Entries und der vollständige Primzahlvergleich sind bestätigt.
+Der anschließende Audit privater Kopien prüfte 5.000 abgeschlossene Parents,
+5.000 abgeschlossene Children und alle 5.000 ursprünglichen Member-Claims
+mit Target-, Principal-, Generation-, Request-ID-, Methoden- und Hash-Bindung.
+Alle 30 unterbrochenen Requests sind darunter; keine ungenutzte
+Zukunftsreservierung und keine aktive Member-Transaktion blieb übrig.
+Typecheck und 428 Regressionstests bestanden; der erweiterte Audit ist auch
+gegen den vorherigen Admission-Volllastlauf geprüft.
+[Nachweise](../test/evidence/ap2-netbird-process-crashes-2026-10-13/).
+
+**Noch offen:** Der Nachweis betrifft Root-Abbrüche an RPC-Grenzen bei laufenden
+Members. Gezielt unterbrochene Mailbox-ACKs und sämtliche Journal-Commit-
+Grenzen über NetBird sowie individuelle Member-Prozessabbrüche sind damit noch
+nicht abgenommen. Die vier Netzräume bleiben auf einem physischen Server;
+Produktions-Provisionierung, unabhängige Boot-/Fencing-Berechtigung und die
+weiteren Admin-/Profil-Gates bleiben offen. Phase 2 ist nicht vollständig
+abgenommen. Temporäre Fixture-Container und NetBird-Objekte wurden entfernt;
+bestehende Produktionsdienste bleiben aktiv.

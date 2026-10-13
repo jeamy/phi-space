@@ -1,0 +1,11 @@
+build-ready
+provisioning
+running
+restarting-root-1
+restarting-root-2
+restarting-root-3
+restarting-root-4
+restarting-root-5
+restarting-root-6
+passed
+cleanup-finished

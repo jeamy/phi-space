@@ -1,0 +1,77 @@
+{
+  "processCrashEffects": [
+    "txn-commit"
+  ],
+  "processCrashGapJobs": 1,
+  "processCrashEffect": "txn-commit",
+  "processCrashBoundary": "beforeSend",
+  "processCrashMembers": [
+    "c"
+  ],
+  "processCrashes": [
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "effect": "txn-commit",
+      "generation": "g8640ec2a032144bfe3c53c78006ec4f8.35db1c42995f635b0135360c47a66f33e7bf21b816cc75c280edce31089b5511",
+      "requestId": "router-083499713a8e620f53ac42674662c03c2757f1954f957b2a43cc78c1e99d772f",
+      "at": "2026-10-13T17:47:17.665Z"
+    }
+  ],
+  "routerEpoch": 1,
+  "routerLeaseId": "c1781be6-b281-4de3-babb-ce9d524d64dd",
+  "stableWorkerAssignment": true,
+  "rpcFaults": false,
+  "rpcFaultBoundary": "afterReply",
+  "faults": [],
+  "sameParentRetries": 0,
+  "processCrashesExercised": true,
+  "mailboxAckFaultsExercised": false,
+  "passed": true,
+  "date": "2026-10-13T17:47:27.657Z",
+  "scope": "real-netbird-signed-wire-fixture",
+  "entries": 12,
+  "backgroundEntriesSeededLocally": 0,
+  "jobs": 12,
+  "workers": 6,
+  "workerJobs": [
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "members": [
+    {
+      "id": "a",
+      "peerId": "db3r4p7lh8lg008eup6g",
+      "ip": "100.89.240.87"
+    },
+    {
+      "id": "b",
+      "peerId": "db3r4pflh8lg008eupq0",
+      "ip": "100.89.5.70"
+    },
+    {
+      "id": "c",
+      "peerId": "db3r4p7lh8lg008eupb0",
+      "ip": "100.89.116.183"
+    }
+  ],
+  "routerPeerId": "db3r4ovlh8lg008eup20",
+  "independentNetworkNamespaces": 4,
+  "physicalServers": 1,
+  "layerA": true,
+  "layerB": true,
+  "signedGrants": true,
+  "signedDelegation": true,
+  "signedRouterLease": true,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "fullPhase2Accepted": false,
+  "primes": 196,
+  "sum": 106733,
+  "elapsedMs": 13524
+}

@@ -1,0 +1,115 @@
+{
+  "processCrashEffect": "txn-commit",
+  "processCrashBoundary": "both",
+  "processCrashMembers": [
+    "a",
+    "b",
+    "c"
+  ],
+  "processCrashes": [
+    {
+      "member": "c",
+      "boundary": "beforeSend",
+      "effect": "txn-commit",
+      "generation": "gf99c5e310750f55a53a80bdfd956dbf4.93485f6993389b0e9e6480923b45dcf70d5223a614a839a4de6ab39fac34334d",
+      "requestId": "router-083499713a8e620f53ac42674662c03c2757f1954f957b2a43cc78c1e99d772f",
+      "at": "2026-10-13T17:30:45.130Z"
+    },
+    {
+      "member": "c",
+      "boundary": "afterReply",
+      "effect": "txn-commit",
+      "generation": "gf99c5e310750f55a53a80bdfd956dbf4.93485f6993389b0e9e6480923b45dcf70d5223a614a839a4de6ab39fac34334d",
+      "requestId": "router-083499713a8e620f53ac42674662c03c2757f1954f957b2a43cc78c1e99d772f",
+      "at": "2026-10-13T17:30:53.745Z"
+    },
+    {
+      "member": "b",
+      "boundary": "beforeSend",
+      "effect": "txn-commit",
+      "generation": "g6266baf9df733b48bf476cb252321ce2.e3c85363c9ac06a3d2eb3257572a70b3958b74fedc7fb943ad6e9d46719c3e46",
+      "requestId": "router-a5eba4d3d042ae1cfda5d27ee8b412eb3dcd66af46eaddaf9387efda5fb92ccc",
+      "at": "2026-10-13T17:31:02.809Z"
+    },
+    {
+      "member": "b",
+      "boundary": "afterReply",
+      "effect": "txn-commit",
+      "generation": "ge79a9cac5ee608aa5d8549f1a9f8f6bb.ae9df28da94ae39639aa90c870376a0a10b0e75b95474cca5d6f6e17072b90a5",
+      "requestId": "router-404731b986c3fa07d142f61834da5180298d74c312102fa6e2e4d74857230c5c",
+      "at": "2026-10-13T17:31:12.458Z"
+    },
+    {
+      "member": "a",
+      "boundary": "beforeSend",
+      "effect": "txn-commit",
+      "generation": "g5ced7290ff9e08edc8272d62858f1ce8.dd8ec35b27a2e832a4bdbafbe606e67aca206d3d14b9396bea74d26bbe8473f2",
+      "requestId": "router-dfc3362fa6f54adf9d94c268bb574b232f5c1c64cb5c56b0b8a7b8fbb79d856c",
+      "at": "2026-10-13T17:31:21.398Z"
+    },
+    {
+      "member": "a",
+      "boundary": "afterReply",
+      "effect": "txn-commit",
+      "generation": "g5ced7290ff9e08edc8272d62858f1ce8.dd8ec35b27a2e832a4bdbafbe606e67aca206d3d14b9396bea74d26bbe8473f2",
+      "requestId": "router-dfc3362fa6f54adf9d94c268bb574b232f5c1c64cb5c56b0b8a7b8fbb79d856c",
+      "at": "2026-10-13T17:31:30.034Z"
+    }
+  ],
+  "routerEpoch": 1,
+  "routerLeaseId": "3fe5d04a-2efa-4ef3-bbbb-e99ab2db421f",
+  "stableWorkerAssignment": true,
+  "rpcFaults": false,
+  "rpcFaultBoundary": "afterReply",
+  "faults": [],
+  "sameParentRetries": 0,
+  "processCrashesExercised": true,
+  "mailboxAckFaultsExercised": false,
+  "passed": true,
+  "date": "2026-10-13T17:31:39.388Z",
+  "scope": "real-netbird-signed-wire-fixture",
+  "entries": 12,
+  "backgroundEntriesSeededLocally": 0,
+  "jobs": 12,
+  "workers": 6,
+  "workerJobs": [
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "members": [
+    {
+      "id": "a",
+      "peerId": "db3r4p7lh8lg008eup6g",
+      "ip": "100.89.240.87"
+    },
+    {
+      "id": "b",
+      "peerId": "db3r4pflh8lg008eupq0",
+      "ip": "100.89.5.70"
+    },
+    {
+      "id": "c",
+      "peerId": "db3r4p7lh8lg008eupb0",
+      "ip": "100.89.116.183"
+    }
+  ],
+  "routerPeerId": "db3r4ovlh8lg008eup20",
+  "independentNetworkNamespaces": 4,
+  "physicalServers": 1,
+  "layerA": true,
+  "layerB": true,
+  "signedGrants": true,
+  "signedDelegation": true,
+  "signedRouterLease": true,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "fullPhase2Accepted": false,
+  "primes": 196,
+  "sum": 106733,
+  "elapsedMs": 58102
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "number": 1,
+    "exitCode": 137,
+    "oomKilled": false,
+    "completedJobs": 0,
+    "crash": {
+      "member": "c",
+      "boundary": "beforeSend",
+      "effect": "txn-commit",
+      "generation": "g8640ec2a032144bfe3c53c78006ec4f8.35db1c42995f635b0135360c47a66f33e7bf21b816cc75c280edce31089b5511",
+      "requestId": "router-083499713a8e620f53ac42674662c03c2757f1954f957b2a43cc78c1e99d772f",
+      "at": "2026-10-13T17:47:17.665Z"
+    },
+    "finishedAt": "2026-10-13T17:47:17.683576283Z"
+  }
+]
