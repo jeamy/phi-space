@@ -1,0 +1,8 @@
+{
+  "fencedRuntimeDenial": {
+    "id": "native-sieve-resume",
+    "passed": false,
+    "error": "external host boot authorization is absent or inactive"
+  },
+  "exitCode": 0
+}

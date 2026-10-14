@@ -1,0 +1,4 @@
+{
+  "readerCASDenied": true,
+  "reason": "certificate has no CAS permission for this register key"
+}

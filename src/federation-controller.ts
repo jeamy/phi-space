@@ -1,3 +1,4 @@
+import {ProfileTransitionController} from './profile-transition.ts';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {MemberStatusDirectory} from "./capability-directory.ts";
 // Complete server-side Phase-2 composition; guards and original grants stay external inputs.
@@ -34,7 +35,7 @@ export async function createFederationController(o: {
     grant : (principal: Principal) => Promise<SignedGrant>;
     assertAuthority : () => Promise<void>;
     authorizeAdmin : () => Promise<void>;
-    probeStatus?: (memberId:string,target:Readonly<import("./router.ts").TargetBinding>)=>Promise<{revision:number;free:number;lag:number|null}>;
+    probeStatus?: (memberId:string,target:Readonly<import("./router.ts").TargetBinding>)=>Promise<{revision:number;free:number|null;lag:number|null}>;
     journalPartitions?: number;
     now?: () => number
 }) {
@@ -111,9 +112,23 @@ export async function createFederationController(o: {
         controlSpaceId : o.controlSpaceId
     });
     await space.initializeJournals();
-    await router.recover();
-    for(const partitionRouter of partitionRouters) if(partitionRouter!==router) await partitionRouter.recover();
+    await RouterController.recoverMany([router,...partitionRouters]);
     const refs = {controlSpaceId : o.controlSpaceId, routerId : o.id, federationId : o.id};
+    const membershipTransport:MembershipTransport = {
+            pin : o.memberPin,
+            apply : async (m, q) => {
+                const r = new RemoteSpace(o.transport(m.id), {
+                    space : m.target.spaceId,
+                    signer : o.routerSigner,
+                    ownPeerId : o.routerPeerId,
+                    expectedGateHostId : m.target.hostId,
+                    now,
+                    attempts : 1
+                });
+                await r.authenticate();
+                return r.requestMembership(q);
+            }
+        };
     const membership = new MembershipController({
         host,
         ctx : o.ctx,
@@ -130,22 +145,9 @@ export async function createFederationController(o: {
             },
             o.ctx),
         hasReferencesIn : (tx, id, sid) => memberReferencesIn(tx, refs, id, sid),
-        transport : {
-            pin : o.memberPin,
-            apply : async (m, q) => {
-                const r = new RemoteSpace(o.transport(m.id), {
-                    space : m.target.spaceId,
-                    signer : o.routerSigner,
-                    ownPeerId : o.routerPeerId,
-                    expectedGateHostId : m.target.hostId,
-                    now,
-                    attempts : 1
-                });
-                await r.authenticate();
-                return r.requestMembership(q);
-            }
-        }
+        transport: membershipTransport
     });
     const directory=o.probeStatus?new MemberStatusDirectory({host,ctx:o.ctx,controlSpaceId:o.controlSpaceId,assertAuthority:guard,now,probe:o.probeStatus}):undefined;
-    return {space, router, partitionRouters: Object.freeze(partitionRouters), rpc, membership, policy, directory};
+    const profiles=new ProfileTransitionController({host,ctx:o.ctx,controlSpaceId:o.controlSpaceId,authorityId:o.authorityId,federationId:o.id,journalPartitions:partitions,peerId:o.controlPeerId,signer:o.controlSigner,transport:membershipTransport,assertAuthority:guard,authorize:o.authorizeAdmin});
+    return {space, profiles, router, partitionRouters: Object.freeze(partitionRouters), rpc, membership, policy, directory};
 }

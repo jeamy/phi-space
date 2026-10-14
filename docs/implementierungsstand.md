@@ -33,8 +33,8 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
 | Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport mit Fixture-Identitäten im selben Prozess; Drei-Host-NetBird- und vollständige Crash-Abnahme bleiben offen |
 | NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; volle Overlay-Crash-Matrix und Produktions-Provisionierung bleiben offen |
-| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Sechs weitere Testblöcke und Gesamtfreigabe offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
-| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Sechs weitere Testblöcke und Gesamtfreigabe offen; Liste in der Phase-2-Abnahme |
+| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Fünf weitere Testblöcke und Gesamtfreigabe offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
+| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Fünf weitere Testblöcke und Gesamtfreigabe offen; Liste in der Phase-2-Abnahme |
 | NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen und Produktions-Boot/Fencing bleiben offen; ACK- und Member-Nachweise stehen getrennt |
 | Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; Kombination mit NetBird-Volllast und unabhängigen Hosts bleibt offen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
@@ -127,12 +127,41 @@ Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lastt
 für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweise
 und offenen Grenzen. Die vollständige Phase 2 ist noch nicht freigegeben:
 Die feste Journal-Aufteilung und das signierte Drei-Member-Sieb über NetBird
-sind nachgewiesen. Offen bleiben die vollständige Overlay-Crash-Matrix,
-produktive Root-/Directory-Provisionierung, verteilte F9-Löschung einschließlich
-Historien/Archiven und kontrollierte Abschlussprofil-Umstellung. Die vier
-Netzräume auf big ersetzen keine unabhängigen physischen Ausfalldomänen. Die lokale batchweise Principal-Löschung mit dauerhaftem
-Fortschritt, Space-Sperre und Crash-Recovery ist inzwischen implementiert und
-auf beiden Speicher-Backends geprüft. RunGate und Replikation folgen später.
+sind nachgewiesen. Die Overlay-Abbruchblöcke 1–3 sind inzwischen abgeschlossen,
+einschließlich 26 gezielter Journal-Abbrüche unter voller Joblast. Offen bleiben
+fünf Abnahmeblöcke: der vollständige produktive Root-/Directory-Betrieb,
+unabhängige physische Ausfalldomänen, verteilte F9-Löschung, Archive/Backups
+und die kontrollierte Abschlussprofil-Umstellung. Die vier Netzräume auf big
+ersetzen keine unabhängigen physischen Ausfalldomänen.
+
+`createConfiguredRoot` provisioniert einen nativen Hosted-Agent-Root gemeinsam
+mit Control: getrennte aktive Router-/Host-Schlüssel, feste Member-Zieltupel,
+unabhängige Boot-/Authority-Prüfungen, persistierte RouterLease und
+MemberStatus-Probes. Administrative Membership- und Profilbefehle benötigen den
+konfigurierten, aktuell autorisierten Supervisor-Administrator. Ein öffentlicher
+virtueller Root-Space-Endpunkt ist dadurch nicht implementiert. Der eigene
+Live-Aufbau und eine Fencing-Ablehnung sind geprüft; die vollständige native
+Job-Abnahme ist noch offen.
+
+Die lokale batchweise Principal-Löschung und `RootHistoryErasure` besitzen
+dauerhaften Fortschritt und Crash-Recovery. Letzteres löscht eigene sowie
+betroffene fremde gecachte Parent-/Child-Inhalte, bewahrt gebundene IDs und
+verweigert deren Effekt-Replay mit `ResultExpired`. Das ist auf beiden
+Speicher-Backends getestet; ein verteilter, vollständig abgenommener
+Löschkoordinator fehlt noch.
+
+Unabhängige Lösch-Epochen sperren veraltete Restores und normale Dienste bei
+unvollständiger Löschung. `ErasureArchiveController` verwaltet registrierte
+Archive, Quarantäne, überprüfte Löschbelege und eine begrenzte Löschfrist.
+Die Tests prüfen echte Backup-Dateien und Wiederanlauf; die vollständige
+Integration in den Backup-/Restore-Betrieb und die Bereinigung aktiver
+Backend-Historien fehlen. Logische Löschung ist kein physischer Löschbeleg.
+
+`ProfileTransitionController` friert ruhende Members ein, installiert eine
+reine Profiländerung, veröffentlicht die nächste Policy und aktiviert Members
+wieder. Unklare Antworten behalten den eingefrorenen Zustand und setzen mit
+denselben IDs fort. Crash-/Wiederanlauftests bestehen auf beiden Backends;
+der verteilte Live-Nachweis steht aus. RunGate und Replikation folgen später.
 
 Die Wire-Recovery-Prüfung vom 2026-10-13 ergänzt gezielt verlorene erfolgreiche
 RPC-Antworten. Typisierte definitive Fehler bei der Claim-Auflösung führen
@@ -158,3 +187,20 @@ Vorbereitung bleibt ein bereits gespeicherter Parent jetzt als Pending mit
 unverändertem Routingplan wiederaufnehmbar. Die Fehlerklassifikation wird auf
 JSONL und SQLite geprüft; fachliche und Berechtigungsfehler bleiben definitive
 Fehler. Details und Grenzen stehen in der [Phase-2-Abnahme](ap2-abnahme.md).
+
+
+Testblock 3 ist seit 2026-10-14 abgenommen: 26 tatsächliche Root-SIGKILLs
+vor/nach 13 erfolgreichen Journal-Übergängen über NetBird in fünf vollständigen
+1.000-Job-/10.000-Entry-Läufen mit sechs aktiven Workern, jeweils mit Offline-
+Audit. Die aktuelle Liste enthält fünf verbleibende Testblöcke. Die native
+Root-Konfiguration wird derzeit separat verdrahtet und geprüft; ihre produktive
+Live-Abnahme ist damit noch nicht erteilt.
+
+
+Die Fehlerbehandlung unterscheidet außerdem vorläufig unbekannte Wirkungen von
+expliziten Transaktions-/Abschlussverletzungen auf dem Wire. Letztere sperren den
+Child und Parent dauerhaft zur Prüfung; Wiederanlauf löst keinen zusätzlichen
+Effekt aus. Identische signierte Member-Policies werden nach geschützter Abfrage
+und erneuter Authority-Prüfung ohne Mutations-Commit bestätigt. Die vollständige
+Suite umfasst am 2026-10-14 **462 bestandene Tests**; die noch fehlenden Live-
+Abnahmen bleiben davon getrennt.

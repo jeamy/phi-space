@@ -1,3 +1,4 @@
+import {createConfiguredRoot,type RootConfig} from './configured-root.ts';
 import {CapabilityDirectory,CAPABILITY_HEARTBEAT_MS} from "./capability-directory.ts";
 import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
@@ -24,6 +25,7 @@ import {FederationPolicyAuthority,verifyFederationPolicy} from "./federation-pol
 import type { Algorithm } from "./auth.ts";
 
 export type FederationConfig = {
+ root?:RootConfig;
  capabilities?: {dataSpaces?:string[];tools?:string[];models?:string[];hostBindings?:Record<string,string>};
 	hostId: string; peerId: string; authorityId: string; controlHostId: string; controlSpaceId: string;
 	listen: { host: string; port: number }; mode: "control" | "member";
@@ -38,6 +40,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 	const raw = { commit: host.commit.bind(host), snapshot: host.snapshot.bind(host) };
 	const config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
 	if (!config.hostId || !config.peerId || !config.authorityId || !config.controlHostId || !config.controlSpaceId || !["control", "member"].includes(config.mode)) throw new Error("incomplete federation provisioning");
+	if(config.root&&config.mode!=='control')throw new BootBlocked('native Root must be co-located with authoritative Control');
 	const signer = loadFileSigner(config.keyFile);
 	if ([config.registerReadSocket,config.registerSshTarget,config.registerTls].filter(Boolean).length !== 1) throw new Error("configure exactly one independent register endpoint");
 	const external = config.registerTls ? new TlsRecoveryRegister(config.registerTls) : config.registerSshTarget ? new SshRecoveryRegister(config.registerSshTarget) : new SocketRecoveryRegister(config.registerReadSocket!), installed = new SqliteRecoveryRegister(config.installedRegisterFile);
@@ -57,7 +60,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		if (!authority || authority.value.state !== "active" || authority.value.authorityId !== authorityId || authority.value.hostId !== config.controlHostId || authority.value.supervisorKey !== controlPublicKey) throw new BootBlocked("independent authority is not active or disagrees with installed control identity");
 		if (installedAuthority?.value.targetHostId && installedAuthority.value.targetHostId !== config.controlHostId) throw new Error("control endpoint must be reprovisioned for the installed authority successor");
 		const identity = new GateIdentity();
-		let keys: import("./auth.ts").KeyDirectory, control: { host: Harness; authority: GrantAuthority; leases?:RouterLeaseAuthority; routing?:FederationPolicyAuthority;directory?:CapabilityDirectory } | undefined;
+		let keys: import("./auth.ts").KeyDirectory, control: { host: Harness; authority: GrantAuthority; leases?:RouterLeaseAuthority; routing?:FederationPolicyAuthority;directory?:CapabilityDirectory;membership?:import("./membership.ts").MembershipController;profiles?:import("./profile-transition.ts").ProfileTransitionController;withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> } | undefined;
 		let controlRemote:RemoteSpace|undefined;
 		if (config.mode === "control") {
 			if (config.hostId !== config.controlHostId || (await host.snapshot(Registry, ctx))?.aliases.control !== config.controlSpaceId) throw new Error("configured control host or space identity disagrees with provisioned state");
@@ -78,9 +81,11 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const delegation=new DelegationVerifier({host,ctx,authorityId,controlSpaceId:config.controlSpaceId,supervisorPeerId:controlPeer.id,supervisorKey:{algorithm:config.control.algorithm,publicKey:controlPublicKey},keys,grants:grantVerifier,policy:async()=>{if(control){const p=(await control.routing!.state()).policy;if(!p)throw new Error("no federation policy installed");return p;}return verifyFederationPolicy(await controlRemote!.requestRoutingPolicy(),{authorityId,peerId:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey});}});
 
 		const membership=config.membership?new MemberLifecycle({host,ctx,memberId:config.membership.memberId,spaceId:config.membership.spaceId,authorityId,peerId:config.peerId,signer,controlPin:{issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey},assertAuthority:async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active"||b.value.spaces?.[config.membership!.spaceId]?.authorityId!==authorityId)throw new BootBlocked("Member boot authority changed");}}):undefined;
-		const runtime = await startFederationHost(host, ctx, { ...config, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed } });
+        let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;
+        if(config.root){try{root=await createConfiguredRoot({host,ctx,hostId:config.hostId,peerId:config.peerId,ownAddress:config.listen.host,authorityId,controlSpaceId:config.controlSpaceId,controlSigner:signer,keys,directory,groupRoles,external,installed,grants:control!.authority,leases:control!.leases!,root:config.root,assertControl});control!.membership=root.membership;control!.profiles=root.profiles;control!.withAdmin=root.withAdmin;}catch(e){await root?.close();throw e;}}
+		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed } });}catch(e){await root?.close();throw e;}
 		let recovery: Awaited<ReturnType<typeof startConfiguredRecovery>> | undefined;
-		try { if (config.recovery) recovery = await startConfiguredRecovery(host, raw, ctx, { ...config, authorityId, signer, controlKey: { algorithm: config.control.algorithm, publicKey: controlPublicKey }, config: config.recovery, external, installed }); await host.snapshot(Registry, ctx); } catch (e) { await recovery?.close(); await runtime.close(); throw e; }
+		try { if (config.recovery) recovery = await startConfiguredRecovery(host, raw, ctx, { ...config, authorityId, signer, controlKey: { algorithm: config.control.algorithm, publicKey: controlPublicKey }, config: config.recovery, external, installed }); await host.snapshot(Registry, ctx); } catch (e) { await recovery?.close();await root?.close(); await runtime.close(); throw e; }
         let capabilityTimer:ReturnType<typeof setTimeout>|undefined, capabilityStopped=false, capabilityActive:Promise<void>=Promise.resolve();
         const report=()=>({hostId:config.hostId,resources:{memoryBytes:totalmem(),cpus:availableParallelism()},tools:config.capabilities?.tools??[],models:config.capabilities?.models??[],metrics:{freeMemoryBytes:freemem()}});
         const heartbeat=()=>{capabilityActive=(async()=>{
@@ -93,6 +98,6 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
         if(config.capabilities)heartbeat();
 		const trustedConnection = async () => { await directory.refresh(); const peer = await directory.lookup(config.listen.host); if (!peer || peer.id !== config.peerId) throw new Error("local service peer is no longer known to NetBird"); return { peerId: peer.id, overlayIp: peer.ip, credentials: { roles: peer.groups.flatMap(g => groupRoles[g] ?? []) } }; };
 		const nativeService = { async handle(call: unknown, conn: import("./service.ts").Connection) { Object.assign(conn, await trustedConnection()); return runtime.service.handle(call, conn); } };
-		return { ...runtime, service: nativeService, config, trustedConnection, close: async () => { capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;try { try { await recovery?.close(); } finally { await runtime.close(); } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
+		return { ...runtime, root, service: nativeService, config, trustedConnection, close: async () => { capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
 	} catch (e) { controlSocket?.close(); external.close(); installed.close(); throw e; }
 }

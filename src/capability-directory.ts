@@ -30,14 +30,14 @@ export class CapabilityDirectory {
  }
 }
 export class MemberStatusDirectory {
- private o:{host:SpaceHost;ctx:Context;controlSpaceId:string;assertAuthority:()=>Promise<void>;now?:()=>number;probe:(memberId:string,target:Readonly<TargetBinding>)=>Promise<{revision:number;free:number;lag:number|null}>};
+ private o:{host:SpaceHost;ctx:Context;controlSpaceId:string;assertAuthority:()=>Promise<void>;now?:()=>number;probe:(memberId:string,target:Readonly<TargetBinding>)=>Promise<{revision:number;free:number|null;lag:number|null}>};
  constructor(o:MemberStatusDirectory['o']){this.o=o;}
  async refresh() {
   await this.o.assertAuthority();const st=await this.o.host.snapshot(FederationRouting,this.o.controlSpaceId,this.o.ctx);
   for(const m of Object.values(st?.members??{})) {
    if(!['active','draining'].includes(m.state))continue;
    const at=(this.o.now??Date.now)();let result:Awaited<ReturnType<MemberStatusDirectory['o']['probe']>>|undefined;
-   try{result=await this.o.probe(m.id,structuredClone(m.target));if(!Number.isSafeInteger(result.revision)||result.revision<0||!Number.isFinite(result.free)||result.free<0||result.lag!==null&&(!Number.isFinite(result.lag)||result.lag<0))throw Error('invalid member status');}catch{result=undefined;}
+   try{result=await this.o.probe(m.id,structuredClone(m.target));if(!Number.isSafeInteger(result.revision)||result.revision<0||result.free!==null&&(!Number.isFinite(result.free)||result.free<0)||result.lag!==null&&(!Number.isFinite(result.lag)||result.lag<0))throw Error('invalid member status');}catch{result=undefined;}
    await this.o.assertAuthority();
    await this.o.host.commit(async tx=>{
     await this.o.assertAuthority();const now=(this.o.now??Date.now)();const current=(await tx.doc(FederationRouting,this.o.controlSpaceId,null)).members[m.id];
@@ -45,7 +45,7 @@ export class MemberStatusDirectory {
     const s=await spaceDoc(tx,this.o.controlSpaceId,now);
     const caps=core.list(s,now,{type:'Capability',fields:{hostId:m.target.hostId}}).sort((a,b)=>Number(b.fields.at)-Number(a.fields.at))[0];
     const fresh=!!result&&now-at<MEMBER_STATUS_LEASE_MS;
-    if(fresh)current.capacity={free:result!.free,at};else delete current.capacity;
+    if(fresh&&result!.free!==null)current.capacity={free:result!.free,at};else delete current.capacity;
     if(fresh&&caps)current.capabilities={names:[...(caps.fields.tools as string[]),...(caps.fields.models as string[])],at:Number(caps.fields.at)};else delete current.capabilities;
     replace(s,now,'MemberStatus','memberId',m.id,{memberId:m.id,hostId:m.target.hostId,reachable:fresh,at,revision:fresh?result!.revision:null,lag:fresh?result!.lag:null,capacity:fresh?result!.free:null},MEMBER_STATUS_LEASE_MS);
    },this.o.ctx);

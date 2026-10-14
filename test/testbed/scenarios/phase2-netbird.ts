@@ -1,4 +1,6 @@
 // Isolated wire acceptance: real NetBird peers, key proofs, grants and delegation; fixture provisioning.
+import {applyImmutable} from '@earendil-works/chord/delta';
+import {journalTransitions} from './journal-checkpoints.ts';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync,existsSync,renameSync} from 'node:fs';
 import {join} from 'node:path';
@@ -15,16 +17,45 @@ import {core,claims,canonicalJson,principalId,FederationOperations,operationPart
 const [mode,configFile,memberId]=process.argv.slice(2);const config=JSON.parse(privateFile(configFile!).toString());
 const home='/data',common='/shared',authorityId=config.authorityId,controlPeerId=config.root.peerId;
 mkdirSync(home,{recursive:true,mode:0o700});
-const policy:FederationPolicy={authorityId,policyVersion:1,default:{mode:'local',member:'a'},rules:['Load','SieveTask','SieveResult',...(config.ackCrashes?['AckProbe']:[])].map(type=>({type,mode:'expand',by:{field:'taskId'},members:['a','b','c']})),completionProfiles:[{taskType:'SieveTask',resultTypes:['SieveResult'],equalFields:['taskId','rangeStart','rangeEnd'],maxResultCount:1,maxResultBytes:32768,maxLeaseMs:60000}]};
-const host=await Harness.open(await openNodeSqliteStorage(join(home,'harness.sqlite')), {models:createModels(),registry:createRegistry()},ctx);
+const policy:FederationPolicy={authorityId,policyVersion:1,default:{mode:'local',member:'a'},rules:['Load','SieveTask','SieveResult',...((config.ackCrashes||config.journalCrashes)?['AckProbe']:[])].map(type=>({type,mode:'expand',by:{field:'taskId'},members:['a','b','c']})),completionProfiles:[{taskType:'SieveTask',resultTypes:['SieveResult'],equalFields:['taskId','rangeStart','rangeEnd'],maxResultCount:1,maxResultBytes:32768,maxLeaseMs:60000}]};
+let selectedJournal:()=>any=()=>undefined;
+const rawStorage=await openNodeSqliteStorage(join(home,'harness.sqlite'));
+const storage=new Proxy(rawStorage,{get(target,key){const value=Reflect.get(target,key);if(key!=='commit')return typeof value==='function'?value.bind(target):value;
+ return async(writes:any[],context:typeof ctx)=>{
+  const selected=selectedJournal();let match:any;
+  if(selected&&!progress.crashes.some((f:any)=>f.parentId===selected.parentId)){
+   const digest=(x:any)=>createHash('sha256').update(canonicalJson(x)).digest('hex'),child=(label:string)=>'f-'+digest([selected.parentId,label]);
+   const childIds=new Set(['initial:a','initial:b','initial:c','winner-commit','cancel:a','cancel:b','cancel:c','abort:a','abort:b','abort:c'].map(child)),budgetId=child('budget');
+   const states=new Map<number,any>();
+   for(const w of writes){
+    if(!['document.create','document.change'].includes(w.type))continue;
+    let record:any,before:any,after:any;
+    if(w.type==='document.create'){record=w.record;before=undefined;after=structuredClone(w.content.value);}
+    else{const prior=states.get(w.id)??await target.document(w.id,'current',context);if(!prior)continue;record=prior.record;before=prior.value;after=w.content.kind==='base'?structuredClone(w.content.value):applyImmutable(before,w.content.ops);}
+    const kind=record.kind;
+    if(journalTransitions(kind,before,after,selected.parentId,childIds,budgetId).includes(selected.kind)){
+     const select=(v:any)=>kind==='pi-spaces.federation-operations'?v?.operations?.[selected.parentId]??null:kind==='pi-spaces.router-command'?v?.command??null:{future:v?.future?.[budgetId]??null};
+     match={documentId:record.id,documentKind:kind,documentKey:record.key,budgetId,before:select(before),plannedAfter:select(after),deltaHash:digest(w.content)};
+    }
+    states.set(record.id,{record,value:after});
+   }
+  }
+  const kill=(commitSeq?:number)=>{const fault={...selected,effect:'journal',...match,commitSeq:commitSeq??null,activeWorkers,completedJobs:progress.done.length,at:new Date().toISOString()};progress.crashes.push(fault);atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'root-sigkill',kind:fault.kind,boundary:fault.boundary,parentId:fault.parentId,effect:fault.effect,commitSeq:fault.commitSeq,activeWorkers,completedJobs:fault.completedJobs}));process.kill(process.pid,'SIGKILL');throw Error('SIGKILL returned');};
+  if(match&&selected.boundary==='beforeCommit')kill();
+  const seq=await target.commit(writes,context);
+  if(match){const persisted=await target.document(match.documentId,'current',context);assert.ok(persisted);const v:any=persisted.value,readBack=match.documentKind==='pi-spaces.federation-operations'?v.operations?.[selected.parentId]??null:match.documentKind==='pi-spaces.router-command'?v.command??null:{future:v.future?.[match.budgetId]??null};assert.deepEqual(readBack,match.plannedAfter);kill(seq);}
+  return seq;
+ };
+}});
+const host=await Harness.open(storage, {models:createModels(),registry:createRegistry()},ctx);
 const directory=new NetbirdDirectory({url:config.managementUrl,token:privateFile('/secrets/management-token').toString().trim()});
 const transports=new Map<string,Transport>();
 type ProcessCrash={member:string;boundary:string;effect:string;generation:string;requestId:string;at:string};
 let activeWorkers=0;
 const progressFile=join(home,'run-progress.json');
 const progress=mode==='run'&&existsSync(progressFile)?JSON.parse(privateFile(progressFile).toString()):{authorityId,jobs:config.jobs,entries:config.entries,produced:0,done:[],workers:Array(6).fill(0),crashes:[],startedAt:Date.now(),inventoryVerified:false};
-progress.ackCursor??=0;progress.ackResults??=[];
-if(mode==='run'){if(config.processCrashes||config.ackCrashes)assert.notEqual(process.pid,1,'process crash fixture requires a container init process');assert.equal(progress.authorityId,authorityId);assert.equal(progress.jobs,config.jobs);assert.equal(progress.entries,config.entries);}
+progress.ackCursor??=0;progress.ackResults??=[];selectedJournal=()=>mode==='run'&&config.journalCrashes?progress.activeJournalCase:undefined;
+if(mode==='run'){if(config.processCrashes||config.ackCrashes||config.journalCrashes)assert.notEqual(process.pid,1,'process crash fixture requires a container init process');assert.equal(progress.authorityId,authorityId);assert.equal(progress.jobs,config.jobs);assert.equal(progress.entries,config.entries);}
 function atomicJson(file:string,value:unknown){const temp=file+'.tmp';writeFileSync(temp,JSON.stringify(value),{mode:0o600});renameSync(temp,file);}
 function crashAt(member:string,boundary:string,call:any,effect:string){
  if(!config.processCrashes||!config.processCrashEffects.includes(effect)||!call.request)return;
@@ -146,11 +177,15 @@ try {
     await effect(()=>controller.space.finishTransaction('begin-'+n,'commit',{id:'commit-'+n,principal:p}));assert.equal(done.has(n),false);done.add(n);workers[w]++;progress.done=[...done];publishWorkload();atomicJson(progressFile,progress);if(done.size%100===0)console.log(JSON.stringify({stage:'completed',jobs:done.size}));
    }}finally{activeWorkers--;publishWorkload();}}));
    const ackRun=async()=>{
-    if(!config.ackCrashes)return;
-    const cases=config.members.flatMap((m:any)=>['beforeSend','afterReply'].map(boundary=>({member:m.id,boundary})));
+    if(!config.ackCrashes&&!config.journalCrashes)return;
+    const cases=config.journalCrashes?config.journalCrashKinds.flatMap((kind:string)=>['beforeCommit','afterCommit'].map(boundary=>({kind,boundary}))):config.members.flatMap((m:any)=>['beforeSend','afterReply'].map(boundary=>({member:m.id,boundary})));
     for(let i=progress.ackCursor;i<cases.length;i++){
-     const selected={...cases[i],parentId:'ack-race-'+i},p={peerId:controlPeerId,agentId:'ack-worker-'+i},probeId='ack-probe-'+i;
-     progress.activeAckCase=selected;atomicJson(progressFile,progress);
+     const selected={...cases[i],parentId:(config.journalCrashes?'journal-race-':'ack-race-')+i},p={peerId:controlPeerId,agentId:'ack-worker-'+i},probeId='ack-probe-'+i;
+     if(config.journalCrashes)progress.activeJournalCase=selected;else progress.activeAckCase=selected;atomicJson(progressFile,progress);
+     if(config.journalCrashes&&selected.kind==='parentCursor'){
+      const request={id:selected.parentId,principal:p};assert.equal(await effect(()=>controller.space.read({type:'AckProbe',fields:{probeId}},request)),null);assert.equal(await controller.space.resume(selected.parentId),null);
+      progress.ackResults.push({parentId:selected.parentId,kind:'read',journalKind:selected.kind,boundary:selected.boundary,replayStable:true});progress.ackCursor=i+1;delete progress.activeJournalCase;atomicJson(progressFile,progress);continue;
+     }
      try{await controller.space.takeWaiting({type:'AckProbe',fields:{probeId}},60000,60000,{id:selected.parentId,principal:p});}catch(e){if(!(e instanceof FederationPending))throw e;}
      for(const m of config.members){
       let taskId='';for(let n=0;n<1000;n++){const key=probeId+'-'+n;if(searchMembers(policy,{type:'AckProbe',fields:{taskId:key}})[0]===m.id){taskId=key;break;}}assert.ok(taskId);
@@ -160,7 +195,7 @@ try {
      assert.equal((await controller.space.readAll({type:'AckProbe',fields:{probeId}},producer)).entries.length,2,'one winner consumed and two losers returned');
      const replay=await controller.space.resume(selected.parentId);assert.deepEqual(replay,winner);
      for(const m of config.members){const target=st.members[m.id]!.target;const journal=await host.snapshot(FederationOperations,parentJournalKey('ap2-netbird',1024,operationPartition(selected.parentId,1024)),ctx);assert.ok(journal?.operations[selected.parentId]);const page=await controller.rpc.events(m.id,p,(await controller.partitionRouters[operationPartition(selected.parentId,1024)]!.get(journal.operations[selected.parentId]!.children[m.id]!))!.steps[0]!);assert.equal(page.events.length,0);assert.equal(page.gap,false);assert.ok(target);}
-     progress.ackResults.push({parentId:selected.parentId,probeId,winner,selectedMember:selected.member,boundary:selected.boundary,replayStable:true,remaining:2});progress.ackCursor=i+1;delete progress.activeAckCase;atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'ack-case-completed',case:i+1,completedJobs:done.size}));
+     progress.ackResults.push({parentId:selected.parentId,probeId,winner,kind:'race',journalKind:selected.kind,selectedMember:selected.member,boundary:selected.boundary,replayStable:true,remaining:2});progress.ackCursor=i+1;delete progress.activeAckCase;delete progress.activeJournalCase;atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'ack-case-completed',case:i+1,completedJobs:done.size}));
     }
    };
    await Promise.all([workerRun,ackRun()]);
@@ -168,10 +203,11 @@ try {
    const actual=results.entries.flatMap(e=>e.fields.primes as number[]).sort((a,b)=>a-b);assert.deepEqual(actual,primes(1,jobs*100));assert.equal(new Set(results.entries.map(e=>e.fields.taskId)).size,jobs);assert.ok(workers.every(n=>n>0));
    assert.equal((await controller.space.count({type:'Load'},producer)).count,(config.entries??jobs)-jobs);
    if(config.rpcFaults)assert.equal(faultSlots.size,config.rpcFaultBoundary==='both'?30:15,'all requested RPC boundaries, five effect kinds and all three Members must be exercised');
-   const expectedCrashes=(config.processCrashes?config.processCrashEffects.length*config.processCrashMembers.length*(config.processCrashBoundary==='both'?2:1):0)+(config.ackCrashes?6:0);assert.equal(progress.crashes.length,expectedCrashes,'all selected process boundaries must have killed the Root');assert.equal(done.size,jobs);
+   const expectedCrashes=(config.processCrashes?config.processCrashEffects.length*config.processCrashMembers.length*(config.processCrashBoundary==='both'?2:1):0)+(config.ackCrashes?6:0)+(config.journalCrashes?config.journalCrashKinds.length*2:0);assert.equal(progress.crashes.length,expectedCrashes,'all selected process boundaries must have killed the Root');assert.equal(done.size,jobs);
    if(config.ackCrashes){assert.equal(progress.ackResults.length,6);assert.equal(new Set(progress.ackResults.map((r:any)=>r.winner.gid)).size,6);if(jobs===1000)assert.ok(progress.crashes.every((f:any)=>f.activeWorkers===6),'full ACK matrix must interrupt six running Workers');}
+   if(config.journalCrashes){assert.equal(progress.ackResults.length,config.journalCrashKinds.length*2);if(jobs===1000)assert.ok(progress.crashes.every((f:any)=>f.activeWorkers===6),'journal matrix must interrupt six active Workers');}
    const memberFaults=config.memberCrashes?config.members.flatMap((m:any)=>JSON.parse(privateFile(join(common,m.id+'-crashes.json')).toString())):[];if(config.memberCrashes){assert.equal(memberFaults.length,30);assert.equal(new Set(memberFaults.map((f:any)=>[f.member,f.boundary,f.effect].join(':'))).size,30);if(jobs===1000)assert.ok(memberFaults.filter((f:any)=>f.effect!=='SieveTask').every((f:any)=>f.activeWorkers===6),'all Member worker-effect deaths must interrupt six running Workers');}
-   const report={memberProcessCrashesExercised:!!config.memberCrashes,memberProcessCrashes:memberFaults,memberCrashesUnderWorkerLoad:config.memberCrashes?memberFaults.filter((f:any)=>f.effect!=='SieveTask').every((f:any)=>f.activeWorkers===6):false,ackProbes:progress.ackResults,expectedProcessCrashes:expectedCrashes+(config.memberCrashes?30:0),expectedRootProcessCrashes:expectedCrashes,ackCrashesUnderWorkerLoad:config.ackCrashes?progress.crashes.every((f:any)=>f.activeWorkers===6):false,processCrashEffects:config.processCrashEffects,processCrashGapJobs:Math.floor(config.jobs/(config.processCrashEffects.length*config.processCrashMembers.length*2+10)),processCrashEffect:config.processCrashEffect,processCrashBoundary:config.processCrashBoundary,processCrashMembers:config.processCrashMembers,processCrashes:progress.crashes,routerEpoch:current.lease.routerEpoch,routerLeaseId:current.lease.id,stableWorkerAssignment:true,rpcFaults:!!config.rpcFaults,rpcFaultBoundary:config.rpcFaultBoundary,faults,sameParentRetries:retries,processCrashesExercised:!!(config.processCrashes||config.ackCrashes),mailboxAckFaultsExercised:!!config.ackCrashes,passed:true,date:new Date().toISOString(),scope:'real-netbird-signed-wire-fixture',entries:config.entries??jobs,backgroundEntriesSeededLocally:(config.entries??jobs)-jobs,jobs,workers:6,workerJobs:workers,members:config.members.map((m:any)=>({id:m.id,peerId:m.peerId,ip:m.ip})),routerPeerId:controlPeerId,independentNetworkNamespaces:4,physicalServers:1,layerA:true,layerB:true,signedGrants:true,signedDelegation:true,signedRouterLease:true,fixtureProvisioning:true,independentBootRegisterExercised:false,productionServicesChanged:false,fullPhase2Accepted:false,primes:actual.length,sum:actual.reduce((a,b)=>a+b,0),elapsedMs:Date.now()-progress.startedAt};
+   const report={journalCommitCrashesExercised:!!config.journalCrashes,journalCrashKinds:config.journalCrashKinds,journalCrashesUnderWorkerLoad:config.journalCrashes?progress.crashes.every((f:any)=>f.activeWorkers===6):false,memberProcessCrashesExercised:!!config.memberCrashes,memberProcessCrashes:memberFaults,memberCrashesUnderWorkerLoad:config.memberCrashes?memberFaults.filter((f:any)=>f.effect!=='SieveTask').every((f:any)=>f.activeWorkers===6):false,ackProbes:progress.ackResults,expectedProcessCrashes:expectedCrashes+(config.memberCrashes?30:0),expectedRootProcessCrashes:expectedCrashes,ackCrashesUnderWorkerLoad:config.ackCrashes?progress.crashes.every((f:any)=>f.activeWorkers===6):false,processCrashEffects:config.processCrashEffects,processCrashGapJobs:Math.floor(config.jobs/(config.processCrashEffects.length*config.processCrashMembers.length*2+10)),processCrashEffect:config.processCrashEffect,processCrashBoundary:config.processCrashBoundary,processCrashMembers:config.processCrashMembers,processCrashes:progress.crashes,routerEpoch:current.lease.routerEpoch,routerLeaseId:current.lease.id,stableWorkerAssignment:true,rpcFaults:!!config.rpcFaults,rpcFaultBoundary:config.rpcFaultBoundary,faults,sameParentRetries:retries,processCrashesExercised:!!(config.processCrashes||config.ackCrashes||config.journalCrashes),mailboxAckFaultsExercised:!!config.ackCrashes,passed:true,date:new Date().toISOString(),scope:'real-netbird-signed-wire-fixture',entries:config.entries??jobs,backgroundEntriesSeededLocally:(config.entries??jobs)-jobs,jobs,workers:6,workerJobs:workers,members:config.members.map((m:any)=>({id:m.id,peerId:m.peerId,ip:m.ip})),routerPeerId:controlPeerId,independentNetworkNamespaces:4,physicalServers:1,layerA:true,layerB:true,signedGrants:true,signedDelegation:true,signedRouterLease:true,fixtureProvisioning:true,independentBootRegisterExercised:false,productionServicesChanged:false,fullPhase2Accepted:false,primes:actual.length,sum:actual.reduce((a,b)=>a+b,0),elapsedMs:Date.now()-progress.startedAt};
    writeFileSync(join(common,'netbird-sieve.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
   }else throw new Error('use prepare, member or run');
  }

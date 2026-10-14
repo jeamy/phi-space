@@ -3,7 +3,7 @@ import {createHash} from "node:crypto";
 import {defineDocFamily, type Session} from "@earendil-works/pi-durable";
 import type {Context} from "@earendil-works/chord";
 import {canonicalJson} from "./canonical.ts";
-import {argHash, type Principal} from "./claims.ts";
+import {argHash, ResultExpired, type Principal} from "./claims.ts";
 import type {Json} from "./core.ts";
 
 export type TargetBinding = {
@@ -32,6 +32,7 @@ export type RouterCommand = {
     id: string; area: string; blocksArea: boolean; hash: string; state: CommandState;
     steps: RouterStep[];
     reservedBytes: number;
+    erased?:{commandId:string;originalHash:string;subjectHash:string};
     reviews: {at: number; admin: string; note: string; releaseArea: boolean}[]
 };
 export type RouterReceipt = {
@@ -257,6 +258,7 @@ export class RouterController {
                 if (d.command) {
                     if (d.command.hash !== c.hash)
                         throw new RouterConflict("command ID already binds different arguments");
+                    if(d.command.erased)throw new ResultExpired("Child command content was erased");
                     return copy(d.command);
                 }
                 if (Object.values(i.refs).some(
@@ -303,6 +305,7 @@ export class RouterController {
         });
     }
     private verify(c: RouterCommand) {
+        if(c.erased){if(c.hash!==c.erased.originalHash||c.state!=="completed"||c.steps.length||c.reviews.length)throw new RouterBlocked("invalid erased Child tombstone");return;}
         if (c.hash !== hash(specOf(c))) throw new RouterBlocked("command binding hash corrupted");
         for (const [n, s] of c.steps.entries())
             if (s.argHash !== argHash(s.method, s.args) ||
@@ -361,6 +364,29 @@ export class RouterController {
         }
         return this.applyReceipt(c.id, n, receipt);
     }
+    /** Cold-start only: initialize empty journals in bounded, fenced commits; recover retained work normally. */
+    static async recoverMany(controllers:readonly RouterController[]):Promise<void>{
+        const all=[...new Set(controllers)];if(!all.length)return;
+        const first=all[0]!,o=first.o;
+        if(all.some(r=>r.ready||r.o.host!==o.host||r.o.ctx!==o.ctx||r.o.authorityId!==o.authorityId||r.o.assertAuthority!==o.assertAuthority))throw new RouterBlocked('batched recovery requires one inactive, fenced owner');
+        const retained:RouterController[]=[];
+        for(let n=0;n<all.length;n+=16){
+            const batch=all.slice(n,n+16),empty:RouterController[]=[];await o.assertAuthority();
+            await o.host.commit(async tx=>{
+                await o.assertAuthority();
+                for(const r of batch){const i=await tx.doc(RouterJournal,r.o.routerId,null);
+                    if(i.authorityId!==null&&i.authorityId!==o.authorityId||i.limits&&hash(i.limits)!==hash(r.limits))throw new RouterBlocked('journal authority or budget changed');
+                    if(Object.keys(i.refs).length||Object.keys(i.future??{}).length){retained.push(r);continue;}
+                    if(i.reservedBytes!==0)throw new RouterBlocked('empty journal reservation mismatch');
+                    i.authorityId=o.authorityId;i.limits=r.limits;i.mode='ready';
+                    if(bytes(i)>r.limits.maxIndexBytes)throw new RouterBudgetExceeded('router index exceeds budget');empty.push(r);
+                }
+                await o.assertAuthority();
+            },o.ctx);
+            for(const r of empty)r.ready=true;
+        }
+        for(const r of retained)await r.recover();
+    }
     async recover(): Promise<void> {
         return this.serial(async () => {
             this.ready = false;
@@ -396,7 +422,7 @@ export class RouterController {
             if (!this.ready) throw new RouterBlocked("router is recovering");
             let c = await this.get(id);
             if (!c) throw new RouterBlocked("unknown command");
-            this.verify(c);
+            this.verify(c);if(c.erased)throw new ResultExpired("Child command content was erased");
             while (!terminal(c.state)) {
                 const n = c.steps.findIndex(s => s.state !== "done");
                 if (n < 0) throw new RouterBlocked("inconsistent command state");

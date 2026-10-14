@@ -1,0 +1,441 @@
+{
+  "journalCommitCrashesExercised": true,
+  "journalCrashKinds": [
+    "parentAdmission",
+    "childAcceptance"
+  ],
+  "journalCrashesUnderWorkerLoad": true,
+  "memberProcessCrashesExercised": false,
+  "memberProcessCrashes": [],
+  "memberCrashesUnderWorkerLoad": false,
+  "ackProbes": [
+    {
+      "parentId": "journal-race-0",
+      "probeId": "ack-probe-0",
+      "winner": {
+        "id": "e77dd9636-61",
+        "gid": "sp-a70ce88c-3644-4bef-b94f-480a5439f586/e77dd9636-61",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-0-2",
+          "probeId": "ack-probe-0",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "parentAdmission",
+      "boundary": "beforeCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-1",
+      "probeId": "ack-probe-1",
+      "winner": {
+        "id": "e77dd9636-67",
+        "gid": "sp-a70ce88c-3644-4bef-b94f-480a5439f586/e77dd9636-67",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-1-5",
+          "probeId": "ack-probe-1",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "parentAdmission",
+      "boundary": "afterCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-2",
+      "probeId": "ack-probe-2",
+      "winner": {
+        "id": "e77dd9636-74",
+        "gid": "sp-a70ce88c-3644-4bef-b94f-480a5439f586/e77dd9636-74",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-2-1",
+          "probeId": "ack-probe-2",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "childAcceptance",
+      "boundary": "beforeCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-3",
+      "probeId": "ack-probe-3",
+      "winner": {
+        "id": "e77dd9636-80",
+        "gid": "sp-a70ce88c-3644-4bef-b94f-480a5439f586/e77dd9636-80",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-3-1",
+          "probeId": "ack-probe-3",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "childAcceptance",
+      "boundary": "afterCommit",
+      "replayStable": true,
+      "remaining": 2
+    }
+  ],
+  "expectedProcessCrashes": 4,
+  "expectedRootProcessCrashes": 4,
+  "ackCrashesUnderWorkerLoad": false,
+  "processCrashEffects": [
+    "txn-commit"
+  ],
+  "processCrashGapJobs": 3,
+  "processCrashEffect": "txn-commit",
+  "processCrashBoundary": "both",
+  "processCrashMembers": [
+    "a",
+    "b",
+    "c"
+  ],
+  "processCrashes": [
+    {
+      "kind": "parentAdmission",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-0",
+      "effect": "journal",
+      "documentId": 1154,
+      "documentKind": "pi-spaces.federation-operations",
+      "documentKey": "e74df654a9b694274007883e5ee2a4d0d3e47c6832681bc740186cac11896d33",
+      "budgetId": "f-568df68003d6aa5012a287d4538ad92fab2e1e9836686b4c38b9788f6f0acf58",
+      "before": null,
+      "plannedAfter": {
+        "id": "journal-race-0",
+        "hash": "f5abd609cb71af1d82d5045577e6e4ac14428b1a5fbd23c5cbc96ff5ca432fb1",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-0"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-a70ce88c-3644-4bef-b94f-480a5439f586",
+            "dataIncarnation": "77dd9636",
+            "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-c9908f7a-695e-4eb0-a50c-7e3d0a224af7",
+            "dataIncarnation": "11f770de",
+            "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-d6dd8d72-51f1-4c21-a1ae-4c2813ae391a",
+            "dataIncarnation": "6fecf5f8",
+            "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-0"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "admitting",
+        "deadline": 1791949767501,
+        "children": {},
+        "registrations": {},
+        "cursor": 0,
+        "candidates": {}
+      },
+      "deltaHash": "814e8d8f6cd106b12e28ebcf375e8aad395d04dc9e59008224b63674d57e21b5",
+      "commitSeq": null,
+      "activeWorkers": 6,
+      "completedJobs": 0,
+      "at": "2026-10-14T03:48:27.504Z"
+    },
+    {
+      "kind": "parentAdmission",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-1",
+      "effect": "journal",
+      "documentId": 1242,
+      "documentKind": "pi-spaces.federation-operations",
+      "documentKey": "f7d8932d0b00f6f7a848b437e8265d4488b0d4393d10bbbfc38642fc6b71760b",
+      "budgetId": "f-9470760e15cf3a3ae480629887846720d943a55d65f285a141185d8f59dfe993",
+      "before": null,
+      "plannedAfter": {
+        "id": "journal-race-1",
+        "hash": "40b74d08e884a0776aaded67b65165e91a5b48ed5588a2f800023b26292b4538",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-1"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-a70ce88c-3644-4bef-b94f-480a5439f586",
+            "dataIncarnation": "77dd9636",
+            "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-c9908f7a-695e-4eb0-a50c-7e3d0a224af7",
+            "dataIncarnation": "11f770de",
+            "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-d6dd8d72-51f1-4c21-a1ae-4c2813ae391a",
+            "dataIncarnation": "6fecf5f8",
+            "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-1"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "admitting",
+        "deadline": 1791949777390,
+        "children": {},
+        "registrations": {},
+        "cursor": 0,
+        "candidates": {}
+      },
+      "deltaHash": "6084f4a30d3327e250a1da30d9718d9a754d4ea7dca0c78cf92cdbf13dd7f118",
+      "commitSeq": 5049,
+      "activeWorkers": 6,
+      "completedJobs": 6,
+      "at": "2026-10-14T03:48:37.393Z"
+    },
+    {
+      "kind": "childAcceptance",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-2",
+      "effect": "journal",
+      "documentId": 1305,
+      "documentKind": "pi-spaces.router-command",
+      "documentKey": "40a0f7dd783b3d7aa56f34399060df675f82694b854afff6988edcd6a2012deb",
+      "budgetId": "f-c81144e2760e0244b1f775c4845d783046058fe8f973dc30a7c5f068b9fa6d05",
+      "before": null,
+      "plannedAfter": {
+        "id": "f-88bcba4be6be55300f74001ca4e22664415e58afd81d2ca00ee20d185245f15a",
+        "area": "federation",
+        "blocksArea": false,
+        "hash": "51aa55a586b7114d47fc80518632103e5943d419ec6455e856be2537f84d439a",
+        "state": "accepted",
+        "steps": [
+          {
+            "target": {
+              "hostId": "ap2-wire-a",
+              "spaceId": "sp-a70ce88c-3644-4bef-b94f-480a5439f586",
+              "dataIncarnation": "77dd9636",
+              "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+              "primaryEpoch": 1
+            },
+            "principal": {
+              "peerId": "db3r4ovlh8lg008eup20",
+              "agentId": "ack-worker-2"
+            },
+            "generation": "g406f09fe119ca6fe7069e083dac0a2de.be4873a425aa1bf130b26897e24241a0b03fc6ec72a7edeb0299a0d42e738211",
+            "method": "wait",
+            "args": {
+              "template": {
+                "type": "AckProbe",
+                "fields": {
+                  "probeId": "ack-probe-2"
+                }
+              },
+              "timeoutMs": 60000,
+              "txnLeaseMs": 60000,
+              "deadline": 1791949786491,
+              "take": true,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              }
+            },
+            "policyVersion": 1,
+            "resultBudgetBytes": 16384,
+            "requestId": "router-a7bd3a519d3bf91ba0dacdefc59795d0b859085e4e7e90214c4a623ccb065d09",
+            "argHash": "af913761c934ee06b55611cece8321104310f4534b846e87541af7e0556daa84",
+            "state": "prepared"
+          }
+        ],
+        "reservedBytes": 26159,
+        "reviews": []
+      },
+      "deltaHash": "0050215aed79b0eaa72d02fdca31f991917cc1adeb64ee47155e08de6428048a",
+      "commitSeq": null,
+      "activeWorkers": 6,
+      "completedJobs": 12,
+      "at": "2026-10-14T03:48:46.504Z"
+    },
+    {
+      "kind": "childAcceptance",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-3",
+      "effect": "journal",
+      "documentId": 1365,
+      "documentKind": "pi-spaces.router-command",
+      "documentKey": "071275c9a7af2e0176e5927779519a658bae9a3f6f805ad5577091a6ad13e3ed",
+      "budgetId": "f-620e68f608f8b9f847e1b2a8be4fcf6a516fe1306afc4988f134e0bb2fa8cd97",
+      "before": null,
+      "plannedAfter": {
+        "id": "f-588abcfdb5f26e2c5c0e969e65479ab5d0bb69b6db8a7ce5cbdd86691a2ef952",
+        "area": "federation",
+        "blocksArea": false,
+        "hash": "3023450a08e6db92ce79762fa6793852b2475d71ae01a67ed2c1a147700b3c07",
+        "state": "accepted",
+        "steps": [
+          {
+            "target": {
+              "hostId": "ap2-wire-a",
+              "spaceId": "sp-a70ce88c-3644-4bef-b94f-480a5439f586",
+              "dataIncarnation": "77dd9636",
+              "authorityId": "ap2-wire-e99770a7-2150-4da6-b030-48b8307265fd",
+              "primaryEpoch": 1
+            },
+            "principal": {
+              "peerId": "db3r4ovlh8lg008eup20",
+              "agentId": "ack-worker-3"
+            },
+            "generation": "gb77f10952c3baa430ba3d22beab81389.e1c1b34c1dd93b5453c3ce52ee0a809087c5e43b276abb1ba8bcf639a4a5af03",
+            "method": "wait",
+            "args": {
+              "template": {
+                "type": "AckProbe",
+                "fields": {
+                  "probeId": "ack-probe-3"
+                }
+              },
+              "timeoutMs": 60000,
+              "txnLeaseMs": 60000,
+              "deadline": 1791949795786,
+              "take": true,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              }
+            },
+            "policyVersion": 1,
+            "resultBudgetBytes": 16384,
+            "requestId": "router-e3d118024db9e5c5f5c09d81ab1e965f64a9ac2dc7d7b83e17eee5fd6f033b07",
+            "argHash": "899b456bdbe4b1bc0766f441200b614352429c82d6765ca03215fe463e9b5754",
+            "state": "prepared"
+          }
+        ],
+        "reservedBytes": 26159,
+        "reviews": []
+      },
+      "deltaHash": "2c2b5f330e486ca7cdd17d466207dd10441d3278c3d3632c5dec04fc381af0b9",
+      "commitSeq": 9732,
+      "activeWorkers": 6,
+      "completedJobs": 18,
+      "at": "2026-10-14T03:48:55.797Z"
+    }
+  ],
+  "routerEpoch": 1,
+  "routerLeaseId": "22dfecdb-7a20-4641-a3ce-7b1b0704e297",
+  "stableWorkerAssignment": true,
+  "rpcFaults": false,
+  "rpcFaultBoundary": "afterReply",
+  "faults": [],
+  "sameParentRetries": 0,
+  "processCrashesExercised": true,
+  "mailboxAckFaultsExercised": false,
+  "passed": true,
+  "date": "2026-10-14T03:49:10.216Z",
+  "scope": "real-netbird-signed-wire-fixture",
+  "entries": 180,
+  "backgroundEntriesSeededLocally": 120,
+  "jobs": 60,
+  "workers": 6,
+  "workerJobs": [
+    10,
+    10,
+    10,
+    10,
+    10,
+    10
+  ],
+  "members": [
+    {
+      "id": "a",
+      "peerId": "db3r4p7lh8lg008eup6g",
+      "ip": "100.89.240.87"
+    },
+    {
+      "id": "b",
+      "peerId": "db3r4pflh8lg008eupq0",
+      "ip": "100.89.5.70"
+    },
+    {
+      "id": "c",
+      "peerId": "db3r4p7lh8lg008eupb0",
+      "ip": "100.89.116.183"
+    }
+  ],
+  "routerPeerId": "db3r4ovlh8lg008eup20",
+  "independentNetworkNamespaces": 4,
+  "physicalServers": 1,
+  "layerA": true,
+  "layerB": true,
+  "signedGrants": true,
+  "signedDelegation": true,
+  "signedRouterLease": true,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "fullPhase2Accepted": false,
+  "primes": 783,
+  "sum": 2174734,
+  "elapsedMs": 47016
+}

@@ -1,4 +1,5 @@
 // Read-only acceptance audit: copy closed fixture SQLite stores; never open originals for writing.
+import {journalTransitions} from './journal-checkpoints.ts';
 import assert from 'node:assert/strict';
 import {copyFileSync,existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -13,8 +14,8 @@ const fixture=process.argv[2]!,output=process.argv[3]!;
 const config=JSON.parse(readFileSync(join(fixture,'shared/config.json'),'utf8')),report=JSON.parse(readFileSync(join(fixture,'shared/netbird-sieve.json'),'utf8'));
 assert.equal(report.passed,true);
 const allFaults=report.memberProcessCrashesExercised?report.memberProcessCrashes:report.processCrashesExercised?report.processCrashes:report.faults;
-const ackFaults=allFaults.filter((f:any)=>f.effect==='ack'),faultedRequests=allFaults.filter((f:any)=>f.effect!=='ack'),probes=report.ackProbes??[];
-const expectedFaults=report.memberProcessCrashesExercised?30:report.mailboxAckFaultsExercised?0:report.processCrashesExercised?(report.processCrashEffects??[report.processCrashEffect]).length*report.processCrashMembers.length*(report.processCrashBoundary==='both'?2:1):30;
+const ackFaults=allFaults.filter((f:any)=>f.effect==='ack'),journalFaults=allFaults.filter((f:any)=>f.effect==='journal'),faultedRequests=allFaults.filter((f:any)=>!['ack','journal'].includes(f.effect)),readProbes=(report.ackProbes??[]).filter((p:any)=>p.kind==='read'),probes=(report.ackProbes??[]).filter((p:any)=>p.kind!=='read');
+const expectedFaults=report.journalCommitCrashesExercised?0:report.memberProcessCrashesExercised?30:report.mailboxAckFaultsExercised?0:report.processCrashesExercised?(report.processCrashEffects??[report.processCrashEffect]).length*report.processCrashMembers.length*(report.processCrashBoundary==='both'?2:1):30;
 if(!report.processCrashesExercised&&!report.memberProcessCrashesExercised)assert.equal(report.rpcFaultBoundary,'both');
 assert.equal(faultedRequests.length,expectedFaults);
 if(report.mailboxAckFaultsExercised){assert.equal(ackFaults.length,6);assert.equal(probes.length,6);}
@@ -30,7 +31,28 @@ try{
   const router=new RouterController({host:readOnlyRoot,ctx,routerId:id,authorityId:config.authorityId,target:{protocol:'pi-spaces-rpc-v1',invoke:async()=>{throw new Error('audit must never send');},resolve:async()=>{throw new Error('audit must never resolve');}},assertAuthority:async()=>{}});
   for(const [id,ref] of Object.entries(index?.refs??{})){assert.equal(ref.state,'completed');const command=await router.get(id);assert.ok(command);assert.equal(command.hash,ref.hash);assert.equal(command.state,'completed');commands++;for(const step of command.steps){assert.equal(step.state,'done');const key=JSON.stringify([step.target.hostId,step.generation,step.requestId]);assert.equal(steps.has(key),false);steps.set(key,step);}}
  }
- assert.equal(parents,config.jobs*5+probes.length*4);assert.equal(commands,config.jobs*5+probes.length*12);
+ assert.equal(parents,config.jobs*5+probes.length*4+readProbes.length);assert.equal(commands,config.jobs*5+probes.length*12+readProbes.length*3);
+ const checkedJournals:any[]=[];
+ if(report.journalCommitCrashesExercised){
+  assert.equal(journalFaults.length,report.journalCrashKinds.length*2);
+  assert.equal(new Set(journalFaults.map((f:any)=>f.kind+':'+f.boundary)).size,journalFaults.length);
+  for(const fault of journalFaults){
+   const parent=parentRecords.get(fault.parentId);assert.ok(parent);const cid=(label:string)=>'f-'+createHash('sha256').update(canonicalJson([fault.parentId,label])).digest('hex'),childIds=new Set(['initial:a','initial:b','initial:c','winner-commit','cancel:a','cancel:b','cancel:c','abort:a','abort:b','abort:c'].map(cid));
+   const wrap=(v:any)=>fault.documentKind==='pi-spaces.federation-operations'?{operations:{[fault.parentId]:v}}:fault.documentKind==='pi-spaces.router-command'?{command:v}:{future:v?.future?{[fault.budgetId]:v.future}:{}};
+   assert.ok(journalTransitions(fault.documentKind,wrap(fault.before),wrap(fault.plannedAfter),fault.parentId,childIds,fault.budgetId).includes(fault.kind));
+   assert.equal(fault.commitSeq===null,fault.boundary==='beforeCommit');if(fault.boundary==='afterCommit')assert.ok(Number.isSafeInteger(fault.commitSeq)&&fault.commitSeq>0);
+   if(fault.documentKind==='pi-spaces.federation-operations'){
+    assert.equal(parent.hash,fault.plannedAfter.hash);assert.deepEqual(parent.principal,fault.plannedAfter.principal);assert.deepEqual(parent.targets,fault.plannedAfter.targets);
+    if(fault.kind==='candidate'&&fault.boundary==='afterCommit')for(const [key,candidate]of Object.entries(fault.plannedAfter.candidates))assert.deepEqual(parent.candidates[key],candidate);
+    if(fault.kind==='winner')assert.deepEqual(parent.winner,fault.plannedAfter.winner);
+   }
+   if(fault.documentKind==='pi-spaces.router-command'&&!(fault.kind==='childAcceptance'&&fault.boundary==='beforeCommit'))for(const old of fault.plannedAfter.steps){
+    const actual=steps.get(JSON.stringify([old.target.hostId,old.generation,old.requestId]));assert.ok(actual,'durably accepted Child must keep the original request');for(const field of ['target','principal','method','args','argHash','generation','requestId'])assert.deepEqual((actual as any)[field],old[field]);
+   }
+   checkedJournals.push({kind:fault.kind,boundary:fault.boundary,parentId:fault.parentId,commitSeq:fault.commitSeq,originalParentPlanPreserved:true});
+  }
+ }
+ for(const probe of readProbes){const p=parentRecords.get(probe.parentId);assert.ok(p);assert.equal(p.phase,'done');assert.equal(p.result,null);}
  let allClaimsChecked=0;
  const checkedAcks:Array<{member:string;boundary:string;parentId:string;claimState:string;durableCandidatePreserved:boolean}>=[];
  const checked:Array<{member:string;boundary:string;requestId:string;claimState:string}>=[];
@@ -63,6 +85,9 @@ try{
    const parent=parentRecords.get(probe.parentId)!;const box:MailboxState['boxes'][string]|undefined=space.mailboxes?.boxes[principalId(parent.principal)];assert.ok(box);assert.equal(box.events.length,0);assert.equal(box.gap,undefined);
    const entries:core.EntryRec[]=space.entries.filter(e=>e.type==='AckProbe'&&e.fields.probeId===probe.probeId);assert.equal(entries.length,member.id==='a'?0:1);for(const e of entries){assert.equal(e.takenBy,null);assert.equal(e.writtenUnder,null);}
   }
+  for(const fault of journalFaults.filter((f:any)=>f.kind==='childAcceptance'&&f.boundary==='beforeCommit'))for(const step of fault.plannedAfter.steps.filter((s:any)=>s.target.hostId===member.hostId)){
+   const abandonedClaim:claims.ClaimRec|undefined=space.rpc?.claims[claims.keyOf(space,{principal:step.principal,generation:step.generation,requestId:step.requestId})];assert.equal(abandonedClaim,undefined,'a Child interrupted before durable admission must never dispatch its abandoned original request');
+  }
   for(const fault of faultedRequests.filter((f:any)=>f.member===member.id)){
    const step=steps.get(JSON.stringify([member.hostId,fault.generation,fault.requestId]));assert.ok(step,'faulted request must remain in its original completed journal');assert.deepEqual(step.target,target);if(report.memberProcessCrashesExercised){assert.deepEqual(fault.target,target);assert.deepEqual(fault.principal,step.principal);assert.equal(fault.claimState,fault.boundary==='beforeHandle'?'notAdmitted':'done');}
    const reference={principal:step.principal,generation:fault.generation,requestId:fault.requestId};const claim:claims.ClaimRec|undefined=space.rpc?.claims[claims.keyOf(space,reference)];assert.ok(claim,'original request must have a retained claim on original Member');
@@ -71,5 +96,5 @@ try{
    checked.push({member:member.id,boundary:fault.boundary,requestId:fault.requestId,claimState:claim.state});
   }
  }
- assert.equal(allClaimsChecked,config.jobs*5+probes.length*12);assert.equal(checkedAcks.length,ackFaults.length);assert.equal(checked.length,expectedFaults);writeFileSync(output,JSON.stringify({passed:true,scope:'closed fixture journal and Member claim audit on private copies',sourceStoresOpenedReadOnly:true,parents,commands,allParentsAndChildrenDone:true,unusedFutureReservations:0,allOriginalClaimsChecked:allClaimsChecked,ackBoundariesChecked:checkedAcks.length,checkedAcks,faultedClaimsChecked:checked.length,originalTargetIdentityAndArgumentHashesPreserved:true,checked},null,2)+'\n');console.log(JSON.stringify({passed:true,parents,commands,allOriginalClaimsChecked:allClaimsChecked,ackBoundariesChecked:checkedAcks.length,checkedAcks,faultedClaimsChecked:checked.length}));
+ assert.equal(allClaimsChecked,config.jobs*5+probes.length*12+readProbes.length*3);assert.equal(checkedAcks.length,ackFaults.length);assert.equal(checked.length,expectedFaults);writeFileSync(output,JSON.stringify({passed:true,scope:'closed fixture journal and Member claim audit on private copies',sourceStoresOpenedReadOnly:true,parents,commands,allParentsAndChildrenDone:true,unusedFutureReservations:0,allOriginalClaimsChecked:allClaimsChecked,ackBoundariesChecked:checkedAcks.length,checkedAcks,journalBoundariesChecked:checkedJournals.length,checkedJournals,faultedClaimsChecked:checked.length,originalTargetIdentityAndArgumentHashesPreserved:true,checked},null,2)+'\n');console.log(JSON.stringify({passed:true,parents,commands,allOriginalClaimsChecked:allClaimsChecked,ackBoundariesChecked:checkedAcks.length,checkedAcks,journalBoundariesChecked:checkedJournals.length,checkedJournals,faultedClaimsChecked:checked.length}));
 }finally{for(const host of hosts)await host.close(ctx);}

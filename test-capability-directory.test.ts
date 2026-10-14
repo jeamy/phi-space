@@ -20,9 +20,10 @@ for(const backend of BACKENDS)test(`${backend}: protected capabilities, bounded 
  assert.throws(()=>core.renew(s,now,s.entries[0]!.id,core.FOREVER,'worker'),core.PermissionError);
  const target={hostId:'a',spaceId:'jobs-a',authorityId:'authority',dataIncarnation:'1',primaryEpoch:1};
  await host.commit(async tx=>{(await tx.doc(FederationRouting,sid,null)).members.a={id:'a',state:'active',target};},ctx);
- let online=true;const statuses=new MemberStatusDirectory({host,ctx,controlSpaceId:sid,assertAuthority:async()=>{},now:()=>now,probe:async()=>{if(!online)throw Error('offline');return{revision:9,free:200,lag:null};}});
+ let online=true,known=true;const statuses=new MemberStatusDirectory({host,ctx,controlSpaceId:sid,assertAuthority:async()=>{},now:()=>now,probe:async()=>{if(!online)throw Error('offline');return{revision:9,free:known?200:null,lag:null};}});
  await statuses.refresh();let routing=await host.snapshot(FederationRouting,sid,ctx);assert.deepEqual(routing!.members.a!.capabilities!.names,['sieve']);
  s=(await snapshotSpace(host,sid,ctx))!;assert.equal(core.list(s,now,{type:'MemberStatus'})[0]!.fields.reachable,true);
+ known=false;await statuses.refresh();routing=await host.snapshot(FederationRouting,sid,ctx);assert.equal(routing!.members.a!.capacity,undefined);s=(await snapshotSpace(host,sid,ctx))!;assert.equal(core.list(s,now,{type:'MemberStatus'})[0]!.fields.reachable,true);
  online=false;now+=15000;await statuses.refresh();routing=await host.snapshot(FederationRouting,sid,ctx);assert.equal(routing!.members.a!.capacity,undefined);assert.equal(routing!.members.a!.capabilities,undefined);
  now+=120001;await host.commit(async tx=>core.settle(await spaceDoc(tx,sid,now),now),ctx);s=(await snapshotSpace(host,sid,ctx))!;assert.equal(core.list(s,now,{type:'Capability'}).length,0);assert.equal(core.list(s,now,{type:'MemberStatus'}).length,0);
  }finally{await home.dispose();}

@@ -1,0 +1,91 @@
+{
+  "passed": true,
+  "batches": [
+    {
+      "batch": 1,
+      "kinds": [
+        "parentAdmission",
+        "futureReservation",
+        "childAcceptance"
+      ],
+      "elapsedMs": 468442,
+      "rootDeaths": 6,
+      "parents": 5024,
+      "originalClaims": 5072,
+      "jobs": 1000,
+      "initialEntries": 10000,
+      "sixWorkersAtEveryDeath": true
+    },
+    {
+      "batch": 2,
+      "kinds": [
+        "childBinding",
+        "parentReady",
+        "childInflight"
+      ],
+      "elapsedMs": 499317,
+      "rootDeaths": 6,
+      "parents": 5024,
+      "originalClaims": 5072,
+      "jobs": 1000,
+      "initialEntries": 10000,
+      "sixWorkersAtEveryDeath": true
+    },
+    {
+      "batch": 3,
+      "kinds": [
+        "childCompletion",
+        "registration",
+        "candidate"
+      ],
+      "elapsedMs": 487395,
+      "rootDeaths": 6,
+      "parents": 5024,
+      "originalClaims": 5072,
+      "jobs": 1000,
+      "initialEntries": 10000,
+      "sixWorkersAtEveryDeath": true
+    },
+    {
+      "batch": 4,
+      "kinds": [
+        "winner",
+        "parentCompletion",
+        "futureRelease"
+      ],
+      "elapsedMs": 497384,
+      "rootDeaths": 6,
+      "parents": 5024,
+      "originalClaims": 5072,
+      "jobs": 1000,
+      "initialEntries": 10000,
+      "sixWorkersAtEveryDeath": true
+    },
+    {
+      "batch": 5,
+      "kinds": [
+        "parentCursor"
+      ],
+      "elapsedMs": 443914,
+      "rootDeaths": 2,
+      "parents": 5002,
+      "originalClaims": 5006,
+      "jobs": 1000,
+      "initialEntries": 10000,
+      "sixWorkersAtEveryDeath": true
+    }
+  ],
+  "journalDeaths": 26,
+  "journalKinds": 13,
+  "jobsPerBatch": 1000,
+  "initialEntriesPerBatch": 10000,
+  "allOriginalClaimsChecked": 25294,
+  "allParentsChecked": 25098,
+  "unusedFutureReservations": 0,
+  "activeTransactions": 0,
+  "physicalServers": 1,
+  "allExplicitSuccessfulJournalTransitions": true,
+  "fullPhase2Accepted": false,
+  "remainingBlocks": 5,
+  "librarySha256": "3d7f2f0a8496d8fa07534786e579127c5143d4b704d37c23bffb7e3983d37a94"
+}

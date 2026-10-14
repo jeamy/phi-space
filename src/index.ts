@@ -476,3 +476,12 @@ export * from "./federation-journals.ts";
 
 export {RouterJournal} from "./router.ts";
 export type {RoutingState} from "./routing-semantics.ts";
+
+export {createConfiguredRoot,type RootConfig} from "./configured-root.ts";
+
+export {ProfileTransitionController,ProfileTransitions} from "./profile-transition.ts";
+
+export {RootHistoryErasure,RootErasures} from './root-erasure.ts';
+
+export {ErasureArchiveController,type ErasureArchive} from './erasure-archives.ts';
+export {checkErasureBarrier,type ErasureBarrier} from './erasure-barrier.ts';

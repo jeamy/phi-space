@@ -1,3 +1,4 @@
+import type {ProfileTransitionController} from './profile-transition.ts';
 import type {DataAdminController} from "./data-admin.ts";
 import type {CapabilityDirectory} from "./capability-directory.ts";
 import type {MemberLifecycle,MembershipController} from "./membership.ts";
@@ -29,7 +30,7 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	delegation?: DelegationVerifier;
 	membership?: MemberLifecycle;
 	refreshPolicy?:()=>Promise<void>;
-	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; dataAdmin?:DataAdminController; membership?: MembershipController };
+	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
 export async function startFederationHost(host: Harness, ctx: Context, o: FederationHostOptions) {
 	if (o.control && o.control.host !== host) throw new Error("the authoritative control runtime must use its own harness");
@@ -92,9 +93,11 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
             if(o.control.dataAdmin) for(const kind of ["purgeTasks","deletePrincipal"] as const) {
                 asyncCommands[kind]=(id,args,admin)=>o.control!.dataAdmin!.execute(id,kind,String(args.spaceId??""),admin,(kind==="purgeTasks"?args.template:args.principal) as any) as any;
             }
+            const administer=<T>(peerId:string,run:()=>Promise<T>)=>o.control!.withAdmin?o.control!.withAdmin(peerId,run):run();
+            if(o.control.profiles)asyncCommands.migrateProfiles=async(id,args,admin)=>administer(admin,()=>o.control!.profiles!.execute(id,args.policy as any)) as any;
             if(o.control.membership) for(const kind of ["addMember","drain","removeMember"] as const) {
-                asyncCommands[kind]=async(id,args)=>{
-                    const r=await o.control!.membership!.execute(id,kind==="addMember"?"add":kind==="drain"?"drain":"remove",args.member as any,args.newDefault as any);
+                asyncCommands[kind]=async(id,args,admin)=>{
+                    const r=await administer(admin,()=>o.control!.membership!.execute(id,kind==="addMember"?"add":kind==="drain"?"drain":"remove",args.member as any,args.newDefault as any));
                     return {phase:r.phase,memberId:r.member.id,...(r.error?{error:r.error}:{}),...(r.policy?{policyVersion:r.policy.policyVersion}:{})};
                 };
             }

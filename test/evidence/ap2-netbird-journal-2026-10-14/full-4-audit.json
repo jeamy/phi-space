@@ -1,0 +1,60 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 5024,
+  "commands": 5072,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "allOriginalClaimsChecked": 5072,
+  "ackBoundariesChecked": 0,
+  "checkedAcks": [],
+  "journalBoundariesChecked": 6,
+  "checkedJournals": [
+    {
+      "kind": "winner",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-0",
+      "commitSeq": null,
+      "originalParentPlanPreserved": true
+    },
+    {
+      "kind": "winner",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-1",
+      "commitSeq": 13999,
+      "originalParentPlanPreserved": true
+    },
+    {
+      "kind": "parentCompletion",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-2",
+      "commitSeq": null,
+      "originalParentPlanPreserved": true
+    },
+    {
+      "kind": "parentCompletion",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-3",
+      "commitSeq": 19113,
+      "originalParentPlanPreserved": true
+    },
+    {
+      "kind": "futureRelease",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-4",
+      "commitSeq": null,
+      "originalParentPlanPreserved": true
+    },
+    {
+      "kind": "futureRelease",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-5",
+      "commitSeq": 24209,
+      "originalParentPlanPreserved": true
+    }
+  ],
+  "faultedClaimsChecked": 0,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": []
+}

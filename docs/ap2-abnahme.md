@@ -4,16 +4,16 @@
 Bausteintests, den Member-Lasttest und den noch offenen Verbundbetrieb.
 Die bisherigen Nachweise zu AP 1b bleiben bestehen.
 
-## Aktuelle verbleibende Testblöcke (2026-10-13)
+## Aktuelle verbleibende Testblöcke (2026-10-14)
 
 Die Phase-2-Abnahmen sind in acht technische Blöcke gebündelt; jeder Block
-umfasst mehrere Einzeltests. Blöcke 1 und 2 sind inzwischen abgenommen, **sechs
+umfasst mehrere Einzeltests. Blöcke 1–3 sind inzwischen abgenommen, **fünf
 Blöcke bleiben offen**, danach folgt die Gesamtfreigabe mit finalen Gate-4-Werten.
 Die Blöcke 4–8 benötigen teilweise noch Implementierung oder Betriebsentscheidungen.
 
 - [x] 1. Mailbox-ACK-Abbrüche über NetBird unter voller Joblast.
 - [x] 2. Individuelle Member-Prozessabbrüche und Wiederaufnahme.
-- [ ] 3. Gezielt unterbrochene Journal-Commits über NetBird.
+- [x] 3. Gezielt unterbrochene Journal-Commits über NetBird.
 - [ ] 4. Produktive Root-/Directory-Provisionierung samt Boot-/Fencing-Prüfung.
 - [ ] 5. Nachweis über unabhängige physische Ausfalldomänen.
 - [ ] 6. Verteilte Principal-Löschung einschließlich Router-/Parent-Historien.
@@ -552,3 +552,102 @@ bestehende Produktionsdienste bleiben aktiv. Der Nachweis ersetzt weder
 Promotion/Boot/Fencing noch unabhängige physische Ausfalldomänen oder Power-Loss-
 Prüfung. **Sechs Testblöcke sowie die Gesamtfreigabe bleiben offen.** Als nächstes
 folgt Testblock 3 mit gezielt unterbrochenen expliziten Root-Journal-Commits.
+
+
+## Journal-Commit-Abbrüche über NetBird (2026-10-14)
+
+**Testblock 3 ist abgenommen.** Fünf frische Volllastläufe mit jeweils
+10.000 initialen Entries und 1.000 Jobs decken 13 erfolgreiche Journal-
+Zustandsübergänge unmittelbar vor und nach dem tatsächlichen atomaren
+`Storage.commit` ab. Alle 26 Root-Abbrüche sind bestätigte SIGKILLs;
+bei jedem liefen sechs Job-Worker. Geprüft sind Parent-Aufnahme, Future-
+Reservierung, Child-Aufnahme, Child-Bindung, Parent-ready, Child-inflight,
+Child-Abschluss, Registrierung, Kandidat, Gewinner, Parent-Abschluss,
+Reservierungsfreigabe und Cursor-Fortschritt bei einem Read-Miss.
+
+Die Klassifikation prüft Dokumentfamilie, konkrete Parent-/Child-ID und
+materialisierte Vor-/Nachzustände. Nach dem Commit werden Zustand und
+Commit-Sequenz erneut vom Backend gelesen. Jeder anschließende Audit arbeitet
+auf privaten Kopien geschlossener, read-only gemounteter Stores und prüft alle
+ursprünglich journalisierten Child-Claims und die 26 Abbruchstellen. Vor der
+dauerhaften Child-Aufnahme verworfene Identitäten bleiben nicht angenommen;
+danach bleiben Generation, Request-ID, Principal, Target und Argumente erhalten.
+Waiting-Take-Proben behalten einen Gewinner und geben die Verlierer zurück.
+Keine aktive Transaktion oder ungenutzte Reservierung bleibt offen.
+
+Der erste kleine Lauf erkannte die zunächst nicht erfasste Dokument-Erstanlage
+und scheiterte korrekt bei 22 statt 26 Abbrüchen. Nach Korrektur bestehen die
+vier Erstanlage-Proben samt Audit und alle fünf vollständigen Läufe.
+Zusätzliche Probe-Entries zählen nicht zum anfänglich geprüften 10.000er Bestand.
+[Nachweise](../test/evidence/ap2-netbird-journal-2026-10-14/).
+
+Die Abnahme umfasst erfolgreiche Daten-/Wettlauf-Journale. Fehler-/Review-,
+Restore-, Lösch- und Profilumstellungsabläufe haben eigene Abnahmen.
+Die fünf übrigen Testblöcke und die Gesamtfreigabe bleiben offen.
+
+## Fortsetzung der Blöcke 4–8 am 2026-10-14
+
+Die native Root-Provisionierung, Root-/Child-Historienlöschung, unabhängigen
+Löschbarrieren, der Archivkatalog und die kontrollierte Profilumstellung sind
+implementierte Bausteine. Ihre Grenzen und noch fehlenden Betriebsbindungen
+stehen im [Implementierungsstand](implementierungsstand.md#phase-2).
+Sie ersetzen die offenen Live-Abnahmen nicht.
+
+Ein definitiver Child-Fehler führte bisher in zusammengesetzten Schreib-/Take-
+Operationen zu wiederholtem `FederationPending`; bei einer Suchoperation konnte
+er außerdem übersprungen werden. Definitive Fehler und `needsReview` markieren
+nun den Parent dauerhaft `needsReview`. Auch wartende Race-Operationen behalten
+diese Sperre beim Replay. Acht neue Tests prüfen Write, Read, Take und Race auf
+JSONL und SQLite nach Wiederanlauf ohne einen zusätzlichen Effekt. Typecheck und
+die vollständige Suite bestehen mit **462/462 Tests**.
+
+Die eigene native Live-Umgebung umfasst Root sowie drei Members auf big, dem
+lokalen Rechner und vpsc. Sie verwendet ausschließlich ihre eigenen neuen
+Stores und einen getrennten NetBird-Test-Scope. Ein unabhängiges Root-Fencing
+verweigert normale Journaloperationen. Nach einem Verbindungsabbruch zum lokalen
+Member wurde der ursprüngliche zweite Schreibauftrag mit derselben Parent-,
+Child- und Member-Request-ID abgeschlossen. Dieser einzelne Wiederaufnahmebeleg
+ist noch keine erfolgreiche native Sieb-/Job-Abnahme. Die Blöcke 4–8 bleiben offen.
+
+
+Zusätzlich verweigert der eigene Root unter laufender Job-Produktion nach
+unabhängigem Boot-Fencing weitere Operationen. Der anschließend neu gestartete
+Root behält seine ursprüngliche Lease-ID und Router-Epoche; die drei Member-
+Runtimes bleiben dabei unverändert. Das verwendete Data-Leserzertifikat kann
+am unabhängigen Register lesen, bekommt beim CAS-Versuch aber die erwartete
+Berechtigungsablehnung.
+
+Die gemessenen Register-Lesezeiten betragen am lokalen Member im Mittel rund
+450 ms und am Root rund 58 ms (je zehn Abfragen, keine Gate-4-Perzentile).
+Der native Smoke-Treiber verwendet sechs Agenten mit ausdrücklich **höchstens
+einer gleichzeitig offenen Transaktion**. Dadurch wird keine Abnahme für sechs
+gleichzeitig offene native Root-Transaktionen behauptet. Die bisherigen
+Lastnachweise der Blöcke 1–3 behalten ihre eigene dokumentierte Nebenläufigkeit.
+
+
+Die Fortsetzung ergänzt zwei weitere sicherheitsrelevante Korrekturen:
+Identische signierte Member-Policies benötigen keinen erneuten Mutations-Commit;
+der normale geschützte Snapshot und eine erneute Authority-Prüfung bleiben
+verpflichtend. Tatsächliche Profil-/Policy-Änderungen laufen weiterhin über
+vollständig geprüfte Commits. Zwei neue Backend-Tests prüfen dabei insbesondere
+Widerruf während der Abfrage und ungültige Signaturen.
+
+Explizite Wire-Antworten `TransactionError` und `CompletionViolation` werden
+bei Effect-Dispatch und Claim-Auflösung konservativ als `needsReview` erfasst.
+Sie sind weder ein Transportausfall noch ein Nachweis einer erfolgreichen
+Wirkung. Zwei neue TCP-/Backend-Tests prüfen, dass nach der Antwort und nach
+Wiederanlauf kein weiterer Effekt gesendet wird. Beim eigenen nativen Lauf sind
+alle zwölf Schreib-Parents abgeschlossen; die ersten beiden Transaktionen
+sind vor der Take-Admission abgelaufen. Dieser Lauf bleibt daher ein negativer
+Betriebsnachweis und gibt Phase 2 nicht frei. Die ursprünglichen IDs und ihre
+Historien werden nicht durch Ersatz-IDs oder gelöschte Journale verdeckt.
+
+
+Die [Nachweise der nativen Fortsetzung](../test/evidence/ap2-native-root-2026-10-14/README.md)
+enthalten Tests, Artefakt-Prüfsummen, Fencing, die CAS-Ablehnung und den dauerhaft
+prüfpflichtigen ursprünglichen Request. Die eigene Testumgebung ist anschließend
+beendet: sechs Container, sechs genau zugeordnete Firewall-Ausnahmen und die
+temporären NetBird-Objekte sind entfernt. Die eigenen vier Boot-Einträge und die
+eigene Autorität sind gefenced; die Stores bleiben als Nachweis erhalten. Alle
+drei geschützten bestehenden Services sind weiterhin aktiv, ebenso das vorhandene
+Tailscale auf vpsc und NetBird am lokalen Rechner.

@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: journal classifier excludes other Parents, commands, budgets and unrelated document families
+ok 1 - journal classifier excludes other Parents, commands, budgets and unrelated document families
+  ---
+  duration_ms: 4.590064
+  type: 'test'
+  ...
+# Subtest: journal classifier covers every selected transition and excludes unchanged replay
+ok 2 - journal classifier covers every selected transition and excludes unchanged replay
+  ---
+  duration_ms: 1.612165
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 248.816215

@@ -12,7 +12,8 @@ import {
 
 export type MemberAdmission = {
     memberId: string; authorityId : string; policy : FederationPolicy | null;
-    state : 'adding' | 'active' | 'draining' | 'removing' | 'detached' | 'recoveryBlocked';
+    state : 'adding' | 'active' | 'draining' | 'removing' | 'detached' | 'recoveryBlocked' | 'profileFrozen';
+    profileTransition?:{id:string;hash:string};
     admissionVersion : number;
     transitionId : string;
     drainAt?: number;
@@ -27,7 +28,7 @@ export function permitRoutedWrite(s: SpaceState, proven: boolean) { routerPermit
 export function assertMemberAdmission(s: SpaceState, method: string) {
     if(s.adminMaintenance)throw new MemberDrained("Space has a pending administrative deletion");
     const a = s.membership;
-    if (a && [ 'adding', 'removing', 'detached', 'recoveryBlocked' ].includes(a.state) &&
+    if (a && [ 'adding', 'removing', 'detached', 'recoveryBlocked', 'profileFrozen' ].includes(a.state) &&
         !['ack', 'cancelOperation', 'txn.abort'].includes(method))
         throw new MemberDrained('Member admission is ' + a.state);
 }

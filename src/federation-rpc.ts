@@ -1,7 +1,7 @@
 // Production wire adapter: app-key proof, original grants and per-call signed delegation.
 import type {Signer} from './auth.ts';
 import {argHash, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
-import {PermissionError, type Json, type Template} from './core.ts';
+import {PermissionError, TransactionError, CompletionViolation, type Json, type Template} from './core.ts';
 import {
     delegationForCall,
     signDelegation,
@@ -125,7 +125,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
             request : {generation : s.generation, requestId : s.requestId},
             frame : {authorityId : s.target.authorityId, primaryEpoch : s.target.primaryEpoch}
         }); }catch(e){
-            if(e instanceof RequestConflict||e instanceof RequestExpired||e instanceof ResultExpired||e instanceof IncarnationChanged||e instanceof PermissionError)return this.receipt(s,'needsReview',undefined,e.constructor.name);
+            if(e instanceof RequestConflict||e instanceof RequestExpired||e instanceof ResultExpired||e instanceof IncarnationChanged||e instanceof PermissionError||e instanceof TransactionError||e instanceof CompletionViolation)return this.receipt(s,'needsReview',undefined,e.constructor.name);
             throw e;
         }
         return this.resolve(s);
@@ -153,10 +153,10 @@ export class FederationRpc implements RouterTarget, FederationIO {
                                 v.result, v.error?.code);
         } catch (e) {
             if (e instanceof RequestConflict || e instanceof RequestExpired || e instanceof ResultExpired ||
-                e instanceof IncarnationChanged || e instanceof PermissionError)
+                e instanceof IncarnationChanged || e instanceof PermissionError || e instanceof TransactionError || e instanceof CompletionViolation)
                 return this.receipt(s, 'needsReview', undefined, e.constructor.name);
             if (e instanceof RemoteError && [
-                    'RequestConflict', 'RequestExpired', 'ResultExpired', 'IncarnationChanged', 'PermissionDenied'
+                    'RequestConflict', 'RequestExpired', 'ResultExpired', 'IncarnationChanged', 'PermissionDenied', 'TransactionError', 'CompletionViolation'
                 ].includes(e.code))
                 return this.receipt(s, 'needsReview', undefined, e.code);
             throw e;

@@ -1,3 +1,4 @@
+import {ProfileTransitions} from './profile-transition-doc.ts';
 // Authoritative policy persistence and supervisor signature; pure routing is separate.
 import type {Context} from '@earendil-works/chord';
 import {defineDocFamily, type Tx} from '@earendil-works/pi-durable';
@@ -88,6 +89,8 @@ export async function applyFederationPolicyIn(tx: Tx, controlSpaceId: string, au
                                               p: FederationPolicy, expectedVersion: number,
                                               allowedRemoval: ReadonlySet < string >=
                                                   new Set()): Promise<FederationPolicy> {
+    const profiles=await tx.doc(ProfileTransitions,controlSpaceId,null);
+    if(Object.values(profiles.operations).some(op=>op.phase!=='completed'))throw new RoutingConflict('profile transition blocks ordinary policy changes');
     const d = await tx.doc(FederationRouting, controlSpaceId, null);
     if ((d.policy?.policyVersion ?? 0) !== expectedVersion || p.authorityId !== authorityId)
         throw new RoutingConflict("stale policy command");

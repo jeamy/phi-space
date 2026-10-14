@@ -368,3 +368,13 @@ for (const b of BACKENDS)
              assert.equal((await controller.execute('remove-race', 'remove', o.members.b)).phase,
                           'completed');
          }));
+
+for(const backend of BACKENDS)test(`${backend}: identical signed Member policy avoids mutation but retains guarded reads and authority checks`,()=>fixture(backend,async o=>{
+ await o.make().execute('same-policy-add','add',o.members.a);const token=await o.authority.signed();await o.nodes.a.installPolicy(token);
+ let commits=0,snapshots=0,revoked=false,revokeOnSnapshot=false;
+ const guarded=new Proxy(o.a,{get(target,key){if(key==='commit')return (...args:any[])=>{commits++;return target.commit(...args);};if(key==='snapshot')return async(...args:any[])=>{snapshots++;const value=await target.snapshot(...args);if(revokeOnSnapshot)revoked=true;return value;};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}}),node=new MemberLifecycle({...o.nodes.a.o,host:guarded,assertAuthority:async()=>{if(revoked)throw Error('authority revoked');}});
+ await node.installPolicy(token);assert.equal(commits,0);assert.ok(snapshots>0);
+ revokeOnSnapshot=true;await assert.rejects(node.installPolicy(token),/authority revoked/);assert.equal(commits,0);
+ revoked=false;revokeOnSnapshot=false;await assert.rejects(node.installPolicy({...token,signature:'invalid'}),RoutingConflict);assert.equal(commits,0);
+ const previous=(await snapshotSpace(o.a,o.members.a.target.spaceId,ctx))!.membership!;assert.equal(previous.policy!.policyVersion,token.policy.policyVersion);
+}));

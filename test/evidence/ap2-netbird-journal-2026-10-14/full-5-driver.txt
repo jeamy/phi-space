@@ -1,0 +1,7 @@
+build-ready
+provisioning
+running
+restarting-root-1
+restarting-root-2
+passed
+cleanup-finished

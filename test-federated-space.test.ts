@@ -412,3 +412,13 @@ for(const b of BACKENDS){
   }
  }));
 }
+
+for(const b of BACKENDS)for(const kind of ['write','read','take','race'] as const)
+ test(`${b}: ${kind} persists a definitive failed Child as review across reopen`,()=>fixture(b,async o=>{
+  let invokes=0;o.sim.invoke=async(s:any)=>{invokes++;return{target:s.target,principal:s.principal,method:s.method,generation:s.generation,requestId:s.requestId,argHash:s.argHash,outcome:'failed',evidence:'TransactionError'};};
+  const request={id:'failed-'+kind,principal:o.p},template={type:'Job'};
+  const run=()=>kind==='write'?o.f.write({type:'Job',fields:{}},request):kind==='read'?o.f.read(template,request):kind==='take'?o.f.take(template,request):o.f.takeWaiting(template,10000,5000,request);
+  await assert.rejects(run(),FederationUnavailable);assert.equal(invokes,1);
+  const key=parentJournalKey('federation',8,operationPartition(request.id,8)),parent=(await o.host.snapshot(FederationOperations,key,ctx)).operations[request.id];assert.equal(parent.phase,'needsReview');
+  await o.reopen();await assert.rejects(o.f.resume(request.id),FederationUnavailable);await assert.rejects(run(),FederationUnavailable);assert.equal(invokes,1);
+ },8));

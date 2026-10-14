@@ -376,3 +376,43 @@ Ersatz-ID. Bekannte Claims liefern weiterhin `pending`, `done` oder `cancelled`
 mit bisherigen Retention-/Restore-Markierungen. Für alte Members ohne
 `resolveOperation` fällt der Router auf `pollOperation` für bekannte Claims
 zurück; ein unbekannter Ausgang bleibt dort konservativ `needsReview`.
+
+
+### Native Root- und Verwaltungsbausteine (2026-10-14)
+
+`startConfiguredFederation` akzeptiert im Control-Modus optional `root` mit
+festem Root-ID, getrennten `keyFile`/`hostKeyFile`, privatem `leaseFile`,
+`journalPartitions` und provisionierten `members`. Ein Member bindet sein
+Zieltupel, Peer-ID, App-Key-Pin und seine Overlay-Adresse. `createConfiguredRoot`
+prüft die unabhängige Boot-/Control-Autorisierung und aktive Schlüssel; es liefert
+die serverseitigen Federation-Controller sowie `close()`. Mit
+`allowMembershipCommands` und `adminPeer` verarbeiten die echten Supervisor-
+Handler Membership- und Profilbefehle im autorisierten Admin-Kontext.
+Dies erzeugt keinen öffentlichen virtuellen Root-Space-RPC-Endpunkt.
+
+`ProfileTransitionController.execute(id, nextPolicy)` ersetzt ausschließlich
+Abschlussprofile bei um eins erhöhter Policy-Version. Offene Root-Aufträge,
+Transaktionen und Membership-Wechsel verhindern den Start. `start` und `advance`
+erlauben einzelnen, dauerhaft journalisierten Fortschritt; dieselbe ID bindet
+dieselbe Policy. Members werden eingefroren, umgestellt und erst nach
+Veröffentlichung der neuen Policy aktiviert. Der Supervisor-Command heißt
+`migrateProfiles`, mit `args.policy`; der Controller muss provisioniert sein.
+Gewöhnliche `setPolicy`-Änderungen bestehender Profile bleiben gesperrt.
+
+`RootHistoryErasure` entfernt unter separater Operator-Autorisierung und
+nachgewiesenem exklusiven Fencing Principal-Inhalte aus Root-Parent-/Child-
+Historien. Erfasste Entry-Digests schließen betroffene fremde gecachte Ergebnisse
+ein. Alte Request-IDs bleiben gebunden und liefern `ResultExpired`; sie werden
+nicht für neue Wirkungen freigegeben. `DataAdminController` bleibt für die
+lokalen Data-Inhalte zuständig. Ein vollständiger verteilter Löschlauf entsteht
+nicht allein durch diese beiden Bausteine.
+
+`ErasureArchiveController` verlangt Operator-Autorisierung, eine
+`destroy`-Funktion und eine unabhängige `verifyDeletion`-Prüfung. Es registriert
+Archive, beginnt eine Lösch-Epoche, quarantänisiert ältere Archive, verarbeitet
+Löschfristen und versiegelt die Epoche nach geprüftem lokalem Abschluss.
+`assertRestore(spaceId, artifactId)` prüft Katalog und aktuelle Epoche; der
+Restore-Aufrufer muss zusätzlich die tatsächlichen Archivbytes an den
+registrierten Hash binden. Unvollständige Löschungen, alte Snapshot-Epochen und
+überfällige Archive sperren normale Dienste durch den unabhängigen Register-
+Eintrag. Die vollständige Backup-/Restore-Betriebsintegration steht noch aus.

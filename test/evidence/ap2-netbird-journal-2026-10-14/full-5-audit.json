@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "scope": "closed fixture journal and Member claim audit on private copies",
+  "sourceStoresOpenedReadOnly": true,
+  "parents": 5002,
+  "commands": 5006,
+  "allParentsAndChildrenDone": true,
+  "unusedFutureReservations": 0,
+  "allOriginalClaimsChecked": 5006,
+  "ackBoundariesChecked": 0,
+  "checkedAcks": [],
+  "journalBoundariesChecked": 2,
+  "checkedJournals": [
+    {
+      "kind": "parentCursor",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-0",
+      "commitSeq": null,
+      "originalParentPlanPreserved": true
+    },
+    {
+      "kind": "parentCursor",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-1",
+      "commitSeq": 13247,
+      "originalParentPlanPreserved": true
+    }
+  ],
+  "faultedClaimsChecked": 0,
+  "originalTargetIdentityAndArgumentHashesPreserved": true,
+  "checked": []
+}

@@ -1,0 +1,1980 @@
+{
+  "journalCommitCrashesExercised": true,
+  "journalCrashKinds": [
+    "winner",
+    "parentCompletion",
+    "futureRelease"
+  ],
+  "journalCrashesUnderWorkerLoad": true,
+  "memberProcessCrashesExercised": false,
+  "memberProcessCrashes": [],
+  "memberCrashesUnderWorkerLoad": false,
+  "ackProbes": [
+    {
+      "parentId": "journal-race-0",
+      "probeId": "ack-probe-0",
+      "winner": {
+        "id": "ef9d3cfe7-3327",
+        "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3327",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-0-2",
+          "probeId": "ack-probe-0",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "winner",
+      "boundary": "beforeCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-1",
+      "probeId": "ack-probe-1",
+      "winner": {
+        "id": "ef9d3cfe7-3338",
+        "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3338",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-1-5",
+          "probeId": "ack-probe-1",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "winner",
+      "boundary": "afterCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-2",
+      "probeId": "ack-probe-2",
+      "winner": {
+        "id": "ef9d3cfe7-3349",
+        "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-2-1",
+          "probeId": "ack-probe-2",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "parentCompletion",
+      "boundary": "beforeCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-3",
+      "probeId": "ack-probe-3",
+      "winner": {
+        "id": "ef9d3cfe7-3360",
+        "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-3-1",
+          "probeId": "ack-probe-3",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "parentCompletion",
+      "boundary": "afterCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-4",
+      "probeId": "ack-probe-4",
+      "winner": {
+        "id": "ef9d3cfe7-3373",
+        "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3373",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-4-4",
+          "probeId": "ack-probe-4",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "futureRelease",
+      "boundary": "beforeCommit",
+      "replayStable": true,
+      "remaining": 2
+    },
+    {
+      "parentId": "journal-race-5",
+      "probeId": "ack-probe-5",
+      "winner": {
+        "id": "ef9d3cfe7-3388",
+        "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3388",
+        "type": "AckProbe",
+        "types": [
+          "AckProbe"
+        ],
+        "fields": {
+          "taskId": "ack-probe-5-0",
+          "probeId": "ack-probe-5",
+          "member": "a"
+        },
+        "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+      },
+      "kind": "race",
+      "journalKind": "futureRelease",
+      "boundary": "afterCommit",
+      "replayStable": true,
+      "remaining": 2
+    }
+  ],
+  "expectedProcessCrashes": 6,
+  "expectedRootProcessCrashes": 6,
+  "ackCrashesUnderWorkerLoad": false,
+  "processCrashEffects": [
+    "txn-commit"
+  ],
+  "processCrashGapJobs": 62,
+  "processCrashEffect": "txn-commit",
+  "processCrashBoundary": "both",
+  "processCrashMembers": [
+    "a",
+    "b",
+    "c"
+  ],
+  "processCrashes": [
+    {
+      "kind": "winner",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-0",
+      "effect": "journal",
+      "documentId": 2032,
+      "documentKind": "pi-spaces.federation-operations",
+      "documentKey": "e74df654a9b694274007883e5ee2a4d0d3e47c6832681bc740186cac11896d33",
+      "budgetId": "f-568df68003d6aa5012a287d4538ad92fab2e1e9836686b4c38b9788f6f0acf58",
+      "before": {
+        "id": "journal-race-0",
+        "hash": "f5abd609cb71af1d82d5045577e6e4ac14428b1a5fbd23c5cbc96ff5ca432fb1",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-0"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-0"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "ready",
+        "deadline": 1791951728126,
+        "children": {
+          "a": "f-206a7e0dc8d0b2b3ba8fa6599c0443a89fc4b24b9f73b240cedac57e73a2f8c1",
+          "b": "f-fd3428389ec13d6a1ed580d8db846f50cd448aca05e2a9225cf0be82069626ab",
+          "c": "f-989c0ceb4c6d149b1c57f5d8d7af9e14f4ec57874f64020ca38004a15f6bcdb8"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3326",
+          "b": "wf041a900-3350",
+          "c": "w714d4e40-3327"
+        },
+        "cursor": 0,
+        "candidates": {
+          "fbf8299037c03967951cf52ac7e38528efbfb6661a23f9f48c410bcfa31db0b4": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3326",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-0"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3327",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3327",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-0-2",
+                  "probeId": "ack-probe-0",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3328"
+            },
+            "txn": "tf9d3cfe7-3328",
+            "entry": {
+              "id": "ef9d3cfe7-3327",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3327",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-0-2",
+                "probeId": "ack-probe-0",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "7dba5558b6f47de29b79795bc108b0bb16f511274fa73f7d907fc660b7cecab2": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3350",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-0"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]",
+              "entry": {
+                "id": "ef041a900-3352",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3352",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-0-1",
+                  "probeId": "ack-probe-0",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3353"
+            },
+            "txn": "tf041a900-3353",
+            "entry": {
+              "id": "ef041a900-3352",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3352",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-0-1",
+                "probeId": "ack-probe-0",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "90ae1419368581be3d649d858b66b073d48a47b5b1ceb5728cec55c60ae3cd14": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3327",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-0"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]",
+              "entry": {
+                "id": "e714d4e40-3338",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3338",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-0-0",
+                  "probeId": "ack-probe-0",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3339"
+            },
+            "txn": "t714d4e40-3339",
+            "entry": {
+              "id": "e714d4e40-3338",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3338",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-0-0",
+                "probeId": "ack-probe-0",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        }
+      },
+      "plannedAfter": {
+        "id": "journal-race-0",
+        "hash": "f5abd609cb71af1d82d5045577e6e4ac14428b1a5fbd23c5cbc96ff5ca432fb1",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-0"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-0"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "ready",
+        "deadline": 1791951728126,
+        "children": {
+          "a": "f-206a7e0dc8d0b2b3ba8fa6599c0443a89fc4b24b9f73b240cedac57e73a2f8c1",
+          "b": "f-fd3428389ec13d6a1ed580d8db846f50cd448aca05e2a9225cf0be82069626ab",
+          "c": "f-989c0ceb4c6d149b1c57f5d8d7af9e14f4ec57874f64020ca38004a15f6bcdb8"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3326",
+          "b": "wf041a900-3350",
+          "c": "w714d4e40-3327"
+        },
+        "cursor": 0,
+        "candidates": {
+          "fbf8299037c03967951cf52ac7e38528efbfb6661a23f9f48c410bcfa31db0b4": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3326",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-0"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3327",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3327",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-0-2",
+                  "probeId": "ack-probe-0",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3328"
+            },
+            "txn": "tf9d3cfe7-3328",
+            "entry": {
+              "id": "ef9d3cfe7-3327",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3327",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-0-2",
+                "probeId": "ack-probe-0",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "7dba5558b6f47de29b79795bc108b0bb16f511274fa73f7d907fc660b7cecab2": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3350",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-0"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]",
+              "entry": {
+                "id": "ef041a900-3352",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3352",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-0-1",
+                  "probeId": "ack-probe-0",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3353"
+            },
+            "txn": "tf041a900-3353",
+            "entry": {
+              "id": "ef041a900-3352",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3352",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-0-1",
+                "probeId": "ack-probe-0",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "90ae1419368581be3d649d858b66b073d48a47b5b1ceb5728cec55c60ae3cd14": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3327",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-0"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-0\"]",
+              "entry": {
+                "id": "e714d4e40-3338",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3338",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-0-0",
+                  "probeId": "ack-probe-0",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3339"
+            },
+            "txn": "t714d4e40-3339",
+            "entry": {
+              "id": "e714d4e40-3338",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3338",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-0-0",
+                "probeId": "ack-probe-0",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        },
+        "winner": {
+          "member": "a",
+          "txn": "tf9d3cfe7-3328",
+          "entry": {
+            "id": "ef9d3cfe7-3327",
+            "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3327",
+            "type": "AckProbe",
+            "types": [
+              "AckProbe"
+            ],
+            "fields": {
+              "taskId": "ack-probe-0-2",
+              "probeId": "ack-probe-0",
+              "member": "a"
+            },
+            "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+          }
+        }
+      },
+      "deltaHash": "dc4abc1ad94fb60b4f18599037fd814ebf0fbce0c596eb5599b505187fe20ffa",
+      "commitSeq": null,
+      "activeWorkers": 6,
+      "completedJobs": 6,
+      "at": "2026-10-14T04:21:10.820Z"
+    },
+    {
+      "kind": "winner",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-1",
+      "effect": "journal",
+      "documentId": 2087,
+      "documentKind": "pi-spaces.federation-operations",
+      "documentKey": "f7d8932d0b00f6f7a848b437e8265d4488b0d4393d10bbbfc38642fc6b71760b",
+      "budgetId": "f-9470760e15cf3a3ae480629887846720d943a55d65f285a141185d8f59dfe993",
+      "before": {
+        "id": "journal-race-1",
+        "hash": "40b74d08e884a0776aaded67b65165e91a5b48ed5588a2f800023b26292b4538",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-1"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-1"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "ready",
+        "deadline": 1791951743005,
+        "children": {
+          "a": "f-f58649233b4676f4f52773dd2b4b1f8a8fd03d4a04b9b7312e4a403112355181",
+          "b": "f-9f2beb604bc8a1840725187eb4f8a1f7a7268562e1d075ae41754010b37ada33",
+          "c": "f-aaae171dad29fcf48f575e3323ad25721bdec2613a728a5d2e8075e390ca076b"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3336",
+          "b": "wf041a900-3367",
+          "c": "w714d4e40-3341"
+        },
+        "cursor": 0,
+        "candidates": {
+          "14919094cca046e297bba4d8b6216df256dd88c5f0787f0eb9979dc9554c5d70": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3336",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-1"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-1\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3338",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3338",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-1-5",
+                  "probeId": "ack-probe-1",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3339"
+            },
+            "txn": "tf9d3cfe7-3339",
+            "entry": {
+              "id": "ef9d3cfe7-3338",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3338",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-1-5",
+                "probeId": "ack-probe-1",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "018734ce85c7ebb81fc1fcc6ab43744ae5db2d1bb174f55d9ba8599e2667d52f": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3367",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-1"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-1\"]",
+              "entry": {
+                "id": "ef041a900-3370",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3370",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-1-4",
+                  "probeId": "ack-probe-1",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3371"
+            },
+            "txn": "tf041a900-3371",
+            "entry": {
+              "id": "ef041a900-3370",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3370",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-1-4",
+                "probeId": "ack-probe-1",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "042f0ed2683a99bb4a05adc97e39f5c692c49453a8ad60dd172c109b6e8cc699": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3341",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-1"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-1\"]",
+              "entry": {
+                "id": "e714d4e40-3345",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3345",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-1-0",
+                  "probeId": "ack-probe-1",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3346"
+            },
+            "txn": "t714d4e40-3346",
+            "entry": {
+              "id": "e714d4e40-3345",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3345",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-1-0",
+                "probeId": "ack-probe-1",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        }
+      },
+      "plannedAfter": {
+        "id": "journal-race-1",
+        "hash": "40b74d08e884a0776aaded67b65165e91a5b48ed5588a2f800023b26292b4538",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-1"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-1"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "ready",
+        "deadline": 1791951743005,
+        "children": {
+          "a": "f-f58649233b4676f4f52773dd2b4b1f8a8fd03d4a04b9b7312e4a403112355181",
+          "b": "f-9f2beb604bc8a1840725187eb4f8a1f7a7268562e1d075ae41754010b37ada33",
+          "c": "f-aaae171dad29fcf48f575e3323ad25721bdec2613a728a5d2e8075e390ca076b"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3336",
+          "b": "wf041a900-3367",
+          "c": "w714d4e40-3341"
+        },
+        "cursor": 0,
+        "candidates": {
+          "14919094cca046e297bba4d8b6216df256dd88c5f0787f0eb9979dc9554c5d70": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3336",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-1"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-1\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3338",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3338",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-1-5",
+                  "probeId": "ack-probe-1",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3339"
+            },
+            "txn": "tf9d3cfe7-3339",
+            "entry": {
+              "id": "ef9d3cfe7-3338",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3338",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-1-5",
+                "probeId": "ack-probe-1",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "018734ce85c7ebb81fc1fcc6ab43744ae5db2d1bb174f55d9ba8599e2667d52f": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3367",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-1"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-1\"]",
+              "entry": {
+                "id": "ef041a900-3370",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3370",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-1-4",
+                  "probeId": "ack-probe-1",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3371"
+            },
+            "txn": "tf041a900-3371",
+            "entry": {
+              "id": "ef041a900-3370",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3370",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-1-4",
+                "probeId": "ack-probe-1",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "042f0ed2683a99bb4a05adc97e39f5c692c49453a8ad60dd172c109b6e8cc699": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3341",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-1"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-1\"]",
+              "entry": {
+                "id": "e714d4e40-3345",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3345",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-1-0",
+                  "probeId": "ack-probe-1",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3346"
+            },
+            "txn": "t714d4e40-3346",
+            "entry": {
+              "id": "e714d4e40-3345",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3345",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-1-0",
+                "probeId": "ack-probe-1",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        },
+        "winner": {
+          "member": "a",
+          "txn": "tf9d3cfe7-3339",
+          "entry": {
+            "id": "ef9d3cfe7-3338",
+            "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3338",
+            "type": "AckProbe",
+            "types": [
+              "AckProbe"
+            ],
+            "fields": {
+              "taskId": "ack-probe-1-5",
+              "probeId": "ack-probe-1",
+              "member": "a"
+            },
+            "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+          }
+        }
+      },
+      "deltaHash": "6d08e743bda2c96cf261931ea103aa413477cbb5f9e54576598877f860ebdf75",
+      "commitSeq": 13999,
+      "activeWorkers": 6,
+      "completedJobs": 18,
+      "at": "2026-10-14T04:21:25.747Z"
+    },
+    {
+      "kind": "parentCompletion",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-2",
+      "effect": "journal",
+      "documentId": 1448,
+      "documentKind": "pi-spaces.federation-operations",
+      "documentKey": "ae431f5dded20c5c3c3bd996ba6bfb4d502e2fb69e2d2b1083ea776805fc89d0",
+      "budgetId": "f-c81144e2760e0244b1f775c4845d783046058fe8f973dc30a7c5f068b9fa6d05",
+      "before": {
+        "id": "journal-race-2",
+        "hash": "8a5c69e214c3cdb594d9bd42006e784df6c466778e2607a26992106d2f96f98a",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-2"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-2"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "ready",
+        "deadline": 1791951756574,
+        "children": {
+          "a": "f-88bcba4be6be55300f74001ca4e22664415e58afd81d2ca00ee20d185245f15a",
+          "b": "f-a09aef46a8325d3d983f28ce2366e61f858204b9e051608f9cf7d9bcac807915",
+          "c": "f-0af8a3051865ca6809c1ebd4cfd035b5b9aa1dcf8d8e6f77f2b732349b3de286"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3346",
+          "b": "wf041a900-3379",
+          "c": "w714d4e40-3350"
+        },
+        "cursor": 0,
+        "candidates": {
+          "16fe92de17a9975a96f610de73f957160c34353d456e67518367c3c556848af1": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3346",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-2\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3349",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-2-1",
+                  "probeId": "ack-probe-2",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3350"
+            },
+            "txn": "tf9d3cfe7-3350",
+            "entry": {
+              "id": "ef9d3cfe7-3349",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-2-1",
+                "probeId": "ack-probe-2",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "e3260e6a5ae820e5261198e42045421b151b3b1cf0067e7812e53569789639e4": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3379",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-2\"]",
+              "entry": {
+                "id": "ef041a900-3383",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3383",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-2-9",
+                  "probeId": "ack-probe-2",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3384"
+            },
+            "txn": "tf041a900-3384",
+            "entry": {
+              "id": "ef041a900-3383",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3383",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-2-9",
+                "probeId": "ack-probe-2",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "b8b8773ea6ebaa42ecbe0ab4fd27e0be36dc518879e33c11ff4e74b6c4f4cd63": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3350",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-2\"]",
+              "entry": {
+                "id": "e714d4e40-3355",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3355",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-2-0",
+                  "probeId": "ack-probe-2",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3356"
+            },
+            "txn": "t714d4e40-3356",
+            "entry": {
+              "id": "e714d4e40-3355",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3355",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-2-0",
+                "probeId": "ack-probe-2",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        },
+        "winner": {
+          "member": "a",
+          "txn": "tf9d3cfe7-3350",
+          "entry": {
+            "id": "ef9d3cfe7-3349",
+            "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+            "type": "AckProbe",
+            "types": [
+              "AckProbe"
+            ],
+            "fields": {
+              "taskId": "ack-probe-2-1",
+              "probeId": "ack-probe-2",
+              "member": "a"
+            },
+            "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+          }
+        }
+      },
+      "plannedAfter": {
+        "id": "journal-race-2",
+        "hash": "8a5c69e214c3cdb594d9bd42006e784df6c466778e2607a26992106d2f96f98a",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-2"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-2"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "done",
+        "deadline": 1791951756574,
+        "children": {
+          "a": "f-88bcba4be6be55300f74001ca4e22664415e58afd81d2ca00ee20d185245f15a",
+          "b": "f-a09aef46a8325d3d983f28ce2366e61f858204b9e051608f9cf7d9bcac807915",
+          "c": "f-0af8a3051865ca6809c1ebd4cfd035b5b9aa1dcf8d8e6f77f2b732349b3de286"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3346",
+          "b": "wf041a900-3379",
+          "c": "w714d4e40-3350"
+        },
+        "cursor": 0,
+        "candidates": {
+          "16fe92de17a9975a96f610de73f957160c34353d456e67518367c3c556848af1": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3346",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-2\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3349",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-2-1",
+                  "probeId": "ack-probe-2",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3350"
+            },
+            "txn": "tf9d3cfe7-3350",
+            "entry": {
+              "id": "ef9d3cfe7-3349",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-2-1",
+                "probeId": "ack-probe-2",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "e3260e6a5ae820e5261198e42045421b151b3b1cf0067e7812e53569789639e4": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3379",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-2\"]",
+              "entry": {
+                "id": "ef041a900-3383",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3383",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-2-9",
+                  "probeId": "ack-probe-2",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3384"
+            },
+            "txn": "tf041a900-3384",
+            "entry": {
+              "id": "ef041a900-3383",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3383",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-2-9",
+                "probeId": "ack-probe-2",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "b8b8773ea6ebaa42ecbe0ab4fd27e0be36dc518879e33c11ff4e74b6c4f4cd63": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3350",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-2"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-2\"]",
+              "entry": {
+                "id": "e714d4e40-3355",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3355",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-2-0",
+                  "probeId": "ack-probe-2",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3356"
+            },
+            "txn": "t714d4e40-3356",
+            "entry": {
+              "id": "e714d4e40-3355",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3355",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-2-0",
+                "probeId": "ack-probe-2",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        },
+        "winner": {
+          "member": "a",
+          "txn": "tf9d3cfe7-3350",
+          "entry": {
+            "id": "ef9d3cfe7-3349",
+            "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+            "type": "AckProbe",
+            "types": [
+              "AckProbe"
+            ],
+            "fields": {
+              "taskId": "ack-probe-2-1",
+              "probeId": "ack-probe-2",
+              "member": "a"
+            },
+            "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+          }
+        },
+        "result": {
+          "id": "ef9d3cfe7-3349",
+          "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3349",
+          "type": "AckProbe",
+          "types": [
+            "AckProbe"
+          ],
+          "fields": {
+            "taskId": "ack-probe-2-1",
+            "probeId": "ack-probe-2",
+            "member": "a"
+          },
+          "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+        }
+      },
+      "deltaHash": "8cfdba6f121be49242caa5dec9d5d347a180a6826237fe7ad018da67babaaf74",
+      "commitSeq": null,
+      "activeWorkers": 6,
+      "completedJobs": 30,
+      "at": "2026-10-14T04:21:39.685Z"
+    },
+    {
+      "kind": "parentCompletion",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-3",
+      "effect": "journal",
+      "documentId": 1074,
+      "documentKind": "pi-spaces.federation-operations",
+      "documentKey": "b14fe71f79a4b9bc2cad5c3fb6a385ed3d95eeb1ef6d67c2a16624a807ca8ed4",
+      "budgetId": "f-620e68f608f8b9f847e1b2a8be4fcf6a516fe1306afc4988f134e0bb2fa8cd97",
+      "before": {
+        "id": "journal-race-3",
+        "hash": "d5ebca046bd798846b64a5ccb2bf2788bfa5a3008336fff1f70a4ca11c475cbd",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-3"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-3"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "ready",
+        "deadline": 1791951770364,
+        "children": {
+          "a": "f-588abcfdb5f26e2c5c0e969e65479ab5d0bb69b6db8a7ce5cbdd86691a2ef952",
+          "b": "f-28ae19e33411dd7faee602448167632f63676ad031dcc15538e081f50b4518c7",
+          "c": "f-accc8861409559351e22f7edddff4d76954d1f12978a681ad6bcbe9bebab0f68"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3357",
+          "b": "wf041a900-3391",
+          "c": "w714d4e40-3361"
+        },
+        "cursor": 0,
+        "candidates": {
+          "359f5f53a2e8686d8901b16cf0f520257e4fb47ca2910c347aece628c83924bf": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3357",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-3\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3360",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-3-1",
+                  "probeId": "ack-probe-3",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3361"
+            },
+            "txn": "tf9d3cfe7-3361",
+            "entry": {
+              "id": "ef9d3cfe7-3360",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-3-1",
+                "probeId": "ack-probe-3",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "33bbfb2f8f17641609940a20b1974920c9a0a1b0962b63c157f677b2da06358f": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3391",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-3\"]",
+              "entry": {
+                "id": "ef041a900-3394",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3394",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-3-0",
+                  "probeId": "ack-probe-3",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3395"
+            },
+            "txn": "tf041a900-3395",
+            "entry": {
+              "id": "ef041a900-3394",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3394",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-3-0",
+                "probeId": "ack-probe-3",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "4954f0f4adf1646fb68f774eb01244aba2f2456ee032bfaf038241cdafea3354": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3361",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-3\"]",
+              "entry": {
+                "id": "e714d4e40-3365",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3365",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-3-2",
+                  "probeId": "ack-probe-3",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3366"
+            },
+            "txn": "t714d4e40-3366",
+            "entry": {
+              "id": "e714d4e40-3365",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3365",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-3-2",
+                "probeId": "ack-probe-3",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        },
+        "winner": {
+          "member": "a",
+          "txn": "tf9d3cfe7-3361",
+          "entry": {
+            "id": "ef9d3cfe7-3360",
+            "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+            "type": "AckProbe",
+            "types": [
+              "AckProbe"
+            ],
+            "fields": {
+              "taskId": "ack-probe-3-1",
+              "probeId": "ack-probe-3",
+              "member": "a"
+            },
+            "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+          }
+        }
+      },
+      "plannedAfter": {
+        "id": "journal-race-3",
+        "hash": "d5ebca046bd798846b64a5ccb2bf2788bfa5a3008336fff1f70a4ca11c475cbd",
+        "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "ack-worker-3"
+        },
+        "policyVersion": 1,
+        "members": [
+          "a",
+          "b",
+          "c"
+        ],
+        "targets": [
+          {
+            "hostId": "ap2-wire-a",
+            "spaceId": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce",
+            "dataIncarnation": "f9d3cfe7",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-b",
+            "spaceId": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523",
+            "dataIncarnation": "f041a900",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          },
+          {
+            "hostId": "ap2-wire-c",
+            "spaceId": "sp-38808fdb-9ecf-4328-8350-ececfbd17058",
+            "dataIncarnation": "714d4e40",
+            "authorityId": "ap2-wire-5df542a2-7329-41a5-97a7-4d42b7ca1326",
+            "primaryEpoch": 1
+          }
+        ],
+        "kind": "race",
+        "args": {
+          "template": {
+            "type": "AckProbe",
+            "fields": {
+              "probeId": "ack-probe-3"
+            }
+          },
+          "timeoutMs": 60000,
+          "txnLeaseMs": 60000
+        },
+        "phase": "done",
+        "deadline": 1791951770364,
+        "children": {
+          "a": "f-588abcfdb5f26e2c5c0e969e65479ab5d0bb69b6db8a7ce5cbdd86691a2ef952",
+          "b": "f-28ae19e33411dd7faee602448167632f63676ad031dcc15538e081f50b4518c7",
+          "c": "f-accc8861409559351e22f7edddff4d76954d1f12978a681ad6bcbe9bebab0f68"
+        },
+        "registrations": {
+          "a": "wf9d3cfe7-3357",
+          "b": "wf041a900-3391",
+          "c": "w714d4e40-3361"
+        },
+        "cursor": 0,
+        "candidates": {
+          "359f5f53a2e8686d8901b16cf0f520257e4fb47ca2910c347aece628c83924bf": {
+            "member": "a",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf9d3cfe7-3357",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-3\"]",
+              "entry": {
+                "id": "ef9d3cfe7-3360",
+                "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-3-1",
+                  "probeId": "ack-probe-3",
+                  "member": "a"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf9d3cfe7-3361"
+            },
+            "txn": "tf9d3cfe7-3361",
+            "entry": {
+              "id": "ef9d3cfe7-3360",
+              "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-3-1",
+                "probeId": "ack-probe-3",
+                "member": "a"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "33bbfb2f8f17641609940a20b1974920c9a0a1b0962b63c157f677b2da06358f": {
+            "member": "b",
+            "event": {
+              "kind": "waiter",
+              "eventId": "wf041a900-3391",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-3\"]",
+              "entry": {
+                "id": "ef041a900-3394",
+                "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3394",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-3-0",
+                  "probeId": "ack-probe-3",
+                  "member": "b"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "tf041a900-3395"
+            },
+            "txn": "tf041a900-3395",
+            "entry": {
+              "id": "ef041a900-3394",
+              "gid": "sp-e4c76fbd-8b92-4dba-909c-611fb0158523/ef041a900-3394",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-3-0",
+                "probeId": "ack-probe-3",
+                "member": "b"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          },
+          "4954f0f4adf1646fb68f774eb01244aba2f2456ee032bfaf038241cdafea3354": {
+            "member": "c",
+            "event": {
+              "kind": "waiter",
+              "eventId": "w714d4e40-3361",
+              "seq": 1,
+              "handback": {
+                "federationOperation": "journal-race-3"
+              },
+              "target": "[\"db3r4ovlh8lg008eup20\",\"ack-worker-3\"]",
+              "entry": {
+                "id": "e714d4e40-3365",
+                "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3365",
+                "type": "AckProbe",
+                "types": [
+                  "AckProbe"
+                ],
+                "fields": {
+                  "taskId": "ack-probe-3-2",
+                  "probeId": "ack-probe-3",
+                  "member": "c"
+                },
+                "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+              },
+              "txn": "t714d4e40-3366"
+            },
+            "txn": "t714d4e40-3366",
+            "entry": {
+              "id": "e714d4e40-3365",
+              "gid": "sp-38808fdb-9ecf-4328-8350-ececfbd17058/e714d4e40-3365",
+              "type": "AckProbe",
+              "types": [
+                "AckProbe"
+              ],
+              "fields": {
+                "taskId": "ack-probe-3-2",
+                "probeId": "ack-probe-3",
+                "member": "c"
+              },
+              "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+            }
+          }
+        },
+        "winner": {
+          "member": "a",
+          "txn": "tf9d3cfe7-3361",
+          "entry": {
+            "id": "ef9d3cfe7-3360",
+            "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+            "type": "AckProbe",
+            "types": [
+              "AckProbe"
+            ],
+            "fields": {
+              "taskId": "ack-probe-3-1",
+              "probeId": "ack-probe-3",
+              "member": "a"
+            },
+            "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+          }
+        },
+        "result": {
+          "id": "ef9d3cfe7-3360",
+          "gid": "sp-24d0dde1-5322-4e76-a0d9-e30525c3d7ce/ef9d3cfe7-3360",
+          "type": "AckProbe",
+          "types": [
+            "AckProbe"
+          ],
+          "fields": {
+            "taskId": "ack-probe-3-1",
+            "probeId": "ack-probe-3",
+            "member": "a"
+          },
+          "owner": "[\"db3r4ovlh8lg008eup20\",\"producer\"]"
+        }
+      },
+      "deltaHash": "d840986820b1a28b4e86ac84f9c9b14ba8d9cc589596a81aee892dfbf1e9dc49",
+      "commitSeq": 19113,
+      "activeWorkers": 6,
+      "completedJobs": 42,
+      "at": "2026-10-14T04:21:53.916Z"
+    },
+    {
+      "kind": "futureRelease",
+      "boundary": "beforeCommit",
+      "parentId": "journal-race-4",
+      "effect": "journal",
+      "documentId": 619,
+      "documentKind": "pi-spaces.router-journal",
+      "documentKey": "partition-5f1789d69e4441a80b197df06d10c32104b67c9a7ee1d0bf077a316291993e3a",
+      "budgetId": "f-b80424d0e569819f9b55ea6ba9dc3b89d90c6f4fe6f2ee75b9bb3e9401d8a052",
+      "before": {
+        "future": {
+          "slots": 3,
+          "bytesPerSlot": 65536
+        }
+      },
+      "plannedAfter": {
+        "future": null
+      },
+      "deltaHash": "16330e163bc8b6b5b295c2322d200b8c2ad3c1d4b60a4b9b3a1680c0add0c309",
+      "commitSeq": null,
+      "activeWorkers": 6,
+      "completedJobs": 54,
+      "at": "2026-10-14T04:22:07.920Z"
+    },
+    {
+      "kind": "futureRelease",
+      "boundary": "afterCommit",
+      "parentId": "journal-race-5",
+      "effect": "journal",
+      "documentId": 906,
+      "documentKind": "pi-spaces.router-journal",
+      "documentKey": "partition-7f6a0763130c442e3809d3fdac4cb9b8f3bcc2766dfd31f7c60ea44afec2268e",
+      "budgetId": "f-5876c4066ab75d77fb60bf599474fd89abf9b00a87053c50169b174bd3e1dbe3",
+      "before": {
+        "future": {
+          "slots": 3,
+          "bytesPerSlot": 65536
+        }
+      },
+      "plannedAfter": {
+        "future": null
+      },
+      "deltaHash": "c594928752672fd8c29dec5e61923d8baa61cb344c9a86825167b5f3d0a5db73",
+      "commitSeq": 24209,
+      "activeWorkers": 6,
+      "completedJobs": 66,
+      "at": "2026-10-14T04:22:21.330Z"
+    }
+  ],
+  "routerEpoch": 1,
+  "routerLeaseId": "91e929d9-05e2-4276-af35-ed947c4e8de6",
+  "stableWorkerAssignment": true,
+  "rpcFaults": false,
+  "rpcFaultBoundary": "afterReply",
+  "faults": [],
+  "sameParentRetries": 0,
+  "processCrashesExercised": true,
+  "mailboxAckFaultsExercised": false,
+  "passed": true,
+  "date": "2026-10-14T04:28:32.997Z",
+  "scope": "real-netbird-signed-wire-fixture",
+  "entries": 10000,
+  "backgroundEntriesSeededLocally": 9000,
+  "jobs": 1000,
+  "workers": 6,
+  "workerJobs": [
+    167,
+    167,
+    167,
+    167,
+    166,
+    166
+  ],
+  "members": [
+    {
+      "id": "a",
+      "peerId": "db3r4p7lh8lg008eup6g",
+      "ip": "100.89.240.87"
+    },
+    {
+      "id": "b",
+      "peerId": "db3r4pflh8lg008eupq0",
+      "ip": "100.89.5.70"
+    },
+    {
+      "id": "c",
+      "peerId": "db3r4p7lh8lg008eupb0",
+      "ip": "100.89.116.183"
+    }
+  ],
+  "routerPeerId": "db3r4ovlh8lg008eup20",
+  "independentNetworkNamespaces": 4,
+  "physicalServers": 1,
+  "layerA": true,
+  "layerB": true,
+  "signedGrants": true,
+  "signedDelegation": true,
+  "signedRouterLease": true,
+  "fixtureProvisioning": true,
+  "independentBootRegisterExercised": false,
+  "productionServicesChanged": false,
+  "fullPhase2Accepted": false,
+  "primes": 9592,
+  "sum": 454396537,
+  "elapsedMs": 497384
+}

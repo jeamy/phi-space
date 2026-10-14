@@ -1,4 +1,6 @@
+import {ProfileTransitions} from './profile-transition-doc.ts';
 // Durable membership transitions; remote calls run outside Control commits.
+import {validateProfileOnlyChange} from './profile-policy.ts';
 import type {Context} from '@earendil-works/chord';
 import {defineDocFamily} from '@earendil-works/pi-durable';
 import {createHash} from 'node:crypto';
@@ -32,8 +34,9 @@ const copy = core.plain;
 const hash = (v: unknown) => createHash('sha256').update(canonicalJson(v as Json)).digest('hex');
 export type MembershipInstruction = {
     id: string; authorityId : string; memberId : string; spaceId : string;
-    action : 'prepareAdd' | 'activate' | 'drain' | 'freeze' | 'detach' | 'policy' | 'rejectAdd';
+    action : 'prepareAdd' | 'activate' | 'drain' | 'freeze' | 'detach' | 'policy' | 'rejectAdd' | 'profileFreeze' | 'profileInstall' | 'profileResume';
     policy?: FederationPolicy;
+    previousPolicy?:FederationPolicy;
     expectedAdmissionVersion?: number
 };
 export type MembershipProof = {
@@ -104,6 +107,14 @@ export class MemberLifecycle {
             publicKey : this.o.controlPin.publicKey
         });
         await this.o.assertAuthority();
+        // An identical signed policy needs no mutation. Use the normal guarded snapshot
+        // and recheck authority before returning; changes still use the guarded commit.
+        const installed = (await snapshotSpace(this.o.host, this.o.spaceId, this.o.ctx))?.membership;
+        if (installed && ['active', 'draining'].includes(installed.state) &&
+            p.policyVersion === installed.policy?.policyVersion && hash(p) === hash(installed.policy)) {
+            await this.o.assertAuthority();
+            return;
+        }
         await this.o.host.commit(async tx => {
             await this.o.assertAuthority();
             const s = await spaceDoc(tx, this.o.spaceId, (this.o.now ?? Date.now)()),
@@ -117,6 +128,7 @@ export class MemberLifecycle {
                     throw new RoutingConflict('policy changed within version');
                 return;
             }
+            if(a.policy)assertOrdinaryProfiles(a.policy,p);
             a.policy = copy(p);
             s.completionProfiles = copy(p.completionProfiles);
             core.touch(s, (this.o.now ?? Date.now)());
@@ -181,6 +193,20 @@ export class MemberLifecycle {
                 s.completionProfiles = copy(q.policy.completionProfiles);
                 a.state = 'active';
                 a.admissionVersion++;
+            } else if (q.action === 'profileFreeze') {
+                if(!a||a.state!=='active'||!a.policy||!q.policy)throw new RoutingConflict('profile freeze requires active policy');
+                const base=q.previousPolicy??a.policy;
+                if(base.authorityId!==a.authorityId||base.policyVersion<a.policy.policyVersion||base.policyVersion===a.policy.policyVersion&&hash(base)!==hash(a.policy))throw new RoutingConflict('profile predecessor disagrees with installed policy');
+                assertOrdinaryProfiles(a.policy,base);
+                const affected=validateProfileOnlyChange(base,q.policy);
+                if(Object.keys(s.txns).length||s.waiters.length||s.regs.length||(s.jobs??[]).length||(s.releaseQueue??[]).length||Object.values(s.rpc?.claims??{}).some(c=>c.state==='pending')||s.entries.some(e=>affected.some(type=>e.types.includes(type))))throw new RoutingConflict('profile transition requires no affected Tasks or open work');
+                a.policy=copy(base);a.state='profileFrozen';a.profileTransition={id:q.id,hash:hash(q.policy)};a.admissionVersion++;
+            } else if (q.action === 'profileInstall') {
+                if(!a||a.state!=='profileFrozen'||!a.policy||!q.policy||a.profileTransition?.id!==q.id||a.profileTransition.hash!==hash(q.policy))throw new RoutingConflict('profile install requires matching frozen transition');
+                validateProfileOnlyChange(a.policy,q.policy);a.policy=copy(q.policy);s.completionProfiles=copy(q.policy.completionProfiles);a.admissionVersion++;
+            } else if (q.action === 'profileResume') {
+                if(!a||a.state!=='profileFrozen'||!q.policy||a.profileTransition?.id!==q.id||hash(a.policy)!==hash(q.policy)||a.profileTransition.hash!==hash(q.policy))throw new RoutingConflict('profile resume requires installed transition');
+                a.state='active';delete a.profileTransition;a.admissionVersion++;
             } else if (q.action === 'policy') {
                 if (!a || !['active', 'draining'].includes(a.state) || !q.policy ||
                     q.policy.authorityId !== a.authorityId ||
@@ -189,6 +215,7 @@ export class MemberLifecycle {
                 if (q.policy.policyVersion === (a.policy?.policyVersion ?? 0) &&
                     hash(q.policy) !== hash(a.policy))
                     throw new RoutingConflict('policy version changed content');
+                if(a.policy)assertOrdinaryProfiles(a.policy,q.policy);
                 a.policy = copy(q.policy);
                 s.completionProfiles = copy(q.policy.completionProfiles);
             } else if (q.action === 'drain') {
@@ -311,6 +338,8 @@ export class MembershipController {
         await this.o.authorize();
         return this.o.host.commit(async tx => {
             await this.o.assertAuthority();
+            const profiles=await tx.doc(ProfileTransitions,this.o.controlSpaceId,null);
+            if(Object.values(profiles.operations).some(op=>op.phase!=='completed'))throw new RoutingConflict('profile transition blocks membership changes');
             const d = await tx.doc(MembershipJournal, this.o.controlSpaceId, null);
             return f(d);
         }, this.o.ctx);
@@ -545,4 +574,9 @@ export class MembershipController {
         }
         return copy(op);
     }
+}
+
+function assertOrdinaryProfiles(old:FederationPolicy,next:FederationPolicy){
+ for(const p of old.completionProfiles)if(hash(p)!==hash(next.completionProfiles.find(n=>n.taskType===p.taskType)??null))throw new MigrationRequired('existing profile requires controlled transition');
+ for(const p of next.completionProfiles)if(!old.completionProfiles.some(n=>n.taskType===p.taskType)&&old.rules.some(r=>r.type===p.taskType))throw new MigrationRequired('existing Task requires controlled transition');
 }

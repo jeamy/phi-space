@@ -1,3 +1,5 @@
+import {RootErasures} from './root-erasure-doc.ts';
+import {ResultExpired} from './claims.ts';
 import type {Context} from '@earendil-works/chord';
 import {defineDocFamily} from '@earendil-works/pi-durable';
 // Composite operations bind their complete routing plan before sending any effect.
@@ -10,6 +12,7 @@ import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
 import {FederationRouting} from "./federation-policy.ts";
 import {FederationJournalLayout, operationPartition, parentJournalKey, validateJournalPartitions} from './federation-journals.ts';
 import {TransportFailure} from './remote.ts';
+import {ProfileTransitions} from './profile-transition-doc.ts';
 import {MembershipJournal} from "./membership.ts";
 import {RouterController, type RouterOperation, type RouterStepSpec} from './router.ts';
 import {
@@ -59,6 +62,7 @@ export type FederationOperation = {
                             event: SpaceEvent
                         }>;
     result?: Json;
+    erased?:{commandId:string;originalHash:string;subjectHash:string};
     userTxn?: {member : string; id : string}
 };
 type Operation = FederationOperation;
@@ -200,8 +204,10 @@ export class FederatedSpace {
         if(d)this.verifyParentJournal(d,partition);
         return copy(d?.operations[id]);
     }
+    private async assertNoErasure(){const d=await this.o.host.snapshot(RootErasures,this.o.id,this.o.ctx);if(Object.values(d?.operations??{}).some(op=>op.phase!=='completed'))throw new FederationUnavailable('Root principal erasure is pending');}
     private async prepare(kind: Operation['kind'], args: Json,
                           q: FederationRequest): Promise<Operation> {
+        await this.assertNoErasure();
         if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(q.id) ||
             [ 'constructor', 'prototype', '__proto__' ].includes(q.id))
             throw new RoutingConflict('invalid operation ID');
@@ -253,6 +259,7 @@ export class FederatedSpace {
         };
         await this.change(q.id, async (d, tx) => {
             if (this.o.controlSpaceId) {
+                const profiles=await tx.doc(ProfileTransitions,this.o.controlSpaceId,null);if(Object.values(profiles.operations).some(op=>op.phase!=='completed'&&op.members.some(m=>ids.includes(m.id))))throw new RoutingConflict('profile transition blocks new Root admission');
                 const current = await tx.doc(FederationRouting, this.o.controlSpaceId, null),
                       jobs = await tx.doc(MembershipJournal, this.o.controlSpaceId, null);
                 if (current.policy?.policyVersion !== op!.policyVersion ||
@@ -333,6 +340,7 @@ export class FederatedSpace {
         return copy(result);
     }
     private async decide(op: Operation) {
+        if(op.erased)throw new ResultExpired('Root operation content was erased');
         if (op.phase === 'done') {
             // A crash after the Parent commit can precede releasing unused child reservations.
             await this.router(op.id).releaseFuture(child(op.id, 'budget'));
@@ -343,10 +351,10 @@ export class FederatedSpace {
         op = await this.admit(op);
         for (; op.cursor < op.members.length; op.cursor++) {
             const m = op.members[op.cursor]!, c = await this.router(op.id).advance(op.children[m]!);
-            if (c.state === 'needsReview') {
+            if (c.state === 'needsReview' || c.state === 'failed') {
                 op.phase = 'needsReview';
                 await this.save(op);
-                throw new FederationUnavailable('child needs review');
+                throw new FederationUnavailable('definitive child failure or review requires explicit review');
             }
             if (c.state !== 'completed') {
                 if (op.kind === 'read')
@@ -371,7 +379,7 @@ export class FederatedSpace {
     }
     async write(entry: EntryDraft, q: FederationRequest, leaseMs?: number) {
         return this.serial(async () => {
-            const old = await this.get(q.id);
+            const old = await this.get(q.id);if(old?.erased)throw new ResultExpired('Root operation content was erased');
             let e = entry;
             if (!old) {
                 const p = (await this.o.state()).policy;
@@ -424,7 +432,7 @@ export class FederatedSpace {
         waitForCompleteMs?: number;
         txn?: {member : string; id : string}
     } = {}) {
-        await this.o.assertAuthority();await this.ensureLayout();
+        await this.o.assertAuthority();await this.assertNoErasure();await this.ensureLayout();
         const st = await this.o.state();
         if (!st.policy)
             throw new RoutingConflict('no policy');
@@ -549,14 +557,22 @@ export class FederatedSpace {
         }
     }
     private async progressRace(op: Operation): Promise<Json> {
+        if(op.erased)throw new ResultExpired('Root operation content was erased');
         if (op.phase === 'done') {
             // A crash after the Parent commit can precede releasing unused child reservations.
             await this.router(op.id).releaseFuture(child(op.id, 'budget'));
             return copy(op.result!);
         }
+        if (op.phase === 'needsReview')
+            throw new FederationUnavailable('operation needs explicit review');
         op = await this.admit(op);
         for (const m of op.members) {
             const c = await this.router(op.id).advance(op.children[m]!);
+            if (c.state === 'failed' || c.state === 'needsReview') {
+                op.phase = 'needsReview';
+                await this.save(op);
+                throw new FederationUnavailable('definitive child failure or review requires explicit review');
+            }
             if (c.state !== 'completed') {
                 if (op.kind === 'read')
                     continue;
@@ -614,7 +630,7 @@ export class FederatedSpace {
     }
     async resume(id: string) {
         return this.serial(async () => {
-            const op = await this.get(id);
+            await this.assertNoErasure();const op = await this.get(id);
             if (!op)
                 throw new RoutingConflict('unknown federation operation');
             return op.kind === 'race' ? this.progressRace(op) : this.decide(op);

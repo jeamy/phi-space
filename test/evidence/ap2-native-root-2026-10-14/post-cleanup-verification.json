@@ -1,0 +1,10 @@
+{
+  "ownedNetbirdObjectsVerifiedAbsent": true,
+  "protectedServices": {
+    "pi-spaces-phase1b-host-a.service": "active",
+    "pi-spaces-phase1b-member-1.service": "active",
+    "pi-spaces-restore-target.service": "active"
+  },
+  "vpscTailscaleStillRunning": true,
+  "localNetbirdStillRunning": true
+}

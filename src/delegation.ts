@@ -93,7 +93,7 @@ export class RouterLeaseAuthority {
     };
     constructor(o: RouterLeaseAuthority["o"]) { this.o = o; }
     async issue(routerPeerId: string, routerKeyId: string,
-                renew?: {id: string; routerEpoch : number}): Promise<SignedRouterLease> {
+                renew?: {id: string; routerEpoch : number; token?:SignedRouterLease}): Promise<SignedRouterLease> {
         await this.o.assertAuthority();
         const key = await this.o.keys.find(routerPeerId, routerKeyId);
         if (!key || key.state !== "active" || !key.roles.includes("router"))
@@ -106,10 +106,9 @@ export class RouterLeaseAuthority {
             const live = core.list(s, now, {type : "RouterLease"})[0];
             let epoch = s.authorityCounters.routerEpoch;
             if (renew) {
-                if (!live || live.fields.id !== renew.id ||
-                    live.fields.routerPeerId !== routerPeerId ||
-                    live.fields.routerKeyId !== routerKeyId ||
-                    live.fields.routerEpoch !== renew.routerEpoch || renew.routerEpoch !== epoch)
+                const retained=renew.token, l=retained?.lease;
+                const signedRetained=!!retained&&!!l&&!!this.o.signer.publicKey&&retained.issuer===this.o.peerId&&retained.algorithm===this.o.signer.algorithm&&verifyDetached(retained.algorithm,this.o.signer.publicKey,bytes("router-lease",l),retained.signature)&&l.id===renew.id&&l.routerPeerId===routerPeerId&&l.routerKeyId===routerKeyId&&l.routerEpoch===renew.routerEpoch&&l.authorityId===this.o.authorityId&&l.controlSpaceId===this.o.controlSpaceId&&l.controlPrimaryEpoch===(s.primaryEpoch??1);
+                if (renew.routerEpoch!==epoch||!(signedRetained||live&&live.fields.id===renew.id&&live.fields.routerPeerId===routerPeerId&&live.fields.routerKeyId===routerKeyId&&live.fields.routerEpoch===renew.routerEpoch))
                     throw new DelegationDenied("lease renewal no longer owns current epoch");
             } else {
                 if (!Number.isSafeInteger(epoch) || epoch < 0 || epoch >= Number.MAX_SAFE_INTEGER)
