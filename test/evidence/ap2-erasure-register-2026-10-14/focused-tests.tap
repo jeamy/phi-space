@@ -1,0 +1,62 @@
+TAP version 13
+# (node:3417616) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: jsonl: independent deletion floor blocks stale restores, raced commits and overdue archives across reopen
+ok 1 - jsonl: independent deletion floor blocks stale restores, raced commits and overdue archives across reopen
+  ---
+  duration_ms: 60.937788
+  type: 'test'
+  ...
+# Subtest: sqlite: independent deletion floor blocks stale restores, raced commits and overdue archives across reopen
+ok 2 - sqlite: independent deletion floor blocks stale restores, raced commits and overdue archives across reopen
+  ---
+  duration_ms: 28.691888
+  type: 'test'
+  ...
+# Subtest: register prevents floor rollback and late archive admission across independent writers and reopen
+ok 3 - register prevents floor rollback and late archive admission across independent writers and reopen
+  ---
+  duration_ms: 9.384539
+  type: 'test'
+  ...
+# (node:3417617) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node-22 --trace-warnings ...` to show where the warning was created)
+# Subtest: member authority installation replays a lost external ACK, invalidates old generations and permits another recovery
+ok 4 - member authority installation replays a lost external ACK, invalidates old generations and permits another recovery
+  ---
+  duration_ms: 139.578591
+  type: 'test'
+  ...
+# Subtest: mutual TLS register separates readers, scoped writers and operators and persists CAS across restart
+ok 5 - mutual TLS register separates readers, scoped writers and operators and persists CAS across restart
+  ---
+  duration_ms: 413.339197
+  type: 'test'
+  ...
+# Subtest: signed control ACK is durable, rejects mismatched tuples and cannot bypass a fenced source
+ok 6 - signed control ACK is durable, rejects mismatched tuples and cannot bypass a fenced source
+  ---
+  duration_ms: 33.233473
+  type: 'test'
+  ...
+# Subtest: control restore requires a new admin and every confirmed member ACK; retries retain one authority and closed old rights
+ok 7 - control restore requires a new admin and every confirmed member ACK; retries retain one authority and closed old rights
+  ---
+  duration_ms: 104.067602
+  type: 'test'
+  ...
+# Subtest: control ACK rechecks the enrolled host key inside the receipt commit
+ok 8 - control ACK rechecks the enrolled host key inside the receipt commit
+  ---
+  duration_ms: 15.457188
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1423.163834

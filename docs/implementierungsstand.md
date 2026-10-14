@@ -31,12 +31,12 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | Phase 1b | zwei dauerhafte echte NetBird-Gates auf big, unabhängiges Register auf vpsc, private SSH-/TLS-Zugänge, Control-ACK, Control-/Data-Restore-Controller, Member-Installation, native Android-Keystore-Abnahme, echte Handy–big-Kopplung/Objektzugriff/Rotation sowie verteilte Live-Data-/Control-Restores mit bestätigten Member-ACKs, sichtbare Handy-Schlüsselsteuerung, zehn Minuten Bildschirm-aus/Hintergrund und kontrollierter tiefer Doze-Test | F15-Modell und kontrollierte komponentenbezogene Ausfälle abgenommen; keine Phase-2-/Replikations-/Promotion-Freigabe |
 | Router AP 2.1 | Command-Zustandsmaschine, dauerhaft gebundene Unterrequests, Rekonstruktion, getrennte Budgets, feste optionale Journal-Partitionen, unabhängige Admission, Restore-Review und Mailbox-Übernahme | vollständige Phase-2-System- und Lastabnahme |
 | AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
-| Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport mit Fixture-Identitäten im selben Prozess; Drei-Host-NetBird- und vollständige Crash-Abnahme bleiben offen |
-| NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; volle Overlay-Crash-Matrix und Produktions-Provisionierung bleiben offen |
+| Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport dieses Nachweises mit Fixture-Identitäten im selben Prozess; separate Overlay-Abbruchblöcke 1–3 abgeschlossen; native positive Job-Abnahme offen |
+| NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; Overlay-Abbruchblöcke 1–3 abgeschlossen; vollständige native Produktions-Abnahme bleibt offen |
 | NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Fünf weitere Testblöcke und Gesamtfreigabe offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
 | NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Fünf weitere Testblöcke und Gesamtfreigabe offen; Liste in der Phase-2-Abnahme |
-| NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen und Produktions-Boot/Fencing bleiben offen; ACK- und Member-Nachweise stehen getrennt |
-| Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; Kombination mit NetBird-Volllast und unabhängigen Hosts bleibt offen |
+| NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen sind in Block 3 abgenommen; native positive Job-Abnahme bleibt offen; ACK- und Member-Nachweise stehen getrennt |
+| Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; separate NetBird-Volllast in Blöcken 1–3 nachgewiesen; physische Ausfalldomänen offen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
 
@@ -153,6 +153,10 @@ Löschkoordinator fehlt noch.
 Unabhängige Lösch-Epochen sperren veraltete Restores und normale Dienste bei
 unvollständiger Löschung. `ErasureArchiveController` verwaltet registrierte
 Archive, Quarantäne, überprüfte Löschbelege und eine begrenzte Löschfrist.
+Das SQLite-Register erzwingt monotone Lösch-Epochen und unveränderliche
+Archivbindungen innerhalb seines CAS-Commits. Verspätete Archivregistrierung,
+Rücksetzen von Quarantäne und Löschen von Katalogbelegen werden abgelehnt;
+die Prüfung der Versiegelung liest den Archivkatalog in derselben Transaktion.
 Die Tests prüfen echte Backup-Dateien und Wiederanlauf; die vollständige
 Integration in den Backup-/Restore-Betrieb und die Bereinigung aktiver
 Backend-Historien fehlen. Logische Löschung ist kein physischer Löschbeleg.
@@ -181,7 +185,7 @@ Promotionsnachweis sind weiterhin ein eigener, nicht abgenommener Schritt.
 
 
 Der NetBird-Volllastnachweis individueller Member-Prozessabbrüche vom
-2026-10-13 schließt Testblock 2. Die aktuelle Liste umfasst sechs offene
+2026-10-13 schließt Testblock 2. Nach Abschluss von Block 3 umfasst die aktuelle Liste fünf offene
 Testblöcke plus Gesamtfreigabe. Bei Transportverlust während der Child-
 Vorbereitung bleibt ein bereits gespeicherter Parent jetzt als Pending mit
 unverändertem Routingplan wiederaufnehmbar. Die Fehlerklassifikation wird auf
@@ -193,7 +197,7 @@ Testblock 3 ist seit 2026-10-14 abgenommen: 26 tatsächliche Root-SIGKILLs
 vor/nach 13 erfolgreichen Journal-Übergängen über NetBird in fünf vollständigen
 1.000-Job-/10.000-Entry-Läufen mit sechs aktiven Workern, jeweils mit Offline-
 Audit. Die aktuelle Liste enthält fünf verbleibende Testblöcke. Die native
-Root-Konfiguration wird derzeit separat verdrahtet und geprüft; ihre produktive
+Root-Konfiguration ist verdrahtet und separat geprüft; ihre produktive
 Live-Abnahme ist damit noch nicht erteilt.
 
 

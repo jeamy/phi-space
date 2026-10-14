@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { canonicalJson } from "./canonical.ts";
+import { validateErasureRegisterUpdate } from "./erasure-register-policy.ts";
 import type { Json } from "./core.ts";
 
 export type RegisterRecord<T extends Json = Json> = { version: number; value: T };
@@ -25,9 +26,13 @@ export class SqliteRecoveryRegister implements RecoveryRegister {
 		const encoded = canonicalJson(value);
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
-			const prior = this.db.prepare("SELECT version FROM records WHERE key=?").get(key) as { version: number } | undefined;
+			const prior = this.db.prepare("SELECT version,value FROM records WHERE key=?").get(key) as { version: number; value: string } | undefined;
 			if ((prior?.version ?? null) !== expected) throw new RegisterConflict("register version changed");
-			const version = (expected ?? 0) + 1;
+			validateErasureRegisterUpdate(key, JSON.parse(encoded), prior ? JSON.parse(prior.value) : null, relatedKey => {
+                const related = this.db.prepare("SELECT value FROM records WHERE key=?").get(relatedKey) as {value: string} | undefined;
+                return related ? JSON.parse(related.value) : null;
+            }, message => { throw new RegisterConflict(message); });
+            const version = (expected ?? 0) + 1;
 			this.db.prepare("INSERT INTO records(key,version,value) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET version=excluded.version,value=excluded.value").run(key, version, encoded);
 			this.db.exec("COMMIT"); return { version, value: JSON.parse(encoded) as T };
 		} catch (e) { this.db.exec("ROLLBACK"); throw e; }

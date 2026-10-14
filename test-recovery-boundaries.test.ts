@@ -81,6 +81,11 @@ test("mutual TLS register separates readers, scoped writers and operators and pe
   await assert.rejects(client("unknown").get("authority:control"));
   await client("scoped").compareAndSet("boot:member",null,{state:"quarantine"});
   await assert.rejects(client("scoped").compareAndSet("authority:control",1,{}),/no CAS permission/);
+  const erasure={spaceId:"jobs",epoch:1,state:"pending",commandHash:"a".repeat(64),archiveDeadline:2000,archivesPending:true};
+  await client("operator").compareAndSet("erasure:jobs",null,erasure);
+  await assert.rejects(client("operator").compareAndSet("erasure:jobs",1,{...erasure,epoch:0}),RegisterConflict);
+  await assert.rejects(client("operator").compareAndSet("erasure-archives:jobs",null,{spaceId:"jobs",artifacts:[{id:"stale",sha256:"b".repeat(64),epoch:0,kind:"backup",state:"retained"}]}),RegisterConflict);
+  assert.equal((await client("reader").get<any>("erasure:jobs"))?.version,1);
   await server.close();db.close();db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));server=await serveTlsRegister(db,config);
   assert.equal((await client("reader").get<any>("authority:control"))?.value.authorityId,"a");
   const wrongName=new TlsRecoveryRegister({...pki.identity("reader"),host:"127.0.0.1",serverName:"untrusted.example",port:(server.address() as any).port});await assert.rejects(wrongName.get("authority:control"));

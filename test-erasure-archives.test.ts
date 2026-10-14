@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {ErasureArchiveController} from './src/erasure-archives.ts';
 import {checkErasureBarrier} from './src/erasure-barrier.ts';
-import {SqliteRecoveryRegister} from './src/recovery-register.ts';
+import {RegisterConflict,SqliteRecoveryRegister} from './src/recovery-register.ts';
 import {installBootGuard,BootBlocked} from './src/boot.ts';
 import {createSpace,spaceDoc} from './src/spaces.ts';
 import {PiSpaces} from './src/client.ts';
@@ -25,4 +25,52 @@ for(const backend of BACKENDS)test(`${backend}: independent deletion floor block
   external.close();external=new SqliteRecoveryRegister(join(dir,'external.sqlite'));await home.close(host);host=await home.open();stop=installBootGuard(host,ctx,{hostId:'host',authorityId:'authority',external,installed,now:()=>now});assert.equal(await client().count(),1);
   now=1500;await assert.rejects(checkErasureBarrier(external,info.spaceId,{erasureEpoch:1} as any,now),/deadline expired/);assert.ok(existsSync(backup));allowed=false;await assert.rejects(make().destroyDue(info.spaceId,sha('erase')),/permission revoked/);assert.ok(existsSync(backup));allowed=true;await make().destroyDue(info.spaceId,sha('erase'));assert.ok(!existsSync(backup));await make().seal(info.spaceId,sha('erase'),1);assert.equal(await client().count(),1);await assert.rejects(make().assertRestore(info.spaceId,'owned-backup'),/restore is blocked/);
  }finally{stop?.();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('register prevents floor rollback and late archive admission across independent writers and reopen', async () => {
+ const dir=mkdtempSync(join(tmpdir(),'pi-erasure-cas-')),path=join(dir,'register.sqlite');
+ let db=new SqliteRecoveryRegister(path);const other=new SqliteRecoveryRegister(path);
+ const key='erasure:jobs',archiveKey='erasure-archives:jobs';
+ const artifact={id:'backup',sha256:sha('private'),epoch:0,kind:'backup',state:'retained'};
+ const floor={spaceId:'jobs',epoch:1,state:'pending',commandHash:sha('erase'),archiveDeadline:1500,archivesPending:true};
+ const denied=async(key:string,value:any)=>{
+  const prior=await db.get<any>(key);
+  await assert.rejects(db.compareAndSet(key,prior?.version??null,value),RegisterConflict);
+  assert.deepEqual(await db.get(key),prior,'rejected update must not change version or value');
+ };
+ try {
+  // A backup writer has read an empty floor and prepared a catalog, then pauses.
+  await other.get(key);
+  await db.compareAndSet(key,null,floor);
+  await denied(key,{...floor,epoch:0});
+  await denied(key,{...floor,epoch:2});
+  await denied(key,{...floor,commandHash:sha('replacement')});
+  await denied(key,{...floor,archiveDeadline:9999});
+  await denied(key,{...floor,archivesPending:false});
+  await db.compareAndSet(key,1,{...floor,state:'sealed',archivesPending:false});
+  await assert.rejects(other.compareAndSet(archiveKey,null,{spaceId:'jobs',artifacts:[artifact]}),RegisterConflict);
+  assert.equal(await db.get(archiveKey),null);
+  await denied(key,{...floor,state:'pending'});
+  await denied(key,{...floor,state:'sealed',archivesPending:true});
+  await denied(key,{...floor,state:'sealed',archivesPending:false,commandHash:sha('replacement')});
+  const currentArtifact={...artifact,epoch:1};
+  await db.compareAndSet(archiveKey,null,{spaceId:'jobs',artifacts:[currentArtifact]});
+  const second={...floor,epoch:2,commandHash:sha('erase-again'),archiveDeadline:2000};
+  await db.compareAndSet(key,2,second);
+  await denied(key,{...second,state:'sealed',archivesPending:false});
+  const quarantined={...currentArtifact,state:'quarantined',deleteBefore:2000};
+  await db.compareAndSet(archiveKey,1,{spaceId:'jobs',artifacts:[quarantined]});
+  await db.compareAndSet(key,3,{...second,state:'sealed'});
+  await denied(key,{...second,epoch:3,state:'pending',commandHash:sha('extend-deadline')});
+  await denied(archiveKey,{spaceId:'jobs',artifacts:[currentArtifact]});
+  await denied(archiveKey,{spaceId:'jobs',artifacts:[]});
+  await denied(archiveKey,{spaceId:'jobs',artifacts:[{...quarantined,sha256:sha('changed')}]});
+  await denied(archiveKey,{spaceId:'jobs',artifacts:[{...quarantined,deleteBefore:9999}]});
+  await db.compareAndSet(archiveKey,2,{spaceId:'jobs',artifacts:[{...quarantined,state:'destroyed'}]});
+  await denied(archiveKey,{spaceId:'jobs',artifacts:[quarantined]});
+  await db.compareAndSet(key,4,{...second,state:'sealed',archivesPending:false});
+  db.close();db=new SqliteRecoveryRegister(path);
+  await denied(key,{...floor,state:'sealed',archivesPending:false});
+  await db.compareAndSet(key,5,{...second,epoch:3,commandHash:sha('third'),state:'pending'});
+ } finally {other.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });

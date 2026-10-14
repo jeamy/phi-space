@@ -415,4 +415,12 @@ Löschfristen und versiegelt die Epoche nach geprüftem lokalem Abschluss.
 Restore-Aufrufer muss zusätzlich die tatsächlichen Archivbytes an den
 registrierten Hash binden. Unvollständige Löschungen, alte Snapshot-Epochen und
 überfällige Archive sperren normale Dienste durch den unabhängigen Register-
-Eintrag. Die vollständige Backup-/Restore-Betriebsintegration steht noch aus.
+Eintrag. `SqliteRecoveryRegister` prüft Lösch-Epoche und Archivkatalog atomar
+innerhalb des CAS-Commits, auch hinter mTLS: Epochen beginnen bei eins, steigen
+nur nach abgeschlossenem vorherigem Löschlauf einschließlich Archivlöschung,
+und behalten Command-Hash und Löschfrist. Archiv-IDs, Hashes, Epochen und Arten
+sind unveränderlich; Quarantäne und Zerstörung sind nicht rücksetzbar. Eine
+verspätete Registrierung eines alten Backups scheitert am aktuellen Floor.
+Die vollständige Backup-/Restore-Betriebsintegration steht noch aus.
+Andere `RecoveryRegister`-Implementierungen müssen dieselben atomaren
+Constraints garantieren; reine Aufruferprüfungen reichen dafür nicht aus.

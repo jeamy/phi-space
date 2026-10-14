@@ -651,3 +651,20 @@ temporären NetBird-Objekte sind entfernt. Die eigenen vier Boot-Einträge und d
 eigene Autorität sind gefenced; die Stores bleiben als Nachweis erhalten. Alle
 drei geschützten bestehenden Services sind weiterhin aktiv, ebenso das vorhandene
 Tailscale auf vpsc und NetBird am lokalen Rechner.
+
+
+Am 2026-10-14 wurden die Registerregeln für Block 7 zusätzlich abgesichert:
+Lösch-Epochen können auch durch einen authentifizierten Operator-CAS nicht
+zurückgesetzt werden. Command-Hash und Frist bleiben gebunden; eine weitere
+Epoche beginnt erst nach abgeschlossenem Löschlauf und Archivlöschung.
+Archivbindungen und Löschbelege bleiben erhalten, Quarantäne und Zerstörung
+sind irreversibel. Die Archiv- und Floor-Prüfungen laufen innerhalb derselben
+SQLite-Schreibtransaktion: Eine verspätete Registrierung eines Backups aus einer
+älteren Epoche scheitert auch nach bereits erfolgter Versiegelung.
+
+Die [Register-Nachweise](../test/evidence/ap2-erasure-register-2026-10-14/README.md)
+enthalten Zwei-Verbindungs-/Wiederanlauf- und mTLS-Prüfungen, **463/463** Tests,
+**24/24** mobile Tests, Typecheck und 29 gebaute Artefakte. Der gemeinsame
+Live-Registerdienst wurde nicht aktualisiert oder neu gestartet. Backup-/Restore-
+Einbindung und aktive Backend-Historien sind weiterhin offen; Block 7 und die
+Blöcke 4–8 insgesamt erhalten dadurch keine Freigabe.
