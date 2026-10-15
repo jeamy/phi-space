@@ -1,0 +1,71 @@
+{
+  "scope": "ap2-remaining-20261015",
+  "member": {
+    "target": {
+      "hostId": "ap2-remaining-20261015-d",
+      "spaceId": "sp-27747146-759a-4d24-9055-8ae8a658c2ef",
+      "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+      "dataIncarnation": "1a0de760",
+      "primaryEpoch": 1
+    },
+    "peerId": "db3sssflh8lg008evddg",
+    "keyId": "f527a00e3348d26538af68bce393df47",
+    "algorithm": "ed25519",
+    "publicKey": "ilb8NbZZZyYf6UNlSXaliPyg5P3NNE5jT/9pnuq97cM=",
+    "address": {
+      "host": "100.89.218.189",
+      "port": 7432
+    }
+  },
+  "localDmi": {
+    "sys_vendor": "Micro-Star International Co., Ltd.",
+    "product_name": "MS-7C37"
+  },
+  "serverDmi": {
+    "sys_vendor": "netcup",
+    "product_name": "KVM Server"
+  },
+  "write": {
+    "id": "ap2-remaining-20261015-domain-write",
+    "passed": true,
+    "result": {
+      "id": "e1a0de760-1",
+      "expires": 9007199254740991
+    }
+  },
+  "isolatedFailure": {
+    "id": "ap2-remaining-20261015-domain-unavailable",
+    "passed": true,
+    "result": {
+      "remoteUnavailable": true,
+      "unaffectedCount": 0
+    }
+  },
+  "readAfterReopen": {
+    "id": "ap2-remaining-20261015-domain-read",
+    "passed": false,
+    "error": "bound child outcome is unresolved"
+  },
+  "readRetrySameParent": {
+    "id": "ap2-remaining-20261015-domain-read-resume",
+    "passed": true,
+    "result": {
+      "found": true,
+      "nonce": "physical-domain-20261015"
+    }
+  },
+  "durableParents": [
+    {
+      "id": "domain-probe-write",
+      "phase": "done",
+      "erased": null
+    },
+    {
+      "id": "domain-probe-read",
+      "phase": "done",
+      "erased": null
+    }
+  ],
+  "physicalHostCount": 2,
+  "passed": true
+}

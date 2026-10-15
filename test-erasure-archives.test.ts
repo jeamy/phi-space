@@ -74,3 +74,27 @@ test('register prevents floor rollback and late archive admission across indepen
   await db.compareAndSet(key,5,{...second,epoch:3,commandHash:sha('third'),state:'pending'});
  } finally {other.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+for (const backend of BACKENDS) test(`${backend}: legacy register keeps final boot fencing after deletion reads`, async () => {
+ const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'pi-legacy-fence-'));
+ const external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
+ let stop:(()=>void)|undefined;
+ try {
+  const host=await home.open(),space=await host.commit(tx=>createSpace(tx,'jobs',1000),ctx);
+  const permit={state:'active',authorityId:'authority',dataIncarnation:space.incarnation,role:'local',transitionId:'test'};
+  await installed.compareAndSet('installed:host:'+space.spaceId,null,permit);
+  await external.compareAndSet('boot:host',null,{hostId:'host',state:'active',spaces:{[space.spaceId]:permit}});
+  let floors=0,armed=false;
+  const legacy={compareAndSet:external.compareAndSet.bind(external),get:async<T extends import('./src/core.ts').Json>(key:string)=>{
+   const value=await external.get<T>(key);
+   if(armed&&key==='erasure:'+space.spaceId&&++floors===2){const boot=(await external.get<any>('boot:host'))!;await external.compareAndSet('boot:host',boot.version,{...boot.value,state:'fenced'});}
+   return value;
+  }};
+  stop=installBootGuard(host,ctx,{hostId:'host',authorityId:'authority',external:legacy,installed});
+  armed=true;await assert.rejects(new PiSpaces(host,ctx,()=>1000,undefined,undefined,{space:'jobs'}).write({type:'MustRollback',fields:{}}),BootBlocked);
+  stop();stop=undefined;assert.equal(await new PiSpaces(host,ctx,()=>1000,undefined,undefined,{space:'jobs'}).count(),0);
+  const boot=(await external.get<any>('boot:host'))!;await external.compareAndSet('boot:host',boot.version,{...boot.value,state:'active'});floors=0;
+  stop=installBootGuard(host,ctx,{hostId:'host',authorityId:'authority',external:legacy,installed});
+  await assert.rejects(new PiSpaces(host,ctx,()=>1000,undefined,undefined,{space:'jobs'}).count(),BootBlocked);
+ } finally {stop?.();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
+});

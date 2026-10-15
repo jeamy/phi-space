@@ -485,3 +485,7 @@ export {RootHistoryErasure,RootErasures} from './root-erasure.ts';
 
 export {ErasureArchiveController,type ErasureArchive} from './erasure-archives.ts';
 export {checkErasureBarrier,type ErasureBarrier} from './erasure-barrier.ts';
+
+export {DistributedPrincipalErasure,type DistributedErasurePlan,type ErasureParticipant,type DistributedErasureDriver} from "./distributed-erasure.ts";
+
+export {compactErasedSqlite} from "./erasure-sqlite.ts";

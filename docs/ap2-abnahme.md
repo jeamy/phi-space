@@ -4,21 +4,27 @@
 Bausteintests, den Member-Lasttest und den noch offenen Verbundbetrieb.
 Die bisherigen Nachweise zu AP 1b bleiben bestehen.
 
-## Aktuelle verbleibende Testblöcke (2026-10-14)
+## Aktuelle verbleibende Testblöcke (2026-10-15)
 
 Die Phase-2-Abnahmen sind in acht technische Blöcke gebündelt; jeder Block
-umfasst mehrere Einzeltests. Blöcke 1–3 sind inzwischen abgenommen, **fünf
-Blöcke bleiben offen**, danach folgt die Gesamtfreigabe mit finalen Gate-4-Werten.
-Die Blöcke 4–8 benötigen teilweise noch Implementierung oder Betriebsentscheidungen.
+umfasst mehrere Einzeltests. **Alle acht Testblöcke sind abgeschlossen.** Offen bleibt die gesonderte
+Gesamtfreigabe mit finalen Gate-4-Werten; sie ist kein weiterer Testblock.
+Block 4 ist auf ausdrückliche Entscheidung des Auftraggebers vom 2026-10-15
+abgeschlossen und wird nicht erneut ausgeführt. Die historischen negativen
+Messungen weiter unten bleiben als solche erhalten; die Entscheidung erklärt
+diese Messungen nicht nachträglich zu bestandenen Tests.
 
 - [x] 1. Mailbox-ACK-Abbrüche über NetBird unter voller Joblast.
 - [x] 2. Individuelle Member-Prozessabbrüche und Wiederaufnahme.
 - [x] 3. Gezielt unterbrochene Journal-Commits über NetBird.
-- [ ] 4. Produktive Root-/Directory-Provisionierung samt Boot-/Fencing-Prüfung.
-- [ ] 5. Nachweis über unabhängige physische Ausfalldomänen.
-- [ ] 6. Verteilte Principal-Löschung einschließlich Router-/Parent-Historien.
-- [ ] 7. Physische Löschung bzw. verbindliche Löschregeln für Archive und Backups.
-- [ ] 8. Kontrollierte Umstellung bestehender Abschlussprofile.
+- [x] 4. Produktive Root-/Directory-Provisionierung samt Boot-/Fencing-Prüfung (Abschlussentscheidung 2026-10-15).
+- [x] 5. Nachweis über unabhängige physische Ausfalldomänen (Live-Abnahme 2026-10-15).
+- [x] 6. Verteilte Principal-Löschung einschließlich Router-/Parent-Historien (Live-Abnahme 2026-10-15).
+- [x] 7. Physische Löschung bzw. verbindliche Löschregeln für Archive und Backups (Live-Abnahme 2026-10-15).
+- [x] 8. Kontrollierte Umstellung bestehender Abschlussprofile (Live-Abnahme 2026-10-15).
+
+Datierte Nachträge und Statuszeilen unten beschreiben den Stand des jeweiligen
+Laufs. Für aktuell offene Punkte ist ausschließlich die Liste oben maßgeblich.
 
 ## AP 2.6
 
@@ -668,3 +674,125 @@ enthalten Zwei-Verbindungs-/Wiederanlauf- und mTLS-Prüfungen, **463/463** Tests
 Live-Registerdienst wurde nicht aktualisiert oder neu gestartet. Backup-/Restore-
 Einbindung und aktive Backend-Historien sind weiterhin offen; Block 7 und die
 Blöcke 4–8 insgesamt erhalten dadurch keine Freigabe.
+
+
+## Native Root-Latenz: frische Prüfungen bündeln
+
+Die [Latenz-Nachweise](../test/evidence/ap2-native-performance-2026-10-14/README.md)
+trennen den negativen Take, lesende Messungen und die weiterhin separate Live-Abnahme.
+Ein einzelner lesender Root-Aufruf benötigte zunächst 19,4 Sekunden und 141
+Registerabfragen. Root-Zustand und Schlüssel werden nun aus einem gemeinsamen,
+normal durch BootGuard geschützten Control-Snapshot geprüft; Authority, Erasure und
+Boot stammen aus einem frisch authentifizierten Register-Batch. Journal-Commits
+behalten ihre frischen Autoritätsprüfungen. Es gibt keinen Authentifizierungs- oder
+TLS-Sitzungscache.
+
+Transaktionsfolgen können die noch offene, ursprüngliche Request-Generation bei
+identischer Ziel-, Principal- und Policy-Bindung verwenden. Jeder Effekt behält eine
+eigene dauerhafte Request-ID, einen frischen App-Key-Beweis sowie Grant und Delegation;
+der Member prüft die Zulassung erneut. Eine Inline-Antwort zählt nur mit vollständig
+geprüfter Bindung und Auflösung des tatsächlich gespeicherten Claims als abgeschlossen.
+Legacy-Antworten benötigen weiterhin die gesonderte Auflösung.
+
+Typecheck, **151** gezielte Prüfungen und **473/473** vollständige Tests bestehen.
+Neue native Testläufe erhalten einen eigenen Objekt-/Request-Namensraum und messen
+Begin, Take, Ergebnis und Commit getrennt. Frühere negative Claims bleiben erhalten.
+Diese Implementierungs- und Testnachweise schließen Block 4 noch nicht.
+
+## Block 8: Live-Profilumstellung nach Root-Abbruch (2026-10-15)
+
+Im neuen, getrennten Scope `ap2-remaining-20261015` wurde der autorisierte
+Supervisor-Command `ap2-remaining-20261015-profiles` nach dauerhaftem Eintritt
+in `freezing` per gezieltem Root-SIGKILL unterbrochen. Die ursprüngliche
+Command-ID und der gespeicherte Fortschritt blieben bestehen. Dabei zeigte
+sich ein Wiederanlauffehler: Remote-Supervisor-Jobs liefen vor dem Control-
+Listener an, den Members für frische Schlüsselabfragen benötigen.
+
+`startFederationHost` öffnet nun den vollständig durch Boot-, Proof-, Grant-
+und Control-Regeln geschützten Listener vor dem ersten Supervisor-Durchlauf.
+Zwei zusätzliche persistente TCP-Tests prüfen diese Reihenfolge für JSONL
+und SQLite. Nach Deployment des gebauten Fixes schloss derselbe Live-Command
+ab: Policy-Version 5, `maxResultCount=2`, alle drei Members wieder `active`
+und mit genau dem neuen Abschlussprofil. Die bestehenden Umstellungstests
+prüfen weiterhin Antwortverlust, Commit-Abbrüche und Rechte-/Zielbindungen.
+
+Nachweis: [profile-transition.json](../test/evidence/ap2-remaining-2026-10-15/profile-transition.json).
+Block 4 wird dadurch nicht erneut ausgeführt oder bewertet.
+
+## Block 5: Zwei physische Hosts und isolierter Member-Ausfall (2026-10-15)
+
+Der bestehende NetBird-Peer des lokalen physischen Rechners wurde als vierter
+Member `d` in den eigenen Scope aufgenommen. Root und drei weitere Members
+blieben auf `big`; der lokale Rechner verwendet sein vorhandenes NetBird,
+keinen zweiten VPN-Tunnel. Der zusätzliche SSH-Unix-Socket dient ausschließlich
+dem unabhängigen Recovery-Register und transportiert weiterhin frisches mTLS.
+DMI-Proben unterscheiden den lokalen MSI-Rechner vom netcup-KVM-Server.
+Der Nachweis betrifft zwei physische Betriebsumgebungen, keine Standby-
+Promotion und keinen simulierten Stromausfall.
+
+Ein signierter Root-Schreibaufruf legte einen `DomainProbe` ausschließlich auf
+Member `d` ab. Nach SIGKILL genau dieses Members meldete dessen Abfrage einen
+Ausfall, während Root und die übrigen Members weiterhin antworteten. Der
+ursprüngliche Lese-Parent `domain-probe-read` wurde nach Wiederöffnung mit
+unveränderter Zielbindung fortgesetzt und las genau den persistierten Nonce.
+Ein zunächst noch unaufgelöster Child wurde mit derselben Parent-ID fortgesetzt;
+es wurde kein neuer Datenlauf erzeugt. Beide Parents sind dauerhaft `done`.
+
+Die lokale Eingangs-Firewall erhielt ausschließlich zwei dokumentierte Regeln
+für Root-Peer, lokale NetBird-Adresse und Testport 7432.
+Nachweis: [physical-domains.json](../test/evidence/ap2-remaining-2026-10-15/physical-domains.json).
+
+## Blöcke 6 und 7: Verteilte Löschung mit Backend- und Archivnachweis (2026-10-15)
+
+Der echte Verbund umfasste Root/Control und vier Data-Members auf zwei Space-
+Hosts; sein Recovery-Register lief unabhängig auf `vpsc`. Neun persönliche
+Prüf-Entries wurden auf drei Members angelegt. Eine zusätzliche lesende
+Prüfung der unveränderten Root-Sicherung bestätigt vor dem Löschen die
+Nutzdaten sowohl im eigenen als auch im fremden gecachten Parent-Ergebnis.
+
+`DistributedPrincipalErasure` band alle fünf Ziel-Tupel und denselben
+Command `erase-20261015-remaining` an einen unabhängigen CAS-Fortschritt.
+Alle Writer wurden unabhängig gesperrt und tatsächlich gestoppt. Erst nach
+Anlage sämtlicher Lösch-Floors und Sammlung aller Entry-IDs begannen lokale
+Löschungen. Nach deren Abschluss endete der erste Koordinatorprozess am
+dauerhaften Checkpoint `root`; ein neuer Prozess setzte denselben Command
+fort und bereinigte eigene und betroffene fremde Parent-/Child-Historien.
+
+Danach wurden alle fünf lokalen Epochen und installierten Berechtigungen
+aktualisiert, die aktiven SQLite-Historien konsolidiert und die zuvor
+registrierten, per SHA-256 gebundenen Backups quarantänisiert und gelöscht.
+Die Einzelbelege prüfen tatsächliche Datenbank-, WAL- und SHM-Dateien auf
+verbliebene Prüfnutzdaten und verlangen leere eigene Archivverzeichnisse.
+Alle fünf Floors sind `sealed`, alle Archive `destroyed`, `archivesPending`
+ist überall `false`. Ein Restore jedes alten Archivs wurde ausdrücklich
+mit der Löschpolicy-Ablehnung zurückgewiesen; Transportfehler zählen nicht
+als bestandener Restore-Negativtest.
+
+Nach erneuter Boot-Freigabe und Neustart von Root und allen vier Members
+lieferten ursprünglicher Write-Parent, eigener Read-Parent und fremder
+Read-Parent jeweils `ResultExpired`; keine Prüfeinträge waren mehr sichtbar.
+Keine frühere Root-Operation wurde mit einer neuen Request-ID wiederholt.
+
+Nachweise: [Löschlauf](../test/evidence/ap2-remaining-2026-10-15/distributed-erasure.json),
+[Dateiprüfungen](../test/evidence/ap2-remaining-2026-10-15/file-verification.json),
+[Fortschrittsfolge](../test/evidence/ap2-remaining-2026-10-15/erasure-progress.jsonl),
+[alte Cache-Inhalte vorhanden](../test/evidence/ap2-remaining-2026-10-15/privacy-before-erasure.json),
+[Prüfstand](../test/evidence/ap2-remaining-2026-10-15/validation.json).
+
+Der abschließende Quellstand besteht Typecheck, 492 pi-spaces-Tests,
+20 mobile Runtime-Tests, vier mobile Lifecycle-Tests und zwei zusätzliche
+Python-Prüfungen mit echten SQLite-WAL-Daten. Letztere bestätigen konsistente
+Backups, unveränderte Bindung beim Replay und Löschverweigerung bei falschem
+Hash. Die SQLite-Bereinigung behauptet kein sicheres Überschreiben von
+Speichermedien; zusätzliche externe Kopien unterliegen weiterhin der
+verbindlichen Registrierung und Löschpolicy. Die Gesamtfreigabe/Gate 4 bleibt
+von diesen abgeschlossenen Testblöcken getrennt.
+
+Nach Sicherung der Nachweise wurden ausschließlich die eigenen Abnahme-
+Fixtures unabhängig gesperrt und beendet. Zwei eigene lokale Firewallregeln,
+drei eigene NetBird-Policies und Gruppen, beide SSH-Weiterleitungen und die
+exakt ergänzte eingeschränkte SSH-Autorisierungszeile wurden entfernt.
+Der eigene Register-Container wurde beendet und entfernt; seine Datenbank,
+die versiegelten Löschbelege und die Stores bleiben erhalten. Die geprüften
+Bestandsdienste auf `big` und `vpsc` behielten Container-ID, Startzeit und
+Neustartzähler: [Aufräumnachweis](../test/evidence/ap2-remaining-2026-10-15/cleanup.json).

@@ -1,0 +1,26 @@
+{
+  "id": "ap2-native-receipt-20261014-profile-batched",
+  "passed": true,
+  "result": {
+    "elapsedMs": 12670,
+    "count": 1,
+    "timings": {
+      "register.getMany": {
+        "calls": 55,
+        "ms": 4952.83153400001
+      },
+      "host.snapshot": {
+        "calls": 43,
+        "ms": 7395.332928000016
+      },
+      "register.get": {
+        "calls": 81,
+        "ms": 7095.83064
+      },
+      "host.commit": {
+        "calls": 13,
+        "ms": 3972.444268000003
+      }
+    }
+  }
+}

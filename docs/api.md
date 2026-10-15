@@ -424,3 +424,55 @@ verspätete Registrierung eines alten Backups scheitert am aktuellen Floor.
 Die vollständige Backup-/Restore-Betriebsintegration steht noch aus.
 Andere `RecoveryRegister`-Implementierungen müssen dieselben atomaren
 Constraints garantieren; reine Aufruferprüfungen reichen dafür nicht aus.
+
+
+### Frische Prüfungen und gebundene Claim-Antworten
+
+`RecoveryRegister.getMany(keys)` ist optional. TLS-Clients aktivieren den bounded
+Batch-Aufruf ausdrücklich mit `batchReads: true`; höchstens 32 eindeutige Schlüssel
+werden pro Batch gelesen. Jeder Batch eröffnet eine neue gegenseitig authentifizierte
+TLS-Verbindung. Ohne Opt-in bleiben Einzelabfragen erhalten. Ein `unixPath`-Transport
+verlangt einen absoluten Socketpfad und einen explizit gepinnten TLS-Servernamen.
+
+`SpaceKeyDirectory.findMany(keys)` und `inspect(keys)` lesen jedes Mal einen normalen,
+geschützten Control-Snapshot. `inspect` liefert dessen Zustand und daraus abgeleitete
+Schlüssel gemeinsam; es speichert weder Zustand noch Authentifizierung für Folgeaufrufe.
+
+`RemoteSpace.requestBoundWithClaim(call)` verlangt zusätzlich zum normalen Ergebnis
+optional einen gebundenen Claim-Beleg. Der Dienst löst dafür den tatsächlich gespeicherten
+ursprünglichen Claim auf; der Router prüft Host, Space, Authority, Incarnation, Epoche,
+Principal, Generation, Request-ID, Methode und Argumenthash. Das rohe RPC-Ergebnis
+ersetzt diesen Beleg nicht. Fehlt er bei einem älteren Dienst, bleibt eine getrennte
+Claim-Auflösung erforderlich. Wiederhergestellte, abgelaufene oder widersprüchliche
+Ergebnisse führen weiterhin zu Review.
+
+`RouterStepSpec.generationAdmitUntil` hält die bestätigte Zulassungsfrist fest. Eine
+Transaktionsfolge darf die ursprüngliche Generation nur innerhalb dieser Frist und
+bei identischer Bindung verwenden. Das ersetzt keinen App-Key-Beweis, Grant oder
+Delegationsnachweis. Fehlende Fristen in älteren Journaleinträgen führen zum bisherigen
+frischen Generation-Aufruf.
+
+### Verteilte Principal-Löschung und SQLite-Historien
+
+`DistributedPrincipalErasure({register, archives, driver, authorize})` besitzt
+`advance(plan)` und `execute(plan)`. Ein Plan bindet `id`, `principal`, bis zu
+32 eindeutige Space-Zieltupel mit genau einem Root und `retentionMs` (maximal
+24 Stunden). Die Fortschrittsadresse lautet `erasure-command:<id>` im
+unabhängigen Register. Geänderte Argumente unter derselben ID werden
+abgewiesen. Die aktuelle Sammelgrenze beträgt 4096 Entry-IDs (je höchstens 256 Zeichen);
+eine Überschreitung stoppt den Command unter den bestehenden Sperren.
+Driver-Aufrufe müssen für dieselbe Command-Bindung wiederholbar
+sein und exklusiv gestoppte Writer nachweisen. Vor jedem Wartungsschritt
+werden alle Sperren geprüft; Freigabe setzt alle versiegelten Floors voraus.
+Die CLI [run-distributed-erasure.ts](../test/testbed/run-distributed-erasure.ts)
+bindet dies für den eigenen Testverbund an echte Prozesse, lokale Löschbelege,
+Archivdateien und die unabhängigen mTLS-Registereinträge.
+
+`compactErasedSqlite(path, assertExclusiveFenced)` bereinigt alte Revisionen
+der sessionweiten pi-spaces-Dokumente in einem gestoppten SQLite-Store mit
+pi-durable-Schema 1. Es bewahrt aktuelle Dokumentwerte und die letzte Sequenz
+und Version, entfernt überholte Revisionen, führt Secure-Delete, Checkpoints,
+VACUUM und Integrity-Check aus. Symlink-Dateien und andere Schema-Versionen
+werden abgewiesen. Der Aufrufer muss die logische Principal-Löschung bereits
+abgeschlossen haben und den exklusiven unabhängigen Fence während des
+gesamten Aufrufs halten. Es ersetzt keine Löschregel für externe Kopien.

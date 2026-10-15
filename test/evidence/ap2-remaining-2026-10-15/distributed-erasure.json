@@ -1,0 +1,219 @@
+{
+  "scope": "ap2-remaining-20261015",
+  "plan": {
+    "id": "erase-20261015-remaining",
+    "principal": {
+      "peerId": "db3r4ovlh8lg008eup20",
+      "agentId": "erase-subject"
+    },
+    "participants": [
+      {
+        "hostId": "ap2-remaining-20261015-root",
+        "spaceId": "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084",
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "dataIncarnation": "8447c6bf",
+        "primaryEpoch": 1,
+        "root": true
+      },
+      {
+        "hostId": "ap2-remaining-20261015-a",
+        "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "dataIncarnation": "6b1a8ff6",
+        "primaryEpoch": 1
+      },
+      {
+        "hostId": "ap2-remaining-20261015-b",
+        "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "dataIncarnation": "e5c053f4",
+        "primaryEpoch": 1
+      },
+      {
+        "hostId": "ap2-remaining-20261015-c",
+        "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "dataIncarnation": "63f845f6",
+        "primaryEpoch": 1
+      },
+      {
+        "hostId": "ap2-remaining-20261015-d",
+        "spaceId": "sp-27747146-759a-4d24-9055-8ae8a658c2ef",
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "dataIncarnation": "1a0de760",
+        "primaryEpoch": 1
+      }
+    ],
+    "retentionMs": 86400000
+  },
+  "coordinator": {
+    "version": 34,
+    "value": {
+      "commandHash": "5e3218eb57e2d4f5b8d6b04066ad28a42be81e132f9afcd74b8a08f4ffa73c2e",
+      "cursor": 0,
+      "entryIds": [],
+      "epochs": {
+        "sp-23878fee-9aab-4744-a827-8309dfe93dca": 1,
+        "sp-27747146-759a-4d24-9055-8ae8a658c2ef": 1,
+        "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c": 1,
+        "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e": 1,
+        "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084": 1
+      },
+      "hash": "ea319d80cf041e3cf24a5be57d531ebe76e69951b1bbb1a04f2a37c2309146f2",
+      "phase": "completed"
+    }
+  },
+  "floors": {
+    "root": {
+      "version": 2,
+      "value": {
+        "archiveDeadline": 1792123533395,
+        "archivesPending": false,
+        "commandHash": "5e3218eb57e2d4f5b8d6b04066ad28a42be81e132f9afcd74b8a08f4ffa73c2e",
+        "epoch": 1,
+        "spaceId": "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084",
+        "state": "sealed"
+      }
+    },
+    "a": {
+      "version": 2,
+      "value": {
+        "archiveDeadline": 1792123561860,
+        "archivesPending": false,
+        "commandHash": "5e3218eb57e2d4f5b8d6b04066ad28a42be81e132f9afcd74b8a08f4ffa73c2e",
+        "epoch": 1,
+        "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+        "state": "sealed"
+      }
+    },
+    "b": {
+      "version": 2,
+      "value": {
+        "archiveDeadline": 1792123590607,
+        "archivesPending": false,
+        "commandHash": "5e3218eb57e2d4f5b8d6b04066ad28a42be81e132f9afcd74b8a08f4ffa73c2e",
+        "epoch": 1,
+        "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+        "state": "sealed"
+      }
+    },
+    "c": {
+      "version": 2,
+      "value": {
+        "archiveDeadline": 1792123618987,
+        "archivesPending": false,
+        "commandHash": "5e3218eb57e2d4f5b8d6b04066ad28a42be81e132f9afcd74b8a08f4ffa73c2e",
+        "epoch": 1,
+        "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+        "state": "sealed"
+      }
+    },
+    "d": {
+      "version": 2,
+      "value": {
+        "archiveDeadline": 1792123628290,
+        "archivesPending": false,
+        "commandHash": "5e3218eb57e2d4f5b8d6b04066ad28a42be81e132f9afcd74b8a08f4ffa73c2e",
+        "epoch": 1,
+        "spaceId": "sp-27747146-759a-4d24-9055-8ae8a658c2ef",
+        "state": "sealed"
+      }
+    }
+  },
+  "archives": {
+    "root": {
+      "version": 3,
+      "value": {
+        "artifacts": [
+          {
+            "deleteBefore": 1792123533395,
+            "epoch": 0,
+            "id": "erase-20261015-remaining-root",
+            "kind": "backup",
+            "sha256": "e260d752dc474ddbd4cb89e36ff579be75d1e0413095d2c8d822f00739df8f45",
+            "state": "destroyed"
+          }
+        ],
+        "spaceId": "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084"
+      }
+    },
+    "a": {
+      "version": 3,
+      "value": {
+        "artifacts": [
+          {
+            "deleteBefore": 1792123561860,
+            "epoch": 0,
+            "id": "erase-20261015-remaining-a",
+            "kind": "backup",
+            "sha256": "b5d21b107329da46f3972914ae131e5398450955031295e60c1726a2ceb69433",
+            "state": "destroyed"
+          }
+        ],
+        "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca"
+      }
+    },
+    "b": {
+      "version": 3,
+      "value": {
+        "artifacts": [
+          {
+            "deleteBefore": 1792123590607,
+            "epoch": 0,
+            "id": "erase-20261015-remaining-b",
+            "kind": "backup",
+            "sha256": "0a475222cb567be4435d4c7124bb3d9c32ecc06cc40f318775b7869728012c3e",
+            "state": "destroyed"
+          }
+        ],
+        "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c"
+      }
+    },
+    "c": {
+      "version": 3,
+      "value": {
+        "artifacts": [
+          {
+            "deleteBefore": 1792123618987,
+            "epoch": 0,
+            "id": "erase-20261015-remaining-c",
+            "kind": "backup",
+            "sha256": "2235a63baf092e4e20d7ee2615621bcce645024e8fd778a3baa8bdbee372c910",
+            "state": "destroyed"
+          }
+        ],
+        "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e"
+      }
+    },
+    "d": {
+      "version": 3,
+      "value": {
+        "artifacts": [
+          {
+            "deleteBefore": 1792123628290,
+            "epoch": 0,
+            "id": "erase-20261015-remaining-d",
+            "kind": "backup",
+            "sha256": "2d56040fa8c194a2053a5bd7f602d1135b58f71ac2925d8b7c0c47e48726489d",
+            "state": "destroyed"
+          }
+        ],
+        "spaceId": "sp-27747146-759a-4d24-9055-8ae8a658c2ef"
+      }
+    }
+  },
+  "liveCheck": {
+    "id": "ap2-remaining-20261015-privacy-check",
+    "passed": true,
+    "result": {
+      "originalParentReplayExpired": {
+        "privacy-write-a-0": true,
+        "privacy-read-own": true,
+        "privacy-read-foreign": true
+      },
+      "remainingEntries": 0
+    }
+  },
+  "coordinatorRestartedBeforeRoot": true,
+  "passed": true
+}

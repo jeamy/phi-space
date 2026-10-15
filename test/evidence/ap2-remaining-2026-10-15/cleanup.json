@@ -1,0 +1,58 @@
+{
+  "scope": "ap2-remaining-20261015",
+  "storesPreserved": true,
+  "block4NotRerun": true,
+  "ownedFirewallRulesRemoved": 2,
+  "netbirdRemoved": [
+    {
+      "kind": "policies",
+      "id": "db7qk77lh8lg0089hkcg",
+      "name": "ap2-native-positive-20261014"
+    },
+    {
+      "kind": "groups",
+      "id": "db7qk6vlh8lg0089hkb0",
+      "name": "ap2-native-positive-20261014"
+    },
+    {
+      "kind": "policies",
+      "id": "db7rts7lh8lg0089krdg",
+      "name": "ap2-native-receipt-20261014"
+    },
+    {
+      "kind": "groups",
+      "id": "db7rtrnlh8lg0089krbg",
+      "name": "ap2-native-receipt-20261014"
+    },
+    {
+      "kind": "policies",
+      "id": "db84jlnlh8lg008ae77g",
+      "name": "ap2-remaining-20261015"
+    },
+    {
+      "kind": "groups",
+      "id": "db84jl7lh8lg008ae75g",
+      "name": "ap2-remaining-20261015"
+    }
+  ],
+  "localTunnelStopped": true,
+  "sshAuthorization": {
+    "exactOwnedLineRemoved": true
+  },
+  "bigTunnel": {
+    "exactOwnedTunnelStopped": true
+  },
+  "ownRegisterStoppedAndRemoved": true,
+  "protectedServicesUnchanged": true,
+  "passed": true,
+  "protectedInventorySha256": {
+    "protectedBefore": {
+      "big": "6000c53e7eea4371c54e577eb96c60dea446f62e11cedf1cc03e80a9b3608749",
+      "vpsc": "e7a0f81a2082805f729388aea4f95147bd813ee15daaea865b2472073e5c9372"
+    },
+    "protectedAfter": {
+      "big": "6000c53e7eea4371c54e577eb96c60dea446f62e11cedf1cc03e80a9b3608749",
+      "vpsc": "e7a0f81a2082805f729388aea4f95147bd813ee15daaea865b2472073e5c9372"
+    }
+  }
+}

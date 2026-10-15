@@ -1,0 +1,1118 @@
+{
+  "scope": "ap2-remaining-20261015",
+  "commandId": "ap2-remaining-20261015-profiles",
+  "policy": {
+    "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+    "policyVersion": 5,
+    "default": {
+      "mode": "local",
+      "member": "a"
+    },
+    "rules": [
+      {
+        "type": "SieveTask",
+        "mode": "expand",
+        "by": {
+          "field": "taskId"
+        },
+        "members": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      {
+        "type": "SieveResult",
+        "mode": "expand",
+        "by": {
+          "field": "taskId"
+        },
+        "members": [
+          "a",
+          "b",
+          "c"
+        ]
+      }
+    ],
+    "completionProfiles": [
+      {
+        "taskType": "SieveTask",
+        "resultTypes": [
+          "SieveResult"
+        ],
+        "equalFields": [
+          "taskId",
+          "rangeStart",
+          "rangeEnd"
+        ],
+        "maxResultCount": 2,
+        "maxResultBytes": 32768,
+        "maxLeaseMs": 60000
+      }
+    ]
+  },
+  "before": {
+    "profiles": [],
+    "erasures": [],
+    "parents": [],
+    "routing": [
+      {
+        "policy": {
+          "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+          "policyVersion": 4,
+          "default": {
+            "mode": "local",
+            "member": "a"
+          },
+          "rules": [
+            {
+              "type": "SieveTask",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            {
+              "type": "SieveResult",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          ],
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 1,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ]
+        },
+        "members": {
+          "a": {
+            "id": "a",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-a",
+              "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "6b1a8ff6",
+              "primaryEpoch": 1
+            }
+          },
+          "b": {
+            "id": "b",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-b",
+              "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "e5c053f4",
+              "primaryEpoch": 1
+            }
+          },
+          "c": {
+            "id": "c",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-c",
+              "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "63f845f6",
+              "primaryEpoch": 1
+            }
+          }
+        }
+      }
+    ],
+    "spaces": [
+      {
+        "spaceId": "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084",
+        "membership": null,
+        "completionProfiles": [],
+        "erasureEpoch": 0,
+        "entries": 26,
+        "privacyEntries": 0,
+        "activeTransactions": 0
+      },
+      {
+        "spaceId": "sp-f0ff5302-77d6-4594-b433-eae655c7b7e4",
+        "membership": null,
+        "completionProfiles": [],
+        "erasureEpoch": 0,
+        "entries": 0,
+        "privacyEntries": 0,
+        "activeTransactions": 0
+      }
+    ]
+  },
+  "interrupted": {
+    "profiles": [
+      {
+        "id": "ap2-remaining-20261015-profiles",
+        "hash": "4685907ee63cb60defc7db5ce5bc9180fc8bde0c78bc1ca3917ef5a56f065267",
+        "oldPolicy": {
+          "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+          "policyVersion": 4,
+          "default": {
+            "mode": "local",
+            "member": "a"
+          },
+          "rules": [
+            {
+              "type": "SieveTask",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            {
+              "type": "SieveResult",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          ],
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 1,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ]
+        },
+        "nextPolicy": {
+          "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+          "policyVersion": 5,
+          "default": {
+            "mode": "local",
+            "member": "a"
+          },
+          "rules": [
+            {
+              "type": "SieveTask",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            {
+              "type": "SieveResult",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          ],
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 2,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ]
+        },
+        "members": [
+          {
+            "id": "a",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-a",
+              "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "6b1a8ff6",
+              "primaryEpoch": 1
+            }
+          },
+          {
+            "id": "b",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-b",
+              "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "e5c053f4",
+              "primaryEpoch": 1
+            }
+          },
+          {
+            "id": "c",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-c",
+              "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "63f845f6",
+              "primaryEpoch": 1
+            }
+          }
+        ],
+        "phase": "freezing",
+        "cursor": 0
+      }
+    ],
+    "erasures": [],
+    "parents": [],
+    "routing": [
+      {
+        "policy": {
+          "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+          "policyVersion": 4,
+          "default": {
+            "mode": "local",
+            "member": "a"
+          },
+          "rules": [
+            {
+              "type": "SieveTask",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            },
+            {
+              "type": "SieveResult",
+              "mode": "expand",
+              "by": {
+                "field": "taskId"
+              },
+              "members": [
+                "a",
+                "b",
+                "c"
+              ]
+            }
+          ],
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 1,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ]
+        },
+        "members": {
+          "a": {
+            "id": "a",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-a",
+              "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "6b1a8ff6",
+              "primaryEpoch": 1
+            }
+          },
+          "b": {
+            "id": "b",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-b",
+              "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "e5c053f4",
+              "primaryEpoch": 1
+            }
+          },
+          "c": {
+            "id": "c",
+            "state": "active",
+            "target": {
+              "hostId": "ap2-remaining-20261015-c",
+              "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "dataIncarnation": "63f845f6",
+              "primaryEpoch": 1
+            }
+          }
+        }
+      }
+    ],
+    "spaces": [
+      {
+        "spaceId": "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084",
+        "membership": null,
+        "completionProfiles": [],
+        "erasureEpoch": 0,
+        "entries": 26,
+        "privacyEntries": 0,
+        "activeTransactions": 0
+      },
+      {
+        "spaceId": "sp-f0ff5302-77d6-4594-b433-eae655c7b7e4",
+        "membership": null,
+        "completionProfiles": [],
+        "erasureEpoch": 0,
+        "entries": 0,
+        "privacyEntries": 0,
+        "activeTransactions": 0
+      }
+    ]
+  },
+  "startupFix": "guarded Control listener starts before recovered Supervisor remote work",
+  "resumedReply": {
+    "completed": true,
+    "result": {
+      "hash": "4685907ee63cb60defc7db5ce5bc9180fc8bde0c78bc1ca3917ef5a56f065267",
+      "oldPolicy": {
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "policyVersion": 4,
+        "default": {
+          "mode": "local",
+          "member": "a"
+        },
+        "rules": [
+          {
+            "type": "SieveTask",
+            "mode": "expand",
+            "by": {
+              "field": "taskId"
+            },
+            "members": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          {
+            "type": "SieveResult",
+            "mode": "expand",
+            "by": {
+              "field": "taskId"
+            },
+            "members": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        ],
+        "completionProfiles": [
+          {
+            "taskType": "SieveTask",
+            "resultTypes": [
+              "SieveResult"
+            ],
+            "equalFields": [
+              "taskId",
+              "rangeStart",
+              "rangeEnd"
+            ],
+            "maxResultCount": 1,
+            "maxResultBytes": 32768,
+            "maxLeaseMs": 60000
+          }
+        ]
+      },
+      "nextPolicy": {
+        "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+        "policyVersion": 5,
+        "default": {
+          "mode": "local",
+          "member": "a"
+        },
+        "rules": [
+          {
+            "type": "SieveTask",
+            "mode": "expand",
+            "by": {
+              "field": "taskId"
+            },
+            "members": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          {
+            "type": "SieveResult",
+            "mode": "expand",
+            "by": {
+              "field": "taskId"
+            },
+            "members": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        ],
+        "completionProfiles": [
+          {
+            "taskType": "SieveTask",
+            "resultTypes": [
+              "SieveResult"
+            ],
+            "equalFields": [
+              "taskId",
+              "rangeStart",
+              "rangeEnd"
+            ],
+            "maxResultCount": 2,
+            "maxResultBytes": 32768,
+            "maxLeaseMs": 60000
+          }
+        ]
+      },
+      "members": [
+        {
+          "id": "a",
+          "state": "active",
+          "target": {
+            "hostId": "ap2-remaining-20261015-a",
+            "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "dataIncarnation": "6b1a8ff6",
+            "primaryEpoch": 1
+          }
+        },
+        {
+          "id": "b",
+          "state": "active",
+          "target": {
+            "hostId": "ap2-remaining-20261015-b",
+            "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "dataIncarnation": "e5c053f4",
+            "primaryEpoch": 1
+          }
+        },
+        {
+          "id": "c",
+          "state": "active",
+          "target": {
+            "hostId": "ap2-remaining-20261015-c",
+            "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "dataIncarnation": "63f845f6",
+            "primaryEpoch": 1
+          }
+        }
+      ],
+      "phase": "completed",
+      "cursor": 0
+    }
+  },
+  "after": {
+    "root": {
+      "profiles": [
+        {
+          "id": "ap2-remaining-20261015-profiles",
+          "hash": "4685907ee63cb60defc7db5ce5bc9180fc8bde0c78bc1ca3917ef5a56f065267",
+          "oldPolicy": {
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "policyVersion": 4,
+            "default": {
+              "mode": "local",
+              "member": "a"
+            },
+            "rules": [
+              {
+                "type": "SieveTask",
+                "mode": "expand",
+                "by": {
+                  "field": "taskId"
+                },
+                "members": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              },
+              {
+                "type": "SieveResult",
+                "mode": "expand",
+                "by": {
+                  "field": "taskId"
+                },
+                "members": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              }
+            ],
+            "completionProfiles": [
+              {
+                "taskType": "SieveTask",
+                "resultTypes": [
+                  "SieveResult"
+                ],
+                "equalFields": [
+                  "taskId",
+                  "rangeStart",
+                  "rangeEnd"
+                ],
+                "maxResultCount": 1,
+                "maxResultBytes": 32768,
+                "maxLeaseMs": 60000
+              }
+            ]
+          },
+          "nextPolicy": {
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "policyVersion": 5,
+            "default": {
+              "mode": "local",
+              "member": "a"
+            },
+            "rules": [
+              {
+                "type": "SieveTask",
+                "mode": "expand",
+                "by": {
+                  "field": "taskId"
+                },
+                "members": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              },
+              {
+                "type": "SieveResult",
+                "mode": "expand",
+                "by": {
+                  "field": "taskId"
+                },
+                "members": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              }
+            ],
+            "completionProfiles": [
+              {
+                "taskType": "SieveTask",
+                "resultTypes": [
+                  "SieveResult"
+                ],
+                "equalFields": [
+                  "taskId",
+                  "rangeStart",
+                  "rangeEnd"
+                ],
+                "maxResultCount": 2,
+                "maxResultBytes": 32768,
+                "maxLeaseMs": 60000
+              }
+            ]
+          },
+          "members": [
+            {
+              "id": "a",
+              "state": "active",
+              "target": {
+                "hostId": "ap2-remaining-20261015-a",
+                "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+                "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+                "dataIncarnation": "6b1a8ff6",
+                "primaryEpoch": 1
+              }
+            },
+            {
+              "id": "b",
+              "state": "active",
+              "target": {
+                "hostId": "ap2-remaining-20261015-b",
+                "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+                "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+                "dataIncarnation": "e5c053f4",
+                "primaryEpoch": 1
+              }
+            },
+            {
+              "id": "c",
+              "state": "active",
+              "target": {
+                "hostId": "ap2-remaining-20261015-c",
+                "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+                "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+                "dataIncarnation": "63f845f6",
+                "primaryEpoch": 1
+              }
+            }
+          ],
+          "phase": "completed",
+          "cursor": 0
+        }
+      ],
+      "erasures": [],
+      "parents": [],
+      "routing": [
+        {
+          "policy": {
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "policyVersion": 5,
+            "default": {
+              "mode": "local",
+              "member": "a"
+            },
+            "rules": [
+              {
+                "type": "SieveTask",
+                "mode": "expand",
+                "by": {
+                  "field": "taskId"
+                },
+                "members": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              },
+              {
+                "type": "SieveResult",
+                "mode": "expand",
+                "by": {
+                  "field": "taskId"
+                },
+                "members": [
+                  "a",
+                  "b",
+                  "c"
+                ]
+              }
+            ],
+            "completionProfiles": [
+              {
+                "taskType": "SieveTask",
+                "resultTypes": [
+                  "SieveResult"
+                ],
+                "equalFields": [
+                  "taskId",
+                  "rangeStart",
+                  "rangeEnd"
+                ],
+                "maxResultCount": 2,
+                "maxResultBytes": 32768,
+                "maxLeaseMs": 60000
+              }
+            ]
+          },
+          "members": {
+            "a": {
+              "id": "a",
+              "state": "active",
+              "target": {
+                "hostId": "ap2-remaining-20261015-a",
+                "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+                "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+                "dataIncarnation": "6b1a8ff6",
+                "primaryEpoch": 1
+              }
+            },
+            "b": {
+              "id": "b",
+              "state": "active",
+              "target": {
+                "hostId": "ap2-remaining-20261015-b",
+                "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+                "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+                "dataIncarnation": "e5c053f4",
+                "primaryEpoch": 1
+              }
+            },
+            "c": {
+              "id": "c",
+              "state": "active",
+              "target": {
+                "hostId": "ap2-remaining-20261015-c",
+                "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+                "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+                "dataIncarnation": "63f845f6",
+                "primaryEpoch": 1
+              }
+            }
+          }
+        }
+      ],
+      "spaces": [
+        {
+          "spaceId": "sp-78b90e98-b66e-4ec2-9a0a-9bcdc6f03084",
+          "membership": null,
+          "completionProfiles": [],
+          "erasureEpoch": 0,
+          "entries": 27,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        },
+        {
+          "spaceId": "sp-f0ff5302-77d6-4594-b433-eae655c7b7e4",
+          "membership": null,
+          "completionProfiles": [],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        }
+      ]
+    },
+    "a": {
+      "profiles": [],
+      "erasures": [],
+      "parents": [],
+      "routing": [],
+      "spaces": [
+        {
+          "spaceId": "sp-23878fee-9aab-4744-a827-8309dfe93dca",
+          "membership": {
+            "memberId": "a",
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "policy": {
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "policyVersion": 5,
+              "default": {
+                "mode": "local",
+                "member": "a"
+              },
+              "rules": [
+                {
+                  "type": "SieveTask",
+                  "mode": "expand",
+                  "by": {
+                    "field": "taskId"
+                  },
+                  "members": [
+                    "a",
+                    "b",
+                    "c"
+                  ]
+                },
+                {
+                  "type": "SieveResult",
+                  "mode": "expand",
+                  "by": {
+                    "field": "taskId"
+                  },
+                  "members": [
+                    "a",
+                    "b",
+                    "c"
+                  ]
+                }
+              ],
+              "completionProfiles": [
+                {
+                  "taskType": "SieveTask",
+                  "resultTypes": [
+                    "SieveResult"
+                  ],
+                  "equalFields": [
+                    "taskId",
+                    "rangeStart",
+                    "rangeEnd"
+                  ],
+                  "maxResultCount": 2,
+                  "maxResultBytes": 32768,
+                  "maxLeaseMs": 60000
+                }
+              ]
+            },
+            "state": "active",
+            "admissionVersion": 5,
+            "transitionId": "ap2-remaining-20261015-add-a"
+          },
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 2,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        },
+        {
+          "spaceId": "sp-586a22de-8a24-48e1-a80b-91ced542325f",
+          "membership": null,
+          "completionProfiles": [],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        }
+      ]
+    },
+    "b": {
+      "profiles": [],
+      "erasures": [],
+      "parents": [],
+      "routing": [],
+      "spaces": [
+        {
+          "spaceId": "sp-382047fb-3ff0-41d0-b7ff-0205ad0e022c",
+          "membership": {
+            "memberId": "b",
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "policy": {
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "policyVersion": 5,
+              "default": {
+                "mode": "local",
+                "member": "a"
+              },
+              "rules": [
+                {
+                  "type": "SieveTask",
+                  "mode": "expand",
+                  "by": {
+                    "field": "taskId"
+                  },
+                  "members": [
+                    "a",
+                    "b",
+                    "c"
+                  ]
+                },
+                {
+                  "type": "SieveResult",
+                  "mode": "expand",
+                  "by": {
+                    "field": "taskId"
+                  },
+                  "members": [
+                    "a",
+                    "b",
+                    "c"
+                  ]
+                }
+              ],
+              "completionProfiles": [
+                {
+                  "taskType": "SieveTask",
+                  "resultTypes": [
+                    "SieveResult"
+                  ],
+                  "equalFields": [
+                    "taskId",
+                    "rangeStart",
+                    "rangeEnd"
+                  ],
+                  "maxResultCount": 2,
+                  "maxResultBytes": 32768,
+                  "maxLeaseMs": 60000
+                }
+              ]
+            },
+            "state": "active",
+            "admissionVersion": 5,
+            "transitionId": "ap2-remaining-20261015-add-b"
+          },
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 2,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        },
+        {
+          "spaceId": "sp-3759e3ee-14d5-4dc0-a3e5-76bf0fac8d21",
+          "membership": null,
+          "completionProfiles": [],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        }
+      ]
+    },
+    "c": {
+      "profiles": [],
+      "erasures": [],
+      "parents": [],
+      "routing": [],
+      "spaces": [
+        {
+          "spaceId": "sp-6df41d01-88ac-4421-a64e-83ae1f9fa21e",
+          "membership": {
+            "memberId": "c",
+            "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+            "policy": {
+              "authorityId": "remaining-7b672e34dceb58ec74e5eedd",
+              "policyVersion": 5,
+              "default": {
+                "mode": "local",
+                "member": "a"
+              },
+              "rules": [
+                {
+                  "type": "SieveTask",
+                  "mode": "expand",
+                  "by": {
+                    "field": "taskId"
+                  },
+                  "members": [
+                    "a",
+                    "b",
+                    "c"
+                  ]
+                },
+                {
+                  "type": "SieveResult",
+                  "mode": "expand",
+                  "by": {
+                    "field": "taskId"
+                  },
+                  "members": [
+                    "a",
+                    "b",
+                    "c"
+                  ]
+                }
+              ],
+              "completionProfiles": [
+                {
+                  "taskType": "SieveTask",
+                  "resultTypes": [
+                    "SieveResult"
+                  ],
+                  "equalFields": [
+                    "taskId",
+                    "rangeStart",
+                    "rangeEnd"
+                  ],
+                  "maxResultCount": 2,
+                  "maxResultBytes": 32768,
+                  "maxLeaseMs": 60000
+                }
+              ]
+            },
+            "state": "active",
+            "admissionVersion": 5,
+            "transitionId": "ap2-remaining-20261015-add-c"
+          },
+          "completionProfiles": [
+            {
+              "taskType": "SieveTask",
+              "resultTypes": [
+                "SieveResult"
+              ],
+              "equalFields": [
+                "taskId",
+                "rangeStart",
+                "rangeEnd"
+              ],
+              "maxResultCount": 2,
+              "maxResultBytes": 32768,
+              "maxLeaseMs": 60000
+            }
+          ],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        },
+        {
+          "spaceId": "sp-3add6d3a-aaa6-4da9-878a-c9ec267030c5",
+          "membership": null,
+          "completionProfiles": [],
+          "erasureEpoch": 0,
+          "entries": 0,
+          "privacyEntries": 0,
+          "activeTransactions": 0
+        }
+      ]
+    }
+  },
+  "passed": true
+}

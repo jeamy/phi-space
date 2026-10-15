@@ -51,8 +51,17 @@ await build({ ...common, entryPoints: ['test/testbed/inspect.ts'], outfile: reso
 // Provisioned production-mode federation daemon, no TypeScript shipped.
 await build({ ...common, entryPoints: ['test/testbed/federation-host.ts'], outfile: resolve(out, 'tools/federation-host.mjs'), plugins: [sharedLibrary] });
 
+await build({ ...common, entryPoints: ['test/testbed/audit-native.ts'], outfile: resolve(out, 'tools/audit-native.mjs'), plugins: [sharedLibrary] });
+
+await build({ ...common, entryPoints: ['test/testbed/audit-maintenance.ts'], outfile: resolve(out, 'tools/audit-maintenance.mjs'), plugins: [sharedLibrary] });
+
+await build({ ...common, entryPoints: ['test/testbed/erase-compact.ts'], outfile: resolve(out, 'tools/erase-compact.mjs'), plugins: [sharedLibrary] });
+
 // Administrative backup/data-recovery helper; requires an explicitly provisioned exclusive runtime.
 await build({ ...common, entryPoints: ['test/testbed/recovery-data-host.ts'], outfile: resolve(out, 'tools/recovery-data-host.mjs'), plugins: [sharedLibrary] });
+
+// Isolated independent recovery register, including bounded fresh-mTLS read batches.
+await build({ ...common, entryPoints: ['test/testbed/recovery-register-host.ts'], outfile: resolve(out, 'tools/recovery-register-host.mjs'), plugins: [sharedLibrary] });
 
 // Administrative component fault proxy; built artifact, no source shipped.
 await build({ ...common, entryPoints: ['test/testbed/netbird/fault-proxy.mjs'], outfile: resolve(out, 'tools/fault-proxy.mjs') });

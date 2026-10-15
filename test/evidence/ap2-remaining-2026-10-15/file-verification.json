@@ -1,0 +1,57 @@
+[
+  {
+    "commandId": "erase-20261015-remaining",
+    "member": "root",
+    "backendAndArchivesClean": true,
+    "filesChecked": [
+      "harness.sqlite",
+      "harness.sqlite-wal",
+      "harness.sqlite-shm"
+    ],
+    "archiveFilesRemaining": 0
+  },
+  {
+    "commandId": "erase-20261015-remaining",
+    "member": "a",
+    "backendAndArchivesClean": true,
+    "filesChecked": [
+      "harness.sqlite",
+      "harness.sqlite-wal",
+      "harness.sqlite-shm"
+    ],
+    "archiveFilesRemaining": 0
+  },
+  {
+    "commandId": "erase-20261015-remaining",
+    "member": "b",
+    "backendAndArchivesClean": true,
+    "filesChecked": [
+      "harness.sqlite",
+      "harness.sqlite-wal",
+      "harness.sqlite-shm"
+    ],
+    "archiveFilesRemaining": 0
+  },
+  {
+    "commandId": "erase-20261015-remaining",
+    "member": "c",
+    "backendAndArchivesClean": true,
+    "filesChecked": [
+      "harness.sqlite",
+      "harness.sqlite-wal",
+      "harness.sqlite-shm"
+    ],
+    "archiveFilesRemaining": 0
+  },
+  {
+    "commandId": "erase-20261015-remaining",
+    "member": "d",
+    "backendAndArchivesClean": true,
+    "filesChecked": [
+      "harness.sqlite",
+      "harness.sqlite-wal",
+      "harness.sqlite-shm"
+    ],
+    "archiveFilesRemaining": 0
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "id": "ap2-native-receipt-20261014-profile-steady",
+  "passed": true,
+  "result": {
+    "elapsedMs": 19592,
+    "count": 1,
+    "timings": {
+      "register.get": {
+        "calls": 37,
+        "ms": 4460.659631000017
+      },
+      "register.getMany": {
+        "calls": 47,
+        "ms": 5262.9202909999585
+      },
+      "host.snapshot": {
+        "calls": 27,
+        "ms": 7254.920617000025
+      },
+      "host.commit": {
+        "calls": 1,
+        "ms": 644.6469939999952
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import test from "node:test";
+import {createServer as createRawServer,connect as rawConnect} from "node:net";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -72,7 +73,15 @@ test("mutual TLS register separates readers, scoped writers and operators and pe
  const dir=mkdtempSync(join(tmpdir(),"pi-spaces-tls-register-")),pki=certificates(dir);let db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));
  const config={...pki.identity("server"),host:"127.0.0.1",port:0,peers:{[pki.fingerprint("reader")]:{operator:false},[pki.fingerprint("operator")]:{operator:true},[pki.fingerprint("scoped")]:{writeKeys:["boot:member"]}}};
  let server=await serveTlsRegister(db,config);
- const client=(name:string)=>new TlsRecoveryRegister({...pki.identity(name),host:"127.0.0.1",port:(server.address() as any).port,timeoutMs:2000});
+ const unixPath=join(dir,"register-tunnel.sock"),tunnelSockets=new Set<ReturnType<typeof rawConnect>>();
+ const tunnel=createRawServer(socket=>{const upstream=rawConnect({host:"127.0.0.1",port:(server.address() as any).port});
+  for(const current of [socket,upstream]){tunnelSockets.add(current);current.on("close",()=>tunnelSockets.delete(current));}
+  socket.on("error",()=>upstream.destroy());upstream.on("error",()=>socket.destroy());socket.on("close",()=>upstream.destroy());upstream.on("close",()=>socket.destroy());socket.pipe(upstream).pipe(socket);
+ });
+ await new Promise<void>((resolve,reject)=>{tunnel.once("error",reject);tunnel.listen(unixPath,()=>{tunnel.off("error",reject);resolve();});});chmodSync(unixPath,0o600);
+ const tunneled=new TlsRecoveryRegister({...pki.identity("reader"),host:"127.0.0.1",port:1,unixPath,serverName:"127.0.0.1",batchReads:true});
+ assert.throws(()=>new TlsRecoveryRegister({...pki.identity("reader"),host:"127.0.0.1",port:1,unixPath}),/pinned TLS server name/);
+ const client=(name:string)=>new TlsRecoveryRegister({...pki.identity(name),host:"127.0.0.1",port:(server.address() as any).port,timeoutMs:2000,batchReads:true});
  try{
   await client("operator").compareAndSet("authority:control",null,{authorityId:"a"});
   assert.equal((await client("reader").get<any>("authority:control"))?.value.authorityId,"a");
@@ -81,6 +90,19 @@ test("mutual TLS register separates readers, scoped writers and operators and pe
   await assert.rejects(client("unknown").get("authority:control"));
   await client("scoped").compareAndSet("boot:member",null,{state:"quarantine"});
   await assert.rejects(client("scoped").compareAndSet("authority:control",1,{}),/no CAS permission/);
+  const batch=await client("reader").getMany(["authority:control","boot:member","missing"]);
+  assert.equal((batch["authority:control"]!.value as any).authorityId,"a");
+  assert.equal((batch["boot:member"]!.value as any).state,"quarantine");assert.equal(batch.missing,null);
+  await assert.rejects(client("reader").getMany(Array.from({length:33},(_,i)=>"key:"+i)),RegisterConflict);
+  await assert.rejects(client("unknown").getMany(["authority:control"]));
+  // Fresh batches must observe changes; no authenticated connection or record is cached.
+  await client("operator").compareAndSet("boot:member",1,{state:"fenced"});
+  assert.equal(((await client("reader").getMany(["boot:member"]))["boot:member"]!.value as any).state,"fenced");
+  assert.equal(((await tunneled.getMany(["boot:member"]))["boot:member"]!.value as any).state,"fenced");
+  const readerPolicy=config.peers[pki.fingerprint("reader")];delete config.peers[pki.fingerprint("reader")];
+  await assert.rejects(client("reader").getMany(["boot:member"]));
+  await assert.rejects(tunneled.getMany(["boot:member"]));
+  config.peers[pki.fingerprint("reader")]=readerPolicy;
   const erasure={spaceId:"jobs",epoch:1,state:"pending",commandHash:"a".repeat(64),archiveDeadline:2000,archivesPending:true};
   await client("operator").compareAndSet("erasure:jobs",null,erasure);
   await assert.rejects(client("operator").compareAndSet("erasure:jobs",1,{...erasure,epoch:0}),RegisterConflict);
@@ -89,7 +111,7 @@ test("mutual TLS register separates readers, scoped writers and operators and pe
   await server.close();db.close();db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));server=await serveTlsRegister(db,config);
   assert.equal((await client("reader").get<any>("authority:control"))?.value.authorityId,"a");
   const wrongName=new TlsRecoveryRegister({...pki.identity("reader"),host:"127.0.0.1",serverName:"untrusted.example",port:(server.address() as any).port});await assert.rejects(wrongName.get("authority:control"));
- }finally{await server.close();db.close();rmSync(dir,{recursive:true,force:true});}
+ }finally{for(const socket of tunnelSockets)socket.destroy();await new Promise<void>(resolve=>tunnel.close(()=>resolve()));await server.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });
 
 test("signed control ACK is durable, rejects mismatched tuples and cannot bypass a fenced source",async()=>{

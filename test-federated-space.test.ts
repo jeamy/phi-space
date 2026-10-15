@@ -15,7 +15,7 @@ import {
 import {FederationJournalLayout,operationPartition,parentJournalKey,partitionRouterId} from './src/federation-journals.ts';
 import {memberReferencesIn} from './src/federation-references.ts';
 import {FederationOperations} from './src/federated-space.ts';
-import {RouterController,RouterJournal} from './src/router.ts';
+import {RouterController,RouterJournal,type RouterLimits} from './src/router.ts';
 import {RoutingConflict, type RoutingState} from './src/routing-semantics.ts';
 import {FederationSimulator} from './test/support/federation-simulator.ts';
 import {BACKENDS, ctx, PersistentHome} from './test/support/persistent.ts';
@@ -24,7 +24,7 @@ const principal = {
     peerId : 'client',
     agentId : 'worker'
 };
-async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>, partitions=1) {
+async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>, partitions=1,limits:Partial<RouterLimits>={}) {
     const sim = new FederationSimulator(b), home = new PersistentHome(b);
     try {
         await sim.add('a');
@@ -56,7 +56,7 @@ async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>
             routerId : 'federated-router',
             authorityId : 'authority-1',
             target : sim,
-            assertAuthority : async () => {}
+            assertAuthority : async () => {},limits
         });
         let router = new RouterController(options());
         let partitionRouters=partitions===1?[router]:Array.from({length:partitions},(_,n)=>new RouterController({...options(),routerId:partitionRouterId('federation',n)}));
@@ -130,9 +130,10 @@ async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>
             get partitionRouters(){return partitionRouters;},
             makeWith:(n:number)=>new FederatedSpace({host,ctx,id:"federation",router,journalPartitions:n,partitionRouters:Array.from({length:n},(_,i)=>new RouterController({...options(),routerId:partitionRouterId("federation",i)})),state:async()=>state,io,assertAuthority:async()=>{}}),
             get f() { return f; },
-            reopen : async () => {
+            reopen : async (beforeRecovery?:(host:any)=>Promise<void>) => {
                 home.crash(host);
                 host = await home.open();
+                await beforeRecovery?.(host);
                 router = new RouterController(options());
                 partitionRouters=partitions===1?[router]:Array.from({length:partitions},(_,n)=>new RouterController({...options(),routerId:partitionRouterId('federation',n)}));
                 for(const r of new Set([router,...partitionRouters]))await r.recover();
@@ -422,3 +423,32 @@ for(const b of BACKENDS)for(const kind of ['write','read','take','race'] as cons
   const key=parentJournalKey('federation',8,operationPartition(request.id,8)),parent=(await o.host.snapshot(FederationOperations,key,ctx)).operations[request.id];assert.equal(parent.phase,'needsReview');
   await o.reopen();await assert.rejects(o.f.resume(request.id),FederationUnavailable);await assert.rejects(run(),FederationUnavailable);assert.equal(invokes,1);
  },8));
+
+for(const b of BACKENDS)for(const boundary of ['admission','completion'] as const)for(const fault of ['failBeforeCommit','loseAnswer'] as const)
+test(`${b}: atomic Parent/Child ${boundary} ${fault} preserves one original effect`,()=>fixture(b,async o=>{
+ const request={id:'atomic-'+boundary+'-'+fault,principal:o.p},entry={type:'Job',fields:{n:1}};
+ const matches=(writes:any[])=>writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"operations"')&&JSON.stringify(w.content).includes(boundary==='admission'?'"ready"':'"done"'))&&writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"command"')&&JSON.stringify(w.content).includes('"steps"'));
+ o.home.faults.arm(fault,matches);await assert.rejects(o.f.write(entry,request));assert.equal(o.home.faults.fired,1,'the paired multi-document commit must be interrupted');
+ const key=parentJournalKey('federation',8,operationPartition(request.id,8));let durablePhase:string|undefined;await o.reopen(async(host:any)=>{durablePhase=(await host.snapshot(FederationOperations,key,ctx)).operations[request.id].phase;});
+ assert.equal(durablePhase,boundary==='admission'?(fault==='loseAnswer'?'ready':'admitting'):(fault==='loseAnswer'?'done':'ready'));
+ const api=new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a'));assert.equal(await api.count(),boundary==='admission'?0:1);
+ await o.reopen();const result=await o.f.write(entry,request);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await api.count(),1);
+ const claims=Object.values((await o.sim.nodes.get('a').host.snapshot(Space,ctx)).rpc.claims) as any[];assert.equal(claims.filter(c=>c.method==='write').length,1);
+ for(const router of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,router.journalId,ctx)).future??{},{});
+},8));
+
+for(const b of BACKENDS)for(const fault of ['failBeforeCommit','loseAnswer'] as const)
+test(`${b}: Parent admission and child budget ${fault} commit or roll back together`,()=>fixture(b,async o=>{
+ const request={id:'atomic-budget-'+fault,principal:o.p},entry={type:'Job',fields:{n:1}};
+ o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"operations"')&&JSON.stringify(w.content).includes('"admitting"'))&&writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"future"')&&JSON.stringify(w.content).includes('"slots"')));
+ await assert.rejects(o.f.write(entry,request));assert.equal(o.home.faults.fired,1);let parent:any,slots=0;
+ await o.reopen(async(host:any)=>{parent=(await host.snapshot(FederationOperations,parentJournalKey('federation',8,operationPartition(request.id,8)),ctx))?.operations[request.id];for(const r of o.partitionRouters){const j=await host.snapshot(RouterJournal,r.journalId,ctx);slots+=Object.values(j?.future??{}).reduce((n:number,x:any)=>n+x.slots,0);}});
+ assert.equal(!!parent,fault==='loseAnswer');assert.equal(slots,fault==='loseAnswer'?1:0);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
+ await o.f.write(entry,request);await o.reopen();await o.f.write(entry,request);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+},8));
+
+for(const b of BACKENDS)test(`${b}: large Parent stays on bounded separate commits when atomic room is insufficient`,()=>fixture(b,async o=>{
+ let paired=0;o.home.faults.arm('failBeforeCommit',(writes:any[])=>{if(writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"operations"')&&/"ready"|"done"/.test(JSON.stringify(w.content)))&&writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"command"')&&JSON.stringify(w.content).includes('"steps"')))paired++;return false;});
+ const request={id:'bounded-fallback',principal:o.p},entry={type:'Job',fields:{blob:'x'.repeat(27000)}};const result=await o.f.write(entry,request);assert.equal(paired,0);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+ for(const r of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,r.journalId,ctx)).future??{},{});
+},8,{maxCommitBytes:60000,maxIndexBytes:1024,defaultResultBytes:64}));

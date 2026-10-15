@@ -37,6 +37,8 @@ export type PeerKeyRec = {
 export interface KeyDirectory {
 	/** The key if it exists (any state), else null. */
 	find(peerId: string, keyId: string): Promise<PeerKeyRec | null>;
+	/** One fresh directory read for a bounded set of keys; never a retained authentication. */
+	findMany?(keys: readonly {peerId:string;keyId:string}[]): Promise<(PeerKeyRec|null)[]>;
 }
 /** Keys in memory: tests and tools. */
 export class MemoryKeyDirectory implements KeyDirectory {

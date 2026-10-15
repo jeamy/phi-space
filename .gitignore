@@ -5,3 +5,4 @@ dist/
 .env
 .DS_Store
 test/testbed/testbed.env
+__pycache__/

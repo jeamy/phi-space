@@ -10,6 +10,7 @@ import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
+import {rpcDomain} from "./rpc-domain.ts";
 import { PiSpaces, type SpaceHost } from "./client.ts";
 import { listSpaces, snapshotSpace, spaceDoc, UnknownSpaceError, DEFAULT_ALIAS, Registry } from "./spaces.ts";
 import type { Principal, RequestRef } from "./claims.ts";
@@ -56,14 +57,15 @@ export type Call = {
 	space?: string;
 	request?: { generation: string; requestId: string };
 	/** The renewable frame; checked on every call, never part of the argument hash. */
-	frame?: { authorityId?: string; primaryEpoch?: number; grant?: Json; delegation?: Json };
+	frame?: { authorityId?: string; primaryEpoch?: number; grant?: Json; delegation?: Json; claimReceipt?: boolean };
 	args?: Record<string, Json>;
 };
 export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
 	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
-export type Reply = { ok: true; result: Json } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
+export type ClaimReceipt={protocol:'pi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
+export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
 export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("@earendil-works/pi-durable").Tx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
 export type SpaceServiceOptions = {
@@ -169,8 +171,23 @@ export class SpaceService {
 			const frameBytes = Math.min(transportFrameBytes, (await client.configuration()).limits.maxFrameBytes);
 			responseFrame = frameBytes;
 			if ((rawBytes ?? encodedBytes(call)) > frameBytes) throw new core.ResourceExhausted("the request exceeds the space frame limit");
-			const result = await this.dispatch(method, args, { id, request, client, space, grant, frameBytes });
-			const reply: Reply = { ok: true, result };
+			const includeClaim=isObj(frame)&&frame.claimReceipt===true;
+            if(isObj(frame)&&frame.claimReceipt!==undefined&&typeof frame.claimReceipt!=='boolean')throw new Bad('claimReceipt must be boolean');
+            if(includeClaim){if(!request)throw new Bad('claim receipt requires an original effect request');this.allowed(id,'resolveOperation');}
+            const result = await this.dispatch(method, args, { id, request, client, space, grant, frameBytes });
+            const reply: Reply = { ok: true, result };
+            if(includeClaim&&request){
+                // This is the full retained-claim check, not an acknowledgement inferred from result.
+                // Unavailable witnesses use the legacy separate resolution path at the Router.
+                try{
+                    const domain=rpcDomain(call as unknown as Call,id.principal),epoch=await this.o.epochForSpace?.(space)??this.o.primaryEpoch;
+                    const record=await client.resolveOperationRecord(request,domain.method,claims.argHash(domain.method,domain.args),epoch);
+                    const resolutionGrant=this.allowed(id,'resolveOperation');
+                    if('result' in record.resolution&&isObj(record.resolution.result)&&Array.isArray(record.resolution.result.types))this.checkTypes(resolutionGrant,record.resolution.result.types as string[],'this retained result');
+                    const hostId=this.o.hostId??(await this.o.host.snapshot(Registry,this.o.ctx))?.hostId;
+                    if(hostId)reply.claimReceipt={protocol:'pi-spaces-claim-receipt-v1',hostId,...record};
+                }catch{/* Effect may already be committed. Leave the witness absent; never fabricate completion. */}
+            }
 			if (encodedBytes(reply) > frameBytes) throw new core.ResourceExhausted("the configured frame cannot carry the result; use a compatible transport frame");
 			return reply;
 		} catch (e) {

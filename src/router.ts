@@ -14,7 +14,7 @@ export type RouterOperation = "write"|"read"|"take"|"txn"|"lease"|"wait"|"notify
 export type RouterStepSpec = {
     target: TargetBinding; principal: Principal; generation: string; method: RouterOperation;
     args: Json; policyVersion?: number; targetRequest?: import("./delegation.ts").TargetRequest;
-    resultBudgetBytes?: number
+    resultBudgetBytes?: number; generationAdmitUntil?: number
 };
 export type RouterCommandSpec = {
     id: string; area: string;
@@ -112,9 +112,10 @@ const specOf = (c: RouterCommand) => ({
     area: c.area,
     blocksArea: c.blocksArea,
     steps: c.steps.map(
-        ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest}) =>
-            ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest}))
+        ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest,generationAdmitUntil}) =>
+            ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest,generationAdmitUntil}))
 });
+export type RouterCommitHook=(command:Readonly<RouterCommand>,tx:import('@earendil-works/pi-durable').Tx,context:{roomBytes:number;releaseFuture:(id:string)=>void})=>Promise<void>;
 export type RouterOptions = {
     host: Pick<Session, "commit"|"snapshot">; ctx: Context; routerId: string; authorityId: string;
     target: RouterTarget;
@@ -200,6 +201,7 @@ export class RouterController {
             if (!["write", "read", "take", "txn", "lease", "wait", "notify", "cancelOperation"]
                      .includes(x.method))
                 throw new TypeError("non-idempotent command operation");
+            if(x.generationAdmitUntil!==undefined&&(!Number.isSafeInteger(x.generationAdmitUntil)||x.generationAdmitUntil<0))throw new TypeError("invalid generation admission deadline");
             canonicalJson(x.args);
             const resultBudgetBytes = x.resultBudgetBytes ?? this.limits.defaultResultBytes;
             if (!Number.isSafeInteger(resultBudgetBytes) || resultBudgetBytes < 64)
@@ -231,25 +233,28 @@ export class RouterController {
                 "command cannot reserve bounded results and commit overhead");
         return c;
     }
+    private hookContext(i:Index,c:RouterCommand){return{roomBytes:this.limits.maxCommitBytes-bytes(i)-bytes(c)-8192,releaseFuture:(id:string)=>{ident(id);const r=i.future?.[id];if(r){i.reservedBytes-=r.slots*r.bytesPerSlot;delete i.future![id];}}};}
+    private reserveFutureValue(i:Index,id:string,slots:number,bytesPerSlot:number){
+        ident(id);if(!Number.isSafeInteger(slots)||slots<1||!Number.isSafeInteger(bytesPerSlot)||bytesPerSlot<1024||bytesPerSlot>this.limits.maxCommandBytes)throw new RouterBudgetExceeded('invalid future reservation');
+        i.future??={};if(i.future[id])return;const count=Object.values(i.future).reduce((n,r)=>n+r.slots,0);
+        if(Object.keys(i.refs).length+count+slots>this.limits.maxCommands||i.reservedBytes+slots*bytesPerSlot+this.limits.maxIndexBytes>this.limits.maxJournalBytes)throw new RouterBudgetExceeded('future child budget unavailable');
+        i.future[id]={slots,bytesPerSlot};i.reservedBytes+=slots*bytesPerSlot;
+        if(bytes(i)>this.limits.maxIndexBytes)throw new RouterBudgetExceeded('router index exceeds budget');
+    }
+    /** Only inside a caller-owned transaction with fresh authority guards before/after commit. */
+    async reserveFutureIn(tx:import('@earendil-works/pi-durable').Tx,id:string,slots:number,bytesPerSlot=this.limits.maxCommandBytes){
+        if(!this.ready)throw new RouterBlocked('router is recovering');const i=await tx.doc(RouterJournal,this.o.routerId,null);
+        if(i.mode!=='ready'||i.authorityId!==this.o.authorityId||hash(i.limits)!==hash(this.limits))throw new RouterBlocked('reservation owner or budget changed');
+        this.reserveFutureValue(i,id,slots,bytesPerSlot);
+    }
     /** Reserve future child effects before admitting a composite operation. IDs are never recycled. */
-    async reserveFuture(id: string, slots: number, bytesPerSlot = this.limits.maxCommandBytes): Promise<void> {
-        ident(id);
-        if (!Number.isSafeInteger(slots) || slots < 1 || !Number.isSafeInteger(bytesPerSlot) || bytesPerSlot < 1024 || bytesPerSlot > this.limits.maxCommandBytes) throw new RouterBudgetExceeded("invalid future reservation");
-        await this.serial(async () => {
-            if (!this.ready) throw new RouterBlocked("router is recovering");
-            await this.change(async i => {
-                i.future ??= {};
-                if (i.future[id]) return;
-                const count = Object.values(i.future).reduce((n,r)=>n+r.slots,0);
-                if (Object.keys(i.refs).length + count + slots > this.limits.maxCommands || i.reservedBytes + slots * bytesPerSlot + this.limits.maxIndexBytes > this.limits.maxJournalBytes) throw new RouterBudgetExceeded("future child budget unavailable");
-                i.future[id] = {slots, bytesPerSlot}; i.reservedBytes += slots * bytesPerSlot;
-            });
-        });
+    async reserveFuture(id:string,slots:number,bytesPerSlot=this.limits.maxCommandBytes):Promise<void>{
+        await this.serial(async()=>{if(!this.ready)throw new RouterBlocked('router is recovering');await this.change(async i=>this.reserveFutureValue(i,id,slots,bytesPerSlot));});
     }
     async releaseFuture(id: string): Promise<void> {
-        await this.serial(()=>this.change(async i=>{const r=i.future?.[id];if(r){i.reservedBytes-=r.slots*r.bytesPerSlot;delete i.future![id];}}));
+        await this.serial(async()=>{ident(id);await this.o.assertAuthority();const current=await this.o.host.snapshot(RouterJournal,this.o.routerId,this.o.ctx);if(current?.authorityId!==this.o.authorityId)throw new RouterBlocked('reservation owner changed');if(!current.future?.[id])return;await this.change(async i=>{const r=i.future?.[id];if(r){i.reservedBytes-=r.slots*r.bytesPerSlot;delete i.future![id];}});});
     }
-    async submit(spec: RouterCommandSpec, futureId?: string): Promise<RouterCommand> {
+    async submit(spec: RouterCommandSpec, futureId?: string, admitted?:RouterCommitHook): Promise<RouterCommand> {
         const c = this.normalize(spec);
         return this.serial(async () => {
             if (!this.ready) throw new RouterBlocked("router is recovering");
@@ -283,6 +288,7 @@ export class RouterController {
                     reservedBytes: c.reservedBytes
                 };
                 i.reservedBytes += c.reservedBytes;
+                await admitted?.(copy(c),tx,this.hookContext(i,c));
                 return copy(c);
             });
         });
@@ -293,11 +299,11 @@ export class RouterController {
         await ack();
         return c;
     }
-    private async update(id: string, f: (c: RouterCommand) => void): Promise<RouterCommand> {
+    private async update(id: string, f: (c: RouterCommand,tx:import("@earendil-works/pi-durable").Tx,i:Index) => void|Promise<void>): Promise<RouterCommand> {
         return this.change(async (i, tx) => {
             const d = await tx.doc(RouterCommands, commandKey(this.o.routerId, id), null);
             if (!d.command || !i.refs[id]) throw new RouterBlocked("missing command history");
-            f(d.command);
+            await f(d.command,tx,i);
             if (bytes(d.command) > d.command.reservedBytes)
                 throw new RouterBudgetExceeded("reserved command bytes exceeded");
             i.refs[id]!.state = d.command.state;
@@ -312,8 +318,8 @@ export class RouterController {
                 s.requestId !== "router-" + hash([this.o.routerId, c.id, n]))
                 throw new RouterBlocked("subrequest binding corrupted");
     }
-    private async applyReceipt(id: string, n: number, r: RouterReceipt): Promise<RouterCommand> {
-        return this.update(id, c => {
+    private async applyReceipt(id: string, n: number, r: RouterReceipt, completed?:RouterCommitHook): Promise<RouterCommand> {
+        return this.update(id, async (c,tx,i) => {
             const s = c.steps[n]!;
             if (hash(r.target) !== hash(s.target) || hash(r.principal) !== hash(s.principal) ||
                 r.method !== s.method || r.generation !== s.generation ||
@@ -349,9 +355,10 @@ export class RouterController {
             } else
                 s.state = r.outcome === "notAdmitted" ? "prepared" : "pending";
             if (c.steps.every(x => x.state === "done")) c.state = "completed";
+            if(c.state==="completed")await completed?.(copy(c),tx,this.hookContext(i,c));
         });
     }
-    private async resolve(c: RouterCommand, n: number): Promise<RouterCommand> {
+    private async resolve(c: RouterCommand, n: number,completed?:RouterCommitHook): Promise<RouterCommand> {
         let receipt: RouterReceipt;
         await this.o.assertAuthority();
         try {
@@ -362,7 +369,7 @@ export class RouterController {
                 d.steps[n]!.evidence = "resolution transport unavailable";
             });
         }
-        return this.applyReceipt(c.id, n, receipt);
+        return this.applyReceipt(c.id, n, receipt,completed);
     }
     /** Cold-start only: initialize empty journals in bounded, fenced commits; recover retained work normally. */
     static async recoverMany(controllers:readonly RouterController[]):Promise<void>{
@@ -416,7 +423,7 @@ export class RouterController {
             this.ready = true;
         });
     }
-    async advance(id: string): Promise<RouterCommand> {
+    async advance(id: string,completed?:RouterCommitHook): Promise<RouterCommand> {
         ident(id);
         return this.serial(async () => {
             if (!this.ready) throw new RouterBlocked("router is recovering");
@@ -427,7 +434,7 @@ export class RouterController {
                 const n = c.steps.findIndex(s => s.state !== "done");
                 if (n < 0) throw new RouterBlocked("inconsistent command state");
                 if (c.steps[n]!.state !== "prepared") {
-                    c = await this.resolve(c, n);
+                    c = await this.resolve(c, n,completed);
                     if (terminal(c.state)) break;
                     if ((c.steps[n] as RouterStep).state !== "prepared") return c;
                 }
@@ -457,7 +464,7 @@ export class RouterController {
                     this.ready = false;
                     throw e;
                 }
-                c = await this.applyReceipt(id, n, receipt);
+                c = await this.applyReceipt(id, n, receipt,completed);
                 if ((c.steps[n] as RouterStep).state !== "done") return c;
             }
             return c;

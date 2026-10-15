@@ -63,7 +63,8 @@ export type FederationOperation = {
                         }>;
     result?: Json;
     erased?:{commandId:string;originalHash:string;subjectHash:string};
-    userTxn?: {member : string; id : string}
+    userTxn?: {member : string; id : string; originId?:string};
+    budgetWithParent?:true
 };
 type Operation = FederationOperation;
 export const FederationOperations =
@@ -255,7 +256,8 @@ export class FederatedSpace {
             registrations : {},
             cursor : 0,
             candidates : {},
-            ...(q.txn ? {userTxn : copy(q.txn)} : {})
+            ...(q.txn ? {userTxn : copy(q.txn)} : {}),
+            ...(ids.length===1&&kind!=='race'?{budgetWithParent:true as const}:{})
         };
         await this.change(q.id, async (d, tx) => {
             if (this.o.controlSpaceId) {
@@ -274,20 +276,30 @@ export class FederatedSpace {
                 throw new RoutingConflict('composite operation history full');
             if (d.operations[q.id])
                 throw new RoutingConflict('concurrent admission');
+            if(op!.budgetWithParent)await this.router(op!.id).reserveFutureIn(tx,child(op!.id,'budget'),1,64*1024);
             d.operations[q.id] = op!;
             d.reservedBytes += 128 * 1024;
         });
         return op;
+    }
+    private async transactionOriginStep(originId:string,member:string){
+        const origin=await this.get(originId);if(!origin||origin.kind!=='txn'||origin.phase!=='done'||origin.members[0]!==member)throw new RoutingConflict('transaction origin changed');
+        const command=await this.router(originId).get(origin.children[member]!);if(!command||command.state!=='completed'||!command.steps[0])throw new RoutingConflict('transaction origin claim unavailable');return command.steps[0];
     }
     private async save(op: Operation) {
         if (Buffer.byteLength(JSON.stringify(op)) > 128 * 1024)
             throw new RoutingConflict('operation result/event budget exceeded');
         await this.change(op.id,d => {if(d.operations[op.id]?.hash!==op.hash)throw new RoutingConflict('missing or conflicting parent history');d.operations[op.id] = copy(op);});
     }
+    private async storeParentIn(tx:import('@earendil-works/pi-durable').Tx,op:Operation){
+        if(Buffer.byteLength(JSON.stringify(op))>128*1024)throw new RoutingConflict('operation result/event budget exceeded');
+        await this.layoutIn(tx);const layout=await tx.doc(FederationJournalLayout,this.o.id,null);if(layout.reconciliation)throw new RoutingConflict('restore reconciliation blocks Parent completion');
+        const partition=operationPartition(op.id,this.partitions),d=await tx.doc(FederationOperations,parentJournalKey(this.o.id,this.partitions,partition),null);if(d.operations[op.id]?.hash!==op.hash)throw new RoutingConflict('missing or conflicting parent history');d.operations[op.id]=copy(op);
+    }
     private async admit(op: Operation) {
         if (op.phase !== 'admitting')
             return op;
-        await this.router(op.id).reserveFuture(
+        if(!op.budgetWithParent)await this.router(op.id).reserveFuture(
             child(op.id, 'budget'), op.members.length * (op.kind === 'race' ? 4 : 1), 64 * 1024);
         for (const member of op.members) {
             const label = 'initial:' + member, id = child(op.id, label);
@@ -310,9 +322,8 @@ export class FederatedSpace {
             let spec: RouterStepSpec;
             try {
                 spec = await this.o.io.step(member, op.principal, method, a, op.policyVersion,
-                                                  op.kind === "txn" && a.originId
-                                                      ? (await this.router(a.originId).get((await this.get(
-                                                            a.originId))!.children[member]!))!.steps[0]
+                                                  (op.kind === "txn" && a.originId || op.userTxn?.originId)
+                                                      ? await this.transactionOriginStep(op.kind==='txn'?a.originId:op.userTxn!.originId!,member)
                                                       : undefined);
             } catch (e) {
                 // No effect has been dispatched; keep the persisted routing plan and reservation.
@@ -321,15 +332,19 @@ export class FederatedSpace {
             }
             const expected = (await this.o.state()).members[member]?.target;
             if (!expected || hash(spec.target) !== hash(expected) ||
-                hash(spec.principal) !== hash(op.principal))
+                hash(spec.principal) !== hash(op.principal)||spec.method!==method||hash(spec.args)!==hash(a)||spec.policyVersion!==undefined&&spec.policyVersion!==op.policyVersion)
                 throw new RoutingConflict('target/principal adapter binding mismatch');
-            await this.router(op.id).submit({id, area : 'federation', steps : [ spec ]},
-                                       child(op.id, 'budget'));
-            op.children[member] = id;
-            await this.save(op);
+            let attached=false;
+            await this.router(op.id).submit({id, area : 'federation', steps : [ spec ]},child(op.id, 'budget'),
+                op.members.length===1&&op.kind!=='race'?async(command,tx,context)=>{
+                    const next={...copy(op),children:{...op.children,[member]:id},phase:'ready' as const};
+                    if(Buffer.byteLength(JSON.stringify(next))>context.roomBytes)return;
+                    if(command.id!==id||command.steps.length!==1)throw new RoutingConflict('Child admission changed binding');
+                    await this.storeParentIn(tx,next);Object.assign(op,next);attached=true;
+                }:undefined);
+            if(!attached){op.children[member] = id;await this.save(op);}
         }
-        op.phase = 'ready';
-        await this.save(op);
+        if((op as Operation).phase!=='ready'){op.phase = 'ready';await this.save(op);}
         return op;
     }
     private async finish(op: Operation, result: Json) {
@@ -350,7 +365,14 @@ export class FederatedSpace {
             throw new FederationUnavailable('operation needs explicit review');
         op = await this.admit(op);
         for (; op.cursor < op.members.length; op.cursor++) {
-            const m = op.members[op.cursor]!, c = await this.router(op.id).advance(op.children[m]!);
+            const m=op.members[op.cursor]!;let finalized=false;
+            const c=await this.router(op.id).advance(op.children[m]!,op.members.length===1?async(command,tx,context)=>{
+                if(command.id!==op.children[m]||command.steps.length!==1||command.steps[0]!.state!=='done')throw new RoutingConflict('Child completion changed binding');
+                const next={...copy(op),phase:'done' as const,result:copy(command.steps[0]!.result??null)};
+                if(Buffer.byteLength(JSON.stringify(next))>context.roomBytes)return;
+                await this.storeParentIn(tx,next);context.releaseFuture(child(op.id,'budget'));Object.assign(op,next);finalized=true;
+            }:undefined);
+            if(finalized)return copy(op.result!);
             if (c.state === 'needsReview' || c.state === 'failed') {
                 op.phase = 'needsReview';
                 await this.save(op);

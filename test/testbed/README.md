@@ -257,3 +257,27 @@ limits. An observer failure ends the fixture instead of leaving a Member
 offline indefinitely. Cleanup recovers lost container-start responses from
 CID files only after this invocation successfully created its fresh directory;
 a refused existing directory never grants ownership of its containers.
+
+### Exclusive distributed erasure acceptance
+
+`run-distributed-erasure.ts PRIVATE_CONFIG [--checkpoint-root]` runs locally
+with Node type stripping. It requires a private pinned fixture manifest, a
+separately authorized mTLS register writer and the exact owned `big`/local
+homes. `netbird/erasure-driver.py` performs the bounded process/file operations.
+Normal daemons are stopped and independently fenced before maintenance.
+The checkpoint option exits after all local deletions; a new CLI process
+resumes the same command to erase Root histories. All floors and actual
+backup/backend checks must complete before boot permission is restored.
+Daemons remain stopped until the independent command receipt is completed.
+
+The coordinator currently bounds evidence at 4096 Entry IDs and 32 Space
+targets; budget failures keep the fixture fenced. Do not use this CLI on
+protected F15 stores or treat its owned fixture manifest as general host access.
+The local transport checks run without a server:
+
+```sh
+python3 -m unittest discover -s test/testbed/netbird -p test_erasure_driver.py
+```
+
+See `docs/ap2-abnahme.md` and `test/evidence/ap2-remaining-2026-10-15/` for the
+actual multi-host deletion, archive and profile-transition acceptance.

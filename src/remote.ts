@@ -159,7 +159,7 @@ export class RemoteSpace implements SpaceLike {
 	 * Send `call`; a transport failure repeats the very same call (same request identity, same arguments). `ok:false` replies
 	 * are answers, never retried: they throw. Returns the result. `onExhausted` turns "attempts used up" into the caller's error.
 	 */
-	private async send(call: Call, onExhausted?: () => Error, end?: number): Promise<Json> {
+	private async send(call: Call, onExhausted?: () => Error, end?: number, mapReply?: (reply:Extract<Reply,{ok:true}>)=>Json): Promise<Json> {
 		call = core.plain(call as unknown as Json) as unknown as Call;
 		let last: unknown;
 		let reproved = false;
@@ -171,7 +171,7 @@ export class RemoteSpace implements SpaceLike {
 			try {
 				const r = await this.roundTrip({ ...call, ...(this.o.space === undefined ? {} : { space: this.o.space }) }, end);
 				if (!r.ok) throw toError(r.error);
-				return r.result;
+				return mapReply?mapReply(r):r.result;
 			} catch (e) {
 				// the host withheld a privileged role because this connection has not proven its app key: prove once, repeat the call
 				if (e instanceof RemoteError && e.code === "ProofRequired" && this.o.signer && !reproved) { reproved = true; await this.authenticate(); n--; continue; }
@@ -186,6 +186,9 @@ export class RemoteSpace implements SpaceLike {
 
 	/** Router adapter entry point: preserves externally journaled request identity. */
 	async requestBound(call:Call):Promise<Json>{return this.send(call);}
+ async requestBoundWithClaim(call:Call):Promise<{result:Json;claimReceipt:import('./service.ts').ClaimReceipt|null}>{
+  return await this.send({...call,frame:{...call.frame,claimReceipt:true}},undefined,undefined,r=>({result:r.result,claimReceipt:r.claimReceipt??null}) as unknown as Json) as unknown as {result:Json;claimReceipt:import('./service.ts').ClaimReceipt|null};
+ }
  async resolveOperation(target:{generation:string;requestId:string},method:string,argumentHash:string,primaryEpoch:number):Promise<claims.AdmissionResolution>{return await this.send({method:'resolveOperation',args:{targetRequest:target,method,argumentHash,primaryEpoch}}) as unknown as claims.AdmissionResolution;}
 	async requestGeneration():Promise<{generation:string;admitUntil:number}>{return await this.rawCall("generation") as any;}
 	async publishCapability(report:import("./capability-directory.ts").CapabilityReport):Promise<import("./core.ts").Lease>{return await this.send({method:"capabilityHeartbeat" as any,args:{report:report as any}}) as any;}

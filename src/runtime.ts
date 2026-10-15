@@ -44,6 +44,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 	const proof = new ProvingService(noticeService??service, { gateHostId: o.hostId, keys: o.keys, now: o.now });
 	let chain: { handle(c: unknown, conn: Connection): Promise<Reply>; handleText(t: string, conn: Connection, bytes?: number): Promise<string> } = proof;
 	let stopSupervisor: (() => Promise<void>) | undefined;
+    let supervisor: Supervisor | undefined;
 	let stopMaintenance: (() => Promise<void>) | undefined;
 	let gate: Awaited<ReturnType<typeof startGate>> | undefined;
 	try {
@@ -101,15 +102,18 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
                     return {phase:r.phase,memberId:r.member.id,...(r.error?{error:r.error}:{}),...(r.policy?{policyVersion:r.policy.policyVersion}:{})};
                 };
             }
-            stopSupervisor = await new Supervisor(o.control.host, ctx, {
+            supervisor = new Supervisor(o.control.host, ctx, {
                 now:o.now,...(Object.keys(asyncCommands).length?{asyncCommands}:{}),
                 ...(o.control.routing?{commands:{setPolicy:async(tx,args)=>{
                     const p=await o.control!.routing!.applyIn(tx,args.policy as any,Number(args.expectedVersion));return {policyVersion:p.policyVersion};
                 }}}:{})
-            }).start();
+            });
 		}
 		stopMaintenance = await startService(host, ctx, { now: o.now });
 		gate = await startGate(chain, { ...o, keys: o.keys });
+        // Recovered remote jobs may need this Control endpoint for fresh Member key lookup.
+        // All proof, grant, Control access and boot guards are installed before listening.
+        if(supervisor)stopSupervisor=await supervisor.start();
 		let closed = false;
 		return { ...gate, service: chain, close: async () => { if (closed) return; closed = true; try { await gate!.close(); await stopSupervisor?.(); await stopMaintenance?.(); } finally { stopBoot?.(); } } };
 	} catch (e) { try { await gate?.close(); await stopSupervisor?.(); await stopMaintenance?.(); } finally { stopBoot?.(); } throw e; }

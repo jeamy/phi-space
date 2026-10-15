@@ -662,3 +662,56 @@ for(const backend of BACKENDS)test(`${backend}: definitive wire transaction erro
   }
  }finally{socket.close();await server.close();}
 }));
+
+for(const backend of BACKENDS)test(`${backend}: inline replies still verify retained claims and every binding; legacy replies resolve separately`,()=>fixture(backend,async o=>{
+ const server=await serveSpace(new ProvingService(o.service(),{keys:o.keys,gateHostId:'member',now:o.clock}),{listen:{host:'127.0.0.1',port:0},connection:()=>({peerId:'router',credentials:{roles:['router']}})}),socket=socketTransport({host:'127.0.0.1',port:(server.address() as any).port});
+ try{
+  const target={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1},state:any={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'member'},rules:[],completionProfiles:[]},members:{member:{id:'member',target,state:'active'}}};
+  let mode='valid',queries=0,effects=0;
+  const transport={request:async(text:string)=>{
+   const call=JSON.parse(text);if(call.method==='resolveOperation')queries++;
+   const encoded=await socket.request(text);if(call.method!=='write')return encoded;effects++;
+   const reply=JSON.parse(encoded);assert.ok(reply.ok);assert.ok(reply.claimReceipt,'Member must resolve the persisted original claim');
+   if(mode==='legacy')delete reply.claimReceipt;
+   else if(mode==='raw-result')reply.result={id:'wrong-unbound-result',expires:123};
+   else if(mode==='missing-principal')delete reply.claimReceipt.binding.principal;
+   else if(mode==='host')reply.claimReceipt.hostId='foreign-host';
+   else if(mode==='principal')reply.claimReceipt.binding.principal={peerId:'foreign'};
+   else if(mode==='request')reply.claimReceipt.binding.requestId='foreign-request';
+   else if(mode==='hash')reply.claimReceipt.binding.argumentHash='0'.repeat(64);
+   else if(mode==='incarnation')reply.claimReceipt.binding.dataIncarnation='foreign-incarnation';
+   else if(mode==='epoch')reply.claimReceipt.binding.primaryEpoch=2;
+   else if(mode==='restored')reply.claimReceipt.resolution.restoredHistory=true;
+   else if(mode==='expired')reply.claimReceipt.resolution.resultExpired=true;
+   else if(mode==='resolution-method')reply.claimReceipt.resolution.method='take';
+   else if(mode==='missing-admission')reply.claimReceipt.resolution={state:'notAdmitted'};
+   return JSON.stringify(reply);
+  }};
+  const rpc=new FederationRpc({state:async()=>state,transport:()=>transport,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock}),router=new RouterController({host:o.root,ctx,routerId:'inline-witness',authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
+  const modes=['valid','raw-result','legacy','missing-principal','host','principal','request','hash','incarnation','epoch','restored','expired','resolution-method','missing-admission'];
+  for(mode of modes){
+   const id='witness-'+mode,spec=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{mode}},txn:null,leaseMs:60000},1);
+   await router.submit({id,area:id,steps:[spec]});const before=queries,command=await router.advance(id);
+   if(['valid','raw-result','legacy'].includes(mode)){assert.equal(command.state,'completed');assert.notEqual((command.steps[0]!.result as any).id,'wrong-unbound-result');assert.equal(queries-before,mode==='legacy'?1:0);}
+   else {assert.equal(command.state,'needsReview');assert.equal(queries,before);const sent=effects;await router.recover();assert.equal((await router.advance(id)).state,'needsReview');assert.equal(effects,sent);}
+  }
+  assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),modes.length);assert.equal(effects,modes.length);
+ }finally{socket.close();await server.close();}
+}));
+
+for(const backend of BACKENDS)test(`${backend}: transaction follow-ups reuse only a live bound admission namespace and still freshly authenticate`,()=>fixture(backend,async o=>{
+ const server=await serveSpace(new ProvingService(o.service(),{keys:o.keys,gateHostId:'member',now:o.clock}),{listen:{host:'127.0.0.1',port:0},connection:()=>({peerId:'router',credentials:{roles:['router']}})}),socket=socketTransport({host:'127.0.0.1',port:(server.address() as any).port});
+ try{
+  const target={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1},state:any={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'member'},rules:[],completionProfiles:[]},members:{member:{id:'member',target,state:'active'}}};
+  let generations=0,proofs=0,effects=0;const transport={request:async(text:string)=>{const c=JSON.parse(text);if(c.method==='generation')generations++;if(c.method==='prove')proofs++;if(['take','write'].includes(c.method))effects++;return socket.request(text);}};
+  const rpc=new FederationRpc({state:async()=>state,transport:()=>transport,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock}),router=new RouterController({host:o.root,ctx,routerId:'generation-reuse',authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
+  await new PiSpaces(o.data,ctx,o.clock).write({type:'Job',fields:{n:1}});
+  await router.submit({id:'begin',area:'begin',steps:[await rpc.step('member',{peerId:'user'},'txn',{action:'begin',leaseMs:60000},1)]});const begun=await router.advance('begin');assert.equal(begun.state,'completed');const origin=begun.steps[0]!,txn=(origin.result as any).id;assert.ok(origin.generationAdmitUntil!>o.now);const before=generations;
+  await router.recover();const retained=(await router.get('begin'))!.steps[0]!;assert.equal(retained.generationAdmitUntil,origin.generationAdmitUntil);
+  const take=await rpc.step('member',{peerId:'user'},'take',{template:{type:'Job'},timeoutMs:0,txn},1,retained);assert.equal(take.generation,origin.generation);assert.equal(generations,before);
+  const priorProofs=proofs;await router.submit({id:'take',area:'take',steps:[take]});assert.equal((await router.advance('take')).state,'completed');assert.ok(proofs>priorProofs);assert.equal(effects,1);
+  for(const bad of [{...origin,generationAdmitUntil:o.now},{...origin,generationAdmitUntil:undefined},{...origin,target:{...origin.target,dataIncarnation:'foreign'}},{...origin,principal:{peerId:'foreign'}}]){const n=generations;const spec=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{n:2}},txn},1,bad);assert.notEqual(spec.generation,origin.generation);assert.equal(generations,n+1);}
+  const next=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{n:2}},txn},1,origin);await router.submit({id:'write',area:'write',steps:[next]});o.records.get('router').state='revoked';const prior=effects;const denied=await router.advance('write');assert.equal(denied.steps[0]!.state,'unknown');assert.equal(effects,prior);o.records.get('router').state='active';assert.equal((await router.advance('write')).state,'completed');assert.equal(effects,prior+1);
+  await router.submit({id:'abort',area:'abort',steps:[await rpc.step('member',{peerId:'user'},'txn',{action:'abort',id:txn},1,origin)]});assert.equal((await router.advance('abort')).state,'completed');assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
+ }finally{socket.close();await server.close();}
+}));

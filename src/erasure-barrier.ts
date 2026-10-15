@@ -1,9 +1,12 @@
 // Independent deletion floor. Space snapshots cannot supply or lower this record.
-import type {RecoveryRegister} from './recovery-register.ts';
+import type {RecoveryRegister,RegisterRecord} from './recovery-register.ts';
 import type {SpaceState} from './core.ts';
 export type ErasureBarrier={spaceId:string;epoch:number;state:'pending'|'sealed';commandHash:string;archiveDeadline?:number;archivesPending?:boolean};
 export async function checkErasureBarrier(register:RecoveryRegister,spaceId:string,state:Readonly<SpaceState>,now=Date.now()):Promise<number|null>{
- const record=await register.get<any>('erasure:'+spaceId);
+ return validateErasureBarrier(await register.get<any>('erasure:'+spaceId),spaceId,state,now);
+}
+// Used only with freshly read records; allows atomic boot/floor reads without caching.
+export function validateErasureBarrier(record:RegisterRecord<any>|null,spaceId:string,state:Readonly<SpaceState>,now:number):number|null{
  if(!record){if((state.erasureEpoch??0)!==0)throw Error('independent erasure barrier is missing');return null;}
  const v=record.value;
  if(v.spaceId!==spaceId||!Number.isSafeInteger(v.epoch)||v.epoch<1||v.state!=='sealed'||typeof v.commandHash!=='string'||!/^[a-f0-9]{64}$/.test(v.commandHash)||(state.erasureEpoch??0)!==v.epoch)throw Error('erasure barrier requires completed deletion at its current epoch');

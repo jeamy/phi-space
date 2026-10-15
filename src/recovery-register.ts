@@ -7,8 +7,21 @@ import { validateErasureRegisterUpdate } from "./erasure-register-policy.ts";
 import type { Json } from "./core.ts";
 
 export type RegisterRecord<T extends Json = Json> = { version: number; value: T };
-export interface RecoveryRegister { get<T extends Json>(key: string): Promise<RegisterRecord<T> | null>; compareAndSet<T extends Json>(key: string, expected: number | null, value: T): Promise<RegisterRecord<T>>; }
+export interface RecoveryRegister { get<T extends Json>(key: string): Promise<RegisterRecord<T> | null>; compareAndSet<T extends Json>(key: string, expected: number | null, value: T): Promise<RegisterRecord<T>>; getMany?(keys: readonly string[]): Promise<Record<string, RegisterRecord | null>>; }
 export class RegisterConflict extends Error {}
+export function validateRegisterReadKeys(keys: readonly string[]): void {
+    if (!Array.isArray(keys) || !keys.length || keys.length > 32 || new Set(keys).size !== keys.length || keys.some(k => typeof k !== 'string' || !k || k.length > 512)) throw new RegisterConflict('invalid bounded register read keys');
+}
+export async function readRegisterRecords(register: RecoveryRegister, keys: readonly string[]): Promise<Record<string, RegisterRecord | null>> {
+    if (!Array.isArray(keys) || !keys.length || new Set(keys).size !== keys.length) throw new RegisterConflict('invalid register read keys');
+    const records: Record<string, RegisterRecord | null> = {};
+    for(let offset=0;offset<keys.length;offset+=32){
+        const batch=keys.slice(offset,offset+32);validateRegisterReadKeys(batch);
+        if(register.getMany)Object.assign(records,await register.getMany(batch));
+        else for(const key of batch)records[key]=await register.get(key);
+    }
+    return records;
+}
 export class SqliteRecoveryRegister implements RecoveryRegister {
 	private db: DatabaseSync;
 	constructor(path: string) {
@@ -21,6 +34,18 @@ export class SqliteRecoveryRegister implements RecoveryRegister {
 		const r = this.db.prepare("SELECT version,value FROM records WHERE key=?").get(key) as { version: number; value: string } | undefined;
 		return r ? { version: r.version, value: JSON.parse(r.value) as T } : null;
 	}
+    async getMany(keys: readonly string[]): Promise<Record<string, RegisterRecord | null>> {
+        validateRegisterReadKeys(keys);
+        this.db.exec('BEGIN');
+        try {
+            const read = this.db.prepare('SELECT version,value FROM records WHERE key=?');
+            const records = Object.fromEntries(keys.map(key => {
+                const row = read.get(key) as {version: number; value: string} | undefined;
+                return [key, row ? {version: row.version, value: JSON.parse(row.value)} : null];
+            }));
+            this.db.exec('COMMIT');return records;
+        } catch (error) { this.db.exec('ROLLBACK');throw error; }
+    }
 	async compareAndSet<T extends Json>(key: string, expected: number | null, value: T): Promise<RegisterRecord<T>> {
 		if (!key || (expected !== null && (!Number.isSafeInteger(expected) || expected < 1))) throw new RegisterConflict("invalid register key/version");
 		const encoded = canonicalJson(value);

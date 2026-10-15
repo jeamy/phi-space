@@ -1,6 +1,6 @@
 # pi-spaces: aktueller Implementierungsstand
 
-Stand: 2026-10-11. Diese Seite ist die Ist-Stand-Referenz für Code und
+Stand: 2026-10-15. Diese Seite ist die Ist-Stand-Referenz für Code und
 automatisierte Nachweise. Der [Föderationsplan v3](federation-plan-v3.md) bleibt
 der Zielvertrag: Seine Garantien gelten nicht allein deshalb, weil einzelne
 Bausteine unten bereits vorhanden sind.
@@ -31,11 +31,11 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | Phase 1b | zwei dauerhafte echte NetBird-Gates auf big, unabhängiges Register auf vpsc, private SSH-/TLS-Zugänge, Control-ACK, Control-/Data-Restore-Controller, Member-Installation, native Android-Keystore-Abnahme, echte Handy–big-Kopplung/Objektzugriff/Rotation sowie verteilte Live-Data-/Control-Restores mit bestätigten Member-ACKs, sichtbare Handy-Schlüsselsteuerung, zehn Minuten Bildschirm-aus/Hintergrund und kontrollierter tiefer Doze-Test | F15-Modell und kontrollierte komponentenbezogene Ausfälle abgenommen; keine Phase-2-/Replikations-/Promotion-Freigabe |
 | Router AP 2.1 | Command-Zustandsmaschine, dauerhaft gebundene Unterrequests, Rekonstruktion, getrennte Budgets, feste optionale Journal-Partitionen, unabhängige Admission, Restore-Review und Mailbox-Übernahme | vollständige Phase-2-System- und Lastabnahme |
 | AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
-| Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport dieses Nachweises mit Fixture-Identitäten im selben Prozess; separate Overlay-Abbruchblöcke 1–3 abgeschlossen; native positive Job-Abnahme offen |
+| Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport dieses Nachweises mit Fixture-Identitäten im selben Prozess; separate Overlay-Abbruchblöcke 1–3 abgeschlossen; historische native Negativmessungen getrennt dokumentiert; Block 4 per Entscheidung abgeschlossen |
 | NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; Overlay-Abbruchblöcke 1–3 abgeschlossen; vollständige native Produktions-Abnahme bleibt offen |
-| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Fünf weitere Testblöcke und Gesamtfreigabe offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
-| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Fünf weitere Testblöcke und Gesamtfreigabe offen; Liste in der Phase-2-Abnahme |
-| NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen sind in Block 3 abgenommen; native positive Job-Abnahme bleibt offen; ACK- und Member-Nachweise stehen getrennt |
+| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Weitere Testblöcke und Gesamtfreigabe gemäß aktueller Abnahmeliste offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
+| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Weitere Testblöcke und Gesamtfreigabe gemäß aktueller Abnahmeliste offen; Liste in der Phase-2-Abnahme |
+| NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen sind in Block 3 abgenommen; Block 4 per Entscheidung abgeschlossen; historische native Negativmessungen bleiben erhalten; ACK- und Member-Nachweise stehen getrennt |
 | Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; separate NetBird-Volllast in Blöcken 1–3 nachgewiesen; physische Ausfalldomänen offen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
@@ -128,10 +128,11 @@ für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweis
 und offenen Grenzen. Die vollständige Phase 2 ist noch nicht freigegeben:
 Die feste Journal-Aufteilung und das signierte Drei-Member-Sieb über NetBird
 sind nachgewiesen. Die Overlay-Abbruchblöcke 1–3 sind inzwischen abgeschlossen,
-einschließlich 26 gezielter Journal-Abbrüche unter voller Joblast. Offen bleiben
-fünf Abnahmeblöcke: der vollständige produktive Root-/Directory-Betrieb,
-unabhängige physische Ausfalldomänen, verteilte F9-Löschung, Archive/Backups
-und die kontrollierte Abschlussprofil-Umstellung. Die vier Netzräume auf big
+einschließlich 26 gezielter Journal-Abbrüche unter voller Joblast. Alle acht technischen Abnahmeblöcke sind inzwischen abgeschlossen;
+offen bleibt die gesonderte Gesamtfreigabe mit finalen Gate-4-Werten.
+Block 5 besitzt den Live-Nachweis zwischen physischem lokalem Rechner und
+Server einschließlich isoliertem Member-SIGKILL und gebundenem Lese-Replay. Block 4 ist auf ausdrückliche Entscheidung vom 2026-10-15
+abgeschlossen; Block 8 besitzt den Live-Nachweis mit Root-Abbruch und Replay. Die vier Netzräume auf big
 ersetzen keine unabhängigen physischen Ausfalldomänen.
 
 `createConfiguredRoot` provisioniert einen nativen Hosted-Agent-Root gemeinsam
@@ -140,15 +141,22 @@ unabhängige Boot-/Authority-Prüfungen, persistierte RouterLease und
 MemberStatus-Probes. Administrative Membership- und Profilbefehle benötigen den
 konfigurierten, aktuell autorisierten Supervisor-Administrator. Ein öffentlicher
 virtueller Root-Space-Endpunkt ist dadurch nicht implementiert. Der eigene
-Live-Aufbau und eine Fencing-Ablehnung sind geprüft; die vollständige native
-Job-Abnahme ist noch offen.
+Live-Aufbau und eine Fencing-Ablehnung sind geprüft. Block 4 wird gemäß
+Auftraggeberentscheidung vom 2026-10-15 nicht erneut geöffnet; historische
+native Negativmessungen werden nicht zu bestandenen Tests umgedeutet.
 
 Die lokale batchweise Principal-Löschung und `RootHistoryErasure` besitzen
 dauerhaften Fortschritt und Crash-Recovery. Letzteres löscht eigene sowie
 betroffene fremde gecachte Parent-/Child-Inhalte, bewahrt gebundene IDs und
 verweigert deren Effekt-Replay mit `ResultExpired`. Das ist auf beiden
-Speicher-Backends getestet; ein verteilter, vollständig abgenommener
-Löschkoordinator fehlt noch.
+Speicher-Backends getestet. `DistributedPrincipalErasure` koordiniert nun
+fest gebundene Teilnehmer mit unabhängig gespeichertem Fortschritt: alle
+Writer sperren, sämtliche Entry-Evidenz erfassen, lokal und in Root-Historien
+löschen, Epochen installieren, Archive bereinigen, alle Floors versiegeln
+und erst dann Boot-Berechtigungen freigeben. Neustarttests unterbrechen jede
+Koordinator-Fortschrittsgrenze vor bzw. nach dauerhaftem CAS. Der Live-Lauf
+mit fünf Teilnehmern besteht einschließlich Prozesswechsel vor der Root-
+Löschung und originalem `ResultExpired`-Replay nach Neustart.
 
 Unabhängige Lösch-Epochen sperren veraltete Restores und normale Dienste bei
 unvollständiger Löschung. `ErasureArchiveController` verwaltet registrierte
@@ -157,15 +165,28 @@ Das SQLite-Register erzwingt monotone Lösch-Epochen und unveränderliche
 Archivbindungen innerhalb seines CAS-Commits. Verspätete Archivregistrierung,
 Rücksetzen von Quarantäne und Löschen von Katalogbelegen werden abgelehnt;
 die Prüfung der Versiegelung liest den Archivkatalog in derselben Transaktion.
-Die Tests prüfen echte Backup-Dateien und Wiederanlauf; die vollständige
-Integration in den Backup-/Restore-Betrieb und die Bereinigung aktiver
-Backend-Historien fehlen. Logische Löschung ist kein physischer Löschbeleg.
+Die Tests prüfen echte Backup-Dateien und Wiederanlauf. `compactErasedSqlite`
+konsolidiert ausschließlich sessionweite pi-spaces-Dokumente eines exklusiv
+gesperrten SQLite-Stores (pi-durable-Schema 1), bewahrt aktuelle Werte, IDs,
+Revisionen und Replay-Belege und entfernt alte Revisionen sowie freie Seiten
+mittels Secure-Delete, Checkpoint und VACUUM. Der neue Test prüft den
+tatsächlichen Wegfall alter Nutzdatenbytes und die anschließende Wiederöffnung.
+Der bestandene Operatorlauf bindet eigene Backups an Hash und Space-Epoche,
+prüft tatsächliche DB-/WAL-/SHM-Dateien und leere Archivverzeichnisse und
+verweigert den Restore aller fünf alten Backups. Externe
+Datenträger-/Provider-Snapshots benötigen weiterhin eigene registrierte
+Löschregeln; SQLite-Bereinigung ist kein Nachweis sicheren Medienüberschreibens.
 
 `ProfileTransitionController` friert ruhende Members ein, installiert eine
 reine Profiländerung, veröffentlicht die nächste Policy und aktiviert Members
 wieder. Unklare Antworten behalten den eingefrorenen Zustand und setzen mit
 denselben IDs fort. Crash-/Wiederanlauftests bestehen auf beiden Backends;
-der verteilte Live-Nachweis steht aus. RunGate und Replikation folgen später.
+der verteilte Live-Nachweis besteht seit 2026-10-15: derselbe Supervisor-
+Command schloss nach Root-SIGKILL in `freezing` mit Policy-Version 5 ab,
+alle drei Members waren anschließend aktiv. Dabei wurde der Start des
+geschützten Control-Listeners vor wiederaufgenommenen Remote-Jobs korrigiert
+und durch zwei persistente TCP-Tests abgesichert. RunGate und Replikation
+folgen später.
 
 Die Wire-Recovery-Prüfung vom 2026-10-13 ergänzt gezielt verlorene erfolgreiche
 RPC-Antworten. Typisierte definitive Fehler bei der Claim-Auflösung führen

@@ -1,0 +1,26 @@
+{
+  "id": "ap2-native-receipt-20261014-profile-coalesced",
+  "passed": true,
+  "result": {
+    "elapsedMs": 14722,
+    "count": 1,
+    "timings": {
+      "register.getMany": {
+        "calls": 68,
+        "ms": 5203.96790299999
+      },
+      "register.get": {
+        "calls": 107,
+        "ms": 8427.583144999993
+      },
+      "host.snapshot": {
+        "calls": 53,
+        "ms": 7984.439796999999
+      },
+      "host.commit": {
+        "calls": 14,
+        "ms": 5521.566610000016
+      }
+    }
+  }
+}

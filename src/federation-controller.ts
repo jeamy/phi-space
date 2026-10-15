@@ -20,7 +20,7 @@ import {MembershipController, type MembershipTransport} from './membership.ts';
 import type {Transport} from './remote.ts';
 import {RemoteSpace} from './remote.ts';
 import {RouterController} from './router.ts';
-import {snapshotSpace} from "./spaces.ts";
+import {NamedSpace} from "./spaces.ts";
 
 export async function createFederationController(o: {
     host: SpaceHost; ctx : Context; controlSpaceId : string; authorityId : string; id : string;
@@ -34,6 +34,8 @@ export async function createFederationController(o: {
     lease : () => Promise<SignedRouterLease>;
     grant : (principal: Principal) => Promise<SignedGrant>;
     assertAuthority : () => Promise<void>;
+    /** Performs fresh authority authorization AND obtains the lease; only outside journal commits. */
+    authorizeLease?: () => Promise<SignedRouterLease>;
     authorizeAdmin : () => Promise<void>;
     probeStatus?: (memberId:string,target:Readonly<import("./router.ts").TargetBinding>)=>Promise<{revision:number;free:number|null;lag:number|null}>;
     journalPartitions?: number;
@@ -48,8 +50,9 @@ export async function createFederationController(o: {
     let cachedLease:SignedRouterLease|undefined;
     const lease=async()=>{const t=await o.lease();cachedLease=structuredClone(t);return t;};
     const now = o.now ?? Date.now, guard = async () => {
-        await o.assertAuthority();
-        const t=inCommit.getStore()?cachedLease:await lease();
+        let t:SignedRouterLease|undefined;
+        if(!inCommit.getStore()&&o.authorizeLease){t=await o.authorizeLease();cachedLease=structuredClone(t);}
+        else {await o.assertAuthority();t=inCommit.getStore()?cachedLease:await lease();}
         if(!t)throw new Error('RouterLease was not validated before journal commit');
         const l=t.lease;
         if (t.issuer !== o.controlPeerId || t.algorithm !== o.controlSigner.algorithm ||
@@ -60,8 +63,8 @@ export async function createFederationController(o: {
             l.routerPeerId !== o.routerPeerId || l.routerKeyId !== o.routerSigner.keyId ||
             now() >= l.expiresAt - 2000)
             throw new Error('RouterLease does not authorize journal owner');
-        const control = await snapshotSpace(o.host, o.controlSpaceId, o.ctx);
-        if (!control || control.authorityCounters?.routerEpoch !== l.routerEpoch ||
+        const control = await o.host.snapshot(NamedSpace, o.controlSpaceId, o.ctx);
+        if (!control || control.spaceId!==o.controlSpaceId || control.authorityCounters?.routerEpoch !== l.routerEpoch ||
             (control.primaryEpoch ?? 1) !== l.controlPrimaryEpoch)
             throw new Error('RouterLease was superseded by Control');
     };

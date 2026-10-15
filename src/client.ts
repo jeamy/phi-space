@@ -148,10 +148,19 @@ export class PiSpaces implements SpaceLike {
 	}
 	/** Resolve a journaled identity; a miss only authorizes retry of that same identity on this epoch. */
  async resolveOperation(target:RequestRef, method:string, argumentHash:string, primaryEpoch:number):Promise<claims.AdmissionResolution>{
-  if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
-  const view=await this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();return core.plain(claims.resolveAdmission(s,this.now(),target,method,argumentHash,primaryEpoch) as unknown as Json) as unknown as claims.AdmissionResolution;},this.ctx);
-  return view.state==='pending'&&!view.restoredHistory?this.pollOperation(target):view;
+  return (await this.resolveOperationRecord(target,method,argumentHash,primaryEpoch)).resolution;
  }
+ /** Resolve the SAME original claim and capture its space binding in one guarded storage commit. */
+ async resolveOperationRecord(target:RequestRef,method:string,argumentHash:string,primaryEpoch:number){
+  if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
+  const record=await this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();return core.plain({
+   binding:{spaceId:s.spaceId??null,authorityId:this.options.authorityId??'local',dataIncarnation:s.incarnation??null,primaryEpoch:s.primaryEpoch??primaryEpoch,principal:target.principal,generation:target.generation,requestId:target.requestId,method,argumentHash},
+   resolution:claims.resolveAdmission(s,this.now(),target,method,argumentHash,primaryEpoch)
+  } as unknown as Json) as unknown as {binding:{spaceId:string|null;authorityId:string;dataIncarnation:string|null;primaryEpoch:number;principal:Principal;generation:string;requestId:string;method:string;argumentHash:string};resolution:claims.AdmissionResolution};},this.ctx);
+  if(record.resolution.state==='pending'&&!record.resolution.restoredHistory)record.resolution=await this.pollOperation(target);
+  return record;
+ }
+
 	/** State of a known request, read without a commit. An unknown id is RequestExpired, never a new operation. */
 	async pollOperation(target: RequestRef): Promise<ClaimView> {
 		const s = await this.snap();

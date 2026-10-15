@@ -1,0 +1,11 @@
+{
+  "scope": "ap2-remaining-20261015",
+  "ownedBackupId": "erase-20261015-remaining-root",
+  "cachedPrivacyPayloadPresentBeforeErasure": {
+    "privacy-read-own": true,
+    "privacy-read-foreign": true
+  },
+  "completedWriteParents": 9,
+  "completedReadParents": 2,
+  "passed": true
+}

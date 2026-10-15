@@ -1,0 +1,63 @@
+{
+  "typecheck": {
+    "command": "npm run typecheck",
+    "exit": 0
+  },
+  "targeted": {
+    "files": [
+      "test-delegation.test.ts",
+      "test-configured-root.test.ts",
+      "test-federated-space.test.ts",
+      "test-router.test.ts"
+    ],
+    "passed": 151,
+    "failed": 0
+  },
+  "fullSuite": {
+    "command": "npm test",
+    "passed": 473,
+    "failed": 0
+  },
+  "build": {
+    "files": 30,
+    "manifest": {
+      "builtAt": "2026-10-14T19:12:12.204Z",
+      "commit": "b8ac5de",
+      "dirty": true,
+      "node": "v22.23.1",
+      "files": {
+        "examples/arxiv-research.mjs": "55a677091e7ea143",
+        "examples/arxiv-tool.mjs": "da7e3bc27157df53",
+        "examples/blocking-tool.mjs": "03ce2e70629d46d6",
+        "examples/cache.mjs": "5992b7c85389f2e5",
+        "examples/chat.mjs": "c6984e7fbd00fc3b",
+        "examples/dark-energy-research.mjs": "183bec3078c53f2a",
+        "examples/golomb.mjs": "d55bb9cc1999a296",
+        "examples/live-models.mjs": "0c246bae8cbd8f9e",
+        "examples/research-support.mjs": "50b577743b48becf",
+        "examples/sensor-pipeline.mjs": "d112174b54646490",
+        "examples/sieve.mjs": "b77d3ada4ee95757",
+        "examples/workers.mjs": "244b460805a0864a",
+        "package-lock.json": "f3e62502000ca9d2",
+        "package.json": "e36f96ef502b5c0b",
+        "pi-spaces.mjs": "68a5faeb21087d11",
+        "scenarios/federation-runtime.mjs": "793201047c847580",
+        "scenarios/journal-checkpoints.mjs": "72c255537ca7bf24",
+        "scenarios/native-operator.mjs": "f9a5ab0b99fe9d78",
+        "scenarios/phase2-admission-audit.mjs": "2671ec4b2ce1b04c",
+        "scenarios/phase2-load.mjs": "e59f13d0a36f7d4e",
+        "scenarios/phase2-netbird.mjs": "9ad082c62b9c1f40",
+        "scenarios/phase2-process-crashes.mjs": "959146c280b745c3",
+        "scenarios/phase2-router-load.mjs": "39591e1f551792e8",
+        "scenarios/sieve-mobile.mjs": "c3e989d225beb1fd",
+        "scenarios/sieve-remote.mjs": "0ff70768fb1d65d8",
+        "tools/fault-proxy.mjs": "1bfa51f8b39bef05",
+        "tools/federation-host.mjs": "a949ee261690f6db",
+        "tools/inspect.mjs": "dd0e6918217846d1",
+        "tools/recovery-data-host.mjs": "7389f4f5ea1109af",
+        "tools/recovery-register-host.mjs": "5265562781807f5a"
+      }
+    }
+  },
+  "nativeAcceptance": "pending; see separate live result and original-claim audit"
+}

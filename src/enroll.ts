@@ -26,6 +26,7 @@ import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import { canonicalJson } from "./canonical.ts";
 import { createSpace, listSpaces, spaceDoc, snapshotSpace } from "./spaces.ts";
+import {NamedSpace} from "./spaces.ts";
 import { verifySignature, type Algorithm, type AuthState, type Challenge, type KeyDirectory, type PeerKeyRec, CHALLENGE_TTL_MS } from "./auth.ts";
 import type { Connection, Reply } from "./service.ts";
 import type { Json } from "./core.ts";
@@ -166,15 +167,19 @@ export async function bootstrapEnroll(host: Host, ctx: Context, o: { tokenHash: 
 
 /** `PeerKey` entries of the control space as the key directory of the gate (layer B). */
 export class SpaceKeyDirectory implements KeyDirectory {
-	private host: Host; private ctx: Context; private now: () => number;
-	constructor(host: Host, ctx: Context, now: () => number = Date.now) { this.host = host; this.ctx = ctx; this.now = now; }
-	async find(peerId: string, keyId: string): Promise<PeerKeyRec | null> {
-		const info = (await listSpaces(this.host, this.ctx)).find((i) => i.alias === CONTROL_SPACE);
-		const s = info ? await snapshotSpace(this.host, info.spaceId, this.ctx) : undefined;
-		if (!s) return null;
-		const e = core.list(s, this.now(), { type: "PeerKey", fields: { peerId, keyId } })[0];
-		return e ? ({ ...fieldsOf(e), roles: [...(fieldsOf(e).roles as string[])] } as unknown as PeerKeyRec) : null;
-	}
+	private host: Host; private ctx: Context; private now: () => number; private controlSpaceId?: string;
+	constructor(host: Host, ctx: Context, now: () => number = Date.now, controlSpaceId?: string) { this.host = host; this.ctx = ctx; this.now = now; this.controlSpaceId = controlSpaceId; }
+	async find(peerId: string, keyId: string): Promise<PeerKeyRec | null> { return (await this.findMany([{peerId,keyId}]))[0]!; }
+    async findMany(keys:readonly {peerId:string;keyId:string}[]):Promise<(PeerKeyRec|null)[]> { return (await this.inspect(keys)).keys; }
+    /** A freshly guarded Control snapshot and keys derived from that exact snapshot; nothing is retained. */
+    async inspect(keys:readonly {peerId:string;keyId:string}[]) {
+        if(keys.length<1||keys.length>32||keys.some(k=>!k||typeof k.peerId!=='string'||!k.peerId||typeof k.keyId!=='string'||!k.keyId))throw new TypeError('bounded explicit key lookup required');
+        // The entire batch comes from one normal, freshly fenced snapshot. Nothing is retained.
+        const info=this.controlSpaceId?undefined:(await listSpaces(this.host,this.ctx)).find(i=>i.alias===CONTROL_SPACE);
+        const s=this.controlSpaceId?await this.host.snapshot(NamedSpace,this.controlSpaceId,this.ctx):info?await snapshotSpace(this.host,info.spaceId,this.ctx):undefined;
+        if(!s||this.controlSpaceId&&s.spaceId!==this.controlSpaceId)return {state:undefined,keys:keys.map(()=>null)};
+        const now=this.now();return {state:s,keys:keys.map(({peerId,keyId})=>{const e=core.list(s,now,{type:'PeerKey',fields:{peerId,keyId}})[0];return e?({...fieldsOf(e),roles:[...(fieldsOf(e).roles as string[])]} as unknown as PeerKeyRec):null;})};
+    }
 }
 /** Revoke a key (the supervisor's `revokePeer`/`rotateKey` will call this); the gate closes its connections at the next check. */
 export async function revokePeerKey(host: Host, ctx: Context, peerId: string, keyId: string, now: () => number = Date.now): Promise<boolean> {

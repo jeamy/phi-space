@@ -1,0 +1,18 @@
+{
+  "test": "ap2-native-receipt-20261014",
+  "failedOperation": "native-take-0",
+  "rootEvidence": "TransactionError",
+  "beginDecidedAt": 1792000787279,
+  "transactionExpiresAt": 1792000847279,
+  "leaseMs": 60000,
+  "takeGenerationIssuedAfterBeginMs": 36586,
+  "takeClaimRetained": false,
+  "registerSamples": 10,
+  "registerMedianMs": 81.0,
+  "registerMaximumMs": 156,
+  "fullSuite": {
+    "pass": 469,
+    "fail": 0
+  },
+  "conclusion": "Time budget is consumed before the Take is admitted; register latency alone does not locate the remaining overhead. Profile Root checks and RPC preparation before another transactional run."
+}
