@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-15T18:06:55.408182+00:00",
+  "scope": "first-administrative-entry-replication-substrate",
+  "fullPhase3Accepted": false,
+  "productionReplicationActivated": false,
+  "typecheck": true,
+  "tests": {
+    "repository": {
+      "tests": 505,
+      "pass": 505,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "7e46fb0521d9f154c50a21041578b5d0a9c2af7e8884b0bd33c85b695ad25e96"
+    },
+    "mobileRuntime": {
+      "tests": 20,
+      "pass": 20,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "f57ffb1425ab41e48da23abe62686b71bcdcf3b0d8fcc1a6d40aa0fce749e2d0"
+    },
+    "mobileLifecycle": {
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "c24306e8f48b09293ab0e16b8d1d0391038c28e32581c5a62a6e7a3acba5c3c8"
+    }
+  },
+  "totalLocalTests": 529,
+  "builtServerCases": 11,
+  "linksChecked": 57,
+  "missingLinks": 0,
+  "sourceHashes": {
+    "src/entry-replication.ts": "e86954c4bd02a152f422c16c0e966edae31ef72c37324a8458770fafe63d7ff9",
+    "src/replication-clock.ts": "bf30571274729302d028d165c590127487772dbb0e0ba0ad76afbe43d86bc492",
+    "src/index.ts": "2e83917679f7c7cff528536a946b1521cb1a0953c80ab505a5d3388518d21dd4",
+    "test-entry-replication.test.ts": "552f750925a35060456b6b15cfb91ed69772c4966932140348c45b5a5091c320",
+    "test/testbed/scenarios/phase3-entry-replication.ts": "cc91afb637b7b10a1ea20304f2ba1345b2bd48230d4629dac9b20b3d2d5ae1e9",
+    "package.json": "c484f5b5ee5d6343574a2b234147363c28d4be9fe2e705e2a605c5d467944e59",
+    "docs/ap3-replikation.md": "28aac564193590cdb6d3548ea1c0bc452b222436390abda993fdc6e77977bf36",
+    "docs/api.md": "c5cc6b62ea6078a188b17b0aa70be742e4607353d24e24cf0be47ce2fb0cc447",
+    "docs/implementierungsstand.md": "12cbbf9b6c03bb2731198cc12cb9e303e4b905aeb064270fa93374f57bd2759f",
+    "docs/federation-plan-v3.md": "e17fa947a4fa3d281cb59920f5e90b74e2c5d7901ea182bdf6f419e03d342572",
+    "test/testbed/README.md": "c9085c5601b7a31d1f9c92ed57d5d36b4a791e56bc47c9198d054f127fad0d91",
+    "test/evidence/ap3-entry-2026-10-15/README.md": "108efde90f75daf9eed7f955b395e730c65bb23e0b5df17768600ae3700844e7"
+  },
+  "mobileLibraryMatchesServer": true,
+  "mobileLibrarySha256": "aeba3b4f6945ab277f7e3eb0a20a528de273dbe3ae00ee30613d996afa40ce6e",
+  "ownedFixturesRemoved": true,
+  "protectedInventoryUnchanged": true,
+  "remaining": [
+    "large paged snapshots and durable transfer cursors",
+    "SpaceLike/policy/ACL/clock-health/boot/erasure integration",
+    "primary-sync full commit intent protocol",
+    "setStandby and fenced single transition",
+    "manual promotion and quarantine",
+    "real ten-minute overlay partition and independent-host acceptance"
+  ]
+}

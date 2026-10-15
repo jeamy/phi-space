@@ -489,3 +489,6 @@ export {checkErasureBarrier,type ErasureBarrier} from './erasure-barrier.ts';
 export {DistributedPrincipalErasure,type DistributedErasurePlan,type ErasureParticipant,type DistributedErasureDriver} from "./distributed-erasure.ts";
 
 export {compactErasedSqlite} from "./erasure-sqlite.ts";
+
+export { EntryReplicationController, EntryReplicas, ReplicationConflict, entryChangeId, type EntryReplicationConfig, type EntryReplicationRule, type EntryMutation, type ReplicatedEntryChange, type ReplicatedEntryView, type EntryReplicationSnapshot, type EntryReplicationOptions } from './entry-replication.ts';
+export { advanceHybridClock, compareHybridClock, validateHybridClock, ReplicationClockError, type HybridClock } from './replication-clock.ts';

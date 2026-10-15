@@ -1,0 +1,15 @@
+{
+  "tag": "ap3-entry-20261015-41a84386",
+  "base": "/home/mux/.local/share/pi-spaces-operations/ap3-entry-20261015-41a84386",
+  "image": "95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413",
+  "cpus": 2,
+  "memoryBytes": 1073741824,
+  "network": "none; container loopback only",
+  "readOnlyRoot": true,
+  "production": true,
+  "sourceShipped": false,
+  "artifactHashes": {
+    "pi-spaces.mjs": "aeba3b4f6945ab277f7e3eb0a20a528de273dbe3ae00ee30613d996afa40ce6e",
+    "scenarios/phase3-entry-replication.mjs": "d09cee61f16060f31b5d5cf00271945ff95d54e0cae3c11ad0d5542c66e1c35e"
+  }
+}

@@ -1366,6 +1366,11 @@ NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
   - Idempotenz-Beispiel und Gegenbeispiel dokumentieren die Grenze externer Wirkungen.
 
 ### Stufe 3 – Replikation und kontrollierte Übernahme
+
+Umsetzungsstand: [Phase-3-Bausteine und Nachweise](ap3-replikation.md). Der erste
+Entry-Replikationsbaustein ist geprüft; die nachstehenden Gesamtgarantien sind
+noch nicht abgenommen.
+
 - Snapshot-/Stream-Import, lww/set mit versionierten Deletes, Leases, Deduplizierung, Offline-Rejoin.
 - primary/sync mit festem Standby und `setStandby`; Control Space wechselt auf primary/sync; Router-Lease über
   sync-Commits; Fencing-Adapter nach 5.5 mit Quarantänemodus; Promotion nach 5.3; Umschaltung nach 5.3.1;

@@ -482,3 +482,16 @@ VACUUM und Integrity-Check aus. Symlink-Dateien und andere Schema-Versionen
 werden abgewiesen. Der Aufrufer muss die logische Principal-Löschung bereits
 abgeschlossen haben und den exklusiven unabhängigen Fence während des
 gesamten Aufrufs halten. Es ersetzt keine Löschregel für externe Kopien.
+
+
+## Entry-Replikation: administrativer Phase-3-Baustein
+
+`EntryReplicationController` verwendet ein eigenes Dokument, keine automatische
+Replikation bestehender `PiSpaces`-Entries. Konfiguration, Aufrufmethoden,
+Vertrauensgrenze und Betriebsbeschränkungen stehen in
+[Phase 3](ap3-replikation.md). Die exportierten HLC-Funktionen sind
+`advanceHybridClock`, `compareHybridClock` und `validateHybridClock`. Die Uhr
+muss atomar mit der Änderung gespeichert werden; der Controller übernimmt dies.
+`EntryReplicas` ist eine interne administrative Dokumentfamilie und kein
+unautorisierter RPC-Importpfad. Der öffentliche Dienst bietet dafür noch keine
+Methoden an. Primary/Standby und Promotion werden dadurch nicht bereitgestellt.

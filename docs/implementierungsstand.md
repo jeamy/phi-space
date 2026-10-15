@@ -242,3 +242,21 @@ Timeout noch Peer-Quota. Zwei neue Gate-Regressionsfälle und eine gebaute
 5-Sekunden-Prüfung sichern das ab. Die Schicht-B-Challenge gilt separat 30 Sekunden.
 Die Phase-2-Abschlussentscheidung bleibt ausdrücklich auf ihren dokumentierten
 Umfang mit Ausnahme für Block 4 begrenzt; Phase 3 ist noch nicht abgenommen.
+
+
+## Phase 3: erster Replikationsbaustein (2026-10-15)
+
+[Entry-Replikation und weitere Schritte](ap3-replikation.md):
+`EntryReplicationController` implementiert persistente Änderungs-IDs/HLC, LWW
+mit versionierten Tombstones, Add-Wins-Tags, bytebegrenzte Änderungsseiten und
+einen kleinen atomaren Snapshot-Merge auf eigenen Dokumenten. Elf gezielte
+Prüfungen decken JSONL und SQLite einschließlich tatsächlicher Commit-Verluste ab.
+Der Baustein ist noch nicht in den öffentlichen Space-Dienst, Policy, Boot-
+und Löschbarrieren eingebunden; Primary/Standby und Promotion bleiben offen.
+Die vorhandene Entry-Changes-API wird nicht als vollständige Primary-Commit-
+Historie verwendet. Phase 3 besitzt noch keine Gesamtfreigabe.
+
+Die Abschlussprüfung dieses Bausteins besteht aus 505 grünen Repository-Tests,
+24 mobilen Tests sowie elf Fällen am gebauten isolierten Server-Artefakt.
+[Nachweise](../test/evidence/ap3-entry-2026-10-15/README.md); keine produktive
+Replikation wurde aktiviert.

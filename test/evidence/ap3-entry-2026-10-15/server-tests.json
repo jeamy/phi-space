@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "date": "2026-10-15T18:02:57.121018+00:00",
+  "scope": "built-entry-replication-invariants",
+  "counts": {
+    "tests": 11,
+    "pass": 11,
+    "fail": 0,
+    "skipped": 0
+  },
+  "backends": [
+    "jsonl",
+    "sqlite"
+  ],
+  "clock": "injected ten-minute partition, not ten wall-clock minutes",
+  "realNetbirdReplication": false,
+  "fullPhase3Accepted": false
+}

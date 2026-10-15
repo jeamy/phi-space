@@ -1,0 +1,78 @@
+TAP version 13
+# Subtest: hybrid clock orders local/remote ties, rejects invalid/future clocks and fails on exhaustion
+ok 1 - hybrid clock orders local/remote ties, rejects invalid/future clocks and fails on exhaustion
+  ---
+  duration_ms: 1.944538
+  type: 'test'
+  ...
+# Subtest: jsonl: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+ok 2 - jsonl: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+  ---
+  duration_ms: 109.272915
+  type: 'test'
+  ...
+# Subtest: jsonl: loss before/after actual commit reopens the same change without duplicate effect
+ok 3 - jsonl: loss before/after actual commit reopens the same change without duplicate effect
+  ---
+  duration_ms: 19.554449
+  type: 'test'
+  ...
+# Subtest: jsonl: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+ok 4 - jsonl: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+  ---
+  duration_ms: 44.897245
+  type: 'test'
+  ...
+# Subtest: jsonl: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+ok 5 - jsonl: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+  ---
+  duration_ms: 17.124459
+  type: 'test'
+  ...
+# Subtest: jsonl: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+ok 6 - jsonl: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+  ---
+  duration_ms: 140.383729
+  type: 'test'
+  ...
+# Subtest: sqlite: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+ok 7 - sqlite: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+  ---
+  duration_ms: 46.276033
+  type: 'test'
+  ...
+# Subtest: sqlite: loss before/after actual commit reopens the same change without duplicate effect
+ok 8 - sqlite: loss before/after actual commit reopens the same change without duplicate effect
+  ---
+  duration_ms: 12.864513
+  type: 'test'
+  ...
+# Subtest: sqlite: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+ok 9 - sqlite: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+  ---
+  duration_ms: 29.277271
+  type: 'test'
+  ...
+# Subtest: sqlite: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+ok 10 - sqlite: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+  ---
+  duration_ms: 11.818861
+  type: 'test'
+  ...
+# Subtest: sqlite: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+ok 11 - sqlite: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+  ---
+  duration_ms: 86.728414
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 537.765685
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

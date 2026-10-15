@@ -295,3 +295,14 @@ Use an isolated production-mode container with 2 CPUs, 1 GiB RAM and private
 writable scratch space; no external network or production-store access is needed.
 They do not rerun the accepted job workload or native Block 4. Final limits and
 acceptance scope: [Gate 4](../../docs/ap2-gate4.md).
+
+
+### Phase 3 entry-replication invariants
+
+`scenarios/phase3-entry-replication.mjs` runs eleven compiled invariant cases
+against the shipped library on JSONL and SQLite. Run the built JavaScript only
+in an isolated production-mode container with private scratch storage, 2 CPUs
+and 1 GiB RAM. No external network or live store is required. It covers durable
+HLC/LWW/Add-Wins metadata, reordered delivery and commit-loss recovery. The
+ten-minute partition uses an injected clock; this is not live NetBird replication
+or primary/standby acceptance. See [Phase 3](../../docs/ap3-replikation.md).
