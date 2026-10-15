@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-15T19:15:40.765285+00:00",
+  "scope": "continuous-entry-stream-administrative-transfer",
+  "fullPhase3Accepted": false,
+  "productionReplicationActivated": false,
+  "typecheck": true,
+  "tests": {
+    "repository": {
+      "tests": 530,
+      "pass": 530,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "9984efd95772e1b19aa320a609a7ee1ce807126b87899e0e9746eef75975af77"
+    },
+    "mobileRuntime": {
+      "tests": 20,
+      "pass": 20,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "a0f0eb5ebbc7f8e36607d74cdb9935960465d167dd50d60fde208b0e5efbf111"
+    },
+    "mobileLifecycle": {
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "94ce0b2bee5f22706f39d3ee2914ff580239ff17f0fb9257e99ccb030daba331"
+    }
+  },
+  "totalLocalTests": 554,
+  "builtServerCases": 36,
+  "linksChecked": 77,
+  "missingLinks": 0,
+  "sourceHashes": {
+    "src/entry-replication.ts": "3baed882499a545892ad763c838ca60401b73345be697e27454ec81856a9531e",
+    "src/entry-replication-stream.ts": "6e0b514f31bac557b2f1abbcd88c1dc3feedb66f0fe6e3fcf7963956aca9318d",
+    "src/entry-replication-transfer.ts": "dfbdd7821552f1b1d504a524f366da51d8e18e4ec715d1d1f00f85892a6012f1",
+    "src/index.ts": "bf524fcc4be11183ed68139a480f4a72ad505976c258d6fdb3be2def0020cf2c",
+    "test-entry-replication-stream.test.ts": "8aca79ce416182d891f3d092665e0509c29ddb42a8a416f89292e3b109513e23",
+    "test/testbed/scenarios/phase3-stream-transfer.ts": "809f62ef2874e8263c3a987f242a9287dd9de1b500207fc545954b51a81a4158",
+    "package.json": "933df71e14657d42420be35a783ea77692497252c683558e3f483fb925db0726",
+    "docs/ap3-stream-transfer.md": "c53019f2bea575fb28703b3066bfdbdbf64844a21151960d77650c35663752e5",
+    "docs/ap3-snapshot-transfer.md": "1f55933b17e8c133730f0ddaa381822d09da3fa853c80ca5d76dd787b2e18159",
+    "docs/ap3-replikation.md": "65921fdc363566c5fdb6f4a8b986684416e7e47c8e9bb3ab63ab6389a93f31be",
+    "docs/api.md": "43340d4e0ffc522795259f7e3ba167d223fe5843fee74ab10227766dd5aaea95",
+    "docs/implementierungsstand.md": "040c82280b8bd84d5c35b755c9319a481a71eb9cf3edd808be43a6b4ba370970",
+    "docs/federation-plan-v3.md": "0f4e8fc15627fbe85ba386e7c7f05d4fa91a77e3695445dd41b166b1ccc94597",
+    "test/testbed/README.md": "fd8a5b7d796cc7197e9840394cd04619f5dac9a300091f68b5af6b7a5fcb0644",
+    "test/evidence/ap3-stream-2026-10-15/README.md": "2c7e2f1b6388cad6a2e7d8af1499029a28d28e0ac102aae45b59e4225e304813"
+  },
+  "mobileLibraryMatchesServer": true,
+  "mobileLibrarySha256": "31990c2e584cf5f944aed488d580226f1ae2f027ac201eaa11f8eb16ee69f2be",
+  "ownedFixturesRemoved": true,
+  "protectedInventoryUnchanged": true,
+  "remaining": [
+    "retained generation/receipt maintenance",
+    "real NetBird partition acceptance",
+    "service/ACL/boot/erasure integration",
+    "primary-sync and promotion"
+  ]
+}

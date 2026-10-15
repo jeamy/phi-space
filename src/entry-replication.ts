@@ -9,6 +9,7 @@ import { RequestConflict } from './claims.ts';
 import { SnapshotExpired, ResourceExhausted, type Json, type Fields } from './core.ts';
 import { advanceHybridClock, compareHybridClock, ReplicationClockError, validateHybridClock, type HybridClock } from './replication-clock.ts';
 import { EntrySnapshotChunks, EntrySnapshotTransfers, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotSegment, type EntrySnapshotImport } from './entry-replication-transfer.ts';
+import { EntryStreamCheckpoints, EntryStreamCursorConflict, type EntryStreamIdentity, type EntryStreamDescription, type EntryStreamPage, type EntryStreamCheckpoint, type EntryStreamResult } from './entry-replication-stream.ts';
 export type { EntrySnapshotManifest, EntrySnapshotPage, EntrySnapshotImport } from './entry-replication-transfer.ts';
 export type EntryReplicationRule = { type: string; variant: 'lww'; keyFields: string[] } | { type: string; variant: 'set' };
 export type EntryReplicationConfig = {
@@ -139,13 +140,18 @@ export class EntryReplicationController {
    await this.check('local');return copy(event);
   },this.o.ctx);
  }
+ private async importIn(tx:Tx,events:ReplicatedEntryChange[]):Promise<{added:number;revision:number}>{
+  const s=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(s);const now=this.now();
+  s.config??=copy(this.config);s.configHash=this.configHash;const logical=await this.materializeIn(tx,s),previous=logical.events.length;
+  const added=this.append(logical,events,now);this.persistOverlay(s,logical,previous);return {added,revision:logical.events.length};
+ }
  async importChanges(input: ReplicatedEntryChange[]): Promise<{ added: number; revision: number }> {
   const events=copy(input);if(!Array.isArray(events)||events.length>1024)throw new ResourceExhausted('bounded event array required');this.budget(events);
   await this.check('import');return this.o.host.commit(async tx=>{
-   await this.check('import');const s=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(s);const now=this.now();
-   s.config??=copy(this.config);s.configHash=this.configHash;const logical=await this.materializeIn(tx,s),previous=logical.events.length;const added=this.append(logical,events,now);this.persistOverlay(s,logical,previous);await this.check('import');return {added,revision:logical.events.length};
+   await this.check('import');const result=await this.importIn(tx,events);await this.check('import');return result;
   },this.o.ctx);
  }
+
  private async materialize(base: Readonly<EntryReplicationState>, load: (key: string) => Promise<Readonly<{page: EntrySnapshotPage|null}>|undefined>): Promise<EntryReplicationState> {
   const result:EntryReplicationState=copy(base),events:ReplicatedEntryChange[]=[],seen=new Map<string,string>();let through=0;
   const add=(items:ReadonlyArray<ReplicatedEntryChange>)=>{for(const e of items){const k=entryChangeId(e),h=hash(e),old=seen.get(k);if(old&&old!==h)throw new ReplicationConflict('stored change ID conflict');if(!old){events.push(copy(e));seen.set(k,h);}}};
@@ -291,6 +297,64 @@ export class EntryReplicationController {
    t.phase='aborting';if(t.cleanupCursor<t.nextPage){const chunk=await tx.doc(EntrySnapshotChunks,chunkKey(this.documentKey,snapshotId,t.cleanupCursor),null);chunk.page=null;t.cleanupCursor++;}
    if(t.cleanupCursor===t.nextPage){t.phase='aborted';ledger.retainedBytes-=t.reservedBytes;}
    await this.check('import');return copy(t);
+  },this.o.ctx);
+ }
+
+ private streamIdentity():EntryStreamIdentity {
+  const body={version:1 as const,spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,replicaId:this.config.replicaId,incarnation:this.config.incarnation};return {...body,streamId:hash(body)};
+ }
+ private validateStream(source:EntryStreamIdentity){
+  if(!source||!exact(source,['version','spaceId','authorityId','configHash','replicaId','incarnation','streamId'])||source.version!==1||source.spaceId!==this.config.spaceId||source.authorityId!==this.config.authorityId||source.configHash!==this.configHash||!this.config.members.some(m=>m.replicaId===source.replicaId&&m.incarnation===source.incarnation)||!sha(source.streamId))throw new ReplicationConflict('stream identity or binding changed');
+  const {streamId,...body}=source;if(streamId!==hash(body))throw new ReplicationConflict('stream identity hash changed');
+ }
+ private streamPageHash(page:EntryStreamPage){return hash({source:page.source,after:page.after,next:page.next,events:page.events});}
+ async describeStream():Promise<EntryStreamDescription>{const state=await this.state('export');return {source:this.streamIdentity(),revision:state?.events.length??0};}
+ async streamChanges(after:number,maxBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntryStreamPage>{
+  const state=await this.state('export'),events=state?.events??[];
+  if(!number(after)||after>events.length||!number(maxBytes)||maxBytes<1024||maxBytes>256*1024)throw new ReplicationConflict('invalid stream cursor or page budget');
+  const page:EntryStreamPage={source:this.streamIdentity(),after,next:after,headRevision:events.length,more:after<events.length,events:[],sha256:'0'.repeat(64)};
+  for(let n=after;n<events.length&&page.events.length<1024;n++){
+   const candidate={...page,events:[...page.events,copy(events[n]!)],next:n+1,more:n+1<events.length};
+   if(bytes(candidate)>maxBytes){if(!page.events.length)throw new ResourceExhausted('next change does not fit stream page');break;}Object.assign(page,candidate);
+  }
+  page.sha256=this.streamPageHash(page);return page;
+ }
+ async startStreamImport(input:EntryStreamIdentity,snapshotId?:string):Promise<EntryStreamCheckpoint>{
+  const source=copy(input);this.validateStream(source);if(snapshotId!==undefined)this.snapshotId(snapshotId);await this.check('import');
+  return this.o.host.commit(async tx=>{
+   await this.check('import');const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);
+   const ledger=await tx.doc(EntryStreamCheckpoints,this.documentKey,null),old=ledger.links[source.streamId];
+   if(old&&canonical(old.source)!==canonical(source))throw new ReplicationConflict('stored stream source changed');
+   let seed=0;
+   if(snapshotId!==undefined){
+    const transfers=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=transfers.transfers[snapshotId];
+    if(!t||t.phase!=='completed'||!t.result||t.manifest.sourceReplicaId!==source.replicaId||t.manifest.sourceIncarnation!==source.incarnation)throw new ReplicationConflict('stream seed requires completed snapshot from this source');
+    this.bindManifest(t.manifest);if(t.result.sourceRevision!==t.manifest.revision||!base.segments?.some(s=>s.manifest.id===snapshotId&&canonical(s.manifest)===canonical(t.manifest)))throw new ReplicationConflict('stream seed snapshot is not published');seed=t.result.sourceRevision;
+   }
+   if(!old){if(Object.keys(ledger.links).length>=32)throw new ResourceExhausted('stream checkpoint capacity exhausted');ledger.links[source.streamId]={source,cursor:seed,last:null,...(snapshotId?{seedSnapshotId:snapshotId}:{})};}
+   else if(seed>old.cursor){old.cursor=seed;old.seedSnapshotId=snapshotId!;old.last=null;}
+   await this.check('import');return copy(ledger.links[source.streamId]!);
+  },this.o.ctx);
+ }
+ async streamImportStatus(input:EntryStreamIdentity):Promise<EntryStreamCheckpoint|null>{
+  const source=copy(input);this.validateStream(source);await this.check('import');const ledger=await this.o.host.snapshot(EntryStreamCheckpoints,this.documentKey,this.o.ctx),checkpoint=ledger?.links[source.streamId];
+  if(checkpoint&&canonical(checkpoint.source)!==canonical(source))throw new ReplicationConflict('stored stream source changed');await this.check('import');return checkpoint?copy(checkpoint):null;
+ }
+ async importStreamPage(input:EntryStreamPage):Promise<EntryStreamResult>{
+  const page=copy(input);if(!page||!exact(page,['source','after','next','headRevision','more','events','sha256']))throw new ReplicationConflict('invalid stream page');this.validateStream(page.source);
+  if(!number(page.after)||!number(page.next)||!number(page.headRevision)||page.after>page.next||page.next>page.headRevision||typeof page.more!=='boolean'||page.more!==(page.next<page.headRevision)||!Array.isArray(page.events)||page.events.length>1024||page.next-page.after!==page.events.length||(!page.events.length&&page.more)||!sha(page.sha256)||this.streamPageHash(page)!==page.sha256||bytes(page)>256*1024)throw new ReplicationConflict('stream page range or hash changed');this.budget(page.events);
+  await this.check('import');return this.o.host.commit(async tx=>{
+   await this.check('import');const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const ledger=await tx.doc(EntryStreamCheckpoints,this.documentKey,null),checkpoint=ledger.links[page.source.streamId];
+   if(!checkpoint||canonical(checkpoint.source)!==canonical(page.source))throw new ReplicationConflict('stream is not initialized with this source');
+   if(page.after!==checkpoint.cursor){
+    if(checkpoint.last?.after===page.after&&checkpoint.last.next===page.next){
+     if(checkpoint.last.sha256!==page.sha256)throw new ReplicationConflict('decided stream page changed content');await this.check('import');return copy(checkpoint.last.result);
+    }
+    throw new EntryStreamCursorConflict(checkpoint.cursor);
+   }
+   const applied=await this.importIn(tx,page.events),result={...applied,cursor:page.next};
+   if(page.events.length){checkpoint.cursor=page.next;checkpoint.last={after:page.after,next:page.next,sha256:page.sha256,result:copy(result)};}
+   await this.check('import');return result;
   },this.o.ctx);
  }
 }

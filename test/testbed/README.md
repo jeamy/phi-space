@@ -317,3 +317,14 @@ atomic publication, concurrent writes and actual commit-loss/reopen boundaries.
 Use an isolated production-mode container with private scratch storage, 2 CPUs
 and 1 GiB RAM; no live store or external network is required. This is not a live
 NetBird replication acceptance. See [snapshot transfer](../../docs/ap3-snapshot-transfer.md).
+
+
+### Continuous entry-stream progress
+
+`scenarios/phase3-stream-transfer.mjs` runs 36 compiled cases: base replication,
+paged bootstrap and thirteen continuous-stream cases on both persistent backends.
+It verifies atomic event/checkpoint commits, real loopback TCP disconnect/reconnect,
+competing workers, cancellation and bounded source retries. Run only built
+JavaScript in an isolated production-mode container with private scratch, 2 CPUs
+and 1 GiB RAM. This is not a production NetBird deployment or primary/sync
+acceptance. See [stream protocol](../../docs/ap3-stream-transfer.md).

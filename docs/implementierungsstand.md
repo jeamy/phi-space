@@ -269,9 +269,27 @@ Staging, Hashketten, gespeicherte Seiten-/Quell-Cursor und atomare Sichtbarkeit
 durch Generationenverweise. Lokale Overlay-Writes und bestehende Changes-Cursor
 bleiben erhalten; Dokumentversion 1 migriert auf Version 2. Zwölf neue Fälle
 prüfen beide Backends einschließlich Commit-Verlust an Beginn, jeder Seite
-und Abschluss. Laufender Replikationstransport, Generationenpflege und die
+und Abschluss. Öffentlicher Replikationstransport, Generationenpflege und die
 produktive Rechte-/Boot-/Löschintegration bleiben offen.
 
 Aktueller Snapshot-Nachweis: 517 Repository-Tests und 24 mobile Tests grün;
 23 gebaute Serverfälle bestanden.
 [Artefakt- und Quellbindung](../test/evidence/ap3-paged-2026-10-15/README.md).
+
+
+## Fortlaufender Entry-Stream (2026-10-15)
+
+[Quellgebundene Stream-Cursor und Pull-Worker](ap3-stream-transfer.md) sind
+implementiert. Daten und Fortschritt werden im selben Commit gespeichert;
+Snapshot-R kann aus einem geprüften veröffentlichten Beleg übernommen werden.
+Konkurrenz, Wiederaufnahme, TCP-Ausfall und Abbruch besitzen gezielte Tests auf
+JSONL und SQLite. Der Worker startet nur explizit und wird noch nicht als
+öffentlicher NetBird-/Space-Dienst provisioniert. Generationenpflege und die
+produktive Rechte-/Boot-/Löschintegration bleiben offen.
+
+
+Aktueller Stream-Nachweis: 530 Repository-Tests und 24 mobile Tests grün;
+36 gebaute Serverfälle bestanden. Daten und Cursor überstehen die geprüften
+Commit-Verluste gemeinsam; TCP-Wiederanlauf und konkurrierende Worker sind geprüft.
+[Artefakt- und Quellbindung](../test/evidence/ap3-stream-2026-10-15/README.md).
+Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleiben offen.

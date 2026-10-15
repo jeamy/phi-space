@@ -506,3 +506,15 @@ verwalten dauerhafte Seiten und den Import-Cursor. Erst der Abschluss macht alle
 Seiten atomar sichtbar. `sourceRevision` im Abschlussresultat nennt den Startpunkt
 für danach entstandene Änderungen. Grenzen, Wiederaufnahme, Abbruch und
 Vertrauensbereich: [Snapshot-Transfer](ap3-snapshot-transfer.md).
+
+
+### Dauerhafter Entry-Stream
+
+`describeStream`, `streamChanges`, `startStreamImport`, `streamImportStatus` und
+`importStreamPage` binden den fortlaufenden Austausch an eine feste Quelle. Import
+und Cursor-Fortschritt sind atomar. `EntryReplicationPump` bietet einen begrenzten
+Schritt und eine explizit gestartete, abbrechbare Pull-Schleife. Pro Quelle bleibt
+die letzte Bereichsquittung wiederholbar; ältere Bereiche erfordern ein erneutes
+Lesen des Checkpoints. Adapter, Rückgabewerte und Grenzen stehen im
+[Stream-Protokoll](ap3-stream-transfer.md). Der öffentliche Space-Dienst bietet
+diese administrativen Methoden noch nicht über seine RPC-Allowlist an.

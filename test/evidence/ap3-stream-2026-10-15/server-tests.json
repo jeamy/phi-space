@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "date": "2026-10-15T19:11:10.960247+00:00",
+  "scope": "built-continuous-stream-invariants",
+  "counts": {
+    "tests": 36,
+    "pass": 36,
+    "fail": 0,
+    "skipped": 0
+  },
+  "backends": [
+    "jsonl",
+    "sqlite"
+  ],
+  "clock": "injected ten-minute partition, not ten wall-clock minutes",
+  "realNetbirdReplication": false,
+  "fullPhase3Accepted": false
+}

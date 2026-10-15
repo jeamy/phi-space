@@ -57,8 +57,8 @@ Ein Treiber hält die Snapshot-ID fest und rekonstruiert nach Neustart seinen
 nächsten Schritt aus `snapshotImportStatus(id)`. Die vollständige Manifestbindung
 liegt zusätzlich im Zieljournal `EntrySnapshotTransfers`. Das Abschlussresultat
 enthält `sourceRevision`: `source.changes(sourceRevision)` liefert die Änderungen,
-die nach dem Export entstanden sind. Deren fortlaufender Transport und eigener
-dauerhafter Stream-Checkpoint sind der nächste Teil von AP 3.2.
+die nach dem Export entstanden sind. Deren fortlaufenden Transport und dauerhaften Stream-Checkpoint übernimmt der
+implementierte [Pull-Worker](ap3-stream-transfer.md).
 
 Bereits vollständig empfangene Snapshots dürfen auch nach Token-Ablauf und
 Quell-Neustart fertiggestellt werden: Die Seiten sind dauerhaft und vollständig
@@ -107,7 +107,7 @@ unter 12 KiB, obwohl der Snapshot größer als das Commitbudget ist.
 
 Der gebaute Serverfall führt diese zwölf und die elf bisherigen Entry-Invarianten
 im isolierten Produktionsmodus-Container aus. Dies bleibt ein Bausteinnachweis;
-realer Transport mit zehn Minuten Partition, Stream-Checkpoint, Dienst-/Grant-/
+reale NetBird-Einbindung mit zehn Minuten Partition, Dienst-/Grant-/
 Boot-/Löschintegration und Primary/Standby besitzen eigene offene Abnahmen.
 Siehe [Phase 3](ap3-replikation.md).
 

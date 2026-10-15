@@ -494,3 +494,5 @@ export { EntryReplicationController, EntryReplicas, ReplicationConflict, entryCh
 export { advanceHybridClock, compareHybridClock, validateHybridClock, ReplicationClockError, type HybridClock } from './replication-clock.ts';
 
 export { EntrySnapshotChunks, EntrySnapshotTransfers, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotImport } from './entry-replication-transfer.ts';
+
+export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnavailable, EntryReplicationPump, type EntryStreamIdentity, type EntryStreamDescription, type EntryStreamPage, type EntryStreamCheckpoint, type EntryStreamResult, type EntryReplicationSource, type EntryReplicationStep, type EntryReplicationPumpOptions } from './entry-replication-stream.ts';

@@ -10,7 +10,7 @@ Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
 | Teil | Stand | Verbleibender Nachweis |
 |---|---|---|
 | 3.1 Entry-Replikation | Persistenter HLC, LWW, versionierte Tombstones, Add-Wins-Tags, Deduplizierung, feste Replikat-Inkarnationen, bytebegrenzter Änderungsabruf und kleiner atomarer Snapshot-Merge implementiert | Lokale und gebaute Invariantentests sind Bausteinnachweise; noch keine produktive NetBird-Replikation |
-| 3.2 Große Snapshots und fortlaufender Austausch | [Gepagter Snapshot-Teil implementiert](ap3-snapshot-transfer.md): dauerhafte Seiten/Cursor, Hashkette, atomare Veröffentlichung, lokale Writes und Wiederaufnahme | Fortlaufender Transport mit dauerhaftem Stream-Checkpoint, Generationenpflege und zehn reale Minuten Partition weiterhin offen |
+| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | Generationenpflege, produktive NetBird-Einbindung und zehn reale Minuten Partition weiterhin offen |
 | 3.3 Einbindung in Spaces und Dienst | Offen | Policy-Modi, Typ-/Owner-Rechte, frische Import-Grants für genau Quelle/Ziel, Boot-Rolle `entryReplica`, Clock-Health, Widerruf, Löschbarrieren und verteilte Principal-Löschung auch dieser Historien; Lease-Renewal für Set-Tags; exklusive Txns/Takes ablehnen |
 | 3.4 Vollständige Primary-/Standby-Historie | Offen | Unveränderliches CommitIntent vor Versand, lückenlose Hashkette, persistentes Standby-ACK, lokale Anwendung erst danach; alle Claims, Txns, Sperren, Mailboxes und Root-Dokumente atomar erfassen; keinen Erfolg ohne Standby |
 | 3.5 `setStandby` und Single-Umschaltung | Offen | Dauerhaftes Übergangsjournal, Pausieren aller Schreibquellen inklusive Reaper, Standby-Aufbau, Fencing des ausgeschlossenen Hosts und passende externe Boot-Berechtigungen |
@@ -127,5 +127,13 @@ Gepagte Snapshots mit dauerhaftem Importfortschritt und atomarer Veröffentlichu
 sind umgesetzt und im isolierten Server-Bausteintest geprüft. 517 Repository-Tests
 und 24 mobile Tests sind grün; 23 Replikationsfälle bestehen zusätzlich am gebauten
 Server-Artefakt. [Details und Betriebsgrenzen](ap3-snapshot-transfer.md).
-Der fortlaufende Transport mit dauerhaftem Stream-Checkpoint, Generationenpflege
-und die reale Overlay-Partition bleiben als weitere Teile von 3.2 offen.
+Dieser Checkpoint belegt den Snapshot-Teil. Der aktuelle fortlaufende Austausch
+ist im [Stream-Nachtrag](ap3-stream-transfer.md) beschrieben; Generationenpflege
+und reale Overlay-Partition bleiben offen.
+
+
+Aktueller Stream-Nachweis: 530 Repository-Tests und 24 mobile Tests grün;
+36 gebaute Serverfälle bestanden. Daten und Cursor überstehen die geprüften
+Commit-Verluste gemeinsam; TCP-Wiederanlauf und konkurrierende Worker sind geprüft.
+[Artefakt- und Quellbindung](../test/evidence/ap3-stream-2026-10-15/README.md).
+Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleiben offen.

@@ -1,0 +1,46 @@
+[
+  {
+    "metric": "snapshot-transfer",
+    "backend": "jsonl",
+    "bytes": 353186,
+    "pages": 20,
+    "sourceRevision": 82,
+    "localEntriesPreserved": 3
+  },
+  {
+    "metric": "snapshot-commits",
+    "backend": "jsonl",
+    "largestCommitBytes": 3745,
+    "publicationBytes": 2433,
+    "completedGenerations": 4,
+    "batchLimitBytes": 32768
+  },
+  {
+    "metric": "snapshot-transfer",
+    "backend": "sqlite",
+    "bytes": 353186,
+    "pages": 20,
+    "sourceRevision": 82,
+    "localEntriesPreserved": 3
+  },
+  {
+    "metric": "snapshot-commits",
+    "backend": "sqlite",
+    "largestCommitBytes": 3746,
+    "publicationBytes": 2433,
+    "completedGenerations": 4,
+    "batchLimitBytes": 32768
+  },
+  {
+    "metric": "stream-commit",
+    "backend": "jsonl",
+    "largestCommitBytes": 7386,
+    "batchLimitBytes": 32768
+  },
+  {
+    "metric": "stream-commit",
+    "backend": "sqlite",
+    "largestCommitBytes": 7386,
+    "batchLimitBytes": 32768
+  }
+]

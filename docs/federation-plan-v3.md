@@ -1368,7 +1368,7 @@ NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
 ### Stufe 3 – Replikation und kontrollierte Übernahme
 
 Umsetzungsstand: [Phase-3-Bausteine und Nachweise](ap3-replikation.md). Der erste
-Entry-Replikationsbaustein und der gepagte Snapshot-Transfer sind geprüft; die nachstehenden Gesamtgarantien sind
+Entry-Replikationsbaustein, gepagter Snapshot-Transfer und fortlaufender Cursor-Worker sind geprüft; die nachstehenden Gesamtgarantien sind
 noch nicht abgenommen.
 
 - Snapshot-/Stream-Import, lww/set mit versionierten Deletes, Leases, Deduplizierung, Offline-Rejoin.
