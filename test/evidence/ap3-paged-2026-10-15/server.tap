@@ -1,0 +1,154 @@
+TAP version 13
+# Subtest: hybrid clock orders local/remote ties, rejects invalid/future clocks and fails on exhaustion
+ok 1 - hybrid clock orders local/remote ties, rejects invalid/future clocks and fails on exhaustion
+  ---
+  duration_ms: 1.889195
+  type: 'test'
+  ...
+# Subtest: jsonl: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+ok 2 - jsonl: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+  ---
+  duration_ms: 109.253471
+  type: 'test'
+  ...
+# Subtest: jsonl: loss before/after actual commit reopens the same change without duplicate effect
+ok 3 - jsonl: loss before/after actual commit reopens the same change without duplicate effect
+  ---
+  duration_ms: 17.361618
+  type: 'test'
+  ...
+# Subtest: jsonl: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+ok 4 - jsonl: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+  ---
+  duration_ms: 39.005574
+  type: 'test'
+  ...
+# Subtest: jsonl: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+ok 5 - jsonl: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+  ---
+  duration_ms: 13.63249
+  type: 'test'
+  ...
+# Subtest: jsonl: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+ok 6 - jsonl: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+  ---
+  duration_ms: 253.382557
+  type: 'test'
+  ...
+# Subtest: sqlite: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+ok 7 - sqlite: ten-minute partition converges under reverse duplicate delivery; restart retains HLC, tombstones and add-wins tags
+  ---
+  duration_ms: 46.961577
+  type: 'test'
+  ...
+# Subtest: sqlite: loss before/after actual commit reopens the same change without duplicate effect
+ok 8 - sqlite: loss before/after actual commit reopens the same change without duplicate effect
+  ---
+  duration_ms: 13.228182
+  type: 'test'
+  ...
+# Subtest: sqlite: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+ok 9 - sqlite: atomic snapshots merge local writes and preserve removed/expired versions, gaps and dedup on reopen
+  ---
+  duration_ms: 41.513751
+  type: 'test'
+  ...
+# Subtest: sqlite: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+ok 10 - sqlite: import rejects retired identities, HLC equivocation, future clocks and cross-type removes atomically
+  ---
+  duration_ms: 12.93464
+  type: 'test'
+  ...
+# Subtest: sqlite: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+ok 11 - sqlite: retained history and atomic batch caps backpressure instead of discarding deletion metadata
+  ---
+  duration_ms: 233.479793
+  type: 'test'
+  ...
+# Subtest: jsonl: version-one entry history migrates without changing IDs, HLC or existing entries
+ok 12 - jsonl: version-one entry history migrates without changing IDs, HLC or existing entries
+  ---
+  duration_ms: 16.049642
+  type: 'test'
+  ...
+{"metric":"snapshot-transfer","backend":"jsonl","bytes":353186,"pages":20,"sourceRevision":82,"localEntriesPreserved":3}
+# Subtest: jsonl: large immutable pages stay invisible until atomic publication, preserve concurrent writes and stable cursors
+ok 13 - jsonl: large immutable pages stay invisible until atomic publication, preserve concurrent writes and stable cursors
+  ---
+  duration_ms: 2887.807302
+  type: 'test'
+  ...
+# Subtest: jsonl: failBeforeCommit at begin, every page and publication resumes after reopen without double import
+ok 14 - jsonl: failBeforeCommit at begin, every page and publication resumes after reopen without double import
+  ---
+  duration_ms: 150.964451
+  type: 'test'
+  ...
+# Subtest: jsonl: loseAnswer at begin, every page and publication resumes after reopen without double import
+ok 15 - jsonl: loseAnswer at begin, every page and publication resumes after reopen without double import
+  ---
+  duration_ms: 124.481455
+  type: 'test'
+  ...
+# Subtest: jsonl: bad pages, changed bindings and revocation leave active data and progress unchanged; abort resumes
+ok 16 - jsonl: bad pages, changed bindings and revocation leave active data and progress unchanged; abort resumes
+  ---
+  duration_ms: 45.555901
+  type: 'test'
+  ...
+{"metric":"snapshot-commits","backend":"jsonl","largestCommitBytes":3743,"publicationBytes":2433,"completedGenerations":4,"batchLimitBytes":32768}
+# Subtest: jsonl: actual staging/head/overlay commits stay bounded; completed imports enforce retained-generation backpressure
+ok 17 - jsonl: actual staging/head/overlay commits stay bounded; completed imports enforce retained-generation backpressure
+  ---
+  duration_ms: 1443.709949
+  type: 'test'
+  ...
+# Subtest: sqlite: version-one entry history migrates without changing IDs, HLC or existing entries
+ok 18 - sqlite: version-one entry history migrates without changing IDs, HLC or existing entries
+  ---
+  duration_ms: 10.792233
+  type: 'test'
+  ...
+{"metric":"snapshot-transfer","backend":"sqlite","bytes":353186,"pages":20,"sourceRevision":82,"localEntriesPreserved":3}
+# Subtest: sqlite: large immutable pages stay invisible until atomic publication, preserve concurrent writes and stable cursors
+ok 19 - sqlite: large immutable pages stay invisible until atomic publication, preserve concurrent writes and stable cursors
+  ---
+  duration_ms: 2749.323749
+  type: 'test'
+  ...
+# Subtest: sqlite: failBeforeCommit at begin, every page and publication resumes after reopen without double import
+ok 20 - sqlite: failBeforeCommit at begin, every page and publication resumes after reopen without double import
+  ---
+  duration_ms: 133.826059
+  type: 'test'
+  ...
+# Subtest: sqlite: loseAnswer at begin, every page and publication resumes after reopen without double import
+ok 21 - sqlite: loseAnswer at begin, every page and publication resumes after reopen without double import
+  ---
+  duration_ms: 112.202233
+  type: 'test'
+  ...
+# Subtest: sqlite: bad pages, changed bindings and revocation leave active data and progress unchanged; abort resumes
+ok 22 - sqlite: bad pages, changed bindings and revocation leave active data and progress unchanged; abort resumes
+  ---
+  duration_ms: 34.366738
+  type: 'test'
+  ...
+{"metric":"snapshot-commits","backend":"sqlite","largestCommitBytes":3746,"publicationBytes":2433,"completedGenerations":4,"batchLimitBytes":32768}
+# Subtest: sqlite: actual staging/head/overlay commits stay bounded; completed imports enforce retained-generation backpressure
+ok 23 - sqlite: actual staging/head/overlay commits stay bounded; completed imports enforce retained-generation backpressure
+  ---
+  duration_ms: 1189.358974
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9689.732903
+(node:1) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

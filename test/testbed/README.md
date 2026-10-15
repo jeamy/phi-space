@@ -306,3 +306,14 @@ and 1 GiB RAM. No external network or live store is required. It covers durable
 HLC/LWW/Add-Wins metadata, reordered delivery and commit-loss recovery. The
 ten-minute partition uses an injected clock; this is not live NetBird replication
 or primary/standby acceptance. See [Phase 3](../../docs/ap3-replikation.md).
+
+
+### Paged entry snapshots
+
+`scenarios/phase3-snapshot-transfer.mjs` runs the eleven base entry invariants
+and twelve paged-transfer cases against the shipped library, including both
+persistent backends, schema migration, immutable pages, durable transfer cursors,
+atomic publication, concurrent writes and actual commit-loss/reopen boundaries.
+Use an isolated production-mode container with private scratch storage, 2 CPUs
+and 1 GiB RAM; no live store or external network is required. This is not a live
+NetBird replication acceptance. See [snapshot transfer](../../docs/ap3-snapshot-transfer.md).

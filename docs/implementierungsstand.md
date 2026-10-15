@@ -260,3 +260,18 @@ Die Abschlussprüfung dieses Bausteins besteht aus 505 grünen Repository-Tests,
 24 mobilen Tests sowie elf Fällen am gebauten isolierten Server-Artefakt.
 [Nachweise](../test/evidence/ap3-entry-2026-10-15/README.md); keine produktive
 Replikation wurde aktiviert.
+
+
+## Gepagte Entry-Snapshots (2026-10-15)
+
+Der [Snapshot-Transfer](ap3-snapshot-transfer.md) ergänzt AP 3.2 um dauerhaftes
+Staging, Hashketten, gespeicherte Seiten-/Quell-Cursor und atomare Sichtbarkeit
+durch Generationenverweise. Lokale Overlay-Writes und bestehende Changes-Cursor
+bleiben erhalten; Dokumentversion 1 migriert auf Version 2. Zwölf neue Fälle
+prüfen beide Backends einschließlich Commit-Verlust an Beginn, jeder Seite
+und Abschluss. Laufender Replikationstransport, Generationenpflege und die
+produktive Rechte-/Boot-/Löschintegration bleiben offen.
+
+Aktueller Snapshot-Nachweis: 517 Repository-Tests und 24 mobile Tests grün;
+23 gebaute Serverfälle bestanden.
+[Artefakt- und Quellbindung](../test/evidence/ap3-paged-2026-10-15/README.md).

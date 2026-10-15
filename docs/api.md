@@ -495,3 +495,14 @@ muss atomar mit der Änderung gespeichert werden; der Controller übernimmt dies
 `EntryReplicas` ist eine interne administrative Dokumentfamilie und kein
 unautorisierter RPC-Importpfad. Der öffentliche Dienst bietet dafür noch keine
 Methoden an. Primary/Standby und Promotion werden dadurch nicht bereitgestellt.
+
+
+### Gepagter Snapshot-Import
+
+`EntryReplicationController.startSnapshot` und `snapshotPage` exportieren eine
+bei R eingefrorene Historie. `beginSnapshotImport`, `importSnapshotPage`,
+`snapshotImportStatus`, `finishSnapshotImport` und `abortSnapshotImport`
+verwalten dauerhafte Seiten und den Import-Cursor. Erst der Abschluss macht alle
+Seiten atomar sichtbar. `sourceRevision` im Abschlussresultat nennt den Startpunkt
+für danach entstandene Änderungen. Grenzen, Wiederaufnahme, Abbruch und
+Vertrauensbereich: [Snapshot-Transfer](ap3-snapshot-transfer.md).

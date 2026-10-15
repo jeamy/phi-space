@@ -492,3 +492,5 @@ export {compactErasedSqlite} from "./erasure-sqlite.ts";
 
 export { EntryReplicationController, EntryReplicas, ReplicationConflict, entryChangeId, type EntryReplicationConfig, type EntryReplicationRule, type EntryMutation, type ReplicatedEntryChange, type ReplicatedEntryView, type EntryReplicationSnapshot, type EntryReplicationOptions } from './entry-replication.ts';
 export { advanceHybridClock, compareHybridClock, validateHybridClock, ReplicationClockError, type HybridClock } from './replication-clock.ts';
+
+export { EntrySnapshotChunks, EntrySnapshotTransfers, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotImport } from './entry-replication-transfer.ts';
