@@ -1472,12 +1472,14 @@ Gates (vor der jeweiligen Stufe nachzuweisen):
 3. Zulässige Uhrunsicherheit, HLC-Zukunftsgrenze, Sperrverhalten; gelten auch für Grants und Router-Lease (vor 1b).
 4. Startwerte für Frame, `maxCommitBytes`, Verbindungen und Handshake festgelegt (vor 1b, F11); konkrete
    Byte-/Anzahl-Limits, Snapshot- und Generationslaufzeiten aus Lasttests bestätigt (vor 2).
+   Stand 2026-10-15: für das dokumentierte Profil geschlossen; Werte, Nachweise und
+   Ausnahme beim Phase-2-Abschluss stehen in [Gate 4](ap2-gate4.md).
 5. NetBird-Version, Deployment, Lizenzen, Management-API-Rechte, Ergebnisse der Testmatrix 4.6 (vor 1b).
 6. Schlüsselablage auf Zielplattformen (Android-Keystore: Ed25519 oder P-256), WebCrypto für Browser (vor 1b/4).
 
 ## 14. Offene Fragen
 
-Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F10–F15 sind entschieden (Empfehlung übernommen; F2–F7 und F11 am 2026-10-08). F11 gilt für die Startwerte; die finalen Werte bestimmt der Lasttest vor Stufe 2 (Gate 4). Empfehlungen sind Vorschläge.
+Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F10–F15 sind entschieden (Empfehlung übernommen; F2–F7 und F11 am 2026-10-08). F11 gilt für die Startwerte; die finalen Betriebswerte wurden am 2026-10-15 für das dokumentierte Profil in [Gate 4](ap2-gate4.md) bestätigt. Empfehlungen sind Vorschläge.
 
 | # | Frage | Empfehlung | blockiert |
 |---|---|---|---|
@@ -1491,7 +1493,7 @@ Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F
 | F8 | Werden RPC-Ergebnisse 24 h oder bis 7 Tage aufbewahrt? | 24 h | 1 |
 | F9 | Welche Inhalte gelten als personenbezogen, und braucht es eine Löschfunktion pro Principal über Entries, Claims und Mailboxes? | ja, als Admin-Command in Stufe 2 | 2 |
 | F10 | Ist Teilergebnis-Lesen (`allowPartial`) für Dashboards Standard oder nur explizit? | nur explizit; Dashboard setzt es | 2 |
-| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | bis Lasttest übernehmen | 1 (Startwerte), 2 (final) |
+| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | am 2026-10-15 für das geprüfte Profil bestätigt; [Grenzen](ap2-gate4.md) | 1 (Startwerte), 2 (final) |
 | F12 | Wird das Browser-Gateway gebraucht, oder genügen Handy-App und CLI? | zurückstellen | 4 |
 | F13 | Wird automatische Migration (HRW-Erweiterung) gebraucht? Sie ist nicht in v3. | erst bei konkretem Bedarf | – |
 | F14 | Sollen die v2-Dokumente (`federation-plan-v2*.md`, `.DOCS-UPDATE.md`) archiviert oder gelöscht und `README.md` auf v3 umgestellt werden? Sie verweisen auf nicht existierende Dateien und erklären die gründlichere v1 für veraltet. | README auf v3 umstellen, v2 als „ersetzt“ markieren | – |

@@ -186,3 +186,38 @@ test("the gate refuses to listen on a wildcard address", async (tc) => {
 	const directory = new NetbirdDirectory({ url: mgmt.url, token: "t" });
 	for (const host of ["0.0.0.0", "::", ""]) await assert.rejects(startGate(service, { listen: { host, port: 0 }, directory }), /overlay address only/);
 });
+
+
+test("silent sockets are identified at accept and a hung directory closes them within the handshake bound", async tc => {
+ const h = await memory(); tc.after(() => h.close(ctx));
+ const events: Array<{event:string;reason?:string}> = [];
+ const gate = await startGate(new SpaceService({host:h,ctx,identity:new GateIdentity()}), {
+  listen:{host:"127.0.0.1",port:0}, handshakeMs:100, revalidateMs:0,
+  directory:{async refresh(){},lookup:()=>new Promise(()=>{})}, onEvent:e=>events.push(e),
+ });
+ tc.after(()=>gate.close());
+ const socket = net.createConnection({host:"127.0.0.1",port:(gate.address() as net.AddressInfo).port});
+ tc.after(()=>socket.destroy()); socket.on("error",()=>{});
+ await new Promise<void>((resolve,reject)=>{
+  const timeout=setTimeout(()=>reject(new Error("silent socket survived handshake deadline")),1500);
+  socket.once("close",()=>{clearTimeout(timeout);resolve();});
+ });
+ assert.ok(events.some(e=>e.event==="refused" && e.reason?.includes("not identified in time")));
+ assert.equal(gate.peers().length,0);
+});
+
+test("silent identified sockets consume the per-peer cap before sending their first frame", async tc => {
+ const h = await memory(); tc.after(()=>h.close(ctx));
+ const gate = await startGate(new SpaceService({host:h,ctx,identity:new GateIdentity()}),{
+  listen:{host:"127.0.0.1",port:0},maxConnectionsPerPeer:1,revalidateMs:0,
+  directory:{async refresh(){},async lookup(ip){return {id:"silent",name:"silent",ip,groups:["space-hosts"],connected:true};}},
+ });
+ tc.after(()=>gate.close());
+ const address={host:"127.0.0.1",port:(gate.address() as net.AddressInfo).port};
+ const first=net.createConnection(address);tc.after(()=>first.destroy()); first.on("error",()=>{});
+ for(let n=0;n<100 && gate.peers().length!==1;n++)await new Promise(r=>setTimeout(r,5));
+ assert.equal(gate.peers().length,1);
+ const second=net.createConnection(address);tc.after(()=>second.destroy());second.on("error",()=>{});
+ await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error("second silent peer connection survived")),1500);second.once("close",()=>{clearTimeout(timer);resolve();});});
+ assert.equal(gate.peers().length,1);
+});

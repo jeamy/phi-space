@@ -191,6 +191,7 @@ export async function startGate(service: Pick<SpaceService, "handleText">, o: Ga
 	const server = await serveSpace(service, {
 		listen: o.listen,
 		connection: identify,
+		identifyOnConnect: true,
 		...(o.maxFrameBytes === undefined ? {} : { maxFrameBytes: o.maxFrameBytes }),
 		...(o.maxConnections === undefined ? {} : { maxConnections: o.maxConnections }),
 		...(o.idleMs === undefined ? {} : { idleMs: o.idleMs }),

@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-15T17:21:34.141Z",
+  "scope": "bounded-default-resource-acceptance",
+  "node": "v22.23.3",
+  "limits": {
+    "maxEntryBytes": 65536,
+    "maxTypeChars": 128,
+    "maxTypes": 16,
+    "maxEntries": 10000,
+    "maxEntriesPerOwner": 1000,
+    "maxRegsPerOwner": 20,
+    "maxWaitersPerOwner": 20,
+    "maxTxnsPerOwner": 20,
+    "maxSpaceBytes": 67108864,
+    "notifyIntervalMs": 1000,
+    "claimResultMs": 86400000,
+    "generationAdmitMs": 3600000,
+    "maxClaimBytes": 33554432,
+    "maxOutboxBytes": 8388608,
+    "maxDocBytes": 134217728,
+    "maxCommitBytes": 196608,
+    "maxFrameBytes": 262144,
+    "maxEventBytes": 163840,
+    "maxLogBytes": 4194304,
+    "maxSnapshotBytes": 67108864,
+    "maxSnapshots": 16,
+    "snapshotTtlMs": 60000,
+    "maxMailboxBytes": 8388608,
+    "mailboxTtlMs": 604800000,
+    "maxJobBytes": 16777216
+  },
+  "independentNetbirdLoad": false,
+  "fullPhase2Accepted": false,
+  "snapshot": {
+    "entries": 10000,
+    "inventoryBytes": 12026679,
+    "pages": 47,
+    "maxPageBytes": 260834,
+    "firstPageMs": 125.83135900000343,
+    "traversalMs": 303.0711420000007,
+    "ttlMs": 60000,
+    "createdBeforeFirstEviction": 6,
+    "aggregateByteCapExercised": true,
+    "countCapExercised": true,
+    "evictionProbeMs": 706.3829960000003,
+    "concurrentWriteExcluded": true,
+    "expiredAtTtl": true,
+    "seedMs": 117701.158424
+  },
+  "commit": {
+    "admittedEntries": 3,
+    "nextAdmissionRefused": true,
+    "reservedCompletionBytes": 180405,
+    "publishedBatchBytes": 180443,
+    "completionSucceeded": true,
+    "physicalStorageDeltaBytesMeasured": false
+  },
+  "generation": {
+    "admitMs": 3600000,
+    "resultRetentionMs": 86400000,
+    "pendingSurvivesAdmissionEnd": true,
+    "newIdRejected": true,
+    "decidedReplayWorks": true,
+    "expiredClaimNeverReadmitted": true,
+    "clock": "injected; no one-hour wall-clock wait"
+  },
+  "socket": {
+    "frameBytes": 262144,
+    "headerBytes": 8,
+    "exactFrameRoundTrip": true,
+    "oversizedClientFrameRefused": true,
+    "oversizedServerFrameRefused": true,
+    "globalConnections": 64,
+    "sixtyFifthRefused": true
+  },
+  "peerConnections": {
+    "maxConnectionsPerPeer": 32,
+    "thirtyThirdRefusedByPeerCap": true,
+    "defaultsUnchanged": true
+  },
+  "handshake": {
+    "configuredMs": 5000,
+    "measuredRefusalMs": 5001.967173000012,
+    "hungDirectoryFailsClosed": true,
+    "scope": "peer identification after first frame; not total key-proof time"
+  },
+  "passed": true,
+  "elapsedMs": 125303.569481,
+  "peakRssBytes": 244903936
+}

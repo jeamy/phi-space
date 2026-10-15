@@ -54,10 +54,10 @@ test("dashboard: SSE says hello, then pushes space and metrics events after a co
 	const dash = await startDashboard({ host: h, ctx, port: 0, meter, metricsMs: 100 });
 	const ac = new AbortController();
 	const events: Array<{ type: string; [k: string]: unknown }> = [];
-	const seen = (t: string) => events.some((e) => e.type === t);
-	const wait = async (t: string): Promise<void> => {
-		for (let i = 0; i < 300 && !seen(t); i++) await new Promise((r) => setTimeout(r, 10));
-		assert.ok(seen(t), `SSE never sent ${t}; got ${events.map((e) => e.type).join(",")}`);
+	const seen = (t: string, matches: (event: typeof events[number]) => boolean) => events.some((e) => e.type === t && matches(e));
+	const wait = async (t: string, matches: (event: typeof events[number]) => boolean = () => true): Promise<void> => {
+		for (let i = 0; i < 300 && !seen(t, matches); i++) await new Promise((r) => setTimeout(r, 10));
+		assert.ok(seen(t, matches), `SSE never sent ${t}; got ${events.map((e) => e.type).join(",")}`);
 	};
 	const res = await fetch(`${dash.url}/api/live`, { signal: ac.signal });
 	const pump = (async () => {
@@ -79,8 +79,8 @@ test("dashboard: SSE says hello, then pushes space and metrics events after a co
 		await new PiSpaces(h, ctx, Date.now, meter).write({ type: "Probe", fields: {} });
 		await wait("space");
 		assert.ok((events.find((e) => e.type === "space")!.stats as { entries: number }).entries >= 1);
-		await wait("metrics");
-		assert.equal((events.find((e) => e.type === "metrics")!.totals as Record<string, number>).writes, 1);
+		// An earlier periodic metric can legitimately precede the write under suite load.
+		await wait("metrics", e => (e.totals as Record<string, number>).writes === 1);
 	} finally {
 		ac.abort();
 		await pump;

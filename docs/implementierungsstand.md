@@ -19,7 +19,7 @@ nutzbar; `RemoteSpace` implementiert dafür den gemeinsamen Basisvertrag
 `SpaceLike`. Gate, Overlay-Identität, Schlüssel-Challenge, Enrollment, Grants und
 Supervisor sind zu einer persistenten Host-Laufzeit zusammengeführt. Es gibt
 ein persistentes Router-Grundgerüst (AP 2.1) und einen Simulator (AP 2.8),
-aber keine vollständige Phase-2-/Replikations-/Promotion-Abnahme. Die [Phase-1b-Abnahme](ap1b-abnahme.md) trennt lokale Nachweise von den
+Phase 2 ist mit dokumentierter Ausnahme für Block 4 abgeschlossen; Replikation und Promotion sind noch nicht abgenommen. Die [Phase-1b-Abnahme](ap1b-abnahme.md) trennt lokale Nachweise von den
 abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 
 | Baustein | Vorhanden | Nicht daraus ableitbar |
@@ -33,10 +33,10 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | AP 2.2–2.5 | signierte RouterLease/Delegation, Policy, HRW, FederatedSpace, Txn-Bindung, Waiter-Wettlauf, Membership und lokale Admission; echte TCP-Gates und persistente Neustartprüfungen | AP 2.6/2.7/2.9, automatische Provisionierung der Root-Komposition und öffentliche virtuelle Space-Adresse |
 | Router-Lastfall AP 2.9 | 10.000 Entries, 1.000 Jobs, sechs Worker, 5.000 Router-Operationen auf vier SQLite-Stores; 36 Antwortverluste, Root-Reopen, Ergebnis- und Journalprüfung am gebauten Server-Artefakt | Transport dieses Nachweises mit Fixture-Identitäten im selben Prozess; separate Overlay-Abbruchblöcke 1–3 abgeschlossen; historische native Negativmessungen getrennt dokumentiert; Block 4 per Entscheidung abgeschlossen |
 | NetBird-Wire-Prüfung Phase 2 | 1.000 Sieb-Jobs, drei Members, sechs Worker mit realen Peer-Gates, App-Key-Beweis, signierten Grants/RouterLease/Delegation; zusätzlich 10.000 Entries und 15 verlorene erfolgreiche Antworten geprüft; Lease-Deadlock, Parent-Reservierungsfreigabe und typisierte Auflösungsfehler regressionsgesichert | Fixture-Provisionierung in vier Netzräumen auf einem Server; Overlay-Abbruchblöcke 1–3 abgeschlossen; vollständige native Produktions-Abnahme bleibt offen |
-| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Weitere Testblöcke und Gesamtfreigabe gemäß aktueller Abnahmeliste offen; keine Promotion-/Boot-/Power-Loss-Freigabe |
-| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Weitere Testblöcke und Gesamtfreigabe gemäß aktueller Abnahmeliste offen; Liste in der Phase-2-Abnahme |
+| NetBird Member-Prozessabbrüche Phase 2 | 30 tatsächliche Member-SIGKILLs vor Admission/nach dauerhaftem Abschluss; je elf Starts mit gleicher Zielbindung, ein Root-Start; 1.000 Jobs/10.000 Entries; alle 24 Worker-Wirkungsabbrüche bei sechs laufenden Workern; Audit sämtlicher 5.000 ursprünglichen Claims | Phase 2 mit Ausnahme zu Block 4 abgeschlossen; keine Promotion-/Boot-/Power-Loss-Freigabe |
+| NetBird ACK-Abbrüche Phase 2 | Sechs tatsächliche Root-SIGKILLs vor/nach ACK auf drei Members bei sechs aktiven Workern und 1.000 Jobs; stabile Gewinner, zwölf zurückgegebene Verlierer; Audit aller Kandidaten, Cursor und 5.072 ursprünglichen Child-Claims; gemeinsame Transport-Proofs regressionsgesichert | Phase 2 mit Ausnahme zu Block 4 abgeschlossen; Liste in der Phase-2-Abnahme |
 | NetBird Root-Prozessabbrüche Phase 2 | 10.000 initiale Entries, 1.000 Jobs, sechs feste Worker, drei Members; 30 tatsächliche Root-SIGKILLs an fünf RPC-Effektarten vor/nach Versand bzw. Antwort; 31 Starts mit gleicher Lease/Epoche; Audit aller 5.000 ursprünglichen Member-Claims | Gezielte Root-Journal-Grenzen sind in Block 3 abgenommen; Block 4 per Entscheidung abgeschlossen; historische native Negativmessungen bleiben erhalten; ACK- und Member-Nachweise stehen getrennt |
-| Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; separate NetBird-Volllast in Blöcken 1–3 nachgewiesen; physische Ausfalldomänen offen |
+| Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; separate NetBird-Volllast in Blöcken 1–3 nachgewiesen; physische Ausfalldomänen separat in Block 5 nachgewiesen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
 
@@ -125,11 +125,11 @@ Prüfzahlen und gebaute Artefakte stehen in
 AP 2.6/2.7 sind um Abschlussbudgets, auditierte lokale Admin-Bausteine,
 Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lasttest
 für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweise
-und offenen Grenzen. Die vollständige Phase 2 ist noch nicht freigegeben:
+und ihre Grenzen. Phase 2 ist mit der ausdrücklichen Ausnahme zu Block 4 abgeschlossen:
 Die feste Journal-Aufteilung und das signierte Drei-Member-Sieb über NetBird
 sind nachgewiesen. Die Overlay-Abbruchblöcke 1–3 sind inzwischen abgeschlossen,
 einschließlich 26 gezielter Journal-Abbrüche unter voller Joblast. Alle acht technischen Abnahmeblöcke sind inzwischen abgeschlossen;
-offen bleibt die gesonderte Gesamtfreigabe mit finalen Gate-4-Werten.
+[Gate 4 und finale Betriebswerte](ap2-gate4.md) sind für das nachgewiesene Profil geschlossen; eine uneingeschränkte native Produktionsfreigabe wird nicht erklärt.
 Block 5 besitzt den Live-Nachweis zwischen physischem lokalem Rechner und
 Server einschließlich isoliertem Member-SIGKILL und gebundenem Lese-Replay. Block 4 ist auf ausdrückliche Entscheidung vom 2026-10-15
 abgeschlossen; Block 8 besitzt den Live-Nachweis mit Root-Abbruch und Replay. Die vier Netzräume auf big
@@ -229,3 +229,16 @@ Effekt aus. Identische signierte Member-Policies werden nach geschützter Abfrag
 und erneuter Authority-Prüfung ohne Mutations-Commit bestätigt. Die vollständige
 Suite umfasst am 2026-10-14 **462 bestandene Tests**; die noch fehlenden Live-
 Abnahmen bleiben davon getrennt.
+
+
+## Gate 4 (2026-10-15)
+
+Die [finalen Betriebswerte](ap2-gate4.md) sind durch vorhandene Volllastnachweise
+und einen ergänzenden gebauten Server-Grenztest festgelegt: Frame 256 KiB, Commit
+192 KiB, 32 Verbindungen je Peer / 64 je Listener, Peer-Erkennung 5 Sekunden,
+Snapshot 60 Sekunden / 16 Tokens / 64 MiB und Generation eine Stunde. Der Gate
+beginnt die Erkennung jetzt bei TCP-Annahme; stumme Verbindungen umgehen weder
+Timeout noch Peer-Quota. Zwei neue Gate-Regressionsfälle und eine gebaute
+5-Sekunden-Prüfung sichern das ab. Die Schicht-B-Challenge gilt separat 30 Sekunden.
+Die Phase-2-Abschlussentscheidung bleibt ausdrücklich auf ihren dokumentierten
+Umfang mit Ausnahme für Block 4 begrenzt; Phase 3 ist noch nicht abgenommen.

@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "date": "2026-10-15T17:24:43.440Z",
+  "node": "v22.23.3",
+  "storage": [
+    {
+      "backend": "jsonl",
+      "serializedStorageWritesBytes": 180747,
+      "admittedEntries": 3
+    },
+    {
+      "backend": "sqlite",
+      "serializedStorageWritesBytes": 180747,
+      "admittedEntries": 3
+    }
+  ],
+  "silentHandshake": {
+    "configuredMs": 5000,
+    "measuredRefusalMs": 5010.433542,
+    "noFrameSent": true
+  },
+  "scope": "targeted-boundary-followup"
+}

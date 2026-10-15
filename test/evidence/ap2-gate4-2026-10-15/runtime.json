@@ -1,0 +1,15 @@
+{
+  "tag": "ap2-gate4-20261015-ab0f1d9a",
+  "base": "/home/mux/.local/share/pi-spaces-operations/ap2-gate4-20261015-ab0f1d9a",
+  "image": "95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413",
+  "cpus": 2,
+  "memoryBytes": 1073741824,
+  "network": "none; container loopback only",
+  "readOnlyRoot": true,
+  "production": true,
+  "sourceShipped": false,
+  "artifactHashes": {
+    "pi-spaces.mjs": "d19b5c6ef69db0e2fabddd3755fe7b375eaf7a793c7a9bd0aac70ebe4f4d538c",
+    "scenarios/phase2-gate4.mjs": "72cee8fd3365fbb8f4c29788816dc13f85816b08d368d8cf5196631f73525c47"
+  }
+}

@@ -96,6 +96,12 @@ danach neue erste Seite lesen. Änderungen nach der Snapshot-Revision werden üb
 `socketTransport({ path })` und `socketTransport({ host, port })` stellen
 Unix- bzw. TCP-Verbindungen her. Der Server wird mit
 `serveSpace(service, { listen: target, connection })` gestartet.
+Mit `identifyOnConnect: true` beginnt die Identitätsauflösung schon bei TCP-Annahme;
+ohne diese Option beginnt sie beim ersten Frame. `startGate` setzt die Option
+immer und begrenzt die Peer-Erkennung auf standardmäßig fünf Sekunden. Damit
+verbrauchen auch stumme identifizierte Sockets die Peer-Quota; ein hängendes
+Directory schließt sie nach Ablauf. Die Schicht-B-Challenge gilt separat 30 Sekunden.
+Die [finalen Betriebsgrenzen](ap2-gate4.md) gelten für das geprüfte Lastprofil.
 
 Vor der Nutzung ruft `RemoteSpace` `hello` auf, eröffnet eine Generation und
 gibt jeder Mutation eine Request-ID. Bei verlorener Antwort wiederholt er mit

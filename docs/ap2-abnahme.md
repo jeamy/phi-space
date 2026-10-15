@@ -1,14 +1,17 @@
 # Phase 2: Erweiterungen und Abnahme vom 2026-10-11
 
-**Phase 2 ist noch nicht abgenommen.** Die nachstehenden Nachweise unterscheiden
-Bausteintests, den Member-Lasttest und den noch offenen Verbundbetrieb.
+**Phase 2 ist mit der dokumentierten Abschlussentscheidung für Block 4 abgeschlossen.**
+[Gate 4 und Betriebsgrenzen](ap2-gate4.md) sind für das geprüfte Profil festgelegt.
+Eine uneingeschränkte native Produktionsfreigabe ist damit nicht erklärt.
+Die nachstehenden datierten Nachweise unterscheiden Baustein-, Last- und Betriebsprüfungen.
 Die bisherigen Nachweise zu AP 1b bleiben bestehen.
 
 ## Aktuelle verbleibende Testblöcke (2026-10-15)
 
 Die Phase-2-Abnahmen sind in acht technische Blöcke gebündelt; jeder Block
-umfasst mehrere Einzeltests. **Alle acht Testblöcke sind abgeschlossen.** Offen bleibt die gesonderte
-Gesamtfreigabe mit finalen Gate-4-Werten; sie ist kein weiterer Testblock.
+umfasst mehrere Einzeltests. **Alle acht Testblöcke sind abgeschlossen.** Gate 4 ist ebenfalls geschlossen;
+der Phase-2-Abschluss gilt mit der unten festgehaltenen Ausnahme zu Block 4
+und den [dokumentierten Betriebsgrenzen](ap2-gate4.md).
 Block 4 ist auf ausdrückliche Entscheidung des Auftraggebers vom 2026-10-15
 abgeschlossen und wird nicht erneut ausgeführt. Die historischen negativen
 Messungen weiter unten bleiben als solche erhalten; die Entscheidung erklärt
@@ -796,3 +799,13 @@ Der eigene Register-Container wurde beendet und entfernt; seine Datenbank,
 die versiegelten Löschbelege und die Stores bleiben erhalten. Die geprüften
 Bestandsdienste auf `big` und `vpsc` behielten Container-ID, Startzeit und
 Neustartzähler: [Aufräumnachweis](../test/evidence/ap2-remaining-2026-10-15/cleanup.json).
+
+
+## Gate 4 und Abschlussentscheidung (2026-10-15)
+
+Der ergänzende gebaute Server-Grenztest und die gezielte Handshake-Anschlussprüfung
+sind bestanden. Die [Betriebsgrenzen und Reichweite](ap2-gate4.md) sind verbindlich
+dokumentiert. Alle acht Blöcke und Gate 4 sind geschlossen; es bleibt kein
+Phase-2-Testblock offen. Die ausdrückliche Abschlussentscheidung zu Block 4 wird
+als Ausnahme fortgeführt und erklärt die dortigen negativen nativen Messungen
+nicht zu bestandenen Tests. Der nächste Planabschnitt ist Phase 3.

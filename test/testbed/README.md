@@ -281,3 +281,17 @@ python3 -m unittest discover -s test/testbed/netbird -p test_erasure_driver.py
 
 See `docs/ap2-abnahme.md` and `test/evidence/ap2-remaining-2026-10-15/` for the
 actual multi-host deletion, archive and profile-transition acceptance.
+
+
+### Phase 2 Gate 4 resource boundaries
+
+`scenarios/phase2-gate4.mjs <report-directory>` measures 10,000 SQLite entries,
+snapshot traversal/eviction/TTL, default generation and transaction budgets,
+exact frame size, global/per-peer connection caps and directory timeout.
+`scenarios/phase2-gate4-followup.mjs <report-directory>` separately checks actual
+serialized JSONL/SQLite commit writes and the five-second timeout of a silent
+socket. Both are standalone operator scenarios built by the existing builder.
+Use an isolated production-mode container with 2 CPUs, 1 GiB RAM and private
+writable scratch space; no external network or production-store access is needed.
+They do not rerun the accepted job workload or native Block 4. Final limits and
+acceptance scope: [Gate 4](../../docs/ap2-gate4.md).

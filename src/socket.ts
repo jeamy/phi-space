@@ -52,6 +52,8 @@ export type ServeOptions = {
 	maxFrameBytes?: number;
 	maxConnections?: number;
 	maxInflightPerConnection?: number;
+	/** Identify immediately, including silent sockets (used by the overlay gate). */
+	identifyOnConnect?: boolean;
 	/** A connection with no traffic for this long is closed (default 5 minutes). */
 	idleMs?: number;
 };
@@ -78,14 +80,19 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 		const reader = new FrameReader(maxFrame - HEADER);
 		let inflight = 0;
 		let conn: Promise<Connection> | undefined;
+		const identify = () => conn ??= Promise.resolve().then(() => o.connection ? o.connection(socket) : {}).then(c => {
+			if (c === null) { socket.destroy(); throw new Error("refused"); }
+			return c;
+		});
+		// Attach a rejection handler even if this socket never sends a request.
+		if (o.identifyOnConnect) void identify().catch(() => socket.destroy());
 		const reply = (id: number, text: string) => { if (!socket.destroyed) socket.write(frame(id, text)); };
 		socket.on("data", (chunk) => {
 			try {
 				reader.push(chunk, (id, text) => {
 					if (inflight >= maxInflight) { reply(id, JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: `at most ${maxInflight} calls at once per connection` } })); return; }
 					inflight++;
-					conn ??= Promise.resolve(o.connection ? o.connection(socket) : {}).then((c) => { if (c === null) { socket.destroy(); throw new Error("refused"); } return c; });
-					conn.then((c) => service.handleText(text, c, maxFrame - HEADER))
+					identify().then((c) => service.handleText(text, c, maxFrame - HEADER))
 						.then((r) => reply(id, r), (e) => reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: e instanceof Error ? e.message : String(e) } })))
 						.finally(() => { inflight--; });
 				});

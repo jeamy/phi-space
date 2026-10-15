@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-15T17:31:01.543015+00:00",
+  "gate4": "closed-for-documented-baseline",
+  "phase2": "closed-with-explicit-owner-block4-exception",
+  "unqualifiedNativeProductionAccepted": false,
+  "block4Repeated": false,
+  "phase3Accepted": false,
+  "typecheck": true,
+  "tests": {
+    "repository": {
+      "tests": 494,
+      "pass": 494,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "b737e600a497dd5e979770fee620175555244a0408c573c7e4353205f7e3b392"
+    },
+    "mobileRuntime": {
+      "tests": 20,
+      "pass": 20,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "0e5cef602a12a4e236ca833c906530e3145b981aee7372b3d846b06ec0032b2a"
+    },
+    "mobileLifecycle": {
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "logSha256": "fdcab385cde7655907f4eb52a676656d8b70135032b9333b4e8e8909a925ea24"
+    }
+  },
+  "totalTests": 518,
+  "linksChecked": 81,
+  "missingLinks": 0,
+  "mobileLibraryMatchesServerFollowup": true,
+  "mobileLibrarySha256": "060a2242d3b40ff634206a48780d127195c48399bfdc4d793dc269548211f057",
+  "sourceHashes": {
+    "src/socket.ts": "e020ff8cbe171adb55ec55cb16b92a91e41535e00ff8cac2a5891340af0c4c9f",
+    "src/gate.ts": "eda53cc71881367fd6b97f4004903b0bd6cc9d4f802a2dae2f84c46221ed47bd",
+    "src/snapshot.ts": "598c2180cd9cb8a883d20c4714b1e126fe68fbd46df77689b5f9fe7ec3f2da71",
+    "src/core.ts": "e5ed21512cc96e54bad4f1cc80ec99963c8caa3c4e4c42c3d799ea92034de312",
+    "src/claims.ts": "b23eac5500b32ed056c6cf6c767aa17263954f1a4798d8e8a488ea9e996fc100",
+    "src/client.ts": "73bd664ced686990c6cb2d972ea3a6cb35c1504e3c24c1b0ca5acf59abf2f7fd",
+    "test-gate.test.ts": "51c6affa4b0d4cd14680b1da48af0fcfa7ded600b2b7f5df33c583a80613ac22",
+    "test-dashboard.test.ts": "500ddd045cfab870099dc88dbe76925c7a9942cf592936b00f77d7056c0d3648",
+    "test/testbed/scenarios/phase2-gate4.ts": "3b82965d633c4f0fa16784fc20e3c8ecf1e5770eddfd4b177519fc63d0861944",
+    "test/testbed/scenarios/phase2-gate4-followup.ts": "33d5b2300ccb01bc6c5877362af97d8c182c33be86abc5ebc7ed08b3a482ab16",
+    "docs/api.md": "e33dbb54a190631209c311021be45b017daaa1a3acad567b7df689d7473053ef",
+    "docs/ap2-gate4.md": "98a6bf2d07b8e69a960d76b5a1c314ffdb83798620bc787b46e1b15b99f9cb71",
+    "docs/ap2-abnahme.md": "cc283307d4c8814c4191384b431b720907010e98e32f2bd0a26dd1b651689695",
+    "docs/implementierungsstand.md": "9f9b37a83a1effbee87a157a5de97284118d0952aaeb2a28a634098527db36e2",
+    "docs/federation-plan-v3.md": "e5e84a9ffacd4a8c950351806255d4c5883f8c2781dd583413d96a74b02eb998",
+    "test/testbed/README.md": "a9ee168df00177e002b0df4bac95b8012168c3b9cd9ee06a8b40180ac824eb00",
+    "test/evidence/ap2-gate4-2026-10-15/README.md": "de52c523983c108a0b47a535385071e6c5fe0527e8aa8c24deee8f31b60a278a"
+  },
+  "firstFinalSuite": {
+    "passed": 493,
+    "failed": 1,
+    "failure": "SSE test selected periodic metric before the write; corrected to await expected writes=1 metric; final full suite passed",
+    "logSha256": "ec207f6b14f6a278e9d9610be957f711292ee91cb74094a1435c3a7d77cd04a4"
+  },
+  "ownedFixturesRemoved": true,
+  "protectedInventoriesUnchanged": true
+}
