@@ -496,3 +496,8 @@ export { advanceHybridClock, compareHybridClock, validateHybridClock, Replicatio
 export { EntrySnapshotChunks, EntrySnapshotTransfers, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotImport } from './entry-replication-transfer.ts';
 
 export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnavailable, EntryReplicationPump, type EntryStreamIdentity, type EntryStreamDescription, type EntryStreamPage, type EntryStreamCheckpoint, type EntryStreamResult, type EntryReplicationSource, type EntryReplicationStep, type EntryReplicationPumpOptions } from './entry-replication-stream.ts';
+
+export { EntrySnapshotMaintenance } from "./entry-replication-transfer.ts";
+export type { EntrySnapshotMaintenanceJob } from "./entry-replication-transfer.ts";
+export { PrimarySyncJournal, PrimarySyncBlocked, CommitSealed, primarySyncStorage, recoverPrimarySync, materializeSyncHistory } from './primary-sync.ts';
+export type { PrimarySyncConfig, PrimaryCommitIntent, PrimarySyncAck, PrimarySyncPeer } from './primary-sync.ts';

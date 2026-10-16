@@ -10,9 +10,9 @@ Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
 | Teil | Stand | Verbleibender Nachweis |
 |---|---|---|
 | 3.1 Entry-Replikation | Persistenter HLC, LWW, versionierte Tombstones, Add-Wins-Tags, Deduplizierung, feste Replikat-Inkarnationen, bytebegrenzter Änderungsabruf und kleiner atomarer Snapshot-Merge implementiert | Lokale und gebaute Invariantentests sind Bausteinnachweise; noch keine produktive NetBird-Replikation |
-| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | Generationenpflege, produktive NetBird-Einbindung und zehn reale Minuten Partition weiterhin offen |
-| 3.3 Einbindung in Spaces und Dienst | Offen | Policy-Modi, Typ-/Owner-Rechte, frische Import-Grants für genau Quelle/Ziel, Boot-Rolle `entryReplica`, Clock-Health, Widerruf, Löschbarrieren und verteilte Principal-Löschung auch dieser Historien; Lease-Renewal für Set-Tags; exklusive Txns/Takes ablehnen |
-| 3.4 Vollständige Primary-/Standby-Historie | Offen | Unveränderliches CommitIntent vor Versand, lückenlose Hashkette, persistentes Standby-ACK, lokale Anwendung erst danach; alle Claims, Txns, Sperren, Mailboxes und Root-Dokumente atomar erfassen; keinen Erfolg ohne Standby |
+| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | [Generationenpflege](ap3-snapshot-maintenance.md) implementiert und geprüft; produktive Einbindung und zehn reale Minuten Partition weiterhin offen |
+| 3.3 Einbindung in Spaces und Dienst | Offen | Policy-Modi, Typ-/Owner-Rechte, frische Import-Grants für genau Quelle/Ziel, Boot-Rolle `entryReplica`, Clock-Health, Widerruf, Löschbarrieren und verteilte Principal-Löschung auch dieser Historien; Set-Renewal ist als atomare Version umgesetzt; exklusive Txns/Takes im öffentlichen Adapter noch ablehnen |
+| 3.4 Vollständige Primary-/Standby-Historie | [Synchroner Storage-Unterbau](ap3-primary-sync.md) implementiert und geprüft | Produktive Domain-Trennung, authentifizierter Transport, öffentliches commitSealed, Bootstrap bestehender Stores, Boot-/Löschintegration und kontrollierte Übergänge bleiben offen |
 | 3.5 `setStandby` und Single-Umschaltung | Offen | Dauerhaftes Übergangsjournal, Pausieren aller Schreibquellen inklusive Reaper, Standby-Aufbau, Fencing des ausgeschlossenen Hosts und passende externe Boot-Berechtigungen |
 | 3.6 Promotion und Quarantäne | Offen | Nur fester synchroner Standby, verifizierter Fencing-Nachweis, lokale Konfiguration/Epoche, keine implizite Single-Freigabe; Negativclaims nur unter den vollständigen Voraussetzungen des Zielvertrags |
 | 3.7 Gesamtbetrieb | Offen | Reale unabhängige Hosts, Overlay-Ausfälle, Prozess-/Storage-Grenzen, zehnminütige Partition mit Writes/Deletes/Renewals sowie Verlustfreiheit aller bestätigten Operationen |
@@ -74,7 +74,7 @@ Die gesamte kodierte Historie einschließlich Konfiguration und Tombstones besit
 standardmäßig 16 MiB, konfigurierbar von 16 KiB bis 64 MiB. Bei Erschöpfung werden
 neue Änderungen abgewiesen. Es gibt keine zeitbasierte Bereinigung und keinen
 Verlust von Remove-/Deduplizierungsinformationen. Ein solcher Bestand verwendet für große Snapshots den implementierten
-gepagten Teil 3.2; dessen fortlaufender Transport bleibt offen. Entry-Felder bleiben auf 64 KiB,
+gepagten Teil 3.2 und den implementierten Cursor-Worker. Entry-Felder bleiben auf 64 KiB,
 Mitglieder auf 32 und Typregeln auf 64 begrenzt.
 
 Der Betreiber muss `authorize(action)` und `assertActive()` bereitstellen. Beide
@@ -137,3 +137,27 @@ Aktueller Stream-Nachweis: 530 Repository-Tests und 24 mobile Tests grün;
 Commit-Verluste gemeinsam; TCP-Wiederanlauf und konkurrierende Worker sind geprüft.
 [Artefakt- und Quellbindung](../test/evidence/ap3-stream-2026-10-15/README.md).
 Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleiben offen.
+
+
+## Generationenpflege und synchroner Storage-Unterbau (2026-10-15)
+
+Die [Generationenpflege](ap3-snapshot-maintenance.md) entfernt redundante Kopien
+seitenweise und erhält die vollständige kausale Historie. Der
+[synchrone Storage-Baustein](ap3-primary-sync.md) versiegelt vollständige Batches vor
+Versand und wendet sie erst nach dauerhafter Standby-Annahme lokal an. Beides ist
+implementiert und gezielt geprüft. Dies schließt nicht die offenen Integrations-,
+Fencing- und Übergangspunkte der obigen Tabelle. Phase 3 bleibt bis zu diesen
+Nachweisen offen.
+
+
+### Set-Lease-Erneuerung
+
+`mutate(id, {kind: "renew", type, tag, fields, owner, expiresAt})` ersetzt einen
+lokal sichtbaren, noch lebenden Set-Tag durch einen neuen Origin-Tag. Felder und
+Owner müssen unverändert bleiben. Die neue Version entfernt den beobachteten alten
+Tag im selben Event/Commit. Ein konkurrierender Remove des alten Tags entfernt
+die Erneuerung nicht; nach deren Ablauf wird der alte Tag nicht wieder sichtbar.
+Die Erneuerung kann vor dem ursprünglichen Add eintreffen. Bei späterem Empfang
+wird die kausale Feld-/Owner-Bindung nachgeprüft; Selbstreferenzen sind ungültig.
+Acht Fälle prüfen dies einschließlich tatsächlicher Commit-Verluste auf beiden
+Backends. Der öffentliche SpaceLike-/Lease-Adapter ist weiterhin Teil von 3.3.

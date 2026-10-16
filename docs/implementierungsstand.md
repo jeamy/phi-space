@@ -293,3 +293,17 @@ Aktueller Stream-Nachweis: 530 Repository-Tests und 24 mobile Tests grün;
 Commit-Verluste gemeinsam; TCP-Wiederanlauf und konkurrierende Worker sind geprüft.
 [Artefakt- und Quellbindung](../test/evidence/ap3-stream-2026-10-15/README.md).
 Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleiben offen.
+
+
+## Snapshot-Pflege und synchroner Storage-Baustein (2026-10-15)
+
+[Dauerhafte Generationenpflege](ap3-snapshot-maintenance.md) und
+[vollständiger synchroner Storage-Pfad](ap3-primary-sync.md) sind implementiert.
+Acht Wartungsfälle und 16 Sync-Fälle prüfen tatsächliche Commit-Verluste auf
+JSONL und SQLite. Der Sync-Baustein gilt zunächst für einen dedizierten Store und
+ist noch nicht in Policy, öffentlichen Claim-Status, Boot, Löschungen und
+Primary-/Standby-Übergänge eingebunden. Phase 3 bleibt ausdrücklich offen.
+
+Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
+gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
+Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

@@ -8,9 +8,9 @@ import type { Principal } from './claims.ts';
 import { RequestConflict } from './claims.ts';
 import { SnapshotExpired, ResourceExhausted, type Json, type Fields } from './core.ts';
 import { advanceHybridClock, compareHybridClock, ReplicationClockError, validateHybridClock, type HybridClock } from './replication-clock.ts';
-import { EntrySnapshotChunks, EntrySnapshotTransfers, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotSegment, type EntrySnapshotImport } from './entry-replication-transfer.ts';
+import { EntrySnapshotChunks, EntrySnapshotTransfers, EntrySnapshotMaintenance, type EntrySnapshotMaintenanceJob, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotSegment, type EntrySnapshotImport } from './entry-replication-transfer.ts';
 import { EntryStreamCheckpoints, EntryStreamCursorConflict, type EntryStreamIdentity, type EntryStreamDescription, type EntryStreamPage, type EntryStreamCheckpoint, type EntryStreamResult } from './entry-replication-stream.ts';
-export type { EntrySnapshotManifest, EntrySnapshotPage, EntrySnapshotImport } from './entry-replication-transfer.ts';
+export type { EntrySnapshotManifest, EntrySnapshotPage, EntrySnapshotImport, EntrySnapshotMaintenanceJob } from './entry-replication-transfer.ts';
 export type EntryReplicationRule = { type: string; variant: 'lww'; keyFields: string[] } | { type: string; variant: 'set' };
 export type EntryReplicationConfig = {
  spaceId: string; authorityId: string; replicaId: string; incarnation: string;
@@ -19,7 +19,8 @@ export type EntryReplicationConfig = {
 export type EntryMutation =
  | { kind: 'put' | 'add'; type: string; fields: Fields; owner: Principal; expiresAt: number | null }
  | { kind: 'delete'; type: string; fields: Fields; owner: Principal }
- | { kind: 'remove'; type: string; tags: string[]; owner: Principal };
+ | { kind: 'remove'; type: string; tags: string[]; owner: Principal }
+ | { kind: 'renew'; type: string; tag: string; fields: Fields; owner: Principal; expiresAt: number | null };
 export type ReplicatedEntryChange = {
  originReplicaId: string; incarnation: string; seq: number; clock: HybridClock;
  requestId: string; argumentHash: string; mutation: EntryMutation;
@@ -92,8 +93,9 @@ export class EntryReplicationController {
    if(r.variant!=='set'||!exact(m,['kind','type','tags','owner'])||!Array.isArray(m.tags)||m.tags.length>256||new Set(m.tags).size!==m.tags.length)throw new ReplicationConflict('invalid observed remove');
    for(const tag of m.tags){let v:unknown;try{v=JSON.parse(tag);}catch{throw new ReplicationConflict('invalid observed tag');}if(!Array.isArray(v)||v.length!==3||!number(v[2])||v[2]<1||!this.config.members.some(p=>p.replicaId===v[0]&&p.incarnation===v[1])||canonical(v)!==tag)throw new ReplicationConflict('unknown tag origin');}
   } else {
-   const hasLease=m.kind==='put'||m.kind==='add';
-   if(!exact(m,hasLease?['kind','type','fields','owner','expiresAt']:['kind','type','fields','owner']) || (r.variant==='lww' ? !['put','delete'].includes(m.kind) : m.kind!=='add') || !m.fields || typeof m.fields!=='object'||Array.isArray(m.fields) || hasLease&&m.expiresAt!==null&&!number(m.expiresAt))throw new ReplicationConflict('invalid replicated mutation');
+   const hasLease=m.kind==='put'||m.kind==='add'||m.kind==='renew';
+   if(!exact(m,m.kind==='renew'?['kind','type','tag','fields','owner','expiresAt']:hasLease?['kind','type','fields','owner','expiresAt']:['kind','type','fields','owner']) || (r.variant==='lww' ? !['put','delete'].includes(m.kind) : !['add','renew'].includes(m.kind)) || !m.fields || typeof m.fields!=='object'||Array.isArray(m.fields) || hasLease&&m.expiresAt!==null&&!number(m.expiresAt))throw new ReplicationConflict('invalid replicated mutation');
+   if(m.kind==='renew'){let tag:unknown;try{tag=JSON.parse(m.tag);}catch{throw new ReplicationConflict('invalid renewal tag');}if(!Array.isArray(tag)||tag.length!==3||!number(tag[2])||tag[2]<1||!this.config.members.some(p=>p.replicaId===tag[0]&&p.incarnation===tag[1])||canonical(tag)!==m.tag)throw new ReplicationConflict('unknown renewal tag');}
    if(bytes(m.fields)>64*1024)throw new ResourceExhausted('entry fields exceed 64 KiB');if(r.variant==='lww')key(r,m.fields);
   }
  }
@@ -118,7 +120,12 @@ export class EntryReplicationController {
    items.sort((a,b)=>a.seq-b.seq);for(let n=1;n<items.length;n++)if(compareHybridClock(items[n-1]!.clock,items[n]!.clock)>=0)throw new ReplicationConflict('origin clock is not strictly monotonic');
   }
   for(const event of known.values())if(event.mutation.kind==='remove')for(const tag of event.mutation.tags){
-   const observed=known.get(tag);if(observed&&(observed.mutation.kind!=='add'||observed.mutation.type!==event.mutation.type))throw new ReplicationConflict('remove references another type or a non-add');
+   const observed=known.get(tag);if(observed&&(!['add','renew'].includes(observed.mutation.kind)||observed.mutation.type!==event.mutation.type))throw new ReplicationConflict('remove references another type or a non-add');
+  }
+  for(const event of known.values())if(event.mutation.kind==='renew'){
+   const m=event.mutation,observed=known.get(m.tag);
+   if(entryChangeId(event)===m.tag)throw new ReplicationConflict('renewal cannot reference itself');
+   if(observed){const old=observed.mutation;if(!['add','renew'].includes(old.kind)||old.type!==m.type||canonical(old.owner)!==canonical(m.owner)||!('fields'in old)||canonical(old.fields)!==canonical(m.fields)||compareHybridClock(observed.clock,event.clock)>=0)throw new ReplicationConflict('renewal must preserve an earlier tag fields and owner');}
   }
   for(const event of accepted){s.events.push(copy(event));s.clock=advanceHybridClock(s.clock,now,event.clock);if(event.originReplicaId===this.config.replicaId&&event.incarnation===this.config.incarnation)s.seq=Math.max(s.seq,event.seq);}
   if(accepted.length){s.lastWallTime=Math.max(s.lastWallTime,now);if(bytes(s)>this.maxHistoryBytes)throw new ResourceExhausted('replica history is full; no tombstone or dedup record was discarded');}
@@ -133,7 +140,12 @@ export class EntryReplicationController {
    const old=logical.events.find(e=>e.originReplicaId===this.config.replicaId&&e.incarnation===this.config.incarnation&&e.requestId===requestId);
    if(old){if(old.argumentHash!==argumentHash)throw new RequestConflict('replication request changed arguments');await this.check('local');return copy(old);}
    const now=this.now();this.clockSafe(s,now);
-   if(m.kind==='remove')for(const tag of m.tags){const e=logical.events.find(e=>entryChangeId(e)===tag);if(!e||e.mutation.kind!=='add'||e.mutation.type!==m.type)throw new ReplicationConflict('local remove can only remove observed adds of its type');}
+   if(m.kind==='remove')for(const tag of m.tags){const e=logical.events.find(e=>entryChangeId(e)===tag);if(!e||!['add','renew'].includes(e.mutation.kind)||e.mutation.type!==m.type)throw new ReplicationConflict('local remove can only remove observed adds of its type');}
+   if(m.kind==='renew'){
+    const observed=logical.events.find(e=>entryChangeId(e)===m.tag),old=observed?.mutation;
+    const removed=logical.events.some(e=>e.mutation.kind==='remove'&&e.mutation.tags.includes(m.tag)||e.mutation.kind==='renew'&&e.mutation.tag===m.tag);
+    if(!old||!['add','renew'].includes(old.kind)||old.type!==m.type||!('expiresAt'in old)||old.expiresAt!==null&&old.expiresAt<=now||removed||canonical(old.owner)!==canonical(m.owner)||!('fields'in old)||canonical(old.fields)!==canonical(m.fields)||m.expiresAt!==null&&m.expiresAt<=now)throw new ReplicationConflict('renewal requires a live observed tag with unchanged fields and owner');
+   }
    if(!Number.isSafeInteger(s.seq+1))throw new ReplicationConflict('origin sequence exhausted');
    const event:ReplicatedEntryChange={originReplicaId:this.config.replicaId,incarnation:this.config.incarnation,seq:s.seq+1,clock:advanceHybridClock(s.clock,now),requestId,argumentHash,mutation:m};
    this.budget([event]);s.config??=copy(this.config);s.configHash=this.configHash;logical.config=copy(this.config);logical.configHash=this.configHash;this.append(logical,[event],now);this.persistOverlay(s,logical,previous);
@@ -178,10 +190,10 @@ export class EntryReplicationController {
    if(r.variant==='lww'&&e.mutation.kind!=='remove'){
     const k=key(r,e.mutation.fields),old=winners.get(k),cmp=old?compareHybridClock(e.clock,old.clock):1;
     if(!old||cmp>0||cmp===0&&e.originReplicaId>old.originReplicaId)winners.set(k,e);
-   } else if(e.mutation.kind==='remove')for(const tag of e.mutation.tags)removed.add(tag);
+   } else if(e.mutation.kind==='remove')for(const tag of e.mutation.tags)removed.add(tag);else if(e.mutation.kind==='renew')removed.add(e.mutation.tag);
   }
   const visible=[...winners.values()].filter(e=>e.mutation.kind==='put');
-  visible.push(...s.events.filter(e=>e.mutation.kind==='add'&&!removed.has(entryChangeId(e))));
+  visible.push(...s.events.filter(e=>['add','renew'].includes(e.mutation.kind)&&!removed.has(entryChangeId(e))));
   return visible.filter(e=>{const m=e.mutation as Extract<EntryMutation,{expiresAt:number|null}>;return m.expiresAt===null||m.expiresAt>now;}).map(e=>{
    const m=e.mutation as Extract<EntryMutation,{expiresAt:number|null}>;return {id:entryChangeId(e),type:m.type,fields:copy(m.fields),owner:copy(m.owner),expiresAt:m.expiresAt,clock:copy(e.clock),originReplicaId:e.originReplicaId};
   }).sort((a,b)=>a.id<b.id?-1:1);
@@ -223,12 +235,8 @@ export class EntryReplicationController {
   for(let n=0;n<count;n++){const chunk=await load(chunkKey(this.documentKey,m.id,n));if(!chunk?.page)throw new ReplicationConflict('snapshot page is missing');this.validatePage(m,chunk.page,n,events.length,chain);events.push(...copy(chunk.page.events));chain=chunk.page.sha256;}
   if(count===m.pageCount&&(chain!==m.rootHash||events.length!==m.eventCount||bytes(events)!==m.bytes))throw new ReplicationConflict('snapshot is incomplete or its final hash changed');return events;
  }
- async startSnapshot(pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotManifest> {
-  if(!number(pageBytes)||pageBytes<1024||2*pageBytes+16384>this.maxBatchBytes)throw new ReplicationConflict('invalid snapshot page budget');
-  const state=await this.state('export'),events=copy(state?.events??[]),now=this.now(),cache=this.cache();
-  for(const [key,v] of cache)if(v.manifest.expiresAt<=now)cache.delete(key);
-  const manifest:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:events.length,eventCount:events.length,bytes:bytes(events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
-  if(!Number.isSafeInteger(manifest.expiresAt)||manifest.bytes>64*1024*1024)throw new ResourceExhausted('snapshot cache byte bound exceeded');
+ private packSnapshot(events:ReplicatedEntryChange[],template:EntrySnapshotManifest):ExportedSnapshot {
+  const manifest=copy(template),pageBytes=manifest.pageBytes;
   const pages:EntrySnapshotPage[]=[];let offset=0;
   do {
    const page:EntrySnapshotPage={snapshotId:manifest.id,index:pages.length,offset,next:pages.length+1,events:[],previousHash:'0'.repeat(64),sha256:'0'.repeat(64)};
@@ -237,6 +245,15 @@ export class EntryReplicationController {
   }while(offset<events.length);
   manifest.pageCount=pages.length;manifest.seedHash=manifestSeed(manifest);let chain=manifest.seedHash;
   for(const page of pages){page.previousHash=chain;page.sha256=pageHash(page);chain=page.sha256;}manifest.rootHash=chain;
+  return {manifest,pages};
+ }
+ async startSnapshot(pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotManifest> {
+  if(!number(pageBytes)||pageBytes<1024||2*pageBytes+16384>this.maxBatchBytes)throw new ReplicationConflict('invalid snapshot page budget');
+  const state=await this.state('export'),events=copy(state?.events??[]),now=this.now(),cache=this.cache();
+  for(const [key,v] of cache)if(v.manifest.expiresAt<=now)cache.delete(key);
+  const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:events.length,eventCount:events.length,bytes:bytes(events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
+  if(!Number.isSafeInteger(template.expiresAt)||template.bytes>64*1024*1024)throw new ResourceExhausted('snapshot cache byte bound exceeded');
+  const {manifest,pages}=this.packSnapshot(events,template);
   while(cache.size>=16||[...cache.values()].reduce((n,v)=>n+v.manifest.bytes,0)+manifest.bytes>64*1024*1024){const first=cache.keys().next().value;if(first===undefined)throw new ResourceExhausted('snapshot cache is full');cache.delete(first);}
   cache.set(manifest.id,{manifest,pages});return copy(manifest);
  }
@@ -251,6 +268,7 @@ export class EntryReplicationController {
    if(old){if(canonical(old.manifest)!==canonical(manifest))throw new ReplicationConflict('snapshot ID changed manifest');await this.check('import');return copy(old);}
    if(this.now()>=manifest.expiresAt)throw new SnapshotExpired('snapshot expired before import');
    const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);
+   const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null);if(maintenance.job&&maintenance.job.phase!=='completed')throw new ReplicationConflict('snapshot maintenance is active');
    const reservedBytes=manifest.bytes+manifest.pageCount*1024;
    if(Object.values(ledger.transfers).some(t=>t.phase==='receiving'||t.phase==='aborting')||Object.keys(ledger.transfers).length>=16||(base.segments?.length??0)>=16||ledger.retainedBytes+reservedBytes>2*this.maxHistoryBytes)throw new ResourceExhausted('snapshot transfer or retained staging capacity exhausted');
    const transfer:EntrySnapshotImport={manifest,phase:'receiving',nextPage:0,nextOffset:0,chainHash:manifest.seedHash,receivedBytes:2,reservedBytes,cleanupCursor:0};
@@ -280,7 +298,7 @@ export class EntryReplicationController {
  }
  async finishSnapshotImport(snapshotId:string):Promise<{added:number;revision:number;sourceRevision:number}> {
   this.snapshotId(snapshotId);await this.check('import');return this.o.host.commit(async tx=>{
-   await this.check('import');const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=ledger.transfers[snapshotId];if(!t)throw new ReplicationConflict('unknown snapshot import');this.bindManifest(t.manifest);if(t.phase==='completed'){await this.check('import');return copy(t.result!);}
+   await this.check('import');const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=ledger.transfers[snapshotId];if(!t)throw new ReplicationConflict('unknown snapshot import');this.bindManifest(t.manifest);if(['completed','retiring','retired'].includes(t.phase)){await this.check('import');return copy(t.result!);}
    if(t.phase!=='receiving'||t.nextPage!==t.manifest.pageCount)throw new ReplicationConflict('snapshot import is incomplete');
    const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const logical=await this.materializeIn(tx,base),events=await this.stagedEvents(t.manifest,key=>tx.doc(EntrySnapshotChunks,key,null));
    const now=this.now();this.clockSafe(logical,now);const added=this.append(logical,events,now);
@@ -293,10 +311,81 @@ export class EntryReplicationController {
  }
  async abortSnapshotImport(snapshotId:string):Promise<EntrySnapshotImport> {
   this.snapshotId(snapshotId);await this.check('import');return this.o.host.commit(async tx=>{
-   await this.check('import');const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=ledger.transfers[snapshotId];if(!t)throw new ReplicationConflict('unknown snapshot import');this.bindManifest(t.manifest);if(t.phase==='completed')throw new ReplicationConflict('published generation cannot be aborted');if(t.phase==='aborted'){await this.check('import');return copy(t);}
+   await this.check('import');const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=ledger.transfers[snapshotId];if(!t)throw new ReplicationConflict('unknown snapshot import');this.bindManifest(t.manifest);if(['completed','retiring','retired','consolidating'].includes(t.phase))throw new ReplicationConflict('published or maintenance generation cannot be aborted');if(t.phase==='aborted'){await this.check('import');return copy(t);}
    t.phase='aborting';if(t.cleanupCursor<t.nextPage){const chunk=await tx.doc(EntrySnapshotChunks,chunkKey(this.documentKey,snapshotId,t.cleanupCursor),null);chunk.page=null;t.cleanupCursor++;}
    if(t.cleanupCursor===t.nextPage){t.phase='aborted';ledger.retainedBytes-=t.reservedBytes;}
    await this.check('import');return copy(t);
+  },this.o.ctx);
+ }
+
+
+ /** Capture a stable logical prefix; replacement copies data, never discards causal/dedup history. */
+ async startSnapshotMaintenance(requestId:string,pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotMaintenanceJob>{
+  if(!id(requestId)||!number(pageBytes)||pageBytes<1024||2*pageBytes+16384>this.maxBatchBytes)throw new ReplicationConflict('invalid maintenance request or page budget');
+  await this.check('import');return this.o.host.commit(async tx=>{
+   await this.check('import');const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null);
+   if(maintenance.job?.requestId===requestId){if(maintenance.job.manifest.pageBytes!==pageBytes)throw new ReplicationConflict('maintenance request changed page budget');await this.check('import');return copy(maintenance.job);}
+   if(maintenance.job&&maintenance.job.phase!=='completed')throw new ReplicationConflict('another snapshot maintenance request is active');
+   const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);
+   const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null);
+   if(Object.values(ledger.transfers).some(t=>t.maintenanceRequestId===requestId))throw new ReplicationConflict('older maintenance receipt cannot be restarted');
+   if(Object.values(ledger.transfers).some(t=>!['completed','retired','aborted'].includes(t.phase)))throw new ReplicationConflict('finish or abort existing snapshot transfers first');
+   if(Object.keys(ledger.transfers).length>=17)throw new ResourceExhausted('retire expired snapshot receipts before maintenance');
+   const logical=await this.materializeIn(tx,base),now=this.now();this.clockSafe(logical,now);
+   const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:logical.events.length,eventCount:logical.events.length,bytes:bytes(logical.events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
+   if(!Number.isSafeInteger(template.expiresAt))throw new ReplicationConflict('maintenance deadline overflow');
+   const {manifest}=this.packSnapshot(logical.events,template),reservedBytes=manifest.bytes+manifest.pageCount*1024;
+   if(ledger.retainedBytes+reservedBytes>3*this.maxHistoryBytes+2048*1024)throw new ResourceExhausted('maintenance retained byte bound exceeded');
+   ledger.transfers[manifest.id]={maintenanceRequestId:requestId,manifest,phase:'consolidating',nextPage:0,nextOffset:0,chainHash:manifest.seedHash,receivedBytes:2,reservedBytes,cleanupCursor:0};ledger.retainedBytes+=reservedBytes;
+   maintenance.job={requestId,phase:'copying',manifest,nextPage:0,overlayCount:base.events.length,previous:(base.segments??[]).map(s=>({snapshotId:s.manifest.id,pageCount:s.manifest.pageCount,nextPage:0}))};
+   await this.check('import');return copy(maintenance.job);
+  },this.o.ctx);
+ }
+ async snapshotMaintenanceStatus():Promise<EntrySnapshotMaintenanceJob|null>{
+  await this.check('import');const state=await this.o.host.snapshot(EntrySnapshotMaintenance,this.documentKey,this.o.ctx);await this.check('import');return state?.job?copy(state.job):null;
+ }
+ /** One page copy, atomic reference publication, or one obsolete-page retirement per invocation. */
+ async advanceSnapshotMaintenance(requestId:string):Promise<EntrySnapshotMaintenanceJob>{
+  if(!id(requestId))throw new ReplicationConflict('invalid maintenance request');await this.check('import');return this.o.host.commit(async tx=>{
+   await this.check('import');const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null),job=maintenance.job;
+   if(!job||job.requestId!==requestId)throw new ReplicationConflict('unknown maintenance request');
+   const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);this.bindManifest(job.manifest);
+   const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),replacement=ledger.transfers[job.manifest.id];
+   if(!replacement)throw new ReplicationConflict('maintenance receipt missing');
+   if(job.phase==='copying'){
+    if((base.segments??[]).map(s=>s.manifest.id).join(',')!==job.previous.map(s=>s.snapshotId).join(',')||base.events.length<job.overlayCount)throw new ReplicationConflict('maintenance source references changed');
+    const logical=await this.materializeIn(tx,base),prefix=logical.events.slice(0,job.manifest.revision),packed=this.packSnapshot(prefix,job.manifest);
+    if(canonical(packed.manifest)!==canonical(job.manifest))throw new ReplicationConflict('maintenance source prefix changed');
+    if(job.nextPage<job.manifest.pageCount){
+     const page=packed.pages[job.nextPage]!,chunk=await tx.doc(EntrySnapshotChunks,chunkKey(this.documentKey,job.manifest.id,job.nextPage),null);
+     if(chunk.page!==null)throw new ReplicationConflict('maintenance page already occupied');chunk.page=copy(page);job.nextPage++;
+     replacement.nextPage=job.nextPage;replacement.nextOffset+=page.events.length;replacement.chainHash=page.sha256;replacement.receivedBytes+=bytes(page.events)-2+(page.offset>0&&page.events.length>0?1:0);
+    }else{
+     const staged=await this.stagedEvents(job.manifest,key=>tx.doc(EntrySnapshotChunks,key,null));
+     if(canonical(staged)!==canonical(prefix))throw new ReplicationConflict('maintenance publication prefix changed');
+     // Existing and concurrent overlay writes retain order; the full prefix is now immutable pages.
+     base.events.splice(0,job.overlayCount);base.segments=[{manifest:copy(job.manifest),overlayThrough:0}];
+     for(const previous of job.previous){const t=ledger.transfers[previous.snapshotId];if(!t||t.phase!=='completed')throw new ReplicationConflict('maintenance generation receipt changed');t.phase='retiring';}
+     replacement.phase='completed';replacement.result={added:0,revision:job.manifest.revision,sourceRevision:job.manifest.revision};job.phase='cleaning';
+    }
+   }else if(job.phase==='cleaning'){
+    const previous=job.previous.find(p=>p.nextPage<p.pageCount);
+    if(previous){
+     await tx.retireDoc(EntrySnapshotChunks,chunkKey(this.documentKey,previous.snapshotId,previous.nextPage));previous.nextPage++;
+     if(previous.nextPage===previous.pageCount){const t=ledger.transfers[previous.snapshotId];if(!t||t.phase!=='retiring')throw new ReplicationConflict('maintenance cleanup receipt changed');t.phase='retired';t.cleanupCursor=t.nextPage;ledger.retainedBytes-=t.reservedBytes;}
+    }else job.phase='completed';
+   }
+   await this.check('import');return copy(job);
+  },this.o.ctx);
+ }
+ /** Drop one expired, unreachable transfer receipt. Never delete a live generation or its seed checkpoint. */
+ async forgetSnapshotReceipt(snapshotId:string):Promise<boolean>{
+  this.snapshotId(snapshotId);await this.check('import');return this.o.host.commit(async tx=>{
+   await this.check('import');const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const now=this.now();this.clockSafe(base,now);
+   const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=ledger.transfers[snapshotId];if(!t){await this.check('import');return false;}this.bindManifest(t.manifest);
+   const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null);
+   if(!['retired','aborted'].includes(t.phase)||t.manifest.expiresAt>now||base.segments?.some(s=>s.manifest.id===snapshotId)||maintenance.job?.phase!=='completed'&&maintenance.job?.previous.some(p=>p.snapshotId===snapshotId))throw new ReplicationConflict('snapshot receipt is live or has not expired');
+   delete ledger.transfers[snapshotId];await this.check('import');return true;
   },this.o.ctx);
  }
 
@@ -326,10 +415,10 @@ export class EntryReplicationController {
    const ledger=await tx.doc(EntryStreamCheckpoints,this.documentKey,null),old=ledger.links[source.streamId];
    if(old&&canonical(old.source)!==canonical(source))throw new ReplicationConflict('stored stream source changed');
    let seed=0;
-   if(snapshotId!==undefined){
+   if(snapshotId!==undefined&&!(old&&old.seedSnapshotId===snapshotId)){
     const transfers=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=transfers.transfers[snapshotId];
-    if(!t||t.phase!=='completed'||!t.result||t.manifest.sourceReplicaId!==source.replicaId||t.manifest.sourceIncarnation!==source.incarnation)throw new ReplicationConflict('stream seed requires completed snapshot from this source');
-    this.bindManifest(t.manifest);if(t.result.sourceRevision!==t.manifest.revision||!base.segments?.some(s=>s.manifest.id===snapshotId&&canonical(s.manifest)===canonical(t.manifest)))throw new ReplicationConflict('stream seed snapshot is not published');seed=t.result.sourceRevision;
+    if(!t||!['completed','retiring','retired'].includes(t.phase)||!t.result||t.manifest.sourceReplicaId!==source.replicaId||t.manifest.sourceIncarnation!==source.incarnation)throw new ReplicationConflict('stream seed requires completed snapshot from this source');
+    this.bindManifest(t.manifest);if(t.result.sourceRevision!==t.manifest.revision||!(t.phase==='retiring'||t.phase==='retired'||base.segments?.some(s=>s.manifest.id===snapshotId&&canonical(s.manifest)===canonical(t.manifest))))throw new ReplicationConflict('stream seed snapshot is not published');seed=t.result.sourceRevision;
    }
    if(!old){if(Object.keys(ledger.links).length>=32)throw new ResourceExhausted('stream checkpoint capacity exhausted');ledger.links[source.streamId]={source,cursor:seed,last:null,...(snapshotId?{seedSnapshotId:snapshotId}:{})};}
    else if(seed>old.cursor){old.cursor=seed;old.seedSnapshotId=snapshotId!;old.last=null;}

@@ -328,3 +328,39 @@ competing workers, cancellation and bounded source retries. Run only built
 JavaScript in an isolated production-mode container with private scratch, 2 CPUs
 and 1 GiB RAM. This is not a production NetBird deployment or primary/sync
 acceptance. See [stream protocol](../../docs/ap3-stream-transfer.md).
+
+
+### Phase-3 generation maintenance and synchronous storage
+
+`scenarios/phase3-maintenance.mjs` runs 68 built component cases: the existing
+36 entry/snapshot/stream cases plus eight generation-maintenance and sixteen
+full-batch synchronous-storage cases, plus eight atomic set-renewal cases. Run in the same isolated production-mode
+container as the preceding components. It covers real Storage.commit faults,
+claim/transaction replay and journal/data marker recovery. It does not activate
+production sync policies or prove promotion.
+
+`scenarios/phase3-overlay-node.mjs` is an isolated, operator-controlled two-host
+fixture. Stdin owns commands; its private namespace exchanges over TCP 17431 bound
+to provisioned NetBird addresses. It requires both a fixed peer IP and a private
+test token, plus temporary two-peer Management policy and matching host-firewall
+rules. Stop only its listeners to create the partition. Use a fresh private home
+and clean up owned processes, containers and exact policy/group/firewall rules. Existing Tailscale antispoofing can also drop
+NetBird CGNAT addresses before UFW; the operator must account for both endpoints
+without disabling either VPN.
+This is a component fixture, not the production key-proof/grant/boot protocol.
+
+
+The existing `big`/`bigi` installation can run the two-host component check with:
+
+```sh
+python3 test/testbed/netbird/run-phase3-overlay.py --artifacts /tmp/phase3-artifacts --output /tmp/phase3-overlay-new-run
+```
+
+Use `--local-ip` / `--remote-ip` when provisioned peer addresses differ. This needs
+the existing Management secret on big, root SSH via bigi and local passwordless
+iptables access for the narrowly scoped temporary rules. It requires a fresh
+output directory and records owned IDs before running. The partition lasts at
+least 600 real seconds; it uses 21 samples and continues local mutations throughout.
+SIGINT/SIGTERM run cleanup. After a forced kill, inspect the private `owned.json`
+and remove only its exact tagged rules, group, policy and container; never adopt
+or restart old acceptance stores.

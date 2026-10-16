@@ -518,3 +518,28 @@ die letzte Bereichsquittung wiederholbar; ältere Bereiche erfordern ein erneute
 Lesen des Checkpoints. Adapter, Rückgabewerte und Grenzen stehen im
 [Stream-Protokoll](ap3-stream-transfer.md). Der öffentliche Space-Dienst bietet
 diese administrativen Methoden noch nicht über seine RPC-Allowlist an.
+
+
+### Administrative Replikationspflege und synchroner Storage
+
+`EntryReplicationController.startSnapshotMaintenance(id, pageBytes?)`,
+`advanceSnapshotMaintenance(id)` und `snapshotMaintenanceStatus()` kopieren und
+veröffentlichen einen vollständigen Präfix und stilllegen anschließend alte
+Chunk-Dokumente. `forgetSnapshotReceipt(id)` entfernt nur abgelaufene, nicht mehr
+lebende Belege. Origin-/Request-/Konfliktinformationen und Cursor bleiben erhalten.
+[Details](ap3-snapshot-maintenance.md).
+
+`PrimarySyncJournal`, `primarySyncStorage`, `recoverPrimarySync` und
+`materializeSyncHistory` bilden den administrativen synchronen Storage-Pfad.
+Er besitzt feste Konfigurationspins, dauerhafte Hashkette, Standby-ACK und
+atomare Datenmarker; ein unklarer versiegelter Kandidat liefert `CommitSealed`.
+Diese API aktiviert noch keine produktive Sync-Policy oder Promotion.
+[Vertrauensbereich und Betriebsgrenzen](ap3-primary-sync.md).
+
+
+Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich
+`{kind: "renew", type, tag, fields, owner, expiresAt}`. Das erneuert ausschließlich
+einen lokal lebenden beobachteten Tag, erhält Felder/Owner und erzeugt atomar einen
+neuen Tag samt Entfernung des alten. Die Request-ID bleibt replaybar. Das ist
+weiter die administrative Entry-API, keine automatische Umleitung normaler
+`PiSpaces.renew`-Aufrufe.

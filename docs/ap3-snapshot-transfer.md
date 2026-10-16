@@ -121,3 +121,7 @@ in 20 Seiten. Der getrennte 32-KiB-Grenzfall misst maximal 3.743 Bytes (JSONL)
 bzw. 3.746 Bytes (SQLite) je StorageWrite-Array und 2.433 Bytes für die
 Veröffentlichung. [Artefakte und Nachweise](../test/evidence/ap3-paged-2026-10-15/README.md).
 Der Testcontainer ist entfernt; Bestandscontainer blieben unverändert.
+
+
+Die [dauerhafte Generationenpflege](ap3-snapshot-maintenance.md) ersetzt inzwischen
+redundante Seitenkopien crashsicher. Sie verkürzt keine kausale Historie.

@@ -102,7 +102,7 @@ Prüfungen begrenzen hängende Quellaufrufe und beenden die Schleife bei Abbruch
 oder dauerhaftem Fehler.
 
 Eine reale zehnminütige NetBird-Partition zwischen unabhängigen Hosts und die
-Pflege alter Snapshot-Generationen/Belege bleiben offen. Primary/sync, Standby,
+produktive Dienstintegration bleiben offen. Die [Generationenpflege](ap3-snapshot-maintenance.md) ist implementiert und geprüft. Primary/sync, Standby,
 Fencing-Übergänge und Promotion sind dadurch nicht abgenommen.
 
 
