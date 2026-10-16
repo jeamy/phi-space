@@ -205,7 +205,9 @@ reguläre Dateien; Servername/IP muss zum Zertifikat passen. Der Registerserver
 lässt nur freigegebene Client-Zertifikats-Fingerprints zu. Reader haben kein CAS;
 `writeKeys` beschränkt einen Dienst auf ausdrücklich genannte Registerschlüssel.
 Unbeschränkte Operator-Zertifikate und der CA-Privatschlüssel gehören nicht in
-normale Member-/Agenten-Konfigurationen. Auf big liegen ausschließlich Reader-
+normale Member-/Agenten-Konfigurationen. Seit 2026-10-16 lauscht der TLS-Zugang dual-stack (`::`); IPv6-Clients
+wie nanoi verwenden `serverName: "pi-spaces-register"`, weil das Serverzertifikat diesen Namen enthält
+([Testumgebung §18](testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel)). Auf big liegen ausschließlich Reader-
 Zertifikat/Schlüssel in den normalen Laufzeiten.
 
 Auf big laufen die beiden Benutzer-Dienste:

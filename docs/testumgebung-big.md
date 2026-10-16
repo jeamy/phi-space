@@ -379,12 +379,31 @@ der Backup-/Register-Host, big bleibt wegen seiner übrigen Dienste kein Fencing
 
 | Bereich | Einrichtung |
 |---|---|
-| Netz | **nur IPv6** (netcup-Image ohne IPv4). `spacebird.eibrain.org` hat keinen AAAA-Eintrag; `/etc/hosts` auf nanoi zeigt den Namen auf die IPv6-Adresse von big (nginx hört dort auf `[::]:443`, TLS gültig). Ein AAAA-Eintrag im DNS würde diesen Eintrag ersetzen. |
+| Netz | **nur IPv6** (netcup-Image ohne IPv4). `spacebird.eibrain.org` hat seit 2026-10-16 den AAAA-Eintrag `2a0a:4cc0:c0:62f2:8000::1000` (big, nginx auf `[::]:443`). Solange netcups Resolver ihn noch nicht liefert, steht auf nanoi ein als TEMPORARY markierter `/etc/hosts`-Eintrag auf diese Adresse; danach wird er gelöscht. |
 | NetBird | Client 0.80.0 aus dem signierten Repository `pkgs.netbird.io`, auf die Server-Version gepinnt (`apt-mark hold`); Peer `nano-test`, 100.89.28.88, Gruppe `space-hosts` über den vorhandenen Setup-Key `testbed-hosts` (von big direkt weitergereicht, nie ausgegeben). Verbindungen zu IPv4-Peers laufen über das Relay. |
 | Firewall | `pi-nft-host.service` lädt `/etc/nftables-pi-host.nft`: eingehend nur SSH, ICMP/ICMPv6, WireGuard (UDP 51820) und alles über `wt0`; ausgehend frei. Beim Einrichten mit Totmannschalter angewendet und per neuer SSH-Verbindung geprüft. |
 | Laufzeit | Debian `docker.io`; Image `pi-spaces-test-node:local` von big übertragen (Node v22.23.3, Produktionsabhängigkeiten). Verzeichnisse `/opt/pi-spaces/artifacts` und `/var/lib/pi-spaces` (0700). Es werden wie auf big nur gebaute Artefakte ausgeliefert. |
 | Zeit | systemd-timesyncd aktiv, synchronisiert (Voraussetzung für die HLC-Uhrprüfung). |
 
-Geprüft: Neustart von nanoi, danach Firewall, Docker und NetBird aktiv; TCP über das Overlay zu `host-a:7421`.
-Noch nicht eingerichtet: Zugang zum unabhängigen Register auf vpsc (mTLS-Client-Zertifikat aus der Operator-CA),
-Boot-Berechtigung und Dienste; netcup-API-Zugang für den Fencing-Adapter (Zugangsdaten außerhalb dieses Hosts).
+| Federation-Member | Container `pi-spaces-nano` (Benutzer `node`, read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz) mit Daten in `/var/lib/pi-spaces/nano` (`/data/nano`); eigenständig gebündelter Daemon `federation-host.mjs` aus `test/testbed/federation-host.ts`; Dienst `pi-spaces-nano.service`. Host `nano-test`, Member von Control `phase1b-host-a`, Gate `100.89.28.88:7421`, eigener Ed25519-Host-Schlüssel (`keyId 6e11de52…`) beim Control-Supervisor als `host` enrolled. |
+| Register | eigenes Reader-Zertifikat `CN=pi-spaces-register-reader-nano` aus der Operator-CA (Fingerprint `4e935bd2…`, kein Operator-Recht), Zugriff über IPv6 auf `2a02:c207:2252:8263:8000::`:17422 mit `serverName: pi-spaces-register`; externer `boot:nano-test` (Version 1) per Operator-CAS geschrieben |
+| NetBird-Abfragen | lesender Management-Token wie bei member-1 (`management-token`, 0600) |
+
+Geprüft: Neustart von nanoi, danach Firewall, Docker, NetBird und `pi-spaces-nano` aktiv und `ready`; ein Admin
+(`lux27`) authentifiziert sich über das Overlay am Gate von nanoi (Schlüssel über den Control-Host nachgeschlagen)
+und liest dessen Data Space.
+
+Ersteinrichtung des Enrollments: nanoi lag beim Beitritt in `space-hosts` und galt damit als gekoppelt; das Gate
+verlangt dann einen Schlüsselbeweis und lehnt die Erstkopplung ab. `nano-test` wurde deshalb nur für das Enrollment
+nach `space-enroll` verschoben, mit einer eigenen befristeten Gruppe (nur `host-a`) und Policy für TCP 7421; danach
+zurück nach `space-hosts`, eigene Gruppe/Policy gelöscht. Für künftige Hosts ist das der Ablauf, solange keine
+dauerhafte Enrollment-Policy besteht.
+
+Änderungen auf vpsc für IPv6-Clients: Der Register-TLS-Dienst lauscht auf `::` (dual-stack, IPv4-Clients
+unverändert geprüft), `tls.json` gibt den Fingerprint von nanoi frei (Sicherung `tls.json.before-nano-20261016`);
+ufw erlaubt 17422 zusätzlich nur von nanoi. vpsc hatte keine funktionierende IPv6-Default-Route: `fe80::1` aus der
+netplan-Konfiguration antwortet nicht, der Router meldet sich als `fe80::2dc:ff:fe00:2`. Diese Route ist zur
+Laufzeit gesetzt und in netplan ergänzt (Sicherung `50-cloud-init.yaml.bak.20261016-ipv6gw`, nur `netplan generate`,
+kein Neuanwenden); von außen ist nur `…8263:8000::` erreichbar, nicht `…8263::1`.
+
+Noch offen: netcup-API-Zugang für den Fencing-Adapter (Zugangsdaten außerhalb von nanoi, vorgesehen auf vpsc).
