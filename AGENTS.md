@@ -10,7 +10,7 @@ pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dire
   `PI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner: `test-core.test.ts`, `test-meter.test.ts`, `integration.test.ts`,
   `test-persistence.test.ts`, `test-spaces.test.ts`, `test-claims.test.ts`, `test-budgets.test.ts`, `test-stream.test.ts`, `test-service.test.ts`, `test-remote.test.ts`, `test-socket.test.ts`, `test-gate.test.ts`, `test-auth.test.ts`, `test-enroll.test.ts`, `test-supervisor.test.ts`,
-  `test-scenario.test.ts`, `test-tui.test.ts`, `test-ap1.test.ts`, `test-pi-server.test.ts`, `test-federation-runtime.test.ts`, `test-grants.test.ts`, `test-recovery.test.ts`, `test-operations.test.ts`, `test-recovery-boundaries.test.ts`, `test-router.test.ts`); crash/reopen helpers for JSONL and SQLite
+  `test-scenario.test.ts`, `test-tui.test.ts`, `test-ap1.test.ts`, `test-pi-server.test.ts`, `test-federation-runtime.test.ts`, `test-grants.test.ts`, `test-recovery.test.ts`, `test-operations.test.ts`, `test-recovery-boundaries.test.ts`, `test-router.test.ts`, `test-run-gate.test.ts`, `test-run-member.test.ts`, `test-run-recovery.test.ts`, `test-workers.test.ts`, `test-space-lifecycle.test.ts`, `test-deployment.test.ts`, `test-alerts.test.ts`, `test-run-export.test.ts`); crash/reopen helpers for JSONL and SQLite
   in `test/support/persistent.ts`
 - Native pi-server acceptance: `npm run test:pi-server`; uses packages from the sibling mobile runtime
   (`PI_SERVER_RUNTIME_DIR` overrides the path); skips if not installed, never installs dependencies.
@@ -37,7 +37,14 @@ Run typecheck and tests after every change.
   `src/enroll.ts` pairing (tokens, enroll RPC, bootstrap, key directory in the control space),
   `src/supervisor.ts` the control-space supervisor (createEnroll, revokePeer) and the wire rules for the control space; `src/runtime.ts` composes the federation host;
   `src/grants.ts` / `src/rotation.ts` provide short-lived grants and own-key rotation;
-  `src/recovery-register.ts`, `src/recovery.ts`, `src/boot.ts`, `src/restore.ts` are recovery building blocks.
+  `src/recovery-register.ts`, `src/recovery.ts`, `src/boot.ts`, `src/restore.ts` are recovery building blocks;
+  `src/run-controller.ts` journals run start/pause/resume/stop against the core RunGates of each run Member,
+  `src/run-member.ts` carries them as signed instructions to Member hosts (`runGateInstruction`),
+  `src/workers.ts` keeps desired worker state per host and reconciles registered worker kinds on each host,
+  `src/space-lifecycle.ts` creates, archives and deletes named Spaces through signed host instructions,
+  `src/deployment.ts` validates, plans and applies deployment configs (CLI: `npm run bootstrap`, `scripts/bootstrap-spaces.ts`),
+  `src/alerts.ts` derives alerts, publishes their changes (webhook) and lists the admin command audit.
+  `test/testbed/device/b9-coordinator.ts` is the LAN coordinator for phone acceptance of the mobile control page.
 - `examples/` runnable examples; `examples/sensor-pipeline.ts` is also imported by the pipeline tests.
 - `docs/` plans and documentation: `implementierungsstand.md` (current implementation), `api.md` (public API), `spaces-v1.md` (historical), `federation-plan-v3.md` (current
   federation plan; v1/v2 are superseded), `examples.md` (examples in detail).

@@ -39,6 +39,7 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | Prozess-Crash-Matrix Phase 2 | 20 bestätigte SIGKILL-Fälle auf JSONL/SQLite lokal und am gebauten Server-Artefakt: Journal-, RPC- und ACK-Grenzen; stabile ursprüngliche Requests, Gewinner und Replay; keine offenen Reservierungen | Fixture-RPC und feste Uhr, vier Stores im selben Prozess; separate NetBird-Volllast in Blöcken 1–3 nachgewiesen; physische Ausfalldomänen separat in Block 5 nachgewiesen |
 | Simulator AP 2.8 | mehrere echte JSONL-/SQLite-Harnesses, deterministische Transportfehler, Uhrsprünge, Crash/Reopen und unabhängiges Reservierungs-/Request-Gegenmodell | realer Overlay-/Replikations-/Fencing-Nachweis |
 | Betrieb | Testbed und Szenario `sieve-remote` | Produktivfreigabe der Federation oder mobiler Bedienabläufe |
+| Lauf-, Worker-, Space- und Deployment-Steuerung (Betriebserweiterung B2–B10) | RunGate im Core, `RunController` mit Journal, signierte Gate-Anweisungen an Remote-Members, Admin-Commands, Recovery-Abgleich nach Restore, Worker-Zuweisungen mit lokalem Supervisor, Space-Lebenszyklus, Deployment-Plan/-Apply mit CLI; Abnahmefälle 2, 3, 4, 8–13 lokal, Fall 3 zusätzlich über echtes NetBird | SSH-/NetBird-Provisionierung und Pairing im Bootstrap, mobile Steuerung gegen einen Koordinator auf big; Worker nur als Schleifen im Daemon-Prozess |
 
 ## Daten- und Konsistenzmodell
 
@@ -307,3 +308,107 @@ Primary-/Standby-Übergänge eingebunden. Phase 3 bleibt ausdrücklich offen.
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.
+
+
+## Laufsteuerung: RunGate, RunController und Lauf-Recovery (2026-10-16)
+
+Umgesetzt sind die Schritte B2–B5 der [Betriebserweiterung](betrieb-und-mobile-steuerung.md#8-umsetzungsstand-und-reihenfolge-der-betriebserweiterung):
+
+- **RunGate im Core:** geschützter Steuerzustand je Lauf im Space-Dokument (kein Entry). Ein
+  `CompletionProfile` mit `gateField` (Pflicht: endliches `maxLeaseMs`) macht Tasks nur bei `running` ohne Fence
+  nehmbar, auch für wartende Takes und Host-Code; der Take bindet die Txn an die Revision. Pause/Stop installieren
+  zuerst einen Fence und wechseln erst ohne gebundene Txn. Dieselbe Revision mit anderem Command ergibt
+  `RunGateConflict`. Gesperrte Profile lassen sich unter aktivem Lauf weder lokal noch per Federation-Policy entfernen.
+- **RunController** (`src/run-controller.ts`): Journal `pi-spaces.run-controller`, Start mit Vorbereitung hinter
+  `preparing`, Pause/Resume/Stop mit ACK-Barriere, `pauseIncomplete` bei fehlenden ACKs, `advance` nach Neustart.
+  Offene Übergänge tragen Control-Autorität und -Inkarnation und werden nach einem Wechsel nie erneut gesendet.
+- **Remote-Members** (`src/run-member.ts`): signierte Anweisungen und ACKs, Methode `runGateInstruction` im Gate,
+  nur registrierte Vorbereiter je Laufart; Admin-Commands `startRun`, `pauseRun`, `resumeRun`, `stopRun`,
+  `reconcileRun`, `resolveRunRecovery`; serverseitige Fortsetzung über `control.runs` in `startFederationHost`.
+- **Lauf-Recovery:** Recovery-Eintrittssperre je Gate, `RunRecoveryView`, Data-Restore importiert Gates des
+  Snapshots als Evidenz (Restore-Stufe `gates`); `reconcile` bestätigt nur eindeutige paused/stopped-Lagen
+  automatisch, sonst `needsReview`; `resolve` ist an den View-Hash gebunden und prüft jeden Member per
+  Compare-and-Set.
+
+Nachweise: `test-run-gate.test.ts`, `test-run-member.test.ts`, `test-run-recovery.test.ts` (31 Fälle, JSONL und
+SQLite, Commit-Fehler, Controller-Neustart, verlorene ACKs, TCP über das zusammengesetzte Gate) und ein Lauf über
+das echte NetBird-Overlay zwischen Operator-Host und einem Container auf big
+([Nachweis](../test/evidence/run-gate-overlay-2026-10-15/README.md); Schicht A dort als Fixture-Pin).
+
+Grenzen: Gate-Änderungen werden mit festen 1 KiB gegen die Budgets gerechnet, die Historie hält 32 Revisionen je
+Lauf, `stopped`-Gates werden noch nicht in Laufhistorie überführt (höchstens 256 Gates je Space). Ein
+Control-Restore (Wechsel der Control-Inkarnation) und ein Member unter Restore-Sperre starten `reconcile` beim
+nächsten `advance` bzw. Befehl selbst; ohne Befehl oder offenen Übergang bemerkt der Controller einen Data-Restore
+erst bei der nächsten Aktion. Die serverseitige Fortsetzungsschleife hat keinen eigenen automatischen Test.
+
+
+## Worker-Steuerung (2026-10-16)
+
+Schritt B6 der Betriebserweiterung: Der Control-Host hält den Soll-Zustand je Host im Journal
+`pi-spaces.worker-assignments` (Admin-Command `setWorkers`, idempotent, monotone Generation). Ein Host holt über die
+Gate-Methode `workerAssignments` nur seinen eigenen, signierten Anteil; maßgeblich ist der bewiesene aktive
+Host-Schlüssel der Verbindung. Der `WorkerSupervisor` des Hosts nimmt nur gültig signierte, neuere Listen derselben
+Control-Identität an, speichert sie und gleicht registrierte Workerarten ab: Skalieren, Stopp nach dem laufenden Task,
+Neustart bei neuem Ziel, Ablehnung unbekannter Arten oder fremder Spaces, Backoff bis 5 s, wenn keine Arbeit nehmbar
+ist. Nach einem Neustart laufen die gespeicherten Worker auch ohne erreichbaren Koordinator weiter. Der angewendete
+Stand gelangt als `metrics.workers` über den vorhandenen Capability-Heartbeat zurück (`appliedWorkers`).
+
+Nachweis: `test-workers.test.ts` (11 Fälle, JSONL/SQLite), darunter ein gesperrter Sieblauf, den zwei Worker nach
+Pause und Resume vollständig rechnen, und die Gate-Methode über TCP. Grenzen: Worker laufen als asynchrone Schleifen
+im Daemon-Prozess und bringen keine CPU-Parallelität; der periodische Heartbeat des Hosts wird noch nicht von
+`startFederationHost` selbst gesendet.
+
+
+## Space-Lebenszyklus (2026-10-16)
+
+Schritt B7: `SpaceLifecycle` legt benannte Spaces idempotent an (vorhandener Alias wird unverändert
+wiederverwendet), archiviert sie (lesbar, keine neue Arbeit), reaktiviert sie und löscht nur archivierte, leere
+Spaces ohne Federation-Mitgliedschaft, offene Arbeit, aufbewahrte Claims, Mailbox-Ergebnisse oder ungestoppte Läufe.
+Die spaceId bleibt als Grabstein in der Registry reserviert; `listSpaces`, `resolveSpaceId` und `snapshotSpace`
+kennen gelöschte Spaces nicht mehr. Der Control-Host sendet signierte Anweisungen an den Ziel-Host
+(`spaceLifecycleInstruction`); Admin-Commands `createSpace`, `archiveSpace`, `reactivateSpace`, `deleteSpace`.
+Nachweis: `test-space-lifecycle.test.ts` (JSONL/SQLite, Neustart, TCP über das Gate, Supervisor-Command).
+
+
+## Deployment-Bootstrap (2026-10-16)
+
+Schritt B8: `validateDeployment` prüft eine deklarative Config (`schemaVersion: 1`, nur Aliase, keine Geheimnisse)
+und liefert alle Fehler. Der `DeploymentController` des Koordinators hält die Alias→ID-Zuordnung, plant ohne
+Wirkung und wendet idempotent an: Spaces über den Lebenszyklus (B7), Worker als Zuweisung mit Anzahl 0 (B6), Start
+getrennt über `startWorkers`. Eine neue Config-Revision verwendet vorhandene Spaces und laufende Worker unverändert
+weiter; Konflikte (Host-Wechsel eines Space, geänderte Definition laufender Worker, Space mit anderen Limits) werden
+gemeldet statt angewendet. Das CLI `npm run bootstrap` prüft offline (`--check`) und sendet sonst Admin-Commands
+über das Gate. Nicht enthalten: SSH-Provisionierung, NetBird-Beitritt, Erstinitialisierung und Pairing; sie bleiben
+Voraussetzungen, die der Plan als `blocked` sichtbar macht. Nachweis: `test-deployment.test.ts` (JSONL/SQLite, zwei
+Stores, Absturz und Wiederaufnahme, CLI als gepairter Admin über das echte Gate).
+
+
+## Mobile Steuerung (2026-10-16)
+
+Schritt B9 im Nachbarprojekt `pi-termux-mobile`: Die Seite **Spaces-Steuerung** zeigt Vorgänge, Läufe und Worker
+und sendet Admin-Commands über die gepairte Control-Verbindung. Die Command-ID wird vor dem Senden im privaten
+Profil gespeichert; Wiederholungen, Timeouts und Neustarts verwenden sie erneut, und ein unklarer Ausgang wird als
+„Ausgang wird geprüft“ angezeigt. Neue lesende Admin-Commands auf dem Koordinator: `listRuns`, `runStatus`,
+`listWorkers` (Soll-Zuweisungen und zuletzt gemeldeter Stand je Host). Nachweis: mobiler Test der Brücke und
+Geräteabnahme auf dem Xiaomi gegen einen Koordinator in Produktionskomposition per WLAN, einschließlich Koordinator-Absturz und erneutem Senden derselben ID und über NetBird mit Peer-Identität aus der Management-API ([Nachweis](../test/evidence/b9-device-2026-10-16/README.md)); ein Koordinator auf big steht aus.
+
+
+## Alarmierung, Audit und Plan-Vorschau (2026-10-16)
+
+Schritt B10 (Teil): `collectAlerts` leitet Hinweise aus Läufen, Worker-Zuweisungen und Host-Berichten ab; ein
+Hinweis ist kein Zustandsbeweis. `startAlertMonitor` meldet nur Änderungen, `webhookPublisher` stellt sie als Text
+zu (z. B. ntfy). `auditLog` listet Admin-Results ohne Payloads. Laufbefehle mit `dryRun: true` liefern eine Vorschau
+(zulässig, Grund, Revision), ohne etwas zu journalisieren. Admin-Commands `listAlerts`/`auditLog`; die mobile
+Steuerseite zeigt Hinweise und Audit und stoppt nur nach einer Vorschau. Nachweis: `test-alerts.test.ts`,
+Geräteprüfung. Offen: feinere Rollen und Zwei-Personen-Freigabe sowie die übrigen Vorschläge aus §7.5.
+
+
+## Ergebnisexport und Zeitplan für Läufe (2026-10-16)
+
+`RunController.export(runId)` liest mit einem registrierten Exporter je Laufart (z. B. `SIEVE_EXPORTER`) die
+Ergebnisse aller Members und meldet Vollständigkeit, fehlende Teile, Manifest- und Ergebnis-Hash; ein Teilresultat
+wird als solches ausgewiesen. `RunController.schedule` plant Pause oder Fortsetzung; die serverseitige Schleife gibt
+sie zum Zeitpunkt als normales journalisiertes Command aus. Admin-Commands `exportRun`, `scheduleRun`; die mobile
+Steuerseite hat dafür Bedienelemente sowie Formulare für Space-Lebenszyklus und Deployment-Plan/-Export.
+Nachweis: `test-run-export.test.ts`. Die mobilen Dialoge (`confirm`/`prompt`) nutzen die Standarddialoge der
+Android-WebView; auf dem Gerät sind sie nicht eigens geprüft.

@@ -1,0 +1,9 @@
+{
+  "ownContainersRemoved": true,
+  "ownNetbirdPolicyAndGroupRemoved": true,
+  "ownFirewallRulesRemoved": true,
+  "protectedInventoryUnchanged": true,
+  "remoteStoreRetainedPrivately": true,
+  "remoteBase": "/home/mux/.local/share/pi-spaces-operations/rungate-overlay-20261015-f1a2eeac",
+  "errors": []
+}

@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { core, FOREVER, PiSpaces, Space, canonicalJson, type SpaceHost, type SpaceLike, spaceDoc } from "../src/index.ts";
+import { createHash } from "node:crypto";
+import { core, FOREVER, PiSpaces, Space, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
 
 export type SieveConfig = { runId: string; start: number; end: number; blockSize: number };
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
@@ -40,10 +41,23 @@ export function segmentedSieve(start: number, end: number): number[] {
   return primes;
 }
 
-export const SIEVE_COMPLETION_PROFILE = { taskType: "SieveTask", resultTypes: ["SieveResult"], equalFields: ["runId", "taskId"], maxResultCount: 1 };
+export const SIEVE_COMPLETION_PROFILE = { taskType: "SieveTask", resultTypes: ["SieveResult"], equalFields: ["runId", "taskId", "rangeStart", "rangeEnd"], maxResultCount: 1 };
+/** With a RunGate: tasks are takeable only while their run is running (docs/betrieb-und-mobile-steuerung.md §6). */
+export const SIEVE_GATED_PROFILE = { ...SIEVE_COMPLETION_PROFILE, gateField: "runId", maxLeaseMs: 60_000 };
+
+/** Configure a Space for gated sieve runs once, before workers open transactions. */
+export async function configureGatedSieveSpace(host: SpaceHost, space?: string): Promise<void> {
+  await host.commit(async tx => {
+    const s = await spaceDoc(tx, space, Date.now());
+    const prior = (s.completionProfiles ?? []).find(p => p.taskType === "SieveTask");
+    if (prior && canonicalJson(prior as any) === canonicalJson(SIEVE_GATED_PROFILE as any)) return;
+    if (prior) throw new Error("Space already has an ungated SieveTask profile");
+    core.setCompletionProfiles(s, [...(s.completionProfiles ?? []), SIEVE_GATED_PROFILE]);
+  }, ctx);
+}
 
 /** Creation is resumable: each seed and its durable cursor commit together, within the space's byte budget. */
-export async function prepareSieveRun(host: SpaceHost, config: SieveConfig, options: { space?: string } = {}): Promise<string[]> {
+export async function prepareSieveRun(host: SpaceHost, config: SieveConfig, options: { space?: string; gate?: { commandId: string; revision: number } } = {}): Promise<string[]> {
   validate(config);
   const count = Math.ceil((config.end - config.start) / config.blockSize);
   const seedKey = canonicalJson([config.runId]);
@@ -54,7 +68,11 @@ export async function prepareSieveRun(host: SpaceHost, config: SieveConfig, opti
       const prior = runs.configs.find(c => c.runId === config.runId);
       if (prior && canonicalJson(prior) !== canonicalJson(config)) throw new Error("Sieve run configuration changed");
       if (!prior && runs.configs.length >= 128) throw new Error("Example supports at most 128 runs per store");
-      if (!(space.completionProfiles ?? []).some(p => p.taskType === "SieveTask")) core.setCompletionProfiles(space, [...(space.completionProfiles ?? []), SIEVE_COMPLETION_PROFILE]);
+      const profile = (space.completionProfiles ?? []).find(p => p.taskType === "SieveTask");
+      if (options.gate) {
+        if (profile?.gateField !== "runId") throw new Error("gated sieve runs need configureGatedSieveSpace first");
+        core.applyRunGate(space, Date.now(), { runId: config.runId, kind: "prepare", ...options.gate }); // idempotent; written with the first seed
+      } else if (!profile) core.setCompletionProfiles(space, [...(space.completionProfiles ?? []), SIEVE_COMPLETION_PROFILE]);
       runs.seeds ??= {};
       if (!runs.seeds[seedKey]) runs.seeds[seedKey] = { spaceId: space.spaceId!, next: prior ? count : 0 };
       const seed = runs.seeds[seedKey]!;
@@ -92,6 +110,27 @@ export async function processSieveTask(space: SpaceLike, runId: string, options:
     throw error;
   }
 }
+
+/** Result export for `RunController` (kind "sieve"): completeness per expected task, hash over all results in order. */
+export const SIEVE_EXPORTER: RunExporter = async (run, space) => {
+  const config = run.config as SieveConfig;
+  validate(config);
+  const hash = createHash("sha256"), missing: string[] = [];
+  let found = 0, primes = 0, first: number | null = null, last: number | null = null;
+  for (let start = config.start, i = 0; start < config.end; start += config.blockSize, i++) {
+    const taskId = `${config.runId}:${i}`;
+    let result: SieveResult | undefined;
+    for (const member of run.members) { const e = await space(member).readAll({ type: "SieveResult", fields: { runId: config.runId, taskId } }); if (e.length) { result = e[0]!.fields as SieveResult; break; } }
+    if (!result) { missing.push(taskId); continue; }
+    found++; primes += result.primes.length; hash.update(canonicalJson(result as unknown as core.Json));
+    if (result.primes.length) { first ??= result.primes[0]!; last = result.primes[result.primes.length - 1]!; }
+  }
+  const expected = Math.ceil((config.end - config.start) / config.blockSize);
+  return { complete: missing.length === 0, expected, found, missing, resultHash: hash.digest("hex"), summary: { primes, first, last, range: [config.start, config.end] } };
+};
+
+/** Registered worker kind for `WorkerSupervisor`: one sieve task per step, bound to the assignment's run. */
+export const SIEVE_WORKER_KIND: WorkerKind = { requiresRun: true, step: ({ space, runId }) => processSieveTask(space, runId!) };
 
 /** Look up every expected ID: never infer completeness from a truncated result list/count. */
 export async function collectSieveResults(space: SpaceLike, config: SieveConfig): Promise<number[]> {

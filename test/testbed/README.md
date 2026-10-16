@@ -364,3 +364,13 @@ least 600 real seconds; it uses 21 samples and continues local mutations through
 SIGINT/SIGTERM run cleanup. After a forced kill, inspect the private `owned.json`
 and remove only its exact tagged rules, group, policy and container; never adopt
 or restart old acceptance stores.
+
+
+### Run gate case 3 over NetBird
+
+`netbird/run-run-gate-overlay.py` drives `scenarios/run-gate-overlay-node.ts` (compiled) for acceptance case 3 of
+`docs/betrieb-und-mobile-steuerung.md` §7.4: controller and one Member on the operator host, one Member in an owned
+container on big behind the composed Gate on TCP 17432 of its NetBird address. The Member container is killed during
+a pause and restarted on the same store. The driver owns and removes its firewall rules, NetBird group/policy and
+containers and checks the protected container inventory. `--local-smoke` runs the same sequence on loopback without
+ssh. Build first with `node test/testbed/build-artifacts.mjs <dir>`; evidence: `test/evidence/run-gate-overlay-2026-10-15/`.

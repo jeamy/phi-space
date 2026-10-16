@@ -10,7 +10,8 @@ import { Space } from "./doc.ts";
 export const DEFAULT_ALIAS = "default";
 const ALIAS = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
-export type SpaceInfo = { spaceId: string; alias: string; incarnation: string; createdAt: number };
+/** `deletedAt`: a deleted Space keeps its id reserved (never reused) but is neither resolved nor listed. */
+export type SpaceInfo = { spaceId: string; alias: string; incarnation: string; createdAt: number; deletedAt?: number };
 export type RegistryState = {
 	hostId: string | null;
 	hostKey?: string;
@@ -64,7 +65,7 @@ async function registry(tx: Tx, now: number): Promise<RegistryState> {
 export async function resolveSpaceId(tx: Tx, space: string | undefined, now: number): Promise<string> {
 	const r = await registry(tx, now);
 	if (space === undefined) return r.defaultSpaceId!;
-	const id = r.aliases[space] ?? (r.spaces[space] ? space : undefined);
+	const id = r.aliases[space] ?? (r.spaces[space] && !r.spaces[space]!.deletedAt ? space : undefined);
 	if (id === undefined) throw new UnknownSpaceError(`unknown space: ${space}`);
 	return id;
 }
@@ -109,7 +110,7 @@ export async function createSpace(tx: Tx, alias: string, now: number): Promise<S
 export async function listSpaces(host: Pick<Session, "snapshot">, ctx: Context): Promise<SpaceInfo[]> {
 	const r = await host.snapshot(Registry, ctx);
 	if (!r) return [];
-	const all = Object.values(r.spaces).map((i) => ({ ...i }));
+	const all = Object.values(r.spaces).filter((i) => !i.deletedAt).map((i) => ({ ...i }));
 	return all.sort((a, b) => (a.spaceId === r.defaultSpaceId ? -1 : b.spaceId === r.defaultSpaceId ? 1 : a.createdAt - b.createdAt));
 }
 
@@ -117,6 +118,6 @@ export async function listSpaces(host: Pick<Session, "snapshot">, ctx: Context):
 export async function snapshotSpace(host: Pick<Session, "snapshot">, spaceId: string, ctx: Context): Promise<Readonly<core.SpaceState> | undefined> {
 	const r = await host.snapshot(Registry, ctx);
 	if (r && spaceId === r.defaultSpaceId) return host.snapshot(Space, ctx);
-	if (r && !r.spaces[spaceId]) return undefined;
+	if (r && (!r.spaces[spaceId] || r.spaces[spaceId]!.deletedAt)) return undefined;
 	return host.snapshot(NamedSpace, spaceId, ctx);
 }

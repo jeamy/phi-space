@@ -137,7 +137,7 @@ export class RemoteSpace implements SpaceLike {
 			const raw = await Promise.race([
 				(async () => {
 					const grant = this.o.grantProvider && !["challenge", "prove", "enroll", "enrollStatus", "grant"].includes(call.method) ? await this.o.grantProvider(call) : undefined;
-					const delegation=this.o.delegationProvider && !["challenge","prove","enroll","enrollStatus","grant","keyLookup","routerLease","epochNotice","routingPolicy","membershipInstruction","capabilityHeartbeat"].includes(call.method) ? await this.o.delegationProvider(call,grant) : undefined;
+					const delegation=this.o.delegationProvider && !["challenge","prove","enroll","enrollStatus","grant","keyLookup","routerLease","epochNotice","routingPolicy","membershipInstruction","runGateInstruction","spaceLifecycleInstruction","workerAssignments","capabilityHeartbeat"].includes(call.method) ? await this.o.delegationProvider(call,grant) : undefined;
 					const text = JSON.stringify(grant||delegation ? { ...call, frame: { ...call.frame, ...(grant?{grant}:{}), ...(delegation?{delegation}: {}) } } : call);
 					const limit = this.frameLimit; // not read from `hello`: the retries of `hello` itself must not wait for it
 					if (new TextEncoder().encode(text).length > limit) throw new core.ResourceExhausted(`a call may take at most ${limit} bytes`);
@@ -192,6 +192,10 @@ export class RemoteSpace implements SpaceLike {
  async resolveOperation(target:{generation:string;requestId:string},method:string,argumentHash:string,primaryEpoch:number):Promise<claims.AdmissionResolution>{return await this.send({method:'resolveOperation',args:{targetRequest:target,method,argumentHash,primaryEpoch}}) as unknown as claims.AdmissionResolution;}
 	async requestGeneration():Promise<{generation:string;admitUntil:number}>{return await this.rawCall("generation") as any;}
 	async publishCapability(report:import("./capability-directory.ts").CapabilityReport):Promise<import("./core.ts").Lease>{return await this.send({method:"capabilityHeartbeat" as any,args:{report:report as any}}) as any;}
+	/** The signed worker assignments of this (proven) host; the control host derives the host from the connection. */
+	async workerAssignments():Promise<import("./workers.ts").SignedWorkers>{return await this.send({method:"workerAssignments" as any,args:{}}) as any;}
+	async requestSpaceLifecycle(instruction:import("./space-lifecycle.ts").SignedLifecycle<import("./space-lifecycle.ts").SpaceLifecycleInstruction>):Promise<import("./space-lifecycle.ts").SignedLifecycle<import("./space-lifecycle.ts").SpaceLifecycleResult>>{return await this.send({method:"spaceLifecycleInstruction" as any,args:{instruction:instruction as any}}) as any;}
+	async requestRunGate(instruction:import("./run-member.ts").SignedRun<import("./run-member.ts").RunGateInstruction>):Promise<import("./run-member.ts").SignedRun<import("./core.ts").RunGateAck>>{return await this.send({method:"runGateInstruction" as any,args:{instruction:instruction as any}}) as any;}
 	async requestMembership(instruction:import("./membership.ts").SignedMembership<import("./membership.ts").MembershipInstruction>):Promise<import("./membership.ts").SignedMembership<import("./membership.ts").MembershipProof>>{return await this.send({method:"membershipInstruction" as any,args:{instruction:instruction as any}}) as any;}
 
 	/** Ask the authoritative control runtime; replicas and data members do not implement this method. */

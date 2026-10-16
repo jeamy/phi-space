@@ -543,3 +543,133 @@ einen lokal lebenden beobachteten Tag, erhält Felder/Owner und erzeugt atomar e
 neuen Tag samt Entfernung des alten. Die Request-ID bleibt replaybar. Das ist
 weiter die administrative Entry-API, keine automatische Umleitung normaler
 `PiSpaces.renew`-Aufrufe.
+
+
+## Laufsteuerung (Betriebserweiterung)
+
+Vertrag und Abnahme: [Betrieb und mobile Steuerung](betrieb-und-mobile-steuerung.md) §6 und §8.
+
+### RunGate im Core
+
+`CompletionProfile.gateField` (muss in `equalFields` stehen, `maxLeaseMs` ist dann Pflicht) bindet Tasks an den
+RunGate ihres Laufs. Alle Funktionen sind Host-Code und über Space-RPC nicht erreichbar.
+
+| Funktion | Wirkung |
+|---|---|
+| `core.applyRunGate(s, now, {runId, commandId, kind, revision, recoveryId?, expect?})` | `kind`: `prepare`, `release`, `pause`, `resume`, `stop`. Liefert `RunGateAck {phase: "applied" \| "fenced", state, revision, spaceId, incarnation, authorityId, boundTxns}`. Dieselbe Revision mit demselben Command liefert die gespeicherte Bestätigung; mit anderem Command `RunGateConflict`. |
+| `core.runGateView(s, runId)` | lesende Sicht auf Gate, Fence, Recovery und gebundene Txns |
+| `core.recoverRunGate(s, now, {runId, recoveryId})` | installiert die Recovery-Eintrittssperre und liefert `RunRecoveryView` (`stable` erst ohne gebundene Txn) |
+| `core.assertGatedProfilesKept(s, profiles)` | Prüfung vor jedem Profilwechsel |
+
+Fehler: `RunGateConflict` (Revision, Command, Zustand, Recovery), `CompletionViolation` (Ergebnis ohne gebundene
+Txn oder mit fremdem Lauf). Gesperrte Tasks sind nur in `preparing` schreibbar.
+
+### `RunController`
+
+```ts
+const runs = new RunController({ host, ctx, member: spaceId => RunMember, identity?: async () => ({ authorityId, incarnation }) });
+await runs.start(commandId, { runId, kind, config, members });
+await runs.pause(commandId, runId); await runs.resume(commandId, runId); await runs.stop(commandId, runId);
+await runs.advance(runId);            // offene Übergänge fortsetzen, idempotent
+await runs.reconcile(commandId, runId, recoveryId, manifest?);
+await runs.resolve(commandId, runId, { expectedViewHash, decision: "pause" | "stop" | "resume" });
+await runs.status(runId); await runs.pending();
+```
+
+Ein Wechsel der Control-Identität oder ein Member unter Restore-Sperre startet `reconcile` automatisch
+(Recovery `control-<inkarnation>` bzw. `runRecoveryIdOf(restoreId)`); offene Aufträge werden dabei nie erneut gesendet.
+
+Lesend: `runs.list(limit)` sowie die Admin-Commands `listRuns`, `runStatus` und `listWorkers` (Zuweisungen plus
+zuletzt gemeldeter Stand je Host).
+
+`RunView.state` ist `preparing`, `running`, `pausing`, `pauseIncomplete`, `paused`, `resuming`, `stopping`,
+`stopped`, `reconciling` oder `needsReview`; `pending` nennt angewendete, gefencte und fehlende Members,
+`recovery` die Views, den View-Hash, geparkte Aufträge und gemeldete Änderungen. `RunBusy` meldet einen noch
+offenen Übergang oder eine laufende Recovery. Commands mit gleicher ID und gleichem Inhalt sind idempotent.
+
+Members: `localRunMember(host, ctx, spaceId, prepare)` für eigene Spaces, `remoteRunMember({spaceId, authorityId,
+peerId, signer, memberPin, send})` für fremde Hosts; `send` ist z. B. `RemoteSpace.requestRunGate`. Auf dem
+Member-Host prüft `RunGateService({..., controllerPin, preparers})` Signatur, Autorität und lokalen Space; er wird
+als `runGates` an `startFederationHost` übergeben. `runCommands(runs)` liefert die Supervisor-Handler für
+`startRun`, `pauseRun`, `resumeRun`, `stopRun`, `reconcileRun` und `resolveRunRecovery`; mit `control.runs` setzt
+`startFederationHost` offene Übergänge serverseitig fort.
+
+Sieb: `SIEVE_GATED_PROFILE`, `configureGatedSieveSpace(host, space)` und `prepareSieveRun(host, config, {space, gate})`
+in `examples/sieve.ts`. `SIEVE_COMPLETION_PROFILE` prüft jetzt auch `rangeStart` und `rangeEnd`.
+
+### Worker-Steuerung
+
+```ts
+const workers = new WorkerAssignments({ host, ctx, authorityId, peerId, signer, identity?: async () => ({ incarnation }) });
+await workers.set(commandId, { assignmentId, hostId, kind, targetSpace, count, runId? }); // count 0 stoppt nach dem Task
+await workers.forHost(hostId); await workers.list();
+
+const sup = new WorkerSupervisor({ host, ctx, hostId, authorityId, controllerPin, kinds: { sieve: SIEVE_WORKER_KIND },
+  fetch: () => remote.workerAssignments(), backoff?: { minMs, maxMs }, sleep?, space? });
+await sup.reconcile();                 // ein Durchlauf: abrufen, prüfen, speichern, skalieren -> WorkerSummary
+const stop = startWorkerSupervisor(sup, { intervalMs, publish: summary => heartbeat({ ...report, metrics: { workers: summary } }) });
+await sup.acceptControlIdentity(incarnation); // nach geprüftem Control-Restore
+```
+
+Eine Workerart ist `{ step({ space, spaceId, runId?, signal }): Promise<boolean>, requiresRun? }`: ein Task je
+Schritt, `false`, wenn gerade keiner nehmbar ist. Der Stopp wird zwischen Schritten geprüft, Wartezeiten bricht er
+sofort ab. `WorkerSummary` nennt je Zuweisung `desired`, `active`, `stopping`, `tasks`, `errors`, `lastError` und
+`rejected`, dazu `generation`, `blocked` und `fetchError`. `appliedWorkers(controlState, now)` liest den letzten
+Stand je Host aus den Capability-Entries; `at` zeigt, wie alt er ist. Mit `control.workers` bietet
+`startFederationHost` die Gate-Methode `workerAssignments` und den Admin-Command `setWorkers`;
+`RemoteSpace.workerAssignments()` ruft sie auf. Worker sind Schleifen im Prozess, keine Threads.
+
+### Space-Lebenszyklus
+
+```ts
+const life = new SpaceLifecycle({ host, ctx });
+await life.apply({ commandId, action: "create", alias, limits?, profiles? }); // { spaceId, alias, state, existed? }
+await life.apply({ commandId, action: "archive" | "reactivate" | "delete", spaceId });
+```
+
+Fehler: `SpaceInUse` mit Grund (Mitgliedschaft, Entries, offene Arbeit, Claims, Mailboxes, Läufe, Restore),
+`RunGateConflict` bei einem Alias mit anderen Limits/Profilen, `PermissionError` für Default- und Control-Space.
+Ein archivierter Space (`SpaceState.archived`) lehnt Writes, Takes, Txns, wartende Takes und Registrierungen ab.
+Remote: `SpaceLifecycleService` (als `spaceLifecycle` an `startFederationHost`), `RemoteSpace.requestSpaceLifecycle`,
+`signLifecycle`/`verifyLifecycle`; `spaceCommands({authorityId, peerId, signer, hostPin, send})` liefert die
+Supervisor-Handler, die über `control.spaces` eingebunden werden.
+
+### Deployment-Bootstrap
+
+```ts
+validateDeployment(config) // { config?, configHash?, errors[] }
+const deploy = new DeploymentController({ host, ctx, ports: {
+  hostStatus: capabilityHostStatus(host, ctx, controlSpaceId), createSpace: spaceCommands(...).createSpace, workers, controlSpaceId } });
+await deploy.bindHost(alias, hostId);
+await deploy.plan(config);       // { ready, configHash, steps: [{ key, action, status, detail }] }
+await deploy.apply(config);      // { state: "applying" | "blocked" | "completed", steps }
+await deploy.startWorkers(commandId, deployment);
+await deploy.export(deployment);
+```
+
+`deploymentCommands(deploy)` liefert die Supervisor-Handler `planDeployment`, `applyDeployment`, `bindHostAlias`,
+`startWorkers` und `exportDeployment`; `startFederationHost` bindet sie über `control.deployment` ein.
+CLI: `npm run bootstrap -- --check|--plan|--apply|--bind a=id|--start-workers|--export` (Exit 0 ok, 1 ungültige
+Config, 2 abgelehnt/blockiert, 3 noch kein Ergebnis).
+
+### Alarmierung, Audit und Vorschau
+
+```ts
+await collectAlerts({ runs?, workers?, host, ctx, controlSpaceId, staleMs? }); // Alert[] { key, severity, source, subject, message }
+const monitor = startAlertMonitor({ collect, publish: webhookPublisher("https://ntfy.example/topic"), intervalMs });
+await auditLog(host, ctx, controlSpaceId, { limit });                            // ohne Result-Payloads
+await runs.preview("start" | "pause" | "resume" | "stop", runId, spec?);        // { allowed, reason?, revision?, state? }
+```
+
+Admin-Commands: `listAlerts`, `auditLog` (jede Control-Runtime) sowie `dryRun: true` an `startRun`, `pauseRun`,
+`resumeRun`, `stopRun`.
+
+### Ergebnisexport und Zeitplan
+
+```ts
+new RunController({ ..., exporters: { sieve: SIEVE_EXPORTER }, space: spaceId => SpaceLike });
+await runs.export(runId);   // { complete, expected, found, missing, manifestHash, resultHash, summary }
+await runs.schedule(commandId, runId, { kind: "pause" | "resume", at, cancel? });
+```
+
+Admin-Commands `exportRun` und `scheduleRun` (`scheduleId`, `kind`, `at`, `cancel`).

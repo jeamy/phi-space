@@ -1,0 +1,175 @@
+{
+  "passed": true,
+  "date": "2026-10-15T20:51:39.325267+00:00",
+  "scope": "local-loopback-smoke",
+  "case": "7.4 case 3",
+  "run": "case3-252af1",
+  "transport": "loopback TCP",
+  "offlineMechanism": "member process killed",
+  "authentication": "layer B key proof and signed run gate instructions/ACKs; layer A fixture peer-IP pin, not the Management API",
+  "members": {
+    "big": "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+    "local": "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+  },
+  "steps": [
+    {
+      "step": "started",
+      "at": "2026-10-15T20:51:38.531235+00:00",
+      "value": {
+        "runId": "case3-252af1",
+        "kind": "jobs",
+        "members": [
+          "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+          "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+        ],
+        "revision": 2,
+        "state": "running"
+      }
+    },
+    {
+      "step": "member-killed",
+      "at": "2026-10-15T20:51:38.563437+00:00",
+      "value": {
+        "container": null
+      }
+    },
+    {
+      "step": "pause-incomplete",
+      "at": "2026-10-15T20:51:38.574495+00:00",
+      "value": {
+        "runId": "case3-252af1",
+        "kind": "jobs",
+        "members": [
+          "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+          "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+        ],
+        "revision": 2,
+        "state": "pauseIncomplete",
+        "pending": {
+          "commandId": "pause-3",
+          "kind": "pause",
+          "revision": 3,
+          "errors": {
+            "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51": "connect ECONNREFUSED 127.0.0.3:17432"
+          },
+          "applied": [
+            "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+          ],
+          "fenced": [],
+          "missing": [
+            "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51"
+          ]
+        },
+        "pauseCallMs": 10
+      }
+    },
+    {
+      "step": "controller-crash-kept-pause",
+      "at": "2026-10-15T20:51:38.578563+00:00",
+      "value": {
+        "status": {
+          "runId": "case3-252af1",
+          "kind": "jobs",
+          "members": [
+            "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+            "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+          ],
+          "revision": 2,
+          "state": "pauseIncomplete",
+          "pending": {
+            "commandId": "pause-3",
+            "kind": "pause",
+            "revision": 3,
+            "errors": {
+              "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51": "connect ECONNREFUSED 127.0.0.3:17432"
+            },
+            "applied": [
+              "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+            ],
+            "fenced": [],
+            "missing": [
+              "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51"
+            ]
+          }
+        },
+        "earlyResume": "run case3-252af1 is still applying pause at revision 3"
+      }
+    },
+    {
+      "step": "same-pause-completed",
+      "at": "2026-10-15T20:51:39.220139+00:00",
+      "value": {
+        "status": {
+          "runId": "case3-252af1",
+          "kind": "jobs",
+          "members": [
+            "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+            "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+          ],
+          "revision": 3,
+          "state": "paused"
+        },
+        "memberGate": {
+          "runId": "case3-252af1",
+          "revision": 3,
+          "state": "paused",
+          "commandId": "pause-3",
+          "kind": "pause",
+          "at": 1792097499206,
+          "boundTxns": 0
+        }
+      }
+    },
+    {
+      "step": "late-pause-without-effect",
+      "at": "2026-10-15T20:51:39.300375+00:00",
+      "value": {
+        "replaySameCommand": {
+          "accepted": true,
+          "ack": {
+            "runId": "case3-252af1",
+            "spaceId": "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+            "incarnation": "aa3a6c22",
+            "authorityId": null,
+            "revision": 3,
+            "state": "paused",
+            "commandId": "pause-3",
+            "kind": "pause",
+            "phase": "applied",
+            "boundTxns": 0
+          }
+        },
+        "otherCommand": "revision 3 of run case3-252af1 belongs to another command",
+        "staleRevision": "revision 4 of run case3-252af1 belongs to another command",
+        "memberGate": {
+          "runId": "case3-252af1",
+          "revision": 4,
+          "state": "running",
+          "commandId": "resume-4",
+          "kind": "resume",
+          "at": 1792097499238,
+          "boundTxns": 0
+        }
+      }
+    },
+    {
+      "step": "stopped",
+      "at": "2026-10-15T20:51:39.324937+00:00",
+      "value": {
+        "runId": "case3-252af1",
+        "kind": "jobs",
+        "members": [
+          "sp-d479b21b-e24f-4944-bdbb-76089a2e8d51",
+          "sp-ec0b8cdc-f1e6-4478-840e-4b535f58c0a9"
+        ],
+        "revision": 5,
+        "state": "stopped"
+      }
+    }
+  ],
+  "productionServiceActivated": false,
+  "artifactHashes": {
+    "pi-spaces.mjs": "943d5fa098da45eafaf0a4ac2d39e254b5b25d21b22e7ffd355dc3e7d2f7ab12",
+    "scenarios/run-gate-overlay-node.mjs": "d79cd72adceb61bbaf47b0e6e0ba51837afbf40ed2facdecf4af26ab75865a80"
+  }
+}

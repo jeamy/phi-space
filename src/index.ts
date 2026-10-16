@@ -16,7 +16,7 @@ export { serveRegister, SocketRecoveryRegister } from "./register-service.ts";
 export { serveRecovery, RecoveryClient, recoveryBytes, type RecoveryCall, type SignedRecoveryCall } from "./recovery-service.ts";
 export { RecoveryController, RecoveryJobs, dataRecoveryHandler, type DataRestoreRequest, type RecoveryJob, type RecoveryControllerOptions } from "./recovery-controller.ts";
 export { startConfiguredFederation, type FederationConfig } from "./configured-runtime.ts";
-export { beginRestore, restoreBatch, completeRestore, releaseRestored, snapshotHash, type RestoreArgs, type RestoreState } from "./restore.ts";
+export { beginRestore, restoreBatch, completeRestore, releaseRestored, snapshotHash, runRecoveryIdOf, type RestoreArgs, type RestoreState } from "./restore.ts";
 export { SqliteRecoveryRegister, RegisterConflict, type RecoveryRegister, type RegisterRecord } from "./recovery-register.ts";
 export { RecoveryCoordinator, RecoveryBlocked, installAuthorityTransition, type AuthorityTransition, type SignedAuthorityTransition, type AuthorityRecord } from "./recovery.ts";
 export { installBootGuard, BootBlocked, type HostBootState, type SpaceBootPermit } from "./boot.ts";
@@ -36,7 +36,13 @@ export { SpaceService, StaticIdentity, DEFAULT_POLICY, PROTOCOL_VERSION, METHODS
 export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type AdmissionResolution, type ClaimState } from "./claims.ts";
 export * as claims from "./claims.ts";
 export { principalId, MailboxEpochMismatch, InvalidAck, type MailboxPage, type MailItem, type MailboxState } from "./mailbox.ts";
-export { CompletionViolation, type CompletionProfile } from "./core.ts";
+export { CompletionViolation, RunGateConflict, type CompletionProfile, type RunGateAck, type RunGateCommand, type RunGateKind, type RunGateState, type RunGateEvidence, type RunRecoveryView } from "./core.ts";
+export { RunController, RunBusy, RunJournal, localRunMember, runCommands, type RunExporter, type RunIdentity, type RunMember, type RunSpec, type RunStatus, type RunView } from "./run-controller.ts";
+export { auditLog, collectAlerts, startAlertMonitor, webhookPublisher, type Alert } from "./alerts.ts";
+export { DeploymentController, DeploymentState, capabilityHostStatus, deploymentCommands, validateDeployment, type DeploymentConfig, type DeploymentPlan, type DeploymentPorts, type PlanStep } from "./deployment.ts";
+export { SpaceLifecycle, SpaceLifecycleService, SpaceLifecycleJournal, SpaceInUse, signLifecycle, verifyLifecycle, spaceCommands, type SpaceAction, type SpaceLifecycleRequest, type SpaceLifecycleResult, type SpaceLifecycleInstruction, type SignedLifecycle, type LifecyclePin } from "./space-lifecycle.ts";
+export { WorkerAssignments, WorkerSupervisor, WorkerJournal, appliedWorkers, abortableSleep, startWorkerSupervisor, verifyWorkers, workerCommands, type SignedWorkers, type WorkerKind, type WorkerList, type WorkerPin, type WorkerSpec, type WorkerSummary } from "./workers.ts";
+export { RunGateService, remoteRunMember, signRun, verifyRun, type RunGateInstruction, type RunPin, type RunPreparer, type SignedRun } from "./run-member.ts";
 export * from "./meter.ts";
 export { core };
 

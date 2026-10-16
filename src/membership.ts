@@ -130,6 +130,7 @@ export class MemberLifecycle {
             }
             if(a.policy)assertOrdinaryProfiles(a.policy,p);
             a.policy = copy(p);
+            core.assertGatedProfilesKept(s, p.completionProfiles);
             s.completionProfiles = copy(p.completionProfiles);
             core.touch(s, (this.o.now ?? Date.now)());
         }, this.o.ctx);
@@ -190,6 +191,7 @@ export class MemberLifecycle {
                     assertMemberWrite({...s, membership : {...a, state : 'active'}}, normalized,
                                       e.writtenUnder, now);
                 }
+                core.assertGatedProfilesKept(s, q.policy.completionProfiles);
                 s.completionProfiles = copy(q.policy.completionProfiles);
                 a.state = 'active';
                 a.admissionVersion++;
@@ -203,7 +205,7 @@ export class MemberLifecycle {
                 a.policy=copy(base);a.state='profileFrozen';a.profileTransition={id:q.id,hash:hash(q.policy)};a.admissionVersion++;
             } else if (q.action === 'profileInstall') {
                 if(!a||a.state!=='profileFrozen'||!a.policy||!q.policy||a.profileTransition?.id!==q.id||a.profileTransition.hash!==hash(q.policy))throw new RoutingConflict('profile install requires matching frozen transition');
-                validateProfileOnlyChange(a.policy,q.policy);a.policy=copy(q.policy);s.completionProfiles=copy(q.policy.completionProfiles);a.admissionVersion++;
+                validateProfileOnlyChange(a.policy,q.policy);a.policy=copy(q.policy);core.assertGatedProfilesKept(s,q.policy.completionProfiles);s.completionProfiles=copy(q.policy.completionProfiles);a.admissionVersion++;
             } else if (q.action === 'profileResume') {
                 if(!a||a.state!=='profileFrozen'||!q.policy||a.profileTransition?.id!==q.id||hash(a.policy)!==hash(q.policy)||a.profileTransition.hash!==hash(q.policy))throw new RoutingConflict('profile resume requires installed transition');
                 a.state='active';delete a.profileTransition;a.admissionVersion++;
@@ -217,6 +219,7 @@ export class MemberLifecycle {
                     throw new RoutingConflict('policy version changed content');
                 if(a.policy)assertOrdinaryProfiles(a.policy,q.policy);
                 a.policy = copy(q.policy);
+                core.assertGatedProfilesKept(s, q.policy.completionProfiles);
                 s.completionProfiles = copy(q.policy.completionProfiles);
             } else if (q.action === 'drain') {
                 if (!a || a.state !== 'active')

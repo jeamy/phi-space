@@ -3,7 +3,9 @@ import { createHash, randomBytes } from "node:crypto";
 import * as core from "./core.ts";
 import { canonicalJson } from "./canonical.ts";
 
-export type RestoreState = { recoveryId: string; argumentHash: string; snapshotHash: string; incarnation: string; primaryEpoch: number; startedAt: number; waitUntil: number; stage: "entries" | "claims" | "generations" | "waiting" | "completed"; cursor: number; kind: "data" | "control" };
+export type RestoreState = { recoveryId: string; argumentHash: string; snapshotHash: string; incarnation: string; primaryEpoch: number; startedAt: number; waitUntil: number; stage: "entries" | "claims" | "generations" | "gates" | "waiting" | "completed"; cursor: number; kind: "data" | "control" };
+/** The recovery ID that fences run gates of a restore: the restore ID itself if it is a valid gate ID, else a stable hash. */
+export const runRecoveryIdOf = (recoveryId: string): string => /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/.test(recoveryId) ? recoveryId : "restore-" + createHash("sha256").update(recoveryId).digest("hex").slice(0, 32);
 export const snapshotHash = (s: core.SpaceState): string => createHash("sha256").update(canonicalJson(s as unknown as core.Json)).digest("hex");
 export type RestoreArgs = { recoveryId: string; expectedDataIncarnation: string; expectedPrimaryEpoch: number; snapshotHash: string; kind: "data" | "control" };
 export function beginRestore(s: core.SpaceState, now: number, o: RestoreArgs): RestoreState {
@@ -16,6 +18,7 @@ export function beginRestore(s: core.SpaceState, now: number, o: RestoreArgs): R
 	s.entries = []; s.txns = {}; s.regs = []; s.waiters = []; s.outbox = []; s.jobs = []; s.releaseQueue = []; s.mailboxes = { boxes: {} };
 	s.rpc = { generations: {}, claims: {}, bytes: 0, reservedBytes: 0 }; s.restoredClaims = {}; s.invalidGenerations = {}; s.nextId = 1;
 	s.stream = { rev: 0, floor: 0, bytes: 0, log: [] }; s.incarnation = restoration.incarnation; s.primaryEpoch = restoration.primaryEpoch; s.restore = restoration;
+	core.fenceGatesForRestore(s, now, runRecoveryIdOf(o.recoveryId)); // local run gates become historical evidence until the run is reconciled
 	core.touch(s, now); return core.plain(s.restore);
 }
 export function restoreBatch(s: core.SpaceState, now: number, source: core.SpaceState): RestoreState {
@@ -64,6 +67,15 @@ export function restoreBatch(s: core.SpaceState, now: number, source: core.Space
 			if (cost + 1024 > lim.maxCommitBytes || core.claimBytes(s) + cost > lim.maxClaimBytes || core.overheadBytes(s) + cost + s.entries.reduce((n, e) => n + (e.size ?? Buffer.byteLength(JSON.stringify(e.fields))), 0) > lim.maxDocBytes) throw new core.ResourceExhausted("restored generation violates current space limits");
 			if (!core.maintenanceStep(s, cost, now, `restore-generation:${r.cursor}`)) return core.plain(r);
 			s.invalidGenerations![id] = true; core.touch(s, now);
+		}
+		r.stage = "gates"; r.cursor = 0; core.touch(s, now);
+	}
+	if (r.stage === "gates") { // run gates of the snapshot: compact evidence, never an executable transition
+		const runs = Object.keys(source.runGates ?? {}).sort();
+		for (; r.cursor < runs.length; r.cursor++) {
+			const g = source.runGates![runs[r.cursor]!]!, cost = 1024;
+			if (!core.maintenanceStep(s, cost, now, `restore-gate:${r.cursor}`)) return core.plain(r);
+			core.importRestoredGate(s, now, g, runRecoveryIdOf(r.recoveryId));
 		}
 		r.stage = "waiting"; r.cursor = 0; core.touch(s, now);
 	}

@@ -71,6 +71,8 @@ export class IllegalArgumentError extends Error {}
 export class PermissionError extends Error {}
 export class TransactionError extends Error {}
 export class CompletionViolation extends TransactionError {}
+/** A RunGate command conflicts with the gate's revision history, its pending transition or its terminal state. */
+export class RunGateConflict extends TransactionError {}
 export class UnknownLeaseError extends Error {}
 
 /** An entry: a typed group of fields. `types` is the type followed by its supertypes, fixed at write time. */
@@ -92,8 +94,18 @@ export type EntryRec = {
 	size?: number; // JSON bytes of `fields`, for the space-wide limit
 };
 /** `owner`: the only conversation that may use, commit, abort, renew or cancel it; null: host code only. */
-export type TxnRec = { completion?: CompletionAllowance; completionDeadline?: number; originRequestKey?: string; id: string; expires: number; owner: Target | null; reserved?: number; takenTasks?: Array<{ id: string; types: string[]; fields: Fields }> };
-export type CompletionProfile = { taskType: string; resultTypes: string[]; equalFields: string[]; maxResultCount: number; maxResultBytes?: number; maxLeaseMs?: number };
+export type TxnRec = { completion?: CompletionAllowance; completionDeadline?: number; originRequestKey?: string; id: string; expires: number; owner: Target | null; reserved?: number; takenTasks?: Array<{ id: string; types: string[]; fields: Fields }>; runs?: Record<string, number> };
+/** `gateField`: tasks name their run in this field; they are takeable only while that run's RunGate is running. */
+export type CompletionProfile = { taskType: string; resultTypes: string[]; equalFields: string[]; maxResultCount: number; maxResultBytes?: number; maxLeaseMs?: number; gateField?: string };
+export type RunGateState = "preparing" | "running" | "paused" | "stopped";
+export type RunGateKind = "prepare" | "release" | "pause" | "resume" | "stop";
+/** `recoveryId`/`expect`: a decision under a recovery entry fence, applied only if the gate still shows `expect`. */
+export type RunGateCommand = { runId: string; commandId: string; kind: RunGateKind; revision: number; recoveryId?: string; expect?: { revision: number; state: RunGateState } };
+/** Compact evidence of a gate taken from a restored snapshot. */
+export type RunGateEvidence = { revision: number; state: RunGateState; commandId: string; kind: RunGateKind; maxRevision: number; fence?: { revision: number; commandId: string; kind: "pause" | "stop" } };
+/** Protected local control state of one run on this Member; not an entry, never written through Space RPC. */
+export type RunGateRec = { runId: string; revision: number; state: RunGateState; commandId: string; kind: RunGateKind; at: number; fence?: { revision: number; commandId: string; kind: "pause" | "stop"; at: number; recoveryId?: string }; recovery?: { id: string; at: number }; historical?: true; restored?: RunGateEvidence; history: Array<{ revision: number; commandId: string; kind: RunGateKind; state: RunGateState }> };
+export type RunGateAck = { runId: string; spaceId: string | null; incarnation: string | null; authorityId: string | null; revision: number; state: RunGateState; commandId: string; kind: RunGateKind; phase: "applied" | "fenced"; boundTxns: number };
 export type FanoutJob = { id: string; at: number; cursor: number; retryAt?: number; events: Array<{ event: SpaceEvent; consumer?: Principal }> };
 export type RegRec = {
 	id: string; // event id
@@ -134,7 +146,7 @@ export type SpaceEvent = {
  * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
  * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
  */
-export type SpaceState = { erasureEpoch?:number; adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed" }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; invalidGenerations?: Record<string, true> };
+export type SpaceState = { erasureEpoch?:number; adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed" }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; invalidGenerations?: Record<string, true>; runGates?: Record<string, RunGateRec>; archived?: { at: number; commandId: string } };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
@@ -218,7 +230,7 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
 /** Bytes of the parts of the document that are not entries (claims by their running tally). */
 export function overheadBytes(s: Readonly<SpaceState>): number {
-	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {});
+	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {}) + jsonBytes(s.runGates ?? {});
 }
 /** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
 export function claimBytes(s: Readonly<SpaceState>): number {
@@ -377,6 +389,8 @@ export function matches(t: Template, e: { id?: string; types: string[]; fields: 
  * this. Lapses are replayed in time order, so when nobody looked for a while the outcome is still what it would have
  * been at each moment: an entry returned by a transaction that expired before a waiter's deadline serves that waiter.
  */
+/** An archived Space keeps its data readable but takes no new work (space-lifecycle.ts). */
+export function assertNotArchived(s: Readonly<SpaceState>): void { if (s.archived) throw new PermissionError("the Space is archived; reactivate it first"); }
 export function assertAdminIdle(s: Readonly<SpaceState>):void {if(s.adminMaintenance)throw new PermissionError("Space has a pending administrative deletion");}
 export function settle(s: SpaceState, now: number): void {
 	if(s.adminMaintenance)return;
@@ -456,11 +470,13 @@ function expire(s: SpaceState, at: number): boolean {
  */
 const directoryEntry = (e: {types?:string[];type:string}) => [e?.type,...(Array.isArray(e?.types)?e.types:[])].some(t=>t==="Capability"||t==="MemberStatus");
 export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string | null, lease: number, as?: Target): Lease {
+	assertNotArchived(s);
 	if (directoryEntry(entry)) { if(as!==undefined || txn!==null) throw new PermissionError("directory entries require trusted publication"); assertMemberAdmission(s,"write"); if(s.membership && s.membership.state!=="active") throw new PermissionError("directory publication requires active Member"); } else assertMemberWrite(s, entry, txn, now);
 	settle(s, now);
 	if (typeof entry?.type !== "string" || entry.type === "") throw new IllegalArgumentError("entry needs a type");
 	if (entry.fields === null || typeof entry.fields !== "object" || Array.isArray(entry.fields)) throw new IllegalArgumentError("entry fields must be an object");
 	if (txn !== null) requireTxn(s, txn, as);
+	assertRunWrite(s, entry, txn);
 	const expires = grant(lease, now);
 	if (as !== undefined) {
 		const lim = limitsOf(s);
@@ -555,6 +571,7 @@ export type Probe = { status: "found"; entry: EntryRec } | { status: "none" } | 
 /** One non-waiting attempt. `locked` means matches exist, but every one conflicts with another transaction. */
 export function probe(s: SpaceState, now: number, tmpl: Template, txn: string | null, take: boolean, as?: Target): Probe {
 	assertMemberAdmission(s, take ? "take" : "read");
+	if (take) assertNotArchived(s);
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn, as);
 	const f = find(s, tmpl, txn, take);
@@ -572,6 +589,7 @@ function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean):
 	let locked = false;
 	for (const e of s.entries) {
 		if (!matches(tmpl, e) || (e.restoredUnverified && (take || txn !== null))) continue;
+		if (take) { const run = runOf(s, e.types, e.fields); if (run !== undefined && !takeableRun(s, run)) continue; } // gated: invisible to takes, not a conflict
 		const mine = txn !== null && e.writtenUnder === txn;
 		if (e.writtenUnder !== null && !mine) continue; // not yet committed elsewhere: invisible, not a conflict
 		if (e.takenBy !== null) {
@@ -599,6 +617,8 @@ function apply(s: SpaceState, now: number, e: EntryRec, txn: string | null, take
 			t.expires = Math.min(t.expires, t.completionDeadline);
 			reserve(s, txn, jsonBytes(capture) + 64, limitsOf(s));
 			s.txns[txn]!.takenTasks ??= []; s.txns[txn]!.takenTasks!.push(capture);
+			const run = runOf(s, e.types, e.fields);
+			if (run) { t.runs ??= {}; t.runs[run] = s.runGates![run]!.revision; } // find admitted it: the gate is running
 		}
 		if (e.writtenUnder === null) logDel(s, now, e.id); // it stops being visible (taken, or locked by a transaction)
 		touch(s, now);
@@ -610,6 +630,7 @@ function apply(s: SpaceState, now: number, e: EntryRec, txn: string | null, take
 
 export function createTxn(s: SpaceState, now: number, lease: number, as?: Target): Lease {
 	assertAdminIdle(s);
+	assertNotArchived(s);
 	settle(s, now);
 	if (as !== undefined && Object.values(s.txns).filter(ownedBy(as)).length >= limitsOf(s).maxTxnsPerOwner) throw new LimitError(`you already have ${limitsOf(s).maxTxnsPerOwner} open transactions`);
 	const t: TxnRec = { id: newId(s, "t"), expires: grant(lease, now), owner: as ?? null };
@@ -632,11 +653,18 @@ export function setCompletionProfiles(s: SpaceState, profiles: CompletionProfile
 	const seen = new Set<string>();
 	for (const p of profiles) {
 		if (!p || typeof p.taskType !== "string" || !p.taskType || seen.has(p.taskType) || !Array.isArray(p.resultTypes) || !p.resultTypes.length || !p.resultTypes.every(t => typeof t === "string" && t.length > 0) || !Array.isArray(p.equalFields) || !p.equalFields.every(f => typeof f === "string" && f.length > 0) || !Number.isSafeInteger(p.maxResultCount) || p.maxResultCount < 1) throw new IllegalArgumentError("invalid completion profile");
+		if (p.gateField !== undefined && (typeof p.gateField !== "string" || !p.gateField || !p.equalFields.includes(p.gateField) || p.maxLeaseMs === undefined)) throw new IllegalArgumentError("a gate field must be one of the equal fields, with a finite maxLeaseMs");
 		if ((p.maxResultBytes !== undefined && (!Number.isSafeInteger(p.maxResultBytes) || p.maxResultBytes < 1)) || (p.maxLeaseMs !== undefined && (!Number.isSafeInteger(p.maxLeaseMs) || p.maxLeaseMs < 1))) throw new IllegalArgumentError("invalid completion budget");
 		seen.add(p.taskType);
 	}
+	assertGatedProfilesKept(s, profiles);
 	s.completionProfiles = clone(profiles);
 	touch(s, now);
+}
+/** Every path that replaces completion profiles (also a federation policy) must keep the gates of unstopped runs. */
+export function assertGatedProfilesKept(s: Readonly<SpaceState>, profiles: readonly CompletionProfile[]): void {
+	const active = Object.values(s.runGates ?? {}).some(g => g.state !== "stopped");
+	if (active && (s.completionProfiles ?? []).some(o => o.gateField !== undefined && !profiles.some(p => p.taskType === o.taskType && p.gateField === o.gateField))) throw new RunGateConflict("gated profiles cannot change while a run is not stopped");
 }
 function checkCompletion(s: SpaceState, id: string): void {
 	for (const p of s.completionProfiles ?? []) {
@@ -651,7 +679,7 @@ function checkCompletion(s: SpaceState, id: string): void {
 		if (tasks.length && s.entries.some(e => e.writtenUnder === id && e.takenBy === null && e.types.some(t => p.resultTypes.includes(t)) && !assigned.has(e.id))) throw new CompletionViolation("unmatched completion result");
 	}
 }
-export const commitTxn = (s: SpaceState, now: number, id: string, as?: Target) => { assertMemberAdmission(s,"txn.commit"); settle(s, now); requireTxn(s, id, as); checkCompletion(s, id); charge(s, s.txns[id]!.reserved ?? 0); finish(s, id, true, now); serve(s, now); };
+export const commitTxn = (s: SpaceState, now: number, id: string, as?: Target) => { assertMemberAdmission(s,"txn.commit"); settle(s, now); requireTxn(s, id, as); checkCompletion(s, id); checkRunBindings(s, id); charge(s, s.txns[id]!.reserved ?? 0); finish(s, id, true, now); serve(s, now); };
 export const abortTxn = (s: SpaceState, now: number, id: string, as?: Target) => { settle(s, now); requireTxn(s, id, as); charge(s, s.txns[id]!.reserved ?? 0); finish(s, id, false, now); serve(s, now); };
 /** Abort `id` if it is still active (host side, e.g. when the holder of a served take can no longer be reached). */
 export function releaseTxn(s: SpaceState, now: number, id: string): boolean {
@@ -669,6 +697,7 @@ export function releaseTxn(s: SpaceState, now: number, id: string): boolean {
 
 /** Park a read/take for `target`; the space serves it later (or reports a timeout) through the outbox. */
 export function addWaiter(s: SpaceState, now: number, w: { template: Template; take: boolean; target: Target | null; timeout: number; deadline?:number; txnLeaseMs?: number; handback?: Json; as?: Target; consumer?: Principal; authorizedUntil?: number; originRequestKey?:string }): string {
+	if (w.take) assertNotArchived(s);
 	assertMemberAdmission(s,"wait");
 	const deadline = w.deadline ?? deadlineOf(now, w.timeout);if(!Number.isFinite(deadline)&&deadline!==FOREVER||deadline<0)throw new IllegalArgumentError("invalid waiter deadline"); // FOREVER: waits until served or cancelled
 	settle(s, now);
@@ -765,7 +794,9 @@ export function parkOperation(s: SpaceState, key: string, tmpl: Template, take: 
 
 function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 	touch(s, now);
+	const runs = s.txns[id]?.runs;
 	delete s.txns[id];
+	for (const run of Object.keys(runs ?? {})) completeFence(s, run, now);
 	for (const r of s.regs) if (r.txn === id && r.consumer) queueEvent(s, now, { kind: "registrationClosed", eventId: r.id, seq: ++r.seq, handback: r.handback, target: r.target, reason: "transactionEnded" }, r.consumer, true);
 	prune(s.regs, (r) => r.txn === id); // registrations under a txn are dropped when it completes
 	const published: EntryRec[] = [];
@@ -785,6 +816,7 @@ function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 }
 
 export function notify(s: SpaceState, now: number, tmpl: Template, txn: string | null, lease: number, handback: Json, target: Target | null, as?: Target, consumer?: Principal): { eventId: string; lease: Lease } {
+	assertNotArchived(s);
 	assertMemberAdmission(s,"notify");
 	settle(s, now);
 	if (txn !== null) requireTxn(s, txn, as);
@@ -830,6 +862,7 @@ export function renew(s: SpaceState, now: number, id: string, ms: number, as?: T
 	const v = grant(ms, now);
 	assertMemberRenew(s,id,v);
 	if (s.txns[id]?.completionDeadline !== undefined && v > s.txns[id]!.completionDeadline!) throw new CompletionViolation("lease exceeds task completion boundary");
+	for (const run of Object.keys(s.txns[id]?.runs ?? {})) if (s.runGates?.[run]?.fence || s.runGates?.[run]?.recovery) throw new RunGateConflict(`run ${run} is ${s.runGates[run]!.recovery ? "under recovery" : s.runGates[run]!.fence!.kind === "pause" ? "pausing" : "stopping"}; bound transactions may finish but not extend their lease`);
 	l.set(v);
 	touch(s, now);
 	const e = s.entries.find((x) => x.id === id);
@@ -1046,4 +1079,193 @@ export function purgeTasks(s:SpaceState,now:number,template:Template):number {
  const cost=tasks.reduce((n,e)=>n+publishCost(s,e),0);charge(s,cost);
  for(const e of tasks){logDel(s,now,e.id);s.entries.splice(s.entries.indexOf(e),1);}
  touch(s,now);return tasks.length;
+}
+
+// RunGates (docs/betrieb-und-mobile-steuerung.md §6): per-run control state that the core enforces on every take,
+// so direct, waiting and host takes cannot bypass a pause. A take binds its transaction to the gate's revision.
+const MAX_RUN_GATES = 256, MAX_GATE_HISTORY = 32, GATE_COST = 1024;
+const validId = (v: unknown): v is string => typeof v === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(v);
+/** The run a gated task belongs to: undefined if the type is not gated, null if the gate field is missing. */
+function runOf(s: Readonly<SpaceState>, types: readonly string[], fields: Fields): string | null | undefined {
+	for (const p of s.completionProfiles ?? []) if (p.gateField !== undefined && types.includes(p.taskType)) { const v = fields[p.gateField]; return typeof v === "string" ? v : null; }
+	return undefined;
+}
+function takeableRun(s: Readonly<SpaceState>, run: string | null): boolean {
+	const g = run === null ? undefined : s.runGates?.[run];
+	return g !== undefined && g.state === "running" && !g.fence && !g.recovery;
+}
+function assertRunWrite(s: Readonly<SpaceState>, entry: EntryDraft, txn: string | null): void {
+	const types = [entry.type, ...(entry.types ?? [])];
+	for (const p of s.completionProfiles ?? []) {
+		if (p.gateField === undefined) continue;
+		const run = entry.fields[p.gateField];
+		if (types.includes(p.taskType)) {
+			const g = typeof run === "string" ? s.runGates?.[run] : undefined;
+			if (!g || g.state !== "preparing" || g.fence || g.recovery) throw new RunGateConflict(`${p.taskType} entries are written only while their run is preparing`);
+		}
+		if (types.some(t => p.resultTypes.includes(t)) && (txn === null || typeof run !== "string" || s.txns[txn]?.runs?.[run] === undefined)) throw new CompletionViolation(`${entry.type} needs a transaction bound to its run`);
+	}
+}
+function checkRunBindings(s: Readonly<SpaceState>, id: string): void {
+	for (const [run, revision] of Object.entries(s.txns[id]?.runs ?? {})) {
+		const g = s.runGates?.[run];
+		if (!g || g.revision !== revision || g.state !== "running") throw new RunGateConflict(`run ${run} changed while transaction ${id} was bound to it`);
+	}
+}
+const boundTxns = (s: Readonly<SpaceState>, run: string): number => Object.values(s.txns).filter(t => t.runs?.[run] !== undefined).length;
+function recordGate(g: RunGateRec, c: { revision: number; commandId: string; kind: RunGateKind }, state: RunGateState, now: number): void {
+	Object.assign(g, { revision: c.revision, commandId: c.commandId, kind: c.kind, state, at: now });
+	g.history.push({ revision: c.revision, commandId: c.commandId, kind: c.kind, state });
+	if (g.history.length > MAX_GATE_HISTORY) g.history.splice(0, g.history.length - MAX_GATE_HISTORY);
+}
+/** Ends a pause/stop barrier once no transaction is bound to the run any more. */
+function completeFence(s: SpaceState, run: string, now: number): void {
+	const g = s.runGates?.[run];
+	if (!g?.fence || boundTxns(s, run) > 0) return;
+	const f = g.fence;
+	delete g.fence;
+	recordGate(g, f, f.kind === "pause" ? "paused" : "stopped", now);
+	if (f.recoveryId !== undefined && g.recovery?.id === f.recoveryId) { delete g.recovery; delete g.historical; } // the decision's barrier is confirmed
+	touch(s, now);
+}
+function gateAck(s: Readonly<SpaceState>, g: RunGateRec, c: RunGateCommand, state: RunGateState, phase: RunGateAck["phase"]): RunGateAck {
+	return { runId: g.runId, spaceId: s.spaceId ?? null, incarnation: s.incarnation ?? null, authorityId: s.acceptedAuthorityId ?? s.membership?.authorityId ?? null, revision: c.revision, state, commandId: c.commandId, kind: c.kind, phase, boundTxns: boundTxns(s, g.runId) };
+}
+/**
+ * Applies one controller command to a run's gate (trusted host code only). The same revision with the same command
+ * returns the stored confirmation; with another command it is a RunGateConflict and changes nothing. Older revisions
+ * are refused. Pause and stop first fence the run (no new binding, no lease extension) and change the gate only
+ * when no bound transaction is left: until then the ack's phase is "fenced".
+ * Under a recovery entry fence only a decision of that recovery applies: its history replays (progress of the same
+ * decision), then its expected gate state is compared and set; old commands never complete a restored barrier.
+ */
+export function applyRunGate(s: SpaceState, now: number, c: RunGateCommand): RunGateAck {
+	if (!c || !validId(c.runId) || !validId(c.commandId) || !Number.isSafeInteger(c.revision) || c.revision < 1 || !["prepare", "release", "pause", "resume", "stop"].includes(c.kind) || (c.recoveryId !== undefined && !validId(c.recoveryId)) || (c.expect !== undefined && (!c.expect || !Number.isSafeInteger(c.expect.revision) || !["preparing", "running", "paused", "stopped"].includes(c.expect.state)))) throw new IllegalArgumentError("invalid RunGate command");
+	assertAdminIdle(s);
+	settle(s, now);
+	const spend = () => { // every gate mutation is bounded metadata, charged like other maintenance
+		if (!canCharge(s, GATE_COST)) throw new ResourceExhausted("the RunGate change exceeds the remaining commit budget");
+		if (overheadBytes(s) + GATE_COST + s.entries.reduce((n, e) => n + (e.size ?? jsonBytes(e.fields)), 0) > limitsOf(s).maxDocBytes) throw new ResourceExhausted("the RunGate change exceeds maxDocBytes");
+		charge(s, GATE_COST);
+	};
+	s.runGates ??= {};
+	const gates = s.runGates; // re-read: durable documents track changes through the stored object, not the literal
+	let g = Object.hasOwn(gates, c.runId) ? gates[c.runId] : undefined;
+	if (!g) {
+		// stop without a gate leaves a terminal gate, so a late prepare of this run is refused
+		if (c.kind !== "prepare" && c.kind !== "stop") throw new RunGateConflict(`run ${c.runId} has no gate on this Member`);
+		if (c.kind === "prepare" && c.recoveryId !== undefined) throw new RunGateConflict("a recovery decision cannot prepare a run");
+		if (c.kind === "prepare" && !(s.completionProfiles ?? []).some(p => p.gateField !== undefined)) throw new RunGateConflict("this Space has no gated completion profile; a gate would not stop any take");
+		if (c.expect !== undefined) throw new RunGateConflict(`run ${c.runId} has no gate on this Member, but the decision expected one`);
+		if (Object.keys(gates).length >= MAX_RUN_GATES) throw new ResourceExhausted(`at most ${MAX_RUN_GATES} run gates per Space`);
+		spend();
+		const state = c.kind === "prepare" ? "preparing" : "stopped";
+		gates[c.runId] = { runId: c.runId, revision: 0, state, commandId: c.commandId, kind: c.kind, at: now, history: [] };
+		g = gates[c.runId]!;
+		recordGate(g, c, state, now);
+		touch(s, now);
+		return gateAck(s, g, c, state, "applied");
+	}
+	const same = (x: { commandId: string; kind: RunGateKind }) => x.commandId === c.commandId && x.kind === c.kind;
+	const conflict = () => new RunGateConflict(`revision ${c.revision} of run ${c.runId} belongs to another command`);
+	if (g.recovery && c.recoveryId !== g.recovery.id) throw new RunGateConflict(`run ${c.runId} is under recovery ${g.recovery.id}; only its decision applies`);
+	const done = g.history.find(h => h.revision === c.revision);
+	if (done) { if (!same(done)) throw conflict(); return gateAck(s, g, c, done.state, "applied"); }
+	if (g.fence && g.fence.revision === c.revision) {
+		if (!same(g.fence) || g.fence.recoveryId !== c.recoveryId) throw conflict();
+		completeFence(s, c.runId, now);
+		return g.fence ? gateAck(s, g, c, g.state, "fenced") : gateAck(s, g, c, g.state, "applied");
+	}
+	if (c.recoveryId !== undefined && !g.recovery) throw new RunGateConflict(`run ${c.runId} is not under recovery ${c.recoveryId}`);
+	const recovering = g.recovery !== undefined;
+	if (recovering) {
+		if (c.expect && (g.revision !== c.expect.revision || g.state !== c.expect.state)) throw new RunGateConflict(`run ${c.runId} changed since the reviewed view (${g.state}/${g.revision}); review again`);
+		if (g.fence) {
+			if (boundTxns(s, c.runId) > 0) throw new RunGateConflict(`run ${c.runId} still has bound transactions under an unfinished ${g.fence.kind}`);
+			delete g.fence; // an unfinished barrier of the old history: the reviewed decision replaces it
+		}
+	}
+	if (c.revision <= Math.max(g.revision, g.fence?.revision ?? 0, g.restored?.maxRevision ?? 0)) throw new RunGateConflict(`revision ${c.revision} of run ${c.runId} is older than the gate`);
+	if (g.fence) throw new RunGateConflict(`run ${c.runId} has an unfinished ${g.fence.kind} at revision ${g.fence.revision}`);
+	if (g.state === "stopped" && !(recovering && c.kind === "stop")) throw new RunGateConflict(`run ${c.runId} is stopped`);
+	if (recovering && (g.restored?.state === "stopped") && c.kind !== "stop") throw new RunGateConflict(`run ${c.runId} was stopped in the restored history`);
+	// Under recovery a decision ends in paused or stopped; a resume follows only after that barrier.
+	const from: Record<RunGateKind, RunGateState[]> = recovering
+		? { prepare: [], release: [], resume: [], pause: ["running", "paused"], stop: ["preparing", "running", "paused", "stopped"] }
+		: { prepare: [], release: ["preparing"], resume: ["paused"], pause: ["running"], stop: ["preparing", "running", "paused"] };
+	if (!from[c.kind].includes(g.state)) throw new RunGateConflict(`cannot ${c.kind} run ${c.runId} while it is ${g.state}${recovering ? " under recovery" : ""}`);
+	spend();
+	if (c.kind === "release" || c.kind === "resume") {
+		recordGate(g, c, "running", now);
+		touch(s, now);
+		serve(s, now); // waiting takes may now match
+		return gateAck(s, g, c, "running", "applied");
+	}
+	if (g.state !== "running") { // nothing can be bound: confirm or stop at once
+		recordGate(g, c, c.kind === "pause" ? "paused" : "stopped", now);
+		if (recovering) { delete g.recovery; delete g.historical; }
+		touch(s, now);
+		return gateAck(s, g, c, g.state, "applied");
+	}
+	g.fence = { revision: c.revision, commandId: c.commandId, kind: c.kind as "pause" | "stop", at: now, ...(recovering ? { recoveryId: c.recoveryId! } : {}) };
+	touch(s, now);
+	completeFence(s, c.runId, now);
+	return g.fence ? gateAck(s, g, c, g.state, "fenced") : gateAck(s, g, c, g.state, "applied");
+}
+export type RunRecoveryView = {
+	runId: string; spaceId: string | null; incarnation: string | null; authorityId: string | null; recoveryId: string; present: boolean;
+	gate: { revision: number; state: RunGateState; commandId: string; kind: RunGateKind } | null;
+	fence: { revision: number; commandId: string; kind: "pause" | "stop" } | null;
+	restored: RunGateEvidence | null; historical: boolean; stopped: boolean; maxRevision: number; boundTxns: number; stable: boolean;
+};
+function recoveryView(s: Readonly<SpaceState>, runId: string, recoveryId: string): RunRecoveryView {
+	const g = Object.hasOwn(s.runGates ?? {}, runId) ? s.runGates![runId] : undefined;
+	const bound = g ? boundTxns(s, runId) : 0;
+	const base = { runId, spaceId: s.spaceId ?? null, incarnation: s.incarnation ?? null, authorityId: s.acceptedAuthorityId ?? s.membership?.authorityId ?? null, recoveryId };
+	if (!g) return { ...base, present: false, gate: null, fence: null, restored: null, historical: false, stopped: false, maxRevision: 0, boundTxns: 0, stable: true };
+	const fence = g.fence ? { revision: g.fence.revision, commandId: g.fence.commandId, kind: g.fence.kind } : null;
+	return { ...base, present: true, gate: { revision: g.revision, state: g.state, commandId: g.commandId, kind: g.kind }, fence, restored: g.restored ? clone(g.restored) : null, historical: !!g.historical,
+		stopped: g.state === "stopped" || g.restored?.state === "stopped" || g.history.some(h => h.state === "stopped"),
+		maxRevision: Math.max(g.revision, fence?.revision ?? 0, g.restored?.maxRevision ?? 0, ...g.history.map(h => h.revision)), boundTxns: bound, stable: bound === 0 };
+}
+/**
+ * Installs the recovery entry fence of `recoveryId` (no new binding, no lease extension, no task writes) and returns
+ * the run's recovery view. Bound transactions may still finish; the view is `stable` once none is left. A newer
+ * recovery replaces an older one. Missing gates are reported, not invented.
+ */
+export function recoverRunGate(s: SpaceState, now: number, o: { runId: string; recoveryId: string }): RunRecoveryView {
+	if (!o || !validId(o.runId) || !validId(o.recoveryId)) throw new IllegalArgumentError("invalid run recovery request");
+	assertAdminIdle(s);
+	settle(s, now);
+	const g = Object.hasOwn(s.runGates ?? {}, o.runId) ? s.runGates![o.runId] : undefined;
+	if (g && g.recovery?.id !== o.recoveryId) {
+		if (!canCharge(s, GATE_COST)) throw new ResourceExhausted("the recovery fence exceeds the remaining commit budget");
+		charge(s, GATE_COST);
+		g.recovery = { id: o.recoveryId, at: now };
+		touch(s, now);
+	}
+	return recoveryView(s, o.runId, o.recoveryId);
+}
+/** Restore support: every gate of the replaced data becomes historical evidence under the restore's recovery fence. */
+export function fenceGatesForRestore(s: SpaceState, now: number, recoveryId: string): void {
+	for (const g of Object.values(s.runGates ?? {})) { g.recovery = { id: recoveryId, at: now }; g.historical = true; }
+	if (s.runGates) touch(s, now);
+}
+/** Restore support: compact evidence of one snapshot gate; installs a fenced historical gate if the run is unknown here. */
+export function importRestoredGate(s: SpaceState, now: number, source: RunGateRec, recoveryId: string): void {
+	const ev: RunGateEvidence = { revision: source.revision, state: source.state, commandId: source.commandId, kind: source.kind, maxRevision: Math.max(source.revision, source.fence?.revision ?? 0, ...source.history.map(h => h.revision)), ...(source.fence ? { fence: { revision: source.fence.revision, commandId: source.fence.commandId, kind: source.fence.kind } } : {}) };
+	s.runGates ??= {};
+	const gates = s.runGates;
+	const local = Object.hasOwn(gates, source.runId) ? gates[source.runId] : undefined;
+	if (local) { local.restored = ev; local.recovery = { id: recoveryId, at: now }; local.historical = true; touch(s, now); return; }
+	if (Object.keys(gates).length >= MAX_RUN_GATES) throw new ResourceExhausted(`at most ${MAX_RUN_GATES} run gates per Space`);
+	gates[source.runId] = { runId: source.runId, revision: source.revision, state: source.state, commandId: source.commandId, kind: source.kind, at: now, history: [{ revision: source.revision, commandId: source.commandId, kind: source.kind, state: source.state }], recovery: { id: recoveryId, at: now }, historical: true, restored: ev, ...(source.fence ? { fence: { revision: source.fence.revision, commandId: source.fence.commandId, kind: source.fence.kind, at: now } } : {}) };
+	touch(s, now);
+}
+/** Read-only view of a run's gate, for workers, monitors and controllers. */
+export function runGateView(s: Readonly<SpaceState>, runId: string): (Omit<RunGateRec, "history"> & { boundTxns: number }) | null {
+	const g = Object.hasOwn(s.runGates ?? {}, runId) ? s.runGates![runId] : undefined;
+	if (!g) return null;
+	const { history: _h, ...rest } = clone(g);
+	return { ...rest, boundTxns: boundTxns(s, runId) };
 }

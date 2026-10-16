@@ -43,7 +43,9 @@ export type FederationRule =|{
 export type FederationCompletionProfile = {
     taskType: string; resultTypes : string[]; equalFields : string[]; maxResultBytes : number;
     maxResultCount : number;
-    maxLeaseMs : number
+    maxLeaseMs : number;
+    /** Tasks name their run in this field; a RunGate decides when they are takeable (run-controller.ts). */
+    gateField?: string
 };
 export type FederationPolicy = {
     authorityId: string; policyVersion : number; rules : FederationRule[];
@@ -177,7 +179,8 @@ export function validateFederationPolicy(
         name(f.taskType);
         if (profiles.has(f.taskType) || !f.resultTypes.length || !f.equalFields.length ||
             f.maxResultBytes < 1 || f.maxResultCount < 1 || f.maxLeaseMs < 1 ||
-            ![f.maxResultBytes, f.maxResultCount, f.maxLeaseMs].every(Number.isSafeInteger))
+            ![f.maxResultBytes, f.maxResultCount, f.maxLeaseMs].every(Number.isSafeInteger) ||
+            (f.gateField !== undefined && (typeof f.gateField !== 'string' || !f.equalFields.includes(f.gateField))))
             throw new RoutingConflict('invalid completion profile');
         profiles.add(f.taskType);
         f.resultTypes.forEach(name);
