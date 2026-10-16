@@ -72,9 +72,10 @@ nicht nachträglich ungeprüft umschlossen.
 
 Offen bleiben der authentifizierte Diensttransport, öffentliches `pending/commitSealed`
 mit Claim-Auflösung vor lokaler Anwendung, Boot-/Löschintegration einschließlich
-des neuen Journals, Snapshot-Bootstrap bestehender Stores, `setStandby`,
-Konfigurationsübergänge, verifiziertes Fencing, Promotion und Control-/Router-
-Umschaltung. Deshalb bleiben produktive Sync-Regeln durch den bestehenden
+des neuen Journals, Snapshot-Bootstrap bestehender Stores, verifiziertes reales
+Fencing und Control-/Router-Umschaltung. Konfigurationsübergänge, `setStandby`,
+degradeToSingle und Promotion sind seit 2026-10-16 mit Simulator-Adapter
+vorhanden ([Replikatsteuerung](ap3-replica-control.md)). Deshalb bleiben produktive Sync-Regeln durch den bestehenden
 Policy-Validator gesperrt. Ein ACK des Journal-Bausteins ist kein Promotionsnachweis.
 
 16 neue Fälle auf JSONL und SQLite prüfen verlorene ACKs, Ausfall vor Annahme,

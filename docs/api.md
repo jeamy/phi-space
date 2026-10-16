@@ -536,6 +536,14 @@ atomare Datenmarker; ein unklarer versiegelter Kandidat liefert `CommitSealed`.
 Diese API aktiviert noch keine produktive Sync-Policy oder Promotion.
 [Vertrauensbereich und Betriebsgrenzen](ap3-primary-sync.md).
 
+Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
+`recoverSealedWithoutStandby`, `PrimarySyncJournal.catchUp`). Darauf bauen
+`degradeToSingle`, `promote` und `setStandby` mit `FencingAdapter`
+(`SimulatorFencing` nur mit `allowSimulator`, `unconfiguredFencing` als Platzhalter),
+`fenceHostBoot`, `releaseHostToQuarantine` sowie `assertSyncPrimary`,
+`assertSyncStandby` und `assertQuarantine` auf. Fehlgeschlagene Übergänge werfen
+`ReplicaTransitionBlocked`. [Replikatsteuerung](ap3-replica-control.md).
+
 
 Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich
 `{kind: "renew", type, tag, fields, owner, expiresAt}`. Das erneuert ausschließlich

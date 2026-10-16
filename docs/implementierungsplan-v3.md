@@ -171,10 +171,10 @@ Stand der Pakete (Details: [Phase-3-Stand](ap3-replikation.md), dort mit eigener
 |---|---|
 | 3.1 Stream-Import | Bausteine umgesetzt: Snapshot-Transfer, Stream-Cursor-Worker, Generationenpflege; reale zehnminütige NetBird-Partition als Komponentenlauf bestanden ([Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md)). Nicht in den Space-Dienst eingebunden |
 | 3.2 primary/sync | Storage-Unterbau für einen dedizierten Store umgesetzt (Versiegeln, Hashkette, Standby-ACK, Neustartklärung); offen: Domain-Trennung, authentifizierter Transport, öffentliches `commitSealed`, Negativclaims/`NotCommitted` nach 6.2, Bootstrap bestehender Stores |
-| 3.3 Fencing-Adapter | offen; F1 nicht entschieden. Vorhanden ist nur der SSH-/Neustartsperren-Nachweis nach F15 für Single-Restore |
-| 3.4 Promotion, degradeToSingle | offen |
-| 3.5 setStandby | offen |
-| 3.6 Boot-Merkmal komplett | offen; die Grundform aus 1b.8 kennt kein `fenced`/`quarantine` und keine Replikatversion |
+| 3.3 Fencing-Adapter | Schnittstelle nach v3 §5.5 umgesetzt ([Replikatsteuerung](ap3-replica-control.md)): Simulator nur mit ausdrücklicher Testfreigabe, netcup als „nicht konfiguriert“-Platzhalter. Realer Adapter offen (F1/Gate 2); Testziel nanoi. Für Single-Restore bleibt der SSH-Nachweis nach F15 |
+| 3.4 Promotion, degradeToSingle | mit Simulator-Adapter umgesetzt und geprüft; Abnahme durch F1/Gate 2 blockiert. `ReplicaConfigNotice` offen |
+| 3.5 setStandby | mit Simulator-Adapter umgesetzt (leeres Quarantäne-Ziel, vollständiges Nachladen); Pausieren aller Schreibquellen inklusive Reaper und Snapshot-Bootstrap offen |
+| 3.6 Boot-Merkmal komplett | teilweise: `fenced`/`quarantine` mit CAS-Übergängen und Primary-/Standby-Prüfung von Epoche, Replikatversion und Durability im Sync-Pfad; `installBootGuard` kennt weiterhin nur `local`/`primary` und `primaryEpoch` |
 | 3.7 lww/set | Baustein umgesetzt (HLC, versionierte Tombstones, Add-Wins, Lease-Erneuerung); offen: Kompaktierung, öffentlicher Adapter, Policy-Modi |
 | 3.8 Control Space auf primary/sync | offen |
 
@@ -263,6 +263,7 @@ eingeschlossen, [ap1b-abnahme.md](ap1b-abnahme.md)). Phase 2 ist mit der Ausnahm
 | 3.1 | Bausteine umgesetzt und geprüft: Entry-Replikation, gepagter Snapshot, Stream-Cursor, Generationenpflege; reale zehnminütige NetBird-Partition bestanden | [ap3-replikation.md](ap3-replikation.md); nicht in Dienst, Policy, Boot und Löschung eingebunden |
 | 3.2 | Storage-Unterbau umgesetzt und geprüft | [ap3-primary-sync.md](ap3-primary-sync.md); keine produktive Sync-Policy, kein Transport, kein `NotCommitted` |
 | 3.7 | Baustein umgesetzt: lww/set mit HLC, Tombstones, Add-Wins, Set-Lease-Erneuerung | Kompaktierung und öffentlicher Adapter offen |
-| 3.3–3.6, 3.8 | offen | F1/Gate 2 ist die Voraussetzung für 3.3 und 3.4 |
+| 3.3–3.6 | Replikatsteuerung mit Simulator-Adapter umgesetzt und geprüft; 3.6 teilweise | [ap3-replica-control.md](ap3-replica-control.md); Abnahme durch F1/Gate 2 (realer Fencing-Adapter) blockiert |
+| 3.8 | offen | Control Space auf primary/sync |
 
 Nachweise, genaue Grenzen und nächste Betriebsschritte: [Phase-1b-Abnahme](ap1b-abnahme.md).

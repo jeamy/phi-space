@@ -379,7 +379,7 @@ der Backup-/Register-Host, big bleibt wegen seiner übrigen Dienste kein Fencing
 
 | Bereich | Einrichtung |
 |---|---|
-| Netz | **nur IPv6** (netcup-Image ohne IPv4). `spacebird.eibrain.org` hat seit 2026-10-16 den AAAA-Eintrag `2a0a:4cc0:c0:62f2:8000::1000` (big, nginx auf `[::]:443`). Solange netcups Resolver ihn noch nicht liefert, steht auf nanoi ein als TEMPORARY markierter `/etc/hosts`-Eintrag auf diese Adresse; danach wird er gelöscht. |
+| Netz | **nur IPv6** (netcup-Image ohne IPv4). `spacebird.eibrain.org` hat seit 2026-10-16 den AAAA-Eintrag `2a0a:4cc0:c0:62f2:8000::1000` (big, nginx auf `[::]:443`). nanoi löst ihn über den netcup-Resolver auf; der vorübergehende `/etc/hosts`-Eintrag ist entfernt. |
 | NetBird | Client 0.80.0 aus dem signierten Repository `pkgs.netbird.io`, auf die Server-Version gepinnt (`apt-mark hold`); Peer `nano-test`, 100.89.28.88, Gruppe `space-hosts` über den vorhandenen Setup-Key `testbed-hosts` (von big direkt weitergereicht, nie ausgegeben). Verbindungen zu IPv4-Peers laufen über das Relay. |
 | Firewall | `pi-nft-host.service` lädt `/etc/nftables-pi-host.nft`: eingehend nur SSH, ICMP/ICMPv6, WireGuard (UDP 51820) und alles über `wt0`; ausgehend frei. Beim Einrichten mit Totmannschalter angewendet und per neuer SSH-Verbindung geprüft. |
 | Laufzeit | Debian `docker.io`; Image `pi-spaces-test-node:local` von big übertragen (Node v22.23.3, Produktionsabhängigkeiten). Verzeichnisse `/opt/pi-spaces/artifacts` und `/var/lib/pi-spaces` (0700). Es werden wie auf big nur gebaute Artefakte ausgeliefert. |

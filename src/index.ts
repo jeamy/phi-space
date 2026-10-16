@@ -443,6 +443,7 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 export { SshRecoveryRegister } from "./ssh-register.ts";
 
 export { verifySshFence } from "./fencing.ts";
+export { SimulatorFencing, ReplicaTransitionBlocked, unconfiguredFencing, fenceHostBoot, releaseHostToQuarantine, assertSyncPrimary, assertSyncStandby, assertQuarantine, degradeToSingle, promote, setStandby, type FencingAdapter, type FenceProof, type StandbyTarget } from "./replica-control.ts";
 export { ControlAckService, RecoveryReceipts, type ControlAck } from "./control-ack.ts";
 
 export { sshRecoveryTransport } from "./ssh-recovery.ts";
@@ -506,4 +507,5 @@ export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnav
 export { EntrySnapshotMaintenance } from "./entry-replication-transfer.ts";
 export type { EntrySnapshotMaintenanceJob } from "./entry-replication-transfer.ts";
 export { PrimarySyncJournal, PrimarySyncBlocked, CommitSealed, primarySyncStorage, recoverPrimarySync, materializeSyncHistory } from './primary-sync.ts';
-export type { PrimarySyncConfig, PrimaryCommitIntent, PrimarySyncAck, PrimarySyncPeer } from './primary-sync.ts';
+export { applyConfigTransition, recoverSealedWithoutStandby, durabilityOf } from './primary-sync.ts';
+export type { PrimarySyncConfig, PrimaryCommitIntent, PrimaryConfigIntent, PrimaryIntent, PrimarySyncAck, PrimarySyncPeer } from './primary-sync.ts';

@@ -13,6 +13,7 @@
 | [ap2-abnahme.md](ap2-abnahme.md) | Phase 2: Router, Delegation, Membership, Last- und Ausfallabnahmen | abgeschlossen (Ausnahme Block 4) |
 | [ap2-gate4.md](ap2-gate4.md) | Gate 4: finale Betriebswerte | festgelegt |
 | [ap3-replikation.md](ap3-replikation.md) | Phase 3: Replikationsbausteine, Stand und offene Schritte | begonnen, nicht abgenommen |
+| [ap3-replica-control.md](ap3-replica-control.md) | Phase 3: Promotion, degradeToSingle, setStandby, Fencing-Schnittstelle | mit Simulator umgesetzt, Abnahme durch F1/Gate 2 blockiert |
 | [dashboard.md](dashboard.md) | lesendes Live-Dashboard | umgesetzt |
 | [ap1-abnahme.md](ap1-abnahme.md) | AP 1.1–1.9: Implementierung, Regressionen und native pi-serverd-Abnahme | lokal geprüft |
 | [testumgebung-big.md](testumgebung-big.md) | Docker-Testumgebung auf dem Server big: Skript, Container, Fehlerinjektion, Grenzen | umgesetzt, `test/testbed/` |

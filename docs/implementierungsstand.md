@@ -305,6 +305,16 @@ JSONL und SQLite. Der Sync-Baustein gilt zunächst für einen dedizierten Store 
 ist noch nicht in Policy, öffentlichen Claim-Status, Boot, Löschungen und
 Primary-/Standby-Übergänge eingebunden. Phase 3 bleibt ausdrücklich offen.
 
+## Replikatsteuerung (2026-10-16)
+
+[Promotion, degradeToSingle und setStandby](ap3-replica-control.md) sind mit
+Simulator-Adapter umgesetzt. Konfigurationswechsel sind Einträge der Sync-Kette,
+Übergänge sind per ID journalisiert und nach Abstürzen fortsetzbar, Boot-Zustände
+`fenced`/`quarantine` laufen per CAS über das unabhängige Register. Acht Fälle auf
+JSONL und SQLite prüfen u. a. Abstürze vor dem Boot-CAS, Forks des alten Primary
+und die Ablehnung von Simulator-Nachweisen. Die Abnahme bleibt durch F1/Gate 2
+(realer Fencing-Adapter) blockiert; 3.6 ist nur teilweise umgesetzt.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.
