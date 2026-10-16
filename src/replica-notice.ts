@@ -9,13 +9,14 @@ import type { Algorithm, Signer } from "./auth.ts";
 import type { SpaceHost } from "./client.ts";
 import { verifyDetached } from "./grants.ts";
 import type { Json } from "./core.ts";
+import * as core from "./core.ts";
 import { touch } from "./core.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import type { HostBootState } from "./boot.ts";
 import { durabilityOf, PrimarySyncBlocked, type PrimarySyncJournal } from "./primary-sync.ts";
 import { FederationRouting, RoutingConflict } from "./federation-policy.ts";
 import { ProfileTransitions } from "./profile-transition-doc.ts";
-import { spaceDoc } from "./spaces.ts";
+import { snapshotSpace, spaceDoc } from "./spaces.ts";
 
 export type ReplicaConfigNotice = {
 	authorityId: string; spaceId: string; recoveryId: string; primaryReplica: string; standbyReplica: string | null;
@@ -90,4 +91,53 @@ export async function adoptReplicaConfigNotice(host: SpaceHost, ctx: Context, o:
 		touch(control, Date.now());
 		return { adopted: true, memberId: m.id, policyVersion: d.policy.policyVersion };
 	}, ctx);
+}
+
+/** The notice of the newest completed transition in this chain, or null; what a primary keeps offering. */
+export function latestReplicaConfigNotice(journal: PrimarySyncJournal, dataIncarnation: string): ReplicaConfigNotice | null {
+	for (let r = journal.head().revision; r >= 1; r--) {
+		const i = journal.intent(r)!;
+		if (i.version !== 2) continue;
+		if (journal.transition<{ phase: string } & Json>(i.reason)?.phase !== "completed") return null;
+		return replicaConfigNotice(journal, i.reason, dataIncarnation);
+	}
+	return null;
+}
+
+/**
+ * The pickup point in the control Space: a proven host publishes only its own signed notice (at most one per Space
+ * and host); the router adopts what it finds there. The board stores; the adoption decides (signature and register).
+ */
+export class ReplicaNoticeBoard {
+	private o: { host: SpaceHost; ctx: Context; controlSpaceId: string; hostForPeer?: (peerId: string) => string | undefined; assertAuthority: () => Promise<void>; now?: () => number };
+	constructor(o: ReplicaNoticeBoard["o"]) { this.o = o; }
+	/** peerId/roles MUST come from the authenticated connection, never from the body. */
+	async publish(t: SignedReplicaConfigNotice, identity: { peerId: string; roles: readonly string[]; check?: () => void | Promise<void> }) {
+		const n = t?.notice;
+		if (!n || typeof t.issuer !== "string" || t.issuer !== n.primaryReplica || typeof n.spaceId !== "string" || !n.spaceId || n.spaceId.length > 128 || typeof t.signature !== "string" || Buffer.byteLength(JSON.stringify(t)) > 4096)
+			throw new RoutingConflict("invalid replica configuration notice");
+		if (!identity.roles.includes("host") || (this.o.hostForPeer?.(identity.peerId) ?? identity.peerId) !== t.issuer) throw new RoutingConflict("only the proven primary host publishes its notice");
+		await identity.check?.(); await this.o.assertAuthority();
+		return this.o.host.commit(async tx => {
+			await identity.check?.(); await this.o.assertAuthority();
+			const now = (this.o.now ?? Date.now)(), s = await spaceDoc(tx, this.o.controlSpaceId, now), fields = { spaceId: n.spaceId, issuer: t.issuer };
+			const old = core.list(s, now, { type: "ReplicaConfigNotice", fields });
+			if (old.some(e => canonicalJson(e.fields.signed as Json) === canonicalJson(t as unknown as Json))) return { stored: false };
+			for (const e of old) core.probe(s, now, { type: "ReplicaConfigNotice", id: e.id }, null, true);
+			core.write(s, now, { type: "ReplicaConfigNotice", fields: { ...fields, version: n.replicaConfigVersion, signed: structuredClone(t) as unknown as Json } }, null, core.FOREVER);
+			return { stored: true };
+		}, this.o.ctx);
+	}
+	async published(): Promise<SignedReplicaConfigNotice[]> {
+		const s = await snapshotSpace(this.o.host, this.o.controlSpaceId, this.o.ctx);
+		return core.list(s ?? core.initialState(), (this.o.now ?? Date.now)(), { type: "ReplicaConfigNotice" }).sort((a, b) => Number(a.fields.version) - Number(b.fields.version)).map(e => structuredClone(e.fields.signed) as unknown as SignedReplicaConfigNotice);
+	}
+	/** Router side: adopts every published notice in version order; refusals are reported, not fatal. */
+	async adoptAll(adopt: (t: SignedReplicaConfigNotice) => Promise<{ adopted: boolean }>): Promise<{ adopted: number; refused: string[] }> {
+		let adopted = 0; const refused: string[] = [];
+		for (const t of await this.published()) {
+			try { if ((await adopt(t)).adopted) adopted++; } catch (e) { refused.push(`${t.notice?.spaceId}@${t.notice?.replicaConfigVersion}: ${e instanceof Error ? e.message : String(e)}`); }
+		}
+		return { adopted, refused };
+	}
 }

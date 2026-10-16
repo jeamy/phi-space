@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,unlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createConfiguredRoot,SpaceKeyDirectory,PiSpaces,revokePeerKey,installBootGuard,MemoryKeyDirectory,provisionFileSigner,createSpace,spaceDoc,snapshotSpace,GateIdentity,GrantAuthority,RouterLeaseAuthority,SqliteRecoveryRegister,BootBlocked} from './src/index.ts';
+import {FederationRouting,ReplicaNoticeBoard,signReplicaConfigNotice,serveSpace,createConfiguredRoot,SpaceKeyDirectory,PiSpaces,revokePeerKey,installBootGuard,MemoryKeyDirectory,provisionFileSigner,createSpace,spaceDoc,snapshotSpace,GateIdentity,GrantAuthority,RouterLeaseAuthority,SqliteRecoveryRegister,BootBlocked} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 for(const backend of BACKENDS)for(const batchAuthority of [false,true])test(`${backend}/${batchAuthority?'batched':'legacy'}: configured native Root retains lease and blocks invalid boot, key and lost lease`,async()=>{
  const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'configured-root-')),external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;
@@ -40,4 +40,38 @@ for(const backend of BACKENDS)test(`${backend}: pinned Control keys observe revo
   const boot=(await external.get<any>('boot:host'))!;await external.compareAndSet('boot:host',boot.version,{...boot.value,state:'fenced'});
   await assert.rejects(keys.find('peer',key.keyId),BootBlocked);await assert.rejects(keys.findMany([{peerId:'peer',keyId:key.keyId}]),BootBlocked);await assert.rejects(keys.inspect([{peerId:'peer',keyId:key.keyId}]),BootBlocked);await assert.rejects(keys.findMany([]),TypeError);
  }finally{stop?.();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
+});
+
+for(const backend of BACKENDS)test(`${backend}: native Root adopts a published ReplicaConfigNotice and routes the replicated Member to its new primary`,async()=>{
+ const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'root-replica-')),external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
+ let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;const servers:Awaited<ReturnType<typeof serveSpace>>[]=[],hits={p:0,s:0};
+ try{
+  const host=await home.open(),sid=(await host.commit(tx=>createSpace(tx,'control',Date.now()),ctx)).spaceId,control=provisionFileSigner(join(dir,'control-key')),router=provisionFileSigner(join(dir,'router-key')),agentHost=provisionFileSigner(join(dir,'host-key')),pKey=provisionFileSigner(join(dir,'p-key')),sKey=provisionFileSigner(join(dir,'s-key')),keys=new MemoryKeyDirectory();
+  const rec={peerId:'root-peer',keyId:router.keyId,algorithm:router.algorithm,publicKey:router.publicKey!,principal:'root',roles:['host','router','admin'],scope:['*'],state:'active' as const};keys.add(rec);keys.add({...rec,keyId:agentHost.keyId,algorithm:agentHost.algorithm,publicKey:agentHost.publicKey!,roles:['host']});
+  const s=(await snapshotSpace(host,sid,ctx))!,permit={state:'active',authorityId:'authority',dataIncarnation:s.incarnation!,role:'local',primaryEpoch:1,transitionId:'provisioned'};
+  await installed.compareAndSet('installed:root-host:'+sid,null,permit);await external.compareAndSet('boot:root-host',null,{hostId:'root-host',state:'active',spaces:{[sid]:permit}});
+  const peers:Record<string,string>={'127.0.0.1':'root-peer','127.0.0.2':'p-peer','127.0.0.3':'s-peer'};
+  const directory={refresh:async()=>{},lookup:async(ip:string)=>peers[ip]?{id:peers[ip]!,name:peers[ip]!,ip,connected:true,groups:['hosts']}:null};
+  for(const [ip,name] of [['127.0.0.2','p'],['127.0.0.3','s']] as const)servers.push(await serveSpace({handleText:async()=>{hits[name]++;return JSON.stringify({id:0,ok:false,error:{code:'Unavailable',message:'counting fixture'}});}},{listen:{host:ip,port:0}}));
+  const port=(i:number)=>(servers[i]!.address() as {port:number}).port,endpoint=(k:typeof pKey,peerId:string,ip:string,i:number)=>({peerId,keyId:k.keyId,algorithm:k.algorithm,publicKey:k.publicKey!,address:{host:ip,port:port(i)}});
+  const target={hostId:'p',spaceId:'sync-space',authorityId:'authority',dataIncarnation:'inc-p',primaryEpoch:1};
+  const identity=new GateIdentity(),grants=new GrantAuthority({authorityId:'authority',hostId:'root-host',signer:control,keys,identity,refreshIdentity:async c=>identity.authenticate(c)}),leases=new RouterLeaseAuthority({host,ctx,controlSpaceId:sid,authorityId:'authority',peerId:'root-peer',signer:control,keys,assertAuthority:async()=>{}});
+  const opts={host,ctx,hostId:'root-host',peerId:'root-peer',ownAddress:'127.0.0.1',authorityId:'authority',controlSpaceId:sid,controlSigner:control,keys,directory,groupRoles:{hosts:['host','router','admin']},external,installed,grants,leases,assertControl:async()=>{},
+   root:{id:'root',keyFile:join(dir,'router-key'),hostKeyFile:join(dir,'host-key'),leaseFile:join(dir,'root-lease'),journalPartitions:8,statusIntervalMs:15000,members:{replicated:{target,...endpoint(pKey,'p-peer','127.0.0.2',0),replicas:{s:endpoint(sKey,'s-peer','127.0.0.3',1)}}}}};
+  await host.commit(async tx=>{const d=await tx.doc(FederationRouting,sid,null);d.policy={authorityId:'authority',policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'replicated'}};
+   d.members={replicated:{id:'replicated',state:'active',target,replication:{primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'}}};},ctx);
+  root=await createConfiguredRoot(opts);
+  await root.directory!.refresh().catch(()=>{});assert.ok(hits.p>0&&hits.s===0,'before adoption the status probe goes to the provisioned primary');
+  // s was promoted: the register admits it, it publishes its notice on the board in the control Space.
+  await external.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{'sync-space':{state:'active',authorityId:'authority',dataIncarnation:'inc-s',role:'primary',primaryEpoch:2,replicaConfigVersion:2,durability:'sync',transitionId:'promote-s'}}});
+  const notice={authorityId:'authority',spaceId:'sync-space',recoveryId:'promote-s',primaryReplica:'s',standbyReplica:'p',primaryEpoch:2,replicaConfigVersion:2,durability:'sync' as const,dataIncarnation:'inc-s'};
+  const board=new ReplicaNoticeBoard({host,ctx,controlSpaceId:sid,assertAuthority:async()=>{}}),signed=await signReplicaConfigNotice(notice,sKey);
+  await assert.rejects(board.publish(signed,{peerId:'p',roles:['host']}),/only the proven primary host/);
+  assert.deepEqual(await board.publish(signed,{peerId:'s',roles:['host']}),{stored:true});assert.deepEqual(await board.publish(signed,{peerId:'s',roles:['host']}),{stored:false});
+  const adopted=await root.adoptReplicaNotices();assert.deepEqual(adopted,{adopted:1,refused:[]});
+  assert.equal((await host.snapshot(FederationRouting,sid,ctx))!.members.replicated!.target.hostId,'s');
+  hits.p=0;hits.s=0;await root.directory!.refresh().catch(()=>{});assert.ok(hits.s>0&&hits.p===0,'after adoption the probe goes to the new primary');
+  // A restarted Root accepts the persisted target on the provisioned replica host; adopting again is a no-op.
+  await root.close();root=await createConfiguredRoot(opts);assert.deepEqual(await root.adoptReplicaNotices(),{adopted:0,refused:[]});
+ }finally{await root?.close();for(const sv of servers)await sv.close();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
 });

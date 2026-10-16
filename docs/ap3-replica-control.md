@@ -196,12 +196,30 @@ verliert also nichts.
 - Lokale Arbeit ist nicht betroffen.
 - Nach der Übernahme gibt sich die Sperre ohne eigene Rückmeldung frei.
 
+**Abholen:** Der Primary legt die Notice im Control Space ab, statt dass der Router ihn befragt. Der Router kennt
+den neuen Primary ja erst nach der Übernahme.
+
+- `latestReplicaConfigNotice(journal, dataIncarnation)` liefert die Notice des jüngsten abgeschlossenen Übergangs.
+- Die Wire-Methode `replicaNotice` (`RemoteSpace.publishReplicaNotice`) ist gebaut wie `capabilityHeartbeat`: Sie
+  verlangt einen aktuell bewiesenen Host-Schlüssel und einen Grant.
+- `ReplicaNoticeBoard` speichert höchstens eine Notice je Space und Host, und nur die des bewiesenen Hosts selbst.
+
+**Nativer Root (`configured-root.ts`):**
+
+- Replizierte Member können `replicas` provisionieren, also weitere Replikat-Hosts mit Peer-ID, Schlüssel und
+  Adresse.
+- Der Heartbeat übernimmt vor jeder Statusrunde die veröffentlichten Notices (`adoptReplicaNotices`). Den
+  Schlüssel des Absenders schlägt er in dieser Provisionierung nach.
+- Der Transport löst die Adresse bei jedem Aufruf über das aktuelle Routing-Ziel auf. Nach der Übernahme gehen
+  Aufrufe also an den neuen Primary.
+- Ein gespeichertes Ziel auf einem provisionierten Replikat-Host gilt beim Neustart als provisioniert.
+- Getestet mit zwei Loopback-Endpunkten: Vor der Übernahme geht der Status-Abruf an den alten Host, danach an den
+  neuen, und auch nach einem Neustart des Root.
+
 **Offen:**
 
-- Der native Root (`configured-root.ts`) adressiert Member über eine fest provisionierte Adresse und prüft das
-  gespeicherte Ziel gegen die Provisionierung. Nach einer Promotion braucht er die Adressen beider Replikate in der
-  Provisionierung.
-- Notices werden noch nicht automatisch abgeholt; der Weg über den Supervisor wie bei `EpochNotice` fehlt.
+- Die Notice veröffentlichen muss bisher der Betreiber eines primary/sync-Space selbst anstoßen. Im
+  Federation-Daemon gibt es noch keine primary/sync-Spaces, weil der Policy-Validator Sync-Regeln sperrt.
 - Der Control-Space-Sonderfall (Schritt 6) gehört zu 3.8.
 
 ## Übergänge
@@ -291,7 +309,7 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 - 3.6 ist im Kern umgesetzt (Guard-Hook, Standby-Sperre, Wiederzulassung je Space, Neustart). Den Hook mit dem
   Journal verbinden muss weiterhin, wer einen primary/sync-Space betreibt.
 - Noch offen:
-  - automatisches Abholen der `ReplicaConfigNotice` und Adressauflösung im nativen Root;
+  - Veröffentlichen der Notice aus dem Federation-Daemon, sobald dort primary/sync-Spaces laufen;
   - authentifizierter Transport zwischen den Replikaten;
   - Control-Space-Sonderfall (3.8);
   - Snapshot-Bootstrap eines nicht leeren Ziels.

@@ -137,7 +137,7 @@ export class RemoteSpace implements SpaceLike {
 			const raw = await Promise.race([
 				(async () => {
 					const grant = this.o.grantProvider && !["challenge", "prove", "enroll", "enrollStatus", "grant"].includes(call.method) ? await this.o.grantProvider(call) : undefined;
-					const delegation=this.o.delegationProvider && !["challenge","prove","enroll","enrollStatus","grant","keyLookup","routerLease","epochNotice","routingPolicy","membershipInstruction","runGateInstruction","spaceLifecycleInstruction","workerAssignments","capabilityHeartbeat"].includes(call.method) ? await this.o.delegationProvider(call,grant) : undefined;
+					const delegation=this.o.delegationProvider && !["challenge","prove","enroll","enrollStatus","grant","keyLookup","routerLease","epochNotice","routingPolicy","membershipInstruction","runGateInstruction","spaceLifecycleInstruction","workerAssignments","capabilityHeartbeat","replicaNotice"].includes(call.method) ? await this.o.delegationProvider(call,grant) : undefined;
 					const text = JSON.stringify(grant||delegation ? { ...call, frame: { ...call.frame, ...(grant?{grant}:{}), ...(delegation?{delegation}: {}) } } : call);
 					const limit = this.frameLimit; // not read from `hello`: the retries of `hello` itself must not wait for it
 					if (new TextEncoder().encode(text).length > limit) throw new core.ResourceExhausted(`a call may take at most ${limit} bytes`);
@@ -191,6 +191,8 @@ export class RemoteSpace implements SpaceLike {
  }
  async resolveOperation(target:{generation:string;requestId:string},method:string,argumentHash:string,primaryEpoch:number):Promise<claims.AdmissionResolution>{return await this.send({method:'resolveOperation',args:{targetRequest:target,method,argumentHash,primaryEpoch}}) as unknown as claims.AdmissionResolution;}
 	async requestGeneration():Promise<{generation:string;admitUntil:number}>{return await this.rawCall("generation") as any;}
+	/** Leaves this primary's signed ReplicaConfigNotice in the control Space (the control host checks the proven host). */
+	async publishReplicaNotice(notice:import("./replica-notice.ts").SignedReplicaConfigNotice):Promise<{stored:boolean}>{return await this.send({method:"replicaNotice" as any,args:{notice:notice as any}}) as any;}
 	async publishCapability(report:import("./capability-directory.ts").CapabilityReport):Promise<import("./core.ts").Lease>{return await this.send({method:"capabilityHeartbeat" as any,args:{report:report as any}}) as any;}
 	/** The signed worker assignments of this (proven) host; the control host derives the host from the connection. */
 	async workerAssignments():Promise<import("./workers.ts").SignedWorkers>{return await this.send({method:"workerAssignments" as any,args:{}}) as any;}

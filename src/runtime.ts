@@ -41,7 +41,7 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	/** Applies signed Space lifecycle instructions (create, archive, reactivate, delete) to this host's Spaces. */
 	spaceLifecycle?: SpaceLifecycleService;
 	refreshPolicy?:()=>Promise<void>;
-	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
+	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
 export async function startFederationHost(host: Harness, ctx: Context, o: FederationHostOptions) {
 	if (o.control && o.control.host !== host) throw new Error("the authoritative control runtime must use its own harness");
@@ -81,6 +81,15 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
                       const list=await o.control!.workers.forHost(id.principal.peerId);const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");return{ok:true,result:list as any};
                      }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
                     }
+                    if((c as any)?.method==="replicaNotice") {
+                     // v3 5.3.1 step 5: a proven primary host leaves its own signed notice for the router to adopt.
+                     try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;
+                      if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.replicaNotices)throw Error("replica notices require a currently proven host");
+                      const auth=o.verifier.check((c as any).frame?.grant,id,{method:"write",space:"control"},conn);auth.check();
+                      if(!auth.roles.includes("host"))throw Error("notice grant does not authorize host publication");
+                      const r=await o.control!.replicaNotices.publish((c as any).args?.notice,{peerId:id.principal.peerId,roles:auth.roles,check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:r as any};
+                     }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
+                    }
                     if((c as any)?.method==="capabilityHeartbeat") {
                      try{const id=await identity.authenticate(conn),proof=(conn.state as any)?.proof,key=proof&&conn.peerId?await o.keys.find(conn.peerId,proof.keyId):null;
                       if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.directory)throw Error("capability requires a currently proven host");
@@ -105,7 +114,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 				},
 				async handleText(t, conn, bytes) {
 					let c: unknown; try { c = JSON.parse(t); } catch { return inner.handleText(t, conn, bytes); }
-					if (["grant", "keyLookup", "routerLease", "routingPolicy", "capabilityHeartbeat", "workerAssignments"].includes((c as any)?.method)) { if (Buffer.byteLength(t) > (bytes ?? 256 * 1024)) return JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: "grant request exceeds frame budget" } }); return JSON.stringify(await this.handle(c, conn)); }
+					if (["grant", "keyLookup", "routerLease", "routingPolicy", "capabilityHeartbeat", "replicaNotice", "workerAssignments"].includes((c as any)?.method)) { if (Buffer.byteLength(t) > (bytes ?? 256 * 1024)) return JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: "grant request exceeds frame budget" } }); return JSON.stringify(await this.handle(c, conn)); }
 					return inner.handleText(t, conn, bytes);
 				},
 			};

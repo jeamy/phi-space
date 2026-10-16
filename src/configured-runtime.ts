@@ -1,5 +1,6 @@
 import {createConfiguredRoot,type RootConfig} from './configured-root.ts';
 import {CapabilityDirectory,CAPABILITY_HEARTBEAT_MS} from "./capability-directory.ts";
+import {ReplicaNoticeBoard} from "./replica-notice.ts";
 import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
@@ -60,7 +61,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		if (!authority || authority.value.state !== "active" || authority.value.authorityId !== authorityId || authority.value.hostId !== config.controlHostId || authority.value.supervisorKey !== controlPublicKey) throw new BootBlocked("independent authority is not active or disagrees with installed control identity");
 		if (installedAuthority?.value.targetHostId && installedAuthority.value.targetHostId !== config.controlHostId) throw new Error("control endpoint must be reprovisioned for the installed authority successor");
 		const identity = new GateIdentity();
-		let keys: import("./auth.ts").KeyDirectory, control: { host: Harness; authority: GrantAuthority; leases?:RouterLeaseAuthority; routing?:FederationPolicyAuthority;directory?:CapabilityDirectory;membership?:import("./membership.ts").MembershipController;profiles?:import("./profile-transition.ts").ProfileTransitionController;withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> } | undefined;
+		let keys: import("./auth.ts").KeyDirectory, control: { host: Harness; authority: GrantAuthority; leases?:RouterLeaseAuthority; routing?:FederationPolicyAuthority;directory?:CapabilityDirectory;replicaNotices?:ReplicaNoticeBoard;membership?:import("./membership.ts").MembershipController;profiles?:import("./profile-transition.ts").ProfileTransitionController;withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> } | undefined;
 		let controlRemote:RemoteSpace|undefined;
 		if (config.mode === "control") {
 			if (config.hostId !== config.controlHostId || (await host.snapshot(Registry, ctx))?.aliases.control !== config.controlSpaceId) throw new Error("configured control host or space identity disagrees with provisioned state");
@@ -77,7 +78,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const checkControlAuthority=(a:any)=>{if(a?.value.state!=="active"||a.value.authorityId!==authorityId||a.value.hostId!==config.controlHostId||a.value.supervisorKey!==controlPublicKey)throw new BootBlocked("control authority changed");};
         const assertControl=async()=>checkControlAuthority(await external.get<any>(`authority:${config.controlSpaceId}`));
 		const controlPeer=config.mode==="control"?ownPeer:await directory.lookup(config.control.address.host);if(!controlPeer)throw new BootBlocked("control peer unavailable in provisioned directory");
-		if(control){control.directory=new CapabilityDirectory({host,ctx,spaceId:config.controlSpaceId,assertAuthority:assertControl,hostForPeer:p=>config.capabilities?.hostBindings?.[p]});control.leases=new RouterLeaseAuthority({host,ctx,controlSpaceId:config.controlSpaceId,authorityId,peerId:controlPeer.id,signer,keys,assertAuthority:assertControl});control.routing=new FederationPolicyAuthority({host,ctx,controlSpaceId:config.controlSpaceId,authorityId,peerId:controlPeer.id,signer,assertAuthority:assertControl});}
+		if(control){control.directory=new CapabilityDirectory({host,ctx,spaceId:config.controlSpaceId,assertAuthority:assertControl,hostForPeer:p=>config.capabilities?.hostBindings?.[p]});control.replicaNotices=new ReplicaNoticeBoard({host,ctx,controlSpaceId:config.controlSpaceId,assertAuthority:assertControl,hostForPeer:p=>config.capabilities?.hostBindings?.[p]});control.leases=new RouterLeaseAuthority({host,ctx,controlSpaceId:config.controlSpaceId,authorityId,peerId:controlPeer.id,signer,keys,assertAuthority:assertControl});control.routing=new FederationPolicyAuthority({host,ctx,controlSpaceId:config.controlSpaceId,authorityId,peerId:controlPeer.id,signer,assertAuthority:assertControl});}
 		const grantVerifier=new GrantVerifier({authorityId,issuerHostId:config.controlHostId,algorithm:config.control.algorithm,publicKey:controlPublicKey});
 		const delegation=new DelegationVerifier({host,ctx,authorityId,controlSpaceId:config.controlSpaceId,supervisorPeerId:controlPeer.id,supervisorKey:{algorithm:config.control.algorithm,publicKey:controlPublicKey},keys,grants:grantVerifier,policy:async()=>{if(control){const p=(await control.routing!.state()).policy;if(!p)throw new Error("no federation policy installed");return p;}return verifyFederationPolicy(await controlRemote!.requestRoutingPolicy(),{authorityId,peerId:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey});}});
 
