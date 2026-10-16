@@ -1367,9 +1367,11 @@ NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
 
 ### Stufe 3 – Replikation und kontrollierte Übernahme
 
-Umsetzungsstand: [Phase-3-Bausteine und Nachweise](ap3-replikation.md). Der erste
-Entry-Replikationsbaustein, gepagter Snapshot-Transfer und fortlaufender Cursor-Worker sind geprüft; die nachstehenden Gesamtgarantien sind
-noch nicht abgenommen.
+Umsetzungsstand (2026-10-16): [Phase-3-Bausteine und Nachweise](ap3-replikation.md). Entry-Replikation
+(lww/set), gepagter Snapshot-Transfer, fortlaufender Cursor-Worker, Generationenpflege und der synchrone
+Storage-Unterbau sind als administrative Bausteine geprüft; die Entry-Replikation hat eine reale zehnminütige
+NetBird-Partition auf Komponentenebene bestanden. Einbindung in den Dienst, Fencing-Adapter (F1/Gate 2),
+`setStandby`, Promotion und die nachstehenden Gesamtgarantien sind noch nicht abgenommen.
 
 - Snapshot-/Stream-Import, lww/set mit versionierten Deletes, Leases, Deduplizierung, Offline-Rejoin.
 - primary/sync mit festem Standby und `setStandby`; Control Space wechselt auf primary/sync; Router-Lease über

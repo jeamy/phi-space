@@ -8,15 +8,19 @@
 | [UI-Mockups](ui-mockups/UI-MOCKUPS.md) | Galerie der Dashboard-Entwürfe | UI-Konzept |
 | [spaces-v1.md](spaces-v1.md) | lokaler Stand vom 2026-10-07 | historisch |
 | [federation-plan-v3.md](federation-plan-v3.md) | Plan für föderierte Spaces, Gates, offene Fragen | **aktuell** |
-| [implementierungsplan-v3.md](implementierungsplan-v3.md) | Reife, Vorab-Entscheidungen, Arbeitspakete und Fortschritt für v3 | AP 1.1–1.9 lokal umgesetzt; weitere Phasen geplant |
-| [ap1b-abnahme.md](ap1b-abnahme.md) | Phase 1b: Laufzeit, Grants, Rotation und Recovery-Bausteine | lokal geprüft; Live-Abnahmen offen |
+| [implementierungsplan-v3.md](implementierungsplan-v3.md) | Reife, Vorab-Entscheidungen, Arbeitspakete und Fortschritt für v3 | **aktuell**: Stufen 0–2 und 2b umgesetzt, Stufe 3 begonnen |
+| [ap1b-abnahme.md](ap1b-abnahme.md) | Phase 1b: Laufzeit, Grants, Rotation und Recovery-Bausteine | im F15-Modell abgenommen |
+| [ap2-abnahme.md](ap2-abnahme.md) | Phase 2: Router, Delegation, Membership, Last- und Ausfallabnahmen | abgeschlossen (Ausnahme Block 4) |
+| [ap2-gate4.md](ap2-gate4.md) | Gate 4: finale Betriebswerte | festgelegt |
+| [ap3-replikation.md](ap3-replikation.md) | Phase 3: Replikationsbausteine, Stand und offene Schritte | begonnen, nicht abgenommen |
+| [dashboard.md](dashboard.md) | lesendes Live-Dashboard | umgesetzt |
 | [ap1-abnahme.md](ap1-abnahme.md) | AP 1.1–1.9: Implementierung, Regressionen und native pi-serverd-Abnahme | lokal geprüft |
 | [testumgebung-big.md](testumgebung-big.md) | Docker-Testumgebung auf dem Server big: Skript, Container, Fehlerinjektion, Grenzen | umgesetzt, `test/testbed/` |
 | [tui.md](tui.md) | Terminaloberfläche: Spaces/Objekte, Serveraktionen, Tests und Berichte | umgesetzt; geplante Backends gesperrt |
-| [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) | Architekturdiagramme, pi-durable/Remote-Anbindung, Bootstrap, mobile Abläufe und Sieb-Beispiel | vorhandener Stand und Bedienentwurf |
+| [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) | Betriebserweiterung: Läufe, Worker, Spaces, Bootstrap, mobile Steuerung, Abnahmefälle | **aktuell**: B1–B10 umgesetzt, Stand je Fall in §7.6 |
 | [projektstart-autoprovisionierung.md](projektstart-autoprovisionierung.md) | automatische Remote-Bereitstellung von Runtime, Spaces, Monitoring und Federation bei Projektstart | ergänzender Zielvertrag |
 | [examples.md](examples.md) | Beispiele (Pipeline, Chat, arXiv-Team) im Detail — was wirklich läuft | aktuell |
-| [VALIDIERUNG.md](VALIDIERUNG.md) | lokaler Prüfnachweis und seine Grenzen | Stand 2026-10-07 |
+| [VALIDIERUNG.md](VALIDIERUNG.md) | lokaler Prüfnachweis und seine Grenzen | historisch (Stand 2026-10-07); aktuelle Nachweise im Implementierungsstand |
 | [TESTBESPIELE.md](TESTBESPIELE.md) | Spezifikation von Ziel-Beispielen inkl. Federation-Modi | Entwurf, Zielbild |
 | [examples/README.md](examples/README.md) | Index, Lernpfad, Schnellstart für alle Beispiele | aktuell |
 | [examples/](examples/) | geprüfte Beispielverträge und klar getrennte Entwürfe | Sieb und lokaler Cache implementiert; Federation geplant |

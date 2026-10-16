@@ -1,6 +1,6 @@
 # Lokales segmentiertes Primzahlsieb
 
-Stand: 2026-10-09. Implementierung: [sieve.ts](../../examples/sieve.ts).
+Stand: 2026-10-16. Implementierung: [sieve.ts](../../examples/sieve.ts).
 Tests: [sieve.test.ts](../../test/examples/sieve.test.ts). Kein Modell oder Netzwerk erforderlich.
 
 ```bash
@@ -18,7 +18,8 @@ dauerhaften Seed-Cursor. Jeder disjunkte SieveTask mit runId/taskId und der Curs
 entstehen in einem budgetbegrenzten Commit; Teilfortschritt bleibt nach Überlast oder Crash fortsetzbar. Wiederholte oder konkurrierende Vorbereitung desselben
 Laufs erzeugt keine zusätzlichen Tasks; geänderte Konfiguration wird abgewiesen. Vor dem ersten Task
 installiert der Host das Abschlussprofil: ein Task-Take kann nur mit genau einem zugeordneten
-SieveResult (`runId`/`taskId`) committet werden. Das gilt auch über `RemoteSpace`.
+SieveResult committet werden, dessen `runId`, `taskId`, `rangeStart` und `rangeEnd` mit dem Task übereinstimmen.
+Das gilt auch über `RemoteSpace`.
 `processSieveTask(space, runId)` nimmt einen Task unter Txn, berechnet sein Segment und schreibt
 SieveResult unter derselben Txn. Commit entfernt Task und veröffentlicht Ergebnis gemeinsam.
 Ein Fehler führt zu Abort; eine verlassene Reservierung wird nach Txn-Lease-Ablauf wieder verfügbar.
@@ -46,3 +47,13 @@ In einer späteren Federation müssen Task und Ergebnis in derselben Member-Txn 
 Siehe [v3-Plan](../federation-plan-v3.md). Weitere Minimalmuster:
 [workers.ts](../../examples/workers.ts), [blocking-tool.ts](../../examples/blocking-tool.ts).
 [Zur Übersicht](README.md).
+
+
+## Gesteuerte Läufe (Betriebserweiterung)
+
+Mit `configureGatedSieveSpace(host, space)` erhält der Space das gesperrte Profil `SIEVE_GATED_PROFILE`
+(`gateField: "runId"`, Lease höchstens 60 s). Tasks sind dann nur nehmbar, solange der RunGate ihres Laufs
+`running` ist; `RunController` startet, pausiert, setzt fort und stoppt Läufe über alle Members, auch nach
+Restores. `SIEVE_WORKER_KIND` ist die registrierte Workerart für den `WorkerSupervisor`, `SIEVE_EXPORTER` liefert
+den Ergebnisexport mit Vollständigkeit und Hash. Vertrag und Nachweise:
+[Betrieb und mobile Steuerung](../betrieb-und-mobile-steuerung.md) §6 und §8.

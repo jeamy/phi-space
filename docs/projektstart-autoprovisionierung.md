@@ -1,6 +1,6 @@
 # Projektstart am Handy: Spaces und Monitoring automatisch bereitstellen
 
-Stand: 2026-10-08 (Bootstrap, Boot-Berechtigungen je Space und vollständige Lauf-Recovery an v3 angeglichen). **Ergänzender Zielvertrag**, nicht implementiert. Verbindliche Federation-Grundlage
+Stand: 2026-10-08 (Bootstrap, Boot-Berechtigungen je Space und vollständige Lauf-Recovery an v3 angeglichen). **Ergänzender Zielvertrag**; Teile sind seit 2026-10-16 umgesetzt (Deployment-Plan/-Apply, Space-Lebenszyklus, Worker, Läufe, Alarmierung; siehe [Betrieb §8](betrieb-und-mobile-steuerung.md#8-umsetzungsstand-und-reihenfolge-der-betriebserweiterung)), der automatische Projektstart als Ganzes nicht. Verbindliche Federation-Grundlage
 ist [v3](federation-plan-v3.md); die [v2-Zusammenfassung](federation-plan-v2-summary.md) bleibt ein Archiv.
 Architektur und manueller Bootstrap: [Betrieb und mobile Steuerung](betrieb-und-mobile-steuerung.md).
 
@@ -121,7 +121,10 @@ erfordern. Task-Verarbeitung mit exklusivem Take benötigt expand/primary; ein L
 
 ## 4. Projektkonfiguration
 
-Folgendes JSON zeigt ein **vorgeschlagenes Schema**, keinen heute vorhandenen Parser. Release, Projekt-
+Folgendes JSON zeigt ein **vorgeschlagenes Projektschema**, für das es keinen Parser gibt. Umgesetzt ist das
+schlankere Deployment-Schema aus [Betrieb §4](betrieb-und-mobile-steuerung.md#4-bootstrap-script-plus-config)
+(`validateDeployment`, `npm run bootstrap`); Federation-Mitglieder, Routing-Policy und Workload dieses Projektschemas
+werden davon noch nicht angewendet. Release, Projekt-
 und Config-Revision werden eingefroren, sobald ein Startauftrag angenommen ist. Zugangsdaten liegen
 außerhalb der Datei; eine neue Revision verändert keinen laufenden Auftrag.
 
@@ -242,7 +245,9 @@ Eine unbekannte Member-Antwort bleibt unaufgelöst; vollständiger Erfolg erford
 
 Für den Einstieg genügt ein Monitor im Host-Runtime-Prozess; Prometheus/Grafana sind keine Voraussetzung.
 Persistenter Lauf-/Deployment-Status bleibt von prozesslokalen Meter-Zählern getrennt. Host-Sampler und
-Monitoring-Endpunkte sind noch zu implementieren. Sie verwenden Observer-Sichten mit Zeitstempeln;
+Monitoring-Endpunkte sind nur teilweise umgesetzt: Hosts melden Ressourcen und Worker-Stand über den
+Capability-Heartbeat, `listAlerts`/`auditLog` liefern Hinweise und Audit; ein Host-Sampler für CPU-Last, Disk und
+Commit-Latenz fehlt. Sie verwenden Observer-Sichten mit Zeitstempeln;
 internes Journal, Schlüssel und Enrollment-Tokens werden nicht an die UI ausgeliefert.
 Die mobilen Statusabfragen pausieren bei geschlossener Seite, die serverseitigen Sampler laufen weiter.
 

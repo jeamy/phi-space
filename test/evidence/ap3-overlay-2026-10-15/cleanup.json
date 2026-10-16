@@ -1,0 +1,11 @@
+{
+  "ownContainerRemoved": true,
+  "ownNetbirdPolicyRemoved": true,
+  "ownNetbirdGroupRemoved": true,
+  "ownFirewallRuleRemoved": true,
+  "ownLocalFirewallRuleRemoved": true,
+  "protectedInventoryUnchanged": true,
+  "localStoreRemoved": true,
+  "remoteStoreRetainedPrivately": true,
+  "errors": []
+}

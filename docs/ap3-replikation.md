@@ -1,6 +1,6 @@
 # Phase 3: Replikation und kontrollierte Übernahme
 
-Stand: 2026-10-15. **Phase 3 ist begonnen, aber nicht abgenommen.**
+Stand: 2026-10-16. **Phase 3 ist begonnen, aber nicht abgenommen.**
 Phase 2 und ihre dokumentierte Abschlussentscheidung bleiben unverändert.
 Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
 [Föderationsplans](federation-plan-v3.md).
@@ -10,12 +10,12 @@ Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
 | Teil | Stand | Verbleibender Nachweis |
 |---|---|---|
 | 3.1 Entry-Replikation | Persistenter HLC, LWW, versionierte Tombstones, Add-Wins-Tags, Deduplizierung, feste Replikat-Inkarnationen, bytebegrenzter Änderungsabruf und kleiner atomarer Snapshot-Merge implementiert | Lokale und gebaute Invariantentests sind Bausteinnachweise; noch keine produktive NetBird-Replikation |
-| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | [Generationenpflege](ap3-snapshot-maintenance.md) implementiert und geprüft; produktive Einbindung und zehn reale Minuten Partition weiterhin offen |
+| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | [Generationenpflege](ap3-snapshot-maintenance.md) implementiert und geprüft; reale zehnminütige NetBird-Partition zwischen zwei Hosts als Komponentenlauf bestanden ([Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md)); produktive Einbindung offen |
 | 3.3 Einbindung in Spaces und Dienst | Offen | Policy-Modi, Typ-/Owner-Rechte, frische Import-Grants für genau Quelle/Ziel, Boot-Rolle `entryReplica`, Clock-Health, Widerruf, Löschbarrieren und verteilte Principal-Löschung auch dieser Historien; Set-Renewal ist als atomare Version umgesetzt; exklusive Txns/Takes im öffentlichen Adapter noch ablehnen |
 | 3.4 Vollständige Primary-/Standby-Historie | [Synchroner Storage-Unterbau](ap3-primary-sync.md) implementiert und geprüft | Produktive Domain-Trennung, authentifizierter Transport, öffentliches commitSealed, Bootstrap bestehender Stores, Boot-/Löschintegration und kontrollierte Übergänge bleiben offen |
 | 3.5 `setStandby` und Single-Umschaltung | Offen | Dauerhaftes Übergangsjournal, Pausieren aller Schreibquellen inklusive Reaper, Standby-Aufbau, Fencing des ausgeschlossenen Hosts und passende externe Boot-Berechtigungen |
 | 3.6 Promotion und Quarantäne | Offen | Nur fester synchroner Standby, verifizierter Fencing-Nachweis, lokale Konfiguration/Epoche, keine implizite Single-Freigabe; Negativclaims nur unter den vollständigen Voraussetzungen des Zielvertrags |
-| 3.7 Gesamtbetrieb | Offen | Reale unabhängige Hosts, Overlay-Ausfälle, Prozess-/Storage-Grenzen, zehnminütige Partition mit Writes/Deletes/Renewals sowie Verlustfreiheit aller bestätigten Operationen |
+| 3.7 Gesamtbetrieb | Teilweise | Zehnminütige reale Partition mit Writes/Deletes/Renewals auf der Komponentenebene bestanden (Fixture-Identität, kein Snapshot unter Last); offen: dasselbe über den produktiven Dienst mit Schlüsselbeweis/Grants/Boot, Overlay-Ausfälle, Prozess-/Storage-Grenzen und Verlustfreiheit aller bestätigten Operationen im Primary-/Standby-Betrieb |
 
 ## Baustein 3.1
 
@@ -161,3 +161,14 @@ Die Erneuerung kann vor dem ursprünglichen Add eintreffen. Bei späterem Empfan
 wird die kausale Feld-/Owner-Bindung nachgeprüft; Selbstreferenzen sind ungültig.
 Acht Fälle prüfen dies einschließlich tatsächlicher Commit-Verluste auf beiden
 Backends. Der öffentliche SpaceLike-/Lease-Adapter ist weiterhin Teil von 3.3.
+
+
+## Reale Partition über NetBird (2026-10-15)
+
+`run-phase3-overlay.py` hat die Entry-Replikation zwischen dem Operator-Host und einem Container auf big über
+NetBird geprüft: 600,4 Sekunden Partition (nur die eigenen Replikations-Listener gestoppt), währenddessen auf
+beiden Seiten Writes, Erneuerungen, ein Delete und während der Partition ablaufende Gewinner. Nach Neustart beider
+Harnesses und Austausch sind beide Sichten gleich (Revision 90), Gelöschtes und Abgelaufenes blieb unsichtbar, und
+Wartung plus erneuter Austausch erzeugte kein Echo. Eigene Regeln, Gruppe, Policy und Container wurden entfernt.
+Grenzen: Komponenten-Fixture mit Peer-IP-Pin und privatem Token, kein Snapshot unter Last, kein produktiver Dienst.
+[Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md).

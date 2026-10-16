@@ -1,0 +1,152 @@
+{
+  "passed": true,
+  "date": "2026-10-15T19:56:22.718389+00:00",
+  "scope": "real-two-host-entry-overlay-component",
+  "transport": "TCP bound to existing NetBird IPv4 on port 17431",
+  "partitionMechanism": "both owned replication listeners stopped; existing VPN and other traffic unchanged",
+  "partitionStarted": "2026-10-15T19:46:15.225855+00:00",
+  "partitionSeconds": 600.4324903660454,
+  "samples": [
+    {
+      "sample": 0,
+      "elapsedSeconds": 1.0534106630366296,
+      "localRevision": 5,
+      "bigRevision": 5
+    },
+    {
+      "sample": 1,
+      "elapsedSeconds": 31.146409817039967,
+      "localRevision": 8,
+      "bigRevision": 7
+    },
+    {
+      "sample": 2,
+      "elapsedSeconds": 60.426679948111996,
+      "localRevision": 10,
+      "bigRevision": 10
+    },
+    {
+      "sample": 3,
+      "elapsedSeconds": 90.36481503304094,
+      "localRevision": 12,
+      "bigRevision": 12
+    },
+    {
+      "sample": 4,
+      "elapsedSeconds": 121.17269753408618,
+      "localRevision": 14,
+      "bigRevision": 14
+    },
+    {
+      "sample": 5,
+      "elapsedSeconds": 150.64208362810314,
+      "localRevision": 16,
+      "bigRevision": 16
+    },
+    {
+      "sample": 6,
+      "elapsedSeconds": 180.3525419519283,
+      "localRevision": 18,
+      "bigRevision": 18
+    },
+    {
+      "sample": 7,
+      "elapsedSeconds": 210.28763374802656,
+      "localRevision": 20,
+      "bigRevision": 20
+    },
+    {
+      "sample": 8,
+      "elapsedSeconds": 240.66111304191872,
+      "localRevision": 22,
+      "bigRevision": 22
+    },
+    {
+      "sample": 9,
+      "elapsedSeconds": 270.2965090391226,
+      "localRevision": 24,
+      "bigRevision": 24
+    },
+    {
+      "sample": 10,
+      "elapsedSeconds": 300.8577965530567,
+      "localRevision": 26,
+      "bigRevision": 26
+    },
+    {
+      "sample": 11,
+      "elapsedSeconds": 330.5771881940309,
+      "localRevision": 28,
+      "bigRevision": 28
+    },
+    {
+      "sample": 12,
+      "elapsedSeconds": 360.32767966995016,
+      "localRevision": 30,
+      "bigRevision": 30
+    },
+    {
+      "sample": 13,
+      "elapsedSeconds": 390.25977108697407,
+      "localRevision": 32,
+      "bigRevision": 32
+    },
+    {
+      "sample": 14,
+      "elapsedSeconds": 420.24519097502343,
+      "localRevision": 34,
+      "bigRevision": 34
+    },
+    {
+      "sample": 15,
+      "elapsedSeconds": 450.273153482005,
+      "localRevision": 36,
+      "bigRevision": 36
+    },
+    {
+      "sample": 16,
+      "elapsedSeconds": 480.29899836308323,
+      "localRevision": 38,
+      "bigRevision": 38
+    },
+    {
+      "sample": 17,
+      "elapsedSeconds": 510.327383921016,
+      "localRevision": 40,
+      "bigRevision": 40
+    },
+    {
+      "sample": 18,
+      "elapsedSeconds": 540.6435317210853,
+      "localRevision": 42,
+      "bigRevision": 42
+    },
+    {
+      "sample": 19,
+      "elapsedSeconds": 570.5630611099768,
+      "localRevision": 44,
+      "bigRevision": 44
+    },
+    {
+      "sample": 20,
+      "elapsedSeconds": 600.3115684189834,
+      "localRevision": 46,
+      "bigRevision": 46
+    }
+  ],
+  "after": {
+    "localRevision": 90,
+    "bigRevision": 90,
+    "visibleEntries": 3,
+    "localReceivedExports": 0,
+    "bigReceivedExports": 32
+  },
+  "snapshotUnderLoad": false,
+  "realNetbirdReplication": true,
+  "fullPhase3Accepted": false,
+  "productionServiceActivated": false,
+  "artifactHashes": {
+    "pi-spaces.mjs": "f8c489f160dfc7e450f38b847126654d711a5dbaa711edf8f41a220e3b9fdb2c",
+    "scenarios/phase3-overlay-node.mjs": "fa998c0f384825629678ad18d9d534828c4760b44fe38063a20fb08eefd3e3f4"
+  }
+}

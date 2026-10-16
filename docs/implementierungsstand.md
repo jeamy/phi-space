@@ -1,6 +1,6 @@
 # pi-spaces: aktueller Implementierungsstand
 
-Stand: 2026-10-15. Diese Seite ist die Ist-Stand-Referenz für Code und
+Stand: 2026-10-16. Diese Seite ist die Ist-Stand-Referenz für Code und
 automatisierte Nachweise. Der [Föderationsplan v3](federation-plan-v3.md) bleibt
 der Zielvertrag: Seine Garantien gelten nicht allein deshalb, weil einzelne
 Bausteine unten bereits vorhanden sind.
@@ -19,7 +19,7 @@ nutzbar; `RemoteSpace` implementiert dafür den gemeinsamen Basisvertrag
 `SpaceLike`. Gate, Overlay-Identität, Schlüssel-Challenge, Enrollment, Grants und
 Supervisor sind zu einer persistenten Host-Laufzeit zusammengeführt. Es gibt
 ein persistentes Router-Grundgerüst (AP 2.1) und einen Simulator (AP 2.8),
-Phase 2 ist mit dokumentierter Ausnahme für Block 4 abgeschlossen; Replikation und Promotion sind noch nicht abgenommen. Die [Phase-1b-Abnahme](ap1b-abnahme.md) trennt lokale Nachweise von den
+Phase 2 ist mit dokumentierter Ausnahme für Block 4 abgeschlossen; die Betriebserweiterung (Läufe, Worker, Spaces, Bootstrap, mobile Steuerung) ist umgesetzt; Replikation und Promotion sind begonnen, aber nicht abgenommen. Die [Phase-1b-Abnahme](ap1b-abnahme.md) trennt lokale Nachweise von den
 abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 
 | Baustein | Vorhanden | Nicht daraus ableitbar |

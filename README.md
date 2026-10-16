@@ -112,10 +112,12 @@ instead receive a transport outcome or `OutcomeUnknown` and must poll the same r
 
 ## Scope
 
-One harness process owns one persistent storage and may expose it as a single-host space service. Named spaces share
-that storage; they are not separate hosts. `SpaceService` and `RemoteSpace` allow clients in other processes to reach
-that host, but do not make several host storages a federation. The federation contract remains
-[docs/federation-plan-v3.md](docs/federation-plan-v3.md).
+One harness process owns one persistent storage and may expose it as a space service. Named spaces share that
+storage; they are not separate hosts. `SpaceService` and `RemoteSpace` let clients in other processes reach that host;
+the federation runtime (gate, enrollment, grants, router, `FederatedSpace`, membership) composes several hosts
+according to [docs/federation-plan-v3.md](docs/federation-plan-v3.md) — stages 1b and 2 are accepted, stage 3
+(replication, promotion) is in progress. The operations extension (runs, workers, Space lifecycle, deployment
+bootstrap, mobile control) is described in [docs/betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md).
 `space_take`/`space_read` with `timeoutMs` block the turn and are capped at 60 s; use `space_wait` for long waits.
 
 ## Running it
@@ -216,10 +218,12 @@ German documents in [docs/](docs/README.md):
 |---|---|
 | [implementierungsstand.md](docs/implementierungsstand.md) | implemented scope, evidence and limits |
 | [api.md](docs/api.md) | TypeScript, service and remote API reference |
-| [ap1b-abnahme.md](docs/ap1b-abnahme.md) | phase 1b integration evidence and remaining operational gates |
+| [ap1b-abnahme.md](docs/ap1b-abnahme.md) | phase 1b integration evidence |
+| [ap2-abnahme.md](docs/ap2-abnahme.md) | phase 2 acceptance |
+| [ap3-replikation.md](docs/ap3-replikation.md) | phase 3 building blocks and what is still open |
 | [spaces-v1.md](docs/spaces-v1.md) | historical local snapshot (2026-10-07) |
-| [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (target, not implemented) |
+| [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (stages 0–2 implemented, 3 in progress) |
 | [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |
-| [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md) | operating spaces from a phone: architecture, bootstrap, the sieve example |
+| [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md) | operations extension: runs, workers, Spaces, bootstrap, mobile control, acceptance status |
 | [testumgebung-big.md](docs/testumgebung-big.md) | the remote docker test bed |
 | [VALIDIERUNG.md](docs/VALIDIERUNG.md) | what was verified locally, and measurements |
