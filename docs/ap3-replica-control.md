@@ -88,6 +88,18 @@ Betrieb:
   Widerruf im SCP-Konto unter „Kontosicherheit → Geräteaktivität“.
 - Das SCP-Konto ist IP-beschränkt. Freigegeben sind die Adressen von vpsc: `2a02:c207:2252:8263:8000::`
   und `207.180.233.218`.
+- Ausgerollt am 2026-10-16 als User-Dienst `pi-spaces-fencing.service` von `mux` auf vpsc (Linger an).
+  Er lauscht auf `[::]:17423`, Konfiguration in `~/.local/share/pi-spaces-fencing/fencing.json`.
+  - Serverzertifikat `CN=pi-spaces-fencing-server` aus der Operator-CA mit SAN `207.180.233.218`,
+    `2a02:c207:2252:8263:8000::` und `pi-spaces-fencing`. Der Schlüssel wurde auf vpsc erzeugt; lokal wurde
+    nur die Anfrage signiert.
+  - Freigegeben ist nur das Operator-Zertifikat (`a8baf286…`).
+  - ufw erlaubt 17423 nur von der Operator-Adresse `212.186.197.226`.
+- Nicht verändernde Prüfung von lux27 aus:
+  - `verify` für `nano-test` liefert `false`, weil nanoi `RUNNING` ist.
+  - `verify` für `big` liefert `false`, weil `big` nicht in der Liste steht.
+  - Das Reader-Zertifikat wird abgewiesen.
+  - Der Dienst hat den Refresh-Token rotiert; die Kette blieb gültig.
 - Festgelegtes Ziel ist nur nanoi: `nano-test` → Server 964249, MAC `2a:38:5f:38:de:22`. Server 730972 ist big
   und steht nie in der Liste.
 
@@ -173,8 +185,7 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 
 ## Grenzen
 
-- Der netcup-Adapter ist gebaut und gegen eine nachgebaute SCP-API geprüft, aber noch nicht auf vpsc
-  ausgerollt und noch nie gegen den echten nanoi gelaufen. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
+- Der netcup-Adapter ist auf vpsc ausgerollt, hat aber nanoi noch nie abgeschaltet. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
   diesen realen Lauf. Testziel ist nanoi
   ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Der Standby-Platz ist noch
   festzulegen: vpsc trägt bereits das Register, ein Standby dort würde beide Ausfälle koppeln.
