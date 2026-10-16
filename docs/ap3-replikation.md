@@ -172,3 +172,10 @@ Harnesses und Austausch sind beide Sichten gleich (Revision 90), Gelöschtes und
 Wartung plus erneuter Austausch erzeugte kein Echo. Eigene Regeln, Gruppe, Policy und Container wurden entfernt.
 Grenzen: Komponenten-Fixture mit Peer-IP-Pin und privatem Token, kein Snapshot unter Last, kein produktiver Dienst.
 [Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md).
+
+
+## Testserver für Fencing und Promotion (2026-10-16)
+
+Für 3.3–3.6 steht der netcup-Server `nanoi` als Test-Primary bereit, der tatsächlich abgeschaltet werden darf;
+vpsc dient als Backup-/Register-Host. Einrichtung und Grenzen: [Testumgebung §18](testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel).
+Für den Fencing-Adapter fehlen noch der netcup-REST-API-Zugang und die Entscheidung F1.

@@ -369,3 +369,22 @@ nicht „wer auf diesem Host ist“; ein Admin, der sich selbst widerruft, verli
 `test-supervisor.test.ts`: Ablauf Command → Supervisor → Result → `enroll` → `revokePeer` über das Gate; Idempotenz; fehlgeschlagene Kommandos; nur Admins mit Beweis; Schreiber ohne Admin-Schlüssel und der Selbstwiderruf; ein Fehler
 vor dem Commit hinterlässt das Kommando, die Wiederholung ergibt genau ein Ergebnis und eine Wirkung (JSONL und SQLite).
 Noch nicht: `rotateKey` (verlangt den Beweis beider Schlüssel durch das Gerät), das Router-Journal und die Router-Kommandos (`setLimits`, `addMember`, ...), `restoreDataSpace`/`releaseRestored`, die Ausführung als eigener Prozess auf big.
+
+## 18. Testserver nanoi (Phase 3, Test-Primary und Fencing-Ziel)
+
+Stand 2026-10-16. `nanoi` ist ein eigener netcup-KVM-Server (Debian 13, 4 Kerne, 7,8 GB RAM, 157 GB), erreichbar
+nur von big aus (`ssh nanoi` mit dort hinterlegtem Schlüssel, Benutzer root). Er ist für Tests reserviert, auf denen
+ein Host tatsächlich abgeschaltet werden darf: Test-Primary für primary/sync, `setStandby` und Promotion; vpsc ist
+der Backup-/Register-Host, big bleibt wegen seiner übrigen Dienste kein Fencing-Ziel.
+
+| Bereich | Einrichtung |
+|---|---|
+| Netz | **nur IPv6** (netcup-Image ohne IPv4). `spacebird.eibrain.org` hat keinen AAAA-Eintrag; `/etc/hosts` auf nanoi zeigt den Namen auf die IPv6-Adresse von big (nginx hört dort auf `[::]:443`, TLS gültig). Ein AAAA-Eintrag im DNS würde diesen Eintrag ersetzen. |
+| NetBird | Client 0.80.0 aus dem signierten Repository `pkgs.netbird.io`, auf die Server-Version gepinnt (`apt-mark hold`); Peer `nano-test`, 100.89.28.88, Gruppe `space-hosts` über den vorhandenen Setup-Key `testbed-hosts` (von big direkt weitergereicht, nie ausgegeben). Verbindungen zu IPv4-Peers laufen über das Relay. |
+| Firewall | `pi-nft-host.service` lädt `/etc/nftables-pi-host.nft`: eingehend nur SSH, ICMP/ICMPv6, WireGuard (UDP 51820) und alles über `wt0`; ausgehend frei. Beim Einrichten mit Totmannschalter angewendet und per neuer SSH-Verbindung geprüft. |
+| Laufzeit | Debian `docker.io`; Image `pi-spaces-test-node:local` von big übertragen (Node v22.23.3, Produktionsabhängigkeiten). Verzeichnisse `/opt/pi-spaces/artifacts` und `/var/lib/pi-spaces` (0700). Es werden wie auf big nur gebaute Artefakte ausgeliefert. |
+| Zeit | systemd-timesyncd aktiv, synchronisiert (Voraussetzung für die HLC-Uhrprüfung). |
+
+Geprüft: Neustart von nanoi, danach Firewall, Docker und NetBird aktiv; TCP über das Overlay zu `host-a:7421`.
+Noch nicht eingerichtet: Zugang zum unabhängigen Register auf vpsc (mTLS-Client-Zertifikat aus der Operator-CA),
+Boot-Berechtigung und Dienste; netcup-API-Zugang für den Fencing-Adapter (Zugangsdaten außerhalb dieses Hosts).
