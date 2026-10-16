@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
+import {startQuarantineReplicas,serveRegister,signedReplicaPeer,socketTransport,openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -304,4 +304,27 @@ test('the policy validator admits primary rules of replicated Members and keeps 
  assert.throws(()=>validateFederationPolicy(policy([{...primary,member:'plain'}]),table),/sync activation requires phase 3/);
  assert.throws(()=>validateFederationPolicy(policy([{...primary,replicaConfigVersion:2}]),table),/disagrees with the member replica configuration/);
  assert.throws(()=>validateFederationPolicy(policy([{type:'Merged',mode:'sync',variant:'lww',members:['plain'],semantics:'state',keyFields:['k']}]),table),/sync activation requires phase 3/);
+});
+
+test('a quarantined host opens only replica listeners, accepts catch-up and reports when it is active again',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'quarantine-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),sock=join(dir,'register.sock'),server=await serveRegister(reg,sock,{writable:true});
+ const keys={p:provisionFileSigner(join(dir,'p.json')),s:provisionFileSigner(join(dir,'s.json'))},spaceId='sp-0b7e6f1a-2222-4222-8333-944445555666',port=17541;
+ const genesis:PrimarySyncConfig={spaceId,authorityId:config.authorityId,primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s',durability:'sync'};
+ const file=join(dir,'federation.json');writeFileSync(file,JSON.stringify({hostId:'p',peerId:'peer-p',authorityId:config.authorityId,controlHostId:'c',controlSpaceId:'x',mode:'member',listen:{host:'127.0.0.2',port:7421},keyFile:join(dir,'p.json'),registerReadSocket:sock,installedRegisterFile:join(dir,'installed.sqlite'),management:{url:'x',tokenFile:'x'},control:{address:{host:'x',port:1},algorithm:'ed25519',publicKey:'x'},
+  syncSpaces:[{alias:'jobs-sync',spaceId,incarnation:'0a1b2c3d',dir:join(dir,'sync'),genesis,port,peers:[{hostId:'s',algorithm:'ed25519',publicKey:keys.s.publicKey,ip:'127.0.0.3'}]}]}),{mode:0o600});
+ const factories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(st:any)=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)};
+ let q:Awaited<ReturnType<typeof startQuarantineReplicas>>|undefined;
+ try{
+  await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{}});
+  await assert.rejects(startQuarantineReplicas(ctx,file,factories),/not in quarantine/);
+  const b=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',b.version,{...b.value,state:'quarantine'});
+  q=await startQuarantineReplicas(ctx,file,factories,{pollMs:20});
+  assert.equal(q.spaces.length,1);assert.equal(q.spaces[0]!.harness,undefined,'the old primary serves nothing in quarantine');
+  // The new primary s replays history onto the quarantined replica through the signed transport.
+  const sJournal=new PrimarySyncJournal(join(dir,'s-journal.sqlite'),{...genesis,primaryReplica:'p'});
+  const t=socketTransport({host:'127.0.0.2',port},{localAddress:'127.0.0.3'}),peer=signedReplicaPeer({transport:t,signer:keys.s,self:'s',remote:{hostId:'p',algorithm:'ed25519',publicKey:keys.p.publicKey}});
+  try{assert.equal((await peer.head()).revision,0,'reachable and empty');}finally{t.close();sJournal.close();}
+  const active=q.untilActive();const b2=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',b2.version,{...b2.value,state:'active'});
+  assert.equal(await active,true);
+ }finally{await q?.close();await server.close();reg.close();rmSync(dir,{recursive:true,force:true});}
 });

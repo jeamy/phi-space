@@ -32,6 +32,8 @@ export async function openSyncSpace(o: {
 	config: SyncSpaceConfig; hostId: string; authorityId: string; bindIp: string; signer: Signer;
 	external: RecoveryRegister; installed: RecoveryRegister; ctx: Context;
 	openStorage: (path: string) => Promise<Storage>; openHarness: (storage: Storage) => Promise<Harness>; now?: () => number;
+	/** Quarantine: only the journal and the replica listener (catch-up for setStandby), never a served Harness. */
+	listenOnly?: boolean;
 }): Promise<SyncSpace> {
 	const c = o.config, now = o.now ?? Date.now;
 	if (c.genesis.spaceId !== c.spaceId || c.genesis.authorityId !== o.authorityId) throw new Error(`replica configuration of ${c.alias} names another Space or authority`);
@@ -44,7 +46,7 @@ export async function openSyncSpace(o: {
 		{ listen: { host: o.bindIp, port: c.port }, connection: s => ips.has(String(s.remoteAddress).replace(/^::ffff:/, "")) ? {} : null, maxConnections: 4, maxFrameBytes: 1 << 20 });
 	let harness: Harness | undefined, stopGuard: (() => void) | undefined;
 	try {
-		if (role() === "primary") {
+		if (!o.listenOnly && role() === "primary") {
 			const standby = durabilityOf(journal.config) === "sync" ? c.peers.find(p => p.hostId === journal.config.standbyReplica) : undefined;
 			if (durabilityOf(journal.config) === "sync" && !standby) throw new Error(`standby ${journal.config.standbyReplica} of ${c.alias} is not provisioned`);
 			const peer = standby ? signedReplicaPeer({ transport: (transports.push(socketTransport({ host: standby.ip, port: c.port }, { localAddress: o.bindIp, connectTimeoutMs: 8000, maxFrameBytes: 1 << 20 })), transports.at(-1)!), signer: o.signer, self: o.hostId, remote: standby }) : null;

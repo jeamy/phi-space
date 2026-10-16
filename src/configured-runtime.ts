@@ -19,7 +19,9 @@ import { SshRecoveryRegister } from "./ssh-register.ts";
 import { SocketRecoveryRegister } from "./register-service.ts";
 import { SqliteRecoveryRegister } from "./recovery-register.ts";
 import { BootBlocked, type HostBootState } from "./boot.ts";
-import { Registry, snapshotSpace } from "./spaces.ts";
+import { Registry, snapshotSpace, listSpaces } from "./spaces.ts";
+import { installAdmittedPermit } from "./replica-control.ts";
+import { canonicalJson } from "./canonical.ts";
 import type { Json } from "./core.ts";
 import { startConfiguredRecovery, type PrivateRecoveryConfig } from "./configured-recovery.ts";
 import {RouterLeaseAuthority,DelegationVerifier} from "./delegation.ts";
@@ -56,6 +58,10 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 	try {
 		const boot = await external.get<HostBootState & Record<string, Json>>(`boot:${config.hostId}`);
 		if (!boot || boot.value.hostId !== config.hostId || boot.value.state !== "active") throw new BootBlocked("configured host is not authorized for normal boot");
+		// Re-admitted Spaces (readmitSpace by the operator, or the Space of a finished transition): install exactly the
+		// active external permit locally when its data incarnation matches the local Space.
+		for (const info of await listSpaces(host, ctx)) { const p = boot.value.spaces[info.spaceId], local = await installed.get(`installed:${config.hostId}:${info.spaceId}`);
+			if (p?.state === "active" && p.dataIncarnation === info.incarnation && canonicalJson(local?.value ?? null) !== canonicalJson(p as unknown as Json)) await installAdmittedPermit({ external, installed, hostId: config.hostId, spaceId: info.spaceId, localDataIncarnation: info.incarnation }); }
 		await directory.refresh();
 		const ownPeer = await directory.lookup(config.listen.host);
 		if (!ownPeer || ownPeer.id !== config.peerId) throw new Error("listen address does not belong to the provisioned NetBird peer");
@@ -119,4 +125,24 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const nativeService = { async handle(call: unknown, conn: import("./service.ts").Connection) { Object.assign(conn, await trustedConnection()); return runtime.service.handle(call, conn); } };
 		return { ...runtime, root, service: nativeService, config, trustedConnection, close: async () => { capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
 	} catch (e) { controlSocket?.close(); external.close(); installed.close(); throw e; }
+}
+
+/**
+ * Quarantine start (v3 5.3.1 step 7): a host released into quarantine serves nothing; it only opens the journals and
+ * replica listeners of its primary/sync Spaces so a primary can run setStandby against it. `untilActive` resolves
+ * once setStandby (or an operator) made the host active again; the daemon then restarts into the normal runtime.
+ */
+export async function startQuarantineReplicas(ctx: Context, configFile: string, factories: SyncSpaceFactories, o: { pollMs?: number } = {}) {
+	const config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
+	if (!config.syncSpaces?.length) throw new BootBlocked("quarantine start needs provisioned primary/sync Spaces");
+	if ([config.registerReadSocket,config.registerSshTarget,config.registerTls].filter(Boolean).length !== 1) throw new Error("configure exactly one independent register endpoint");
+	const external = config.registerTls ? new TlsRecoveryRegister(config.registerTls) : config.registerSshTarget ? new SshRecoveryRegister(config.registerSshTarget) : new SocketRecoveryRegister(config.registerReadSocket!), installed = new SqliteRecoveryRegister(config.installedRegisterFile);
+	const state = async () => (await external.get<HostBootState & Record<string, Json>>(`boot:${config.hostId}`))?.value.state;
+	if (await state() !== "quarantine") { external.close(); installed.close(); throw new BootBlocked("host is not in quarantine"); }
+	const signer = loadFileSigner(config.keyFile);
+	const r = await openSyncSpaces(config.syncSpaces, c => openSyncSpace({ config: c, hostId: config.hostId, authorityId: config.authorityId, bindIp: config.listen.host, signer, external, installed, ctx, openStorage: factories.openSyncStorage, openHarness: factories.openSyncHarness, listenOnly: true }));
+	for (const f of r.failed) console.error(`primary/sync Space ${f.alias} has no quarantine listener:`, f.error);
+	let stopped = false;
+	const untilActive = async () => { while (!stopped) { try { if (await state() === "active") return true; } catch (e) { console.error("quarantine boot check:", e instanceof Error ? e.message : String(e)); } await new Promise(res => setTimeout(res, o.pollMs ?? 5000)); } return false; };
+	return { spaces: r.opened, failed: r.failed, untilActive, close: async () => { stopped = true; for (const sp of r.opened) await sp.close(); external.close(); installed.close(); } };
 }

@@ -7,7 +7,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, openSync, closeSync
 import { join } from "node:path";
 import {createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
-import {ProvingService} from "../../src/index.ts";
+import {ProvingService,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
 import { provisionFileSigner, loadFileSigner, privateFile, PiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
 const [mode, home="/data/phase1b"] = process.argv.slice(2);
 mkdirSync(home,{recursive:true,mode:0o700});
@@ -23,6 +23,12 @@ if (["stop","status","fence"].includes(mode)) {
  if(mode!=="status") {const running=processes();if(running.length){const owner=JSON.parse(privateFile(ownerFile).toString());if(owner.mode!=='run'||running.length!==1||owner.pid!==running[0])throw new Error('normal runtime ownership disagrees with process inventory');process.kill(owner.pid,'SIGTERM');const deadline=Date.now()+15000;while(processes().length){if(Date.now()>=deadline)throw new Error('normal runtime did not stop');await new Promise(r=>setTimeout(r,50));}}}
  let restartLocked=false;try{const stat=lstatSync(restart);restartLocked=stat.isFile()&&!stat.isSymbolicLink()&&(stat.mode&0o077)===0;}catch{}
  console.log(JSON.stringify({normalStopped:processes().length===0,restartLocked}));process.exit(0);
+}
+if(mode==="sync-head"){
+ // Read-only journal view of every primary/sync Space; safe while the daemon runs.
+ const cfg=JSON.parse(privateFile(join(home,"federation.json")).toString());
+ const out=(cfg.syncSpaces??[]).map((c:any)=>{const j=new PrimarySyncJournal(join(c.dir,"journal.sqlite"),c.genesis);try{return{alias:c.alias,head:j.head(),applied:j.appliedRevision,config:j.config,open:j.openTransitionIds(),recoveredCommitted:j.recoveredCommitted};}finally{j.close();}});
+ console.log(JSON.stringify(out));process.exit(0);
 }
 const configFile=join(home,"federation.json"), installed=new SqliteRecoveryRegister(join(home,"installed.sqlite"));
 if (["recovery","member-recovery"].includes(mode) && !existsSync(join(home,"restart.lock"))) throw new Error("recovery requires a persistent restart lock");
@@ -85,7 +91,17 @@ try{
   }
 
 
-  runtime=await startConfiguredFederation(h,ctx,configFile,{openSyncStorage:path=>openNodeSqliteStorage(path),openSyncHarness:storage=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx)});console.log(JSON.stringify({ready:true,hostId:runtime.config.hostId,address:runtime.address()}));
+  const syncFactories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(storage:any)=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx)};
+  let quarantine:Awaited<ReturnType<typeof startQuarantineReplicas>>|undefined;
+  if(JSON.parse(privateFile(configFile).toString()).syncSpaces?.length){try{quarantine=await startQuarantineReplicas(ctx,configFile,syncFactories);}catch(e){if(!(e instanceof BootBlocked)||!/not in quarantine/.test(e.message))throw e;}}
+  if(quarantine){
+   // Quarantine: only replica listeners for setStandby; the host leaves once the register says active again.
+   console.log(JSON.stringify({quarantine:true,listeners:quarantine.spaces.map(sp=>sp.config.alias),failed:quarantine.failed}));
+   const signal=new Promise<boolean>(resolve=>{process.once("SIGTERM",()=>resolve(false));process.once("SIGINT",()=>resolve(false));});
+   const active=await Promise.race([quarantine.untilActive(),signal]);await quarantine.close();
+   console.log(JSON.stringify({leftQuarantine:active,next:active?"re-admit the other Spaces of this host, then start the normal daemon":"stopped"}));
+  }else{
+  runtime=await startConfiguredFederation(h,ctx,configFile,syncFactories);console.log(JSON.stringify({ready:true,hostId:runtime.config.hostId,address:runtime.address()}));
   for(const method of ["snapshot","commit"])observe(h,method,"host."+method);
   if(runtime.root){for(const method of ["step","invoke","resolve"])observe(runtime.root.rpc,method,"rpc."+method);for(const method of ["prepare","admit","finish"])observe(runtime.root.space,method,"root."+method);}
   const acceptFile=process.env.PI_SPACES_ROOT_ACCEPTANCE_FILE;
@@ -137,5 +153,33 @@ try{
     }catch(e){writeFileSync(out,JSON.stringify({id:command.id,passed:false,error:e instanceof Error?e.message:String(e)})+'\n',{mode:0o600});}
    }
   }else await new Promise<void>(resolve=>{process.once("SIGTERM",resolve);process.once("SIGINT",resolve);});
- }else throw new Error("use provision, bootstrap, enroll, recovery or run");
+  }
+ }else if(mode==="sync"){
+  // Operator tool for one primary/sync Space, with the daemon stopped (this mode holds the owner lock).
+  let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>65536)throw new Error("sync input exceeds budget");}
+  const q=JSON.parse(text),cfg=JSON.parse(privateFile(configFile).toString()),c=(cfg.syncSpaces??[]).find((x:any)=>x.alias===q.alias);if(!c)throw new Error("unknown primary/sync Space");
+  const reader=new SyncRegister(cfg.registerTls),journal=new PrimarySyncJournal(join(c.dir,"journal.sqlite"),c.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)});
+  const signer=loadFileSigner(cfg.keyFile),raw=async()=>openNodeSqliteStorage(join(c.dir,"harness.sqlite"));let result:any;
+  try{
+   const status=()=>({alias:c.alias,head:journal.head(),applied:journal.appliedRevision,config:journal.config,open:journal.openTransitionIds(),recoveredCommitted:journal.recoveredCommitted});
+   if(q.op==="status"){
+    result=status();
+    if(q.materialize){const st=await raw();await materializeSyncHistory(st,journal,ctx);await st.close(ctx);const v=await Harness.open(await raw(),{models:createModels(),registry:createRegistry()},ctx);
+     try{const sp=await snapshotSpace(v,c.spaceId,ctx);result.entries=sp?.entries.filter((e:any)=>e.type===q.countType).length??0;result.snapshot=createHash("sha256").update(syncCanonical(sp as any)).digest("hex");}finally{await v.close(ctx);}}
+   }else if(["promote","degrade","set-standby"].includes(q.op)){
+    const register=new SyncRegister(q.controlRegister),st=await raw();
+    try{
+     const base={storage:st,journal,register,hostId:cfg.hostId,dataIncarnation:c.incarnation,ctx};
+     if(q.op==="set-standby"){const peer=c.peers.find((p:any)=>p.hostId===q.target);if(!peer)throw new Error("unpinned target");const t=socketTransport({host:peer.ip,port:c.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20});
+      try{result=await setStandby({...base,transitionId:q.tid,target:signedReplicaPeer({transport:t,signer,self:cfg.hostId,remote:peer}),targetDataIncarnation:c.incarnation});}finally{t.close();}}
+     else{const adapter=new TlsFencing(q.fencing),other=(q.op==="promote"?journal.config.primaryReplica:journal.config.standbyReplica)??"",proof=await adapter.fence(other,`${q.op} ${q.tid}`);
+      result=q.op==="promote"?await promote({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof}):await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof});result={...result,proof:{kind:proof.kind,evidence:proof.evidence}};}
+    }finally{await st.close(ctx);register.close();}
+   }else if(q.op==="wipe"){
+    const b=await reader.get<any>("boot:"+cfg.hostId);if(b?.value.state==="active")throw new Error("an active host keeps its history; wipe only a fenced or quarantined replica");
+    journal.close();const aside=c.dir+".aside-"+Date.now();(await import("node:fs")).renameSync(c.dir,aside);result={aside};
+   }else throw new Error("unknown sync op");
+  }finally{try{journal.close();}catch{}reader.close();}
+  console.log(JSON.stringify(result));
+ }else throw new Error("use provision, bootstrap, enroll, recovery, run, sync or sync-head");
 }finally{await cleanup();}

@@ -443,6 +443,7 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 export { SshRecoveryRegister } from "./ssh-register.ts";
 
 export { verifySshFence } from "./fencing.ts";
+export { startQuarantineReplicas } from "./configured-runtime.ts";
 export { openSyncSpace, openSyncSpaces, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 export { replicaConfigNotice, latestReplicaConfigNotice, ReplicaNoticeBoard, signReplicaConfigNotice, adoptReplicaConfigNotice, type ReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 export { signedReplicaPeer, replicaSyncHandler, ReplicaTransportRefused, type ReplicaPin } from "./replica-transport.ts";
