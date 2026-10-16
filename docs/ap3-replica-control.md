@@ -189,8 +189,10 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
   ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)). Offen ist eine Promotion bzw. degradeToSingle
   mit echten Primary-/Standby-Daten. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
   diesen realen Lauf. Testziel ist nanoi
-  ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Der Standby-Platz ist noch
-  festzulegen: vpsc trägt bereits das Register, ein Standby dort würde beide Ausfälle koppeln.
+  ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Standby ist Host 100 im
+  Heimnetz ([testumgebung-big.md](testumgebung-big.md) §19), nicht vpsc, das bereits Register und Fencing-Dienst
+  trägt. Für 100 gibt es keinen Fencing-Adapter. Deshalb ist nur Promotion auf 100 nach Fencing von nanoi
+  abnehmbar; `degradeToSingle` auf nanoi bleibt gesperrt.
 - 3.6 ist nur teilweise umgesetzt:
   - `installBootGuard` erlaubt weiterhin nur die Rollen `local`/`primary` und vergleicht nur `primaryEpoch`.
   - Replikatversion und Durability werden nur über `assertSyncPrimary` im Sync-Storage-Pfad durchgesetzt.
