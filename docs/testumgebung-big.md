@@ -408,4 +408,12 @@ kein Neuanwenden); von außen ist nur `…8263:8000::` erreichbar, nicht `…826
 
 Fencing: netcup-SCP-Zugang (Offline-Refresh-Token) und Fencing-Dienst liegen auf vpsc, nicht auf nanoi.
 Details in [ap3-replica-control.md](ap3-replica-control.md#netcup-adapter). nanoi ist Server 964249 mit
-MAC `2a:38:5f:38:de:22`; nur dieser Server steht in der Liste der Ziele. Ein echter Abschaltlauf steht noch aus.
+MAC `2a:38:5f:38:de:22`; nur dieser Server steht in der Liste der Ziele. Ein echter Abschaltlauf ist am 2026-10-16 bestanden
+([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)).
+
+Nach einem harten Ausschalten bleibt `/var/lib/pi-spaces/nano/owner.lock` liegen, und `pi-spaces-nano` startet
+nicht von selbst. Vorgehen:
+
+1. Prüfen, dass die eingetragene PID im Container nicht mehr existiert.
+2. Erst dann die Sperre löschen.
+3. `systemctl start pi-spaces-nano` ausführen.

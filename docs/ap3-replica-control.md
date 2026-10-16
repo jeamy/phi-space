@@ -185,7 +185,9 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 
 ## Grenzen
 
-- Der netcup-Adapter ist auf vpsc ausgerollt, hat aber nanoi noch nie abgeschaltet. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
+- Der netcup-Adapter hat nanoi am 2026-10-16 real abgeschaltet, geprüft und über Quarantäne wieder freigegeben
+  ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)). Offen ist eine Promotion bzw. degradeToSingle
+  mit echten Primary-/Standby-Daten. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
   diesen realen Lauf. Testziel ist nanoi
   ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Der Standby-Platz ist noch
   festzulegen: vpsc trägt bereits das Register, ein Standby dort würde beide Ausfälle koppeln.

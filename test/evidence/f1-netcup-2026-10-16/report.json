@@ -1,0 +1,134 @@
+{
+ "run": "f1-netcup-1792172676659",
+ "host": "nano-test",
+ "fenced": true,
+ "log": [
+  {
+   "at": "2026-10-16T17:44:37.160Z",
+   "name": "boot before",
+   "data": {
+    "version": 1,
+    "state": "active",
+    "transitionId": null,
+    "permits": {
+     "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active",
+     "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active"
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T17:44:37.288Z",
+   "name": "gate reachable before",
+   "data": true
+  },
+  {
+   "at": "2026-10-16T17:44:38.176Z",
+   "name": "boot fenced",
+   "data": {
+    "version": 0,
+    "state": "fenced",
+    "transitionId": "f1-netcup-1792172676659",
+    "permits": {
+     "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "revoked",
+     "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "revoked"
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T17:44:45.420Z",
+   "name": "adapter fence",
+   "data": {
+    "ms": 7244,
+    "kind": "cloud",
+    "restartLocked": true,
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "F1 acceptance run f1-netcup-1792172676659"
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T17:44:46.037Z",
+   "name": "adapter verify",
+   "data": true
+  },
+  {
+   "at": "2026-10-16T17:44:50.042Z",
+   "name": "gate reachable while fenced",
+   "data": false
+  },
+  {
+   "at": "2026-10-16T17:44:59.959Z",
+   "name": "released to quarantine and powered on",
+   "data": {
+    "ms": 9917
+   }
+  },
+  {
+   "at": "2026-10-16T17:45:00.604Z",
+   "name": "verify after release",
+   "data": false
+  },
+  {
+   "at": "2026-10-16T17:50:51.049Z",
+   "name": "gate reachable after release",
+   "data": false
+  },
+  {
+   "at": "2026-10-16T17:50:51.437Z",
+   "name": "boot after release",
+   "data": {
+    "version": 3,
+    "state": "quarantine",
+    "transitionId": "f1-netcup-1792172676659-release",
+    "permits": {
+     "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "revoked",
+     "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "revoked"
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T17:50:51.911Z",
+   "name": "boot restored to original value",
+   "data": {
+    "version": 4,
+    "state": "active",
+    "transitionId": null,
+    "permits": {
+     "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active",
+     "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active"
+    }
+   }
+  }
+ ],
+ "afterRun": [
+  {
+   "at": "2026-10-16T17:51:22Z",
+   "name": "stale owner lock found",
+   "data": {
+    "path": "/data/nano/owner.lock",
+    "pid": 8,
+    "mode": "run",
+    "pidPresentInContainer": false
+   }
+  },
+  {
+   "at": "2026-10-16T17:51:30Z",
+   "name": "operator removed stale lock and started pi-spaces-nano",
+   "data": {
+    "ready": true,
+    "gate": "100.89.28.88:7421"
+   }
+  },
+  {
+   "at": "2026-10-16T17:52:00Z",
+   "name": "admin read of nano data space over the overlay",
+   "data": {
+    "ok": true
+   }
+  }
+ ]
+}
