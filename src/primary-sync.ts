@@ -120,7 +120,9 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   });
  }
  seal(deltas:StorageWrite[],validatedAt:number):PrimaryCommitIntent{
-  return this.sealEntry(head=>({version:1 as const,config:this.config,revision:head.revision+1,previousHash:head.hash,batchHash:hash(deltas.slice(0,-1)),deltas:copy(deltas),validatedAt})) as PrimaryCommitIntent;
+  // Business decisions wait while a replica transition is open; checked in the sealing transaction itself, so no
+  // write can slip in between a transition's begin and its configuration entry. Version-2 entries stay allowed.
+  return this.sealEntry(head=>{const open=this.openTransitionIds();if(open.length)throw new PrimarySyncBlocked(`replica transition ${open[0]} in progress; writes are paused`);return {version:1 as const,config:this.config,revision:head.revision+1,previousHash:head.hash,batchHash:hash(deltas.slice(0,-1)),deltas:copy(deltas),validatedAt};}) as PrimaryCommitIntent;
  }
  /** Seals a configuration change; `mark` is the marker write for the new configuration hash. */
  sealTransition(next:PrimarySyncConfig,reason:string,mark:StorageWrite,validatedAt:number):PrimaryConfigIntent{
@@ -140,6 +142,25 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   const i=copy(input);await assertQuarantine();this.transaction(()=>this.insert(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
  }
  /** Durable record of a replica transition (promotion, degradeToSingle, setStandby) for idempotent continuation. */
+ /** IDs of transitions in phase started or locallyCommitted; while any exists, business writes are paused. */
+ openTransitionIds():string[]{
+  return (this.db.prepare("SELECT key,value FROM sync_meta WHERE key LIKE 'transition:%'").all() as {key:string;value:string}[])
+   .filter(r=>['started','locallyCommitted'].includes(JSON.parse(r.value)?.phase)).map(r=>r.key.slice('transition:'.length));
+ }
+ /** Starts or resumes a transition atomically: at most one open transition per journal; returns the stored record. */
+ beginTransition<T extends Json>(id:string,record:T):T{
+  if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id))throw new PrimarySyncBlocked('invalid transition ID');
+  return this.transaction(()=>{const old=this.meta('transition:'+id);if(old)return JSON.parse(old);const open=this.openTransitionIds();
+   if(open.length)throw new PrimarySyncBlocked(`replica transition ${open[0]} is still open; resume or abandon it first`);
+   this.setMeta('transition:'+id,canonical(record));return record;});
+ }
+ /** Ends a started transition that sealed nothing (refused proof, wrong versions, failed catch-up). */
+ abandonTransition(id:string){
+  this.transaction(()=>{const v=this.meta('transition:'+id),rec=v?JSON.parse(v):null;
+   if(!rec||rec.phase!=='started')throw new PrimarySyncBlocked('only a started transition can be abandoned');
+   const head=this.head().revision;for(let r=1;r<=head;r++){const i=this.intent(r)!;if(i.version===2&&i.reason===id)throw new PrimarySyncBlocked('the transition already sealed a configuration entry; resume it');}
+   this.setMeta('transition:'+id,canonical({...rec,phase:'abandoned'}));});
+ }
  transition<T extends Json>(id:string):T|null{const v=this.meta('transition:'+id);return v?JSON.parse(v):null;}
  saveTransition(id:string,value:Json){if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id))throw new PrimarySyncBlocked('invalid transition ID');this.transaction(()=>this.setMeta('transition:'+id,canonical(value)));}
  markApplied(i:PrimaryIntent,recovered=false){this.transaction(()=>{const stored=this.intent(i.revision);if(!stored||stored.hash!==i.hash)throw new PrimarySyncBlocked('cannot apply an unknown intent');if(this.appliedRevision===i.revision)return;if(this.appliedRevision!==i.revision-1)throw new PrimarySyncBlocked('applied history gap');this.setMeta('applied',String(i.revision));if(recovered)this.setMeta('recoveredCommitted',canonical([...this.recoveredCommitted,i.revision]));});}

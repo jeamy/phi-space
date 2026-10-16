@@ -96,17 +96,16 @@ export function assertQuarantine(register: RecoveryRegister, hostId: string): ()
 	return async () => { if ((await register.get<Boot & Json>(`boot:${hostId}`))?.value.state !== "quarantine") throw new PrimarySyncBlocked(`${hostId} is not in quarantine`); };
 }
 
-type Phase = "started" | "locallyCommitted" | "completed";
+type Phase = "started" | "locallyCommitted" | "completed" | "abandoned";
 type Record_ = { kind: string; phase: Phase; hash: string; config?: PrimarySyncConfig; catchingUp?: boolean };
 async function checkProof(adapter: FencingAdapter, proof: FenceProof, hostId: string, allowSimulator: boolean) {
 	if (adapter.kind === "simulator" && !allowSimulator) throw new ReplicaTransitionBlocked("a simulator fencing claim is no evidence for promotion or degradeToSingle");
 	if (!proof || proof.hostId !== hostId || proof.kind !== adapter.kind || proof.restartLocked !== true || !(await adapter.verify(proof))) throw new ReplicaTransitionBlocked(`no verified fencing proof for ${hostId}`);
 }
 function begin(journal: PrimarySyncJournal, id: string, kind: string, args: Json): Record_ {
-	const hash = canonicalJson(args), old = journal.transition<Record_ & Json>(id);
-	if (old) { if (old.kind !== kind || old.hash !== hash) throw new ReplicaTransitionBlocked("transition ID was used for another transition"); return old; }
-	const rec: Record_ = { kind, phase: "started", hash };
-	journal.saveTransition(id, rec as unknown as Json);
+	const hash = canonicalJson(args), rec = journal.beginTransition(id, { kind, phase: "started", hash } as Json) as unknown as Record_;
+	if (rec.kind !== kind || rec.hash !== hash) throw new ReplicaTransitionBlocked("transition ID was used for another transition");
+	if (rec.phase === "abandoned") throw new ReplicaTransitionBlocked("transition was abandoned; use a new ID");
 	return rec;
 }
 type Common = { storage: Storage; journal: PrimarySyncJournal; register: RecoveryRegister; installed?: RecoveryRegister; hostId: string; dataIncarnation: string; ctx: Context; now?: () => number; allowSimulator?: boolean };
@@ -233,4 +232,31 @@ export async function setStandby(o: Common & { transitionId: string; target: Sta
 		rec.phase = "completed"; o.journal.saveTransition(o.transitionId, rec as unknown as Json);
 	}
 	return { transitionId: o.transitionId, config: o.journal.config };
+}
+
+/**
+ * 3.6 re-admission after a fence: fenceHostBoot revokes every Space permit of the host, but a transition re-admits only
+ * the Space it is about. The other Spaces come back one by one: the operator/supervisor side reactivates a revoked
+ * permit with unchanged authority, role and data incarnation (never the fenced host itself, which only reads its boot
+ * record), and the host then installs exactly that external permit locally after checking its own data incarnation.
+ */
+export function readmitSpace(register: RecoveryRegister, hostId: string, spaceId: string, o: { transitionId: string; expectedDataIncarnation: string }): Promise<Boot> {
+	return casBoot(register, hostId, b => {
+		const p = b?.spaces[spaceId];
+		if (!b || b.state !== "active") throw new ReplicaTransitionBlocked(`${hostId} is not active; re-admit Spaces only after the host left quarantine`);
+		if (!p) throw new ReplicaTransitionBlocked(`${hostId} has no permit for ${spaceId}`);
+		if (["primary", "standby"].includes(p.role)) throw new ReplicaTransitionBlocked("replicated Spaces return only through promote, degradeToSingle or setStandby");
+		if (p.state === "active" && p.dataIncarnation === o.expectedDataIncarnation) return null;
+		if (p.state !== "revoked" || p.dataIncarnation !== o.expectedDataIncarnation) throw new ReplicaTransitionBlocked(`permit of ${spaceId} is not a revoked permit of incarnation ${o.expectedDataIncarnation}`);
+		return { ...b, spaces: { ...b.spaces, [spaceId]: { ...p, state: "active", transitionId: o.transitionId } }, transitionId: o.transitionId };
+	});
+}
+/** Host side: copies the active external permit of one Space into the local installation if its incarnation matches. */
+export async function installAdmittedPermit(o: { external: RecoveryRegister; installed: RecoveryRegister; hostId: string; spaceId: string; localDataIncarnation: string }): Promise<SpaceBootPermit> {
+	const b = (await o.external.get<Boot & Json>(`boot:${o.hostId}`))?.value, p = b?.spaces[o.spaceId];
+	if (!b || b.state !== "active" || !p || p.state !== "active") throw new ReplicaTransitionBlocked(`no active external permit for ${o.spaceId}`);
+	if (p.dataIncarnation !== o.localDataIncarnation) throw new ReplicaTransitionBlocked("external permit names another data incarnation than the local Space");
+	const key = `installed:${o.hostId}:${o.spaceId}`, cur = await o.installed.get(key);
+	if (!cur || !permitEq(cur.value, p)) await o.installed.compareAndSet(key, cur?.version ?? null, p as unknown as Json);
+	return p;
 }

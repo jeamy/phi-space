@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
+import {startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -32,9 +32,12 @@ for(const backend of BACKENDS){
    const h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
    const sim=new SimulatorFencing(),proof=await sim.fence('p','primary lost'),sStorage=await t.sHome.storage(),head=t.sJournal.head();
    const base={storage:sStorage,journal:t.sJournal,register:t.register,hostId:'s',dataIncarnation:'inc-s',ctx,recoveryId:'promote-1',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1};
-   await assert.rejects(promote({...base,adapter:sim,proof}),/simulator fencing claim is no evidence/);
-   await assert.rejects(promote({...base,recoveryId:'promote-2',adapter:unconfiguredFencing('cloud','netcup'),proof:{...proof,kind:'cloud'}}),/netcup fencing is not configured/);
-   await assert.rejects(promote({...base,recoveryId:'promote-3',adapter:sim,proof:{...proof,hostId:'s'},allowSimulator:true}),/no verified fencing proof for p/);
+   // A refused transition stays open (and pauses business seals) until it is abandoned; it sealed nothing.
+   const refused=async(id:string,run:Promise<unknown>,why:RegExp)=>{await assert.rejects(run,why);assert.deepEqual(t.sJournal.openTransitionIds(),[id]);t.sJournal.abandonTransition(id);assert.deepEqual(t.sJournal.openTransitionIds(),[]);};
+   await refused('promote-1',promote({...base,adapter:sim,proof}),/simulator fencing claim is no evidence/);
+   await refused('promote-2',promote({...base,recoveryId:'promote-2',adapter:unconfiguredFencing('cloud','netcup'),proof:{...proof,kind:'cloud'}}),/netcup fencing is not configured/);
+   await refused('promote-3',promote({...base,recoveryId:'promote-3',adapter:sim,proof:{...proof,hostId:'s'},allowSimulator:true}),/no verified fencing proof for p/);
+   await assert.rejects(promote({...base,adapter:sim,proof,allowSimulator:true}),/abandoned; use a new ID/);
    assert.deepEqual(t.sJournal.head(),head);assert.equal(t.sJournal.config.primaryReplica,'p');
    assert.equal((await t.register.get<any>('boot:p'))!.value.state,'active','no boot change without a verified proof');
    // A transition ID is bound to its arguments.
@@ -80,6 +83,9 @@ for(const backend of BACKENDS){
    try{
     await t.pHome.close(h);let st=await t.raw();
     await assert.rejects(setStandby({storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc-p',ctx,transitionId:'standby-old',target:target('s',t.sJournal,t.register),targetDataIncarnation:'inc-s2'}),/empty target/);
+    // A second transition cannot start while the refused one is open.
+    await assert.rejects(setStandby({storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc-p',ctx,transitionId:'standby-1',target:target('s',fJournal,t.register),targetDataIncarnation:'inc-s2'}),/standby-old is still open/);
+    t.pJournal.abandonTransition('standby-old');
     const so={storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc-p',ctx,transitionId:'standby-1',target:target('s',fJournal,t.register),targetDataIncarnation:'inc-s2'};
     t.register.failNext='boot:s';await assert.rejects(setStandby(so),/crash before boot CAS/);
     assert.equal(t.pJournal.config.standbyReplica,'s');assert.equal((await t.register.get<any>('boot:s'))!.value.state,'quarantine');
@@ -137,7 +143,75 @@ for(const backend of BACKENDS){
     const racing:StandbyTarget={...inner,catchUp:async i=>{if(!fenced){fenced=true;await fenceHostBoot(t.register,'p','fence-p');}return inner.catchUp(i);}};
     await assert.rejects(setStandby({storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc-p',ctx,transitionId:'standby-1',target:racing,targetDataIncarnation:'inc-s2'}),/boot permit/);
     assert.deepEqual(t.pJournal.head(),head,'no transition was sealed');assert.equal((await t.register.get<any>('boot:s'))!.value.state,'quarantine');
+    // The refused setStandby stays open and pauses the Space until it is resumed or abandoned.
+    assert.deepEqual(t.pJournal.openTransitionIds(),['standby-1']);t.pJournal.abandonTransition('standby-1');assert.deepEqual(t.pJournal.openTransitionIds(),[]);
    }finally{await st.close(ctx);fJournal.close();await fresh.dispose();}
   }finally{await t.dispose();}
  });
 }
+
+for(const backend of BACKENDS)test(`${backend}: an open replica transition pauses every write source, including the reaper and lease renewals, until it completes`,async()=>{
+ const single:PrimarySyncConfig={...config,standbyReplica:null,durability:'single'},home=new PersistentHome(backend),journal=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),single),raw=home.storage.bind(home);
+ let now=1_000_000;home.storage=async()=>primarySyncStorage(await raw(),journal,null,{assertPrimary:async()=>{},now:()=>now});
+ const errors:unknown[]=[];let h=await home.open(),stop=await startMaintenance(h,ctx,{now:()=>now,retryMs:20,onError:e=>errors.push(e)});
+ const live=async()=>(await h.snapshot(Space,ctx))!.entries.map(e=>e.fields.n);
+ try{
+  const client=()=>new PiSpaces(h,ctx,()=>now);
+  await client().write({type:'Lease',fields:{n:1}},null,500);const long=await client().write({type:'Lease',fields:{n:2}},null,60_000);
+  journal.beginTransition('paused-1',{kind:'test',phase:'started',hash:'x'});
+  // The refused seal ends the serving session (pi-durable poisons it); the transition runs with the service down.
+  await assert.rejects(client().write({type:'Lease',fields:{n:3}},null,core.FOREVER),/paused-1 in progress; writes are paused/);
+  now+=1000;await new Promise(r=>setTimeout(r,100));await stop();await home.close(h);
+  // A restarted service (any write source) stays paused while the transition is open.
+  h=await home.open();errors.length=0;stop=await startMaintenance(h,ctx,{now:()=>now,retryMs:20,onError:e=>errors.push(e)}).catch(e=>{errors.push(e);return async()=>{};});
+  assert.ok(errors.some(e=>e instanceof PrimarySyncBlocked||/writes are paused/.test(String((e as Error)?.message))),'the reaper of a restarted service is paused too');
+  await stop();await home.close(h);h=await home.open();
+  await assert.rejects(client().renew(long.id,60_000),/writes are paused/);await home.close(h);
+  assert.deepEqual((await (h=await home.open()).snapshot(Space,ctx))!.entries.map(e=>e.fields.n).sort(),[1,2],'the expired lease was not settled during the pause');
+  assert.equal(journal.appliedRevision,journal.head().revision,'no business candidate was sealed during the pause');
+  journal.saveTransition('paused-1',{kind:'test',phase:'completed',hash:'x'});
+  stop=await startMaintenance(h,ctx,{now:()=>now,retryMs:20,onError:e=>errors.push(e)});
+  for(let i=0;i<50&&(await live()).length!==1;i++)await new Promise(r=>setTimeout(r,20));
+  assert.deepEqual(await live(),[2],'after completion the reaper settles the expired lease exactly once');
+  await client().write({type:'Lease',fields:{n:4}},null,core.FOREVER);
+ }finally{await stop();await home.close(h);journal.close();await home.dispose();}
+});
+
+for(const backend of BACKENDS)test(`${backend}: the boot guard binds primary/sync Spaces to the journal configuration; other Spaces of a fenced host return one by one`,async()=>{
+ const home=new PersistentHome(backend),reg=new SqliteRecoveryRegister(join(home.dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(home.dir,'installed.sqlite'));
+ let h=await home.open(),stop:(()=>void)|undefined;
+ try{
+  const one=await h.commit(tx=>createSpace(tx,'one',1),ctx),sync=await h.commit(tx=>createSpace(tx,'sync',1),ctx);
+  let current:PrimarySyncConfig={...config,spaceId:sync.spaceId,primaryReplica:'p',standbyReplica:'s'};
+  const local:SpaceBootPermit={state:'active',authorityId:config.authorityId,dataIncarnation:one.incarnation,role:'local',transitionId:'bootstrap'};
+  const primary=(c:PrimarySyncConfig):SpaceBootPermit=>({state:'active',authorityId:c.authorityId,dataIncarnation:sync.incarnation,role:'primary',primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'bootstrap'});
+  await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[one.spaceId]:local,[sync.spaceId]:primary(current)}} as any);
+  const install=async()=>{for(const [id,inc] of [[one.spaceId,one.incarnation],[sync.spaceId,sync.incarnation]])await installAdmittedPermit({external:reg,installed,hostId:'p',spaceId:id,localDataIncarnation:inc}).catch(()=>{});};
+  await install();
+  const guard=()=>installBootGuard(h,ctx,{hostId:'p',authorityId:config.authorityId,external:reg,installed,replicaConfig:id=>id===sync.spaceId?current:null});stop=guard();
+  const a=()=>new PiSpaces(h,ctx,()=>1,undefined,undefined,{space:'one'}),b=()=>new PiSpaces(h,ctx,()=>1,undefined,undefined,{space:'sync'});
+  await a().write({type:'Ok',fields:{}},null,core.FOREVER);await b().write({type:'Ok',fields:{}},null,core.FOREVER);
+  // The journal moved on (a transition committed locally) but the permit did not: the replicated Space is blocked.
+  current={...current,primaryEpoch:2,replicaConfigVersion:2};
+  await assert.rejects(b().write({type:'No',fields:{}}),/disagrees with the local replica configuration/);await a().write({type:'StillOk',fields:{}},null,core.FOREVER);
+  await assert.rejects(b().read({type:'Ok'},0),/disagrees with the local replica configuration/);
+  // A standby permit admits nothing, even with a matching configuration.
+  let boot=(await reg.get<any>('boot:p'))!;boot.value.spaces[sync.spaceId]={...primary(current),role:'standby'};await reg.compareAndSet('boot:p',boot.version,boot.value);await install();
+  await assert.rejects(b().count({type:'Ok'}),/standby permit admits no business work/);
+  // Fence: every Space of the host is revoked.
+  await fenceHostBoot(reg,'p','fence-p');await assert.rejects(a().count({type:'Ok'}),BootBlocked);
+  // A transition brings back only its own Space (host active, sync permit at the new configuration).
+  boot=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',boot.version,{...boot.value,state:'active',spaces:{...boot.value.spaces,[sync.spaceId]:primary(current)}});await install();
+  assert.equal(await b().count({type:'Ok'}),1);await assert.rejects(a().count({type:'Ok'}),BootBlocked);
+  // Re-admission of the other Space: operator side reactivates the revoked permit, the host installs it.
+  await assert.rejects(readmitSpace(reg,'p',one.spaceId,{transitionId:'readmit-one',expectedDataIncarnation:'other'}),/not a revoked permit of incarnation other/);
+  await assert.rejects(readmitSpace(reg,'p',sync.spaceId,{transitionId:'readmit-sync',expectedDataIncarnation:sync.incarnation}),/replicated Spaces return only through promote/);
+  await readmitSpace(reg,'p',one.spaceId,{transitionId:'readmit-one',expectedDataIncarnation:one.incarnation});
+  await assert.rejects(a().count({type:'Ok'}),BootBlocked,'external alone is not enough: the local installation still differs');
+  await assert.rejects(installAdmittedPermit({external:reg,installed,hostId:'p',spaceId:one.spaceId,localDataIncarnation:'stale'}),/another data incarnation/);
+  await install();assert.equal(await a().count({type:'StillOk'}),1);
+  // Reboot: the guard is installed again and both Spaces keep their data and admission.
+  stop();await home.close(h);h=await home.open();stop=guard();
+  assert.equal(await a().count({type:'Ok'}),1);await b().write({type:'AfterReboot',fields:{}},null,core.FOREVER);assert.equal(await b().count({type:'AfterReboot'}),1);
+ }finally{stop?.();await home.close(h);reg.close();installed.close();await home.dispose();}
+});

@@ -8,12 +8,24 @@ import type { RecoveryRegister } from "./recovery-register.ts";
 import { Space } from "./doc.ts";
 import { NamedSpace } from "./spaces.ts";
 import type { Json, SpaceState } from "./core.ts";
+import type { PrimarySyncConfig } from "./primary-sync.ts";
 
 export type SpaceBootPermit = { erasureEpoch?:number; state: "active" | "revoked"; authorityId: string; dataIncarnation: string; role: "local" | "primary" | "standby" | "entryReplica"; primaryEpoch?: number; replicaConfigVersion?: number; durability?: "single" | "sync"; transitionId: string; authorityMarker?: boolean };
 export type HostBootState = { hostId: string; state: "active" | "fenced" | "quarantine"; spaces: Record<string, SpaceBootPermit> };
 export class BootBlocked extends Error {}
+/**
+ * A primary/sync Space admits work only as the primary of its current replica configuration: role, epoch, version
+ * and durability of the permit equal the journal configuration. A standby never answers business calls.
+ */
+function replicaMismatch(hostId: string, permit: SpaceBootPermit, config: PrimarySyncConfig | null | undefined): string | null {
+	if (permit.role === "standby") return "a standby permit admits no business work";
+	if (!config) return null;
+	if (permit.role !== "primary" || config.primaryReplica !== hostId) return "this host is not the primary of the replica configuration";
+	if (permit.authorityId !== config.authorityId || permit.primaryEpoch !== config.primaryEpoch || permit.replicaConfigVersion !== config.replicaConfigVersion || permit.durability !== (config.durability ?? "sync")) return "boot permit disagrees with the local replica configuration";
+	return null;
+}
 /** Guard a host once, after explicitly initializing/registering its spaces and installing their permits. */
-export function installBootGuard(host: Harness, ctx: Context, o: { hostId: string; authorityId: string; external: RecoveryRegister; installed: RecoveryRegister;now?:()=>number }) {
+export function installBootGuard(host: Harness, ctx: Context, o: { hostId: string; authorityId: string; external: RecoveryRegister; installed: RecoveryRegister;now?:()=>number; /** current replica configuration of a primary/sync Space (its journal), null for other Spaces */ replicaConfig?: (spaceId: string) => PrimarySyncConfig | null }) {
 	const original = host.commit.bind(host), originalSnapshot = host.snapshot.bind(host); let installed = true;
 	const guarded: typeof host.commit = async (fn, context) => {
 		const checkedLocal = new Map<string, number>(),checkedErasure=new Map<string,number|null>();
@@ -27,7 +39,8 @@ export function installBootGuard(host: Harness, ctx: Context, o: { hostId: strin
 					if (args[0] === Space || args[0] === NamedSpace) {
 						const s = state as SpaceState, id = s.spaceId ?? args[1];
 						const permit = external.value.spaces[id], local = await o.installed.get<SpaceBootPermit & Record<string, Json>>(`installed:${o.hostId}:${id}`);
-						if (!permit || !local || permit.state !== "active" || local.value.state !== "active" || permit.authorityId !== o.authorityId || (permit.authorityMarker && s.acceptedAuthorityId !== o.authorityId) || permit.dataIncarnation !== s.incarnation || canonicalJson(permit as unknown as Json) !== canonicalJson(local.value as unknown as Json) || !["local", "primary"].includes(permit.role)) throw new BootBlocked(`space ${id} lacks matching external/local boot permission`);
+						if (!permit || !local || permit.state !== "active" || local.value.state !== "active" || permit.authorityId !== o.authorityId || (permit.authorityMarker && s.acceptedAuthorityId !== o.authorityId) || permit.dataIncarnation !== s.incarnation || canonicalJson(permit as unknown as Json) !== canonicalJson(local.value as unknown as Json) || !["local", "primary", "standby"].includes(permit.role)) throw new BootBlocked(`space ${id} lacks matching external/local boot permission`);
+						const replica = replicaMismatch(o.hostId, permit, o.replicaConfig?.(id));if (replica) throw new BootBlocked(`space ${id}: ${replica}`);
 						if((permit.erasureEpoch??0)!==(s.erasureEpoch??0))throw new BootBlocked('space deletion epoch disagrees with boot permission');
 						try{checkedErasure.set(id,await checkErasureBarrier(o.external,id,s,(o.now??Date.now)()));}catch(e){throw new BootBlocked((e as Error).message);}
 						checkedLocal.set(id, local.version);
@@ -56,7 +69,8 @@ export function installBootGuard(host: Harness, ctx: Context, o: { hostId: strin
 		if (state && (args[0] === Space || args[0] === NamedSpace)) {
 			const s = state as SpaceState, id = s.spaceId ?? args[1];
 			const permit = external.value.spaces[id], local = await o.installed.get<SpaceBootPermit & Record<string, Json>>(`installed:${o.hostId}:${id}`);
-			if (!permit || !local || permit.state !== "active" || local.value.state !== "active" || permit.authorityId !== o.authorityId || (permit.authorityMarker && s.acceptedAuthorityId !== o.authorityId) || permit.dataIncarnation !== s.incarnation || canonicalJson(permit as unknown as Json) !== canonicalJson(local.value as unknown as Json) || !["local", "primary"].includes(permit.role) || (s.primaryEpoch !== undefined && permit.primaryEpoch !== s.primaryEpoch)) throw new BootBlocked(`space ${id} lacks matching external/local boot permission`);
+			if (!permit || !local || permit.state !== "active" || local.value.state !== "active" || permit.authorityId !== o.authorityId || (permit.authorityMarker && s.acceptedAuthorityId !== o.authorityId) || permit.dataIncarnation !== s.incarnation || canonicalJson(permit as unknown as Json) !== canonicalJson(local.value as unknown as Json) || !["local", "primary", "standby"].includes(permit.role) || (s.primaryEpoch !== undefined && permit.primaryEpoch !== s.primaryEpoch)) throw new BootBlocked(`space ${id} lacks matching external/local boot permission`);
+			const replica = replicaMismatch(o.hostId, permit, o.replicaConfig?.(id));if (replica) throw new BootBlocked(`space ${id}: ${replica}`);
 			if((permit.erasureEpoch??0)!==(s.erasureEpoch??0))throw new BootBlocked('space deletion epoch disagrees with boot permission');
 			let erasureVersion:number|null;try{erasureVersion=start&&namedId===id?validateErasureBarrier(start['erasure:'+id]!,id,s,(o.now??Date.now)()):await checkErasureBarrier(o.external,id,s,(o.now??Date.now)());}catch(e){throw new BootBlocked((e as Error).message);}
 			if ((await o.installed.get(`installed:${o.hostId}:${id}`))?.version !== local.version) throw new BootBlocked("local boot installation changed during read");

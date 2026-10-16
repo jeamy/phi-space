@@ -548,6 +548,12 @@ Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
 netcup-Adapter; `serveFencing` bietet einen Adapter per mTLS nur für
 Operator-Zertifikate an, `TlsFencing` ist der passende Client. Fehler: `NetcupError`.
 
+`PrimarySyncJournal.beginTransition`, `openTransitionIds` und `abandonTransition` steuern die Schreibsperre
+während eines Übergangs. `installBootGuard(..., { replicaConfig })` bindet primary/sync-Spaces an die
+Journal-Konfiguration. `readmitSpace` (Operator) und `installAdmittedPermit` (Host) lassen die übrigen Spaces
+eines gefencten Hosts einzeln wieder zu. `signedReplicaPeer` und `replicaSyncHandler` bilden den signierten
+Replikat-Transport.
+
 
 Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich
 `{kind: "renew", type, tag, fields, owner, expiresAt}`. Das erneuert ausschließlich

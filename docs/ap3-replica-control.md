@@ -117,6 +117,53 @@ Betrieb:
 - `promote` prüft die Standby-Berechtigung ohne Quarantäne-Ausnahme. Ein freigegebener Standby mit
   veralteter Historie kann sich daher nicht selbst befördern.
 
+## Schreibsperre während eines Übergangs
+
+v3 §5.3.1, Schritte 1 und 7: Solange im Journal ein Übergang in `started` oder `locallyCommitted` steht, versiegelt
+`PrimarySyncJournal.seal` keine fachliche Entscheidung.
+
+- **Atomar:** Die Prüfung läuft in derselben SQLite-Transaktion wie das Versiegeln, also ohne Lücke zwischen dem
+  Beginn eines Übergangs und seinem Konfigurationseintrag.
+- **Erlaubt bleiben** nur die Konfigurationseinträge (`version: 2`) des Übergangs selbst.
+- **Alle Schreibquellen:** Reaper, Agenten, Clients und Lease-Erneuerungen committen alle über den Storage und
+  sind damit gemeinsam gesperrt.
+- **Folge in pi-durable:** Der erste abgewiesene Commit vergiftet die laufende Harness-Sitzung. Der Übergang läuft
+  also mit gestopptem Dienst auf dem rohen Storage, und auch ein neu gestarteter Dienst schreibt bis zum Abschluss
+  nichts.
+- **Nach `completed`:** Der Dienst wird neu geöffnet, und der Reaper holt abgelaufene Leases genau einmal nach.
+
+Weitere Regeln:
+
+- `beginTransition` erlaubt je Journal genau einen offenen Übergang. Dieselbe ID setzt fort, eine andere wird
+  abgewiesen.
+- Ein abgelehnter Übergang bleibt offen und sperrt den Space. Das betrifft etwa einen Simulator-Nachweis, falsche
+  Versionen oder einen Primary, der während des Nachladens gefenct wurde. `abandonTransition(id)` beendet ihn,
+  aber nur in `started` und nur, solange kein Konfigurationseintrag mit dieser ID versiegelt ist. Ein schon
+  ausgeführtes `fenceHostBoot` am Gegenüber bleibt bestehen. Eine aufgegebene ID ist nicht wiederverwendbar.
+
+## Boot-Guard und Wiederzulassung (3.6)
+
+`installBootGuard` hat einen optionalen Hook `replicaConfig(spaceId)`, der die aktuelle Journal-Konfiguration
+liefert.
+
+- Für einen primary/sync-Space verlangt der Guard die Rolle `primary` dieses Hosts sowie Autorität, Epoche,
+  Replikatversion und Durability genau wie im Journal.
+- Eine `standby`-Berechtigung lässt weder Commits noch Lesezugriffe zu.
+- Weicht die Journal-Konfiguration nach einem lokalen Übergang von der externen Berechtigung ab, ist nur dieser
+  Space gesperrt.
+
+`fenceHostBoot` widerruft alle Spaces des Hosts, ein Übergang lässt aber nur seinen eigenen Space wieder zu. Die
+übrigen Spaces kommen einzeln zurück:
+
+1. `readmitSpace` läuft auf der Operator- bzw. Supervisor-Seite. Es aktiviert nur eine widerrufene Berechtigung
+   mit unveränderter Rolle und Dateninkarnation, und nur, wenn der Host `active` ist. Replizierte Rollen kommen nur
+   über `promote`, `degradeToSingle` oder `setStandby` zurück.
+2. Der Host übernimmt mit `installAdmittedPermit` genau diese externe Berechtigung in seine lokale Installation,
+   nachdem er die Dateninkarnation geprüft hat.
+
+Invariante: Ein Host, der gefenct werden kann, schreibt nie seinen eigenen Boot-Eintrag. Er liest ihn nur und
+installiert lokal.
+
 ## Übergänge
 
 Jeder Übergang wird unter seiner ID im Journal abgelegt (`started` → `locallyCommitted` → `completed`) und
@@ -201,11 +248,9 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
   Heimnetz ([testumgebung-big.md](testumgebung-big.md) §19), nicht vpsc, das bereits Register und Fencing-Dienst
   trägt. Für 100 gibt es keinen Fencing-Adapter. Deshalb ist nur Promotion auf 100 nach Fencing von nanoi
   abnehmbar; `degradeToSingle` auf nanoi bleibt gesperrt.
-- 3.6 ist nur teilweise umgesetzt:
-  - `installBootGuard` erlaubt weiterhin nur die Rollen `local`/`primary` und vergleicht nur `primaryEpoch`.
-  - Replikatversion und Durability werden nur über `assertSyncPrimary` im Sync-Storage-Pfad durchgesetzt.
+- 3.6 ist im Kern umgesetzt (Guard-Hook, Standby-Sperre, Wiederzulassung je Space, Neustart). Den Hook mit dem
+  Journal verbinden muss weiterhin, wer einen primary/sync-Space betreibt.
 - Noch offen:
-  - Pausieren aller Schreibquellen einschließlich Reaper;
   - `ReplicaConfigNotice`;
   - authentifizierter Transport zwischen den Replikaten;
   - Control-Space-Sonderfall (3.8);
