@@ -53,6 +53,9 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
         const controlId = (await root.commit(tx => createSpace(tx, "control", now), ctx)).spaceId;
         await data.commit(tx => spaceDoc(tx, undefined, now), ctx);
         const info = (await listSpaces(data, ctx))[0]!;
+        let replicaVersion: number | null = null;
+        const replicaConfig = (id: string) =>
+            replicaVersion === null || id !== info.spaceId ? null : {replicaConfigVersion : replicaVersion};
         const userIdentity = {principal : {peerId : "user"}, roles : [ "member" ]};
         const authority = new GrantAuthority({
             authorityId : "authority",
@@ -93,7 +96,8 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
             keys,
             grants : grantVerifier,
             policy : async () => ({authorityId : "authority", policyVersion}),
-            now : clock
+            now : clock,
+            replicaConfig
         });
         const conn = {peerId : "router", state : {proof : {keyId : routerKey.signer.keyId}}};
         const identity =
@@ -162,6 +166,7 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
             setNow : (v: number) => now = v,
             get now() { return now },
             setPolicy : (v: number) => policyVersion = v,
+            setReplica : (v: number | null) => replicaVersion = v,
             records,
             keys,
             leases,
@@ -193,7 +198,8 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
                     keys,
                     grants : grantVerifier,
                     policy : async () => ({authorityId : "authority", policyVersion}),
-                    now : clock
+                    now : clock,
+                    replicaConfig
                 });
             }
         });
@@ -256,6 +262,22 @@ for (const backend of BACKENDS) {
              o.records.get("user").state = "revoked";
              await assert.rejects(o.signed(c));
              assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+         }));
+    test(`${backend}: a replicated Member answers ReplicaConfigPending until the router routes under its configuration`,
+         () => fixture(backend, async o => {
+             const before = o.call("write", {entry : {type : "Job", fields : {n : 1}}});
+             assert.ok((await o.invoke(before)).ok, "non-replicated Spaces ignore the version");
+             o.setReplica(3);
+             const fresh = o.call("write", {entry : {type : "Job", fields : {n : 2}}});
+             const pending = await o.invoke(fresh, undefined, {targetReplicaConfigVersion : 2});
+             assert.equal(pending.ok, false);assert.match(JSON.stringify(pending), /not adopted by the router yet/);
+             assert.equal((await o.invoke(o.call("write", {entry : {type : "Job", fields : {n : 3}}}))).ok, false, "a router without the version is pending too");
+             // Follow-ups of an operation admitted before the change continue under its binding.
+             const poll = await o.invoke({method : "pollOperation", space : o.info.spaceId, args : {targetRequest : before.request, waitMs : 0}}, o.target(before));
+             assert.ok(poll.ok, JSON.stringify(poll));
+             const adopted = await o.invoke(fresh, undefined, {targetReplicaConfigVersion : 3});
+             assert.ok(adopted.ok, JSON.stringify(adopted));
+             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 2, "local work and adopted calls only");
          }));
     test(`${backend}: policy changes permit bound old resolution, not old new requests`,
          () => fixture(backend, async o => {

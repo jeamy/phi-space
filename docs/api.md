@@ -552,7 +552,10 @@ Operator-Zertifikate an, `TlsFencing` ist der passende Client. Fehler: `NetcupEr
 während eines Übergangs. `installBootGuard(..., { replicaConfig })` bindet primary/sync-Spaces an die
 Journal-Konfiguration. `readmitSpace` (Operator) und `installAdmittedPermit` (Host) lassen die übrigen Spaces
 eines gefencten Hosts einzeln wieder zu. `signedReplicaPeer` und `replicaSyncHandler` bilden den signierten
-Replikat-Transport.
+Replikat-Transport. `replicaConfigNotice`, `signReplicaConfigNotice` und `adoptReplicaConfigNotice` tragen eine
+neue Replikatkonfiguration in die Member-Tabelle des Routers. Die Übernahme ist nur möglich, wenn das Register
+den neuen Primary mit genau diesen Werten zulässt. Delegationen tragen `targetReplicaConfigVersion`, und
+`DelegationVerifier({ replicaConfig })` antwortet bis zur Übernahme mit `ReplicaConfigPending`.
 
 
 Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich

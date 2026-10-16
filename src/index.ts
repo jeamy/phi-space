@@ -443,6 +443,7 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 export { SshRecoveryRegister } from "./ssh-register.ts";
 
 export { verifySshFence } from "./fencing.ts";
+export { replicaConfigNotice, signReplicaConfigNotice, adoptReplicaConfigNotice, type ReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 export { signedReplicaPeer, replicaSyncHandler, ReplicaTransportRefused, type ReplicaPin } from "./replica-transport.ts";
 export { NetcupScp, NetcupFencing, NetcupError, fileTokenProvider, fileFenceState, memoryFenceState, serveFencing, TlsFencing, type NetcupServerPin, type NetcupFenceState } from "./netcup-fencing.ts";
 export { SimulatorFencing, ReplicaTransitionBlocked, unconfiguredFencing, fenceHostBoot, releaseHostToQuarantine, assertSyncPrimary, assertSyncStandby, assertQuarantine, degradeToSingle, promote, setStandby, readmitSpace, installAdmittedPermit, type FencingAdapter, type FenceProof, type StandbyTarget } from "./replica-control.ts";
@@ -458,7 +459,7 @@ export { startRecoveryOnly, startMemberRecoveryOnly, type MemberRecoveryOnlyConf
 
 export { RouterController, RouterBlocked, RouterConflict, RouterBudgetExceeded, DEFAULT_ROUTER_LIMITS } from "./router.ts";
 export type { RouterTarget, RouterOptions, RouterLimits, RouterCommandSpec, RouterStepSpec, RouterCommand, RouterStep, RouterReceipt, TargetBinding, CommandState, RouterOperation } from "./router.ts";
-export {RouterLeaseAuthority,DelegationVerifier,DelegationDenied,signDelegation,delegationForCall} from './delegation.ts';
+export {RouterLeaseAuthority,DelegationVerifier,DelegationDenied,ReplicaConfigPending,signDelegation,delegationForCall} from './delegation.ts';
 export type {RouterLease,SignedRouterLease,Delegation,SignedDelegation,TargetRequest,EpochNotice,SignedEpochNotice} from './delegation.ts';
 export {rpcDomain} from './rpc-domain.ts';
 export {FederationPolicyAuthority,validateFederationPolicy,verifyFederationPolicy,hrw,writeMember,searchMembers,normalizeFederatedEntry,RoutingConflict,MigrationRequired,MemberDrained,CapacityUnavailable,NoCapableMember} from './federation-policy.ts';

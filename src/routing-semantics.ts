@@ -58,7 +58,9 @@ export type FederationMember = {
     replication?: {
         primaryReplica : string; replicaConfigVersion : number; durability : 'single' | 'sync';
         standbyReplica?: string;
-        backupReplica?: string
+        backupReplica?: string;
+        /** recovery/transition ID of the adopted ReplicaConfigNotice */
+        recoveryId?: string
     };
     capacity?: {free : number; at : number};
     capabilities?: {names : string[]; at : number}

@@ -79,7 +79,8 @@ export class FederationRpc implements RouterTarget, FederationIO {
                         ].includes(call.method)
                                             ? ref
                                             : undefined,
-                        now : (this.o.now ?? Date.now)()
+                        now : (this.o.now ?? Date.now)(),
+                        replicaConfigVersion : m.replication?.replicaConfigVersion
                     })) as any
         });
         await r.authenticate();

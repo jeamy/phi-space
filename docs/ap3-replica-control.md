@@ -164,6 +164,46 @@ liefert.
 Invariante: Ein Host, der gefenct werden kann, schreibt nie seinen eigenen Boot-Eintrag. Er liest ihn nur und
 installiert lokal.
 
+## ReplicaConfigNotice (v3 §5.3.1 Schritt 5)
+
+Nach `promote`, `degradeToSingle` oder `setStandby` bietet der Primary die neue Replikatkonfiguration als
+signierte Notice an. Code: `src/replica-notice.ts`.
+
+**Erzeugen:** `replicaConfigNotice(journal, transitionId, dataIncarnation)` leitet den Inhalt deterministisch aus
+dem Konfigurationseintrag des abgeschlossenen Übergangs ab. Ein Absturz zwischen `completed` und dem Abholen
+verliert also nichts.
+
+**Signieren:** `signReplicaConfigNotice` signiert mit dem Host-Schlüssel des neuen Primary.
+
+**Übernahme:** `adoptReplicaConfigNotice` übernimmt die Notice auf Router-Seite in einem eigenen Control-Commit.
+
+- **Prüfung:** Die Signatur muss vom genannten Primary stammen. Entscheidend ist aber das unabhängige Register:
+  Der Primary muss dort `active` sein und eine aktive `primary`-Berechtigung mit genau Epoche, Version,
+  Durability und Dateninkarnation der Notice haben. Eine solche Berechtigung entsteht nur durch einen gefencten
+  Übergang. Ein gefencter alter Primary mit weiterhin enrolltem Schlüssel kommt deshalb nicht durch.
+- **Wirkung:** Geändert werden nur `replication` und `target` (Host, Epoche, Dateninkarnation) des einen Members,
+  dessen Space die Notice nennt, plus `policyVersion + 1`.
+- **Wiederholung:** Dieselbe Version mit derselben Recovery-ID ist ein No-op. Abweichende oder ältere Notices
+  werden abgewiesen; eine alte Policy setzt die lokale Durability nie zurück.
+- **Profilübergänge:** Solange einer offen ist, wird nicht übernommen.
+
+**Sperre auf Member-Seite (`ReplicaConfigPending`):**
+
+- Delegationen tragen für replizierte Member `targetReplicaConfigVersion` aus der Member-Tabelle des Routers.
+- Der `DelegationVerifier` mit Hook `replicaConfig` weist neue Arbeit mit `ReplicaConfigPending` ab, solange diese
+  Version nicht der Journal-Konfiguration entspricht. Das deckt auch `setStandby` ab, das nur die Version erhöht.
+- Folgeaufrufe bereits zugelassener Operationen laufen unter ihrer ursprünglichen Bindung weiter.
+- Lokale Arbeit ist nicht betroffen.
+- Nach der Übernahme gibt sich die Sperre ohne eigene Rückmeldung frei.
+
+**Offen:**
+
+- Der native Root (`configured-root.ts`) adressiert Member über eine fest provisionierte Adresse und prüft das
+  gespeicherte Ziel gegen die Provisionierung. Nach einer Promotion braucht er die Adressen beider Replikate in der
+  Provisionierung.
+- Notices werden noch nicht automatisch abgeholt; der Weg über den Supervisor wie bei `EpochNotice` fehlt.
+- Der Control-Space-Sonderfall (Schritt 6) gehört zu 3.8.
+
 ## Übergänge
 
 Jeder Übergang wird unter seiner ID im Journal abgelegt (`started` → `locallyCommitted` → `completed`) und
@@ -251,7 +291,7 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 - 3.6 ist im Kern umgesetzt (Guard-Hook, Standby-Sperre, Wiederzulassung je Space, Neustart). Den Hook mit dem
   Journal verbinden muss weiterhin, wer einen primary/sync-Space betreibt.
 - Noch offen:
-  - `ReplicaConfigNotice`;
+  - automatisches Abholen der `ReplicaConfigNotice` und Adressauflösung im nativen Root;
   - authentifizierter Transport zwischen den Replikaten;
   - Control-Space-Sonderfall (3.8);
   - Snapshot-Bootstrap eines nicht leeren Ziels.

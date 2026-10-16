@@ -35,7 +35,9 @@ export type Delegation = {
     requestId : string;
     requestGeneration : string;
     argumentHash : string;
-    targetRequest?: TargetRequest; policyVersion : number; issuedAt : number; expiresAt : number
+    targetRequest?: TargetRequest; policyVersion : number; issuedAt : number; expiresAt : number;
+    /** Only for replicated Members: the replica configuration version the router routed under. */
+    targetReplicaConfigVersion?: number
 };
 export type SignedDelegation = {
     delegation: Delegation; keyId : string; algorithm : Algorithm; signature : string
@@ -56,6 +58,8 @@ const same = (a: unknown, b: unknown) =>
     canonicalJson(a as core.Json) === canonicalJson(b as core.Json);
 const positive = (n: unknown) => Number.isSafeInteger(n) && Number(n) > 0;
 export class DelegationDenied extends core.PermissionError {}
+/** v3 5.3.1 step 5: the Member changed its replica configuration and the router has not adopted the notice yet. */
+export class ReplicaConfigPending extends DelegationDenied {}
 export const DelegationEpochs =
     defineDocFamily<{routerEpoch : number; controlPrimaryEpoch : number; policyVersion : number},
                     null>({
@@ -180,7 +184,8 @@ export function delegationForCall(o: {
     primaryEpoch : number;
     grant : SignedGrant;
     targetRequest?: TargetRequest;
-    now?: number
+    now?: number;
+    replicaConfigVersion?: number
 }): Delegation {
     const now = o.now ?? Date.now(), domain = rpcDomain(o.call, o.principal),
           request = o.call.request ?? {requestId : randomUUID(), generation : "non-mutating"};
@@ -196,6 +201,7 @@ export function delegationForCall(o: {
         argumentHash : argHash(domain.method, domain.args),
         ...(o.targetRequest ? {targetRequest : o.targetRequest} : {}),
         policyVersion : o.policyVersion,
+        ...(o.replicaConfigVersion !== undefined ? {targetReplicaConfigVersion : o.replicaConfigVersion} : {}),
         issuedAt : now,
         expiresAt : Math.min(now + 60000, o.lease.lease.expiresAt, o.grant.grant.expiresAt)
     };
@@ -208,7 +214,9 @@ type VerifierOptions = {
     grants : GrantVerifier;
     policy : () => Promise<{authorityId : string; policyVersion : number}>;
     now?: () => number;
-    uncertaintyMs?: number
+    uncertaintyMs?: number;
+    /** Replica configuration of a primary/sync Space (its journal); null for other Spaces. */
+    replicaConfig?: (spaceId: string) => {replicaConfigVersion : number} | null
 };
 export class DelegationVerifier {
     private o: VerifierOptions;
@@ -340,6 +348,11 @@ export class DelegationVerifier {
                 call.frame.primaryEpoch !== d.targetPrimaryEpoch ||
             d.targetPrimaryEpoch > epoch || d.targetPrimaryEpoch < epoch && !reference)
             throw new DelegationDenied("target epoch does not match new or known request");
+        // New work on a replicated Space needs the router to route under the local replica configuration; follow-ups
+        // of operations admitted before the change continue under their original binding.
+        const replica = this.o.replicaConfig?.(info.spaceId);
+        if (replica && !reference && d.targetReplicaConfigVersion !== replica.replicaConfigVersion)
+            throw new ReplicaConfigPending(`replica configuration ${replica.replicaConfigVersion} is not adopted by the router yet`);
         const policy = await this.o.policy();
         if (policy.authorityId !== this.o.authorityId || !positive(policy.policyVersion) ||
             !reference && d.policyVersion !== policy.policyVersion)

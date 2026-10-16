@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
+import {FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -214,4 +214,42 @@ for(const backend of BACKENDS)test(`${backend}: the boot guard binds primary/syn
   stop();await home.close(h);h=await home.open();stop=guard();
   assert.equal(await a().count({type:'Ok'}),1);await b().write({type:'AfterReboot',fields:{}},null,core.FOREVER);assert.equal(await b().count({type:'AfterReboot'}),1);
  }finally{stop?.();await home.close(h);reg.close();installed.close();await home.dispose();}
+});
+
+for(const backend of BACKENDS)test(`${backend}: the router adopts a ReplicaConfigNotice only as admitted by the register, idempotently and without touching other routing state`,async()=>{
+ const t=await setup(backend),router=new PersistentHome(backend),keyDir=join(router.dir,'keys');
+ const keys={p:provisionFileSigner(join(keyDir,'p.json')),s:provisionFileSigner(join(keyDir,'s.json'))};
+ const issuerKey=async(h:string)=>h==='p'||h==='s'?{algorithm:'ed25519' as const,publicKey:keys[h].publicKey}:null;
+ let rh=await router.open();
+ try{
+  const h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
+  const sim=new SimulatorFencing(),proof=await sim.fence('p','primary lost'),st=await t.sHome.storage();
+  await promote({storage:st,journal:t.sJournal,register:t.register,hostId:'s',dataIncarnation:'inc-s',ctx,recoveryId:'promote-s',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof,allowSimulator:true});await st.close(ctx);
+  const control=await rh.commit(tx=>createSpace(tx,'control',1),ctx),o={controlSpaceId:control.spaceId,authorityId:config.authorityId,register:t.register,issuerKey};
+  await rh.commit(async tx=>{const d=await tx.doc(FederationRouting,control.spaceId,null);
+   d.policy={authorityId:config.authorityId,policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'local'}};
+   d.members={local:{id:'local',state:'active',target:{hostId:'router',spaceId:'local-space',authorityId:config.authorityId,dataIncarnation:'inc-l',primaryEpoch:1}},
+    replicated:{id:'replicated',state:'active',target:{hostId:'p',spaceId:config.spaceId,authorityId:config.authorityId,dataIncarnation:'inc-p',primaryEpoch:1},replication:{primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'}}};},ctx);
+  const routing=async()=>structuredClone((await rh.snapshot(FederationRouting,control.spaceId,ctx))!);const before=await routing();
+  const notice=replicaConfigNotice(t.sJournal,'promote-s','inc-s');
+  assert.deepEqual(notice,{authorityId:config.authorityId,spaceId:config.spaceId,recoveryId:'promote-s',primaryReplica:'s',standbyReplica:'p',primaryEpoch:2,replicaConfigVersion:2,durability:'sync',dataIncarnation:'inc-s'});
+  // The fenced old primary still holds an enrolled key, but the register does not admit it.
+  await assert.rejects(adoptReplicaConfigNotice(rh,ctx,o,await signReplicaConfigNotice({...notice,primaryReplica:'p',standbyReplica:'s',primaryEpoch:5,replicaConfigVersion:5,dataIncarnation:'inc-p'},keys.p)),/register does not admit/);
+  await assert.rejects(adoptReplicaConfigNotice(rh,ctx,o,{...await signReplicaConfigNotice(notice,keys.p),issuer:'s'}),/not signed by its primary/);
+  assert.deepEqual(await routing(),before,'refused notices change nothing');
+  const signed=await signReplicaConfigNotice(notice,keys.s),first=await adoptReplicaConfigNotice(rh,ctx,o,signed);
+  assert.deepEqual(first,{adopted:true,memberId:'replicated',policyVersion:2});
+  const after=await routing(),m=after.members.replicated!;
+  assert.deepEqual(m.target,{hostId:'s',spaceId:config.spaceId,authorityId:config.authorityId,dataIncarnation:'inc-s',primaryEpoch:2});
+  assert.deepEqual(m.replication,{primaryReplica:'s',standbyReplica:'p',replicaConfigVersion:2,durability:'sync',recoveryId:'promote-s'});
+  const strip=(r:any)=>({...r,policy:{...r.policy,policyVersion:0},members:{...r.members,replicated:{...r.members.replicated,target:null,replication:null}}});
+  assert.deepEqual(strip(after),strip(before),'only replication, target and policyVersion changed');
+  // Idempotent; conflicting or stale notices are refused.
+  assert.deepEqual(await adoptReplicaConfigNotice(rh,ctx,o,signed),{adopted:false,memberId:'replicated',policyVersion:2});
+  await assert.rejects(adoptReplicaConfigNotice(rh,ctx,o,await signReplicaConfigNotice({...notice,recoveryId:'other'},keys.s)),/conflicting notice/);
+  await assert.rejects(adoptReplicaConfigNotice(rh,ctx,o,await signReplicaConfigNotice({...notice,primaryEpoch:1,replicaConfigVersion:1},keys.s)),/register does not admit|stale/);
+  assert.throws(()=>replicaConfigNotice(t.sJournal,'unknown',''),/completed transition/);
+  // A restart keeps the adopted configuration.
+  await router.close(rh);rh=await router.open();assert.equal((await rh.snapshot(FederationRouting,control.spaceId,ctx))!.policy!.policyVersion,2);
+ }finally{await router.close(rh);await router.dispose();await t.dispose();}
 });
