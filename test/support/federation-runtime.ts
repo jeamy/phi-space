@@ -57,7 +57,8 @@ export async function exerciseFederationRuntime() {
 			await data.commit(tx => createSpace(tx, "jobs", now), ctx);
 			// A primary/sync Space lives in its own store; the member host dispatches calls naming it to that Harness.
 			const syncHome = new PersistentHome(home.backend); syncHomes.push(syncHome); const syncHost = await syncHome.open(), syncInfo = await syncHost.commit(tx => createSpace(tx, "sync-jobs", now), ctx);
-			member = await startFederationHost(data, ctx, { syncSpaces: [{ spaceId: syncInfo.spaceId, alias: "sync-jobs", host: syncHost, primaryEpoch: () => 1 }], hostId: "data-host", authorityId: "authority", keys: networkKeys, verifier: verifier(), boot: await provisionBoot(data, "data-host"), directory, groupRoles, listen: { host: "127.0.0.1", port: 0 }, revalidateMs: 0, now: clock });
+			// runGates enables the notice front service as on deployed hosts; sync calls must pass through it to their store.
+			member = await startFederationHost(data, ctx, { runGates: {} as any, syncSpaces: [{ spaceId: syncInfo.spaceId, alias: "sync-jobs", host: syncHost, primaryEpoch: () => 1 }], hostId: "data-host", authorityId: "authority", keys: networkKeys, verifier: verifier(), boot: await provisionBoot(data, "data-host"), directory, groupRoles, listen: { host: "127.0.0.1", port: 0 }, revalidateMs: 0, now: clock });
 			let purpose: Grant["purpose"] = "effect";
 			const socket = socketTransport({ host: "127.0.0.1", port: (member.address() as any).port }, { localAddress: "127.0.0.3" }); sockets.push(socket);
 			const remote = new RemoteSpace(socket, { space: "jobs", signer: adminSigner, expectedGateHostId: "data-host", ownPeerId: "admin", now: clock, grantProvider: () => admin.requestGrant(purpose), maxClientWaitMs: 1000, attempts: 2, backoffMs: 1, callTimeoutMs: 3000 });
