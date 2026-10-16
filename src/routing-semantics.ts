@@ -99,6 +99,9 @@ function placement(r: FederationRule): Json {
             members : [...r.members ].sort(),
             capability : r.capability ?? null
         };
+    // The replica configuration of a primary Member changes through transitions; its placement is the Member alone.
+    if (r.mode === 'sync' && r.variant === 'primary')
+        return {mode : r.mode, variant : r.variant, member : r.member};
     return r as unknown as Json;
 }
 /** Members must already be registered; placement changes need an explicit proven removal. */
@@ -159,6 +162,11 @@ export function validateFederationPolicy(
             });
             if (primary.has(r.member) && primary.get(r.member) !== signature)
                 throw new RoutingConflict('one replica configuration per member');
+            const rep = table[r.member]?.replication;
+            if (rep && (rep.primaryReplica !== r.primaryReplica || rep.replicaConfigVersion !== r.replicaConfigVersion ||
+                        rep.durability !== r.durability || (rep.standbyReplica ?? null) !== (r.standbyReplica ?? null) ||
+                        (rep.backupReplica ?? null) !== (r.backupReplica ?? null)))
+                throw new RoutingConflict('primary rule disagrees with the member replica configuration');
             primary.set(r.member, signature);
         } else if (r.mode === 'sync') {
             if (r.variant === 'lww' && (r.semantics !== 'state' || !r.keyFields?.length) ||

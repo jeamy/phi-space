@@ -181,8 +181,15 @@ verliert also nichts.
   Der Primary muss dort `active` sein und eine aktive `primary`-Berechtigung mit genau Epoche, Version,
   Durability und Dateninkarnation der Notice haben. Eine solche Berechtigung entsteht nur durch einen gefencten
   Übergang. Ein gefencter alter Primary mit weiterhin enrolltem Schlüssel kommt deshalb nicht durch.
-- **Wirkung:** Geändert werden nur `replication` und `target` (Host, Epoche, Dateninkarnation) des einen Members,
-  dessen Space die Notice nennt, plus `policyVersion + 1`.
+- **Wirkung:** Geändert werden in einem Commit nur:
+  - `replication` und `target` (Host, Epoche, Dateninkarnation) des einen Members, dessen Space die Notice nennt;
+  - die Replikatfelder der Sync-Primary-Regeln dieses Members;
+  - `policyVersion + 1`.
+
+  Der Validator verlangt, dass Primary-Regel und `member.replication` übereinstimmen. Die Platzierung einer
+  Primary-Regel ist nur ihr Member; eine neue Replikatkonfiguration gilt deshalb nicht als Platzierungsänderung.
+  Member holen die Policy bei jeder Delegationsprüfung live vom Control-Host und sehen die neue Version also
+  sofort.
 - **Wiederholung:** Dieselbe Version mit derselben Recovery-ID ist ein No-op. Abweichende oder ältere Notices
   werden abgewiesen; eine alte Policy setzt die lokale Durability nie zurück.
 - **Profilübergänge:** Solange einer offen ist, wird nicht übernommen.

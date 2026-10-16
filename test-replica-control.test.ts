@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
+import {validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -227,7 +227,8 @@ for(const backend of BACKENDS)test(`${backend}: the router adopts a ReplicaConfi
   await promote({storage:st,journal:t.sJournal,register:t.register,hostId:'s',dataIncarnation:'inc-s',ctx,recoveryId:'promote-s',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof,allowSimulator:true});await st.close(ctx);
   const control=await rh.commit(tx=>createSpace(tx,'control',1),ctx),o={controlSpaceId:control.spaceId,authorityId:config.authorityId,register:t.register,issuerKey};
   await rh.commit(async tx=>{const d=await tx.doc(FederationRouting,control.spaceId,null);
-   d.policy={authorityId:config.authorityId,policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'local'}};
+   d.policy={authorityId:config.authorityId,policyVersion:1,completionProfiles:[],default:{mode:'local',member:'local'},
+    rules:[{type:'Synced',mode:'sync',variant:'primary',member:'replicated',primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'},{type:'Plain',mode:'local',member:'local'}]};
    d.members={local:{id:'local',state:'active',target:{hostId:'router',spaceId:'local-space',authorityId:config.authorityId,dataIncarnation:'inc-l',primaryEpoch:1}},
     replicated:{id:'replicated',state:'active',target:{hostId:'p',spaceId:config.spaceId,authorityId:config.authorityId,dataIncarnation:'inc-p',primaryEpoch:1},replication:{primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'}}};},ctx);
   const routing=async()=>structuredClone((await rh.snapshot(FederationRouting,control.spaceId,ctx))!);const before=await routing();
@@ -242,8 +243,12 @@ for(const backend of BACKENDS)test(`${backend}: the router adopts a ReplicaConfi
   const after=await routing(),m=after.members.replicated!;
   assert.deepEqual(m.target,{hostId:'s',spaceId:config.spaceId,authorityId:config.authorityId,dataIncarnation:'inc-s',primaryEpoch:2});
   assert.deepEqual(m.replication,{primaryReplica:'s',standbyReplica:'p',replicaConfigVersion:2,durability:'sync',recoveryId:'promote-s'});
-  const strip=(r:any)=>({...r,policy:{...r.policy,policyVersion:0},members:{...r.members,replicated:{...r.members.replicated,target:null,replication:null}}});
-  assert.deepEqual(strip(after),strip(before),'only replication, target and policyVersion changed');
+  assert.deepEqual(after.policy!.rules[0],{type:'Synced',mode:'sync',variant:'primary',member:'replicated',primaryReplica:'s',standbyReplica:'p',replicaConfigVersion:2,durability:'sync'});
+  const strip=(r:any)=>({...r,policy:{...r.policy,policyVersion:0,rules:[null,...r.policy.rules.slice(1)]},members:{...r.members,replicated:{...r.members.replicated,target:null,replication:null}}});
+  assert.deepEqual(strip(after),strip(before),'only replication, target, the primary rule of the Member and policyVersion changed');
+  // Rule and Member replica configuration agree before and after; a drifted rule is refused by the validator.
+  validateFederationPolicy(before.policy!,before.members,null,new Set(),true);validateFederationPolicy(after.policy!,after.members,before.policy,new Set(),true);
+  assert.throws(()=>validateFederationPolicy(before.policy!,after.members,null,new Set(),true),/disagrees with the member replica configuration/);
   // Idempotent; conflicting or stale notices are refused.
   assert.deepEqual(await adoptReplicaConfigNotice(rh,ctx,o,signed),{adopted:false,memberId:'replicated',policyVersion:2});
   await assert.rejects(adoptReplicaConfigNotice(rh,ctx,o,await signReplicaConfigNotice({...notice,recoveryId:'other'},keys.s)),/conflicting notice/);

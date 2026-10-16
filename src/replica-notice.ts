@@ -84,7 +84,11 @@ export async function adoptReplicaConfigNotice(host: SpaceHost, ctx: Context, o:
 		if ((await o.register.get(`boot:${n.primaryReplica}`))?.version !== registerVersion) throw new RoutingConflict("boot permit changed during adoption");
 		m.replication = { primaryReplica: n.primaryReplica, replicaConfigVersion: n.replicaConfigVersion, durability: n.durability, ...(n.standbyReplica ? { standbyReplica: n.standbyReplica } : {}), ...(r.backupReplica ? { backupReplica: r.backupReplica } : {}), recoveryId: n.recoveryId };
 		m.target = { ...m.target, hostId: n.primaryReplica, primaryEpoch: n.primaryEpoch, dataIncarnation: n.dataIncarnation };
-		d.policy = { ...d.policy, policyVersion: d.policy.policyVersion + 1 };
+		// Primary rules of this Member carry the same replica configuration and follow it in the same commit.
+		const rules = d.policy.rules.map(rule => rule.mode === "sync" && rule.variant === "primary" && rule.member === m.id
+			? (({ standbyReplica: _, ...rest }) => ({ ...rest, primaryReplica: n.primaryReplica, replicaConfigVersion: n.replicaConfigVersion, durability: n.durability, ...(n.standbyReplica ? { standbyReplica: n.standbyReplica } : {}) }))(rule)
+			: rule);
+		d.policy = { ...d.policy, rules, policyVersion: d.policy.policyVersion + 1 };
 		const control = await spaceDoc(tx, o.controlSpaceId, Date.now());
 		control.authorityCounters ??= { routerEpoch: 0, policyVersion: 0 };
 		control.authorityCounters.policyVersion = d.policy.policyVersion;
