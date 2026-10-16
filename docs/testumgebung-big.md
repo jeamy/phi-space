@@ -417,3 +417,26 @@ nicht von selbst. Vorgehen:
 1. Prüfen, dass die eingetragene PID im Container nicht mehr existiert.
 2. Erst dann die Sperre löschen.
 3. `systemctl start pi-spaces-nano` ausführen.
+
+## 19. Test-Standby 100 (Phase 3, fester synchroner Standby zu nanoi)
+
+Stand 2026-10-16. Host `100` ist ein physischer Server im Heimnetz: 192.168.1.100, Ubuntu 26.04, 8 Kerne, 31 GB RAM.
+Er dient zugleich als NFS-Server im LAN. Zugang über `ssh 100` (Benutzer `virtual`) bzw. `ssh 100i` (root). Nach
+außen geht er nur über IPv4, mit derselben öffentlichen Adresse wie lux27 (`212.186.197.226`).
+
+| Bereich | Einrichtung |
+|---|---|
+| Rolle | Fester Standby zu nanoi als Primary. Promotion auf 100 nach netcup-Fencing von nanoi ist möglich. `degradeToSingle` auf nanoi bleibt gesperrt, weil es für 100 keinen Fencing-Adapter gibt (keine Power-API). |
+| NetBird | Client 0.80.0 aus `pkgs.netbird.io` (Schlüssel von nanoi übernommen), `apt-mark hold`. Auf 100 lag eine ältere Konfiguration für netbird.io, die nach der Installation kurz wieder aktiv wurde. Sie bleibt als inaktives Profil `default` erhalten; aktiv ist das neue Profil `spacebird` mit Peer `standby-100`, 100.89.187.150, Gruppe `space-hosts`, Peer-ID `db96lcflh8lg008bddjg`. Sicherung des vorherigen Zustands: `/root/netbird-state.before-spacebird-20261016`. Zu nanoi (nur IPv6) läuft die Verbindung über das Relay. |
+| Firewall | `pi-nft-host.service` mit `/etc/nftables-pi-host.nft`, Policy `accept`, damit LAN-Dienste (NFS, SSH) unverändert bleiben. Über `wt0` werden nur neue Verbindungen auf TCP 7421 angenommen; 7421 ist außerhalb des Overlays gesperrt. |
+| Laufzeit | Docker, Image `pi-spaces-test-node:local` von big; Daemon-Artefakt identisch mit nanoi. Container `pi-spaces-standby` (read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz), Daten in `/var/lib/pi-spaces/standby`; Dienst `pi-spaces-standby.service`. |
+| Federation-Member | Host `standby-100`, Member von Control `phase1b-host-a`, Gate `100.89.187.150:7421`, eigener Ed25519-Schlüssel (`keyId 83503563…`), als `host` enrolled. Ablauf wie bei nanoi: befristete Gruppe `standby-enroll-20261016` mit Policy, danach gelöscht. |
+| Register | Reader-Zertifikat `CN=pi-spaces-register-reader-standby-100` (Fingerprint `d57baa5c…`, Schlüssel auf 100 erzeugt), Zugriff über `207.180.233.218:17422`. `tls.json` auf vpsc ergänzt (Sicherung `tls.json.before-standby-100-20261016`). `boot:standby-100` (Version 1) per Operator-CAS. Keine neue ufw-Regel nötig: Die Adresse ist schon für den Operator freigegeben, getrennt wird über das Zertifikat. |
+| NetBird-Abfragen | lesender Management-Token wie bei nanoi |
+
+Geprüft:
+
+- Ein Admin (lux27) liest über das Overlay den Data Space von `standby-100`.
+- nanoi erreicht `standby-100:7421` über das Relay.
+- Nach einem Neustart von 100 kamen Firewall, NetBird (Profil `spacebird`), Docker, NFS und `pi-spaces-standby`
+  von selbst wieder. Der Dienst war danach `ready`, und das Admin-Lesen klappte erneut.
