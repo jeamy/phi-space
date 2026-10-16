@@ -544,6 +544,10 @@ Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
 `assertSyncStandby` und `assertQuarantine` auf. Fehlgeschlagene Übergänge werfen
 `ReplicaTransitionBlocked`. [Replikatsteuerung](ap3-replica-control.md).
 
+`NetcupFencing` (mit `NetcupScp`, `fileTokenProvider`, `fileFenceState`) ist der
+netcup-Adapter; `serveFencing` bietet einen Adapter per mTLS nur für
+Operator-Zertifikate an, `TlsFencing` ist der passende Client. Fehler: `NetcupError`.
+
 
 Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich
 `{kind: "renew", type, tag, fields, owner, expiresAt}`. Das erneuert ausschließlich

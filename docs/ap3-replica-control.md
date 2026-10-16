@@ -33,9 +33,10 @@ Adapter, sondern im unabhängigen Recovery-Register.
 
 - `SimulatorFencing` meldet `kind: "simulator"`. Promotion und degradeToSingle lehnen ihn ab, außer ein Test
   setzt ausdrücklich `allowSimulator`. Für diese Ablehnung gibt es einen eigenen Test.
-- `unconfiguredFencing(kind, provider)` ist der Platzhalter für netcup und andere Anbieter. Jede Operation
-  scheitert mit „not configured“. Endpunkte werden erst mit echten Zugangsdaten eingetragen; diese liegen auf
-  vpsc, nicht auf nanoi und nicht im Repository.
+- `unconfiguredFencing(kind, provider)` ist der Platzhalter für Anbieter ohne Zugang. Jede Operation
+  scheitert mit „not configured“.
+- `NetcupFencing` (`src/netcup-fencing.ts`, `kind: "cloud"`) nutzt die SCP-REST-API von netcup; siehe
+  [netcup-Adapter](#netcup-adapter).
 - Die Boot-Übergänge laufen per CAS über das Register. Erneut versucht wird nur bei `RegisterConflict`; ein
   anderer Fehler bricht den Übergang ab.
   - `fenceHostBoot` setzt den Host auf `fenced` und alle Space-Berechtigungen auf `revoked`. Die Werte bleiben
@@ -43,6 +44,52 @@ Adapter, sondern im unabhängigen Recovery-Register.
   - `releaseHostToQuarantine` führt ausschließlich von `fenced` nach `quarantine`. Erst danach hebt der
     Adapter die Neustartsperre auf.
   - `active` setzt nur das Ende von `setStandby`.
+
+## netcup-Adapter
+
+Grundlage ist die je Benutzer ausgelieferte OpenAPI-Spezifikation der SCP-REST-API
+(`https://www.servercontrolpanel.de/scp-core/api/v1`, Version 2026.1015, 63 Pfade). Endpunkte:
+
+- `GET /servers/{id}`: Zustand und Autostart (`serverLiveInfo.state`, `serverLiveInfo.autostart`);
+- `GET /servers/{id}/interfaces`: MACs;
+- `PATCH /servers/{id}` mit `application/merge-patch+json` und genau einem Attribut je Aufruf; liefert 202
+  und eine Aufgabe;
+- `GET /tasks/{uuid}`: Aufgabenstatus.
+
+Ablauf:
+
+- **fence:**
+  1. Prüft die festgelegte Identität: Host-ID → Server-ID und MAC, nur aus der lokalen Liste.
+  2. Merkt sich den bisherigen Autostart-Wert und schaltet Autostart ab.
+  3. Schaltet hart aus: `state: OFF` mit `stateOption=POWEROFF`.
+  4. Liest den Server erneut. Ein Nachweis mit `restartLocked: true` entsteht nur bei genau `SHUTOFF` und
+     Autostart aus.
+  5. Aufgaben in `ERROR`, `CANCELED` oder `ROLLBACK` sowie 503 (Wartung) gelten als Fehlschlag.
+- **verify:** fragt bei jedem Aufruf den Live-Zustand des Servers ab, den die lokale Liste zur Host-ID nennt.
+  Die Server-ID im Nachweis wird nie verwendet.
+- **release:** nur nach `quarantine`. Stellt den alten Autostart-Wert wieder her und schaltet ein.
+
+Mit netcup heißt „Neustartsperre“: Autostart aus und `SHUTOFF` beobachtet. Wer Zugang zum SCP hat, kann den
+Server trotzdem starten. Die eigentliche Sperre ist der Boot-Zustand `fenced` mit widerrufenen Berechtigungen
+im Register.
+
+Betrieb:
+
+- Token und Aufrufe bleiben auf vpsc. Der Dienst `scripts/fencing-netcup-tls.mjs` (Teil von
+  `npm run build:operations`) bietet `fence`, `verify` und `release` per mTLS an, nur für
+  Operator-Zertifikate.
+- Transitionshosts nutzen `TlsFencing` als schlanken Client.
+- Der Dienst läuft als eigener Prozess neben dem Register; das Register selbst sieht den Token nie.
+- Anmeldung per Device-Flow mit `scripts/netcup-login.py`, als Benutzer `mux` auf vpsc. Ergebnis ist ein
+  Offline-Refresh-Token in `~/.config/pi-spaces-fencing/netcup.json` (0600).
+- Keycloak rotiert den Refresh-Token. Dienst und Skript erneuern ihn deshalb nur unter derselben Sperrdatei
+  `netcup.json.lock`.
+- Der Token verfällt nach etwa 30 Tagen ohne Nutzung; regelmäßige Statusabfragen halten ihn aktiv.
+  Widerruf im SCP-Konto unter „Kontosicherheit → Geräteaktivität“.
+- Das SCP-Konto ist IP-beschränkt. Freigegeben sind die Adressen von vpsc: `2a02:c207:2252:8263:8000::`
+  und `207.180.233.218`.
+- Festgelegtes Ziel ist nur nanoi: `nano-test` → Server 964249, MAC `2a:38:5f:38:de:22`. Server 730972 ist big
+  und steht nie in der Liste.
 
 ## Berechtigungsprüfungen
 
@@ -95,6 +142,16 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 
 ## Tests
 
+`test-netcup-fencing.test.ts` prüft den Adapter gegen einen nachgebauten SCP-Zustandsautomaten:
+
+- die Reihenfolge Identität, Autostart, Ausschalten;
+- Wiederholung ohne erneutes Patchen;
+- `verify` gegen falsche Server-ID im Nachweis, eingeschaltetes Autostart, falschen Typ und nicht
+  festgelegte Hosts;
+- Aufgabenfehler, Wartung, geänderte MAC und einen Server, der weiterläuft;
+- Token-Rotation unter Sperrdatei;
+- den mTLS-Dienst: Reader-Zertifikat abgewiesen, Operator erlaubt.
+
 `test-replica-control.test.ts` umfasst 8 Fälle auf JSONL und SQLite:
 
 - **Ablehnungen:** Simulator- und unkonfigurierte Adapter werden abgelehnt, ohne Zustand zu ändern;
@@ -116,7 +173,9 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 
 ## Grenzen
 
-- Die Abnahme von 3.3/3.4 verlangt einen realen Adapter (F1/Gate 2). Testziel ist nanoi
+- Der netcup-Adapter ist gebaut und gegen eine nachgebaute SCP-API geprüft, aber noch nicht auf vpsc
+  ausgerollt und noch nie gegen den echten nanoi gelaufen. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
+  diesen realen Lauf. Testziel ist nanoi
   ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Der Standby-Platz ist noch
   festzulegen: vpsc trägt bereits das Register, ein Standby dort würde beide Ausfälle koppeln.
 - 3.6 ist nur teilweise umgesetzt:
