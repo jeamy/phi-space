@@ -1,0 +1,75 @@
+{
+ "bootRecords": {
+  "nano-test": {
+   "afterRun": {
+    "version": 9,
+    "state": "active",
+    "permits": {
+     "phase3-sync": "active/standby",
+     "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "revoked/local",
+     "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "revoked/local"
+    }
+   },
+   "restored": {
+    "version": 10,
+    "state": "active",
+    "permits": {
+     "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+     "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+    }
+   }
+  },
+  "standby-100": {
+   "afterRun": {
+    "version": 5,
+    "state": "active",
+    "permits": {
+     "phase3-sync": "active/primary",
+     "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+     "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+    }
+   },
+   "restored": {
+    "version": 6,
+    "state": "active",
+    "permits": {
+     "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+     "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+    }
+   }
+  }
+ },
+ "steps": [
+  {
+   "what": "boot:nano-test and boot:standby-100 restored to their pre-run values by operator CAS (sync-space permits removed, federation permits of nano-test active again)",
+   "ok": true
+  },
+  {
+   "what": "stale owner.lock on nanoi (pid 35, gone in the container) removed, pi-spaces-nano started",
+   "ready": true
+  },
+  {
+   "what": "temporary NetBird group and policy phase3-sync-20261016 (tcp 17432, both directions) deleted",
+   "remaining": []
+  },
+  {
+   "what": "runtime nft rule for tcp 17432 on wt0 removed on 100 (never written to the configuration file)",
+   "remaining": 0
+  },
+  {
+   "what": "replica-control certificate eedbcd4c... removed from register tls.json (writeKeys) and fencing.json (operator); both services restarted",
+   "ok": true
+  },
+  {
+   "what": "admin read over the overlay of nano-test and standby-100 after cleanup",
+   "ok": true
+  }
+ ],
+ "retained": [
+  "fixture stores in /var/lib/pi-spaces/{nano,standby}/phase3 (nanoi: aside-1792177179833 holds the old journal with the fork at revision 6)",
+  "config backups tls.json.before-phase3-sync-20261016 and fencing.json.before-phase3-sync-20261016 on vpsc"
+ ],
+ "artifact": {
+  "phase3-sync-node.mjs": "7926e8bfc7f76ac16121e3f954452211890b283ed7ddae1ff27907707e5e6aa1"
+ }
+}

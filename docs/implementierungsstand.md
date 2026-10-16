@@ -315,6 +315,18 @@ JSONL und SQLite prüfen u. a. Abstürze vor dem Boot-CAS, Forks des alten Prima
 und die Ablehnung von Simulator-Nachweisen. Die Abnahme bleibt durch F1/Gate 2
 (realer Fencing-Adapter) blockiert; 3.6 ist nur teilweise umgesetzt.
 
+Nachtrag 2026-10-16: Der netcup-Fencing-Adapter mit mTLS-Dienst auf vpsc und ein signierter Replikat-Transport
+sind umgesetzt. Ein Fixture-Lauf über echte Hosts hat bestanden, mit nanoi als Primary und 100 als Standby
+([Nachweis](../test/evidence/phase3-sync-2026-10-16/README.md)). Der Lauf umfasste:
+
+- Fork ohne ACK;
+- netcup-Power-off;
+- Promotion, degradeToSingle und setStandby;
+- am Ende identische Stände.
+
+Offen bleiben die Einbindung in den produktiven Space-Dienst, `ReplicaConfigNotice`, das Pausieren aller
+Schreibquellen und 3.8.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

@@ -186,8 +186,16 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 ## Grenzen
 
 - Der netcup-Adapter hat nanoi am 2026-10-16 real abgeschaltet, geprüft und über Quarantäne wieder freigegeben
-  ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)). Offen ist eine Promotion bzw. degradeToSingle
-  mit echten Primary-/Standby-Daten. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
+  ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)).
+- Am selben Tag lief der ganze Zyklus mit echten Hosts
+  ([Nachweis](../test/evidence/phase3-sync-2026-10-16/README.md)):
+  - Primary nanoi, Standby 100, verbunden über den signierten Replikat-Transport;
+  - Fork ohne ACK;
+  - netcup-Fencing, `promote` und `degradeToSingle` auf 100;
+  - Freigabe in Quarantäne und `setStandby` zurück zu nanoi;
+  - am Ende identische Stände.
+
+  Das ist ein Fixture-Lauf neben dem Federation-Daemon, nicht der produktive Space-Dienst. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
   diesen realen Lauf. Testziel ist nanoi
   ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Standby ist Host 100 im
   Heimnetz ([testumgebung-big.md](testumgebung-big.md) §19), nicht vpsc, das bereits Register und Fencing-Dienst

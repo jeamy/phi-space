@@ -1,0 +1,271 @@
+{
+ "passed": true,
+ "error": null,
+ "log": [
+  {
+   "at": "2026-10-16T18:58:48.739Z",
+   "name": "primary ready",
+   "data": {
+    "ready": true,
+    "self": "nano-test",
+    "head": {
+     "revision": 0,
+     "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+     "configHash": "55feaabb58de106496b3b838252f2413780177c099b8290a10d4d8bd6e7b50c7"
+    },
+    "applied": 0,
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 1,
+     "primaryReplica": "nano-test",
+     "replicaConfigVersion": 1,
+     "spaceId": "phase3-sync",
+     "standbyReplica": "standby-100"
+    },
+    "recoveredCommitted": []
+   }
+  },
+  {
+   "at": "2026-10-16T18:58:48.742Z",
+   "name": "standby ready",
+   "data": {
+    "ready": true,
+    "self": "standby-100",
+    "head": {
+     "revision": 0,
+     "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+     "configHash": "55feaabb58de106496b3b838252f2413780177c099b8290a10d4d8bd6e7b50c7"
+    },
+    "applied": 0,
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 1,
+     "primaryReplica": "nano-test",
+     "replicaConfigVersion": 1,
+     "spaceId": "phase3-sync",
+     "standbyReplica": "standby-100"
+    },
+    "recoveredCommitted": []
+   }
+  },
+  {
+   "at": "2026-10-16T18:58:48.990Z",
+   "name": "primary opened",
+   "data": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 1,
+    "primaryReplica": "nano-test",
+    "replicaConfigVersion": 1,
+    "spaceId": "phase3-sync",
+    "standbyReplica": "standby-100"
+   }
+  },
+  {
+   "at": "2026-10-16T18:58:51.039Z",
+   "name": "check",
+   "data": "five sync writes confirmed by the standby"
+  },
+  {
+   "at": "2026-10-16T18:58:51.120Z",
+   "name": "check",
+   "data": "standby journal head equals primary head"
+  },
+  {
+   "at": "2026-10-16T18:58:51.582Z",
+   "name": "check",
+   "data": "write without standby ACK is sealed, not committed"
+  },
+  {
+   "at": "2026-10-16T18:58:51.582Z",
+   "name": "fork candidate",
+   "data": {
+    "revision": 6,
+    "hash": "61712a214ec118863bc6538b0e747c1849c3b1493afad2376d5c6c87af74b74f"
+   }
+  },
+  {
+   "at": "2026-10-16T18:58:59.155Z",
+   "name": "fence proof",
+   "data": {
+    "kind": "cloud",
+    "restartLocked": true,
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "phase3 sync acceptance: primary lost"
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T18:58:59.624Z",
+   "name": "check",
+   "data": "fencing proof verifies"
+  },
+  {
+   "at": "2026-10-16T18:59:02.158Z",
+   "name": "promoted",
+   "data": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 2,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 2,
+    "spaceId": "phase3-sync",
+    "standbyReplica": "nano-test"
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:02.158Z",
+   "name": "check",
+   "data": "standby is primary with epoch 2, old primary named as standby"
+  },
+  {
+   "at": "2026-10-16T18:59:02.259Z",
+   "name": "check",
+   "data": "the unacknowledged fork is not part of the promoted history"
+  },
+  {
+   "at": "2026-10-16T18:59:02.259Z",
+   "name": "promoted entry at fork revision",
+   "data": {
+    "revision": 6,
+    "hash": "9de2c7717433b9455c73fe7ca6bdba46b1da5ca1dd7b98a0df43fa150b6dfbcf",
+    "version": 2
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:10.908Z",
+   "name": "check",
+   "data": "without a live standby a write stays sealed and unconfirmed"
+  },
+  {
+   "at": "2026-10-16T18:59:10.908Z",
+   "name": "sealed on the promoted primary",
+   "data": {
+    "revision": 7,
+    "hash": "6fe9c928f5041530807286237318c95dad9b0ecae268c788e931ee923f08d8f8"
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:13.610Z",
+   "name": "degraded",
+   "data": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "single",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 3,
+    "spaceId": "phase3-sync",
+    "standbyReplica": null
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:13.611Z",
+   "name": "check",
+   "data": "single durability with epoch 3"
+  },
+  {
+   "at": "2026-10-16T18:59:13.611Z",
+   "name": "check",
+   "data": "degradeToSingle completed exactly the sealed candidate after the fencing proof"
+  },
+  {
+   "at": "2026-10-16T18:59:15.826Z",
+   "name": "check",
+   "data": "single writes on the promoted primary"
+  },
+  {
+   "at": "2026-10-16T18:59:24.669Z",
+   "name": "old primary released into quarantine",
+   "data": "quarantine"
+  },
+  {
+   "at": "2026-10-16T18:59:40.982Z",
+   "name": "old primary restarted",
+   "data": {
+    "revision": 6,
+    "hash": "61712a214ec118863bc6538b0e747c1849c3b1493afad2376d5c6c87af74b74f",
+    "configHash": "55feaabb58de106496b3b838252f2413780177c099b8290a10d4d8bd6e7b50c7"
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:41.138Z",
+   "name": "old sync history moved aside",
+   "data": {
+    "aside": "/data/nano/phase3/aside-1792177179833",
+    "head": {
+     "revision": 0,
+     "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+     "configHash": "55feaabb58de106496b3b838252f2413780177c099b8290a10d4d8bd6e7b50c7"
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:44.798Z",
+   "name": "setStandby",
+   "data": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 4,
+    "spaceId": "phase3-sync",
+    "standbyReplica": "nano-test"
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:44.798Z",
+   "name": "check",
+   "data": "old primary is the new sync standby"
+  },
+  {
+   "at": "2026-10-16T18:59:45.765Z",
+   "name": "check",
+   "data": "old primary left quarantine"
+  },
+  {
+   "at": "2026-10-16T18:59:48.121Z",
+   "name": "check",
+   "data": "sync writes in the new direction"
+  },
+  {
+   "at": "2026-10-16T18:59:48.552Z",
+   "name": "final states",
+   "data": {
+    "standby100": {
+     "entries": 12,
+     "snapshot": "c2d926f3aa1579a7059abb1a70f9c0e22ed65cc6b36e236eb6732035415584cc",
+     "head": {
+      "revision": 15,
+      "hash": "75b3fccfcce5b2c1c3c8ca7c5d83ae3cf9404ed60b2064766d6d904164a97d59",
+      "configHash": "7dff536b4cf4f01fd5171bad381e741b7ab655fb30c0f0a1fa3f98959a607bff"
+     }
+    },
+    "nano": {
+     "entries": 12,
+     "snapshot": "c2d926f3aa1579a7059abb1a70f9c0e22ed65cc6b36e236eb6732035415584cc",
+     "head": {
+      "revision": 15,
+      "hash": "75b3fccfcce5b2c1c3c8ca7c5d83ae3cf9404ed60b2064766d6d904164a97d59",
+      "configHash": "7dff536b4cf4f01fd5171bad381e741b7ab655fb30c0f0a1fa3f98959a607bff"
+     }
+    }
+   }
+  },
+  {
+   "at": "2026-10-16T18:59:48.552Z",
+   "name": "check",
+   "data": "twelve probes: five before, one recovered candidate, three single, three after; no fork"
+  },
+  {
+   "at": "2026-10-16T18:59:48.552Z",
+   "name": "check",
+   "data": "both materialized states and journal heads are identical"
+  }
+ ]
+}
