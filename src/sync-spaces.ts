@@ -11,7 +11,7 @@ import type { Signer } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { installBootGuard } from "./boot.ts";
 import { PrimarySyncJournal, primarySyncStorage, recoverPrimarySync, durabilityOf, type PrimarySyncConfig } from "./primary-sync.ts";
-import { assertQuarantine, assertSyncPrimary, assertSyncStandby } from "./replica-control.ts";
+import { assertQuarantine, assertSyncPrimary, assertSyncStandby, installAdmittedPermit } from "./replica-control.ts";
 import { replicaSyncHandler, signedReplicaPeer, type ReplicaPin } from "./replica-transport.ts";
 import { latestReplicaConfigNotice, signReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 import { serveSpace, socketTransport } from "./socket.ts";
@@ -47,6 +47,9 @@ export async function openSyncSpace(o: {
 	let harness: Harness | undefined, stopGuard: (() => void) | undefined;
 	try {
 		if (!o.listenOnly && role() === "primary") {
+			// The local installation follows the active external permit of this replica configuration (after every
+			// transition the next open copies it); without an active permit the Space is not served.
+			await installAdmittedPermit({ external: o.external, installed: o.installed, hostId: o.hostId, spaceId: c.spaceId, localDataIncarnation: c.incarnation });
 			const standby = durabilityOf(journal.config) === "sync" ? c.peers.find(p => p.hostId === journal.config.standbyReplica) : undefined;
 			if (durabilityOf(journal.config) === "sync" && !standby) throw new Error(`standby ${journal.config.standbyReplica} of ${c.alias} is not provisioned`);
 			const peer = standby ? signedReplicaPeer({ transport: (transports.push(socketTransport({ host: standby.ip, port: c.port }, { localAddress: o.bindIp, connectTimeoutMs: 8000, maxFrameBytes: 1 << 20 })), transports.at(-1)!), signer: o.signer, self: o.hostId, remote: standby }) : null;

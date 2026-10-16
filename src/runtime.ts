@@ -163,7 +163,10 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 		const mainService = await startService(host, ctx, { now: o.now }), syncServicesStops: Array<() => Promise<void>> = [];
 		stopMaintenance = async () => { for (const stop of syncServicesStops.splice(0)) await stop(); await mainService(); };
 		// Reaper and delivery of every served primary/sync Space run on its own Harness.
-		for (const sp of o.syncSpaces ?? []) syncServicesStops.push(await startService(sp.host, ctx, { now: o.now, space: sp.alias }));
+		for (const sp of o.syncSpaces ?? []) {
+			try { syncServicesStops.push(await startService(sp.host, ctx, { now: o.now, space: sp.alias })); }
+			catch (e) { syncServices.delete(sp.spaceId); syncServices.delete(sp.alias); console.error(`primary/sync Space ${sp.alias} stays unserved:`, e instanceof Error ? e.message : String(e)); }
+		}
 		gate = await startGate(chain, { ...o, keys: o.keys });
         // Recovered remote jobs may need this Control endpoint for fresh Member key lookup.
         // All proof, grant, Control access and boot guards are installed before listening.

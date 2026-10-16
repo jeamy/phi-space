@@ -7,7 +7,7 @@ import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {startQuarantineReplicas,serveRegister,signedReplicaPeer,socketTransport,openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
+import {startService,startQuarantineReplicas,serveRegister,signedReplicaPeer,socketTransport,openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -275,7 +275,6 @@ for(const backend of BACKENDS)test(`${backend}: openSyncSpace serves a primary/s
  const permit=(role:'primary'|'standby')=>({state:'active',authorityId:config.authorityId,dataIncarnation:incarnation,role,primaryEpoch:1,replicaConfigVersion:1,durability:'sync',transitionId:'provisioned'});
  await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[spaceId]:permit('primary')}});await reg.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{[spaceId]:permit('standby')}});
  const installed={p:new SqliteRecoveryRegister(join(dir,'installed-p.sqlite')),s:new SqliteRecoveryRegister(join(dir,'installed-s.sqlite'))};
- await installed.p.compareAndSet(`installed:p:${spaceId}`,null,permit('primary'));
  const homes={p:new PersistentHome(backend),s:new PersistentHome(backend)};
  const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(homes[h].dir,'sync'),genesis,port,peers:[{hostId:h==='p'?'s':'p',algorithm:'ed25519',publicKey:keys[h==='p'?'s':'p'].publicKey,ip:ip[h==='p'?'s':'p']}]},
   hostId:h,authorityId:config.authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
@@ -287,11 +286,22 @@ for(const backend of BACKENDS)test(`${backend}: openSyncSpace serves a primary/s
   const jobs=()=>new PiSpaces(p!.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
   for(let n=0;n<3;n++)await jobs().write({type:'Job',fields:{n}},null,core.FOREVER);
   assert.deepEqual(s.journal.head(),p.journal.head(),'every commit is confirmed by the standby');assert.equal(await jobs().count({type:'Job'}),3);
+  // Reaper and delivery on a sync Harness: idle ticks are no sync decisions; with the standby down the start does not throw.
+  let stop=await startService(p.harness!,ctx,{space:'jobs-sync',retryMs:20});await new Promise(r=>setTimeout(r,150));
+  const before=p.journal.head().revision;await jobs().write({type:'Job',fields:{n:99}},null,core.FOREVER);assert.equal(p.journal.head().revision,before+1,'idle maintenance sealed nothing');await stop();
+  const job99=(await jobs().readAll({type:'Job',fields:{n:99}}))[0]!;await jobs().take({type:'Job',fields:{n:99}},0);void job99;
+  await s.close();s=undefined;stop=await startService(p.harness!,ctx,{space:'jobs-sync',retryMs:20});await new Promise(r=>setTimeout(r,150));await stop();
+  assert.equal(p.journal.head().revision,p.journal.appliedRevision,'no candidate was sealed by idle maintenance without a standby');
+  await p.close();p=undefined;s=await open('s');p=await open('p');
   assert.equal(await p.notice(),null,'no notice without a completed transition');
   await p.close();p=await open('p');assert.equal(await jobs().count({type:'Job'}),3,'the dedicated store survives a restart');await jobs().write({type:'Job',fields:{n:3}},null,core.FOREVER);
   // The boot guard follows the external permit of exactly this replica configuration.
   const b=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',b.version,{...b.value,spaces:{[spaceId]:{...permit('primary'),replicaConfigVersion:2}}});
   await assert.rejects(jobs().write({type:'Job',fields:{n:4}},null,core.FOREVER),/boot permit|replica configuration|lacks matching/);
+  // Reopening copies the new external permit; it still disagrees with the journal configuration, so writes stay blocked.
+  await p.close();p=undefined;p=await open('p');await assert.rejects(jobs().write({type:'Job',fields:{n:4}},null,core.FOREVER),/boot permit|replica configuration|lacks matching/);
+  const b2=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',b2.version,{...b2.value,spaces:{[spaceId]:permit('primary')}});
+  await p.close();p=undefined;p=await open('p');await jobs().write({type:'Job',fields:{n:5}},null,core.FOREVER);assert.equal(await jobs().count({type:'Job'}),5,'after the permit returns, the reopened primary installs it and serves again');
  }finally{await p?.close().catch(()=>{});await s?.close();reg.close();installed.p.close();installed.s.close();await homes.p.dispose();await homes.s.dispose();rmSync(dir,{recursive:true,force:true});}
 });
 
