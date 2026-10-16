@@ -21,7 +21,7 @@ export async function exerciseFederationRuntime() {
 		let keys = new SpaceKeyDirectory(h, ctx, clock);
 		const verifier = () => new GrantVerifier({ authorityId: "authority", issuerHostId: "control-host", publicKey: rootKey.publicKey, algorithm: "ed25519", now: clock });
 		let root: Awaited<ReturnType<typeof startFederationHost>> | undefined, member: Awaited<ReturnType<typeof startFederationHost>> | undefined;
-		const sockets: Array<ReturnType<typeof socketTransport>> = [];
+		const sockets: Array<ReturnType<typeof socketTransport>> = [], syncHomes: PersistentHome[] = [];
 		const groupRoles = { "space-admin": ["admin"], "space-members": ["member"], "space-hosts": ["member", "host"], "space-enroll": ["unpaired"] };
 		const authority = () => new GrantAuthority({ authorityId: "authority", hostId: "control-host", signer: rootKey.signer, keys, identity, now: clock, refreshIdentity: async conn => { await directory.refresh(); const p = await directory.lookup(conn.overlayIp!); return p ? identity.authenticate({ ...conn, credentials: { roles: p.groups.flatMap(g => groupRoles[g as keyof typeof groupRoles] ?? []) } }) : null; } });
 		try {
@@ -55,7 +55,9 @@ export async function exerciseFederationRuntime() {
 
 			const networkKeys = { find: (peerId: string, keyId: string) => hostControl.lookupPeerKey(peerId, keyId) };
 			await data.commit(tx => createSpace(tx, "jobs", now), ctx);
-			member = await startFederationHost(data, ctx, { hostId: "data-host", authorityId: "authority", keys: networkKeys, verifier: verifier(), boot: await provisionBoot(data, "data-host"), directory, groupRoles, listen: { host: "127.0.0.1", port: 0 }, revalidateMs: 0, now: clock });
+			// A primary/sync Space lives in its own store; the member host dispatches calls naming it to that Harness.
+			const syncHome = new PersistentHome(home.backend); syncHomes.push(syncHome); const syncHost = await syncHome.open(), syncInfo = await syncHost.commit(tx => createSpace(tx, "sync-jobs", now), ctx);
+			member = await startFederationHost(data, ctx, { syncSpaces: [{ spaceId: syncInfo.spaceId, alias: "sync-jobs", host: syncHost, primaryEpoch: () => 1 }], hostId: "data-host", authorityId: "authority", keys: networkKeys, verifier: verifier(), boot: await provisionBoot(data, "data-host"), directory, groupRoles, listen: { host: "127.0.0.1", port: 0 }, revalidateMs: 0, now: clock });
 			let purpose: Grant["purpose"] = "effect";
 			const socket = socketTransport({ host: "127.0.0.1", port: (member.address() as any).port }, { localAddress: "127.0.0.3" }); sockets.push(socket);
 			const remote = new RemoteSpace(socket, { space: "jobs", signer: adminSigner, expectedGateHostId: "data-host", ownPeerId: "admin", now: clock, grantProvider: () => admin.requestGrant(purpose), maxClientWaitMs: 1000, attempts: 2, backoffMs: 1, callTimeoutMs: 3000 });
@@ -67,6 +69,11 @@ export async function exerciseFederationRuntime() {
 			purpose = "resolution"; assert.equal((await remote.pollOperation(pending, 0)).state, "pending"); assert.equal(await local.count({ type: "Later" }), 1);
 			await assert.rejects(remote.write({ type: "Forbidden", fields: {} }), /resolution/);
 			purpose = "effect"; assert.equal((await remote.pollOperation(pending, 0)).state, "done"); assert.equal(await local.count({ type: "Later" }), 0);
+			const syncSocket = socketTransport({ host: "127.0.0.1", port: (member.address() as any).port }, { localAddress: "127.0.0.3" }); sockets.push(syncSocket);
+			const syncRemote = new RemoteSpace(syncSocket, { space: "sync-jobs", signer: adminSigner, expectedGateHostId: "data-host", ownPeerId: "admin", now: clock, grantProvider: () => admin.requestGrant("effect"), maxClientWaitMs: 1000, attempts: 2, backoffMs: 1, callTimeoutMs: 3000 });
+			assert.equal((await syncRemote.info()).spaceId, syncInfo.spaceId);await syncRemote.write({ type: "Synced", fields: { n: 1 } }, null, FOREVER);
+			assert.equal(await new PiSpaces(syncHost, ctx, clock, undefined, undefined, { space: "sync-jobs" }).count({ type: "Synced" }), 1, "the call reached the dedicated store");
+			assert.equal(await local.count({ type: "Synced" }), 0, "and not the host's main store");
 
 			const workerKey = generateKey("ecdsa-p256", "worker"), workerToken = newEnrollToken();
 			await admin.write({ type: "Command", fields: { commandId: "pair-worker", kind: "createEnroll", args: { tokenHash: hashToken(workerToken), role: "member", allowedPeerId: "worker", scope: ["jobs"] } } }, null, FOREVER);
@@ -93,6 +100,6 @@ export async function exerciseFederationRuntime() {
 			home.crash(h); other.crash(data); h = await home.open(); data = await other.open(); keys = new SpaceKeyDirectory(h, ctx, clock);
 			assert.equal((await keys.find("admin", ch.newKeyId))?.state, "active"); assert.equal((await keys.find("admin", paired.keyId))?.state, "revoked");
 			assert.equal(await new PiSpaces(data, ctx, clock, undefined, undefined, { space: "jobs" }).count({ type: "Later" }), 0);
-		} finally { sockets.forEach(s => s.close()); await member?.close(); await root?.close(); await other.dispose(); external.close(); installed.close(); rmSync(registerDir, { recursive: true, force: true }); }
+		} finally { sockets.forEach(s => s.close()); await member?.close(); await root?.close(); await other.dispose(); for (const sh of syncHomes) await sh.dispose(); external.close(); installed.close(); rmSync(registerDir, { recursive: true, force: true }); }
 	});
 }

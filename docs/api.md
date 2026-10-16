@@ -560,6 +560,11 @@ veröffentlicht seine Notice mit `RemoteSpace.publishReplicaNotice` auf dem `Rep
 der native Root übernimmt sie im Heartbeat (`adoptReplicaNotices`) und adressiert Member über ihre provisionierten
 `replicas`.
 
+`openSyncSpace` öffnet einen primary/sync-Space mit eigenem Store, Replikat-Listener, Boot-Guard und Notice.
+`startFederationHost({ syncSpaces })` und `startConfiguredFederation(host, ctx, file, { openSyncStorage,
+openSyncHarness })` binden solche Spaces in den Federation-Host ein. `createSpace(tx, alias, now, { spaceId,
+incarnation })` legt einen Space mit vorgegebener Identität an.
+
 
 Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich
 `{kind: "renew", type, tag, fields, owner, expiresAt}`. Das erneuert ausschließlich

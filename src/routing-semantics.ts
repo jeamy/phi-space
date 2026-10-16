@@ -179,7 +179,9 @@ export function validateFederationPolicy(
         if ((r.mode === 'expand' || r.mode === 'sync' && r.variant !== 'primary') &&
             members(r).some(id => primary.has(id) || !!table[id]!.replication))
             throw new RoutingConflict('primary member cannot be expand or merge member');
-    if (!allowFutureModes && p.rules.some(r => r.mode === 'sync'))
+    // primary/sync is served by hosts with a dedicated store (sync-spaces.ts) and needs the Member's replica
+    // configuration; merge modes (lww/set) stay blocked until their public adapter exists.
+    if (!allowFutureModes && p.rules.some(r => r.mode === 'sync' && (r.variant !== 'primary' || !table[r.member]?.replication)))
         throw new RoutingConflict('sync activation requires phase 3 implementation');
     for (const r of p.rules)
         if (declaredSupertypes(p, r.type).length > 15)

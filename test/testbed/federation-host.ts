@@ -85,7 +85,7 @@ try{
   }
 
 
-  runtime=await startConfiguredFederation(h,ctx,configFile);console.log(JSON.stringify({ready:true,hostId:runtime.config.hostId,address:runtime.address()}));
+  runtime=await startConfiguredFederation(h,ctx,configFile,{openSyncStorage:path=>openNodeSqliteStorage(path),openSyncHarness:storage=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx)});console.log(JSON.stringify({ready:true,hostId:runtime.config.hostId,address:runtime.address()}));
   for(const method of ["snapshot","commit"])observe(h,method,"host."+method);
   if(runtime.root){for(const method of ["step","invoke","resolve"])observe(runtime.root.rpc,method,"rpc."+method);for(const method of ["prepare","admit","finish"])observe(runtime.root.space,method,"root."+method);}
   const acceptFile=process.env.PI_SPACES_ROOT_ACCEPTANCE_FILE;

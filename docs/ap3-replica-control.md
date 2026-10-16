@@ -229,6 +229,45 @@ den neuen Primary ja erst nach der Übernahme.
   Federation-Daemon gibt es noch keine primary/sync-Spaces, weil der Policy-Validator Sync-Regeln sperrt.
 - Der Control-Space-Sonderfall (Schritt 6) gehört zu 3.8.
 
+## primary/sync-Spaces im Federation-Host
+
+Nach v3 §7.2 („pro Space eine vollständige geordnete Commit-Historie“) und `ap3-primary-sync.md` läuft jeder
+primary/sync-Space in einem eigenen Store. `openSyncSpace` (`src/sync-spaces.ts`) öffnet ihn:
+
+- **Journal:** mit `self` und Standby-Prüfung gegen das Register.
+- **Listener:** ein Replikat-Listener mit signiertem Transport auf der Overlay-Adresse, nur für die
+  provisionierten Peer-IPs.
+- **Auf dem Primary:**
+  1. Der offene Kandidat wird geklärt.
+  2. Eine Harness über `primarySyncStorage` wird geöffnet.
+  3. Der Space wird mit fester Identität angelegt (`createSpace(..., { spaceId, incarnation })`). Der Standby
+     erhält dieselbe ID und Dateninkarnation über die Replikation.
+  4. Der Boot-Guard läuft mit `replicaConfig`.
+- **Auf dem Standby:** keine Harness; er bedient keine fachlichen Aufrufe.
+- **Notice:** `notice()` liefert die signierte Notice des letzten abgeschlossenen Übergangs.
+
+`configured-runtime` liest diese Spaces aus `syncSpaces` in der Konfiguration. Speicher und Harness öffnet sie über
+Fabriken, die der Daemon übergibt.
+
+- `startFederationHost({ syncSpaces })` verteilt Aufrufe, deren `space` die ID oder den Alias eines solchen Space
+  nennt, an einen eigenen `SpaceService` über dessen Harness. Dazu gehört ein eigener `DelegationVerifier` mit
+  `replicaConfig`; `epochNotice` für diesen Space geht an dessen Prüfer.
+- Der Host veröffentlicht die Notice im Takt des Capability-Heartbeats.
+- Übergänge (`promote`, `degradeToSingle`, `setStandby`) laufen bei gestopptem Dienst dieses Space. Beim nächsten
+  Start folgt der Host dem Journal.
+
+Der Policy-Validator lässt jetzt Sync-Primary-Regeln zu, wenn der Member eine `replication` hat und Regel und
+Member übereinstimmen. `lww` und `set` bleiben gesperrt, bis ihr öffentlicher Adapter (3.7) existiert.
+
+Geprüft:
+
+- `openSyncSpace` mit zwei Hosts auf Loopback: Replikation, kein Dienst auf dem Standby, Neustart,
+  Boot-Guard-Sperre.
+- Im Runtime-Test über das echte Gate mit Grant landet ein Aufruf an `sync-jobs` im eigenen Store.
+
+Nicht geprüft ist ein Daemon-Lauf mit `syncSpaces` auf echten Hosts; der Fixture-Lauf vom 2026-10-16 lief neben
+dem Daemon.
+
 ## Übergänge
 
 Jeder Übergang wird unter seiner ID im Journal abgelegt (`started` → `locallyCommitted` → `completed`) und

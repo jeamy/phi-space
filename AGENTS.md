@@ -38,7 +38,7 @@ Run typecheck and tests after every change.
   `src/supervisor.ts` the control-space supervisor (createEnroll, revokePeer) and the wire rules for the control space; `src/runtime.ts` composes the federation host;
   `src/grants.ts` / `src/rotation.ts` provide short-lived grants and own-key rotation;
   `src/recovery-register.ts`, `src/recovery.ts`, `src/boot.ts`, `src/restore.ts` are recovery building blocks;
-  `src/primary-sync.ts` is the primary/sync journal, `src/replica-control.ts` holds fencing adapters, promotion, degradeToSingle and setStandby, `src/netcup-fencing.ts` the netcup SCP adapter and its mutual-TLS fencing service;
+  `src/primary-sync.ts` is the primary/sync journal, `src/replica-control.ts` holds fencing adapters, promotion, degradeToSingle and setStandby, `src/netcup-fencing.ts` the netcup SCP adapter and its mutual-TLS fencing service, `src/replica-transport.ts` / `src/replica-notice.ts` / `src/sync-spaces.ts` the signed replica transport, ReplicaConfigNotice and primary/sync Spaces in their own store on a federation host;
   `src/run-controller.ts` journals run start/pause/resume/stop against the core RunGates of each run Member,
   `src/run-member.ts` carries them as signed instructions to Member hosts (`runGateInstruction`),
   `src/workers.ts` keeps desired worker state per host and reconciles registered worker kinds on each host,

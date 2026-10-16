@@ -91,12 +91,21 @@ export async function hostKey(tx: Tx, now: number): Promise<string> { return (aw
  * Create a named space, or return the existing one with this alias (idempotent per alias). Its spaceId is generated
  * and stays fixed; the alias is only a name.
  */
-export async function createSpace(tx: Tx, alias: string, now: number): Promise<SpaceInfo> {
+/**
+ * `fixed`: a provisioned identity, for a primary/sync Space whose ID and data incarnation are bound in the replica
+ * configuration before its first commit (the standby receives the same Space through replication).
+ */
+export async function createSpace(tx: Tx, alias: string, now: number, fixed?: { spaceId: string; incarnation: string }): Promise<SpaceInfo> {
 	if (typeof alias !== "string" || !ALIAS.test(alias)) throw new core.IllegalArgumentError("alias: 1-64 of a-z 0-9 . _ - (starting with a letter or digit)");
+	if (fixed && (!/^sp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(fixed.spaceId) || !/^[0-9a-f]{8}$/.test(fixed.incarnation))) throw new core.IllegalArgumentError("a fixed Space identity needs an sp-<uuid> ID and an 8-hex incarnation");
 	const r = await registry(tx, now);
 	const known = r.aliases[alias];
-	if (known !== undefined) return core.plain(r.spaces[known]!);
-	const info: SpaceInfo = { spaceId: newSpaceId(), alias, incarnation: newIncarnation(), createdAt: now };
+	if (known !== undefined) {
+		if (fixed && (known !== fixed.spaceId || r.spaces[known]!.incarnation !== fixed.incarnation)) throw new core.IllegalArgumentError("alias names another Space identity");
+		return core.plain(r.spaces[known]!);
+	}
+	if (fixed && r.spaces[fixed.spaceId]) throw new core.IllegalArgumentError("Space ID already registered under another alias");
+	const info: SpaceInfo = { spaceId: fixed?.spaceId ?? newSpaceId(), alias, incarnation: fixed?.incarnation ?? newIncarnation(), createdAt: now };
 	const d = await tx.doc(NamedSpace, info.spaceId, null);
 	openDocument(tx, info.spaceId, d); core.touch(d, now);
 	d.spaceId = info.spaceId;

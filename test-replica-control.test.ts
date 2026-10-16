@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {Harness,createRegistry} from '@earendil-works/pi-durable';
+import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
+import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
+import {createModels} from '@earendil-works/pi-ai/models';
+import {openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from './src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './test/support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -257,4 +263,43 @@ for(const backend of BACKENDS)test(`${backend}: the router adopts a ReplicaConfi
   // A restart keeps the adopted configuration.
   await router.close(rh);rh=await router.open();assert.equal((await rh.snapshot(FederationRouting,control.spaceId,ctx))!.policy!.policyVersion,2);
  }finally{await router.close(rh);await router.dispose();await t.dispose();}
+});
+
+for(const backend of BACKENDS)test(`${backend}: openSyncSpace serves a primary/sync Space from its own store, replicates to the standby and binds the boot guard`,async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'sync-space-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite'));
+ const keys={p:provisionFileSigner(join(dir,'p.json')),s:provisionFileSigner(join(dir,'s.json'))},ip={p:'127.0.0.2',s:'127.0.0.3'},port=17533+(backend==='jsonl'?0:1);
+ const spaceId='sp-0b7e6f1a-1111-4222-8333-944445555666',incarnation='0a1b2c3d';
+ const genesis:PrimarySyncConfig={spaceId,authorityId:config.authorityId,primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s',durability:'sync'};
+ const permit=(role:'primary'|'standby')=>({state:'active',authorityId:config.authorityId,dataIncarnation:incarnation,role,primaryEpoch:1,replicaConfigVersion:1,durability:'sync',transitionId:'provisioned'});
+ await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[spaceId]:permit('primary')}});await reg.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{[spaceId]:permit('standby')}});
+ const installed={p:new SqliteRecoveryRegister(join(dir,'installed-p.sqlite')),s:new SqliteRecoveryRegister(join(dir,'installed-s.sqlite'))};
+ await installed.p.compareAndSet(`installed:p:${spaceId}`,null,permit('primary'));
+ const homes={p:new PersistentHome(backend),s:new PersistentHome(backend)};
+ const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(homes[h].dir,'sync'),genesis,port,peers:[{hostId:h==='p'?'s':'p',algorithm:'ed25519',publicKey:keys[h==='p'?'s':'p'].publicKey,ip:ip[h==='p'?'s':'p']}]},
+  hostId:h,authorityId:config.authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
+  openStorage:async path=>backend==='sqlite'?openNodeSqliteStorage(path):openNodeJsonlStorage(path+'.d',ctx),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+ let s:SyncSpace|undefined,p:SyncSpace|undefined;
+ try{
+  s=await open('s');assert.equal(s.role(),'standby');assert.equal(s.harness,undefined,'a standby serves no business calls');
+  p=await open('p');assert.equal(p.role(),'primary');
+  const jobs=()=>new PiSpaces(p!.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
+  for(let n=0;n<3;n++)await jobs().write({type:'Job',fields:{n}},null,core.FOREVER);
+  assert.deepEqual(s.journal.head(),p.journal.head(),'every commit is confirmed by the standby');assert.equal(await jobs().count({type:'Job'}),3);
+  assert.equal(await p.notice(),null,'no notice without a completed transition');
+  await p.close();p=await open('p');assert.equal(await jobs().count({type:'Job'}),3,'the dedicated store survives a restart');await jobs().write({type:'Job',fields:{n:3}},null,core.FOREVER);
+  // The boot guard follows the external permit of exactly this replica configuration.
+  const b=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',b.version,{...b.value,spaces:{[spaceId]:{...permit('primary'),replicaConfigVersion:2}}});
+  await assert.rejects(jobs().write({type:'Job',fields:{n:4}},null,core.FOREVER),/boot permit|replica configuration|lacks matching/);
+ }finally{await p?.close().catch(()=>{});await s?.close();reg.close();installed.p.close();installed.s.close();await homes.p.dispose();await homes.s.dispose();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('the policy validator admits primary rules of replicated Members and keeps merge modes blocked',()=>{
+ const target=(h:string)=>({hostId:h,spaceId:'sp-'+h,authorityId:'a',dataIncarnation:'i',primaryEpoch:1});
+ const table:any={m:{id:'m',state:'active',target:target('p'),replication:{primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'}},plain:{id:'plain',state:'active',target:target('x')}};
+ const policy=(rules:any[])=>({authorityId:'a',policyVersion:1,completionProfiles:[],default:{mode:'local' as const,member:'plain'},rules});
+ const primary={type:'Synced',mode:'sync',variant:'primary',member:'m',primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'};
+ validateFederationPolicy(policy([primary]),table);
+ assert.throws(()=>validateFederationPolicy(policy([{...primary,member:'plain'}]),table),/sync activation requires phase 3/);
+ assert.throws(()=>validateFederationPolicy(policy([{...primary,replicaConfigVersion:2}]),table),/disagrees with the member replica configuration/);
+ assert.throws(()=>validateFederationPolicy(policy([{type:'Merged',mode:'sync',variant:'lww',members:['plain'],semantics:'state',keyFields:['k']}]),table),/sync activation requires phase 3/);
 });
