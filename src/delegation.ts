@@ -216,7 +216,7 @@ type VerifierOptions = {
     now?: () => number;
     uncertaintyMs?: number;
     /** Replica configuration of a primary/sync Space (its journal); null for other Spaces. */
-    replicaConfig?: (spaceId: string) => {replicaConfigVersion : number} | null
+    replicaConfig?: (spaceId: string) => {replicaConfigVersion : number; primaryEpoch?: number} | null
 };
 export class DelegationVerifier {
     private o: VerifierOptions;
@@ -342,7 +342,10 @@ export class DelegationVerifier {
                    (call.method === "txn" && call.args?.action !== "begin" ||
                     call.method === "lease"))
             throw new DelegationDenied("follow-up requires targetRequest");
-        const epoch = s.primaryEpoch ?? 1;
+        // A replicated Space takes its epoch from the replica configuration (journal); its document keeps the epoch
+        // it was created with, transitions only change the configuration.
+        const replica = this.o.replicaConfig?.(info.spaceId);
+        const epoch = replica?.primaryEpoch ?? s.primaryEpoch ?? 1;
         if (!positive(d.targetPrimaryEpoch) ||
             call.frame?.primaryEpoch !== undefined &&
                 call.frame.primaryEpoch !== d.targetPrimaryEpoch ||
@@ -350,7 +353,6 @@ export class DelegationVerifier {
             throw new DelegationDenied("target epoch does not match new or known request");
         // New work on a replicated Space needs the router to route under the local replica configuration; follow-ups
         // of operations admitted before the change continue under their original binding.
-        const replica = this.o.replicaConfig?.(info.spaceId);
         if (replica && !reference && d.targetReplicaConfigVersion !== replica.replicaConfigVersion)
             throw new ReplicaConfigPending(`replica configuration ${replica.replicaConfigVersion} is not adopted by the router yet`);
         const policy = await this.o.policy();

@@ -67,7 +67,10 @@ for(const backend of BACKENDS)test(`${backend}: native Root adopts a published R
   const notice={authorityId:'authority',spaceId:'sync-space',recoveryId:'promote-s',primaryReplica:'s',standbyReplica:'p',primaryEpoch:2,replicaConfigVersion:2,durability:'sync' as const,dataIncarnation:'inc-s'};
   const board=new ReplicaNoticeBoard({host,ctx,controlSpaceId:sid,assertAuthority:async()=>{}}),signed=await signReplicaConfigNotice(notice,sKey);
   await assert.rejects(board.publish(signed,{peerId:'p',roles:['host']}),/only the proven primary host/);
-  assert.deepEqual(await board.publish(signed,{peerId:'s',roles:['host']}),{stored:true});assert.deepEqual(await board.publish(signed,{peerId:'s',roles:['host']}),{stored:false});
+  // Real hosts prove a NetBird peer ID, not their host ID: the notice must be signed with exactly the proven key.
+  await assert.rejects(board.publish(signed,{peerId:'s-peer',roles:['host'],key:{algorithm:pKey.algorithm,publicKey:pKey.publicKey!}}),/only the proven primary host/);
+  assert.deepEqual(await board.publish(signed,{peerId:'s-peer',roles:['host'],key:{algorithm:sKey.algorithm,publicKey:sKey.publicKey!}}),{stored:true});
+  assert.deepEqual(await board.publish(signed,{peerId:'s',roles:['host']}),{stored:false});
   const adopted=await root.adoptReplicaNotices();assert.deepEqual(adopted,{adopted:1,refused:[]});
   assert.equal((await host.snapshot(FederationRouting,sid,ctx))!.members.replicated!.target.hostId,'s');
   hits.p=0;hits.s=0;await root.directory!.refresh().catch(()=>{});assert.ok(hits.s>0&&hits.p===0,'after adoption the probe goes to the new primary');

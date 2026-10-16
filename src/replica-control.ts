@@ -98,6 +98,11 @@ export function assertQuarantine(register: RecoveryRegister, hostId: string): ()
 
 type Phase = "started" | "locallyCommitted" | "completed" | "abandoned";
 type Record_ = { kind: string; phase: Phase; hash: string; config?: PrimarySyncConfig; catchingUp?: boolean };
+/** A replicated Space has one data incarnation shared by its replicas; transitions keep it unchanged. */
+async function assertSharedIncarnation(register: RecoveryRegister, hostId: string, spaceId: string, dataIncarnation: string) {
+	const p = (await register.get<Boot & Json>(`boot:${hostId}`))?.value.spaces[spaceId];
+	if (!p || p.dataIncarnation !== dataIncarnation) throw new ReplicaTransitionBlocked("the data incarnation of a replicated Space is shared by its replicas and stays unchanged");
+}
 async function checkProof(adapter: FencingAdapter, proof: FenceProof, hostId: string, allowSimulator: boolean) {
 	if (adapter.kind === "simulator" && !allowSimulator) throw new ReplicaTransitionBlocked("a simulator fencing claim is no evidence for promotion or degradeToSingle");
 	if (!proof || proof.hostId !== hostId || proof.kind !== adapter.kind || proof.restartLocked !== true || !(await adapter.verify(proof))) throw new ReplicaTransitionBlocked(`no verified fencing proof for ${hostId}`);
@@ -146,6 +151,7 @@ export async function degradeToSingle(o: Common & { recoveryId: string; expected
 		const c = o.journal.config;
 		if (c.primaryReplica !== o.hostId || durabilityOf(c) !== "sync" || c.primaryEpoch !== o.expectedPrimaryEpoch || c.replicaConfigVersion !== o.expectedReplicaConfigVersion) throw new ReplicaTransitionBlocked("replica configuration differs from the expected versions");
 		await checkProof(o.adapter, o.proof, c.standbyReplica!, !!o.allowSimulator);
+		await assertSharedIncarnation(o.register, o.hostId, c.spaceId, o.dataIncarnation);
 		const fenced = async () => { await checkProof(o.adapter, o.proof, c.standbyReplica!, !!o.allowSimulator); };
 		await fenceHostBoot(o.register, c.standbyReplica!, o.recoveryId);
 		await recoverSealedWithoutStandby(o.storage, o.journal, o.ctx, fenced);
@@ -177,6 +183,7 @@ export async function promote(o: Common & { recoveryId: string; expectedPrimaryE
 		await checkProof(o.adapter, o.proof, c.primaryReplica, !!o.allowSimulator);
 		// No quarantine exception here: a released standby with stale history has no standby permit.
 		await assertPermit(o.register, o.hostId, c, "standby");
+		await assertSharedIncarnation(o.register, o.hostId, c.spaceId, o.dataIncarnation);
 		await fenceHostBoot(o.register, c.primaryReplica, o.recoveryId);
 		await materializeSyncHistory(o.storage, o.journal, o.ctx);
 		const next: PrimarySyncConfig = { ...c, primaryReplica: o.hostId, standbyReplica: c.primaryReplica, primaryEpoch: c.primaryEpoch + 1, replicaConfigVersion: c.replicaConfigVersion + 1 };
@@ -209,6 +216,8 @@ export async function setStandby(o: Common & { transitionId: string; target: Sta
 	if (rec.phase === "started") {
 		const c = o.journal.config;
 		if (c.primaryReplica !== o.hostId || durabilityOf(c) !== "single") throw new ReplicaTransitionBlocked("setStandby starts from a single primary");
+		if (o.targetDataIncarnation !== o.dataIncarnation) throw new ReplicaTransitionBlocked("the standby carries the shared data incarnation of the Space");
+		await assertSharedIncarnation(o.register, o.hostId, c.spaceId, o.dataIncarnation);
 		if ((await o.register.get<Boot & Json>(`boot:${o.target.hostId}`))?.value.state !== "quarantine") throw new ReplicaTransitionBlocked("the target must be in quarantine");
 		if (o.journal.head().revision !== o.journal.appliedRevision) throw new ReplicaTransitionBlocked("resolve the sealed candidate first");
 		await assertSyncPrimary(o.register, o.hostId, o.journal)();

@@ -57,7 +57,7 @@ async function scenario(env:Env){
   await releaseHostToQuarantine(env.register,P,'phase3-release-1',env.operatorFencing??undefined);step('old primary released into quarantine',(await env.register.get<any>('boot:'+P))?.value.state);
   await env.afterRelease();p=env.startPrimary();step('old primary restarted',(await p.ready).head);
   const wiped=await p.call('wipe');step('old sync history moved aside',{aside:wiped.aside,head:wiped.head});await p.call('listen');
-  const set=await s.call('set-standby',{tid:'phase3-standby-1',target:P,targetIncarnation:'sync-nano-2'});step('setStandby',set.config);
+  const set=await s.call('set-standby',{tid:'phase3-standby-1',target:P,targetIncarnation:'sync-1'});step('setStandby',set.config);
   check(set.config.standbyReplica===P&&set.config.durability==='sync','old primary is the new sync standby');
   check((await env.register.get<any>('boot:'+P))?.value.state==='active','old primary left quarantine');
   await s.call('open-primary');const after=await s.call('write',{count:3,label:'after-setstandby'});check(after.writes.every((w:any)=>w.ok),'sync writes in the new direction');
@@ -74,12 +74,12 @@ if(args[0]==='--local'){
  const dir=resolve(args[1]??'phase3-sync-local');mkdirSync(dir,{recursive:true,mode:0o700});
  const register=new SqliteRecoveryRegister(join(dir,'register.sqlite'));
  const keys:Record<string,ReturnType<typeof provisionFileSigner>>={[P]:provisionFileSigner(join(dir,'keys',P+'.json')),[S]:provisionFileSigner(join(dir,'keys',S+'.json'))};
- await register.compareAndSet('boot:'+P,null,{hostId:P,state:'active',spaces:{[SPACE]:permit('primary','sync-nano-1')}});
- await register.compareAndSet('boot:'+S,null,{hostId:S,state:'active',spaces:{[SPACE]:permit('standby','sync-100-1')}});
+ await register.compareAndSet('boot:'+P,null,{hostId:P,state:'active',spaces:{[SPACE]:permit('primary','sync-1')}});
+ await register.compareAndSet('boot:'+S,null,{hostId:S,state:'active',spaces:{[SPACE]:permit('standby','sync-1')}});
  const pin=(h:string,port:number)=>({hostId:h,algorithm:'ed25519',publicKey:keys[h]!.publicKey,ip:'127.0.0.1',port});
  const conf=(self:string,other:string,inc:string,port:number,fencing:unknown)=>{const f=join(dir,self+'.json');writeFileSync(f,JSON.stringify({self,bindIp:'127.0.0.'+(self===P?'1':'2'),port,signerFile:join(dir,'keys',self+'.json'),remotes:[{...pin(other,port),ip:'127.0.0.'+(other===P?'1':'2')}],genesis,dataIncarnation:inc,register:{sqlite:join(dir,'register.sqlite')},fencing}));return f;};
  const node=(self:string,f:string)=>new Node(self,process.execPath,[...(process.env.SYNC_REPORT_DIR?['--report-on-signal','--report-directory='+process.env.SYNC_REPORT_DIR]:[]),'--experimental-strip-types',join(here,'phase3-sync-node.ts'),join(dir,self),f],l=>console.log(l));
- const pf=conf(P,S,'sync-nano-1',17432,null),sf=conf(S,P,'sync-100-1',17432,{simulator:true});
+ const pf=conf(P,S,'sync-1',17432,null),sf=conf(S,P,'sync-1',17432,{simulator:true});
  await scenario({register,operatorFencing:null,startPrimary:()=>node(P,pf),startStandby:()=>node(S,sf),fencePrimaryProcess:async n=>{n.kill();},afterRelease:async()=>{},out:dir});
  register.close();
 }else if(args[0]==='--remote'){

@@ -61,3 +61,15 @@ export async function openSyncSpace(o: {
 		close: async () => { stopGuard?.(); if (harness) await harness.close(o.ctx); for (const t of transports) t.close(); await listener.close(); journal.close(); },
 	};
 }
+
+/**
+ * Opens every configured primary/sync Space on its own: a Space that cannot open (unreachable standby for its sealed
+ * candidate, missing permit) stays unserved and blocked, and does not take the host and its other Spaces down.
+ */
+export async function openSyncSpaces(configs: readonly SyncSpaceConfig[], open: (c: SyncSpaceConfig) => Promise<SyncSpace>): Promise<{ opened: SyncSpace[]; failed: Array<{ alias: string; error: string }> }> {
+	const opened: SyncSpace[] = [], failed: Array<{ alias: string; error: string }> = [];
+	for (const c of configs) {
+		try { opened.push(await open(c)); } catch (e) { failed.push({ alias: c.alias, error: e instanceof Error ? e.message : String(e) }); }
+	}
+	return { opened, failed };
+}

@@ -5,7 +5,7 @@ import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
 import type { Harness, Storage } from "@earendil-works/pi-durable";
-import { openSyncSpace, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
+import { openSyncSpace, openSyncSpaces, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 import type { Context } from "@earendil-works/chord";
 import { privateFile, loadFileSigner } from "./keys.ts";
 import { NetbirdDirectory, GateIdentity, type GroupRoles } from "./gate.ts";
@@ -93,13 +93,13 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const syncSpaces:SyncSpace[]=[];
 		if(config.syncSpaces?.length){
 			if(!factories)throw new Error("primary/sync Spaces need storage and Harness factories from the daemon");
-			try{for(const c of config.syncSpaces)syncSpaces.push(await openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,openStorage:factories.openSyncStorage,openHarness:factories.openSyncHarness}));}
-			catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
+			const r=await openSyncSpaces(config.syncSpaces,c=>openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,openStorage:factories.openSyncStorage,openHarness:factories.openSyncHarness}));
+			syncSpaces.push(...r.opened);for(const f of r.failed)console.error(`primary/sync Space ${f.alias} stays unserved:`,f.error);
 		}
 		const syncOptions=syncSpaces.filter(sp=>sp.harness).map(sp=>({spaceId:sp.config.spaceId,alias:sp.config.alias,host:sp.harness!,primaryEpoch:()=>sp.journal.config.primaryEpoch,delegation:verifierFor(sp.harness!,id=>id===sp.config.spaceId?sp.journal.config:null)}));
 		// v3 5.3.1 step 5: a primary keeps offering the notice of its last transition until the router adopted it.
 		let noticeTimer:ReturnType<typeof setTimeout>|undefined,noticeStopped=false,noticeActive:Promise<void>=Promise.resolve();
-		const publishNotices=()=>{noticeActive=(async()=>{for(const sp of syncSpaces){const n=await sp.notice();if(!n)continue;if(control)await control.replicaNotices!.publish(n,{peerId:config.peerId,roles:["host"]});else await controlRemote!.publishReplicaNotice(n);}})()
+		const publishNotices=()=>{noticeActive=(async()=>{for(const sp of syncSpaces){const n=await sp.notice();if(!n)continue;if(control)await control.replicaNotices!.publish(n,{peerId:config.peerId,roles:["host"],key:{algorithm:signer.algorithm,publicKey:signer.publicKey}});else await controlRemote!.publishReplicaNotice(n);}})()
 			.catch(e=>console.error("Replica notice:",e instanceof Error?e.message:String(e))).then(()=>{if(!noticeStopped)noticeTimer=setTimeout(publishNotices,CAPABILITY_HEARTBEAT_MS);});};
 		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, syncSpaces: syncOptions, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
 		if(syncSpaces.length)publishNotices();

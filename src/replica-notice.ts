@@ -116,11 +116,17 @@ export class ReplicaNoticeBoard {
 	private o: { host: SpaceHost; ctx: Context; controlSpaceId: string; hostForPeer?: (peerId: string) => string | undefined; assertAuthority: () => Promise<void>; now?: () => number };
 	constructor(o: ReplicaNoticeBoard["o"]) { this.o = o; }
 	/** peerId/roles MUST come from the authenticated connection, never from the body. */
-	async publish(t: SignedReplicaConfigNotice, identity: { peerId: string; roles: readonly string[]; check?: () => void | Promise<void> }) {
+	/**
+	 * The publisher is the issuing host if a host binding says so, or if the notice is signed with exactly the key the
+	 * connection proved (a NetBird peer ID differs from the host ID).
+	 */
+	async publish(t: SignedReplicaConfigNotice, identity: { peerId: string; roles: readonly string[]; key?: { algorithm: Algorithm; publicKey: string }; check?: () => void | Promise<void> }) {
 		const n = t?.notice;
 		if (!n || typeof t.issuer !== "string" || t.issuer !== n.primaryReplica || typeof n.spaceId !== "string" || !n.spaceId || n.spaceId.length > 128 || typeof t.signature !== "string" || Buffer.byteLength(JSON.stringify(t)) > 4096)
 			throw new RoutingConflict("invalid replica configuration notice");
-		if (!identity.roles.includes("host") || (this.o.hostForPeer?.(identity.peerId) ?? identity.peerId) !== t.issuer) throw new RoutingConflict("only the proven primary host publishes its notice");
+		const bound = (this.o.hostForPeer?.(identity.peerId) ?? identity.peerId) === t.issuer;
+		const signedByProvenKey = !!identity.key && identity.key.algorithm === t.algorithm && verifyDetached(t.algorithm, identity.key.publicKey, bytes(n), t.signature);
+		if (!identity.roles.includes("host") || !(bound || signedByProvenKey)) throw new RoutingConflict("only the proven primary host publishes its notice");
 		await identity.check?.(); await this.o.assertAuthority();
 		return this.o.host.commit(async tx => {
 			await identity.check?.(); await this.o.assertAuthority();

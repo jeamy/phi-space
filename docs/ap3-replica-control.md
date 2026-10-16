@@ -253,8 +253,27 @@ Fabriken, die der Daemon übergibt.
   nennt, an einen eigenen `SpaceService` über dessen Harness. Dazu gehört ein eigener `DelegationVerifier` mit
   `replicaConfig`; `epochNotice` für diesen Space geht an dessen Prüfer.
 - Der Host veröffentlicht die Notice im Takt des Capability-Heartbeats.
-- Übergänge (`promote`, `degradeToSingle`, `setStandby`) laufen bei gestopptem Dienst dieses Space. Beim nächsten
-  Start folgt der Host dem Journal.
+- Übergänge (`promote`, `degradeToSingle`, `setStandby`) laufen bei gestopptem Dienst dieses Space. Ein aktiver
+  Host folgt beim nächsten Start dem Journal.
+- **Grenze:** Ein `setStandby`-Ziel ist in `quarantine`, und `startConfiguredFederation` startet nur aktive Hosts.
+  Dessen Nachladen (`catchUp`) braucht deshalb vorerst das Fixture `phase3-sync-node` oder ein eigenes Werkzeug; ein
+  Quarantäne-Startmodus des Daemons fehlt.
+- **Fehlerisolation:** Kann ein Sync-Space nicht öffnen, etwa weil sein Standby für einen versiegelten Kandidaten
+  nicht erreichbar ist, bleibt nur dieser Space unbedient und gesperrt. Der Host und seine übrigen Spaces starten
+  (`openSyncSpaces`).
+- **Hintergrunddienste:** Für jeden bedienten Sync-Space laufen Reaper und Delivery auf dessen eigener Harness.
+- **Epoche:** Der `DelegationVerifier` nimmt sie für replizierte Spaces aus der Journal-Konfiguration
+  (`replicaConfig.primaryEpoch`), denn das replizierte Space-Dokument behält die Epoche seiner Anlage. Ohne das
+  würde nach einer Promotion jeder neue delegierte Aufruf abgewiesen.
+- **Dateninkarnation:** Ein replizierter Space hat genau eine, die beide Replikate teilen. `promote` und
+  `degradeToSingle` verlangen die bisherige Inkarnation der Berechtigung; `setStandby` gibt dem Ziel dieselbe wie
+  dem Primary.
+- **Notice:** Das Brett nimmt eine Notice an, wenn sie mit genau dem bewiesenen Schlüssel der Verbindung signiert
+  ist. Eine Zuordnung von Peer-ID zu Host-ID ist dafür nicht nötig; NetBird-Peer-IDs unterscheiden sich von
+  Host-IDs.
+- **Abhängigkeit vom Register:** Jeder Sync-Write prüft die Boot-Berechtigungen im unabhängigen Register auf vpsc,
+  per Primary-Prüfung, Standby-Prüfung und Boot-Guard. Fällt das Register aus, stehen die Sync-Writes. Das ist
+  gewollt: Ohne Register gibt es keinen Nachweis, dass dieser Host noch Primary ist.
 
 Der Policy-Validator lässt jetzt Sync-Primary-Regeln zu, wenn der Member eine `replication` hat und Regel und
 Member übereinstimmen. `lww` und `set` bleiben gesperrt, bis ihr öffentlicher Adapter (3.7) existiert.

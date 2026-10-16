@@ -102,7 +102,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
                       if(!id||!proof||!key||key.state!=="active"||!key.roles.includes("host")||!id.roles.includes("host")||!o.control!.replicaNotices)throw Error("replica notices require a currently proven host");
                       const auth=o.verifier.check((c as any).frame?.grant,id,{method:"write",space:"control"},conn);auth.check();
                       if(!auth.roles.includes("host"))throw Error("notice grant does not authorize host publication");
-                      const r=await o.control!.replicaNotices.publish((c as any).args?.notice,{peerId:id.principal.peerId,roles:auth.roles,check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:r as any};
+                      const r=await o.control!.replicaNotices.publish((c as any).args?.notice,{peerId:id.principal.peerId,roles:auth.roles,key:{algorithm:key.algorithm,publicKey:key.publicKey},check:async()=>{auth.check();const current=await o.keys.find(id.principal.peerId,proof.keyId);if(!current||current.state!=="active"||!current.roles.includes("host"))throw Error("host key no longer authorized");}});return{ok:true,result:r as any};
                      }catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}
                     }
                     if((c as any)?.method==="capabilityHeartbeat") {
@@ -160,7 +160,10 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
                 }}}:{})
             });
 		}
-		stopMaintenance = await startService(host, ctx, { now: o.now });
+		const mainService = await startService(host, ctx, { now: o.now }), syncServicesStops: Array<() => Promise<void>> = [];
+		stopMaintenance = async () => { for (const stop of syncServicesStops.splice(0)) await stop(); await mainService(); };
+		// Reaper and delivery of every served primary/sync Space run on its own Harness.
+		for (const sp of o.syncSpaces ?? []) syncServicesStops.push(await startService(sp.host, ctx, { now: o.now, space: sp.alias }));
 		gate = await startGate(chain, { ...o, keys: o.keys });
         // Recovered remote jobs may need this Control endpoint for fresh Member key lookup.
         // All proof, grant, Control access and boot guards are installed before listening.

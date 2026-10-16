@@ -50,6 +50,10 @@ Gesamtdauer etwa eine Minute; nanoi lief 16 s nach dem Einschalten wieder.
 
 ## Grenzen
 
+- Dieser Lauf verwendete noch eigene Dateninkarnationen je Replikat (`sync-nano-1`, `sync-100-1`, `sync-nano-2`).
+  Seit dem Folgestand teilen beide Replikate eines Space genau eine Inkarnation, und die Übergänge setzen das
+  durch.
+
 - Fixture-Ebene: eigener Sync-Space neben dem Federation-Daemon, nicht der produktive Space-Dienst.
 - Der Transport authentifiziert über festgelegte Host-Schlüssel, nicht über Gate und Grants.
 - Für 100 gibt es keinen Fencing-Adapter. `degradeToSingle` auf nanoi mit 100 als ausgefallenem Standby ist

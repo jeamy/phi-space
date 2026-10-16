@@ -53,9 +53,9 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
         const controlId = (await root.commit(tx => createSpace(tx, "control", now), ctx)).spaceId;
         await data.commit(tx => spaceDoc(tx, undefined, now), ctx);
         const info = (await listSpaces(data, ctx))[0]!;
-        let replicaVersion: number | null = null;
+        let replicaVersion: number | null = null, replicaEpoch = 1;
         const replicaConfig = (id: string) =>
-            replicaVersion === null || id !== info.spaceId ? null : {replicaConfigVersion : replicaVersion};
+            replicaVersion === null || id !== info.spaceId ? null : {replicaConfigVersion : replicaVersion, primaryEpoch : replicaEpoch};
         const userIdentity = {principal : {peerId : "user"}, roles : [ "member" ]};
         const authority = new GrantAuthority({
             authorityId : "authority",
@@ -109,6 +109,7 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
             hostId : "member",
             authorityId : "authority",
             primaryEpoch : 1,
+            epochForSpace : async (space?: string) => replicaVersion !== null && space === info.spaceId ? replicaEpoch : 1,
             now : clock,
             maxPollMs : 1,
             authorize : (call, id, c) => verifier.check(call, id, c)
@@ -166,7 +167,7 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
             setNow : (v: number) => now = v,
             get now() { return now },
             setPolicy : (v: number) => policyVersion = v,
-            setReplica : (v: number | null) => replicaVersion = v,
+            setReplica : (v: number | null, epoch = 1) => { replicaVersion = v; replicaEpoch = epoch; },
             records,
             keys,
             leases,
@@ -278,6 +279,12 @@ for (const backend of BACKENDS) {
              const adopted = await o.invoke(fresh, undefined, {targetReplicaConfigVersion : 3});
              assert.ok(adopted.ok, JSON.stringify(adopted));
              assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 2, "local work and adopted calls only");
+             // After a promotion the journal epoch rises while the replicated Space document keeps its own: the
+             // router's new target epoch is accepted, the old one is refused for new work.
+             o.setReplica(4, 2);
+             const promoted = async (epoch: number, n: number) => { const c = o.call("write", {entry : {type : "Job", fields : {n}}}), t = await o.signed(c, undefined, {targetPrimaryEpoch : epoch, targetReplicaConfigVersion : 4}); t.frame.primaryEpoch = epoch; return o.service().handle(t, o.conn); };
+             const stale = await promoted(1, 5);assert.equal(stale.ok, false, JSON.stringify(stale));
+             const fresh2 = await promoted(2, 6);assert.ok(fresh2.ok, JSON.stringify(fresh2));
          }));
     test(`${backend}: policy changes permit bound old resolution, not old new requests`,
          () => fixture(backend, async o => {
