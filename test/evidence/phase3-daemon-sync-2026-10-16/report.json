@@ -1,0 +1,217 @@
+{
+ "passed": true,
+ "space": {
+  "spaceId": "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90",
+  "incarnation": "67a91007",
+  "alias": "jobs-sync"
+ },
+ "daemonBundleSha256": "1cb5d7f1397cf5ed7f8d91ba41ea62fde272e7814bc3cf99775ea88e7a01f21a",
+ "steps": {
+  "p3_syncWritesViaNanoGate": "5 confirmed writes, both journal heads revision 7",
+  "p4_forkOnNano": {
+   "head": {
+    "revision": 8,
+    "hash": "3d50bed036f00ae41706cdc616d7571eaca500c77f0d2b377177169674d0d3d3",
+    "configHash": "bfee90e67adb7399c071b73481d2e22af35df6278657632ec94b2f2e1b963a54"
+   },
+   "applied": 7
+  },
+  "p5_promote": {
+   "recoveryId": "daemon-promote-1",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 2,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 2,
+    "spaceId": "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90",
+    "standbyReplica": "nano-test"
+   },
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "promote daemon-promote-1"
+    }
+   }
+  },
+  "p5_degrade": {
+   "recoveryId": "daemon-degrade-1",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "single",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 3,
+    "spaceId": "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90",
+    "standbyReplica": null
+   },
+   "recoveredCommitted": [],
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "degrade daemon-degrade-1"
+    }
+   }
+  },
+  "p5_singleWritesVia100Gate": {
+   "gateHost": "standby-100",
+   "writes": [
+    {
+     "n": 0,
+     "ok": true
+    },
+    {
+     "n": 1,
+     "ok": true
+    },
+    {
+     "n": 2,
+     "ok": true
+    }
+   ],
+   "spaceId": "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90",
+   "primaryEpoch": 3,
+   "count": 8
+  },
+  "p6_release": {
+   "state": "quarantine",
+   "permits": {
+    "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90": "revoked/primary",
+    "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "revoked/local",
+    "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "revoked/local"
+   }
+  },
+  "p6_quarantineStart": [
+   "pid 173 gone",
+   "{\"aside\":\"/data/nano/sync-jobs.aside-1792187328009\"}",
+   "sync-jobs.aside-1792187328009",
+   "active",
+   "{\"quarantine\":true,\"listeners\":[\"jobs-sync\"],\"failed\":[]}"
+  ],
+  "p7_setStandby": {
+   "transitionId": "daemon-standby-1",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 4,
+    "spaceId": "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90",
+    "standbyReplica": "nano-test"
+   }
+  },
+  "p7_readmit": {
+   "state": "active",
+   "permits": {
+    "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90": "active/standby/v4",
+    "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+    "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+   }
+  },
+  "p8_syncWritesVia100Gate": {
+   "gateHost": "standby-100",
+   "writes": [
+    {
+     "n": 0,
+     "ok": true
+    },
+    {
+     "n": 1,
+     "ok": true
+    },
+    {
+     "n": 2,
+     "ok": true
+    }
+   ],
+   "spaceId": "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90",
+   "primaryEpoch": 3,
+   "count": 11
+  },
+  "p9_final": {
+   "standby100": {
+    "head": {
+     "revision": 18,
+     "hash": "92457d8549e44971b8f8a222be601418b763dae8306f744d7f6e21b971e82e4a",
+     "configHash": "6709d75efe7b0c65660d03abb4a81491dff073d34d3cfd01adab4a72c075b44b"
+    },
+    "entries": 11,
+    "snapshot": "3a1c96789900386fca3af48b60e3b937291d3a62cf67e3c6cee3a9876e5c87ee",
+    "revision8": "rev8 6e109ac609de3069823b41cc1add033c65462469f1b13047f7a1939c86a43eae"
+   },
+   "nano": {
+    "head": {
+     "revision": 18,
+     "hash": "92457d8549e44971b8f8a222be601418b763dae8306f744d7f6e21b971e82e4a",
+     "configHash": "6709d75efe7b0c65660d03abb4a81491dff073d34d3cfd01adab4a72c075b44b"
+    },
+    "entries": 11,
+    "snapshot": "3a1c96789900386fca3af48b60e3b937291d3a62cf67e3c6cee3a9876e5c87ee",
+    "asideRevision8": "aside rev8 3d50bed036f00ae41706cdc616d7571eaca500c77f0d2b377177169674d0d3d3"
+   }
+  }
+ },
+ "cleanup": {
+  "bootRecords": {
+   "nano-test": {
+    "afterRun": {
+     "version": 17,
+     "state": "active",
+     "permits": {
+      "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90": "active/standby",
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    },
+    "restored": {
+     "version": 18,
+     "state": "active",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    }
+   },
+   "standby-100": {
+    "afterRun": {
+     "version": 10,
+     "state": "active",
+     "permits": {
+      "sp-0bcf8f0d-960f-4ddf-8792-0bd8ef39ff90": "active/primary",
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    },
+    "restored": {
+     "version": 11,
+     "state": "active",
+     "permits": {
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    }
+   }
+  },
+  "configsRestoredFrom": "federation.json.before-sync-20261016",
+  "netbirdPolicy": "deleted",
+  "nftRule": "deleted",
+  "controlCertGrants": "removed",
+  "adminReadAfterCleanup": "nano-test and standby-100 ok",
+  "retained": [
+   "daemon bundle 1cb5d7f1397cf5ed on both hosts (backups federation-host.mjs.before-sync-20261016)",
+   "sync stores /var/lib/pi-spaces/{nano,standby}/sync-jobs and nanoi sync-jobs.aside-*"
+  ]
+ },
+ "limits": [
+  "host-a (big) runs the old bundle and refused replicaNotice; no router adoption in this run",
+  "client writes used admin grants, not router delegations"
+ ]
+}

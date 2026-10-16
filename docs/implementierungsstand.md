@@ -327,6 +327,16 @@ sind umgesetzt. Ein Fixture-Lauf über echte Hosts hat bestanden, mit nanoi als 
 Offen bleiben die Einbindung in den produktiven Space-Dienst, `ReplicaConfigNotice`, das Pausieren aller
 Schreibquellen und 3.8.
 
+Nachtrag später am 2026-10-16:
+
+- Schreibsperre während Übergängen, vollständiger Boot-Guard und `ReplicaConfigNotice` mit Übernahme im Router
+  sind umgesetzt.
+- primary/sync-Spaces laufen mit eigenem Store im Federation-Daemon, inklusive Quarantäne-Start.
+- Ein echter Daemon-Lauf auf nanoi und 100 hat bestanden
+  ([Nachweis](../test/evidence/phase3-daemon-sync-2026-10-16/README.md)): Fork ohne ACK, netcup-Fencing,
+  promote, degrade, Quarantäne, setStandby, Schreibvorgänge in beide Richtungen, identische Stände.
+- Offen: Router-Übernahme auf echten Hosts (host-a braucht das neue Bündel) und 3.8.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

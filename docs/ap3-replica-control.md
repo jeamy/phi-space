@@ -255,9 +255,17 @@ Fabriken, die der Daemon übergibt.
 - Der Host veröffentlicht die Notice im Takt des Capability-Heartbeats.
 - Übergänge (`promote`, `degradeToSingle`, `setStandby`) laufen bei gestopptem Dienst dieses Space. Ein aktiver
   Host folgt beim nächsten Start dem Journal.
-- **Grenze:** Ein `setStandby`-Ziel ist in `quarantine`, und `startConfiguredFederation` startet nur aktive Hosts.
-  Dessen Nachladen (`catchUp`) braucht deshalb vorerst das Fixture `phase3-sync-node` oder ein eigenes Werkzeug; ein
-  Quarantäne-Startmodus des Daemons fehlt.
+- **Quarantäne-Start:** Ein Host in `quarantine` startet nicht normal. `startQuarantineReplicas` öffnet dann nur
+  Journale und Replikat-Listener seiner Sync-Spaces, ohne Gate, Dienst oder Harness, damit ein Primary `setStandby`
+  gegen ihn ausführen kann. Wird der Host `active`, beendet sich der Daemon mit Hinweis. Der Operator lässt dann die
+  übrigen Spaces wieder zu (`readmitSpace`) und startet normal; der normale Start übernimmt die aktiven externen
+  Berechtigungen lokal.
+- **Werkzeug:** Der Testbed-Daemon hat den Modus `sync` (`status` mit Materialisierung, `promote`, `degrade`,
+  `set-standby`, `wipe`) für einen gestoppten Dienst sowie `sync-head` für einen lesenden Blick bei laufendem
+  Dienst.
+- **Echter Lauf im Daemon** am 2026-10-16 bestanden
+  ([Nachweis](../test/evidence/phase3-daemon-sync-2026-10-16/README.md)). Die Router-Übernahme der Notice ist dabei
+  nicht enthalten, weil host-a mit dem alten Bündel läuft.
 - **Fehlerisolation:** Kann ein Sync-Space nicht öffnen, etwa weil sein Standby für einen versiegelten Kandidaten
   nicht erreichbar ist, bleibt nur dieser Space unbedient und gesperrt. Der Host und seine übrigen Spaces starten
   (`openSyncSpaces`).
