@@ -21,6 +21,8 @@ export const EntrySnapshotChunks = defineDocFamily<{ page: EntrySnapshotPage | n
 export type EntrySnapshotMaintenanceJob = {
  requestId: string; phase: 'copying' | 'cleaning' | 'completed';
  manifest: EntrySnapshotManifest; nextPage: number; overlayCount: number;
+ /** Logical events captured at start (absent in older jobs: the manifest's eventCount). */
+ prefixCount?: number;
  previous: Array<{ snapshotId: string; pageCount: number; nextPage: number }>;
 };
 /** One durable, bounded replacement job; old pages remain reachable until publication. */

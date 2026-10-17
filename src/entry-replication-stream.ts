@@ -5,7 +5,8 @@ import type { Json } from './core.ts';
 import type { EntryReplicationController, ReplicatedEntryChange } from './entry-replication.ts';
 export type EntryStreamIdentity = { version: 1; spaceId: string; authorityId: string; configHash: string; replicaId: string; incarnation: string; streamId: string };
 export type EntryStreamDescription = { source: EntryStreamIdentity; revision: number };
-export type EntryStreamPage = { source: EntryStreamIdentity; after: number; next: number; headRevision: number; more: boolean; events: ReplicatedEntryChange[]; sha256: string };
+/** `positions`: the stream positions of `events`, present only when they are not after+1, after+2, ... (compaction). */
+export type EntryStreamPage = { source: EntryStreamIdentity; after: number; next: number; headRevision: number; more: boolean; events: ReplicatedEntryChange[]; positions?: number[]; sha256: string };
 export type EntryStreamResult = { added: number; revision: number; cursor: number };
 export type EntryStreamCheckpoint = { source: EntryStreamIdentity; cursor: number; seedSnapshotId?: string; last: null | { after: number; next: number; sha256: string; result: EntryStreamResult } };
 export const EntryStreamCheckpoints = defineDocFamily<{ links: Record<string, EntryStreamCheckpoint> }, null>({ kind: 'pi-spaces.entry-stream-checkpoints', version: 1, scope: 'session', family: true, initial: () => ({ links: {} }) });

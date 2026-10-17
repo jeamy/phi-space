@@ -34,7 +34,11 @@ export type ReplicatedEntryChange = {
  originReplicaId: string; incarnation: string; seq: number; clock: HybridClock;
  requestId: string; argumentHash: string; mutation: EntryMutation;
 };
-export type EntryReplicationState = { config: EntryReplicationConfig | null; configHash: string; clock: HybridClock; lastWallTime: number; seq: number; events: ReplicatedEntryChange[]; segments?: EntrySnapshotSegment[] };
+/**
+ * `dropped`: runs [first, last] of stream positions whose events compaction removed. Positions are assigned in logical
+ * order and never reused; without runs, position = index + 1 (docs/ap3-replikation.md, step 4).
+ */
+export type EntryReplicationState = { config: EntryReplicationConfig | null; configHash: string; clock: HybridClock; lastWallTime: number; seq: number; events: ReplicatedEntryChange[]; segments?: EntrySnapshotSegment[]; dropped?: Array<[number, number]> };
 export type EntryReplicationSnapshot = { version: 1; spaceId: string; authorityId: string; configHash: string; events: ReplicatedEntryChange[]; sha256: string };
 export type ReplicatedEntryView = { id: string; type: string; fields: Fields; owner: Principal; expiresAt: number | null; clock: HybridClock; originReplicaId: string };
 export class ReplicationConflict extends Error {}
@@ -81,6 +85,15 @@ const snapshotCaches = new WeakMap<object, Map<string, Map<string, ExportedSnaps
 const sha = (v: unknown): v is string => typeof v==='string' && /^[a-f0-9]{64}$/.test(v);
 const chunkKey = (documentKey: string, snapshotId: string, index: number) => hash([documentKey,snapshotId,index]);
 const pageHash = (page: EntrySnapshotPage) => { const {sha256,...body}=page;return hash(body); };
+const droppedCount = (runs: ReadonlyArray<[number, number]> = []) => runs.reduce((n,[a,b])=>n+b-a+1,0);
+/** The stream position of each retained event, in logical order. */
+export function positionsOf(count: number, runs: ReadonlyArray<[number, number]> = []): number[] {
+ const out:number[]=[];let p=0,r=0;
+ while(out.length<count){p++;while(r<runs.length&&runs[r]![1]<p)r++;if(r<runs.length&&runs[r]![0]<=p)continue;out.push(p);}
+ return out;
+}
+const headOf = (s: Pick<EntryReplicationState, 'events' | 'dropped'>) => s.events.length + droppedCount(s.dropped);
+const contiguous = (after: number, positions: number[]) => positions.every((p,n)=>p===after+n+1);
 const manifestSeed = (manifest: EntrySnapshotManifest) => { const {seedHash,rootHash,...body}=manifest;return hash(body); };
 export class EntryReplicationController {
  private o: EntryReplicationOptions; private config: EntryReplicationConfig; private configHash: string;
@@ -212,7 +225,7 @@ export class EntryReplicationController {
  private async importIn(tx:Tx,events:ReplicatedEntryChange[]):Promise<{added:number;revision:number}>{
   const s=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(s);const now=this.now();
   s.config??=copy(this.config);s.configHash=this.configHash;const logical=await this.materializeIn(tx,s),previous=logical.events.length;
-  const added=this.append(logical,events,now);this.persistOverlay(s,logical,previous);return {added,revision:logical.events.length};
+  const added=this.append(logical,events,now);this.persistOverlay(s,logical,previous);return {added,revision:headOf(logical)};
  }
  async importChanges(input: ReplicatedEntryChange[]): Promise<{ added: number; revision: number }> {
   const events=copy(input);if(!Array.isArray(events)||events.length>1024)throw new ResourceExhausted('bounded event array required');this.budget(events);
@@ -265,11 +278,21 @@ export class EntryReplicationController {
    const m=e.mutation as Extract<EntryMutation,{expiresAt:number|null}>;return {id:entryChangeId(e),type:m.type,fields:copy(m.fields),owner:copy(m.owner),expiresAt:m.expiresAt,clock:copy(e.clock),originReplicaId:e.originReplicaId};
   }).sort((a,b)=>a.id<b.id?-1:1);
  }
- async changes(afterRevision=0,maxBytes=256*1024): Promise<{events:ReplicatedEntryChange[];next:number;more:boolean}> {
-  const s=await this.state('export'),all=s?.events??[];
-  if(!number(afterRevision)||afterRevision>all.length||!Number.isSafeInteger(maxBytes)||maxBytes<256||maxBytes>256*1024)throw new ReplicationConflict('invalid revision or page budget');
-  const page={events:[] as ReplicatedEntryChange[],next:afterRevision,more:afterRevision<all.length};
-  for(let n=afterRevision;n<all.length;n++){const candidate={events:[...page.events,copy(all[n]!)],next:n+1,more:n+1<all.length};if(bytes(candidate)>maxBytes){if(!page.events.length)throw new ResourceExhausted('next change does not fit page');break;}Object.assign(page,candidate);}
+ /** Byte-bounded changes after stream position `afterRevision`; `positions` only when they are not contiguous. */
+ async changes(afterRevision=0,maxBytes=256*1024): Promise<{events:ReplicatedEntryChange[];next:number;more:boolean;positions?:number[]}> {
+  const s=await this.state('export');
+  if(!number(afterRevision)||afterRevision>(s?headOf(s):0)||!Number.isSafeInteger(maxBytes)||maxBytes<256||maxBytes>256*1024)throw new ReplicationConflict('invalid revision or page budget');
+  const frame=(events:ReplicatedEntryChange[],positions:number[],next:number,more:boolean)=>({events,next,more,...(contiguous(afterRevision,positions)?{}:{positions})});
+  const {events,positions,next,more}=this.pageAfter(s,afterRevision,maxBytes,frame,'next change does not fit page');return frame(events,positions,next,more);
+ }
+ /** Retained events after position `after` that fit `maxBytes` as measured by `frame`; `next` is the head when nothing follows. */
+ private pageAfter(s:EntryReplicationState|undefined,after:number,maxBytes:number,frame:(events:ReplicatedEntryChange[],positions:number[],next:number,more:boolean)=>unknown,tooLarge:string){
+  const all=s?.events??[],at=positionsOf(all.length,s?.dropped),head=s?headOf(s):0;let n=0;while(n<at.length&&at[n]!<=after)n++;
+  const page={events:[] as ReplicatedEntryChange[],positions:[] as number[],next:n<at.length?after:head,more:n<at.length};
+  for(;n<all.length&&page.events.length<1024;n++){
+   const events=[...page.events,copy(all[n]!)],positions=[...page.positions,at[n]!],more=n+1<all.length,next=more?at[n]!:head;
+   if(bytes(frame(events,positions,next,more))>maxBytes){if(!page.events.length)throw new ResourceExhausted(tooLarge);break;}Object.assign(page,{events,positions,next,more});
+  }
   return page;
  }
  async snapshot(): Promise<EntryReplicationSnapshot> {
@@ -292,7 +315,7 @@ export class EntryReplicationController {
  }
  private bindManifest(m:EntrySnapshotManifest) {if(m.spaceId!==this.config.spaceId||m.authorityId!==this.config.authorityId||m.configHash!==this.configHash||!this.config.members.some(p=>p.replicaId===m.sourceReplicaId&&p.incarnation===m.sourceIncarnation))throw new ReplicationConflict('snapshot binding changed');}
  private validateManifest(m: EntrySnapshotManifest) {
-  if(!m||!exact(m,['version','id','spaceId','authorityId','configHash','sourceReplicaId','sourceIncarnation','revision','eventCount','bytes','pageBytes','pageCount','expiresAt','seedHash','rootHash'])||m.version!==1||!/^ss[0-9a-f]{32}$/.test(m.id)||m.spaceId!==this.config.spaceId||m.authorityId!==this.config.authorityId||m.configHash!==this.configHash||!this.config.members.some(p=>p.replicaId===m.sourceReplicaId&&p.incarnation===m.sourceIncarnation)||!number(m.revision)||m.revision!==m.eventCount||!number(m.eventCount)||!number(m.bytes)||m.bytes<2||m.bytes>this.maxHistoryBytes||!number(m.pageBytes)||m.pageBytes<1024||2*m.pageBytes+16384>this.maxBatchBytes||!number(m.pageCount)||m.pageCount<1||m.pageCount>2048||!number(m.expiresAt)||!sha(m.seedHash)||!sha(m.rootHash)||manifestSeed(m)!==m.seedHash)throw new ReplicationConflict('invalid snapshot manifest or binding');
+  if(!m||!exact(m,['version','id','spaceId','authorityId','configHash','sourceReplicaId','sourceIncarnation','revision','eventCount','bytes','pageBytes','pageCount','expiresAt','seedHash','rootHash'])||m.version!==1||!/^ss[0-9a-f]{32}$/.test(m.id)||m.spaceId!==this.config.spaceId||m.authorityId!==this.config.authorityId||m.configHash!==this.configHash||!this.config.members.some(p=>p.replicaId===m.sourceReplicaId&&p.incarnation===m.sourceIncarnation)||!number(m.revision)||!number(m.eventCount)||m.revision<m.eventCount||!number(m.bytes)||m.bytes<2||m.bytes>this.maxHistoryBytes||!number(m.pageBytes)||m.pageBytes<1024||2*m.pageBytes+16384>this.maxBatchBytes||!number(m.pageCount)||m.pageCount<1||m.pageCount>2048||!number(m.expiresAt)||!sha(m.seedHash)||!sha(m.rootHash)||manifestSeed(m)!==m.seedHash)throw new ReplicationConflict('invalid snapshot manifest or binding');
  }
  private validatePage(m:EntrySnapshotManifest,p:EntrySnapshotPage,index:number,offset:number,previousHash:string) {
   if(!p||!exact(p,['snapshotId','index','offset','next','events','previousHash','sha256'])||p.snapshotId!==m.id||p.index!==index||p.offset!==offset||p.next!==index+1||p.previousHash!==previousHash||!Array.isArray(p.events)||p.events.length>1024||(!p.events.length&&m.eventCount!==0)||!sha(p.sha256)||pageHash(p)!==p.sha256||bytes(p)>m.pageBytes||offset+p.events.length>m.eventCount)throw new ReplicationConflict('snapshot page changed, is out of order or exceeds budget');
@@ -318,7 +341,7 @@ export class EntryReplicationController {
   if(!number(pageBytes)||pageBytes<1024||2*pageBytes+16384>this.maxBatchBytes)throw new ReplicationConflict('invalid snapshot page budget');
   const state=await this.state('export'),events=copy(state?.events??[]),now=this.now(),cache=this.cache();
   for(const [key,v] of cache)if(v.manifest.expiresAt<=now)cache.delete(key);
-  const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:events.length,eventCount:events.length,bytes:bytes(events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
+  const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:state?headOf(state):0,eventCount:events.length,bytes:bytes(events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
   if(!Number.isSafeInteger(template.expiresAt)||template.bytes>64*1024*1024)throw new ResourceExhausted('snapshot cache byte bound exceeded');
   const {manifest,pages}=this.packSnapshot(events,template);
   while(cache.size>=16||[...cache.values()].reduce((n,v)=>n+v.manifest.bytes,0)+manifest.bytes>64*1024*1024){const first=cache.keys().next().value;if(first===undefined)throw new ResourceExhausted('snapshot cache is full');cache.delete(first);}
@@ -373,7 +396,7 @@ export class EntryReplicationController {
    if(segments.length>16||bytes({...logical,segments,config:this.config,configHash:this.configHash})>this.maxHistoryBytes)throw new ResourceExhausted('published snapshot exceeds retained history budget');
    // Only this small head update makes the previously hidden immutable pages visible.
    base.config??=copy(this.config);base.configHash=this.configHash;base.segments=segments;base.clock=copy(logical.clock);base.seq=logical.seq;base.lastWallTime=logical.lastWallTime;
-   t.phase='completed';t.result={added,revision:logical.events.length,sourceRevision:t.manifest.revision};await this.check('import');return copy(t.result);
+   t.phase='completed';t.result={added,revision:headOf(logical),sourceRevision:t.manifest.revision};await this.check('import');return copy(t.result);
   },this.o.ctx);
  }
  async abortSnapshotImport(snapshotId:string):Promise<EntrySnapshotImport> {
@@ -436,12 +459,12 @@ export class EntryReplicationController {
    if(Object.values(ledger.transfers).some(t=>!['completed','retired','aborted'].includes(t.phase)))throw new ReplicationConflict('finish or abort existing snapshot transfers first');
    if(Object.keys(ledger.transfers).length>=17)throw new ResourceExhausted('retire expired snapshot receipts before maintenance');
    const logical=await this.materializeIn(tx,base),now=this.now();this.clockSafe(logical,now);
-   const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:logical.events.length,eventCount:logical.events.length,bytes:bytes(logical.events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
+   const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:headOf(logical),eventCount:logical.events.length,bytes:bytes(logical.events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
    if(!Number.isSafeInteger(template.expiresAt))throw new ReplicationConflict('maintenance deadline overflow');
    const {manifest}=this.packSnapshot(logical.events,template),reservedBytes=manifest.bytes+manifest.pageCount*1024;
    if(ledger.retainedBytes+reservedBytes>3*this.maxHistoryBytes+2048*1024)throw new ResourceExhausted('maintenance retained byte bound exceeded');
    ledger.transfers[manifest.id]={maintenanceRequestId:requestId,manifest,phase:'consolidating',nextPage:0,nextOffset:0,chainHash:manifest.seedHash,receivedBytes:2,reservedBytes,cleanupCursor:0};ledger.retainedBytes+=reservedBytes;
-   maintenance.job={requestId,phase:'copying',manifest,nextPage:0,overlayCount:base.events.length,previous:(base.segments??[]).map(s=>({snapshotId:s.manifest.id,pageCount:s.manifest.pageCount,nextPage:0}))};
+   maintenance.job={requestId,phase:'copying',manifest,nextPage:0,prefixCount:logical.events.length,overlayCount:base.events.length,previous:(base.segments??[]).map(s=>({snapshotId:s.manifest.id,pageCount:s.manifest.pageCount,nextPage:0}))};
    await this.check('import');return copy(maintenance.job);
   },this.o.ctx);
  }
@@ -458,7 +481,7 @@ export class EntryReplicationController {
    if(!replacement)throw new ReplicationConflict('maintenance receipt missing');
    if(job.phase==='copying'){
     if((base.segments??[]).map(s=>s.manifest.id).join(',')!==job.previous.map(s=>s.snapshotId).join(',')||base.events.length<job.overlayCount)throw new ReplicationConflict('maintenance source references changed');
-    const logical=await this.materializeIn(tx,base),prefix=logical.events.slice(0,job.manifest.revision),packed=this.packSnapshot(prefix,job.manifest);
+    const logical=await this.materializeIn(tx,base),prefix=logical.events.slice(0,job.prefixCount??job.manifest.eventCount),packed=this.packSnapshot(prefix,job.manifest);
     if(canonical(packed.manifest)!==canonical(job.manifest))throw new ReplicationConflict('maintenance source prefix changed');
     if(job.nextPage<job.manifest.pageCount){
      const page=packed.pages[job.nextPage]!,chunk=await tx.doc(EntrySnapshotChunks,chunkKey(this.documentKey,job.manifest.id,job.nextPage),null);
@@ -500,16 +523,13 @@ export class EntryReplicationController {
   if(!source||!exact(source,['version','spaceId','authorityId','configHash','replicaId','incarnation','streamId'])||source.version!==1||source.spaceId!==this.config.spaceId||source.authorityId!==this.config.authorityId||source.configHash!==this.configHash||!this.config.members.some(m=>m.replicaId===source.replicaId&&m.incarnation===source.incarnation)||!sha(source.streamId))throw new ReplicationConflict('stream identity or binding changed');
   const {streamId,...body}=source;if(streamId!==hash(body))throw new ReplicationConflict('stream identity hash changed');
  }
- private streamPageHash(page:EntryStreamPage){return hash({source:page.source,after:page.after,next:page.next,events:page.events});}
- async describeStream():Promise<EntryStreamDescription>{const state=await this.state('export');return {source:this.streamIdentity(),revision:state?.events.length??0};}
+ private streamPageHash(page:EntryStreamPage){return hash({source:page.source,after:page.after,next:page.next,events:page.events,...(page.positions?{positions:page.positions}:{})});}
+ async describeStream():Promise<EntryStreamDescription>{const state=await this.state('export');return {source:this.streamIdentity(),revision:state?headOf(state):0};}
  async streamChanges(after:number,maxBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntryStreamPage>{
-  const state=await this.state('export'),events=state?.events??[];
-  if(!number(after)||after>events.length||!number(maxBytes)||maxBytes<1024||maxBytes>256*1024)throw new ReplicationConflict('invalid stream cursor or page budget');
-  const page:EntryStreamPage={source:this.streamIdentity(),after,next:after,headRevision:events.length,more:after<events.length,events:[],sha256:'0'.repeat(64)};
-  for(let n=after;n<events.length&&page.events.length<1024;n++){
-   const candidate={...page,events:[...page.events,copy(events[n]!)],next:n+1,more:n+1<events.length};
-   if(bytes(candidate)>maxBytes){if(!page.events.length)throw new ResourceExhausted('next change does not fit stream page');break;}Object.assign(page,candidate);
-  }
+  const state=await this.state('export'),head=state?headOf(state):0;
+  if(!number(after)||after>head||!number(maxBytes)||maxBytes<1024||maxBytes>256*1024)throw new ReplicationConflict('invalid stream cursor or page budget');
+  const source=this.streamIdentity(),frame=(events:ReplicatedEntryChange[],positions:number[],next:number,more:boolean):EntryStreamPage=>({source,after,next,headRevision:head,more,events,...(contiguous(after,positions)?{}:{positions}),sha256:'0'.repeat(64)});
+  const {events,positions,next,more}=this.pageAfter(state,after,maxBytes,frame,'next change does not fit stream page'),page=frame(events,positions,next,more);
   page.sha256=this.streamPageHash(page);return page;
  }
  async startStreamImport(input:EntryStreamIdentity,snapshotId?:string):Promise<EntryStreamCheckpoint>{
@@ -534,8 +554,10 @@ export class EntryReplicationController {
   if(checkpoint&&canonical(checkpoint.source)!==canonical(source))throw new ReplicationConflict('stored stream source changed');await this.check('import');return checkpoint?copy(checkpoint):null;
  }
  async importStreamPage(input:EntryStreamPage):Promise<EntryStreamResult>{
-  const page=copy(input);if(!page||!exact(page,['source','after','next','headRevision','more','events','sha256']))throw new ReplicationConflict('invalid stream page');this.validateStream(page.source);
-  if(!number(page.after)||!number(page.next)||!number(page.headRevision)||page.after>page.next||page.next>page.headRevision||typeof page.more!=='boolean'||page.more!==(page.next<page.headRevision)||!Array.isArray(page.events)||page.events.length>1024||page.next-page.after!==page.events.length||(!page.events.length&&page.more)||!sha(page.sha256)||this.streamPageHash(page)!==page.sha256||bytes(page)>256*1024)throw new ReplicationConflict('stream page range or hash changed');this.budget(page.events);
+  const page=copy(input);if(!page||!exact(page,['source','after','next','headRevision','more','events','sha256',...(page&&'positions'in page?['positions']:[])]))throw new ReplicationConflict('invalid stream page');this.validateStream(page.source);
+  // Positions are absent while contiguous (after+1 ... next); a compacted source names them, strictly increasing.
+  const positions=page.positions??(Array.isArray(page.events)?page.events.map((_,n)=>page.after+n+1):[]);
+  if(!number(page.after)||!number(page.next)||!number(page.headRevision)||page.after>page.next||page.next>page.headRevision||typeof page.more!=='boolean'||page.more!==(page.next<page.headRevision)||!Array.isArray(page.events)||page.events.length>1024||!Array.isArray(positions)||positions.length!==page.events.length||positions.some((p,n)=>!number(p)||p<=(n?positions[n-1]!:page.after))||(positions.length?positions.at(-1)!>page.next||page.more&&positions.at(-1)!==page.next:page.more)||!sha(page.sha256)||this.streamPageHash(page)!==page.sha256||bytes(page)>256*1024)throw new ReplicationConflict('stream page range or hash changed');this.budget(page.events);
   await this.check('import');return this.o.host.commit(async tx=>{
    await this.check('import');const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const ledger=await tx.doc(EntryStreamCheckpoints,this.documentKey,null),checkpoint=ledger.links[page.source.streamId];
    if(!checkpoint||canonical(checkpoint.source)!==canonical(page.source))throw new ReplicationConflict('stream is not initialized with this source');
@@ -546,7 +568,7 @@ export class EntryReplicationController {
     throw new EntryStreamCursorConflict(checkpoint.cursor);
    }
    const applied=await this.importIn(tx,page.events),result={...applied,cursor:page.next};
-   if(page.events.length){checkpoint.cursor=page.next;checkpoint.last={after:page.after,next:page.next,sha256:page.sha256,result:copy(result)};}
+   if(page.next>page.after){checkpoint.cursor=page.next;checkpoint.last={after:page.after,next:page.next,sha256:page.sha256,result:copy(result)};}
    await this.check('import');return result;
   },this.o.ctx);
  }
