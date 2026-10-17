@@ -7,7 +7,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, openSync, closeSync
 import { join } from "node:path";
 import {createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
-import {ProvingService,lastConfigTransition,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
+import {ProvingService,lastConfigTransition,releaseHostToQuarantine,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
 import { provisionFileSigner, loadFileSigner, privateFile, PiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
 const [mode, home="/data/phase1b"] = process.argv.slice(2);
 mkdirSync(home,{recursive:true,mode:0o700});
@@ -15,6 +15,14 @@ if(mode==="recovery-call") {
  let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>256*1024)throw new Error("recovery envelope exceeds budget");}JSON.parse(text);
  const normal=JSON.parse(privateFile(join(home,"federation.json")).toString()),recovery=normal.recovery??JSON.parse(privateFile(join(home,"recovery.json")).toString());
  const socket=socketTransport({path:recovery.path});try{process.stdout.write(await socket.request(text));}finally{socket.close();}process.exit(0);
+}
+if(mode==="release") {
+ // Releases a fenced host into quarantine (boot CAS, then the fencing adapter unlocks and starts it), run on the
+ // other replica host whose certificate holds the register and fencing rights. No owner lock, no Harness.
+ let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>16384)throw new Error("release input exceeds budget");}
+ const q=JSON.parse(text),register=new SyncRegister(q.controlRegister);
+ try{const b=await releaseHostToQuarantine(register,q.hostId,q.recoveryId,new TlsFencing(q.fencing));console.log(JSON.stringify({hostId:q.hostId,state:b.state}));}finally{register.close();}
+ process.exit(0);
 }
 if(mode==="enroll-key") {
  // An additional key of this host (e.g. the native Root's router and host keys), enrolled at the control gate while the
