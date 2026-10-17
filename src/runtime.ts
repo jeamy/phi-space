@@ -49,6 +49,8 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	/** Applies signed Space lifecycle instructions (create, archive, reactivate, delete) to this host's Spaces. */
 	spaceLifecycle?: SpaceLifecycleService;
 	refreshPolicy?:()=>Promise<void>;
+	/** lww/set types of this host's main-store Spaces, served by entry replication (docs/ap3-replikation.md). */
+	merge?: import("./service.ts").SpaceServiceOptions["merge"];
 	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
 export async function startFederationHost(host: Harness, ctx: Context, o: FederationHostOptions) {
@@ -56,7 +58,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 	if (!o.boot && !o.unsafeSkipBootGuardForTests) throw new Error("a federation host requires independent boot authorization and local installation");
 	const stopBoot = o.boot ? installBootGuard(host, ctx, { ...o.boot, hostId: o.hostId, authorityId: o.authorityId }) : undefined;
 	const identity = new GateIdentity();
-	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now,
+	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, ...(o.merge ? { merge: o.merge } : {}),
 		epochForSpace: async space => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info ? o.boot?.replicaConfig?.(info.spaceId)?.primaryEpoch ?? (await snapshotSpace(host, info.spaceId, ctx))?.primaryEpoch ?? 1 : 0; },
 		authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?o.delegation?await o.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await o.refreshPolicy?.();auth.check();return auth;} });
 	const syncServices = new Map<string, SpaceService>(), mainSpaces = await listSpaces(host, ctx);

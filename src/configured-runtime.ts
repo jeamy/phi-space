@@ -19,6 +19,7 @@ import { SshRecoveryRegister } from "./ssh-register.ts";
 import { SocketRecoveryRegister } from "./register-service.ts";
 import { SqliteRecoveryRegister } from "./recovery-register.ts";
 import { followControlHostChange } from "./control-host-change.ts";
+import { EntryReplicationController } from "./entry-replication.ts";
 import { BootBlocked, type HostBootState } from "./boot.ts";
 import { Registry, snapshotSpace, listSpaces } from "./spaces.ts";
 import { installAdmittedPermit } from "./replica-control.ts";
@@ -38,6 +39,9 @@ export type FederationConfig = {
 	recovery?: PrivateRecoveryConfig;
 	/** Recovery admin key pinned for control host changes after a control promotion (src/control-host-change.ts). */
 	recoveryAdmin?: { algorithm: import("./auth.ts").Algorithm; publicKey: string };
+	/** lww/set Member: the provisioned, fixed entry replication of one main-store Space (alias or ID). */
+	entryReplication?: { space: string; replicaId: string; incarnation: string; members: Array<{ replicaId: string; incarnation: string }>;
+		rules: import("./entry-replication.ts").EntryReplicationRule[]; clockUncertaintyMs?: number };
 	/** Explicit logical Member/Space installed by signed Control commands. */
 	membership?:{memberId:string;spaceId:string};
 	management: { url: string; tokenFile: string }; groupRoles?: GroupRoles;
@@ -127,7 +131,20 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		let noticeTimer:ReturnType<typeof setTimeout>|undefined,noticeStopped=false,noticeActive:Promise<void>=Promise.resolve();
 		const publishNotices=()=>{noticeActive=(async()=>{for(const sp of syncSpaces){const n=await sp.notice();if(!n)continue;if(control)await control.replicaNotices!.publish(n,{peerId:config.peerId,roles:["host"],key:{algorithm:signer.algorithm,publicKey:signer.publicKey}});else await controlRemote!.publishReplicaNotice(n);}})()
 			.catch(e=>console.error("Replica notice:",e instanceof Error?e.message:String(e))).then(()=>{if(!noticeStopped)noticeTimer=setTimeout(publishNotices,CAPABILITY_HEARTBEAT_MS);});};
-		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, syncSpaces: syncOptions, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
+		// lww/set: the provisioned entry replication of one Space; its merge types bypass the core (step 1 serves local
+		// writes and reads; import and export between Members follow in step 2).
+		let merge: import("./service.ts").SpaceServiceOptions["merge"];
+		if (config.entryReplication) {
+			const er = config.entryReplication, info = (await listSpaces(host, ctx)).find(i => i.spaceId === er.space || i.alias === er.space);
+			if (!info) throw new BootBlocked(`entry replication names an unknown Space ${er.space}`);
+			const controller = new EntryReplicationController({ host, ctx, config: { spaceId: info.spaceId, authorityId, replicaId: er.replicaId, incarnation: er.incarnation, members: er.members, rules: er.rules },
+				authorize: async action => { if (action === "import" || action === "export") throw new BootBlocked("entry replication import and export are not enabled yet"); },
+				assertActive: async () => { const b = await external.get<any>(`boot:${config.hostId}`); if (b?.value.state !== "active" || b.value.spaces?.[info.spaceId]?.state !== "active") throw new BootBlocked("entry replica Space is not admitted"); },
+				clockUncertaintyMs: () => er.clockUncertaintyMs ?? 1000 });
+			const adapter = { controller, rules: er.rules };
+			merge = space => (space ?? "default") === info.alias || space === info.spaceId ? adapter : undefined;
+		}
+		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), syncSpaces: syncOptions, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
 		if(syncSpaces.length)publishNotices();
 		let recovery: Awaited<ReturnType<typeof startConfiguredRecovery>> | undefined;
 		try { if (config.recovery) recovery = await startConfiguredRecovery(host, raw, ctx, { ...config, authorityId, signer, controlKey: { algorithm: config.control.algorithm, publicKey: controlPublicKey }, config: config.recovery, external, installed }); await host.snapshot(Registry, ctx); } catch (e) { await recovery?.close();await root?.close(); await runtime.close(); noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(()=>{}); throw e; }

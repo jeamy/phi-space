@@ -117,6 +117,14 @@ test("configured runtime checks independent boot, provisioned overlay ownership 
    const changed = await Promise.race([runtime.controlChanged, new Promise<null>(r => setTimeout(() => r(null), 5000))]);
    assert.equal(changed?.targetHostId, "next-host", "the running host reports the change");
    assert.equal((await installed.get<any>(`installed-authority:${config.controlSpaceId}`))!.value.address.host, "127.0.0.9", "and installed the new endpoint");
+   // lww/set: a provisioned entry replication must name a known Space of this host.
+   await runtime.close(); runtime = undefined; await installed.compareAndSet(`installed-authority:${config.controlSpaceId}`, (await installed.get(`installed-authority:${config.controlSpaceId}`))!.version, { authorityId: "authority" });
+   const auth2 = (await external.get<any>(`authority:${config.controlSpaceId}`))!; await external.compareAndSet(`authority:${config.controlSpaceId}`, auth2.version, { authorityId: "authority", hostId: "configured-host", supervisorKey: signer.publicKey, state: "active", lineage: {} });
+   const er = { replicaId: "r1", incarnation: "i1", members: [{ replicaId: "r1", incarnation: "i1" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }] };
+   writeFileSync(configFile, JSON.stringify({ ...config, entryReplication: { ...er, space: "nope" } }), { mode: 0o600 });
+   await assert.rejects(startConfiguredFederation(h, ctx, configFile), /unknown Space nope/);
+   writeFileSync(configFile, JSON.stringify({ ...config, entryReplication: { ...er, space: "default" } }), { mode: 0o600 });
+   runtime = await startConfiguredFederation(h, ctx, configFile);
   } finally { await runtime?.close(); await readServer.close(); await new Promise<void>(resolve => api.close(() => resolve())); installed.close(); external.close(); rmSync(dir, { recursive: true, force: true }); }
  });
 });
