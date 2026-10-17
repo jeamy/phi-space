@@ -176,7 +176,7 @@ Stand der Pakete (Details: [Phase-3-Stand](ap3-replikation.md), dort mit eigener
 | 3.5 setStandby | umgesetzt (leeres Quarantäne-Ziel, vollständiges Nachladen); im echten Zyklus zurück zu nanoi geprüft; Schreibsperre für alle Quellen inklusive Reaper während offener Übergänge, Abbruch mit `abandonTransition`; Nachladen eines bootstrappten Stores (Bootstrap-Chunks mit Prüfsumme) umgesetzt |
 | 3.6 Boot-Merkmal komplett | umgesetzt: `fenced`/`quarantine` per CAS; Boot-Guard bindet primary/sync-Spaces über `replicaConfig` an Rolle, Epoche, Replikatversion und Durability des Journals, `standby` ohne fachliche Zulassung; Wiederzulassung der übrigen Spaces eines gefencten Hosts je Space (`readmitSpace`/`installAdmittedPermit`); mehrere Spaces und Neustart geprüft |
 | 3.7 lww/set | Baustein umgesetzt (HLC, versionierte Tombstones, Add-Wins, Lease-Erneuerung); offen: Kompaktierung, öffentlicher Adapter, Policy-Modi |
-| 3.8 Control Space auf primary/sync | lokal umgesetzt: Bootstrap bestehender Stores, Hauptstore auf primary/sync (`mainSync`, `main-sync`, `replica-listen`), Control-Epoche aus dem Journal, Geschwister-Spaces; echter Lauf auf host-a bestanden: Bootstrap, zweimal setStandby/degradeToSingle mit Standby auf nanoi und netcup-Fencing, Ende `single` ([Nachweis](../test/evidence/control-sync-hosta-2026-10-17/README.md)); Schritt 6 (Policy-Abgleich, Lease über den Übergang, EpochNotice) lokal umgesetzt, echter Lauf offen; Promotion des Control-Replikats offen |
+| 3.8 Control Space auf primary/sync | lokal umgesetzt: Bootstrap bestehender Stores, Hauptstore auf primary/sync (`mainSync`, `main-sync`, `replica-listen`), Control-Epoche aus dem Journal, Geschwister-Spaces; echter Lauf auf host-a bestanden: Bootstrap, zweimal setStandby/degradeToSingle mit Standby auf nanoi und netcup-Fencing, Ende `single` ([Nachweis](../test/evidence/control-sync-hosta-2026-10-17/README.md)); Schritt 6 (Policy-Abgleich, Lease über den Übergang, EpochNotice) umgesetzt und auf host-a mit Root und Policy echt gelaufen ([Nachweis](../test/evidence/step6-hosta-2026-10-17/README.md)); Promotion des Control-Replikats offen |
 
 | AP | Inhalt | Größe |
 |---|---|---|
@@ -264,6 +264,6 @@ eingeschlossen, [ap1b-abnahme.md](ap1b-abnahme.md)). Phase 2 ist mit der Ausnahm
 | 3.2 | Storage-Unterbau, signierter Transport, Spaces im Federation-Daemon und Bootstrap bestehender Stores umgesetzt; echte Läufe bestanden | [ap3-primary-sync.md](ap3-primary-sync.md); offen: öffentliches `commitSealed`, kein `NotCommitted` |
 | 3.7 | Baustein umgesetzt: lww/set mit HLC, Tombstones, Add-Wins, Set-Lease-Erneuerung | Kompaktierung und öffentlicher Adapter offen |
 | 3.3–3.6 | Replikatsteuerung umgesetzt; netcup-Fencing-Adapter real (F1/Gate 2); Promotion, Degrade, setStandby, Notice-Übernahme und Boot-Merkmal in echten Läufen geprüft | [ap3-replica-control.md](ap3-replica-control.md); offen: Degrade ohne Fencing-Adapter |
-| 3.8 | Hauptstore auf primary/sync umgesetzt; echter Lauf auf host-a bestanden; Schritt 6 lokal umgesetzt | echter Lauf von Schritt 6 und Promotion des Control-Replikats offen |
+| 3.8 | Hauptstore auf primary/sync und Schritt 6 umgesetzt; echte Läufe auf host-a bestanden | Promotion des Control-Replikats offen |
 
 Nachweise, genaue Grenzen und nächste Betriebsschritte: [Phase-1b-Abnahme](ap1b-abnahme.md).

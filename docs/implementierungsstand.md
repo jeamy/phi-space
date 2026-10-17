@@ -356,6 +356,15 @@ Nachtrag 2026-10-17 (Router-Pfad echt):
   Erneuerung der aufbewahrten Router-Lease verglichen noch die Epoche des Space-Dokuments.
 - Der Testbed-Daemon hat dafür den sperrfreien Modus `enroll-key` für zusätzliche Schlüssel eines laufenden Hosts.
 
+Nachtrag 2026-10-17 (Schritt 6):
+
+- Control-Übergänge sind jetzt auch mit installierter Routing-Policy möglich. Der erste Start nach einem Übergang
+  gleicht die Policy ab (Marker, `policyVersion`), bevor Grants, Router-Lease oder Root existieren.
+- Die Router-Lease erneuert sich über einen Übergang mit gleichem Primary; der Root verteilt die `EpochNotice`.
+- Echter Lauf auf host-a mit Root, Member und Policy: `setStandby`, `degrade` mit netcup-Fencing, Root-Neustart
+  nach Ablauf der Lease, geroutete Schreibvorgänge danach; alles zurückgesetzt
+  ([Nachweis](../test/evidence/step6-hosta-2026-10-17/README.md)).
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

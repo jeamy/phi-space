@@ -210,8 +210,9 @@ Store-Commit. Sein Policy-Schritt folgt deshalb im ersten Commit danach, bevor d
 - **Promotion eines Control-Replikats** wird abgewiesen. big ist nie Fencing-Ziel, und für den Control-Host gäbe es
   nur einen Container-Fencing-Adapter. Außerdem fehlen dem neuen Host Root-Lease-Datei und eigene Router- und
   Host-Schlüssel.
-- **Schritt 6** ist lokal umgesetzt und geprüft (`test-configured-root.test.ts`), ein echter Lauf steht aus. Dass
-  die `EpochNotice` bei einem Member ankommt, prüft der Test nur als Versuch gegen eine Attrappe.
+- **Schritt 6** ist umgesetzt, lokal geprüft (`test-configured-root.test.ts`) und auf host-a echt gelaufen
+  ([Nachweis](../test/evidence/step6-hosta-2026-10-17/README.md)). Dass die Marke am Member aus der `EpochNotice`
+  stammt und nicht aus der ersten Delegation der neuen Epoche, ist dabei nicht unterscheidbar.
 - **Kopplung:** Mit Standby braucht jeder Control-Write dessen ACK. Fällt der Standby aus, stehen Enrollments,
   Admin-Commands und Routing-Änderungen bis zu `degradeToSingle`.
 - **Kein Rückweg:** Ein Bootstrap lässt sich nicht rückgängig machen. Zurück geht es nur über die Kopie vor der

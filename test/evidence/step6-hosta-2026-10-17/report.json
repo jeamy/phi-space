@@ -1,0 +1,171 @@
+{
+ "passed": true,
+ "bundle": "c04fd5b53c58f124",
+ "commit": "3e817bb",
+ "root": {
+  "host": "phase1b-host-a",
+  "id": "root-hosta-step6",
+  "routerKeyId": "4a77c49d9457e2541d089b09f17c0d9c",
+  "hostKeyId": "26c520180cb62872ea533811f59bbf28"
+ },
+ "member": {
+  "id": "step6-member",
+  "host": "standby-100",
+  "spaceId": "sp-89ac541d-e6aa-41fc-a3cd-3e8334338647",
+  "dataIncarnation": "bf2833bf",
+  "durability": "single"
+ },
+ "controlStandby": "control-standby-nano-2 (replica-listen on nanoi)",
+ "steps": [
+  {
+   "step": "Root start, addMember",
+   "result": {
+    "phase": "completed",
+    "memberId": "step6-member",
+    "policyVersion": 1
+   },
+   "routedWrite": {
+    "written": true,
+    "entry": "ebf2833bf-1"
+   }
+  },
+  {
+   "step": "set-standby with routing policy installed",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 3,
+    "primaryReplica": "phase1b-host-a",
+    "replicaConfigVersion": 6,
+    "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+    "standbyReplica": "control-standby-nano-2"
+   },
+   "policyAfterRestart": {
+    "policyVersion": 2,
+    "members": 0,
+    "default": {
+     "member": "step6-member",
+     "mode": "local"
+    }
+   },
+   "routedWrite": {
+    "written": true,
+    "entry": "ebf2833bf-2"
+   }
+  },
+  {
+   "step": "degrade with routing policy installed",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "single",
+    "primaryEpoch": 4,
+    "primaryReplica": "phase1b-host-a",
+    "replicaConfigVersion": 7,
+    "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+    "standbyReplica": null
+   },
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "degrade step6-degrade"
+    }
+   }
+  },
+  {
+   "step": "Root restart after the retained lease expired",
+   "leaseBefore": {
+    "id": "3bc4b4d8\u2026",
+    "routerEpoch": 1,
+    "controlPrimaryEpoch": 3,
+    "expiresAt": "2026-10-17T11:37:56.667Z"
+   },
+   "startedAt": "2026-10-17T11:38:23Z",
+   "leaseAfter": {
+    "id": "3bc4b4d8\u2026",
+    "routerEpoch": 1,
+    "controlPrimaryEpoch": 4,
+    "issuedAt": "2026-10-17T11:38:28.040Z"
+   }
+  },
+  {
+   "step": "after degrade",
+   "policy": {
+    "policyVersion": 3,
+    "members": 0,
+    "default": {
+     "member": "step6-member",
+     "mode": "local"
+    }
+   },
+   "routedWrite": {
+    "written": true,
+    "entry": "ebf2833bf-3"
+   },
+   "routedCount": {
+    "complete": true,
+    "missingMembers": [],
+    "revisions": {
+     "step6-member": 11
+    },
+    "consistentSnapshot": false,
+    "count": 3
+   }
+  },
+  {
+   "step": "Member epoch high-water (store of the Member Space on standby-100)",
+   "revisions": [
+    {
+     "seq": 4,
+     "value": {
+      "controlPrimaryEpoch": 3,
+      "policyVersion": 1,
+      "routerEpoch": 1
+     }
+    },
+    {
+     "seq": 7,
+     "set": {
+      "policyVersion": 2
+     }
+    },
+    {
+     "seq": 11,
+     "set": {
+      "controlPrimaryEpoch": 4,
+      "policyVersion": 3
+     }
+    }
+   ]
+  }
+ ],
+ "notes": [
+  "no 'Root epoch notice' error was logged on host-a; whether the Member's high-water came from the EpochNotice or from the first delegation of the new epoch is not distinguishable in its store",
+  "'pi-spaces supervisor: Error: database is not open' appears once while stopping: the supervisor tick races the closed store"
+ ],
+ "restore": {
+  "host-a": "files from the step-6 backup, drop-in removed, boot record written back to epoch 3 / version 5 (register version 15)",
+  "standby-100": "config from before-step6, Member Space removed, boot record restored",
+  "nanoi": "released (power on), control standby unit and directory removed, boot:control-standby-nano-2 retired (fenced, no permits)",
+  "vpsc": "tls.json and fencing.json restored, ufw rule removed",
+  "netbird": "owned group/policy control-sync-step6-20261017 removed"
+ },
+ "baselineRestored": {
+  "at": "2026-10-17T11:43:09.095Z",
+  "peerKeys": 13,
+  "controlWrite": "completed",
+  "nano-test": {
+   "ok": true,
+   "epoch": 1,
+   "entries": 0
+  },
+  "standby-100": {
+   "ok": true,
+   "epoch": 1,
+   "entries": 0
+  }
+ }
+}
