@@ -131,13 +131,18 @@ async function resumeSealed(o: Common, id: string, assert: () => Promise<void>, 
 }
 async function alignPermit(o: Common, c: PrimarySyncConfig, role: "primary" | "standby", id: string, host?: { hostState?: "active"; requireHost?: Array<HostBootState["state"]> }, hostId = o.hostId) {
 	const permit = permitFor(c, role, o.dataIncarnation, id);
-	// Sibling Spaces of a replicated main store keep their own data incarnation and follow role and versions.
-	if (hostId === o.hostId) for (const sibling of o.siblingSpaces ?? []) if (sibling !== c.spaceId) await casBoot(o.register, hostId, b => {
-		const p = b?.spaces[sibling];
+	// Sibling Spaces of a replicated main store keep their own data incarnation and follow role and versions. Another
+	// host (the setStandby target) holds the same store, so it gets their permits with the incarnations of this host.
+	for (const sibling of o.siblingSpaces ?? []) if (sibling !== c.spaceId) {
+	const own = hostId === o.hostId ? null : (await o.register.get<Boot>(`boot:${o.hostId}`))?.value.spaces[sibling];
+	if (hostId !== o.hostId && !own) throw new ReplicaTransitionBlocked(`${o.hostId} has no permit for sibling Space ${sibling}`);
+	await casBoot(o.register, hostId, b => {
+		const p = own ?? b?.spaces[sibling];
 		if (!b || !p) throw new ReplicaTransitionBlocked(`${hostId} has no permit for sibling Space ${sibling}`);
 		const next = { ...p, state: "active" as const, role, authorityId: c.authorityId, primaryEpoch: c.primaryEpoch, replicaConfigVersion: c.replicaConfigVersion, durability: durabilityOf(c), transitionId: id };
-		return permitEq(p, next) ? null : { ...b, spaces: { ...b.spaces, [sibling]: next }, transitionId: id };
+		return b.spaces[sibling] && permitEq(b.spaces[sibling], next) ? null : { ...b, spaces: { ...b.spaces, [sibling]: next }, transitionId: id };
 	});
+	}
 	await setPermit(o.register, hostId, c.spaceId, permit, host);
 	if (o.installed && hostId === o.hostId) {
 		const key = `installed:${hostId}:${c.spaceId}`, cur = await o.installed.get(key);

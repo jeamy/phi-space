@@ -126,7 +126,8 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
   listener=await openSyncSpace({config:{alias:'control-main',spaceId:control.spaceId,incarnation:control.incarnation,dir:join(dir,'replica'),genesis,port,peers:[{hostId:'a',algorithm:'ed25519',publicKey:keys.a.publicKey,ip:'127.0.0.2'}]},hostId:'n',authorityId:'authority',bindIp:'127.0.0.3',signer:keys.n,external:reg,installed:new SqliteRecoveryRegister(join(dir,'n-installed.sqlite')),ctx,openStorage:async()=>{throw Error('unused');},openHarness:async()=>{throw Error('unused');},listenOnly:true});
   const t=socketTransport({host:'127.0.0.3',port},{localAddress:'127.0.0.2'}),peer=signedReplicaPeer({transport:t,signer:keys.a,self:'a',remote:{hostId:'n',algorithm:'ed25519',publicKey:keys.n.publicKey}});
   const set=await setStandby({storage:st,journal,register:reg,hostId:'a',dataIncarnation:control.incarnation,ctx,transitionId:'control-standby',target:peer,targetDataIncarnation:control.incarnation,siblingSpaces:[def.spaceId]});
-  assert.equal(set.config.standbyReplica,'n');assert.equal(listener.journal.head().hash,journal.head().hash,'the control standby holds the whole chain incl. bootstrap');
+  assert.equal(set.config.standbyReplica,'n');
+  const nb=(await reg.get<any>('boot:n'))!.value.spaces[def.spaceId];assert.deepEqual([nb.state,nb.role,nb.dataIncarnation,nb.replicaConfigVersion],['active','standby',def.incarnation,2],'the standby holds the sibling Space too');assert.equal(listener.journal.head().hash,journal.head().hash,'the control standby holds the whole chain incl. bootstrap');
   await st.close(ctx);
   // 3. The main Harness runs on primary/sync with the boot guard bound for every Space of the store.
   const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),journal,peer,{assertPrimary:assertSyncPrimary(reg,'a',journal)});
