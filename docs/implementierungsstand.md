@@ -365,6 +365,16 @@ Nachtrag 2026-10-17 (Schritt 6):
   nach Ablauf der Lease, geroutete Schreibvorgänge danach; alles zurückgesetzt
   ([Nachweis](../test/evidence/step6-hosta-2026-10-17/README.md)).
 
+Nachtrag 2026-10-17 (Promotion des Control-Replikats):
+
+- Container-Fencing (`ContainerFencing` hinter dem mTLS-Fencing-Dienst) und der Wechsel des Control-Hosts unter
+  gleicher Autorität (`ControlHostChange`, vom Recovery-Admin signiert, vom Register erst nach der Promotion
+  aufgezeichnet, von den Hosts beim Start übernommen) sind umgesetzt.
+- Echter Lauf auf big in beide Richtungen: host-a → host-c → host-a, die Members folgten jeweils
+  ([Nachweis](../test/evidence/control-promotion-2026-10-17/README.md)).
+- Dabei behoben: Berechtigungen der Geschwister-Spaces für das `setStandby`-Ziel, das Fencing-Ziel beim
+  Fortsetzen einer Promotion und eine Sperrliste für Quelladressen im Fencing-Dienst.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

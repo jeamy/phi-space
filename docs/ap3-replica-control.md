@@ -256,6 +256,8 @@ eigene Art von Wechsel: gleiche Autorität, neuer Control-Host, neuer Supervisor
 **Grenzen:** Ein Root zieht nicht mit (siehe oben). Members folgen erst beim nächsten Start; bis dahin erreichen sie
 den alten, gesperrten Control-Host nicht.
 
+Echter Lauf in beide Richtungen auf big: [Nachweis](../test/evidence/control-promotion-2026-10-17/README.md).
+
 **Messung auf der Kopie von host-a:** 114 Control-Commits in sechs Tagen, Revisionen von 1–3 KB. Das Journal-Budget
 von 64 MiB reicht damit grob für Jahre.
 

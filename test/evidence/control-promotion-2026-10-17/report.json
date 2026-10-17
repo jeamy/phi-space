@@ -1,0 +1,252 @@
+{
+ "passed": true,
+ "bundle": "98e2b42665ed8584",
+ "commits": [
+  "eaebf3c",
+  "efcce2f",
+  "be44076",
+  "b0e624e",
+  "5c6b9a0",
+  "8a3fbb7"
+ ],
+ "authority": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+ "controlSpace": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+ "hosts": {
+  "phase1b-host-a": {
+   "container": "pi-spaces-test-host-a-1",
+   "overlay": "100.89.128.128"
+  },
+  "phase1b-host-c": {
+   "container": "pi-spaces-test-host-c-1 (temporary, own NetBird agent)",
+   "overlay": "100.89.200.120"
+  }
+ },
+ "fencing": {
+  "adapter": "ContainerFencing behind serveFencing on big, mutual TLS, pins host-a and host-c, source allowlist 152.53.239.133"
+ },
+ "steps": [
+  {
+   "step": "set-standby host-a -> host-c",
+   "config": {
+    "durability": "sync",
+    "primaryEpoch": 3,
+    "replicaConfigVersion": 6
+   },
+   "baseline": {
+    "at": "2026-10-17T12:36:34.023Z",
+    "peerKeys": 13,
+    "controlWrite": "completed",
+    "nano-test": {
+     "ok": true,
+     "epoch": 1,
+     "entries": 0
+    },
+    "standby-100": {
+     "ok": true,
+     "epoch": 1,
+     "entries": 0
+    }
+   }
+  },
+  {
+   "step": "promote on host-c (container fencing of host-a)",
+   "result": {
+    "recoveryId": "promo-c",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 4,
+     "primaryReplica": "phase1b-host-c",
+     "replicaConfigVersion": 7,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": "phase1b-host-a"
+    },
+    "proof": {
+     "kind": "container",
+     "evidence": {
+      "provider": "docker",
+      "container": "pi-spaces-test-host-a-1",
+      "unit": "pi-spaces-phase1b-host-a.service",
+      "running": false,
+      "restartPolicy": "no",
+      "unitLocked": true,
+      "reason": "promote promo-c"
+     }
+    }
+   }
+  },
+  {
+   "step": "degrade on host-c",
+   "result": {
+    "recoveryId": "promo-c-single",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 5,
+     "primaryReplica": "phase1b-host-c",
+     "replicaConfigVersion": 8,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": null
+    },
+    "proof": "(truncated in the transcript)"
+   }
+  },
+  {
+   "step": "control host change recorded",
+   "authority": {
+    "version": 2,
+    "hostId": "phase1b-host-c",
+    "hostChange": "promo-c"
+   }
+  },
+  {
+   "step": "host-c starts as control, members follow",
+   "members": [
+    "pi-spaces-phase1b-member-1: {\"ready\":true,\"hostId\":\"phase1b-member-1\",\"address\":{\"address\":\"100.89.5.70\",\"family\":\"IPv4\",\"port\":7421}}",
+    "pi-spaces-restore-target: {\"ready\":true,\"hostId\":\"phase1b-restore-target\",\"address\":{\"address\":\"100.89.116.183\",\"family\":\"IPv4\",\"port\":7421}}",
+    "nano: {\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}",
+    "100: {\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+   ],
+   "baseline": {
+    "at": "2026-10-17T12:51:39.814Z",
+    "peerKeys": 13,
+    "controlWrite": "completed",
+    "nano-test": {
+     "ok": true,
+     "epoch": 1,
+     "entries": 0
+    },
+    "standby-100": {
+     "ok": true,
+     "epoch": 1,
+     "entries": 0
+    }
+   }
+  },
+  {
+   "step": "release host-a into quarantine, wipe, listener",
+   "boot": "quarantine"
+  },
+  {
+   "step": "set-standby host-c -> host-a",
+   "config": {
+    "durability": "sync",
+    "primaryEpoch": 5,
+    "replicaConfigVersion": 9
+   }
+  },
+  {
+   "step": "promote on host-a (container fencing of host-c)",
+   "result": {
+    "recoveryId": "promo-a",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 6,
+     "primaryReplica": "phase1b-host-a",
+     "replicaConfigVersion": 10,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": "phase1b-host-c"
+    },
+    "proof": {
+     "kind": "container",
+     "evidence": {
+      "provider": "docker",
+      "container": "pi-spaces-test-host-c-1",
+      "unit": "pi-spaces-phase1b-host-c.service",
+      "running": false,
+      "restartPolicy": "no",
+      "unitLocked": true,
+      "reason": "promote promo-a"
+     }
+    }
+   }
+  },
+  {
+   "step": "degrade on host-a",
+   "result": {
+    "recoveryId": "promo-a-single",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 7,
+     "primaryReplica": "phase1b-host-a",
+     "replicaConfigVersion": 11,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": null
+    },
+    "proof": "(truncated in the transcript)"
+   }
+  },
+  {
+   "step": "control host change back recorded",
+   "authority": {
+    "version": 3,
+    "hostId": "phase1b-host-a",
+    "hostChange": "promo-a"
+   }
+  },
+  {
+   "step": "host-a control again, members follow",
+   "members": [
+    "pi-spaces-phase1b-member-1: {\"ready\":true,\"hostId\":\"phase1b-member-1\",\"address\":{\"address\":\"100.89.5.70\",\"family\":\"IPv4\",\"port\":7421}}",
+    "pi-spaces-restore-target: {\"ready\":true,\"hostId\":\"phase1b-restore-target\",\"address\":{\"address\":\"100.89.116.183\",\"family\":\"IPv4\",\"port\":7421}}",
+    "nano: {\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}",
+    "100: {\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+   ],
+   "baseline": {
+    "at": "2026-10-17T12:56:24.695Z",
+    "peerKeys": 13,
+    "controlWrite": "completed",
+    "nano-test": {
+     "ok": true,
+     "epoch": 1,
+     "entries": 0
+    },
+    "standby-100": {
+     "ok": true,
+     "epoch": 1,
+     "entries": 0
+    }
+   }
+  }
+ ],
+ "final": {
+  "baseline": {
+   "at": "2026-10-17T12:57:58.525Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "hostABoot": "version 26, active, primary single epoch 7 version 11 (control and default)"
+ },
+ "incidents": [
+  "the fencing service on big's overlay address was unreachable from the containers (host firewall on big, no root); it moved to big's public address with a source allowlist that drops other addresses before TLS (5c6b9a0); meanwhile host-c was stopped while host-a ran sync with it, so control writes stalled from 12:37:51 to 12:47:30 UTC",
+  "the set-standby to host-c ran with host-a's previous bundle, before the sibling fix (be44076): host-c had no permit for the default Space and the promotion stopped after fencing host-a; the operator added the standby permit of the default Space in the register (incarnation a0281666, as the fixed set-standby writes it)",
+  "resuming the promotion, main-sync took its fence target from the journal's current primary, which was already host-c, and fenced host-c itself; host-c was unlocked by hand without starting its unit, the tool fixed to fence the other replica and refuse itself (8a3fbb7)",
+  "the members still ran bundles without control host changes and stopped with BootBlocked after the first restart; with the new bundle they followed",
+  "control outage while promoting to host-c: 12:47:33 (host-a fenced) to about 12:51:30 UTC (members ready); the way back: 12:55:18 to about 12:56:40 UTC"
+ ],
+ "cleanup": [
+  "host-c containers, volumes, unit and NetBird peer removed; boot:phase1b-host-c retired (fenced, no permits)",
+  "container fencing service and its key removed",
+  "owned NetBird group/policy removed",
+  "vpsc tls.json restored",
+  "host-a control certificate, backup and set-aside history removed; config/bundle backups on members removed",
+  "host-a unit TimeoutStopSec 25 -> 75 (longer than the 60 s stop window)"
+ ],
+ "kept": [
+  "members keep the new bundle and the pinned recovery admin key",
+  "host-a's config keeps mainSync.incarnation, recoveryAdmin and host-c as its last replica peer",
+  "the authority record keeps both host changes as history"
+ ]
+}
