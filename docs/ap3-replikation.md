@@ -206,9 +206,16 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
   - Löschen: bei `lww` ein Tombstone mit eigener HLC-Version, bei `set` ein Remove der beobachteten Tags.
   - `take`, Txns, `wait` und Lease-Eingriffe auf Merge-Typen werden mit `MergeTypeNotExclusive` abgewiesen
     (v3 7.2: keine exklusive Vergabe).
-- **Root:** Für eine Merge-Regel wählt der Root den Ziel-Member deterministisch per HRW, bei `lww` über den Schlüssel,
-  bei `set` über die Request-ID. Lesen geht an den ersten erreichbaren Member in derselben Reihenfolge. Exklusive
-  Operationen lehnt er ab, bevor ein Member angesprochen wird.
+- **Root:** Für eine Merge-Regel wählt der Root den Ziel-Member deterministisch per HRW.
+  - Schreiben: bei `lww` über den kanonischen Schlüssel (fehlende Schlüsselfelder sind ein Fehler), bei `set` über
+    die kanonischen Felder.
+  - Lesen: bei `lww` mit vollständigem Schlüssel im Template beim Schlüssel-Member, sonst bei genau einem Member per
+    HRW über den Typ. Mehrere Members zu befragen würde nach der Replikation Einträge doppelt zählen.
+  - Exklusive Operationen (`take`, Rennen, Txns) lehnt er ab, bevor ein Member angesprochen wird
+    (`MergeTypeNotExclusive`).
+  - Vor Schritt 2 sieht ein Lesen nur, was beim gelesenen Member liegt.
+
+**Stand:** Schritt 1 ist umgesetzt (Dienst-Adapter, Policy-Validierung, Platzierung, Ablehnung im Root).
 
 **2. Import über den Dienst:** Die Members ziehen die Änderungen der anderen mit dem vorhandenen Stream-Worker. Dabei
 gelten Schlüsselbeweis, frische Import-Grants genau für Quelle und Ziel, Widerruf, Boot-Rolle `entryReplica` und

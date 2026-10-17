@@ -452,3 +452,37 @@ for(const b of BACKENDS)test(`${b}: large Parent stays on bounded separate commi
  const request={id:'bounded-fallback',principal:o.p},entry={type:'Job',fields:{blob:'x'.repeat(27000)}};const result=await o.f.write(entry,request);assert.equal(paired,0);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
  for(const r of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,r.journalId,ctx)).future??{},{});
 },8,{maxCommitBytes:60000,maxIndexBytes:1024,defaultResultBytes:64}));
+
+for (const backend of BACKENDS)
+    test(`${backend}: merge types are placed by key, read at one converging Member and never taken exclusively`,
+         () => fixture(backend, async o => {
+             const {validateFederationPolicy, writeMember, searchMembers, isMergeType} = await import('./src/routing-semantics.ts');
+             const {MergeTypeNotExclusive} = await import('./src/service.ts');
+             const sensor = {type : 'Sensor', mode : 'sync' as const, variant : 'lww' as const, members : [ 'a', 'b' ], semantics : 'state' as const, keyFields : [ 'sensorId' ]};
+             const fact = {type : 'Fact', mode : 'sync' as const, variant : 'set' as const, members : [ 'a', 'b' ], semantics : 'facts' as const};
+             const policy = {...o.state.policy, policyVersion : 2, rules : [ ...o.state.policy.rules, sensor, fact ]};
+             // Members must carry a matching entry replication.
+             assert.throws(() => validateFederationPolicy(policy, o.state.members, o.state.policy), /lacks a matching entry replication/);
+             const er = (replicaId: string, keyFields = [ 'sensorId' ]) => ({replicaId, incarnation : 'i-' + replicaId, rules : [ {type : 'Sensor', variant : 'lww' as const, keyFields}, {type : 'Fact', variant : 'set' as const} ]});
+             o.state.members.a.entryReplication = er('a');o.state.members.b.entryReplication = er('b', [ 'other' ]);
+             assert.throws(() => validateFederationPolicy(policy, o.state.members, o.state.policy), /lacks a matching entry replication/, 'key fields must agree');
+             o.state.members.b.entryReplication = er('b');
+             validateFederationPolicy(policy, o.state.members, o.state.policy);
+             // lww: the key decides the Member, for writes and keyed reads alike; without the key one Member answers.
+             const target = writeMember(policy, o.state.members, {type : 'Sensor', fields : {sensorId : 's1', v : 1}}, 0);
+             assert.equal(writeMember(policy, o.state.members, {type : 'Sensor', fields : {sensorId : 's1', v : 2}}, 0), target);
+             assert.deepEqual(searchMembers(policy, {type : 'Sensor', fields : {sensorId : 's1'}}), [ target ]);
+             assert.equal(searchMembers(policy, {type : 'Sensor'}).length, 1);
+             assert.throws(() => writeMember(policy, o.state.members, {type : 'Sensor', fields : {v : 1}}, 0), /key field missing/);
+             assert.equal(writeMember(policy, o.state.members, {type : 'Fact', fields : {x : 1}}, 0), writeMember(policy, o.state.members, {type : 'Fact', fields : {x : 1}}, 0));
+             assert.deepEqual([ isMergeType(policy, 'Sensor'), isMergeType(policy, 'Fact'), isMergeType(policy, 'Job'), isMergeType(policy, undefined) ], [ true, true, false, false ]);
+             // The Root refuses exclusive allocation before any Member is called.
+             o.state.policy = policy;
+             let calls = 0;const step = o.sim.step.bind(o.sim);o.sim.step = async (...a: any[]) => { calls++;return step(...a); };
+             await assert.rejects(o.f.take({type : 'Sensor'}, {id : 'merge-take', principal : o.p}), MergeTypeNotExclusive);
+             await assert.rejects(o.f.take({type : 'Fact'}, {id : 'merge-take-2', principal : o.p}), MergeTypeNotExclusive);
+             assert.equal(calls, 0, 'no Member was asked');
+             // A normal type still reaches a Member through the same path (the counter works).
+             await o.f.take({type : 'Job'}, {id : 'job-take', principal : o.p}).catch(() => {});
+             assert.ok(calls > 0, 'the step counter sees Member calls');
+         }));

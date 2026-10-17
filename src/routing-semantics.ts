@@ -62,6 +62,11 @@ export type FederationMember = {
         /** recovery/transition ID of the adopted ReplicaConfigNotice */
         recoveryId?: string
     };
+    /** lww/set Member (docs/ap3-replikation.md): its provisioned entry replication; merge rules must match it. */
+    entryReplication?: {
+        replicaId : string; incarnation : string;
+        rules : Array<{type : string; variant : 'lww'; keyFields : string[]} | {type : string; variant : 'set'}>
+    };
     capacity?: {free : number; at : number};
     capabilities?: {names : string[]; at : number}
 };
@@ -172,6 +177,13 @@ export function validateFederationPolicy(
             if (r.variant === 'lww' && (r.semantics !== 'state' || !r.keyFields?.length) ||
                 r.variant === 'set' && r.semantics !== 'facts')
                 throw new RoutingConflict('merge semantics must be explicit');
+            // Every merge Member serves the type through its provisioned entry replication with the same rule.
+            for (const id of r.members) {
+                const er: {type : string; variant : string; keyFields?: string[]} | undefined = table[id]?.entryReplication?.rules.find(x => x.type === r.type);
+                if (!er || er.variant !== r.variant ||
+                    (r.variant === 'lww' && JSON.stringify(er.keyFields) !== JSON.stringify(r.keyFields)))
+                    throw new RoutingConflict('merge member lacks a matching entry replication');
+            }
         } else if (r.mode !== 'local')
             throw new RoutingConflict('unknown rule mode');
     }
@@ -180,8 +192,8 @@ export function validateFederationPolicy(
             members(r).some(id => primary.has(id) || !!table[id]!.replication))
             throw new RoutingConflict('primary member cannot be expand or merge member');
     // primary/sync is served by hosts with a dedicated store (sync-spaces.ts) and needs the Member's replica
-    // configuration; merge modes (lww/set) stay blocked until their public adapter exists.
-    if (!allowFutureModes && p.rules.some(r => r.mode === 'sync' && (r.variant !== 'primary' || !table[r.member]?.replication)))
+    // configuration; merge modes (lww/set) need a matching entry replication on every Member (checked above).
+    if (!allowFutureModes && p.rules.some(r => r.mode === 'sync' && r.variant === 'primary' && !table[r.member]?.replication))
         throw new RoutingConflict('sync activation requires phase 3 implementation');
     for (const r of p.rules)
         if (declaredSupertypes(p, r.type).length > 15)
@@ -256,14 +268,28 @@ export function normalizeFederatedEntry(p: FederationPolicy, e: EntryDraft): Ent
         throw new RoutingConflict('entry supertypes must be declared by its rule');
     return {...copy(e), types : parents};
 }
+/** Placement value of a merge write: the canonical lww key, or for set the canonical fields. */
+function mergeKey(r: Extract<FederationRule, {variant : 'lww'|'set'}>, fields: Record<string, Json>): string {
+    if (r.variant === 'set')
+        return canonicalJson(fields as Json);
+    if (r.keyFields!.some(k => !Object.hasOwn(fields, k) || fields[k] === null))
+        throw new RoutingConflict('lww key field missing');
+    return canonicalJson([ r.type, ...r.keyFields!.map(k => fields[k]!) ] as Json);
+}
+/** True when the type is replicated by merge (lww/set): no exclusive allocation (v3 7.2). */
+export function isMergeType(p: FederationPolicy, type: string | undefined): boolean {
+    if (!type) return false;
+    const r = p.rules.find(x => x.type === type);
+    return !!r && r.mode === 'sync' && r.variant !== 'primary';
+}
 export function writeMember(p: FederationPolicy, table: Record<string, FederationMember>,
                             entry: EntryDraft, now: number, maxAgeMs = 60000): string {
     const r = ruleFor(p, entry.type);
     let id: string;
     if (r.mode === 'local' || r.mode === 'sync' && r.variant === 'primary')
         id = r.member;
-    else if (r.mode !== 'expand')
-        throw new RoutingConflict('merge mode unavailable');
+    else if (r.mode === 'sync')
+        id = hrw(mergeKey(r, entry.fields), r.members);
     else if (r.by === 'type')
         id = hrw(r.type, r.members);
     else if (typeof r.by === 'object') {
@@ -312,8 +338,11 @@ export function searchMembers(p: FederationPolicy, template: Template): string[]
     const targets = rules.flatMap(r => {
         if (r.mode === 'local' || r.mode === 'sync' && r.variant === 'primary')
             return [ r.member ];
-        if (r.mode !== 'expand')
-            throw new RoutingConflict('merge search unavailable');
+        if (r.mode === 'sync') {
+            // Merge Members converge: one of them answers; by key when a lww template names the whole key.
+            const keyed = r.variant === 'lww' && template.fields && r.keyFields!.every(k => Object.hasOwn(template.fields!, k));
+            return [ hrw(keyed ? mergeKey(r, template.fields as Record<string, Json>) : r.type, r.members) ];
+        }
         if (r.by === 'type')
             return [ hrw(r.type, r.members) ];
         if (typeof r.by === 'object' && template.fields &&

@@ -12,6 +12,7 @@ import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
 import {FederationRouting} from "./federation-policy.ts";
 import {FederationJournalLayout, operationPartition, parentJournalKey, validateJournalPartitions} from './federation-journals.ts';
 import {TransportFailure} from './remote.ts';
+import {MergeTypeNotExclusive} from './service.ts';
 import {ProfileTransitions} from './profile-transition-doc.ts';
 import {MembershipJournal} from "./membership.ts";
 import {RouterController, type RouterOperation, type RouterStepSpec} from './router.ts';
@@ -20,7 +21,8 @@ import {
     RoutingConflict,
     type RoutingState,
     searchMembers,
-    writeMember
+    writeMember,
+    isMergeType
 } from './routing-semantics.ts';
 
 export class FederationUnavailable extends Error {}
@@ -222,6 +224,10 @@ export class FederatedSpace {
         const st = await this.o.state(), p = st.policy;
         if (!p)
             throw new RoutingConflict('no installed policy');
+        // v3 7.2: merge types (lww/set) know no exclusive allocation; refused before any Member is called.
+        const mergeType = (kind === 'write' ? (args as any).entry?.type : (args as any).template?.type) as string | undefined;
+        if (isMergeType(p, mergeType) && (kind === 'take' || kind === 'race' || q.txn))
+            throw new MergeTypeNotExclusive(`${q.txn ? 'a transaction' : kind} is not available for merge types (lww/set)`);
         let ids =
             kind === 'txn' ? [ (args as any).member ]
             : kind === 'write'
