@@ -16,7 +16,14 @@ export type PrimarySyncConfig={spaceId:string;authorityId:string;primaryEpoch:nu
 export type PrimaryCommitIntent={version:1;config:PrimarySyncConfig;revision:number;previousHash:string;batchHash:string;deltas:StorageWrite[];validatedAt:number;hash:string};
 /** A configuration change in the chain; `config` is the configuration from this revision on. */
 export type PrimaryConfigIntent={version:2;config:PrimarySyncConfig;previousConfigHash:string;reason:string;revision:number;previousHash:string;batchHash:string;deltas:StorageWrite[];validatedAt:number;hash:string};
-export type PrimaryIntent=PrimaryCommitIntent|PrimaryConfigIntent;
+/**
+ * Bootstrap of an existing store (plan 3.2, "Bootstrap bestehender Stores"): the complete live content as creates,
+ * split into chunks at the start of the chain (revisions 1..total). Each chunk carries the data marker like a
+ * commit; `storeHash` is the digest of the complete captured store, checked by the primary before its marker and by
+ * every replica after applying the last chunk.
+ */
+export type PrimaryBootstrapIntent={version:3;config:PrimarySyncConfig;bootstrap:{index:number;total:number;storeHash:string};revision:number;previousHash:string;batchHash:string;deltas:StorageWrite[];validatedAt:number;hash:string};
+export type PrimaryIntent=PrimaryCommitIntent|PrimaryConfigIntent|PrimaryBootstrapIntent;
 export type PrimarySyncAck={revision:number;hash:string;configHash:string};
 export interface PrimarySyncPeer{accept(intent:PrimaryIntent):Promise<PrimarySyncAck>}
 export class PrimarySyncBlocked extends Error{}
@@ -58,7 +65,7 @@ const markerOf=(i:PrimaryIntent)=>({configHash:hash(i.config),revision:i.revisio
 /** Dedicated local journal, not the independent recovery register. Open before the Harness. */
 export class PrimarySyncJournal implements PrimarySyncPeer{
  private genesis:PrimarySyncConfig;private configs:PrimarySyncConfig[];readonly maxIntentBytes:number;private db:DatabaseSync;private maxHistoryBytes:number;
- private assertStandby?:(config:PrimarySyncConfig,version:1|2)=>Promise<void>;private self?:string;
+ private assertStandby?:(config:PrimarySyncConfig,version:1|2|3)=>Promise<void>;private self?:string;
  /** Configuration after the newest entry, including an unresolved candidate. */
  get config(){return copy(this.configs.at(-1)!);}
  get configHash(){return hash(this.configs.at(-1));}
@@ -70,7 +77,7 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   * acceptance: an entry is accepted only if this replica is the standby of the configuration it leads to and the
   * callback (external boot permit, host state) agrees.
   */
- constructor(path:string,config:PrimarySyncConfig,o:{maxIntentBytes?:number;maxHistoryBytes?:number;self?:string;assertStandby?:(config:PrimarySyncConfig,version:1|2)=>Promise<void>}={}){
+ constructor(path:string,config:PrimarySyncConfig,o:{maxIntentBytes?:number;maxHistoryBytes?:number;self?:string;assertStandby?:(config:PrimarySyncConfig,version:1|2|3)=>Promise<void>}={}){
   this.genesis=configOf(config);this.configs=[this.genesis];this.self=o.self;this.assertStandby=o.assertStandby;this.maxIntentBytes=o.maxIntentBytes??256*1024;this.maxHistoryBytes=o.maxHistoryBytes??64*1024*1024;
   if(!integer(this.maxIntentBytes)||this.maxIntentBytes<32768||this.maxIntentBytes>1024*1024||!integer(this.maxHistoryBytes)||this.maxHistoryBytes<this.maxIntentBytes||this.maxHistoryBytes>1024*1024*1024)throw new PrimarySyncBlocked('invalid journal bounds');
   mkdirSync(dirname(path),{recursive:true,mode:0o700});try{if(lstatSync(path).isSymbolicLink())throw new PrimarySyncBlocked('journal must not be a symlink');}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
@@ -91,9 +98,14 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  intent(revision:number):PrimaryIntent|null{if(!integer(revision)||revision<1)throw new PrimarySyncBlocked('invalid commit revision');const row=this.db.prepare('SELECT intent FROM sync_intents WHERE revision=?').get(revision) as {intent:string}|undefined;return row?JSON.parse(row.intent):null;}
  /** Validates an entry against the configuration in force before it. */
  private validate(i:PrimaryIntent,current:PrimarySyncConfig){
-  const keys1=['version','config','revision','previousHash','batchHash','deltas','validatedAt','hash'],keys2=[...keys1,'previousConfigHash','reason'];
-  if(!i||!(i.version===1&&exact(i,keys1)||i.version===2&&exact(i,keys2))||!integer(i.revision)||i.revision<1||!integer(i.validatedAt)||!Array.isArray(i.deltas)||Buffer.byteLength(canonical(i))>this.maxIntentBytes)throw new PrimarySyncBlocked('invalid or oversized commit intent');
+  const keys1=['version','config','revision','previousHash','batchHash','deltas','validatedAt','hash'],keys2=[...keys1,'previousConfigHash','reason'],keys3=[...keys1,'bootstrap'];
+  if(!i||!(i.version===1&&exact(i,keys1)||i.version===2&&exact(i,keys2)||i.version===3&&exact(i,keys3))||!integer(i.revision)||i.revision<1||!integer(i.validatedAt)||!Array.isArray(i.deltas)||Buffer.byteLength(canonical(i))>this.maxIntentBytes)throw new PrimarySyncBlocked('invalid or oversized commit intent');
   if(i.version===1){if(canonical(i.config)!==canonical(current)||i.deltas.length<2)throw new PrimarySyncBlocked('invalid or oversized commit intent');}
+  else if(i.version===3){
+   const b=i.bootstrap;
+   if(canonical(i.config)!==canonical(current)||!b||!exact(b,['index','total','storeHash'])||!integer(b.index)||!integer(b.total)||b.total<1||b.index>=b.total||i.revision!==b.index+1||!/^[0-9a-f]{64}$/.test(String(b.storeHash))||i.deltas.length<1)throw new PrimarySyncBlocked('invalid bootstrap chunk');
+   for(const w of i.deltas.slice(0,-1))if(!['conversation','entry','task','submission','document.create'].includes(w.type))throw new PrimarySyncBlocked('a bootstrap chunk only creates records');
+  }
   else{
    if(i.previousConfigHash!==hash(current)||typeof i.reason!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(i.reason)||i.deltas.length!==1)throw new PrimarySyncBlocked('invalid replica configuration entry');
    validateConfigTransition(current,i.config);
@@ -110,6 +122,10 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   this.validate(i,integer(i?.revision)&&i.revision>=1&&i.revision-1<=head.revision?this.configs[i.revision-1]!:this.configs.at(-1)!);
   const old=this.intent(i.revision);if(old){if(canonical(old)!==canonical(i))throw new PrimarySyncBlocked('immutable commit revision changed');return;}
   if(i.revision!==head.revision+1||i.previousHash!==head.hash)throw new PrimarySyncBlocked('commit history gap or fork');
+  // Bootstrap chunks form an unbroken prefix of the chain; nothing else may precede or interrupt them.
+  const before=i.revision>1?this.intent(i.revision-1):null;
+  if(i.version===3&&before&&(before.version!==3||before.bootstrap.total!==i.bootstrap.total||before.bootstrap.storeHash!==i.bootstrap.storeHash))throw new PrimarySyncBlocked('bootstrap chunks must start the chain without gaps');
+  if(i.version!==3&&before?.version===3&&before.bootstrap.index!==before.bootstrap.total-1)throw new PrimarySyncBlocked('the bootstrap is not complete');
   const encoded=canonical(i),used=(this.db.prepare('SELECT COALESCE(SUM(length(CAST(intent AS BLOB))),0) AS n FROM sync_intents').get() as {n:number}).n;
   if(used+Buffer.byteLength(encoded)>this.maxHistoryBytes)throw new PrimarySyncBlocked('sync history is full; no committed result was discarded');
   this.db.prepare('INSERT INTO sync_intents(revision,hash,intent) VALUES(?,?,?)').run(i.revision,i.hash,encoded);this.configs.push(copy(i.config));
@@ -122,7 +138,18 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  seal(deltas:StorageWrite[],validatedAt:number):PrimaryCommitIntent{
   // Business decisions wait while a replica transition is open; checked in the sealing transaction itself, so no
   // write can slip in between a transition's begin and its configuration entry. Version-2 entries stay allowed.
-  return this.sealEntry(head=>{const open=this.openTransitionIds();if(open.length)throw new PrimarySyncBlocked(`replica transition ${open[0]} in progress; writes are paused`);return {version:1 as const,config:this.config,revision:head.revision+1,previousHash:head.hash,batchHash:hash(deltas.slice(0,-1)),deltas:copy(deltas),validatedAt};}) as PrimaryCommitIntent;
+  return this.sealEntry(head=>{const open=this.openTransitionIds();const last=head.revision?this.intent(head.revision):null;if(last?.version===3&&last.bootstrap.index!==last.bootstrap.total-1)throw new PrimarySyncBlocked('the store bootstrap is not complete; finish it before new work');if(open.length)throw new PrimarySyncBlocked(`replica transition ${open[0]} in progress; writes are paused`);return {version:1 as const,config:this.config,revision:head.revision+1,previousHash:head.hash,batchHash:hash(deltas.slice(0,-1)),deltas:copy(deltas),validatedAt};}) as PrimaryCommitIntent;
+ }
+ /** Seals all bootstrap chunks in one transaction; each chunk gets its marker write (create first, then change). */
+ sealBootstrap(chunks:StorageWrite[][],storeHash:string,markerId:DocumentId,validatedAt:number):PrimaryBootstrapIntent[]{
+  return this.transaction(()=>{
+   if(this.head().revision!==0)throw new PrimarySyncBlocked('a bootstrap starts an empty journal');
+   const out:PrimaryBootstrapIntent[]=[];
+   chunks.forEach((writes,index)=>{const head=this.head(),body:Omit<PrimaryBootstrapIntent,'hash'|'deltas'>={version:3,config:this.config,bootstrap:{index,total:chunks.length,storeHash},revision:head.revision+1,previousHash:head.hash,batchHash:hash(writes),validatedAt};
+    const value=markerOf({...body,deltas:[],hash:''} as PrimaryIntent),mark:StorageWrite=index===0?{type:'document.create',record:{...address(this.config.spaceId),id:markerId},content:{version:1,kind:'base',value}}:{type:'document.change',id:markerId,content:{version:1,kind:'base',value}};
+    const full={...body,deltas:[...copy(writes),mark]},intent={...full,hash:hash(full)} as PrimaryBootstrapIntent;this.insert(intent);out.push(copy(intent));});
+   return out;
+  });
  }
  /** Seals a configuration change; `mark` is the marker write for the new configuration hash. */
  sealTransition(next:PrimarySyncConfig,reason:string,mark:StorageWrite,validatedAt:number):PrimaryConfigIntent{
@@ -166,12 +193,63 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  markApplied(i:PrimaryIntent,recovered=false){this.transaction(()=>{const stored=this.intent(i.revision);if(!stored||stored.hash!==i.hash)throw new PrimarySyncBlocked('cannot apply an unknown intent');if(this.appliedRevision===i.revision)return;if(this.appliedRevision!==i.revision-1)throw new PrimarySyncBlocked('applied history gap');this.setMeta('applied',String(i.revision));if(recovered)this.setMeta('recoveredCommitted',canonical([...this.recoveredCommitted,i.revision]));});}
  close(){this.db.close();}
 }
+type Captured={writes:StorageWrite[];digest:string};
+async function scanAll<T>(scan:(cursor:any)=>Promise<{items:readonly T[];next?:any}>):Promise<T[]>{const out:T[]=[];let cursor:any;do{const page=await scan(cursor);out.push(...page.items);cursor=page.next;}while(cursor!==undefined);return out;}
+/**
+ * The complete live content of a store as creates in dependency order (conversations, entries, tasks, submissions,
+ * then documents of the session, conversation and task scopes), and its digest. The replication marker is excluded.
+ * Only current document state is captured: as-of history of rewindable documents does not replicate.
+ */
+export async function captureStore(storage:Storage,ctx:Context):Promise<Captured>{
+ // Storage IDs are minted numbers: ascending numeric order is creation order (parents before children).
+ const order=(a:unknown,b:unknown)=>typeof a==='number'&&typeof b==='number'?a-b:String(a)<String(b)?-1:String(a)>String(b)?1:0;
+ const byId=<T extends {id:unknown}>(xs:T[])=>[...new Map(xs.map(x=>[String(x.id),x])).values()].sort((a,b)=>order(a.id,b.id));
+ const conversations=byId(await scanAll(c=>storage.scanConversations({},256,c,ctx)));
+ const entries=byId((await Promise.all(conversations.map(c=>scanAll(cur=>storage.scanEntries({conversationId:c.id},256,cur,ctx))))).flat());
+ const tasks=byId(await scanAll(c=>storage.scanTasks({},256,c,ctx))),submissions=byId(await scanAll(c=>storage.scanSubmissions({},256,c,ctx)));
+ const scopes=[{kind:'session' as const},...conversations.map(c=>({kind:'conversation' as const,conversationId:c.id})),...tasks.map(t=>({kind:'task' as const,taskId:t.id}))];
+ const docs:StorageWrite[]=[];
+ for(const scope of scopes)for(const r of byId(await scanAll(c=>storage.scanDocuments({scope:scope as any,at:'current'},256,c,ctx)))){
+  if(r.kind===kind)continue;const d=await storage.document(r.id,'current',ctx);if(!d)throw new PrimarySyncBlocked('document vanished during capture');
+  const {createdAt:_c,retiredAt:_r,...record}=r as DocumentRecord & {retiredAt?:Seq};docs.push({type:'document.create',record:record as any,content:{version:d.version,kind:'base',value:d.value}});
+ }
+ const writes:StorageWrite[]=[...conversations.map(value=>({type:'conversation' as const,value})),...entries.map(value=>({type:'entry' as const,value})),...tasks.map(value=>({type:'task' as const,value})),...submissions.map(value=>({type:'submission' as const,value})),...docs];
+ return {writes:copy(writes),digest:hash(writes)};
+}
+/**
+ * Brings an existing, exclusively opened store (daemon stopped, no Harness) under primary/sync. The journal must be
+ * empty with a single-durability genesis: the standby joins afterwards with setStandby. Resumable: after a crash
+ * between sealing and the markers the same call verifies the store again and finishes.
+ */
+export async function bootstrapPrimarySync(storage:Storage,journal:PrimarySyncJournal,ctx:Context,o:{now?:()=>number;chunkBytes?:number}={}):Promise<{revisions:number;storeHash:string;writes:number}>{
+ const head=journal.head().revision,first=head?journal.intent(1):null;
+ if(head===0){
+  if(durabilityOf(journal.config)!=='single')throw new PrimarySyncBlocked('a bootstrap starts single; add the standby afterwards with setStandby');
+  if(await marker(storage,journal.config,ctx))throw new PrimarySyncBlocked('the store already carries a replication marker');
+  const {writes,digest}=await captureStore(storage,ctx),limit=Math.min(o.chunkBytes??journal.maxIntentBytes-16384,journal.maxIntentBytes-16384),chunks:StorageWrite[][]=[[]];let size=0;
+  for(const w of writes){const n=Buffer.byteLength(canonical(w));if(n>limit)throw new PrimarySyncBlocked(`a single record of ${n} bytes exceeds the bootstrap chunk budget`);if(size+n>limit&&chunks.at(-1)!.length){chunks.push([]);size=0;}chunks.at(-1)!.push(w);size+=n;}
+  const now=(o.now??Date.now)();if(!integer(now))throw new PrimarySyncBlocked('invalid validation timestamp');
+  journal.sealBootstrap(chunks,digest,await storage.mintId<DocumentId>(),now);
+ }else if(first?.version!==3)throw new PrimarySyncBlocked('this journal did not start with a bootstrap');
+ const b=(journal.intent(1) as PrimaryBootstrapIntent).bootstrap;
+ if(journal.appliedRevision<b.total){
+  // The store is unchanged since sealing (exclusive): verify before writing the markers that make it tracked.
+  if((await captureStore(storage,ctx)).digest!==b.storeHash)throw new PrimarySyncBlocked('the store changed since the bootstrap was sealed');
+  for(let r=journal.appliedRevision+1;r<=b.total;r++){const i=journal.intent(r)!,m=await marker(storage,i.config,ctx);
+   if(m&&canonical(m.value)===canonical(markerOf(i))){journal.markApplied(i);continue;}
+   await storage.commit([copy(i.deltas.at(-1)!)],ctx);journal.markApplied(i);}
+ }
+ return {revisions:b.total,storeHash:b.storeHash,writes:(await captureStore(storage,ctx)).writes.length};
+}
 async function apply(storage:Storage,journal:PrimarySyncJournal,intent:PrimaryIntent,ctx:Context,recovered=false):Promise<Seq|null>{
  const m=await marker(storage,journal.configAt(intent.revision),ctx),expected=markerOf(intent);
  if(m&&canonical(m.value)===canonical(expected)){journal.markApplied(intent,recovered);return null;}
  const previous=intent.revision>1?journal.intent(intent.revision-1):null;
  if(intent.revision===1?m!==null:!m||m.value.configHash!==journal.configHashAt(intent.revision-1)||m.value.revision!==intent.revision-1||m.value.batchHash!==previous?.batchHash||m.value.previousHash!==previous?.previousHash)throw new PrimarySyncBlocked('data marker disagrees with the complete journal prefix');
- const seq=await storage.commit(copy(intent.deltas),ctx);journal.markApplied(intent,recovered);return seq;
+ const seq=await storage.commit(copy(intent.deltas),ctx);
+ // A replica that applied the last bootstrap chunk must hold exactly the captured store before it counts as applied.
+ if(intent.version===3&&intent.bootstrap.index===intent.bootstrap.total-1&&(await captureStore(storage,ctx)).digest!==intent.bootstrap.storeHash)throw new PrimarySyncBlocked('the bootstrapped replica differs from the captured store');
+ journal.markApplied(intent,recovered);return seq;
 }
 async function verifyDataPrefix(storage:Storage,journal:PrimarySyncJournal,ctx:Context){
  const applied=journal.appliedRevision,m=await marker(storage,journal.configAt(applied),ctx);

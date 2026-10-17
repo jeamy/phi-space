@@ -62,6 +62,51 @@ Bestätigungshistorie zeitbasiert entfernt. Ein nicht leerer, bisher ungetrackte
 Store wird nicht als Startpräfix akzeptiert. Bestehende Stores brauchen einen
 später explizit gebundenen Snapshot-/Stream-Bootstrap.
 
+## Bootstrap bestehender Stores (2026-10-17)
+
+`bootstrapPrimarySync(storage, journal, ctx)` bringt einen bestehenden Store unter primary/sync.
+
+**Voraussetzungen:**
+
+- Der Store ist exklusiv geöffnet: Dienst gestoppt, keine Harness.
+- Das Journal ist leer, mit Genesis `durability: "single"`.
+- Der Standby kommt danach per `setStandby` dazu.
+
+**Ablauf:**
+
+1. `captureStore` erfasst den gesamten lebenden Inhalt als Anlege-Schreibvorgänge, in Abhängigkeitsreihenfolge:
+   Conversations, Entries aufsteigend, Tasks, Submissions, dann Dokumente der Session-, Conversation- und
+   Task-Scopes.
+2. Daraus entstehen Stücke unter dem Intent-Budget. Sie werden in einer Transaktion als neue Kettenart
+   (`version: 3`) am Anfang der Kette versiegelt. Jedes Stück trägt wie ein Commit den Datenmarker und dazu die
+   Prüfsumme des ganzen Stores.
+3. Der Primary schreibt nur die Marker. Vorher prüft er die Prüfsumme erneut, auch beim Fortsetzen nach einem
+   Absturz zwischen Versiegeln und Marker.
+4. Ein Replikat wendet die Stücke als Commits an. Nach dem letzten Stück muss sein Store genau diese Prüfsumme
+   haben, sonst gilt das Stück nicht als angewendet.
+
+**Regeln:**
+
+- Fachliche Schreibvorgänge sind bis zum Abschluss gesperrt.
+- Ein Store, der sich nach dem Versiegeln geändert hat, wird abgewiesen.
+- Ein einzelner Datensatz über dem Budget wird abgewiesen.
+- Ein ungetrackter Store öffnet weiterhin nicht ohne ausdrücklichen Bootstrap.
+
+**Grenzen:**
+
+- Übertragen wird nur der aktuelle Dokumentstand; die As-of-Historie von `rewindable`-Dokumenten repliziert
+  nicht. Im Code liest nichts frühere Dokumentstände oder Commit-Sequenzen.
+- Der Bootstrap bleibt dauerhaft in der Journal-Historie, denn eine Kompaktierung gibt es noch nicht.
+
+**Geprüft** mit `test-bootstrap.test.ts`:
+
+- ein pi-spaces-Store mit Spaces, Claims, synthetischen Conversations, Entries und Conversation-Dokument, in
+  mehreren Stücken;
+- Fortsetzung nach Absturz und Abweisung eines geänderten Stores;
+- Schutzregeln;
+- optional (`PI_SPACES_BOOTSTRAP_COPY`) eine lesend gezogene Kopie des Control-Stores von host-a: alle Spaces
+  sind auf dem Replikat identisch.
+
 ## Einbindung und noch offene Gesamtgarantien
 
 Der Adapter gilt für einen dedizierten vollständigen Storagebereich mit einer

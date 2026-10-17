@@ -85,7 +85,7 @@ export function assertSyncPrimary(register: RecoveryRegister, hostId: string, jo
 	return () => assertPermit(register, hostId, journal.config, "primary");
 }
 /** assertStandby for PrimarySyncJournal: host active and an active standby permit for exactly this configuration. */
-export function assertSyncStandby(register: RecoveryRegister, hostId: string): (c: PrimarySyncConfig, version: 1 | 2) => Promise<void> {
+export function assertSyncStandby(register: RecoveryRegister, hostId: string): (c: PrimarySyncConfig, version: 1 | 2 | 3) => Promise<void> {
 	return async (c, version) => {
 		// Only the setStandby configuration entry naming this host is confirmed while it is still in quarantine (5.3.1 step 7).
 		if (version === 2 && c.standbyReplica === hostId && (await register.get<Boot & Json>(`boot:${hostId}`))?.value.state === "quarantine") return;
