@@ -207,9 +207,9 @@ Store-Commit. Sein Policy-Schritt folgt deshalb im ersten Commit danach, bevor d
 
 **Grenzen:**
 
-- **Promotion eines Control-Replikats** wird abgewiesen. big ist nie Fencing-Ziel, und für den Control-Host gäbe es
-  nur einen Container-Fencing-Adapter. Außerdem fehlen dem neuen Host Root-Lease-Datei und eigene Router- und
-  Host-Schlüssel.
+- **Promotion eines Control-Replikats** ist umgesetzt (siehe unten), ohne Root. Ein Root zieht noch nicht mit: Ihm
+  fehlen auf dem neuen Host Lease-Datei und Schlüssel, und einen Wechsel der Router-Epoche lehnt er beim
+  Wiederöffnen ab.
 - **Schritt 6** ist umgesetzt, lokal geprüft (`test-configured-root.test.ts`) und auf host-a echt gelaufen
   ([Nachweis](../test/evidence/step6-hosta-2026-10-17/README.md)). Dass die Marke am Member aus der `EpochNotice`
   stammt und nicht aus der ersten Delegation der neuen Epoche, ist dabei nicht unterscheidbar.
@@ -217,6 +217,44 @@ Store-Commit. Sein Policy-Schritt folgt deshalb im ersten Commit danach, bevor d
   Admin-Commands und Routing-Änderungen bis zu `degradeToSingle`.
 - **Kein Rückweg:** Ein Bootstrap lässt sich nicht rückgängig machen. Zurück geht es nur über die Kopie vor der
   Migration, mit Verlust späterer Control-Writes, oder dauerhaft im Single-Betrieb mit wachsendem Journal.
+
+## Promotion des Control-Replikats
+
+Die Promotion behält die Autorität. Replikatkonfiguration, Boot-Berechtigungen und Delegationsprüfer tragen die
+`authorityId`, und `validateConfigTransition` lehnt einen Wechsel ab. Der Autoritätswechsel aus 5.2.1
+(`RecoveryCoordinator`) erzeugt dagegen immer eine neue Autorität. Er passt deshalb nicht; die Promotion ist eine
+eigene Art von Wechsel: gleiche Autorität, neuer Control-Host, neuer Supervisor-Schlüssel, neue Adresse.
+
+**Ablauf:**
+
+1. **Standby:** Der künftige Control-Host läuft mit eigener NetBird-Identität, eigenem Schlüssel und einer
+   `mainSync`-Konfiguration mit derselben Genesis. Solange er nicht Primary ist oder in Quarantäne steht, betreibt
+   `run` nur Journal und Listener (`mainSync.incarnation` nennt die Dateninkarnation des Control Space).
+   `set-standby` auf dem Control-Host macht ihn zum synchronen Standby.
+2. **Promotion:** Bei gestopptem Standby-Dienst führt `main-sync promote` die Promotion aus.
+   - Ein Fencing-Adapter sperrt den alten Control-Host. Für einen Container ist das `ContainerFencing` auf dem
+     Docker-Host hinter dem mTLS-Dienst: Container gestoppt, Neustartrichtlinie `no`, Drop-in sperrt die Unit.
+   - Danach baut `promote` den Store aus dem Journal nach und erhöht die Epoche; der Boot-Eintrag des alten Hosts
+     wird `fenced`.
+3. **Wechsel aufzeichnen:** Der Recovery-Admin signiert `ControlHostChange` (Autorität, alter und neuer Host,
+   Epoche, Supervisor-Schlüssel und Adresse des neuen Hosts). `recordControlHostChange` schreibt sie in
+   `authority:<controlSpaceId>`, aber nur, wenn das Register den neuen Host als aktiven Primary des Control Space
+   in dieser Epoche zeigt und der alte Host keine aktive Berechtigung mehr hat.
+4. **Neuer Control-Host startet:** Schritt 6 gleicht beim Start die Policy ab; der Marker zeigt einen
+   Primary-Wechsel, alte Router-Leases erneuern sich also nicht.
+5. **Hosts folgen:** Jeder Host, der den Recovery-Admin-Schlüssel pinnt (`recoveryAdmin`), folgt beim Start
+   (`followControlHostChange`).
+   - Nennt das Register einen anderen Control-Host als den, den er benutzt, prüft er die aufgezeichnete Änderung
+     gegen den gepinnten Schlüssel und dieselbe Autorität.
+   - Dann installiert er Host, Schlüssel und Adresse in `installed-authority` und benutzt sie als Control-Endpunkt.
+   - Eine bloße Registeränderung ohne passende Signatur leitet niemanden um. Ein Host ohne Pin bleibt wie bisher
+     mit „independent authority … disagrees“ stehen.
+6. **Rückweg:** Der alte Host wird in Quarantäne freigegeben und legt seine Historie mit `main-sync wipe` beiseite.
+   Danach läuft derselbe Ablauf in umgekehrter Richtung: `set-standby` vom neuen Host, `promote` auf dem alten,
+   zweiter `ControlHostChange`.
+
+**Grenzen:** Ein Root zieht nicht mit (siehe oben). Members folgen erst beim nächsten Start; bis dahin erreichen sie
+den alten, gesperrten Control-Host nicht.
 
 **Messung auf der Kopie von host-a:** 114 Control-Commits in sechs Tagen, Revisionen von 1–3 KB. Das Journal-Budget
 von 64 MiB reicht damit grob für Jahre.
