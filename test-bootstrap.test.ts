@@ -148,8 +148,11 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
   h=await home.open();stop=installBootGuard(h,ctx,{hostId:'a',authorityId:'authority',external:reg,installed,replicaConfig:()=>journal.config});
   await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:3}},null,core.FOREVER);
   const router=provisionFileSigner(join(dir,'router.json')),keyDir=new MemoryKeyDirectory();keyDir.add({peerId:'router',keyId:router.keyId,algorithm:router.algorithm,publicKey:router.publicKey!,principal:'router',roles:['router'],scope:['*'],state:'active'});
-  const leases=new RouterLeaseAuthority({host:h,ctx,controlSpaceId:control.spaceId,authorityId:'authority',peerId:'a',signer:keys.a,keys:keyDir,assertAuthority:async()=>{},controlEpoch:()=>journal.config.primaryEpoch});
-  assert.equal((await leases.issue('router',router.keyId)).lease.controlPrimaryEpoch,2,'the router lease carries the journal epoch');
+  let clock=Date.now();const leases=new RouterLeaseAuthority({host:h,ctx,controlSpaceId:control.spaceId,authorityId:'authority',peerId:'a',signer:keys.a,keys:keyDir,assertAuthority:async()=>{},controlEpoch:()=>journal.config.primaryEpoch,now:()=>clock});
+  const first=await leases.issue('router',router.keyId);assert.equal(first.lease.controlPrimaryEpoch,2,'the router lease carries the journal epoch');
+  // A restarted Root renews its retained lease after the live entry expired: only the signed token proves ownership.
+  clock+=120_000;const renewed=await leases.issue('router',router.keyId,{id:first.lease.id,routerEpoch:first.lease.routerEpoch,token:first});
+  assert.deepEqual([renewed.lease.id,renewed.lease.routerEpoch,renewed.lease.controlPrimaryEpoch],[first.lease.id,first.lease.routerEpoch,2]);clock=Date.now();
   // The Root's journal guard compares the lease with the same journal epoch (host-a: the Space document still says 1).
   const controller=(controlEpoch?:()=>number)=>createFederationController({host:h,ctx,id:'root',journalPartitions:2,controlSpaceId:control.spaceId,authorityId:'authority',routerPeerId:'router',routerSigner:router,controlPeerId:'a',controlSigner:keys.a,controlPublicKey:keys.a.publicKey,
    transport:()=>{throw new Error('no Member');},memberPin:async()=>{throw new Error('no Member');},lease:()=>leases.issue('router',router.keyId),grant:async()=>{throw new Error('no grant');},assertAuthority:async()=>{},authorizeAdmin:async()=>{},...(controlEpoch?{controlEpoch}:{})});
