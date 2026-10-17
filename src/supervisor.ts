@@ -115,20 +115,24 @@ export class Supervisor {
 	/** Process commands as they arrive (a watch on the control space plus a first pass); returns the function that stops it. */
 	async start(): Promise<() => Promise<void>> {
 		const id = await this.controlId();
-		let running = false, again = false, stopped = false;
+		let running = false, again = false, stopped = false, current: Promise<void> = Promise.resolve();
 		const run = async () => {
 			if (stopped) return;
 			if (running) { again = true; return; }
 			running = true;
-			try { do { again = false; await this.tick(); } while (again && !stopped); }
-			catch (e) { (this.o.onError ?? ((x) => console.error("pi-spaces supervisor:", x)))(e); }
-			finally { running = false; }
+			current = (async () => {
+				try { do { again = false; await this.tick(); } while (again && !stopped); }
+				catch (e) { (this.o.onError ?? ((x) => console.error("pi-spaces supervisor:", x)))(e); }
+				finally { running = false; }
+			})();
+			await current;
 		};
 		const watch = await this.host.watchDoc(NamedSpace, id, this.ctx);
 		watch?.start(run);
 		await run();
 		const retry=this.o.asyncCommands?setInterval(()=>{void run();},1000):undefined;
-		return async () => { stopped = true; if(retry)clearInterval(retry); await watch?.stop(); };
+		// Stopping waits for a pass in flight: it must not run on against a store that closes next.
+		return async () => { stopped = true; if(retry)clearInterval(retry); await watch?.stop(); await current; };
 	}
 }
 

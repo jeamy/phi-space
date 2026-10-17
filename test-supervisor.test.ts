@@ -183,3 +183,21 @@ test('persistent remote admin command runs outside Control commit and resumes af
  await make().tick();assert.equal((await new PiSpaces(host,ctx,now,undefined,undefined,{space:CONTROL_SPACE}).readAll({type:'Result'})).length,0);home.crash(host);host=await home.open();await make().tick();const r=await new PiSpaces(host,ctx,now,undefined,undefined,{space:CONTROL_SPACE}).readAll({type:'Result'});assert.equal(r.length,1);assert.equal(r[0]!.fields.state,'completed');assert.equal(attempts,2);await make().tick();assert.equal(attempts,2);
  });
 });
+
+test("stopping the supervisor waits for a pass in flight, so it never runs on against a closing store", async () => {
+	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	await host.commit((tx) => createSpace(tx, CONTROL_SPACE, 1_000), ctx);
+	let gate: (() => void) | undefined, committing = false, armed = false;
+	const slow = new Proxy(host, { get(t, k) { const v = Reflect.get(t, k, t); if (k !== "commit") return typeof v === "function" ? v.bind(t) : v;
+		return async (...a: Parameters<typeof host.commit>) => { if (!armed) return host.commit(...a); armed = false; committing = true; await new Promise<void>((r) => { gate = r; }); try { return await host.commit(...a); } finally { committing = false; } }; } }) as typeof host;
+	const stop = await new Supervisor(slow, ctx, { onError: (e) => assert.fail(String(e)) }).start();
+	armed = true;
+	// start() itself ran a first pass; the next pass is triggered by a new Command and parks in commit.
+	await new PiSpaces(host, ctx, () => 2_000, undefined, undefined, { space: CONTROL_SPACE }).write({ type: "Command", fields: { commandId: "c1", kind: "noop" } }, null, FOREVER);
+	assert.ok(await until(async () => committing), "a pass is in flight");
+	let stopped = false;const stopping = stop().then(() => { stopped = true; });
+	await new Promise((r) => setTimeout(r, 50));
+	assert.equal(stopped, false, "stop waits for the pass in flight");
+	gate!();await stopping;assert.equal(committing, false);
+	await host.close(ctx);
+});
