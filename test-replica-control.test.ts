@@ -305,7 +305,7 @@ for(const backend of BACKENDS)test(`${backend}: openSyncSpace serves a primary/s
  }finally{await p?.close().catch(()=>{});await s?.close();reg.close();installed.p.close();installed.s.close();await homes.p.dispose();await homes.s.dispose();rmSync(dir,{recursive:true,force:true});}
 });
 
-test('the policy validator admits primary rules of replicated Members and keeps merge modes blocked',()=>{
+test('the policy validator admits primary rules of replicated Members and merge rules only with a matching entry replication',()=>{
  const target=(h:string)=>({hostId:h,spaceId:'sp-'+h,authorityId:'a',dataIncarnation:'i',primaryEpoch:1});
  const table:any={m:{id:'m',state:'active',target:target('p'),replication:{primaryReplica:'p',standbyReplica:'s',replicaConfigVersion:1,durability:'sync'}},plain:{id:'plain',state:'active',target:target('x')}};
  const policy=(rules:any[])=>({authorityId:'a',policyVersion:1,completionProfiles:[],default:{mode:'local' as const,member:'plain'},rules});
@@ -313,7 +313,12 @@ test('the policy validator admits primary rules of replicated Members and keeps 
  validateFederationPolicy(policy([primary]),table);
  assert.throws(()=>validateFederationPolicy(policy([{...primary,member:'plain'}]),table),/sync activation requires phase 3/);
  assert.throws(()=>validateFederationPolicy(policy([{...primary,replicaConfigVersion:2}]),table),/disagrees with the member replica configuration/);
- assert.throws(()=>validateFederationPolicy(policy([{type:'Merged',mode:'sync',variant:'lww',members:['plain'],semantics:'state',keyFields:['k']}]),table),/sync activation requires phase 3/);
+ const merged={type:'Merged',mode:'sync',variant:'lww',members:['plain'],semantics:'state',keyFields:['k']};
+ assert.throws(()=>validateFederationPolicy(policy([merged]),table),/lacks a matching entry replication/);
+ table.plain.entryReplication={replicaId:'x',incarnation:'i',rules:[{type:'Merged',variant:'lww',keyFields:['k']}]};validateFederationPolicy(policy([merged]),table);
+ // A primary Member never serves a merge rule (two replication paths for the same entries).
+ table.m.entryReplication={replicaId:'p',incarnation:'i',rules:[{type:'Merged',variant:'lww',keyFields:['k']}]};
+ assert.throws(()=>validateFederationPolicy(policy([{...merged,members:['m']}]),table),/primary member cannot be expand or merge member/);
 });
 
 test('a quarantined host opens only replica listeners, accepts catch-up and reports when it is active again',async()=>{
