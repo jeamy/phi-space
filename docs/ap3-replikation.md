@@ -179,3 +179,43 @@ Grenzen: Komponenten-Fixture mit Peer-IP-Pin und privatem Token, kein Snapshot u
 Für 3.3–3.6 steht der netcup-Server `nanoi` als Test-Primary bereit, der tatsächlich abgeschaltet werden darf;
 vpsc dient als Backup-/Register-Host. Einrichtung und Grenzen: [Testumgebung §18](testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel).
 Für den Fencing-Adapter fehlen noch der netcup-REST-API-Zugang und die Entscheidung F1.
+
+## Einbindung von lww/set in Dienst und Router (Entwurf, 2026-10-17)
+
+Die Bausteine aus 3.1/3.2 halten replizierte Entries in einem eigenen Dokument (`EntryReplicas`), nicht als normale
+Space-Entries. Die Einbindung bildet die öffentlichen Space-Operationen auf diesen Baustein ab. Sie läuft in fünf
+Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
+
+**1. Policy-Modus und öffentlicher Adapter**
+
+- **Feste Konfiguration:** Die Replikationskonfiguration eines Merge-Members wird provisioniert und ist fest, wie
+  bei primary/sync. Sie umfasst Space, Replikat-ID, Inkarnation, die Mitglieder mit ihren Inkarnationen und die
+  Regeln (Typ, Variante, bei `lww` die Schlüsselfelder). Eine Änderung verlangt einen ausdrücklichen Neuaufbau, weil
+  der Controller seine Konfiguration bindet.
+- **Policy:** Eine `sync`-Regel mit `variant: lww|set` ist nur gültig, wenn jedes ihrer Members eine
+  `entryReplication` gleicher Regeln trägt und keine primary-Replikation hat. Die Variante und bei `lww` die
+  Schlüsselfelder müssen übereinstimmen. Damit fällt die Sperre „sync activation requires phase 3 implementation“
+  für diese Varianten.
+- **Member-Dienst:** Der `space`-Dienst leitet Operationen auf Merge-Typen an den Controller.
+  - `write`: bei `lww` ein `put`; der Schlüssel kommt aus den Schlüsselfeldern, fehlende Felder sind ein Fehler.
+    Bei `set` ein `add` mit eindeutigem Tag. Die Request-ID wird zur Request-ID der Änderung, Wiederholungen sind
+    idempotent.
+  - `read`, `readAll` und `count` nutzen die konvergierende Sicht (gewinnende `lww`-Version, nicht entfernte
+    `set`-Tags, abgelaufene Versionen unsichtbar). Antworten tragen `replicated: true`, denn sie können veraltet
+    sein.
+  - Löschen: bei `lww` ein Tombstone mit eigener HLC-Version, bei `set` ein Remove der beobachteten Tags.
+  - `take`, Txns, `wait` und Lease-Eingriffe auf Merge-Typen werden mit `MergeTypeNotExclusive` abgewiesen
+    (v3 7.2: keine exklusive Vergabe).
+- **Root:** Für eine Merge-Regel wählt der Root den Ziel-Member deterministisch per HRW, bei `lww` über den Schlüssel,
+  bei `set` über die Request-ID. Lesen geht an den ersten erreichbaren Member in derselben Reihenfolge. Exklusive
+  Operationen lehnt er ab, bevor ein Member angesprochen wird.
+
+**2. Import über den Dienst:** Die Members ziehen die Änderungen der anderen mit dem vorhandenen Stream-Worker. Dabei
+gelten Schlüsselbeweis, frische Import-Grants genau für Quelle und Ziel, Widerruf, Boot-Rolle `entryReplica` und
+Clock-Health.
+
+**3. Löschung:** Lösch-Barrieren und verteilte Principal-Löschung auch für die replizierten Historien.
+
+**4. Kompaktierung** der Tombstones nach bestätigtem gemeinsamem Kausalstand aller aktiven Replikate.
+
+**5. Echter Lauf** über NetBird mit Partition und Prozessgrenzen.
