@@ -88,6 +88,11 @@ Der 3.8-Test deckt jetzt beide Pfade ab und scheitert ohne die jeweilige Behebun
   Zurückkopieren root als Besitzer mit. Die Folge waren EACCES beim Start und eine Sperre aus demselben Boot.
   Behoben durch `chown` und Entfernen der Sperre, nachdem geprüft war, dass kein Daemon läuft.
 
+Nachtrag: Das langsame Stoppen und die Sperre nach einem Stopp während des Starts sind in `4d2eaac` behoben. Der
+Root schließt zuerst seine Member-Verbindungen und wartet höchstens 5 Sekunden auf den Heartbeat. Der Daemon fängt
+SIGTERM ab der Sperre ab, beendet sich nach dem Aufräumen explizit, und `stop` wartet 60 Sekunden. Das Bündel
+`f372966a` läuft auf host-a, nano-test und standby-100.
+
 ## Grenzen
 
 - Der Lauf deckt die Übernahme nach Promotion und Degrade ab, nicht nach `setStandby`.
