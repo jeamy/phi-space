@@ -1,0 +1,283 @@
+{
+ "passed": true,
+ "bundle": "0f64da419258e46e",
+ "commits": [
+  "2c927c9",
+  "4383e41",
+  "1292189",
+  "75ce5a5"
+ ],
+ "member": {
+  "id": "promo-member",
+  "host": "standby-100",
+  "durability": "single"
+ },
+ "root": {
+  "id": "root-promo",
+  "routerKeys": {
+   "phase1b-host-a": "fc9b0599\u2026",
+   "phase1b-host-c": "5f3b50d1\u2026"
+  }
+ },
+ "steps": [
+  {
+   "step": "Root on host-a, addMember, routed writes",
+   "addMember": {
+    "phase": "completed",
+    "memberId": "promo-member",
+    "policyVersion": 1
+   },
+   "writes": [
+    {
+     "id": "w1",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-1"
+     }
+    },
+    {
+     "id": "w2",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-2"
+     }
+    },
+    {
+     "id": "w3",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-3"
+     }
+    }
+   ]
+  },
+  {
+   "step": "set-standby host-a -> host-c",
+   "config": [
+    {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 7,
+     "primaryReplica": "phase1b-host-a",
+     "replicaConfigVersion": 12,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": "phase1b-host-c"
+    }
+   ]
+  },
+  {
+   "step": "promote + degrade on host-c (container fencing of host-a)",
+   "configs": [
+    {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 8,
+     "primaryReplica": "phase1b-host-c",
+     "replicaConfigVersion": 13,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": "phase1b-host-a"
+    },
+    {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 9,
+     "primaryReplica": "phase1b-host-c",
+     "replicaConfigVersion": 14,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": null
+    }
+   ]
+  },
+  {
+   "step": "host-c starts, Root takeover after host-a's lease expired",
+   "started": "14:18:12 -> ready 14:18:34 UTC",
+   "lease": {
+    "routerEpoch": 2,
+    "routerKeyId": "5f3b50d1\u2026",
+    "controlPrimaryEpoch": 9
+   }
+  },
+  {
+   "step": "members follow while running (exit 75, unit restart)",
+   "members": [
+    "phase1b-member-1",
+    "phase1b-restore-target",
+    "nano-test",
+    "standby-100"
+   ]
+  },
+  {
+   "step": "routed writes and count via host-c's Root",
+   "writes": [
+    {
+     "id": "c1",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-4"
+     }
+    },
+    {
+     "id": "c2",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-5"
+     }
+    },
+    {
+     "id": "c3",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-6"
+     }
+    }
+   ],
+   "count": {
+    "complete": true,
+    "missingMembers": [],
+    "revisions": {
+     "promo-member": 15
+    },
+    "consistentSnapshot": false,
+    "count": 5
+   },
+   "epochNotice": {
+    "routerEpoch": 2,
+    "controlPrimaryEpoch": 9,
+    "policyVersion": 3,
+    "note": "delivered after two refused attempts while standby-100 restarted"
+   },
+   "memberDelegationEpochs": [
+    {
+     "seq": 4,
+     "value": {
+      "controlPrimaryEpoch": 7,
+      "policyVersion": 1,
+      "routerEpoch": 1
+     }
+    },
+    {
+     "seq": 9,
+     "set": {
+      "policyVersion": 2
+     }
+    },
+    {
+     "seq": 13,
+     "set": {
+      "routerEpoch": 2,
+      "controlPrimaryEpoch": 9,
+      "policyVersion": 3
+     }
+    }
+   ]
+  },
+  {
+   "step": "way back: release + wipe host-a, set-standby host-c -> host-a",
+   "config": [
+    {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 9,
+     "primaryReplica": "phase1b-host-c",
+     "replicaConfigVersion": 15,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": "phase1b-host-a"
+    }
+   ]
+  },
+  {
+   "step": "promote + degrade on host-a (container fencing of host-c)",
+   "configs": [
+    {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 10,
+     "primaryReplica": "phase1b-host-a",
+     "replicaConfigVersion": 16,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": "phase1b-host-c"
+    },
+    {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 11,
+     "primaryReplica": "phase1b-host-a",
+     "replicaConfigVersion": 17,
+     "spaceId": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+     "standbyReplica": null
+    }
+   ]
+  },
+  {
+   "step": "host-a starts, Root takeover of its superseded lease after host-c's lease expired",
+   "hostCLeaseExpired": "14:24:35 UTC",
+   "ready": "14:24:46 UTC",
+   "lease": {
+    "routerEpoch": 3,
+    "routerKeyId": "fc9b0599\u2026",
+    "controlPrimaryEpoch": 11
+   }
+  },
+  {
+   "step": "members follow back; routed write and count via host-a",
+   "writes": [
+    {
+     "id": "a1",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e0687995b-7"
+     }
+    }
+   ],
+   "count": {
+    "complete": true,
+    "missingMembers": [],
+    "revisions": {
+     "promo-member": 21
+    },
+    "consistentSnapshot": false,
+    "count": 7
+   },
+   "epochNotice": {
+    "routerEpoch": 3,
+    "controlPrimaryEpoch": 11,
+    "policyVersion": 5
+   }
+  }
+ ],
+ "preconditions": [
+  "one bundle on host-a, host-c and all four members (hash compared)",
+  "Restart=on-failure on all member units (nano-test and standby-100 had Restart=no: drop-in added, kept)",
+  "TimeoutStopSec 75 on member-1 and restore-target (drop-in, kept)",
+  "fencing service reachable from both containers (harmless verify)"
+ ],
+ "restore": {
+  "host-a": "files from the backup taken after the bundle deploy, boot record written back (epoch 7, version 11; register version 38); no Root, no policy, 13 keys",
+  "standby-100": "config back, Member Space removed, boot record restored",
+  "host-c": "containers, volumes, unit, NetBird peer removed; boot:phase1b-host-c retired (fenced, no permits)",
+  "vpsc/netbird": "tls.json restored, owned group/policy removed",
+  "authorityRecord": "keeps the two host changes of this run as history"
+ },
+ "baselineFinal": {
+  "at": "2026-10-17T14:28:24.541Z",
+  "peerKeys": 13,
+  "controlWrite": "completed",
+  "nano-test": {
+   "ok": true,
+   "epoch": 1,
+   "entries": 0
+  },
+  "standby-100": {
+   "ok": true,
+   "epoch": 1,
+   "entries": 0
+  }
+ }
+}

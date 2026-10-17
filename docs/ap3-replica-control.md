@@ -271,7 +271,7 @@ eigene Art von Wechsel: gleiche Autorität, neuer Control-Host, neuer Supervisor
   Control-Übergang und Router-Epoche.
 - Der neue Router braucht eigene, für seinen Peer enrollte Router- und Host-Schlüssel.
 
-**Grenzen:** Der Router-Wechsel ist lokal geprüft; ein echter Lauf mit Root bei einer Control-Promotion steht aus.
+Echter Lauf mit Root bei einer Control-Promotion in beide Richtungen: [Nachweis](../test/evidence/root-promotion-2026-10-17/README.md).
 
 Echter Lauf in beide Richtungen auf big: [Nachweis](../test/evidence/control-promotion-2026-10-17/README.md).
 
@@ -343,7 +343,6 @@ den neuen Primary ja erst nach der Übernahme.
 
 **Offen:**
 
-- Echter Lauf einer Control-Promotion mit Root (Router-Wechsel ist lokal umgesetzt).
 
 ## primary/sync-Spaces im Federation-Host
 

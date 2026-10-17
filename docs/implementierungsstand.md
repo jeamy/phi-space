@@ -375,6 +375,14 @@ Nachtrag 2026-10-17 (Promotion des Control-Replikats):
 - Dabei behoben: Berechtigungen der Geschwister-Spaces für das `setStandby`-Ziel, das Fencing-Ziel beim
   Fortsetzen einer Promotion und eine Sperrliste für Quelladressen im Fencing-Dienst.
 
+Nachtrag 2026-10-17 (Router-Wechsel, 3.8 abgeschlossen):
+
+- Ein neuer Router übernimmt das Root-Journal mit `takeover` erst nach Ablauf der vorigen Lease, mit höherer
+  Router-Epoche; der Supervisor stellt einem anderen Router keine Lease aus, solange die vorige lebt.
+- Hosts folgen einem Control-Wechsel im laufenden Betrieb (Prüfung alle 15 Sekunden, Neustart über Code 75).
+- Echter Lauf mit Root und repliziertem Member in beide Richtungen
+  ([Nachweis](../test/evidence/root-promotion-2026-10-17/README.md)); host-a danach zurückgesetzt.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.
