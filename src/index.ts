@@ -448,6 +448,7 @@ export { openSyncSpace, openSyncSpaces, type SyncSpace, type SyncSpaceConfig } f
 export { replicaConfigNotice, latestReplicaConfigNotice, ReplicaNoticeBoard, signReplicaConfigNotice, adoptReplicaConfigNotice, type ReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 export { signedReplicaPeer, replicaSyncHandler, ReplicaTransportRefused, type ReplicaPin } from "./replica-transport.ts";
 export { NetcupScp, NetcupFencing, NetcupError, fileTokenProvider, fileFenceState, memoryFenceState, serveFencing, TlsFencing, type NetcupServerPin, type NetcupFenceState } from "./netcup-fencing.ts";
+export { signControlHostChange, verifyControlHostChange, recordControlHostChange, followControlHostChange, ControlHostChangeBlocked, type ControlHostChange, type SignedControlHostChange } from "./control-host-change.ts";
 export { ContainerFencing, ContainerFencingError, execRunner, type ContainerPin, type CommandRunner } from "./container-fencing.ts";
 export { SimulatorFencing, ReplicaTransitionBlocked, unconfiguredFencing, fenceHostBoot, releaseHostToQuarantine, assertSyncPrimary, assertSyncStandby, assertQuarantine, degradeToSingle, promote, setStandby, readmitSpace, installAdmittedPermit, type FencingAdapter, type FenceProof, type StandbyTarget } from "./replica-control.ts";
 export { ControlAckService, RecoveryReceipts, type ControlAck } from "./control-ack.ts";

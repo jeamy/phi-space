@@ -80,26 +80,51 @@ if(mode==="main-sync"){
    const status=()=>({head:journal.head(),applied:journal.appliedRevision,config:journal.config,open:journal.openTransitionIds()});
    if(q.op==="status")result={...status(),...(q.digest?{storeHash:(await captureStore(st,ctx)).digest}:{})};
    else if(q.op==="bootstrap")result={...(await bootstrapPrimarySync(st,journal,ctx)),...status()};
-   else if(["degrade","set-standby"].includes(q.op)){
+   else if(q.op==="wipe"){
+    // An excluded old primary sets its history aside before it becomes a setStandby target in quarantine.
+    const b=await reader.get<any>("boot:"+cfg.hostId);if(b?.value.state==="active")throw new Error("an active host keeps its history; wipe only a fenced or quarantined replica");
+    await st.close(ctx);journal.close();const fs=await import("node:fs"),stamp=Date.now(),asideDir=mainCfg.dir+".aside-"+stamp;fs.renameSync(mainCfg.dir,asideDir);
+    for(const f of ["harness.sqlite","harness.sqlite-wal","harness.sqlite-shm"])if(fs.existsSync(join(home,f)))fs.renameSync(join(home,f),join(home,f+".aside-"+stamp));
+    result={aside:asideDir};
+   }
+   else if(["degrade","set-standby","promote"].includes(q.op)){
     // Step 6 (v3 5.3.1): the next start aligns the routing policy before serving; nothing may block that afterwards.
     const profiles=await st.findDocument({kind:"pi-spaces.profile-transitions",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx),open=profiles&&Object.values((await st.document(profiles.id,"current",ctx))?.value?.operations??{}).some((op:any)=>op.phase!=="completed");
     if(open)throw new Error("an open profile transition blocks the policy step of a control transition");
     const register=new SyncRegister(q.controlRegister),siblings:string[]=q.siblings??[];
     try{
      const base={storage:st,journal,register,hostId:cfg.hostId,dataIncarnation:q.dataIncarnation,ctx,siblingSpaces:siblings};
-     if(q.op==="degrade"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(journal.config.standbyReplica??"",`degrade ${q.tid}`);
+     if(q.op==="promote"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(journal.config.primaryReplica,`promote ${q.tid}`);
+      result={...(await promote({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof})),proof:{kind:proof.kind,evidence:proof.evidence}};}
+     else if(q.op==="degrade"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(journal.config.standbyReplica??"",`degrade ${q.tid}`);
       result={...(await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof})),proof:{kind:proof.kind,evidence:proof.evidence}};}
      else{const peer=mainCfg.peers.find((x:any)=>x.hostId===q.target);if(!peer)throw new Error("unpinned target");const t=socketTransport({host:peer.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20});
       try{result=await setStandby({...base,transitionId:q.tid,target:signedReplicaPeer({transport:t,signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:peer}),targetDataIncarnation:q.dataIncarnation});}finally{t.close();}}
     }finally{register.close();}
-   }else if(q.op==="promote")throw new Error("promoting a control replica needs a fencing adapter for the control host; not supported");
-   else throw new Error("unknown main-sync op");
-  }finally{await st.close(ctx);journal.close();reader.close();}
+   }else throw new Error("unknown main-sync op");
+  }finally{try{await st.close(ctx);}catch{}try{journal.close();}catch{}reader.close();}
   console.log(JSON.stringify(result));
  }finally{installed.close();releaseLock();}
  process.exit(0);
 }
 if(mainCfg&&mode!=="run")throw new Error("a primary/sync main store opens only in run or main-sync");
+if(mainCfg&&mode==="run"){
+ // A replica of the main store (standby, quarantined setStandby target, or a host that lost control by promotion):
+ // journal and signed listener only, no Harness and no gate. Once a promotion makes it primary, the next start serves.
+ const cfg=JSON.parse(privateFile(configFile).toString()),external=new SyncRegister(cfg.registerTls);
+ const probe=new PrimarySyncJournal(join(mainCfg.dir,"journal.sqlite"),mainCfg.genesis,{self:cfg.hostId}),primary=probe.config.primaryReplica;probe.close();
+ const boot=(await external.get<any>("boot:"+cfg.hostId))?.value;
+ if(primary!==cfg.hostId||boot?.state==="quarantine"){
+  try{
+   if(!mainCfg.incarnation)throw new Error("a main store replica needs mainSync.incarnation (data incarnation of the control Space)");
+   const sp=await openSyncSpace({config:{alias:"control-main",spaceId:mainCfg.genesis.spaceId,incarnation:mainCfg.incarnation,dir:mainCfg.dir,genesis:mainCfg.genesis,port:mainCfg.port,peers:mainCfg.peers},hostId:cfg.hostId,authorityId:mainCfg.genesis.authorityId,bindIp:cfg.listen.host,signer:loadFileSigner(cfg.keyFile),external,installed,ctx,openStorage:p=>openNodeSqliteStorage(p),openHarness:async()=>{throw new Error("no Harness on a main store replica");},listenOnly:true});
+   console.log(JSON.stringify({mainReplicaListening:true,boot:boot?.state??null,head:sp.journal.head(),config:sp.journal.config}));
+   await terminate;await sp.close();
+  }finally{external.close();installed.close();releaseLock();}
+  process.exit(0);
+ }
+ external.close();
+}
 let mainJournal:PrimarySyncJournal|undefined;
 // Handles of the main store beside its Harness; open ones keep the event loop alive after SIGTERM (seen on host-a:
 // a sync-mode daemon released its owner lock but never exited while its standby transport stayed open).

@@ -18,6 +18,7 @@ import { TlsRecoveryRegister, type RegisterTlsClient } from "./tls-register.ts";
 import { SshRecoveryRegister } from "./ssh-register.ts";
 import { SocketRecoveryRegister } from "./register-service.ts";
 import { SqliteRecoveryRegister } from "./recovery-register.ts";
+import { followControlHostChange } from "./control-host-change.ts";
 import { BootBlocked, type HostBootState } from "./boot.ts";
 import { Registry, snapshotSpace, listSpaces } from "./spaces.ts";
 import { installAdmittedPermit } from "./replica-control.ts";
@@ -35,6 +36,8 @@ export type FederationConfig = {
 	listen: { host: string; port: number }; mode: "control" | "member";
 	keyFile: string; registerTls?: RegisterTlsClient; registerReadSocket?: string; registerSshTarget?: string; installedRegisterFile: string;
 	recovery?: PrivateRecoveryConfig;
+	/** Recovery admin key pinned for control host changes after a control promotion (src/control-host-change.ts). */
+	recoveryAdmin?: { algorithm: import("./auth.ts").Algorithm; publicKey: string };
 	/** Explicit logical Member/Space installed by signed Control commands. */
 	membership?:{memberId:string;spaceId:string};
 	management: { url: string; tokenFile: string }; groupRoles?: GroupRoles;
@@ -50,7 +53,7 @@ export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<St
 	mainTransition?: () => ReturnType<typeof import("./primary-sync.ts").lastConfigTransition> };
 export async function startConfiguredFederation(host: Harness, ctx: Context, configFile: string, factories?: SyncSpaceFactories) {
 	const raw = { commit: host.commit.bind(host), snapshot: host.snapshot.bind(host) };
-	const config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
+	let config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
 	if (!config.hostId || !config.peerId || !config.authorityId || !config.controlHostId || !config.controlSpaceId || !["control", "member"].includes(config.mode)) throw new Error("incomplete federation provisioning");
 	if(config.root&&config.mode!=='control')throw new BootBlocked('native Root must be co-located with authoritative Control');
 	const signer = loadFileSigner(config.keyFile);
@@ -69,7 +72,11 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		await directory.refresh();
 		const ownPeer = await directory.lookup(config.listen.host);
 		if (!ownPeer || ownPeer.id !== config.peerId) throw new Error("listen address does not belong to the provisioned NetBird peer");
+		// Control promotion: follow a recorded, recovery-admin-signed change of the control host before anything else.
+		if (config.recoveryAdmin) await followControlHostChange(external, installed, { controlSpaceId: config.controlSpaceId, configured: { hostId: config.controlHostId, authorityId: config.authorityId }, recoveryAdmin: config.recoveryAdmin });
 		const installedAuthority = await installed.get<any>(`installed-authority:${config.controlSpaceId}`);
+		// An installed host change carries the endpoint: this host now uses the promoted control host, its key and address.
+		if (installedAuthority?.value.address) config = { ...config, controlHostId: installedAuthority.value.targetHostId, control: { ...config.control, address: installedAuthority.value.address, algorithm: installedAuthority.value.algorithm, publicKey: installedAuthority.value.supervisorKey } };
 		const authorityId = installedAuthority?.value.authorityId ?? config.authorityId;
 		const controlPublicKey = installedAuthority?.value.supervisorKey ?? config.control.publicKey;
 		const authority = await external.get<any>(`authority:${config.controlSpaceId}`);
