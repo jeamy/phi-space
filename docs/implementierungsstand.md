@@ -401,6 +401,10 @@ Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter prim
 `CommitSealed`; der Host klärt ihn mit dem Standby und bedient den Space ohne Neustart wieder
 ([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet der Primary einen unbekannten Request älterer
 Epoche mit Nachweis per Negativclaim mit `NotCommitted`.
+Gesamtbetrieb 3.7 echt gelaufen: zehnminütige Partition, Prozessabbrüche, Failover mit `NotCommitted` und Rückweg
+über den produktiven Dienst, jeder entschiedene Schreibvorgang genau einmal
+([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)). Gefunden und behoben: unbegrenztes Warten des
+Primary auf den Standby (`requestTimeoutMs`).
 `degradeToSingle` geht auch ohne Fencing-Adapter: Dann wird nur die Standby-Berechtigung dieses Space widerrufen,
 der Host bleibt aktiv ([Ablauf](ap3-replica-control.md)).
 

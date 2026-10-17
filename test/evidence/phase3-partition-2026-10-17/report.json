@@ -1,0 +1,596 @@
+{
+ "passed": true,
+ "bundles": {
+  "run": "ef99a5fb96119819 (523831b)",
+  "fromPartitionBounded": "88842c992d7779b4 (f96a7f7, bounded standby wait)"
+ },
+ "space": "sp-233186d7-d9da-477f-9b54-865537bdaa75",
+ "alias": "jobs-part",
+ "writesByPhase": {
+  "short": {
+   "writes": 11,
+   "confirmed": 10,
+   "resolved": 1,
+   "sealedAnswers": 1
+  },
+  "long": {
+   "writes": 30,
+   "confirmed": 29,
+   "resolved": 1,
+   "sealedAnswers": 122
+  },
+  "kill-standby": {
+   "writes": 36,
+   "confirmed": 35,
+   "resolved": 1,
+   "sealedAnswers": 2
+  },
+  "bounded": {
+   "writes": 10,
+   "confirmed": 9,
+   "resolved": 1,
+   "sealedAnswers": 73
+  },
+  "kill-primary": {
+   "writes": 29,
+   "confirmed": 28,
+   "resolved": 1,
+   "sealedAnswers": 0
+  },
+  "fork": {
+   "writes": 1,
+   "confirmed": 0,
+   "resolved": 1,
+   "sealedAnswers": 1
+  }
+ },
+ "steps": {
+  "preflight": {
+   "bundle": "ef99a5fb96119819",
+   "head": {
+    "revision": 1,
+    "hash": "a78d6031fb3df9936fa39250e2a73ad865bfc43ba69bfd277dc4ab91a446f96a",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   }
+  },
+  "partition-short": {
+   "label": "short",
+   "writes": 11,
+   "confirmed": 10,
+   "resolved": 1,
+   "sealedAnswers": 1,
+   "longestOpenMs": 77130,
+   "probes": [
+    {
+     "at": 55536,
+     "read": {
+      "ok": 4
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 89479,
+     "read": {
+      "ok": 4
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 95767,
+     "read": {
+      "code": "CommitSealed"
+     },
+     "other": {
+      "ok": 0
+     }
+    }
+   ],
+   "events": {
+    "cut": {
+     "cut": true
+    },
+    "cutAt": 21707,
+    "heal": {
+     "healed": true,
+     "droppedPackets": 10
+    },
+    "healAt": 93817
+   },
+   "heads": {
+    "revision": 13,
+    "hash": "019ba0eb66649489083410f054fe114ed8550537110d88519955f7998f8a586c",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   },
+   "lossless": {
+    "decided": 11,
+    "entries": 11
+   }
+  },
+  "partition-long": {
+   "label": "long",
+   "writes": 30,
+   "confirmed": 29,
+   "resolved": 1,
+   "sealedAnswers": 122,
+   "longestOpenMs": 601942,
+   "probes": [
+    {
+     "at": 100334,
+     "read": {
+      "ok": 27
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 135236,
+     "read": {
+      "ok": 27
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 169219,
+     "read": {
+      "ok": 27
+     },
+     "other": {
+      "ok": 0
+     }
+    }
+   ],
+   "events": {
+    "cut": {
+     "cut": true
+    },
+    "cutAt": 66424,
+    "heal": {
+     "healed": true,
+     "droppedPackets": 102
+    },
+    "healAt": 664329
+   },
+   "heads": {
+    "revision": 43,
+    "hash": "a3c0028b96f1c151eccb41a51bb5a8343e7fae223a4a59de184b1ff150006534",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   },
+   "lossless": {
+    "decided": 41,
+    "entries": 41
+   }
+  },
+  "partition-bounded": {
+   "bundle": "88842c992d7779b4",
+   "label": "bounded",
+   "writes": 10,
+   "confirmed": 9,
+   "resolved": 1,
+   "sealedAnswers": 73,
+   "longestOpenMs": 204805,
+   "probes": [
+    {
+     "at": 53641,
+     "read": {
+      "code": "CommitSealed"
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 57403,
+     "read": {
+      "code": "CommitSealed"
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 61414,
+     "read": {
+      "code": "CommitSealed"
+     },
+     "other": {
+      "ok": 0
+     }
+    }
+   ],
+   "events": {
+    "cut": {
+     "cut": true
+    },
+    "cutAt": 34599,
+    "heal": {
+     "healed": true,
+     "droppedPackets": 67
+    },
+    "healAt": 213456
+   },
+   "heads": {
+    "revision": 59,
+    "hash": "29d18fbec8f8dd4c7d584c6fdf6dd07c88384a7cd66759f2c6df798ae569a984",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   },
+   "lossless": {
+    "decided": 51,
+    "entries": 57
+   }
+  },
+  "kill-standby": {
+   "label": "kill-standby",
+   "writes": 36,
+   "confirmed": 35,
+   "resolved": 1,
+   "sealedAnswers": 2,
+   "longestOpenMs": 11236,
+   "probes": [
+    {
+     "at": 30572,
+     "read": {
+      "code": "CommitSealed"
+     },
+     "other": {
+      "ok": 0
+     }
+    },
+    {
+     "at": 34483,
+     "read": {
+      "code": "CommitSealed"
+     },
+     "other": {
+      "ok": 0
+     }
+    }
+   ],
+   "events": {
+    "kill": {
+     "killed": 1890
+    },
+    "killAt": 26315
+   },
+   "heads": {
+    "revision": 89,
+    "hash": "b17713ae49b46d4b2cae2036ad286eb74961ca91127d9039540a008520c9d73d",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   },
+   "lossless": {
+    "decided": 87,
+    "entries": 87
+   }
+  },
+  "kill-primary": {
+   "label": "kill-primary",
+   "writes": 29,
+   "confirmed": 28,
+   "resolved": 1,
+   "sealedAnswers": 0,
+   "longestOpenMs": 13210,
+   "probes": [
+    {
+     "at": 28158,
+     "read": {
+      "code": "connect ECONNREFUSED 100.89.28.88:7421"
+     },
+     "other": {
+      "error": "connect ECONNREFUSED 100.89.28.88:7421"
+     }
+    },
+    {
+     "at": 31439,
+     "read": {
+      "code": "connect ECONNREFUSED 100.89.28.88:7421"
+     },
+     "other": {
+      "error": "connect ECONNREFUSED 100.89.28.88:7421"
+     }
+    },
+    {
+     "at": 34822,
+     "read": {
+      "code": "connect ECONNREFUSED 100.89.28.88:7421"
+     },
+     "other": {
+      "error": "connect ECONNREFUSED 100.89.28.88:7421"
+     }
+    }
+   ],
+   "events": {
+    "kill": {
+     "killed": 693
+    },
+    "killAt": 26791
+   },
+   "heads": {
+    "revision": 118,
+    "hash": "c3fec6ad89c6daaa15a85b8345adc88408024bec13ef5b1a8b3b5cce3453fa10",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   },
+   "lossless": {
+    "decided": 116,
+    "entries": 116
+   }
+  },
+  "fork": {
+   "fork": {
+    "revision": 120,
+    "hash": "beb3815cd54b84817c5649d42b5f5c6e49801f8c005450102a532bfe84bfdf53",
+    "configHash": "203ce845064e7bb4aeeffd98d42c8cece83220530c984907601887ac73b16808"
+   },
+   "write": {
+    "n": 116,
+    "requestId": "fork",
+    "label": "fork",
+    "status": "resolved",
+    "issuedAt": 1792272751108,
+    "attempts": 1,
+    "sealedAnswers": 1,
+    "lastError": "NotCommitted"
+   },
+   "generation": "g02f83cffcbf857acaa554ef886077401.cd856dec570190521f6f37245a21f2e678cde102c469b0218b783f680c93c23c"
+  },
+  "promote": {
+   "recoveryId": "part-promote",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 2,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 2,
+    "spaceId": "sp-233186d7-d9da-477f-9b54-865537bdaa75",
+    "standbyReplica": "nano-test"
+   },
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "promote part-promote"
+    }
+   }
+  },
+  "degrade": {
+   "recoveryId": "part-degrade",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "single",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 3,
+    "spaceId": "sp-233186d7-d9da-477f-9b54-865537bdaa75",
+    "standbyReplica": null
+   },
+   "recoveredCommitted": [],
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "degrade part-degrade"
+    }
+   }
+  },
+  "start-new-primary": {
+   "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+  },
+  "not-committed": {
+   "resolution": {
+    "state": "done",
+    "deadline": 1792272813612,
+    "method": "write",
+    "error": {
+     "code": "NotCommitted",
+     "message": "request fork was not committed before the promotion to epoch 3"
+    },
+    "result": null
+   },
+   "late": "NotCommitted",
+   "forkEntries": 0,
+   "epoch": 3
+  },
+  "release": {
+   "state": "quarantine"
+  },
+  "wipe-old": {
+   "aside": "/data/nano/sync-part.aside-1792272856067"
+  },
+  "start-quarantine": {
+   "quarantine": "{\"quarantine\":true,\"listeners\":[\"jobs-part\"],\"failed\":[]}"
+  },
+  "set-standby": {
+   "setStandby": {
+    "transitionId": "part-standby",
+    "config": {
+     "durability": "sync",
+     "primaryEpoch": 3,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 4,
+     "standbyReplica": "nano-test"
+    }
+   },
+   "incident": "first attempt at 21:34:27Z crashed in the sync tool (uncaught exception; output not kept by the driver); resumed by hand with the same transition ID, completed; nano logged leftQuarantine:true"
+  },
+  "readmit": {
+   "readmitted": [
+    "sp-0e8bf457-66ec-4324-95dc-488d5afe9356",
+    "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd"
+   ]
+  },
+  "start-old": {
+   "ready": "{\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}"
+  },
+  "start-new": {
+   "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+  },
+  "lossless-after": {
+   "decided": 116,
+   "entries": 116
+  },
+  "compare": {
+   "newPrimary": {
+    "head": {
+     "revision": 123,
+     "hash": "892163dc8c978245b8cf52c1f8b4a7a3ba2777df9f7788175e9a212d0ce4e19c",
+     "configHash": "eaec07ccaec13f5e92f7f93387a487d0ee0d3d3a7c86e4289e80447f5c7dc6b3"
+    },
+    "entries": 116,
+    "snapshot": "25977c9f40d25364bbcaf6801d7e3ff20c0e4b744e0b0774162a133ed72f7761",
+    "atFork": "e4ba9fd9c8de450657e4c0cc8bc77bafdbaa15b776e3483fe6b4f450bdf09755"
+   },
+   "oldPrimary": {
+    "head": {
+     "revision": 123,
+     "hash": "892163dc8c978245b8cf52c1f8b4a7a3ba2777df9f7788175e9a212d0ce4e19c",
+     "configHash": "eaec07ccaec13f5e92f7f93387a487d0ee0d3d3a7c86e4289e80447f5c7dc6b3"
+    },
+    "entries": 116,
+    "snapshot": "25977c9f40d25364bbcaf6801d7e3ff20c0e4b744e0b0774162a133ed72f7761",
+    "asideAtFork": "beb3815cd54b84817c5649d42b5f5c6e49801f8c005450102a532bfe84bfdf53"
+   }
+  }
+ },
+ "stepLog": [
+  "2026-10-17T21:06:43.255Z step \"preflight\"",
+  "2026-10-17T21:06:46.463Z check \"same daemon bundle on both hosts (ef99a5fb96119819)\"",
+  "2026-10-17T21:06:49.951Z check \"both replicas agree and the primary leads\"",
+  "2026-10-17T21:06:54.148Z step \"partition-short\"",
+  "2026-10-17T21:07:17.188Z event \"cut\"",
+  "2026-10-17T21:08:28.198Z event \"heal\"",
+  "2026-10-17T21:08:59.149Z check \"the partition sealed a write, and it resolved after healing\"",
+  "2026-10-17T21:09:03.655Z check \"primary and standby journal heads are equal, nothing unresolved\"",
+  "2026-10-17T21:09:09.189Z check \"every decided write exactly once (11 writes; missing none, duplicates none)\"",
+  "2026-10-17T21:09:09.190Z step \"partition-long\"",
+  "2026-10-17T21:10:15.145Z event \"cut\"",
+  "2026-10-17T21:20:13.859Z event \"heal\"",
+  "2026-10-17T21:21:15.160Z check \"the long partition sealed a write, and it resolved after healing\"",
+  "2026-10-17T21:21:19.724Z check \"primary and standby journal heads are equal, nothing unresolved\"",
+  "2026-10-17T21:21:24.773Z check \"every decided write exactly once (41 writes; missing none, duplicates none)\"",
+  "2026-10-17T21:21:24.774Z step \"kill-standby\"",
+  "2026-10-17T21:21:50.086Z event \"kill\"",
+  "2026-10-17T21:21:52.451Z FAILED \"standby-100: \"",
+  "2026-10-17T21:23:42.706Z step \"partition-bounded\"",
+  "2026-10-17T21:23:45.958Z check \"same daemon bundle on both hosts (88842c992d7779b4)\"",
+  "2026-10-17T21:24:22.099Z event \"cut\"",
+  "2026-10-17T21:27:19.965Z event \"heal\"",
+  "2026-10-17T21:27:50.197Z check \"the cut turned the commit into CommitSealed at once; other Spaces stayed usable; it resolved after healing\"",
+  "2026-10-17T21:27:54.734Z check \"primary and standby journal heads are equal, nothing unresolved\"",
+  "2026-10-17T21:27:59.521Z check \"every decided write exactly once (51 writes; missing none, duplicates none)\"",
+  "2026-10-17T21:27:59.522Z step \"kill-standby\"",
+  "2026-10-17T21:28:24.949Z event \"kill\"",
+  "2026-10-17T21:30:07.892Z check \"primary and standby journal heads are equal, nothing unresolved\"",
+  "2026-10-17T21:30:13.019Z check \"every decided write exactly once (87 writes; missing none, duplicates none)\"",
+  "2026-10-17T21:30:13.019Z step \"kill-primary\"",
+  "2026-10-17T21:30:37.996Z event \"kill\"",
+  "2026-10-17T21:32:21.308Z check \"primary and standby journal heads are equal, nothing unresolved\"",
+  "2026-10-17T21:32:25.836Z check \"every decided write exactly once (116 writes; missing none, duplicates none)\"",
+  "2026-10-17T21:32:25.836Z step \"fork\"",
+  "2026-10-17T21:32:35.870Z check \"the unconfirmed fork write stays a sealed candidate\"",
+  "2026-10-17T21:32:35.871Z step \"promote\"",
+  "2026-10-17T21:32:57.600Z check \"standby promoted after a verified fence\"",
+  "2026-10-17T21:32:57.601Z step \"degrade\"",
+  "2026-10-17T21:33:05.066Z check \"single durability after degradeToSingle\"",
+  "2026-10-17T21:33:05.067Z step \"start-new-primary\"",
+  "2026-10-17T21:33:28.082Z step \"not-committed\"",
+  "2026-10-17T21:33:34.696Z check \"the fork sealed only on the fenced primary is NotCommitted\"",
+  "2026-10-17T21:33:42.166Z check \"the late original call meets the negative claim\"",
+  "2026-10-17T21:33:47.233Z check \"the fork never took effect\"",
+  "2026-10-17T21:33:47.234Z step \"release\"",
+  "2026-10-17T21:34:10.795Z step \"wipe-old\"",
+  "2026-10-17T21:34:17.512Z step \"start-quarantine\"",
+  "2026-10-17T21:34:22.405Z step \"set-standby\"",
+  "2026-10-17T21:34:27.649Z FAILED \"sync tool: Node.js v22.23.3\"",
+  "2026-10-17T21:35:53.396Z step \"readmit\"",
+  "2026-10-17T21:35:55.299Z step \"start-old\"",
+  "2026-10-17T21:36:08.026Z check \"the old primary is the sync standby\"",
+  "2026-10-17T21:36:08.026Z step \"start-new\"",
+  "2026-10-17T21:36:31.010Z step \"lossless-after\"",
+  "2026-10-17T21:36:41.871Z check \"every decided write exactly once (116 writes; missing none, duplicates none)\"",
+  "2026-10-17T21:36:41.872Z step \"compare\"",
+  "2026-10-17T21:36:53.117Z check \"both materialized replicas are identical\"",
+  "2026-10-17T21:36:53.117Z check \"the fork is only in the old primary's set-aside history\"",
+  "2026-10-17T21:37:26.164Z PASSED"
+ ],
+ "incidents": [
+  "kill-standby: first attempt used `docker exec kill` (a shell builtin in the image) and stopped the driver; fixed to run through sh, step repeated",
+  "set-standby: first attempt crashed in the sync tool (uncaught exception, output not kept by the driver); resumed by hand with the same transition ID, completed; the driver now keeps the whole tool output",
+  "partition-short and partition-long ran with the first bundle: the primary waited for the standby for the life of the cut TCP connection, so writes hung for minutes before CommitSealed; fixed in f96a7f7 and shown by partition-bounded"
+ ],
+ "cleanup": {
+  "bootRecords": {
+   "nano-test": {
+    "afterRun": {
+     "version": 40,
+     "state": "active",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-233186d7-d9da-477f-9b54-865537bdaa75": "active/standby",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    },
+    "restored": {
+     "version": 41,
+     "state": "active",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    }
+   },
+   "standby-100": {
+    "afterRun": {
+     "version": 30,
+     "state": "active",
+     "permits": {
+      "sp-233186d7-d9da-477f-9b54-865537bdaa75": "active/primary",
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    },
+    "restored": {
+     "version": 31,
+     "state": "active",
+     "permits": {
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    }
+   }
+  },
+  "configs": "restored from federation.json.before-part-20261017 (no syncSpaces)",
+  "nftRules": "removed",
+  "netbirdPolicy": "deleted",
+  "controlCert": "grants removed on vpsc, files removed on standby-100",
+  "baseline": {
+   "at": "2026-10-17T21:38:36.124Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  }
+ },
+ "retained": [
+  "daemon bundle 88842c992d7779b4 on both hosts (backups federation-host.mjs.before-part-20261017)",
+  "sync stores sync-part on both hosts and nano sync-part.aside-* as evidence"
+ ]
+}

@@ -130,6 +130,9 @@ angewendet oder durch Fencing und Promotion ausgeschlossen. Seit 2026-10-17 sieh
     Primary, der mit offenem Kandidaten und ohne Standby startet, läuft genauso.
   - Verliert der Host seine Primary-Berechtigung (Fencing durch eine Promotion), hört der Versuch auf; der Kandidat
     wird hier nie angewendet.
+- **Antwortfrist:** Der Primary wartet höchstens 15 Sekunden auf die Antwort des Standby (`requestTimeoutMs` des
+  Replikat-Transports). Danach gilt der Commit als unbestätigt, und der Resolver übernimmt. Ohne Frist hielt eine
+  abgeschnittene TCP-Verbindung im echten Lauf jeden Schreibvorgang minutenlang fest.
 - **Bewusste Vereinfachung:** `CommitSealed` gilt für den ganzen Space, nicht für einzelne Claims.
   - Je Claim müsste man Claims aus den rohen Storage-Deltas lesen oder das Intent um Claim-Schlüssel erweitern. Das
     wäre eine neue Intent-Version mit anderem Hash und Risiko bei gemischten Bündeln.
