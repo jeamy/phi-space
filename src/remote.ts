@@ -6,7 +6,7 @@
 // (`maxClientWaitMs`) only ends the waiting: the operation keeps running on the host to its own deadline.
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
-import { PROTOCOL_VERSION, type Call, type ErrorCode, type Reply } from "./service.ts";
+import { PROTOCOL_VERSION, MergeTypeNotExclusive, type Call, type ErrorCode, type Reply } from "./service.ts";
 import { AUTH_PROTOCOL, signedBytes, type Challenge, type Signer } from "./auth.ts";
 import type { EntryDraft, Json, Lease, Template } from "./core.ts";
 import type { ClaimView, RequestRef } from "./claims.ts";
@@ -93,6 +93,7 @@ const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> 
 	PermissionDenied: (m) => new core.PermissionError(m),
 	TransactionError: (m) => new core.TransactionError(m),
 	CompletionViolation: (m) => new core.CompletionViolation(m),
+	MergeTypeNotExclusive: (m) => new MergeTypeNotExclusive(m),
 	MailboxEpochMismatch: (m) => new MailboxEpochMismatch(m),
 	InvalidAck: (m) => new InvalidAck(m),
 	BadRequest: (m) => new core.IllegalArgumentError(m),

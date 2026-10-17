@@ -7,6 +7,8 @@ import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semanti
 // Placeholders until the federation stages: `authorityId` and `primaryEpoch` are checked against the configured values
 // (a single host is its own authority, epoch 0). Overlay authentication and grants belong to phase 1b.
 import { awaitWithContext } from "@earendil-works/chord/context";
+import { ReplicationConflict } from "./entry-replication.ts";
+import { ReplicationClockError } from "./replication-clock.ts";
 import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
@@ -63,11 +65,15 @@ export type Call = {
 export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
 export type ClaimReceipt={protocol:'pi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
 export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("@earendil-works/pi-durable").Tx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
+/** lww/set types of a Space served by its entry replication controller (docs/ap3-replikation.md, step 1). */
+export type MergeAdapter = { controller: import("./entry-replication.ts").EntryReplicationController; rules: readonly import("./entry-replication.ts").EntryReplicationRule[] };
+/** v3 7.2: merge types know no exclusive allocation (take, transactions, waits, lease changes). */
+export class MergeTypeNotExclusive extends core.IllegalArgumentError {}
 export type SpaceServiceOptions = {
 	authorize?: (call: Call, id: Identity, conn: Connection) => Promise<DecisionAuthorization>;
 	host: SpaceHost;
@@ -79,6 +85,8 @@ export type SpaceServiceOptions = {
 	primaryEpoch?: number;
 	/** Resolve the current persisted epoch for the addressed space. */
 	epochForSpace?: (space: string | undefined) => Promise<number>;
+	/** Merge types (lww/set) of a Space, served by its entry replication controller instead of the core. */
+	merge?: (space: string | undefined) => MergeAdapter | undefined;
 	hostId?: string;
 	maxPollMs?: number; // longest wait of a poll (spec: 25 s)
 	maxPendingPerPrincipal?: number;
@@ -227,6 +235,8 @@ export class SpaceService {
 
 	private async dispatch(method: Method, a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; space?: string; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		const { client, request, grant } = c;
+		const merged = await this.mergeCall(method, a, c);
+		if (merged !== undefined) return merged;
 		switch (method) {
 			case "hello": return this.hello(a, c);
 			case "generation": {
@@ -349,6 +359,45 @@ export class SpaceService {
 	}
 
 	/** read/take: `done` with the entry or null, or `pending` while the operation keeps running on the host. */
+	/**
+	 * Calls on a merge type of this Space go to its entry replication controller; everything else returns undefined.
+	 * Reads see the converging view and are marked `replicated` (they may be stale); exclusive operations are refused.
+	 */
+	private async mergeCall(method: Method, a: Record<string, Json>, c: { id: Identity; request?: RequestRef; space?: string; grant: { types: ReadonlySet<string> | "*" } }): Promise<Json | undefined> {
+		const merge = this.o.merge?.(c.space);
+		if (!merge) return undefined;
+		const rule = (type: unknown) => typeof type === "string" ? merge.rules.find(r => r.type === type) : undefined;
+		const refuse = (what: string) => { throw new MergeTypeNotExclusive(`${what} is not available for merge types (lww/set)`); };
+		const { entryChangeId } = await import("./entry-replication.ts");
+		const view = (v: import("./entry-replication.ts").ReplicatedEntryView) => ({ id: v.id, type: v.type, types: [v.type], fields: v.fields as Json, owner: v.owner as unknown as Json, expires: v.expiresAt ?? core.FOREVER, replicated: true });
+		const matches = (t: core.Template, v: import("./entry-replication.ts").ReplicatedEntryView) => !t || (!t.type || t.type === v.type) && Object.entries(t.fields ?? {}).every(([k, x]) => JSON.stringify(x) === JSON.stringify((v.fields as Record<string, unknown>)[k]));
+		if (method === "write") {
+			if (!isObj(a.entry) || !rule(a.entry.type)) return undefined;
+			const r = rule(a.entry.type)!, type = r.type;
+			if (!isObj(a.entry.fields)) throw new Bad("entry.fields must be an object");
+			if (a.entry.types !== undefined) throw new Bad("a merge type takes no supertypes");
+			if (a.txn !== undefined && a.txn !== null) refuse("a transaction");
+			this.checkTypes(c.grant, [type], `type ${type}`);
+			if (!c.request) throw new Bad("a merge write needs a request ID");
+			const ms = duration(a.leaseMs, "leaseMs", core.ANY), expiresAt = ms === core.ANY || ms >= core.FOREVER ? null : this.now() + ms;
+			const change = await merge.controller.mutate(c.request.requestId, { kind: r.variant === "lww" ? "put" : "add", type, fields: a.entry.fields as Record<string, Json>, owner: { ...c.id.principal }, expiresAt } as never);
+			return { id: entryChangeId(change), expires: expiresAt ?? core.FOREVER, replicated: true };
+		}
+		if (method === "read" || method === "take" || method === "readAll" || method === "count" || method === "wait") {
+			const t = template(a.template);
+			if (!rule(t?.type)) return undefined;
+			if (method === "take" || method === "wait") refuse(method);
+			if (a.txn !== undefined && a.txn !== null) refuse("a transaction");
+			this.checkTypes(c.grant, [t!.type!], "this template");
+			const found = (await merge.controller.read()).filter(v => matches(t, v));
+			if (method === "read") return { state: "done", entry: found[0] ? view(found[0]) : null, replicated: true };
+			if (method === "count") return { value: found.length, rev: 0, streamId: "merge:" + merge.controller.documentKey, replicated: true };
+			return { items: found.slice(0, 100).map(view), next: null, rev: 0, streamId: "merge:" + merge.controller.documentKey, replicated: true };
+		}
+		if (method === "lease" && typeof a.id === "string" && a.id.startsWith("[")) refuse("a lease change");
+		return undefined;
+	}
+
 	private async readTake(method: "read" | "take", a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		const { client, request, grant } = c;
 		const t = template(a.template);
@@ -417,6 +466,9 @@ export class SpaceService {
 		if (e instanceof MailboxEpochMismatch) return fail("MailboxEpochMismatch", e.message);
 		if (e instanceof InvalidAck) return fail("InvalidAck", e.message);
 		if (e instanceof core.TransactionError || e instanceof core.UnknownLeaseError) return fail("TransactionError", (e as Error).message);
+		if (e instanceof MergeTypeNotExclusive) return fail("MergeTypeNotExclusive", e.message);
+		if (e instanceof ReplicationConflict) return fail("BadRequest", e.message);
+		if (e instanceof ReplicationClockError) return fail("ResourceExhausted", "replication clock: " + e.message);
 		if (e instanceof core.IllegalArgumentError || e instanceof TypeError) return fail("BadRequest", (e as Error).message);
 		return fail("Internal", e instanceof Error ? e.message : String(e));
 	}
