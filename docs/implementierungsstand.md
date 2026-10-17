@@ -418,7 +418,7 @@ Umgesetzt sind die Schritte B2–B5 der [Betriebserweiterung](betrieb-und-mobile
   automatisch, sonst `needsReview`; `resolve` ist an den View-Hash gebunden und prüft jeden Member per
   Compare-and-Set.
 
-Nachweise: `test-run-gate.test.ts`, `test-run-member.test.ts`, `test-run-recovery.test.ts` (31 Fälle, JSONL und
+Nachweise: `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts` (31 Fälle, JSONL und
 SQLite, Commit-Fehler, Controller-Neustart, verlorene ACKs, TCP über das zusammengesetzte Gate) und ein Lauf über
 das echte NetBird-Overlay zwischen Operator-Host und einem Container auf big
 ([Nachweis](../test/evidence/run-gate-overlay-2026-10-15/README.md); Schicht A dort als Fixture-Pin).
@@ -441,7 +441,7 @@ Neustart bei neuem Ziel, Ablehnung unbekannter Arten oder fremder Spaces, Backof
 ist. Nach einem Neustart laufen die gespeicherten Worker auch ohne erreichbaren Koordinator weiter. Der angewendete
 Stand gelangt als `metrics.workers` über den vorhandenen Capability-Heartbeat zurück (`appliedWorkers`).
 
-Nachweis: `test-workers.test.ts` (11 Fälle, JSONL/SQLite), darunter ein gesperrter Sieblauf, den zwei Worker nach
+Nachweis: `test/test-workers.test.ts` (11 Fälle, JSONL/SQLite), darunter ein gesperrter Sieblauf, den zwei Worker nach
 Pause und Resume vollständig rechnen, und die Gate-Methode über TCP. Grenzen: Worker laufen als asynchrone Schleifen
 im Daemon-Prozess und bringen keine CPU-Parallelität; der periodische Heartbeat des Hosts wird noch nicht von
 `startFederationHost` selbst gesendet.
@@ -455,7 +455,7 @@ Spaces ohne Federation-Mitgliedschaft, offene Arbeit, aufbewahrte Claims, Mailbo
 Die spaceId bleibt als Grabstein in der Registry reserviert; `listSpaces`, `resolveSpaceId` und `snapshotSpace`
 kennen gelöschte Spaces nicht mehr. Der Control-Host sendet signierte Anweisungen an den Ziel-Host
 (`spaceLifecycleInstruction`); Admin-Commands `createSpace`, `archiveSpace`, `reactivateSpace`, `deleteSpace`.
-Nachweis: `test-space-lifecycle.test.ts` (JSONL/SQLite, Neustart, TCP über das Gate, Supervisor-Command).
+Nachweis: `test/test-space-lifecycle.test.ts` (JSONL/SQLite, Neustart, TCP über das Gate, Supervisor-Command).
 
 
 ## Deployment-Bootstrap (2026-10-16)
@@ -467,7 +467,7 @@ getrennt über `startWorkers`. Eine neue Config-Revision verwendet vorhandene Sp
 weiter; Konflikte (Host-Wechsel eines Space, geänderte Definition laufender Worker, Space mit anderen Limits) werden
 gemeldet statt angewendet. Das CLI `npm run bootstrap` prüft offline (`--check`) und sendet sonst Admin-Commands
 über das Gate. Nicht enthalten: SSH-Provisionierung, NetBird-Beitritt, Erstinitialisierung und Pairing; sie bleiben
-Voraussetzungen, die der Plan als `blocked` sichtbar macht. Nachweis: `test-deployment.test.ts` (JSONL/SQLite, zwei
+Voraussetzungen, die der Plan als `blocked` sichtbar macht. Nachweis: `test/test-deployment.test.ts` (JSONL/SQLite, zwei
 Stores, Absturz und Wiederaufnahme, CLI als gepairter Admin über das echte Gate).
 
 
@@ -487,7 +487,7 @@ Schritt B10 (Teil): `collectAlerts` leitet Hinweise aus Läufen, Worker-Zuweisun
 Hinweis ist kein Zustandsbeweis. `startAlertMonitor` meldet nur Änderungen, `webhookPublisher` stellt sie als Text
 zu (z. B. ntfy). `auditLog` listet Admin-Results ohne Payloads. Laufbefehle mit `dryRun: true` liefern eine Vorschau
 (zulässig, Grund, Revision), ohne etwas zu journalisieren. Admin-Commands `listAlerts`/`auditLog`; die mobile
-Steuerseite zeigt Hinweise und Audit und stoppt nur nach einer Vorschau. Nachweis: `test-alerts.test.ts`,
+Steuerseite zeigt Hinweise und Audit und stoppt nur nach einer Vorschau. Nachweis: `test/test-alerts.test.ts`,
 Geräteprüfung. Offen: feinere Rollen und Zwei-Personen-Freigabe sowie die übrigen Vorschläge aus §7.5.
 
 
@@ -498,5 +498,5 @@ Ergebnisse aller Members und meldet Vollständigkeit, fehlende Teile, Manifest- 
 wird als solches ausgewiesen. `RunController.schedule` plant Pause oder Fortsetzung; die serverseitige Schleife gibt
 sie zum Zeitpunkt als normales journalisiertes Command aus. Admin-Commands `exportRun`, `scheduleRun`; die mobile
 Steuerseite hat dafür Bedienelemente sowie Formulare für Space-Lebenszyklus und Deployment-Plan/-Export.
-Nachweis: `test-run-export.test.ts`. Die mobilen Dialoge (`confirm`/`prompt`) nutzen die Standarddialoge der
+Nachweis: `test/test-run-export.test.ts`. Die mobilen Dialoge (`confirm`/`prompt`) nutzen die Standarddialoge der
 Android-WebView; auf dem Gerät sind sie nicht eigens geprüft.

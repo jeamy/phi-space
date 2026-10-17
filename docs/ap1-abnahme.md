@@ -28,7 +28,7 @@ npm run bundle
 ```
 
 Die Kern-/Integrationssuite umfasst 184 bestandene Tests, die Beispielsuite 158;
-keine Fehler oder Skips bei der lokalen Abnahme. `test-pi-server.test.ts` verwendet vorhandene
+keine Fehler oder Skips bei der lokalen Abnahme. `test/test-pi-server.test.ts` verwendet vorhandene
 Pakete des benachbarten mobilen Runtimes. Ohne diese Pakete werden die zwei nativen Tests
 explizit übersprungen; dadurch ist keine pi-serverd-Abnahme nachgewiesen. Alternativer Pfad:
 `PI_SERVER_RUNTIME_DIR=/pfad/zur/runtime npm run test:pi-server`. Es wird nichts installiert.

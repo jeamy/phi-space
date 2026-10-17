@@ -98,7 +98,7 @@ später explizit gebundenen Snapshot-/Stream-Bootstrap.
   nicht. Im Code liest nichts frühere Dokumentstände oder Commit-Sequenzen.
 - Der Bootstrap bleibt dauerhaft in der Journal-Historie, denn eine Kompaktierung gibt es noch nicht.
 
-**Geprüft** mit `test-bootstrap.test.ts`:
+**Geprüft** mit `test/test-bootstrap.test.ts`:
 
 - ein pi-spaces-Store mit Spaces, Claims, synthetischen Conversations, Entries und Conversation-Dokument, in
   mehreren Stücken;

@@ -85,9 +85,9 @@ Aktualisierung. Watches (`watchDoc`) wecken den Server, die Korrektheit hängt n
 
 ## Tests
 
-`test-dashboard.test.ts` (läuft mit in `npm test`): HTTP-Projektion (Spaces, Detail, Entries, Metrics,
+`test/test-dashboard.test.ts` (läuft mit in `npm test`): HTTP-Projektion (Spaces, Detail, Entries, Metrics,
 405/404, Statische UI) und der SSE-Vertrag (`hello`, `space` nach einem Commit, `metrics`-Push) gegen einen
-In-Memory-Host. Einzel: `node --experimental-strip-types --test test-dashboard.test.ts`.
+In-Memory-Host. Einzel: `node --experimental-strip-types --test test/test-dashboard.test.ts`.
 
 ## Nächste Phasen (Vorschlag)
 

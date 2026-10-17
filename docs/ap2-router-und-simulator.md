@@ -83,7 +83,7 @@ Vergleiche verwenden tatsächliche Entries und Claims aus den Ziel-Harnesses.
 
 ## Nachweise
 
-`test-router.test.ts` enthält 45 Fälle und läuft regulär in `npm test`.
+`test/test-router.test.ts` enthält 45 Fälle und läuft regulär in `npm test`.
 Der abschließende Gesamtprüflauf hat 345 Tests bestanden; Typprüfung, 158 Beispieltests und
 vier Mobile-Tests sind ebenfalls grün. Zusätzlich wird das gebaute
 Produktionsbundle auf beiden Backends mit Duplikat, verlorener Take-Antwort und

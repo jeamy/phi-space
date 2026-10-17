@@ -16,7 +16,6 @@
     "src",
     "examples",
     "test",
-    "*.test.ts",
     "scripts/bootstrap-spaces.ts"
   ]
 }

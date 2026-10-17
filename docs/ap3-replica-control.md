@@ -3,7 +3,7 @@
 Stand 2026-10-16. Umgesetzt mit Simulator-Adapter; die Abnahme ist durch F1/Gate 2 (realer
 Fencing-Adapter) blockiert. Grundlage: [federation-plan-v3.md](federation-plan-v3.md) §5.3, §5.3.1 und §5.5,
 Plan-Pakete 3.3–3.6 in [implementierungsplan-v3.md](implementierungsplan-v3.md). Code: `src/replica-control.ts`,
-Konfigurationseinträge in `src/primary-sync.ts`, Tests in `test-replica-control.test.ts`.
+Konfigurationseinträge in `src/primary-sync.ts`, Tests in `test/test-replica-control.test.ts`.
 
 ## Konfigurationsübergänge als Einträge der Sync-Kette
 
@@ -210,7 +210,7 @@ Store-Commit. Sein Policy-Schritt folgt deshalb im ersten Commit danach, bevor d
 - **Promotion eines Control-Replikats** ist umgesetzt (siehe unten), ohne Root. Ein Root zieht noch nicht mit: Ihm
   fehlen auf dem neuen Host Lease-Datei und Schlüssel, und einen Wechsel der Router-Epoche lehnt er beim
   Wiederöffnen ab.
-- **Schritt 6** ist umgesetzt, lokal geprüft (`test-configured-root.test.ts`) und auf host-a echt gelaufen
+- **Schritt 6** ist umgesetzt, lokal geprüft (`test/test-configured-root.test.ts`) und auf host-a echt gelaufen
   ([Nachweis](../test/evidence/step6-hosta-2026-10-17/README.md)). Dass die Marke am Member aus der `EpochNotice`
   stammt und nicht aus der ersten Delegation der neuen Epoche, ist dabei nicht unterscheidbar.
 - **Kopplung:** Mit Standby braucht jeder Control-Write dessen ACK. Fällt der Standby aus, stehen Enrollments,
@@ -278,7 +278,7 @@ Echter Lauf in beide Richtungen auf big: [Nachweis](../test/evidence/control-pro
 **Messung auf der Kopie von host-a:** 114 Control-Commits in sechs Tagen, Revisionen von 1–3 KB. Das Journal-Budget
 von 64 MiB reicht damit grob für Jahre.
 
-**Geprüft** (`test-bootstrap.test.ts`, beide Backends) mit einem Control-artigen Hauptstore: Bootstrap,
+**Geprüft** (`test/test-bootstrap.test.ts`, beide Backends) mit einem Control-artigen Hauptstore: Bootstrap,
 `setStandby` an einen Listener, synchron bestätigte Control-Writes, `degradeToSingle` mit Geschwister-Space,
 danach Epoche 2 in Berechtigungen, Boot-Guard und Router-Lease.
 
@@ -453,7 +453,7 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 
 ## Tests
 
-`test-netcup-fencing.test.ts` prüft den Adapter gegen einen nachgebauten SCP-Zustandsautomaten:
+`test/test-netcup-fencing.test.ts` prüft den Adapter gegen einen nachgebauten SCP-Zustandsautomaten:
 
 - die Reihenfolge Identität, Autostart, Ausschalten;
 - Wiederholung ohne erneutes Patchen;
@@ -463,7 +463,7 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
 - Token-Rotation unter Sperrdatei;
 - den mTLS-Dienst: Reader-Zertifikat abgewiesen, Operator erlaubt.
 
-`test-replica-control.test.ts` umfasst 8 Fälle auf JSONL und SQLite:
+`test/test-replica-control.test.ts` umfasst 8 Fälle auf JSONL und SQLite:
 
 - **Ablehnungen:** Simulator- und unkonfigurierte Adapter werden abgelehnt, ohne Zustand zu ändern;
   ebenso Nachweise für den falschen Host und wiederverwendete IDs.

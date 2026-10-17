@@ -68,14 +68,14 @@ Fencing, Control-ACK und externe/lokale Boot-Installation prüfen und erst danac
 
 ## Automatisierte Nachweise
 
-- `test-federation-runtime.test.ts`: zwei eigenständige persistente Harnesses
+- `test/test-federation-runtime.test.ts`: zwei eigenständige persistente Harnesses
   über echte TCP-Gates, auf JSONL und SQLite. Bootstrap, Host-Enrollment,
   Schlüsselabfrage über die Leitung, Boot-Prüfung, Grants, abgelaufener Take,
   Resolution ohne Wirkung, Management-Ausfall, Rotation und Crash/Reopen.
-- `test-grants.test.ts`: manipulierte Signatur, fremde Principals/Schlüssel und
+- `test/test-grants.test.ts`: manipulierte Signatur, fremde Principals/Schlüssel und
   Scopes, Resolution ohne Effect, Ablauf unmittelbar vor Mutation und
   Rollenentzug vor Txn-Commit.
-- `test-recovery.test.ts`: konkurrierende CAS-Nachfolger, ungültiger
+- `test/test-recovery.test.ts`: konkurrierende CAS-Nachfolger, ungültiger
   Fencing-Nachweis, signierte Installation und Reopen; Berechtigung pro Space,
   gesperrte Reads und Rollback bei gleichzeitigem Fence; Restore in mehreren
   Batches mit Reopen, historische Pending-Claims und begrenzte Task-Freigabe.
@@ -165,7 +165,7 @@ Keystore-Nachweis wurde separat am 2026-10-11 erbracht (unten).
 ## Ergänzte Implementierung vom 2026-10-10
 
 Die Bausteine und konkreten Konfigurations-/SSH-Aufrufe stehen in
-[ap1b-betrieb.md](ap1b-betrieb.md). `test-operations.test.ts` prüft private
+[ap1b-betrieb.md](ap1b-betrieb.md). `test/test-operations.test.ts` prüft private
 Schlüsseldateien, Reader-/CAS-Trennung, signierten privaten Recovery-Zugang,
 Data-Restore mit Journal/Registry/ACK/Boot-Abgleich nach Reopen auf beiden
 Backends, idempotente Freigabe über den echten Socket, gesperrte Freigabe nach
@@ -230,11 +230,11 @@ Laufzeitregeln vor dieser Kette erlauben nur etablierte TCP-Antworten von
 oder deaktiviert. Diese lokalen Regeln sind noch keine persistente allgemeine
 VPN-Konfiguration.
 
-`test-recovery-boundaries.test.ts` prüft zusätzlich den verlorenen externen ACK,
+`test/test-recovery-boundaries.test.ts` prüft zusätzlich den verlorenen externen ACK,
 einen zweiten Authority-Wechsel, stale Snapshot-Marker, begrenzte Orphan-Audits,
 TLS-Clientrechte/Serveridentität, signierte ACKs und deren Schlüsselwiderruf vor
 Receipt-Commit sowie den vollständigen Control-Controller mit zwei persistenten
-Members. Fencing und Uhr sind darin Fixtures. `test-grants.test.ts` verweigert
+Members. Fencing und Uhr sind darin Fixtures. `test/test-grants.test.ts` verweigert
 nach Restore A-only-Observerrechte und lässt für Unpaired nur Enrollment-Scope.
 Die TUI liest nun auch laufende `harness.sqlite` über SQLite-Backup in eine private
 Kopie; Historie, ungültige Generationen und Restore-/Authority-Zustände werden

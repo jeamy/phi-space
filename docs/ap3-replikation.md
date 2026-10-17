@@ -94,7 +94,7 @@ eine Aufgabe der späteren Laufzeiteinbindung.
 
 ## Prüfumfang
 
-`test-entry-replication.test.ts` führt elf Prüfungen aus: einen reinen HLC-Fall
+`test/test-entry-replication.test.ts` führt elf Prüfungen aus: einen reinen HLC-Fall
 und je fünf Fälle auf JSONL und SQLite. Sie prüfen simulierte zehn Minuten
 Partition, vertauschte/duplizierte Zustellung, dauerhaften HLC nach Neustart,
 versionierte Löschung, Ablauf ohne Rückfall auf ältere Werte, Add-Wins,
@@ -233,7 +233,7 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
   `entryReplica` gibt es nicht; „aktiv“ heißt aktive Boot-Berechtigung für den Space. Die Uhr-Unsicherheit ist
   ein Konfigurationswert (Standard 1 s); eine gemessene Clock-Health fehlt noch.
 - **Geprüft:** zwei vollständig konfigurierte Hosts mit Gates replizieren `lww` in beide Richtungen und
-  konvergieren; ein bewiesener, aber nicht gepinnter Host bekommt nichts (`test-operations.test.ts`).
+  konvergieren; ein bewiesener, aber nicht gepinnter Host bekommt nichts (`test/test-operations.test.ts`).
 
 **3. Löschung eines Principals (Entwurf):** Die Löschung ist selbst eine replizierte Änderung mit eigener HLC-Version,
 `erase {principal}`. Sie konvergiert wie jede andere Änderung.
@@ -269,7 +269,7 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
 **Stand von Schritt 3:**
 
 - **Baustein** (`erasePrincipal`, `erasureStatus`, `completeErasure`, `changeIdsOwnedBy`): umgesetzt und geprüft
-  (`test-entry-erasure.test.ts`).
+  (`test/test-entry-erasure.test.ts`).
   - Drei Replikate, eines hinkt hinterher; geschwärzte Formen kommen vor der Löschung an; Originale treffen nach
     ihrer Schwärzung ein.
   - Kein älterer Wert lebt wieder auf.

@@ -218,7 +218,7 @@ npm run testbed -- scenario sieve-mobile evaluate   # Exit-Code 0 = bestanden
 mehrere Hosts (alles läuft in einem Container und einem Harness-Prozess; ein Host-„Neustart“ beendet die Worker und öffnet den
 Storage neu, ist aber kein Absturz mitten im Commit) und das Pausieren über ein RunGate (noch nicht implementiert). Das
 Vorbereiten der Aufgaben ist nicht gegen vorzeitige Bearbeitung abgesichert (Betrieb Abschnitt 6, `preparing`). Als
-Regressionstest läuft eine kleine Fassung der TypeScript-Quelle lokal in `npm test` (`test-scenario.test.ts`); auf dem Server
+Regressionstest läuft eine kleine Fassung der TypeScript-Quelle lokal in `npm test` (`test/test-scenario.test.ts`); auf dem Server
 läuft die kompilierte Fassung (`scenarios/sieve-mobile.mjs`).
 
 ## 11. TUI und lesende Space-Inspektion
@@ -346,7 +346,7 @@ die Änderung ankommt (hier nach wenigen Sekunden bis Minuten seit Entfernen; Ze
   Verbrauch ist die Befugnis für immer geschlossen (`BootstrapClosed`).
 - **Schlüssel:** `SpaceKeyDirectory` liest die `PeerKey`-Einträge des Control Space als Verzeichnis für Schicht B; `revokePeerKey` widerruft, das Gate trennt die Verbindungen mit dem Schlüssel beim nächsten Tick.
 
-`test-enroll.test.ts` (Gate, Management-Nachbildung, `MemoryStorage`): Bootstrap und Wiederholung, Ersatz eines verlorenen Tokens, Host-Token und Rollenbegrenzung, kein Klartext-Token im Control Space, in Claims und Ereignissen,
+`test/test-enroll.test.ts` (Gate, Management-Nachbildung, `MemoryStorage`): Bootstrap und Wiederholung, Ersatz eines verlorenen Tokens, Host-Token und Rollenbegrenzung, kein Klartext-Token im Control Space, in Claims und Ereignissen,
 die Reihenfolge der Prüfungen, Ratenbegrenzung, Ablauf, einheitliche Ablehnung, nur ungepaarte Peers, `enrollStatus` nur für die eigene Anfrage, Widerruf eines gepaarten Schlüssels.
 Noch nicht: der Supervisor als Prozess, der `createEnroll` aus einem Command eines gepaarten Admin verarbeitet (5.1), Schlüsselrotation (`rotateKey`) und der Lauf auf echten Geräten.
 
@@ -366,7 +366,7 @@ nicht „wer auf diesem Host ist“; ein Admin, der sich selbst widerruft, verli
 `Bootstrap` verlassen den Host nie, `take`, `stats`, `changes` und `txn` gibt es dort nicht, jeder andere (Member, Admin-Gruppe ohne Beweis, ungepaarte Peers) ist ausgeschlossen. Die Pairing-Pfade (`hello`, `generation`,
 `challenge`, `prove`, `enroll`, `enrollStatus`) bleiben davon unberührt. Reihenfolge der Schichten: Gate → `EnrollmentService` → `ControlAccess` → `ProvingService` → `SpaceService`.
 
-`test-supervisor.test.ts`: Ablauf Command → Supervisor → Result → `enroll` → `revokePeer` über das Gate; Idempotenz; fehlgeschlagene Kommandos; nur Admins mit Beweis; Schreiber ohne Admin-Schlüssel und der Selbstwiderruf; ein Fehler
+`test/test-supervisor.test.ts`: Ablauf Command → Supervisor → Result → `enroll` → `revokePeer` über das Gate; Idempotenz; fehlgeschlagene Kommandos; nur Admins mit Beweis; Schreiber ohne Admin-Schlüssel und der Selbstwiderruf; ein Fehler
 vor dem Commit hinterlässt das Kommando, die Wiederholung ergibt genau ein Ergebnis und eine Wirkung (JSONL und SQLite).
 Noch nicht: `rotateKey` (verlangt den Beweis beider Schlüssel durch das Gerät), das Router-Journal und die Router-Kommandos (`setLimits`, `addMember`, ...), `restoreDataSpace`/`releaseRestored`, die Ausführung als eigener Prozess auf big.
 
