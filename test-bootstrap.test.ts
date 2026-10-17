@@ -105,7 +105,7 @@ test('a read-only copy of a real control store bootstraps and replays with ident
 void PrimarySyncBlocked;
 
 for(const backend of BACKENDS)test(`${backend}: a control-like main store bootstraps, gains a standby, degrades with epoch 2 on every control path`,async()=>{
- const {SqliteRecoveryRegister,assertSyncPrimary,assertSyncStandby,installBootGuard,setStandby,degradeToSingle,SimulatorFencing,fenceHostBoot,openSyncSpace,signedReplicaPeer,socketTransport,provisionFileSigner,RouterLeaseAuthority,MemoryKeyDirectory}=await import('./src/index.ts');
+ const {SqliteRecoveryRegister,assertSyncPrimary,assertSyncStandby,installBootGuard,setStandby,degradeToSingle,SimulatorFencing,fenceHostBoot,openSyncSpace,signedReplicaPeer,socketTransport,provisionFileSigner,RouterLeaseAuthority,MemoryKeyDirectory,createFederationController}=await import('./src/index.ts');
  const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'control-sync-'));
  let listener:Awaited<ReturnType<typeof openSyncSpace>>|undefined;
  try{
@@ -150,6 +150,11 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
   const router=provisionFileSigner(join(dir,'router.json')),keyDir=new MemoryKeyDirectory();keyDir.add({peerId:'router',keyId:router.keyId,algorithm:router.algorithm,publicKey:router.publicKey!,principal:'router',roles:['router'],scope:['*'],state:'active'});
   const leases=new RouterLeaseAuthority({host:h,ctx,controlSpaceId:control.spaceId,authorityId:'authority',peerId:'a',signer:keys.a,keys:keyDir,assertAuthority:async()=>{},controlEpoch:()=>journal.config.primaryEpoch});
   assert.equal((await leases.issue('router',router.keyId)).lease.controlPrimaryEpoch,2,'the router lease carries the journal epoch');
+  // The Root's journal guard compares the lease with the same journal epoch (host-a: the Space document still says 1).
+  const controller=(controlEpoch?:()=>number)=>createFederationController({host:h,ctx,id:'root',journalPartitions:2,controlSpaceId:control.spaceId,authorityId:'authority',routerPeerId:'router',routerSigner:router,controlPeerId:'a',controlSigner:keys.a,controlPublicKey:keys.a.publicKey,
+   transport:()=>{throw new Error('no Member');},memberPin:async()=>{throw new Error('no Member');},lease:()=>leases.issue('router',router.keyId),grant:async()=>{throw new Error('no grant');},assertAuthority:async()=>{},authorizeAdmin:async()=>{},...(controlEpoch?{controlEpoch}:{})});
+  await assert.rejects(controller(),/superseded by Control/,'without the journal epoch the guard sees the Space document epoch');
+  await controller(()=>journal.config.primaryEpoch);
   stop();await home.close(h);void fenceHostBoot;void assertSyncStandby;
   journal.close();reg.close();installed.close();
  }finally{await listener?.close().catch(()=>{});await home.dispose();rmSync(dir,{recursive:true,force:true});}

@@ -39,6 +39,8 @@ export async function createFederationController(o: {
     authorizeAdmin : () => Promise<void>;
     probeStatus?: (memberId:string,target:Readonly<import("./router.ts").TargetBinding>)=>Promise<{revision:number;free:number|null;lag:number|null}>;
     journalPartitions?: number;
+    /** Control epoch of a primary/sync main store (its journal); the Space document epoch otherwise. */
+    controlEpoch?: () => number;
     now?: () => number
 }) {
     const inCommit=new AsyncLocalStorage<boolean>();
@@ -65,7 +67,7 @@ export async function createFederationController(o: {
             throw new Error('RouterLease does not authorize journal owner');
         const control = await o.host.snapshot(NamedSpace, o.controlSpaceId, o.ctx);
         if (!control || control.spaceId!==o.controlSpaceId || control.authorityCounters?.routerEpoch !== l.routerEpoch ||
-            (control.primaryEpoch ?? 1) !== l.controlPrimaryEpoch)
+            (o.controlEpoch?.() ?? control.primaryEpoch ?? 1) !== l.controlPrimaryEpoch)
             throw new Error('RouterLease was superseded by Control');
     };
     const policy = new FederationPolicyAuthority({
