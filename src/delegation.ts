@@ -93,7 +93,9 @@ export class RouterLeaseAuthority {
         signer : Signer;
         keys : KeyDirectory;
         assertAuthority : () => Promise<void>;
-        now?: () => number
+        now?: () => number;
+        /** Control on primary/sync: the control primary epoch comes from its journal, not the Space document. */
+        controlEpoch?: () => number
     };
     constructor(o: RouterLeaseAuthority["o"]) { this.o = o; }
     async issue(routerPeerId: string, routerKeyId: string,
@@ -127,7 +129,7 @@ export class RouterLeaseAuthority {
                 routerEpoch : epoch,
                 controlSpaceId : this.o.controlSpaceId,
                 authorityId : this.o.authorityId,
-                controlPrimaryEpoch : s.primaryEpoch ?? 1,
+                controlPrimaryEpoch : this.o.controlEpoch?.() ?? s.primaryEpoch ?? 1,
                 issuedAt : now,
                 expiresAt : now + 60000
             };
@@ -156,7 +158,7 @@ export class RouterLeaseAuthority {
             authorityId : this.o.authorityId,
             controlSpaceId : this.o.controlSpaceId,
             routerEpoch : s.authorityCounters.routerEpoch,
-            controlPrimaryEpoch : s.primaryEpoch ?? 1,
+            controlPrimaryEpoch : this.o.controlEpoch?.() ?? s.primaryEpoch ?? 1,
             policyVersion,
             issuedAt : now,
             expiresAt : now + 60000

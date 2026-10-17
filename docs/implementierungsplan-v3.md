@@ -176,7 +176,7 @@ Stand der Pakete (Details: [Phase-3-Stand](ap3-replikation.md), dort mit eigener
 | 3.5 setStandby | umgesetzt (leeres Quarantäne-Ziel, vollständiges Nachladen); im echten Zyklus zurück zu nanoi geprüft; Schreibsperre für alle Quellen inklusive Reaper während offener Übergänge, Abbruch mit `abandonTransition`; Snapshot-Bootstrap offen |
 | 3.6 Boot-Merkmal komplett | umgesetzt: `fenced`/`quarantine` per CAS; Boot-Guard bindet primary/sync-Spaces über `replicaConfig` an Rolle, Epoche, Replikatversion und Durability des Journals, `standby` ohne fachliche Zulassung; Wiederzulassung der übrigen Spaces eines gefencten Hosts je Space (`readmitSpace`/`installAdmittedPermit`); mehrere Spaces und Neustart geprüft |
 | 3.7 lww/set | Baustein umgesetzt (HLC, versionierte Tombstones, Add-Wins, Lease-Erneuerung); offen: Kompaktierung, öffentlicher Adapter, Policy-Modi |
-| 3.8 Control Space auf primary/sync | offen |
+| 3.8 Control Space auf primary/sync | lokal umgesetzt: Bootstrap bestehender Stores, Hauptstore auf primary/sync (`mainSync`, `main-sync`, `replica-listen`), Control-Epoche aus dem Journal, Geschwister-Spaces; Promotion des Control-Replikats und Schritt 6 offen; Migration von host-a steht aus |
 
 | AP | Inhalt | Größe |
 |---|---|---|

@@ -103,3 +103,54 @@ test('a read-only copy of a real control store bootstraps and replays with ident
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 void PrimarySyncBlocked;
+
+for(const backend of BACKENDS)test(`${backend}: a control-like main store bootstraps, gains a standby, degrades with epoch 2 on every control path`,async()=>{
+ const {SqliteRecoveryRegister,assertSyncPrimary,assertSyncStandby,installBootGuard,setStandby,degradeToSingle,SimulatorFencing,fenceHostBoot,openSyncSpace,signedReplicaPeer,socketTransport,provisionFileSigner,RouterLeaseAuthority,MemoryKeyDirectory}=await import('./src/index.ts');
+ const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'control-sync-'));
+ let listener:Awaited<ReturnType<typeof openSyncSpace>>|undefined;
+ try{
+  // A control host's main store: default Space plus the control Space.
+  let h=await home.open();const control=await h.commit(tx=>createSpace(tx,'control',1000),ctx);await new PiSpaces(h,ctx,()=>1000).write({type:'Default',fields:{}},null,core.FOREVER);
+  await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'PeerKey',fields:{peerId:'x'}},null,core.FOREVER);
+  const spaces=await listSpaces(h,ctx),def=spaces.find(i=>i.alias==='default')!;await home.close(h);
+  const reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
+  const genesis:PrimarySyncConfig={spaceId:control.spaceId,authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'a',standbyReplica:null,durability:'single'};
+  const permit=(inc:string,role:string,c:PrimarySyncConfig)=>({state:'active',authorityId:'authority',dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'provisioned'});
+  await reg.compareAndSet('boot:a',null,{hostId:'a',state:'active',spaces:{[control.spaceId]:permit(control.incarnation,'primary',genesis),[def.spaceId]:permit(def.incarnation,'primary',genesis)}});
+  await reg.compareAndSet('boot:n',null,{hostId:'n',state:'quarantine',spaces:{[control.spaceId]:{...permit(control.incarnation,'standby',genesis),state:'revoked'}}});
+  // 1. Bootstrap under single durability.
+  const journal=new PrimarySyncJournal(join(home.dir,'main-journal.sqlite'),genesis,{self:'a'});let st=await home.storage();
+  const boot=await bootstrapPrimarySync(st,journal,ctx);assert.ok(boot.revisions>=1);
+  // 2. setStandby to a listen-only replica of the main store (the control standby), siblings follow on a.
+  const keys={a:provisionFileSigner(join(dir,'a.json')),n:provisionFileSigner(join(dir,'n.json'))},port=17561+(backend==='jsonl'?0:1);
+  listener=await openSyncSpace({config:{alias:'control-main',spaceId:control.spaceId,incarnation:control.incarnation,dir:join(dir,'replica'),genesis,port,peers:[{hostId:'a',algorithm:'ed25519',publicKey:keys.a.publicKey,ip:'127.0.0.2'}]},hostId:'n',authorityId:'authority',bindIp:'127.0.0.3',signer:keys.n,external:reg,installed:new SqliteRecoveryRegister(join(dir,'n-installed.sqlite')),ctx,openStorage:async()=>{throw Error('unused');},openHarness:async()=>{throw Error('unused');},listenOnly:true});
+  const t=socketTransport({host:'127.0.0.3',port},{localAddress:'127.0.0.2'}),peer=signedReplicaPeer({transport:t,signer:keys.a,self:'a',remote:{hostId:'n',algorithm:'ed25519',publicKey:keys.n.publicKey}});
+  const set=await setStandby({storage:st,journal,register:reg,hostId:'a',dataIncarnation:control.incarnation,ctx,transitionId:'control-standby',target:peer,targetDataIncarnation:control.incarnation,siblingSpaces:[def.spaceId]});
+  assert.equal(set.config.standbyReplica,'n');assert.equal(listener.journal.head().hash,journal.head().hash,'the control standby holds the whole chain incl. bootstrap');
+  await st.close(ctx);
+  // 3. The main Harness runs on primary/sync with the boot guard bound for every Space of the store.
+  const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),journal,peer,{assertPrimary:assertSyncPrimary(reg,'a',journal)});
+  for(const sp of [control,def]){const p=(await reg.get<any>('boot:a'))!.value.spaces[sp.spaceId];await installed.compareAndSet(`installed:a:${sp.spaceId}`,(await installed.get(`installed:a:${sp.spaceId}`))?.version??null,p);}
+  h=await home.open();let stop=installBootGuard(h,ctx,{hostId:'a',authorityId:'authority',external:reg,installed,replicaConfig:()=>journal.config});
+  await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:1}},null,core.FOREVER);await new PiSpaces(h,ctx,()=>1000).write({type:'Default',fields:{n:2}},null,core.FOREVER);
+  assert.equal(listener.journal.head().hash,journal.head().hash,'every control write is confirmed by the standby');
+  stop();await home.close(h);
+  // 4. The standby is lost: degradeToSingle with a fencing proof; both Spaces follow to epoch 2.
+  await listener.close();listener=undefined;t.close();
+  const sim=new SimulatorFencing(),proof=await sim.fence('n','control standby lost');st=await raw();
+  const d=await degradeToSingle({storage:st,journal,register:reg,hostId:'a',dataIncarnation:control.incarnation,ctx,recoveryId:'control-degrade',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:2,adapter:sim,proof,allowSimulator:true,siblingSpaces:[def.spaceId]});await st.close(ctx);
+  assert.equal(d.config.primaryEpoch,2);const b=(await reg.get<any>('boot:a'))!.value;
+  for(const id of [control.spaceId,def.spaceId])assert.deepEqual({e:b.spaces[id].primaryEpoch,v:b.spaces[id].replicaConfigVersion,d:b.spaces[id].durability,r:b.spaces[id].role},{e:2,v:3,d:'single',r:'primary'},`permit of ${id} follows`);
+  assert.equal(b.spaces[def.spaceId].dataIncarnation,def.incarnation,'a sibling keeps its own incarnation');
+  // 5. Every control path uses the journal epoch: guard, lease and hello.
+  home.storage=async()=>primarySyncStorage(await raw(),journal,null,{assertPrimary:assertSyncPrimary(reg,'a',journal)});
+  for(const sp of [control,def]){const p=(await reg.get<any>('boot:a'))!.value.spaces[sp.spaceId],cur=await installed.get(`installed:a:${sp.spaceId}`);await installed.compareAndSet(`installed:a:${sp.spaceId}`,cur!.version,p);}
+  h=await home.open();stop=installBootGuard(h,ctx,{hostId:'a',authorityId:'authority',external:reg,installed,replicaConfig:()=>journal.config});
+  await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:3}},null,core.FOREVER);
+  const router=provisionFileSigner(join(dir,'router.json')),keyDir=new MemoryKeyDirectory();keyDir.add({peerId:'router',keyId:router.keyId,algorithm:router.algorithm,publicKey:router.publicKey!,principal:'router',roles:['router'],scope:['*'],state:'active'});
+  const leases=new RouterLeaseAuthority({host:h,ctx,controlSpaceId:control.spaceId,authorityId:'authority',peerId:'a',signer:keys.a,keys:keyDir,assertAuthority:async()=>{},controlEpoch:()=>journal.config.primaryEpoch});
+  assert.equal((await leases.issue('router',router.keyId)).lease.controlPrimaryEpoch,2,'the router lease carries the journal epoch');
+  stop();await home.close(h);void fenceHostBoot;void assertSyncStandby;
+  journal.close();reg.close();installed.close();
+ }finally{await listener?.close().catch(()=>{});await home.dispose();rmSync(dir,{recursive:true,force:true});}
+});

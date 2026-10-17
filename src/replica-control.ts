@@ -113,7 +113,9 @@ function begin(journal: PrimarySyncJournal, id: string, kind: string, args: Json
 	if (rec.phase === "abandoned") throw new ReplicaTransitionBlocked("transition was abandoned; use a new ID");
 	return rec;
 }
-type Common = { storage: Storage; journal: PrimarySyncJournal; register: RecoveryRegister; installed?: RecoveryRegister; hostId: string; dataIncarnation: string; ctx: Context; now?: () => number; allowSimulator?: boolean };
+type Common = { storage: Storage; journal: PrimarySyncJournal; register: RecoveryRegister; installed?: RecoveryRegister; hostId: string; dataIncarnation: string; ctx: Context; now?: () => number; allowSimulator?: boolean;
+	/** Other Spaces in the same replicated store (a host's main store): their permits follow on this host. */
+	siblingSpaces?: string[] };
 /**
  * Continues a configuration entry of this transition that was sealed before a crash: applies it once (after `accept`
  * re-delivered it where a standby takes part). Returns its configuration, or null when no such entry exists.
@@ -129,6 +131,13 @@ async function resumeSealed(o: Common, id: string, assert: () => Promise<void>, 
 }
 async function alignPermit(o: Common, c: PrimarySyncConfig, role: "primary" | "standby", id: string, host?: { hostState?: "active"; requireHost?: Array<HostBootState["state"]> }, hostId = o.hostId) {
 	const permit = permitFor(c, role, o.dataIncarnation, id);
+	// Sibling Spaces of a replicated main store keep their own data incarnation and follow role and versions.
+	if (hostId === o.hostId) for (const sibling of o.siblingSpaces ?? []) if (sibling !== c.spaceId) await casBoot(o.register, hostId, b => {
+		const p = b?.spaces[sibling];
+		if (!b || !p) throw new ReplicaTransitionBlocked(`${hostId} has no permit for sibling Space ${sibling}`);
+		const next = { ...p, state: "active" as const, role, authorityId: c.authorityId, primaryEpoch: c.primaryEpoch, replicaConfigVersion: c.replicaConfigVersion, durability: durabilityOf(c), transitionId: id };
+		return permitEq(p, next) ? null : { ...b, spaces: { ...b.spaces, [sibling]: next }, transitionId: id };
+	});
 	await setPermit(o.register, hostId, c.spaceId, permit, host);
 	if (o.installed && hostId === o.hostId) {
 		const key = `installed:${hostId}:${c.spaceId}`, cur = await o.installed.get(key);

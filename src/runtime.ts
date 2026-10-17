@@ -30,7 +30,7 @@ import type { RecoveryRegister } from "./recovery-register.ts";
 
 export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	hostId: string; authorityId: string; keys: KeyDirectory; verifier: GrantVerifier;
-	boot?: { external: RecoveryRegister; installed: RecoveryRegister };
+	boot?: { external: RecoveryRegister; installed: RecoveryRegister; /** main store on primary/sync: its journal configuration for every Space in it */ replicaConfig?: (spaceId: string) => import("./primary-sync.ts").PrimarySyncConfig | null };
 	/**
 	 * primary/sync Spaces, each in its own dedicated store (one commit history per Space, v3 7.2): calls naming the
 	 * Space go to a service over that Harness, with its own delegation verifier; boot guard and replica wiring are the
@@ -57,7 +57,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 	const stopBoot = o.boot ? installBootGuard(host, ctx, { ...o.boot, hostId: o.hostId, authorityId: o.authorityId }) : undefined;
 	const identity = new GateIdentity();
 	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now,
-		epochForSpace: async space => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info ? (await snapshotSpace(host, info.spaceId, ctx))?.primaryEpoch ?? 1 : 0; },
+		epochForSpace: async space => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info ? o.boot?.replicaConfig?.(info.spaceId)?.primaryEpoch ?? (await snapshotSpace(host, info.spaceId, ctx))?.primaryEpoch ?? 1 : 0; },
 		authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?o.delegation?await o.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await o.refreshPolicy?.();auth.check();return auth;} });
 	const syncServices = new Map<string, SpaceService>(), mainSpaces = await listSpaces(host, ctx);
 	for (const sp of o.syncSpaces ?? []) {

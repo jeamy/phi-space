@@ -164,6 +164,46 @@ liefert.
 Invariante: Ein Host, der gefenct werden kann, schreibt nie seinen eigenen Boot-Eintrag. Er liest ihn nur und
 installiert lokal.
 
+## Control Space auf primary/sync (3.8, lokal umgesetzt)
+
+**Hauptstore als Sync-Store:** Ein Control-Host kann seinen ganzen Hauptstore als primary/sync betreiben
+(`mainSync` in der Konfiguration). Die Kette deckt damit jeden Space dieses Stores ab; auf host-a sind das der
+Standard-Space und der Control Space.
+
+**Daemon:**
+
+- `run` öffnet die Haupt-Harness über `primarySyncStorage`, nach Klärung eines offenen Kandidaten.
+- `main-sync` ist das Werkzeug bei gestopptem Dienst: `bootstrap`, `status` mit Store-Prüfsumme, `degrade` und
+  `set-standby`.
+- `replica-listen` betreibt einen Control-Standby nur mit Journal und signiertem Listener; er bedient nichts.
+- Andere Modi weisen einen Sync-Hauptstore ab, weil sie das Journal umgehen würden.
+
+**Epochen:** Router-Lease, Epochen-Hinweis, Root-Prüfung, `hello` und Delegationsprüfer nehmen die
+Control-Epoche aus dem Journal (`controlEpoch`, `boot.replicaConfig`). Das Space-Dokument behält seine
+Anlage-Epoche; ohne das wäre nach `degradeToSingle` die Router-Lease ungültig.
+
+**Geschwister-Spaces:** Ein Übergang zieht die Berechtigungen aller Spaces des Stores nach (`siblingSpaces`); jeder
+behält seine eigene Dateninkarnation.
+
+**Grenzen:**
+
+- **Promotion eines Control-Replikats** wird abgewiesen. big ist nie Fencing-Ziel, und für den Control-Host gäbe es
+  nur einen Container-Fencing-Adapter. Außerdem fehlen dem neuen Host Root-Lease-Datei und eigene Router- und
+  Host-Schlüssel.
+- **Schritt 6** (Policy im selben Commit) ist nicht umgesetzt. `degrade` und `set-standby` werden abgewiesen,
+  solange der Store eine Routing-Policy enthält; host-a hat keine.
+- **Kopplung:** Mit Standby braucht jeder Control-Write dessen ACK. Fällt der Standby aus, stehen Enrollments,
+  Admin-Commands und Routing-Änderungen bis zu `degradeToSingle`.
+- **Kein Rückweg:** Ein Bootstrap lässt sich nicht rückgängig machen. Zurück geht es nur über die Kopie vor der
+  Migration, mit Verlust späterer Control-Writes, oder dauerhaft im Single-Betrieb mit wachsendem Journal.
+
+**Messung auf der Kopie von host-a:** 114 Control-Commits in sechs Tagen, Revisionen von 1–3 KB. Das Journal-Budget
+von 64 MiB reicht damit grob für Jahre.
+
+**Geprüft** (`test-bootstrap.test.ts`, beide Backends) mit einem Control-artigen Hauptstore: Bootstrap,
+`setStandby` an einen Listener, synchron bestätigte Control-Writes, `degradeToSingle` mit Geschwister-Space,
+danach Epoche 2 in Berechtigungen, Boot-Guard und Router-Lease.
+
 ## ReplicaConfigNotice (v3 §5.3.1 Schritt 5)
 
 Nach `promote`, `degradeToSingle` oder `setStandby` bietet der Primary die neue Replikatkonfiguration als

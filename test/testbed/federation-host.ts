@@ -7,7 +7,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, openSync, closeSync
 import { join } from "node:path";
 import {createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
-import {ProvingService,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
+import {ProvingService,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
 import { provisionFileSigner, loadFileSigner, privateFile, PiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
 const [mode, home="/data/phase1b"] = process.argv.slice(2);
 mkdirSync(home,{recursive:true,mode:0o700});
@@ -40,7 +40,66 @@ const bootId=(()=>{try{return readFileSync('/proc/sys/kernel/random/boot_id','ut
 const lock=join(home,"owner.lock");
 if(existsSync(lock)&&bootId){try{const old=JSON.parse(privateFile(lock).toString());if(old.bootId&&old.bootId!==bootId){unlinkSync(lock);console.error(JSON.stringify({staleOwnerLockCleared:{pid:old.pid,mode:old.mode,previousBoot:old.bootId}}));}}catch(e){if(!(e instanceof SyntaxError))throw e;}}
 const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode,bootId,startTime})+'\n');closeSync(fd);
-const h=await Harness.open(await openNodeSqliteStorage(join(home,"harness.sqlite")),{models:createModels(),registry:createRegistry()},ctx);
+const releaseLock=()=>{try{unlinkSync(lock);}catch{}};
+// 3.8: a host's main store on primary/sync (the control host). Only `run` serves it, `main-sync` administers it with
+// the daemon stopped; every other mode would bypass its journal and is refused.
+const mainCfg=existsSync(configFile)?JSON.parse(privateFile(configFile).toString()).mainSync:undefined;
+if(mode==="replica-listen"){
+ // A replica of another host's main store (control standby): journal and signed listener only, no Harness, no gate.
+ try{
+  const rc=JSON.parse(privateFile(join(home,"replica.json")).toString()),external=new SyncRegister(rc.registerTls);
+  const sp=await openSyncSpace({config:rc.replica,hostId:rc.hostId,authorityId:rc.replica.genesis.authorityId,bindIp:rc.listen.host,signer:loadFileSigner(rc.keyFile),external,installed,ctx,openStorage:p=>openNodeSqliteStorage(p),openHarness:async()=>{throw new Error("no Harness on a replica listener");},listenOnly:true});
+  console.log(JSON.stringify({replicaListening:true,alias:rc.replica.alias,head:sp.journal.head()}));
+  await new Promise<void>(resolve=>{process.once("SIGTERM",()=>resolve());process.once("SIGINT",()=>resolve());});
+  await sp.close();external.close();
+ }finally{installed.close();releaseLock();}
+ process.exit(0);
+}
+if(mode==="main-sync"){
+ // Operator tool for the main store on primary/sync, daemon stopped: bootstrap, status, degrade, set-standby.
+ let result:any;
+ try{
+  if(!mainCfg)throw new Error("no mainSync provisioning");
+  let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>65536)throw new Error("main-sync input exceeds budget");}
+  const q=JSON.parse(text),cfg=JSON.parse(privateFile(configFile).toString()),reader=new SyncRegister(cfg.registerTls);
+  const journal=new PrimarySyncJournal(join(mainCfg.dir,"journal.sqlite"),mainCfg.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)}),st=await openNodeSqliteStorage(join(home,"harness.sqlite"));
+  try{
+   const status=()=>({head:journal.head(),applied:journal.appliedRevision,config:journal.config,open:journal.openTransitionIds()});
+   if(q.op==="status")result={...status(),...(q.digest?{storeHash:(await captureStore(st,ctx)).digest}:{})};
+   else if(q.op==="bootstrap")result={...(await bootstrapPrimarySync(st,journal,ctx)),...status()};
+   else if(["degrade","set-standby"].includes(q.op)){
+    // Step 6 (the control policy in the same commit) is not implemented: refuse while this store holds a routing policy.
+    const routing=await st.findDocument({kind:"pi-spaces.federation-routing",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx);
+    if(routing&&(await st.document(routing.id,"current",ctx))?.value?.policy)throw new Error("this control store holds a routing policy; the policy step of the transition is not implemented");
+    const register=new SyncRegister(q.controlRegister),siblings:string[]=q.siblings??[];
+    try{
+     const base={storage:st,journal,register,hostId:cfg.hostId,dataIncarnation:q.dataIncarnation,ctx,siblingSpaces:siblings};
+     if(q.op==="degrade"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(journal.config.standbyReplica??"",`degrade ${q.tid}`);
+      result={...(await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof})),proof:{kind:proof.kind,evidence:proof.evidence}};}
+     else{const peer=mainCfg.peers.find((x:any)=>x.hostId===q.target);if(!peer)throw new Error("unpinned target");const t=socketTransport({host:peer.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20});
+      try{result=await setStandby({...base,transitionId:q.tid,target:signedReplicaPeer({transport:t,signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:peer}),targetDataIncarnation:q.dataIncarnation});}finally{t.close();}}
+    }finally{register.close();}
+   }else if(q.op==="promote")throw new Error("promoting a control replica needs a fencing adapter for the control host; not supported");
+   else throw new Error("unknown main-sync op");
+  }finally{await st.close(ctx);journal.close();reader.close();}
+  console.log(JSON.stringify(result));
+ }finally{installed.close();releaseLock();}
+ process.exit(0);
+}
+if(mainCfg&&mode!=="run")throw new Error("a primary/sync main store opens only in run or main-sync");
+let mainJournal:PrimarySyncJournal|undefined;
+const openMain=async()=>{
+ const cfg=JSON.parse(privateFile(configFile).toString()),external=new SyncRegister(cfg.registerTls);
+ mainJournal=new PrimarySyncJournal(join(mainCfg.dir,"journal.sqlite"),mainCfg.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(external,cfg.hostId)});
+ if(mainJournal.config.primaryReplica!==cfg.hostId)throw new BootBlocked("this host is not the primary of its main store");
+ const standby=mainJournal.config.durability==="single"?undefined:mainCfg.peers.find((x:any)=>x.hostId===mainJournal!.config.standbyReplica);
+ if(mainJournal.config.durability!=="single"&&!standby)throw new BootBlocked("the standby of the main store is not provisioned");
+ const peer=standby?signedReplicaPeer({transport:socketTransport({host:standby.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20}),signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:standby}):null;
+ const raw=await openNodeSqliteStorage(join(home,"harness.sqlite")),assert=assertSyncPrimary(external,cfg.hostId,mainJournal);
+ await recoverPrimarySync(raw,mainJournal,peer,ctx,assert);
+ return Harness.open(primarySyncStorage(raw,mainJournal,peer,{assertPrimary:assert}),{models:createModels(),registry:createRegistry()},ctx);
+};
+const h=mainCfg?await openMain():await Harness.open(await openNodeSqliteStorage(join(home,"harness.sqlite")),{models:createModels(),registry:createRegistry()},ctx);
 let runtime:Awaited<ReturnType<typeof startConfiguredFederation>>|undefined;
 let recovery:Awaited<ReturnType<typeof startRecoveryOnly>>|undefined;
 const cleanup=async()=>{await recovery?.close();await runtime?.close();await h.close(ctx);installed.close();unlinkSync(lock);};
@@ -96,7 +155,7 @@ try{
   }
 
 
-  const syncFactories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(storage:any)=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx)};
+  const syncFactories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(storage:any)=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx),...(mainJournal?{mainReplica:()=>mainJournal!.config}:{})};
   let quarantine:Awaited<ReturnType<typeof startQuarantineReplicas>>|undefined;
   if(JSON.parse(privateFile(configFile).toString()).syncSpaces?.length){try{quarantine=await startQuarantineReplicas(ctx,configFile,syncFactories);}catch(e){if(!(e instanceof BootBlocked)||!/not in quarantine/.test(e.message))throw e;}}
   if(quarantine){
