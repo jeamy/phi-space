@@ -63,6 +63,8 @@ export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<St
 	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
 	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */
 	mainTransition?: () => ReturnType<typeof import("./primary-sync.ts").lastConfigTransition>;
+	/** NotCommitted evidence of the main store's journal (v3 6.2, promotionEvidence) for every Space in it. */
+	mainPromotionProof?: (requestEpoch: number) => { hash: string } | null;
 	/** How often a running host checks the register for a control host change (default 15 s). */
 	followIntervalMs?: number };
 export async function startConfiguredFederation(host: Harness, ctx: Context, configFile: string, factories?: SyncSpaceFactories) {
@@ -162,7 +164,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 			const peers = new Set((er.peers ?? []).map(p => p.peerId));
 			if (peers.size) entryExport = { peers, describe: async () => await controller.describeStream() as unknown as import("./core.ts").Json, changes: async (after, maxBytes) => await controller.streamChanges(after, maxBytes) as unknown as import("./core.ts").Json };
 		}
-		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, unresolvedSyncSpaces, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
+		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, unresolvedSyncSpaces, ...(factories?.mainPromotionProof ? { promotionProof: async (_space: string | undefined, epoch: number) => factories.mainPromotionProof!(epoch) } : {}), membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
 		if(syncSpaces.length)publishNotices();
 		for(const sp of syncSpaces)if(!sp.harness&&sp.role()==="primary"&&sealedOf(sp))resolveSealed(sp);
 		// The reaper can seal a candidate too, without any call noticing it.

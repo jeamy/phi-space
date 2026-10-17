@@ -46,6 +46,8 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 		onSealed?: () => void; sealedCandidate?: () => { revision: number; hash: string } | null;
 		/** NotCommitted evidence of this Space's journal (v3 6.2). */
 		promotionProof?: (space: string | undefined, requestEpoch: number) => Promise<{ hash: string } | null> }>;
+	/** Main store on primary/sync: NotCommitted evidence of its journal for the Spaces in it (v3 6.2). */
+	promotionProof?: (space: string | undefined, requestEpoch: number) => Promise<{ hash: string } | null>;
 	/** primary/sync Spaces whose sealed candidate is not resolved yet: answered with `CommitSealed` until setSyncSpace. */
 	unresolvedSyncSpaces?: UnresolvedSyncSpace[];
 	/** Explicit fixture mode. Never set in a deployed host. */
@@ -69,7 +71,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 	if (!o.boot && !o.unsafeSkipBootGuardForTests) throw new Error("a federation host requires independent boot authorization and local installation");
 	const stopBoot = o.boot ? installBootGuard(host, ctx, { ...o.boot, hostId: o.hostId, authorityId: o.authorityId }) : undefined;
 	const identity = new GateIdentity();
-	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, ...(o.merge ? { merge: o.merge } : {}),
+	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, ...(o.merge ? { merge: o.merge } : {}), ...(o.promotionProof ? { promotionProof: o.promotionProof } : {}),
 		epochForSpace: async space => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info ? o.boot?.replicaConfig?.(info.spaceId)?.primaryEpoch ?? (await snapshotSpace(host, info.spaceId, ctx))?.primaryEpoch ?? 1 : 0; },
 		authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?o.delegation?await o.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await o.refreshPolicy?.();auth.check();return auth;} });
 	const syncServices = new Map<string, SpaceService | { handle: (c: unknown, conn: Connection) => Promise<Reply>; handleText: (t: string, conn: Connection) => Promise<string> }>(), mainSpaces = await listSpaces(host, ctx);

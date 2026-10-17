@@ -175,8 +175,9 @@ dauerhaftes `NotCommitted`; erst dann darf der Client mit einer neuen ID beginne
   - `test/test-delegation.test.ts` prüft denselben Fall über eine signierte Router-Delegation nach einem
     Epochenwechsel: ohne Nachweis `IncarnationChanged`, mit Nachweis `NotCommitted`; der verspätete Originalaufruf
     bleibt ohne Wirkung, der Router-Beleg ist `failed`.
-- **Offen:**
-  - Für den Haupt-Store mit `mainSync` (Control Space) ist der Nachweis noch nicht angeschlossen, nur für primary/sync-Spaces.
+- **Haupt-Store mit `mainSync`** (Control Space): Der Daemon reicht den Nachweis seines Journals über die Factory
+  `mainPromotionProof` an den Hauptdienst (`startFederationHost({ promotionProof })`). Diese Verdrahtung hat keinen
+  eigenen Test; die Entscheidung selbst prüfen die Tests oben.
 
 ## Einbindung und noch offene Gesamtgarantien
 
@@ -186,8 +187,7 @@ Replikatversionen brauchen noch eine passende Trennung beziehungsweise einen
 vollständigen atomaren Domain-Vertrag. Die vorhandenen produktiven Stores werden
 nicht nachträglich ungeprüft umschlossen.
 
-Offen bleiben Boot-/Löschintegration einschließlich des neuen Journals und `NotCommitted` für den Haupt-Store mit
-`mainSync`. Diensttransport, Bootstrap bestehender Stores, reales Fencing und Control-/Router-Umschaltung
+Offen bleibt die Boot-/Löschintegration einschließlich des neuen Journals. Diensttransport, Bootstrap bestehender Stores, reales Fencing und Control-/Router-Umschaltung
 sind inzwischen umgesetzt und echt gelaufen. Konfigurationsübergänge, `setStandby`,
 degradeToSingle und Promotion sind seit 2026-10-16 mit Simulator-Adapter
 vorhanden ([Replikatsteuerung](ap3-replica-control.md)). Deshalb bleiben produktive Sync-Regeln durch den bestehenden
