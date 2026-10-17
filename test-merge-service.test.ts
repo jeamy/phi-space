@@ -6,7 +6,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { SpaceService, StaticIdentity, DEFAULT_POLICY, EntryReplicationController, listSpaces, type Reply, type Call } from "./src/index.ts";
 import { ctx } from "./test/support/persistent.ts";
 
-const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] } });
+const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-b": { principal: { peerId: "peer-b" }, roles: ["member"] } });
 const ok = (r: Reply): any => { assert.ok(r.ok, JSON.stringify(r)); return (r as { ok: true; result: unknown }).result; };
 const err = (r: Reply, code: string) => assert.ok(!r.ok && r.error.code === code, JSON.stringify(r));
 
@@ -39,6 +39,12 @@ test("merge types write, read and count through the entry replication controller
 	err(await call("wait", { template: { type: "Sensor" }, timeoutMs: 1000 }), "MergeTypeNotExclusive");
 	err(await call("write", { entry: { type: "Fact", fields: {} }, txn: "t1" }), "MergeTypeNotExclusive");
 	err(await call("lease", { id: w1.id, leaseMs: 1000 }), "MergeTypeNotExclusive");
+	// The same request ID from another principal (and another generation) is another request, not a conflict.
+	const gb = ok(await s.handle({ method: "generation" }, { peerId: "peer-b" }));
+	const wb = ok(await s.handle({ method: "write", request: { generation: gb.generation, requestId: "put-1" }, args: { entry: { type: "Sensor", fields: { sensorId: "s9", v: 9 } } } } as Call, { peerId: "peer-b" }));
+	assert.notEqual(wb.id, w1.id);
+	const g2 = ok(await s.handle({ method: "generation" }, { peerId: "peer-a" }));
+	assert.notEqual(ok(await s.handle({ method: "write", request: { generation: g2.generation, requestId: "put-1" }, args: { entry: { type: "Sensor", fields: { sensorId: "s8", v: 8 } } } } as Call, { peerId: "peer-a" })).id, w1.id);
 	// Other types stay core entries.
 	ok(await call("write", { entry: { type: "Job", fields: { n: 1 } } }));
 	assert.equal(ok(await call("count", { template: { type: "Job" } })).value, 1);

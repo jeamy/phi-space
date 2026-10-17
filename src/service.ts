@@ -9,6 +9,8 @@ import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semanti
 import { awaitWithContext } from "@earendil-works/chord/context";
 import { ReplicationConflict } from "./entry-replication.ts";
 import { ReplicationClockError } from "./replication-clock.ts";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "./canonical.ts";
 import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
@@ -380,7 +382,9 @@ export class SpaceService {
 			this.checkTypes(c.grant, [type], `type ${type}`);
 			if (!c.request) throw new Bad("a merge write needs a request ID");
 			const ms = duration(a.leaseMs, "leaseMs", core.ANY), expiresAt = ms === core.ANY || ms >= core.FOREVER ? null : this.now() + ms;
-			const change = await merge.controller.mutate(c.request.requestId, { kind: r.variant === "lww" ? "put" : "add", type, fields: a.entry.fields as Record<string, Json>, owner: { ...c.id.principal }, expiresAt } as never);
+			// A request is identified by principal, generation and request ID (claims); the controller gets that identity.
+			const changeRequest = createHash("sha256").update(canonicalJson([c.id.principal, c.request.generation, c.request.requestId] as unknown as Json)).digest("hex");
+			const change = await merge.controller.mutate(changeRequest, { kind: r.variant === "lww" ? "put" : "add", type, fields: a.entry.fields as Record<string, Json>, owner: { ...c.id.principal }, expiresAt } as never);
 			return { id: entryChangeId(change), expires: expiresAt ?? core.FOREVER, replicated: true };
 		}
 		if (method === "read" || method === "take" || method === "readAll" || method === "count" || method === "wait") {
