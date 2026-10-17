@@ -143,7 +143,8 @@ export function fileTokenProvider(path: string, o: { fetch?: Fetch; oidc?: strin
 // --- mutual-TLS service: only operator certificates may fence, verify or release. ---
 const BUDGET = 64 * 1024;
 const validProof = (p: any): p is FenceProof => !!p && typeof p === "object" && typeof p.hostId === "string" && typeof p.kind === "string" && typeof p.observedAt === "number" && typeof p.restartLocked === "boolean";
-export async function serveFencing(adapter: FencingAdapter, o: RegisterTlsIdentity & { host: string; port: number; peers: Record<string, { operator?: boolean }> }) {
+/** `allowAddresses`: optional source addresses; any other connection is dropped before the TLS handshake. */
+export async function serveFencing(adapter: FencingAdapter, o: RegisterTlsIdentity & { host: string; port: number; peers: Record<string, { operator?: boolean }>; allowAddresses?: string[] }) {
 	const open = new Set<tls.TLSSocket>();let chain: Promise<unknown> = Promise.resolve();
 	const serial = <T>(fn: () => Promise<T>) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
 	const server = tls.createServer({ ca: privateFile(o.caFile), cert: privateFile(o.certFile), key: privateFile(o.keyFile), requestCert: true, rejectUnauthorized: true, minVersion: "TLSv1.3", handshakeTimeout: 4000 }, socket => {
@@ -168,6 +169,7 @@ export async function serveFencing(adapter: FencingAdapter, o: RegisterTlsIdenti
 		});
 	});
 	server.on("tlsClientError", () => {});
+	if (o.allowAddresses) { const allow = new Set(o.allowAddresses); server.prependListener("connection", s => { if (!allow.has(String(s.remoteAddress).replace(/^::ffff:/, ""))) s.destroy(); }); }
 	await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(o.port, o.host, () => { server.removeListener("error", reject); resolve(); }); });
 	return { address: () => server.address(), close: async () => { for (const s of open) s.destroy(); await new Promise<void>((res, rej) => server.close(e => e ? rej(e) : res())); } };
 }

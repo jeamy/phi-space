@@ -100,5 +100,9 @@ test('fencing service over mutual TLS serves only operator certificates; the cli
   // A remote cloud proof is not accepted by a simulator adapter.
   const sim=new SimulatorFencing();assert.equal(await sim.verify(proof as FenceProof),false);
   await op.release('nano-test');assert.equal(t.servers[964249].state,'RUNNING');
+  // A source allowlist drops every other address before TLS, even with the operator certificate.
+  const only=await serveFencing(adapter,{...c.identity('server'),host:'127.0.0.1',port:0,peers:{[c.fingerprint('operator')]:{operator:true}},allowAddresses:['127.0.0.2']});
+  try{const before=t.calls.length;await assert.rejects(new TlsFencing({...c.identity('operator'),host:'127.0.0.1',port:(only.address() as {port:number}).port,serverName:'127.0.0.1',timeoutMs:5000}).fence('nano-test','x'));assert.equal(t.calls.length,before);}
+  finally{await only.close();}
  }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
 });
