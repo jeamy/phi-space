@@ -102,9 +102,11 @@ if(mode==="main-sync"){
     const register=new SyncRegister(q.controlRegister),siblings:string[]=q.siblings??[];
     try{
      const base={storage:st,journal,register,hostId:cfg.hostId,dataIncarnation:q.dataIncarnation,ctx,siblingSpaces:siblings};
-     if(q.op==="promote"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(journal.config.primaryReplica,`promote ${q.tid}`);
+     // The replica to fence is the other one: before a promotion the primary, once it is applied (resumed) the standby.
+     const other=(n:string|null|undefined)=>{if(!n||n===cfg.hostId)throw new Error("refusing to fence this host itself");return n;};
+     if(q.op==="promote"){const adapter=new TlsFencing(q.fencing),c=journal.config,proof=await adapter.fence(other(c.primaryReplica===cfg.hostId?c.standbyReplica:c.primaryReplica),`promote ${q.tid}`);
       result={...(await promote({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof})),proof:{kind:proof.kind,evidence:proof.evidence}};}
-     else if(q.op==="degrade"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(journal.config.standbyReplica??"",`degrade ${q.tid}`);
+     else if(q.op==="degrade"){const adapter=new TlsFencing(q.fencing),proof=await adapter.fence(other(journal.config.standbyReplica),`degrade ${q.tid}`);
       result={...(await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof})),proof:{kind:proof.kind,evidence:proof.evidence}};}
      else{const peer=mainCfg.peers.find((x:any)=>x.hostId===q.target);if(!peer)throw new Error("unpinned target");const t=socketTransport({host:peer.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20});
       try{result=await setStandby({...base,transitionId:q.tid,target:signedReplicaPeer({transport:t,signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:peer}),targetDataIncarnation:q.dataIncarnation});}finally{t.close();}}
