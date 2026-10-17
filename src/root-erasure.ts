@@ -40,7 +40,8 @@ export class RootHistoryErasure {
    const layout=await tx.doc(FederationJournalLayout,this.o.federationId,null);if(layout.partitions!==op.partitions||layout.reconciliation||hash([...new Set([this.o.federationId,...layout.routerIds??[]])])!==hash(op.routerIds))throw new RoutingConflict('Root erasure topology changed; remain fenced');
    const own=(p:Principal)=>hash(p)===op.subjectHash;
    const remember=async(entryId:string)=>{const d=hash(entryId);(await tx.doc(ErasedEntryDigests,evidenceKey(this.o.federationId,id,d),null)).digests[d]=true;};
-   const affected=async(v:any):Promise<boolean>=>{if(!v||typeof v!=='object')return false;if(typeof v.id==='string'){const d=hash(v.id);if((await tx.doc(ErasedEntryDigests,evidenceKey(this.o.federationId,id,d),null)).digests[d])return true;}for(const x of Object.values(v))if(await affected(x))return true;return false;};
+   // A replicated (lww/set) view names its owner: matched directly, since compaction may have removed its change ID from the evidence.
+   const affected=async(v:any):Promise<boolean>=>{if(!v||typeof v!=='object')return false;if(v.replicated===true&&v.owner&&typeof v.owner==='object'&&own(v.owner))return true;if(typeof v.id==='string'){const d=hash(v.id);if((await tx.doc(ErasedEntryDigests,evidenceKey(this.o.federationId,id,d),null)).digests[d])return true;}for(const x of Object.values(v))if(await affected(x))return true;return false;};
    if(op.phase==='collecting'){
     const d=await tx.doc(FederationOperations,parentJournalKey(this.o.federationId,op.partitions,op.partition),null);for(const p of Object.values(d.operations))if(!p.erased&&own(p.principal)&&p.kind==='write'&&typeof (p.result as any)?.id==='string')await remember((p.result as any).id);
     op.partition++;if(op.partition===op.partitions){op.phase='children';op.partition=0;op.cursor=0;}

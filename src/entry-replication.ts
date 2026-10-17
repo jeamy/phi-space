@@ -511,6 +511,7 @@ export class EntryReplicationController {
   if(!id(requestId))throw new ReplicationConflict('invalid maintenance request');await this.check('import');return this.o.host.commit(async tx=>{
    await this.check('import');const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null),job=maintenance.job;
    if(!job||job.requestId!==requestId)throw new ReplicationConflict('unknown maintenance request');
+   if(job.phase==='aborting')throw new ReplicationConflict('maintenance generation is being aborted');
    const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);this.bindManifest(job.manifest);
    const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),replacement=ledger.transfers[job.manifest.id];
    if(!replacement)throw new ReplicationConflict('maintenance receipt missing');
@@ -541,6 +542,31 @@ export class EntryReplicationController {
    }
    await this.check('import');return copy(job);
   },this.o.ctx);
+ }
+ /**
+  * Aborts a generation that is still copying, e.g. because an erase changed its source prefix: one staged page per call,
+  * then the receipt is aborted and the job cleared (null). A new generation needs a new request ID.
+  */
+ async abortSnapshotMaintenance(requestId:string):Promise<EntrySnapshotMaintenanceJob|null>{
+  if(!id(requestId))throw new ReplicationConflict('invalid maintenance request');await this.check('import');return this.o.host.commit(async tx=>{
+   await this.check('import');const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null),job=maintenance.job;
+   if(!job||job.requestId!==requestId){await this.check('import');return null;}
+   if(job.phase!=='copying'&&job.phase!=='aborting')throw new ReplicationConflict('a published maintenance generation cannot be aborted');
+   const ledger=await tx.doc(EntrySnapshotTransfers,this.documentKey,null),t=ledger.transfers[job.manifest.id];if(!t||t.maintenanceRequestId!==requestId)throw new ReplicationConflict('maintenance receipt missing');
+   job.phase='aborting';
+   if(job.nextPage>0){job.nextPage--;await tx.retireDoc(EntrySnapshotChunks,chunkKey(this.documentKey,job.manifest.id,job.nextPage));t.nextPage=job.nextPage;await this.check('import');return copy(job);}
+   t.phase='aborted';ledger.retainedBytes-=t.reservedBytes;maintenance.job=null;await this.check('import');return null;
+  },this.o.ctx);
+ }
+ /** Advances a maintenance generation to its end; one whose source changed under it is aborted (false). */
+ private async finishMaintenance(requestId:string):Promise<boolean>{
+  let job=await this.snapshotMaintenanceStatus();
+  for(let n=0;n<100_000&&job&&job.requestId===requestId&&job.phase!=='completed';n++){
+   if(job.phase==='aborting'){job=await this.abortSnapshotMaintenance(requestId);continue;}
+   try{job=await this.advanceSnapshotMaintenance(requestId);}
+   catch(e){if(!(e instanceof ReplicationConflict)||!/prefix changed/.test(e.message))throw e;job=await this.abortSnapshotMaintenance(requestId);}
+  }
+  return job?.requestId===requestId&&job.phase==='completed';
  }
  /** Drop one expired, unreachable transfer receipt. Never delete a live generation or its seed checkpoint. */
  async forgetSnapshotReceipt(snapshotId:string):Promise<boolean>{
@@ -619,8 +645,9 @@ export class EntryReplicationController {
   for(let changed=true;changed;){changed=false;
    for(const i of [...drop]){const m=events[i]!.mutation;if(m.kind==='erase'||rule(m.type).variant!=='set')continue;
     const tags=m.kind==='remove'?m.tags:renewed(m)!==undefined?[renewed(m)!]:[];
-    // A removal stays while its tag does; a renewed tag stays while its renewal does (the erase follows renew chains).
-    if(tags.some(t=>!gone(t))||(renewsOf.get(entryChangeId(events[i]!))??[]).some(r=>!drop.has(r))){drop.delete(i);changed=true;}
+    // A removal stays while its tag does. A renewed tag stays while a renewal that is not yet stable names it: an erase
+    // could still arrive and must reach the renewal through the tag. Every erase older than a stable renewal is here.
+    if(tags.some(t=>!gone(t))||(renewsOf.get(entryChangeId(events[i]!))??[]).some(r=>!drop.has(r)&&!stable(events[r]!))){drop.delete(i);changed=true;}
    }
   }
   return {blocked:null,drop:[...drop].sort((a,b)=>a-b),floor};
@@ -632,9 +659,14 @@ export class EntryReplicationController {
  }
  /** One compaction to completion; nothing happens while it is blocked or nothing can go. */
  async compact(requestId: string): Promise<{ dropped: number; status: EntryCompactionStatus }> {
+  // Each generation leaves a receipt; retired and aborted ones go once expired, so periodic runs never run out.
+  const ledger=await this.o.host.snapshot(EntrySnapshotTransfers,this.documentKey,this.o.ctx),now=this.now();
+  for(const [snapshotId,t] of Object.entries(ledger?.transfers??{}))if(['retired','aborted'].includes(t.phase)&&t.manifest.expiresAt<=now)try{await this.forgetSnapshotReceipt(snapshotId);}catch(e){if(!(e instanceof ReplicationConflict))throw e;}
+  // A generation left from before (a restart, or an erase changed its source) is finished or aborted first.
+  const active=await this.snapshotMaintenanceStatus();if(active&&active.phase!=='completed'){await this.finishMaintenance(active.requestId);return {dropped:0,status:await this.compactionStatus()};}
   const before=await this.compactionStatus();if(before.blocked||!before.droppable)return {dropped:0,status:before};
-  const job=await this.startCompaction(requestId);let phase=job.phase;for(let n=0;n<100_000&&phase!=='completed';n++)phase=(await this.advanceSnapshotMaintenance(requestId)).phase;
-  return {dropped:droppedCount(job.compaction?.dropped),status:await this.compactionStatus()};
+  const job=await this.startCompaction(requestId),done=await this.finishMaintenance(requestId);
+  return {dropped:done?droppedCount(job.compaction?.dropped):0,status:await this.compactionStatus()};
  }
 
  private streamIdentity():EntryStreamIdentity {

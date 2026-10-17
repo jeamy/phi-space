@@ -19,7 +19,7 @@ export const EntrySnapshotTransfers = defineDocFamily<EntrySnapshotTransfersStat
 export const EntrySnapshotChunks = defineDocFamily<{ page: EntrySnapshotPage | null }, null>({ kind: 'pi-spaces.entry-snapshot-chunk', version: 1, scope: 'session', family: true, initial: () => ({ page: null }) });
 
 export type EntrySnapshotMaintenanceJob = {
- requestId: string; phase: 'copying' | 'cleaning' | 'completed';
+ requestId: string; phase: 'copying' | 'aborting' | 'cleaning' | 'completed';
  manifest: EntrySnapshotManifest; nextPage: number; overlayCount: number;
  /** Logical events captured at start (absent in older jobs: the manifest's eventCount). */
  prefixCount?: number;

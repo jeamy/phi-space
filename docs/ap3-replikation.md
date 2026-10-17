@@ -316,8 +316,9 @@ kompaktierenden Schatten, der genau dieselben Eingaben bekommt.
   - Ein abgelaufenes Tag ist Kandidat, wenn seine Ablaufzeit plus 60 Sekunden vor jedem Vektor-Zeitpunkt liegt. So
     sind Erneuerungen von vor dem Ablauf schon da.
   - Ein Remove und eine Erneuerung bleiben, solange eines ihrer Tags bleibt.
-  - Ein Tag bleibt, solange eine Erneuerung bleibt, die es nennt. Sonst könnte ein später eintreffendes `erase` die
-    Erneuerung nicht mehr schwärzen.
+  - Ein Tag bleibt, solange eine noch nicht stabile Erneuerung es nennt. Sonst könnte ein später eintreffendes
+    `erase` die Erneuerung nicht mehr schwärzen. Jedes `erase`, das älter ist als eine stabile Erneuerung, ist schon
+    hier; regelmäßig erneuerte Einträge behalten deshalb nur ihre letzte Erneuerung.
   - Eigene Änderungen bleiben mindestens `requestRetentionMs` (Standard 24 Stunden), damit ein Retry seine Änderung
     findet. Danach erzeugt ein Retry eine neue Änderung.
 - **Untergrenze:** Bei der Veröffentlichung wird die Untergrenze gespeichert. Eine unbekannte Änderung darunter
@@ -326,14 +327,21 @@ kompaktierenden Schatten, der genau dieselben Eingaben bekommt.
   - `compact(id)` startet mit `startCompaction` eine Wartungsgeneration. Sie hält die Entscheidung im Job fest und
     kopiert nur die verbleibenden Ereignisse.
   - Die Veröffentlichung setzt Segment, `dropped` und Untergrenze atomar; danach werden die alten Chunks eingezogen.
+  - Ändert ein eintreffendes `erase` die kopierte Quelle, bricht `compact` die Generation ab
+    (`abortSnapshotMaintenance`) und der nächste Lauf beginnt neu. Abgelaufene Belege früherer Generationen entfernt
+    `compact` vorher, damit periodische Läufe nicht an der Grenze von 17 Belegen hängen bleiben.
   - Den Speicherplatz gibt erst die Offline-Kompaktierung frei (wie bei der Löschung).
-  - Im Daemon läuft das mit `entryReplication.compactEveryMs` periodisch.
+  - Im Daemon läuft das mit `entryReplication.compactEveryMs` periodisch (mindestens 1000; sinnvoll sind Minuten,
+    weil ein Beleg erst nach 60 Sekunden entfernt werden kann).
+- **Löschnachweis für den Root:** Kompaktierte Änderungen eines Principals fehlen in `changeIdsOwnedBy`. Der Root
+  erkennt replizierte Sichten in seinen Journalen deshalb auch an ihrem `owner` und löscht sie ohne Nachweis-ID.
 - **Tests** (`test/test-entry-compaction.test.ts`):
   - Positionen und alter Cursor nach dem Entfernen.
   - Zufallstest mit acht Saaten, teils mit einem nie kompaktierenden Replikat.
   - Gezielte Fälle: fehlender, hinterherhinkender und zurückgefallener Vektor; Remove mit instabilem Tag;
     Tombstone mit älterem gleichzeitigem Put; Erneuerung mit späterem `erase`; Ablauf mit Erneuerung; Retry in der
-    Aufbewahrung; Snapshot nach der Kompaktierung.
+    Aufbewahrung; Snapshot nach der Kompaktierung; 20 Läufe nacheinander; `erase` während des Kopierens;
+    Erneuerungskette.
   - Jede Regel ist durch Mutationsproben belegt: Ohne sie schlägt mindestens ein Test fehl.
   - Der Laufzeittest kompaktiert periodisch zwischen zwei Hosts über bewiesene Verbindungen.
 

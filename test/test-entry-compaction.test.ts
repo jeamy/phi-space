@@ -219,3 +219,39 @@ test('snapshots after compaction: a compacted source seeds the stream at its hea
  const identity=(await a.describeStream()).source;assert.equal((await b.startStreamImport(identity,fromA.m.id)).cursor,3);
  await a.mutate('k2',{kind:'add',type:'Fact',fields:{n:3},owner:Q,expiresAt:null});await sync(a,b);assert.deepEqual(await viewOf(b),await viewOf(a));
 }));
+
+test('periodic compaction keeps working: old generation receipts are forgotten',()=>compactionFixture(async o=>{
+ const [a,b,c]=['a','b','c'].map(r=>o.node(r,0)) as [Node,Node,Node];
+ for(let round=0;round<20;round++){
+  await b.mutate('p'+round,{kind:'put',type:'Sensor',fields:{sensorId:'k'+round,v:round},owner:Q,expiresAt:null});
+  await b.mutate('d'+round,{kind:'delete',type:'Sensor',fields:{sensorId:'k'+round},owner:Q});
+  await settle([a,b,c]);await recordAt(a,b,c);o.tick(61_000);
+  assert.equal((await a.compact('round-'+round)).dropped,2,`round ${round}`);
+ }
+}));
+
+test('an erase arriving while a compaction copies aborts that generation; the next one succeeds',()=>compactionFixture(async o=>{
+ const [a,b,c]=['a','b','c'].map(r=>o.node(r,0)) as [Node,Node,Node];
+ await a.mutate('keep',{kind:'add',type:'Fact',fields:{n:'secret'},owner:P,expiresAt:null});
+ // Live entries keep the copied prefix several pages long; the put/delete pairs are what goes.
+ for(let n=0;n<20;n++)await b.mutate('live'+n,{kind:'put',type:'Sensor',fields:{sensorId:'live'+n,pad:'x'.repeat(2000)},owner:Q,expiresAt:null});
+ for(let n=0;n<40;n++)await b.mutate('f'+n,{kind:'put',type:'Sensor',fields:{sensorId:'k'+n},owner:Q,expiresAt:null});
+ for(let n=0;n<40;n++)await b.mutate('g'+n,{kind:'delete',type:'Sensor',fields:{sensorId:'k'+n},owner:Q});
+ await settle([a,b,c]);await recordAt(a,b,c);
+ const job=await a.startCompaction('first',4096);assert.ok(job.manifest.pageCount>2);await a.advanceSnapshotMaintenance('first');
+ await c.erasePrincipal('x',P,ADMIN);await sync(c,a);// redacts a retained event of the copied prefix
+ await assert.rejects(a.advanceSnapshotMaintenance('first'),/prefix changed/);
+ const r=await a.compact('second');assert.equal(r.dropped,0,'the stale generation is aborted');
+ assert.equal((await a.snapshotMaintenanceStatus()),null);
+ await settle([a,b,c]);await recordAt(a,b,c);assert.ok((await a.compact('third')).dropped>=80);
+ assert.equal((await viewOf(a)).length,20,'only the live entries remain');
+ assert.equal((await a.erasureStatus()).complete,true,'the aborted pages and the old generation are gone');
+}));
+
+test('a live entry renewed again and again keeps only its latest renewal once the chain is stable',()=>compactionFixture(async o=>{
+ const [a,b,c]=['a','b','c'].map(r=>o.node(r,0)) as [Node,Node,Node];
+ let tag=tagOf(await a.mutate('t',{kind:'add',type:'Fact',fields:{n:1},owner:Q,expiresAt:o.now()+100_000}));
+ for(let n=0;n<5;n++){o.tick(50_000);tag=tagOf(await a.mutate('rn'+n,{kind:'renew',type:'Fact',tag,fields:{n:1},owner:Q,expiresAt:o.now()+100_000}));}
+ await settle([a,b,c]);await recordAt(a,b,c);const view=await viewOf(a);assert.equal(view.length,1);
+ assert.equal((await a.compact('x')).dropped,5);assert.deepEqual(await viewOf(a),view);assert.equal((await a.changes(0,256*1024)).events.length,1);
+}));

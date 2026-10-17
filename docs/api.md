@@ -536,7 +536,8 @@ lebende Belege. Origin-/Request-/Konfliktinformationen und Cursor bleiben erhalt
 
 Kompaktierung (lww/set Schritt 4): `compactionStatus()` nennt Blockadegrund, Ereigniszahl, entfernbare Ereignisse
 und Untergrenze; `compact(id)` führt eine Kompaktierung vollständig aus, `startCompaction(id, pageBytes?)` startet
-sie als Wartungsgeneration (weiter mit `advanceSnapshotMaintenance`). `recordPeerVector(description)` speichert den
+sie als Wartungsgeneration (weiter mit `advanceSnapshotMaintenance`, Abbruch beim Kopieren mit
+`abortSnapshotMaintenance`). `recordPeerVector(description)` speichert den
 Vektor, den ein Peer in `describeStream()` meldet; `EntryReplicationPump` ruft es selbst auf. Option
 `requestRetentionMs` (Standard 24 Stunden) hält eigene Änderungen für Retries. Stream-Seiten tragen `positions`,
 wenn sie nicht lückenlos sind. [Regeln](ap3-replikation.md).
