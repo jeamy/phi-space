@@ -397,6 +397,10 @@ Nachtrag 2026-10-17 (lww/set eingebunden):
   `entryReplication.compactEveryMs`. Echter Lauf mit nano-test und standby-100
   ([Nachweis](../test/evidence/compaction-run-2026-10-17/README.md)).
 
+Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter primary/sync-Commit ist öffentlich
+`CommitSealed`; der Host klärt ihn mit dem Standby und bedient den Space ohne Neustart wieder
+([Ablauf](ap3-primary-sync.md)).
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

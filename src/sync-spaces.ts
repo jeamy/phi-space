@@ -10,7 +10,7 @@ import type { Context } from "@earendil-works/chord";
 import type { Signer } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { installBootGuard } from "./boot.ts";
-import { PrimarySyncJournal, primarySyncStorage, recoverPrimarySync, durabilityOf, type PrimarySyncConfig } from "./primary-sync.ts";
+import { PrimarySyncJournal, PrimarySyncBlocked, primarySyncStorage, recoverPrimarySync, durabilityOf, type PrimarySyncConfig } from "./primary-sync.ts";
 import { assertQuarantine, assertSyncPrimary, assertSyncStandby, installAdmittedPermit } from "./replica-control.ts";
 import { replicaSyncHandler, signedReplicaPeer, type ReplicaPin } from "./replica-transport.ts";
 import { latestReplicaConfigNotice, signReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
@@ -27,8 +27,19 @@ export type SyncSpaceConfig = {
 };
 export type SyncSpace = {
 	config: SyncSpaceConfig; journal: PrimarySyncJournal; role: () => "primary" | "standby" | "excluded";
-	harness?: Harness; notice: () => Promise<SignedReplicaConfigNotice | null>; close: () => Promise<void>;
+	/** The served Harness of a primary; absent on a standby and while a sealed candidate is unresolved. */
+	readonly harness?: Harness; notice: () => Promise<SignedReplicaConfigNotice | null>; close: () => Promise<void>;
+	/** Primary: stops serving after a sealed, unconfirmed commit (its Harness refuses all work until reopened). */
+	unserve: () => Promise<void>;
+	/**
+	 * Primary: one attempt to resolve the sealed candidate with the standby and serve again (docs/ap3-primary-sync.md).
+	 * "served", "pending" (try again later: standby or register unreachable) or "excluded" (this host lost its active
+	 * primary permit, e.g. fenced by a promotion: stop trying; the candidate is never applied here).
+	 */
+	resolve: () => Promise<{ state: "served" | "pending" | "excluded"; error?: string }>;
 };
+/** How long a poisoned Harness may take to close before it is abandoned. */
+const CLOSE_BOUND_MS = 5000;
 
 export async function openSyncSpace(o: {
 	config: SyncSpaceConfig; hostId: string; authorityId: string; bindIp: string; signer: Signer;
@@ -47,26 +58,60 @@ export async function openSyncSpace(o: {
 	const listener = await serveSpace({ handleText: replicaSyncHandler({ journal: () => journal, signer: o.signer, self: o.hostId, remotes: c.peers, assertQuarantine: assertQuarantine(o.external, o.hostId), now }) },
 		{ listen: { host: o.bindIp, port: c.port }, connection: s => ips.has(String(s.remoteAddress).replace(/^::ffff:/, "")) ? {} : null, maxConnections: 4, maxFrameBytes: 1 << 20 });
 	let harness: Harness | undefined, stopGuard: (() => void) | undefined;
+	const assert = assertSyncPrimary(o.external, o.hostId, journal), harnessPath = join(c.dir, "harness.sqlite");
+	let peer: ReturnType<typeof signedReplicaPeer> | null | undefined;
+	const peerFor = () => {
+		if (peer !== undefined) return peer;
+		const standby = durabilityOf(journal.config) === "sync" ? c.peers.find(p => p.hostId === journal.config.standbyReplica) : undefined;
+		if (durabilityOf(journal.config) === "sync" && !standby) throw new Error(`standby ${journal.config.standbyReplica} of ${c.alias} is not provisioned`);
+		return peer = standby ? signedReplicaPeer({ transport: (transports.push(socketTransport({ host: standby.ip, port: c.port }, { localAddress: o.bindIp, connectTimeoutMs: 8000, maxFrameBytes: 1 << 20 })), transports.at(-1)!), signer: o.signer, self: o.hostId, remote: standby }) : null;
+	};
+	// Open, resolve the at most one sealed candidate with the standby, then serve. The same path at start and after a
+	// sealed commit at runtime.
+	const serve = async () => {
+		// The local installation follows the active external permit of this replica configuration (after every
+		// transition the next open copies it); without an active permit the Space is not served.
+		await installAdmittedPermit({ external: o.external, installed: o.installed, hostId: o.hostId, spaceId: c.spaceId, localDataIncarnation: c.incarnation });
+		const p = peerFor(), raw = await o.openStorage(harnessPath);
+		let h: Harness | undefined;
+		try {
+			await recoverPrimarySync(raw, journal, p, o.ctx, assert);
+			h = await o.openHarness(primarySyncStorage(raw, journal, p, { assertPrimary: assert, now }));
+			if (!(await listSpaces(h, o.ctx)).some(i => i.spaceId === c.spaceId)) await h.commit(tx => createSpace(tx, c.alias, now(), { spaceId: c.spaceId, incarnation: c.incarnation }), o.ctx);
+		} catch (e) { if (h) await bounded(h.close(o.ctx)); else await bounded(raw.close(o.ctx)); throw e; }
+		stopGuard = installBootGuard(h, o.ctx, { hostId: o.hostId, authorityId: o.authorityId, external: o.external, installed: o.installed, replicaConfig: id => id === c.spaceId ? journal.config : null });
+		harness = h;
+	};
+	const unserve = async () => { const h = harness; harness = undefined; stopGuard?.(); stopGuard = undefined; if (h) await bounded(h.close(o.ctx)); };
 	try {
 		if (!o.listenOnly && role() === "primary") {
-			// The local installation follows the active external permit of this replica configuration (after every
-			// transition the next open copies it); without an active permit the Space is not served.
-			await installAdmittedPermit({ external: o.external, installed: o.installed, hostId: o.hostId, spaceId: c.spaceId, localDataIncarnation: c.incarnation });
-			const standby = durabilityOf(journal.config) === "sync" ? c.peers.find(p => p.hostId === journal.config.standbyReplica) : undefined;
-			if (durabilityOf(journal.config) === "sync" && !standby) throw new Error(`standby ${journal.config.standbyReplica} of ${c.alias} is not provisioned`);
-			const peer = standby ? signedReplicaPeer({ transport: (transports.push(socketTransport({ host: standby.ip, port: c.port }, { localAddress: o.bindIp, connectTimeoutMs: 8000, maxFrameBytes: 1 << 20 })), transports.at(-1)!), signer: o.signer, self: o.hostId, remote: standby }) : null;
-			const assert = assertSyncPrimary(o.external, o.hostId, journal), raw = await o.openStorage(join(c.dir, "harness.sqlite"));
-			await recoverPrimarySync(raw, journal, peer, o.ctx, assert);
-			harness = await o.openHarness(primarySyncStorage(raw, journal, peer, { assertPrimary: assert, now }));
-			if (!(await listSpaces(harness, o.ctx)).some(i => i.spaceId === c.spaceId)) await harness.commit(tx => createSpace(tx, c.alias, now(), { spaceId: c.spaceId, incarnation: c.incarnation }), o.ctx);
-			stopGuard = installBootGuard(harness, o.ctx, { hostId: o.hostId, authorityId: o.authorityId, external: o.external, installed: o.installed, replicaConfig: id => id === c.spaceId ? journal.config : null });
+			try { await serve(); }
+			catch (e) {
+				// A sealed candidate the standby cannot confirm now stays unresolved; resolve() tries again. Anything else
+				// (no permit, another configuration) keeps the Space unserved as before.
+				if (journal.head().revision === journal.appliedRevision || e instanceof PrimarySyncBlocked) throw e;
+				console.error(`primary/sync Space ${c.alias} has an unresolved sealed candidate:`, e instanceof Error ? e.message : String(e));
+			}
 		}
 	} catch (e) { for (const t of transports) t.close(); await listener.close(); journal.close(); throw e; }
 	return {
-		config: c, journal, role, harness,
+		config: c, journal, role, get harness() { return harness; }, unserve,
+		resolve: async () => {
+			if (harness) return { state: "served" };
+			if (o.listenOnly || role() !== "primary") return { state: "excluded", error: "this host is not the primary of the journal configuration" };
+			try { await assert(); } catch (e) { return { state: e instanceof PrimarySyncBlocked ? "excluded" : "pending", error: e instanceof Error ? e.message : String(e) }; }
+			// recoverPrimarySync checks the permit again before it applies anything.
+			try { await serve(); return { state: "served" }; } catch (e) { return { state: "pending", error: e instanceof Error ? e.message : String(e) }; }
+		},
 		notice: async () => { if (role() !== "primary") return null; const n = latestReplicaConfigNotice(journal, c.incarnation); return n ? signReplicaConfigNotice(n, o.signer) : null; },
-		close: async () => { stopGuard?.(); if (harness) await harness.close(o.ctx); for (const t of transports) t.close(); await listener.close(); journal.close(); },
+		close: async () => { await unserve(); for (const t of transports) t.close(); await listener.close(); journal.close(); },
 	};
+}
+
+async function bounded(p: Promise<unknown>): Promise<void> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	await Promise.race([p.catch(() => {}), new Promise<void>(r => { timer = setTimeout(r, CLOSE_BOUND_MS); timer.unref?.(); })]);
+	clearTimeout(timer);
 }
 
 /**
@@ -79,4 +124,45 @@ export async function openSyncSpaces(configs: readonly SyncSpaceConfig[], open: 
 		try { opened.push(await open(c)); } catch (e) { failed.push({ alias: c.alias, error: e instanceof Error ? e.message : String(e) }); }
 	}
 	return { opened, failed };
+}
+
+export type SealedSyncSpace = { spaceId: string; alias: string; sealed: { revision: number; hash: string } };
+/** The unresolved sealed candidate of a primary/sync Space, or null. */
+export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: string } | null => {
+	const h = sp.journal.head();
+	return h.revision !== sp.journal.appliedRevision ? { revision: h.revision, hash: h.hash } : null;
+};
+/**
+ * Resolves sealed, unconfirmed commits while the host runs (docs/ap3-primary-sync.md): the Space is set unresolved
+ * (answered with CommitSealed), its Harness closed, and `resolve()` retried with backoff until the standby confirms
+ * or rejects the candidate; then the Space is served anew. A host that lost its primary permit stops trying.
+ */
+export function sealedResolver<E>(o: { set: (next: E | SealedSyncSpace) => Promise<void>; serve: (sp: SyncSpace) => E; retryMs?: number; maxRetryMs?: number; log?: (message: string) => void }) {
+	const log = o.log ?? (m => console.error(m)), active = new Map<string, Promise<void>>();
+	let stopped = false, timer: ReturnType<typeof setInterval> | undefined;
+	const wakers = new Set<() => void>();
+	const resolve = (sp: SyncSpace): Promise<void> => {
+		const key = sp.config.spaceId, running = active.get(key);
+		if (running || stopped) return running ?? Promise.resolve();
+		const run = (async () => {
+			try {
+				await o.set({ spaceId: key, alias: sp.config.alias, sealed: sealedCandidateOf(sp) ?? sp.journal.head() }); await sp.unserve();
+				for (let wait = o.retryMs ?? 1000; !stopped; wait = Math.min(o.maxRetryMs ?? 30_000, wait * 2)) {
+					const r = await sp.resolve();
+					if (r.state === "served") { await o.set(o.serve(sp)); log(`primary/sync Space ${sp.config.alias}: sealed candidate resolved, served again`); return; }
+					if (r.state === "excluded") { log(`primary/sync Space ${sp.config.alias} stays unresolved; this host is no longer its primary: ${r.error}`); return; }
+					log(`primary/sync Space ${sp.config.alias}: sealed candidate still unresolved: ${r.error}`);
+					await new Promise<void>(res => { const done = () => { clearTimeout(t); wakers.delete(done); res(); }, t = setTimeout(done, wait); t.unref?.(); wakers.add(done); });
+				}
+			} catch (e) { log(`primary/sync Space ${sp.config.alias}: resolving the sealed candidate failed: ${e instanceof Error ? e.message : String(e)}`); }
+			finally { active.delete(key); }
+		})();
+		active.set(key, run); return run;
+	};
+	return {
+		resolve,
+		/** Also catches candidates the reaper sealed without any call noticing. */
+		watch: (spaces: readonly SyncSpace[], everyMs = 2000) => { timer = setInterval(() => { for (const sp of spaces) if (sp.harness && sealedCandidateOf(sp)) void resolve(sp); }, everyMs); timer.unref?.(); },
+		stop: async () => { stopped = true; if (timer) clearInterval(timer); for (const wake of [...wakers]) wake(); await Promise.all([...active.values()]); },
+	};
 }

@@ -545,7 +545,10 @@ wenn sie nicht lückenlos sind. [Regeln](ap3-replikation.md).
 `PrimarySyncJournal`, `primarySyncStorage`, `recoverPrimarySync` und
 `materializeSyncHistory` bilden den administrativen synchronen Storage-Pfad.
 Er besitzt feste Konfigurationspins, dauerhafte Hashkette, Standby-ACK und
-atomare Datenmarker; ein unklarer versiegelter Kandidat liefert `CommitSealed`.
+atomare Datenmarker; ein unklarer versiegelter Kandidat liefert `CommitSealed`. Im Dienst wird daraus der
+Fehlercode `CommitSealed`, im Client `CommitSealedPending` (Unterklasse von `OutcomeUnknown`); `sealedResolver`,
+`sealedCandidateOf` und `SyncSpace.resolve()/unserve()` klären den Kandidaten im laufenden Host
+([Ablauf](ap3-primary-sync.md)).
 Diese API aktiviert noch keine produktive Sync-Policy oder Promotion.
 [Vertrauensbereich und Betriebsgrenzen](ap3-primary-sync.md).
 

@@ -5,7 +5,7 @@ import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
 import type { Harness, Storage } from "@earendil-works/pi-durable";
-import { openSyncSpace, openSyncSpaces, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
+import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 import type { Context } from "@earendil-works/chord";
 import { privateFile, loadFileSigner } from "./keys.ts";
 import { NetbirdDirectory, GateIdentity, type GroupRoles } from "./gate.ts";
@@ -129,11 +129,17 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 			const r=await openSyncSpaces(config.syncSpaces,c=>openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,openStorage:factories.openSyncStorage,openHarness:factories.openSyncHarness}));
 			syncSpaces.push(...r.opened);for(const f of r.failed)console.error(`primary/sync Space ${f.alias} stays unserved:`,f.error);
 		}
-		const syncOptions=syncSpaces.filter(sp=>sp.harness).map(sp=>{
+		const optionFor=(sp:SyncSpace)=>{
 			// The Member state of a replicated Space is part of that Space, so it follows the replicas.
 			const lifecycle=sp.config.membership?new MemberLifecycle({host:sp.harness!,ctx,memberId:sp.config.membership.memberId,spaceId:sp.config.spaceId,authorityId,peerId:config.peerId,signer,controlPin:{issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey},assertAuthority:async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active"||b.value.spaces?.[sp.config.spaceId]?.authorityId!==authorityId)throw new BootBlocked("Member boot authority changed");}}):undefined;
 			return {spaceId:sp.config.spaceId,alias:sp.config.alias,host:sp.harness!,primaryEpoch:()=>sp.journal.config.primaryEpoch,delegation:verifierFor(sp.harness!,id=>id===sp.config.spaceId?sp.journal.config:null),
-				membership:lifecycle,refreshPolicy:lifecycle&&controlRemote?async()=>lifecycle.installPolicy(await controlRemote!.requestRoutingPolicy()):undefined};});
+				membership:lifecycle,refreshPolicy:lifecycle&&controlRemote?async()=>lifecycle.installPolicy(await controlRemote!.requestRoutingPolicy()):undefined,
+				onSealed:()=>resolveSealed(sp),sealedCandidate:()=>sealedOf(sp)};};
+		// A sealed, unconfirmed commit: the Space answers CommitSealed until this host resolved it and serves it anew.
+		const sealedOf=sealedCandidateOf,resolver=sealedResolver({set:next=>runtime.setSyncSpace(next),serve:optionFor});
+		const resolveSealed=(sp:SyncSpace)=>{void resolver.resolve(sp);};
+		const syncOptions=syncSpaces.filter(sp=>sp.harness).map(optionFor);
+		const unresolvedSyncSpaces=syncSpaces.filter(sp=>!sp.harness&&sp.role()==="primary"&&sealedOf(sp)).map(sp=>({spaceId:sp.config.spaceId,alias:sp.config.alias,sealed:sealedOf(sp)!}));
 		// v3 5.3.1 step 5: a primary keeps offering the notice of its last transition until the router adopted it.
 		let noticeTimer:ReturnType<typeof setTimeout>|undefined,noticeStopped=false,noticeActive:Promise<void>=Promise.resolve();
 		const publishNotices=()=>{noticeActive=(async()=>{for(const sp of syncSpaces){const n=await sp.notice();if(!n)continue;if(control)await control.replicaNotices!.publish(n,{peerId:config.peerId,roles:["host"],key:{algorithm:signer.algorithm,publicKey:signer.publicKey}});else await controlRemote!.publishReplicaNotice(n);}})()
@@ -155,8 +161,11 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 			const peers = new Set((er.peers ?? []).map(p => p.peerId));
 			if (peers.size) entryExport = { peers, describe: async () => await controller.describeStream() as unknown as import("./core.ts").Json, changes: async (after, maxBytes) => await controller.streamChanges(after, maxBytes) as unknown as import("./core.ts").Json };
 		}
-		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
+		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, unresolvedSyncSpaces, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
 		if(syncSpaces.length)publishNotices();
+		for(const sp of syncSpaces)if(!sp.harness&&sp.role()==="primary"&&sealedOf(sp))resolveSealed(sp);
+		// The reaper can seal a candidate too, without any call noticing it.
+		if(syncSpaces.length)resolver.watch(syncSpaces);
 		let recovery: Awaited<ReturnType<typeof startConfiguredRecovery>> | undefined;
 		try { if (config.recovery) recovery = await startConfiguredRecovery(host, raw, ctx, { ...config, authorityId, signer, controlKey: { algorithm: config.control.algorithm, publicKey: controlPublicKey }, config: config.recovery, external, installed }); await host.snapshot(Registry, ctx); } catch (e) { await recovery?.close();await root?.close(); await runtime.close(); noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(()=>{}); throw e; }
         let capabilityTimer:ReturnType<typeof setTimeout>|undefined, capabilityStopped=false, capabilityActive:Promise<void>=Promise.resolve();
@@ -207,7 +216,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const followTimer = config.recoveryAdmin ? setInterval(() => { void followControlHostChange(external, installed, { controlSpaceId: config.controlSpaceId, configured: { hostId: config.controlHostId, authorityId }, recoveryAdmin: config.recoveryAdmin! })
 			.then(c => { if (c) reportChange(c); }).catch(e => console.error("Control host change:", e instanceof Error ? e.message : String(e))); }, factories?.followIntervalMs ?? 15_000) : undefined;
 		followTimer?.unref?.();
-		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, entryReplication: entryController, close: async () => { if (followTimer) clearInterval(followTimer); compactStopped = true; if (compactTimer) clearTimeout(compactTimer); for (const ac of pumps) ac.abort(); for (const t of pumpTransports) t.close(); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
+		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, entryReplication: entryController, close: async () => { await resolver.stop(); if (followTimer) clearInterval(followTimer); compactStopped = true; if (compactTimer) clearTimeout(compactTimer); for (const ac of pumps) ac.abort(); for (const t of pumpTransports) t.close(); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
 	} catch (e) { controlSocket?.close(); external.close(); installed.close(); throw e; }
 }
 

@@ -9,6 +9,7 @@ import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semanti
 import { awaitWithContext } from "@earendil-works/chord/context";
 import { ReplicationConflict } from "./entry-replication.ts";
 import { ReplicationClockError } from "./replication-clock.ts";
+import { CommitSealed } from "./commit-sealed.ts";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "./canonical.ts";
 import type { Context } from "@earendil-works/chord";
@@ -67,7 +68,7 @@ export type Call = {
 export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
 export type ClaimReceipt={protocol:'pi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
@@ -77,6 +78,13 @@ export type MergeAdapter = { controller: import("./entry-replication.ts").EntryR
 /** v3 7.2: merge types know no exclusive allocation (take, transactions, waits, lease changes). */
 export class MergeTypeNotExclusive extends core.IllegalArgumentError {}
 export type SpaceServiceOptions = {
+	/**
+	 * primary/sync: a commit of this Space was sealed but not confirmed (docs/ap3-primary-sync.md). From then on every
+	 * call is answered with `CommitSealed` until the host resolved the candidate and serves the Space anew.
+	 */
+	onSealed?: () => void;
+	/** primary/sync: the unresolved sealed candidate of this Space, if any (also one sealed by the reaper). */
+	sealedCandidate?: () => { revision: number; hash: string } | null;
 	authorize?: (call: Call, id: Identity, conn: Connection) => Promise<DecisionAuthorization>;
 	host: SpaceHost;
 	ctx: Context;
@@ -128,6 +136,8 @@ export class SpaceService {
 	private policy: Policy;
 	private now: () => number;
 	private rates = new Map<string, { at: number; calls: number }>();
+	private sealed: { revision: number; hash: string } | null = null;
+	private noteSealed(c: { revision: number; hash: string }): Reply { if (!this.sealed) { this.sealed = { revision: c.revision, hash: c.hash }; this.o.onSealed?.(); } return sealedReply(this.sealed); }
 
 	constructor(o: SpaceServiceOptions) {
 		this.o = { maxPollMs: 25_000, maxPendingPerPrincipal: 32, maxPendingPerPeer: 128, maxCallsPerWindow: 1024, rateWindowMs: 1000, authorityId: "local", primaryEpoch: 0, ...o };
@@ -158,6 +168,8 @@ export class SpaceService {
 			const args = (call.args ?? {}) as Record<string, Json>;
 			const authenticated = await this.o.identity.authenticate(conn);
 			if (!authenticated) return fail("Unauthenticated", "the connection has no known identity");
+			const candidate = this.sealed ?? this.o.sealedCandidate?.() ?? null;
+			if (candidate) return this.noteSealed(candidate);
 			const id = { ...authenticated, roles: [...authenticated.roles] };
 			this.rate(id.principal.peerId);
 			const authorization = await this.o.authorize?.(call as unknown as Call, id, conn);
@@ -452,6 +464,8 @@ export class SpaceService {
 	// ---- errors
 
 	private error(e: unknown): Reply {
+		const sealed = sealedIn(e) ?? (() => { try { return this.o.sealedCandidate?.() ?? null; } catch { return null; } })();
+		if (sealed) return this.noteSealed(sealed);
 		if(e instanceof RoutingConflict)return fail("RoutingConflict",e.message);if(e instanceof MemberDrained)return fail("MemberDrained",e.message);if(e instanceof MigrationRequired)return fail("MigrationRequired",e.message);
 		if (e instanceof Bad) return fail("BadRequest", e.message);
 		if (e instanceof Denied || e instanceof core.PermissionError) return fail("PermissionDenied", (e as Error).message);
@@ -478,3 +492,7 @@ export class SpaceService {
 	}
 }
 class UnsupportedProtocol extends Error {}
+/** A sealed candidate, also when the storage layer wrapped it as a cause. */
+function sealedIn(e: unknown): CommitSealed | null { for (let x = e, n = 0; x && n < 8; x = (x as { cause?: unknown }).cause, n++) if (x instanceof CommitSealed) return x; return null; }
+/** The caller keeps resolving the same request: its outcome may be in the sealed candidate. Never a failure. */
+export const sealedReply = (e: { revision: number; hash: string }): Reply => fail("CommitSealed", `a commit of this Space is sealed but not confirmed (revision ${e.revision}); the outcome is pending, poll or retry the same request`);

@@ -45,6 +45,11 @@ export class OutcomeUnknown extends Error {
 	request: { generation: string; requestId: string };
 	constructor(request: { generation: string; requestId: string }, why: string) { super(`outcome unknown for request ${request.requestId}: ${why}`); this.request = request; }
 }
+/**
+ * The host sealed a primary/sync commit but has not confirmed it yet (`CommitSealed`): the request may be in that
+ * candidate. Keep polling or retrying exactly this request; never start a new ID for it, never treat it as failed.
+ */
+export class CommitSealedPending extends OutcomeUnknown {}
 export class UnsupportedOperation extends Error {}
 
 export type RemoteOptions = {
@@ -171,7 +176,11 @@ export class RemoteSpace implements SpaceLike {
 			if (end !== undefined && performance.now() >= end) break;
 			try {
 				const r = await this.roundTrip({ ...call, ...(this.o.space === undefined ? {} : { space: this.o.space }) }, end);
-				if (!r.ok) throw toError(r.error);
+				if (!r.ok) {
+					const target = call.request ?? (call.args?.targetRequest as { generation: string; requestId: string } | undefined);
+					if (r.error.code === "CommitSealed" && target && typeof target === "object") throw new CommitSealedPending({ generation: target.generation, requestId: target.requestId }, r.error.message);
+					throw toError(r.error);
+				}
 				return mapReply?mapReply(r):r.result;
 			} catch (e) {
 				// the host withheld a privileged role because this connection has not proven its app key: prove once, repeat the call
@@ -311,11 +320,18 @@ export class RemoteSpace implements SpaceLike {
 		const end = this.o.maxClientWaitMs === undefined ? undefined : started + this.o.maxClientWaitMs;
 		const args = { template: tmpl as unknown as Json, timeoutMs: leaseArg(timeout), ...(o.deadline === undefined ? {} : { deadline: o.deadline }), txn: o.txn ?? null, ifExists, waitMs: this.pollMs(end) };
 		const unknown = (why: string) => () => new OutcomeUnknown(request, why);
-		let r = (await this.send({ method, request, args }, unknown("the client stopped waiting; resolve the same request"), end)) as { state: string; entry?: Taken | null };
+		// A sealed, unconfirmed commit of the Space: the request may not even be admitted yet. Wait a little, then send the
+		// very same call again (same request identity, so it meets its claim if there is one).
+		const sealedWait = async (e: unknown) => { if (!(e instanceof CommitSealedPending) || end !== undefined && performance.now() >= end) throw e; await this.o.sleep(Math.min(1000, end === undefined ? 1000 : Math.max(1, end - performance.now()))); return { state: "sealed" }; };
+		const call = () => this.send({ method, request, args }, unknown("the client stopped waiting; resolve the same request"), end).catch(sealedWait) as Promise<{ state: string; entry?: Taken | null }>;
+		let r = await call();
 		for (;;) {
 			if (r.state === "done") return (r.entry ?? null) as Taken | null;
+			if (r.state === "sealed") { r = await call(); continue; }
 			if (this.o.maxClientWaitMs !== undefined && performance.now() - started >= this.o.maxClientWaitMs) throw new OutcomeUnknown(request, "the client stopped waiting; the operation continues on the host");
-			const view = (await this.send({ method: "pollOperation", args: { targetRequest: request as unknown as Json, waitMs: this.pollMs(end) } }, unknown("the client stopped waiting while polling"), end)) as unknown as ClaimView;
+			let view: ClaimView;
+			try { view = (await this.send({ method: "pollOperation", args: { targetRequest: request as unknown as Json, waitMs: this.pollMs(end) } }, unknown("the client stopped waiting while polling"), end)) as unknown as ClaimView; }
+			catch (e) { r = await sealedWait(e) as { state: string }; continue; }
 			if (view.resultExpired) throw new claims.ResultExpired("the operation's retained result expired");
 			if (view.unknownOutcome) throw new OutcomeUnknown(request, "restored history cannot establish the original outcome");
 			if (view.error) throw toError(view.error);

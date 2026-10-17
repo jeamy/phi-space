@@ -9,6 +9,7 @@ import {dirname} from 'node:path';
 import type {Context} from '@earendil-works/chord';
 import type {Storage,StorageWrite,DocumentId,DocumentRecord,Seq} from '@earendil-works/pi-durable';
 import {canonicalJson} from './canonical.ts';
+import {CommitSealed} from './commit-sealed.ts';
 import type {Json} from './core.ts';
 
 /** `durability` absent means sync (older configurations keep their hash). Single has no standby. */
@@ -27,10 +28,7 @@ export type PrimaryIntent=PrimaryCommitIntent|PrimaryConfigIntent|PrimaryBootstr
 export type PrimarySyncAck={revision:number;hash:string;configHash:string};
 export interface PrimarySyncPeer{accept(intent:PrimaryIntent):Promise<PrimarySyncAck>}
 export class PrimarySyncBlocked extends Error{}
-export class CommitSealed extends Error{
- readonly revision:number;readonly hash:string;
- constructor(intent:PrimaryIntent,cause?:unknown){super('commit is durably sealed; resolve this candidate before admitting new work',{cause});this.revision=intent.revision;this.hash=intent.hash;}
-}
+export {CommitSealed};
 const canonical=(v:unknown)=>canonicalJson(v as Json);
 const hash=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex');
 const copy=<T>(v:T):T=>JSON.parse(canonical(v));

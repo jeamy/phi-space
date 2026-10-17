@@ -17,7 +17,7 @@ import { RotationService } from "./rotation.ts";
 import type { Harness } from "@earendil-works/pi-durable";
 import type { Context } from "@earendil-works/chord";
 import type { Json } from "./core.ts";
-import { SpaceService, type Call, type Reply, type Connection } from "./service.ts";
+import { SpaceService, sealedReply, type Call, type Reply, type Connection } from "./service.ts";
 import { GateIdentity, startGate, type GateOptions } from "./gate.ts";
 import { ProvingService, type KeyDirectory } from "./auth.ts";
 import { EnrollmentService } from "./enroll.ts";
@@ -29,6 +29,8 @@ import type { SpaceHost } from "./client.ts";
 import { installBootGuard } from "./boot.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 
+export type UnresolvedSyncSpace = { spaceId: string; alias: string; sealed: { revision: number; hash: string } };
+type SyncEntry = NonNullable<FederationHostOptions["syncSpaces"]>[number];
 export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	hostId: string; authorityId: string; keys: KeyDirectory; verifier: GrantVerifier;
 	boot?: { external: RecoveryRegister; installed: RecoveryRegister; /** main store on primary/sync: its journal configuration for every Space in it */ replicaConfig?: (spaceId: string) => import("./primary-sync.ts").PrimarySyncConfig | null };
@@ -39,7 +41,11 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	 */
 	syncSpaces?: Array<{ spaceId: string; alias: string; host: Harness; delegation?: import("./delegation.ts").DelegationVerifier; primaryEpoch: () => number;
 		/** Member lifecycle of this Space in its own store; membership instructions naming the Space go here. */
-		membership?: import("./membership.ts").MemberLifecycle; refreshPolicy?: () => Promise<void> }>;
+		membership?: import("./membership.ts").MemberLifecycle; refreshPolicy?: () => Promise<void>;
+		/** A commit of this Space was sealed but not confirmed; the caller resolves it and serves the Space anew (setSyncSpace). */
+		onSealed?: () => void; sealedCandidate?: () => { revision: number; hash: string } | null }>;
+	/** primary/sync Spaces whose sealed candidate is not resolved yet: answered with `CommitSealed` until setSyncSpace. */
+	unresolvedSyncSpaces?: UnresolvedSyncSpace[];
 	/** Explicit fixture mode. Never set in a deployed host. */
 	unsafeSkipBootGuardForTests?: true;
 	/** Only the control runtime supplies these. An injected control Host must be authoritative, never a restored replica. */
@@ -64,26 +70,39 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 	const service = new SpaceService({ host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, ...(o.merge ? { merge: o.merge } : {}),
 		epochForSpace: async space => { const info = (await listSpaces(host, ctx)).find(i => i.spaceId === space || i.alias === (space ?? "default")); return info ? o.boot?.replicaConfig?.(info.spaceId)?.primaryEpoch ?? (await snapshotSpace(host, info.spaceId, ctx))?.primaryEpoch ?? 1 : 0; },
 		authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?o.delegation?await o.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await o.refreshPolicy?.();auth.check();return auth;} });
-	const syncServices = new Map<string, SpaceService>(), mainSpaces = await listSpaces(host, ctx);
+	const syncServices = new Map<string, SpaceService | { handle: (c: unknown, conn: Connection) => Promise<Reply>; handleText: (t: string, conn: Connection) => Promise<string> }>(), mainSpaces = await listSpaces(host, ctx);
+	// The current entry of every primary/sync Space: served, or unresolved after a sealed commit (setSyncSpace swaps them).
+	const syncEntries: Array<SyncEntry | UnresolvedSyncSpace> = [];
+	const makeSyncService = (sp: SyncEntry) => new SpaceService({ host: sp.host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, epochForSpace: async () => sp.primaryEpoch(), ...(sp.onSealed ? { onSealed: sp.onSealed } : {}), ...(sp.sealedCandidate ? { sealedCandidate: sp.sealedCandidate } : {}),
+			authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?sp.delegation?await sp.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await (sp.refreshPolicy ?? o.refreshPolicy)?.();auth.check();return auth;} });
+	const sealedService = (u: UnresolvedSyncSpace) => {
+		const handle = async (_c: unknown, conn: Connection): Promise<Reply> => await identity.authenticate(conn) ? sealedReply(u.sealed) : { ok: false, error: { code: "Unauthenticated", message: "the connection has no known identity" } };
+		return { handle, handleText: async (_t: string, conn: Connection) => JSON.stringify(await handle(undefined, conn)) };
+	};
+	for (const u of o.unresolvedSyncSpaces ?? []) {
+		if (mainSpaces.some(i => i.spaceId === u.spaceId || i.alias === u.alias) || syncServices.has(u.spaceId) || syncServices.has(u.alias)) throw new Error(`primary/sync Space ${u.alias} needs its own store and a unique ID and alias`);
+		syncServices.set(u.spaceId, sealedService(u)); syncServices.set(u.alias, sealedService(u)); syncEntries.push(u);
+	}
 	for (const sp of o.syncSpaces ?? []) {
 		if (sp.host === host || mainSpaces.some(i => i.spaceId === sp.spaceId || i.alias === sp.alias) || syncServices.has(sp.spaceId) || syncServices.has(sp.alias)) throw new Error(`primary/sync Space ${sp.alias} needs its own store and a unique ID and alias`);
-		const svc = new SpaceService({ host: sp.host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, epochForSpace: async () => sp.primaryEpoch(),
-			authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?sp.delegation?await sp.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await (sp.refreshPolicy ?? o.refreshPolicy)?.();auth.check();return auth;} });
-		syncServices.set(sp.spaceId, svc); syncServices.set(sp.alias, svc);
+		const svc = makeSyncService(sp);
+		syncServices.set(sp.spaceId, svc); syncServices.set(sp.alias, svc); syncEntries.push(sp);
 	}
+	const syncEntry = (space: unknown) => syncEntries.find(sp => sp.spaceId === space || sp.alias === space);
 	const pick = (c: unknown) => syncServices.get((c as any)?.space) ?? service;
-	const dispatch = syncServices.size ? { handle: (c: unknown, conn: Connection) => pick(c).handle(c as any, conn), handleText: async (t: string, conn: Connection, bytes?: number) => { let c: unknown; try { c = JSON.parse(t); } catch { return service.handleText(t, conn, bytes); } return pick(c).handleText(t, conn, bytes); } } : service;
+	const dispatch = syncServices.size || o.syncSpaces?.length ? { handle: (c: unknown, conn: Connection) => pick(c).handle(c as any, conn), handleText: async (t: string, conn: Connection, bytes?: number) => { let c: unknown; try { c = JSON.parse(t); } catch { return service.handleText(t, conn, bytes); } return pick(c).handleText(t, conn, bytes); } } : service;
 	const notices=["epochNotice","membershipInstruction","runGateInstruction","spaceLifecycleInstruction","entryDescribe","entryChanges"];
 	const noticeService = o.delegation || o.membership || o.runGates || o.spaceLifecycle || o.entryExport || (o.syncSpaces ?? []).some(sp => sp.membership) ? {handle:async(c:unknown,conn:Connection):Promise<Reply>=>{ if(!notices.includes((c as any)?.method))return dispatch.handle(c as any,conn);try{const id=await identity.authenticate(conn);if(!(conn.state as any)?.proof||!id?.roles.some(r=>["router","host","admin"].includes(r)))throw new Error("epoch notice requires proven service peer");
 		// lww/set step 2: the entry stream of this host's replica, only for the pinned peers of the same replication.
 		if((c as any).method==="entryDescribe"||(c as any).method==="entryChanges"){if(!o.entryExport)throw new Error("entry replication not configured");if(!conn.peerId||!o.entryExport.peers.has(conn.peerId))throw new Error("peer is not a replica of this entry replication");
 		 return{ok:true,result:(c as any).method==="entryDescribe"?await o.entryExport.describe():await o.entryExport.changes(Number((c as any).args?.after),Number((c as any).args?.maxBytes))};}
-		if((c as any).method==="spaceLifecycleInstruction"){if(!o.spaceLifecycle)throw new Error("space lifecycle not configured");return{ok:true,result:await o.spaceLifecycle.apply((c as any).args?.instruction) as any};}if((c as any).method==="runGateInstruction"){if(!o.runGates)throw new Error("run gates not configured");return{ok:true,result:await o.runGates.apply((c as any).args?.instruction) as any};}if((c as any).method==="membershipInstruction"){const inst=(c as any).args?.instruction,lifecycle=(o.syncSpaces??[]).find(sp=>sp.membership&&sp.spaceId===inst?.value?.spaceId)?.membership??o.membership;if(!lifecycle)throw new Error("membership not configured");return{ok:true,result:await lifecycle.apply(inst) as any};}const sync=(o.syncSpaces??[]).find(sp=>sp.spaceId===(c as any).space||sp.alias===(c as any).space),verifier=sync?sync.delegation:o.delegation;if(!verifier)throw new Error("delegation not configured");await verifier.epochNotice((c as any).args?.signedNotice,(c as any).space);return{ok:true,result:{installed:true}};}catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}},handleText:async(t:string,conn:Connection,max?:number):Promise<string>=>{let c:any;try{c=JSON.parse(t);}catch{return dispatch.handleText(t,conn,max);}if(!notices.includes(c?.method))return dispatch.handleText(t,conn,max);if(Buffer.byteLength(t)>(max??256*1024))return JSON.stringify({ok:false,error:{code:"ResourceExhausted",message:"notice frame too large"}});return JSON.stringify(await noticeService!.handle(c,conn));}} : undefined;
+		if((c as any).method==="spaceLifecycleInstruction"){if(!o.spaceLifecycle)throw new Error("space lifecycle not configured");return{ok:true,result:await o.spaceLifecycle.apply((c as any).args?.instruction) as any};}if((c as any).method==="runGateInstruction"){if(!o.runGates)throw new Error("run gates not configured");return{ok:true,result:await o.runGates.apply((c as any).args?.instruction) as any};}if((c as any).method==="membershipInstruction"){const inst=(c as any).args?.instruction,lifecycleEntry=syncEntries.find(sp=>sp.spaceId===inst?.value?.spaceId&&('sealed' in sp||sp.membership));if(lifecycleEntry&&'sealed' in lifecycleEntry)return sealedReply(lifecycleEntry.sealed);const lifecycle=(lifecycleEntry as SyncEntry|undefined)?.membership??o.membership;if(!lifecycle)throw new Error("membership not configured");return{ok:true,result:await lifecycle.apply(inst) as any};}const sync=syncEntry((c as any).space);if(sync&&'sealed' in sync)return sealedReply(sync.sealed);const verifier=sync?sync.delegation:o.delegation;if(!verifier)throw new Error("delegation not configured");await verifier.epochNotice((c as any).args?.signedNotice,(c as any).space);return{ok:true,result:{installed:true}};}catch(e){return{ok:false,error:{code:"PermissionDenied",message:e instanceof Error?e.message:String(e)}};}},handleText:async(t:string,conn:Connection,max?:number):Promise<string>=>{let c:any;try{c=JSON.parse(t);}catch{return dispatch.handleText(t,conn,max);}if(!notices.includes(c?.method))return dispatch.handleText(t,conn,max);if(Buffer.byteLength(t)>(max??256*1024))return JSON.stringify({ok:false,error:{code:"ResourceExhausted",message:"notice frame too large"}});return JSON.stringify(await noticeService!.handle(c,conn));}} : undefined;
 	const proof = new ProvingService(noticeService??dispatch, { gateHostId: o.hostId, keys: o.keys, now: o.now });
 	let chain: { handle(c: unknown, conn: Connection): Promise<Reply>; handleText(t: string, conn: Connection, bytes?: number): Promise<string> } = proof;
 	let stopSupervisor: (() => Promise<void>) | undefined;
     let supervisor: Supervisor | undefined;
 	let stopMaintenance: (() => Promise<void>) | undefined;
+	const syncStops = new Map<string, () => Promise<void>>();
 	let gate: Awaited<ReturnType<typeof startGate>> | undefined;
 	try {
 		if (o.control) {
@@ -171,11 +190,11 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
                 }}}:{})
             });
 		}
-		const mainService = await startService(host, ctx, { now: o.now }), syncServicesStops: Array<() => Promise<void>> = [];
-		stopMaintenance = async () => { for (const stop of syncServicesStops.splice(0)) await stop(); await mainService(); };
+		const mainService = await startService(host, ctx, { now: o.now });
+		stopMaintenance = async () => { for (const stop of [...syncStops.values()]) await stop(); syncStops.clear(); await mainService(); };
 		// Reaper and delivery of every served primary/sync Space run on its own Harness.
 		for (const sp of o.syncSpaces ?? []) {
-			try { syncServicesStops.push(await startService(sp.host, ctx, { now: o.now, space: sp.alias })); }
+			try { syncStops.set(sp.spaceId, await startService(sp.host, ctx, { now: o.now, space: sp.alias })); }
 			catch (e) { syncServices.delete(sp.spaceId); syncServices.delete(sp.alias); console.error(`primary/sync Space ${sp.alias} stays unserved:`, e instanceof Error ? e.message : String(e)); }
 		}
 		gate = await startGate(chain, { ...o, keys: o.keys });
@@ -185,6 +204,19 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
         // Transitions waiting for Member ACKs continue server side, also when no client is connected.
         if(o.control?.runs){const runs=o.control.runs;let busy=false;const timer=setInterval(()=>{if(busy)return;busy=true;void (async()=>{try{for(const id of await runs.pending())await runs.advance(id).catch(()=>{});}finally{busy=false;}})();},o.control.runAdvanceMs??1000);timer.unref?.();const prior=stopSupervisor;stopSupervisor=async()=>{clearInterval(timer);await prior?.();};}
 		let closed = false;
-		return { ...gate, service: chain, close: async () => { if (closed) return; closed = true; try { await gate!.close(); await stopSupervisor?.(); await stopMaintenance?.(); } finally { stopBoot?.(); } } };
+		/**
+		 * Swaps a primary/sync Space while running: unresolved after a sealed commit (its reaper stops, calls get
+		 * `CommitSealed`), or served again over the reopened Harness with a new service and reaper.
+		 */
+		const setSyncSpace = async (next: SyncEntry | UnresolvedSyncSpace) => {
+			const i = syncEntries.findIndex(sp => sp.spaceId === next.spaceId);
+			if (i < 0 || syncEntries[i]!.alias !== next.alias) throw new Error(`primary/sync Space ${next.alias} is not provisioned on this host`);
+			const stop = syncStops.get(next.spaceId); syncStops.delete(next.spaceId);
+			if ("sealed" in next) { const svc = sealedService(next); syncServices.set(next.spaceId, svc); syncServices.set(next.alias, svc); syncEntries[i] = next; await stop?.(); return; }
+			await stop?.();
+			const svc = makeSyncService(next); syncStops.set(next.spaceId, await startService(next.host, ctx, { now: o.now, space: next.alias }));
+			syncServices.set(next.spaceId, svc); syncServices.set(next.alias, svc); syncEntries[i] = next;
+		};
+		return { ...gate, service: chain, setSyncSpace, close: async () => { if (closed) return; closed = true; try { await gate!.close(); await stopSupervisor?.(); await stopMaintenance?.(); } finally { stopBoot?.(); } } };
 	} catch (e) { try { await gate?.close(); await stopSupervisor?.(); await stopMaintenance?.(); } finally { stopBoot?.(); } throw e; }
 }

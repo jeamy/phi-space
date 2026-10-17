@@ -31,7 +31,7 @@ export { ProvingService, MemoryKeyDirectory, generateKey, verifySignature, signe
 export { startGate, NetbirdDirectory, GateIdentity, DirectoryDown, DEFAULT_GROUP_ROLES, rolesOf, type Gate, type GateOptions, type PeerDirectory, type PeerInfo, type GroupRoles, type NetbirdDirectoryOptions } from "./gate.ts";
 export { serveSpace, socketTransport, type ServeOptions, type SpaceServer, type SocketTransport, type ListenTarget } from "./socket.ts";
 export { withSpaceService, piServerTransport, type RoutedServices, type RoutedAttachment, type RoutedCall } from "./pi-server.ts";
-export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, UnsupportedOperation, type Transport, type RemoteOptions } from "./remote.ts";
+export { RemoteSpace, inProcessTransport, RemoteError, OutcomeUnknown, CommitSealedPending, UnsupportedOperation, type Transport, type RemoteOptions } from "./remote.ts";
 export { SpaceService, MergeTypeNotExclusive, type MergeAdapter, StaticIdentity, DEFAULT_POLICY, PROTOCOL_VERSION, METHODS, principalKey, type Call, type Reply, type ErrorCode, type Identity, type IdentityAdapter, type Connection, type Policy, type RolePolicy, type SpaceServiceOptions, type Method } from "./service.ts";
 export { RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled, argHash, type Principal, type RequestRef, type ClaimView, type AdmissionResolution, type ClaimState } from "./claims.ts";
 export * as claims from "./claims.ts";
@@ -444,7 +444,7 @@ export { SshRecoveryRegister } from "./ssh-register.ts";
 
 export { verifySshFence } from "./fencing.ts";
 export { startQuarantineReplicas } from "./configured-runtime.ts";
-export { openSyncSpace, openSyncSpaces, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
+export { openSyncSpace, openSyncSpaces, sealedResolver, sealedCandidateOf, type SealedSyncSpace, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 export { replicaConfigNotice, latestReplicaConfigNotice, ReplicaNoticeBoard, signReplicaConfigNotice, adoptReplicaConfigNotice, type ReplicaConfigNotice, type SignedReplicaConfigNotice } from "./replica-notice.ts";
 export { signedReplicaPeer, replicaSyncHandler, ReplicaTransportRefused, type ReplicaPin } from "./replica-transport.ts";
 export { NetcupScp, NetcupFencing, NetcupError, fileTokenProvider, fileFenceState, memoryFenceState, serveFencing, TlsFencing, type NetcupServerPin, type NetcupFenceState } from "./netcup-fencing.ts";

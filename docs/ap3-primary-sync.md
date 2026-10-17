@@ -107,6 +107,34 @@ später explizit gebundenen Snapshot-/Stream-Bootstrap.
 - optional (`PI_SPACES_BOOTSTRAP_COPY`) eine lesend gezogene Kopie des Control-Stores von host-a: alle Spaces
   sind auf dem Replikat identisch.
 
+## Versiegelter, unbestätigter Commit im Dienst (`CommitSealed`)
+
+Bestätigt der Standby einen versiegelten Kandidaten nicht, ist dessen Ausgang offen: Er wird entweder später
+angewendet oder durch Fencing und Promotion ausgeschlossen. Seit 2026-10-17 sieht der Client das so (v3 6.2/7.2):
+
+- **Fehlercode `CommitSealed`:** Der Dienst antwortet so auf den Aufruf, dessen Commit versiegelt wurde, und danach auf
+  jeden weiteren Aufruf für diesen Space, bis der Host den Kandidaten geklärt hat. Er erkennt das auch, wenn der
+  Reaper versiegelt hat (Abfrage des Journals je Aufruf).
+- **Client:** `RemoteSpace` macht daraus `CommitSealedPending`, eine Unterklasse von `OutcomeUnknown` mit derselben
+  Request-Identität. Ein blockierendes `read`/`take` wartet und sendet denselben Aufruf erneut. Der Router behandelt
+  den Code wie jeden unbekannten Ausgang: Schritt `unknown`, Auflösung desselben Requests.
+- **Kein Abbruch:** Solange der Kandidat offen ist, öffnet kein Harness. Ein `cancelOperation` kann ihn deshalb nicht
+  negativ entscheiden.
+- **Klärung im laufenden Host:**
+  - `sealedResolver` setzt den Space auf ungeklärt und schließt den Harness (begrenzt, er kann vergiftet sein).
+  - Dann ruft er `SyncSpace.resolve()` mit wachsendem Abstand (1 bis 30 Sekunden) auf: Berechtigung prüfen, Storage
+    öffnen, `recoverPrimarySync` mit dem Standby, Harness und Boot-Guard.
+  - Danach bedient der Federation-Host den Space mit neuem Dienst und Reaper (`setSyncSpace`), ohne Neustart. Ein
+    Primary, der mit offenem Kandidaten und ohne Standby startet, läuft genauso.
+  - Verliert der Host seine Primary-Berechtigung (Fencing durch eine Promotion), hört der Versuch auf; der Kandidat
+    wird hier nie angewendet.
+- **Bewusste Vereinfachung:** `CommitSealed` gilt für den ganzen Space, nicht für einzelne Claims.
+  - Je Claim müsste man Claims aus den rohen Storage-Deltas lesen oder das Intent um Claim-Schlüssel erweitern. Das
+    wäre eine neue Intent-Version mit anderem Hash und Risiko bei gemischten Bündeln.
+  - Für den Client ändert sich nichts: Er fragt in jedem Fall nach demselben Request weiter.
+- **Tests:** `test/test-commit-sealed.test.ts` (versiegelter Write, Poll/Retry/Cancel, wartender Take,
+  automatische Klärung, gefencter Host, Start ohne Standby).
+
 ## Einbindung und noch offene Gesamtgarantien
 
 Der Adapter gilt für einen dedizierten vollständigen Storagebereich mit einer
@@ -115,10 +143,9 @@ Replikatversionen brauchen noch eine passende Trennung beziehungsweise einen
 vollständigen atomaren Domain-Vertrag. Die vorhandenen produktiven Stores werden
 nicht nachträglich ungeprüft umschlossen.
 
-Offen bleiben der authentifizierte Diensttransport, öffentliches `pending/commitSealed`
-mit Claim-Auflösung vor lokaler Anwendung, Boot-/Löschintegration einschließlich
-des neuen Journals, Snapshot-Bootstrap bestehender Stores, verifiziertes reales
-Fencing und Control-/Router-Umschaltung. Konfigurationsübergänge, `setStandby`,
+Offen bleiben Boot-/Löschintegration einschließlich des neuen Journals und `NotCommitted` mit Negativclaim nach
+einer Promotion (6.2). Diensttransport, Bootstrap bestehender Stores, reales Fencing und Control-/Router-Umschaltung
+sind inzwischen umgesetzt und echt gelaufen. Konfigurationsübergänge, `setStandby`,
 degradeToSingle und Promotion sind seit 2026-10-16 mit Simulator-Adapter
 vorhanden ([Replikatsteuerung](ap3-replica-control.md)). Deshalb bleiben produktive Sync-Regeln durch den bestehenden
 Policy-Validator gesperrt. Ein ACK des Journal-Bausteins ist kein Promotionsnachweis.
