@@ -316,7 +316,8 @@ export async function applyConfigTransition(storage:Storage,journal:PrimarySyncJ
  }catch(e){throw new CommitSealed(sealed,e);}
 }
 /** Captures every document, claim, task, mailbox and root table write in the supplied storage domain. */
-export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:{assertPrimary:()=>Promise<void>;now?:()=>number}):Storage{
+/** `onPoisoned`: a sealed candidate was not confirmed; this storage refuses all work until it is reopened and resolved. */
+export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:{assertPrimary:()=>Promise<void>;now?:()=>number;onPoisoned?:(sealed:{revision:number;hash:string})=>void}):Storage{
  let poisoned=false,busy=false;
  return new Proxy(storage,{get(target,property,receiver){
   if(property!=='commit'){const v=Reflect.get(target,property,receiver);return typeof v==='function'?v.bind(target):v;}
@@ -333,7 +334,7 @@ export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,pe
     await o.assertPrimary();sealed=journal.seal([...copy(writes),mark],now);
     if(sync){const ack=await peer!.accept(copy(sealed));if(canonical(ack)!==canonical({revision:sealed.revision,hash:sealed.hash,configHash:journal.configHash}))throw new PrimarySyncBlocked('standby ACK does not match sealed intent');}
     await o.assertPrimary();const seq=await apply(storage,journal,sealed,ctx);if(seq===null)throw new PrimarySyncBlocked('unexpected already-applied candidate');return seq;
-   }catch(e){if(sealed){poisoned=true;throw new CommitSealed(sealed,e);}throw e;}finally{busy=false;}
+   }catch(e){if(sealed){poisoned=true;try{o.onPoisoned?.({revision:sealed.revision,hash:sealed.hash});}catch{}throw new CommitSealed(sealed,e);}throw e;}finally{busy=false;}
   };
  }});
 }

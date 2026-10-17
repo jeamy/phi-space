@@ -37,6 +37,13 @@ export type SyncSpace = {
 	 * primary permit, e.g. fenced by a promotion: stop trying; the candidate is never applied here).
 	 */
 	resolve: () => Promise<{ state: "served" | "pending" | "excluded"; error?: string }>;
+	/**
+	 * The unresolved sealed candidate: the served store was poisoned by an unconfirmed commit, or (no Harness) the
+	 * journal holds a candidate beyond the applied revision. Not the short window of a commit in flight.
+	 */
+	sealed: () => { revision: number; hash: string } | null;
+	/** Called once whenever the served store gets poisoned (also by the reaper). */
+	onSealed: (listener: () => void) => void;
 };
 /** How long a poisoned Harness may take to close before it is abandoned. */
 const CLOSE_BOUND_MS = 5000;
@@ -57,7 +64,7 @@ export async function openSyncSpace(o: {
 	const ips = new Set(c.peers.map(p => p.ip)), transports: Array<ReturnType<typeof socketTransport>> = [];
 	const listener = await serveSpace({ handleText: replicaSyncHandler({ journal: () => journal, signer: o.signer, self: o.hostId, remotes: c.peers, assertQuarantine: assertQuarantine(o.external, o.hostId), now }) },
 		{ listen: { host: o.bindIp, port: c.port }, connection: s => ips.has(String(s.remoteAddress).replace(/^::ffff:/, "")) ? {} : null, maxConnections: 4, maxFrameBytes: 1 << 20 });
-	let harness: Harness | undefined, stopGuard: (() => void) | undefined;
+	let harness: Harness | undefined, stopGuard: (() => void) | undefined, poisoned: { revision: number; hash: string } | null = null, sealedListener: (() => void) | undefined;
 	const assert = assertSyncPrimary(o.external, o.hostId, journal), harnessPath = join(c.dir, "harness.sqlite");
 	let peer: ReturnType<typeof signedReplicaPeer> | null | undefined;
 	const peerFor = () => {
@@ -76,11 +83,11 @@ export async function openSyncSpace(o: {
 		let h: Harness | undefined;
 		try {
 			await recoverPrimarySync(raw, journal, p, o.ctx, assert);
-			h = await o.openHarness(primarySyncStorage(raw, journal, p, { assertPrimary: assert, now }));
+			h = await o.openHarness(primarySyncStorage(raw, journal, p, { assertPrimary: assert, now, onPoisoned: s => { if (!poisoned) { poisoned = s; queueMicrotask(() => sealedListener?.()); } } }));
 			if (!(await listSpaces(h, o.ctx)).some(i => i.spaceId === c.spaceId)) await h.commit(tx => createSpace(tx, c.alias, now(), { spaceId: c.spaceId, incarnation: c.incarnation }), o.ctx);
 		} catch (e) { if (h) await bounded(h.close(o.ctx)); else await bounded(raw.close(o.ctx)); throw e; }
 		stopGuard = installBootGuard(h, o.ctx, { hostId: o.hostId, authorityId: o.authorityId, external: o.external, installed: o.installed, replicaConfig: id => id === c.spaceId ? journal.config : null });
-		harness = h;
+		poisoned = null; harness = h;
 	};
 	const unserve = async () => { const h = harness; harness = undefined; stopGuard?.(); stopGuard = undefined; if (h) await bounded(h.close(o.ctx)); };
 	try {
@@ -96,6 +103,8 @@ export async function openSyncSpace(o: {
 	} catch (e) { for (const t of transports) t.close(); await listener.close(); journal.close(); throw e; }
 	return {
 		config: c, journal, role, get harness() { return harness; }, unserve,
+		sealed: () => { if (harness) return poisoned; if (role() !== "primary") return null; const h = journal.head(); return h.revision !== journal.appliedRevision ? { revision: h.revision, hash: h.hash } : null; },
+		onSealed: listener => { sealedListener = listener; },
 		resolve: async () => {
 			if (harness) return { state: "served" };
 			if (o.listenOnly || role() !== "primary") return { state: "excluded", error: "this host is not the primary of the journal configuration" };
@@ -127,11 +136,8 @@ export async function openSyncSpaces(configs: readonly SyncSpaceConfig[], open: 
 }
 
 export type SealedSyncSpace = { spaceId: string; alias: string; sealed: { revision: number; hash: string } };
-/** The unresolved sealed candidate of a primary/sync Space, or null. */
-export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: string } | null => {
-	const h = sp.journal.head();
-	return h.revision !== sp.journal.appliedRevision ? { revision: h.revision, hash: h.hash } : null;
-};
+/** The unresolved sealed candidate of a primary/sync Space, or null (see SyncSpace.sealed). */
+export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: string } | null => sp.sealed();
 /**
  * Resolves sealed, unconfirmed commits while the host runs (docs/ap3-primary-sync.md): the Space is set unresolved
  * (answered with CommitSealed), its Harness closed, and `resolve()` retried with backoff until the standby confirms
@@ -139,7 +145,7 @@ export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: stri
  */
 export function sealedResolver<E>(o: { set: (next: E | SealedSyncSpace) => Promise<void>; serve: (sp: SyncSpace) => E; retryMs?: number; maxRetryMs?: number; log?: (message: string) => void }) {
 	const log = o.log ?? (m => console.error(m)), active = new Map<string, Promise<void>>();
-	let stopped = false, timer: ReturnType<typeof setInterval> | undefined;
+	let stopped = false;
 	const wakers = new Set<() => void>();
 	const resolve = (sp: SyncSpace): Promise<void> => {
 		const key = sp.config.spaceId, running = active.get(key);
@@ -161,8 +167,8 @@ export function sealedResolver<E>(o: { set: (next: E | SealedSyncSpace) => Promi
 	};
 	return {
 		resolve,
-		/** Also catches candidates the reaper sealed without any call noticing. */
-		watch: (spaces: readonly SyncSpace[], everyMs = 2000) => { timer = setInterval(() => { for (const sp of spaces) if (sp.harness && sealedCandidateOf(sp)) void resolve(sp); }, everyMs); timer.unref?.(); },
-		stop: async () => { stopped = true; if (timer) clearInterval(timer); for (const wake of [...wakers]) wake(); await Promise.all([...active.values()]); },
+		/** Resolves whenever a served store gets poisoned, also by the reaper without any call noticing. */
+		attach: (spaces: readonly SyncSpace[]) => { for (const sp of spaces) sp.onSealed(() => void resolve(sp)); },
+		stop: async () => { stopped = true; for (const wake of [...wakers]) wake(); await Promise.all([...active.values()]); },
 	};
 }

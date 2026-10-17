@@ -214,7 +214,10 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 			const stop = syncStops.get(next.spaceId); syncStops.delete(next.spaceId);
 			if ("sealed" in next) { const svc = sealedService(next); syncServices.set(next.spaceId, svc); syncServices.set(next.alias, svc); syncEntries[i] = next; await stop?.(); return; }
 			await stop?.();
-			const svc = makeSyncService(next); syncStops.set(next.spaceId, await startService(next.host, ctx, { now: o.now, space: next.alias }));
+			const svc = makeSyncService(next);
+			// Without its reaper the Space is still served; every regular operation settles expiries itself.
+			try { syncStops.set(next.spaceId, await startService(next.host, ctx, { now: o.now, space: next.alias })); }
+			catch (e) { console.error(`primary/sync Space ${next.alias} is served without its reaper:`, e instanceof Error ? e.message : String(e)); }
 			syncServices.set(next.spaceId, svc); syncServices.set(next.alias, svc); syncEntries[i] = next;
 		};
 		return { ...gate, service: chain, setSyncSpace, close: async () => { if (closed) return; closed = true; try { await gate!.close(); await stopSupervisor?.(); await stopMaintenance?.(); } finally { stopBoot?.(); } } };

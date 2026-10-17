@@ -165,7 +165,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		if(syncSpaces.length)publishNotices();
 		for(const sp of syncSpaces)if(!sp.harness&&sp.role()==="primary"&&sealedOf(sp))resolveSealed(sp);
 		// The reaper can seal a candidate too, without any call noticing it.
-		if(syncSpaces.length)resolver.watch(syncSpaces);
+		resolver.attach(syncSpaces);
 		let recovery: Awaited<ReturnType<typeof startConfiguredRecovery>> | undefined;
 		try { if (config.recovery) recovery = await startConfiguredRecovery(host, raw, ctx, { ...config, authorityId, signer, controlKey: { algorithm: config.control.algorithm, publicKey: controlPublicKey }, config: config.recovery, external, installed }); await host.snapshot(Registry, ctx); } catch (e) { await recovery?.close();await root?.close(); await runtime.close(); noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(()=>{}); throw e; }
         let capabilityTimer:ReturnType<typeof setTimeout>|undefined, capabilityStopped=false, capabilityActive:Promise<void>=Promise.resolve();

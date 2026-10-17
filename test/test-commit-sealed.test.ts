@@ -18,18 +18,20 @@ import {ctx} from './support/persistent.ts';
 const ids=new StaticIdentity({'peer-a':{principal:{peerId:'peer-a'},roles:['member']}});
 type Svc={handleText(t:string,c:Connection):Promise<string>};
 
-async function fixture(port:number,fn:(o:{open:(h:'p'|'s')=>Promise<SyncSpace>;reg:SqliteRecoveryRegister;spaceId:string})=>Promise<void>){
+async function fixture(port:number,fn:(o:{open:(h:'p'|'s')=>Promise<SyncSpace>;reg:SqliteRecoveryRegister;spaceId:string;slowStandby:(on:boolean)=>void})=>Promise<void>){
  const dir=mkdtempSync(join(tmpdir(),'commit-sealed-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite'));
  const keys={p:provisionFileSigner(join(dir,'p.json')),s:provisionFileSigner(join(dir,'s.json'))},ip={p:'127.0.0.2',s:'127.0.0.3'};
  const spaceId='sp-0c7e6f1a-1111-4222-8333-944445555777',incarnation='0a1b2c3e',authorityId='authority';
  const genesis:PrimarySyncConfig={spaceId,authorityId,primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s',durability:'sync'};
  const permit=(role:'primary'|'standby')=>({state:'active',authorityId,dataIncarnation:incarnation,role,primaryEpoch:1,replicaConfigVersion:1,durability:'sync',transitionId:'provisioned'});
  await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[spaceId]:permit('primary')}});await reg.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{[spaceId]:permit('standby')}});
+ // The standby checks its permit before every ACK: slowing that check widens the window of a commit in flight.
+ let slow=false;const slowReg={get:async(k:string)=>{if(slow)await new Promise(r=>setTimeout(r,300));return reg.get(k);},compareAndSet:(k:string,e:number|null,v:any)=>reg.compareAndSet(k,e,v)} as unknown as SqliteRecoveryRegister;
  const installed={p:new SqliteRecoveryRegister(join(dir,'installed-p.sqlite')),s:new SqliteRecoveryRegister(join(dir,'installed-s.sqlite'))};
  const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(dir,h,'sync'),genesis,port,peers:[{hostId:h==='p'?'s':'p',algorithm:'ed25519',publicKey:keys[h==='p'?'s':'p'].publicKey,ip:ip[h==='p'?'s':'p']}]},
-  hostId:h,authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
+  hostId:h,authorityId,bindIp:ip[h],signer:keys[h],external:h==='s'?slowReg:reg,installed:installed[h],ctx,
   openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
- try{await fn({open,reg,spaceId});}finally{reg.close();installed.p.close();installed.s.close();rmSync(dir,{recursive:true,force:true});}
+ try{await fn({open,reg,spaceId,slowStandby:on=>{slow=on;}});}finally{reg.close();installed.p.close();installed.s.close();rmSync(dir,{recursive:true,force:true});}
 }
 /** What the federation host does: the served service of the Space, swapped by the resolver. */
 function host(p:()=>SyncSpace){
@@ -107,4 +109,25 @@ test('a primary starting with an unresolved candidate and no standby stays unser
   const jobs=new PiSpaces(p.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
   assert.equal(await jobs.count({type:'Job',fields:{n:2}}),1,'the candidate was applied after the restart');
  }finally{await p?.close().catch(()=>{});await s?.close().catch(()=>{});}
+}));
+
+test('a commit in flight is not a sealed candidate: concurrent reads and polls are served normally',()=>fixture(17567,async o=>{
+ const s=await o.open('s'),p=await o.open('p');
+ try{
+  const {remote,resolver}=host(()=>p);const harness=p.harness;
+  const request={principal:{peerId:'peer-a'},generation:(await remote.requestGeneration()).generation,requestId:'w1'};
+  await remote.write({type:'Job',fields:{n:1}},null,core.FOREVER,{request});
+  o.slowStandby(true);
+  const inFlight=remote.write({type:'Job',fields:{n:2}},null,core.FOREVER);
+  await new Promise(r=>setTimeout(r,60));
+  assert.notEqual(p.journal.head().revision,p.journal.appliedRevision,'the second commit is sealed and waits for its ACK');
+  for(let n=0;n<4;n++){
+   assert.equal(await remote.count({type:'Job'}),1);
+   assert.equal((await remote.readAll({type:'Job'})).length,1);
+   assert.equal((await remote.pollOperation(request)).state,'done');
+  }
+  await inFlight;o.slowStandby(false);
+  assert.equal(await remote.count({type:'Job'}),2);assert.equal(p.harness,harness,'still served on the same Harness');assert.equal(p.sealed(),null);
+  await resolver.stop();
+ }finally{await p.close().catch(()=>{});await s.close().catch(()=>{});}
 }));

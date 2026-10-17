@@ -113,8 +113,10 @@ Bestätigt der Standby einen versiegelten Kandidaten nicht, ist dessen Ausgang o
 angewendet oder durch Fencing und Promotion ausgeschlossen. Seit 2026-10-17 sieht der Client das so (v3 6.2/7.2):
 
 - **Fehlercode `CommitSealed`:** Der Dienst antwortet so auf den Aufruf, dessen Commit versiegelt wurde, und danach auf
-  jeden weiteren Aufruf für diesen Space, bis der Host den Kandidaten geklärt hat. Er erkennt das auch, wenn der
-  Reaper versiegelt hat (Abfrage des Journals je Aufruf).
+  jeden weiteren Aufruf für diesen Space, bis der Host den Kandidaten geklärt hat. Ungeklärt heißt: Der
+  Storage-Adapter meldet, dass ein Commit nach dem Versiegeln scheiterte (`onPoisoned`, auch beim Reaper); ohne
+  Harness genügt ein Kandidat jenseits der angewendeten Revision. Ein Commit, der gerade auf sein ACK wartet, zählt
+  nicht dazu; parallele Lesezugriffe laufen normal weiter.
 - **Client:** `RemoteSpace` macht daraus `CommitSealedPending`, eine Unterklasse von `OutcomeUnknown` mit derselben
   Request-Identität. Ein blockierendes `read`/`take` wartet und sendet denselben Aufruf erneut. Der Router behandelt
   den Code wie jeden unbekannten Ausgang: Schritt `unknown`, Auflösung desselben Requests.
@@ -133,7 +135,9 @@ angewendet oder durch Fencing und Promotion ausgeschlossen. Seit 2026-10-17 sieh
     wäre eine neue Intent-Version mit anderem Hash und Risiko bei gemischten Bündeln.
   - Für den Client ändert sich nichts: Er fragt in jedem Fall nach demselben Request weiter.
 - **Tests:** `test/test-commit-sealed.test.ts` (versiegelter Write, Poll/Retry/Cancel, wartender Take,
-  automatische Klärung, gefencter Host, Start ohne Standby).
+  automatische Klärung, gefencter Host, Start ohne Standby, Lesen während eines laufenden Commits);
+  `test/test-membership.test.ts` prüft `setSyncSpace` über Gate und Socket. Die Verdrahtung in
+  `startConfiguredFederation` selbst hat keinen eigenen Test.
 
 ## Einbindung und noch offene Gesamtgarantien
 

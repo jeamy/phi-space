@@ -400,5 +400,16 @@ for (const backend of BACKENDS)
                  assert.equal((await remote.requestMembership(q)).value.state, 'adding');
                  await assert.rejects(o.clients.b.write({type : 'Job', fields : {}}), MemberDrained, 'the state landed in the Space of b, not in the main store');
                  await o.clients.a.write({type : 'Job', fields : {}});
+                 // A sealed, unconfirmed commit of the sync Space: it is answered with CommitSealed through the real
+                 // dispatch (business calls and membership instructions alike) until it is served again.
+                 const entry = {spaceId : o.members.b.target.spaceId, alias : 'jobs-sync-b', host : o.bh, primaryEpoch : () => 1, membership : o.nodes.b};
+                 await runtime.setSyncSpace({spaceId : entry.spaceId, alias : entry.alias, sealed : {revision : 7, hash : 'f'.repeat(64)}});
+                 await assert.rejects(remote.count({type : 'Job'}), (e: any) => e?.code === 'CommitSealed');
+                 const q2 = await signMembership('instruction', {id : 'sync-add-2', authorityId : 'authority', memberId : 'b', spaceId : entry.spaceId, action : 'prepareAdd' as const}, 'control', o.rootKey.signer);
+                 await assert.rejects(remote.requestMembership(q2), (e: any) => e?.code === 'CommitSealed');
+                 await assert.rejects(runtime.setSyncSpace({...entry, alias : 'other'}), /not provisioned/);
+                 await runtime.setSyncSpace(entry);
+                 await assert.rejects(remote.requestMembership(q2), /already managed or frozen/, 'served again: the instruction reaches the lifecycle of b');
+                 await assert.rejects(remote.count({type : 'Job'}), /signed control grant/, 'business calls get the normal authorization again, not CommitSealed');
              } finally { socket.close(); await runtime.close(); }
          }));
