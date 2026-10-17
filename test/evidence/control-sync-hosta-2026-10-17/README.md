@@ -12,11 +12,11 @@ Die Daten stehen in `report.json`.
 |---|---|
 | Sicherung | Store, Konfiguration, Bündel und Signer im Container (`/data/phase1b-backup-20261017`), Unit-Datei auf big |
 | `main-sync bootstrap` | Revision 1; die Store-Prüfsumme nach dem letzten Chunk stimmt |
-| `set-standby` `control-standby-1` | sync, Epoche 1, Version 2; nanoi bis Revision 8 nachgeladen |
+| `set-standby` `control-standby-1` | sync, Epoche 1, Version 2; Standby-Kopf auf nanoi bei Revision 8 (`0e982e25…`) |
 | `degrade` `control-degrade-1` | single, Epoche 2, Version 3; netcup-Nachweis `SHUTOFF` für Server 964249 |
 | Freigabe `control-release-1` | Boot-Datensatz von `control-standby-nano` in `quarantine`, Permit `revoked/standby`; nanoi läuft wieder |
 | Standby geleert | alte Replik nach `replica.after-degrade-1` verschoben; Listener startet mit Revision 0 |
-| `set-standby` `control-standby-2` | sync, Epoche 2, Version 4 |
+| `set-standby` `control-standby-2` | sync, Epoche 2, Version 4; Standby-Kopf nach dem Degrade bei Revision 16 (`50fc0708…`) |
 | `degrade` `control-degrade-2` | single, Epoche 3, Version 5; erneut `SHUTOFF` |
 | Freigabe `control-release-2` | nanoi wieder in Quarantäne und gestartet; die Einheit `pi-spaces-control-standby` bleibt deaktiviert |
 
@@ -38,10 +38,14 @@ Die Boot-Datensätze am Ende stehen in `bootRecordsFinal`:
 
 Beim Stoppen vor `control-standby-2` liefen im Container zwei `run`-Prozesse. Ursache:
 
-1. Der Daemon aus dem ersten Sync-Betrieb hatte auf SIGTERM seinen Harness geschlossen und `owner.lock`
-   entfernt.
+1. Der Daemon aus dem ersten Sync-Betrieb (Neustart nach `control-standby-1`) hatte auf SIGTERM seinen Harness
+   geschlossen und `owner.lock` entfernt.
 2. Er blieb aber am Leben, weil Standby-Transport, Journal und Register-Client des Hauptstores offen blieben.
-3. Der nächste Start bekam die Sperre, und `stop` verweigerte danach zu Recht die Arbeit („ownership disagrees“).
+   Das `ExecStop` vor `control-degrade-1` scheiterte deshalb unbemerkt; systemd beendete nur den
+   `docker exec`-Client.
+3. `control-degrade-1` und die Grundprüfung danach liefen also mit diesem verwaisten Prozess. Er hatte seinen
+   Harness bereits geschlossen, Journal und Transport aber noch offen.
+4. Der nächste Start bekam die Sperre, und `stop` verweigerte danach zu Recht die Arbeit („ownership disagrees“).
 
 Behebung:
 

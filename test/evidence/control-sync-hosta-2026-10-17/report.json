@@ -26,7 +26,10 @@
     "primaryEpoch": 1,
     "replicaConfigVersion": 2
    },
-   "standbyRevisionReached": 8
+   "standbyHead": {
+    "revision": 8,
+    "hash": "0e982e25c3e6c7fde940b2bebbda302d178348bc157cc678cf9d6bc192b7ef8b"
+   }
   },
   {
    "step": "degrade",
@@ -59,6 +62,11 @@
     "durability": "sync",
     "primaryEpoch": 2,
     "replicaConfigVersion": 4
+   },
+   "standbyHead": {
+    "revision": 16,
+    "hash": "50fc07085d73171a3b979a51760d75076a13d655e7ac387107d9796a9e3b0bae",
+    "readAfter": "control-degrade-2"
    }
   },
   {
@@ -324,6 +332,7 @@
  "incident": {
   "what": "a run daemon on a main store in sync mode released owner.lock on SIGTERM but never exited (open standby transport and register client); the next start took the lock, so two run processes existed and `stop` refused",
   "fix": "federation-host closes the main-store handles (standby transport, journal, register client) in cleanup",
-  "verified": "after control-standby-2 the sync-mode daemon stopped with no remaining process"
+  "verified": "after control-standby-2 the sync-mode daemon stopped with no remaining process",
+  "timeline": "the orphan (pid 414) came from the restart after control-standby-1; the ExecStop before control-degrade-1 had already failed silently (systemd killed only the docker exec client), so control-degrade-1 and baseline-4 ran with the orphan alive (harness closed, journal and standby transport open); it surfaced at the stop before control-standby-2"
  }
 }
