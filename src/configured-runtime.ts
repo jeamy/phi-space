@@ -25,7 +25,7 @@ import { canonicalJson } from "./canonical.ts";
 import type { Json } from "./core.ts";
 import { startConfiguredRecovery, type PrivateRecoveryConfig } from "./configured-recovery.ts";
 import {RouterLeaseAuthority,DelegationVerifier} from "./delegation.ts";
-import {FederationPolicyAuthority,verifyFederationPolicy} from "./federation-policy.ts";
+import {FederationPolicyAuthority,verifyFederationPolicy,alignControlReplicaIn} from "./federation-policy.ts";
 import type { Algorithm } from "./auth.ts";
 
 export type FederationConfig = {
@@ -45,7 +45,9 @@ export type FederationConfig = {
 /** Factories for the dedicated stores of primary/sync Spaces; supplied by the daemon, which owns the storage backend. */
 export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<Storage>; openSyncHarness: (storage: Storage) => Promise<Harness>;
 	/** The main store runs on primary/sync (3.8): its current replica configuration, for every Space in it. */
-	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig };
+	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
+	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */
+	mainTransition?: () => ReturnType<typeof import("./primary-sync.ts").lastConfigTransition> };
 export async function startConfiguredFederation(host: Harness, ctx: Context, configFile: string, factories?: SyncSpaceFactories) {
 	const raw = { commit: host.commit.bind(host), snapshot: host.snapshot.bind(host) };
 	const config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
@@ -79,6 +81,9 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		if (config.mode === "control") {
 			if (config.hostId !== config.controlHostId || (await host.snapshot(Registry, ctx))?.aliases.control !== config.controlSpaceId) throw new Error("configured control host or space identity disagrees with provisioned state");
 			if (config.control.algorithm !== signer.algorithm || controlPublicKey !== signer.publicKey) throw new Error("provisioned control signer disagrees with installed authority");
+			// v3 5.3.1 step 6: the policy step of the last control transition, before grants, leases or the Root exist.
+			const transition = factories?.mainTransition?.();
+			if (transition) { const t = transition.config, b = transition.previous; await host.commit(tx => alignControlReplicaIn(tx, config.controlSpaceId, authorityId, { transitionId: transition.transitionId, primaryEpoch: t.primaryEpoch, replicaConfigVersion: t.replicaConfigVersion, primaryReplica: t.primaryReplica }, { primaryEpoch: b.primaryEpoch, primaryReplica: b.primaryReplica }), ctx); }
 			keys = new SpaceKeyDirectory(host, ctx, Date.now, config.controlSpaceId);
 			control = { host, authority: new GrantAuthority({ authorityId, hostId: config.hostId, signer, keys, identity, allowAOnly: async () => { const state = await snapshotSpace(host, config.controlSpaceId, ctx), policy = await external.get<any>(`access:${authorityId}`); return policy ? policy.value.authorityId === authorityId && policy.value.aOnlyAllowed === true : state?.restore?.kind !== "control"; }, refreshIdentity: async conn => { await directory.refresh(); const peer = conn.overlayIp ? await directory.lookup(conn.overlayIp) : null; if (!peer) return null; return identity.authenticate({ ...conn, credentials: { roles: peer.groups.flatMap(g => groupRoles[g] ?? []) } }); } }) };
 		} else {

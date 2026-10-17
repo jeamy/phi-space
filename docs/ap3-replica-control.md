@@ -164,7 +164,7 @@ liefert.
 Invariante: Ein Host, der gefenct werden kann, schreibt nie seinen eigenen Boot-Eintrag. Er liest ihn nur und
 installiert lokal.
 
-## Control Space auf primary/sync (3.8, lokal umgesetzt)
+## Control Space auf primary/sync (3.8)
 
 **Hauptstore als Sync-Store:** Ein Control-Host kann seinen ganzen Hauptstore als primary/sync betreiben
 (`mainSync` in der Konfiguration). Die Kette deckt damit jeden Space dieses Stores ab; auf host-a sind das der
@@ -185,13 +185,33 @@ Anlage-Epoche; ohne das wäre nach `degradeToSingle` die Router-Lease ungültig.
 **Geschwister-Spaces:** Ein Übergang zieht die Berechtigungen aller Spaces des Stores nach (`siblingSpaces`); jeder
 behält seine eigene Dateninkarnation.
 
+**Schritt 6, Sonderfall Control Space (v3 5.3.1):** Der Übergang ist ein Konfigurationseintrag im Journal, kein
+Store-Commit. Sein Policy-Schritt folgt deshalb im ersten Commit danach, bevor der Host etwas bedient.
+
+- **Abgleich beim Start:** `startConfiguredFederation` liest die letzte Transition des Journals
+  (`lastConfigTransition`). Noch vor Grants, Router-Lease und Root führt `alignControlReplicaIn` sie aus.
+  - Der Abgleich setzt den Marker `ControlReplicaMarker` (Transition, Epoche, Version, Vorgänger-Epoche, gleicher
+    Primary) und erhöht in demselben Commit `policyVersion` einer installierten Routing-Policy.
+  - Er ist idempotent je Transition. Ein Absturz zwischen Übergang und Abgleich wird beim nächsten Start
+    abgeschlossen.
+- **Lease über den Übergang:** Eine aufbewahrte oder noch lebende Router-Lease erneuert sich nur dann aus einer
+  älteren Control-Epoche, wenn der Marker einen Übergang mit gleichem Primary (`degradeToSingle`, `setStandby`)
+  aus genau dieser Epoche belegt. Router-Epoche und Lease-ID bleiben dabei gleich. Nach einem Primary-Wechsel
+  erneuert sich keine alte Lease.
+- **EpochNotice:** Der Root sendet die signierte `EpochNotice` des Supervisors je Transition an jedes aktive
+  Member. Nach einem Root-Neustart sendet er sie erneut; das Member behält das Maximum.
+- **Werkzeug:** `main-sync` lässt `degrade` und `set-standby` auch mit Routing-Policy zu. Es weist sie vorher ab,
+  wenn eine offene Profilumstellung den Policy-Schritt später blockieren würde.
+- **Laufende Operationen:** Bereits zugelassene Root-Operationen tragen ihre alte `policyVersion` weiter. Ein Member
+  lehnt neue Anfragen mit alter Version ab, wie bei jeder anderen Policy-Änderung, etwa `addMember`.
+
 **Grenzen:**
 
 - **Promotion eines Control-Replikats** wird abgewiesen. big ist nie Fencing-Ziel, und für den Control-Host gäbe es
   nur einen Container-Fencing-Adapter. Außerdem fehlen dem neuen Host Root-Lease-Datei und eigene Router- und
   Host-Schlüssel.
-- **Schritt 6** (Policy im selben Commit) ist nicht umgesetzt. `degrade` und `set-standby` werden abgewiesen,
-  solange der Store eine Routing-Policy enthält; host-a hat keine.
+- **Schritt 6** ist lokal umgesetzt und geprüft (`test-configured-root.test.ts`), ein echter Lauf steht aus. Dass
+  die `EpochNotice` bei einem Member ankommt, prüft der Test nur als Versuch gegen eine Attrappe.
 - **Kopplung:** Mit Standby braucht jeder Control-Write dessen ACK. Fällt der Standby aus, stehen Enrollments,
   Admin-Commands und Routing-Änderungen bis zu `degradeToSingle`.
 - **Kein Rückweg:** Ein Bootstrap lässt sich nicht rückgängig machen. Zurück geht es nur über die Kopie vor der
@@ -265,9 +285,8 @@ den neuen Primary ja erst nach der Übernahme.
 
 **Offen:**
 
-- Die Notice veröffentlichen muss bisher der Betreiber eines primary/sync-Space selbst anstoßen. Im
-  Federation-Daemon gibt es noch keine primary/sync-Spaces, weil der Policy-Validator Sync-Regeln sperrt.
-- Der Control-Space-Sonderfall (Schritt 6) gehört zu 3.8.
+- Promotion eines Control-Replikats mit Router-Wechsel (`routerEpoch` nach Ablauf der alten Lease); der Root lehnt
+  einen Router-Epochenwechsel beim Wiederöffnen bisher ab.
 
 ## primary/sync-Spaces im Federation-Host
 

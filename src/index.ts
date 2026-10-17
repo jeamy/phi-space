@@ -477,8 +477,8 @@ export * from "./federation-references.ts";
 
 export * from "./federation-controller.ts";
 
-export {renewableRouterLease} from "./delegation.ts";
-export {FederationRouting} from "./federation-policy.ts";
+export {renewableRouterLease,ControlReplicaMarker} from "./delegation.ts";
+export {FederationRouting,alignControlReplicaIn,controlAlignmentBlocker} from "./federation-policy.ts";
 
 export * from "./capability-directory.ts";
 
@@ -512,5 +512,5 @@ export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnav
 export { EntrySnapshotMaintenance } from "./entry-replication-transfer.ts";
 export type { EntrySnapshotMaintenanceJob } from "./entry-replication-transfer.ts";
 export { PrimarySyncJournal, PrimarySyncBlocked, CommitSealed, primarySyncStorage, recoverPrimarySync, materializeSyncHistory, bootstrapPrimarySync, captureStore } from './primary-sync.ts';
-export { applyConfigTransition, recoverSealedWithoutStandby, durabilityOf } from './primary-sync.ts';
+export { applyConfigTransition, recoverSealedWithoutStandby, durabilityOf, lastConfigTransition } from './primary-sync.ts';
 export type { PrimarySyncConfig, PrimaryCommitIntent, PrimaryConfigIntent, PrimaryBootstrapIntent, PrimaryIntent, PrimarySyncAck, PrimarySyncPeer } from './primary-sync.ts';

@@ -69,6 +69,22 @@ export const DelegationEpochs =
         family : true,
         initial : () => ({routerEpoch : 0, controlPrimaryEpoch : 0, policyVersion : 0})
     });
+/**
+ * v3 5.3.1 step 6: the last replica transition of a primary/sync control store, aligned in the control Space before
+ * anything serves (`alignControlReplicaIn`). A transition that keeps the primary (degradeToSingle, setStandby) lets
+ * the current router renew its lease from exactly the epoch before it; a primary change never does.
+ */
+export const ControlReplicaMarker =
+    defineDocFamily<{transitionId : string | null; primaryEpoch : number; replicaConfigVersion : number;
+                     fromEpoch : number; primaryReplica : string | null; samePrimary : boolean},
+                    null>({
+        kind : "pi-spaces.control-replica-marker",
+        version : 1,
+        scope : "session",
+        family : true,
+        initial : () => ({transitionId : null, primaryEpoch : 0, replicaConfigVersion : 0, fromEpoch : 0,
+                          primaryReplica : null, samePrimary : false})
+    });
 const epochKey = (authority: string, space: string) => canonicalJson([ authority, space ]);
 async function fencePending(tx: Tx, space: string, now: number,
                             e: {routerEpoch: number; controlPrimaryEpoch : number}) {
@@ -112,9 +128,12 @@ export class RouterLeaseAuthority {
             const live = core.list(s, now, {type : "RouterLease"})[0];
             let epoch = s.authorityCounters.routerEpoch;
             if (renew) {
+                const current=this.o.controlEpoch?.()??s.primaryEpoch??1;
+                // A lease from the epoch before an aligned same-primary transition renews; anything else must match.
+                const epochOk=async(e:unknown)=>{if(e===current)return true;const m=await tx.doc(ControlReplicaMarker,this.o.controlSpaceId,null);return !!m.transitionId&&m.samePrimary&&m.primaryEpoch===current&&m.fromEpoch===e;};
                 const retained=renew.token, l=retained?.lease;
-                const signedRetained=!!retained&&!!l&&!!this.o.signer.publicKey&&retained.issuer===this.o.peerId&&retained.algorithm===this.o.signer.algorithm&&verifyDetached(retained.algorithm,this.o.signer.publicKey,bytes("router-lease",l),retained.signature)&&l.id===renew.id&&l.routerPeerId===routerPeerId&&l.routerKeyId===routerKeyId&&l.routerEpoch===renew.routerEpoch&&l.authorityId===this.o.authorityId&&l.controlSpaceId===this.o.controlSpaceId&&l.controlPrimaryEpoch===(this.o.controlEpoch?.()??s.primaryEpoch??1);
-                if (renew.routerEpoch!==epoch||!(signedRetained||live&&live.fields.id===renew.id&&live.fields.routerPeerId===routerPeerId&&live.fields.routerKeyId===routerKeyId&&live.fields.routerEpoch===renew.routerEpoch))
+                const signedRetained=!!retained&&!!l&&!!this.o.signer.publicKey&&retained.issuer===this.o.peerId&&retained.algorithm===this.o.signer.algorithm&&verifyDetached(retained.algorithm,this.o.signer.publicKey,bytes("router-lease",l),retained.signature)&&l.id===renew.id&&l.routerPeerId===routerPeerId&&l.routerKeyId===routerKeyId&&l.routerEpoch===renew.routerEpoch&&l.authorityId===this.o.authorityId&&l.controlSpaceId===this.o.controlSpaceId&&await epochOk(l.controlPrimaryEpoch);
+                if (renew.routerEpoch!==epoch||!(signedRetained||live&&live.fields.id===renew.id&&live.fields.routerPeerId===routerPeerId&&live.fields.routerKeyId===routerKeyId&&live.fields.routerEpoch===renew.routerEpoch&&await epochOk(live.fields.controlPrimaryEpoch)))
                     throw new DelegationDenied("lease renewal no longer owns current epoch");
             } else {
                 if (!Number.isSafeInteger(epoch) || epoch < 0 || epoch >= Number.MAX_SAFE_INTEGER)

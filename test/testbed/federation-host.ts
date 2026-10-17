@@ -7,7 +7,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, openSync, closeSync
 import { join } from "node:path";
 import {createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
-import {ProvingService,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
+import {ProvingService,lastConfigTransition,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
 import { provisionFileSigner, loadFileSigner, privateFile, PiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
 const [mode, home="/data/phase1b"] = process.argv.slice(2);
 mkdirSync(home,{recursive:true,mode:0o700});
@@ -81,9 +81,9 @@ if(mode==="main-sync"){
    if(q.op==="status")result={...status(),...(q.digest?{storeHash:(await captureStore(st,ctx)).digest}:{})};
    else if(q.op==="bootstrap")result={...(await bootstrapPrimarySync(st,journal,ctx)),...status()};
    else if(["degrade","set-standby"].includes(q.op)){
-    // Step 6 (the control policy in the same commit) is not implemented: refuse while this store holds a routing policy.
-    const routing=await st.findDocument({kind:"pi-spaces.federation-routing",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx);
-    if(routing&&(await st.document(routing.id,"current",ctx))?.value?.policy)throw new Error("this control store holds a routing policy; the policy step of the transition is not implemented");
+    // Step 6 (v3 5.3.1): the next start aligns the routing policy before serving; nothing may block that afterwards.
+    const profiles=await st.findDocument({kind:"pi-spaces.profile-transitions",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx),open=profiles&&Object.values((await st.document(profiles.id,"current",ctx))?.value?.operations??{}).some((op:any)=>op.phase!=="completed");
+    if(open)throw new Error("an open profile transition blocks the policy step of a control transition");
     const register=new SyncRegister(q.controlRegister),siblings:string[]=q.siblings??[];
     try{
      const base={storage:st,journal,register,hostId:cfg.hostId,dataIncarnation:q.dataIncarnation,ctx,siblingSpaces:siblings};
@@ -175,7 +175,7 @@ try{
   }
 
 
-  const syncFactories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(storage:any)=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx),...(mainJournal?{mainReplica:()=>mainJournal!.config}:{})};
+  const syncFactories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(storage:any)=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx),...(mainJournal?{mainReplica:()=>mainJournal!.config,mainTransition:()=>lastConfigTransition(mainJournal!)}:{})};
   let quarantine:Awaited<ReturnType<typeof startQuarantineReplicas>>|undefined;
   if(JSON.parse(privateFile(configFile).toString()).syncSpaces?.length){try{quarantine=await startQuarantineReplicas(ctx,configFile,syncFactories);}catch(e){if(!(e instanceof BootBlocked)||!/not in quarantine/.test(e.message))throw e;}}
   if(quarantine){

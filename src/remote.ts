@@ -192,6 +192,8 @@ export class RemoteSpace implements SpaceLike {
  async resolveOperation(target:{generation:string;requestId:string},method:string,argumentHash:string,primaryEpoch:number):Promise<claims.AdmissionResolution>{return await this.send({method:'resolveOperation',args:{targetRequest:target,method,argumentHash,primaryEpoch}}) as unknown as claims.AdmissionResolution;}
 	async requestGeneration():Promise<{generation:string;admitUntil:number}>{return await this.rawCall("generation") as any;}
 	/** Leaves this primary's signed ReplicaConfigNotice in the control Space (the control host checks the proven host). */
+	/** The supervisor's signed EpochNotice for this Space (v3 5.2); the Member raises its epoch high-water marks. */
+	async sendEpochNotice(signedNotice:import("./delegation.ts").SignedEpochNotice):Promise<{installed:boolean}>{return await this.send({method:"epochNotice" as any,args:{signedNotice:signedNotice as any}}) as any;}
 	async publishReplicaNotice(notice:import("./replica-notice.ts").SignedReplicaConfigNotice):Promise<{stored:boolean}>{return await this.send({method:"replicaNotice" as any,args:{notice:notice as any}}) as any;}
 	async publishCapability(report:import("./capability-directory.ts").CapabilityReport):Promise<import("./core.ts").Lease>{return await this.send({method:"capabilityHeartbeat" as any,args:{report:report as any}}) as any;}
 	/** The signed worker assignments of this (proven) host; the control host derives the host from the connection. */

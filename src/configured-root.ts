@@ -14,7 +14,7 @@ import {canonicalJson} from './canonical.ts';
 import {snapshotSpace,NamedSpace} from './spaces.ts';
 import {BootBlocked} from './boot.ts';
 import {GrantAuthority} from './grants.ts';
-import {RouterLeaseAuthority,type SignedRouterLease,signDelegation,delegationForCall} from './delegation.ts';
+import {RouterLeaseAuthority,type SignedRouterLease,signDelegation,delegationForCall,ControlReplicaMarker} from './delegation.ts';
 import {FederationJournalLayout} from './federation-journals.ts';
 import {createFederationController} from './federation-controller.ts';
 import {RemoteSpace} from './remote.ts';
@@ -78,7 +78,17 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
   const notices=new ReplicaNoticeBoard({host:o.host,ctx:o.ctx,controlSpaceId:o.controlSpaceId,assertAuthority:async()=>{await assertRoot();}});
   const issuerKey=async(hostId:string)=>{for(const m of Object.values(cfg.members)){const e=endpointOf(m,hostId);if(e)return{algorithm:e.algorithm,publicKey:e.publicKey};}return null;};
   const adoptNotices=async()=>{await assertRoot();const r=await notices.adoptAll(t=>adoptReplicaConfigNotice(o.host,o.ctx,{controlSpaceId:o.controlSpaceId,authorityId:o.authorityId,register:o.external,issuerKey},t));for(const x of r.refused)console.error('Root replica notice refused:',x);return r;};
-  const heartbeat=()=>{active=adoptNotices().catch(e=>console.error('Root replica notices:',e instanceof Error?e.message:String(e))).then(()=>controller.directory!.refresh()).catch(e=>console.error('Root Member status:',e instanceof Error?e.message:String(e))).then(()=>{if(!stopped)timer=setTimeout(heartbeat,interval);});};heartbeat();
+  // v3 5.3.1 step 6: after an aligned control transition every active Member gets the supervisor's EpochNotice once
+  // per transition (again after a Root restart; the Member keeps the maximum).
+  const delivered=new Map<string,string>();
+  const epochNotices=async()=>{
+   const m=await o.host.snapshot(ControlReplicaMarker,o.controlSpaceId,o.ctx),state=await controller.policy.state();if(!m?.transitionId||!state.policy)return;
+   const pending=Object.values(state.members).filter(x=>['active','draining'].includes(x.state)&&delivered.get(x.id)!==m.transitionId);if(!pending.length)return;
+   await assertRoot();const signed=await o.leases.notice(state.policy.policyVersion);
+   for(const x of pending){const p={peerId:o.peerId,agentId:'root-status'},remote=new RemoteSpace(transport(x.id),{space:x.target.spaceId,signer,expectedGateHostId:x.target.hostId,ownPeerId:o.peerId,attempts:1,grantProvider:async()=>await grant(p) as any});
+    try{await remote.authenticate();await remote.sendEpochNotice(signed);delivered.set(x.id,m.transitionId);}catch(e){console.error('Root epoch notice:',x.id,e instanceof Error?e.message:String(e));}}
+  };
+  const heartbeat=()=>{active=adoptNotices().catch(e=>console.error('Root replica notices:',e instanceof Error?e.message:String(e))).then(()=>epochNotices()).catch(e=>console.error('Root epoch notices:',e instanceof Error?e.message:String(e))).then(()=>controller.directory!.refresh()).catch(e=>console.error('Root Member status:',e instanceof Error?e.message:String(e))).then(()=>{if(!stopped)timer=setTimeout(heartbeat,interval);});};heartbeat();
   return{...controller,adoptReplicaNotices:adoptNotices,withAdmin:<T>(peerId:string,run:()=>Promise<T>)=>adminContext.run(peerId,run),close:async()=>{stopped=true;if(timer)clearTimeout(timer);
    // Closing the Member connections first fails a probe that hangs on an unreachable Member; the rest of the
    // heartbeat gets a bounded wait, so a stopping daemon never outlives its stop window.

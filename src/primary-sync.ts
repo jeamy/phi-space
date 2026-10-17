@@ -200,6 +200,11 @@ async function scanAll<T>(scan:(cursor:any)=>Promise<{items:readonly T[];next?:a
  * then documents of the session, conversation and task scopes), and its digest. The replication marker is excluded.
  * Only current document state is captured: as-of history of rewindable documents does not replicate.
  */
+/** The last configuration transition of the chain (its reason is the transition ID) with the configuration before it. */
+export function lastConfigTransition(journal:PrimarySyncJournal):{transitionId:string;config:PrimarySyncConfig;previous:PrimarySyncConfig}|null{
+ for(let r=journal.head().revision;r>=1;r--){const i=journal.intent(r);if(i?.version===2)return{transitionId:i.reason,config:copy(i.config),previous:journal.configAt(r-1)};}
+ return null;
+}
 export async function captureStore(storage:Storage,ctx:Context):Promise<Captured>{
  // Storage IDs are minted numbers: ascending numeric order is creation order (parents before children).
  const order=(a:unknown,b:unknown)=>typeof a==='number'&&typeof b==='number'?a-b:String(a)<String(b)?-1:String(a)>String(b)?1:0;

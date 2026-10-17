@@ -288,7 +288,9 @@ prüft sie den bereits bezogenen Lease und die aktuellen Control-Zähler erneut.
 Ein abgelaufener oder ersetzter Lease wird weiterhin abgelehnt. Liegt der
 Control Space in einem primary/sync-Hauptstore, liefert `controlEpoch` die
 Control-Epoche aus dem Journal; Wächter und Lease-Erneuerung vergleichen dann
-diese statt der Epoche des Space-Dokuments. Der separat
+diese statt der Epoche des Space-Dokuments. `alignControlReplicaIn` führt beim Start den Policy-Schritt der
+letzten Control-Transition aus (`lastConfigTransition`, Marker `ControlReplicaMarker`); `RemoteSpace.sendEpochNotice`
+überbringt die `EpochNotice` eines Supervisors. Der separat
 injektierte `assertAuthority` bleibt eine reine Autoritätsprüfung; er darf
 keinen verschachtelten Commit auf demselben Host anfordern. `MemberLifecycle` installiert
 signierte Control-Anweisungen; `startConfiguredFederation` aktiviert dies mit

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,unlinkSync} from 'node:fs';
+import {mkdtempSync,rmSync,unlinkSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {FederationRouting,ReplicaNoticeBoard,signReplicaConfigNotice,serveSpace,createConfiguredRoot,SpaceKeyDirectory,PiSpaces,revokePeerKey,installBootGuard,MemoryKeyDirectory,provisionFileSigner,createSpace,spaceDoc,snapshotSpace,GateIdentity,GrantAuthority,RouterLeaseAuthority,SqliteRecoveryRegister,BootBlocked} from './src/index.ts';
@@ -101,4 +101,63 @@ for(const backend of BACKENDS)test(`${backend}: native Root closes promptly whil
   const started=Date.now();await root.close();root=undefined;
   assert.ok(Date.now()-started<3000,`close took ${Date.now()-started} ms while the probe hung`);
  }finally{await root?.close();for(const sv of servers)await sv.close();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
+});
+
+for(const backend of BACKENDS)test(`${backend}: control transition step 6 aligns the policy before a native Root restarts on a primary/sync main store`,async()=>{
+ const {PrimarySyncJournal,bootstrapPrimarySync,primarySyncStorage,applyConfigTransition,lastConfigTransition,alignControlReplicaIn,ControlReplicaMarker,listSpaces}=await import('./src/index.ts');
+ const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'root-step6-')),external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
+ let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;const servers:Awaited<ReturnType<typeof serveSpace>>[]=[];const errors:string[]=[],origError=console.error;
+ console.error=(...a:unknown[])=>{errors.push(a.map(String).join(' '));};
+ try{
+  let h=await home.open();const sid=(await h.commit(tx=>createSpace(tx,'control',Date.now()),ctx)).spaceId;await home.close(h);
+  const genesis={spaceId:sid,authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'root-host',standbyReplica:null,durability:'single' as const};
+  const journal=new PrimarySyncJournal(join(dir,'main-journal.sqlite'),genesis,{self:'root-host'});
+  let st=await home.storage();await bootstrapPrimarySync(st,journal,ctx);await st.close(ctx);
+  const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),journal,null,{assertPrimary:async()=>{}});
+  h=await home.open();const s=(await snapshotSpace(h,sid,ctx))!;
+  const permit=(e:number,v:number)=>({state:'active',authorityId:'authority',dataIncarnation:s.incarnation!,role:'primary',primaryEpoch:e,replicaConfigVersion:v,durability:'single',transitionId:'t'+v});
+  const setPermit=async(e:number,v:number)=>{for(const [reg,key] of [[external,'boot:root-host'],[installed,'installed:root-host:'+sid]] as const){const cur=await reg.get<any>(key),p=permit(e,v);await reg.compareAndSet(key,cur?.version??null,key.startsWith('boot')?{hostId:'root-host',state:'active',spaces:{[sid]:p}}:p);}};
+  await setPermit(1,1);
+  const control=provisionFileSigner(join(dir,'control-key')),router=provisionFileSigner(join(dir,'router-key')),agentHost=provisionFileSigner(join(dir,'host-key')),pKey=provisionFileSigner(join(dir,'p-key')),keys=new MemoryKeyDirectory();
+  const rec={peerId:'root-peer',keyId:router.keyId,algorithm:router.algorithm,publicKey:router.publicKey!,principal:'root',roles:['host','router','admin'],scope:['*'],state:'active' as const};keys.add(rec);keys.add({...rec,keyId:agentHost.keyId,algorithm:agentHost.algorithm,publicKey:agentHost.publicKey!,roles:['host']});
+  keys.add({...rec,peerId:'p-peer',keyId:pKey.keyId,algorithm:pKey.algorithm,publicKey:pKey.publicKey!,roles:['host']});
+  const peers:Record<string,string>={'127.0.0.1':'root-peer','127.0.0.2':'p-peer'};
+  const directory={refresh:async()=>{},lookup:async(ip:string)=>peers[ip]?{id:peers[ip]!,name:peers[ip]!,ip,connected:true,groups:['hosts']}:null};
+  servers.push(await serveSpace({handleText:async()=>JSON.stringify({id:0,ok:false,error:{code:'Unavailable',message:'fixture'}})},{listen:{host:'127.0.0.2',port:0}}));
+  const target={hostId:'p',spaceId:'member-space',authorityId:'authority',dataIncarnation:'inc-p',primaryEpoch:1};
+  await h.commit(async tx=>{const d=await tx.doc(FederationRouting,sid,null);d.policy={authorityId:'authority',policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'m'}};d.members={m:{id:'m',state:'active',target}};
+   const c=await spaceDoc(tx,sid,Date.now());c.authorityCounters={routerEpoch:0,policyVersion:1};},ctx);
+  let clock=Date.now();
+  const build=async(host:typeof h)=>{
+   const identity=new GateIdentity(),grants=new GrantAuthority({authorityId:'authority',hostId:'root-host',signer:control,keys,identity,refreshIdentity:async c=>identity.authenticate(c)});
+   const leases=new RouterLeaseAuthority({host,ctx,controlSpaceId:sid,authorityId:'authority',peerId:'root-peer',signer:control,keys,assertAuthority:async()=>{},controlEpoch:()=>journal.config.primaryEpoch,now:()=>clock});
+   return {leases,opts:{host,ctx,hostId:'root-host',peerId:'root-peer',ownAddress:'127.0.0.1',authorityId:'authority',controlSpaceId:sid,controlSigner:control,keys,directory,groupRoles:{hosts:['host','router','admin']},external,installed,grants,leases,assertControl:async()=>{},controlEpoch:()=>journal.config.primaryEpoch,
+    root:{id:'root',keyFile:join(dir,'router-key'),hostKeyFile:join(dir,'host-key'),leaseFile:join(dir,'root-lease'),journalPartitions:2,statusIntervalMs:15000,members:{m:{target,peerId:'p-peer',keyId:pKey.keyId,algorithm:pKey.algorithm,publicKey:pKey.publicKey!,address:{host:'127.0.0.2',port:(servers[0]!.address() as {port:number}).port}}}}}};
+  };
+  root=await createConfiguredRoot((await build(h)).opts);await root.close();root=undefined;await home.close(h);
+  const first=JSON.parse(readFileSync(join(dir,'root-lease'),'utf8'));assert.equal(first.lease.controlPrimaryEpoch,1);
+  // degradeToSingle-like transition on the same primary: epoch 2, version 2, as a journal configuration entry.
+  st=await raw();await applyConfigTransition(st,journal,{...journal.config,primaryEpoch:2,replicaConfigVersion:2},{reason:'control-degrade',ctx,assert:async()=>{}});await st.close(ctx);await setPermit(2,2);
+  // Crash before the policy step: the Root cannot renew its epoch-1 lease.
+  h=await home.open();clock+=120_000;
+  await assert.rejects(createConfiguredRoot((await build(h)).opts),/no longer owns current epoch/);
+  // Step 6: aligned exactly once, before anything serves.
+  const t=lastConfigTransition(journal)!;assert.equal(t.transitionId,'control-degrade');
+  const align=()=>h.commit(tx=>alignControlReplicaIn(tx,sid,'authority',{transitionId:t.transitionId,primaryEpoch:t.config.primaryEpoch,replicaConfigVersion:t.config.replicaConfigVersion,primaryReplica:t.config.primaryReplica},{primaryEpoch:t.previous.primaryEpoch,primaryReplica:t.previous.primaryReplica}),ctx);
+  assert.deepEqual(await align(),{aligned:true,policyVersion:2});assert.deepEqual(await align(),{aligned:false,policyVersion:2});
+  const m=(await h.snapshot(ControlReplicaMarker,sid,ctx))!;assert.deepEqual([m.fromEpoch,m.primaryEpoch,m.samePrimary],[1,2,true]);
+  // The Root restarts after its live lease expired: the signed retained lease renews into epoch 2 with the same router epoch.
+  const b=await build(h);root=await createConfiguredRoot(b.opts);
+  const renewed=JSON.parse(readFileSync(join(dir,'root-lease'),'utf8'));assert.deepEqual([renewed.lease.id,renewed.lease.routerEpoch,renewed.lease.controlPrimaryEpoch],[first.lease.id,first.lease.routerEpoch,2]);
+  for(let i=0;i<100&&!errors.some(e=>e.startsWith('Root epoch notice: m'));i++)await new Promise(r=>setTimeout(r,20));
+  assert.ok(errors.some(e=>e.startsWith('Root epoch notice: m')),'the Root tries to deliver the EpochNotice to the active Member');
+  await root.close();root=undefined;
+  // A primary change never lets an older lease renew: transition with a new primary, aligned, then renewal refused.
+  await home.close(h);st=await raw();await applyConfigTransition(st,journal,{...journal.config,primaryEpoch:3,replicaConfigVersion:3,primaryReplica:'other-host'},{reason:'control-promote',ctx,assert:async()=>{}});await st.close(ctx);
+  h=await home.open();const t2=lastConfigTransition(journal)!;
+  await h.commit(tx=>alignControlReplicaIn(tx,sid,'authority',{transitionId:t2.transitionId,primaryEpoch:3,replicaConfigVersion:3,primaryReplica:'other-host'},{primaryEpoch:2,primaryReplica:'root-host'}),ctx);
+  assert.equal((await h.snapshot(ControlReplicaMarker,sid,ctx))!.samePrimary,false);clock+=120_000;
+  await assert.rejects((await build(h)).leases.issue('root-peer',router.keyId,{id:renewed.lease.id,routerEpoch:renewed.lease.routerEpoch,token:renewed}),/no longer owns current epoch/);
+  void listSpaces;await home.close(h);journal.close();
+ }finally{console.error=origError;await root?.close();for(const sv of servers)await sv.close();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
 });

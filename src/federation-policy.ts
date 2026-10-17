@@ -16,6 +16,7 @@ import {
     validateFederationPolicy
 } from './routing-semantics.ts';
 import {spaceDoc} from './spaces.ts';
+import {ControlReplicaMarker} from './delegation.ts';
 
 export * from './routing-semantics.ts';
 export const FederationRouting = defineDocFamily<RoutingState, null>({
@@ -101,4 +102,36 @@ export async function applyFederationPolicyIn(tx: Tx, controlSpaceId: string, au
     control.authorityCounters.policyVersion = p.policyVersion;
     touch(control, Date.now());
     return copy(p);
+}
+
+/**
+ * v3 5.3.1 step 6, control special case: the replica transition of a primary/sync control store is a journal entry,
+ * not a store commit, so its policy step follows in the first commit after it, before the host serves anything
+ * (grants, router leases, Root). It records the transition in `ControlReplicaMarker` and raises `policyVersion` of
+ * an installed routing policy in the same commit. Idempotent per transition ID; a crash in between is finished on the
+ * next start.
+ */
+export async function alignControlReplicaIn(tx: Tx, controlSpaceId: string, authorityId: string,
+                                            t: {transitionId: string; primaryEpoch: number; replicaConfigVersion: number; primaryReplica: string},
+                                            before: {primaryEpoch: number; primaryReplica: string}): Promise<{aligned: boolean; policyVersion: number | null}> {
+    const m = await tx.doc(ControlReplicaMarker, controlSpaceId, null);
+    const d = await tx.doc(FederationRouting, controlSpaceId, null);
+    if (m.transitionId === t.transitionId) return {aligned : false, policyVersion : d.policy?.policyVersion ?? null};
+    // The epoch any outstanding lease can carry: the one of the last alignment (or of the configuration before).
+    const fromEpoch = m.transitionId ? m.primaryEpoch : before.primaryEpoch,
+          fromPrimary = m.transitionId ? m.primaryReplica : before.primaryReplica;
+    let policyVersion: number | null = null;
+    if (d.policy) {
+        const p = copy(d.policy);
+        p.policyVersion++;
+        policyVersion = (await applyFederationPolicyIn(tx, controlSpaceId, authorityId, p, d.policy.policyVersion)).policyVersion;
+    }
+    Object.assign(m, {transitionId : t.transitionId, primaryEpoch : t.primaryEpoch, replicaConfigVersion : t.replicaConfigVersion,
+                      fromEpoch, primaryReplica : t.primaryReplica, samePrimary : fromPrimary === t.primaryReplica});
+    return {aligned : true, policyVersion};
+}
+/** Checked before a control transition commits: afterwards nothing may keep its policy step from completing. */
+export async function controlAlignmentBlocker(host: SpaceHost, ctx: Context, controlSpaceId: string): Promise<string | null> {
+    const profiles = await host.snapshot(ProfileTransitions, controlSpaceId, ctx);
+    return Object.values(profiles?.operations ?? {}).some(op => op.phase !== 'completed') ? 'an open profile transition blocks the policy step of a control transition' : null;
 }
