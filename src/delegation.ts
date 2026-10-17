@@ -85,6 +85,8 @@ export const ControlReplicaMarker =
         initial : () => ({transitionId : null, primaryEpoch : 0, replicaConfigVersion : 0, fromEpoch : 0,
                           primaryReplica : null, samePrimary : false})
     });
+/** Maximum clock uncertainty between control and router hosts for a router change. */
+export const ROUTER_CHANGE_SKEW_MS = 5_000;
 const epochKey = (authority: string, space: string) => canonicalJson([ authority, space ]);
 async function fencePending(tx: Tx, space: string, now: number,
                             e: {routerEpoch: number; controlPrimaryEpoch : number}) {
@@ -136,6 +138,10 @@ export class RouterLeaseAuthority {
                 if (renew.routerEpoch!==epoch||!(signedRetained||live&&live.fields.id===renew.id&&live.fields.routerPeerId===routerPeerId&&live.fields.routerKeyId===routerKeyId&&live.fields.routerEpoch===renew.routerEpoch&&await epochOk(live.fields.controlPrimaryEpoch)))
                     throw new DelegationDenied("lease renewal no longer owns current epoch");
             } else {
+                // A different router (v3 5.2) starts only after the previous lease expired plus the clock uncertainty;
+                // the same router restarting with a higher epoch fences its own older frames.
+                if (live && (live.fields.routerPeerId !== routerPeerId || live.fields.routerKeyId !== routerKeyId) && now < Number(live.fields.expiresAt) + ROUTER_CHANGE_SKEW_MS)
+                    throw new DelegationDenied(`previous router lease is live until ${new Date(Number(live.fields.expiresAt) + ROUTER_CHANGE_SKEW_MS).toISOString()}`);
                 if (!Number.isSafeInteger(epoch) || epoch < 0 || epoch >= Number.MAX_SAFE_INTEGER)
                     throw new DelegationDenied("router epoch overflow/corruption");
                 epoch++;

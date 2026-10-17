@@ -258,7 +258,20 @@ eigene Art von Wechsel: gleiche Autorität, neuer Control-Host, neuer Supervisor
 (`controlChanged`). Der Testbed-Daemon fährt dann geordnet herunter und endet mit Code 75, und systemd startet ihn
 über `Restart=on-failure` neu. Der Neustart nimmt denselben Startpfad mit dem installierten Endpunkt.
 
-**Grenzen:** Ein Root zieht nicht mit (siehe oben).
+**Router-Wechsel (v3 5.2):** Ein Root ohne eigene Lease-Datei übernimmt ein bestehendes Journal seiner ID nur mit
+`takeover` in der Root-Konfiguration, etwa auf dem neuen Control-Host nach einer Promotion.
+
+- Er wartet (begrenzt durch `takeoverWaitMs`), bis die Lease des vorigen Routers abgelaufen ist, plus 5 Sekunden
+  Zeitunsicherheit (`ROUTER_CHANGE_SKEW_MS`).
+- Dann nimmt er eine frische Lease mit höherer Router-Epoche. Eine aufbewahrte Lease des alten Routers erneuert
+  sich danach nicht mehr.
+- Der Supervisor stellt eine frische Lease für einen **anderen** Router (Peer oder Schlüssel) nie aus, solange die
+  vorige lebt. Derselbe Router darf mit höherer Epoche neu starten und sperrt damit seine eigenen alten Frames.
+- Die `EpochNotice` geht auch nach einem Router-Wechsel an jedes aktive Member, einmal je Kombination aus
+  Control-Übergang und Router-Epoche.
+- Der neue Router braucht eigene, für seinen Peer enrollte Router- und Host-Schlüssel.
+
+**Grenzen:** Der Router-Wechsel ist lokal geprüft; ein echter Lauf mit Root bei einer Control-Promotion steht aus.
 
 Echter Lauf in beide Richtungen auf big: [Nachweis](../test/evidence/control-promotion-2026-10-17/README.md).
 
@@ -330,8 +343,7 @@ den neuen Primary ja erst nach der Übernahme.
 
 **Offen:**
 
-- Promotion eines Control-Replikats mit Router-Wechsel (`routerEpoch` nach Ablauf der alten Lease); der Root lehnt
-  einen Router-Epochenwechsel beim Wiederöffnen bisher ab.
+- Echter Lauf einer Control-Promotion mit Root (Router-Wechsel ist lokal umgesetzt).
 
 ## primary/sync-Spaces im Federation-Host
 

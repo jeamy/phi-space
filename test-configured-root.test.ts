@@ -161,3 +161,43 @@ for(const backend of BACKENDS)test(`${backend}: control transition step 6 aligns
   void listSpaces;await home.close(h);journal.close();
  }finally{console.error=origError;await root?.close();for(const sv of servers)await sv.close();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
 });
+
+for(const backend of BACKENDS)test(`${backend}: a new router takes an existing Root journal over only after the previous lease expired, with a higher router epoch`,async()=>{
+ const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'root-takeover-')),external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
+ let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;const servers:Awaited<ReturnType<typeof serveSpace>>[]=[];
+ try{
+  const host=await home.open(),sid=(await host.commit(tx=>createSpace(tx,'control',Date.now()),ctx)).spaceId,control=provisionFileSigner(join(dir,'control-key')),agentHost=provisionFileSigner(join(dir,'host-key')),pKey=provisionFileSigner(join(dir,'p-key')),keys=new MemoryKeyDirectory();
+  const routerA=provisionFileSigner(join(dir,'router-a')),routerB=provisionFileSigner(join(dir,'router-b'));
+  const rec={peerId:'root-peer',keyId:routerA.keyId,algorithm:routerA.algorithm,publicKey:routerA.publicKey!,principal:'root',roles:['host','router','admin'],scope:['*'],state:'active' as const};
+  keys.add(rec);keys.add({...rec,keyId:routerB.keyId,publicKey:routerB.publicKey!});keys.add({...rec,keyId:agentHost.keyId,algorithm:agentHost.algorithm,publicKey:agentHost.publicKey!,roles:['host']});keys.add({...rec,peerId:'p-peer',keyId:pKey.keyId,publicKey:pKey.publicKey!,roles:['host']});
+  const s=(await snapshotSpace(host,sid,ctx))!,permit={state:'active',authorityId:'authority',dataIncarnation:s.incarnation!,role:'local',primaryEpoch:1,transitionId:'provisioned'};
+  await installed.compareAndSet('installed:root-host:'+sid,null,permit);await external.compareAndSet('boot:root-host',null,{hostId:'root-host',state:'active',spaces:{[sid]:permit}});
+  const peers:Record<string,string>={'127.0.0.1':'root-peer','127.0.0.2':'p-peer'};
+  const directory={refresh:async()=>{},lookup:async(ip:string)=>peers[ip]?{id:peers[ip]!,name:peers[ip]!,ip,connected:true,groups:['hosts']}:null};
+  servers.push(await serveSpace({handleText:async()=>JSON.stringify({id:0,ok:false,error:{code:'Unavailable',message:'fixture'}})},{listen:{host:'127.0.0.2',port:0}}));
+  const target={hostId:'p',spaceId:'member-space',authorityId:'authority',dataIncarnation:'inc-p',primaryEpoch:1};
+  await host.commit(async tx=>{const d=await tx.doc(FederationRouting,sid,null);d.policy={authorityId:'authority',policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'m'}};d.members={m:{id:'m',state:'active',target}};
+   const c=await spaceDoc(tx,sid,Date.now());c.authorityCounters={routerEpoch:0,policyVersion:1};},ctx);
+  let clock=Date.now();
+  const opts=(router:string,lease:string,extra:Record<string,unknown>={})=>{
+   const identity=new GateIdentity(),grants=new GrantAuthority({authorityId:'authority',hostId:'root-host',signer:control,keys,identity,refreshIdentity:async c=>identity.authenticate(c)});
+   const leases=new RouterLeaseAuthority({host,ctx,controlSpaceId:sid,authorityId:'authority',peerId:'root-peer',signer:control,keys,assertAuthority:async()=>{},now:()=>clock});
+   return {leases,o:{host,ctx,hostId:'root-host',peerId:'root-peer',ownAddress:'127.0.0.1',authorityId:'authority',controlSpaceId:sid,controlSigner:control,keys,directory,groupRoles:{hosts:['host','router','admin']},external,installed,grants,leases,assertControl:async()=>{},
+    root:{id:'root',keyFile:join(dir,router),hostKeyFile:join(dir,'host-key'),leaseFile:join(dir,lease),journalPartitions:2,statusIntervalMs:15000,...extra,members:{m:{target,peerId:'p-peer',keyId:pKey.keyId,algorithm:pKey.algorithm,publicKey:pKey.publicKey!,address:{host:'127.0.0.2',port:(servers[0]!.address() as {port:number}).port}}}}}};
+  };
+  root=await createConfiguredRoot(opts('router-a','lease-a').o as any);await root.close();root=undefined;
+  const a=JSON.parse(readFileSync(join(dir,'lease-a'),'utf8'));assert.equal(a.lease.routerEpoch,1);
+  // Another router without its own lease: refused without takeover; with takeover it waits while the old lease is live.
+  await assert.rejects(createConfiguredRoot(opts('router-b','lease-b').o as any),/lost its lease record/);
+  await assert.rejects(createConfiguredRoot(opts('router-b','lease-b',{takeover:true,takeoverWaitMs:200}).o as any),/previous router lease is live/);
+  // After expiry plus clock uncertainty the new router takes over with a higher router epoch.
+  clock+=60_000+6_000;const b=opts('router-b','lease-b',{takeover:true});root=await createConfiguredRoot(b.o as any);
+  const lb=JSON.parse(readFileSync(join(dir,'lease-b'),'utf8'));assert.deepEqual([lb.lease.routerEpoch,lb.lease.routerKeyId],[2,routerB.keyId]);
+  assert.equal((await snapshotSpace(host,sid,ctx))!.authorityCounters!.routerEpoch,2);
+  // The old router's retained lease never renews again.
+  await assert.rejects(b.leases.issue('root-peer',routerA.keyId,{id:a.lease.id,routerEpoch:1,token:a}),/no longer owns current epoch/);
+  await root.close();root=undefined;
+  // The new router restarts from its own retained lease; takeover no longer applies.
+  root=await createConfiguredRoot(opts('router-b','lease-b').o as any);assert.equal(JSON.parse(readFileSync(join(dir,'lease-b'),'utf8')).lease.routerEpoch,2);
+ }finally{await root?.close();for(const sv of servers)await sv.close();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
+});

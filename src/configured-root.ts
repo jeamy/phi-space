@@ -14,7 +14,7 @@ import {canonicalJson} from './canonical.ts';
 import {snapshotSpace,NamedSpace} from './spaces.ts';
 import {BootBlocked} from './boot.ts';
 import {GrantAuthority} from './grants.ts';
-import {RouterLeaseAuthority,type SignedRouterLease,signDelegation,delegationForCall,ControlReplicaMarker} from './delegation.ts';
+import {RouterLeaseAuthority,type SignedRouterLease,signDelegation,delegationForCall,ControlReplicaMarker,DelegationDenied} from './delegation.ts';
 import {FederationJournalLayout} from './federation-journals.ts';
 import {createFederationController} from './federation-controller.ts';
 import {RemoteSpace} from './remote.ts';
@@ -23,7 +23,10 @@ import {FederationRouting} from './federation-policy.ts';
 import {ReplicaNoticeBoard,adoptReplicaConfigNotice} from './replica-notice.ts';
 import type {TargetBinding} from './router.ts';
 import type {Principal} from './claims.ts';
-export type RootConfig={id:string;keyFile:string;hostKeyFile:string;adminPeer?:{peerId:string;address:string};leaseFile:string;journalPartitions:number;allowMembershipCommands?:boolean;statusIntervalMs?:number;members:Record<string,{target:TargetBinding;peerId:string;keyId:string;algorithm:Signer['algorithm'];publicKey:string;address:{host:string;port:number};
+export type RootConfig={id:string;keyFile:string;hostKeyFile:string;adminPeer?:{peerId:string;address:string};leaseFile:string;journalPartitions:number;allowMembershipCommands?:boolean;statusIntervalMs?:number;
+ /** Router change (v3 5.2): adopt the existing Root journal of this id without an own retained lease (a new router host,
+  * e.g. after a control promotion). The fresh lease gets a higher router epoch once the previous router's lease expired. */
+ takeover?:boolean;takeoverWaitMs?:number;members:Record<string,{target:TargetBinding;peerId:string;keyId:string;algorithm:Signer['algorithm'];publicKey:string;address:{host:string;port:number};
  /** primary/sync Members: every other replica host that an adopted ReplicaConfigNotice may name as primary */
  replicas?:Record<string,{peerId:string;keyId:string;algorithm:Signer['algorithm'];publicKey:string;address:{host:string;port:number}}>}>;};
 type Endpoint={peerId:string;keyId:string;algorithm:Signer['algorithm'];publicKey:string;address:{host:string;port:number}};
@@ -60,7 +63,8 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  const grant=async(p:Principal)=>{if(p.peerId!==o.peerId)throw new BootBlocked('native Root only grants its own hosted-agent namespace');return o.grants.issue(await connection(),'effect',p.agentId);};
  let current:SignedRouterLease|undefined;
  const retained=existsSync(cfg.leaseFile)?JSON.parse(privateFile(cfg.leaseFile).toString()):undefined;
- if(!retained&&await o.host.snapshot(FederationJournalLayout,cfg.id,o.ctx))throw new BootBlocked('existing Root journal has lost its lease record');
+ const takeover=!retained&&!!await o.host.snapshot(FederationJournalLayout,cfg.id,o.ctx);
+ if(takeover&&!cfg.takeover)throw new BootBlocked('existing Root journal has lost its lease record');
  const save=(t:SignedRouterLease)=>{writeFileSync(cfg.leaseFile+'.tmp',JSON.stringify(t)+'\n',{mode:0o600});renameSync(cfg.leaseFile+'.tmp',cfg.leaseFile);};
  const retainLease=async()=>{if(!current||Date.now()+45000>=current.lease.expiresAt){const prior=current??retained;current=await o.leases.issue(o.peerId,signer.keyId,prior?{id:prior.lease.id,routerEpoch:prior.lease.routerEpoch,token:prior}:undefined);if(prior&&(current.lease.id!==prior.lease.id||current.lease.routerEpoch!==prior.lease.routerEpoch))throw new BootBlocked('Root lease changed during reopen');save(current);}return current;};
  const lease=async()=>{await assertRoot();return retainLease();};
@@ -69,6 +73,8 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  const transport=(id:string)=>{if(!cfg.members[id])throw new BootBlocked('Member endpoint is not provisioned');return{request:async(text:string)=>{const st=await o.host.snapshot(FederationRouting,o.controlSpaceId,o.ctx),hostId=st?.members[id]?.target.hostId??cfg.members[id]!.target.hostId;return socketFor(id,hostId).request(text);}};};
  let timer:ReturnType<typeof setTimeout>|undefined,stopped=false,active:Promise<void>=Promise.resolve();
  try{
+  // Router change: wait (bounded) until the previous router's lease expired, then take the journal over with a fresh lease.
+  if(takeover){const end=Date.now()+(cfg.takeoverWaitMs??90_000);for(;;){try{await lease();break;}catch(e){if(!(e instanceof DelegationDenied)||!/previous router lease is live/.test(e.message)||Date.now()>=end)throw e;await new Promise(r=>setTimeout(r,1000));}}}
   await assertRoot();const controller=await createFederationController({...(o.controlEpoch?{controlEpoch:o.controlEpoch}:{}),host:o.host,ctx:o.ctx,id:cfg.id,journalPartitions:cfg.journalPartitions,controlSpaceId:o.controlSpaceId,authorityId:o.authorityId,routerPeerId:o.peerId,routerSigner:signer,controlPeerId:o.peerId,controlSigner:o.controlSigner,controlPublicKey:o.controlSigner.publicKey!,transport,lease,grant,assertAuthority:async()=>{await assertRoot();},authorizeLease:lease,authorizeAdmin:async()=>{await assertRoot();if(!cfg.allowMembershipCommands||!cfg.adminPeer||adminContext.getStore()!==cfg.adminPeer.peerId)throw new BootBlocked('native Root requires a provisioned Supervisor administrator context');await o.directory.refresh();const p=await o.directory.lookup(cfg.adminPeer.address),s=await snapshotSpace(o.host,o.controlSpaceId,o.ctx);if(!p||p.id!==cfg.adminPeer.peerId||!p.groups.some(g=>o.groupRoles[g]?.includes('admin'))||!s||!hasAdminKey(s,Date.now(),p.id))throw new BootBlocked('native Root administrator key or overlay role is inactive');},memberPin:async member=>{const m=cfg.members[member.id];if(!m||canonicalJson(m.target as any)!==canonicalJson(member.target as any))throw new BootBlocked('membership target is not provisioned');const k=await o.keys.find(m.peerId,m.keyId);if(!k||k.state!=='active'||k.algorithm!==m.algorithm||k.publicKey!==m.publicKey||!k.roles.includes('host'))throw new BootBlocked('Member key pin is not active');return{issuer:m.peerId,algorithm:m.algorithm,publicKey:m.publicKey};},probeStatus:async(id,target)=>{
    const state=await controller.policy.state(),m=cfg.members[id];if(!provisionedTarget(m,target))throw new BootBlocked('status target is not provisioned');const p={peerId:o.peerId,agentId:'root-status'};
    const remote=new RemoteSpace(transport(id),{space:target.spaceId,signer,expectedGateHostId:target.hostId,ownPeerId:o.peerId,attempts:1,grantProvider:async()=>await grant(p) as any,delegationProvider:async(call,g)=>await signDelegation(signer,delegationForCall({call,principal:p,lease:await lease(),policyVersion:state.policy!.policyVersion,spaceId:target.spaceId,primaryEpoch:target.primaryEpoch,grant:g as any,now:Date.now(),replicaConfigVersion:state.members[id]?.replication?.replicaConfigVersion})) as any});await remote.authenticate();const info:any=await remote.info();if(info.spaceId!==target.spaceId||info.hostId!==target.hostId||info.incarnation!==target.dataIncarnation||info.authorityId!==target.authorityId||info.primaryEpoch!==target.primaryEpoch)throw new BootBlocked('Member status target identity changed');return{revision:info.rev,free:null,lag:null};
@@ -82,11 +88,13 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
   // per transition (again after a Root restart; the Member keeps the maximum).
   const delivered=new Map<string,string>();
   const epochNotices=async()=>{
-   const m=await o.host.snapshot(ControlReplicaMarker,o.controlSpaceId,o.ctx),state=await controller.policy.state();if(!m?.transitionId||!state.policy)return;
-   const pending=Object.values(state.members).filter(x=>['active','draining'].includes(x.state)&&delivered.get(x.id)!==m.transitionId);if(!pending.length)return;
+   // Due after an aligned control transition and after a router change; keyed by both, so either triggers it once.
+   const m=await o.host.snapshot(ControlReplicaMarker,o.controlSpaceId,o.ctx),state=await controller.policy.state(),routerEpoch=(await controlState())?.authorityCounters?.routerEpoch??0;
+   if((!m?.transitionId&&routerEpoch<=1)||!state.policy)return;const key=(m?.transitionId??'')+'#'+routerEpoch;
+   const pending=Object.values(state.members).filter(x=>['active','draining'].includes(x.state)&&delivered.get(x.id)!==key);if(!pending.length)return;
    await assertRoot();const signed=await o.leases.notice(state.policy.policyVersion);
    for(const x of pending){const p={peerId:o.peerId,agentId:'root-status'},remote=new RemoteSpace(transport(x.id),{space:x.target.spaceId,signer,expectedGateHostId:x.target.hostId,ownPeerId:o.peerId,attempts:1,grantProvider:async()=>await grant(p) as any});
-    try{await remote.authenticate();await remote.sendEpochNotice(signed);delivered.set(x.id,m.transitionId);}catch(e){console.error('Root epoch notice:',x.id,e instanceof Error?e.message:String(e));}}
+    try{await remote.authenticate();await remote.sendEpochNotice(signed);delivered.set(x.id,key);}catch(e){console.error('Root epoch notice:',x.id,e instanceof Error?e.message:String(e));}}
   };
   const heartbeat=()=>{active=adoptNotices().catch(e=>console.error('Root replica notices:',e instanceof Error?e.message:String(e))).then(()=>epochNotices()).catch(e=>console.error('Root epoch notices:',e instanceof Error?e.message:String(e))).then(()=>controller.directory!.refresh()).catch(e=>console.error('Root Member status:',e instanceof Error?e.message:String(e))).then(()=>{if(!stopped)timer=setTimeout(heartbeat,interval);});};heartbeat();
   return{...controller,adoptReplicaNotices:adoptNotices,withAdmin:<T>(peerId:string,run:()=>Promise<T>)=>adminContext.run(peerId,run),close:async()=>{stopped=true;if(timer)clearTimeout(timer);
