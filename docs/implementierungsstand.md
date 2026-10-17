@@ -346,6 +346,16 @@ Nachtrag 2026-10-17 (3.8):
   Sync-Betrieb lief.
 - Offen: Promotion des Control-Replikats und Schritt 6.
 
+Nachtrag 2026-10-17 (Router-Pfad echt):
+
+- Ein nativer Root auf host-a hat einen replizierten Member auf nano-test und standby-100 per `addMember`
+  aufgenommen und Schreibvorgänge dorthin geroutet.
+- Nach Promotion mit netcup-Fencing und Degrade auf 100 hat er die `ReplicaConfigNotice` übernommen und weiter
+  geroutet; danach alles zurückgesetzt ([Nachweis](../test/evidence/root-hosta-2026-10-17/README.md)).
+- Dabei wurden zwei übersehene Stellen aus 3.8 gefunden und behoben: der Journal-Wächter des Roots und die
+  Erneuerung der aufbewahrten Router-Lease verglichen noch die Epoche des Space-Dokuments.
+- Der Testbed-Daemon hat dafür den sperrfreien Modus `enroll-key` für zusätzliche Schlüssel eines laufenden Hosts.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.

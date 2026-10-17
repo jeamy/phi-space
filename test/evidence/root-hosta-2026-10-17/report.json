@@ -1,0 +1,303 @@
+{
+ "passed": true,
+ "root": {
+  "host": "phase1b-host-a",
+  "id": "root-hosta",
+  "journalPartitions": 8,
+  "routerKeyId": "0fdb081d26680fd193e14b1c43393069",
+  "hostKeyId": "0ccc4542c1e53203ede6be88ed0cc485"
+ },
+ "member": {
+  "id": "sync-member",
+  "spaceId": "sp-8a6d5b1d-58db-4434-8f6d-69cc308163c8",
+  "dataIncarnation": "29982a8a",
+  "primary": "nano-test",
+  "standby": "standby-100",
+  "replicaPort": 17432
+ },
+ "bundles": {
+  "host-a": "fe0d792f57433009",
+  "nano-test": "2f2debf74f1895fc",
+  "standby-100": "2f2debf74f1895fc"
+ },
+ "steps": [
+  {
+   "step": "enroll router key (host-a briefly in space-enroll)",
+   "keyId": "0fdb081d\u2026",
+   "role": "router",
+   "scope": [
+    "*"
+   ]
+  },
+  {
+   "step": "enroll host key",
+   "keyId": "0ccc4542\u2026",
+   "role": "host",
+   "scope": [
+    "*"
+   ]
+  },
+  {
+   "step": "sync Space root-member on nano-test/standby-100",
+   "bothHeads": {
+    "revision": 1,
+    "hash": "382829fbeb527ffb\u2026"
+   }
+  },
+  {
+   "step": "Root start attempt 1",
+   "failed": "RouterLease was superseded by Control (controller compared the control Space document epoch)",
+   "fix": "2be7885"
+  },
+  {
+   "step": "Root start attempt 2",
+   "failed": "lease renewal no longer owns current epoch (retained lease renewal compared the Space document epoch)",
+   "fix": "f0a879a",
+   "autoReverted": true
+  },
+  {
+   "step": "Root start attempt 3",
+   "ready": true
+  },
+  {
+   "step": "addMember",
+   "result": {
+    "phase": "completed",
+    "memberId": "sync-member",
+    "policyVersion": 1
+   }
+  },
+  {
+   "step": "routed writes before",
+   "entries": [
+    "e29982a8a-1",
+    "e29982a8a-2",
+    "e29982a8a-3"
+   ],
+   "count": 3,
+   "heads": {
+    "nano-test": {
+     "revision": 10,
+     "hash": "a83234db40002681\u2026"
+    },
+    "standby-100": {
+     "revision": 10,
+     "hash": "a83234db40002681\u2026"
+    }
+   }
+  },
+  {
+   "step": "promote standby-100",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 2,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 2,
+    "spaceId": "sp-8a6d5b1d-58db-4434-8f6d-69cc308163c8",
+    "standbyReplica": "nano-test"
+   },
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "promote root-promote"
+    }
+   }
+  },
+  {
+   "step": "degrade on standby-100",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "single",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 3,
+    "spaceId": "sp-8a6d5b1d-58db-4434-8f6d-69cc308163c8",
+    "standbyReplica": null
+   },
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "degrade root-degrade"
+    }
+   }
+  },
+  {
+   "step": "notice adopted by the Root",
+   "member": {
+    "id": "sync-member",
+    "target": {
+     "hostId": "standby-100",
+     "spaceId": "sp-8a6d5b1d-58db-4434-8f6d-69cc308163c8",
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "dataIncarnation": "29982a8a",
+     "primaryEpoch": 3
+    },
+    "state": "active",
+    "replication": {
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 3,
+     "durability": "single",
+     "recoveryId": "root-degrade"
+    }
+   }
+  },
+  {
+   "step": "routed writes after",
+   "writes": [
+    {
+     "id": "a1",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e29982a8a-4"
+     }
+    },
+    {
+     "id": "a2",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e29982a8a-5"
+     }
+    },
+    {
+     "id": "a3",
+     "passed": true,
+     "result": {
+      "written": true,
+      "entry": "e29982a8a-6"
+     }
+    }
+   ],
+   "count": {
+    "complete": true,
+    "missingMembers": [],
+    "revisions": {
+     "sync-member": 16
+    },
+    "consistentSnapshot": false,
+    "count": 6
+   }
+  },
+  {
+   "step": "standby-100 head after",
+   "head": {
+    "revision": 20,
+    "hash": "4c597f33b02bc091e952f5cb9b6dfe1bc1485547dde7c0222555e2557b669102",
+    "configHash": "c3a09ea1810acbc75864900c6e620219a26ae1eec4f68ea1e053f61b18193e3b"
+   }
+  }
+ ],
+ "restore": {
+  "host-a": "post-3.8 backup (harness, installed, main-sync journal, config); drop-in removed; boot record unchanged (version 10)",
+  "nano-test/standby-100": "configs from *.before-root-20261017, sync dirs set aside, boot records restored",
+  "bootRecords": {
+   "nano-test": {
+    "afterRun": {
+     "version": 30,
+     "state": "quarantine",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "revoked/local",
+      "sp-8a6d5b1d-58db-4434-8f6d-69cc308163c8": "revoked/primary",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "revoked/local"
+     }
+    },
+    "restored": {
+     "version": 31,
+     "state": "active",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    }
+   },
+   "standby-100": {
+    "afterRun": {
+     "version": 19,
+     "state": "active",
+     "permits": {
+      "sp-8a6d5b1d-58db-4434-8f6d-69cc308163c8": "active/primary",
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    },
+    "restored": {
+     "version": 20,
+     "state": "active",
+     "permits": {
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    }
+   }
+  },
+  "vpsc": "tls.json and fencing.json from *.before-root-20261017",
+  "netbird": "owned group/policy root-hosta-20261017 removed; space-enroll back to empty"
+ },
+ "baselines": {
+  "rootStarted": {
+   "at": "2026-10-17T10:15:45.438Z",
+   "peerKeys": 15,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "restored": {
+   "at": "2026-10-17T10:32:58.061Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  }
+ },
+ "incidents": [
+  "two failed Root starts took host-a (control) down: about four minutes for the first (manual revert, stale owner.lock after SIGTERM during startup), under 30 s for the second (automatic revert)",
+  "the Root daemon took longer than the 15 s stop window while nanoi was off; it exited by itself and removed its lock",
+  "config backups made by root carried root ownership back on restore (EACCES on start, then a stale lock from the same boot); fixed by chown and lock removal after checking that no daemon runs"
+ ]
+}
