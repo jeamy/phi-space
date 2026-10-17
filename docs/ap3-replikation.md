@@ -344,6 +344,8 @@ kompaktierenden Schatten, der genau dieselben Eingaben bekommt.
     Erneuerungskette.
   - Jede Regel ist durch Mutationsproben belegt: Ohne sie schlägt mindestens ein Test fehl.
   - Der Laufzeittest kompaktiert periodisch zwischen zwei Hosts über bewiesene Verbindungen.
+- **Echter Lauf** mit nano-test und standby-100: periodische Kompaktierung auf beiden Hosts, Sichten unverändert,
+  Ströme danach weiter ([Nachweis](../test/evidence/compaction-run-2026-10-17/README.md)).
 
 **5. Echter Lauf:** bestanden mit nano-test und standby-100: Replikation, Partition mit gleichzeitigen Writes
 und Konvergenz, verteilte Löschung mit physischer Kompaktierung auf beiden Hosts
