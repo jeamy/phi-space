@@ -266,6 +266,12 @@ Fabriken, die der Daemon übergibt.
 - **Echter Lauf im Daemon** am 2026-10-16 bestanden
   ([Nachweis](../test/evidence/phase3-daemon-sync-2026-10-16/README.md)). Die Router-Übernahme der Notice ist dabei
   nicht enthalten, weil host-a mit dem alten Bündel läuft.
+- **Automatisierter Zyklus:** Der Treiber `test/testbed/scenarios/phase3-daemon-cycle.ts` führt alle
+  Operator-Schritte aus, setzt nach Abbruch fort und wartet auf Journalzeilen statt auf feste Pausen. Echter Lauf
+  am 2026-10-17 bestanden ([Nachweis](../test/evidence/phase3-daemon-cycle-2026-10-17/README.md)).
+- **Verwaiste Sperre:** `owner.lock` enthält `boot_id` und Startzeit. Eine Sperre aus einem früheren Boot räumt
+  der Daemon selbst; innerhalb desselben Boots gilt weiter die Prüfung durch den Operator.
+- **Membership:** Anweisungen für einen Sync-Space gehen an einen `MemberLifecycle` über dessen eigenen Store.
 - **Fehlerisolation:** Kann ein Sync-Space nicht öffnen, etwa weil sein Standby für einen versiegelten Kandidaten
   nicht erreichbar ist, bleibt nur dieser Space unbedient und gesperrt. Der Host und seine übrigen Spaces starten
   (`openSyncSpaces`).

@@ -1,0 +1,302 @@
+{
+ "passed": true,
+ "steps": {
+  "preflight": {
+   "primary": {
+    "revision": 1,
+    "hash": "d87242c6699cb2b39902f8a5e6fa2fd16808fe851c3be188f777b0ad9c7dc56f",
+    "configHash": "6a55c15d8f05ca90b568f55e405646e6836ce89235106b7f271d8a4933782b40"
+   },
+   "standby": {
+    "revision": 1,
+    "hash": "d87242c6699cb2b39902f8a5e6fa2fd16808fe851c3be188f777b0ad9c7dc56f",
+    "configHash": "6a55c15d8f05ca90b568f55e405646e6836ce89235106b7f271d8a4933782b40"
+   }
+  },
+  "write-before": {
+   "host": "nano-test",
+   "writes": [
+    {
+     "n": 0,
+     "ok": true
+    },
+    {
+     "n": 1,
+     "ok": true
+    },
+    {
+     "n": 2,
+     "ok": true
+    },
+    {
+     "n": 3,
+     "ok": true
+    },
+    {
+     "n": 4,
+     "ok": true
+    }
+   ],
+   "primaryEpoch": 1,
+   "count": 5
+  },
+  "stop-standby": {
+   "stopped": true
+  },
+  "fork": {
+   "client": {
+    "host": "nano-test",
+    "writes": [
+     {
+      "n": 0,
+      "ok": false,
+      "error": "commit is durably sealed; resolve this candidate before admitting new work"
+     }
+    ],
+    "primaryEpoch": 1,
+    "countError": "Session is poisoned by a failed commit after storage admission; reopen it"
+   },
+   "fork": {
+    "revision": 8,
+    "hash": "64a80c7714905db021ec9970b2f687114c5c06a2f7fd948e83c3337262671446",
+    "configHash": "6a55c15d8f05ca90b568f55e405646e6836ce89235106b7f271d8a4933782b40"
+   }
+  },
+  "promote": {
+   "recoveryId": "cycle-promote",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "sync",
+    "primaryEpoch": 2,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 2,
+    "spaceId": "sp-a5274943-2dc2-4dd5-b742-a7bc190cce28",
+    "standbyReplica": "nano-test"
+   },
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "promote cycle-promote"
+    }
+   }
+  },
+  "degrade": {
+   "recoveryId": "cycle-degrade",
+   "config": {
+    "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+    "durability": "single",
+    "primaryEpoch": 3,
+    "primaryReplica": "standby-100",
+    "replicaConfigVersion": 3,
+    "spaceId": "sp-a5274943-2dc2-4dd5-b742-a7bc190cce28",
+    "standbyReplica": null
+   },
+   "recoveredCommitted": [],
+   "proof": {
+    "kind": "cloud",
+    "evidence": {
+     "provider": "netcup",
+     "serverId": 964249,
+     "state": "SHUTOFF",
+     "autostart": false,
+     "reason": "degrade cycle-degrade"
+    }
+   }
+  },
+  "start-new-primary": {
+   "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+  },
+  "write-single": {
+   "host": "standby-100",
+   "writes": [
+    {
+     "n": 0,
+     "ok": true
+    },
+    {
+     "n": 1,
+     "ok": true
+    },
+    {
+     "n": 2,
+     "ok": true
+    }
+   ],
+   "primaryEpoch": 3,
+   "count": 8
+  },
+  "release": {
+   "state": "quarantine"
+  },
+  "wipe-old": {
+   "aside": "/data/nano/sync-cycle.aside-1792217191947"
+  },
+  "start-quarantine": {
+   "quarantine": "{\"quarantine\":true,\"listeners\":[\"jobs-cycle\"],\"failed\":[]}"
+  },
+  "set-standby": {
+   "setStandby": {
+    "transitionId": "cycle-standby",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 3,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 4,
+     "spaceId": "sp-a5274943-2dc2-4dd5-b742-a7bc190cce28",
+     "standbyReplica": "nano-test"
+    }
+   },
+   "left": "{\"leftQuarantine\":true,\"next\":\"re-admit the other Spaces of this host, then start the normal daemon\"}"
+  },
+  "readmit": {
+   "readmitted": [
+    "sp-0e8bf457-66ec-4324-95dc-488d5afe9356",
+    "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd"
+   ]
+  },
+  "start-old": {
+   "ready": "{\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}"
+  },
+  "start-new": {
+   "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+  },
+  "write-after": {
+   "host": "standby-100",
+   "writes": [
+    {
+     "n": 0,
+     "ok": true
+    },
+    {
+     "n": 1,
+     "ok": true
+    },
+    {
+     "n": 2,
+     "ok": true
+    }
+   ],
+   "primaryEpoch": 3,
+   "count": 11
+  },
+  "compare": {
+   "newPrimary": {
+    "head": {
+     "revision": 18,
+     "hash": "c201e304f49fa372837b8ad0e3c4c3f81966d9933cb74d65c6f9e82e87e8b772",
+     "configHash": "af1e9777d865abf6d093761a39e894369f4ebe8be0a3e3c6733eb0837a40c3ad"
+    },
+    "entries": 11,
+    "snapshot": "a8c19a8af8d3ba93853cbd3ea737408037aea45e19db3f69ffe6bd5398fad2b2",
+    "atFork": "87f6a6438ebf31694493b602530232afa1c0c3077a1ed7fd8f46df273e2f3a2e"
+   },
+   "oldPrimary": {
+    "head": {
+     "revision": 18,
+     "hash": "c201e304f49fa372837b8ad0e3c4c3f81966d9933cb74d65c6f9e82e87e8b772",
+     "configHash": "af1e9777d865abf6d093761a39e894369f4ebe8be0a3e3c6733eb0837a40c3ad"
+    },
+    "entries": 11,
+    "snapshot": "a8c19a8af8d3ba93853cbd3ea737408037aea45e19db3f69ffe6bd5398fad2b2",
+    "asideAtFork": "64a80c7714905db021ec9970b2f687114c5c06a2f7fd948e83c3337262671446"
+   }
+  }
+ },
+ "stepLog": [
+  "2026-10-17T05:58:49.941Z step \"preflight\"",
+  "2026-10-17T05:58:54.403Z check \"both replicas agree and the primary leads\"",
+  "2026-10-17T05:58:54.404Z step \"write-before\"",
+  "2026-10-17T05:59:10.555Z FAILED \"connect timed out\"",
+  "2026-10-17T06:02:41.996Z skip (done) \"preflight\"",
+  "2026-10-17T06:02:41.999Z step \"write-before\"",
+  "2026-10-17T06:02:55.972Z check \"five sync writes through the primary gate\"",
+  "2026-10-17T06:03:00.199Z check \"the standby confirmed every write\"",
+  "2026-10-17T06:03:00.200Z step \"stop-standby\"",
+  "2026-10-17T06:03:01.445Z step \"fork\"",
+  "2026-10-17T06:03:08.092Z check \"the unconfirmed write stays a sealed candidate\"",
+  "2026-10-17T06:03:08.093Z step \"promote\"",
+  "2026-10-17T06:03:11.923Z step \"degrade\"",
+  "2026-10-17T06:03:15.707Z step \"start-new-primary\"",
+  "2026-10-17T06:03:17.611Z step \"write-single\"",
+  "2026-10-17T06:03:18.327Z FAILED \"connect ECONNREFUSED 100.89.187.150:7421\"",
+  "2026-10-17T06:04:40.720Z skip (done) \"preflight\"",
+  "2026-10-17T06:04:40.725Z skip (done) \"write-before\"",
+  "2026-10-17T06:04:40.725Z skip (done) \"stop-standby\"",
+  "2026-10-17T06:04:40.725Z skip (done) \"fork\"",
+  "2026-10-17T06:04:40.725Z step \"promote\"",
+  "2026-10-17T06:05:04.354Z check \"standby promoted after a verified fence\"",
+  "2026-10-17T06:05:04.354Z step \"degrade\"",
+  "2026-10-17T06:05:10.635Z check \"single durability after degradeToSingle\"",
+  "2026-10-17T06:05:10.636Z step \"start-new-primary\"",
+  "2026-10-17T06:05:33.005Z step \"write-single\"",
+  "2026-10-17T06:05:59.073Z check \"single writes on the promoted primary\"",
+  "2026-10-17T06:05:59.073Z step \"release\"",
+  "2026-10-17T06:06:22.452Z step \"wipe-old\"",
+  "2026-10-17T06:06:33.218Z step \"start-quarantine\"",
+  "2026-10-17T06:06:37.597Z step \"set-standby\"",
+  "2026-10-17T06:06:51.324Z step \"readmit\"",
+  "2026-10-17T06:06:52.990Z step \"start-old\"",
+  "2026-10-17T06:07:03.916Z check \"the old primary is the sync standby\"",
+  "2026-10-17T06:07:03.916Z step \"start-new\"",
+  "2026-10-17T06:07:26.316Z step \"write-after\"",
+  "2026-10-17T06:07:52.658Z check \"sync writes in the new direction\"",
+  "2026-10-17T06:07:56.950Z check \"the new standby confirmed every write\"",
+  "2026-10-17T06:07:56.951Z step \"compare\"",
+  "2026-10-17T06:08:06.217Z check \"both materialized replicas are identical\"",
+  "2026-10-17T06:08:06.217Z check \"the fork is only in the old primary's set-aside history\"",
+  "2026-10-17T06:08:37.578Z PASSED"
+ ],
+ "cleanup": {
+  "bootRecords": {
+   "nano-test": {
+    "afterRun": {
+     "version": 25,
+     "state": "active",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-a5274943-2dc2-4dd5-b742-a7bc190cce28": "active/standby",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    },
+    "restored": {
+     "version": 26,
+     "state": "active",
+     "permits": {
+      "sp-0e8bf457-66ec-4324-95dc-488d5afe9356": "active/local",
+      "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd": "active/local"
+     }
+    }
+   },
+   "standby-100": {
+    "afterRun": {
+     "version": 15,
+     "state": "active",
+     "permits": {
+      "sp-a5274943-2dc2-4dd5-b742-a7bc190cce28": "active/primary",
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    },
+    "restored": {
+     "version": 16,
+     "state": "active",
+     "permits": {
+      "sp-c5362f5f-93b4-405f-9208-f8f480e01f14": "active/local",
+      "sp-e0c86cdd-e88c-4356-8deb-4472f0853acf": "active/local"
+     }
+    }
+   }
+  },
+  "configs": "restored from federation.json.before-sync-20261016",
+  "netbirdPolicy": "deleted",
+  "nftRule": "deleted",
+  "controlCertGrants": "removed",
+  "adminReadAfterCleanup": "ok on both hosts"
+ },
+ "staleOwnerLock": "cleared by the daemon on nanoi after the power-off (previous boot_id); no operator PID check"
+}
