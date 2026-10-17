@@ -266,6 +266,24 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
 - **Root:** Ein über den Root geschriebener Merge-Eintrag liegt auch in dessen Journal. Die Root-Historienlöschung
   muss die Merge-Änderungs-IDs des Principals mit einsammeln.
 
+**Stand von Schritt 3:**
+
+- **Baustein** (`erasePrincipal`, `erasureStatus`, `completeErasure`, `changeIdsOwnedBy`): umgesetzt und geprüft
+  (`test-entry-erasure.test.ts`).
+  - Drei Replikate, eines hinkt hinterher; geschwärzte Formen kommen vor der Löschung an; Originale treffen nach
+    ihrer Schwärzung ein.
+  - Kein älterer Wert lebt wieder auf.
+  - Erneuerungen geschwärzter Tags werden ebenfalls geschwärzt, unabhängig von ihrer Uhr, weil sie dieselben Felder
+    kopieren.
+  - Snapshot-Segmente werden über die Wartung bereinigt.
+  - Nach `compactErasedSqlite` enthält die SQLite-Datei die gelöschten Inhalte nicht mehr.
+- **Offline-Ablauf des Testbed-Daemons:**
+  - `erase-evidence` liefert zusätzlich die Merge-Änderungs-IDs des Principals für die Root-Journale.
+  - `erase-local` löscht im Baustein und schließt die Löschung lokal ab; der Status steht im Ergebnis (`merge`).
+  - Danach entfernt der bestehende Schritt `erase-compact` die alten Revisionen.
+  - Jeder Merge-Member durchläuft diesen Ablauf; „überall gelöscht“ heißt, jeder meldet `complete`.
+- **Offen:** ein echter Lauf des Ablaufs über mehrere Merge-Members.
+
 **4. Kompaktierung** der Tombstones nach bestätigtem gemeinsamem Kausalstand aller aktiven Replikate.
 
 **5. Echter Lauf** über NetBird mit Partition und Prozessgrenzen.

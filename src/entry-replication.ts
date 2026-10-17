@@ -386,6 +386,11 @@ export class EntryReplicationController {
  }
 
 
+ /** IDs of every change owned by `principal` (also redacted ones): evidence for erasing the Root's journals. */
+ async changeIdsOwnedBy(principal: Principal): Promise<string[]> {
+  const s=await this.state('export'),p=canonical(principal);
+  return (s?.events??[]).filter(e=>e.mutation.kind!=='erase'&&canonical(e.mutation.owner)===p).map(e=>entryChangeId(e));
+ }
  /** Step 3 (docs/ap3-replikation.md): erases every earlier change of `principal` on all replicas, as a change of its own. */
  async erasePrincipal(requestId: string, principal: Principal, admin: Principal): Promise<ReplicatedEntryChange> {
   return this.mutate(requestId,{kind:'erase',principal:copy(principal),owner:copy(admin)});

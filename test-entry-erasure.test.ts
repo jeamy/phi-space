@@ -36,11 +36,13 @@ test('an erased principal disappears from every replica view and stored overlay,
  await a.mutate('p-fact',{kind:'add',type:'Fact',fields:{note:SECRET},owner:P,expiresAt:null});o.tick();
  await a.mutate('q-s2',{kind:'put',type:'Sensor',fields:{sensorId:'s2',v:'q'},owner:Q,expiresAt:null});o.tick();
  await pull(a,c);// c holds the originals and goes offline
+ const owned=await a.changeIdsOwnedBy(P);assert.equal(owned.length,2,'evidence for the Root journals: the changes of P');
  await a.erasePrincipal('erase-p',P,ADMIN);o.tick();
  // The erase is versioned: a later write by P survives (the admin flow revokes P's key first).
  const expected=[{type:'Sensor',fields:{sensorId:'s2',v:'q'},owner:'peer-q'}];
  assert.deepEqual(await view(a),expected,'s1 stays hidden: the redacted put still wins its key; no older version of q comes back');
  assert.ok(!(await stored(o.host,'a')).includes(SECRET),'the stored overlay of a holds no erased content');
+ assert.deepEqual(await a.changeIdsOwnedBy(P),owned,'redacted changes keep their owner, so the evidence stays complete');
  // b gets the redacted forms one change at a time, before the erase itself arrives.
  await pull(a,b,true);assert.deepEqual(await view(b),expected);assert.ok(!(await stored(o.host,'b')).includes(SECRET));
  // c comes back with the originals: it adopts the redactions; its originals offered to b are recognised and dropped.
