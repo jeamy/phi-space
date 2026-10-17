@@ -235,7 +235,36 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
 - **Geprüft:** zwei vollständig konfigurierte Hosts mit Gates replizieren `lww` in beide Richtungen und
   konvergieren; ein bewiesener, aber nicht gepinnter Host bekommt nichts (`test-operations.test.ts`).
 
-**3. Löschung:** Lösch-Barrieren und verteilte Principal-Löschung auch für die replizierten Historien.
+**3. Löschung eines Principals (Entwurf):** Die Löschung ist selbst eine replizierte Änderung mit eigener HLC-Version,
+`erase {principal}`. Sie konvergiert wie jede andere Änderung.
+
+- **Abdeckung:** alle Änderungen mit `owner` gleich dem Principal und einer Uhr vor der Löschung. Ein gleichzeitiger
+  Schreibvorgang mit späterer HLC bleibt; der Ablauf widerruft deshalb zuerst den Schlüssel des Principals.
+- **Schwärzen:** Eine abgedeckte Änderung (`put`, `add`, `delete`, `renew`) wird durch eine geschwärzte Form ersetzt.
+  - Erhalten bleiben ID, Uhr, Typ, Owner, die ursprüngliche Argument-Prüfsumme und die ID der Löschung.
+  - Statt der Schlüsselfelder trägt sie bei `lww` nur einen Hash des kanonischen Schlüssels.
+  - `remove` enthält keine Inhalte und bleibt.
+- **Konvergenz:**
+  - Ein geschwärzter `lww`-Put konkurriert über den Schlüssel-Hash weiter um seinen Schlüssel und verbirgt ihn, wenn
+    er gewinnt (wie ein Tombstone). So lebt keine ältere Version eines anderen Owners wieder auf.
+  - Ein geschwärztes `set`-Add und jedes `renew` auf ein geschwärztes Add sind unsichtbar.
+  - Decken mehrere Löschungen eine Änderung ab, gilt die mit der kleinsten ID.
+- **Import:** Eine geschwärzte Form ist ohne die Löschung gültig, die Seiten können in beliebiger Reihenfolge kommen.
+  - Eine geschwärzte Form ersetzt ein lokales Original mit gleicher ID und gleicher Argument-Prüfsumme.
+  - Ein Original, das nach seiner Schwärzung eintrifft, wird an `hash(mutation) === argumentHash` erkannt und
+    verworfen.
+  - Nur ein gepinnter, bewiesener Peer kann so etwas liefern; er könnte ohnehin Tombstones schicken.
+- **Physisch:**
+  - Das Overlay wird beim Anwenden der Löschung umgeschrieben.
+  - Die logische Sicht und jeder Export sind immer geschwärzt.
+  - Snapshot-Segmente baut die vorhandene Wartung aus der geschwärzten Sicht neu; die alten Chunks werden
+    entfernt.
+  - Ein laufender eingehender Transfer wird abgebrochen und der Export-Cache verworfen.
+  - Lokal abgeschlossen ist die Löschung erst nach diesen Schritten (`erasureStatus`).
+- **Verteilt:** Gelöscht überall heißt: Jedes gepinnte Member meldet die Löschung als lokal abgeschlossen. Ein
+  ausgefallenes Member hält die Löschung offen; das wird ehrlich gemeldet.
+- **Root:** Ein über den Root geschriebener Merge-Eintrag liegt auch in dessen Journal. Die Root-Historienlöschung
+  muss die Merge-Änderungs-IDs des Principals mit einsammeln.
 
 **4. Kompaktierung** der Tombstones nach bestätigtem gemeinsamem Kausalstand aller aktiven Replikate.
 
