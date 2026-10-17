@@ -513,6 +513,6 @@ export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnav
 
 export { EntrySnapshotMaintenance } from "./entry-replication-transfer.ts";
 export type { EntrySnapshotMaintenanceJob } from "./entry-replication-transfer.ts";
-export { PrimarySyncJournal, PrimarySyncBlocked, CommitSealed, primarySyncStorage, recoverPrimarySync, materializeSyncHistory, bootstrapPrimarySync, captureStore } from './primary-sync.ts';
+export { PrimarySyncJournal, PrimarySyncBlocked, CommitSealed, promotionEvidence, type PromotionEvidence, primarySyncStorage, recoverPrimarySync, materializeSyncHistory, bootstrapPrimarySync, captureStore } from './primary-sync.ts';
 export { applyConfigTransition, recoverSealedWithoutStandby, durabilityOf, lastConfigTransition } from './primary-sync.ts';
 export type { PrimarySyncConfig, PrimaryCommitIntent, PrimaryConfigIntent, PrimaryBootstrapIntent, PrimaryIntent, PrimarySyncAck, PrimarySyncPeer } from './primary-sync.ts';

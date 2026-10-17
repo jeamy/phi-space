@@ -399,7 +399,8 @@ Nachtrag 2026-10-17 (lww/set eingebunden):
 
 Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter primary/sync-Commit ist öffentlich
 `CommitSealed`; der Host klärt ihn mit dem Standby und bedient den Space ohne Neustart wieder
-([Ablauf](ap3-primary-sync.md)).
+([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet der Primary einen unbekannten Request älterer
+Epoche mit Nachweis per Negativclaim mit `NotCommitted`.
 
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.

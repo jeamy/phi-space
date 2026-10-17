@@ -43,7 +43,9 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 		/** Member lifecycle of this Space in its own store; membership instructions naming the Space go here. */
 		membership?: import("./membership.ts").MemberLifecycle; refreshPolicy?: () => Promise<void>;
 		/** A commit of this Space was sealed but not confirmed; the caller resolves it and serves the Space anew (setSyncSpace). */
-		onSealed?: () => void; sealedCandidate?: () => { revision: number; hash: string } | null }>;
+		onSealed?: () => void; sealedCandidate?: () => { revision: number; hash: string } | null;
+		/** NotCommitted evidence of this Space's journal (v3 6.2). */
+		promotionProof?: (space: string | undefined, requestEpoch: number) => Promise<{ hash: string } | null> }>;
 	/** primary/sync Spaces whose sealed candidate is not resolved yet: answered with `CommitSealed` until setSyncSpace. */
 	unresolvedSyncSpaces?: UnresolvedSyncSpace[];
 	/** Explicit fixture mode. Never set in a deployed host. */
@@ -73,7 +75,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 	const syncServices = new Map<string, SpaceService | { handle: (c: unknown, conn: Connection) => Promise<Reply>; handleText: (t: string, conn: Connection) => Promise<string> }>(), mainSpaces = await listSpaces(host, ctx);
 	// The current entry of every primary/sync Space: served, or unresolved after a sealed commit (setSyncSpace swaps them).
 	const syncEntries: Array<SyncEntry | UnresolvedSyncSpace> = [];
-	const makeSyncService = (sp: SyncEntry) => new SpaceService({ host: sp.host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, epochForSpace: async () => sp.primaryEpoch(), ...(sp.onSealed ? { onSealed: sp.onSealed } : {}), ...(sp.sealedCandidate ? { sealedCandidate: sp.sealedCandidate } : {}),
+	const makeSyncService = (sp: SyncEntry) => new SpaceService({ host: sp.host, ctx, identity, hostId: o.hostId, authorityId: o.authorityId, now: o.now, epochForSpace: async () => sp.primaryEpoch(), ...(sp.onSealed ? { onSealed: sp.onSealed } : {}), ...(sp.sealedCandidate ? { sealedCandidate: sp.sealedCandidate } : {}), ...(sp.promotionProof ? { promotionProof: sp.promotionProof } : {}),
 			authorize: async (call,id,conn)=>{const auth=call.frame?.delegation?sp.delegation?await sp.delegation.check(call,id,conn):await Promise.reject(new Error("delegation not configured")):o.verifier.check(call.frame?.grant,id,call,conn);await (sp.refreshPolicy ?? o.refreshPolicy)?.();auth.check();return auth;} });
 	const sealedService = (u: UnresolvedSyncSpace) => {
 		const handle = async (_c: unknown, conn: Connection): Promise<Reply> => await identity.authenticate(conn) ? sealedReply(u.sealed) : { ok: false, error: { code: "Unauthenticated", message: "the connection has no known identity" } };

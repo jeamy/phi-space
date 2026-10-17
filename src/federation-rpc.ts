@@ -1,7 +1,7 @@
 // Production wire adapter: app-key proof, original grants and per-call signed delegation.
 import {canonicalJson} from './canonical.ts';
 import type {Signer} from './auth.ts';
-import {argHash, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
+import {argHash, NotCommitted, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
 import {PermissionError, TransactionError, CompletionViolation, type Json, type Template} from './core.ts';
 import {
     delegationForCall,
@@ -135,6 +135,8 @@ export class FederationRpc implements RouterTarget, FederationIO {
             request : {generation : s.generation, requestId : s.requestId},
             frame : {authorityId : s.target.authorityId, primaryEpoch : s.target.primaryEpoch}
         }); }catch(e){
+            // v3 6.2: decided after a promotion with a durable negative claim; the step had no effect.
+            if(e instanceof NotCommitted)return this.receipt(s,'failed',undefined,'NotCommitted');
             if(e instanceof RequestConflict||e instanceof RequestExpired||e instanceof ResultExpired||e instanceof IncarnationChanged||e instanceof PermissionError||e instanceof TransactionError||e instanceof CompletionViolation)return this.receipt(s,'needsReview',undefined,e.constructor.name);
             throw e;
         }
@@ -168,6 +170,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
             try{v=await r.resolveOperation({generation:s.generation,requestId:s.requestId},ref.method,ref.argumentHash,s.target.primaryEpoch);}catch(e){if(e instanceof RemoteError&&e.code==='UnsupportedMethod')v=await r.pollOperation({generation:s.generation,requestId:s.requestId});else throw e;}
             return this.checkedResolution(s,v);
         } catch (e) {
+            if (e instanceof NotCommitted) return this.receipt(s, 'failed', undefined, 'NotCommitted');
             if (e instanceof RequestConflict || e instanceof RequestExpired || e instanceof ResultExpired ||
                 e instanceof IncarnationChanged || e instanceof PermissionError || e instanceof TransactionError || e instanceof CompletionViolation)
                 return this.receipt(s, 'needsReview', undefined, e.constructor.name);

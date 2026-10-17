@@ -88,6 +88,7 @@ export type Hello = { principal: string; roles: string[]; hostId?: string; space
 const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> = {
 	RequestConflict: (m) => new claims.RequestConflict(m),
 	RequestExpired: (m) => new claims.RequestExpired(m),
+	NotCommitted: (m) => new claims.NotCommitted(m),
 	ResultExpired: (m) => new claims.ResultExpired(m),
 	IncarnationChanged: (m) => new claims.IncarnationChanged(m),
 	OperationCancelled: (m) => new claims.OperationCancelled(m),

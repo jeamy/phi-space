@@ -198,6 +198,26 @@ async function scanAll<T>(scan:(cursor:any)=>Promise<{items:readonly T[];next?:a
  * then documents of the session, conversation and task scopes), and its digest. The replication marker is excluded.
  * Only current document state is captured: as-of history of rewindable documents does not replicate.
  */
+/**
+ * Evidence for NotCommitted (v3 6.2): this host is the primary of the current configuration with no unresolved
+ * candidate, and its continuous chain covers `requestEpoch` and every configuration change since. A primary change is
+ * only ever a promotion with a verified fencing proof, so no earlier replica can still write. Null when the chain does
+ * not reach back to that epoch (then the outcome stays unknown).
+ */
+export type PromotionEvidence={spaceId:string;authorityId:string;requestEpoch:number;primaryEpoch:number;primaryReplica:string;transitions:Array<{revision:number;hash:string;reason:string;config:PrimarySyncConfig}>;hash:string};
+export function promotionEvidence(journal:PrimarySyncJournal,requestEpoch:number,self:string):PromotionEvidence|null{
+ const c=journal.config,head=journal.head();
+ if(!integer(requestEpoch)||c.primaryReplica!==self||requestEpoch>=c.primaryEpoch||head.revision!==journal.appliedRevision)return null;
+ let covered=journal.configAt(0).primaryEpoch===requestEpoch;const transitions:PromotionEvidence['transitions']=[];
+ for(let r=1;r<=head.revision;r++){
+  const i=journal.intent(r);if(!i)return null;if(i.version!==2)continue;
+  if(i.config.primaryEpoch===requestEpoch)covered=true;
+  if(i.config.primaryEpoch>requestEpoch)transitions.push({revision:i.revision,hash:i.hash,reason:i.reason,config:copy(i.config)});
+ }
+ if(!covered||!transitions.length)return null;
+ const body={spaceId:c.spaceId,authorityId:c.authorityId,requestEpoch,primaryEpoch:c.primaryEpoch,primaryReplica:self,transitions};
+ return {...body,hash:hash(body)};
+}
 /** The last configuration transition of the chain (its reason is the transition ID) with the configuration before it. */
 export function lastConfigTransition(journal:PrimarySyncJournal):{transitionId:string;config:PrimarySyncConfig;previous:PrimarySyncConfig}|null{
  for(let r=journal.head().revision;r>=1;r--){const i=journal.intent(r);if(i?.version===2)return{transitionId:i.reason,config:copy(i.config),previous:journal.configAt(r-1)};}

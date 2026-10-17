@@ -68,7 +68,7 @@ export type Call = {
 export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "NotCommitted" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
 export type ClaimReceipt={protocol:'pi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
@@ -85,6 +85,12 @@ export type SpaceServiceOptions = {
 	onSealed?: () => void;
 	/** primary/sync: the unresolved sealed candidate of this Space, if any (also one sealed by the reaper). */
 	sealedCandidate?: () => { revision: number; hash: string } | null;
+	/**
+	 * v3 6.2: evidence that every writer of epochs after `requestEpoch` is fenced and this primary holds their complete
+	 * history (primary-sync promotionEvidence); null when it cannot be shown. Without it an unknown older request stays
+	 * IncarnationChanged (needsReview), never NotCommitted.
+	 */
+	promotionProof?: (space: string | undefined, requestEpoch: number) => Promise<{ hash: string } | null>;
 	authorize?: (call: Call, id: Identity, conn: Connection) => Promise<DecisionAuthorization>;
 	host: SpaceHost;
 	ctx: Context;
@@ -273,8 +279,16 @@ export class SpaceService {
     const target=this.target(a.targetRequest,c.id),method=str(a.method,'method'),hash=str(a.argumentHash,'argumentHash'),epoch=int(a.primaryEpoch,'primaryEpoch');
     const current=await this.o.epochForSpace?.(c.space)??this.o.primaryEpoch;
     if(epoch>current)throw new claims.IncarnationChanged('resolution epoch is ahead of Member');
-    const view=await client.resolveOperation(target,method,hash,epoch);
-    if(view.state==='notAdmitted'&&epoch!==current)throw new claims.IncarnationChanged('missing request requires current Member epoch');
+    let view:claims.AdmissionResolution|undefined,miss:unknown;
+    try{view=await client.resolveOperation(target,method,hash,epoch);}catch(e){if(!(e instanceof claims.IncarnationChanged))throw e;miss=e;}
+    if(view?.state==='notAdmitted'&&epoch!==current)miss=new claims.IncarnationChanged('missing request requires current Member epoch');
+    if(miss){
+     // An unknown request of an earlier epoch: NotCommitted with a durable negative claim, only with promotion evidence.
+     if(epoch>=current||!this.o.promotionProof)throw miss;
+     const proof=await this.o.promotionProof(c.space,epoch);if(!proof)throw miss;
+     view=await client.resolveNotCommitted(target,method,hash,epoch,current,proof.hash);
+    }
+    if(!view)throw miss;
     if('result' in view&&view.result&&isObj(view.result)&&Array.isArray(view.result.types))this.checkTypes(grant,view.result.types as string[],'this retained result');
     return view as unknown as Json;
    }
@@ -475,6 +489,7 @@ export class SpaceService {
 		if (e instanceof claims.RequestExpired) return fail("RequestExpired", e.message);
 		if (e instanceof claims.ResultExpired) return fail("ResultExpired", e.message);
 		if (e instanceof claims.IncarnationChanged) return fail("IncarnationChanged", e.message);
+		if (e instanceof claims.NotCommitted) return fail("NotCommitted", e.message);
 		if (e instanceof claims.OperationCancelled) return fail("OperationCancelled", e.message);
 		if (e instanceof core.ResponseBudgetTooSmall) return fail("ResponseBudgetTooSmall", e.message, { requiredBytes: e.requiredBytes });
 		if (e instanceof core.LimitError) return fail("ResourceExhausted", e.message); // includes ResourceExhausted itself

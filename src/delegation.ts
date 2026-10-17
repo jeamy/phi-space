@@ -5,7 +5,7 @@ import {randomUUID} from "node:crypto";
 
 import type {Algorithm, AuthState, KeyDirectory, Signer} from "./auth.ts";
 import {canonicalJson} from "./canonical.ts";
-import {argHash, keyOf, resolveAdmission, type Principal, type RequestRef} from "./claims.ts";
+import {argHash, keyOf, resolveAdmission, validateGeneration, type Principal, type RequestRef} from "./claims.ts";
 import type {SpaceHost} from "./client.ts";
 import * as core from "./core.ts";
 import {GrantVerifier, type SignedGrant, verifyDetached} from "./grants.ts";
@@ -327,7 +327,7 @@ export class DelegationVerifier {
             requestId : d.requestId
         },
                    known = s.rpc?.claims[keyOf(s, ref)] ?? s.restoredClaims?.[keyOf(s, ref)];
-        let reference = known;
+        let reference = known, missingResolution = false;
         if (d.targetRequest) {
             const r = {
                 principal : d.principal,
@@ -335,10 +335,12 @@ export class DelegationVerifier {
                 requestId : d.targetRequest.requestId
             };
             reference = s.rpc?.claims[keyOf(s, r)] ?? s.restoredClaims?.[keyOf(s, r)];
-            const missingResolution=call.method==='resolveOperation'&&!reference;
+            missingResolution=call.method==='resolveOperation'&&!reference;
             if(missingResolution){
                 if(d.policyVersion!==d.targetRequest.policyVersion||call.args?.method!==d.targetRequest.method||call.args?.argumentHash!==d.targetRequest.argumentHash||call.args?.primaryEpoch!==d.targetPrimaryEpoch)throw new DelegationDenied('missing resolution binding differs');
-                resolveAdmission(s,this.now(),r,d.targetRequest.method,d.targetRequest.argumentHash,d.targetPrimaryEpoch!);
+                // The same epoch is checked here; an earlier one is decided by the service (NotCommitted needs evidence).
+                const current=this.o.replicaConfig?.(info.spaceId)?.primaryEpoch??s.primaryEpoch??1;
+                if(d.targetPrimaryEpoch===current)resolveAdmission(s,this.now(),r,d.targetRequest.method,d.targetRequest.argumentHash,d.targetPrimaryEpoch!);else validateGeneration(s,this.now(),r);
             }
             if (!missingResolution && (!reference || reference.method !== d.targetRequest.method ||
                 reference.argHash !== d.targetRequest.argumentHash ||
@@ -376,7 +378,7 @@ export class DelegationVerifier {
         if (!positive(d.targetPrimaryEpoch) ||
             call.frame?.primaryEpoch !== undefined &&
                 call.frame.primaryEpoch !== d.targetPrimaryEpoch ||
-            d.targetPrimaryEpoch > epoch || d.targetPrimaryEpoch < epoch && !reference)
+            d.targetPrimaryEpoch > epoch || d.targetPrimaryEpoch < epoch && !reference && !missingResolution)
             throw new DelegationDenied("target epoch does not match new or known request");
         // New work on a replicated Space needs the router to route under the local replica configuration; follow-ups
         // of operations admitted before the change continue under their original binding.

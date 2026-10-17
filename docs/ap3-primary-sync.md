@@ -139,6 +139,40 @@ angewendet oder durch Fencing und Promotion ausgeschlossen. Seit 2026-10-17 sieh
   `test/test-membership.test.ts` prüft `setSyncSpace` über Gate und Socket. Die Verdrahtung in
   `startConfiguredFederation` selbst hat keinen eigenen Test.
 
+## `NotCommitted` nach einer Promotion
+
+Ein Request, dessen Ausgang nach einer Promotion unbekannt ist, bekommt nach v3 6.2 entweder sein Ergebnis oder ein
+dauerhaftes `NotCommitted`; erst dann darf der Client mit einer neuen ID beginnen.
+
+- **Ablauf:** `resolveOperation` mit einer älteren `primaryEpoch` für einen unbekannten Claim. Der Dienst fragt
+  `promotionEvidence` des Journals und schreibt dann mit `claims.decideNotCommitted` einen Negativclaim unter dem
+  ursprünglichen Schlüssel, mit Methode und Argument-Hash.
+- **Nachweis** (`promotionEvidence`):
+  - Dieser Host ist Primary der aktuellen Konfiguration und hat keinen offenen Kandidaten.
+  - Seine lückenlose Kette reicht bis zur Epoche des Requests und enthält jeden Konfigurationswechsel seitdem.
+  - Ein Primary-Wechsel ist nur als Promotion mit geprüftem Fencing möglich; kein früheres Replikat kann also noch
+    schreiben. Ein dort nur versiegelter Kandidat wird nie angewendet.
+- **Bedingungen im Claim:**
+  - Die Generation ist erhalten und lässt noch zu (sonst `RequestExpired`).
+  - Sie stammt aus dieser Inkarnation und Autorität und ist nicht jünger als die Epoche des Requests.
+  - Die Epoche des Requests ist älter als die aktuelle.
+  - Kein Restore, kein Autoritätswechsel, kein `recoveryBlocked` (sonst `IncarnationChanged`).
+- **Ohne Nachweis** bleibt es bei `IncarnationChanged`; der Router legt die Arbeit zur Prüfung vor (`needsReview`).
+- **Wirkung:** Negativclaim und Annahme laufen im selben Commit-Bereich. Ein verspäteter Originalaufruf trifft den
+  Claim und bekommt `NotCommitted`, ohne Wirkung. Poll und `resolveOperation` liefern `done` mit Fehler
+  `NotCommitted`. Für die Aufbewahrung gelten die Fristen der übrigen entschiedenen Claims.
+- **Router:** `NotCommitted` ergibt einen fehlgeschlagenen Schritt ohne Wirkung. Die Delegationsprüfung lässt die
+  Auflösung eines unbekannten Requests älterer Epoche durch; entschieden wird im Dienst.
+- **Tests:** `test/test-not-committed.test.ts`, mit echter Promotion (Simulator-Fencing) und `degradeToSingle`:
+  - ein bestätigter Request behält sein Ergebnis;
+  - der nur auf dem alten Primary versiegelte Request wird `NotCommitted`;
+  - der verspätete Originalaufruf bleibt ohne Wirkung;
+  - ohne Nachweis bleibt es bei `IncarnationChanged`;
+  - die Ablehnungsfälle werden geprüft.
+- **Offen:**
+  - Den Weg über Router-Delegation deckt kein eigener Test ab.
+  - Für den Haupt-Store mit `mainSync` (Control Space) ist der Nachweis noch nicht angeschlossen, nur für primary/sync-Spaces.
+
 ## Einbindung und noch offene Gesamtgarantien
 
 Der Adapter gilt für einen dedizierten vollständigen Storagebereich mit einer
@@ -147,8 +181,8 @@ Replikatversionen brauchen noch eine passende Trennung beziehungsweise einen
 vollständigen atomaren Domain-Vertrag. Die vorhandenen produktiven Stores werden
 nicht nachträglich ungeprüft umschlossen.
 
-Offen bleiben Boot-/Löschintegration einschließlich des neuen Journals und `NotCommitted` mit Negativclaim nach
-einer Promotion (6.2). Diensttransport, Bootstrap bestehender Stores, reales Fencing und Control-/Router-Umschaltung
+Offen bleiben Boot-/Löschintegration einschließlich des neuen Journals und `NotCommitted` für den Haupt-Store mit
+`mainSync`. Diensttransport, Bootstrap bestehender Stores, reales Fencing und Control-/Router-Umschaltung
 sind inzwischen umgesetzt und echt gelaufen. Konfigurationsübergänge, `setStandby`,
 degradeToSingle und Promotion sind seit 2026-10-16 mit Simulator-Adapter
 vorhanden ([Replikatsteuerung](ap3-replica-control.md)). Deshalb bleiben produktive Sync-Regeln durch den bestehenden

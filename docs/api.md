@@ -548,7 +548,9 @@ Er besitzt feste Konfigurationspins, dauerhafte Hashkette, Standby-ACK und
 atomare Datenmarker; ein unklarer versiegelter Kandidat liefert `CommitSealed`. Im Dienst wird daraus der
 Fehlercode `CommitSealed`, im Client `CommitSealedPending` (Unterklasse von `OutcomeUnknown`); `sealedResolver`,
 `sealedCandidateOf` und `SyncSpace.resolve()/unserve()` klären den Kandidaten im laufenden Host
-([Ablauf](ap3-primary-sync.md)).
+([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet `resolveOperation` einen unbekannten Request
+älterer Epoche mit Nachweis (`promotionEvidence`, Dienstoption `promotionProof`) per Negativclaim mit `NotCommitted`
+(`claims.decideNotCommitted`, `PiSpaces.resolveNotCommitted`, Fehlerklasse `claims.NotCommitted`).
 Diese API aktiviert noch keine produktive Sync-Policy oder Promotion.
 [Vertrauensbereich und Betriebsgrenzen](ap3-primary-sync.md).
 

@@ -33,12 +33,19 @@ export type ClaimRec = {
 	requestId: string;
 	principal: Principal;
 	reservedResultBytes?: number;
-	error?: { code: "TransactionError" | "PermissionDenied" | "CompletionViolation"; message: string };
+	error?: { code: "TransactionError" | "PermissionDenied" | "CompletionViolation" | "NotCommitted"; message: string };
+	/** Negative claim (v3 6.2): decided after a promotion, the request never took effect and never will. */
+	notCommitted?: { proofHash: string; requestEpoch: number; primaryEpoch: number };
 };
 export type GenerationRec = { primaryEpoch?: number; principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number; spaceId?: string | null; authorityId?: string };
 export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number; reservedBytes?: number; signingKey?: string; authorityId?: string; sweepCursor?: string };
 export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"]; restoredHistory?: true; unknownOutcome?: true; orphanedAfterRestore?: ClaimRec["orphanedAfterRestore"] };
 
+/**
+ * The request was never committed and never will be (v3 6.2): decided by the primary after a promotion, with a
+ * durable negative claim. Only now may the client start a new request.
+ */
+export class NotCommitted extends Error {}
 /** Same request id, different method or arguments. */
 export class RequestConflict extends Error {}
 /** Unknown request id in a generation that no longer admits new ids (or a generation this space does not know). */
@@ -107,6 +114,7 @@ export function admit(s: SpaceState, now: number, r: RequestRef, method: string,
 	if (s.restoredClaims?.[key]) throw new IncarnationChanged("request belongs to historical restored data; replay is forbidden");
 	if (c) {
 		if (c.method !== method || c.argHash !== hash) throw new RequestConflict(`request ${r.requestId} was used for different arguments`);
+		if (c.notCommitted) throw new NotCommitted(`request ${r.requestId} was not committed (decided after promotion to epoch ${c.notCommitted.primaryEpoch})`);
 		if (c.state === "pending") return { kind: "pending", key, deadline: c.deadline };
 		if (c.resultExpired || (c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now)) throw new ResultExpired(`request ${r.requestId} was decided; its result is no longer kept`);
 		return c.state === "cancelled" ? { kind: "cancelled", key } : { kind: "done", key, result: c.result ?? null };
@@ -230,4 +238,28 @@ export function resolveAdmission(s: Readonly<SpaceState>, now:number, r:RequestR
  if(generation.primaryEpoch!==primaryEpoch || s.primaryEpoch!==undefined&&s.primaryEpoch!==primaryEpoch)throw new IncarnationChanged('missing request cannot be resolved across epochs or legacy generations');
  if(s.restore || s.authorityTransition || s.membership?.state==='recoveryBlocked')throw new IncarnationChanged('missing request requires uninterrupted current history');
  return {state:'notAdmitted',spaceId:s.spaceId??null,authorityId:s.rpc!.authorityId!,incarnation:s.incarnation??null,primaryEpoch,generation:r.generation,requestId:r.requestId,method,argumentHash};
+}
+
+/**
+ * v3 6.2, unknown ID after promotion: persists a terminal negative claim for the original key, method and argument
+ * hash, in the same commit domain as admission (a late original call meets it and has no effect). Only for a request of
+ * an older epoch in a retained, still admitting generation of this incarnation and authority, with uninterrupted
+ * history; `proofHash` binds the promotion evidence the caller checked (every earlier writer fenced). A known claim is
+ * answered as it is.
+ */
+export function decideNotCommitted(s: SpaceState, now: number, r: RequestRef, method: string, argumentHash: string, requestEpoch: number, primaryEpoch: number, proofHash: string): ClaimView {
+	assertAdminIdle(s);
+	if (!r.requestId || !method || !/^[a-f0-9]{64}$/.test(argumentHash) || !/^[a-f0-9]{64}$/.test(proofHash) || !Number.isSafeInteger(requestEpoch) || !Number.isSafeInteger(primaryEpoch) || requestEpoch < 1) throw new TypeError("invalid negative claim binding");
+	sweep(s, now);
+	const st = rpc(s), key = keyOf(s, r), known = st.claims[key] ?? s.restoredClaims?.[key];
+	if (known) { if (known.method !== method || known.argHash !== argumentHash) throw new RequestConflict("resolution changed original method/arguments"); return lookup(s, r, now); }
+	const g = validateGeneration(s, now, r);
+	if (requestEpoch >= primaryEpoch || (g.primaryEpoch ?? 1) > requestEpoch) throw new IncarnationChanged("NotCommitted needs a request of an earlier primary epoch than this one");
+	if (s.restore || s.authorityTransition || s.membership?.state === "recoveryBlocked") throw new IncarnationChanged("missing request requires uninterrupted current history");
+	const rec: ClaimRec = { method, argHash: argumentHash, deadline: now, state: "done", result: null, decidedAt: now, generation: r.generation, requestId: r.requestId, principal: { ...r.principal },
+		error: { code: "NotCommitted", message: `request ${r.requestId} was not committed before the promotion to epoch ${primaryEpoch}` }, notCommitted: { proofHash, requestEpoch, primaryEpoch } };
+	const added = bytesOf(rec) + bytesOf(key) + 2;
+	if (claimBytes(s) + added > limitsOf(s).maxClaimBytes) throw new LimitError("the negative claim exceeds maxClaimBytes");
+	st.claims[key] = rec; touch(s, now); st.bytes! += added;
+	return lookup(s, r, now);
 }

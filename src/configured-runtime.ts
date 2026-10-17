@@ -6,6 +6,7 @@ import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
 import type { Harness, Storage } from "@earendil-works/pi-durable";
 import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
+import { promotionEvidence } from "./primary-sync.ts";
 import type { Context } from "@earendil-works/chord";
 import { privateFile, loadFileSigner } from "./keys.ts";
 import { NetbirdDirectory, GateIdentity, type GroupRoles } from "./gate.ts";
@@ -134,7 +135,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 			const lifecycle=sp.config.membership?new MemberLifecycle({host:sp.harness!,ctx,memberId:sp.config.membership.memberId,spaceId:sp.config.spaceId,authorityId,peerId:config.peerId,signer,controlPin:{issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey},assertAuthority:async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active"||b.value.spaces?.[sp.config.spaceId]?.authorityId!==authorityId)throw new BootBlocked("Member boot authority changed");}}):undefined;
 			return {spaceId:sp.config.spaceId,alias:sp.config.alias,host:sp.harness!,primaryEpoch:()=>sp.journal.config.primaryEpoch,delegation:verifierFor(sp.harness!,id=>id===sp.config.spaceId?sp.journal.config:null),
 				membership:lifecycle,refreshPolicy:lifecycle&&controlRemote?async()=>lifecycle.installPolicy(await controlRemote!.requestRoutingPolicy()):undefined,
-				onSealed:()=>resolveSealed(sp),sealedCandidate:()=>sealedOf(sp)};};
+				onSealed:()=>resolveSealed(sp),sealedCandidate:()=>sealedOf(sp),promotionProof:async(_space:string|undefined,epoch:number)=>promotionEvidence(sp.journal,epoch,config.hostId)};};
 		// A sealed, unconfirmed commit: the Space answers CommitSealed until this host resolved it and serves it anew.
 		const sealedOf=sealedCandidateOf,resolver=sealedResolver({set:next=>runtime.setSyncSpace(next),serve:optionFor});
 		const resolveSealed=(sp:SyncSpace)=>{void resolver.resolve(sp);};

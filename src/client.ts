@@ -150,6 +150,11 @@ export class PiSpaces implements SpaceLike {
  async resolveOperation(target:RequestRef, method:string, argumentHash:string, primaryEpoch:number):Promise<claims.AdmissionResolution>{
   return (await this.resolveOperationRecord(target,method,argumentHash,primaryEpoch)).resolution;
  }
+ /** v3 6.2 after a promotion: the durable negative claim for an unknown request of an earlier epoch (claims.decideNotCommitted). */
+ async resolveNotCommitted(target:RequestRef,method:string,argumentHash:string,requestEpoch:number,primaryEpoch:number,proofHash:string):Promise<claims.ClaimView>{
+  if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
+  return this.host.commit(async tx=>{const s=await this.doc(tx);this.options.authorization?.check();return core.plain(claims.decideNotCommitted(s,this.now(),target,method,argumentHash,requestEpoch,primaryEpoch,proofHash) as unknown as Json) as unknown as claims.ClaimView;},this.ctx);
+ }
  /** Resolve the SAME original claim and capture its space binding in one guarded storage commit. */
  async resolveOperationRecord(target:RequestRef,method:string,argumentHash:string,primaryEpoch:number){
   if(this.options.consumer&&canonicalPrincipal(target.principal)!==canonicalPrincipal(this.options.consumer))throw new core.PermissionError('another principal request');
