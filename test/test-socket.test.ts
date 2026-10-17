@@ -126,3 +126,18 @@ test("the client reconnects after the host restarted, and a TCP port on loopback
 	assert.equal(await new PiSpaces(h, ctx).count({ type: "Job" }), 3);
 	await tcp.close();
 });
+
+test("a call without an answer fails after requestTimeoutMs; the next call gets a fresh connection, a late answer is dropped", async (tc) => {
+	const s = sock(); tc.after(s.done);
+	let first = true, release: (v: string) => void = () => {}, connections = 0;
+	await serve(tc, { handleText: (text: string) => first ? (first = false, new Promise<string>(r => { release = r; })) : Promise.resolve("answer:" + text) }, { listen: { path: s.path }, connection: () => { connections++; return {}; } });
+	const t = socketTransport({ path: s.path }, { requestTimeoutMs: 100 }); tc.after(() => t.close());
+	const started = Date.now();
+	await assert.rejects(t.request("stuck"), /request timed out/);
+	assert.ok(Date.now() - started < 2000);
+	release("late");
+	assert.equal(await t.request("next"), "answer:next");
+	assert.equal(connections, 2, "the stuck connection was dropped");
+	const unbounded = socketTransport({ path: s.path }); tc.after(() => unbounded.close());
+	assert.equal(await unbounded.request("plain"), "answer:plain");
+});

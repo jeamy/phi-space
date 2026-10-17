@@ -142,7 +142,12 @@ async function prepareSocketPath(path: string): Promise<void> {
 	} catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 }
 
-export type SocketTransportOptions = { connectTimeoutMs?: number; maxFrameBytes?: number; /** Source address of the connection (a host with several overlay or loopback addresses). */ localAddress?: string };
+export type SocketTransportOptions = { connectTimeoutMs?: number;
+	/**
+	 * A call without an answer after this long fails and its connection is dropped (the next call connects anew); a late
+	 * answer is discarded. Absent: wait as long as the connection lives (a cut overlay can hold it for many minutes).
+	 */
+	requestTimeoutMs?: number; maxFrameBytes?: number; /** Source address of the connection (a host with several overlay or loopback addresses). */ localAddress?: string };
 export type SocketTransport = Transport & { close(): void };
 
 /**
@@ -185,8 +190,10 @@ export function socketTransport(target: ListenTarget, o: SocketTransportOptions 
 			const s = await connect();
 			return new Promise<string>((resolve, reject) => {
 				const id = nextId++ >>> 0 || nextId++;
-				pending.set(id, { socket: s, resolve, reject });
-				s.write(frame(id, text), (e) => { if (e) { pending.delete(id); reject(e); } });
+				const timer = o.requestTimeoutMs === undefined ? undefined : setTimeout(() => { if (pending.delete(id)) { reject(new Error("request timed out")); s.destroy(); } }, o.requestTimeoutMs);
+				const done = <T,>(f: (v: T) => void) => (v: T) => { clearTimeout(timer); f(v); };
+				pending.set(id, { socket: s, resolve: done(resolve), reject: done(reject) });
+				s.write(frame(id, text), (e) => { if (e) { pending.delete(id); clearTimeout(timer); reject(e); } });
 			});
 		},
 		close() { closed = true; opening?.destroy(); socket?.destroy(); socket = undefined; failAll(new Error("closed")); },

@@ -45,6 +45,11 @@ export type SyncSpace = {
 	/** Called once whenever the served store gets poisoned (also by the reaper). */
 	onSealed: (listener: () => void) => void;
 };
+/**
+ * How long the primary waits for the standby's answer to one intent. Beyond it the commit counts as not confirmed
+ * (CommitSealed) and the resolver takes over, instead of every write hanging for the life of a cut connection.
+ */
+const STANDBY_ANSWER_MS = 15_000;
 /** How long a poisoned Harness may take to close before it is abandoned. */
 const CLOSE_BOUND_MS = 5000;
 
@@ -71,7 +76,7 @@ export async function openSyncSpace(o: {
 		if (peer !== undefined) return peer;
 		const standby = durabilityOf(journal.config) === "sync" ? c.peers.find(p => p.hostId === journal.config.standbyReplica) : undefined;
 		if (durabilityOf(journal.config) === "sync" && !standby) throw new Error(`standby ${journal.config.standbyReplica} of ${c.alias} is not provisioned`);
-		return peer = standby ? signedReplicaPeer({ transport: (transports.push(socketTransport({ host: standby.ip, port: c.port }, { localAddress: o.bindIp, connectTimeoutMs: 8000, maxFrameBytes: 1 << 20 })), transports.at(-1)!), signer: o.signer, self: o.hostId, remote: standby }) : null;
+		return peer = standby ? signedReplicaPeer({ transport: (transports.push(socketTransport({ host: standby.ip, port: c.port }, { localAddress: o.bindIp, connectTimeoutMs: 8000, requestTimeoutMs: STANDBY_ANSWER_MS, maxFrameBytes: 1 << 20 })), transports.at(-1)!), signer: o.signer, self: o.hostId, remote: standby }) : null;
 	};
 	// Open, resolve the at most one sealed candidate with the standby, then serve. The same path at start and after a
 	// sealed commit at runtime.
