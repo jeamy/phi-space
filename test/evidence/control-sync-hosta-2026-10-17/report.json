@@ -1,0 +1,329 @@
+{
+ "passed": true,
+ "host": "phase1b-host-a",
+ "controlSpace": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
+ "siblings": [
+  "sp-a1eadc94-5dec-43d4-b4c3-5df1d72dcd3b"
+ ],
+ "standby": "control-standby-nano",
+ "bundles": {
+  "bootstrapAndCycle1": "a173cb7427c76428",
+  "cycle2": "74f3f071744ddc2a"
+ },
+ "steps": [
+  {
+   "step": "bootstrap",
+   "result": {
+    "revision": 1,
+    "storeHash": "991da479\u2026"
+   }
+  },
+  {
+   "step": "set-standby",
+   "tid": "control-standby-1",
+   "config": {
+    "durability": "sync",
+    "primaryEpoch": 1,
+    "replicaConfigVersion": 2
+   },
+   "standbyRevisionReached": 8
+  },
+  {
+   "step": "degrade",
+   "tid": "control-degrade-1",
+   "config": {
+    "durability": "single",
+    "primaryEpoch": 2,
+    "replicaConfigVersion": 3
+   },
+   "proof": {
+    "provider": "netcup",
+    "serverId": 964249,
+    "state": "SHUTOFF"
+   }
+  },
+  {
+   "step": "release",
+   "id": "control-release-1",
+   "boot": "quarantine",
+   "permit": "revoked/standby"
+  },
+  {
+   "step": "wipe-standby",
+   "how": "replica moved aside to replica.after-degrade-1, listener restarted with head revision 0"
+  },
+  {
+   "step": "set-standby",
+   "tid": "control-standby-2",
+   "config": {
+    "durability": "sync",
+    "primaryEpoch": 2,
+    "replicaConfigVersion": 4
+   }
+  },
+  {
+   "step": "degrade",
+   "tid": "control-degrade-2",
+   "config": {
+    "durability": "single",
+    "primaryEpoch": 3,
+    "replicaConfigVersion": 5
+   },
+   "proof": {
+    "provider": "netcup",
+    "serverId": 964249,
+    "state": "SHUTOFF"
+   }
+  },
+  {
+   "step": "release",
+   "id": "control-release-2",
+   "boot": "quarantine",
+   "permit": "revoked/standby"
+  }
+ ],
+ "baselines": {
+  "baseline-0": {
+   "at": "2026-10-17T07:42:38.171Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-1": {
+   "at": "2026-10-17T08:09:20.379Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-2-mainsync": {
+   "at": "2026-10-17T09:14:13.370Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-3-sync": {
+   "at": "2026-10-17T09:15:57.468Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-4-degraded": {
+   "at": "2026-10-17T09:17:52.651Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": false,
+    "error": "connect timed out"
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-5-sync2": {
+   "at": "2026-10-17T09:30:37.791Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-6-final": {
+   "at": "2026-10-17T09:34:49.751Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  },
+  "baseline-restored": {
+   "at": "2026-10-17T07:44:48.904Z",
+   "peerKeys": 13,
+   "controlWrite": "completed",
+   "phase1b-member-1": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 1
+   },
+   "phase1b-restore-target": {
+    "ok": true,
+    "epoch": 2,
+    "entries": 1
+   },
+   "nano-test": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   },
+   "standby-100": {
+    "ok": true,
+    "epoch": 1,
+    "entries": 0
+   }
+  }
+ },
+ "bootRecordsFinal": {
+  "phase1b-host-a": {
+   "version": 10,
+   "state": "active",
+   "spaces": {
+    "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59": {
+     "state": "active",
+     "role": "primary",
+     "durability": "single",
+     "primaryEpoch": 3,
+     "replicaConfigVersion": 5,
+     "transitionId": "control-degrade-2"
+    },
+    "sp-a1eadc94-5dec-43d4-b4c3-5df1d72dcd3b": {
+     "state": "active",
+     "role": "primary",
+     "durability": "single",
+     "primaryEpoch": 3,
+     "replicaConfigVersion": 5,
+     "transitionId": "control-degrade-2"
+    }
+   }
+  },
+  "control-standby-nano": {
+   "version": 7,
+   "state": "quarantine",
+   "spaces": {
+    "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59": {
+     "state": "revoked",
+     "role": "standby",
+     "durability": "sync",
+     "primaryEpoch": 2,
+     "replicaConfigVersion": 4,
+     "transitionId": "control-standby-2"
+    }
+   }
+  }
+ },
+ "incident": {
+  "what": "a run daemon on a main store in sync mode released owner.lock on SIGTERM but never exited (open standby transport and register client); the next start took the lock, so two run processes existed and `stop` refused",
+  "fix": "federation-host closes the main-store handles (standby transport, journal, register client) in cleanup",
+  "verified": "after control-standby-2 the sync-mode daemon stopped with no remaining process"
+ }
+}

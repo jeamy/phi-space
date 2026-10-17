@@ -88,13 +88,20 @@ if(mode==="main-sync"){
 }
 if(mainCfg&&mode!=="run")throw new Error("a primary/sync main store opens only in run or main-sync");
 let mainJournal:PrimarySyncJournal|undefined;
+// Handles of the main store beside its Harness; open ones keep the event loop alive after SIGTERM (seen on host-a:
+// a sync-mode daemon released its owner lock but never exited while its standby transport stayed open).
+const mainHandles:Array<()=>void>=[];
 const openMain=async()=>{
  const cfg=JSON.parse(privateFile(configFile).toString()),external=new SyncRegister(cfg.registerTls);
+ mainHandles.push(()=>external.close());
  mainJournal=new PrimarySyncJournal(join(mainCfg.dir,"journal.sqlite"),mainCfg.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(external,cfg.hostId)});
+ mainHandles.push(()=>mainJournal!.close());
  if(mainJournal.config.primaryReplica!==cfg.hostId)throw new BootBlocked("this host is not the primary of its main store");
  const standby=mainJournal.config.durability==="single"?undefined:mainCfg.peers.find((x:any)=>x.hostId===mainJournal!.config.standbyReplica);
  if(mainJournal.config.durability!=="single"&&!standby)throw new BootBlocked("the standby of the main store is not provisioned");
- const peer=standby?signedReplicaPeer({transport:socketTransport({host:standby.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20}),signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:standby}):null;
+ const transport=standby?socketTransport({host:standby.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20}):undefined;
+ if(transport)mainHandles.push(()=>transport.close());
+ const peer=transport?signedReplicaPeer({transport,signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:standby}):null;
  const raw=await openNodeSqliteStorage(join(home,"harness.sqlite")),assert=assertSyncPrimary(external,cfg.hostId,mainJournal);
  await recoverPrimarySync(raw,mainJournal,peer,ctx,assert);
  return Harness.open(primarySyncStorage(raw,mainJournal,peer,{assertPrimary:assert}),{models:createModels(),registry:createRegistry()},ctx);
@@ -102,7 +109,7 @@ const openMain=async()=>{
 const h=mainCfg?await openMain():await Harness.open(await openNodeSqliteStorage(join(home,"harness.sqlite")),{models:createModels(),registry:createRegistry()},ctx);
 let runtime:Awaited<ReturnType<typeof startConfiguredFederation>>|undefined;
 let recovery:Awaited<ReturnType<typeof startRecoveryOnly>>|undefined;
-const cleanup=async()=>{await recovery?.close();await runtime?.close();await h.close(ctx);installed.close();unlinkSync(lock);};
+const cleanup=async()=>{await recovery?.close();await runtime?.close();await h.close(ctx);for(const close of mainHandles.splice(0).reverse()){try{close();}catch{}}installed.close();unlinkSync(lock);};
 try{
  if(mode==="provision"){
   let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>65536)throw new Error("provisioning input exceeds budget");}

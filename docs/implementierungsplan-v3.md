@@ -176,7 +176,7 @@ Stand der Pakete (Details: [Phase-3-Stand](ap3-replikation.md), dort mit eigener
 | 3.5 setStandby | umgesetzt (leeres Quarantäne-Ziel, vollständiges Nachladen); im echten Zyklus zurück zu nanoi geprüft; Schreibsperre für alle Quellen inklusive Reaper während offener Übergänge, Abbruch mit `abandonTransition`; Snapshot-Bootstrap offen |
 | 3.6 Boot-Merkmal komplett | umgesetzt: `fenced`/`quarantine` per CAS; Boot-Guard bindet primary/sync-Spaces über `replicaConfig` an Rolle, Epoche, Replikatversion und Durability des Journals, `standby` ohne fachliche Zulassung; Wiederzulassung der übrigen Spaces eines gefencten Hosts je Space (`readmitSpace`/`installAdmittedPermit`); mehrere Spaces und Neustart geprüft |
 | 3.7 lww/set | Baustein umgesetzt (HLC, versionierte Tombstones, Add-Wins, Lease-Erneuerung); offen: Kompaktierung, öffentlicher Adapter, Policy-Modi |
-| 3.8 Control Space auf primary/sync | lokal umgesetzt: Bootstrap bestehender Stores, Hauptstore auf primary/sync (`mainSync`, `main-sync`, `replica-listen`), Control-Epoche aus dem Journal, Geschwister-Spaces; Promotion des Control-Replikats und Schritt 6 offen; Migration von host-a steht aus |
+| 3.8 Control Space auf primary/sync | lokal umgesetzt: Bootstrap bestehender Stores, Hauptstore auf primary/sync (`mainSync`, `main-sync`, `replica-listen`), Control-Epoche aus dem Journal, Geschwister-Spaces; echter Lauf auf host-a bestanden: Bootstrap, zweimal setStandby/degradeToSingle mit Standby auf nanoi und netcup-Fencing, Ende `single` ([Nachweis](../test/evidence/control-sync-hosta-2026-10-17/README.md)); Promotion des Control-Replikats und Schritt 6 offen |
 
 | AP | Inhalt | Größe |
 |---|---|---|
@@ -264,6 +264,6 @@ eingeschlossen, [ap1b-abnahme.md](ap1b-abnahme.md)). Phase 2 ist mit der Ausnahm
 | 3.2 | Storage-Unterbau umgesetzt und geprüft | [ap3-primary-sync.md](ap3-primary-sync.md); keine produktive Sync-Policy, kein Transport, kein `NotCommitted` |
 | 3.7 | Baustein umgesetzt: lww/set mit HLC, Tombstones, Add-Wins, Set-Lease-Erneuerung | Kompaktierung und öffentlicher Adapter offen |
 | 3.3–3.6 | Replikatsteuerung mit Simulator-Adapter umgesetzt und geprüft; 3.6 teilweise | [ap3-replica-control.md](ap3-replica-control.md); Abnahme durch F1/Gate 2 (realer Fencing-Adapter) blockiert |
-| 3.8 | offen | Control Space auf primary/sync |
+| 3.8 | Hauptstore auf primary/sync umgesetzt; echter Lauf auf host-a bestanden | Promotion des Control-Replikats und Schritt 6 offen |
 
 Nachweise, genaue Grenzen und nächste Betriebsschritte: [Phase-1b-Abnahme](ap1b-abnahme.md).

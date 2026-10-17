@@ -337,6 +337,15 @@ Nachtrag später am 2026-10-16:
   promote, degrade, Quarantäne, setStandby, Schreibvorgänge in beide Richtungen, identische Stände.
 - Offen: Router-Übernahme auf echten Hosts (host-a braucht das neue Bündel) und 3.8.
 
+Nachtrag 2026-10-17 (3.8):
+
+- Der Control-Store von host-a lief per Bootstrap auf primary/sync.
+- Er durchlief zweimal setStandby → degradeToSingle mit dem Standby `control-standby-nano` auf nanoi und
+  netcup-Fencing und endet wieder `single` ([Nachweis](../test/evidence/control-sync-hosta-2026-10-17/README.md)).
+- Dabei wurde ein Fehler gefunden und behoben: Der Daemon endete nach SIGTERM nicht, wenn der Hauptstore im
+  Sync-Betrieb lief.
+- Offen: Promotion des Control-Replikats und Schritt 6.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.
