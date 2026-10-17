@@ -31,7 +31,9 @@ if(mode==="enroll-key") {
  const q=JSON.parse(text),config=JSON.parse(privateFile(join(home,"federation.json")).toString());
  if(typeof q.token!=="string"||typeof q.keyName!=="string"||!/^[a-z][a-z0-9-]{0,31}$/.test(q.keyName))throw new Error("enroll-key needs a token and a bounded keyName");
  mkdirSync(join(home,"root"),{recursive:true,mode:0o700});const keyFile=join(home,"root",q.keyName+".json"),signer=existsSync(keyFile)?loadFileSigner(keyFile):provisionFileSigner(keyFile,"ed25519");
- const socket=socketTransport(config.control.address,{localAddress:config.listen.host,connectTimeoutMs:8000});let remote:RemoteSpace;remote=new RemoteSpace(socket,{space:"control",signer,ownPeerId:config.peerId,expectedGateHostId:config.controlHostId,grantProvider:()=>remote.requestGrant()});
+ // q.control: another control host than the configured one (a future control host enrolls at the current one).
+ const control=q.control??{address:config.control.address,hostId:config.controlHostId};
+ const socket=socketTransport(control.address,{localAddress:config.listen.host,connectTimeoutMs:8000});let remote:RemoteSpace;remote=new RemoteSpace(socket,{space:"control",signer,ownPeerId:config.peerId,expectedGateHostId:control.hostId,grantProvider:()=>remote.requestGrant()});
  try{console.log(JSON.stringify({keyFile,keyId:signer.keyId,algorithm:signer.algorithm,publicKey:signer.publicKey,result:await remote.enroll(q.token.trim())}));}finally{socket.close();}process.exit(0);
 }
 if (["stop","status","fence"].includes(mode)) {

@@ -199,5 +199,12 @@ for(const backend of BACKENDS)test(`${backend}: a new router takes an existing R
   await root.close();root=undefined;
   // The new router restarts from its own retained lease; takeover no longer applies.
   root=await createConfiguredRoot(opts('router-b','lease-b').o as any);assert.equal(JSON.parse(readFileSync(join(dir,'lease-b'),'utf8')).lease.routerEpoch,2);
+  await root.close();root=undefined;
+  // The way back: router A still holds its superseded lease. Without takeover it stays refused; with takeover it waits
+  // while B's lease lives, then takes over with router epoch 3.
+  await assert.rejects(createConfiguredRoot(opts('router-a','lease-a').o as any),/no longer owns current epoch/);
+  await assert.rejects(createConfiguredRoot(opts('router-a','lease-a',{takeover:true,takeoverWaitMs:200}).o as any),/previous router lease is live/);
+  clock+=60_000+6_000;root=await createConfiguredRoot(opts('router-a','lease-a',{takeover:true}).o as any);
+  assert.deepEqual([JSON.parse(readFileSync(join(dir,'lease-a'),'utf8')).lease.routerEpoch,(await snapshotSpace(host,sid,ctx))!.authorityCounters!.routerEpoch],[3,3]);
  }finally{await root?.close();for(const sv of servers)await sv.close();external.close();installed.close();await home.dispose();rmSync(dir,{recursive:true,force:true});}
 });

@@ -63,10 +63,12 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  const grant=async(p:Principal)=>{if(p.peerId!==o.peerId)throw new BootBlocked('native Root only grants its own hosted-agent namespace');return o.grants.issue(await connection(),'effect',p.agentId);};
  let current:SignedRouterLease|undefined;
  const retained=existsSync(cfg.leaseFile)?JSON.parse(privateFile(cfg.leaseFile).toString()):undefined;
- const takeover=!retained&&!!await o.host.snapshot(FederationJournalLayout,cfg.id,o.ctx);
+ // A retained lease whose router epoch another router has since raised is superseded: with takeover it counts as absent.
+ const superseded=!!retained&&!!cfg.takeover&&((await controlState())?.authorityCounters?.routerEpoch??0)>retained.lease.routerEpoch;
+ const takeover=(!retained||superseded)&&!!await o.host.snapshot(FederationJournalLayout,cfg.id,o.ctx);
  if(takeover&&!cfg.takeover)throw new BootBlocked('existing Root journal has lost its lease record');
  const save=(t:SignedRouterLease)=>{writeFileSync(cfg.leaseFile+'.tmp',JSON.stringify(t)+'\n',{mode:0o600});renameSync(cfg.leaseFile+'.tmp',cfg.leaseFile);};
- const retainLease=async()=>{if(!current||Date.now()+45000>=current.lease.expiresAt){const prior=current??retained;current=await o.leases.issue(o.peerId,signer.keyId,prior?{id:prior.lease.id,routerEpoch:prior.lease.routerEpoch,token:prior}:undefined);if(prior&&(current.lease.id!==prior.lease.id||current.lease.routerEpoch!==prior.lease.routerEpoch))throw new BootBlocked('Root lease changed during reopen');save(current);}return current;};
+ const retainLease=async()=>{if(!current||Date.now()+45000>=current.lease.expiresAt){const prior=current??(superseded?undefined:retained);current=await o.leases.issue(o.peerId,signer.keyId,prior?{id:prior.lease.id,routerEpoch:prior.lease.routerEpoch,token:prior}:undefined);if(prior&&(current.lease.id!==prior.lease.id||current.lease.routerEpoch!==prior.lease.routerEpoch))throw new BootBlocked('Root lease changed during reopen');save(current);}return current;};
  const lease=async()=>{await assertRoot();return retainLease();};
  // The endpoint follows the current routing target: after an adopted ReplicaConfigNotice calls go to the new primary.
  const socketFor=(id:string,hostId:string)=>{const m=cfg.members[id],e=m&&endpointOf(m,hostId);if(!e)throw new BootBlocked('Member endpoint is not provisioned');const key=id+'@'+hostId;let socket=sockets.get(key);if(!socket){if(stopped)throw new BootBlocked('native Root is closing');socket=socketTransport(e.address);sockets.set(key,socket);}return socket;};
