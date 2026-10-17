@@ -34,7 +34,12 @@ const configFile=join(home,"federation.json"), installed=new SqliteRecoveryRegis
 if (["recovery","member-recovery"].includes(mode) && !existsSync(join(home,"restart.lock"))) throw new Error("recovery requires a persistent restart lock");
 if (mode==="run" && existsSync(join(home,"restart.lock"))) throw new Error("persistent recovery restart lock blocks the normal daemon");
 // One harness writer. The operator removes a stale owner lock only after proving that its process is gone.
-const lock=join(home,"owner.lock");const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode})+'\n');closeSync(fd);
+// A lock from an earlier kernel boot (power-off, reboot) cannot belong to a live process: the daemon clears it itself.
+// Within the same boot the operator rule above applies; PIDs are reused across container restarts.
+const bootId=(()=>{try{return readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();}catch{return null;}})(),startTime=(()=>{try{return readFileSync('/proc/self/stat','utf8').split(') ')[1]!.split(' ')[19];}catch{return null;}})();
+const lock=join(home,"owner.lock");
+if(existsSync(lock)&&bootId){try{const old=JSON.parse(privateFile(lock).toString());if(old.bootId&&old.bootId!==bootId){unlinkSync(lock);console.error(JSON.stringify({staleOwnerLockCleared:{pid:old.pid,mode:old.mode,previousBoot:old.bootId}}));}}catch(e){if(!(e instanceof SyntaxError))throw e;}}
+const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode,bootId,startTime})+'\n');closeSync(fd);
 const h=await Harness.open(await openNodeSqliteStorage(join(home,"harness.sqlite")),{models:createModels(),registry:createRegistry()},ctx);
 let runtime:Awaited<ReturnType<typeof startConfiguredFederation>>|undefined;
 let recovery:Awaited<ReturnType<typeof startRecoveryOnly>>|undefined;
@@ -138,6 +143,13 @@ try{
       const results=await root.space.readAll({type:'SieveResult',fields:runFields},p),values=results.entries.flatMap(e=>e.fields.primes as number[]).sort((a,b)=>a-b);if(results.entries.length!==jobs||new Set(results.entries.map(e=>e.fields.taskId)).size!==jobs||canonicalJson(values)!==canonicalJson(primes(1,jobs*100))||(await root.space.count({type:'SieveTask',fields:runFields},p)).count!==0)throw Error('native result comparison failed');result={...(runId?{runId}:{}),jobs,workers:6,maxInFlightTransactions:1,uniqueResults:jobs,primes:values.length,taskCount:0};
      }else if(command.action==='domain-write'){
       result=await root.space.write({type:'DomainProbe',fields:{nonce:'physical-domain-20261015'}},{id:'domain-probe-write',principal:{peerId:nativeConfig.peerId,agentId:'domain-probe'}},core.FOREVER);
+     }else if(command.action==='routed-write'){
+      // Routed through the native Root (delegation to the Member that owns the type), e.g. a primary/sync Member.
+      if(typeof command.type!=='string'||!/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(command.type)||typeof command.requestId!=='string'||!/^[A-Za-z0-9._-]{1,64}$/.test(command.requestId))throw Error('bounded routed write required');
+      const entry=await root.space.write({type:command.type,fields:{...(command.fields??{})}},{id:command.requestId,principal:{peerId:nativeConfig.peerId,agentId:'routed-probe'}},core.FOREVER);result={written:true,entry:(entry as any)?.id??null};
+     }else if(command.action==='routed-count'){
+      if(typeof command.type!=='string'||!/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(command.type))throw Error('bounded routed count required');
+      result=await root.space.count({type:command.type},{peerId:nativeConfig.peerId,agentId:'routed-probe'});
      }else if(command.action==='domain-read'){
       const entry=await root.space.read({type:'DomainProbe',fields:{nonce:'physical-domain-20261015'}},{id:'domain-probe-read',principal:{peerId:nativeConfig.peerId,agentId:'domain-probe'}});const value=entry as unknown as {fields?:{nonce?:string}};if(value?.fields?.nonce!=='physical-domain-20261015')throw Error('cross-host persisted entry missing');result={found:true,nonce:value.fields.nonce};
      }else if(command.action==='domain-unavailable'){

@@ -22,6 +22,8 @@ export type SyncSpaceConfig = {
 	/** replica listener port on the overlay address of every replica */
 	port: number;
 	peers: Array<ReplicaPin & { ip: string }>;
+	/** Logical Member installed by signed Control membership commands; its state lives in the replicated Space. */
+	membership?: { memberId: string };
 };
 export type SyncSpace = {
 	config: SyncSpaceConfig; journal: PrimarySyncJournal; role: () => "primary" | "standby" | "excluded";

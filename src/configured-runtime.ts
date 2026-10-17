@@ -102,7 +102,11 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 			const r=await openSyncSpaces(config.syncSpaces,c=>openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,openStorage:factories.openSyncStorage,openHarness:factories.openSyncHarness}));
 			syncSpaces.push(...r.opened);for(const f of r.failed)console.error(`primary/sync Space ${f.alias} stays unserved:`,f.error);
 		}
-		const syncOptions=syncSpaces.filter(sp=>sp.harness).map(sp=>({spaceId:sp.config.spaceId,alias:sp.config.alias,host:sp.harness!,primaryEpoch:()=>sp.journal.config.primaryEpoch,delegation:verifierFor(sp.harness!,id=>id===sp.config.spaceId?sp.journal.config:null)}));
+		const syncOptions=syncSpaces.filter(sp=>sp.harness).map(sp=>{
+			// The Member state of a replicated Space is part of that Space, so it follows the replicas.
+			const lifecycle=sp.config.membership?new MemberLifecycle({host:sp.harness!,ctx,memberId:sp.config.membership.memberId,spaceId:sp.config.spaceId,authorityId,peerId:config.peerId,signer,controlPin:{issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey},assertAuthority:async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active"||b.value.spaces?.[sp.config.spaceId]?.authorityId!==authorityId)throw new BootBlocked("Member boot authority changed");}}):undefined;
+			return {spaceId:sp.config.spaceId,alias:sp.config.alias,host:sp.harness!,primaryEpoch:()=>sp.journal.config.primaryEpoch,delegation:verifierFor(sp.harness!,id=>id===sp.config.spaceId?sp.journal.config:null),
+				membership:lifecycle,refreshPolicy:lifecycle&&controlRemote?async()=>lifecycle.installPolicy(await controlRemote!.requestRoutingPolicy()):undefined};});
 		// v3 5.3.1 step 5: a primary keeps offering the notice of its last transition until the router adopted it.
 		let noticeTimer:ReturnType<typeof setTimeout>|undefined,noticeStopped=false,noticeActive:Promise<void>=Promise.resolve();
 		const publishNotices=()=>{noticeActive=(async()=>{for(const sp of syncSpaces){const n=await sp.notice();if(!n)continue;if(control)await control.replicaNotices!.publish(n,{peerId:config.peerId,roles:["host"],key:{algorithm:signer.algorithm,publicKey:signer.publicKey}});else await controlRemote!.publishReplicaNotice(n);}})()

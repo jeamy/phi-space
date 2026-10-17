@@ -378,3 +378,27 @@ for(const backend of BACKENDS)test(`${backend}: identical signed Member policy a
  revoked=false;revokeOnSnapshot=false;await assert.rejects(node.installPolicy({...token,signature:'invalid'}),RoutingConflict);assert.equal(commits,0);
  const previous=(await snapshotSpace(o.a,o.members.a.target.spaceId,ctx))!.membership!;assert.equal(previous.policy!.policyVersion,token.policy.policyVersion);
 }));
+
+for (const backend of BACKENDS)
+    test(`${backend}: a membership instruction naming a primary/sync Space reaches the lifecycle in its own store`,
+         () => fixture(backend, async o => {
+             const pin = {find : async (peer: string, key: string) => peer === 'control' && key === o.rootKey.signer.keyId ? {peerId : 'control', principal : 'control', keyId : key, algorithm : 'ed25519' as const, publicKey : o.rootKey.publicKey, state : 'active' as const, roles : [ 'host' ], scope : [ '*' ]} : null};
+             const runtime = await startFederationHost(o.a, ctx, {
+                 hostId : 'a', authorityId : 'authority', unsafeSkipBootGuardForTests : true, groupRoles : {'space-hosts' : [ 'host' ]},
+                 // Only the replicated Space has a lifecycle here: the main store has none, as on a pure sync Member.
+                 syncSpaces : [{spaceId : o.members.b.target.spaceId, alias : 'jobs-sync-b', host : o.bh, primaryEpoch : () => 1, membership : o.nodes.b}],
+                 keys : pin,
+                 verifier : new GrantVerifier({authorityId : 'authority', issuerHostId : 'control', algorithm : 'ed25519', publicKey : o.rootKey.publicKey, now : o.clock}),
+                 directory : {refresh : async () => {}, lookup : async ip => ip === '127.0.0.2' ? {id : 'control', name : 'control', ip, connected : true, groups : [ 'space-hosts' ]} : null},
+                 listen : {host : '127.0.0.1', port : 0}, now : o.clock, revalidateMs : 0
+             });
+             const socket = socketTransport({host : '127.0.0.1', port : (runtime.address() as any).port}, {localAddress : '127.0.0.2'});
+             try {
+                 const remote = new RemoteSpace(socket, {space : o.members.b.target.spaceId, signer : o.rootKey.signer, ownPeerId : 'control', expectedGateHostId : 'a', now : o.clock, attempts : 1});
+                 await remote.authenticate();
+                 const q = await signMembership('instruction', {id : 'sync-add', authorityId : 'authority', memberId : 'b', spaceId : o.members.b.target.spaceId, action : 'prepareAdd' as const}, 'control', o.rootKey.signer);
+                 assert.equal((await remote.requestMembership(q)).value.state, 'adding');
+                 await assert.rejects(o.clients.b.write({type : 'Job', fields : {}}), MemberDrained, 'the state landed in the Space of b, not in the main store');
+                 await o.clients.a.write({type : 'Job', fields : {}});
+             } finally { socket.close(); await runtime.close(); }
+         }));
