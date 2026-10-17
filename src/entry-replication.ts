@@ -20,7 +20,16 @@ export type EntryMutation =
  | { kind: 'put' | 'add'; type: string; fields: Fields; owner: Principal; expiresAt: number | null }
  | { kind: 'delete'; type: string; fields: Fields; owner: Principal }
  | { kind: 'remove'; type: string; tags: string[]; owner: Principal }
- | { kind: 'renew'; type: string; tag: string; fields: Fields; owner: Principal; expiresAt: number | null };
+ | { kind: 'renew'; type: string; tag: string; fields: Fields; owner: Principal; expiresAt: number | null }
+ /** Erases every earlier change owned by `principal` (docs/ap3-replikation.md, step 3); `owner` is the issuing admin. */
+ | { kind: 'erase'; principal: Principal; owner: Principal }
+ | RedactedMutation;
+/**
+ * An erased change: id, clock, type and owner stay, the content goes. `argumentHash` of its event stays the original's;
+ * an lww change keeps only a hash of its canonical key, a renewal its tag.
+ */
+export type RedactedMutation = { kind: 'redacted'; type: string; owner: Principal; was: 'put' | 'add' | 'delete' | 'renew'; erase: string; keyHash?: string; tag?: string };
+type ContentMutation = Extract<EntryMutation, { kind: 'put' | 'add' | 'delete' | 'renew' }>;
 export type ReplicatedEntryChange = {
  originReplicaId: string; incarnation: string; seq: number; clock: HybridClock;
  requestId: string; argumentHash: string; mutation: EntryMutation;
@@ -86,9 +95,17 @@ export class EntryReplicationController {
  private clockSafe(s: Pick<Readonly<EntryReplicationState>, 'lastWallTime'>, now: number) { const u=this.o.clockUncertaintyMs();if(!Number.isFinite(u)||u<0||u>=5000||s.lastWallTime-now>5000)throw new ReplicationClockError('clock uncertainty or backward jump blocks timed operations'); }
  private async check(action: Parameters<EntryReplicationOptions['authorize']>[0]) { await this.o.authorize(action);await this.o.assertActive(); }
  private bind(s: Readonly<EntryReplicationState>) { if(s.config && (s.configHash!==this.configHash || canonical(s.config)!==canonical(this.config)))throw new ReplicationConflict('stored replica configuration changed; explicit rebuild required'); }
+ private tagOk(tag: unknown) { let v:unknown;try{v=JSON.parse(String(tag));}catch{return false;}return typeof tag==='string'&&Array.isArray(v)&&v.length===3&&number(v[2])&&v[2]>=1&&this.config.members.some(p=>p.replicaId===v[0]&&p.incarnation===v[1])&&canonical(v)===tag; }
  private validateMutation(m: EntryMutation) {
-  if(!m || !id(m.type) || !m.owner || !exact(m.owner,m.owner.agentId===undefined?['peerId']:['peerId','agentId']) || !id(m.owner.peerId) || m.owner.agentId!==undefined&&!id(m.owner.agentId))throw new ReplicationConflict('invalid mutation identity');
+  const principalOk=(p:Principal|undefined)=>!!p&&typeof p==='object'&&exact(p,p.agentId===undefined?['peerId']:['peerId','agentId'])&&id(p.peerId)&&(p.agentId===undefined||id(p.agentId));
+  if(m?.kind==='erase'){if(!exact(m,['kind','principal','owner'])||!principalOk(m.principal)||!principalOk(m.owner))throw new ReplicationConflict('invalid erase');return;}
+  if(!m || !id(m.type) || !m.owner || !principalOk(m.owner))throw new ReplicationConflict('invalid mutation identity');
   const r=this.config.rules.find(r=>r.type===m.type);if(!r)throw new ReplicationConflict('type has no replication rule');
+  if(m.kind==='redacted'){
+   const keyed=r.variant==='lww',keys=['kind','type','owner','was','erase',...(keyed?['keyHash']:[]),...(m.was==='renew'?['tag']:[])];
+   if(!exact(m,keys)||(keyed?!['put','delete'].includes(m.was):!['add','renew'].includes(m.was))||!this.tagOk(m.erase)||keyed&&!sha(m.keyHash)||m.was==='renew'&&!this.tagOk(m.tag))throw new ReplicationConflict('invalid redacted change');
+   return;
+  }
   if(m.kind==='remove') {
    if(r.variant!=='set'||!exact(m,['kind','type','tags','owner'])||!Array.isArray(m.tags)||m.tags.length>256||new Set(m.tags).size!==m.tags.length)throw new ReplicationConflict('invalid observed remove');
    for(const tag of m.tags){let v:unknown;try{v=JSON.parse(tag);}catch{throw new ReplicationConflict('invalid observed tag');}if(!Array.isArray(v)||v.length!==3||!number(v[2])||v[2]<1||!this.config.members.some(p=>p.replicaId===v[0]&&p.incarnation===v[1])||canonical(v)!==tag)throw new ReplicationConflict('unknown tag origin');}
@@ -102,14 +119,50 @@ export class EntryReplicationController {
  private validateEvent(e: ReplicatedEntryChange, now: number) {
   if(!e || !exact(e,['originReplicaId','incarnation','seq','clock','requestId','argumentHash','mutation']) || !this.config.members.some(m=>m.replicaId===e.originReplicaId&&m.incarnation===e.incarnation)||!number(e.seq)||e.seq<1||!id(e.requestId)||typeof e.argumentHash!=='string'||!/^[a-f0-9]{64}$/.test(e.argumentHash))throw new ReplicationConflict('invalid change identity or retired origin');
   validateHybridClock(e.clock);if(e.clock.physical-now>60000)throw new ReplicationClockError('remote clock exceeds future bound');this.validateMutation(e.mutation);
-  if(e.argumentHash!==hash(e.mutation))throw new ReplicationConflict('changed mutation argument hash');
+  // A redacted change keeps the original's argument hash (that is how a later original is recognised and dropped).
+  if(e.mutation.kind!=='redacted'&&e.argumentHash!==hash(e.mutation))throw new ReplicationConflict('changed mutation argument hash');
+ }
+ /**
+  * The same change in original and redacted form: an original arriving after its redaction is dropped, a redaction
+  * replaces a local original; of two redactions the one by the smaller erase ID wins.
+  */
+ private equivalent(local: ReplicatedEntryChange, incoming: ReplicatedEntryChange): 'same' | 'replace' | 'conflict' {
+  if(canonical(local)===canonical(incoming))return 'same';
+  const {mutation:a,...ia}=local,{mutation:b,...ib}=incoming;
+  if(canonical(ia)!==canonical(ib)||a.kind!=='redacted'&&b.kind!=='redacted')return 'conflict';
+  const typeOwner=(m:EntryMutation)=>m.kind==='erase'?'':canonical([m.type,m.owner]);if(typeOwner(a)!==typeOwner(b))return 'conflict';
+  if(a.kind==='redacted'&&b.kind==='redacted')return b.erase<a.erase?'replace':'same';
+  if(a.kind==='redacted')return hash(b)===local.argumentHash?'same':'conflict';
+  return hash(a)===incoming.argumentHash?'replace':'conflict';
+ }
+ private redact(e: ReplicatedEntryChange, erase: string): ReplicatedEntryChange {
+  const m=e.mutation as ContentMutation,r=this.config.rules.find(r=>r.type===m.type)!;
+  const red:RedactedMutation={kind:'redacted',type:m.type,owner:copy(m.owner),was:m.kind,erase,...(r.variant==='lww'?{keyHash:hash(key(r,m.fields))}:{}),...(m.kind==='renew'?{tag:m.tag}:{})};
+  return {...copy(e),mutation:red};
+ }
+ /** Redacts, in place, every change owned by an erased principal with a clock before the erase (smallest erase ID wins). */
+ private applyErasures(events: ReplicatedEntryChange[]): number {
+  const erases=events.filter(e=>e.mutation.kind==='erase');if(!erases.length)return 0;let n=0;
+  for(let i=0;i<events.length;i++){
+   const e=events[i]!,m=e.mutation;if(m.kind==='erase'||m.kind==='remove')continue;
+   const owner=canonical(m.owner);let best:string|undefined;
+   for(const x of erases){const xm=x.mutation as Extract<EntryMutation,{kind:'erase'}>;if(canonical(xm.principal)!==owner||compareHybridClock(e.clock,x.clock)>=0)continue;const xid=entryChangeId(x);if(best===undefined||xid<best)best=xid;}
+   if(best===undefined)continue;
+   if(m.kind==='redacted'){if(m.erase<=best)continue;events[i]={...e,mutation:{...m,erase:best}};n++;continue;}
+   events[i]=this.redact(e,best);n++;
+  }
+  // A renewal copies its tag's fields: whatever its clock, it is redacted with an erased tag (chains to a fixpoint).
+  for(let changed=true;changed;){changed=false;const at=new Map(events.map((e,i)=>[entryChangeId(e),i]));
+   for(let i=0;i<events.length;i++){const e=events[i]!,m=e.mutation;if(m.kind!=='renew')continue;const t=events[at.get(m.tag)??-1]?.mutation;
+    if(t?.kind==='redacted'){events[i]=this.redact(e,t.erase);n++;changed=true;}}}
+  return n;
  }
  private budget(events: ReplicatedEntryChange[]) { if(2*bytes(events)+16384>this.maxBatchBytes)throw new ResourceExhausted('replication batch exceeds atomic import budget'); }
  private append(s: EntryReplicationState, incoming: ReplicatedEntryChange[], now: number) {
-  const known=new Map(s.events.map(e=>[entryChangeId(e),e])),requests=new Set(s.events.map(e=>canonical([e.originReplicaId,e.incarnation,e.requestId]))),accepted:ReplicatedEntryChange[]=[];
+  const known=new Map(s.events.map(e=>[entryChangeId(e),e])),requests=new Set(s.events.map(e=>canonical([e.originReplicaId,e.incarnation,e.requestId]))),accepted:ReplicatedEntryChange[]=[];let replaced=0;
   for(const event of incoming){
    this.validateEvent(event,now);const k=entryChangeId(event),old=known.get(k);
-   if(old){if(canonical(old)!==canonical(event))throw new ReplicationConflict('immutable change ID reused');continue;}
+   if(old){const verdict=this.equivalent(old,event);if(verdict==='conflict')throw new ReplicationConflict('immutable change ID reused');if(verdict==='replace'){known.set(k,copy(event));replaced++;}continue;}
    const request=canonical([event.originReplicaId,event.incarnation,event.requestId]);if(requests.has(request))throw new ReplicationConflict('origin request ID reused');
    known.set(k,event);requests.add(request);accepted.push(event);
   }
@@ -120,29 +173,33 @@ export class EntryReplicationController {
    items.sort((a,b)=>a.seq-b.seq);for(let n=1;n<items.length;n++)if(compareHybridClock(items[n-1]!.clock,items[n]!.clock)>=0)throw new ReplicationConflict('origin clock is not strictly monotonic');
   }
   for(const event of known.values())if(event.mutation.kind==='remove')for(const tag of event.mutation.tags){
-   const observed=known.get(tag);if(observed&&(!['add','renew'].includes(observed.mutation.kind)||observed.mutation.type!==event.mutation.type))throw new ReplicationConflict('remove references another type or a non-add');
+   const observed=known.get(tag),om=observed?.mutation as ContentMutation|RedactedMutation|undefined,kind=om?.kind==='redacted'?om.was:om?.kind;
+   if(observed&&(!['add','renew'].includes(kind!)||om!.type!==event.mutation.type))throw new ReplicationConflict('remove references another type or a non-add');
   }
   for(const event of known.values())if(event.mutation.kind==='renew'){
    const m=event.mutation,observed=known.get(m.tag);
    if(entryChangeId(event)===m.tag)throw new ReplicationConflict('renewal cannot reference itself');
-   if(observed){const old=observed.mutation;if(!['add','renew'].includes(old.kind)||old.type!==m.type||canonical(old.owner)!==canonical(m.owner)||!('fields'in old)||canonical(old.fields)!==canonical(m.fields)||compareHybridClock(observed.clock,event.clock)>=0)throw new ReplicationConflict('renewal must preserve an earlier tag fields and owner');}
+   // A renewal of an erased tag stays and is invisible (read); it is not compared with erased content.
+   if(observed&&observed.mutation.kind!=='redacted'){const old=observed.mutation as ContentMutation;if(!['add','renew'].includes(old.kind)||old.type!==m.type||canonical(old.owner)!==canonical(m.owner)||!('fields'in old)||canonical(old.fields)!==canonical(m.fields)||compareHybridClock(observed.clock,event.clock)>=0)throw new ReplicationConflict('renewal must preserve an earlier tag fields and owner');}
   }
+  if(replaced)s.events=s.events.map(e=>known.get(entryChangeId(e))!);
   for(const event of accepted){s.events.push(copy(event));s.clock=advanceHybridClock(s.clock,now,event.clock);if(event.originReplicaId===this.config.replicaId&&event.incarnation===this.config.incarnation)s.seq=Math.max(s.seq,event.seq);}
+  this.applyErasures(s.events);
   if(accepted.length){s.lastWallTime=Math.max(s.lastWallTime,now);if(bytes(s)>this.maxHistoryBytes)throw new ResourceExhausted('replica history is full; no tombstone or dedup record was discarded');}
   return accepted.length;
  }
 
  async mutate(requestId: string, mutation: EntryMutation): Promise<ReplicatedEntryChange> {
-  const m=copy(mutation);if(!id(requestId))throw new ReplicationConflict('invalid request ID');this.validateMutation(m);const argumentHash=hash(m);
+  const m=copy(mutation);if(!id(requestId))throw new ReplicationConflict('invalid request ID');if(m?.kind==='redacted')throw new ReplicationConflict('a redacted change only arrives by replication');this.validateMutation(m);const argumentHash=hash(m);
   await this.check('local');return this.o.host.commit(async tx=>{
    await this.check('local');const s=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(s);
    const logical=await this.materializeIn(tx,s),previous=logical.events.length;
    const old=logical.events.find(e=>e.originReplicaId===this.config.replicaId&&e.incarnation===this.config.incarnation&&e.requestId===requestId);
    if(old){if(old.argumentHash!==argumentHash)throw new RequestConflict('replication request changed arguments');await this.check('local');return copy(old);}
    const now=this.now();this.clockSafe(s,now);
-   if(m.kind==='remove')for(const tag of m.tags){const e=logical.events.find(e=>entryChangeId(e)===tag);if(!e||!['add','renew'].includes(e.mutation.kind)||e.mutation.type!==m.type)throw new ReplicationConflict('local remove can only remove observed adds of its type');}
+   if(m.kind==='remove')for(const tag of m.tags){const e=logical.events.find(e=>entryChangeId(e)===tag);if(!e||!['add','renew'].includes(e.mutation.kind)||(e.mutation as ContentMutation).type!==m.type)throw new ReplicationConflict('local remove can only remove observed adds of its type');}
    if(m.kind==='renew'){
-    const observed=logical.events.find(e=>entryChangeId(e)===m.tag),old=observed?.mutation;
+    const observed=logical.events.find(e=>entryChangeId(e)===m.tag),old=observed?.mutation as ContentMutation|undefined;
     const removed=logical.events.some(e=>e.mutation.kind==='remove'&&e.mutation.tags.includes(m.tag)||e.mutation.kind==='renew'&&e.mutation.tag===m.tag);
     if(!old||!['add','renew'].includes(old.kind)||old.type!==m.type||!('expiresAt'in old)||old.expiresAt!==null&&old.expiresAt<=now||removed||canonical(old.owner)!==canonical(m.owner)||!('fields'in old)||canonical(old.fields)!==canonical(m.fields)||m.expiresAt!==null&&m.expiresAt<=now)throw new ReplicationConflict('renewal requires a live observed tag with unchanged fields and owner');
    }
@@ -164,18 +221,25 @@ export class EntryReplicationController {
   },this.o.ctx);
  }
 
- private async materialize(base: Readonly<EntryReplicationState>, load: (key: string) => Promise<Readonly<{page: EntrySnapshotPage|null}>|undefined>): Promise<EntryReplicationState> {
+ /** The logical history; redacted unless `raw` (used only to check what storage still holds). */
+ private async materialize(base: Readonly<EntryReplicationState>, load: (key: string) => Promise<Readonly<{page: EntrySnapshotPage|null}>|undefined>, raw=false): Promise<EntryReplicationState> {
   const result:EntryReplicationState=copy(base),events:ReplicatedEntryChange[]=[],seen=new Map<string,string>();let through=0;
-  const add=(items:ReadonlyArray<ReplicatedEntryChange>)=>{for(const e of items){const k=entryChangeId(e),h=hash(e),old=seen.get(k);if(old&&old!==h)throw new ReplicationConflict('stored change ID conflict');if(!old){events.push(copy(e));seen.set(k,h);}}};
+  const at=new Map<string,number>();
+  const add=(items:ReadonlyArray<ReplicatedEntryChange>)=>{for(const e of items){const k=entryChangeId(e),h=hash(e),old=seen.get(k);
+   if(old&&old!==h){const i=at.get(k)!,verdict=this.equivalent(events[i]!,e);if(verdict==='conflict')throw new ReplicationConflict('stored change ID conflict');if(verdict==='replace'){events[i]=copy(e);seen.set(k,h);}continue;}
+   if(!old){at.set(k,events.length);events.push(copy(e));seen.set(k,h);}}};
   for(const segment of base.segments??[]){
    if(segment.overlayThrough<through||segment.overlayThrough>base.events.length)throw new ReplicationConflict('invalid stored overlay boundary');
    add(base.events.slice(through,segment.overlayThrough));through=segment.overlayThrough;
    const pages=await this.stagedEvents(segment.manifest,load);add(pages);
   }
-  add(base.events.slice(through));result.events=events;return result;
+  add(base.events.slice(through));if(!raw)this.applyErasures(events);result.events=events;return result;
  }
  private materializeIn(tx: Tx, base: Readonly<EntryReplicationState>) { return this.materialize(base,key=>tx.doc(EntrySnapshotChunks,key,null)); }
  private persistOverlay(base: EntryReplicationState, logical: EntryReplicationState, previous: number) {
+  // The overlay holds its changes in their current (possibly redacted) form; nothing erased stays in it.
+  const current=new Map(logical.events.map(e=>[entryChangeId(e),e]));
+  for(let i=0;i<base.events.length;i++){const now=current.get(entryChangeId(base.events[i]!));if(now&&canonical(now)!==canonical(base.events[i]))base.events[i]=copy(now);}
   base.events.push(...copy(logical.events.slice(previous)));base.clock=copy(logical.clock);base.seq=logical.seq;base.lastWallTime=logical.lastWallTime;
  }
  private async state(action: 'read'|'export') {
@@ -185,15 +249,18 @@ export class EntryReplicationController {
  }
  async read(): Promise<ReplicatedEntryView[]> {
   const s=await this.state('read'),now=this.now();this.clockSafe(s??{lastWallTime:0},now);if(!s)return [];
-  const winners=new Map<string,ReplicatedEntryChange>(),removed=new Set<string>();
-  for(const e of s.events){const r=this.config.rules.find(r=>r.type===e.mutation.type)!;
-   if(r.variant==='lww'&&e.mutation.kind!=='remove'){
-    const k=key(r,e.mutation.fields),old=winners.get(k),cmp=old?compareHybridClock(e.clock,old.clock):1;
+  // lww: winners per key hash, so a redacted change (key hash only) keeps competing and hides the key when it wins.
+  const winners=new Map<string,ReplicatedEntryChange>(),removed=new Set<string>(),redacted=new Set<string>();
+  for(const e of s.events){const m=e.mutation;if(m.kind==='erase')continue;
+   const r=this.config.rules.find(r=>r.type===m.type)!;if(m.kind==='redacted')redacted.add(entryChangeId(e));
+   if(r.variant==='lww'&&m.kind!=='remove'){
+    const k=m.kind==='redacted'?m.keyHash!:hash(key(r,(m as ContentMutation).fields)),old=winners.get(k),cmp=old?compareHybridClock(e.clock,old.clock):1;
     if(!old||cmp>0||cmp===0&&e.originReplicaId>old.originReplicaId)winners.set(k,e);
-   } else if(e.mutation.kind==='remove')for(const tag of e.mutation.tags)removed.add(tag);else if(e.mutation.kind==='renew')removed.add(e.mutation.tag);
+   } else if(m.kind==='remove')for(const tag of m.tags)removed.add(tag);else if(m.kind==='renew'||m.kind==='redacted'&&m.was==='renew')removed.add((m as {tag:string}).tag);
   }
   const visible=[...winners.values()].filter(e=>e.mutation.kind==='put');
-  visible.push(...s.events.filter(e=>['add','renew'].includes(e.mutation.kind)&&!removed.has(entryChangeId(e))));
+  // set: a renewal of an erased tag stays invisible.
+  visible.push(...s.events.filter(e=>['add','renew'].includes(e.mutation.kind)&&!removed.has(entryChangeId(e))&&!(e.mutation.kind==='renew'&&redacted.has(e.mutation.tag))));
   return visible.filter(e=>{const m=e.mutation as Extract<EntryMutation,{expiresAt:number|null}>;return m.expiresAt===null||m.expiresAt>now;}).map(e=>{
    const m=e.mutation as Extract<EntryMutation,{expiresAt:number|null}>;return {id:entryChangeId(e),type:m.type,fields:copy(m.fields),owner:copy(m.owner),expiresAt:m.expiresAt,clock:copy(e.clock),originReplicaId:e.originReplicaId};
   }).sort((a,b)=>a.id<b.id?-1:1);
@@ -318,6 +385,38 @@ export class EntryReplicationController {
   },this.o.ctx);
  }
 
+
+ /** Step 3 (docs/ap3-replikation.md): erases every earlier change of `principal` on all replicas, as a change of its own. */
+ async erasePrincipal(requestId: string, principal: Principal, admin: Principal): Promise<ReplicatedEntryChange> {
+  return this.mutate(requestId,{kind:'erase',principal:copy(principal),owner:copy(admin)});
+ }
+ /**
+  * What this replica's storage still holds of erased principals. The overlay is rewritten with every commit; snapshot
+  * segments need maintenance and incoming snapshot transfers an abort (completeErasure). The offline durable history
+  * compaction then removes the superseded revisions.
+  */
+ async erasureStatus(): Promise<{ erases: number; overlayPending: number; segmentsPending: number; transfersPending: number; complete: boolean }> {
+  await this.check('read');const base=await this.o.host.snapshot(EntryReplicas,this.documentKey,this.o.ctx);
+  if(!base){await this.check('read');return {erases:0,overlayPending:0,segmentsPending:0,transfersPending:0,complete:true};}
+  this.bind(base);const raw=await this.materialize(base,key=>this.o.host.snapshot(EntrySnapshotChunks,key,this.o.ctx),true),view=copy(raw.events);this.applyErasures(view);
+  const target=new Map(view.map(e=>[entryChangeId(e),canonical(e)])),overlayIds=new Set(base.events.map(e=>entryChangeId(e)));
+  const overlayPending=base.events.filter(e=>target.get(entryChangeId(e))!==canonical(e)).length;
+  const segmentsPending=raw.events.filter(e=>!overlayIds.has(entryChangeId(e))&&target.get(entryChangeId(e))!==canonical(e)).length;
+  const ledger=await this.o.host.snapshot(EntrySnapshotTransfers,this.documentKey,this.o.ctx),erases=view.filter(e=>e.mutation.kind==='erase').length;
+  const transfersPending=erases?Object.values(ledger?.transfers??{}).filter(t=>t.phase==='receiving'||t.phase==='aborting').length:0;
+  await this.check('read');return {erases,overlayPending,segmentsPending,transfersPending,complete:!overlayPending&&!segmentsPending&&!transfersPending};
+ }
+ /** Brings this replica's storage to the redacted form: overlay, export cache, incoming transfers, snapshot segments. */
+ async completeErasure(requestId: string): Promise<Awaited<ReturnType<EntryReplicationController['erasureStatus']>>> {
+  if(!id(requestId))throw new ReplicationConflict('invalid erasure request');
+  snapshotCaches.get(this.o.host)?.delete(this.documentKey);
+  await this.check('import');await this.o.host.commit(async tx=>{await this.check('import');const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const logical=await this.materializeIn(tx,base);this.persistOverlay(base,logical,logical.events.length);},this.o.ctx);
+  let status=await this.erasureStatus();
+  if(status.transfersPending){const ledger=await this.o.host.snapshot(EntrySnapshotTransfers,this.documentKey,this.o.ctx);
+   for(const [snapshotId,t] of Object.entries(ledger?.transfers??{}))if(t.phase==='receiving'||t.phase==='aborting')for(let n=0;n<100_000&&(await this.abortSnapshotImport(snapshotId)).phase!=='aborted';n++);}
+  if(status.segmentsPending){const job=await this.startSnapshotMaintenance(requestId);let phase=job.phase;for(let n=0;n<100_000&&phase!=='completed';n++)phase=(await this.advanceSnapshotMaintenance(requestId)).phase;}
+  status=await this.erasureStatus();return status;
+ }
 
  /** Capture a stable logical prefix; replacement copies data, never discards causal/dedup history. */
  async startSnapshotMaintenance(requestId:string,pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotMaintenanceJob>{
