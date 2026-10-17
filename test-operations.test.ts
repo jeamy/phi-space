@@ -120,7 +120,7 @@ test("configured runtime checks independent boot, provisioned overlay ownership 
    // lww/set: a provisioned entry replication must name a known Space of this host.
    await runtime.close(); runtime = undefined; await installed.compareAndSet(`installed-authority:${config.controlSpaceId}`, (await installed.get(`installed-authority:${config.controlSpaceId}`))!.version, { authorityId: "authority" });
    const auth2 = (await external.get<any>(`authority:${config.controlSpaceId}`))!; await external.compareAndSet(`authority:${config.controlSpaceId}`, auth2.version, { authorityId: "authority", hostId: "configured-host", supervisorKey: signer.publicKey, state: "active", lineage: {} });
-   const er = { replicaId: "r1", incarnation: "i1", members: [{ replicaId: "r1", incarnation: "i1" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }] };
+   const er = { spaceId: "logical-sensors", replicaId: "r1", incarnation: "i1", members: [{ replicaId: "r1", incarnation: "i1" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }] };
    writeFileSync(configFile, JSON.stringify({ ...config, entryReplication: { ...er, space: "nope" } }), { mode: 0o600 });
    await assert.rejects(startConfiguredFederation(h, ctx, configFile), /unknown Space nope/);
    writeFileSync(configFile, JSON.stringify({ ...config, entryReplication: { ...er, space: "default" } }), { mode: 0o600 });
@@ -158,4 +158,46 @@ test("member recovery starts with a public OP pin and never exposes control-auth
    await assert.rejects(attacker.call("installAuthority",{proof:null}),/signature or method/);
   }finally{admin.close();attacker.close();await service.close();rmSync(dir,{recursive:true,force:true});}
  });
+});
+
+test("two lww/set Members replicate their entry streams over proven, pinned host connections", async () => {
+ const dir = mkdtempSync(join(tmpdir(), "pi-spaces-merge-")), external = new SqliteRecoveryRegister(join(dir, "external.sqlite"));
+ const peers = [{ id: "peer-a", ip: "127.0.0.1" }, { id: "peer-b", ip: "127.0.0.2" }, { id: "peer-c", ip: "127.0.0.3" }];
+ const api = createServer((req, res) => { if (req.headers.authorization !== "Token fixture-token") { res.writeHead(401); res.end(); return; } res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers.map(p => ({ ...p, connected: true, groups: [{ name: "space-hosts" }] })))); });
+ await new Promise<void>(resolve => api.listen(0, "127.0.0.1", resolve));
+ const readSocket = join(dir, "read.sock"), readServer = await serveRegister(external, readSocket), tokenFile = join(dir, "management-token");writeFileSync(tokenFile, "fixture-token", { mode: 0o600 });
+ const runtimes: Array<Awaited<ReturnType<typeof startConfiguredFederation>>> = [], hosts: any[] = [];
+ try {
+  const ports = [17651, 17652], names = ["a", "b"], signers = names.map(n => provisionFileSigner(join(dir, `signer-${n}.json`)));
+  for (const [i, n] of names.entries()) {
+   const { createRegistry, Harness, MemoryStorage } = await import("@earendil-works/pi-durable"), { createModels } = await import("@earendil-works/pi-ai/models");
+   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);hosts.push(h);
+   await bootstrapEnroll(h, ctx, { tokenHash: hashToken(newEnrollToken()), allowedPeerId: "admin" }); await h.commit(tx => spaceDoc(tx, undefined, Date.now()), ctx);
+   const controlSpaceId = (await h.snapshot(Registry, ctx))!.aliases.control!, installedFile = join(dir, `installed-${n}.sqlite`), installed = new SqliteRecoveryRegister(installedFile), spaces: Record<string, any> = {};
+   for (const info of await listSpaces(h, ctx)) { const permit = { state: "active", authorityId: "authority", dataIncarnation: info.incarnation, role: "local", transitionId: "initial" }; spaces[info.spaceId] = permit; await installed.compareAndSet(`installed:host-${n}:${info.spaceId}`, null, permit); }
+   installed.close();
+   await external.compareAndSet(`authority:${controlSpaceId}`, null, { authorityId: "authority", hostId: `host-${n}`, supervisorKey: signers[i]!.publicKey, state: "active", lineage: {} });
+   await external.compareAndSet(`boot:host-${n}`, null, { hostId: `host-${n}`, state: "active", spaces });
+   // The other Member's host key is known to this host's key directory (its own control Space in this fixture).
+   const o = 1 - i, other = signers[o]!, outsider = i === 0 ? provisionFileSigner(join(dir, "signer-c.json")) : loadFileSigner(join(dir, "signer-c.json"));
+   await new PiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: "peer-c", keyId: outsider.keyId, principal: "enrolled:peer-c", algorithm: outsider.algorithm, publicKey: outsider.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
+   await new PiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: peers[o]!.id, keyId: other.keyId, principal: `enrolled:${peers[o]!.id}`, algorithm: other.algorithm, publicKey: other.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
+   const configFile = join(dir, `federation-${n}.json`);
+   writeFileSync(configFile, JSON.stringify({ hostId: `host-${n}`, peerId: peers[i]!.id, authorityId: "authority", controlHostId: `host-${n}`, controlSpaceId, mode: "control", listen: { host: peers[i]!.ip, port: ports[i] }, keyFile: join(dir, `signer-${n}.json`), registerReadSocket: readSocket, installedRegisterFile: installedFile, management: { url: `http://127.0.0.1:${(api.address() as any).port}`, tokenFile }, control: { address: { host: peers[i]!.ip, port: ports[i] }, algorithm: signers[i]!.algorithm, publicKey: signers[i]!.publicKey },
+    entryReplication: { space: "default", spaceId: "logical-sensors", replicaId: `r-${n}`, incarnation: `i-${n}`, members: [{ replicaId: "r-a", incarnation: "i-a" }, { replicaId: "r-b", incarnation: "i-b" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }], pollMs: 100,
+     peers: [{ replicaId: `r-${names[o]}`, hostId: `host-${names[o]}`, peerId: peers[o]!.id, address: { host: peers[o]!.ip, port: ports[o] } }] } }), { mode: 0o600 });
+   runtimes.push(await startConfiguredFederation(h, ctx, configFile));
+  }
+  const [a, b] = runtimes.map(r => r.entryReplication!);
+  const until = async (f: () => Promise<boolean>) => { for (let n = 0; n < 150; n++) { if (await f()) return true; await new Promise(r => setTimeout(r, 100)); } return false; };
+  const value = async (c: typeof a, id: string) => (await c!.read()).find(v => v.fields.sensorId === id)?.fields.v;
+  await a!.mutate("put-a-1", { kind: "put", type: "Sensor", fields: { sensorId: "s1", v: 1 }, owner: { peerId: "peer-a" }, expiresAt: null });
+  assert.ok(await until(async () => await value(b, "s1") === 1), "b pulled a's put");
+  await b!.mutate("put-b-1", { kind: "put", type: "Sensor", fields: { sensorId: "s1", v: 2 }, owner: { peerId: "peer-b" }, expiresAt: null });
+  assert.ok(await until(async () => await value(a, "s1") === 2), "a pulled b's newer put");
+  assert.equal(await value(b, "s1"), 2, "both converge to the same winner");
+  // A proven host with a known key that is not pinned as a peer of this replication gets nothing.
+  const { RemoteSpace, socketTransport } = await import("./src/index.ts"), t = socketTransport({ host: "127.0.0.1", port: 17651 }, { localAddress: "127.0.0.3" });
+  try { const c = new RemoteSpace(t, { signer: loadFileSigner(join(dir, "signer-c.json")), ownPeerId: "peer-c", expectedGateHostId: "host-a", attempts: 1 }); await c.authenticate(); await assert.rejects(c.entryDescribe(), /not a replica of this entry replication/); } finally { t.close(); }
+ } finally { for (const r of runtimes) await r.close(); for (const h of hosts) await h.close(ctx); await readServer.close(); await new Promise<void>(resolve => api.close(() => resolve())); external.close(); rmSync(dir, { recursive: true, force: true }); }
 });

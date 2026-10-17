@@ -11,7 +11,7 @@ import { privateFile, loadFileSigner } from "./keys.ts";
 import { NetbirdDirectory, GateIdentity, type GroupRoles } from "./gate.ts";
 import { GrantAuthority, GrantVerifier } from "./grants.ts";
 import { SpaceKeyDirectory } from "./enroll.ts";
-import { RemoteSpace } from "./remote.ts";
+import { RemoteSpace, TransportFailure } from "./remote.ts";
 import { socketTransport } from "./socket.ts";
 import { startFederationHost } from "./runtime.ts";
 import { TlsRecoveryRegister, type RegisterTlsClient } from "./tls-register.ts";
@@ -20,6 +20,7 @@ import { SocketRecoveryRegister } from "./register-service.ts";
 import { SqliteRecoveryRegister } from "./recovery-register.ts";
 import { followControlHostChange } from "./control-host-change.ts";
 import { EntryReplicationController } from "./entry-replication.ts";
+import { EntryReplicationPump, EntryReplicationUnavailable } from "./entry-replication-stream.ts";
 import { BootBlocked, type HostBootState } from "./boot.ts";
 import { Registry, snapshotSpace, listSpaces } from "./spaces.ts";
 import { installAdmittedPermit } from "./replica-control.ts";
@@ -39,9 +40,14 @@ export type FederationConfig = {
 	recovery?: PrivateRecoveryConfig;
 	/** Recovery admin key pinned for control host changes after a control promotion (src/control-host-change.ts). */
 	recoveryAdmin?: { algorithm: import("./auth.ts").Algorithm; publicKey: string };
-	/** lww/set Member: the provisioned, fixed entry replication of one main-store Space (alias or ID). */
-	entryReplication?: { space: string; replicaId: string; incarnation: string; members: Array<{ replicaId: string; incarnation: string }>;
-		rules: import("./entry-replication.ts").EntryReplicationRule[]; clockUncertaintyMs?: number };
+	/**
+	 * lww/set Member: the provisioned, fixed entry replication served in one main-store Space (`space`, alias or ID).
+	 * `spaceId` is the logical replicated Space shared by all Members; `members` and `rules` are identical on all of
+	 * them. `peers` pins the other Members for the entry stream (pulled from them, exported to them).
+	 */
+	entryReplication?: { space: string; spaceId: string; replicaId: string; incarnation: string; members: Array<{ replicaId: string; incarnation: string }>;
+		rules: import("./entry-replication.ts").EntryReplicationRule[]; clockUncertaintyMs?: number; pollMs?: number;
+		peers?: Array<{ replicaId: string; hostId: string; peerId: string; address: { host: string; port: number } }> };
 	/** Explicit logical Member/Space installed by signed Control commands. */
 	membership?:{memberId:string;spaceId:string};
 	management: { url: string; tokenFile: string }; groupRoles?: GroupRoles;
@@ -133,18 +139,21 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 			.catch(e=>console.error("Replica notice:",e instanceof Error?e.message:String(e))).then(()=>{if(!noticeStopped)noticeTimer=setTimeout(publishNotices,CAPABILITY_HEARTBEAT_MS);});};
 		// lww/set: the provisioned entry replication of one Space; its merge types bypass the core (step 1 serves local
 		// writes and reads; import and export between Members follow in step 2).
-		let merge: import("./service.ts").SpaceServiceOptions["merge"];
+		let merge: import("./service.ts").SpaceServiceOptions["merge"], entryExport: import("./runtime.ts").FederationHostOptions["entryExport"], entryController: EntryReplicationController | undefined;
 		if (config.entryReplication) {
 			const er = config.entryReplication, info = (await listSpaces(host, ctx)).find(i => i.spaceId === er.space || i.alias === er.space);
 			if (!info) throw new BootBlocked(`entry replication names an unknown Space ${er.space}`);
-			const controller = new EntryReplicationController({ host, ctx, config: { spaceId: info.spaceId, authorityId, replicaId: er.replicaId, incarnation: er.incarnation, members: er.members, rules: er.rules },
-				authorize: async action => { if (action === "import" || action === "export") throw new BootBlocked("entry replication import and export are not enabled yet"); },
+			const controller = entryController = new EntryReplicationController({ host, ctx, config: { spaceId: er.spaceId, authorityId, replicaId: er.replicaId, incarnation: er.incarnation, members: er.members, rules: er.rules },
+				// Local calls are authorized by the space service, export by the front (pinned, proven peers), import by this host.
+				authorize: async () => {},
 				assertActive: async () => { const b = await external.get<any>(`boot:${config.hostId}`); if (b?.value.state !== "active" || b.value.spaces?.[info.spaceId]?.state !== "active") throw new BootBlocked("entry replica Space is not admitted"); },
 				clockUncertaintyMs: () => er.clockUncertaintyMs ?? 1000 });
 			const adapter = { controller, rules: er.rules };
 			merge = space => (space ?? "default") === info.alias || space === info.spaceId ? adapter : undefined;
+			const peers = new Set((er.peers ?? []).map(p => p.peerId));
+			if (peers.size) entryExport = { peers, describe: async () => await controller.describeStream() as unknown as import("./core.ts").Json, changes: async (after, maxBytes) => await controller.streamChanges(after, maxBytes) as unknown as import("./core.ts").Json };
 		}
-		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), syncSpaces: syncOptions, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
+		let runtime:Awaited<ReturnType<typeof startFederationHost>>;try{runtime = await startFederationHost(host, ctx, { ...config, ...(merge ? { merge } : {}), ...(entryExport ? { entryExport } : {}), syncSpaces: syncOptions, membership, ...(membership&&controlRemote?{refreshPolicy:async()=>membership.installPolicy(await controlRemote!.requestRoutingPolicy())}:{}), authorityId, directory, groupRoles, keys, control, delegation, verifier: grantVerifier, boot: { external, installed, ...(factories?.mainReplica?{replicaConfig:()=>factories.mainReplica!()}:{}) } });}catch(e){for(const sp of syncSpaces)await sp.close();await root?.close();throw e;}
 		if(syncSpaces.length)publishNotices();
 		let recovery: Awaited<ReturnType<typeof startConfiguredRecovery>> | undefined;
 		try { if (config.recovery) recovery = await startConfiguredRecovery(host, raw, ctx, { ...config, authorityId, signer, controlKey: { algorithm: config.control.algorithm, publicKey: controlPublicKey }, config: config.recovery, external, installed }); await host.snapshot(Registry, ctx); } catch (e) { await recovery?.close();await root?.close(); await runtime.close(); noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(()=>{}); throw e; }
@@ -160,6 +169,27 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
         if(config.capabilities)heartbeat();
 		const trustedConnection = async () => { await directory.refresh(); const peer = await directory.lookup(config.listen.host); if (!peer || peer.id !== config.peerId) throw new Error("local service peer is no longer known to NetBird"); return { peerId: peer.id, overlayIp: peer.ip, credentials: { roles: peer.groups.flatMap(g => groupRoles[g] ?? []) } }; };
 		const nativeService = { async handle(call: unknown, conn: import("./service.ts").Connection) { Object.assign(conn, await trustedConnection()); return runtime.service.handle(call, conn); } };
+		// lww/set step 2: pull the entry stream of every pinned peer. Network failures are temporary and retried by the
+		// pump; anything else stops it, is logged and restarts after a pause.
+		const pumps: AbortController[] = [], pumpTransports: Array<{ close(): void }> = [];
+		for (const peer of entryController ? config.entryReplication!.peers ?? [] : []) {
+			const ac = new AbortController(); pumps.push(ac);
+			const t = socketTransport(peer.address, { localAddress: config.listen.host, connectTimeoutMs: 8000 }); pumpTransports.push(t);
+			const remote = new RemoteSpace(t, { signer, ownPeerId: config.peerId, expectedGateHostId: peer.hostId, attempts: 1, callTimeoutMs: 15_000 });
+			const temporary = (e: unknown) => e instanceof TransportFailure || /timed out|ECONN|EHOST|closed|socket/i.test(e instanceof Error ? e.message : String(e));
+			const wrap = async <T>(f: () => Promise<T>): Promise<T> => { try { await remote.authenticate(); return await f(); } catch (e) { if (temporary(e)) throw new EntryReplicationUnavailable(e instanceof Error ? e.message : String(e)); throw e; } };
+			const source = { describe: () => wrap(() => remote.entryDescribe()), changes: (after: number, maxBytes: number) => wrap(() => remote.entryChanges(after, maxBytes)) };
+			void (async () => {
+				while (!ac.signal.aborted) {
+					try {
+						const d = await source.describe();
+						if (d.source.replicaId !== peer.replicaId) throw new Error(`peer ${peer.peerId} serves replica ${d.source.replicaId}, not ${peer.replicaId}`);
+						await new EntryReplicationPump({ target: entryController!, source, identity: d.source, pollMs: config.entryReplication!.pollMs ?? 2000 }).run(ac.signal);
+					} catch (e) { if (ac.signal.aborted) break; if (!(e instanceof EntryReplicationUnavailable)) console.error(`Entry replication from ${peer.replicaId}:`, e instanceof Error ? e.message : String(e)); }
+					await new Promise(r => setTimeout(r, 5000).unref?.());
+				}
+			})();
+		}
 		// Control promotion while running: a recorded, signed host change is installed at once and reported; the daemon
 		// restarts through the start path, which uses the installed endpoint.
 		let reportChange: (c: import("./control-host-change.ts").ControlHostChange) => void = () => {};
@@ -167,7 +197,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const followTimer = config.recoveryAdmin ? setInterval(() => { void followControlHostChange(external, installed, { controlSpaceId: config.controlSpaceId, configured: { hostId: config.controlHostId, authorityId }, recoveryAdmin: config.recoveryAdmin! })
 			.then(c => { if (c) reportChange(c); }).catch(e => console.error("Control host change:", e instanceof Error ? e.message : String(e))); }, factories?.followIntervalMs ?? 15_000) : undefined;
 		followTimer?.unref?.();
-		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, close: async () => { if (followTimer) clearInterval(followTimer); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
+		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, entryReplication: entryController, close: async () => { if (followTimer) clearInterval(followTimer); for (const ac of pumps) ac.abort(); for (const t of pumpTransports) t.close(); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
 	} catch (e) { controlSocket?.close(); external.close(); installed.close(); throw e; }
 }
 

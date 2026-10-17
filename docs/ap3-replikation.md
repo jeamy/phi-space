@@ -215,11 +215,25 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
     (`MergeTypeNotExclusive`).
   - Vor Schritt 2 sieht ein Lesen nur, was beim gelesenen Member liegt.
 
-**Stand:** Schritt 1 ist umgesetzt (Dienst-Adapter, Policy-Validierung, Platzierung, Ablehnung im Root).
+**Stand:** Schritt 1 ist umgesetzt (Dienst-Adapter, Policy-Validierung, Platzierung, Ablehnung im Root, provisionierte
+`entryReplication` in der Runtime).
 
-**2. Import über den Dienst:** Die Members ziehen die Änderungen der anderen mit dem vorhandenen Stream-Worker. Dabei
-gelten Schlüsselbeweis, frische Import-Grants genau für Quelle und Ziel, Widerruf, Boot-Rolle `entryReplica` und
-Clock-Health.
+**2. Import über den Dienst:** Die Members ziehen die Änderungen der anderen mit dem vorhandenen Stream-Worker.
+
+- **Konfiguration:** `entryReplication` nennt die gemeinsame logische `spaceId` (Teil des Vertrags-Hashes, auf allen
+  Members gleich) und `peers`, also die anderen Members mit Replikat-ID, Host, NetBird-Peer und Adresse.
+- **Export:** `entryDescribe` und `entryChanges` beantwortet der Eingangsdienst nur einem bewiesenen Dienst-Peer
+  (Schlüsselbeweis gegen das Schlüsselverzeichnis, Rolle `host`, `router` oder `admin`), der als Peer dieser
+  Replikation gepinnt ist. Ein widerrufener Schlüssel beendet den Zugriff damit sofort.
+- **Import:** Je Peer zieht ein `EntryReplicationPump` den Strom. Netzfehler gelten als vorübergehend und werden
+  wiederholt; jeder andere Fehler stoppt den Worker, wird protokolliert und nach einer Pause neu versucht. Die
+  Identität der Quelle muss der gepinnten Replikat-ID entsprechen.
+- **Abweichung vom ersten Entwurf:** Statt eigener Import-Grants der Control-Instanz gelten die gepinnte
+  Peer-Liste und der Schlüsselbeweis; Widerruf läuft über das Schlüsselverzeichnis. Eine eigene Boot-Rolle
+  `entryReplica` gibt es nicht; „aktiv“ heißt aktive Boot-Berechtigung für den Space. Die Uhr-Unsicherheit ist
+  ein Konfigurationswert (Standard 1 s); eine gemessene Clock-Health fehlt noch.
+- **Geprüft:** zwei vollständig konfigurierte Hosts mit Gates replizieren `lww` in beide Richtungen und
+  konvergieren; ein bewiesener, aber nicht gepinnter Host bekommt nichts (`test-operations.test.ts`).
 
 **3. Löschung:** Lösch-Barrieren und verteilte Principal-Löschung auch für die replizierten Historien.
 
