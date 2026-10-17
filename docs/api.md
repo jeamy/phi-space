@@ -558,7 +558,7 @@ Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
 `recoverSealedWithoutStandby`, `PrimarySyncJournal.catchUp`). Darauf bauen
 `degradeToSingle`, `promote` und `setStandby` mit `FencingAdapter`
 (`SimulatorFencing` nur mit `allowSimulator`, `unconfiguredFencing` als Platzhalter),
-`fenceHostBoot`, `releaseHostToQuarantine` sowie `assertSyncPrimary`,
+`fenceHostBoot`, `revokeSpacePermit` (degradeToSingle mit `revokeStandbySpace`), `releaseHostToQuarantine` sowie `assertSyncPrimary`,
 `assertSyncStandby` und `assertQuarantine` auf. Fehlgeschlagene Übergänge werfen
 `ReplicaTransitionBlocked`. [Replikatsteuerung](ap3-replica-control.md).
 

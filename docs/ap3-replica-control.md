@@ -45,6 +45,31 @@ Adapter, sondern im unabhängigen Recovery-Register.
     Adapter die Neustartsperre auf.
   - `active` setzt nur das Ende von `setStandby`.
 
+## degradeToSingle ohne Fencing-Adapter
+
+Für Standbys ohne Adapter (etwa im Heimnetz) gilt seit 2026-10-17 eine Erweiterung von v3 5.3.1 Schritt 2:
+
+- **Aufruf:** `degradeToSingle({..., revokeStandbySpace: true})` statt `adapter` und `proof`. Beides zugleich oder
+  keins von beiden wird abgelehnt.
+- **Wirkung:** Im Register wird nur die Standby-Berechtigung dieses Space widerrufen (`revokeSpacePermit`). Der Host
+  bleibt `active`, seine anderen Spaces bleiben unberührt. Danach laufen dieselben Schritte wie mit Adapter:
+  versiegelten Kandidaten lokal abschließen, `single` mit Epoche und Version + 1, eigene Berechtigung abgleichen.
+- **Begründung:**
+  - Ein Standby bedient keine fachlichen Aufrufe und betreibt keine Agenten. Die Prozess-Sperre aus 5.5 zielt auf
+    die Promotion des alten Primary.
+  - Mit widerrufener Berechtigung nimmt der Standby kein Intent mehr an und kann nicht befördert werden.
+  - Für eine Promotion bleibt ein echter Adapter Pflicht.
+- **Rückkehr:** `setStandby` nimmt als Ziel auch einen aktiven Host ohne aktive Berechtigung für diesen Space an,
+  nicht nur einen Host in Quarantäne. Dasselbe gilt für Catch-up (`assertQuarantine(register, host, spaceId)`) und
+  für die Bestätigung der neuen Konfiguration.
+  - Das Replikat muss vorher leer sein; das alte Journal des Space wird beiseitegelegt.
+- **Test:** `test/test-degrade-revoke.test.ts`:
+  - Degrade mit versiegeltem Kandidaten.
+  - Der Host bleibt aktiv, der andere Space ebenso.
+  - Der ausgeschlossene Standby lehnt den nie empfangenen Kandidaten ab und kann nicht befördert werden.
+  - Der Primary arbeitet als `single` weiter.
+  - `setStandby` zurück auf denselben aktiven Host.
+
 ## netcup-Adapter
 
 Grundlage ist die je Benutzer ausgelieferte OpenAPI-Spezifikation der SCP-REST-API

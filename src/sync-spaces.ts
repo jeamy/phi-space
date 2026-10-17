@@ -62,7 +62,7 @@ export async function openSyncSpace(o: {
 	const journal = new PrimarySyncJournal(join(c.dir, "journal.sqlite"), c.genesis, { self: o.hostId, assertStandby: assertSyncStandby(o.external, o.hostId) });
 	const role = () => journal.config.primaryReplica === o.hostId ? "primary" as const : journal.config.standbyReplica === o.hostId ? "standby" as const : "excluded" as const;
 	const ips = new Set(c.peers.map(p => p.ip)), transports: Array<ReturnType<typeof socketTransport>> = [];
-	const listener = await serveSpace({ handleText: replicaSyncHandler({ journal: () => journal, signer: o.signer, self: o.hostId, remotes: c.peers, assertQuarantine: assertQuarantine(o.external, o.hostId), now }) },
+	const listener = await serveSpace({ handleText: replicaSyncHandler({ journal: () => journal, signer: o.signer, self: o.hostId, remotes: c.peers, assertQuarantine: assertQuarantine(o.external, o.hostId, c.spaceId), now }) },
 		{ listen: { host: o.bindIp, port: c.port }, connection: s => ips.has(String(s.remoteAddress).replace(/^::ffff:/, "")) ? {} : null, maxConnections: 4, maxFrameBytes: 1 << 20 });
 	let harness: Harness | undefined, stopGuard: (() => void) | undefined, poisoned: { revision: number; hash: string } | null = null, sealedListener: (() => void) | undefined;
 	const assert = assertSyncPrimary(o.external, o.hostId, journal), harnessPath = join(c.dir, "harness.sqlite");

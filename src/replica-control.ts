@@ -87,13 +87,37 @@ export function assertSyncPrimary(register: RecoveryRegister, hostId: string, jo
 /** assertStandby for PrimarySyncJournal: host active and an active standby permit for exactly this configuration. */
 export function assertSyncStandby(register: RecoveryRegister, hostId: string): (c: PrimarySyncConfig, version: 1 | 2 | 3) => Promise<void> {
 	return async (c, version) => {
-		// Only the setStandby configuration entry naming this host is confirmed while it is still in quarantine (5.3.1 step 7).
-		if (version === 2 && c.standbyReplica === hostId && (await register.get<Boot & Json>(`boot:${hostId}`))?.value.state === "quarantine") return;
+		// Only the setStandby configuration entry naming this host is confirmed while it is still a setStandby target:
+		// in quarantine, or active without an active permit for this Space (5.3.1 step 7).
+		if (version === 2 && c.standbyReplica === hostId && standbyTarget((await register.get<Boot & Json>(`boot:${hostId}`))?.value, c.spaceId)) return;
 		await assertPermit(register, hostId, c, "standby");
 	};
 }
-export function assertQuarantine(register: RecoveryRegister, hostId: string): () => Promise<void> {
-	return async () => { if ((await register.get<Boot & Json>(`boot:${hostId}`))?.value.state !== "quarantine") throw new PrimarySyncBlocked(`${hostId} is not in quarantine`); };
+/**
+ * A setStandby target for `spaceId`: a quarantined host, or an active host without an active permit for this Space
+ * (its standby permit was revoked by degradeToSingle with `revokeStandbySpace`, or it never had one).
+ */
+const standbyTarget = (b: Boot | undefined, spaceId?: string) => !!b && (b.state === "quarantine" || spaceId !== undefined && b.state === "active" && b.spaces[spaceId]?.state !== "active");
+/** Catch-up of a setStandby target (see standbyTarget); without `spaceId` only a quarantined host. */
+export function assertQuarantine(register: RecoveryRegister, hostId: string, spaceId?: string): () => Promise<void> {
+	return async () => { if (!standbyTarget((await register.get<Boot & Json>(`boot:${hostId}`))?.value, spaceId)) throw new PrimarySyncBlocked(`${hostId} is not in quarantine${spaceId ? ` and still holds an active permit for ${spaceId}` : ""}`); };
+}
+/**
+ * degradeToSingle without a fencing adapter (v3 5.3.1 step 2, decided 2026-10-17): only the standby permit of this
+ * Space is revoked; the host and its other Spaces stay as they are. A standby serves no business calls and runs no
+ * agents; with a revoked permit it accepts no intent and cannot be promoted. Promotion still needs a real adapter.
+ */
+export function revokeSpacePermit(register: RecoveryRegister, hostId: string, spaceId: string, transitionId: string): Promise<Boot> {
+	return casBoot(register, hostId, b => {
+		const p = b?.spaces[spaceId];
+		if (!b || !p) throw new ReplicaTransitionBlocked(`${hostId} has no permit for ${spaceId}`);
+		if (p.state === "revoked") return null;
+		return { ...b, spaces: { ...b.spaces, [spaceId]: { ...p, state: "revoked" } }, transitionId };
+	});
+}
+async function assertSpaceRevoked(register: RecoveryRegister, hostId: string, spaceId: string) {
+	const b = (await register.get<Boot & Json>(`boot:${hostId}`))?.value;
+	if (!b || b.state === "active" && b.spaces[spaceId]?.state !== "revoked") throw new ReplicaTransitionBlocked(`the standby permit of ${hostId} for ${spaceId} is not revoked`);
 }
 
 type Phase = "started" | "locallyCommitted" | "completed" | "abandoned";
@@ -155,19 +179,23 @@ async function alignPermit(o: Common, c: PrimarySyncConfig, role: "primary" | "s
  * candidate is completed locally (recoveredCommitted), the configuration becomes single with epoch and version + 1,
  * and the primary's external permit follows. Repeating the same recovery ID continues the same transition.
  */
-export async function degradeToSingle(o: Common & { recoveryId: string; expectedPrimaryEpoch: number; expectedReplicaConfigVersion: number; adapter: FencingAdapter; proof: FenceProof }) {
-	const rec = begin(o.journal, o.recoveryId, "degradeToSingle", { e: o.expectedPrimaryEpoch, v: o.expectedReplicaConfigVersion, standby: o.proof?.hostId ?? null });
+export async function degradeToSingle(o: Common & { recoveryId: string; expectedPrimaryEpoch: number; expectedReplicaConfigVersion: number } & ({ adapter: FencingAdapter; proof: FenceProof; revokeStandbySpace?: undefined } | { revokeStandbySpace: true; adapter?: undefined; proof?: undefined })) {
+	const revoke = o.revokeStandbySpace === true;
+	if (revoke ? o.adapter || o.proof : !o.adapter || !o.proof) throw new ReplicaTransitionBlocked("degradeToSingle needs either a fencing proof of the standby or revokeStandbySpace");
+	const rec = begin(o.journal, o.recoveryId, "degradeToSingle", revoke ? { e: o.expectedPrimaryEpoch, v: o.expectedReplicaConfigVersion, revokeStandbySpace: true } : { e: o.expectedPrimaryEpoch, v: o.expectedReplicaConfigVersion, standby: o.proof?.hostId ?? null });
+	// The standby is excluded either by a verified fencing proof of its host or by its revoked permit for this Space.
+	const excluded = (standby: string) => revoke ? assertSpaceRevoked(o.register, standby, o.journal.config.spaceId) : checkProof(o.adapter!, o.proof!, standby, !!o.allowSimulator);
 	if (rec.phase === "started") {
-		const resumed = await resumeSealed(o, o.recoveryId, () => checkProof(o.adapter, o.proof, o.proof.hostId, !!o.allowSimulator));
+		const resumed = await resumeSealed(o, o.recoveryId, () => revoke ? excluded(o.journal.configAt(o.journal.head().revision - 1).standbyReplica!) : checkProof(o.adapter!, o.proof!, o.proof!.hostId, !!o.allowSimulator));
 		if (resumed) { rec.phase = "locallyCommitted"; rec.config = resumed; o.journal.saveTransition(o.recoveryId, rec as unknown as Json); }
 	}
 	if (rec.phase === "started") {
 		const c = o.journal.config;
 		if (c.primaryReplica !== o.hostId || durabilityOf(c) !== "sync" || c.primaryEpoch !== o.expectedPrimaryEpoch || c.replicaConfigVersion !== o.expectedReplicaConfigVersion) throw new ReplicaTransitionBlocked("replica configuration differs from the expected versions");
-		await checkProof(o.adapter, o.proof, c.standbyReplica!, !!o.allowSimulator);
+		if (!revoke) await checkProof(o.adapter!, o.proof!, c.standbyReplica!, !!o.allowSimulator);
 		await assertSharedIncarnation(o.register, o.hostId, c.spaceId, o.dataIncarnation);
-		const fenced = async () => { await checkProof(o.adapter, o.proof, c.standbyReplica!, !!o.allowSimulator); };
-		await fenceHostBoot(o.register, c.standbyReplica!, o.recoveryId);
+		const fenced = () => excluded(c.standbyReplica!);
+		if (revoke) await revokeSpacePermit(o.register, c.standbyReplica!, c.spaceId, o.recoveryId); else await fenceHostBoot(o.register, c.standbyReplica!, o.recoveryId);
 		await recoverSealedWithoutStandby(o.storage, o.journal, o.ctx, fenced);
 		const next: PrimarySyncConfig = { ...c, standbyReplica: null, durability: "single", primaryEpoch: c.primaryEpoch + 1, replicaConfigVersion: c.replicaConfigVersion + 1 };
 		await applyConfigTransition(o.storage, o.journal, next, { reason: o.recoveryId, ctx: o.ctx, assert: fenced, now: o.now });
@@ -232,7 +260,7 @@ export async function setStandby(o: Common & { transitionId: string; target: Sta
 		if (c.primaryReplica !== o.hostId || durabilityOf(c) !== "single") throw new ReplicaTransitionBlocked("setStandby starts from a single primary");
 		if (o.targetDataIncarnation !== o.dataIncarnation) throw new ReplicaTransitionBlocked("the standby carries the shared data incarnation of the Space");
 		await assertSharedIncarnation(o.register, o.hostId, c.spaceId, o.dataIncarnation);
-		if ((await o.register.get<Boot & Json>(`boot:${o.target.hostId}`))?.value.state !== "quarantine") throw new ReplicaTransitionBlocked("the target must be in quarantine");
+		if (!standbyTarget((await o.register.get<Boot & Json>(`boot:${o.target.hostId}`))?.value, c.spaceId)) throw new ReplicaTransitionBlocked("the target must be in quarantine or active without an active permit for this Space");
 		if (o.journal.head().revision !== o.journal.appliedRevision) throw new ReplicaTransitionBlocked("resolve the sealed candidate first");
 		await assertSyncPrimary(o.register, o.hostId, o.journal)();
 		// Empty target only; a retry of the same transition may continue its own interrupted catch-up prefix.

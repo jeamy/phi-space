@@ -401,6 +401,8 @@ Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter prim
 `CommitSealed`; der Host klärt ihn mit dem Standby und bedient den Space ohne Neustart wieder
 ([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet der Primary einen unbekannten Request älterer
 Epoche mit Nachweis per Negativclaim mit `NotCommitted`.
+`degradeToSingle` geht auch ohne Fencing-Adapter: Dann wird nur die Standby-Berechtigung dieses Space widerrufen,
+der Host bleibt aktiv ([Ablauf](ap3-replica-control.md)).
 
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
