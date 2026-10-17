@@ -38,7 +38,18 @@ export type ReplicatedEntryChange = {
  * `dropped`: runs [first, last] of stream positions whose events compaction removed. Positions are assigned in logical
  * order and never reused; without runs, position = index + 1 (docs/ap3-replikation.md, step 4).
  */
-export type EntryReplicationState = { config: EntryReplicationConfig | null; configHash: string; clock: HybridClock; lastWallTime: number; seq: number; events: ReplicatedEntryChange[]; segments?: EntrySnapshotSegment[]; dropped?: Array<[number, number]> };
+export type EntryReplicationState = { config: EntryReplicationConfig | null; configHash: string; clock: HybridClock; lastWallTime: number; seq: number; events: ReplicatedEntryChange[]; segments?: EntrySnapshotSegment[]; dropped?: Array<[number, number]>;
+ /** Per origin: every change up to this sequence was held here and by every member; an unknown one is a removed one. */
+ floor?: Record<string, number> };
+/** Contiguous received sequence per origin (`canonical([replicaId, incarnation])`), advertised by `describeStream`. */
+export type EntryVersionVector = Record<string, number>;
+/** The last vector each peer advertised, as recorded here; `regressed` blocks compaction until the peer gets a new incarnation. */
+export type EntryPeerVectors = { peers: Record<string, { incarnation: string; vector: EntryVersionVector; recordedAt: number; regressed?: true }> };
+export const EntryReplicaPeers = defineDocFamily<EntryPeerVectors, null>({ kind: 'pi-spaces.entry-replica-peers', version: 1, scope: 'session', family: true, initial: () => ({ peers: {} }) });
+/** Why nothing can be compacted, or what would be removed (docs/ap3-replikation.md, step 4). */
+export type EntryCompactionStatus = { blocked: string | null; events: number; droppable: number; floor: EntryVersionVector };
+/** Expiry is judged this long after the deadline: the bound on remote clock skew. */
+export const ENTRY_EXPIRY_GRACE_MS = 60_000;
 export type EntryReplicationSnapshot = { version: 1; spaceId: string; authorityId: string; configHash: string; events: ReplicatedEntryChange[]; sha256: string };
 export type ReplicatedEntryView = { id: string; type: string; fields: Fields; owner: Principal; expiresAt: number | null; clock: HybridClock; originReplicaId: string };
 export class ReplicationConflict extends Error {}
@@ -79,6 +90,8 @@ export type EntryReplicationOptions = {
  assertActive: () => Promise<void>;
  now?: () => number; clockUncertaintyMs: () => number;
  maxHistoryBytes?: number; maxBatchBytes?: number;
+ /** Own changes stay at least this long, so a retried request finds its change (default 24 h, the claim retention). */
+ requestRetentionMs?: number;
 };
 type ExportedSnapshot = { manifest: EntrySnapshotManifest; pages: EntrySnapshotPage[] };
 const snapshotCaches = new WeakMap<object, Map<string, Map<string, ExportedSnapshot>>>();
@@ -94,6 +107,14 @@ export function positionsOf(count: number, runs: ReadonlyArray<[number, number]>
 }
 const headOf = (s: Pick<EntryReplicationState, 'events' | 'dropped'>) => s.events.length + droppedCount(s.dropped);
 const contiguous = (after: number, positions: number[]) => positions.every((p,n)=>p===after+n+1);
+/** Sorted, merged union of position runs. */
+function mergeRuns(...lists: ReadonlyArray<ReadonlyArray<[number, number]>>): Array<[number, number]> {
+ const all=lists.flat().map(([a,b])=>[a,b] as [number,number]).sort((x,y)=>x[0]-y[0]),out:Array<[number,number]>=[];
+ for(const r of all){const last=out.at(-1);if(last&&r[0]<=last[1]+1)last[1]=Math.max(last[1],r[1]);else out.push(r);}return out;
+}
+function runsOf(positions: number[]): Array<[number, number]> { return mergeRuns(positions.map(p=>[p,p] as [number,number])); }
+const inRuns = (p: number, runs: ReadonlyArray<[number, number]>) => runs.some(([a,b])=>a<=p&&p<=b);
+const memberKey = (m: { replicaId: string; incarnation: string }) => canonical([m.replicaId, m.incarnation]);
 const manifestSeed = (manifest: EntrySnapshotManifest) => { const {seedHash,rootHash,...body}=manifest;return hash(body); };
 export class EntryReplicationController {
  private o: EntryReplicationOptions; private config: EntryReplicationConfig; private configHash: string;
@@ -176,6 +197,8 @@ export class EntryReplicationController {
   for(const event of incoming){
    this.validateEvent(event,now);const k=entryChangeId(event),old=known.get(k);
    if(old){const verdict=this.equivalent(old,event);if(verdict==='conflict')throw new ReplicationConflict('immutable change ID reused');if(verdict==='replace'){known.set(k,copy(event));replaced++;}continue;}
+   // Below the floor every change was held here: an unknown one was compacted away and must not come back.
+   if(event.seq<=(s.floor?.[origin(event)]??0))continue;
    const request=canonical([event.originReplicaId,event.incarnation,event.requestId]);if(requests.has(request))throw new ReplicationConflict('origin request ID reused');
    known.set(k,event);requests.add(request);accepted.push(event);
   }
@@ -238,13 +261,16 @@ export class EntryReplicationController {
  private async materialize(base: Readonly<EntryReplicationState>, load: (key: string) => Promise<Readonly<{page: EntrySnapshotPage|null}>|undefined>, raw=false): Promise<EntryReplicationState> {
   const result:EntryReplicationState=copy(base),events:ReplicatedEntryChange[]=[],seen=new Map<string,string>();let through=0;
   const at=new Map<string,number>();
+  // After the first segment (the compacted generation) a change below the floor was removed; it stays removed.
+  let floorActive=false;
   const add=(items:ReadonlyArray<ReplicatedEntryChange>)=>{for(const e of items){const k=entryChangeId(e),h=hash(e),old=seen.get(k);
+   if(!old&&floorActive&&e.seq<=(base.floor?.[origin(e)]??0))continue;
    if(old&&old!==h){const i=at.get(k)!,verdict=this.equivalent(events[i]!,e);if(verdict==='conflict')throw new ReplicationConflict('stored change ID conflict');if(verdict==='replace'){events[i]=copy(e);seen.set(k,h);}continue;}
    if(!old){at.set(k,events.length);events.push(copy(e));seen.set(k,h);}}};
   for(const segment of base.segments??[]){
    if(segment.overlayThrough<through||segment.overlayThrough>base.events.length)throw new ReplicationConflict('invalid stored overlay boundary');
    add(base.events.slice(through,segment.overlayThrough));through=segment.overlayThrough;
-   const pages=await this.stagedEvents(segment.manifest,load);add(pages);
+   const pages=await this.stagedEvents(segment.manifest,load);add(pages);floorActive=true;
   }
   add(base.events.slice(through));if(!raw)this.applyErasures(events);result.events=events;return result;
  }
@@ -447,7 +473,10 @@ export class EntryReplicationController {
  }
 
  /** Capture a stable logical prefix; replacement copies data, never discards causal/dedup history. */
- async startSnapshotMaintenance(requestId:string,pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotMaintenanceJob>{
+ async startSnapshotMaintenance(requestId:string,pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotMaintenanceJob>{return this.startMaintenance(requestId,pageBytes,false);}
+ /** Step 4: a maintenance generation without the events `compactionStatus` counts as droppable; also installs the floor. */
+ async startCompaction(requestId:string,pageBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntrySnapshotMaintenanceJob>{return this.startMaintenance(requestId,pageBytes,true);}
+ private async startMaintenance(requestId:string,pageBytes:number,compact:boolean):Promise<EntrySnapshotMaintenanceJob>{
   if(!id(requestId)||!number(pageBytes)||pageBytes<1024||2*pageBytes+16384>this.maxBatchBytes)throw new ReplicationConflict('invalid maintenance request or page budget');
   await this.check('import');return this.o.host.commit(async tx=>{
    await this.check('import');const maintenance=await tx.doc(EntrySnapshotMaintenance,this.documentKey,null);
@@ -459,12 +488,18 @@ export class EntryReplicationController {
    if(Object.values(ledger.transfers).some(t=>!['completed','retired','aborted'].includes(t.phase)))throw new ReplicationConflict('finish or abort existing snapshot transfers first');
    if(Object.keys(ledger.transfers).length>=17)throw new ResourceExhausted('retire expired snapshot receipts before maintenance');
    const logical=await this.materializeIn(tx,base),now=this.now();this.clockSafe(logical,now);
-   const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:headOf(logical),eventCount:logical.events.length,bytes:bytes(logical.events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
+   // The decision is fixed here: stability only grows, so it stays valid while imports continue.
+   let events=logical.events,compaction:EntrySnapshotMaintenanceJob['compaction'];
+   if(compact){
+    const plan=this.plan(logical,await tx.doc(EntryReplicaPeers,this.documentKey,null),now);if(plan.blocked)throw new ReplicationConflict('compaction blocked: '+plan.blocked);
+    const at=positionsOf(logical.events.length,logical.dropped),drop=new Set(plan.drop);events=logical.events.filter((_,i)=>!drop.has(i));compaction={dropped:runsOf(plan.drop.map(i=>at[i]!)),floor:plan.floor};
+   }
+   const template:EntrySnapshotManifest={version:1,id:'ss'+randomBytes(16).toString('hex'),spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,sourceReplicaId:this.config.replicaId,sourceIncarnation:this.config.incarnation,revision:headOf(logical),eventCount:events.length,bytes:bytes(events),pageBytes,pageCount:0,expiresAt:now+60000,seedHash:'',rootHash:''};
    if(!Number.isSafeInteger(template.expiresAt))throw new ReplicationConflict('maintenance deadline overflow');
-   const {manifest}=this.packSnapshot(logical.events,template),reservedBytes=manifest.bytes+manifest.pageCount*1024;
+   const {manifest}=this.packSnapshot(events,template),reservedBytes=manifest.bytes+manifest.pageCount*1024;
    if(ledger.retainedBytes+reservedBytes>3*this.maxHistoryBytes+2048*1024)throw new ResourceExhausted('maintenance retained byte bound exceeded');
    ledger.transfers[manifest.id]={maintenanceRequestId:requestId,manifest,phase:'consolidating',nextPage:0,nextOffset:0,chainHash:manifest.seedHash,receivedBytes:2,reservedBytes,cleanupCursor:0};ledger.retainedBytes+=reservedBytes;
-   maintenance.job={requestId,phase:'copying',manifest,nextPage:0,prefixCount:logical.events.length,overlayCount:base.events.length,previous:(base.segments??[]).map(s=>({snapshotId:s.manifest.id,pageCount:s.manifest.pageCount,nextPage:0}))};
+   maintenance.job={requestId,phase:'copying',manifest,nextPage:0,prefixCount:logical.events.length,...(compaction?{compaction}:{}),overlayCount:base.events.length,previous:(base.segments??[]).map(s=>({snapshotId:s.manifest.id,pageCount:s.manifest.pageCount,nextPage:0}))};
    await this.check('import');return copy(maintenance.job);
   },this.o.ctx);
  }
@@ -481,7 +516,8 @@ export class EntryReplicationController {
    if(!replacement)throw new ReplicationConflict('maintenance receipt missing');
    if(job.phase==='copying'){
     if((base.segments??[]).map(s=>s.manifest.id).join(',')!==job.previous.map(s=>s.snapshotId).join(',')||base.events.length<job.overlayCount)throw new ReplicationConflict('maintenance source references changed');
-    const logical=await this.materializeIn(tx,base),prefix=logical.events.slice(0,job.prefixCount??job.manifest.eventCount),packed=this.packSnapshot(prefix,job.manifest);
+    const logical=await this.materializeIn(tx,base),at=positionsOf(logical.events.length,logical.dropped);
+    const prefix=logical.events.slice(0,job.prefixCount??job.manifest.eventCount).filter((_,i)=>!job.compaction||!inRuns(at[i]!,job.compaction.dropped)),packed=this.packSnapshot(prefix,job.manifest);
     if(canonical(packed.manifest)!==canonical(job.manifest))throw new ReplicationConflict('maintenance source prefix changed');
     if(job.nextPage<job.manifest.pageCount){
      const page=packed.pages[job.nextPage]!,chunk=await tx.doc(EntrySnapshotChunks,chunkKey(this.documentKey,job.manifest.id,job.nextPage),null);
@@ -492,6 +528,7 @@ export class EntryReplicationController {
      if(canonical(staged)!==canonical(prefix))throw new ReplicationConflict('maintenance publication prefix changed');
      // Existing and concurrent overlay writes retain order; the full prefix is now immutable pages.
      base.events.splice(0,job.overlayCount);base.segments=[{manifest:copy(job.manifest),overlayThrough:0}];
+     if(job.compaction){base.dropped=mergeRuns(base.dropped??[],job.compaction.dropped);const floor={...base.floor};for(const [k,v] of Object.entries(job.compaction.floor))floor[k]=Math.max(floor[k]??0,v);base.floor=floor;}
      for(const previous of job.previous){const t=ledger.transfers[previous.snapshotId];if(!t||t.phase!=='completed')throw new ReplicationConflict('maintenance generation receipt changed');t.phase='retiring';}
      replacement.phase='completed';replacement.result={added:0,revision:job.manifest.revision,sourceRevision:job.manifest.revision};job.phase='cleaning';
     }
@@ -516,6 +553,90 @@ export class EntryReplicationController {
   },this.o.ctx);
  }
 
+ /** Contiguous received sequence per configured origin: the floor, then every present sequence after it. */
+ private vectorOf(s: Pick<EntryReplicationState,'events'|'floor'>|undefined): EntryVersionVector {
+  const seqs=new Map<string,Set<number>>();for(const e of s?.events??[]){const k=origin(e);let set=seqs.get(k);if(!set){set=new Set();seqs.set(k,set);}set.add(e.seq);}
+  const out:EntryVersionVector={};for(const m of this.config.members){const k=memberKey(m),set=seqs.get(k);let v=s?.floor?.[k]??0;while(set?.has(v+1))v++;out[k]=v;}return out;
+ }
+ /** Records the vector a peer advertised (the pump does this after each `describe`). A lower value marks the peer regressed. */
+ async recordPeerVector(input: EntryStreamDescription): Promise<void> {
+  const d=copy(input);this.validateStream(d?.source);const v=d.vector,keys=this.config.members.map(memberKey);
+  if(d.source.replicaId===this.config.replicaId)throw new ReplicationConflict('the own stream is not a peer');
+  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!keys.includes(k))||Object.values(v).some(n=>!number(n)))throw new ReplicationConflict('invalid peer vector');
+  await this.check('import');const now=this.now(),fresh=(o:EntryPeerVectors['peers'][string]|undefined)=>!!o&&!o.regressed&&o.incarnation===d.source.incarnation&&canonical(o.vector)===canonical(v)&&now-o.recordedAt<10_000;
+  // A fresh, unchanged vector needs no commit; recordedAt may lag by that much, which only delays compaction.
+  if(fresh((await this.o.host.snapshot(EntryReplicaPeers,this.documentKey,this.o.ctx))?.peers[d.source.replicaId]))return;
+  await this.o.host.commit(async tx=>{
+   await this.check('import');const doc=await tx.doc(EntryReplicaPeers,this.documentKey,null),old=doc.peers[d.source.replicaId];if(fresh(old))return;
+   const same=!!old&&old.incarnation===d.source.incarnation;
+   doc.peers[d.source.replicaId]=same&&(old.regressed||keys.some(k=>(v[k]??0)<(old.vector[k]??0)))?{...old,regressed:true}:{incarnation:d.source.incarnation,vector:v,recordedAt:now};
+   await this.check('import');
+  },this.o.ctx);
+ }
+ /**
+  * Which events can go (docs/ap3-replikation.md, step 4). Stable: every member advertised a vector covering it, and this
+  * replica holds each member's own changes up to its advertised vector. Candidates are stable, invisible for a stable
+  * reason and never an erase; a candidate stays while it still suppresses or anchors a retained change (fixpoint).
+  */
+ private plan(s: EntryReplicationState, peers: Readonly<EntryPeerVectors>|undefined, now: number): { blocked: string|null; drop: number[]; floor: EntryVersionVector } {
+  const own=this.vectorOf(s),floor={...own};let recorded=now;
+  const blocked=(why:string)=>({blocked:why,drop:[],floor:{}});
+  for(const m of this.config.members){if(m.replicaId===this.config.replicaId)continue;const p=peers?.peers[m.replicaId],k=memberKey(m);
+   if(!p||p.incarnation!==m.incarnation)return blocked(`no vector recorded from member ${m.replicaId}`);
+   if(p.regressed)return blocked(`member ${m.replicaId} advertised a lower vector; a restored replica needs a new incarnation`);
+   if((own[k]??0)<(p.vector[k]??0))return blocked(`changes of member ${m.replicaId} are still missing here`);
+   for(const o of Object.keys(floor))floor[o]=Math.min(floor[o]!,p.vector[o]??0);recorded=Math.min(recorded,p.recordedAt);
+  }
+  const events=s.events,index=new Map(events.map((e,i)=>[entryChangeId(e),i])),retainOwn=this.o.requestRetentionMs??86_400_000;
+  const stable=(e:ReplicatedEntryChange)=>e.seq<=(floor[origin(e)]??0);
+  // Own changes stay while a retry may still ask for them.
+  const ok=(e:ReplicatedEntryChange)=>stable(e)&&!(e.originReplicaId===this.config.replicaId&&e.incarnation===this.config.incarnation&&e.clock.physical+retainOwn>now);
+  const expired=(m:EntryMutation,at:number)=>'expiresAt'in m&&m.expiresAt!==null&&m.expiresAt+ENTRY_EXPIRY_GRACE_MS<=at;
+  const rule=(type:string)=>this.config.rules.find(r=>r.type===type)!;
+  const beats=(a:ReplicatedEntryChange,b:ReplicatedEntryChange)=>{const c=compareHybridClock(a.clock,b.clock);return c>0||c===0&&a.originReplicaId>b.originReplicaId;};
+  const renewed=(m:EntryMutation)=>m.kind==='renew'||m.kind==='redacted'&&m.was==='renew'?(m as {tag:string}).tag:undefined;
+  const groups=new Map<string,number[]>(),removedStably=new Set<string>(),renewsOf=new Map<string,number[]>(),candidates=new Set<number>();
+  for(const [i,e] of events.entries()){const m=e.mutation;if(m.kind==='erase')continue;const r=rule(m.type);
+   if(r.variant==='lww'){const k=m.kind==='redacted'?m.keyHash!:hash(key(r,(m as ContentMutation).fields)),g=groups.get(k);if(g)g.push(i);else groups.set(k,[i]);continue;}
+   const tag=renewed(m);if(tag!==undefined){const list=renewsOf.get(tag);if(list)list.push(i);else renewsOf.set(tag,[i]);}
+   if(stable(e)){if(m.kind==='remove')for(const t of m.tags)removedStably.add(t);if(tag!==undefined)removedStably.add(tag);}
+  }
+  // lww: superseded versions go; the winner (tombstone, redacted or expired) only together with every older version.
+  for(const items of groups.values()){
+   items.sort((x,y)=>beats(events[x]!,events[y]!)?-1:1);const [w,...rest]=items as [number,...number[]],wm=events[w]!.mutation,going=rest.filter(i=>ok(events[i]!));
+   for(const i of going)candidates.add(i);
+   if(going.length===rest.length&&ok(events[w]!)&&(wm.kind==='delete'||wm.kind==='redacted'||wm.kind==='put'&&expired(wm,now)))candidates.add(w);
+  }
+  // set: a tag removed by a stable remove or renew, erased by a stable erase, or expired before every member's vector was recorded.
+  for(const [i,e] of events.entries()){const m=e.mutation;if(m.kind==='erase'||rule(m.type).variant!=='set'||!ok(e))continue;
+   if(m.kind==='remove'){candidates.add(i);continue;}
+   const erase=m.kind==='redacted'?events[index.get(m.erase)??-1]:undefined;
+   if(removedStably.has(entryChangeId(e))||erase&&stable(erase)||m.kind!=='redacted'&&expired(m,Math.min(now,recorded)))candidates.add(i);
+  }
+  const drop=new Set(candidates);
+  // Gone: removed now, or absent below the floor (held here once, so removed earlier).
+  const gone=(tag:string)=>{const i=index.get(tag);if(i!==undefined)return drop.has(i);const [r,inc,seq]=JSON.parse(tag) as [string,string,number];return seq<=(floor[canonical([r,inc])]??0);};
+  for(let changed=true;changed;){changed=false;
+   for(const i of [...drop]){const m=events[i]!.mutation;if(m.kind==='erase'||rule(m.type).variant!=='set')continue;
+    const tags=m.kind==='remove'?m.tags:renewed(m)!==undefined?[renewed(m)!]:[];
+    // A removal stays while its tag does; a renewed tag stays while its renewal does (the erase follows renew chains).
+    if(tags.some(t=>!gone(t))||(renewsOf.get(entryChangeId(events[i]!))??[]).some(r=>!drop.has(r))){drop.delete(i);changed=true;}
+   }
+  }
+  return {blocked:null,drop:[...drop].sort((a,b)=>a-b),floor};
+ }
+ async compactionStatus(): Promise<EntryCompactionStatus> {
+  const s=await this.state('read'),peers=await this.o.host.snapshot(EntryReplicaPeers,this.documentKey,this.o.ctx);
+  if(!s)return {blocked:null,events:0,droppable:0,floor:{}};
+  const p=this.plan(s,peers,this.now());return {blocked:p.blocked,events:s.events.length,droppable:p.drop.length,floor:p.floor};
+ }
+ /** One compaction to completion; nothing happens while it is blocked or nothing can go. */
+ async compact(requestId: string): Promise<{ dropped: number; status: EntryCompactionStatus }> {
+  const before=await this.compactionStatus();if(before.blocked||!before.droppable)return {dropped:0,status:before};
+  const job=await this.startCompaction(requestId);let phase=job.phase;for(let n=0;n<100_000&&phase!=='completed';n++)phase=(await this.advanceSnapshotMaintenance(requestId)).phase;
+  return {dropped:droppedCount(job.compaction?.dropped),status:await this.compactionStatus()};
+ }
+
  private streamIdentity():EntryStreamIdentity {
   const body={version:1 as const,spaceId:this.config.spaceId,authorityId:this.config.authorityId,configHash:this.configHash,replicaId:this.config.replicaId,incarnation:this.config.incarnation};return {...body,streamId:hash(body)};
  }
@@ -524,7 +645,7 @@ export class EntryReplicationController {
   const {streamId,...body}=source;if(streamId!==hash(body))throw new ReplicationConflict('stream identity hash changed');
  }
  private streamPageHash(page:EntryStreamPage){return hash({source:page.source,after:page.after,next:page.next,events:page.events,...(page.positions?{positions:page.positions}:{})});}
- async describeStream():Promise<EntryStreamDescription>{const state=await this.state('export');return {source:this.streamIdentity(),revision:state?headOf(state):0};}
+ async describeStream():Promise<EntryStreamDescription>{const state=await this.state('export');return {source:this.streamIdentity(),revision:state?headOf(state):0,vector:this.vectorOf(state)};}
  async streamChanges(after:number,maxBytes=Math.floor((this.maxBatchBytes-16384)/2)):Promise<EntryStreamPage>{
   const state=await this.state('export'),head=state?headOf(state):0;
   if(!number(after)||after>head||!number(maxBytes)||maxBytes<1024||maxBytes>256*1024)throw new ReplicationConflict('invalid stream cursor or page budget');

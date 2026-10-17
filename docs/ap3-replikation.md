@@ -1,6 +1,6 @@
 # Phase 3: Replikation und kontrollierte Übernahme
 
-Stand: 2026-10-16. **Phase 3 ist begonnen, aber nicht abgenommen.**
+Stand: 2026-10-17. **Phase 3 ist begonnen, aber nicht abgenommen.**
 Phase 2 und ihre dokumentierte Abschlussentscheidung bleiben unverändert.
 Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
 [Föderationsplans](federation-plan-v3.md).
@@ -285,38 +285,57 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
 - **Echter Lauf** mit zwei Merge-Members über NetBird, Partition und Löschung bestanden
   ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).
 
-**4. Kompaktierung (Entwurf, noch nicht umgesetzt):** Entfernt werden Ereignisse, die die Sicht nicht mehr
-beeinflussen, sobald sie kausal stabil sind.
+**4. Kompaktierung (umgesetzt):** Entfernt werden Ereignisse, die die Sicht nicht mehr beeinflussen, sobald sie
+kausal stabil sind. Ein Zufallstest vergleicht jedes kompaktierende Replikat nach jedem Schritt mit einem nicht
+kompaktierenden Schatten, der genau dieselben Eingaben bekommt.
 
-- **Stabile Positionen:** Stream-Cursor, `describeStream().revision` und Snapshot-Revisionen sind heute Positionen in
-  der Ereignisliste; Entfernen würde jeden Checkpoint der Peers zerstören.
-  - Jedes Ereignis bekommt beim Anhängen eine feste Log-Position, außerhalb von `ReplicatedEntryChange`. Seiten
-    tragen die Positionen in einem parallelen Feld.
-  - `changes(after)` liefert Positionen größer als `after`; die Lückenprüfungen verlangen nur noch streng steigende
-    Positionen.
-  - Migration: Position = Index + 1, bestehende Checkpoints bleiben gültig.
-- **Kausale Stabilität:** Jedes Replikat Y veröffentlicht in `describe` seinen lückenlosen Versionsvektor V_Y je
-  Ursprung, einschließlich der eigenen Sequenz. Er ist dauerhaft gespeichert und steigt nur.
-  - Ein Ereignis ist bei A stabil, wenn A für jedes konfigurierte Member Y einen Vektor hat, der es abdeckt, und
-    A selbst Ys Ereignisse bis V_Y[Y] hat. Damit ist alles, was Y vor einem Remove erzeugt hat, schon bei A; das
-    deckt auch die gleichzeitige Erneuerung eines entfernten Tags ab.
-  - Ein schweigendes Member blockiert nicht: Es rückt durch Importieren vor. Ein Member ohne Vektor macht nichts
-    stabil; jedes Member muss deshalb gepinnter Peer sein, sonst bleibt die Kompaktierung aus.
-- **Regeln:**
-  - Ein Tombstone, auch ein geschwärzter Gewinner, fällt nur zusammen mit allen älteren Versionen seines Schlüssels.
-  - Ein abgelaufener Gewinner fällt erst nach Ablauf plus Uhr-Unsicherheit.
-  - Ein Remove fällt erst, wenn alle seine Tags weg sind.
-  - Lösch-Ereignisse (`erase`) werden nie entfernt; sie sind klein und dienen als Nachweis.
-- **Untergrenze und Retries:** Je Ursprung gilt eine Untergrenze; ältere Ereignisse, die erneut ankommen, werden
-  verworfen. Eigene Request-IDs bleiben in einem Verzeichnis, begrenzt durch das Zulassungsfenster der Generation,
-  damit ein Retry die ursprüngliche Änderung erhält.
-- **Umsetzung:** als neue Wartungsgeneration (die bestehende Snapshot-Wartung mit einer Kompaktier-Variante), weil
-  `materialize` die Segmente neu lädt; danach Chunks einziehen und offline kompaktieren wie bei der Löschung.
-- **Tests:** ein zufallsgesteuerter Test mit N Replikaten, zufälligen Operationen und Lieferreihenfolgen, manche
-  Replikate kompaktieren, manche nie; im Ruhezustand gleichen alle Sichten der nicht kompaktierenden Referenz.
-  Dazu: Peer mit altem Cursor nach Kompaktierung, schweigendes und hinterherhinkendes Member, gleichzeitige
-  Erneuerung, erneut gelieferte kompaktierte Ereignisse, Retry einer kompaktierten eigenen Anfrage, sinkende
-  Historiengröße.
+- **Stabile Positionen:**
+  - Jedes Ereignis hat eine feste Stream-Position in der logischen Reihenfolge. Entfernte Positionen stehen als
+    Bereiche in `dropped` und werden nie wieder vergeben; ohne Bereiche gilt Position = Index + 1.
+  - `describeStream().revision` ist die Kopfposition. `streamChanges(after)` liefert Ereignisse mit Positionen
+    größer als `after`.
+  - Seiten nennen ihre Positionen in `positions` nur, wenn sie nicht lückenlos sind; sonst bleibt das alte Format.
+  - Liegt hinter dem letzten Ereignis nur noch Entferntes, ist die Seite leer und `next` die Kopfposition.
+  - Snapshot-Manifeste trennen `revision` (Kopfposition der Quelle, Startpunkt des Streams) von `eventCount`.
+- **Versionsvektoren:**
+  - `describeStream()` meldet je Ursprung die lückenlos empfangene Sequenz (`vector`).
+  - Die Pumpe speichert den Vektor jedes Peers mit Zeitpunkt (`recordPeerVector`, Dokument
+    `pi-spaces.entry-replica-peers`).
+  - Meldet ein Peer weniger als zuvor, gilt er als zurückgefallen und die Kompaktierung bleibt aus. Ein aus einer
+    Sicherung wiederhergestelltes Replikat braucht deshalb eine neue Inkarnation.
+- **Stabilität:**
+  - A braucht von jedem konfigurierten Member einen Vektor und hält selbst dessen eigene Änderungen bis dorthin.
+    Sonst meldet `compactionStatus()` den Grund in `blocked`.
+  - Die Untergrenze je Ursprung ist das Minimum aller Vektoren; stabil ist, was darunter liegt.
+- **Regeln:** Kandidat ist ein stabiles Ereignis, das aus einem stabilen Grund unsichtbar ist; `erase` ist nie
+  Kandidat.
+  - **lww:** Überholte Versionen sind Kandidaten. Der Gewinner (Tombstone, geschwärzt oder seit mehr als 60 Sekunden
+    abgelaufen) ist es nur zusammen mit allen älteren Versionen seines Schlüssels.
+  - **set:** Kandidat ist ein Tag, das ein stabiles Remove oder eine stabile Erneuerung entfernt hat oder das ein
+    stabiles `erase` geschwärzt hat.
+  - Ein abgelaufenes Tag ist Kandidat, wenn seine Ablaufzeit plus 60 Sekunden vor jedem Vektor-Zeitpunkt liegt. So
+    sind Erneuerungen von vor dem Ablauf schon da.
+  - Ein Remove und eine Erneuerung bleiben, solange eines ihrer Tags bleibt.
+  - Ein Tag bleibt, solange eine Erneuerung bleibt, die es nennt. Sonst könnte ein später eintreffendes `erase` die
+    Erneuerung nicht mehr schwärzen.
+  - Eigene Änderungen bleiben mindestens `requestRetentionMs` (Standard 24 Stunden), damit ein Retry seine Änderung
+    findet. Danach erzeugt ein Retry eine neue Änderung.
+- **Untergrenze:** Bei der Veröffentlichung wird die Untergrenze gespeichert. Eine unbekannte Änderung darunter
+  wurde entfernt und wird verworfen, ob sie über den Stream, `importChanges` oder einen Snapshot kommt.
+- **Ablauf:**
+  - `compact(id)` startet mit `startCompaction` eine Wartungsgeneration. Sie hält die Entscheidung im Job fest und
+    kopiert nur die verbleibenden Ereignisse.
+  - Die Veröffentlichung setzt Segment, `dropped` und Untergrenze atomar; danach werden die alten Chunks eingezogen.
+  - Den Speicherplatz gibt erst die Offline-Kompaktierung frei (wie bei der Löschung).
+  - Im Daemon läuft das mit `entryReplication.compactEveryMs` periodisch.
+- **Tests** (`test/test-entry-compaction.test.ts`):
+  - Positionen und alter Cursor nach dem Entfernen.
+  - Zufallstest mit acht Saaten, teils mit einem nie kompaktierenden Replikat.
+  - Gezielte Fälle: fehlender, hinterherhinkender und zurückgefallener Vektor; Remove mit instabilem Tag;
+    Tombstone mit älterem gleichzeitigem Put; Erneuerung mit späterem `erase`; Ablauf mit Erneuerung; Retry in der
+    Aufbewahrung; Snapshot nach der Kompaktierung.
+  - Jede Regel ist durch Mutationsproben belegt: Ohne sie schlägt mindestens ein Test fehl.
+  - Der Laufzeittest kompaktiert periodisch zwischen zwei Hosts über bewiesene Verbindungen.
 
 **5. Echter Lauf:** bestanden mit nano-test und standby-100: Replikation, Partition mit gleichzeitigen Writes
 und Konvergenz, verteilte Löschung mit physischer Kompaktierung auf beiden Hosts

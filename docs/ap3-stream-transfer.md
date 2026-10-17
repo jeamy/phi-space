@@ -15,8 +15,10 @@ Jeder Schritt fragt die Quelle erneut ab. Er hält keine Rechte-/Grant- oder
 Challenge-Zustände über diesen Adapter hinweg fest.
 
 `streamChanges(after, maxBytes)` liefert einen bytebegrenzten, ungeteilten Bereich.
-`after`, `next`, Anzahl und Inhalt müssen zusammenpassen. Der SHA-256 bindet die
-feste Quellidentität, den Bereich und die Events. Der veränderliche aktuelle
+`after`, `next`, Positionen und Inhalt müssen zusammenpassen. Nach einer Kompaktierung
+sind die Positionen nicht mehr lückenlos; dann nennt die Seite sie in `positions`
+(streng steigend, größer als `after`, höchstens `next`). Der SHA-256 bindet die
+feste Quellidentität, den Bereich, die Events und gegebenenfalls die Positionen. Der veränderliche aktuelle
 Head und `more` gehören nicht zu dieser Bereichsidentität: Ein Bereich bleibt
 wiederholbar, wenn die Quelle inzwischen weitere Änderungen angehängt hat.
 Hash und Pin ersetzen keine authentifizierte Transportverbindung.

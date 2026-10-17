@@ -534,6 +534,13 @@ Chunk-Dokumente. `forgetSnapshotReceipt(id)` entfernt nur abgelaufene, nicht meh
 lebende Belege. Origin-/Request-/Konfliktinformationen und Cursor bleiben erhalten.
 [Details](ap3-snapshot-maintenance.md).
 
+Kompaktierung (lww/set Schritt 4): `compactionStatus()` nennt Blockadegrund, Ereigniszahl, entfernbare Ereignisse
+und Untergrenze; `compact(id)` führt eine Kompaktierung vollständig aus, `startCompaction(id, pageBytes?)` startet
+sie als Wartungsgeneration (weiter mit `advanceSnapshotMaintenance`). `recordPeerVector(description)` speichert den
+Vektor, den ein Peer in `describeStream()` meldet; `EntryReplicationPump` ruft es selbst auf. Option
+`requestRetentionMs` (Standard 24 Stunden) hält eigene Änderungen für Retries. Stream-Seiten tragen `positions`,
+wenn sie nicht lückenlos sind. [Regeln](ap3-replikation.md).
+
 `PrimarySyncJournal`, `primarySyncStorage`, `recoverPrimarySync` und
 `materializeSyncHistory` bilden den administrativen synchronen Storage-Pfad.
 Er besitzt feste Konfigurationspins, dauerhafte Hashkette, Standby-ACK und

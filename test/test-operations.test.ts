@@ -184,7 +184,7 @@ test("two lww/set Members replicate their entry streams over proven, pinned host
    await new PiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: peers[o]!.id, keyId: other.keyId, principal: `enrolled:${peers[o]!.id}`, algorithm: other.algorithm, publicKey: other.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
    const configFile = join(dir, `federation-${n}.json`);
    writeFileSync(configFile, JSON.stringify({ hostId: `host-${n}`, peerId: peers[i]!.id, authorityId: "authority", controlHostId: `host-${n}`, controlSpaceId, mode: "control", listen: { host: peers[i]!.ip, port: ports[i] }, keyFile: join(dir, `signer-${n}.json`), registerReadSocket: readSocket, installedRegisterFile: installedFile, management: { url: `http://127.0.0.1:${(api.address() as any).port}`, tokenFile }, control: { address: { host: peers[i]!.ip, port: ports[i] }, algorithm: signers[i]!.algorithm, publicKey: signers[i]!.publicKey },
-    entryReplication: { space: "default", spaceId: "logical-sensors", replicaId: `r-${n}`, incarnation: `i-${n}`, members: [{ replicaId: "r-a", incarnation: "i-a" }, { replicaId: "r-b", incarnation: "i-b" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }], pollMs: 100,
+    entryReplication: { space: "default", spaceId: "logical-sensors", replicaId: `r-${n}`, incarnation: `i-${n}`, members: [{ replicaId: "r-a", incarnation: "i-a" }, { replicaId: "r-b", incarnation: "i-b" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }], pollMs: 100, compactEveryMs: 1000,
      peers: [{ replicaId: `r-${names[o]}`, hostId: `host-${names[o]}`, peerId: peers[o]!.id, address: { host: peers[o]!.ip, port: ports[o] } }] } }), { mode: 0o600 });
    runtimes.push(await startConfiguredFederation(h, ctx, configFile));
   }
@@ -196,6 +196,13 @@ test("two lww/set Members replicate their entry streams over proven, pinned host
   await b!.mutate("put-b-1", { kind: "put", type: "Sensor", fields: { sensorId: "s1", v: 2 }, owner: { peerId: "peer-b" }, expiresAt: null });
   assert.ok(await until(async () => await value(a, "s1") === 2), "a pulled b's newer put");
   assert.equal(await value(b, "s1"), 2, "both converge to the same winner");
+  // Step 4: b's put and delete of s3 become stable on both and leave a's history; the head position stays.
+  const head = (await a!.describeStream()).revision;
+  await b!.mutate("put-b-3", { kind: "put", type: "Sensor", fields: { sensorId: "s3", v: 3 }, owner: { peerId: "peer-b" }, expiresAt: null });
+  await b!.mutate("del-b-3", { kind: "delete", type: "Sensor", fields: { sensorId: "s3" }, owner: { peerId: "peer-b" } });
+  const s3 = async () => (await a!.changes(0, 256 * 1024)).events.filter(e => e.mutation.kind !== "erase" && e.mutation.kind !== "remove" && e.mutation.kind !== "redacted" && (e.mutation as { fields: { sensorId?: string } }).fields.sensorId === "s3").length;
+  assert.ok(await until(async () => (await a!.describeStream()).revision === head + 2 && await s3() === 0), "the periodic compaction on a removed b's put and tombstone");
+  assert.equal(await value(a, "s1"), 2, "the live winner stays");
   // A proven host with a known key that is not pinned as a peer of this replication gets nothing.
   const { RemoteSpace, socketTransport } = await import("../src/index.ts"), t = socketTransport({ host: "127.0.0.1", port: 17651 }, { localAddress: "127.0.0.3" });
   try { const c = new RemoteSpace(t, { signer: loadFileSigner(join(dir, "signer-c.json")), ownPeerId: "peer-c", expectedGateHostId: "host-a", attempts: 1 }); await c.authenticate(); await assert.rejects(c.entryDescribe(), /not a replica of this entry replication/); } finally { t.close(); }

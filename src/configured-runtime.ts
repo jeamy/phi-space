@@ -44,9 +44,10 @@ export type FederationConfig = {
 	 * lww/set Member: the provisioned, fixed entry replication served in one main-store Space (`space`, alias or ID).
 	 * `spaceId` is the logical replicated Space shared by all Members; `members` and `rules` are identical on all of
 	 * them. `peers` pins the other Members for the entry stream (pulled from them, exported to them).
+	 * `compactEveryMs` runs the history compaction (step 4) that often; absent, it never runs.
 	 */
 	entryReplication?: { space: string; spaceId: string; replicaId: string; incarnation: string; members: Array<{ replicaId: string; incarnation: string }>;
-		rules: import("./entry-replication.ts").EntryReplicationRule[]; clockUncertaintyMs?: number; pollMs?: number;
+		rules: import("./entry-replication.ts").EntryReplicationRule[]; clockUncertaintyMs?: number; pollMs?: number; compactEveryMs?: number;
 		peers?: Array<{ replicaId: string; hostId: string; peerId: string; address: { host: string; port: number } }> };
 	/** Explicit logical Member/Space installed by signed Control commands. */
 	membership?:{memberId:string;spaceId:string};
@@ -142,6 +143,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		let merge: import("./service.ts").SpaceServiceOptions["merge"], entryExport: import("./runtime.ts").FederationHostOptions["entryExport"], entryController: EntryReplicationController | undefined;
 		if (config.entryReplication) {
 			const er = config.entryReplication, info = (await listSpaces(host, ctx)).find(i => i.spaceId === er.space || i.alias === er.space);
+			if (er.compactEveryMs !== undefined && (!Number.isSafeInteger(er.compactEveryMs) || er.compactEveryMs < 1000)) throw new BootBlocked("entryReplication.compactEveryMs must be an integer of at least 1000");
 			if (!info) throw new BootBlocked(`entry replication names an unknown Space ${er.space}`);
 			const controller = entryController = new EntryReplicationController({ host, ctx, config: { spaceId: er.spaceId, authorityId, replicaId: er.replicaId, incarnation: er.incarnation, members: er.members, rules: er.rules },
 				// Local calls are authorized by the space service, export by the front (pinned, proven peers), import by this host.
@@ -190,6 +192,14 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 				}
 			})();
 		}
+		// lww/set step 4: compaction needs a recorded vector from every Member; until then it does nothing.
+		let compactTimer: ReturnType<typeof setTimeout> | undefined, compactStopped = false;
+		const compactEvery = entryController ? config.entryReplication!.compactEveryMs : undefined;
+		const compactOnce = () => { void entryController!.compact(`compact-${Date.now()}`)
+			.then(r => { if (r.dropped) console.log(`Entry replication compacted ${r.dropped} changes`); })
+			.catch(e => console.error("Entry replication compaction:", e instanceof Error ? e.message : String(e)))
+			.then(() => { if (!compactStopped) { compactTimer = setTimeout(compactOnce, compactEvery); compactTimer.unref?.(); } }); };
+		if (compactEvery !== undefined) { compactTimer = setTimeout(compactOnce, compactEvery); compactTimer.unref?.(); }
 		// Control promotion while running: a recorded, signed host change is installed at once and reported; the daemon
 		// restarts through the start path, which uses the installed endpoint.
 		let reportChange: (c: import("./control-host-change.ts").ControlHostChange) => void = () => {};
@@ -197,7 +207,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const followTimer = config.recoveryAdmin ? setInterval(() => { void followControlHostChange(external, installed, { controlSpaceId: config.controlSpaceId, configured: { hostId: config.controlHostId, authorityId }, recoveryAdmin: config.recoveryAdmin! })
 			.then(c => { if (c) reportChange(c); }).catch(e => console.error("Control host change:", e instanceof Error ? e.message : String(e))); }, factories?.followIntervalMs ?? 15_000) : undefined;
 		followTimer?.unref?.();
-		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, entryReplication: entryController, close: async () => { if (followTimer) clearInterval(followTimer); for (const ac of pumps) ac.abort(); for (const t of pumpTransports) t.close(); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
+		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, entryReplication: entryController, close: async () => { if (followTimer) clearInterval(followTimer); compactStopped = true; if (compactTimer) clearTimeout(compactTimer); for (const ac of pumps) ac.abort(); for (const t of pumpTransports) t.close(); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
 	} catch (e) { controlSocket?.close(); external.close(); installed.close(); throw e; }
 }
 

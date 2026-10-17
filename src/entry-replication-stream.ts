@@ -4,7 +4,8 @@ import { canonicalJson } from './canonical.ts';
 import type { Json } from './core.ts';
 import type { EntryReplicationController, ReplicatedEntryChange } from './entry-replication.ts';
 export type EntryStreamIdentity = { version: 1; spaceId: string; authorityId: string; configHash: string; replicaId: string; incarnation: string; streamId: string };
-export type EntryStreamDescription = { source: EntryStreamIdentity; revision: number };
+/** `vector`: the source's contiguous received sequence per origin (compaction needs it from every member). */
+export type EntryStreamDescription = { source: EntryStreamIdentity; revision: number; vector?: Record<string, number> };
 /** `positions`: the stream positions of `events`, present only when they are not after+1, after+2, ... (compaction). */
 export type EntryStreamPage = { source: EntryStreamIdentity; after: number; next: number; headRevision: number; more: boolean; events: ReplicatedEntryChange[]; positions?: number[]; sha256: string };
 export type EntryStreamResult = { added: number; revision: number; cursor: number };
@@ -46,6 +47,7 @@ export class EntryReplicationPump {
  async step(signal?:AbortSignal):Promise<EntryReplicationStep>{
   const description=await this.call(s=>this.o.source.describe(s),signal);
   if(!description||canonical(description.source)!==canonical(this.o.identity)||!Number.isSafeInteger(description.revision)||description.revision<0)throw new Error('replication source identity changed');
+  if(description.vector!==undefined)await this.o.target.recordPeerVector(description);
   const checkpoint=await this.o.target.startStreamImport(this.o.identity,this.o.snapshotId);
   const page=await this.call(s=>this.o.source.changes(checkpoint.cursor,this.pageBytes,s),signal);
   if(signal?.aborted)throw new DOMException('replication stopped','AbortError');

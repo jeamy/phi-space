@@ -23,6 +23,8 @@ export type EntrySnapshotMaintenanceJob = {
  manifest: EntrySnapshotManifest; nextPage: number; overlayCount: number;
  /** Logical events captured at start (absent in older jobs: the manifest's eventCount). */
  prefixCount?: number;
+ /** A compaction generation: positions it removes and the per-origin floor it installs (fixed at start). */
+ compaction?: { dropped: Array<[number, number]>; floor: Record<string, number> };
  previous: Array<{ snapshotId: string; pageCount: number; nextPage: number }>;
 };
 /** One durable, bounded replacement job; old pages remain reachable until publication. */

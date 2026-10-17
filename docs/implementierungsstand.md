@@ -391,7 +391,10 @@ Nachtrag 2026-10-17 (lww/set eingebunden):
 - Die Löschung eines Principals ist eine replizierte Änderung mit Schwärzung; physisch entfernt die bestehende
   Offline-Kompaktierung die alten Revisionen.
 - Echter Lauf mit nano-test und standby-100: Partition, Konvergenz, verteilte Löschung
-  ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)). Offen: Kompaktierung der Tombstones.
+  ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).
+- Kompaktierung (Schritt 4): stabile Stream-Positionen, Versionsvektoren der Members, Untergrenze je Ursprung;
+  entfernt werden nur stabile, unsichtbare Ereignisse ([Regeln](ap3-replikation.md)). Periodisch im Daemon über
+  `entryReplication.compactEveryMs`. Noch kein echter Lauf.
 
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
