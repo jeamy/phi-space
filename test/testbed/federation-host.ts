@@ -30,7 +30,7 @@ if (["stop","status","fence"].includes(mode)) {
  const restart=join(home,"restart.lock"),ownerFile=join(home,"owner.lock");
  const processes=()=>readdirSync('/proc').filter(v=>/^[0-9]+$/.test(v)).filter(v=>{try{const args=readFileSync(`/proc/${v}/cmdline`,'utf8').split('\0');return args[1]===join(home,'federation-host.mjs')&&args[2]==='run'&&(args[3]===undefined||args[3]===''||args[3]===home);}catch{return false;}}).map(Number);
  if(mode==="fence") { let lockFd;try{lockFd=openSync(restart,'wx',0o600);writeFileSync(lockFd,JSON.stringify({at:Date.now(),reason:'F15-single-testbed-recovery'})+'\n');fsyncSync(lockFd);}catch(e){if((e as any).code!=='EEXIST')throw e;}finally{if(lockFd!==undefined)closeSync(lockFd);}const dirFd=openSync(home,'r');try{fsyncSync(dirFd);}finally{closeSync(dirFd);} }
- if(mode!=="status") {const running=processes();if(running.length){const owner=JSON.parse(privateFile(ownerFile).toString());if(owner.mode!=='run'||running.length!==1||owner.pid!==running[0])throw new Error('normal runtime ownership disagrees with process inventory');process.kill(owner.pid,'SIGTERM');const deadline=Date.now()+15000;while(processes().length){if(Date.now()>=deadline)throw new Error('normal runtime did not stop');await new Promise(r=>setTimeout(r,50));}}}
+ if(mode!=="status") {const running=processes();if(running.length){const owner=JSON.parse(privateFile(ownerFile).toString());if(owner.mode!=='run'||running.length!==1||owner.pid!==running[0])throw new Error('normal runtime ownership disagrees with process inventory');process.kill(owner.pid,'SIGTERM');const deadline=Date.now()+60000;while(processes().length){if(Date.now()>=deadline)throw new Error('normal runtime did not stop');await new Promise(r=>setTimeout(r,50));}}}
  let restartLocked=false;try{const stat=lstatSync(restart);restartLocked=stat.isFile()&&!stat.isSymbolicLink()&&(stat.mode&0o077)===0;}catch{}
  console.log(JSON.stringify({normalStopped:processes().length===0,restartLocked}));process.exit(0);
 }
@@ -51,6 +51,9 @@ const lock=join(home,"owner.lock");
 if(existsSync(lock)&&bootId){try{const old=JSON.parse(privateFile(lock).toString());if(old.bootId&&old.bootId!==bootId){unlinkSync(lock);console.error(JSON.stringify({staleOwnerLockCleared:{pid:old.pid,mode:old.mode,previousBoot:old.bootId}}));}}catch(e){if(!(e instanceof SyntaxError))throw e;}}
 const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode,bootId,startTime})+'\n');closeSync(fd);
 const releaseLock=()=>{try{unlinkSync(lock);}catch{}};
+// SIGTERM is caught from here on: a stop during startup lets the mode finish starting and then clean up (release the
+// lock) instead of killing the process with its lock in place. A second signal kills as before (the handler is once).
+let terminated=false;const terminate=new Promise<void>(resolve=>{const f=()=>{terminated=true;resolve();};process.once("SIGTERM",f);process.once("SIGINT",f);});
 // 3.8: a host's main store on primary/sync (the control host). Only `run` serves it, `main-sync` administers it with
 // the daemon stopped; every other mode would bypass its journal and is refused.
 const mainCfg=existsSync(configFile)?JSON.parse(privateFile(configFile).toString()).mainSync:undefined;
@@ -60,7 +63,7 @@ if(mode==="replica-listen"){
   const rc=JSON.parse(privateFile(join(home,"replica.json")).toString()),external=new SyncRegister(rc.registerTls);
   const sp=await openSyncSpace({config:rc.replica,hostId:rc.hostId,authorityId:rc.replica.genesis.authorityId,bindIp:rc.listen.host,signer:loadFileSigner(rc.keyFile),external,installed,ctx,openStorage:p=>openNodeSqliteStorage(p),openHarness:async()=>{throw new Error("no Harness on a replica listener");},listenOnly:true});
   console.log(JSON.stringify({replicaListening:true,alias:rc.replica.alias,head:sp.journal.head()}));
-  await new Promise<void>(resolve=>{process.once("SIGTERM",()=>resolve());process.once("SIGINT",()=>resolve());});
+  await terminate;
   await sp.close();external.close();
  }finally{installed.close();releaseLock();}
  process.exit(0);
@@ -160,7 +163,7 @@ try{
   try{console.log(JSON.stringify(await remote.enroll(token)));}finally{socket.close();}
  }else if(mode==="recovery"||mode==="member-recovery"){
   recovery=await (mode==="recovery"?startRecoveryOnly:startMemberRecoveryOnly)(h,ctx,join(home,"recovery.json"),async()=>{const owner=JSON.parse(privateFile(lock).toString());return{hostId:JSON.parse(privateFile(configFile).toString()).hostId,normalStopped:["recovery","member-recovery"].includes(owner.mode)&&owner.pid===process.pid,restartLocked:existsSync(join(home,"restart.lock"))};});
-  console.log(JSON.stringify({recoveryReady:true}));await new Promise<void>(resolve=>{process.once("SIGTERM",resolve);process.once("SIGINT",resolve);});
+  console.log(JSON.stringify({recoveryReady:true}));await terminate;
  }else if(mode==="run"){
   // Testbed-only timing, scoped to an explicit read-only diagnostic action. No request contents or credentials.
   type Timing={calls:number;ms:number};const timings=new AsyncLocalStorage<Record<string,Timing>>();
@@ -178,7 +181,7 @@ try{
   if(quarantine){
    // Quarantine: only replica listeners for setStandby; the host leaves once the register says active again.
    console.log(JSON.stringify({quarantine:true,listeners:quarantine.spaces.map(sp=>sp.config.alias),failed:quarantine.failed}));
-   const signal=new Promise<boolean>(resolve=>{process.once("SIGTERM",()=>resolve(false));process.once("SIGINT",()=>resolve(false));});
+   const signal=terminate.then(()=>false);
    const active=await Promise.race([quarantine.untilActive(),signal]);await quarantine.close();
    console.log(JSON.stringify({leftQuarantine:active,next:active?"re-admit the other Spaces of this host, then start the normal daemon":"stopped"}));
   }else{
@@ -187,7 +190,7 @@ try{
   if(runtime.root){for(const method of ["step","invoke","resolve"])observe(runtime.root.rpc,method,"rpc."+method);for(const method of ["prepare","admit","finish"])observe(runtime.root.space,method,"root."+method);}
   const acceptFile=process.env.PI_SPACES_ROOT_ACCEPTANCE_FILE;
   if(acceptFile){
-   if(!runtime.root)throw new Error('native Root acceptance requires explicit Root provisioning');const nativeConfig=runtime.config;let stopped=false;process.once('SIGTERM',()=>{stopped=true;});process.once('SIGINT',()=>{stopped=true;});
+   if(!runtime.root)throw new Error('native Root acceptance requires explicit Root provisioning');const nativeConfig=runtime.config;let stopped=terminated;void terminate.then(()=>{stopped=true;});
    while(!stopped){
     if(!existsSync(acceptFile)){await new Promise(r=>setTimeout(r,100));continue;}
     const command=JSON.parse(privateFile(acceptFile).toString());unlinkSync(acceptFile);const out=acceptFile+'.result';
@@ -240,7 +243,7 @@ try{
      writeFileSync(out,JSON.stringify({id:command.id,passed:true,result})+'\n',{mode:0o600});
     }catch(e){writeFileSync(out,JSON.stringify({id:command.id,passed:false,error:e instanceof Error?e.message:String(e)})+'\n',{mode:0o600});}
    }
-  }else await new Promise<void>(resolve=>{process.once("SIGTERM",resolve);process.once("SIGINT",resolve);});
+  }else await terminate;
   }
  }else if(mode==="sync"){
   // Operator tool for one primary/sync Space, with the daemon stopped (this mode holds the owner lock).
@@ -271,3 +274,5 @@ try{
   console.log(JSON.stringify(result));
  }else throw new Error("use provision, bootstrap, enroll, recovery, run, sync or sync-head");
 }finally{await cleanup();}
+// Every handle should be closed by now; an overlooked one must not keep a stopped daemon alive without its lock.
+process.exit(0);

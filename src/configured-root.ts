@@ -65,7 +65,7 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
  const retainLease=async()=>{if(!current||Date.now()+45000>=current.lease.expiresAt){const prior=current??retained;current=await o.leases.issue(o.peerId,signer.keyId,prior?{id:prior.lease.id,routerEpoch:prior.lease.routerEpoch,token:prior}:undefined);if(prior&&(current.lease.id!==prior.lease.id||current.lease.routerEpoch!==prior.lease.routerEpoch))throw new BootBlocked('Root lease changed during reopen');save(current);}return current;};
  const lease=async()=>{await assertRoot();return retainLease();};
  // The endpoint follows the current routing target: after an adopted ReplicaConfigNotice calls go to the new primary.
- const socketFor=(id:string,hostId:string)=>{const m=cfg.members[id],e=m&&endpointOf(m,hostId);if(!e)throw new BootBlocked('Member endpoint is not provisioned');const key=id+'@'+hostId;let socket=sockets.get(key);if(!socket){socket=socketTransport(e.address);sockets.set(key,socket);}return socket;};
+ const socketFor=(id:string,hostId:string)=>{const m=cfg.members[id],e=m&&endpointOf(m,hostId);if(!e)throw new BootBlocked('Member endpoint is not provisioned');const key=id+'@'+hostId;let socket=sockets.get(key);if(!socket){if(stopped)throw new BootBlocked('native Root is closing');socket=socketTransport(e.address);sockets.set(key,socket);}return socket;};
  const transport=(id:string)=>{if(!cfg.members[id])throw new BootBlocked('Member endpoint is not provisioned');return{request:async(text:string)=>{const st=await o.host.snapshot(FederationRouting,o.controlSpaceId,o.ctx),hostId=st?.members[id]?.target.hostId??cfg.members[id]!.target.hostId;return socketFor(id,hostId).request(text);}};};
  let timer:ReturnType<typeof setTimeout>|undefined,stopped=false,active:Promise<void>=Promise.resolve();
  try{
@@ -79,6 +79,9 @@ export async function createConfiguredRoot(o:{host:SpaceHost;ctx:Context;hostId:
   const issuerKey=async(hostId:string)=>{for(const m of Object.values(cfg.members)){const e=endpointOf(m,hostId);if(e)return{algorithm:e.algorithm,publicKey:e.publicKey};}return null;};
   const adoptNotices=async()=>{await assertRoot();const r=await notices.adoptAll(t=>adoptReplicaConfigNotice(o.host,o.ctx,{controlSpaceId:o.controlSpaceId,authorityId:o.authorityId,register:o.external,issuerKey},t));for(const x of r.refused)console.error('Root replica notice refused:',x);return r;};
   const heartbeat=()=>{active=adoptNotices().catch(e=>console.error('Root replica notices:',e instanceof Error?e.message:String(e))).then(()=>controller.directory!.refresh()).catch(e=>console.error('Root Member status:',e instanceof Error?e.message:String(e))).then(()=>{if(!stopped)timer=setTimeout(heartbeat,interval);});};heartbeat();
-  return{...controller,adoptReplicaNotices:adoptNotices,withAdmin:<T>(peerId:string,run:()=>Promise<T>)=>adminContext.run(peerId,run),close:async()=>{stopped=true;if(timer)clearTimeout(timer);await active;for(const s of sockets.values())s.close();}};
+  return{...controller,adoptReplicaNotices:adoptNotices,withAdmin:<T>(peerId:string,run:()=>Promise<T>)=>adminContext.run(peerId,run),close:async()=>{stopped=true;if(timer)clearTimeout(timer);
+   // Closing the Member connections first fails a probe that hangs on an unreachable Member; the rest of the
+   // heartbeat gets a bounded wait, so a stopping daemon never outlives its stop window.
+   for(const s of sockets.values())s.close();await Promise.race([active,new Promise(r=>setTimeout(r,5000).unref())]);for(const s of sockets.values())s.close();}};
  }catch(e){for(const s of sockets.values())s.close();throw e;}
 }
