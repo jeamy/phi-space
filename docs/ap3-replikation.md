@@ -284,6 +284,37 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
   - Jeder Merge-Member durchläuft diesen Ablauf; „überall gelöscht“ heißt, jeder meldet `complete`.
 - **Offen:** ein echter Lauf des Ablaufs über mehrere Merge-Members.
 
-**4. Kompaktierung** der Tombstones nach bestätigtem gemeinsamem Kausalstand aller aktiven Replikate.
+**4. Kompaktierung (Entwurf, noch nicht umgesetzt):** Entfernt werden Ereignisse, die die Sicht nicht mehr
+beeinflussen, sobald sie kausal stabil sind.
+
+- **Stabile Positionen:** Stream-Cursor, `describeStream().revision` und Snapshot-Revisionen sind heute Positionen in
+  der Ereignisliste; Entfernen würde jeden Checkpoint der Peers zerstören.
+  - Jedes Ereignis bekommt beim Anhängen eine feste Log-Position, außerhalb von `ReplicatedEntryChange`. Seiten
+    tragen die Positionen in einem parallelen Feld.
+  - `changes(after)` liefert Positionen größer als `after`; die Lückenprüfungen verlangen nur noch streng steigende
+    Positionen.
+  - Migration: Position = Index + 1, bestehende Checkpoints bleiben gültig.
+- **Kausale Stabilität:** Jedes Replikat Y veröffentlicht in `describe` seinen lückenlosen Versionsvektor V_Y je
+  Ursprung, einschließlich der eigenen Sequenz. Er ist dauerhaft gespeichert und steigt nur.
+  - Ein Ereignis ist bei A stabil, wenn A für jedes konfigurierte Member Y einen Vektor hat, der es abdeckt, und
+    A selbst Ys Ereignisse bis V_Y[Y] hat. Damit ist alles, was Y vor einem Remove erzeugt hat, schon bei A; das
+    deckt auch die gleichzeitige Erneuerung eines entfernten Tags ab.
+  - Ein schweigendes Member blockiert nicht: Es rückt durch Importieren vor. Ein Member ohne Vektor macht nichts
+    stabil; jedes Member muss deshalb gepinnter Peer sein, sonst bleibt die Kompaktierung aus.
+- **Regeln:**
+  - Ein Tombstone, auch ein geschwärzter Gewinner, fällt nur zusammen mit allen älteren Versionen seines Schlüssels.
+  - Ein abgelaufener Gewinner fällt erst nach Ablauf plus Uhr-Unsicherheit.
+  - Ein Remove fällt erst, wenn alle seine Tags weg sind.
+  - Lösch-Ereignisse (`erase`) werden nie entfernt; sie sind klein und dienen als Nachweis.
+- **Untergrenze und Retries:** Je Ursprung gilt eine Untergrenze; ältere Ereignisse, die erneut ankommen, werden
+  verworfen. Eigene Request-IDs bleiben in einem Verzeichnis, begrenzt durch das Zulassungsfenster der Generation,
+  damit ein Retry die ursprüngliche Änderung erhält.
+- **Umsetzung:** als neue Wartungsgeneration (die bestehende Snapshot-Wartung mit einer Kompaktier-Variante), weil
+  `materialize` die Segmente neu lädt; danach Chunks einziehen und offline kompaktieren wie bei der Löschung.
+- **Tests:** ein zufallsgesteuerter Test mit N Replikaten, zufälligen Operationen und Lieferreihenfolgen, manche
+  Replikate kompaktieren, manche nie; im Ruhezustand gleichen alle Sichten der nicht kompaktierenden Referenz.
+  Dazu: Peer mit altem Cursor nach Kompaktierung, schweigendes und hinterherhinkendes Member, gleichzeitige
+  Erneuerung, erneut gelieferte kompaktierte Ereignisse, Retry einer kompaktierten eigenen Anfrage, sinkende
+  Historiengröße.
 
 **5. Echter Lauf** über NetBird mit Partition und Prozessgrenzen.
