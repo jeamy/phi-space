@@ -186,7 +186,8 @@ export class SpaceService {
 				if (!isObj(frame)) throw new Bad("frame must be an object");
 				if (frame.authorityId !== undefined && frame.authorityId !== this.o.authorityId) return fail("AuthorityMismatch", `this host is authority ${this.o.authorityId}`);
 				const epoch = await this.o.epochForSpace?.(call.space as string | undefined) ?? this.o.primaryEpoch;
-				if (frame.primaryEpoch !== undefined && frame.primaryEpoch !== epoch && !(authorization?.knownRequest && typeof frame.primaryEpoch==="number" && Number.isSafeInteger(frame.primaryEpoch) && frame.primaryEpoch<epoch)) return fail("StaleEpoch", `the primary epoch is ${epoch}`);
+				// resolveOperation judges an earlier epoch itself (v3 6.2: NotCommitted only with promotion evidence).
+				if (frame.primaryEpoch !== undefined && frame.primaryEpoch !== epoch && !((authorization?.knownRequest || method === "resolveOperation") && typeof frame.primaryEpoch==="number" && Number.isSafeInteger(frame.primaryEpoch) && frame.primaryEpoch<epoch)) return fail("StaleEpoch", `the primary epoch is ${epoch}`);
 			}
 			let request: RequestRef | undefined;
 			if (MUTATING.includes(method) && !(method === "txn" && call.args?.action === "status")) {

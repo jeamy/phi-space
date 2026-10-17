@@ -102,7 +102,7 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
         const conn = {peerId : "router", state : {proof : {keyId : routerKey.signer.keyId}}};
         const identity =
             new StaticIdentity({router : {principal : {peerId : "router"}, roles : [ "router" ]}});
-        const service = () => new SpaceService({
+        const service = (extra: Partial<import("../src/service.ts").SpaceServiceOptions> = {}) => new SpaceService({
             host : data,
             ctx,
             identity,
@@ -112,7 +112,8 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
             epochForSpace : async (space?: string) => replicaVersion !== null && space === info.spaceId ? replicaEpoch : 1,
             now : clock,
             maxPollMs : 1,
-            authorize : (call, id, c) => verifier.check(call, id, c)
+            authorize : (call, id, c) => verifier.check(call, id, c),
+            ...extra
         });
         let lease = await leases.issue("router", routerKey.signer.keyId);
         let serial = 0;
@@ -743,4 +744,26 @@ for(const backend of BACKENDS)test(`${backend}: transaction follow-ups reuse onl
   const next=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{n:2}},txn},1,origin);await router.submit({id:'write',area:'write',steps:[next]});o.records.get('router').state='revoked';const prior=effects;const denied=await router.advance('write');assert.equal(denied.steps[0]!.state,'unknown');assert.equal(effects,prior);o.records.get('router').state='active';assert.equal((await router.advance('write')).state,'completed');assert.equal(effects,prior+1);
   await router.submit({id:'abort',area:'abort',steps:[await rpc.step('member',{peerId:'user'},'txn',{action:'abort',id:txn},1,origin)]});assert.equal((await router.advance('abort')).state,'completed');assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
  }finally{socket.close();await server.close();}
+}));
+
+for(const backend of BACKENDS)test(`${backend}: a delegated resolution of an unknown request of an earlier epoch is NotCommitted only with promotion evidence`,()=>fixture(backend,async o=>{
+ o.setReplica(1,1);
+ const lost=o.call('write',{entry:{type:'Job',fields:{n:7}}});// never reached this Member
+ o.setReplica(2,2);// promotion: epoch 2, configuration 2
+ let proof:{hash:string}|null=null;const svc=()=>o.service({promotionProof:async()=>proof});
+ const resolveCall={method:'resolveOperation' as const,space:o.info.spaceId,args:{targetRequest:lost.request as any,method:'write',argumentHash:o.target(lost).argumentHash,primaryEpoch:1}};
+ const resolve=async()=>svc().handle(await o.signed(resolveCall as any,o.target(lost),{targetPrimaryEpoch:1,targetReplicaConfigVersion:2}),o.conn);
+ const without=await resolve();assert.equal(without.ok,false);assert.equal((without as any).error.code,'IncarnationChanged','without evidence: review, not NotCommitted');
+ proof={hash:'b'.repeat(64)};
+ const decided=await resolve();assert.ok(decided.ok,JSON.stringify(decided));assert.equal((decided as any).result.error.code,'NotCommitted');
+ assert.deepEqual(await resolve(),decided,'repeatable');
+ // The late original call under the old epoch meets the negative claim.
+ const late=await svc().handle(await o.signed(lost,undefined,{targetPrimaryEpoch:1,targetReplicaConfigVersion:2}),o.conn);
+ assert.equal(late.ok,false);assert.equal((late as any).error.code,'NotCommitted',JSON.stringify(late));
+ assert.equal(await new PiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n:7}}),0);
+ // The router turns it into a failed step without effect.
+ const {FederationRpc}=await import('../src/federation-rpc.ts');
+ const rpc=new FederationRpc({state:async()=>({policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'member'},rules:[],completionProfiles:[]},members:{}}) as any,transport:()=>({request:async()=>JSON.stringify(decided)}),signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
+ const step:any={target:{hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1},principal:{peerId:'user'},generation:lost.request!.generation,requestId:lost.request!.requestId,method:'write',args:lost.args,policyVersion:1,state:'unknown'};
+ const receipt=(rpc as any).checkedResolution(step,(decided as any).result);assert.equal(receipt.outcome,'failed');
 }));

@@ -161,16 +161,21 @@ dauerhaftes `NotCommitted`; erst dann darf der Client mit einer neuen ID beginne
 - **Wirkung:** Negativclaim und Annahme laufen im selben Commit-Bereich. Ein verspäteter Originalaufruf trifft den
   Claim und bekommt `NotCommitted`, ohne Wirkung. Poll und `resolveOperation` liefern `done` mit Fehler
   `NotCommitted`. Für die Aufbewahrung gelten die Fristen der übrigen entschiedenen Claims.
-- **Router:** `NotCommitted` ergibt einen fehlgeschlagenen Schritt ohne Wirkung. Die Delegationsprüfung lässt die
-  Auflösung eines unbekannten Requests älterer Epoche durch; entschieden wird im Dienst.
+- **Router:** `NotCommitted` ergibt einen fehlgeschlagenen Schritt ohne Wirkung.
+  - Delegationsprüfung und Epochenprüfung des Rahmens lassen `resolveOperation` eines unbekannten Requests älterer
+    Epoche durch; entschieden wird im Dienst. Sonst bliebe der Schritt mit `StaleEpoch` endlos `unknown`.
+  - Hat der Router die neue Replikatkonfiguration noch nicht übernommen, antwortet der Member `ReplicaConfigPending`.
+    Der Router fragt später erneut.
 - **Tests:** `test/test-not-committed.test.ts`, mit echter Promotion (Simulator-Fencing) und `degradeToSingle`:
   - ein bestätigter Request behält sein Ergebnis;
   - der nur auf dem alten Primary versiegelte Request wird `NotCommitted`;
   - der verspätete Originalaufruf bleibt ohne Wirkung;
   - ohne Nachweis bleibt es bei `IncarnationChanged`;
   - die Ablehnungsfälle werden geprüft.
+  - `test/test-delegation.test.ts` prüft denselben Fall über eine signierte Router-Delegation nach einem
+    Epochenwechsel: ohne Nachweis `IncarnationChanged`, mit Nachweis `NotCommitted`; der verspätete Originalaufruf
+    bleibt ohne Wirkung, der Router-Beleg ist `failed`.
 - **Offen:**
-  - Den Weg über Router-Delegation deckt kein eigener Test ab.
   - Für den Haupt-Store mit `mainSync` (Control Space) ist der Nachweis noch nicht angeschlossen, nur für primary/sync-Spaces.
 
 ## Einbindung und noch offene Gesamtgarantien
