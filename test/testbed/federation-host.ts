@@ -16,6 +16,16 @@ if(mode==="recovery-call") {
  const normal=JSON.parse(privateFile(join(home,"federation.json")).toString()),recovery=normal.recovery??JSON.parse(privateFile(join(home,"recovery.json")).toString());
  const socket=socketTransport({path:recovery.path});try{process.stdout.write(await socket.request(text));}finally{socket.close();}process.exit(0);
 }
+if(mode==="enroll-key") {
+ // An additional key of this host (e.g. the native Root's router and host keys), enrolled at the control gate while the
+ // daemon runs: no owner lock, no Harness. The private key is created here and never leaves the host.
+ let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>4096)throw new Error("enrollment input exceeds budget");}
+ const q=JSON.parse(text),config=JSON.parse(privateFile(join(home,"federation.json")).toString());
+ if(typeof q.token!=="string"||typeof q.keyName!=="string"||!/^[a-z][a-z0-9-]{0,31}$/.test(q.keyName))throw new Error("enroll-key needs a token and a bounded keyName");
+ mkdirSync(join(home,"root"),{recursive:true,mode:0o700});const keyFile=join(home,"root",q.keyName+".json"),signer=existsSync(keyFile)?loadFileSigner(keyFile):provisionFileSigner(keyFile,"ed25519");
+ const socket=socketTransport(config.control.address,{localAddress:config.listen.host,connectTimeoutMs:8000});let remote:RemoteSpace;remote=new RemoteSpace(socket,{space:"control",signer,ownPeerId:config.peerId,expectedGateHostId:config.controlHostId,grantProvider:()=>remote.requestGrant()});
+ try{console.log(JSON.stringify({keyFile,keyId:signer.keyId,algorithm:signer.algorithm,publicKey:signer.publicKey,result:await remote.enroll(q.token.trim())}));}finally{socket.close();}process.exit(0);
+}
 if (["stop","status","fence"].includes(mode)) {
  const restart=join(home,"restart.lock"),ownerFile=join(home,"owner.lock");
  const processes=()=>readdirSync('/proc').filter(v=>/^[0-9]+$/.test(v)).filter(v=>{try{const args=readFileSync(`/proc/${v}/cmdline`,'utf8').split('\0');return args[1]===join(home,'federation-host.mjs')&&args[2]==='run'&&(args[3]===undefined||args[3]===''||args[3]===home);}catch{return false;}}).map(Number);
