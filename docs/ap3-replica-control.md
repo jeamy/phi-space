@@ -253,8 +253,12 @@ eigene Art von Wechsel: gleiche Autorität, neuer Control-Host, neuer Supervisor
    Danach läuft derselbe Ablauf in umgekehrter Richtung: `set-standby` vom neuen Host, `promote` auf dem alten,
    zweiter `ControlHostChange`.
 
-**Grenzen:** Ein Root zieht nicht mit (siehe oben). Members folgen erst beim nächsten Start; bis dahin erreichen sie
-den alten, gesperrten Control-Host nicht.
+**Folgen im laufenden Betrieb:** Ein laufender Host mit `recoveryAdmin` prüft das Register alle 15 Sekunden
+(`followIntervalMs`). Erscheint ein aufgezeichneter, signierter Wechsel, installiert er ihn sofort und meldet ihn
+(`controlChanged`). Der Testbed-Daemon fährt dann geordnet herunter und endet mit Code 75, und systemd startet ihn
+über `Restart=on-failure` neu. Der Neustart nimmt denselben Startpfad mit dem installierten Endpunkt.
+
+**Grenzen:** Ein Root zieht nicht mit (siehe oben).
 
 Echter Lauf in beide Richtungen auf big: [Nachweis](../test/evidence/control-promotion-2026-10-17/README.md).
 

@@ -50,7 +50,9 @@ export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<St
 	/** The main store runs on primary/sync (3.8): its current replica configuration, for every Space in it. */
 	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
 	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */
-	mainTransition?: () => ReturnType<typeof import("./primary-sync.ts").lastConfigTransition> };
+	mainTransition?: () => ReturnType<typeof import("./primary-sync.ts").lastConfigTransition>;
+	/** How often a running host checks the register for a control host change (default 15 s). */
+	followIntervalMs?: number };
 export async function startConfiguredFederation(host: Harness, ctx: Context, configFile: string, factories?: SyncSpaceFactories) {
 	const raw = { commit: host.commit.bind(host), snapshot: host.snapshot.bind(host) };
 	let config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
@@ -141,7 +143,14 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
         if(config.capabilities)heartbeat();
 		const trustedConnection = async () => { await directory.refresh(); const peer = await directory.lookup(config.listen.host); if (!peer || peer.id !== config.peerId) throw new Error("local service peer is no longer known to NetBird"); return { peerId: peer.id, overlayIp: peer.ip, credentials: { roles: peer.groups.flatMap(g => groupRoles[g] ?? []) } }; };
 		const nativeService = { async handle(call: unknown, conn: import("./service.ts").Connection) { Object.assign(conn, await trustedConnection()); return runtime.service.handle(call, conn); } };
-		return { ...runtime, root, service: nativeService, config, trustedConnection, close: async () => { capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
+		// Control promotion while running: a recorded, signed host change is installed at once and reported; the daemon
+		// restarts through the start path, which uses the installed endpoint.
+		let reportChange: (c: import("./control-host-change.ts").ControlHostChange) => void = () => {};
+		const controlChanged = new Promise<import("./control-host-change.ts").ControlHostChange>(resolve => { reportChange = resolve; });
+		const followTimer = config.recoveryAdmin ? setInterval(() => { void followControlHostChange(external, installed, { controlSpaceId: config.controlSpaceId, configured: { hostId: config.controlHostId, authorityId }, recoveryAdmin: config.recoveryAdmin! })
+			.then(c => { if (c) reportChange(c); }).catch(e => console.error("Control host change:", e instanceof Error ? e.message : String(e))); }, factories?.followIntervalMs ?? 15_000) : undefined;
+		followTimer?.unref?.();
+		return { ...runtime, root, service: nativeService, config, trustedConnection, controlChanged, close: async () => { if (followTimer) clearInterval(followTimer); capabilityStopped=true;if(capabilityTimer)clearTimeout(capabilityTimer);await capabilityActive;noticeStopped=true;if(noticeTimer)clearTimeout(noticeTimer);await noticeActive;for(const sp of syncSpaces)await sp.close().catch(e=>console.error("primary/sync Space close:",e instanceof Error?e.message:String(e)));try { try { await recovery?.close(); } finally { try{await root?.close();}finally{await runtime.close();} } } finally { controlSocket?.close(); external.close(); installed.close(); } } };
 	} catch (e) { controlSocket?.close(); external.close(); installed.close(); throw e; }
 }
 

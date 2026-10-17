@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, statSync, chmodSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { provisionFileSigner, loadFileSigner, serveRegister, SocketRecoveryRegister, SqliteRecoveryRegister, RecoveryClient, serveRecovery, generateKey, RecoveryBlocked, RecoveryController, RegisterConflict, PiSpaces, core, Space, startConfiguredFederation, bootstrapEnroll, newEnrollToken, hashToken, listSpaces, spaceDoc, Registry, beginRestore, restoreBatch, completeRestore, snapshotHash, dataRecoveryHandler, startMemberRecoveryOnly } from "./src/index.ts";
+import { provisionFileSigner, loadFileSigner, serveRegister, SocketRecoveryRegister, SqliteRecoveryRegister, RecoveryClient, serveRecovery, generateKey, RecoveryBlocked, RecoveryController, RegisterConflict, PiSpaces, core, Space, startConfiguredFederation, bootstrapEnroll, newEnrollToken, hashToken, listSpaces, spaceDoc, Registry, beginRestore, restoreBatch, completeRestore, snapshotHash, dataRecoveryHandler, startMemberRecoveryOnly, signControlHostChange } from "./src/index.ts";
 import { forEachBackend, ctx } from "./test/support/persistent.ts";
 
 test("provisioned keys survive reopen and fail closed on missing, public or symlinked files", async () => {
@@ -105,6 +105,18 @@ test("configured runtime checks independent boot, provisioned overlay ownership 
    peerId = "another-peer"; await assert.rejects(startConfiguredFederation(h, ctx, configFile), /does not belong/); peerId = "configured-peer";
    runtime = await startConfiguredFederation(h, ctx, configFile); assert.equal((await runtime.trustedConnection()).peerId, "configured-peer"); groups = ["space-observer"]; assert.deepEqual((await runtime.trustedConnection()).credentials.roles, ["observer"]);
    const nativeContext = { peerId: "forged", credentials: { roles: ["admin"] } }; const challenge = await runtime.service.handle({ method: "challenge", args: { protocol: 1 } }, nativeContext); assert.equal(challenge.ok && (challenge.result as any).observedPeerId, "configured-peer"); assert.deepEqual(nativeContext.credentials.roles, ["observer"]);
+   // A running host follows a control promotion: the recorded, admin-signed change is installed and reported.
+   await runtime.close(); groups = ["space-hosts"];
+   const admin = provisionFileSigner(join(dir, "admin.json")), next = provisionFileSigner(join(dir, "next.json"));
+   writeFileSync(configFile, JSON.stringify({ ...config, recoveryAdmin: { algorithm: admin.algorithm, publicKey: admin.publicKey } }), { mode: 0o600 });
+   const unused = async () => { throw new Error("no sync Spaces"); };
+   runtime = await startConfiguredFederation(h, ctx, configFile, { openSyncStorage: unused, openSyncHarness: unused, followIntervalMs: 50 });
+   const signed = await signControlHostChange({ recoveryId: "promote-next", authorityId: "authority", controlSpaceId: config.controlSpaceId, fromHostId: "configured-host", targetHostId: "next-host", primaryEpoch: 2, supervisorKey: next.publicKey, algorithm: next.algorithm, address: { host: "127.0.0.9", port: 7421 } }, admin);
+   const auth = (await external.get<any>(`authority:${config.controlSpaceId}`))!;
+   await external.compareAndSet(`authority:${config.controlSpaceId}`, auth.version, { ...auth.value, hostId: "next-host", supervisorKey: next.publicKey, hostChange: "promote-next", hostChanges: { "promote-next": signed } });
+   const changed = await Promise.race([runtime.controlChanged, new Promise<null>(r => setTimeout(() => r(null), 5000))]);
+   assert.equal(changed?.targetHostId, "next-host", "the running host reports the change");
+   assert.equal((await installed.get<any>(`installed-authority:${config.controlSpaceId}`))!.value.address.host, "127.0.0.9", "and installed the new endpoint");
   } finally { await runtime?.close(); await readServer.close(); await new Promise<void>(resolve => api.close(() => resolve())); installed.close(); external.close(); rmSync(dir, { recursive: true, force: true }); }
  });
 });

@@ -61,7 +61,7 @@ const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.
 const releaseLock=()=>{try{unlinkSync(lock);}catch{}};
 // SIGTERM is caught from here on: a stop during startup lets the mode finish starting and then clean up (release the
 // lock) instead of killing the process with its lock in place. A second signal kills as before (the handler is once).
-let terminated=false;const terminate=new Promise<void>(resolve=>{const f=()=>{terminated=true;resolve();};process.once("SIGTERM",f);process.once("SIGINT",f);});
+let restartExit=false;let terminated=false;const terminate=new Promise<void>(resolve=>{const f=()=>{terminated=true;resolve();};process.once("SIGTERM",f);process.once("SIGINT",f);});
 // 3.8: a host's main store on primary/sync (the control host). Only `run` serves it, `main-sync` administers it with
 // the daemon stopped; every other mode would bypass its journal and is refused.
 const mainCfg=existsSync(configFile)?JSON.parse(privateFile(configFile).toString()).mainSync:undefined;
@@ -225,7 +225,7 @@ try{
   if(runtime.root){for(const method of ["step","invoke","resolve"])observe(runtime.root.rpc,method,"rpc."+method);for(const method of ["prepare","admit","finish"])observe(runtime.root.space,method,"root."+method);}
   const acceptFile=process.env.PI_SPACES_ROOT_ACCEPTANCE_FILE;
   if(acceptFile){
-   if(!runtime.root)throw new Error('native Root acceptance requires explicit Root provisioning');const nativeConfig=runtime.config;let stopped=terminated;void terminate.then(()=>{stopped=true;});
+   if(!runtime.root)throw new Error('native Root acceptance requires explicit Root provisioning');const nativeConfig=runtime.config;let stopped=terminated;void terminate.then(()=>{stopped=true;});void runtime.controlChanged.then(c=>{console.log(JSON.stringify({controlHostChanged:c.targetHostId,recoveryId:c.recoveryId,restart:true}));restartExit=true;stopped=true;});
    while(!stopped){
     if(!existsSync(acceptFile)){await new Promise(r=>setTimeout(r,100));continue;}
     const command=JSON.parse(privateFile(acceptFile).toString());unlinkSync(acceptFile);const out=acceptFile+'.result';
@@ -278,7 +278,7 @@ try{
      writeFileSync(out,JSON.stringify({id:command.id,passed:true,result})+'\n',{mode:0o600});
     }catch(e){writeFileSync(out,JSON.stringify({id:command.id,passed:false,error:e instanceof Error?e.message:String(e)})+'\n',{mode:0o600});}
    }
-  }else await terminate;
+  }else{const changed=await Promise.race([terminate.then(()=>null),runtime.controlChanged]);if(changed){console.log(JSON.stringify({controlHostChanged:changed.targetHostId,recoveryId:changed.recoveryId,restart:true}));restartExit=true;}}
   }
  }else if(mode==="sync"){
   // Operator tool for one primary/sync Space, with the daemon stopped (this mode holds the owner lock).
@@ -310,4 +310,5 @@ try{
  }else throw new Error("use provision, bootstrap, enroll, recovery, run, sync or sync-head");
 }finally{await cleanup();}
 // Every handle should be closed by now; an overlooked one must not keep a stopped daemon alive without its lock.
-process.exit(0);
+// 75: the control host changed; the unit restarts the daemon (Restart=on-failure), which then uses the new endpoint.
+process.exit(restartExit?75:0);
