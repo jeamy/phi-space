@@ -282,7 +282,8 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
   - `erase-local` löscht im Baustein und schließt die Löschung lokal ab; der Status steht im Ergebnis (`merge`).
   - Danach entfernt der bestehende Schritt `erase-compact` die alten Revisionen.
   - Jeder Merge-Member durchläuft diesen Ablauf; „überall gelöscht“ heißt, jeder meldet `complete`.
-- **Offen:** ein echter Lauf des Ablaufs über mehrere Merge-Members.
+- **Echter Lauf** mit zwei Merge-Members über NetBird, Partition und Löschung bestanden
+  ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).
 
 **4. Kompaktierung (Entwurf, noch nicht umgesetzt):** Entfernt werden Ereignisse, die die Sicht nicht mehr
 beeinflussen, sobald sie kausal stabil sind.
@@ -317,4 +318,6 @@ beeinflussen, sobald sie kausal stabil sind.
   Erneuerung, erneut gelieferte kompaktierte Ereignisse, Retry einer kompaktierten eigenen Anfrage, sinkende
   Historiengröße.
 
-**5. Echter Lauf** über NetBird mit Partition und Prozessgrenzen.
+**5. Echter Lauf:** bestanden mit nano-test und standby-100: Replikation, Partition mit gleichzeitigen Writes
+und Konvergenz, verteilte Löschung mit physischer Kompaktierung auf beiden Hosts
+([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).

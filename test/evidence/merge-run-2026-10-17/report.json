@@ -1,0 +1,150 @@
+{
+ "passed": true,
+ "bundle": "4405c749e08a15b1",
+ "commit": "031ab7d",
+ "members": {
+  "nano-test": {
+   "replicaId": "r-nano",
+   "overlay": "100.89.28.88"
+  },
+  "standby-100": {
+   "replicaId": "r-100",
+   "overlay": "100.89.187.150"
+  }
+ },
+ "replication": {
+  "spaceId": "merge-run-20261017",
+  "served": "default",
+  "rules": [
+   {
+    "type": "Sensor",
+    "variant": "lww",
+    "keyFields": [
+     "sensorId"
+    ]
+   },
+   {
+    "type": "Fact",
+    "variant": "set"
+   }
+  ]
+ },
+ "steps": [
+  {
+   "step": "write on nano, read on 100",
+   "result": "Sensor s1 = nano-1 replicated to standby-100"
+  },
+  {
+   "step": "partition (nft drop of nano's overlay address on 100, 16:56:53-16:59:03 UTC, 40 packets dropped)",
+   "duringPartition": {
+    "nano": {
+     "s1": "nano-2",
+     "facts": [
+      "by-nano"
+     ]
+    },
+    "100": {
+     "s1": "100-2",
+     "facts": [
+      "by-100"
+     ]
+    }
+   }
+  },
+  {
+   "step": "heal",
+   "converged": "17:00:01 UTC",
+   "both": {
+    "s1": "100-2 (later HLC)",
+    "facts": [
+     "by-100",
+     "by-nano"
+    ]
+   }
+  },
+  {
+   "step": "secret fact written on nano and replicated",
+   "presentInWal": {
+    "nano": 2,
+    "100": 1
+   }
+  },
+  {
+   "step": "offline erasure on nano (fence, erase-evidence, erase-local, erase-compact)",
+   "evidence": {
+    "spaceId": "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd",
+    "entryIds": [
+     "[\"r-nano\",\"i-nano\",1]",
+     "[\"r-nano\",\"i-nano\",2]",
+     "[\"r-nano\",\"i-nano\",3]",
+     "[\"r-100\",\"i-100\",1]",
+     "[\"r-100\",\"i-100\",2]",
+     "[\"r-nano\",\"i-nano\",4]"
+    ]
+   },
+   "local": {
+    "hash": "def735d488ba580caeaaa5b5af4b7c1fc16fbdbdb990819c3bfa197c9968c8ca",
+    "at": 1792256524506,
+    "kind": "deletePrincipal",
+    "admin": "exclusive-offline-operator",
+    "count": 0,
+    "merge": {
+     "erases": 1,
+     "overlayPending": 0,
+     "segmentsPending": 0,
+     "transfersPending": 0,
+     "complete": true
+    }
+   },
+   "compact": {
+    "documents": 6,
+    "revisionsRemoved": 31,
+    "completed": true
+   },
+   "secretInFiles": 0
+  },
+  {
+   "step": "erase reaches standby-100 over the stream",
+   "views": {
+    "100": {
+     "facts": [],
+     "sensors": []
+    },
+    "nano": {
+     "facts": [],
+     "sensors": []
+    }
+   }
+  },
+  {
+   "step": "offline compaction on standby-100",
+   "compact": {
+    "documents": 5,
+    "revisionsRemoved": 19,
+    "completed": true
+   },
+   "secretInFiles": 0
+  },
+  {
+   "step": "write after erasure",
+   "result": "Sensor s7 written on 100 replicated to nano; s1 stays erased"
+  }
+ ],
+ "restore": "configs without entryReplication, boot records back to their originals (fenced only during the offline steps), backups and tools removed; the new bundle stays",
+ "leftover": "the EntryReplicas documents of the run (redacted history plus the erase and one later test write) stay in the default Spaces of both hosts",
+ "baselineFinal": {
+  "at": "2026-10-17T17:05:33.095Z",
+  "peerKeys": 13,
+  "controlWrite": "completed",
+  "nano-test": {
+   "ok": true,
+   "epoch": 1,
+   "entries": 0
+  },
+  "standby-100": {
+   "ok": true,
+   "epoch": 1,
+   "entries": 0
+  }
+ }
+}

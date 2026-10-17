@@ -383,6 +383,16 @@ Nachtrag 2026-10-17 (Router-Wechsel, 3.8 abgeschlossen):
 - Echter Lauf mit Root und repliziertem Member in beide Richtungen
   ([Nachweis](../test/evidence/root-promotion-2026-10-17/README.md)); host-a danach zurückgesetzt.
 
+Nachtrag 2026-10-17 (lww/set eingebunden):
+
+- Merge-Typen laufen im `space`-Dienst über den Replikations-Baustein; der Root platziert sie nach Schlüssel bzw.
+  Feldern und lehnt exklusive Operationen ab.
+- Members replizieren ihre Änderungsströme über bewiesene, gepinnte Verbindungen.
+- Die Löschung eines Principals ist eine replizierte Änderung mit Schwärzung; physisch entfernt die bestehende
+  Offline-Kompaktierung die alten Revisionen.
+- Echter Lauf mit nano-test und standby-100: Partition, Konvergenz, verteilte Löschung
+  ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)). Offen: Kompaktierung der Tombstones.
+
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.
 Acht zusätzliche persistente Fälle prüfen Replay, Konkurrenz und Lease-Ablauf.
