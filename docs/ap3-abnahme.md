@@ -18,7 +18,7 @@ Nachweise liegen unter `test/evidence/`, Tests unter `test/`.
 
 | # | Kriterium | Lokal | Real | Stand |
 |---|---|---|---|---|
-| S1 | 10-min-Partition mit konkurrierenden Writes, Deletes und Erneuerungen konvergiert | `test-entry-replication` (zehn simulierte Minuten), `test-entry-replication-stream` (bidirektional nach Partition) | lww/set: 600 s als Komponentenlauf (`ap3-overlay-2026-10-15`), über den Dienst nur 130 s (`merge-run-2026-10-17`); primary/sync: 10 min über den Dienst (`phase3-partition-2026-10-17`) | teilweise: 10-min-Partition auf dem produktiven Merge-Pfad fehlt |
+| S1 | 10-min-Partition mit konkurrierenden Writes, Deletes und Erneuerungen konvergiert | `test-entry-replication`, `test-entry-replication-stream`, `test-merge-service` (Löschen und Erneuern über `lease`) | über den Dienst 656 s mit Writes, Deletes, Erneuerungen und Ablauf (`phase3-final-2026-10-18`); primary/sync 10 min (`phase3-partition-2026-10-17`) | erfüllt |
 | S2 | Alter Put belebt keinen Tombstone wieder | `test-entry-replication`, `test-entry-compaction` (Tombstone mit älterem Put) | `ap3-overlay-2026-10-15`, `merge-run-2026-10-17` | erfüllt |
 | S3 | Natürlicher Ablauf löscht keine neuere Erneuerung | `test-entry-renewal`, `test-entry-compaction` (Ablauf mit Erneuerung) | `ap3-overlay-2026-10-15` (Erneuerungen während der Partition) | erfüllt |
 | S4 | Snapshot unter Last verliert nichts | `test-entry-snapshot-transfer` (gleichzeitige Writes bis zur Veröffentlichung), `test-bootstrap` (geänderter Store wird abgewiesen) | — (keine Overlay-Annahme) | erfüllt |
@@ -57,15 +57,16 @@ Weitere Inhalte der Stufe:
 
 | # | Punkt | Stand |
 |---|---|---|
-| B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | teilweise: geroutete Writes mit Partition und Promotion real (`root-hosta-2026-10-17`, Lauf vom 2026-10-18); der Router konnte offene Schritte nach Promotion oder Degrade nicht klären und beendete Writes im `ReplicaConfigPending`-Fenster endgültig, seit 2026-10-18 behoben und lokal geprüft (`test-delegation`); real offen |
-| B2 | Ausfall eines NetBird-Agenten | offen |
-| B3 | Erschöpfter Speicher | lokal: ein volles Journal lehnt vor dem Versiegeln mit `ResourceExhausted` ab, Lesen und kleinere Writes gehen weiter (`test-primary-sync`; bis 2026-10-18 sperrte es die Session); Historienbudget der Merge-Replikation (`test-entry-replication`); real offen; ein voller Datenträger (ENOSPC) wird nicht geprüft |
-| B4 | Prozessabbruch ohne Operatorschritt | lokal erfüllt: Der Daemon räumt eine Sperre, deren Prozess nachweislich fehlt (früherer Boot, oder kein Prozess mit ihrer PID und Startzeit; `test-replica-control`); real offen |
-| B5 | `degrade` ohne Fencing-Adapter im Sync-Werkzeug | umgesetzt: `sync` mit `op: degrade, revokeStandbySpace: true` für primary/sync-Spaces (nicht für `main-sync` mit Geschwister-Spaces); real offen |
-
-Außerhalb der Abnahmekriterien, aber offen: Boot- und Löschintegration des Sync-Journals
-([ap3-primary-sync](ap3-primary-sync.md)).
+| B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | real (`phase3-final-2026-10-18`): geroutete Writes durch Partition, Promotion, Degrade mit und ohne Adapter, Rückwege mit `set-standby` bei laufendem Root; Klärung beim Nachfolger nach Degrade real. `NotCommitted` nach Promotion über den Root nur lokal (`test-delegation`, `91e24c1`): der reale Versuch zeigte den behobenen Policy-Befund, die Wiederholung scheiterte an der hängenden Member-Aufnahme | teilweise |
+| B2 | Ausfall eines NetBird-Agenten | real (`phase3-final-2026-10-18`): 120 s Agent aus auf dem Standby, Write versiegelt und danach entschieden, Daemon ohne Neustart | erfüllt |
+| B3 | Erschöpfter Speicher | real (`phase3-final-2026-10-18`): volles Journal lehnt mit `ResourceExhausted` ab, Lesen und anderer Space gehen weiter; lokal `test-primary-sync`, `test-entry-replication`; ENOSPC nicht geprüft | erfüllt (Journal-Budget) |
+| B4 | Prozessabbruch ohne Operatorschritt | real (`phase3-final-2026-10-18`): SIGKILL auf beiden Hosts, Sperre vom Daemon selbst geräumt (`processGone`); lokal `test-replica-control` | erfüllt |
+| B5 | `degrade` ohne Fencing-Adapter im Sync-Werkzeug | real (`phase3-final-2026-10-18`): Kandidat lokal abgeschlossen, Host aktiv mit widerrufener Berechtigung, Rückweg per `wipe` und `set-standby`; lokal `test-degrade-revoke` | erfüllt |
 
 ## Offen für die Abnahme
 
-Echter Lauf: S1 (10-min-Partition auf dem Merge-Pfad), B1, B2, B3, dazu B4 und B5 real.
+- B1: `NotCommitted` nach Promotion über den Root real (lokal bewiesen).
+- Befund aus dem Lauf vom 2026-10-18: Eine Member-Aufnahme (`addMember`), die nach Phase `committed` unterbrochen wird,
+  läuft nicht weiter und blockiert weitere Mitgliedschaftsbefehle.
+- Außerhalb der Abnahmekriterien: Boot- und Löschintegration des Sync-Journals
+  ([ap3-primary-sync](ap3-primary-sync.md)).

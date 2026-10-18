@@ -74,6 +74,8 @@ Bestätigungshistorie zeitbasiert entfernt.
     (`limitCheckpointBytes`).
   - Ein größerer Space behält seine Delta-Kette; neu versucht wird alle 50 Deltas. Ohne primary/sync im Prozess bleibt
     alles wie bisher.
+  - Die Grenze gilt für alle Spaces des Prozesses und folgt dem kleinsten Journal; ein Space mit sehr kleinem
+    Journal-Budget schaltet Basen im ganzen Daemon ab.
   - Tests: `test-primary-sync` (Space über 256 KiB über 500 Commits und ein Neuladen hinweg), `test-persistence`
     (Basis alle 500 Deltas). Ein nicht leerer, bisher ungetrackter
 Store wird nicht als Startpräfix akzeptiert. Bestehende Stores brauchen einen
