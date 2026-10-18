@@ -176,12 +176,16 @@ export async function historyPage(space: SpaceLike, input: { cursor?: string; be
 	return { candidates, next: cursor ?? "" };
 }
 
-export async function mergedHistory(spaces: SpaceLike[], input: { cursors?: string[]; beforeAt: number; beforeId: string; limit: number; channel?: string; handle?: string; ai?: boolean; signal?: AbortSignal }) {
-	// A missing shard fails the page as a whole: callers retain all cursors and may retry safely.
+export async function mergedHistory(spaces: SpaceLike[], input: { cursors?: string[]; beforeAt: number; beforeId: string; limit: number; channel?: string; handle?: string; ai?: boolean; signal?: AbortSignal; skip?: number[] }) {
+	// The first space is the local one and must answer. A secondary shard that is skipped (known down) or fails
+	// contributes nothing and counts as exhausted: its posts reach the feed again through the live deltas.
 	const stop = new AbortController();
 	const signal = input.signal ? AbortSignal.any([input.signal, stop.signal]) : stop.signal;
+	const none = { candidates: [], next: "" } as Awaited<ReturnType<typeof historyPage>>;
 	let pages: Awaited<ReturnType<typeof historyPage>>[];
-	try { pages = await Promise.all(spaces.map((space, i) => historyPage(space, { ...input, signal, cursor: input.cursors?.[i] }))); }
+	try {
+		pages = await Promise.all(spaces.map((space, i) => input.skip?.includes(i) ? none : historyPage(space, { ...input, signal, cursor: input.cursors?.[i] }).catch((e) => { if (i === 0) throw e; return none; })));
+	}
 	finally { stop.abort(); }
 	const selected = pages.flatMap((p, shard) => p.candidates.map(c => ({ ...c, shard })))
 		.sort((a, b) => b.post.at - a.post.at || b.post.postId.localeCompare(a.post.postId)).slice(0, input.limit);

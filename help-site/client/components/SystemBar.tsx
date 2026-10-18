@@ -26,12 +26,15 @@ export function SystemBar({ locale }: { locale: "de" | "en" }) {
 				{locale === "de" ? "Testsystem" : "Test system"}
 				{info.cap !== null ? (locale === "de" ? ` · max. ${num(info.cap)} Einträge je Datenbank` : ` · max ${num(info.cap)} entries per database`) : ""}
 			</span>
-			{info.shards.map((s) => (
-				<span key={s.shard} className={`system-bar__host ${s.up ? "" : "system-bar__host--down"}`}>
+			{info.shards.map((s) => s.up ? (
+				<span key={s.shard} className="system-bar__host">
 					<b>{s.host?.name ?? s.shard}</b>
 					{s.host ? ` · ${shortCpu(s.host.cpu)} · ${s.host.cores} vCPU · ${s.host.memGiB} GiB` : ""}
 					{s.entries !== null ? ` · ${num(s.entries)}${info.cap !== null ? ` / ${num(info.cap)}` : ""} ${locale === "de" ? "Einträge" : "entries"}` : ""}
-					{s.up ? "" : locale === "de" ? " · nicht erreichbar" : " · unreachable"}
+				</span>
+			) : (
+				<span key={s.shard} className="system-bar__host system-bar__host--down">
+					<b>{s.shard}</b>: {locale === "de" ? "nicht erreichbar" : "unreachable"}
 				</span>
 			))}
 		</div>

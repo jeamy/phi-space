@@ -444,6 +444,10 @@ export class SocialSwarmHub {
 		return this.#remote && postId.startsWith(this.#remotePrefix) ? this.#remote : this.space;
 	}
 
+	#remoteDown(): boolean {
+		return this.#remote !== null && Date.now() < this.#remoteDownUntil;
+	}
+
 	#pickShardForNew(): SpaceLike {
 		return this.#remote && Date.now() >= this.#remoteDownUntil && this.#rng() < 0.5 ? this.#remote : this.space;
 	}
@@ -487,16 +491,21 @@ export class SocialSwarmHub {
 		if (input.kind === "feed.more" && input.channel !== "all") fields.channel = input.channel;
 		if (input.kind === "agent.posts") fields.handle = input.handle;
 		if (input.kind === "ai.posts") fields.viaLlm = true;
-		const spaces = this.#remote ? [this.space, this.#remote] : [this.space];
+		const spaces = this.#remote && !this.#remoteDown() ? [this.space, this.#remote] : [this.space];
 		const posts: SwarmPost[] = [];
 		for (const s of spaces) {
-			let after: string | null = null, token: string | undefined;
-			do {
-				signal?.throwIfAborted();
-				const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await historyRead(s.readPage({ type: "Post", ...(Object.keys(fields).length ? { fields } : {}) }, { after, token, maxBytes: 128 * 1024 }), signal);
-				for (const e of page.items) posts.push(e.fields as unknown as SwarmPost);
-				after = page.next; token = page.token;
-			} while (after !== null);
+			try {
+				let after: string | null = null, token: string | undefined;
+				do {
+					signal?.throwIfAborted();
+					const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await historyRead(s.readPage({ type: "Post", ...(Object.keys(fields).length ? { fields } : {}) }, { after, token, maxBytes: 128 * 1024 }), signal);
+					for (const e of page.items) posts.push(e.fields as unknown as SwarmPost);
+					after = page.next; token = page.token;
+				} while (after !== null);
+			} catch (e) {
+				if (s === this.space || signal?.aborted) throw e;
+				this.#markRemoteDown(); // the secondary shard is skipped: the local posts still page
+			}
 		}
 		const older = posts.filter((p) => p.at < input.beforeAt || (p.at === input.beforeAt && p.postId.localeCompare(input.beforeId) < 0));
 		older.sort((a, b) => b.at - a.at || b.postId.localeCompare(a.postId));
@@ -599,9 +608,8 @@ export class SocialSwarmHub {
 			}
 		}
 
-		if (this.#remote) {
-			await this.#syncRemoteShard();
-		}
+		// A dead second shard must not delay the local one: sync in the background (the broadcast tick retries).
+		if (this.#remote) void this.#syncRemoteShard();
 
 		if (this.#closed) return;
 		for (let w = 0; w < WORKER_COUNT; w++) {
@@ -645,6 +653,7 @@ export class SocialSwarmHub {
 	/** Purge state (and optionally the host description) of one shard; an unreachable shard reports `up: false`. */
 	async #shardReport(space: SpaceLike, shard: string, remote: boolean, entries: number | null, withHost: boolean): Promise<ShardReport> {
 		const call = <T>(p: Promise<T>) => (remote ? this.#remoteCall(p, 8_000) : p);
+		if (remote && this.#remoteDown()) return { shard, up: false, entries, lastPurgeAt: null, lastRemoved: 0, totalRemoved: 0, ...(withHost ? { host: null } : {}) };
 		try {
 			const notice = (await call(space.readAll({ type: "PurgeNotice" }, { limit: 1 })))[0]?.fields as unknown as PurgeNotice | undefined;
 			const host = withHost ? ((await call(space.readAll({ type: "HostInfo" }, { limit: 1 })))[0]?.fields as unknown as HostFacts | undefined) ?? null : undefined;
@@ -1463,6 +1472,7 @@ export class SocialSwarmHub {
 			} catch {
 				this.#markRemoteDown();
 				// shard host unreachable – report the local shard only
+				reports.push(await this.#shardReport(this.#remote, labels.remote, true, null, true));
 			}
 		}
 		const minute = Date.now() - 60_000;
@@ -1684,6 +1694,7 @@ export class SocialSwarmHub {
           ...(kind === "feed.more" && channel !== "all" ? { channel } : {}),
           ...(kind === "agent.posts" ? { handle } : {}), ai: kind === "ai.posts",
           signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(15_000)]),
+          ...(this.#remoteDown() ? { skip: [1] } : {}),
          }));
         } catch {
          // A shard index still migrating (or down) must not dead-end paging – scan instead.
@@ -1702,10 +1713,15 @@ export class SocialSwarmHub {
      case "thread.fetch": {
       const postId = String(msg.postId ?? "");
       const space = this.#shardSpaceFor(postId);
-      const g = await this.#postGraphIn(space);
-      const clicked = g.byId.get(postId) ?? this.#postById.get(postId) ?? null;
-      const root = this.#rootInGraph(g.byId, clicked);
-      const posts = root ? this.#threadInGraph(g.byId, g.children, root.postId) : [];
+      let root: SwarmPost | null = null, posts: unknown[] = [];
+      try {
+       const g = await this.#postGraphIn(space);
+       const clicked = g.byId.get(postId) ?? this.#postById.get(postId) ?? null;
+       root = this.#rootInGraph(g.byId, clicked);
+       posts = root ? this.#threadInGraph(g.byId, g.children, root.postId) : [];
+      } catch (e) {
+       if (space === this.space) throw e; // only the local shard's failure is a real error
+      }
       ws.send({ type: "thread", postId, rootId: root?.postId ?? postId, posts, inline: msg.inline === true });
       return;
      }

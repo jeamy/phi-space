@@ -991,7 +991,7 @@ code, kbd, pre { font-family: var(--font-geist-mono); }
 .system-bar__note { color: var(--text, inherit); font-weight: 700; }
 .system-bar__host { white-space: nowrap; }
 .system-bar__host b { color: var(--text, inherit); }
-.system-bar__host--down { opacity: 0.55; }
+.system-bar__host--down, .system-bar__host--down b { color: #ff5c5c; }
 
 .sf-col { min-height: 0; overflow-y: auto; }
 .sf-col--left, .sf-col--right {

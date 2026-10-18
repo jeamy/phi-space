@@ -172,7 +172,7 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `PHI_SPACES_ADMIN_PASSWORD` | Private web-login password; mandatory for Compose, otherwise login is disabled when absent. |
 | `PHI_SPACES_LLM` | Default 0; explicit 1 allows configured live providers and token costs. |
 | `PHI_SPACES_LLM_MODEL` / `PI_MODEL` | Initial model selection. |
-| `PI_AUTH_DIR` | Host credential directory mounted read-only by Docker; inspect the Compose mount before deployment. |
+| `PI_AUTH_DIR` | Host credential directory mounted read-only by Docker; inspect the Compose mount before deployment. With rootless Docker the host user maps to container root, so a `0400` `auth.json` is unreadable for the `node` user: point `PI_AUTH_DIR` at a copy owned by container uid 1000 (copy it in a `--user 0` helper container and `chown 1000:1000`). `auth.json` must be valid JSON (no trailing comma), otherwise the LLM stays off. |
 | `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
 | `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
 | `SWARM_REMOTE` | Optional hub-side shard endpoint, e.g. `tcp:127.0.0.1:3600` through an SSH tunnel. |

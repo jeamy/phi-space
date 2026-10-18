@@ -216,7 +216,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						className={view.kind === "space-chat" ? "nav-pill-btn is-active" : "nav-pill-btn"}
 						onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
 					>
-						<span>● LIVE CHAT (v1–v6)</span>
+						<span>● Multiplayer Chat (v1–v6)</span>
 					</button>
 					<button
 						type="button"
@@ -1186,7 +1186,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 							<span>Help ≠ Live State</span>
 							<p>
 								{locale === "de"
-									? "Stabile Semantik und Verträge hier. Aktuelle Laufzeitdaten im Live-Chat-Inspector und in AdminSpaces."
+									? "Stabile Semantik und Verträge hier. Aktuelle Laufzeitdaten im Multiplayer-Chat-Inspector und in AdminSpaces."
 									: "Stable semantics and contracts here. Current runtime facts live in the Chat Inspector and AdminSpaces."}
 							</p>
 						</div>

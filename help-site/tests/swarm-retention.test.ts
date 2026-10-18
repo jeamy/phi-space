@@ -103,3 +103,35 @@ test("retention: disabled hub reports no cap", async () => {
 		assert.equal((await f.hub.stats()).retention.cap, null);
 	} finally { await f.close(); }
 });
+
+test("shard down: history queries and thread fetches answer from the local shard, the bar reports the shard unreachable", async () => {
+	const registry = createRegistry(); registry.install(spaces);
+	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null });
+	const dead = new Proxy({}, { get: () => () => Promise.reject(Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })) }) as any;
+	hub.attachRemoteShard(dead, "b-", "tcp:nano:3600");
+	try {
+		await hub.init();
+		const deadline = Date.now() + 5_000;
+		while ((await hub.space.readAll({ type: "PostHistoryHead" }))[0]?.fields.ready !== true) {
+			assert.ok(Date.now() < deadline); await new Promise((r) => setTimeout(r, 10));
+		}
+		await addPost(hub, 1, 0);
+		const sent: any[] = []; let handler: (t: string) => Promise<void> | void = () => {};
+		await hub.attachWebSocket({ id: "t", send: (d: any) => sent.push(d), close() {}, onMessage: (h: (t: string) => Promise<void> | void) => { handler = h; }, onClose() {} } as any);
+		for (const type of ["feed.more", "ai.posts", "agent.posts"]) {
+			sent.length = 0;
+			await handler(JSON.stringify({ type, channel: "all", handle: "a" }));
+			const r = sent.find((m) => m.type === type)!;
+			assert.ok(r, `${type} answered`);
+			assert.notEqual(r.complete, false, `${type} is not reported as failed`);
+			assert.equal(r.error, undefined);
+		}
+		sent.length = 0;
+		await handler(JSON.stringify({ type: "thread.fetch", postId: "b-post-9" }));
+		assert.ok(sent.some((m) => m.type === "thread"), "thread of the dead shard answers empty");
+		assert.ok(!sent.some((m) => m.type === "feed.error"), "no error frame reaches the client");
+		const sys = await hub.systemInfo();
+		assert.deepEqual(sys.shards.map((s) => [s.shard, s.up]), [["a", true], ["b", false]]);
+	} finally { await hub.close(); await host.close(ctx); }
+});

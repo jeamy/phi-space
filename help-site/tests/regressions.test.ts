@@ -241,7 +241,7 @@ test("history deadlines stop abandoned traversals before another shard read", as
 		assert.equal(reads, 1);
 	} finally { await h.close(ctx); }
 });
-test("F14/F15: indexed pages merge shards without omissions; shard failure preserves retry", async () => {
+test("F14/F15: indexed pages merge shards without omissions; a failing secondary shard degrades, a failing local shard preserves retry", async () => {
 	const h = await memory(), other = await memory();
 	try {
 		const sources = [new PhiSpaces(h, ctx), new PhiSpaces(other, ctx)];
@@ -254,8 +254,13 @@ test("F14/F15: indexed pages merge shards without omissions; shard failure prese
 		for (let i = 0; i < 10; i++) { const page = await mergedHistory(sources, { cursors, beforeAt: Infinity, beforeId: "", limit: 7 }); ids.push(...page.posts.map(p => p.postId)); cursors = page.cursors; if (page.exhausted) break; }
 		assert.equal(ids.length, 30); assert.equal(new Set(ids).size, 30); assert.equal(ids[0], "p30");
 		const read = sources[1]!.readChain.bind(sources[1]); sources[1]!.readChain = async () => { throw new Error("shard unavailable"); };
-		await assert.rejects(mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 7 }), /unavailable/);
+		const degraded = await mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 30 });
+		assert.ok(degraded.posts.length > 0 && degraded.posts.every(p => Number(p.postId.slice(1)) % 2 === 0), "a failing secondary shard contributes nothing; the local shard still pages");
+		assert.equal((await mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 7, skip: [1] })).posts.length, 7, "a known-down shard is skipped");
 		sources[1]!.readChain = read;
+		const localRead = sources[0]!.readChain.bind(sources[0]); sources[0]!.readChain = async () => { throw new Error("local unavailable"); };
+		await assert.rejects(mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 7 }), /unavailable/, "the local shard must answer");
+		sources[0]!.readChain = localRead;
 		assert.equal((await mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 7 })).posts[0]!.postId, "p30");
 	} finally { await h.close(ctx); await other.close(ctx); }
 });
