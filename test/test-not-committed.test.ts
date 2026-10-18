@@ -25,15 +25,18 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
  await register.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[config.spaceId]:permit('primary')}});
  await register.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{[config.spaceId]:permit('standby')}});
  const pJournal=new PrimarySyncJournal(join(pHome.dir,'journal.sqlite'),config),sJournal=new PrimarySyncJournal(join(sHome.dir,'journal.sqlite'),config,{self:'s',assertStandby:assertSyncStandby(register,'s')});
- let partitioned=false;const peer:PrimarySyncPeer={accept:async i=>{if(partitioned)throw Error('standby unreachable');return sJournal.accept(i);}};
+ let partitioned=false,now=Date.now();const clock=()=>now,peer:PrimarySyncPeer={accept:async i=>{if(partitioned)throw Error('standby unreachable');return sJournal.accept(i);}};
  try{
   // Epoch 1 on p: r1 is confirmed by the standby, r2 is sealed only on p (the standby is away), then p is lost.
   const pRaw=await pHome.storage();await recoverPrimarySync(pRaw,pJournal,peer,ctx,assertSyncPrimary(register,'p',pJournal));
   const ph=await open(primarySyncStorage(pRaw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}));
   // A Space created like a real primary/sync Space keeps the epoch of its creation in its document.
   if(created)await ph.commit(tx=>createSpace(tx,'jobs',1,{spaceId:config.spaceId,incarnation:INC}),ctx);
-  const so=created?{space:'jobs'}:undefined,pc=new PiSpaces(ph,ctx,undefined,undefined,undefined,so),{generation}=await pc.issueGeneration(A,{primaryEpoch:1}),req=(requestId:string)=>({principal:A,generation,requestId});
+  const so=created?{space:'jobs'}:undefined,pc=new PiSpaces(ph,ctx,clock,undefined,undefined,so),{generation}=await pc.issueGeneration(A,{primaryEpoch:1}),req=(requestId:string)=>({principal:A,generation,requestId});
   const r1=await pc.write({type:'Work',fields:{n:1}},null,core.FOREVER,{request:req('r1')});
+  // t1: a confirmed take whose answer is lost (the client never sees it); two Jobs, so a second take would show.
+  await pc.write({type:'Job',fields:{n:1}},null,core.FOREVER);await pc.write({type:'Job',fields:{n:2}},null,core.FOREVER);
+  const t1=await pc.take({type:'Job'},0,{request:req('t1')});assert.ok(t1);
   partitioned=true;await assert.rejects(pc.write({type:'Work',fields:{n:2}},null,core.FOREVER,{request:req('r2')}),/sealed/);
   assert.equal(pJournal.head().revision,pJournal.appliedRevision+1,'r2 is a candidate on p only');
   await ph.close(ctx).catch(()=>{});
@@ -45,7 +48,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   const sRaw=await sHome.storage(),assert_=assertSyncPrimary(register,'s',sJournal);await recoverPrimarySync(sRaw,sJournal,null,ctx,assert_);
   const sh=await open(primarySyncStorage(sRaw,sJournal,null,{assertPrimary:assert_}));
   let evidence=true;
-  const service=new SpaceService({host:sh,ctx,identity:ids,policy:DEFAULT_POLICY,epochForSpace:async()=>sJournal.config.primaryEpoch,
+  const service=new SpaceService({host:sh,ctx,identity:ids,policy:DEFAULT_POLICY,now:clock,epochForSpace:async()=>sJournal.config.primaryEpoch,
    promotionProof:async(_space,epoch)=>evidence?promotionEvidence(sJournal,epoch,'s'):null});
   const resolve=(requestId:string,n:number,primaryEpoch=1)=>service.handle({method:'resolveOperation',...(so??{}),args:{targetRequest:{generation,requestId},method:'write',argumentHash:writeHash(n),primaryEpoch}} as any,{peerId:'peer-a'});
   // Without evidence the outcome stays unknown (the router keeps it for review).
@@ -57,7 +60,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   assert.deepEqual(ok(await resolve('r2',2)),v2,'repeatable');
   assert.equal(code(await resolve('r2',3)),'RequestConflict','other arguments under the same request ID');
   // A late original call meets the negative claim: no effect, ever.
-  const sc=new PiSpaces(sh,ctx,undefined,undefined,undefined,so);
+  const sc=new PiSpaces(sh,ctx,clock,undefined,undefined,so);
   await assert.rejects(sc.write({type:'Work',fields:{n:2}},null,core.FOREVER,{request:req('r2')}),claims.NotCommitted);
   assert.equal(await sc.count({type:'Work',fields:{n:2}}),0);assert.equal(await sc.count({type:'Work',fields:{n:1}}),1);
   const poll=ok(await service.handle({method:'pollOperation',...(so??{}),args:{targetRequest:{generation,requestId:'r2'}}} as any,{peerId:'peer-a'}));assert.equal(poll.error.code,'NotCommitted');
@@ -72,7 +75,32 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   assert.equal(promotionEvidence(sJournal,3,'s'),null);assert.equal(promotionEvidence(sJournal,1,'p'),null,'only the current primary can give it');
   // The old primary never applies its candidate: it is fenced.
   assert.equal(pJournal.appliedRevision+1,pJournal.head().revision);
+  // A take confirmed before the promotion, its answer lost: a retry with the updated frame gets the stored result.
+  const takeCall=(template:core.Template,primaryEpoch:number)=>service.handle({method:'take',...(so??{}),request:{generation,requestId:'t1'},frame:{primaryEpoch},args:{template,timeoutMs:0}} as any,{peerId:'peer-a'});
+  assert.equal(code(await takeCall({type:'Job'},1)),'StaleEpoch','the old frame is refused: the client learns the new epoch');
+  const again=ok(await takeCall({type:'Job'},3));assert.equal(again.state,'done');assert.deepEqual(again.entry,core.plain(t1),'the stored take');
+  assert.equal(await sc.count({type:'Job'}),1,'no second take');
+  assert.equal(code(await takeCall({type:'Other'},3)),'RequestConflict','other arguments under the same request ID');
+  // A late original arriving before any resolution takes effect under its own claim; resolving it then finds that claim.
+  const r4=await sc.write({type:'Work',fields:{n:4}},null,core.FOREVER,{request:req('r4')});
+  const v4=ok(await resolve('r4',4));assert.equal(v4.state,'done');assert.deepEqual(v4.result,r4,'the original took effect: never NotCommitted');
+  // The negative claim survives a restart: the late original still has no effect.
   await sHome.close(sh);
+  const sRaw2=await sHome.storage();await recoverPrimarySync(sRaw2,sJournal,null,ctx,assert_);
+  const sh2=await open(primarySyncStorage(sRaw2,sJournal,null,{assertPrimary:assert_}));
+  const service2=new SpaceService({host:sh2,ctx,identity:ids,policy:DEFAULT_POLICY,now:clock,epochForSpace:async()=>sJournal.config.primaryEpoch,promotionProof:async(_space,epoch)=>promotionEvidence(sJournal,epoch,'s')});
+  const resolve2=(requestId:string,n:number)=>service2.handle({method:'resolveOperation',...(so??{}),args:{targetRequest:{generation,requestId},method:'write',argumentHash:writeHash(n),primaryEpoch:1}} as any,{peerId:'peer-a'});
+  const sc2=new PiSpaces(sh2,ctx,clock,undefined,undefined,so);
+  assert.deepEqual(ok(await resolve2('r2',2)),v2,'the negative claim is durable');
+  await assert.rejects(sc2.write({type:'Work',fields:{n:2}},null,core.FOREVER,{request:req('r2')}),claims.NotCommitted);
+  assert.equal(await sc2.count({type:'Work',fields:{n:2}}),0);
+  // Once result retention and admission are over, claim and generation are swept: an old retry is RequestExpired,
+  // never NotCommitted and never a new effect.
+  now+=25*3600_000;await sc2.issueGeneration(A,{primaryEpoch:3});// (any new request sweeps)
+  assert.equal(code(await resolve2('r1',1)),'RequestExpired');
+  await assert.rejects(sc2.write({type:'Work',fields:{n:1}},null,core.FOREVER,{request:req('r1')}),claims.RequestExpired);
+  assert.equal(await sc2.count({type:'Work',fields:{n:1}}),1,'the confirmed write stays once');
+  await sHome.close(sh2);
  }finally{pJournal.close();sJournal.close();register.close();await pHome.dispose();await sHome.dispose();}
 });
 

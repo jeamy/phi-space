@@ -23,11 +23,11 @@ async function setup(backend:typeof BACKENDS[number]){
  await register.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{[config.spaceId]:permit(config,'standby','inc')}});
  const pJournal=new PrimarySyncJournal(join(pHome.dir,'journal.sqlite'),config);
  const sJournal=new PrimarySyncJournal(join(sHome.dir,'journal.sqlite'),config,{self:'s',assertStandby:assertSyncStandby(register,'s')});
- let partitioned=false;const peer:PrimarySyncPeer={accept:async i=>{if(partitioned)throw Error('standby unreachable');return sJournal.accept(i);}};
+ let partitioned=false,loseAck=false;const peer:PrimarySyncPeer={accept:async i=>{if(partitioned)throw Error('standby unreachable');const ack=await sJournal.accept(i);if(loseAck){loseAck=false;throw Error('lost standby ACK');}return ack;}};
  const raw=pHome.storage.bind(pHome);
  pHome.storage=async()=>{const st=await raw();await recoverPrimarySync(st,pJournal,peer,ctx,assertSyncPrimary(register,'p',pJournal));return primarySyncStorage(st,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)});};
  const dispose=async()=>{pJournal.close();sJournal.close();await pHome.dispose();await sHome.dispose();};
- return {pHome,sHome,register,pJournal,sJournal,raw,partition:(v:boolean)=>{partitioned=v;},dispose};
+ return {pHome,sHome,register,pJournal,sJournal,raw,partition:(v:boolean)=>{partitioned=v;},loseAck:()=>{loseAck=true;},dispose};
 }
 const target=(hostId:string,journal:PrimarySyncJournal,register:RecoveryRegister):StandbyTarget=>({hostId,head:async()=>journal.head(),catchUp:i=>journal.catchUp(i,assertQuarantine(register,hostId)),accept:i=>journal.accept(i)});
 
@@ -105,6 +105,69 @@ for(const backend of BACKENDS){
     h=await t.pHome.open();await client().write({type:'Work',fields:{n:4}},null,core.FOREVER);assert.equal(fJournal.head().hash,t.pJournal.head().hash);
     const fs=await fresh.storage();await materializeSyncHistory(fs,fJournal,ctx);await fs.close(ctx);const fh=await fresh.open();
     assert.deepEqual(await fh.snapshot(Space,ctx),await h.snapshot(Space,ctx));await fresh.close(fh);await t.pHome.close(h);
+   }finally{fJournal.close();await fresh.dispose();}
+  }finally{await t.dispose();}
+ });
+
+ test(`${backend}: a candidate the standby accepted, ACK lost, then the primary dies and degrades: it takes effect once with its result; an old proof after setStandby is refused`,async()=>{
+  const t=await setup(backend);
+  try{
+   let h=await t.pHome.open();const c=()=>new PiSpaces(h,ctx),principal={peerId:'peer-a'};
+   const {generation}=await c().issueGeneration(principal,{primaryEpoch:1}),request={principal,generation,requestId:'w1'};
+   t.loseAck();await assert.rejects(c().write({type:'Work',fields:{n:1}},null,core.FOREVER,{request}),CommitSealed);
+   const candidate=t.pJournal.head();assert.deepEqual(t.sJournal.head(),candidate,'the standby holds the candidate');
+   await t.pHome.close(h).catch(()=>{});// the primary dies; then the standby is lost as well
+   t.partition(true);
+   const sim=new SimulatorFencing(),proof=await sim.fence('s','standby lost'),st=await t.raw();
+   const o={storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc',ctx,recoveryId:'degrade-ack',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof,allowSimulator:true};
+   const done=await degradeToSingle(o);await st.close(ctx);
+   assert.deepEqual(done.recoveredCommitted,[candidate.revision]);
+   h=await t.pHome.open();
+   assert.equal(await c().count({type:'Work'}),1,'exactly once');
+   const lease=await c().write({type:'Work',fields:{n:1}},null,core.FOREVER,{request});
+   assert.ok(lease,'the retry gets the stored result, no miss or abort');assert.equal((await c().pollOperation(request)).state,'done');
+   assert.equal(await c().count({type:'Work'}),1);await t.pHome.close(h);
+   // setStandby brings s back; the proof from before its release no longer verifies and authorizes nothing.
+   await releaseHostToQuarantine(t.register,'s','rejoin-s',sim);
+   const fresh=new PersistentHome(backend),fJournal=new PrimarySyncJournal(join(fresh.dir,'journal.sqlite'),config,{self:'s',assertStandby:assertSyncStandby(t.register,'s')});
+   try{
+    let st2=await t.raw();
+    await setStandby({storage:st2,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc',ctx,transitionId:'standby-back',target:target('s',fJournal,t.register),targetDataIncarnation:'inc'});await st2.close(ctx);
+    st2=await t.raw();
+    await assert.rejects(degradeToSingle({...o,storage:st2,recoveryId:'degrade-stale',expectedPrimaryEpoch:2,expectedReplicaConfigVersion:3}),/no verified fencing proof for s/);
+    await st2.close(ctx);
+    assert.equal(t.pJournal.config.durability,'sync');assert.equal((await t.register.get<any>('boot:s'))!.value.state,'active','the stale proof fenced nothing');
+   }finally{fJournal.close();await fresh.dispose();}
+  }finally{await t.dispose();}
+ });
+
+ test(`${backend}: setStandby whose confirming ACK is lost admits no write until the same transition completes`,async()=>{
+  const t=await setup(backend);
+  try{
+   let h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
+   t.partition(true);
+   const sim=new SimulatorFencing(),st=await t.raw();
+   await degradeToSingle({storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc',ctx,recoveryId:'degrade-1',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof:await sim.fence('s','standby lost'),allowSimulator:true});await st.close(ctx);
+   await releaseHostToQuarantine(t.register,'s','rejoin-s',sim);
+   const fresh=new PersistentHome(backend),fJournal=new PrimarySyncJournal(join(fresh.dir,'journal.sqlite'),config,{self:'s',assertStandby:assertSyncStandby(t.register,'s')});
+   try{
+    // The target accepts the confirming entry, but its ACK never arrives.
+    let lose=true;const base=target('s',fJournal,t.register),flaky:StandbyTarget={...base,accept:async i=>{const ack=await base.accept(i);if(lose&&i.revision===t.pJournal.head().revision){lose=false;throw Error('lost ACK');}return ack;}};
+    const so={journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc',ctx,transitionId:'standby-1',target:flaky,targetDataIncarnation:'inc'};
+    let st2=await t.raw();await assert.rejects(setStandby({...so,storage:st2}),/durably sealed/);await st2.close(ctx);
+    assert.deepEqual(t.pJournal.openTransitionIds(),['standby-1']);
+    assert.equal((await t.register.get<any>('boot:s'))!.value.state,'quarantine','no permit while the outcome is unclear');
+    // Restart: no write before the same transition is completed; another transition cannot start.
+    await assert.rejects(t.pHome.open().then(x=>new PiSpaces(x,ctx).write({type:'Blocked',fields:{}},null,core.FOREVER)));
+    st2=await t.raw();
+    await assert.rejects(setStandby({...so,storage:st2,transitionId:'standby-2'}),/standby-1 is still open/);
+    const res=await setStandby({...so,storage:st2});await st2.close(ctx);
+    assert.deepEqual([res.config.durability,res.config.standbyReplica],['sync','s']);assert.deepEqual(fJournal.head(),t.pJournal.head());
+    assert.equal((await t.register.get<any>('boot:s'))!.value.state,'active');
+    // The excluded old replica cannot promote: its standby permit was replaced by the new one's configuration.
+    const old=await t.sHome.storage();
+    await assert.rejects(promote({storage:old,journal:t.sJournal,register:t.register,hostId:'s',dataIncarnation:'inc',ctx,recoveryId:'promote-old',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof:await sim.fence('p','x'),allowSimulator:true}),/permit|configuration/);
+    await old.close(ctx);await sim.release('p');
    }finally{fJournal.close();await fresh.dispose();}
   }finally{await t.dispose();}
  });

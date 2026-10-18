@@ -40,16 +40,16 @@ Weitere Inhalte der Stufe:
 
 | # | Fehlerablauf | Lokal | Real | Stand |
 |---|---|---|---|---|
-| K1 | Standby persistiert Batch, ACK verloren; Primary stirbt; danach `degradeToSingle` | `test-primary-sync` (`lostAck`, Klärung mit dem Standby) und `test-replica-control` (Degrade nach Partition) | — | teilweise: ACK-Verlust gefolgt von Degrade fehlt als ein Ablauf |
+| K1 | Standby persistiert Batch, ACK verloren; Primary stirbt; danach `degradeToSingle` | `test-replica-control` (ACK verloren, Primary weg, Degrade: Kandidat genau einmal, Retry erhält das gespeicherte Ergebnis); `test-primary-sync` (`lostAck`) | — | erfüllt |
 | K2 | Primary-Prozess stirbt nach Versiegeln vor Send, Reopen des ursprünglichen Storage; Standby unerreichbar; Fencing und Single | `test-replica-control` (Kandidat lokal abgeschlossen, genau einmal sichtbar), `test-primary-sync` (beschädigter Marker oder Hash blockiert) | `phase3-sync-2026-10-16` (`recoveredCommitted: [7]`) | erfüllt |
 | K3 | Primary-Storage geht nach Versiegeln verloren; Standby lebt; Fencing und Promotion | `test-not-committed` (Negativclaim, `NotCommitted`, bestätigte bleiben) | `phase3-partition-2026-10-17` (Failover mit `NotCommitted`) | erfüllt |
-| K4 | Take bestätigt, Antwort verloren, dann Promotion; Retry mit aktualisiertem Rahmen | — | — | offen |
-| K5 | Erststart ohne Boot-Berechtigung, veralteter Nachweis nach `setStandby`, Promotion in Quarantäne | `test-recovery` (Boot-Prüfung je Space), `test-replica-control` (Promotion in Quarantäne abgewiesen, Replikate nach `setStandby` gleich) | `phase3-daemon-cycle-2026-10-17` | teilweise: Ablehnung eines veralteten Nachweises durch `promote`/`degrade` nicht geprüft (`verify` allein schon) |
+| K4 | Take bestätigt, Antwort verloren, dann Promotion; Retry mit aktualisiertem Rahmen | `test-not-committed` (alter Rahmen `StaleEpoch`, neuer Rahmen liefert den gespeicherten Take ohne zweiten, andere Argumente `RequestConflict`) | — | erfüllt |
+| K5 | Erststart ohne Boot-Berechtigung, veralteter Nachweis nach `setStandby`, Promotion in Quarantäne | `test-recovery` (Boot-Prüfung je Space), `test-replica-control` (Promotion in Quarantäne abgewiesen, Replikate nach `setStandby` gleich, Nachweis von vor der Freigabe autorisiert kein `degrade`) | `phase3-daemon-cycle-2026-10-17` | erfüllt |
 | K6 | Entfernten Data Space auf Single umstellen, Control dabei offline | `test-delegation` (`ReplicaConfigPending` bis zur Übernahme), `test-replica-control` (Übernahme nur nach Register) | `root-hosta-2026-10-17` (Übernahme der Notice) | erfüllt; Control war im echten Lauf erreichbar |
 | K7 | Control-Promotion ohne verfügbaren Standby, danach Ersatz einrichten | `test-replica-control` (nach Promotion ohne Standby bleiben Writes gesperrt), `test-control-host-change` | `control-promotion-2026-10-17`, `root-promotion-2026-10-17` | erfüllt |
-| K8 | ACK-Verlust und Neustart während `setStandby`; altes Replikat kehrt zurück | `test-replica-control` (Absturz vor dem Boot-CAS, Schreibsperre offener Übergänge, Fencing beim Nachladen), `test-degrade-revoke` | `phase3-partition-2026-10-17` (abgebrochenes `set-standby` mit derselben ID fortgesetzt) | teilweise: verlorene Bestätigung des Ziels nicht gezielt geprüft |
-| K9 | Erfolgreicher Request, Claim und Generation bereinigt, dann Promotion und alter Retry | `test-not-committed` nur auf MemoryStorage, ohne Promotion | — | offen |
-| K10 | Unbekannter alter Request gegen verspäteten Original-Aufruf; Absturz nach Negativclaim | `test-not-committed` (Negativclaim zuerst, Original danach ohne Wirkung) | `phase3-partition-2026-10-17` | teilweise: Original zuerst und Reopen nach dem Negativclaim fehlen |
+| K8 | ACK-Verlust und Neustart während `setStandby`; altes Replikat kehrt zurück | `test-replica-control` (verlorene Bestätigung des Ziels: kein Write und kein zweiter Übergang, dieselbe ID schließt ab; altes Replikat kann nicht promovieren), `test-degrade-revoke` | `phase3-partition-2026-10-17` (abgebrochenes `set-standby` mit derselben ID fortgesetzt) | erfüllt |
+| K9 | Erfolgreicher Request, Claim und Generation bereinigt, dann Promotion und alter Retry | `test-not-committed` (nach Ablauf von Ergebnisfrist und Zulassung: Klärung und Retry `RequestExpired`, keine neue Wirkung) | — | erfüllt |
+| K10 | Unbekannter alter Request gegen verspäteten Original-Aufruf; Absturz nach Negativclaim | `test-not-committed` (Negativclaim zuerst: Original ohne Wirkung, auch nach Neustart; Original zuerst: Wirkung mit eigenem Claim, die Klärung findet ihn) | `phase3-partition-2026-10-17` | erfüllt |
 | K11 | Zwei Spaces auf einem Host mit verschiedenen Replikatversionen; Übergang eines Space, danach Reboot beider Hosts | `test-replica-control` (Boot-Guard, Wiederzulassung je Space), `test-degrade-revoke` (anderer Space bleibt) | `phase3-partition-2026-10-17` (Hauptstore single neben `jobs-part` sync, Neustart beider Hosts) | erfüllt |
 | K12 | Abbruch zwischen lokaler Promotion/degrade/`setStandby` und externem Boot-Abgleich | `test-replica-control` (alle drei: Absturz vor dem Boot-CAS, dieselbe ID setzt fort, `assertSyncPrimary` sperrt jeden Commit einschließlich Grants) | — | erfüllt |
 
@@ -65,6 +65,5 @@ Weitere Inhalte der Stufe:
 
 ## Offen für die Abnahme
 
-1. Lokale Tests: K1, K4, K5, K8, K9, K10.
-2. Code: B4 (Sperre derselben Boot-Sitzung), B5 (Werkzeug).
-3. Echter Lauf: S1 (10-min-Partition auf dem Merge-Pfad), B1, B2, B3.
+1. Code: B4 (Sperre derselben Boot-Sitzung), B5 (Werkzeug).
+2. Echter Lauf: S1 (10-min-Partition auf dem Merge-Pfad), B1, B2, B3.
