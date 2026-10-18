@@ -42,7 +42,13 @@ Das `ReplicaConfigPending`-Fenster ist im Lauf nicht unterscheidbar aufgetreten:
 the router yet“; drei meldeten „bound child outcome is unresolved“, was auch das Fenster sein kann. Es gilt als lokal
 nachgewiesen (`test-delegation`).
 
-Ein dritter Zyklus für `NotCommitted` nach Promotion über den Root (`jobs-root3`, `final-member-3`) blieb stecken:
+**`NotCommitted` über den Root (bestanden, Bündel `ebb87f58`, Stand `275924a`):** host-a wurde dafür zuerst auf den
+Stand vor dem Lauf zurückgesetzt (Abgleich der Control-Einträge: nur Einträge dieses Laufs). Ein frischer Root mit
+nur `final-member-4` (`jobs-root4`, nanoi Primary): Fork als Write einer gerouteten Transaktion, versiegelt nur auf
+nanoi; Promotion von 100 mit netcup-Fencing, Degrade, Übernahme der Notice; der Root klärte den Fork-Schritt beim
+beförderten Primary mit der gebundenen Epoche als `NotCommitted`; der Fork wirkte nirgends.
+
+Ein vorheriger Zyklus (`jobs-root3`, `final-member-3`) blieb stecken:
 `addMember` steht in Phase `committed` (Policy-Version 6, Member `adding`), ohne Ergebnis; weder ein neuer Befehl
 noch ein Neustart von host-a setzten fort. Auslöser war vermutlich die `policy`-Anweisung an `final-member-2`, die auf
 100 versiegelt blieb, solange nanoi (gesperrt, siehe unten) nicht erreichbar war. Das ist ein eigener Befund.

@@ -832,8 +832,168 @@
   ]
  },
  "notCommittedCycle": {
+  "space": "jobs-root4",
+  "member": "final-member-4",
+  "bundle": "ebb87f58f04afa28 (275924a)",
+  "passed": true,
+  "note": "host-a restored to its pre-run state first (control diff: only entries of this run); fresh Root with only this member",
+  "steps": {
+   "preflight": {
+    "bundle": "ebb87f58f04afa28",
+    "member": {
+     "id": "final-member-4",
+     "target": {
+      "hostId": "nano-test",
+      "spaceId": "sp-5366ecb0-4e65-4aa8-85bf-2c90c090b415",
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "6797330f",
+      "primaryEpoch": 1
+     },
+     "state": "active",
+     "replication": {
+      "primaryReplica": "nano-test",
+      "standbyReplica": "standby-100",
+      "replicaConfigVersion": 1,
+      "durability": "sync"
+     }
+    }
+   },
+   "fork": {
+    "fork": {
+     "revision": 7,
+     "hash": "58652e263ce3cdf557add97adff03a4bae3466877f21de1cd03145d0140c4a80",
+     "configHash": "1014336fc8466201b28fc203323ef53421a93a200cedda6b912cf34dbb63e335"
+    },
+    "txn": {
+     "id": "t6797330f-1",
+     "expires": 1792334183679,
+     "member": "final-member-4",
+     "originId": "fork-txn"
+    },
+    "answer": {
+     "id": "final-1792334128632-2",
+     "passed": false,
+     "error": "bound child outcome is unresolved"
+    }
+   },
+   "promote": {
+    "recoveryId": "final-promote",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 2,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 2,
+     "spaceId": "sp-5366ecb0-4e65-4aa8-85bf-2c90c090b415",
+     "standbyReplica": "nano-test"
+    },
+    "proof": {
+     "kind": "cloud",
+     "evidence": {
+      "provider": "netcup",
+      "serverId": 964249,
+      "state": "SHUTOFF",
+      "autostart": false,
+      "reason": "promote final-promote"
+     }
+    }
+   },
+   "degrade": {
+    "recoveryId": "final-degrade",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 3,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 3,
+     "spaceId": "sp-5366ecb0-4e65-4aa8-85bf-2c90c090b415",
+     "standbyReplica": null
+    },
+    "recoveredCommitted": [],
+    "proof": {
+     "kind": "cloud",
+     "evidence": {
+      "provider": "netcup",
+      "serverId": 964249,
+      "state": "SHUTOFF",
+      "autostart": false,
+      "reason": "degrade final-degrade"
+     }
+    }
+   },
+   "start-new-primary": {
+    "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}",
+    "adopted": {
+     "id": "final-member-4",
+     "target": {
+      "hostId": "standby-100",
+      "spaceId": "sp-5366ecb0-4e65-4aa8-85bf-2c90c090b415",
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "6797330f",
+      "primaryEpoch": 3
+     },
+     "state": "active",
+     "replication": {
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 3,
+      "durability": "single",
+      "recoveryId": "final-degrade"
+     }
+    }
+   },
+   "not-committed": {
+    "errors": [
+     "bound child outcome is unresolved",
+     "definitive child failure or review requires explicit review"
+    ],
+    "diagnose": {
+     "id": "final-1792334238552-5",
+     "passed": true,
+     "result": {
+      "id": "fork",
+      "phase": "needsReview",
+      "children": [
+       {
+        "id": "f-719f22623955bb63b65c7a26874c48e5289a19406b3ef66a5c65d90d7190e149",
+        "state": "failed",
+        "steps": [
+         {
+          "state": "failed",
+          "evidence": "NotCommitted",
+          "requestId": "router-a179694eeeda320d840243f06d184798824e52d15227e4208f7075f0545c1c40"
+         }
+        ],
+        "resolution": {
+         "target": {
+          "hostId": "nano-test",
+          "spaceId": "sp-5366ecb0-4e65-4aa8-85bf-2c90c090b415",
+          "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+          "dataIncarnation": "6797330f",
+          "primaryEpoch": 1
+         },
+         "principal": {
+          "peerId": "db3r4ovlh8lg008eup20",
+          "agentId": "routed-probe"
+         },
+         "method": "write",
+         "generation": "g056426d6817bbaac853e63aff29e38a3.cadee8199a8592fa8ec809449473d955704b5612349540db4d21586f5228bd2f",
+         "requestId": "router-a179694eeeda320d840243f06d184798824e52d15227e4208f7075f0545c1c40",
+         "argHash": "3829f112c70d2623c530c7f6971bdcb2594de46681014668f51a2ad8a8245086",
+         "outcome": "failed",
+         "result": null,
+         "evidence": "NotCommitted"
+        }
+       }
+      ]
+     }
+    },
+    "forkEntries": 0
+   }
+  }
+ },
+ "notCommittedCycleAborted": {
   "space": "jobs-root3",
   "member": "final-member-3",
-  "state": "abandoned: addMember stuck in phase committed (finding)"
+  "state": "addMember stuck in phase committed (finding)"
  }
 }

@@ -57,7 +57,7 @@ Weitere Inhalte der Stufe:
 
 | # | Punkt | Stand |
 |---|---|---|
-| B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | real (`phase3-final-2026-10-18`): geroutete Writes durch Partition, Promotion, Degrade mit und ohne Adapter, Rückwege mit `set-standby` bei laufendem Root; Klärung beim Nachfolger nach Degrade real. `NotCommitted` nach Promotion über den Root nur lokal (`test-delegation`, `91e24c1`): der reale Versuch zeigte den behobenen Policy-Befund, die Wiederholung scheiterte an der hängenden Member-Aufnahme | teilweise |
+| B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | real (`phase3-final-2026-10-18`): geroutete Writes durch Partition, Promotion, Degrade mit und ohne Adapter, Rückwege mit `set-standby` bei laufendem Root; Klärung beim Nachfolger nach Degrade (ursprüngliches Ergebnis) und nach Promotion (`NotCommitted`, Fork ohne Wirkung); das `ReplicaConfigPending`-Fenster nur lokal (`test-delegation`) | erfüllt |
 | B2 | Ausfall eines NetBird-Agenten | real (`phase3-final-2026-10-18`): 120 s Agent aus auf dem Standby, Write versiegelt und danach entschieden, Daemon ohne Neustart | erfüllt |
 | B3 | Erschöpfter Speicher | real (`phase3-final-2026-10-18`): volles Journal lehnt mit `ResourceExhausted` ab, Lesen und anderer Space gehen weiter; lokal `test-primary-sync`, `test-entry-replication`; ENOSPC nicht geprüft | erfüllt (Journal-Budget) |
 | B4 | Prozessabbruch ohne Operatorschritt | real (`phase3-final-2026-10-18`): SIGKILL auf beiden Hosts, Sperre vom Daemon selbst geräumt (`processGone`); lokal `test-replica-control` | erfüllt |
@@ -65,7 +65,6 @@ Weitere Inhalte der Stufe:
 
 ## Offen für die Abnahme
 
-- B1: `NotCommitted` nach Promotion über den Root real (lokal bewiesen).
 - Befund aus dem Lauf vom 2026-10-18: Eine Member-Aufnahme (`addMember`), die nach Phase `committed` unterbrochen wird,
   läuft nicht weiter und blockiert weitere Mitgliedschaftsbefehle.
 - Außerhalb der Abnahmekriterien: Boot- und Löschintegration des Sync-Journals
