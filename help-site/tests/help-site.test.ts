@@ -24,6 +24,10 @@ import { ALL_ARTICLES } from "../scripts/corpus.ts";
 
 test("1. Help Corpus, Markdown {#anchor} rendering & token-aware search", async () => {
 	await buildHelpSite();
+	const { readFile } = await import("node:fs/promises");
+	const standalone = await readFile(new URL("../dist/public/assets/app.js", import.meta.url), "utf8");
+	assert.match(standalone, /createRoot/);
+	assert.match(standalone, /getElementById\("app"\)/, "standalone bundle must actually mount the Help app");
 	const html = renderMarkdownToHtml("## Überblick {#overview}\n\nEin Absatz mit `code`.");
 	assert.ok(html.includes('<h2 id="overview">Überblick</h2>'), "explicit {#anchor} becomes DOM id and is stripped from visible text");
 	assert.ok(!html.includes("{#overview}"), "raw {#anchor} marker is never visible");

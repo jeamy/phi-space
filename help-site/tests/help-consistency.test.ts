@@ -15,7 +15,7 @@ import { SnapshotExpired, type Changes, type Page } from "../../src/core.ts";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { Meter, spaces } from "../../src/index.ts";
+import { FOREVER, Meter, PiSpaces, spaces } from "../../src/index.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 
 test("help corpus: identities, API facts, links, anchors and table structure are consistent", async () => {
@@ -46,6 +46,8 @@ test("help API index: displayed signatures are extracted from actual exports", (
 	assert.match(signatures.get("help.api.pispaces_write")!, /PiSpaces.write\(entry:/);
 	assert.match(signatures.get("help.api.operations_runs_workers")!, /start\(commandId: string, spec: RunSpec\)/);
 	assert.match(signatures.get("help.api.pispaces_wait_notify_mailbox")!, /RemoteSpace.events\(/);
+	assert.match(signatures.get("help.api.pispaces_read")!, /Promise<core.EntryView \| null>/);
+	for (const signature of signatures.values()) assert.doesNotMatch(signature, /import\("(?:\/|[A-Za-z]:)/);
 });
 
 test("help renderer: code unions, nested lists, numbering and safe links", () => {
@@ -130,4 +132,22 @@ test("help live sync: expired/mismatched stream discards partial state, failure 
 	await assert.rejects(refreshMirror({readPage:async()=>{throw new SnapshotExpired("expired");},changes:async()=>assert.fail()},undefined,2),SnapshotExpired);
 	await assert.rejects(refreshMirror({readPage:async()=>assert.fail(),changes:async()=>{throw new Error("offline");}},old),/offline/);
 	assert.deepEqual([...old.entries.keys()],["old"]);
+});
+
+test("help live sync: actual PiSpaces puts/deletes converge without mutating the old mirror", async () => {
+	const registry = createRegistry(); registry.install(spaces);
+	const host = await Harness.open(new MemoryStorage(),{models:createModels(),registry},ctx);
+	try {
+		const space = new PiSpaces(host,ctx);
+		const first = await space.write({type:"Job",fields:{n:1}},null,FOREVER);
+		await space.write({type:"Job",fields:{n:2}},null,FOREVER);
+		const old = await refreshMirror(space);
+		await space.take({id:first.id},0);
+		const fresh = await space.write({type:"Job",fields:{n:3}},null,FOREVER);
+		const next = await refreshMirror(space,old);
+		assert.equal(old.entries.has(first.id),true);
+		assert.equal(next.entries.has(first.id),false);
+		assert.equal(next.entries.has(fresh.id),true);
+		assert.equal(next.entries.size,2);
+	} finally { await host.close(ctx); }
 });

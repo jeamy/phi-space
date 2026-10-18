@@ -1,6 +1,6 @@
 // Displayed API signatures come from the compiler, never a manually maintained string.
 import ts from "typescript";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const bindings: Record<string, string[]> = {
@@ -21,7 +21,7 @@ const bindings: Record<string, string[]> = {
 
 export function apiSignatures(): Map<string, string> {
 	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts");
-	const program = ts.createProgram([path], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
+	const program = ts.createProgram([path], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strictNullChecks:true,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
 	const checker = program.getTypeChecker(), source = program.getSourceFile(path)!;
 	const exports = new Map(checker.getExportsOfModule(checker.getSymbolAtLocation(source)!).map(s => [s.name,s]));
 	const output = new Map<string,string>();
@@ -40,7 +40,16 @@ export function apiSignatures(): Map<string, string> {
 			const call=checker.getSignaturesOfType(type,ts.SignatureKind.Call), construct=checker.getSignaturesOfType(type,ts.SignatureKind.Construct);
 			const signatures=call.length?call:construct;
 			if(!signatures.length)throw new Error(`No callable API signature ${binding}`);
-			return `${!call.length?"new ":""}${binding}${checker.signatureToString(signatures[0]!,source,ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope)}`;
+			const signature = checker.signatureToString(signatures[0]!,source,ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope);
+			// Anonymous inferred return types can still contain absolute import paths despite alias formatting.
+			// Keep these references relative to src/ so builds are portable and expose no checkout paths.
+			const portable = signature.replace(/import\("([^"]+)"\)/g, (original, modulePath: string) => {
+				if (!isAbsolute(modulePath)) return original;
+				const local = relative(resolve(root, "src"), modulePath).replaceAll("\\", "/");
+				if (local.startsWith("../")) throw new Error(`Nonportable API type reference in ${binding}`);
+				return `import("./${local}${local.endsWith(".ts") ? "" : ".ts"}")`;
+			});
+			return `${!call.length?"new ":""}${binding}${portable}`;
 		});
 		output.set(`help.api.${id}`,signatures.join("; "));
 	}

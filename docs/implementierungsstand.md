@@ -8,11 +8,17 @@ Bausteine unten bereits vorhanden sind.
 Ergänzung vom 18. Oktober 2026: Die Hilfesystem-/Demo-Befunde F01–F23 wurden
 mit gezielten lokalen Regressionstests bearbeitet. Änderungen, Nachweise und
 bewusste Grenzen stehen in der [Umsetzungstabelle der Analyse](analyse-hilfesystem-demo-apps-2026-10-18.md#7-schrittweise-umsetzung-vom-18-oktober-2026)
-und im [Betriebsvertrag des Hilfesystems](../help-site/README.md#demo-vertrag-und-wiederanlauf).
+und im [Betriebsvertrag des Hilfesystems](../help-site/README.md#runtime-contract-and-restart).
 `PiSpaces.write` und `RemoteSpace.write` unterstützen eine optionale atomare
 Singleton-Erstanlage über `unique`-Schlüsselfelder; ältere Remote-Server ohne
 `write.unique` werden dafür abgewiesen. Dies ist eine lokale/RPC-Erweiterung,
 keine neue Zusage globaler Eindeutigkeit oder einer abgenommenen Replikation.
+
+Die [Corpus-Konsistenzprüfung vom 18. Oktober](analyse-hilfecorpus-konsistenz-2026-10-18.md)
+ergänzt dies um acht zweisprachige Praxisleitfäden, aus TypeScript abgeleitete API-Signaturen,
+60 kompilierte Dokumentationsbeispiele sowie geprüfte Navigation, Live-Mirror und Shutdown.
+Standalone-Client und frischer Next-Produktionsbuild sind lokal geprüft. Der Bericht trennt
+abgeschlossene lokale Korrekturen von weiterhin offenen Deployment-/Last-/Ausfallabnahmen.
 
 ## Umfang und Grenzen
 

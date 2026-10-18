@@ -514,7 +514,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									<div className="execution-lane">
 										<div className="execution-lane__identity">
 											<strong>CLUSTER</strong>
-											<span>V4–V6 FEDERATED</span>
+											<span>V4 GATE · V5 ROUTING · V6 OPS</span>
 										</div>
 										<ol className="execution-sequence">
 											<li className="process-plate">

@@ -68,7 +68,7 @@ services:
         required: false
     environment:
       NODE_ENV: test
-    command: ["node", "--experimental-strip-types", "--test", "help-site/tests/help-site.test.ts"]
+    command: ["npm", "--prefix", "help-site", "test"]
 
   # ---- 3. Local Development Server in Docker ----
   spaces-help-dev:

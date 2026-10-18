@@ -779,7 +779,7 @@ node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 		since: "0.0.1",
 		de: {
 			title: "write – Entry schreiben",
-			short: "Erzeugt immer einen neuen typisierten Entry mit Lease; unter einer Transaktion bis zum Commit für andere unsichtbar.",
+			short: "Schreibt einen typisierten Entry mit Lease; unterstützt Request-Replay und atomare Singleton-Erstanlage per unique.",
 			body: `## Überblick {#overview}
 
 \`space.write(entry, txn?, lease?, options?)\` schreibt einen neuen Entry \`{ type, types?, fields }\` in den Space und gibt dessen \`Lease { id, expires }\` zurück. Es gibt kein Überschreiben bestehender Entries.
@@ -817,7 +817,7 @@ const lease = await space.write(
 		},
 		en: {
 			title: "write – Write an Entry",
-			short: "Always creates a new typed entry with a lease; under a transaction it remains invisible to others until commit.",
+			short: "Writes a typed entry with a lease; supports request replay and atomic singleton creation through unique.",
 			body: `## Overview {#overview}
 
 \`space.write(entry, txn?, lease?, options?)\` writes a new entry \`{ type, types?, fields }\` into the space and returns its \`Lease { id, expires }\`. It never overwrites existing entries in place.

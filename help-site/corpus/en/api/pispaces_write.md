@@ -2,7 +2,7 @@
 standard: help_api
 id: help.api.pispaces_write
 title: "write – Write an Entry"
-short: "Always creates a new typed entry with a lease; under a transaction it remains invisible to others until commit."
+short: "Writes a typed entry with a lease; supports request replay and atomic singleton creation through unique."
 tags: [write, entry, lease, txn, requestref, mutation]
 owner: client
 related: [help.topic.entries_and_templates, help.api.pispaces_take]

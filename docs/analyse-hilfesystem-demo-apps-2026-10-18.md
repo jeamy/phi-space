@@ -109,7 +109,7 @@ Der WebAdmin legt Zeitpläne an, startet aber keinen Loop, der `pending()` und `
 
 **Belege:** `help-site/server/admin/admin-controller.ts:88`, `:109`, `:125`, `:496`.
 
-Ohne Konfiguration wird das feste Passwort `admin-spaces-2026` akzeptiert. Das ist besonders relevant, sobald der Server über einen Proxy veröffentlicht wird. Zusätzlich erzeugt jede Controller-Instanz einen neuen privaten Schlüssel unter derselben anfänglichen Key-ID `web-admin-key-1` und schreibt erneut einen aktiven PeerKey. Die Rotation widerruft alte Records nur bei explizitem Rotationsbefehl; der Bootpfad tut dies nicht.
+Ohne Konfiguration wurde damals ein festes Standardpasswort akzeptiert (seitdem entfernt: der Controller generiert jetzt ein zufälliges Secret bzw. erwartet `PI_SPACES_ADMIN_PASSWORD`). Das ist besonders relevant, sobald der Server über einen Proxy veröffentlicht wird. Zusätzlich erzeugt jede Controller-Instanz einen neuen privaten Schlüssel unter derselben anfänglichen Key-ID `web-admin-key-1` und schreibt erneut einen aktiven PeerKey. Die Rotation widerruft alte Records nur bei explizitem Rotationsbefehl; der Bootpfad tut dies nicht.
 
 **Maßnahme:** außerhalb eines ausdrücklich eingeschränkten Demo-Modus fehlende Zugangskonfiguration ablehnen; Identität persistent oder eindeutig mit geregelter Ersetzung führen. **Abnahme:** zwei Boots über gleichem Store ohne doppelte aktive Key-ID mit verschiedenen öffentlichen Schlüsseln; Startkonfiguration ohne Passwort explizit behandeln. Dies ist eine Prüfung des WebAdmin-Wrappers, keine Aussage, dass die Kern-Föderationsauthentifizierung gebrochen sei.
 
@@ -384,7 +384,7 @@ Umgesetzt wurden zuerst Datenintegrität und Parser, anschließend Admin-Journal
 | F22 | Erledigt | Aufgeführte Imports, wirkungsloser Inspect-State und unbenutzte Setter entfernt; feste Sieve-Werte bleiben explizite Konstanten. Unbenutzte Swarm-Parameter und durch Vereinheitlichung entfallene Wrapper entfernt. | Zusätzlicher noUnused-Lauf meldet keine Dateien in `help-site/` oder `examples/sieve.ts`; vorhandene separate Core-Warnungen werden nicht als bereinigt ausgegeben. |
 | F23 | Erledigt | Ein transportneutraler Command-Dispatcher; einheitliche Defaults und Fehler für unbekannte Aktionen. Sieve-Prüfung gemeinsam. Ein Corpus-Build im npm-/Docker-Buildpfad. Standalone nutzt ausschließlich eigene Assets; Next hat einen ausdrücklich gewählten Auslieferungsmodus. Produktionsprüfung baut vorher frisch. | HTTP-Fehlerfall und Dispatcher-Test, tatsächliche Stufen v1–v6, gemeinsame Sieve-Tests, frischer Next-Build mit SSR-Test. Alte Faux-Pipelines bleiben als Semantiktests bezeichnet. |
 
-Die neuen spezifischen Tests liegen in [`help-site/tests/regressions.test.ts`](../help-site/tests/regressions.test.ts); bestehende HTTP-/Stufen-/Shard-Tests in [`help-site/tests/help-site.test.ts`](../help-site/tests/help-site.test.ts) wurden um tatsächliche Zugriffs- und Dispatcher-Fehlerfälle ergänzt. Der aktuelle Betriebsvertrag einschließlich Limits und `needsReview` steht in der [Hilfesystem-README](../help-site/README.md#demo-vertrag-und-wiederanlauf). Die optionale atomare Unique-Prüfung ist in der [API](api.md) beschrieben.
+Die neuen spezifischen Tests liegen in [`help-site/tests/regressions.test.ts`](../help-site/tests/regressions.test.ts); bestehende HTTP-/Stufen-/Shard-Tests in [`help-site/tests/help-site.test.ts`](../help-site/tests/help-site.test.ts) wurden um tatsächliche Zugriffs- und Dispatcher-Fehlerfälle ergänzt. Der aktuelle Betriebsvertrag einschließlich Limits und `needsReview` steht in der [Hilfesystem-README](../help-site/README.md#runtime-contract-and-restart). Die optionale atomare Unique-Prüfung ist in der [API](api.md) beschrieben.
 
 ### 7.2 Ergänzende Korrekturen aus der Umsetzung
 
@@ -452,3 +452,25 @@ Aktuelle lokale Prüfungen des Nachtrags:
 Logs: `/tmp/pi-spaces-help-batch-final.log`, `/tmp/pi-spaces-root-batch-tests.log`, `/tmp/pi-spaces-examples-batch-serial.log`; temporäre lokale Evidenz, kein versioniertes CI-Artefakt. Der frühere Next-Produktionsnachweis aus Abschnitt 7.3 wurde für diesen rein serverseitigen Nachtrag nicht erneut ausgeführt.
 
 **Verbleibende Performance-Grenzen:** Die Zähltests messen echte Storage-Aufrufe, nicht einen pauschalen CPU-/Durchsatzfaktor. Ein einzelner Commit serialisiert weiterhin das große Dokument, und Core-Operationen können die Entries linear durchsuchen. Producer-Intents, Remote-RPCs, Seeds und alte Outbox-Einträge verwenden weiterhin ihre bisherigen Aufrufpfade; deren Commits sind nicht in den zwei Worker-Commits enthalten. CPU, Event-Loop-Verzögerung sowie HTTP-p95/p99 auf dem großen Store und auf `big` wurden nicht gemessen. Die beobachteten 4:38 Minuten Offline-Migration stammen aus der Nutzermeldung, nicht aus diesem Testlauf. Kein Container/Host wurde neu gestartet oder veröffentlicht.
+
+### 7.5 Abschluss der Help-Corpus-Konsistenzkorrekturen
+
+**Status: Erledigt (lokale Umsetzung und Prüfung).** Die zusätzlichen Befunde C01–C14,
+acht neue zweisprachige Praxisleitfäden und alle noch offenen Betriebs-/Veröffentlichungsgates
+stehen im [detaillierten Abschlussbericht](analyse-hilfecorpus-konsistenz-2026-10-18.md).
+
+- [x] API-Schemata, Codebeispiele, Mailbox-/Snapshot-Semantik und Stufentopologie korrigiert.
+- [x] Corpus-/Link-/Anker-/Sprachprüfung, echte API-Signaturen und 60 kompilierte TS-Beispiele integriert.
+- [x] Navigation, Suchfilter, Sprach-/Stufen-URLs, Renderer und Index-Fehlerbehandlung korrigiert.
+- [x] Vollständiges Tutorial und Live-Synchronisationsbeispiel einschließlich Fehler-/Delete-Fällen getestet.
+- [x] Shutdown-Rennen und Testisolation behoben; Help-Suite beendet sich sauber.
+- [x] Standalone-React-Start korrigiert; frischer Produktionsbuild und SSR-Test bestanden.
+- [x] Root-/Help-README-Sprachversionen aktualisiert, Experimental-Hinweis und MIT-Lizenz ergänzt.
+- [x] Erledigt-Markierungen und Dokumentationsindex mit aktuellem Nachweis abgeglichen.
+
+Aktueller Corpus: 45 Artikel/90 Sprachdatensätze, neun Bereiche, 14 API-Gruppen.
+Help-Suite: 44 bestanden und ein separat erfolgreich geprüfter SSR-Fall übersprungen.
+Root: 740 bestanden, ein optionaler Bootstrap-Kopie-Test übersprungen; Beispiele 158/158.
+Die vorherigen Abschnitte dokumentieren ihre jeweiligen historischen Prüfläufe. Browser-Smoke-Tests
+ergänzen jetzt die lokalen Nachweise; vollständige Browser-/Geräte-, Container-, Großstore- und
+Zielbetriebsabnahmen bleiben ausdrücklich getrennt und sind im Abschlussbericht aufgelistet.

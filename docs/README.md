@@ -25,7 +25,8 @@
 | [TESTBESPIELE.md](TESTBESPIELE.md) | Spezifikation von Ziel-Beispielen inkl. Federation-Modi | Entwurf, Zielbild |
 | [examples/README.md](examples/README.md) | Index, Lernpfad, Schnellstart für alle Beispiele | aktuell |
 | [../help-site/](../help-site/) | Interaktives Hilfesystem + Demos: Social Swarm Feed, Space-Chat Workbench (v1–v6), AdminSpaces-Portal | aktuell; Start `npm run help` |
-| [Hilfesystem-/Demo-Analyse vom 18.10.2026](analyse-hilfesystem-demo-apps-2026-10-18.md) | Logikfehler, ungenutzter und doppelter Code, funktionale Lücken; Codebelege, Reproduktionen und Testnachweise | aktuelle Prüfung; 23 offene Befunde, keine Codebehebung |
+| [Hilfesystem-/Demo-Analyse vom 18.10.2026](analyse-hilfesystem-demo-apps-2026-10-18.md) | Logikfehler, ungenutzter und doppelter Code, funktionale Lücken; Codebelege, Reproduktionen und Testnachweise | F01–F23 lokal behoben und als erledigt dokumentiert; Betriebsabnahmen getrennt |
+| [Help-Corpus: Konsistenz und Abschluss](analyse-hilfecorpus-konsistenz-2026-10-18.md) | API-Abgleich, acht neue Praxisleitfäden, UI-Korrekturen, Prüfungen und offene Gates | lokale Umsetzung abgeschlossen; keine Deployment-/Großstore-Abnahme |
 | [examples/](examples/) | geprüfte Beispielverträge und klar getrennte Entwürfe | Sieb und lokaler Cache implementiert; Federation geplant |
 | federation-plan-v1.md, federation-plan-v2.md, federation-plan-v2-summary.md | frühere Fassungen | ersetzt durch v3, nur Verlauf |
 

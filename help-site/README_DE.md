@@ -57,15 +57,12 @@ Die Docker-Konfiguration liegt in `help-site/docker/Dockerfile` und `help-site/d
 
 - **`spaces-help-prod`** – gehärteter Produktiv-Container (`NODE_ENV=production`, unprivilegierter User, `cap_drop`, SQLite-Volume `/data/spaces-eibrain.sqlite`, Healthcheck).
 - **`spaces-help-dev`** – Next.js Dev-Mode mit Live-Reload.
-- **`spaces-help-test`** – baut Corpus + Next.js und führt laut aktuellem Compose-Override `tests/help-site.test.ts` inklusive aktiviertem SSR-Test aus. Die zusätzlichen Regression-/Batch-Dateien sind darin nicht enthalten; vollständige Suite siehe Zusatzbefehl unten.
+- **`spaces-help-test`** – baut Corpus + Next.js und führt die vollständige Help-Suite einschließlich Regressionen, Corpus-Konsistenz, Batches und aktiviertem SSR-Test aus.
 - **`swarm-nano`** – optionaler Headless-Worker-Shard (Profil `nano`), eigener SQLite-Store und Socket auf Port 3600. `SWARM_REMOTE` verbindet den Hub; rohe TCP-Sockets nur über vertrauenswürdiges Netz/SSH-Tunnel betreiben, nicht öffentlich ohne Schutz.
 
 ```bash
 # A) Lokale Tests isoliert in der Dev-Docker-Umgebung bauen & ausführen:
 npm --prefix help-site run docker:test
-
-# Alle Help-Tests statt des engeren Compose-Overrides ausführen:
-npm --prefix help-site run docker:test -- npm --prefix help-site test
 
 # B) Gehärteten Production-Container für https://spaces.eibrain.org im Hintergrund starten:
 npm --prefix help-site run docker:prod:up
@@ -141,11 +138,28 @@ Der lokale Swarm-Worker verwendet echte Durable-Batches: ein Commit reserviert b
 
 Bei fachlichem Fehler wird die Reservierung abgebrochen; bei `ResourceExhausted` halbiert der Worker die Batchgröße bis auf einen Task. Ein auch einzeln nicht verarbeitbarer Task wird nicht bestätigt, sondern mit Warnung erneut versucht. Nach einem Storage-Fehler bleibt die Durable-Session gesperrt und muss wiederhergestellt/geöffnet werden; es gibt keinen Async-Fallback. Leere Queue-Abfragen erzeugen keine normalen Storage-Commits; zwischen erfolgreichen Batches wird 25 ms, bei leerer Queue 500 ms gewartet. Zwei Worker-Commits für vier Posts sind lokal nachgewiesen, keine pauschale Laufzeitbeschleunigung: Dokumentserialisierung, Core-Scans, Producer-/Remote-RPCs, Seeds und der alte Outbox-Pfad bleiben gesonderte Kosten. Ein Custom-Provider ohne kooperativen Abbruch kann nach dem Wartezeitlimit im Hintergrund weiterlaufen; sein verspätetes Ergebnis wird nicht als Post veröffentlicht.
 
-`npm --prefix help-site test` prüft den Standalone-Pfad und alle Regression-/Batch-Dateien ohne vorhandenen Next-Build. `test:production` baut die kanonische Next-Auslieferung frisch und prüft SSR separat. Das Docker-Image aktiviert ebenfalls SSR; der Compose-Test-Override beschränkt ohne den Zusatzbefehl oben die ausgewählten Tests auf `help-site.test.ts`. Keine dieser Prüfungen ist eine Freigabe externer Hosts oder eines veröffentlichten Dienstes.
+`npm --prefix help-site test` prüft den Standalone-Pfad und alle Regression-/Batch-/Konsistenzdateien ohne vorhandenen Next-Build. `test:production` baut die kanonische Next-Auslieferung frisch und prüft SSR separat. Das Docker-Testimage aktiviert ebenfalls SSR und verwendet über Compose denselben vollständigen Testbefehl. Der Containerpfad wurde lokal nicht ausgeführt. Keine dieser Prüfungen ist eine Freigabe externer Hosts oder eines veröffentlichten Dienstes.
 
 ## Dokumente in diesem Verzeichnis
 
-Prüfhinweis vom 18. Oktober 2026: README-Beispiel, beide Typechecks und Root-Suite waren erfolgreich (740 bestanden, ein optionaler Test übersprungen). Die 21 Help-Regressionen und acht Worker-Batch-Tests bestanden separat. Beim vollständigen Help-Befehl meldet die Integrationsdatei vier bestandene Tests und einen übersprungenen SSR-Test, beendet danach aber ihren Prozess nicht; der auf 60 Sekunden begrenzte Lauf endete mit Timeout. Das ist kein vollständig grüner Gesamtlauf. Im Rahmen dieser Dokumentationsänderung wurden dafür weder Laufzeitcode verändert noch ein neuer Produktionsbuild, Deployment oder Handy-Lauf durchgeführt.
+Prüfhinweis vom 18. Oktober 2026: Beide Typechecks erfolgreich; Root-Suite 740 bestanden, ein optionaler Bootstrap-Kopie-Test übersprungen; Beispiele seriell 158/158 bestanden. Die vollständige Help-Suite endet jetzt sauber: 44 bestanden, der separat geprüfte SSR-Fall übersprungen. Frischer Produktionsbuild und SSR-Test erfolgreich (1/1). Die Ursache des früheren Hängers ist behoben: Close während der Initialisierung bricht History-Arbeit ab und verhindert nachträglich gestartete Hintergrundtimer. Tests deaktivieren Modelle und konfigurierte Remote-Shards vor dem Serverimport ausdrücklich.
+
+Lokale Browserprüfungen ergänzen diese Nachweise, sind aber keine vollständige Browser-E2E-, Barrierefreiheits-, Deployment-, Handy-, Großstore-, Stromausfall- oder Multi-Host-Abnahme. Details und offene Prüfgates stehen im [Abschlussbericht](../docs/analyse-hilfecorpus-konsistenz-2026-10-18.md).
+
+### Help-Corpus pflegen
+
+Der Corpus enthält **45 Artikel / 90 DE–EN-Datensätze**, neun Bereiche und 14 API-Referenzgruppen. Acht Praxisleitfäden erklären Erststart, asynchrone Interaktion, Task-Lebenszyklus, Live-Synchronisation, Social-Swarm-Datenfluss, Fehlerbehandlung, sicheren Betrieb und Topologie/Reifegrad. Das [vollständige Tutorial](examples/tuple-basics.ts) ist ohne Modelle ausführbar; der [Live-Mirror](examples/shared/live-mirror.ts) demonstriert Snapshot-Seiten, Changes, Löschungen und Cursor-Neuaufbau.
+
+Inhalte in `scripts/corpus-articles-data.ts`, `scripts/corpus-workflows-and-api.ts` oder `scripts/corpus-practical-guides.ts` ändern, nicht in den generierten Markdown-Dateien unter `corpus/{de,en}`. `api_facts.json` enthält die API-Klassifikation; `scripts/api-signatures.ts` leitet Signaturen aus echten TypeScript-Exports ab. Der Build prüft Links, Anker, Sprachparität und Katalogreferenzen, speichert echte Git-Revision/Dirty-Status und hasht den vollständigen Inhalt.
+
+```bash
+# Rein lesende Prüfung einschließlich aller 60 TypeScript-Beispiele:
+npm --prefix help-site run check:docs
+# Corpus/Assets neu erzeugen und Next.js bauen, einschließlich derselben Prüfungen:
+npm --prefix help-site run build
+```
+
+`client/main.tsx` startet ausschließlich die Standalone-App; Next.js importiert `HelpApp` ohne zweiten React-Root. `tests/help-consistency.test.ts` prüft Corpus, Renderer, Navigation, Loader, Tutorial, Shutdown und Live-Mirror.
 
 - [`VERGLEICH-EARENDIL-VS-PI-SPACES.md`](VERGLEICH-EARENDIL-VS-PI-SPACES.md) – **Architektur- und Konzeptvergleich (Deutsch)**: Earendil Multiplayer Chat (`Pi Durable on Cloudflare`) vs. `pi-spaces` (`v1` In-Memory bis `v5`/`v6` Federated Space) mit detaillierter Vor-/Nachteilsanalyse aller Stufen.
 - [`COMPARISON-EARENDIL-VS-PI-SPACES-EN.md`](COMPARISON-EARENDIL-VS-PI-SPACES-EN.md) – **Architectural & Concept Comparison (English)**: Full English edition of the comparison from In-Memory (`v1`) to Federated Space (`v5`/`v6`).
@@ -163,7 +177,7 @@ help-site/
 │   ├── layout.tsx                   # Root-Layout + Metadaten (spaces.eibrain.org)
 │   └── page.tsx                     # SSR-Einstieg, lädt den Help-Corpus direkt
 ├── README_DE.md                     # Deutsche Fassung dieser Übersicht
-├── corpus/                          # Kanonischer, dateibasierter Help-Corpus (DE/EN)
+├── corpus/                          # Generierte Help-Artikel (DE/EN) und Katalogmetadaten
 │   ├── help_product_catalog.*       # Kanonische Systembereiche
 │   ├── de/                          # Deutsche Referenz-, API- und Stufen-Tutorials (v1–v6)
 │   └── en/                          # Englische Referenz-, API- und Stufen-Tutorials (v1–v6)

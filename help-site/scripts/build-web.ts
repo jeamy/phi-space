@@ -21,7 +21,7 @@ export async function buildHelpSite(): Promise<void> {
 	await copyFile(join(CLIENT_DIR, "styles", "layout.css"), join(assetsDir, "layout.css"));
 
 	await esbuild.build({
-		entryPoints: [join(CLIENT_DIR, "App.tsx")],
+		entryPoints: [join(CLIENT_DIR, "main.tsx")],
 		outfile: join(assetsDir, "app.js"),
 		bundle: true,
 		format: "esm",

@@ -133,7 +133,7 @@ Configuration: `help-site/docker/Dockerfile` and `help-site/docker/docker-compos
 |---|---|
 | `spaces-help-prod` | Production Next.js server, unprivileged user, dropped capabilities, SQLite volume and healthcheck; host networking. |
 | `spaces-help-dev` | Next.js development mode; published port and separate SQLite volume. |
-| `spaces-help-test` | Fresh corpus/Next.js build and tests, profile `test`. The current Compose command selects **only** `tests/help-site.test.ts`, with SSR enabled. |
+| `spaces-help-test` | Fresh corpus/Next.js build and the full help test suite, profile `test`, with SSR enabled. |
 | `swarm-nano` | Optional headless worker shard, profile `nano`, separate SQLite volume and socket port 3600. |
 
 Compose requires a private `PI_SPACES_ADMIN_PASSWORD` during configuration, including test-profile selection.
@@ -141,11 +141,8 @@ Production uses a prebuilt `.next` output; development compiles with Turbopack.
 Startup time depends on the store and machine; no fixed latency is guaranteed.
 
 ```bash
-# Current Compose-selected integration/SSR tests:
+# Full help suite, including integration, regressions, consistency, batches and SSR:
 npm --prefix help-site run docker:test
-
-# Override that narrow selection to run all help regression/batch tests as well:
-npm --prefix help-site run docker:test -- npm --prefix help-site test
 
 # Production start, logs, stop:
 npm --prefix help-site run docker:prod:up
@@ -235,12 +232,38 @@ HTTP latency need deployment-specific measurements. Local suites are not browser
 
 ### Local verification note, 2026-10-18
 
-The README example, both TypeScript checks and the root suite passed (740 passed, one optional test skipped).
-The 21 help regressions and eight worker-batch tests also passed separately. The full help test command currently
-has a shutdown limitation in this checkout: the integration file reports four passes and one skipped SSR case,
-but its process stays alive; a 60-second bounded run ended with timeout. This is not a clean full-suite result.
-No runtime code was changed to mask it, and no fresh production build, deployment or phone run was performed
-as part of this documentation update.
+Both TypeScript checks passed. The root suite passed 740 tests with one optional bootstrap-copy test skipped;
+the serial example suite passed 158/158. The full help suite now exits cleanly: 44 passed, with the separately
+tested SSR case skipped. A fresh production build and its SSR test passed (1/1). The shutdown race was fixed:
+closing during initialization cancels history work and cannot install background timers afterward. Tests explicitly
+disable models and operator-configured remote shards before importing the server.
+
+Local browser checks supplement these automated results; they are not exhaustive browser E2E, accessibility,
+deployment, phone, large-store performance, power-loss or multi-host acceptance. See the
+[completion report (German)](../docs/analyse-hilfecorpus-konsistenz-2026-10-18.md) for evidence and open gates.
+
+## Maintaining the help corpus
+
+The corpus contains **45 articles / 90 DE–EN records**, nine areas and 14 API reference groups. Eight practical
+guides cover first setup, asynchronous interaction, task lifecycle, live synchronization, the Social Swarm
+pipeline, failure handling, safe operation, and topology/readiness. Start with the
+[complete runnable tutorial](examples/tuple-basics.ts); the [live mirror](examples/shared/live-mirror.ts)
+demonstrates paged snapshots, changes, deletion and cursor reset.
+
+Edit `scripts/corpus-articles-data.ts`, `scripts/corpus-workflows-and-api.ts` or
+`scripts/corpus-practical-guides.ts`, not generated `corpus/{de,en}` Markdown. `api_facts.json` supplies API
+classification; `scripts/api-signatures.ts` derives signatures from actual TypeScript exports. The build validates
+links, anchors, translations and catalog references, records the real Git revision/dirty state, and hashes full content.
+
+```bash
+# Read-only validation, including compilation of all 60 TypeScript documentation snippets:
+npm --prefix help-site run check:docs
+# Regenerate corpus/assets, then build Next.js (includes the same validation gate):
+npm --prefix help-site run build
+```
+
+`client/main.tsx` mounts the standalone app; Next.js imports the shared `HelpApp` without creating a second root.
+`tests/help-consistency.test.ts` covers the corpus, renderer, navigation, loaders, tutorial, shutdown and live mirror.
 
 ## Documents and layout
 
@@ -254,7 +277,7 @@ as part of this documentation update.
 help-site/
 ├── README.md / README_DE.md       # English / German overview and operating contract
 ├── app/                          # Next.js App Router entry
-├── corpus/                       # Canonical German/English help articles
+├── corpus/                       # Generated German/English help articles and catalog metadata
 ├── examples/                     # v1–v6 and shared Chat engine
 ├── server/
 │   ├── index.ts                  # HTTP, Next.js, uploads, API and WebSocket routing

@@ -1,6 +1,6 @@
 // Validates and builds the canonical bilingual Help corpus for PI-SPACES / HELP.
 // Produces:
-//   - help-site/corpus/{de,en}/{topics,workflows,api}/*.md (canonical source Markdown with frontmatter & {#anchor}s)
+//   - help-site/corpus/{de,en}/{topics,workflows,api}/*.md (generated from the canonical TypeScript seeds)
 //   - help-site/dist/public/help/index.json (validated index consumed by the React HelpApp)
 //   - help-site/dist/public/help/articles/{de,en}/... (localized Markdown snapshots)
 

@@ -131,7 +131,7 @@ test("F03/F06/F07: durable admin replay, parallel requests, enrollment separatio
 	try {
 		await admin.initialize();
 		const identity = admin.login({ password: "test" });
-		assert.throws(() => admin.login({ password: "admin-spaces-2026" }));
+		assert.throws(() => admin.login({ password: "wrong-password" }));
 		const command = { commandId: "create", kind: "createSpace", args: { alias: "replay-test" }, requestedBy: "tester" };
 		const staleController = new WebAdminController({ host: h, ctx, meter: new Meter(), adminPassword: "test" }); await staleController.initialize();
 		const [first, parallel] = await Promise.all([admin.executeCommand(command), admin.executeCommand(command)]);
