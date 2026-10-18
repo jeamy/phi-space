@@ -74,3 +74,19 @@ noch ein Neustart von host-a setzten fort. Auslöser war vermutlich die `policy`
 - Die Notice des alten Space `jobs-part` (Lauf vom 2026-10-17) liegt noch auf dem Notice-Brett und wird bei jedem
   Heartbeat abgewiesen.
 - Auf 100 steht `iifname "wt0" accept` vor den Regeln aus `/etc/nftables-pi-host.nft` (nicht aus diesem Lauf).
+
+## Rückbau
+
+- host-a aus der Sicherung vor Teil B (Harness, `installed.sqlite`, Journal des Hauptstores, Konfiguration,
+  `private/`, `pki/`), Root-Drop-in entfernt, Boot-Datensatz zurückgeschrieben. Der Abgleich der Control-Einträge vor
+  jeder Rücksetzung zeigte nur Einträge dieses Laufs (Enrollments, `addMember`, `auditLog`, Router- und
+  Host-Schlüssel). Im Control Space stehen wieder 13 Schlüssel, es gibt keinen Root und keine Policy.
+- nanoi freigegeben; Konfigurationen beider Hosts aus `federation.json.before-final-20261018`; Boot-Datensätze auf
+  die Werte vor dem Lauf.
+- nft-Freigabe und Partitionsregeln auf 100 entfernt, Steuerzertifikat auf 100 gelöscht; NetBird-Gruppe und -Policy
+  `final-20261018` gelöscht.
+- Grundprüfung danach grün.
+- Behalten: das Bündel `ebb87f58` auf allen drei Hosts, die Sicherungen (`/data/phase1b-backup-final` auf host-a,
+  `*.before-final-20261018` auf nanoi und 100) und die Sync-Verzeichnisse als Beleg.
+- Offen beim Operator: die befristeten Rechte des Steuerzertifikats auf vpsc zurücknehmen (`tls.json` und
+  `fencing.json` aus `*.before-final-20261018`).
