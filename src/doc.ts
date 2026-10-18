@@ -12,5 +12,19 @@ export const Space = defineDoc<SpaceState & Record<string, any>>({
 	migrate: (v, from) => core.migrate(v, from) as SpaceState & Record<string, any>,
 	// Compact the delta tail periodically: without a base every read replays the
 	// whole journal, so unbounded spaces degrade to O(history) per read.
-	checkpointWhen: (_v, _ops, info) => info.deltasSinceBase >= 500,
+	checkpointWhen: (v, _ops, info) => checkpointDue(v, info),
 });
+
+let checkpointLimit = Infinity;
+/**
+ * Caps the size of a base written for a Space (process-wide, only ever lowered). A base is one write of the whole
+ * value, and a primary/sync journal takes a bounded commit (docs/ap3-primary-sync.md): a larger base would refuse
+ * every later commit of that Space. primarySyncStorage sets it from its journal; without it nothing changes.
+ */
+export function limitCheckpointBytes(bytes: number): void { checkpointLimit = Math.min(checkpointLimit, bytes); }
+/** A base every 500 deltas; under a cap only if the value fits, tried again every 50 deltas (else the tail stays). */
+export function checkpointDue(value: unknown, info: { deltasSinceBase: number }): boolean {
+	if (info.deltasSinceBase < 500) return false;
+	if (checkpointLimit === Infinity) return true;
+	return info.deltasSinceBase % 50 === 0 && Buffer.byteLength(JSON.stringify(value)) <= checkpointLimit;
+}

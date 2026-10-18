@@ -66,7 +66,16 @@ Bestätigungshistorie zeitbasiert entfernt.
   `ResourceExhausted`.
 - **Vorher:** Bis 2026-10-18 sperrte ein volles Journal die ganze Session, und jedes weitere Lesen scheiterte bis
   zum Neustart (gefunden bei der Vorbereitung der Abnahme).
-- **Test:** `test/test-primary-sync.test.ts`. Ein nicht leerer, bisher ungetrackter
+- **Test:** `test/test-primary-sync.test.ts`.
+- **Basis eines großen Space (2026-10-18):** Ein Space-Dokument schreibt alle 500 Deltas eine vollständige Basis. Ist
+  sein Wert größer als ein Journal-Commit, wurde jeder weitere Commit des Space abgewiesen. Auf host-a sperrte das den
+  Control-Store, sobald nach einem Neustart 500 Deltas seit der letzten Basis anstanden.
+  - `primarySyncStorage` begrenzt deshalb prozessweit die Größe einer Basis auf das Intent-Limit minus 64 KiB
+    (`limitCheckpointBytes`).
+  - Ein größerer Space behält seine Delta-Kette; neu versucht wird alle 50 Deltas. Ohne primary/sync im Prozess bleibt
+    alles wie bisher.
+  - Tests: `test-primary-sync` (Space über 256 KiB über 500 Commits und ein Neuladen hinweg), `test-persistence`
+    (Basis alle 500 Deltas). Ein nicht leerer, bisher ungetrackter
 Store wird nicht als Startpräfix akzeptiert. Bestehende Stores brauchen einen
 später explizit gebundenen Snapshot-/Stream-Bootstrap.
 

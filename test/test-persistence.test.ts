@@ -89,3 +89,14 @@ test("tool replay after a crash returns the stored result, not an error, and beg
 		assert.ok(!results.includes("settled overlay"));
 	});
 });
+
+// Without a primary/sync storage in the process, Space bases are written every 500 deltas, whatever their size.
+test("a Space gets a base every 500 deltas", async () => {
+	await forEachBackend(async (home) => {
+		let h = await home.open();
+		for (let n = 0; n < 510; n++) await new PiSpaces(h, ctx).write({ type: "Small", fields: { n } }, null, FOREVER);
+		await home.close(h);
+		const st = await home.storage(), d = await st.findDocument({ kind: "pi-spaces.space", scope: { kind: "session" } } as any, "current", ctx);
+		try { assert.ok(d && (await st.document(d.id, "current", ctx))!.deltasSinceBase < 500, "a base was written"); } finally { await st.close(ctx); }
+	});
+});

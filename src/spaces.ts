@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { Context } from "@earendil-works/chord";
 import { defineDoc, defineDocFamily, type Session, type Tx } from "@earendil-works/pi-durable";
 import * as core from "./core.ts";
-import { Space } from "./doc.ts";
+import { Space, checkpointDue } from "./doc.ts";
 
 export const DEFAULT_ALIAS = "default";
 const ALIAS = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -35,8 +35,8 @@ export const NamedSpace = defineDocFamily<core.SpaceState & Record<string, any>,
 	family: true,
 	initial: () => core.initialState() as core.SpaceState & Record<string, any>,
 	migrate: (v, from) => core.migrate(v, from) as core.SpaceState & Record<string, any>,
-	// Same bound as doc.ts Space: base snapshot every 500 deltas keeps replay reads linear.
-	checkpointWhen: (_v, _ops, info) => info.deltasSinceBase >= 500,
+	// Same rule as doc.ts Space (every 500 deltas, only while the base fits one commit).
+	checkpointWhen: (v, _ops, info) => checkpointDue(v, info),
 });
 
 export class UnknownSpaceError extends Error {}

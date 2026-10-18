@@ -10,6 +10,7 @@ import type {Context} from '@earendil-works/chord';
 import type {Storage,StorageWrite,DocumentId,DocumentRecord,Seq} from '@earendil-works/pi-durable';
 import {canonicalJson} from './canonical.ts';
 import {CommitSealed,SyncBudgetExceeded} from './commit-sealed.ts';
+import {limitCheckpointBytes} from './doc.ts';
 import type {Json} from './core.ts';
 
 /** `durability` absent means sync (older configurations keep their hash). Single has no standby. */
@@ -342,6 +343,8 @@ export async function applyConfigTransition(storage:Storage,journal:PrimarySyncJ
 /** `onPoisoned`: a sealed candidate was not confirmed; this storage refuses all work until it is reopened and resolved. */
 export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:{assertPrimary:()=>Promise<void>;now?:()=>number;onPoisoned?:(sealed:{revision:number;hash:string})=>void}):Storage{
  let poisoned=false,busy=false;
+ // A Space base must fit one sealed commit together with the other writes of that commit.
+ limitCheckpointBytes(journal.maxIntentBytes-64*1024);
  return new Proxy(storage,{get(target,property,receiver){
   if(property!=='commit'){const v=Reflect.get(target,property,receiver);return typeof v==='function'?v.bind(target):v;}
   return async(writes:readonly StorageWrite[],ctx:Context):Promise<Seq>=>{

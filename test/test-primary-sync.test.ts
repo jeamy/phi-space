@@ -101,4 +101,17 @@ for(const backend of BACKENDS){
    await r.write({type:'Small',fields:{}},null,core.FOREVER);assert.deepEqual(s.head(),p.head(),'a write that fits is still confirmed');
   }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}
  });
+ test(`${backend}: a Space larger than a journal commit stays writable past the checkpoint interval and after a reload`,async()=>{
+  const home=new PersistentHome(backend),replica=new PersistentHome(backend);
+  const p=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),config),s=new PrimarySyncJournal(join(replica.dir,'journal.sqlite'),config),raw=home.storage.bind(home);
+  home.storage=async()=>primarySyncStorage(await raw(),p,s,{assertPrimary:async()=>{}});let h=await home.open();
+  try{
+   // Five entries of 60 KB: the Space document is larger than one journal commit (256 KiB) as a whole.
+   for(let n=0;n<5;n++)await new PiSpaces(h,ctx).write({type:'Big',fields:{n,pad:'x'.repeat(60_000)}},null,core.FOREVER);
+   for(let n=0;n<520;n++)await new PiSpaces(h,ctx).write({type:'Small',fields:{n}},null,core.FOREVER);
+   await home.close(h);h=await home.open();// a reload counts every delta since the last base again
+   for(let n=0;n<60;n++)await new PiSpaces(h,ctx).write({type:'Small',fields:{n:1000+n}},null,core.FOREVER);
+   assert.equal(await new PiSpaces(h,ctx).count({type:'Small'}),580);assert.deepEqual(s.head(),p.head());
+  }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}
+ });
 }
