@@ -16,8 +16,8 @@ Lasttreiber auf `big` (gemessen, siehe Profiling-Sessions):
 - Broadcast-Deltas + Stats-Tick scannen den Änderungsstrom.
 - LLM-Aufrufe sind extern, kosten lokal fast nichts.
 
-Seit Pruning entfernt wurde (alle Daten bleiben durable erhalten) wächst `N`
-kontinuierlich — die Verteilung wird damit langfristig *wichtiger*, nicht weniger.
+Ohne Begrenzung wächst `N` kontinuierlich. Deshalb gilt seit 2026-10-18 pro
+Datenbank ein Limit (`SWARM_MAX_ENTRIES`, Standard 20 000, siehe Abschnitt 7).
 
 Vorhandene phi-spaces-Primitive, die direkt nutzbar sind:
 
@@ -128,9 +128,15 @@ Der Swarm-Space wird in zwei durable Spaces gesplittet — wie v5, aber real
   `big`, ~1 Entry pro Thread-Root).
 - **postId-Namensräume**: Shard-Präfix (`a-post-…`, `b-post-…`) verhindert
   Kollisionen beim Merge.
-- **Wachstum bleibt unbounded**: Sharding halbiert N, hebt das
-  O(entries)-Fundament nicht auf. Wenn die Langzeit-Datenflut zum Problem
-  wird: Archiv-Space (alte Posts in einen kalten Space verschieben statt
-  löschen — bleibt abrufbar, verlässt das heiße Doc). Kein Pruning.
+- **Wachstum ist begrenzt (Testsystem)**: Sharding halbiert N, hebt das
+  O(entries)-Fundament nicht auf. Jede Datenbank (lokal eine, auf `big` und
+  `nano` je eine) hält höchstens `SWARM_MAX_ENTRIES` Einträge (Standard
+  20 000, `0` = aus). Darüber löscht der Shard in Schüben die ältesten Posts
+  samt Likes und History-Knoten bis ca. 95 % (`server/social/retention.ts`);
+  die Kette der History bleibt dabei lückenlos, `ChannelCount` bleibt
+  Lebenszeitzähler. Der Feed zeigt beim Löschen einen gelben Hinweis, die
+  Leiste unter dem Chatfenster (`/api/system`) nennt Hosts, CPU, Speicher und
+  Einträge je Datenbank. Das ist eine Testsystem-Grenze, kein Produktlimit.
+  Wer die Daten behalten will: Archiv-Space statt Löschen (nicht umgesetzt).
 - **Empfehlung**: Phase A sofort (1–2 h), Phase B als nächstes Feature
   (~halber Tag), Phase C sobald nano stabil läuft.

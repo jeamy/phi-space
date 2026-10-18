@@ -1,12 +1,12 @@
 # phi-spaces: historischer lokaler Implementierungsstand
 
-> **Überholt durch [implementierungsstand.md](implementierungsstand.md).**
+> **Überholt durch [implementierungsstand.md](../implementierungsstand.md).**
 > Diese Momentaufnahme vom 2026-10-07 bleibt nur für die damaligen Kennungen
 > und Entscheidungen erhalten. Insbesondere L2, L3, L7 und L13 sind nicht mehr
 > der aktuelle Status.
 
 Stand: 2026-10-07, Quellen src/core.ts, src/client.ts, src/doc.ts, src/index.ts und lokale Tests.
-Dies ist die lokale Bibliothek; Federation ist der [v3-Zielplan](federation-plan-v3.md).
+Dies ist die lokale Bibliothek; Federation ist der [v3-Zielplan](../federation-plan-v3.md).
 Die historischen v1/v2-Planfassungen sind nicht verbindlich.
 
 ## Architektur und Datenmodell
@@ -106,12 +106,12 @@ Die Kennungen bleiben für Verweise aus dem Plan erhalten; sie sind kein unverä
 ## Leistung und Nachweise
 
 Dokumentgröße, lineare Suche und Waiter-Scans beeinflussen Kosten. Messung mit `scripts/spike-durable.ts`
-in [VALIDIERUNG.md](VALIDIERUNG.md#pi-durable-machbarkeit-ap-03): Ein Commit mit einem Write kostet bei 1000 Entries
+in [VALIDIERUNG.md](../VALIDIERUNG.md#pi-durable-machbarkeit-ap-03): Ein Commit mit einem Write kostet bei 1000 Entries
 etwa 3–6 ms und wächst linear mit der Entry-Zahl, weil `write` die Gesamtbytes und `settle` alle Entries
 durchläuft. Kein belegter Durchsatz oder linearer
 Speedup; Snapshot-Limits und JSON-Bytebudget sind keine RAM-/VPS-Mindestanforderungen.
 Optimierungen wie Indizes, Sharding, Dirty-Flags und Remote-Protokoll benötigen eigene Implementierung/Tests.
 
 Typecheck, Kern- und Beispielsuite werden lokal ausgeführt. Beispiele und tatsächlicher Nachweisumfang:
-[examples.md](examples.md), [Testübersicht](../test/examples/README.md).
+[examples.md](../examples.md), [Testübersicht](../../test/examples/README.md).
 Federation, NetBird-Identität, Promotion und wissenschaftliche Modellqualität sind damit nicht nachgewiesen.

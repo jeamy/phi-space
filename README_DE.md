@@ -25,7 +25,7 @@ Mailboxen, Overlay-Identität, Enrollment, Grants und Schlüsselrotation sind im
 Föderationsrouting, Membership, Lauf-/Worker-/Space-Verwaltung und mobile Betriebsbausteine.
 Merge-Replikation, primary/sync-Replikation, Promotion und Recovery besitzen Implementierungen und Nachweise;
 **Phase 3 ist noch nicht vollständig abgenommen**. Maßgeblich sind
-[Implementierungsstand](docs/implementierungsstand.md) und [Phase-3-Abnahmematrix](docs/ap3-abnahme.md), nicht
+[Implementierungsstand](docs/implementierungsstand.md) und [Phase-3-Abnahmematrix](docs/abnahme/ap3-abnahme.md), nicht
 eine pauschale Ableitung von Garantien aus dem Vorhandensein einzelner Komponenten.
 
 ## Tuple Spaces: Koordination über Daten
@@ -297,11 +297,11 @@ CPU-Parallelität; die Worker-Commit-Zählung ist kein allgemeiner Produktivbenc
 - [Implementierungsstand](docs/implementierungsstand.md): tatsächliche Komponenten, Nachweise und Grenzen.
 - [API](docs/api.md): lokaler, Dienst- und Remote-Vertrag.
 - [Beispiele](docs/examples.md) und [Einzeldokumente](docs/examples/).
-- [Phase 1b](docs/ap1b-abnahme.md), [Phase 2](docs/ap2-abnahme.md) und [Phase 3](docs/ap3-abnahme.md): Abnahmen getrennt nach Nachweisart.
+- [Phase 1b](docs/abnahme/ap1b-abnahme.md), [Phase 2](docs/abnahme/ap2-abnahme.md) und [Phase 3](docs/abnahme/ap3-abnahme.md): Abnahmen getrennt nach Nachweisart.
 - [Föderationsvertrag v3](docs/federation-plan-v3.md) und [Implementierungsplan](docs/implementierungsplan-v3.md).
-- [Replikation](docs/ap3-replikation.md): Architektur; keine alleinige Betriebsfreigabe.
+- [Replikation](docs/abnahme/ap3-replikation.md): Architektur; keine alleinige Betriebsfreigabe.
 - [Betrieb/mobile Steuerung](docs/betrieb-und-mobile-steuerung.md).
 - [Hilfesystem-Betriebsvertrag](help-site/README_DE.md#demo-vertrag-und-wiederanlauf) und
-  [Analyse der Hilfesystem-/Demo-Fixes](docs/analyse-hilfesystem-demo-apps-2026-10-18.md).
+  [Analyse der Hilfesystem-/Demo-Fixes](docs/_attic/analyse-hilfesystem-demo-apps-2026-10-18.md).
 - [Dokumentenindex](docs/README.md), [Validierung](docs/VALIDIERUNG.md) und
-  [historischer lokaler Stand](docs/spaces-v1.md).
+  [historischer lokaler Stand](docs/_attic/spaces-v1.md).

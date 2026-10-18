@@ -12,14 +12,14 @@ Dieser Plan ist eine Reihenfolge, keine Zeitschätzung. Größen (S/M/L) sind re
 ## 1. Ist der Plan bereit für die Implementierung?
 
 **Stufen 0 bis 2 und die Betriebserweiterung sind umgesetzt; Stufe 3 ist begonnen.** Die Stufen 3 und 4
-hängen an Entscheidungen und Nachweisen, die noch fehlen (Abschnitt 7 und [Phase-3-Stand](ap3-replikation.md)).
+hängen an Entscheidungen und Nachweisen, die noch fehlen (Abschnitt 7 und [Phase-3-Stand](abnahme/ap3-replikation.md)).
 
 | Stufe | Bereit? | Was fehlt vor Beginn |
 |---|---|---|
 | 0 – Core-Rest | **ja** | nichts |
 | 1 – benannte Spaces, lokales Protokoll | **lokal umgesetzt und geprüft** | Startwerte aus F11 benötigen weiterhin einen Lasttest |
-| 1b – Overlay, Identität, Enrollment, Restore | **im F15-Modell abgenommen** ([Phase-1b-Abnahme](ap1b-abnahme.md)) | keine Promotion-/Replikationsfreigabe |
-| 2 – Router und expand | **abgeschlossen** mit dokumentierter Ausnahme für Block 4 ([Phase-2-Abnahme](ap2-abnahme.md)), Gate 4 geschlossen | uneingeschränkte native Produktionsfreigabe nicht erklärt |
+| 1b – Overlay, Identität, Enrollment, Restore | **im F15-Modell abgenommen** ([Phase-1b-Abnahme](abnahme/ap1b-abnahme.md)) | keine Promotion-/Replikationsfreigabe |
+| 2 – Router und expand | **abgeschlossen** mit dokumentierter Ausnahme für Block 4 ([Phase-2-Abnahme](abnahme/ap2-abnahme.md)), Gate 4 geschlossen | uneingeschränkte native Produktionsfreigabe nicht erklärt |
 | 2b – Betriebserweiterung (Läufe, Worker, Spaces, Bootstrap, mobile Steuerung) | **umgesetzt** (B2–B10, [Betrieb §8](betrieb-und-mobile-steuerung.md#8-umsetzungsstand-und-reihenfolge-der-betriebserweiterung)) | eigener Vertrag, keine v3-Abnahme; Fälle 1, 5, 6 teilweise, 7 offen (Betrieb §7.6) |
 | 3 – Replikation, Promotion | **begonnen**: Replikationsbausteine und synchroner Storage-Unterbau | F1; Gate 2 (realer Fencing-Adapter); Einbindung, Übergänge, Promotion |
 | 4 – weitere Clients | nach 2 | F12 bleibt zurückgestellt; Admin-CLI `npm run bootstrap` existiert als Teil von 2b |
@@ -77,7 +77,7 @@ Reihenfolge: 0.1 und 0.3 zuerst und parallel; 0.3 kann die Datenmodell-Entscheid
 
 ### Phase 1 – Benannte Spaces und lokales Protokoll (Stufe 1)
 
-Stand 2026-10-09: AP 1.1–1.9 lokal implementiert; Nachweise in [ap1-abnahme.md](ap1-abnahme.md).
+Stand 2026-10-09: AP 1.1–1.9 lokal implementiert; Nachweise in [ap1-abnahme.md](abnahme/ap1-abnahme.md).
 
 Reihenfolge innerhalb der Phase entlang der Abhängigkeiten:
 
@@ -137,7 +137,7 @@ pi-serverd plus Gates auf localhost und Test-Identitätsadapter, dann in der ech
 | 2.8 | **Simulator:** mehrere Harnesses, deterministische Latenz, Verlust, Duplikate, Partitionen, Uhrsprünge; Gegenmodell für Reservierungen und Requestzustände. Beginn parallel zu 2.1, weil 2.4/2.5 ohne ihn kaum abnehmbar sind. | L |
 | 2.9 | **Lasttest** (Gate 4): 10 000 Entries, 3 Members; finale Werte für Frame, `maxCommitBytes`, Generationslaufzeit. | M |
 
-Aktueller Nachweis und noch offene Freigabepunkte: [Phase-2-Abnahme](ap2-abnahme.md).
+Aktueller Nachweis und noch offene Freigabepunkte: [Phase-2-Abnahme](abnahme/ap2-abnahme.md).
 
 **Abnahme Phase 2:** v3 §11 Stufe 2 und alle Zeilen „2“ aus §12.1; Sieb über drei Members mit HRW nach
 `taskId` (Betrieb §6).
@@ -165,14 +165,14 @@ Zwei-Personen-Freigabe; sie verändern die Zugriffsregeln des Control Space und 
 
 ### Phase 3 – Replikation und Übernahme (Stufe 3)
 
-Stand der Pakete (Details: [Phase-3-Stand](ap3-replikation.md), dort mit eigener Teilnummerierung):
+Stand der Pakete (Details: [Phase-3-Stand](abnahme/ap3-replikation.md), dort mit eigener Teilnummerierung):
 
 | AP | Stand 2026-10-17 |
 |---|---|
 | 3.1 Stream-Import | Bausteine umgesetzt: Snapshot-Transfer, Stream-Cursor-Worker, Generationenpflege; reale zehnminütige NetBird-Partition als Komponentenlauf bestanden ([Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md)). Nicht in den Space-Dienst eingebunden |
 | 3.2 primary/sync | Storage-Unterbau umgesetzt (Versiegeln, Hashkette, Standby-ACK, Neustartklärung); je primary/sync-Space ein eigener Store im Federation-Host (`openSyncSpace`, Verteilung im Host, Konfiguration `syncSpaces`), signierter Replikat-Transport; Sync-Primary-Regeln im Validator freigegeben; Daemon-Lauf auf nanoi und 100 bestanden ([Nachweis](../test/evidence/phase3-daemon-sync-2026-10-16/README.md)); Bootstrap bestehender Stores umgesetzt (`bootstrapPrimarySync`, auf host-a echt gelaufen); öffentliches `CommitSealed` mit Klärung im laufenden Host und `NotCommitted` mit Negativclaim nach 6.2 für primary/sync-Spaces und den Haupt-Store umgesetzt |
-| 3.3 Fencing-Adapter | Schnittstelle nach v3 §5.5 umgesetzt ([Replikatsteuerung](ap3-replica-control.md)): Simulator nur mit ausdrücklicher Testfreigabe, netcup als „nicht konfiguriert“-Platzhalter. netcup-SCP-Adapter mit mTLS-Dienst gebaut und gegen eine nachgebaute API geprüft; Token und Dienst auf vpsc; realer Lauf (Abschalten, Prüfen, Freigabe in Quarantäne) gegen nanoi am 2026-10-16 bestanden ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)). Promotion mit echten Daten im Daemon-Lauf und im Root-Lauf bestanden. Für Single-Restore bleibt der SSH-Nachweis nach F15 |
-| 3.4 Promotion, degradeToSingle | umgesetzt; echter Zyklus mit netcup-Fencing auf nanoi und Standby 100 als Fixture-Lauf bestanden ([Nachweis](../test/evidence/phase3-sync-2026-10-16/README.md)). `ReplicaConfigNotice` mit registergestützter Übernahme im Router und `ReplicaConfigPending` am Member umgesetzt. Abholen über das Notice-Brett im Control Space, Übernahme im Root-Heartbeat, Adressauflösung nach aktuellem Ziel. Echter Lauf mit nativem Root auf host-a bestanden ([Nachweis](../test/evidence/root-hosta-2026-10-17/README.md)). primary/sync-Spaces laufen im Federation-Daemon; der Validator lässt Sync-Regeln nur in der Variante `primary` für replizierte Members zu. degradeToSingle ohne Fencing-Adapter widerruft nur die Standby-Berechtigung des Space ([Ablauf](ap3-replica-control.md)). Offen: `ReplicaConfigPending` und Übernahme nach `setStandby` nur lokal geprüft |
+| 3.3 Fencing-Adapter | Schnittstelle nach v3 §5.5 umgesetzt ([Replikatsteuerung](abnahme/ap3-replica-control.md)): Simulator nur mit ausdrücklicher Testfreigabe, netcup als „nicht konfiguriert“-Platzhalter. netcup-SCP-Adapter mit mTLS-Dienst gebaut und gegen eine nachgebaute API geprüft; Token und Dienst auf vpsc; realer Lauf (Abschalten, Prüfen, Freigabe in Quarantäne) gegen nanoi am 2026-10-16 bestanden ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)). Promotion mit echten Daten im Daemon-Lauf und im Root-Lauf bestanden. Für Single-Restore bleibt der SSH-Nachweis nach F15 |
+| 3.4 Promotion, degradeToSingle | umgesetzt; echter Zyklus mit netcup-Fencing auf nanoi und Standby 100 als Fixture-Lauf bestanden ([Nachweis](../test/evidence/phase3-sync-2026-10-16/README.md)). `ReplicaConfigNotice` mit registergestützter Übernahme im Router und `ReplicaConfigPending` am Member umgesetzt. Abholen über das Notice-Brett im Control Space, Übernahme im Root-Heartbeat, Adressauflösung nach aktuellem Ziel. Echter Lauf mit nativem Root auf host-a bestanden ([Nachweis](../test/evidence/root-hosta-2026-10-17/README.md)). primary/sync-Spaces laufen im Federation-Daemon; der Validator lässt Sync-Regeln nur in der Variante `primary` für replizierte Members zu. degradeToSingle ohne Fencing-Adapter widerruft nur die Standby-Berechtigung des Space ([Ablauf](abnahme/ap3-replica-control.md)). Offen: `ReplicaConfigPending` und Übernahme nach `setStandby` nur lokal geprüft |
 | 3.5 setStandby | umgesetzt (leeres Quarantäne-Ziel, vollständiges Nachladen); im echten Zyklus zurück zu nanoi geprüft; Schreibsperre für alle Quellen inklusive Reaper während offener Übergänge, Abbruch mit `abandonTransition`; Nachladen eines bootstrappten Stores (Bootstrap-Chunks mit Prüfsumme) umgesetzt |
 | 3.6 Boot-Merkmal komplett | umgesetzt: `fenced`/`quarantine` per CAS; Boot-Guard bindet primary/sync-Spaces über `replicaConfig` an Rolle, Epoche, Replikatversion und Durability des Journals, `standby` ohne fachliche Zulassung; Wiederzulassung der übrigen Spaces eines gefencten Hosts je Space (`readmitSpace`/`installAdmittedPermit`); mehrere Spaces und Neustart geprüft |
 | 3.7 lww/set | Baustein, öffentlicher Adapter im `space`-Dienst, Policy-Modi mit Platzierung im Root, Replikation zwischen Members über bewiesene, gepinnte Verbindungen und Löschung eines Principals umgesetzt; echter Lauf über NetBird bestanden ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)); Kompaktierung der Historien umgesetzt und echt gelaufen ([Nachweis](../test/evidence/compaction-run-2026-10-17/README.md)) |
@@ -196,7 +196,7 @@ laufen.
 Stand 2026-10-17: Der Gesamtlauf über den produktiven Dienst ist bestanden. Er umfasste Partition, Prozessabbrüche,
 Failover mit `NotCommitted` und den Rückweg mit netcup-Fencing
 ([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)). Was für die Abnahme noch fehlt, steht in der
-[Abnahme-Matrix](ap3-abnahme.md).
+[Abnahme-Matrix](abnahme/ap3-abnahme.md).
 
 ### Phase 4 – Weitere Clients (Stufe 4)
 
@@ -211,8 +211,8 @@ die Einbindung der Replikation in den Space-Dienst, die Vervollständigung von 3
 F1 mit dem realen Fencing-Adapter (3.3) an; ohne ihn ist Promotion (3.4) nicht abnehmbar.
 
 Phase 1b ist im geprüften F15-Modell abgenommen (Handy–big, NetBird-Ausfallmatrix und verteilte Live-Restores
-eingeschlossen, [ap1b-abnahme.md](ap1b-abnahme.md)). Phase 2 ist mit der Ausnahme für Block 4 abgeschlossen
-([ap2-abnahme.md](ap2-abnahme.md)). Die Betriebserweiterung ist umgesetzt und auf Gerät und Overlay geprüft.
+eingeschlossen, [ap1b-abnahme.md](abnahme/ap1b-abnahme.md)). Phase 2 ist mit der Ausnahme für Block 4 abgeschlossen
+([ap2-abnahme.md](abnahme/ap2-abnahme.md)). Die Betriebserweiterung ist umgesetzt und auf Gerät und Overlay geprüft.
 
 ## 6. Risiken
 
@@ -260,14 +260,14 @@ eingeschlossen, [ap1b-abnahme.md](ap1b-abnahme.md)). Phase 2 ist mit der Ausnahm
 | 2.4 | umgesetzt und persistent/TCP geprüft | feste Routing-Pläne und Budgets, sequenzielle Takes, Teilabfragen, Txn-Bindung, journalisierter Waiter-Gewinner und Verlierer-Abort. Server-API; virtuelle öffentliche Space-Adresse ist keine automatische Folge. |
 | 2.5 | umgesetzt und persistent/TCP geprüft | signierte Aufnahme/Drain/Freeze/Entfernung, gemeinsame lokale/Remote-Core-Sperren, EmptyProof und atomare Root-Referenzprüfung. |
 | 2.8 | umgesetzt und geprüft: `test/support/federation-simulator.ts`, mehrere Harnesses, deterministische Latenz/Verlust/Duplikate/Partitionen/Uhrsprünge, Reservierungs-/Request-Gegenmodell | 45 neue Fälle in `test/test-router.test.ts`; kein Ersatz für echte Overlay-, Replikations- oder Lastabnahme. |
-| 2.6 | umgesetzt und live abgenommen: Policy-Abschlussprofile, `purgeTasks`, `deletePrincipal`, kontrollierte Profilumstellung | [ap2-abnahme.md](ap2-abnahme.md) Blöcke 6–8 |
+| 2.6 | umgesetzt und live abgenommen: Policy-Abschlussprofile, `purgeTasks`, `deletePrincipal`, kontrollierte Profilumstellung | [ap2-abnahme.md](abnahme/ap2-abnahme.md) Blöcke 6–8 |
 | 2.7 | umgesetzt: Capability-Verzeichnis und MemberStatus | Heartbeat nur über bewiesene Host-Schlüssel |
-| 2.9 | umgesetzt und abgenommen: Lasttest und NetBird-Volllast, Gate 4 geschlossen | [ap2-gate4.md](ap2-gate4.md); Block 4 per Entscheidung abgeschlossen |
+| 2.9 | umgesetzt und abgenommen: Lasttest und NetBird-Volllast, Gate 4 geschlossen | [ap2-gate4.md](abnahme/ap2-gate4.md); Block 4 per Entscheidung abgeschlossen |
 | 2b | umgesetzt: RunGate, Run-Controller, Remote-Members, Lauf-Recovery, Worker, Space-Lebenszyklus, Deployment-Bootstrap, mobile Steuerung, Alarmierung, Audit, Vorschau, Export, Zeitplan | [Betrieb §8](betrieb-und-mobile-steuerung.md#8-umsetzungsstand-und-reihenfolge-der-betriebserweiterung) und §7.6; Fall 3 über NetBird auf big, mobile Abnahme über WLAN und NetBird. Feinere Rollen für später notiert |
-| 3.1 | Bausteine umgesetzt und geprüft: Entry-Replikation, gepagter Snapshot, Stream-Cursor, Generationenpflege; reale zehnminütige NetBird-Partition bestanden | [ap3-replikation.md](ap3-replikation.md); nicht in Dienst, Policy, Boot und Löschung eingebunden |
-| 3.2 | Storage-Unterbau, signierter Transport, Spaces im Federation-Daemon und Bootstrap bestehender Stores umgesetzt; echte Läufe bestanden | [ap3-primary-sync.md](ap3-primary-sync.md); `CommitSealed` und `NotCommitted` umgesetzt |
+| 3.1 | Bausteine umgesetzt und geprüft: Entry-Replikation, gepagter Snapshot, Stream-Cursor, Generationenpflege; reale zehnminütige NetBird-Partition bestanden | [ap3-replikation.md](abnahme/ap3-replikation.md); nicht in Dienst, Policy, Boot und Löschung eingebunden |
+| 3.2 | Storage-Unterbau, signierter Transport, Spaces im Federation-Daemon und Bootstrap bestehender Stores umgesetzt; echte Läufe bestanden | [ap3-primary-sync.md](abnahme/ap3-primary-sync.md); `CommitSealed` und `NotCommitted` umgesetzt |
 | 3.7 | lww/set eingebunden: Adapter, Policy, Replikation, Löschung, Kompaktierung; echte Läufe bestanden | — |
-| 3.3–3.6 | Replikatsteuerung umgesetzt; netcup-Fencing-Adapter real (F1/Gate 2); Promotion, Degrade, setStandby, Notice-Übernahme und Boot-Merkmal in echten Läufen geprüft | [ap3-replica-control.md](ap3-replica-control.md); Degrade ohne Fencing-Adapter über Space-Widerruf |
+| 3.3–3.6 | Replikatsteuerung umgesetzt; netcup-Fencing-Adapter real (F1/Gate 2); Promotion, Degrade, setStandby, Notice-Übernahme und Boot-Merkmal in echten Läufen geprüft | [ap3-replica-control.md](abnahme/ap3-replica-control.md); Degrade ohne Fencing-Adapter über Space-Widerruf |
 | 3.8 | Hauptstore auf primary/sync, Schritt 6, Promotion des Control-Replikats und Router-Wechsel umgesetzt; echte Läufe auf big bestanden | — |
 
-Nachweise, genaue Grenzen und nächste Betriebsschritte: [Phase-1b-Abnahme](ap1b-abnahme.md).
+Nachweise, genaue Grenzen und nächste Betriebsschritte: [Phase-1b-Abnahme](abnahme/ap1b-abnahme.md).

@@ -1,7 +1,7 @@
 # Beispiel- und Abnahmeplan
 
-Stand: 2026-10-07. Aktuelle Implementierungen: [examples.md](examples.md).
-Zukünftige Infrastruktur: [Föderationsplan v3](federation-plan-v3.md).
+Stand: 2026-10-07. Aktuelle Implementierungen: [examples.md](../examples.md).
+Zukünftige Infrastruktur: [Föderationsplan v3](../federation-plan-v3.md).
 
 | Bereich | Heutiger Nachweis | Zusätzliche zukünftige Abnahme |
 |---|---|---|
@@ -32,6 +32,6 @@ npm test
 npm run test:examples
 ```
 
-Details: [Testübersicht](../test/examples/README.md),
-[Beispielindex](examples/README.md), [Historie](examples/HISTORISCHE-REFERENZEN.md).
+Details: [Testübersicht](../../test/examples/README.md),
+[Beispielindex](../examples/README.md), [Historie](../examples/HISTORISCHE-REFERENZEN.md).
 Federation-Tests sind Voraussetzungen späterer Planstufen, keine bereits bestandenen Beispieltests.

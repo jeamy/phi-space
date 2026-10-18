@@ -33,5 +33,5 @@ No production replication was activated. Phase 3 remains unaccepted as a whole.
 Generation/receipt maintenance, real NetBird partition acceptance, production
 ACL/boot/erasure wiring, primary/sync and promotion remain open.
 
-[Protocol and limits](../../../docs/ap3-stream-transfer.md),
-[remaining Phase 3 work](../../../docs/ap3-replikation.md).
+[Protocol and limits](../../../docs/abnahme/ap3-stream-transfer.md),
+[remaining Phase 3 work](../../../docs/abnahme/ap3-replikation.md).

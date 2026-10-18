@@ -207,7 +207,7 @@ lässt nur freigegebene Client-Zertifikats-Fingerprints zu. Reader haben kein CA
 Unbeschränkte Operator-Zertifikate und der CA-Privatschlüssel gehören nicht in
 normale Member-/Agenten-Konfigurationen. Seit 2026-10-16 lauscht der TLS-Zugang dual-stack (`::`); IPv6-Clients
 wie nanoi verwenden `serverName: "phi-spaces-register"`, weil das Serverzertifikat diesen Namen enthält
-([Testumgebung §18](testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel)). Auf big liegen ausschließlich Reader-
+([Testumgebung §18](../testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel)). Auf big liegen ausschließlich Reader-
 Zertifikat/Schlüssel in den normalen Laufzeiten.
 
 Auf big laufen die beiden Benutzer-Dienste:
@@ -218,9 +218,11 @@ systemctl --user status phi-spaces-phase1b-member-1.service
 ```
 
 Ihre jeweiligen Container halten `/data/phase1b/harness.sqlite`, lokale
-Installation, Konfiguration und eigenen Signer. Die echten Gate-Adressen sind
-`100.89.128.128:7421` und `100.89.5.70:7421`. Die Registry-IDs und Key-Fingerprints
-stehen in den öffentlichen [Nachweisen](../test/evidence/ap1b-2026-10-11/README.md).
+Installation, Konfiguration und eigenen Signer. Seit dem Neuaufbau vom 2026-10-18
+([Testumgebung §20](../testumgebung-big.md#20-neuaufbau-unter-phi-spaces-2026-10-18)) sind die Gate-Adressen
+`100.89.103.95:7421` (host-a) und `100.89.136.73:7421` (member-1). Die Registry-IDs und Key-Fingerprints
+der früheren Föderation (`100.89.128.128`, `100.89.5.70`) stehen in den öffentlichen
+[Nachweisen](../../test/evidence/ap1b-2026-10-11/README.md).
 Der Daemon `tools/federation-host.mjs` unterstützt `provision` (JSON auf stdin),
 `bootstrap`, `enroll` (Token nur auf stdin), `run`, `stop`, `status`, `fence` und
 `recovery`, `member-recovery` und `recovery-call`. `owner.lock` verhindert zwei Writer; `restart.lock` verweigert

@@ -52,13 +52,13 @@ Run typecheck and tests after every change.
   `src/alerts.ts` derives alerts, publishes their changes (webhook) and lists the admin command audit.
   `test/testbed/device/b9-coordinator.ts` is the LAN coordinator for phone acceptance of the mobile control page.
 - `examples/` runnable examples; `examples/sensor-pipeline.ts` is also imported by the pipeline tests.
-- `docs/` plans and documentation: `implementierungsstand.md` (current implementation), `api.md` (public API), `spaces-v1.md` (historical), `federation-plan-v3.md` (current
+- `docs/` plans and documentation: `implementierungsstand.md` (current implementation), `api.md` (public API), `_attic/spaces-v1.md` (historical), `federation-plan-v3.md` (current
   federation plan; v1/v2 are superseded), `examples.md` (examples in detail).
 
 ## Conventions
 
 - No new dependencies without asking; nothing is installed locally.
-- Scripted model tests: filter out system messages before checking the last message (see `docs/examples.md` §5).
+- Scripted model tests: filter out system messages before checking the last message (see `docs/examples.md`, „Testumfang").
 - Documentation in `docs/` is German; code comments and README are English.
 - Call this project's library and spaces phi-spaces; the local client class is `PhiSpaces`.
   JavaSpaces names the historical reference only.

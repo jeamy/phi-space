@@ -2,7 +2,7 @@
 
 Dieser Bericht dokumentiert die Corpus-Korrekturen vor der vollständigen Namespace-Umstellung.
 Die neueren Schlussläufe einschließlich zusätzlicher Generatorbereinigung und Speicherformatwechsel
-stehen im [Namensumstellungsbericht](namensumstellung-2026-10-18.md).
+stehen im [Namensumstellungsbericht](../namensumstellung-2026-10-18.md).
 
 Stand: 18. Oktober 2026. Ergänzt die [Hilfesystem-/Demo-Analyse](analyse-hilfesystem-demo-apps-2026-10-18.md).
 Die historischen Befunde bleiben dort erhalten; F01–F23 und die nachfolgenden Corpus-Korrekturen
@@ -65,9 +65,9 @@ Alle folgenden Artikel sind **erledigt**, auf Deutsch und Englisch vorhanden und
 | `safe_operations` | Lokaler Start, Passwort/Enrollment/Grants, Modellbudget, Limits, Backup/Restore sowie Grenzen bei Prozess-, Strom- und Hostausfall. |
 | `topology_and_readiness` | Stufenmatrix v1–v6, tatsächlich lokale Komponenten versus reale Hosts; Merge versus Primary/Sync, Fencing und getrennte Abnahmegates. |
 
-Das ausführbare [Tutorial](../help-site/examples/tuple-basics.ts) liefert
+Das ausführbare [Tutorial](../../help-site/examples/tuple-basics.ts) liefert
 `{ inspected: 7, squared: 49, jobsRemaining: 0 }` (CLI als JSON).
-Die [Live-Mirror-Implementierung](../help-site/examples/shared/live-mirror.ts) wird mit
+Die [Live-Mirror-Implementierung](../../help-site/examples/shared/live-mirror.ts) wird mit
 mehrseitigen Fake-Protokollen und echten PhiSpaces-Put-/Delete-Operationen geprüft.
 Unvollständige oder gescheiterte Aktualisierungen verändern den vorher publizierten Mirror nicht.
 
@@ -152,4 +152,4 @@ Bewusste Architektur-/Betriebsgrenzen sind keine versteckten erledigten Garantie
 ein Space bleibt ein vollständiges Durable-Dokument, externe Effekte benötigen eigene
 Idempotenz, unklare Admin-Ausgänge können `needsReview` verlangen, und Stage-Berichte sind
 keine ausführbaren Backups. Neue Betriebsabnahmen sind gegen den aktuellen
-[Implementierungsstand](implementierungsstand.md) zu planen, nicht allein gegen Help-Prosa.
+[Implementierungsstand](../implementierungsstand.md) zu planen, nicht allein gegen Help-Prosa.

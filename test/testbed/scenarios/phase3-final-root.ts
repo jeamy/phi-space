@@ -1,4 +1,4 @@
-// Operator driver for the last phase 3 acceptance run, part B (docs/ap3-abnahme.md): writes routed by the native Root
+// Operator driver for the last phase 3 acceptance run, part B (docs/abnahme/ap3-abnahme.md): writes routed by the native Root
 // on the control host to a primary/sync Member (B1) through a partition, a fork answered NotCommitted after promotion,
 // the way back with setStandby while the Root runs, and degradeToSingle without a fencing adapter (B5) with its way
 // back. Each routed write has its own request ID; an open outcome is retried with the same ID until it is decided.

@@ -1,6 +1,6 @@
-> **Ersetzt durch [federation-plan-v3.md](federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
+> **Ersetzt durch [federation-plan-v3.md](../federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
 
-> **Aktueller Projektstart:** [Automatische Remote-Bereitstellung](projektstart-autoprovisionierung.md) beschreibt
+> **Aktueller Projektstart:** [Automatische Remote-Bereitstellung](../projektstart-autoprovisionierung.md) beschreibt
 > den geplanten mobilen Start mit Spaces, Monitoring und Federation. Die historischen „gelöst“-Markierungen
 > unten sind keine Implementierungs- oder Abnahmenachweise; verworfene v2-Vorschläge sind in v3 korrigiert.
 

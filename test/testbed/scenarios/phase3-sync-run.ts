@@ -2,7 +2,7 @@
 // candidate without ACK, netcup fencing of the primary, promotion and degradeToSingle on the standby, release of the
 // old primary into quarantine, an empty setStandby back to it and a comparison of both materialized states.
 // `--local DIR` runs the same steps on loopback with a local register and the simulator adapter; the remote run is
-// started only with `--remote CONFIG` (see docs/ap3-replica-control.md) and changes real hosts.
+// started only with `--remote CONFIG` (see docs/abnahme/ap3-replica-control.md) and changes real hosts.
 import {spawn,type ChildProcessWithoutNullStreams} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';

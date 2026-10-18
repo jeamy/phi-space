@@ -1,6 +1,6 @@
 # Föderierte Spaces v3 – konsolidierter Plan
 
-Stand: 2026-10-13 (aktuelle Admission-Auflösung ergänzt; vierte Konsistenzprüfung: Nachweis für `NotCommitted`, historische Pending-Arbeit, Lauf-Recovery, Boot-Berechtigungen je Space und zu kleine Seitenbudgets präzisiert). Ersetzt `federation-plan-v1.md` (überarbeitete Fassung) und `federation-plan-v2.md`.
+Stand: 2026-10-13 (aktuelle Admission-Auflösung ergänzt; vierte Konsistenzprüfung: Nachweis für `NotCommitted`, historische Pending-Arbeit, Lauf-Recovery, Boot-Berechtigungen je Space und zu kleine Seitenbudgets präzisiert). Ersetzt `_attic/federation-plan-v1.md` (überarbeitete Fassung) und `_attic/federation-plan-v2.md`.
 
 **Status:** Zielvertrag mit teilweise implementierten lokalen Grundlagen: Doc-Version 5, benannte Spaces,
 Identitäten, lokale Request-Claims und persistente Testhilfen sind vorhanden. Der aktuelle Umfang und die offenen
@@ -14,10 +14,10 @@ brauchbaren Vorschläge übernommen und, wo nötig, korrigiert. Vorschläge, die
 übernommen. Die Bewertung jedes v2-Punkts steht in Anhang B, offene Fragen in Abschnitt 14.
 
 Grundlage der Implementierung: [Implementierungsstand](implementierungsstand.md). Die historischen Kennungen B/L
-sind in [spaces-v1.md](spaces-v1.md) nur noch für frühere Planverweise erhalten.
+sind in [spaces-v1.md](_attic/spaces-v1.md) nur noch für frühere Planverweise erhalten.
 
 **Implementierungsnachweis 2026-10-09:** Das lokale Stufe-1-Protokoll (AP 1.1–1.9) ist implementiert
-und in [ap1-abnahme.md](ap1-abnahme.md) geprüft. Gate, Schicht A/B und Replikation bleiben weitere Stufen.
+und in [ap1-abnahme.md](abnahme/ap1-abnahme.md) geprüft. Gate, Schicht A/B und Replikation bleiben weitere Stufen.
 
 ## 1. Ziel und Ausgangslage
 
@@ -443,7 +443,7 @@ Signal 608,6 s, Relay 1807,3 s und Management + Relay 3604,0 s sind abgeschlosse
 Jeder Fall endet mit erfolgreichem Objektzugriff. Gruppenentzug und echtes
 Peer-DELETE sperrten den Zugriff nach 2,895 s beziehungsweise 2,823 s.
 Frische Handy-Erstkopplung, Schlüsselsteuerung, Hintergrund und kontrollierter
-Doze sind ebenfalls geprüft. [Abnahme und Grenzen](ap1b-abnahme.md),
+Doze sind ebenfalls geprüft. [Abnahme und Grenzen](abnahme/ap1b-abnahme.md),
 [Messungen](../test/evidence/ap1b-2026-10-11/acceptance-summary.json).
 
 Der begrenzte Testproxy unterbrach komponentenweise die Erreichbarkeit für zwei
@@ -697,7 +697,7 @@ Primary**:
    das zu sperrende Gegenreplikat; dessen bereits verifizierter, weiterhin gültiger Nachweis wird verwendet.
    Ohne Sperre keine Umschaltung und keine Replikatfreigabe.
    Ergänzung 2026-10-17: Für einen Standby ohne Fencing-Adapter gilt der Widerruf seiner Boot-Berechtigung für
-   diesen Space als Sperre ([Ablauf](ap3-replica-control.md#degradetosingle-ohne-fencing-adapter)); für eine
+   diesen Space als Sperre ([Ablauf](abnahme/ap3-replica-control.md#degradetosingle-ohne-fencing-adapter)); für eine
    Promotion bleibt ein echter Adapter Pflicht.
 3. **Pending-Präfix abschließen:** Der Primary prüft seine lokale geordnete Historie und den höchstens einen
    versiegelten Commit-Kandidaten aus 7.2. Dieser wird unabhängig vom verlorenen Standby-ACK genau einmal mit
@@ -1380,7 +1380,7 @@ NetBird-, Plattform- und Fencing-Annahmen brauchen reale Integrationsnachweise.
 
 ### Stufe 3 – Replikation und kontrollierte Übernahme
 
-Umsetzungsstand (2026-10-16): [Phase-3-Bausteine und Nachweise](ap3-replikation.md). Entry-Replikation
+Umsetzungsstand (2026-10-16): [Phase-3-Bausteine und Nachweise](abnahme/ap3-replikation.md). Entry-Replikation
 (lww/set), gepagter Snapshot-Transfer, fortlaufender Cursor-Worker, Generationenpflege und der synchrone
 Storage-Unterbau sind als administrative Bausteine geprüft; die Entry-Replikation hat eine reale zehnminütige
 NetBird-Partition auf Komponentenebene bestanden. Einbindung in den Dienst, Fencing-Adapter (F1/Gate 2),
@@ -1493,13 +1493,13 @@ Gates (vor der jeweiligen Stufe nachzuweisen):
 4. Startwerte für Frame, `maxCommitBytes`, Verbindungen und Handshake festgelegt (vor 1b, F11); konkrete
    Byte-/Anzahl-Limits, Snapshot- und Generationslaufzeiten aus Lasttests bestätigt (vor 2).
    Stand 2026-10-15: für das dokumentierte Profil geschlossen; Werte, Nachweise und
-   Ausnahme beim Phase-2-Abschluss stehen in [Gate 4](ap2-gate4.md).
+   Ausnahme beim Phase-2-Abschluss stehen in [Gate 4](abnahme/ap2-gate4.md).
 5. NetBird-Version, Deployment, Lizenzen, Management-API-Rechte, Ergebnisse der Testmatrix 4.6 (vor 1b).
 6. Schlüsselablage auf Zielplattformen (Android-Keystore: Ed25519 oder P-256), WebCrypto für Browser (vor 1b/4).
 
 ## 14. Offene Fragen
 
-Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F10–F15 sind entschieden (Empfehlung übernommen; F2–F7 und F11 am 2026-10-08). F11 gilt für die Startwerte; die finalen Betriebswerte wurden am 2026-10-15 für das dokumentierte Profil in [Gate 4](ap2-gate4.md) bestätigt. Empfehlungen sind Vorschläge.
+Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F10–F15 sind entschieden (Empfehlung übernommen; F2–F7 und F11 am 2026-10-08). F11 gilt für die Startwerte; die finalen Betriebswerte wurden am 2026-10-15 für das dokumentierte Profil in [Gate 4](abnahme/ap2-gate4.md) bestätigt. Empfehlungen sind Vorschläge.
 
 | # | Frage | Empfehlung | blockiert |
 |---|---|---|---|
@@ -1513,10 +1513,10 @@ Fragen, die ohne Entscheidung des Betreibers nicht beantwortbar sind. F2–F8, F
 | F8 | Werden RPC-Ergebnisse 24 h oder bis 7 Tage aufbewahrt? | 24 h | 1 |
 | F9 | Welche Inhalte gelten als personenbezogen, und braucht es eine Löschfunktion pro Principal über Entries, Claims und Mailboxes? | ja, als Admin-Command in Stufe 2 | 2 |
 | F10 | Ist Teilergebnis-Lesen (`allowPartial`) für Dashboards Standard oder nur explizit? | nur explizit; Dashboard setzt es | 2 |
-| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | am 2026-10-15 für das geprüfte Profil bestätigt; [Grenzen](ap2-gate4.md) | 1 (Startwerte), 2 (final) |
+| F11 | Startwerte für Frame (256 KiB), `maxCommitBytes` (192 KiB), Verbindungen pro Peer (32), Handshake (5 s) passend? | am 2026-10-15 für das geprüfte Profil bestätigt; [Grenzen](abnahme/ap2-gate4.md) | 1 (Startwerte), 2 (final) |
 | F12 | Wird das Browser-Gateway gebraucht, oder genügen Handy-App und CLI? | zurückstellen | 4 |
 | F13 | Wird automatische Migration (HRW-Erweiterung) gebraucht? Sie ist nicht in v3. | erst bei konkretem Bedarf | – |
-| F14 | Sollen die v2-Dokumente (`federation-plan-v2*.md`, `.DOCS-UPDATE.md`) archiviert oder gelöscht und `README.md` auf v3 umgestellt werden? Sie verweisen auf nicht existierende Dateien und erklären die gründlichere v1 für veraltet. | README auf v3 umstellen, v2 als „ersetzt“ markieren | – |
+| F14 | Sollen die v2-Dokumente (`_attic/federation-plan-v2*.md`, `.DOCS-UPDATE.md`) archiviert oder gelöscht und `README.md` auf v3 umgestellt werden? Sie verweisen auf nicht existierende Dateien und erklären die gründlichere v1 für veraltet. | README auf v3 umstellen, v2 als „ersetzt“ markieren | – |
 | F15 | Darf vor Abnahme eines realen Fencing-Adapters (Gate 2) ein dokumentiertes Abschalten mit Neustartsperre über die Anbieterkonsole als Fencing-Nachweis für einen Restore in 1b–2 gelten? Das lockert „bloße Admin-Behauptung genügt nicht“ (5.3, Entscheidung 4). | ja, nur für Restore im Single-Betrieb, mit Screenshot/API-Auszug im Audit; nie für Promotion | 1b |
 
 ## Anhang A – Alternative ohne Overlay: SSH-Zertifikate

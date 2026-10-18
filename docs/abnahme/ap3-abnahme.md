@@ -1,7 +1,7 @@
 # Phase 3: Abnahme-Matrix
 
 Stand: 2026-10-18. **Phase 3 ist nicht abgenommen.** Diese Matrix gleicht jedes Abnahmekriterium mit den
-vorhandenen Tests und echten Läufen ab. Maßstab ist der [Implementierungsplan](implementierungsplan-v3.md):
+vorhandenen Tests und echten Läufen ab. Maßstab ist der [Implementierungsplan](../implementierungsplan-v3.md):
 v3 §11 Stufe 3 und alle Zeilen „3“ aus §12.1, real mit Fencing-Adapter.
 
 **Einordnung** nach v3 §11 und §12:
@@ -66,6 +66,18 @@ Weitere Inhalte der Stufe:
 ## Offen für die Abnahme
 
 - Befund aus dem Lauf vom 2026-10-18: Eine Member-Aufnahme (`addMember`), die nach Phase `committed` unterbrochen wird,
-  läuft nicht weiter und blockiert weitere Mitgliedschaftsbefehle.
+  läuft nicht weiter und blockiert weitere Mitgliedschaftsbefehle. **Lokal behoben, real nicht erneut geprüft.**
+  - Fortgesetzt wurde schon vorher: Der Supervisor ruft offene Befehle jede Sekunde und nach einem Neustart erneut auf.
+    Die Sperre weiterer Mitgliedschaftsbefehle bis zum Abschluss ist gewollt.
+  - Dauerhaft scheitern konnte die Fortsetzung: Sie verteilte die beim Commit eingefrorene Policy. Stieg die Policy
+    inzwischen (etwa durch die Übernahme einer ReplicaConfigNotice), lehnte ein Member mit neuerer Policy die ältere
+    ab (`invalid installed policy transition`), bei jedem Versuch.
+  - Jetzt verteilt die Fortsetzung von `add` und `remove` die aktuelle Policy an die aktuellen Members, je
+    Policy-Version unter eigener Anweisungs-ID; `activate` bleibt unverändert wiederholbar. Ist die Policy neuer als
+    beim Commit, erhält sie auch der neue Member.
+  - Tests: `test-membership` (Unterbrechung nach `committed` und Freigabe der Sperre; `add` und `remove` nach neuerer
+    Policy). Der Test für `add` scheitert mit dem alten Code genau an diesem Fehler.
+  - Dass dies der Auslöser im echten Lauf war, ist nicht belegt. Ein dauerhaft unerreichbarer bestehender Member hält
+    die Aufnahme weiterhin an; das ist gewollt, aber nur an fehlenden Ergebnissen erkennbar.
 - Außerhalb der Abnahmekriterien: Boot- und Löschintegration des Sync-Journals
   ([ap3-primary-sync](ap3-primary-sync.md)).

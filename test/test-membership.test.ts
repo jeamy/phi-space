@@ -418,3 +418,74 @@ for (const backend of BACKENDS)
                  await assert.rejects(remote.count({type : 'Job'}), /signed control grant/, 'business calls get the normal authorization again, not CommitSealed');
              } finally { socket.close(); await runtime.close(); }
          }));
+
+for (const b of BACKENDS) {
+    test(`${b}: add interrupted after committed resumes and releases the membership lock`,
+         () => fixture(b, async o => {
+             await o.make().execute('add-a', 'add', o.members.a);
+             o.drop('activate');
+             await assert.rejects(o.make().execute('add-b', 'add', o.members.b));
+             const journal = await o.root.snapshot(MembershipJournal, o.control.spaceId, ctx);
+             assert.equal(journal!.operations['add-b']!.phase, 'committed');
+             await assert.rejects(o.make().execute('drain-a', 'drain', o.members.a),
+                                  /unresolved membership transition/);
+             assert.equal((await o.make().execute('add-b', 'add', o.members.b)).phase,
+                          'completed');
+             assert.equal((await o.make().execute('drain-a', 'drain', o.members.a)).phase,
+                          'completed');
+         }));
+    test(`${b}: add resumed after a newer policy completes with the latest policy`,
+         () => fixture(b, async o => {
+             await o.make().execute('add-a', 'add', o.members.a);
+             o.unreachable('a', true);
+             await assert.rejects(o.make().execute('add-b', 'add', o.members.b));
+             const p = (await o.authority.state()).policy;
+             p.policyVersion++;
+             await o.authority.install(p, p.policyVersion - 1, async () => {});
+             await o.nodes.a.apply(await signMembership('instruction', {
+                 id : 'policy-' + p.policyVersion,
+                 memberId : 'a',
+                 spaceId : o.members.a.target.spaceId,
+                 authorityId : 'authority',
+                 action : 'policy',
+                 policy : p
+             },
+                                                      'control', o.rootKey.signer));
+             o.unreachable('a', false);
+             assert.equal((await o.make().execute('add-b', 'add', o.members.b)).phase,
+                          'completed');
+             assert.equal((await o.authority.state()).members.b!.state, 'active');
+             assert.equal((await snapshotSpace(o.a, o.members.a.target.spaceId, ctx))!
+                              .membership!.policy!.policyVersion,
+                          p.policyVersion);
+             assert.equal((await snapshotSpace(o.bh, o.members.b.target.spaceId, ctx))!
+                              .membership!.policy!.policyVersion,
+                          p.policyVersion);
+         }));
+    test(`${b}: remove resumed after a newer policy completes with the latest policy`,
+         () => fixture(b, async o => {
+             await o.make().execute('add-a', 'add', o.members.a);
+             await o.make().execute('add-b', 'add', o.members.b);
+             await o.make().execute('drain-b', 'drain', o.members.b);
+             o.unreachable('a', true);
+             await assert.rejects(o.make().execute('remove-b', 'remove', o.members.b));
+             const p = (await o.authority.state()).policy;
+             p.policyVersion++;
+             await o.authority.install(p, p.policyVersion - 1, async () => {});
+             await o.nodes.a.apply(await signMembership('instruction', {
+                 id : 'policy-' + p.policyVersion,
+                 memberId : 'a',
+                 spaceId : o.members.a.target.spaceId,
+                 authorityId : 'authority',
+                 action : 'policy',
+                 policy : p
+             },
+                                                      'control', o.rootKey.signer));
+             o.unreachable('a', false);
+             assert.equal((await o.make().execute('remove-b', 'remove', o.members.b)).phase,
+                          'completed');
+             assert.equal((await snapshotSpace(o.a, o.members.a.target.spaceId, ctx))!
+                              .membership!.policy!.policyVersion,
+                          p.policyVersion);
+         }));
+}

@@ -1,4 +1,4 @@
-// lww/set step 4 (docs/ap3-replikation.md): stable stream positions and compaction of replicated entry histories.
+// lww/set step 4 (docs/abnahme/ap3-replikation.md): stable stream positions and compaction of replicated entry histories.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';

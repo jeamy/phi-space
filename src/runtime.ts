@@ -60,9 +60,9 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	/** Applies signed Space lifecycle instructions (create, archive, reactivate, delete) to this host's Spaces. */
 	spaceLifecycle?: SpaceLifecycleService;
 	refreshPolicy?:()=>Promise<void>;
-	/** lww/set types of this host's main-store Spaces, served by entry replication (docs/ap3-replikation.md). */
+	/** lww/set types of this host's main-store Spaces, served by entry replication (docs/abnahme/ap3-replikation.md). */
 	merge?: import("./service.ts").SpaceServiceOptions["merge"];
-	/** Entry stream export of this host's merge replica to its pinned peers (docs/ap3-replikation.md, step 2). */
+	/** Entry stream export of this host's merge replica to its pinned peers (docs/abnahme/ap3-replikation.md, step 2). */
 	entryExport?: { peers: ReadonlySet<string>; describe: () => Promise<Json>; changes: (after: number, maxBytes: number) => Promise<Json> };
 	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };

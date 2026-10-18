@@ -1,4 +1,4 @@
-> **Ersetzt durch [federation-plan-v3.md](federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
+> **Ersetzt durch [federation-plan-v3.md](../federation-plan-v3.md).** Nur noch als Verlauf erhalten; nicht danach implementieren.
 
 # Föderierte Spaces v1 – Analyse und Plan
 

@@ -22,6 +22,7 @@ import type { WsConnection } from "../ws.ts";
 import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
 import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "../../../src/core.ts";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
+import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts, type PurgeNotice, type RetentionConfig } from "./retention.ts";
 
 export const SWARM_ALIAS = "social-swarm";
 export const SWARM_AGENT_COUNT = Math.max(10, Math.min(50_000, Number(process.env.SWARM_AGENTS ?? 100)));
@@ -272,6 +273,18 @@ export interface SwarmStats {
 	/** Attached shard count (1 = single space) and how many answered stats this tick. */
 	shards: number;
 	shardsUp: number;
+	/** Test-system retention: per-shard entry cap (null = unbounded) and the last purge of each shard. */
+	retention: { cap: number | null; now: number; shards: ShardReport[] };
+}
+
+export interface ShardReport {
+	shard: string;
+	up: boolean;
+	entries: number | null;
+	lastPurgeAt: number | null;
+	lastRemoved: number;
+	totalRemoved: number;
+	host?: HostFacts | null;
 }
 
 export interface SwarmShardOptions {
@@ -285,6 +298,8 @@ export interface SwarmShardOptions {
 	seedContent?: boolean;
 	/** Password verifier for admin-gated controls (swarm.pause/rate/burst/agentCount); null = open. */
 	adminCheck?: ((password: string) => boolean) | null;
+	/** Entry cap of this shard's database (default `SWARM_MAX_ENTRIES`, 20000); null disables the purge. */
+	maxEntries?: number | null;
 }
 
 export class SocialSwarmHub {
@@ -369,6 +384,8 @@ export class SocialSwarmHub {
 
 	#adminCheck: ((password: string) => boolean) | null = null;
 	#admins = new Set<WsConnection>();
+	#retention: RetentionConfig | null;
+	#purging = false;
 
 	constructor(host: SpaceHost, ctx: Context, meter: Meter, opts: SwarmShardOptions = {}) {
 		this.host = host;
@@ -379,6 +396,7 @@ export class SocialSwarmHub {
 		this.#pulses = opts.pulses ?? true;
 		this.#seedContent = opts.seedContent ?? true;
 		this.#adminCheck = opts.adminCheck ?? null;
+		this.#retention = opts.maxEntries === undefined ? retentionConfig() : opts.maxEntries === null ? null : retentionConfig(opts.maxEntries);
 	}
 
 	/** Attach a second shard space (primary hub only): task routing, delta merge and queries fan out to it. */
@@ -596,6 +614,61 @@ export class SocialSwarmHub {
 		}
 		this.#timers.push(setInterval(() => void this.#broadcastTick(), 700));
 		this.#timers.push(setInterval(() => void this.#statsTick(), 8_000));
+		await writeHostInfo({ host: this.host, spaceId: this.spaceId, ctx: this.ctx }, hostFacts(), this.#retention?.cap ?? null).catch((e) => this.#shardWarn("host info not written", e));
+		if (this.#retention) this.#timers.push(setInterval(() => void this.#retentionTick(), 10_000));
+	}
+
+	/** Above the cap: purge the oldest posts (with history nodes and likes) in bursts down to the low-water mark. */
+	async #retentionTick(): Promise<void> {
+		if (!this.#retention || this.#purging || this.#closed || !this.#historyReady) return;
+		this.#purging = true;
+		try {
+			if (await this.space.count() <= this.#retention.cap) return;
+			const r = await purgeOldest({ host: this.host, spaceId: this.spaceId, ctx: this.ctx }, this.#retention);
+			if (!r) return;
+			this.#forgetPosts(r.postIds);
+			console.log(`[swarm] retention: purged ${r.removed} entries (${r.posts} posts), ${r.entries} left, cap ${r.cap}`);
+			void this.#statsTick();
+		} catch (e) {
+			this.#shardWarn("retention purge failed", e);
+		} finally {
+			this.#purging = false;
+		}
+	}
+
+	#forgetPosts(postIds: string[]): void {
+		const gone = new Set(postIds);
+		for (const id of gone) { this.#postById.delete(id); this.#likeSets.delete(id); this.#replyCounts.delete(id); }
+		this.#recentPosts = this.#recentPosts.filter((p) => !gone.has(p.postId));
+	}
+
+	/** Purge state (and optionally the host description) of one shard; an unreachable shard reports `up: false`. */
+	async #shardReport(space: SpaceLike, shard: string, remote: boolean, entries: number | null, withHost: boolean): Promise<ShardReport> {
+		const call = <T>(p: Promise<T>) => (remote ? this.#remoteCall(p, 8_000) : p);
+		try {
+			const notice = (await call(space.readAll({ type: "PurgeNotice" }, { limit: 1 })))[0]?.fields as unknown as PurgeNotice | undefined;
+			const host = withHost ? ((await call(space.readAll({ type: "HostInfo" }, { limit: 1 })))[0]?.fields as unknown as HostFacts | undefined) ?? null : undefined;
+			return {
+				shard, up: true, entries: entries ?? await call(space.count()),
+				lastPurgeAt: notice?.at ?? null, lastRemoved: notice?.removed ?? 0, totalRemoved: notice?.totalRemoved ?? 0,
+				...(host !== undefined ? { host } : {}),
+			};
+		} catch {
+			return { shard, up: false, entries, lastPurgeAt: null, lastRemoved: 0, totalRemoved: 0, ...(withHost ? { host: null } : {}) };
+		}
+	}
+
+	#shardLabels(): { local: string; remote: string } {
+		const clean = (tag: string, fallback: string) => tag.replace(/-+$/, "") || fallback;
+		return { local: clean(this.#shardTag, "a"), remote: clean(this.#remotePrefix, "b") };
+	}
+
+	/** What the test-system bar shows: per shard the host (CPU, memory), entry count and the cap. */
+	async systemInfo(): Promise<{ cap: number | null; now: number; shards: ShardReport[] }> {
+		const l = this.#shardLabels();
+		const shards = [await this.#shardReport(this.space, l.local, false, null, true)];
+		if (this.#remote) shards.push(await this.#shardReport(this.#remote, l.remote, true, null, true));
+		return { cap: this.#retention?.cap ?? null, now: Date.now(), shards };
 	}
 
 	setReplyGenerator(fn: import("../llm.ts").SwarmReplyGenerator | null): void {
@@ -1376,10 +1449,13 @@ export class SocialSwarmHub {
 		const entries: Record<string, number> = { ...st.byType };
 		let totalEntries = st.entries;
 		let shardsUp = 1;
+		const labels = this.#shardLabels();
+		const reports = [await this.#shardReport(this.space, labels.local, false, st.entries, true)];
 		if (this.#remote) {
 			try {
 				const rs = await this.#remoteCall(this.#remote.stats(), 8_000);
 				totalEntries += rs.entries;
+				reports.push(await this.#shardReport(this.#remote, labels.remote, true, rs.entries, true));
 				shardsUp++;
 				this.#markRemoteUp();
 				for (const [t, n] of Object.entries(rs.byType)) entries[t] = (entries[t] ?? 0) + Number(n);
@@ -1402,6 +1478,7 @@ export class SocialSwarmHub {
 			likes: [...this.#likeSets.values()].reduce((n, s) => n + s.size, 0),
 			onlineAgents: this.#online.size,
 			postsPerMin: this.#postTimestamps.length,
+			retention: { cap: this.#retention?.cap ?? null, now: Date.now(), shards: reports },
 			workerCount: WORKER_COUNT,
 			running: this.#running,
 			rate: this.#rate,

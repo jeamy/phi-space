@@ -29,4 +29,4 @@ its own administrative documents; it is not activated for normal production
 Spaces. Large paged snapshots, service/ACL/boot/erasure integration and the full
 primary/sync and promotion protocols remain open.
 
-[Implementation and remaining Phase 3 work](../../../docs/ap3-replikation.md).
+[Implementation and remaining Phase 3 work](../../../docs/abnahme/ap3-replikation.md).

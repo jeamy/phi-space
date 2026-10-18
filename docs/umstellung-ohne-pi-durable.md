@@ -431,7 +431,7 @@ Sicherung, gemessene Stillstandszeit und ein benannter Rückweg vor.
 Im Zuge der Umsetzung werden `README.md`, `AGENTS.md`, `docs/api.md`,
 `docs/implementierungsstand.md`, `docs/implementierungsplan-v3.md`,
 `docs/federation-plan-v3.md`, `docs/betrieb-und-mobile-steuerung.md`,
-`docs/ap1b-betrieb.md`, Testbed-/TUI-Anleitungen und Beispielverträge angepasst.
+`docs/abnahme/ap1b-betrieb.md`, Testbed-/TUI-Anleitungen und Beispielverträge angepasst.
 Historische Dokumente bleiben historische Nachweise und werden nicht rückwirkend
 auf den neuen Speicher umgeschrieben. Die mobile Integration erhält eigene
 Migrations-/Betriebsanweisungen im Nachbarprojekt.

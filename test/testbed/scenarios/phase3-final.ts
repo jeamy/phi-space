@@ -1,4 +1,4 @@
-// Operator driver for the last phase 3 acceptance run, part A (docs/ap3-abnahme.md), on two hosts without the control
+// Operator driver for the last phase 3 acceptance run, part A (docs/abnahme/ap3-abnahme.md), on two hosts without the control
 // host: a ten-minute partition of a merge replication with concurrent writes, deletes, renewals and expiries (S1); a
 // SIGKILL of each daemon that the next start clears by itself (B4); a stopped NetBird agent on the standby (B2); a
 // primary/sync journal whose budget runs out (B3). Steps are recorded in <out>/state.json; a rerun continues after the

@@ -1,4 +1,4 @@
-// Operator driver for the phase 3.7 run (docs/ap3-replikation.md): continuous writes through the gate of a primary/sync
+// Operator driver for the phase 3.7 run (docs/abnahme/ap3-replikation.md): continuous writes through the gate of a primary/sync
 // Space while the overlay between primary and standby is cut (a short and a long partition), process kills of standby
 // and primary, then a failover whose sealed fork is answered NotCommitted by the promoted standby, and the way back
 // (quarantine, wipe, setStandby). Every write carries its own number and request ID; a sealed or unknown outcome is

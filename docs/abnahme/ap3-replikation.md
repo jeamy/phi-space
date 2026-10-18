@@ -3,7 +3,7 @@
 Stand: 2026-10-17. **Phase 3 ist begonnen, aber nicht abgenommen.**
 Phase 2 und ihre dokumentierte Abschlussentscheidung bleiben unverändert.
 Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
-[Föderationsplans](federation-plan-v3.md).
+[Föderationsplans](../federation-plan-v3.md).
 Den Abgleich mit den Abnahmekriterien enthält die [Abnahme-Matrix](ap3-abnahme.md).
 
 ## Umsetzung und verbleibende Schritte
@@ -11,12 +11,12 @@ Den Abgleich mit den Abnahmekriterien enthält die [Abnahme-Matrix](ap3-abnahme.
 | Teil | Stand | Verbleibender Nachweis |
 |---|---|---|
 | 3.1 Entry-Replikation | Persistenter HLC, LWW, versionierte Tombstones, Add-Wins-Tags, Deduplizierung, feste Replikat-Inkarnationen, bytebegrenzter Änderungsabruf und kleiner atomarer Snapshot-Merge implementiert | Lokale und gebaute Invariantentests sind Bausteinnachweise; noch keine produktive NetBird-Replikation |
-| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | [Generationenpflege](ap3-snapshot-maintenance.md) implementiert und geprüft; reale zehnminütige NetBird-Partition zwischen zwei Hosts als Komponentenlauf bestanden ([Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md)); produktive Einbindung offen |
+| 3.2 Große Snapshots und fortlaufender Austausch | [Snapshot-Teil](ap3-snapshot-transfer.md) und [Pull-Worker mit atomarem Stream-Cursor](ap3-stream-transfer.md) implementiert und als administrative Bausteine geprüft | [Generationenpflege](ap3-snapshot-maintenance.md) implementiert und geprüft; reale zehnminütige NetBird-Partition zwischen zwei Hosts als Komponentenlauf bestanden ([Nachweis](../../test/evidence/ap3-overlay-2026-10-15/README.md)); produktive Einbindung offen |
 | 3.3 Einbindung in Spaces und Dienst | Offen | Policy-Modi, Typ-/Owner-Rechte, frische Import-Grants für genau Quelle/Ziel, Boot-Rolle `entryReplica`, Clock-Health, Widerruf, Löschbarrieren und verteilte Principal-Löschung auch dieser Historien; Set-Renewal ist als atomare Version umgesetzt; exklusive Txns/Takes im öffentlichen Adapter noch ablehnen |
 | 3.4 Vollständige Primary-/Standby-Historie | [Synchroner Storage-Unterbau](ap3-primary-sync.md), signierter Transport, primary/sync-Spaces im Federation-Daemon, Bootstrap bestehender Stores und kontrollierte Übergänge umgesetzt; echte Läufe bestanden | `CommitSealed` öffentlich mit Klärung im laufenden Host; `NotCommitted` mit Negativclaim für primary/sync-Spaces und Haupt-Store |
 | 3.5 `setStandby` und Single-Umschaltung | [Umgesetzt](ap3-replica-control.md): Übergangsjournal, degradeToSingle, setStandby für ein leeres Quarantäne-Ziel, Schreibsperre aller Quellen inklusive Reaper, Boot-Fencing und externe Berechtigungen; mit netcup- und Container-Fencing echt gelaufen | — |
 | 3.6 Promotion und Quarantäne | [Umgesetzt](ap3-replica-control.md): nur fester synchroner Standby mit aktiver Berechtigung, verifizierter Nachweis, neue Epoche, Quarantäne nur über `release`; netcup- und Container-Fencing real, Boot-Guard für Replikatversion und Durability, Promotion des Control-Replikats echt gelaufen | Negativclaims umgesetzt; Root bei Control-Promotion echt gelaufen |
-| 3.7 Gesamtbetrieb | Echter Lauf über den produktiven Dienst bestanden ([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)): zehnminütige Partition, Prozessabbrüche von Standby und Primary, Failover mit `NotCommitted`, Rückweg; jeder entschiedene Schreibvorgang genau einmal | Router-Delegation statt Admin-Grants, Ausfall eines NetBird-Agenten, erschöpfter Speicher |
+| 3.7 Gesamtbetrieb | Echter Lauf über den produktiven Dienst bestanden ([Nachweis](../../test/evidence/phase3-partition-2026-10-17/README.md)): zehnminütige Partition, Prozessabbrüche von Standby und Primary, Failover mit `NotCommitted`, Rückweg; jeder entschiedene Schreibvorgang genau einmal | Router-Delegation statt Admin-Grants, Ausfall eines NetBird-Agenten, erschöpfter Speicher |
 
 ## Baustein 3.1
 
@@ -117,7 +117,7 @@ Promotion oder physische Löschung der neuen Historie.
 Alle 505 Repository-Tests und 24 mobile Runtime-/Lifecycle-Tests sind bestanden;
 die Typprüfung ist grün. Die elf neuen Replikationsfälle bestehen außerdem am
 gebauten Server-Artefakt. Bibliothek und mobiles Bundle sind bytegleich. Die
-[Nachweise](../test/evidence/ap3-entry-2026-10-15/README.md) halten Quellstände,
+[Nachweise](../../test/evidence/ap3-entry-2026-10-15/README.md) halten Quellstände,
 Artefakt-Hashes, isolierten Container und vollständige Bereinigung fest. Das ist
 der Abschluss des hier beschriebenen ersten Bausteins, keine Phase-3-Gesamtfreigabe.
 
@@ -136,7 +136,7 @@ und reale Overlay-Partition bleiben offen.
 Aktueller Stream-Nachweis: 530 Repository-Tests und 24 mobile Tests grün;
 36 gebaute Serverfälle bestanden. Daten und Cursor überstehen die geprüften
 Commit-Verluste gemeinsam; TCP-Wiederanlauf und konkurrierende Worker sind geprüft.
-[Artefakt- und Quellbindung](../test/evidence/ap3-stream-2026-10-15/README.md).
+[Artefakt- und Quellbindung](../../test/evidence/ap3-stream-2026-10-15/README.md).
 Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleiben offen.
 
 
@@ -172,13 +172,13 @@ beiden Seiten Writes, Erneuerungen, ein Delete und während der Partition ablauf
 Harnesses und Austausch sind beide Sichten gleich (Revision 90), Gelöschtes und Abgelaufenes blieb unsichtbar, und
 Wartung plus erneuter Austausch erzeugte kein Echo. Eigene Regeln, Gruppe, Policy und Container wurden entfernt.
 Grenzen: Komponenten-Fixture mit Peer-IP-Pin und privatem Token, kein Snapshot unter Last, kein produktiver Dienst.
-[Nachweis](../test/evidence/ap3-overlay-2026-10-15/README.md).
+[Nachweis](../../test/evidence/ap3-overlay-2026-10-15/README.md).
 
 
 ## Testserver für Fencing und Promotion (2026-10-16)
 
 Für 3.3–3.6 steht der netcup-Server `nanoi` als Test-Primary bereit, der tatsächlich abgeschaltet werden darf;
-vpsc dient als Backup-/Register-Host. Einrichtung und Grenzen: [Testumgebung §18](testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel).
+vpsc dient als Backup-/Register-Host. Einrichtung und Grenzen: [Testumgebung §18](../testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel).
 Für den Fencing-Adapter fehlen noch der netcup-REST-API-Zugang und die Entscheidung F1.
 
 ## Einbindung von lww/set in Dienst und Router (Entwurf, 2026-10-17)
@@ -289,7 +289,7 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
   - Danach entfernt der bestehende Schritt `erase-compact` die alten Revisionen.
   - Jeder Merge-Member durchläuft diesen Ablauf; „überall gelöscht“ heißt, jeder meldet `complete`.
 - **Echter Lauf** mit zwei Merge-Members über NetBird, Partition und Löschung bestanden
-  ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).
+  ([Nachweis](../../test/evidence/merge-run-2026-10-17/README.md)).
 
 **4. Kompaktierung (umgesetzt):** Entfernt werden Ereignisse, die die Sicht nicht mehr beeinflussen, sobald sie
 kausal stabil sind. Ein Zufallstest vergleicht jedes kompaktierende Replikat nach jedem Schritt mit einem nicht
@@ -351,8 +351,8 @@ kompaktierenden Schatten, der genau dieselben Eingaben bekommt.
   - Jede Regel ist durch Mutationsproben belegt: Ohne sie schlägt mindestens ein Test fehl.
   - Der Laufzeittest kompaktiert periodisch zwischen zwei Hosts über bewiesene Verbindungen.
 - **Echter Lauf** mit nano-test und standby-100: periodische Kompaktierung auf beiden Hosts, Sichten unverändert,
-  Ströme danach weiter ([Nachweis](../test/evidence/compaction-run-2026-10-17/README.md)).
+  Ströme danach weiter ([Nachweis](../../test/evidence/compaction-run-2026-10-17/README.md)).
 
 **5. Echter Lauf:** bestanden mit nano-test und standby-100: Replikation, Partition mit gleichzeitigen Writes
 und Konvergenz, verteilte Löschung mit physischer Kompaktierung auf beiden Hosts
-([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).
+([Nachweis](../../test/evidence/merge-run-2026-10-17/README.md)).

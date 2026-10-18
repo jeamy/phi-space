@@ -1,4 +1,4 @@
-// The error of a primary/sync commit that is durably sealed but not confirmed (docs/ap3-primary-sync.md). Its own
+// The error of a primary/sync commit that is durably sealed but not confirmed (docs/abnahme/ap3-primary-sync.md). Its own
 // module, so the space service can recognise it without loading the journal (node:sqlite).
 import {StorageRejected} from '@earendil-works/pi-durable';
 export class CommitSealed extends Error{

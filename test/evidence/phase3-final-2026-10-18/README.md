@@ -1,6 +1,6 @@
 # Letzter Abnahmelauf Phase 3 — 2026-10-18
 
-Echter Lauf zu den offenen Zeilen der [Abnahme-Matrix](../../../docs/ap3-abnahme.md) auf nanoi (`nano-test`),
+Echter Lauf zu den offenen Zeilen der [Abnahme-Matrix](../../../docs/abnahme/ap3-abnahme.md) auf nanoi (`nano-test`),
 Host 100 (`standby-100`) und host-a (Control und nativer Root). Treiber:
 `test/testbed/scenarios/phase3-final.ts` (Teil A) und `phase3-final-root.ts` (Teil B). Die Daten stehen in
 `report.json`.

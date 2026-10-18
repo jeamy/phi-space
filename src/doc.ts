@@ -18,7 +18,7 @@ export const Space = defineDoc<SpaceState & Record<string, any>>({
 let checkpointLimit = Infinity;
 /**
  * Caps the size of a base written for a Space (process-wide, only ever lowered). A base is one write of the whole
- * value, and a primary/sync journal takes a bounded commit (docs/ap3-primary-sync.md): a larger base would refuse
+ * value, and a primary/sync journal takes a bounded commit (docs/abnahme/ap3-primary-sync.md): a larger base would refuse
  * every later commit of that Space. primarySyncStorage sets it from its journal; without it nothing changes.
  */
 export function limitCheckpointBytes(bytes: number): void { checkpointLimit = Math.min(checkpointLimit, bytes); }

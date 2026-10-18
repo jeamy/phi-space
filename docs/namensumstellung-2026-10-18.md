@@ -80,7 +80,7 @@ Krypto- oder Betriebsverträgen; alte und neue Version sind dort **nicht interop
 3. **SSH-Forced-Commands.** `scripts/recovery-ssh.mjs`, `fence-ssh.mjs`, `fence-docker-ssh.mjs` und
    `recovery-docker-ssh.mjs` vergleichen `SSH_ORIGINAL_COMMAND` exakt (`phi-spaces-recovery`,
    `phi-spaces-register-read|operator`, `phi-spaces-fence`, `phi-spaces-fence-status`). Client und
-   serverseitige Skripte samt `authorized_keys` (`/opt/phi-spaces/…`, siehe `docs/ap1b-betrieb.md`)
+   serverseitige Skripte samt `authorized_keys` (`/opt/phi-spaces/…`, siehe `docs/abnahme/ap1b-betrieb.md`)
    müssen gleichzeitig umgestellt werden, sonst scheitern Recovery und Fencing.
 4. **Fencing-Drop-in.** `ContainerFencing` sperrt die Unit mit `zz-phi-spaces-fenced.conf`. Ein vor der
    Umstellung gefencter Host trägt das Drop-in der alten Version: `verify` erkennt ihn nicht als gefenct
@@ -119,6 +119,13 @@ Krypto- oder Betriebsverträgen; alte und neue Version sind dort **nicht interop
 4. Serverseitige Skripte, `authorized_keys`, systemd-Units, `.env`/Compose-Variablen und Pfade umstellen;
    alte Testbed-Ressourcen abbauen.
 5. Hosts mit der neuen Version starten; Grants und Leases neu ausstellen lassen, Telefone neu paaren.
+
+**Umgesetzt am 2026-10-18** für die Testföderation auf big, vpsc, nanoi und 100: Die Daten waren nicht übernehmbar
+(siehe 1–3), die Föderation wurde deshalb gestoppt, gesichert und unter den neuen Namen frisch aufgesetzt; neue CA
+und Zertifikate, neue Authority und Schlüssel, Forced Commands, Units, Verzeichnisse und SSH-Aliase umbenannt,
+Altbestände entfernt. Details und Prüfungen: [Testumgebung §20](testumgebung-big.md#20-neuaufbau-unter-phi-spaces-2026-10-18).
+Das Handy `xi` ist mit neuer APK und neuem Keystore-Schlüssel neu gekoppelt. Offen: der primary/sync-Haupt-Store von
+host-a wurde nicht wieder eingerichtet.
 
 ## Prüfungen und Evidenz
 

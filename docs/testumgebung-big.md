@@ -385,8 +385,8 @@ der Backup-/Register-Host, big bleibt wegen seiner übrigen Dienste kein Fencing
 | Laufzeit | Debian `docker.io`; Image `phi-spaces-test-node:local` von big übertragen (Node v22.23.3, Produktionsabhängigkeiten). Verzeichnisse `/opt/phi-spaces/artifacts` und `/var/lib/phi-spaces` (0700). Es werden wie auf big nur gebaute Artefakte ausgeliefert. |
 | Zeit | systemd-timesyncd aktiv, synchronisiert (Voraussetzung für die HLC-Uhrprüfung). |
 
-| Federation-Member | Container `phi-spaces-nano` (Benutzer `node`, read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz) mit Daten in `/var/lib/phi-spaces/nano` (`/data/nano`); eigenständig gebündelter Daemon `federation-host.mjs` aus `test/testbed/federation-host.ts`; Dienst `phi-spaces-nano.service`. Host `nano-test`, Member von Control `phase1b-host-a`, Gate `100.89.28.88:7421`, eigener Ed25519-Host-Schlüssel (`keyId 6e11de52…`) beim Control-Supervisor als `host` enrolled. |
-| Register | eigenes Reader-Zertifikat `CN=phi-spaces-register-reader-nano` aus der Operator-CA (Fingerprint `4e935bd2…`, kein Operator-Recht), Zugriff über IPv6 auf `2a02:c207:2252:8263:8000::`:17422 mit `serverName: phi-spaces-register`; externer `boot:nano-test` (Version 1) per Operator-CAS geschrieben |
+| Federation-Member | Container `phi-spaces-nano` (Benutzer `node`, read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz) mit Daten in `/var/lib/phi-spaces/nano` (`/data/nano`); eigenständig gebündelter Daemon `federation-host.mjs` aus `test/testbed/federation-host.ts`; Dienst `phi-spaces-nano.service`. Host `nano-test`, Member von Control `phase1b-host-a`, Gate `100.89.28.88:7421`, eigener Ed25519-Host-Schlüssel (`keyId b37f6846…`, seit 2026-10-18) beim Control-Supervisor als `host` enrolled. |
+| Register | eigenes Reader-Zertifikat `CN=phi-spaces-register-reader-nano` aus der Operator-CA `phi-spaces-recovery-ca` (Fingerprint `ce6431f5…`, kein Operator-Recht), Zugriff über IPv6 auf `2a02:c207:2252:8263:8000::`:17422 mit `serverName: phi-spaces-register`; externer `boot:nano-test` (Version 1) per Operator-CAS geschrieben |
 | NetBird-Abfragen | lesender Management-Token wie bei member-1 (`management-token`, 0600) |
 
 Geprüft: Neustart von nanoi, danach Firewall, Docker, NetBird und `phi-spaces-nano` aktiv und `ready`; ein Admin
@@ -407,7 +407,7 @@ Laufzeit gesetzt und in netplan ergänzt (Sicherung `50-cloud-init.yaml.bak.2026
 kein Neuanwenden); von außen ist nur `…8263:8000::` erreichbar, nicht `…8263::1`.
 
 Fencing: netcup-SCP-Zugang (Offline-Refresh-Token) und Fencing-Dienst liegen auf vpsc, nicht auf nanoi.
-Details in [ap3-replica-control.md](ap3-replica-control.md#netcup-adapter). nanoi ist Server 964249 mit
+Details in [ap3-replica-control.md](abnahme/ap3-replica-control.md#netcup-adapter). nanoi ist Server 964249 mit
 MAC `2a:38:5f:38:de:22`; nur dieser Server steht in der Liste der Ziele. Ein echter Abschaltlauf ist am 2026-10-16 bestanden
 ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)).
 
@@ -430,8 +430,8 @@ außen geht er nur über IPv4, mit derselben öffentlichen Adresse wie lux27 (`2
 | NetBird | Client 0.80.0 aus `pkgs.netbird.io` (Schlüssel von nanoi übernommen), `apt-mark hold`. Auf 100 lag eine ältere Konfiguration für netbird.io, die nach der Installation kurz wieder aktiv wurde. Sie bleibt als inaktives Profil `default` erhalten; aktiv ist das neue Profil `spacebird` mit Peer `standby-100`, 100.89.187.150, Gruppe `space-hosts`, Peer-ID `db96lcflh8lg008bddjg`. Sicherung des vorherigen Zustands: `/root/netbird-state.before-spacebird-20261016`. Zu nanoi (nur IPv6) läuft die Verbindung über das Relay. |
 | Firewall | `pi-nft-host.service` mit `/etc/nftables-pi-host.nft`, Policy `accept`, damit LAN-Dienste (NFS, SSH) unverändert bleiben. Über `wt0` werden nur neue Verbindungen auf TCP 7421 angenommen; 7421 ist außerhalb des Overlays gesperrt. |
 | Laufzeit | Docker, Image `phi-spaces-test-node:local` von big; Daemon-Artefakt identisch mit nanoi. Container `phi-spaces-standby` (read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz), Daten in `/var/lib/phi-spaces/standby`; Dienst `phi-spaces-standby.service`. |
-| Federation-Member | Host `standby-100`, Member von Control `phase1b-host-a`, Gate `100.89.187.150:7421`, eigener Ed25519-Schlüssel (`keyId 83503563…`), als `host` enrolled. Ablauf wie bei nanoi: befristete Gruppe `standby-enroll-20261016` mit Policy, danach gelöscht. |
-| Register | Reader-Zertifikat `CN=phi-spaces-register-reader-standby-100` (Fingerprint `d57baa5c…`, Schlüssel auf 100 erzeugt), Zugriff über `207.180.233.218:17422`. `tls.json` auf vpsc ergänzt (Sicherung `tls.json.before-standby-100-20261016`). `boot:standby-100` (Version 1) per Operator-CAS. Keine neue ufw-Regel nötig: Die Adresse ist schon für den Operator freigegeben, getrennt wird über das Zertifikat. |
+| Federation-Member | Host `standby-100`, Member von Control `phase1b-host-a`, Gate `100.89.187.150:7421`, eigener Ed25519-Schlüssel (`keyId 29728525…`, seit 2026-10-18), als `host` enrolled. Ablauf wie bei nanoi: befristete Gruppe `standby-enroll-20261016` mit Policy, danach gelöscht. |
+| Register | Reader-Zertifikat `CN=phi-spaces-register-reader-standby-100` (Fingerprint `d7f89b33…`, Schlüssel auf 100 erzeugt), Zugriff über `207.180.233.218:17422`. `tls.json` auf vpsc ergänzt (Sicherung `tls.json.before-standby-100-20261016`). `boot:standby-100` (Version 1) per Operator-CAS. Keine neue ufw-Regel nötig: Die Adresse ist schon für den Operator freigegeben, getrennt wird über das Zertifikat. |
 | NetBird-Abfragen | lesender Management-Token wie bei nanoi |
 
 Geprüft:
@@ -440,3 +440,30 @@ Geprüft:
 - nanoi erreicht `standby-100:7421` über das Relay.
 - Nach einem Neustart von 100 kamen Firewall, NetBird (Profil `spacebird`), Docker, NFS und `phi-spaces-standby`
   von selbst wieder. Der Dienst war danach `ready`, und das Admin-Lesen klappte erneut.
+
+## 20. Neuaufbau unter phi-spaces (2026-10-18)
+
+Die Föderation auf big, vpsc, nanoi und 100 lief bis zum 2026-10-18 unter den alten Namen. Ihre Daten waren mit
+der neuen Version nicht übernehmbar (Dokumenttyp-Namespace, Signaturdomänen, SSH-Befehle; die Phase-3-Stores waren
+repliziert, siehe [Namensumstellung](namensumstellung-2026-10-18.md)). Sie wurde deshalb gestoppt, gesichert und
+unter den neuen Namen frisch aufgesetzt; die Altbestände sind entfernt.
+
+| Bereich | Stand |
+|---|---|
+| Artefakte | gepinnt auf Commit `0d17ca9` (sauberer Worktree); Bundle-Hash `d20f60d4…`, Daemon `federation-host.mjs` im Image `8a6e8e73…`, eigenständiger Daemon für nanoi/100 `dabaaede…` |
+| PKI | neue CA `CN=phi-spaces-recovery-ca` (EC P-256); Register-Server `CN=phi-spaces-register-server` (SAN `207.180.233.218`, `2a02:c207:2252:8263:8000::`, `phi-spaces-register`), Fencing-Server `CN=phi-spaces-fencing-server`, Operator, Reader (big), Reader nano, Reader standby-100 (Schlüssel auf 100). Replica-Control-Zertifikate wurden nicht neu ausgestellt (nicht freigegeben, ungenutzt). CA und Operator liegen lokal unter `~/.local/share/phi-spaces-ops/pki` |
+| vpsc | `phi-spaces-recovery-register(-tls).service`, `phi-spaces-fencing.service` unter `~/.local/share/phi-spaces-{recovery,fencing}`; frische Register-Datenbank; netcup-Token und Fence-Zustand verschoben (nicht kopiert) nach `~/.config/phi-spaces-fencing` bzw. `state/` |
+| NetBird | Stack `spacebird` unverändert, Verzeichnis jetzt `/media/docker/phi-spaces/netbird`; Testbed-Peers neu (host-a `100.89.103.95`, member-1 `100.89.136.73`, host-b `100.89.90.236`, member-2 `100.89.226.1`), alte Testbed-Peers gelöscht |
+| Föderation | Authority `a-ddb275ab…`, Control-Space `sp-be8af63f…` auf `phase1b-host-a` (mit Recovery-Socket und Recovery-Admin-Pin); Members `phase1b-member-1`, `nano-test`, `standby-100` als `host` enrolled; Admin `lux27` neu gekoppelt (`keyId b3004c21…`). Neuer Recovery-Operator-Schlüssel `de22259f…` |
+| big | Units `phi-spaces-phase1b-{host-a,member-1}.service` aktiv, die drei Restore-Abnahme-Units umbenannt und deaktiviert; Forced Commands unter `~/.local/share/phi-spaces-operations`; lokale SSH-Aliase `phi-spaces-*` |
+| Handy | `xi` (Xiaomi M2007J17G) mit neu gebauter Debug-APK (Bundle `d20f60d4…`); neuer Keystore-Schlüssel `c5c68f25…` (Alias `phi-spaces/…`) als `member` mit Scope `jobs` gekoppelt, Data-Host `phase1b-member-1`; Objektzugriff über das Overlay geprüft. Das alte Profil liegt auf dem Gerät als `space-profile.legacy-20261018.json`, der alte Keystore-Eintrag bleibt ungenutzt |
+| nicht neu aufgesetzt | der Haupt-Store von host-a als primary/sync (`main-sync`, zuletzt `single` mit einem nicht mehr vorhandenen Peer) |
+
+Geprüft: alle vier Dienste `ready` und nach Neustart wieder `ready`; der Admin liest über das Overlay den Data Space
+`jobs` von member-1, nano-test und standby-100 und den Control-Space (vier PeerKeys); nanoi erreicht
+`standby-100:7421`; F15-Status über `phi-spaces-fence-host-a`/`-member-1` und der SSH-Registerleser antworten;
+der Fencing-Dienst erneuert das netcup-Token unter dem neuen Pfad.
+
+Sicherungen der Altbestände (privat, bis zur Freigabe): `~/legacy-backup-20261018` auf big, vpsc und lokal,
+`/root/backup/legacy-backup-20261018` auf nanoi und 100.
+

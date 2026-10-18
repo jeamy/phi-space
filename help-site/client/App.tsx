@@ -10,6 +10,7 @@ import { startIndexLoad } from "./lib/index-load.ts";
 import { SpaceChatWorkbench } from "./components/SpaceChatWorkbench.tsx";
 import { AdminSpacesView } from "./components/AdminSpacesView.tsx";
 import { SocialFeedView } from "./components/SocialFeedView.tsx";
+import { SystemBar } from "./components/SystemBar.tsx";
 
 const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
 
@@ -1141,18 +1142,24 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						</article>
 					) : null}
 
-					{/* MULTIPLAYER SPACE-CHAT WORKBENCH (v1..v6) */}
-					{view.kind === "space-chat" ? (
-						<SpaceChatWorkbench
-							locale={locale}
-							sessionId={view.sessionId}
-							initialStage={view.stage}
-							onOpenArticle={(id) => openArticle(id)}
-						/>
+					{/* LIVE VIEWS: multiplayer space-chat workbench (v1..v6) and the self-running social swarm feed, with the test-system bar below */}
+					{view.kind === "space-chat" || view.kind === "feed" ? (
+						<div className="live-frame">
+							<div className="live-frame__body">
+								{view.kind === "space-chat" ? (
+									<SpaceChatWorkbench
+										locale={locale}
+										sessionId={view.sessionId}
+										initialStage={view.stage}
+										onOpenArticle={(id) => openArticle(id)}
+									/>
+								) : (
+									<SocialFeedView locale={locale} />
+								)}
+							</div>
+							<SystemBar locale={locale} />
+						</div>
 					) : null}
-
-					{/* SELF-RUNNING SOCIAL SWARM FEED (1000 agents) */}
-					{view.kind === "feed" ? <SocialFeedView locale={locale} /> : null}
 
 					{/* LOGIN-PROTECTED ADMINSPACES PORTAL */}
 					{view.kind === "admin" ? <AdminSpacesView locale={locale} /> : null}

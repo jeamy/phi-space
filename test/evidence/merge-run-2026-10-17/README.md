@@ -1,6 +1,6 @@
 # lww/set echt: zwei Merge-Members über NetBird — 2026-10-17
 
-Echter Lauf der Schritte 1 bis 3 aus [ap3-replikation.md](../../../docs/ap3-replikation.md):
+Echter Lauf der Schritte 1 bis 3 aus [ap3-replikation.md](../../../docs/abnahme/ap3-replikation.md):
 
 - **Members:** nano-test (netcup, nur IPv6) und standby-100 (Heimnetz) als Merge-Members einer gemeinsamen
   Replikation `merge-run-20261017`.

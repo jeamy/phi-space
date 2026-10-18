@@ -1,6 +1,6 @@
 # Kompaktierung echt: zwei Merge-Members über NetBird — 2026-10-17
 
-Echter Lauf von Schritt 4 aus [ap3-replikation.md](../../../docs/ap3-replikation.md) mit nano-test und standby-100.
+Echter Lauf von Schritt 4 aus [ap3-replikation.md](../../../docs/abnahme/ap3-replikation.md) mit nano-test und standby-100.
 Die Daten stehen in `report.json`.
 
 ## Aufbau

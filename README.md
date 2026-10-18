@@ -25,7 +25,7 @@ with overlay identity, key proof, enrollment, signed grants and key rotation. Fe
 run/worker/Space administration and mobile controls are implemented. Merge replication, primary/sync replication,
 promotion and recovery also have implementations and documented tests, but **Phase 3 is not fully accepted**.
 Implementation is not a production or failure-model guarantee: see
-[current implementation](docs/implementierungsstand.md) and the [Phase-3 acceptance matrix](docs/ap3-abnahme.md).
+[current implementation](docs/implementierungsstand.md) and the [Phase-3 acceptance matrix](docs/abnahme/ap3-abnahme.md).
 This README was checked against the checkout on 2026-10-18; those documents carry the detailed evidence and open gates.
 
 ## Tuple spaces: coordination through data
@@ -277,7 +277,7 @@ storage; they are not separate hosts. `SpaceService` and `RemoteSpace` let clien
 the federation runtime (gate, enrollment, grants, router, `FederatedSpace`, membership) composes several hosts
 according to [docs/federation-plan-v3.md](docs/federation-plan-v3.md) — stages 1b and 2 have acceptance evidence
 within their documented profiles and exceptions. Stage 3 has working replication/promotion components but
-remaining system acceptance gates in [the current matrix](docs/ap3-abnahme.md). The operations extension (runs, workers, Space lifecycle, deployment
+remaining system acceptance gates in [the current matrix](docs/abnahme/ap3-abnahme.md). The operations extension (runs, workers, Space lifecycle, deployment
 bootstrap, mobile control) is described in [docs/betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md).
 `space_take`/`space_read` with `timeoutMs` block the turn and are capped at 60 s; use `space_wait` for long waits.
 
@@ -381,11 +381,11 @@ German documents in [docs/](docs/README.md):
 |---|---|
 | [implementierungsstand.md](docs/implementierungsstand.md) | implemented scope, evidence and limits |
 | [api.md](docs/api.md) | TypeScript, service and remote API reference |
-| [ap1b-abnahme.md](docs/ap1b-abnahme.md) | phase 1b integration evidence |
-| [ap2-abnahme.md](docs/ap2-abnahme.md) | phase 2 acceptance |
-| [ap3-replikation.md](docs/ap3-replikation.md) | phase 3 replication architecture |
-| [ap3-abnahme.md](docs/ap3-abnahme.md) | phase 3 acceptance criteria, evidence and remaining gates |
-| [spaces-v1.md](docs/spaces-v1.md) | historical local snapshot (2026-10-07) |
+| [ap1b-abnahme.md](docs/abnahme/ap1b-abnahme.md) | phase 1b integration evidence |
+| [ap2-abnahme.md](docs/abnahme/ap2-abnahme.md) | phase 2 acceptance |
+| [ap3-replikation.md](docs/abnahme/ap3-replikation.md) | phase 3 replication architecture |
+| [ap3-abnahme.md](docs/abnahme/ap3-abnahme.md) | phase 3 acceptance criteria, evidence and remaining gates |
+| [spaces-v1.md](docs/_attic/spaces-v1.md) | historical local snapshot (2026-10-07) |
 | [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (stages 0–2 implemented, 3 in progress) |
 | [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |
 | [betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md) | operations extension: runs, workers, Spaces, bootstrap, mobile control, acceptance status |

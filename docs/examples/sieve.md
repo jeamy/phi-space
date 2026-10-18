@@ -33,7 +33,7 @@ Basisprimzahlen reichen bis sqrt(end−1); die Tests vergleichen unabhängig mit
 Die exportierten Funktionen erlauben JSONL-Storage und Wiederaufnahme unter identischer runId.
 Getestet sind Lease-Ablauf einer verlassenen Reservierung, anschließend JSONL-Reopen und vollständige
 Aggregation ohne Neuseeding. Zusätzlich prüft `sieve-remote` den benannten Space über Unix-Sockets mit sterbenden Workern
-und SIGKILL/Neustart des Host-Prozesses; [AP-1-Abnahme](../ap1-abnahme.md).
+und SIGKILL/Neustart des Host-Prozesses; [AP-1-Abnahme](../abnahme/ap1-abnahme.md).
 
 ## Grenzen
 

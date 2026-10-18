@@ -37,5 +37,5 @@ replication, primary/sync or promotion. Continuous transport checkpoints,
 maintenance of retained generations and production ACL/boot/erasure wiring remain
 open. No production replication was activated.
 
-[Protocol and limits](../../../docs/ap3-snapshot-transfer.md),
-[remaining Phase 3 work](../../../docs/ap3-replikation.md).
+[Protocol and limits](../../../docs/abnahme/ap3-snapshot-transfer.md),
+[remaining Phase 3 work](../../../docs/abnahme/ap3-replikation.md).

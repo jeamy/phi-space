@@ -1,8 +1,8 @@
 # AP 1.1–1.9: lokale Implementierung und Abnahme
 
-Stand: 2026-10-09. Bezug: [Implementierungsplan](implementierungsplan-v3.md),
-[Federation-Vertrag](federation-plan-v3.md), [API](api.md),
-[Implementierungsstand](implementierungsstand.md). Nachweise beziehen sich auf den lokalen Arbeitsstand.
+Stand: 2026-10-09. Bezug: [Implementierungsplan](../implementierungsplan-v3.md),
+[Federation-Vertrag](../federation-plan-v3.md), [API](../api.md),
+[Implementierungsstand](../implementierungsstand.md). Nachweise beziehen sich auf den lokalen Arbeitsstand.
 
 | AP | Geschlossene Punkte | Nachweis |
 |---|---|---|

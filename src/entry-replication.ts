@@ -22,7 +22,7 @@ export type EntryMutation =
  | { kind: 'delete'; type: string; fields: Fields; owner: Principal }
  | { kind: 'remove'; type: string; tags: string[]; owner: Principal }
  | { kind: 'renew'; type: string; tag: string; fields: Fields; owner: Principal; expiresAt: number | null }
- /** Erases every earlier change owned by `principal` (docs/ap3-replikation.md, step 3); `owner` is the issuing admin. */
+ /** Erases every earlier change owned by `principal` (docs/abnahme/ap3-replikation.md, step 3); `owner` is the issuing admin. */
  | { kind: 'erase'; principal: Principal; owner: Principal }
  | RedactedMutation;
 /**
@@ -37,7 +37,7 @@ export type ReplicatedEntryChange = {
 };
 /**
  * `dropped`: runs [first, last] of stream positions whose events compaction removed. Positions are assigned in logical
- * order and never reused; without runs, position = index + 1 (docs/ap3-replikation.md, step 4).
+ * order and never reused; without runs, position = index + 1 (docs/abnahme/ap3-replikation.md, step 4).
  */
 export type EntryReplicationState = { config: EntryReplicationConfig | null; configHash: string; clock: HybridClock; lastWallTime: number; seq: number; events: ReplicatedEntryChange[]; segments?: EntrySnapshotSegment[]; dropped?: Array<[number, number]>;
  /** Per origin: every change up to this sequence was held here and by every member; an unknown one is a removed one. */
@@ -47,7 +47,7 @@ export type EntryVersionVector = Record<string, number>;
 /** The last vector each peer advertised, as recorded here; `regressed` blocks compaction until the peer gets a new incarnation. */
 export type EntryPeerVectors = { peers: Record<string, { incarnation: string; vector: EntryVersionVector; recordedAt: number; regressed?: true }> };
 export const EntryReplicaPeers = defineDocFamily<EntryPeerVectors, null>({ kind: 'phi-spaces.entry-replica-peers', version: 1, scope: 'session', family: true, initial: () => ({ peers: {} }) });
-/** Why nothing can be compacted, or what would be removed (docs/ap3-replikation.md, step 4). */
+/** Why nothing can be compacted, or what would be removed (docs/abnahme/ap3-replikation.md, step 4). */
 export type EntryCompactionStatus = { blocked: string | null; events: number; droppable: number; floor: EntryVersionVector };
 /** Expiry is judged this long after the deadline: the bound on remote clock skew. */
 export const ENTRY_EXPIRY_GRACE_MS = 60_000;
@@ -452,7 +452,7 @@ export class EntryReplicationController {
   const s=await this.state('export'),p=canonical(principal);
   return (s?.events??[]).filter(e=>e.mutation.kind!=='erase'&&canonical(e.mutation.owner)===p).map(e=>entryChangeId(e));
  }
- /** Step 3 (docs/ap3-replikation.md): erases every earlier change of `principal` on all replicas, as a change of its own. */
+ /** Step 3 (docs/abnahme/ap3-replikation.md): erases every earlier change of `principal` on all replicas, as a change of its own. */
  async erasePrincipal(requestId: string, principal: Principal, admin: Principal): Promise<ReplicatedEntryChange> {
   return this.mutate(requestId,{kind:'erase',principal:copy(principal),owner:copy(admin)});
  }
@@ -612,7 +612,7 @@ export class EntryReplicationController {
   },this.o.ctx);
  }
  /**
-  * Which events can go (docs/ap3-replikation.md, step 4). Stable: every member advertised a vector covering it, and this
+  * Which events can go (docs/abnahme/ap3-replikation.md, step 4). Stable: every member advertised a vector covering it, and this
   * replica holds each member's own changes up to its advertised vector. Candidates are stable, invisible for a stable
   * reason and never an erase; a candidate stays while it still suppresses or anchors a retained change (fixpoint).
   */

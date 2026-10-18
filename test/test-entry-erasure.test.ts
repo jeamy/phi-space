@@ -1,4 +1,4 @@
-// lww/set step 3 (docs/ap3-replikation.md): erasing a principal from replicated entry histories.
+// lww/set step 3 (docs/abnahme/ap3-replikation.md): erasing a principal from replicated entry histories.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';

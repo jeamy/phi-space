@@ -168,7 +168,7 @@ bleiben offen.
 | Handy mit aktuellem APK | Installation und Objektlesen über echte NetBird-Verbindung nachgewiesen |
 | Gesamtfreigabe Phase 2 / finale Gate-4-Werte | Nicht erteilt |
 
-Nachweise und Prüfzahlen: [Abnahmeverzeichnis](../test/evidence/ap2-final-2026-10-11/).
+Nachweise und Prüfzahlen: [Abnahmeverzeichnis](../../test/evidence/ap2-final-2026-10-11/).
 
 ## Nachtrag 2026-10-12: lokale batchweise Löschung
 
@@ -182,11 +182,11 @@ Fremde Entries bleiben erhalten; neue Wirkungen sind bis zum Abschluss gesperrt.
 Die Löschung betrifft den aktuell zugänglichen Zustand; physische Bereinigung
 von Backend-Historien, Snapshots und Backups ist damit nicht nachgewiesen.
 
-Aktuelle Nachweise: [Prüfstand 2026-10-12](../test/evidence/ap2-batches-2026-10-12/).
+Aktuelle Nachweise: [Prüfstand 2026-10-12](../../test/evidence/ap2-batches-2026-10-12/).
 
 ## Nachtrag 2026-10-12: partitionierte Root-Journale
 
-[Prüfberichte](../test/evidence/ap2-journals-2026-10-12/) enthalten die aktuellen
+[Prüfberichte](../../test/evidence/ap2-journals-2026-10-12/) enthalten die aktuellen
 lokalen, Mobile- und Server-Artefaktprüfungen. Die Produktion wurde für diese
 Prüfung nicht umgestellt. Der Testtransport der drei persistenten Members ist
 simuliert; es wird keine neue NetBird- oder Handy-Abnahme behauptet.
@@ -214,7 +214,7 @@ Writes/Commits werden erneut abgefragt. Genau 1.000 einzigartige Ergebnisse,
 keine verbleibenden Tasks, vollständiger Primzahlvergleich und genau 5.000
 abgeschlossene Parents/Child-Commands sind Pflichtprüfungen.
 
-[Messwerte und Nachweise](../test/evidence/ap2-router-load-2026-10-12/)
+[Messwerte und Nachweise](../../test/evidence/ap2-router-load-2026-10-12/)
 dokumentieren den konkreten Serverlauf. Er ersetzt weiterhin weder die
 Drei-Host-NetBird-Abnahme noch die vollständige Crash-Grenzen-Matrix.
 
@@ -280,7 +280,7 @@ bereits abgeschlossenen Parents gibt ungenutzte Child-Zukunftsreservierungen
 idempotent frei. Damit ist auch die Lücke zwischen Parent-Abschluss und
 Freigabe des reservierten Child-Budgets geschlossen.
 
-[Nachweise](../test/evidence/ap2-netbird-2026-10-12/) dokumentieren den konkreten
+[Nachweise](../../test/evidence/ap2-netbird-2026-10-12/) dokumentieren den konkreten
 Wire-Lauf und die aktuellen Artefaktprüfungen. Die vollständige Crash-Matrix
 unter voller Overlay-Last bleibt ein separater Abnahmeschritt; die zusätzlichen
 gezielten Fälle ersetzen sie nicht. Phase 2 ist insgesamt weiterhin offen.
@@ -350,7 +350,7 @@ Der Referenzvergleich ergab 9.592 Primzahlen bis 100.000, Summe 454.396.537.
 422 lokale Tests, 185 Tests am gebauten Server-Artefakt und 24 Mobile-/Remote-
 Runtime-Tests bestanden. Der alte Adapter scheitert gezielt auf beiden
 Backends an der neuen Fehlerklassifikations-Regression.
-[Nachweise](../test/evidence/ap2-wire-recovery-2026-10-13/) enthalten die
+[Nachweise](../../test/evidence/ap2-wire-recovery-2026-10-13/) enthalten die
 Berichte und die getrennt bezeichneten Fehlerversuche.
 
 Der separate echte NetBird-Versuch mit `beforeSend` bestätigt den sicheren
@@ -401,7 +401,7 @@ Keine ungenutzte Child-Zukunftsreservierung blieb übrig.
 428 lokale Tests, 199 Server-Artefakt-Tests, eine aktualisierte 43-Fälle-
 Kompatibilitätsprüfung am Server (mit 42 überlappenden Fällen und einem neuen
 Legacy-Fall) und 24 Mobile-/Remote-Tests bestanden.
-[Nachweise](../test/evidence/ap2-admission-2026-10-13/) unterscheiden diesen
+[Nachweise](../../test/evidence/ap2-admission-2026-10-13/) unterscheiden diesen
 aktuellen Wire-Nachweis von der weiterhin offenen Prozess-/Journal-/ACK-Matrix.
 
 
@@ -420,7 +420,7 @@ Gewinner wird konsumiert, zwei Verlierer zurückgegeben. Keine Transaktion,
 kein Mailbox-Ereignis und keine ungenutzte Zukunftsreservierung bleibt offen.
 Typecheck und 428 Regressionstests bestanden. Bestehende Serverdienste bleiben
 aktiv; die Produktionsbibliothek und der Mobile-Bundle bleiben unverändert.
-[Nachweise](../test/evidence/ap2-process-crashes-2026-10-13/).
+[Nachweise](../../test/evidence/ap2-process-crashes-2026-10-13/).
 
 **Grenze:** Der gekillte Prozess besitzt alle vier Stores; RPC verwendet
 Fixture-Identitäten im selben Prozess und die Uhr ist fest. Dies ergänzt die
@@ -460,7 +460,7 @@ Alle 30 unterbrochenen Requests sind darunter; keine ungenutzte
 Zukunftsreservierung und keine aktive Member-Transaktion blieb übrig.
 Typecheck und 428 Regressionstests bestanden; der erweiterte Audit ist auch
 gegen den vorherigen Admission-Volllastlauf geprüft.
-[Nachweise](../test/evidence/ap2-netbird-process-crashes-2026-10-13/).
+[Nachweise](../../test/evidence/ap2-netbird-process-crashes-2026-10-13/).
 
 **Grenzen dieses Root-RPC-Nachweises:** Er betrifft Root-Abbrüche bei laufenden
 Members und deckt gezielte Mailbox-ACKs, explizite Journal-Commit-Grenzen
@@ -505,7 +505,7 @@ Ed25519 und P-256 über echte TCP-Verbindungen reproduziert und regressionsgesic
 432 lokale Tests, zehn gebaute Server-Authentifizierungsfälle, 24 Mobile-Tests
 und Typecheck bestanden. Der Mobile-Bundle ist synchronisiert; ein neuer
 Handy-Deployment-Nachweis wird damit nicht behauptet.
-[Nachweise](../test/evidence/ap2-netbird-ack-2026-10-13/).
+[Nachweise](../../test/evidence/ap2-netbird-ack-2026-10-13/).
 
 Dieser ACK-Nachweis umfasst keine Member-Abbrüche oder sämtliche expliziten
 Journal-Grenzen über NetBird. Der anschließende Member-Nachweis folgt unten. Alle Fixture-Container und temporären NetBird-Objekte
@@ -554,7 +554,7 @@ dem Server. Die erfolgreiche Abnahme nutzt eine frische Fixture. Ein verweigerte
 vorhandenes Testverzeichnis berechtigt nicht zur Übernahme seiner CID-Dateien;
 diese Aufräumgrenze ist separat mit dem laufenden eigenen Fixture geprüft.
 
-[Nachweise](../test/evidence/ap2-netbird-member-crashes-2026-10-13/).
+[Nachweise](../../test/evidence/ap2-netbird-member-crashes-2026-10-13/).
 
 Alle eigenen Fixture-Container und temporären NetBird-Objekte sind entfernt;
 bestehende Produktionsdienste bleiben aktiv. Der Nachweis ersetzt weder
@@ -588,7 +588,7 @@ Der erste kleine Lauf erkannte die zunächst nicht erfasste Dokument-Erstanlage
 und scheiterte korrekt bei 22 statt 26 Abbrüchen. Nach Korrektur bestehen die
 vier Erstanlage-Proben samt Audit und alle fünf vollständigen Läufe.
 Zusätzliche Probe-Entries zählen nicht zum anfänglich geprüften 10.000er Bestand.
-[Nachweise](../test/evidence/ap2-netbird-journal-2026-10-14/).
+[Nachweise](../../test/evidence/ap2-netbird-journal-2026-10-14/).
 
 Die Abnahme umfasst erfolgreiche Daten-/Wettlauf-Journale. Fehler-/Review-,
 Restore-, Lösch- und Profilumstellungsabläufe haben eigene Abnahmen.
@@ -599,7 +599,7 @@ Die fünf übrigen Testblöcke und die Gesamtfreigabe bleiben offen.
 Die native Root-Provisionierung, Root-/Child-Historienlöschung, unabhängigen
 Löschbarrieren, der Archivkatalog und die kontrollierte Profilumstellung sind
 implementierte Bausteine. Ihre Grenzen und noch fehlenden Betriebsbindungen
-stehen im [Implementierungsstand](implementierungsstand.md#phase-2).
+stehen im [Implementierungsstand](../implementierungsstand.md#phase-2).
 Sie ersetzen die offenen Live-Abnahmen nicht.
 
 Ein definitiver Child-Fehler führte bisher in zusammengesetzten Schreib-/Take-
@@ -652,7 +652,7 @@ Betriebsnachweis und gibt Phase 2 nicht frei. Die ursprünglichen IDs und ihre
 Historien werden nicht durch Ersatz-IDs oder gelöschte Journale verdeckt.
 
 
-Die [Nachweise der nativen Fortsetzung](../test/evidence/ap2-native-root-2026-10-14/README.md)
+Die [Nachweise der nativen Fortsetzung](../../test/evidence/ap2-native-root-2026-10-14/README.md)
 enthalten Tests, Artefakt-Prüfsummen, Fencing, die CAS-Ablehnung und den dauerhaft
 prüfpflichtigen ursprünglichen Request. Die eigene Testumgebung ist anschließend
 beendet: sechs Container, sechs genau zugeordnete Firewall-Ausnahmen und die
@@ -671,7 +671,7 @@ sind irreversibel. Die Archiv- und Floor-Prüfungen laufen innerhalb derselben
 SQLite-Schreibtransaktion: Eine verspätete Registrierung eines Backups aus einer
 älteren Epoche scheitert auch nach bereits erfolgter Versiegelung.
 
-Die [Register-Nachweise](../test/evidence/ap2-erasure-register-2026-10-14/README.md)
+Die [Register-Nachweise](../../test/evidence/ap2-erasure-register-2026-10-14/README.md)
 enthalten Zwei-Verbindungs-/Wiederanlauf- und mTLS-Prüfungen, **463/463** Tests,
 **24/24** mobile Tests, Typecheck und 29 gebaute Artefakte. Der gemeinsame
 Live-Registerdienst wurde nicht aktualisiert oder neu gestartet. Backup-/Restore-
@@ -681,7 +681,7 @@ Blöcke 4–8 insgesamt erhalten dadurch keine Freigabe.
 
 ## Native Root-Latenz: frische Prüfungen bündeln
 
-Die [Latenz-Nachweise](../test/evidence/ap2-native-performance-2026-10-14/README.md)
+Die [Latenz-Nachweise](../../test/evidence/ap2-native-performance-2026-10-14/README.md)
 trennen den negativen Take, lesende Messungen und die weiterhin separate Live-Abnahme.
 Ein einzelner lesender Root-Aufruf benötigte zunächst 19,4 Sekunden und 141
 Registerabfragen. Root-Zustand und Schlüssel werden nun aus einem gemeinsamen,
@@ -719,7 +719,7 @@ ab: Policy-Version 5, `maxResultCount=2`, alle drei Members wieder `active`
 und mit genau dem neuen Abschlussprofil. Die bestehenden Umstellungstests
 prüfen weiterhin Antwortverlust, Commit-Abbrüche und Rechte-/Zielbindungen.
 
-Nachweis: [profile-transition.json](../test/evidence/ap2-remaining-2026-10-15/profile-transition.json).
+Nachweis: [profile-transition.json](../../test/evidence/ap2-remaining-2026-10-15/profile-transition.json).
 Block 4 wird dadurch nicht erneut ausgeführt oder bewertet.
 
 ## Block 5: Zwei physische Hosts und isolierter Member-Ausfall (2026-10-15)
@@ -743,7 +743,7 @@ es wurde kein neuer Datenlauf erzeugt. Beide Parents sind dauerhaft `done`.
 
 Die lokale Eingangs-Firewall erhielt ausschließlich zwei dokumentierte Regeln
 für Root-Peer, lokale NetBird-Adresse und Testport 7432.
-Nachweis: [physical-domains.json](../test/evidence/ap2-remaining-2026-10-15/physical-domains.json).
+Nachweis: [physical-domains.json](../../test/evidence/ap2-remaining-2026-10-15/physical-domains.json).
 
 ## Blöcke 6 und 7: Verteilte Löschung mit Backend- und Archivnachweis (2026-10-15)
 
@@ -776,11 +776,11 @@ lieferten ursprünglicher Write-Parent, eigener Read-Parent und fremder
 Read-Parent jeweils `ResultExpired`; keine Prüfeinträge waren mehr sichtbar.
 Keine frühere Root-Operation wurde mit einer neuen Request-ID wiederholt.
 
-Nachweise: [Löschlauf](../test/evidence/ap2-remaining-2026-10-15/distributed-erasure.json),
-[Dateiprüfungen](../test/evidence/ap2-remaining-2026-10-15/file-verification.json),
-[Fortschrittsfolge](../test/evidence/ap2-remaining-2026-10-15/erasure-progress.jsonl),
-[alte Cache-Inhalte vorhanden](../test/evidence/ap2-remaining-2026-10-15/privacy-before-erasure.json),
-[Prüfstand](../test/evidence/ap2-remaining-2026-10-15/validation.json).
+Nachweise: [Löschlauf](../../test/evidence/ap2-remaining-2026-10-15/distributed-erasure.json),
+[Dateiprüfungen](../../test/evidence/ap2-remaining-2026-10-15/file-verification.json),
+[Fortschrittsfolge](../../test/evidence/ap2-remaining-2026-10-15/erasure-progress.jsonl),
+[alte Cache-Inhalte vorhanden](../../test/evidence/ap2-remaining-2026-10-15/privacy-before-erasure.json),
+[Prüfstand](../../test/evidence/ap2-remaining-2026-10-15/validation.json).
 
 Der abschließende Quellstand besteht Typecheck, 492 phi-spaces-Tests,
 20 mobile Runtime-Tests, vier mobile Lifecycle-Tests und zwei zusätzliche
@@ -798,7 +798,7 @@ exakt ergänzte eingeschränkte SSH-Autorisierungszeile wurden entfernt.
 Der eigene Register-Container wurde beendet und entfernt; seine Datenbank,
 die versiegelten Löschbelege und die Stores bleiben erhalten. Die geprüften
 Bestandsdienste auf `big` und `vpsc` behielten Container-ID, Startzeit und
-Neustartzähler: [Aufräumnachweis](../test/evidence/ap2-remaining-2026-10-15/cleanup.json).
+Neustartzähler: [Aufräumnachweis](../../test/evidence/ap2-remaining-2026-10-15/cleanup.json).
 
 
 ## Gate 4 und Abschlussentscheidung (2026-10-15)

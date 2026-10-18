@@ -20,7 +20,7 @@ Stand: 2026-10-07. Dieser Bericht beschreibt den geprüften lokalen Arbeitsstand
 
 ## Ergänzung AP 1.1–1.9 (2026-10-09)
 
-Aktueller Nachweis: [ap1-abnahme.md](ap1-abnahme.md). Typecheck und TypeScript-Build bestanden;
+Aktueller Nachweis: [ap1-abnahme.md](abnahme/ap1-abnahme.md). Typecheck und TypeScript-Build bestanden;
 184 Kern-/Integrations-/TUI-/AP-/pi-server-Tests und 158 Beispieltests bestanden ohne Skips.
 Echter pi-serverd mit neu gebautem Bundle, temporärer SQLite-Datenbank und Unix-Socket geprüft;
 Sessions weiter nutzbar, Space-RPC ohne explizite Konfiguration abgewiesen. Remote-Sieb im benannten

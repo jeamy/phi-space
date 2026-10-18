@@ -1,15 +1,16 @@
 # Beispiele: Implementierung und Nachweise
 
-Stand: 2026-10-07. Verbindlicher Einstieg für die Beispiele. Alle Implementierungen verwenden heute **einen
-lokalen Harness pro Prozess und Storage**. Mehrere Conversations sind keine Federation.
-Der [Föderationsplan v3](federation-plan-v3.md) beschreibt zukünftige Infrastruktur.
+Stand: 2026-10-18. Verbindlicher Einstieg für die Beispiele. Die Beispiele in `examples/` verwenden **einen
+lokalen Harness pro Prozess und Storage**. Mehrere Conversations sind keine Federation; föderierte Stufen
+liegen nur im Hilfesystem (v5/v6). Der [Föderationsplan v3](federation-plan-v3.md) ist umgesetzt; Stand und
+Nachweise stehen im [Implementierungsstand](implementierungsstand.md) und den [Abnahmedokumenten](abnahme/ap3-abnahme.md).
 
 | Beispiel | Implementierung | Nachweis und Grenze |
 |---|---|---|
 | Master/Worker | [workers.ts](../examples/workers.ts) | geskriptete Write/Take-Demonstration; kein Bild-Resize, keine Crash-Wiedervergabe |
 | Blockierendes Take | [blocking-tool.ts](../examples/blocking-tool.ts) | geskripteter Tool-Aufruf; Host schreibt später einen Job im selben Prozess |
 | Sensor-Pipeline | [sensor-pipeline.ts](../examples/sensor-pipeline.ts) | echte Funktionen, Konkurrenz, Lease-Ablauf und Rollback lokal getestet |
-| Chat | [chat.ts](../examples/chat.ts) | tatsächlicher geskripteter Ring getestet; Live-Modell nicht abgenommen |
+| Chat | [chat.ts](../examples/chat.ts) | tatsächlicher geskripteter Ring getestet; Live-Modus (`--live`) vorhanden, nicht abgenommen |
 | arXiv-Recherche | [arxiv-research.ts](../examples/arxiv-research.ts) | tatsächlicher Runner mit geskriptetem Modell und JSONL getestet; echte Quellen-/Modellqualität offen |
 | Dark-Energy-Recherche | [dark-energy-research.ts](../examples/dark-energy-research.ts) | tatsächlicher Runner einschließlich Klassifikation und Abstract-Zusammenfassung geskriptet getestet |
 | Golomb | [golomb.ts](../examples/golomb.ts) | tatsächliche Ordnung-4-Suche, Ergebnisvalidierung und persistente Wiederaufnahme getestet |
@@ -43,13 +44,15 @@ npm run example:golomb -- 4 --workers 2
 npm run example:sieve -- 1001 4
 npm run example:cache
 npm run example:blocking
+npm run example:dark-energy
 npm run example:space-chat
 npm run help
 ```
 
-Live-Beispiele benötigen Zugangsdaten und verursachen Modellkosten. Gemäß AGENTS.md werden sie erst nach
-Freigabe ausgeführt. Der arXiv-Netzzugang und wissenschaftliche Ergebnisqualität sind durch Faux-Tests nicht
-validiert. API-Parser und Datenvertrag werden mit lokalen Fixtures geprüft.
+Live-Beispiele (`examples/chat.ts --live`, `npm run example:arxiv`) benötigen Zugangsdaten und verursachen
+Modellkosten; [live-models.ts](../examples/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
+sie erst nach Freigabe ausgeführt. Der arXiv-Netzzugang und wissenschaftliche Ergebnisqualität sind durch
+Faux-Tests nicht validiert. API-Parser und Datenvertrag werden mit lokalen Fixtures geprüft.
 
 ## Space-Regeln für Beispiele
 
@@ -77,11 +80,15 @@ Lauf verwendet. Ein allgemeiner Resume-Modus für die Forschungsbeispiele ist ni
 
 Die ältere Suite prüft viele Space-Muster mit eigenen Skripten. Sie ist kein vollständiger Nachweis für die
 jeweiligen CLI-Programme. [recovery.test.ts](../test/examples/recovery.test.ts) ergänzt Aufrufe der tatsächlichen
-Implementierungen, JSONL-Reopen sowie gezielte Fehler. [Testübersicht](../test/examples/README.md).
+Implementierungen, JSONL-Reopen sowie gezielte Fehler. Geskriptete Modelltests filtern Systemnachrichten vor der
+Prüfung der letzten Nachricht (`m.role !== "system"`, siehe `test/examples/`). [Testübersicht](../test/examples/README.md).
 
-Keine gemessenen Skalierungs-, Federation-, Netzwerkpartition- oder Produktionsbenchmarks vorhanden.
+Für die Beispiele selbst liegen keine Skalierungs- oder Produktionsbenchmarks vor. Systemweite NetBird-,
+Partitions- und Lastnachweise stehen in [test/evidence](../test/evidence/) und den
+[Abnahmedokumenten](abnahme/ap3-abnahme.md).
 [v3-Ressourcenwerte](federation-plan-v3.md#411-ressourcenplanung-bei-mehreren-vps) sind Planungsgrößen,
 keine nachgewiesenen Mindestanforderungen.
 
-Details: [IoT](examples/iot.md), [Chat](examples/chat.md), [Recherche](examples/arxiv.md),
-[Golomb](examples/golomb.md), [Historische Einordnung](examples/HISTORISCHE-REFERENZEN.md).
+Details: [Sieb](examples/sieve.md), [IoT](examples/iot.md), [Chat](examples/chat.md), [Recherche](examples/arxiv.md),
+[Golomb](examples/golomb.md), [Cache](examples/cache.md), [Analyse](examples/IMPLEMENTIERUNGS-ANALYSE-V2.md),
+[Historische Einordnung](examples/HISTORISCHE-REFERENZEN.md).

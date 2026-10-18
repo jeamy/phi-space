@@ -7,14 +7,14 @@ Bausteine unten bereits vorhanden sind.
 
 Ergänzung vom 18. Oktober 2026: Die Hilfesystem-/Demo-Befunde F01–F23 wurden
 mit gezielten lokalen Regressionstests bearbeitet. Änderungen, Nachweise und
-bewusste Grenzen stehen in der [Umsetzungstabelle der Analyse](analyse-hilfesystem-demo-apps-2026-10-18.md#7-schrittweise-umsetzung-vom-18-oktober-2026)
+bewusste Grenzen stehen in der [Umsetzungstabelle der Analyse](_attic/analyse-hilfesystem-demo-apps-2026-10-18.md#7-schrittweise-umsetzung-vom-18-oktober-2026)
 und im [Betriebsvertrag des Hilfesystems](../help-site/README.md#runtime-contract-and-restart).
 `PhiSpaces.write` und `RemoteSpace.write` unterstützen eine optionale atomare
 Singleton-Erstanlage über `unique`-Schlüsselfelder; ältere Remote-Server ohne
 `write.unique` werden dafür abgewiesen. Dies ist eine lokale/RPC-Erweiterung,
 keine neue Zusage globaler Eindeutigkeit oder einer abgenommenen Replikation.
 
-Die [Corpus-Konsistenzprüfung vom 18. Oktober](analyse-hilfecorpus-konsistenz-2026-10-18.md)
+Die [Corpus-Konsistenzprüfung vom 18. Oktober](_attic/analyse-hilfecorpus-konsistenz-2026-10-18.md)
 ergänzt dies um acht zweisprachige Praxisleitfäden, aus TypeScript abgeleitete API-Signaturen,
 60 kompilierte Dokumentationsbeispiele sowie geprüfte Navigation, Live-Mirror und Shutdown.
 Standalone-Client und frischer Next-Produktionsbuild sind lokal geprüft. Der Bericht trennt
@@ -39,7 +39,7 @@ nutzbar; `RemoteSpace` implementiert dafür den gemeinsamen Basisvertrag
 `SpaceLike`. Gate, Overlay-Identität, Schlüssel-Challenge, Enrollment, Grants und
 Supervisor sind zu einer persistenten Host-Laufzeit zusammengeführt. Es gibt
 ein persistentes Router-Grundgerüst (AP 2.1) und einen Simulator (AP 2.8),
-Phase 2 ist mit dokumentierter Ausnahme für Block 4 abgeschlossen; die Betriebserweiterung (Läufe, Worker, Spaces, Bootstrap, mobile Steuerung) ist umgesetzt; Replikation und Promotion sind begonnen, aber nicht abgenommen. Die [Phase-1b-Abnahme](ap1b-abnahme.md) trennt lokale Nachweise von den
+Phase 2 ist mit dokumentierter Ausnahme für Block 4 abgeschlossen; die Betriebserweiterung (Läufe, Worker, Spaces, Bootstrap, mobile Steuerung) ist umgesetzt; Replikation und Promotion sind begonnen, aber nicht abgenommen. Die [Phase-1b-Abnahme](abnahme/ap1b-abnahme.md) trennt lokale Nachweise von den
 abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 
 | Baustein | Vorhanden | Nicht daraus ableitbar |
@@ -99,7 +99,7 @@ Limits ändern. Der Dienst leitet die Identität ausschließlich aus seinem
 
 ## Nachweise
 
-Die [AP-1-Abnahme](ap1-abnahme.md) beschreibt die neuen Regressionen, das persistente v4-Fixture,
+Die [AP-1-Abnahme](abnahme/ap1-abnahme.md) beschreibt die neuen Regressionen, das persistente v4-Fixture,
 Mailbox-TTL/ACK, Profile, begrenzte Wartung und den echten pi-serverd mit gebautem Bundle.
 
 `npm test` deckt Core, Persistenz, Claims, Budgets, Stream, Dienst,
@@ -112,7 +112,7 @@ und in [testumgebung-big.md](testumgebung-big.md).
 
 ## Abgrenzung zu älteren Dokumenten
 
-[spaces-v1.md](spaces-v1.md) beschreibt den lokalen Stand vom 2026-10-07 und
+[spaces-v1.md](_attic/spaces-v1.md) beschreibt den lokalen Stand vom 2026-10-07 und
 bleibt als historische Momentaufnahme erhalten. Seine offenen Punkte L2, L3,
 L7 und L13 sind durch Revisionen/Changes, globale IDs, Byte-Budgets und
 bytebegrenzte Seiten überholt. Historische v1/v2-Föderationspläne sind keine
@@ -134,8 +134,8 @@ Ausführungsdaten, Claims behalten Hash/Deadline/Ergebnisreservierung. `ResultEx
 
 ## Phase 2
 
-[Router und Simulator](ap2-router-und-simulator.md) sowie
-[AP 2.2–2.5](ap2-delegation-routing-membership.md) sind implementiert:
+[Router und Simulator](abnahme/ap2-router-und-simulator.md) sowie
+[AP 2.2–2.5](abnahme/ap2-delegation-routing-membership.md) sind implementiert:
 RouterLease, Original-Principal-Delegation, persistente Policy, HRW-/Suchregeln,
 journalisierte Federation-Operationen und Membership mit Core-Admission.
 Die neuen APIs sind serverseitige Bausteine mit echtem Member-RPC-Adapter;
@@ -145,12 +145,12 @@ Prüfzahlen und gebaute Artefakte stehen in
 
 AP 2.6/2.7 sind um Abschlussbudgets, auditierte lokale Admin-Bausteine,
 Restore-Reconciliation und das geschützte Directory erweitert. Der Member-Lasttest
-für AP 2.9 und die [Phase-2-Abnahme](ap2-abnahme.md) dokumentieren die Nachweise
+für AP 2.9 und die [Phase-2-Abnahme](abnahme/ap2-abnahme.md) dokumentieren die Nachweise
 und ihre Grenzen. Phase 2 ist mit der ausdrücklichen Ausnahme zu Block 4 abgeschlossen:
 Die feste Journal-Aufteilung und das signierte Drei-Member-Sieb über NetBird
 sind nachgewiesen. Die Overlay-Abbruchblöcke 1–3 sind inzwischen abgeschlossen,
 einschließlich 26 gezielter Journal-Abbrüche unter voller Joblast. Alle acht technischen Abnahmeblöcke sind inzwischen abgeschlossen;
-[Gate 4 und finale Betriebswerte](ap2-gate4.md) sind für das nachgewiesene Profil geschlossen; eine uneingeschränkte native Produktionsfreigabe wird nicht erklärt.
+[Gate 4 und finale Betriebswerte](abnahme/ap2-gate4.md) sind für das nachgewiesene Profil geschlossen; eine uneingeschränkte native Produktionsfreigabe wird nicht erklärt.
 Block 5 besitzt den Live-Nachweis zwischen physischem lokalem Rechner und
 Server einschließlich isoliertem Member-SIGKILL und gebundenem Lese-Replay. Block 4 ist auf ausdrückliche Entscheidung vom 2026-10-15
 abgeschlossen; Block 8 besitzt den Live-Nachweis mit Root-Abbruch und Replay. Die vier Netzräume auf big
@@ -214,7 +214,7 @@ RPC-Antworten. Typisierte definitive Fehler bei der Claim-Auflösung führen
 jetzt dauerhaft zu `needsReview` statt zu einer Endlosschleife von Transport-
 Retries. Vor Annahme ausgefallene Requests benötigen weiterhin eine sichere
 autoritative Negativauflösung; vorhandene Status-Delegationen verlangen einen
-bereits gebundenen Claim. Details stehen in der [Phase-2-Abnahme](ap2-abnahme.md).
+bereits gebundenen Claim. Details stehen in der [Phase-2-Abnahme](abnahme/ap2-abnahme.md).
 
 `resolveOperation` ergänzt jetzt die Admission-Auflösung für einen fehlenden
 eigenen Claim in einer gültigen, auf dieselbe Primary-Epoche gebundenen
@@ -232,7 +232,7 @@ Testblöcke plus Gesamtfreigabe. Bei Transportverlust während der Child-
 Vorbereitung bleibt ein bereits gespeicherter Parent jetzt als Pending mit
 unverändertem Routingplan wiederaufnehmbar. Die Fehlerklassifikation wird auf
 JSONL und SQLite geprüft; fachliche und Berechtigungsfehler bleiben definitive
-Fehler. Details und Grenzen stehen in der [Phase-2-Abnahme](ap2-abnahme.md).
+Fehler. Details und Grenzen stehen in der [Phase-2-Abnahme](abnahme/ap2-abnahme.md).
 
 
 Testblock 3 ist seit 2026-10-14 abgenommen: 26 tatsächliche Root-SIGKILLs
@@ -254,7 +254,7 @@ Abnahmen bleiben davon getrennt.
 
 ## Gate 4 (2026-10-15)
 
-Die [finalen Betriebswerte](ap2-gate4.md) sind durch vorhandene Volllastnachweise
+Die [finalen Betriebswerte](abnahme/ap2-gate4.md) sind durch vorhandene Volllastnachweise
 und einen ergänzenden gebauten Server-Grenztest festgelegt: Frame 256 KiB, Commit
 192 KiB, 32 Verbindungen je Peer / 64 je Listener, Peer-Erkennung 5 Sekunden,
 Snapshot 60 Sekunden / 16 Tokens / 64 MiB und Generation eine Stunde. Der Gate
@@ -267,7 +267,7 @@ Umfang mit Ausnahme für Block 4 begrenzt; Phase 3 ist noch nicht abgenommen.
 
 ## Phase 3: erster Replikationsbaustein (2026-10-15)
 
-[Entry-Replikation und weitere Schritte](ap3-replikation.md):
+[Entry-Replikation und weitere Schritte](abnahme/ap3-replikation.md):
 `EntryReplicationController` implementiert persistente Änderungs-IDs/HLC, LWW
 mit versionierten Tombstones, Add-Wins-Tags, bytebegrenzte Änderungsseiten und
 einen kleinen atomaren Snapshot-Merge auf eigenen Dokumenten. Elf gezielte
@@ -285,7 +285,7 @@ Replikation wurde aktiviert.
 
 ## Gepagte Entry-Snapshots (2026-10-15)
 
-Der [Snapshot-Transfer](ap3-snapshot-transfer.md) ergänzt AP 3.2 um dauerhaftes
+Der [Snapshot-Transfer](abnahme/ap3-snapshot-transfer.md) ergänzt AP 3.2 um dauerhaftes
 Staging, Hashketten, gespeicherte Seiten-/Quell-Cursor und atomare Sichtbarkeit
 durch Generationenverweise. Lokale Overlay-Writes und bestehende Changes-Cursor
 bleiben erhalten; Dokumentversion 1 migriert auf Version 2. Zwölf neue Fälle
@@ -300,7 +300,7 @@ Aktueller Snapshot-Nachweis: 517 Repository-Tests und 24 mobile Tests grün;
 
 ## Fortlaufender Entry-Stream (2026-10-15)
 
-[Quellgebundene Stream-Cursor und Pull-Worker](ap3-stream-transfer.md) sind
+[Quellgebundene Stream-Cursor und Pull-Worker](abnahme/ap3-stream-transfer.md) sind
 implementiert. Daten und Fortschritt werden im selben Commit gespeichert;
 Snapshot-R kann aus einem geprüften veröffentlichten Beleg übernommen werden.
 Konkurrenz, Wiederaufnahme, TCP-Ausfall und Abbruch besitzen gezielte Tests auf
@@ -318,8 +318,8 @@ Generation-/Belegpflege, reale NetBird-Partition und produktive Einbindung bleib
 
 ## Snapshot-Pflege und synchroner Storage-Baustein (2026-10-15)
 
-[Dauerhafte Generationenpflege](ap3-snapshot-maintenance.md) und
-[vollständiger synchroner Storage-Pfad](ap3-primary-sync.md) sind implementiert.
+[Dauerhafte Generationenpflege](abnahme/ap3-snapshot-maintenance.md) und
+[vollständiger synchroner Storage-Pfad](abnahme/ap3-primary-sync.md) sind implementiert.
 Acht Wartungsfälle und 16 Sync-Fälle prüfen tatsächliche Commit-Verluste auf
 JSONL und SQLite. Der Sync-Baustein gilt zunächst für einen dedizierten Store und
 ist noch nicht in Policy, öffentlichen Claim-Status, Boot, Löschungen und
@@ -327,7 +327,7 @@ Primary-/Standby-Übergänge eingebunden. Phase 3 bleibt ausdrücklich offen.
 
 ## Replikatsteuerung (2026-10-16)
 
-[Promotion, degradeToSingle und setStandby](ap3-replica-control.md) sind mit
+[Promotion, degradeToSingle und setStandby](abnahme/ap3-replica-control.md) sind mit
 Simulator-Adapter umgesetzt. Konfigurationswechsel sind Einträge der Sync-Kette,
 Übergänge sind per ID journalisiert und nach Abstürzen fortsetzbar, Boot-Zustände
 `fenced`/`quarantine` laufen per CAS über das unabhängige Register. Acht Fälle auf
@@ -413,20 +413,20 @@ Nachtrag 2026-10-17 (lww/set eingebunden):
 - Echter Lauf mit nano-test und standby-100: Partition, Konvergenz, verteilte Löschung
   ([Nachweis](../test/evidence/merge-run-2026-10-17/README.md)).
 - Kompaktierung (Schritt 4): stabile Stream-Positionen, Versionsvektoren der Members, Untergrenze je Ursprung;
-  entfernt werden nur stabile, unsichtbare Ereignisse ([Regeln](ap3-replikation.md)). Periodisch im Daemon über
+  entfernt werden nur stabile, unsichtbare Ereignisse ([Regeln](abnahme/ap3-replikation.md)). Periodisch im Daemon über
   `entryReplication.compactEveryMs`. Echter Lauf mit nano-test und standby-100
   ([Nachweis](../test/evidence/compaction-run-2026-10-17/README.md)).
 
 Nachtrag 2026-10-17 (versiegelte Commits): Ein versiegelter, unbestätigter primary/sync-Commit ist öffentlich
 `CommitSealed`; der Host klärt ihn mit dem Standby und bedient den Space ohne Neustart wieder
-([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet der Primary einen unbekannten Request älterer
+([Ablauf](abnahme/ap3-primary-sync.md)). Nach einer Promotion beantwortet der Primary einen unbekannten Request älterer
 Epoche mit Nachweis per Negativclaim mit `NotCommitted`.
 Gesamtbetrieb 3.7 echt gelaufen: zehnminütige Partition, Prozessabbrüche, Failover mit `NotCommitted` und Rückweg
 über den produktiven Dienst, jeder entschiedene Schreibvorgang genau einmal
 ([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)). Gefunden und behoben: unbegrenztes Warten des
 Primary auf den Standby (`requestTimeoutMs`).
 `degradeToSingle` geht auch ohne Fencing-Adapter: Dann wird nur die Standby-Berechtigung dieses Space widerrufen,
-der Host bleibt aktiv ([Ablauf](ap3-replica-control.md)).
+der Host bleibt aktiv ([Ablauf](abnahme/ap3-replica-control.md)).
 
 Set-Lease-Erneuerungen erzeugen nun atomar neue Tags; Owner und Felder bleiben
 gebunden, und alte Tags werden nach Ablauf der Erneuerung nicht wieder sichtbar.

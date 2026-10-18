@@ -1,5 +1,5 @@
 // A primary/sync Space on a federation host (plan 3.2/3.5): its own dedicated store (one commit history per Space,
-// docs/ap3-primary-sync.md), the signed replica listener, and on the primary a Harness over primarySyncStorage with
+// docs/abnahme/ap3-primary-sync.md), the signed replica listener, and on the primary a Harness over primarySyncStorage with
 // the boot guard bound to the journal configuration. A standby serves no business calls. Transitions (promote,
 // degradeToSingle, setStandby) run with the host's service for this Space stopped; on the next start the host
 // follows the journal: as primary it serves the Space and offers the ReplicaConfigNotice of its last transition.
@@ -34,7 +34,7 @@ export type SyncSpace = {
 	/** Primary: stops serving after a sealed, unconfirmed commit (its Harness refuses all work until reopened). */
 	unserve: () => Promise<void>;
 	/**
-	 * Primary: one attempt to resolve the sealed candidate with the standby and serve again (docs/ap3-primary-sync.md).
+	 * Primary: one attempt to resolve the sealed candidate with the standby and serve again (docs/abnahme/ap3-primary-sync.md).
 	 * "served", "pending" (try again later: standby or register unreachable) or "excluded" (this host lost its active
 	 * primary permit, e.g. fenced by a promotion: stop trying; the candidate is never applied here).
 	 */
@@ -149,7 +149,7 @@ export type SealedSyncSpace = { spaceId: string; alias: string; sealed: { revisi
 /** The unresolved sealed candidate of a primary/sync Space, or null (see SyncSpace.sealed). */
 export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: string } | null => sp.sealed();
 /**
- * Resolves sealed, unconfirmed commits while the host runs (docs/ap3-primary-sync.md): the Space is set unresolved
+ * Resolves sealed, unconfirmed commits while the host runs (docs/abnahme/ap3-primary-sync.md): the Space is set unresolved
  * (answered with CommitSealed), its Harness closed, and `resolve()` retried with backoff until the standby confirms
  * or rejects the candidate; then the Space is served anew. A host that lost its primary permit stops trying.
  */

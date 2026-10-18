@@ -62,7 +62,7 @@ export type FederationMember = {
         /** recovery/transition ID of the adopted ReplicaConfigNotice */
         recoveryId?: string
     };
-    /** lww/set Member (docs/ap3-replikation.md): its provisioned entry replication; merge rules must match it. */
+    /** lww/set Member (docs/abnahme/ap3-replikation.md): its provisioned entry replication; merge rules must match it. */
     entryReplication?: {
         replicaId : string; incarnation : string;
         rules : Array<{type : string; variant : 'lww'; keyFields : string[]} | {type : string; variant : 'set'}>

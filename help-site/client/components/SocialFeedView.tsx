@@ -20,7 +20,12 @@ interface SwarmStats {
 	posts: number; likes: number; onlineAgents: number; postsPerMin: number;
 	workerCount: number; running: boolean; rate: number; agentCount: number;
 	llmCalls: number; llmTokens: number;
+	retention?: {
+		cap: number | null; now: number;
+		shards: Array<{ shard: string; up: boolean; entries: number | null; lastPurgeAt: number | null; lastRemoved: number; totalRemoved: number; host?: { name: string } | null }>;
+	};
 }
+const PURGE_BADGE_MS = 90_000;
 interface LeaderRow { handle: string; name: string; hue: number; posts: number }
 
 function timeAgo(at: number, locale: "de" | "en"): string {
@@ -209,6 +214,13 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const [aiLoading, setAiLoading] = useState(false);
 	const [agentTotal, setAgentTotal] = useState(1000);
 	const [stats, setStats] = useState<SwarmStats | null>(null);
+	const purgeBadge = useMemo(() => {
+		const r = stats?.retention;
+		if (!r || r.cap === null) return null;
+		const fresh = r.shards.filter((s) => s.lastPurgeAt !== null && r.now - s.lastPurgeAt < PURGE_BADGE_MS);
+		if (!fresh.length) return null;
+		return { cap: r.cap, shards: fresh.map((s) => ({ label: s.host?.name ?? s.shard, removed: s.lastRemoved })) };
+	}, [stats]);
 	const [channel, setChannel] = useState<string>("home");
 	const [draft, setDraft] = useState("");
 	const [handle, setHandle] = useState("you");
@@ -686,6 +698,19 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 
 	return (
 		<div className="sf-root">
+			{purgeBadge ? (
+				<div className="sf-purge-badge" role="status">
+					<b>{locale === "de" ? "Testsystem:" : "Test system:"}</b>{" "}
+					{locale === "de"
+						? `Pro Datenbank werden höchstens ${purgeBadge.cap.toLocaleString("de-DE")} Einträge gehalten; die ältesten werden gelöscht.`
+						: `At most ${purgeBadge.cap.toLocaleString("en-US")} entries are kept per database; the oldest are purged.`}
+					{" "}
+					<span className="sf-purge-badge__detail">
+						{locale === "de" ? "Gerade bereinigt: " : "Just purged: "}
+						{purgeBadge.shards.map((s) => `${s.label} −${s.removed.toLocaleString(locale === "de" ? "de-DE" : "en-US")}`).join(", ")}
+					</span>
+				</div>
+			) : null}
 			{/* Left column: channels + swarm controls */}
 			<aside className="sf-col sf-col--left">
 				<div className="sf-panel">

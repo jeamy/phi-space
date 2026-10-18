@@ -119,7 +119,7 @@ grün; Typprüfung und Linkprüfung sind bestanden. Die 23 gebauten Replikations
 bestehen außerdem auf big. Beide Backends übertragen im großen Fall 353.186 Bytes
 in 20 Seiten. Der getrennte 32-KiB-Grenzfall misst maximal 3.743 Bytes (JSONL)
 bzw. 3.746 Bytes (SQLite) je StorageWrite-Array und 2.433 Bytes für die
-Veröffentlichung. [Artefakte und Nachweise](../test/evidence/ap3-paged-2026-10-15/README.md).
+Veröffentlichung. [Artefakte und Nachweise](../../test/evidence/ap3-paged-2026-10-15/README.md).
 Der Testcontainer ist entfernt; Bestandscontainer blieben unverändert.
 
 

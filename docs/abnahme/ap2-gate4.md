@@ -28,21 +28,21 @@ nicht erneut geöffnet. Replikation und Promotion gehören weiterhin zu Phase 3.
 
 ## Grundlage der Entscheidung
 
-Die vorhandene [Router-Lastmessung](../test/evidence/ap2-router-load-2026-10-12/README.md)
+Die vorhandene [Router-Lastmessung](../../test/evidence/ap2-router-load-2026-10-12/README.md)
 belegt 10.000 Entries, 1.000 Jobs, drei Members und sechs Worker mit 5.000
 abgeschlossenen Root-Operationen auf SQLite. 36 verlorene Wirkungsantworten
 wurden über dieselben IDs aufgelöst. 227,5 Sekunden Gesamtlaufzeit und rund
 258 MiB gemessener RSS gelten für den dort beschriebenen In-Process-Transport.
 API-p95/p99 sind keine reinen Netzwerk-Latenzen.
 
-Die [fünf NetBird-Journalläufe](../test/evidence/ap2-netbird-journal-2026-10-14/README.md)
+Die [fünf NetBird-Journalläufe](../../test/evidence/ap2-netbird-journal-2026-10-14/README.md)
 belegen die signierte Overlay-Strecke unter 1.000 Jobs mit sechs Workern,
 26 gezielte Journal-SIGKILLs, 25.294 geprüfte Original-Claims, keine offenen
 Transaktionen und keine ungenutzten Future-Reservierungen. Laufzeiten:
 443.914 bis 499.317 ms. ACK- und Member-Abbrüche besitzen ihre separaten
 abgeschlossenen Nachweise in der [Phase-2-Abnahme](ap2-abnahme.md).
 
-Der [ergänzende Grenztest](../test/evidence/ap2-gate4-2026-10-15/README.md)
+Der [ergänzende Grenztest](../../test/evidence/ap2-gate4-2026-10-15/README.md)
 misst Snapshot-, Frame-, Commit-, Verbindungs- und Laufzeitgrenzen an gebauten
 Artefakten im Produktionsmodus auf big mit 2 CPUs und 1 GiB RAM. Peak-RSS beim
 Snapshot-Test: 244.903.936 Bytes. Die Anschlussprüfung misst ausschließlich

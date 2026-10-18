@@ -38,6 +38,8 @@ services:
       PORT: "${PORT:-3500}"
       HELP_PORT: "${PORT:-3500}"
       HELP_SQLITE: /data/spaces-eibrain.sqlite
+      SWARM_HOST_NAME: "${SWARM_HOST_NAME:-}"
+      SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
       PHI_SPACES_ADMIN_PASSWORD: ${PHI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
     network_mode: host
     volumes:
@@ -125,6 +127,8 @@ services:
       SWARM_DB: /data/swarm-b.sqlite
       SWARM_TAG: "${SWARM_TAG:-b-}"
       SWARM_PRODUCE: "${SWARM_PRODUCE:-0}"
+      SWARM_HOST_NAME: "${SWARM_HOST_NAME:-}"
+      SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
     ports:
       # Set SWARM_BIND to the host's internal (LAN/NetBird) IP to keep the shard
       # socket off the public interface — serveSpace has no TLS.

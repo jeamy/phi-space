@@ -280,6 +280,12 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 				return sendJson(res, 200, { ...swarm.snapshot(channel), stats: await swarm.stats() });
 			}
 
+			// ---- 1b'. Test-system description: hosts (CPU, memory), entry cap and purge state per shard ----
+			if (pathname === "/api/system" && method === "GET") {
+				await swarm.whenReady();
+				return sendJson(res, 200, await swarm.systemInfo());
+			}
+
 			// ---- 1c. Live LLM model selection (/api/llm/*) ----
 			if (pathname === "/api/llm/models" && method === "GET") {
 				return sendJson(res, 200, await listLlmModels());

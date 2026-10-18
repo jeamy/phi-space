@@ -116,7 +116,7 @@ ohne diese Option beginnt sie beim ersten Frame. `startGate` setzt die Option
 immer und begrenzt die Peer-Erkennung auf standardmäßig fünf Sekunden. Damit
 verbrauchen auch stumme identifizierte Sockets die Peer-Quota; ein hängendes
 Directory schließt sie nach Ablauf. Die Schicht-B-Challenge gilt separat 30 Sekunden.
-Die [finalen Betriebsgrenzen](ap2-gate4.md) gelten für das geprüfte Lastprofil.
+Die [finalen Betriebsgrenzen](abnahme/ap2-gate4.md) gelten für das geprüfte Lastprofil.
 
 Vor der Nutzung ruft `RemoteSpace` `hello` auf, eröffnet eine Generation und
 gibt jeder Mutation eine Request-ID. Bei verlorener Antwort wiederholt er mit
@@ -203,7 +203,7 @@ Die Recovery-Exporte (`SqliteRecoveryRegister`, `RecoveryCoordinator`,
 `completeRestore`, `releaseRestored`) sind Bausteine für einen administrativen
 Pfad. Fencing, Admission-Sperre, Registry-Update, Control-ACK und Boot-Installation
 muss der aufrufende Dienst nachweisen. Näheres und offene Verdrahtung stehen in
-[ap1b-abnahme.md](ap1b-abnahme.md).
+[ap1b-abnahme.md](abnahme/ap1b-abnahme.md).
 
 ## Provisionierter Betrieb und privater Recovery-Zugang
 
@@ -213,7 +213,7 @@ externe Autorität und Boot-Berechtigung. Die zurückgegebene `service` dient de
 nativen pi-server-Adapter: ihre Peer-ID und Gruppen werden serverseitig pro
 Aufruf neu bestimmt. `trustedConnection()` erzeugt den zugehörigen Kontext;
 `close()` beendet Gate, Supervisor, Wartung und eigene Register-Verbindungen.
-Konfiguration und SSH-Endpunkte sind in [ap1b-betrieb.md](ap1b-betrieb.md) erklärt.
+Konfiguration und SSH-Endpunkte sind in [ap1b-betrieb.md](abnahme/ap1b-betrieb.md) erklärt.
 
 - `provisionFileSigner(path, algorithm)` erzeugt einmalig einen privaten
   Desktop-/Dienstschlüssel; `loadFileSigner(path)` lädt ihn ohne Ersatzidentität.
@@ -298,7 +298,7 @@ Zieladapter müssen sie unverändert als RPC-`requestId` verwenden.
 `RouterBlocked` sperrt fehlende Rekonstruktion/Autorität oder abhängige Bereiche;
 `RouterBudgetExceeded` verweigert neue Arbeit vor Wirkung. `RouterTarget` ist
 bewusst ein Adaptervertrag. Produktive RouterLease/Delegation ist AP 2.2.
-Details und Simulator: [AP 2.1/2.8](ap2-router-und-simulator.md).
+Details und Simulator: [AP 2.1/2.8](abnahme/ap2-router-und-simulator.md).
 
 ## Federation-Controller (AP 2.2–2.5)
 
@@ -339,7 +339,7 @@ demselben Restore-Tupel fortgesetzt. Die Mitgliedsentfernung berücksichtigt
 das Manifest und sämtliche zugehörigen Router-/Parent-Referenzen.
 
 Parameter, Rückgaben, Rechte, Budgets und Grenzen:
-[Delegation, Routing und Membership](ap2-delegation-routing-membership.md).
+[Delegation, Routing und Membership](abnahme/ap2-delegation-routing-membership.md).
 
 ## Directory und lokale Admin-Bausteine (AP 2.6/2.7)
 
@@ -391,7 +391,7 @@ noch nicht gelöscht.
 markiert Child-Requests und Parents `needsReview`, ohne neue Wirkungen.
 Es muss als Reconciliation-Hook vor der Control-Restore-Bestätigung eingebunden
 werden. Verwaltete Spaces erhalten ohne diesen Hook kein Control-Receipt.
-[Abnahmestand und Grenzen](ap2-abnahme.md).
+[Abnahmestand und Grenzen](abnahme/ap2-abnahme.md).
 
 `PhiSpaces.resolveOperation` erhält einen `RequestRef` einschließlich Principal;
 `RemoteSpace.resolveOperation` erhält `{generation, requestId}` und verwendet
@@ -517,7 +517,7 @@ gesamten Aufrufs halten. Es ersetzt keine Löschregel für externe Kopien.
 `EntryReplicationController` verwendet ein eigenes Dokument, keine automatische
 Replikation bestehender `PhiSpaces`-Entries. Konfiguration, Aufrufmethoden,
 Vertrauensgrenze und Betriebsbeschränkungen stehen in
-[Phase 3](ap3-replikation.md). Die exportierten HLC-Funktionen sind
+[Phase 3](abnahme/ap3-replikation.md). Die exportierten HLC-Funktionen sind
 `advanceHybridClock`, `compareHybridClock` und `validateHybridClock`. Die Uhr
 muss atomar mit der Änderung gespeichert werden; der Controller übernimmt dies.
 `EntryReplicas` ist eine interne administrative Dokumentfamilie und kein
@@ -535,7 +535,7 @@ bei R eingefrorene Historie. `beginSnapshotImport`, `importSnapshotPage`,
 verwalten dauerhafte Seiten und den Import-Cursor. Erst der Abschluss macht alle
 Seiten atomar sichtbar. `sourceRevision` im Abschlussresultat nennt den Startpunkt
 für danach entstandene Änderungen. Grenzen, Wiederaufnahme, Abbruch und
-Vertrauensbereich: [Snapshot-Transfer](ap3-snapshot-transfer.md).
+Vertrauensbereich: [Snapshot-Transfer](abnahme/ap3-snapshot-transfer.md).
 
 
 ### Dauerhafter Entry-Stream
@@ -546,7 +546,7 @@ und Cursor-Fortschritt sind atomar. `EntryReplicationPump` bietet einen begrenzt
 Schritt und eine explizit gestartete, abbrechbare Pull-Schleife. Pro Quelle bleibt
 die letzte Bereichsquittung wiederholbar; ältere Bereiche erfordern ein erneutes
 Lesen des Checkpoints. Adapter, Rückgabewerte und Grenzen stehen im
-[Stream-Protokoll](ap3-stream-transfer.md). Der öffentliche Space-Dienst bietet
+[Stream-Protokoll](abnahme/ap3-stream-transfer.md). Der öffentliche Space-Dienst bietet
 diese administrativen Methoden noch nicht über seine RPC-Allowlist an.
 
 
@@ -557,7 +557,7 @@ diese administrativen Methoden noch nicht über seine RPC-Allowlist an.
 veröffentlichen einen vollständigen Präfix und stilllegen anschließend alte
 Chunk-Dokumente. `forgetSnapshotReceipt(id)` entfernt nur abgelaufene, nicht mehr
 lebende Belege. Origin-/Request-/Konfliktinformationen und Cursor bleiben erhalten.
-[Details](ap3-snapshot-maintenance.md).
+[Details](abnahme/ap3-snapshot-maintenance.md).
 
 Kompaktierung (lww/set Schritt 4): `compactionStatus()` nennt Blockadegrund, Ereigniszahl, entfernbare Ereignisse
 und Untergrenze; `compact(id)` führt eine Kompaktierung vollständig aus, `startCompaction(id, pageBytes?)` startet
@@ -565,7 +565,7 @@ sie als Wartungsgeneration (weiter mit `advanceSnapshotMaintenance`, Abbruch bei
 `abortSnapshotMaintenance`). `recordPeerVector(description)` speichert den
 Vektor, den ein Peer in `describeStream()` meldet; `EntryReplicationPump` ruft es selbst auf. Option
 `requestRetentionMs` (Standard 24 Stunden) hält eigene Änderungen für Retries. Stream-Seiten tragen `positions`,
-wenn sie nicht lückenlos sind. [Regeln](ap3-replikation.md).
+wenn sie nicht lückenlos sind. [Regeln](abnahme/ap3-replikation.md).
 
 `PrimarySyncJournal`, `primarySyncStorage`, `recoverPrimarySync` und
 `materializeSyncHistory` bilden den administrativen synchronen Storage-Pfad.
@@ -573,11 +573,11 @@ Er besitzt feste Konfigurationspins, dauerhafte Hashkette, Standby-ACK und
 atomare Datenmarker; ein unklarer versiegelter Kandidat liefert `CommitSealed`. Im Dienst wird daraus der
 Fehlercode `CommitSealed`, im Client `CommitSealedPending` (Unterklasse von `OutcomeUnknown`); `sealedResolver`,
 `sealedCandidateOf` und `SyncSpace.resolve()/unserve()` klären den Kandidaten im laufenden Host
-([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet `resolveOperation` einen unbekannten Request
+([Ablauf](abnahme/ap3-primary-sync.md)). Nach einer Promotion beantwortet `resolveOperation` einen unbekannten Request
 älterer Epoche mit Nachweis (`promotionEvidence`, Dienstoption `promotionProof`) per Negativclaim mit `NotCommitted`
 (`claims.decideNotCommitted`, `PhiSpaces.resolveNotCommitted`, Fehlerklasse `claims.NotCommitted`).
 Diese API aktiviert noch keine produktive Sync-Policy oder Promotion.
-[Vertrauensbereich und Betriebsgrenzen](ap3-primary-sync.md).
+[Vertrauensbereich und Betriebsgrenzen](abnahme/ap3-primary-sync.md).
 
 Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
 `recoverSealedWithoutStandby`, `PrimarySyncJournal.catchUp`). Darauf bauen
@@ -585,7 +585,7 @@ Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
 (`SimulatorFencing` nur mit `allowSimulator`, `unconfiguredFencing` als Platzhalter),
 `fenceHostBoot`, `revokeSpacePermit` (degradeToSingle mit `revokeStandbySpace`), `releaseHostToQuarantine` sowie `assertSyncPrimary`,
 `assertSyncStandby` und `assertQuarantine` auf. Fehlgeschlagene Übergänge werfen
-`ReplicaTransitionBlocked`. [Replikatsteuerung](ap3-replica-control.md).
+`ReplicaTransitionBlocked`. [Replikatsteuerung](abnahme/ap3-replica-control.md).
 
 `NetcupFencing` (mit `NetcupScp`, `fileTokenProvider`, `fileFenceState`) ist der
 netcup-Adapter; `serveFencing` bietet einen Adapter per mTLS nur für
@@ -605,7 +605,7 @@ den neuen Primary mit genau diesen Werten zulässt. Delegationen tragen `targetR
 `DelegationVerifier({ replicaConfig })` antwortet bis zur Übernahme mit `ReplicaConfigPending`. `ReplicaConfigPending` und `StalePolicyVersion`
 sind eigene Fehlercodes (Klassen in `core`); der Router wartet bzw. bereitet nie zugelassene Schritte über
 `RouterTarget.reprepare` neu vor und klärt offene Schritte beim installierten Nachfolger ihrer Bindung
-([Replikatsteuerung](ap3-replica-control.md)). Ein Primary
+([Replikatsteuerung](abnahme/ap3-replica-control.md)). Ein Primary
 veröffentlicht seine Notice mit `RemoteSpace.publishReplicaNotice` auf dem `ReplicaNoticeBoard` des Control Space;
 der native Root übernimmt sie im Heartbeat (`adoptReplicaNotices`) und adressiert Member über ihre provisionierten
 `replicas`.

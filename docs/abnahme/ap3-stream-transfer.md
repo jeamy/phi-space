@@ -115,5 +115,5 @@ Typprüfung und lokale Dokumentlinks sind geprüft. Auf big bestehen alle 36
 gebauten Fälle (11 Entry-, 12 Snapshot- und 13 Stream-Fälle). Der getrennte
 32-KiB-Grenzfall misst auf beiden Backends maximal 7.386 Bytes für das gemeinsame
 StorageWrite-Array aus Daten und Checkpoint. Das misst keine Disk-/fsync-Verstärkung.
-[Artefakte und Nachweise](../test/evidence/ap3-stream-2026-10-15/README.md).
+[Artefakte und Nachweise](../../test/evidence/ap3-stream-2026-10-15/README.md).
 Der eigene Testcontainer ist entfernt; Bestandscontainer blieben unverändert.

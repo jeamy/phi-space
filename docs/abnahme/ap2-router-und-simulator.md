@@ -87,7 +87,7 @@ Vergleiche verwenden tatsächliche Entries und Claims aus den Ziel-Harnesses.
 Der abschließende Gesamtprüflauf hat 345 Tests bestanden; Typprüfung, 158 Beispieltests und
 vier Mobile-Tests sind ebenfalls grün. Zusätzlich wird das gebaute
 Produktionsbundle auf beiden Backends mit Duplikat, verlorener Take-Antwort und
-Router-Crash/Reopen geprüft. [Nachweise](../test/evidence/ap2-2026-10-11/checks.json). Die Fälle umfassen:
+Router-Crash/Reopen geprüft. [Nachweise](../../test/evidence/ap2-2026-10-11/checks.json). Die Fälle umfassen:
 
 - Duplikat plus verlorene Take-Antwort und Neustart von Router und Ziel;
 - Crash vor Senden, nach Antwort und vor/nach dem Resultat-Journal-Commit;

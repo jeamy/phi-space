@@ -1,4 +1,4 @@
-// lww/set step 1 (docs/ap3-replikation.md): merge types of a Space go to its entry replication controller.
+// lww/set step 1 (docs/abnahme/ap3-replikation.md): merge types of a Space go to its entry replication controller.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";

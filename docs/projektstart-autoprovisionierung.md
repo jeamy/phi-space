@@ -1,7 +1,7 @@
 # Projektstart am Handy: Spaces und Monitoring automatisch bereitstellen
 
 Stand: 2026-10-08 (Bootstrap, Boot-Berechtigungen je Space und vollständige Lauf-Recovery an v3 angeglichen). **Ergänzender Zielvertrag**; Teile sind seit 2026-10-16 umgesetzt (Deployment-Plan/-Apply, Space-Lebenszyklus, Worker, Läufe, Alarmierung; siehe [Betrieb §8](betrieb-und-mobile-steuerung.md#8-umsetzungsstand-und-reihenfolge-der-betriebserweiterung)), der automatische Projektstart als Ganzes nicht. Verbindliche Federation-Grundlage
-ist [v3](federation-plan-v3.md); die [v2-Zusammenfassung](federation-plan-v2-summary.md) bleibt ein Archiv.
+ist [v3](federation-plan-v3.md); die [v2-Zusammenfassung](_attic/federation-plan-v2-summary.md) bleibt ein Archiv.
 Architektur und manueller Bootstrap: [Betrieb und mobile Steuerung](betrieb-und-mobile-steuerung.md).
 
 ## 1. Gewünschte Bedienung

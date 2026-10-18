@@ -149,14 +149,14 @@ Policy-Wechsel, verlorene Antworten, echte TCP-Gates, JSONL-/SQLite-Neustart,
 sequenzielle Takes, Teilabfragen, konkurrierende Reservierungen, Txn-Bindung,
 Drain, falschen Bestand, Notify-Schlussereignisse und atomare Referenz-Races.
 Die abschließenden Zählwerte und Build-Nachweise stehen in
-[checks.json](../test/evidence/ap2-2026-10-11/checks.json).
+[checks.json](../../test/evidence/ap2-2026-10-11/checks.json).
 
 Offen bleiben AP 2.6 (weitere Admin-Kommandos und kontrollierte Profilwechsel),
 2.7 (automatisches Capability-/MemberStatus-Verzeichnis), 2.9 (Lastabnahme) und
 die vollständige Phase-2-Systemabnahme. RunGate und Replikation folgen später.
 
 Die finale Prüfung umfasst 345 Gesamttests, 158 Beispieltests, vier Mobile-Tests
-und [65 kompilierte Tests auf big](../test/evidence/ap2-2026-10-11/server-built-phase2.json).
+und [65 kompilierte Tests auf big](../../test/evidence/ap2-2026-10-11/server-built-phase2.json).
 Der isolierte Container verwendet kontrollierte Management-Verzeichnisse und
 echtes Loopback-TCP; dies ist keine vollständige Phase-2-Overlay-Abnahme.
 Das normale Android-APK ist offline gebaut. Sein abschließendes Update auf dem

@@ -1,4 +1,4 @@
-// Operator driver for the primary/sync cycle inside the federation daemons (docs/ap3-replica-control.md): sync writes,
+// Operator driver for the primary/sync cycle inside the federation daemons (docs/abnahme/ap3-replica-control.md): sync writes,
 // a sealed fork, netcup fencing, promote and degradeToSingle on the standby, release of the old primary into
 // quarantine, wipe, quarantine start, setStandby, re-admission, restarts in a safe order, writes in the new direction
 // and a materialized comparison. Every step is recorded in <out>/state.json; a rerun continues after the last

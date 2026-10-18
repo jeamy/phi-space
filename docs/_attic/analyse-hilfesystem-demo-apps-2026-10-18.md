@@ -384,7 +384,7 @@ Umgesetzt wurden zuerst Datenintegrität und Parser, anschließend Admin-Journal
 | F22 | Erledigt | Aufgeführte Imports, wirkungsloser Inspect-State und unbenutzte Setter entfernt; feste Sieve-Werte bleiben explizite Konstanten. Unbenutzte Swarm-Parameter und durch Vereinheitlichung entfallene Wrapper entfernt. | Zusätzlicher noUnused-Lauf meldet keine Dateien in `help-site/` oder `examples/sieve.ts`; vorhandene separate Core-Warnungen werden nicht als bereinigt ausgegeben. |
 | F23 | Erledigt | Ein transportneutraler Command-Dispatcher; einheitliche Defaults und Fehler für unbekannte Aktionen. Sieve-Prüfung gemeinsam. Ein Corpus-Build im npm-/Docker-Buildpfad. Standalone nutzt ausschließlich eigene Assets; Next hat einen ausdrücklich gewählten Auslieferungsmodus. Produktionsprüfung baut vorher frisch. | HTTP-Fehlerfall und Dispatcher-Test, tatsächliche Stufen v1–v6, gemeinsame Sieve-Tests, frischer Next-Build mit SSR-Test. Alte Faux-Pipelines bleiben als Semantiktests bezeichnet. |
 
-Die neuen spezifischen Tests liegen in [`help-site/tests/regressions.test.ts`](../help-site/tests/regressions.test.ts); bestehende HTTP-/Stufen-/Shard-Tests in [`help-site/tests/help-site.test.ts`](../help-site/tests/help-site.test.ts) wurden um tatsächliche Zugriffs- und Dispatcher-Fehlerfälle ergänzt. Der aktuelle Betriebsvertrag einschließlich Limits und `needsReview` steht in der [Hilfesystem-README](../help-site/README.md#runtime-contract-and-restart). Die optionale atomare Unique-Prüfung ist in der [API](api.md) beschrieben.
+Die neuen spezifischen Tests liegen in [`help-site/tests/regressions.test.ts`](../../help-site/tests/regressions.test.ts); bestehende HTTP-/Stufen-/Shard-Tests in [`help-site/tests/help-site.test.ts`](../../help-site/tests/help-site.test.ts) wurden um tatsächliche Zugriffs- und Dispatcher-Fehlerfälle ergänzt. Der aktuelle Betriebsvertrag einschließlich Limits und `needsReview` steht in der [Hilfesystem-README](../../help-site/README.md#runtime-contract-and-restart). Die optionale atomare Unique-Prüfung ist in der [API](../api.md) beschrieben.
 
 ### 7.2 Ergänzende Korrekturen aus der Umsetzung
 
@@ -418,7 +418,7 @@ Bewusste Grenzen: `needsReview` verlangt bei unklarem Ausgang eine fachliche Pr�
 
 Die bisherige logische Space-Transaktion war kein Storage-Batch: jeder `PhiSpaces.take`/`write`/Transaktionsaufruf öffnete separat `host.commit`. Insbesondere benötigte `appendHistory` drei solcher Aufrufe pro Post; Post, Kanalzähler, Outbox und Taskreservierung kamen hinzu. Damit blieb die Dokumentserialisierung trotz mehrerer Tasks pro Space-Transaktion im Hot Path.
 
-Umgesetzt in [`batch.ts`](../help-site/server/social/batch.ts) und [`swarm.ts`](../help-site/server/social/swarm.ts):
+Umgesetzt in [`batch.ts`](../../help-site/server/social/batch.ts) und [`swarm.ts`](../../help-site/server/social/swarm.ts):
 
 1. Ein Dispatcher reserviert bis zu vier Tasks in **einem** Durable-Commit. Er verwendet weiterhin `core.createTxn` und `core.probe`, also die normalen Reservierungs-, Lease- und CompletionProfile-Regeln. Die Transaktion gilt 45 Sekunden.
 2. Text-, Zielpost- und Modellvorbereitung laufen **außerhalb** des Durable-Callbacks. Höchstens ein Modellaufruf pro Batch; die Worker-Wartezeit ist auf 20 Sekunden begrenzt. Ein nicht kooperativer Custom-Provider kann danach weiterlaufen, sein verspätetes Ergebnis wird aber nicht veröffentlicht.
@@ -427,7 +427,7 @@ Umgesetzt in [`batch.ts`](../help-site/server/social/batch.ts) und [`swarm.ts`](
 5. Fachliche Fehler rollen den gesamten Abschluss zurück und lösen einen expliziten Abort der Reservierung aus. Bei Byteüberschreitung halbiert sich die Batchgröße bis auf eins; ein weiterhin fehlerhafter Task wird nicht bestätigt und mit Warnung erneut versucht. Ein Storage-Fehler vergiftet weiterhin die Session; nach gescheiterter Bereinigung stoppt der Worker, statt unbestätigt weiterzuschreiben. Wiederöffnung/Recovery ist dann erforderlich.
 6. Eine Snapshot-Vorprüfung verhindert normale Leerqueue-Commits. Zwischen erfolgreichen Batches liegt ein 25-ms-Yield, bei leerer Queue eine 500-ms-Pause. Snapshot-Scans sind weiterhin nicht kostenlos.
 
-Gezielte Nachweise in [`swarm-batch.test.ts`](../help-site/tests/swarm-batch.test.ts):
+Gezielte Nachweise in [`swarm-batch.test.ts`](../../help-site/tests/swarm-batch.test.ts):
 
 | Prüfung | Nachweis |
 |---|---|

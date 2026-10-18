@@ -11,8 +11,8 @@ the six-stage Multiplayer Space-Chat workbench, the Social Swarm feed, and authe
 
 Checked against the checkout on 2026-10-18. A working demo is not a multi-host or production acceptance result.
 See [implementation status](../docs/implementierungsstand.md), the
-[Phase-3 acceptance matrix](../docs/ap3-abnahme.md), and the
-[demo analysis and completed fixes](../docs/analyse-hilfesystem-demo-apps-2026-10-18.md).
+[Phase-3 acceptance matrix](../docs/abnahme/ap3-abnahme.md), and the
+[demo analysis and completed fixes](../docs/_attic/analyse-hilfesystem-demo-apps-2026-10-18.md).
 
 ## What the demos demonstrate
 
@@ -176,6 +176,8 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
 | `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
 | `SWARM_REMOTE` | Optional hub-side shard endpoint, e.g. `tcp:127.0.0.1:3600` through an SSH tunnel. |
+| `SWARM_MAX_ENTRIES` | Entry cap per shard database, default 20000, `0` disables. Above it the oldest posts (with their likes and history nodes) are purged in bursts down to 95 %; the feed shows a yellow notice. Test-system limit, not a product limit. |
+| `SWARM_HOST_NAME` | Name this host reports in the test-system bar below the live views (default: the machine's hostname; set `big` / `nano` in each host's `.env`). |
 | `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | Headless-shard listener, store, ID prefix and optional local intent generation; see `.env.example`. |
 
 <a id="demo-vertrag-und-wiederanlauf"></a>
@@ -244,7 +246,7 @@ disable models and operator-configured remote shards before importing the server
 
 Local browser checks supplement these automated results; they are not exhaustive browser E2E, accessibility,
 deployment, phone, large-store performance, power-loss or multi-host acceptance. See the
-[completion report (German)](../docs/analyse-hilfecorpus-konsistenz-2026-10-18.md) for evidence and open gates.
+[completion report (German)](../docs/_attic/analyse-hilfecorpus-konsistenz-2026-10-18.md) for evidence and open gates.
 
 ## Maintaining the help corpus
 

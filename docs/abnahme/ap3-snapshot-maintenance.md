@@ -62,4 +62,4 @@ Der große Fall führt drei Generationenwechsel mit 72 Events und jeweils 4 KiB
 Payload durch. Bestehende Stream-Reihenfolge und Origin-IDs bleiben exakt erhalten;
 der Overlay-Bestand wird leer. Tatsächliche StorageWrite-Arrays bleiben im
 32-KiB-Testbudget. Die Messwerte und gebauten Serverfälle stehen in den aktuellen
-[Nachweisen](../test/evidence/ap3-next-2026-10-15/README.md).
+[Nachweisen](../../test/evidence/ap3-next-2026-10-15/README.md).

@@ -1,6 +1,6 @@
 # Phase 1b: Umsetzung und Abnahme
 
-Stand: 2026-10-11. Der [Föderationsplan](federation-plan-v3.md) ist der Zielvertrag.
+Stand: 2026-10-11. Der [Föderationsplan](../federation-plan-v3.md) ist der Zielvertrag.
 Die folgenden Nachweise schließen Phase 1b im geprüften F15-Modell ab; sie sind keine Freigabe der
 vollständigen Federation oder von Recovery im Produktivbetrieb.
 
@@ -116,8 +116,8 @@ Management + Relay 3604,0 s. Jeder Fall endet mit erfolgreichem Objektzugriff.
 Auch der Desktop konnte nach dem letzten Fall wieder ein Objekt lesen; seine
 temporäre Firewall-Ausnahme wurde entfernt. Die drei Hauptdienste bleiben aktiv.
 
-[Zusammenfassung der Abnahme](../test/evidence/ap1b-2026-10-11/acceptance-summary.json)
-und [vollständige Messungen](../test/evidence/ap1b-2026-10-11/netbird-fault-matrix.json)
+[Zusammenfassung der Abnahme](../../test/evidence/ap1b-2026-10-11/acceptance-summary.json)
+und [vollständige Messungen](../../test/evidence/ap1b-2026-10-11/netbird-fault-matrix.json)
 belegen damit die Phase-1b-Abnahme im geprüften F15-Betriebsmodell. Die Ausfälle
 betrafen gezielt die Erreichbarkeit der Komponenten für zwei eigene Testpeers,
 nicht einen globalen Server-/Datenbankausfall. Ein bestehender direkter Tunnel
@@ -183,7 +183,7 @@ sichtbare UI-/NetBird-Geräteabnahme.
 
 ## Betriebs- und Geräteprüfung vom 2026-10-11
 
-Nachweise: [öffentliche Ergebnisdateien](../test/evidence/ap1b-2026-10-11/README.md).
+Nachweise: [öffentliche Ergebnisdateien](../../test/evidence/ap1b-2026-10-11/README.md).
 Keine Tokens, privaten Schlüssel oder noch gültigen signierten Grants sind darin
 enthalten.
 
@@ -246,13 +246,13 @@ WLAN-ADB ist wieder verbunden. Das Handy besitzt nun eine echte gekoppelte
 Keystore-Identität für `phase1b-host-a` und authentifiziert sich über NetBird.
 Die Rollenbegrenzung und die verbleibenden Abnahmen stehen oben; der Test erfolgte
 über die lokale Mobile-API, nicht durch sichtbare UI-Bedienung. Siehe
-[Handy-Nachweis](../test/evidence/ap1b-2026-10-11/phone.json).
+[Handy-Nachweis](../../test/evidence/ap1b-2026-10-11/phone.json).
 
 Die finalen Artefakte wurden auf host-a und member-1 ausgerollt; beide Dienste
 laufen. Die Prüfungen von Grants, Write/Take, bestehender Rotation und privatem
 Recovery-Zugang wurden danach wiederholt. Der gebaute TUI-Inspektor liest auf
 beiden laufenden Hosts `harness.sqlite` und zeigt Control-/Jobs-Space samt
-Objekten ohne Lesefehler: [TUI-Nachweis](../test/evidence/ap1b-2026-10-11/tui.json).
+Objekten ohne Lesefehler: [TUI-Nachweis](../../test/evidence/ap1b-2026-10-11/tui.json).
 
 Ein erneuter Authentifizierungsaufruf nach kurzem Wechsel der App in den
 Hintergrund ist bestanden. Danach wurde die App wieder angezeigt. Das belegt
@@ -277,7 +277,7 @@ Test verwendet einen Fixture-Signer; die Geräteprüfung verwendet den nativen
 Android Keystore. Die sichtbare UI-Bedienung ist noch nicht vollständig abgenommen.
 Der Bildschirm-aus-Versuch zählt nicht als Erfolg: `dumpsys power` meldete
 `Awake`, daher ist keine Bildschirm-aus-Dauer belegt. Der Bildschirm wurde am
-Ende wieder eingeschaltet. Nachweis: [phone.json](../test/evidence/ap1b-2026-10-11/phone.json).
+Ende wieder eingeschaltet. Nachweis: [phone.json](../../test/evidence/ap1b-2026-10-11/phone.json).
 
 Auch der kontrollierte 90-Sekunden-Versuch konnte keine volle Ruhephase
 belegen: Android wechselte zunächst in `Dozing`, war nach rund 11 Sekunden
@@ -307,7 +307,7 @@ SSH-Zugangsdaten wurden vor dem Normalstart entfernt. Vom echten Handy wurde
 das freigegebene Objekt über NetBird gelesen, entnommen und zurückgeschrieben.
 Der ursprüngliche Handy-Jobs-Zugriff funktioniert weiterhin. Alle 232 Tests
 bestanden nach den Änderungen erneut ohne Auslassungen. Nachweis:
-[data-restore.json](../test/evidence/ap1b-2026-10-11/data-restore.json).
+[data-restore.json](../../test/evidence/ap1b-2026-10-11/data-restore.json).
 
 
 ### Verteilter Live-Control-Restore mit separatem Member
@@ -337,7 +337,7 @@ Hauptdienste und das bereits restaurierte Data-Ziel wieder gestartet sowie die
 temporäre Register-Schreibfreigabe und Firewall-Regeln entfernt. Die alte
 Control-Quelle bleibt gesperrt. Alle 233 Tests und die Typprüfung sind bestanden;
 Mobile-Bundle und Testbed-Artefakte wurden neu gebaut. Öffentlicher Nachweis:
-[control-restore.json](../test/evidence/ap1b-2026-10-11/control-restore.json).
+[control-restore.json](../../test/evidence/ap1b-2026-10-11/control-restore.json).
 
 
 ### Wiederholter kurzer Bildschirm-aus-Test
@@ -349,7 +349,7 @@ Handy-Objektzugriff und abschließend weiterhin `Asleep`. Der Gesamtlauf dauerte
 115,2 Sekunden; der Bildschirm wurde anschließend wieder eingeschaltet.
 Das schließt den kurzen Bildschirm-aus-Nachweis, nicht die Langzeit-/Doze-Abnahme.
 Samples und beide Versuche stehen in
-[phone.json](../test/evidence/ap1b-2026-10-11/phone.json).
+[phone.json](../../test/evidence/ap1b-2026-10-11/phone.json).
 
 
 ### Sichtbare Handy-Steuerung nach Rotation
@@ -365,7 +365,7 @@ Die korrigierte APK wurde offline gebaut und auf dem Xiaomi aktualisiert.
 Sichtbar bedient und bestanden: Kopplungsstatus, Schlüsselbeweis, eigene Rotation,
 Rotation auswerten (einschließlich Wiederholung nach Abschluss) und Objektanzeige
 mit dem neuen Schlüssel. Alle vier Mobile-Regressionen sind bestanden.
-Öffentlicher Nachweis: [phone-ui.json](../test/evidence/ap1b-2026-10-11/phone-ui.json).
+Öffentlicher Nachweis: [phone-ui.json](../../test/evidence/ap1b-2026-10-11/phone-ui.json).
 Frische Erstkopplung über die sichtbaren Formulare und Kamera-QR-Erfassung wurden
 in diesem Lauf nicht erneut durchgeführt. Der Zehn-Minuten-Bildschirm-aus-Versuch
 wurde nach 192 Sekunden durch Aufwachen unterbrochen und zählt nicht als bestanden.
@@ -373,7 +373,7 @@ wurde nach 192 Sekunden durch Aufwachen unterbrochen und zählt nicht als bestan
 ### Begrenzte NetBird-Ausfallmatrix in Ausführung
 
 Der separate administrative Fehlerproxy und seine Messwerkzeuge sind unter
-[test/testbed/netbird/FAULT-TESTS.md](../test/testbed/netbird/FAULT-TESTS.md)
+[test/testbed/netbird/FAULT-TESTS.md](../../test/testbed/netbird/FAULT-TESTS.md)
 beschrieben. Nur die eigenen Test-Peers host-b/member-2 und das zusätzliche
 restaurierte Data-Gate laufen darüber; ursprüngliche Hauptdienste und Handy
 bleiben auf ihrem normalen Pfad. Management, Signal und Relay wurden jeweils
@@ -391,7 +391,7 @@ abgeschlossenen Nachweise. Desktop-/Relay-Zugriff wird ergänzend lokal gemessen
 Der erste vollständige Management-Fall ist beendet: 305,3 Sekunden Fehlerphase,
 Signal/Relay und direkter TCP-Zugriff erhalten, Objektzugriff nach Gate-Cache-
 Ablauf gesperrt und anschließend wiederhergestellt. Der separate Stundenlauf
-ist gestartet. [Messnachweis](../test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
+ist gestartet. [Messnachweis](../../test/evidence/ap1b-2026-10-11/netbird-management-5m.json).
 
 
 ### Zehn Minuten Hintergrundbetrieb mit ausgeschaltetem Bildschirm
@@ -404,7 +404,7 @@ NetBird und native Schlüsselbeweis funktionierten weiter. Die Samples für das
 alte Resumed-Activity-Feld sind nicht auf allen Android-Versionen aussagekräftig;
 die unabhängige Activity-Prüfung und der fortlaufende Bildschirmzustand ergänzen
 sie. Der Bildschirm wurde anschließend wieder eingeschaltet.
-[phone-background-10m.json](../test/evidence/ap1b-2026-10-11/phone-background-10m.json).
+[phone-background-10m.json](../../test/evidence/ap1b-2026-10-11/phone-background-10m.json).
 Das belegt das gemessene Zehn-Minuten-Intervall, keine unbegrenzte Laufzeit und
 keine automatisch eingetretene tiefe Doze-Phase.
 
@@ -417,7 +417,7 @@ vier erfolgreiche echte Objektprüfungen. Vorher war kein Force-Idle aktiv.
 Anschließend wurde die eigene Testsperre aufgehoben; Android meldete wieder
 `mForceIdle=false` und `ACTIVE`. Es wurden keine Batterieausnahmen oder
 Energieeinstellungen geändert. Der Bildschirm wurde wieder eingeschaltet.
-[phone-doze.json](../test/evidence/ap1b-2026-10-11/phone-doze.json).
+[phone-doze.json](../../test/evidence/ap1b-2026-10-11/phone-doze.json).
 
 Der kontrollierte Doze-Test mit WLAN-ADB und der zehnminütige Bildschirm-aus-Lauf
 sind bestanden. Sie ersetzen keine uninstrumentierte Messung über Nacht.
@@ -432,7 +432,7 @@ Datenformular, Authentifizierung und Objektanzeige durch die tatsächlichen
 UI-Handler ausgeführt. Das neue native Keystore-Profil ist gepairt; der zuvor
 verwendete Schlüssel ist widerrufen und wird zurückgewiesen. Nach Installation
 des normalen APKs ohne Instrumentierung funktioniert der Objektzugriff weiter.
-[phone-first-pair-ui.json](../test/evidence/ap1b-2026-10-11/phone-first-pair-ui.json).
+[phone-first-pair-ui.json](../../test/evidence/ap1b-2026-10-11/phone-first-pair-ui.json).
 
 Ein eigens angelegter NetBird-Peer verlor den Zugriff nach Gruppenentzug in
 2,895 Sekunden. Nach bestätigter Rückaufnahme wurde genau dieser Test-Peer
@@ -440,4 +440,4 @@ gelöscht; der Zugriff war nach 2,823 Sekunden verweigert. Die Messung betrifft
 den Ende-zu-Ende-Zugriff einschließlich Overlay-ACL und Gate, nicht eine isolierte
 Messung ausschließlich des Schicht-A-Caches. Wegwerf-Peer, Container und Setup-Key
 wurden entfernt beziehungsweise widerrufen. Bestehende Peers wurden nicht verändert.
-[peer-withdrawal.json](../test/evidence/ap1b-2026-10-11/peer-withdrawal.json).
+[peer-withdrawal.json](../../test/evidence/ap1b-2026-10-11/peer-withdrawal.json).

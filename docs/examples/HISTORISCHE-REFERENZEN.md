@@ -13,7 +13,7 @@ Referenzimplementierung und kein Leistungsnachweis für Linda, Outrigger, Blitz 
 
 JavaSpaces ergänzt Entries, Templates, Leases, Transaktionen und Benachrichtigungen.
 Die aktuelle Abbildung im Projekt ist im [Implementierungsstand](../implementierungsstand.md) beschrieben;
-die frühere Momentaufnahme bleibt in [spaces-v1.md](../spaces-v1.md). JavaSpace05-Funktionen wie
+die frühere Momentaufnahme bleibt in [spaces-v1.md](../_attic/spaces-v1.md). JavaSpace05-Funktionen wie
 Batch-Operationen und Availability-Events sind nicht vollständig implementiert.
 Eine konzeptionelle API-Nähe ist kein Zertifikat für vollständige Spezifikationskonformität.
 

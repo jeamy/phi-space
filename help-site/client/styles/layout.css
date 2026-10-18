@@ -958,10 +958,41 @@ code, kbd, pre { font-family: var(--font-geist-mono); }
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 300px;
   gap: 0;
+  position: relative;
   height: 100%;
   min-height: 0;
   font-family: var(--font-sans, system-ui, sans-serif);
 }
+.sf-purge-badge {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 20;
+  max-width: min(760px, calc(100% - 24px));
+  padding: 7px 14px;
+  border: 1px solid #b8860b; border-radius: 999px;
+  background: #ffd84d; color: #3d2f00;
+  font: 600 12px/1.45 var(--font-sans, system-ui, sans-serif);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  animation: sf-purge-in 0.25s ease-out;
+}
+.sf-purge-badge__detail { font-weight: 500; opacity: 0.85; }
+@keyframes sf-purge-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Slim test-system bar below the live views: hosts, CPU, memory, entry cap */
+.live-frame { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.live-frame__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.system-bar {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font: 500 11px/1.5 var(--font-geist-mono, ui-monospace, monospace);
+}
+.system-bar__note { color: var(--text, inherit); font-weight: 700; }
+.system-bar__host { white-space: nowrap; }
+.system-bar__host b { color: var(--text, inherit); }
+.system-bar__host--down { opacity: 0.55; }
+
 .sf-col { min-height: 0; overflow-y: auto; }
 .sf-col--left, .sf-col--right {
   border-right: 1px solid var(--line);

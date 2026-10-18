@@ -1,4 +1,4 @@
-// Promotion of a control replica (docs/ap3-replica-control.md, "Promotion des Control-Replikats"): the authority keeps
+// Promotion of a control replica (docs/abnahme/ap3-replica-control.md, "Promotion des Control-Replikats"): the authority keeps
 // its ID, the control host, its supervisor key and its address change. Unlike the 5.2.1 successor decision this is
 // no new authority. The recovery admin signs the change; the independent register records it in the authority
 // record only after it holds the promoted host as active primary of the control Space and the old host without an

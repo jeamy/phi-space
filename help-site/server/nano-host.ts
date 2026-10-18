@@ -7,6 +7,8 @@
 //   SWARM_DB=/data/swarm-b.sqlite         (default: help-site/.local/swarm-b.phi.sqlite)
 //   SWARM_TAG=b-                          post-id prefix of this shard
 //   SWARM_PRODUCE=1                       also generate intents locally (default: 0)
+//   SWARM_MAX_ENTRIES=20000               entry cap of this shard's database; the oldest posts are purged above it (0 = off)
+//   SWARM_HOST_NAME=nano                  name shown in the hub's test-system bar (default: hostname)
 //   PHI_SPACES_LLM=0                       disables the LLM generators (default anyway without creds)
 //
 // Hub side (big): SWARM_REMOTE=unix:/tmp/swarm-b.sock  or  SWARM_REMOTE=tcp:nano:3600

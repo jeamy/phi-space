@@ -219,6 +219,6 @@ Policy-Validator gesperrt. Ein ACK des Journal-Bausteins ist kein Promotionsnach
 Commit-Verluste vor/nach Primary- und Standby-Anwendung, unveränderte Kandidaten,
 Claim-Replay, Transaktionen, Konfigurationskonflikte, falsche ACKs, Lücken/Forks,
 ungetrackte Daten und beschädigte Marker. Die vollständigen aktuellen
-[Nachweise](../test/evidence/ap3-next-2026-10-15/README.md) enthalten den gebauten
+[Nachweise](../../test/evidence/ap3-next-2026-10-15/README.md) enthalten den gebauten
 Serverlauf. Physischer Storage-/Hostverlust und Power-Loss besitzen dadurch noch
 keine neue Gesamtfreigabe.
