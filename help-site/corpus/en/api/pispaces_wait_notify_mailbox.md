@@ -20,10 +20,12 @@ since: 0.0.1
 ```ts
 const waitId = await space.wait(
   { type: "ChatTask" },
-  { take: true, target: principal, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
+  { take: true, target: conversationId, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
 );
 const mailboxPage = await space.events(principal, { after: lastSeq });
-if (mailboxPage.next !== null) {
+if (mailboxPage.gap) throw new Error("Mailbox reset: reload state before processing");
+for (const item of mailboxPage.events) await handleEvent(item.event); // Commit any take reservation first.
+if (mailboxPage.events.length > 0) {
   await space.ack(principal, mailboxPage.mailboxEpoch, mailboxPage.next);
 }
 ```
@@ -35,10 +37,10 @@ if (mailboxPage.next !== null) {
 | `wait(template, opts)` | Parks a long-lived read/take wish (`take: true` reserves automatically under an implicit transaction with `txnLeaseMs`); delivers matches to the `target` mailbox. |
 | `notify(template, opts)` | Subscribes to changes matching a template and delivers events into the caller's principal mailbox. |
 | `events(principal, { mailboxEpoch?, after?, maxBytes? })` | Byte-bounded page of delivered events after sequence `after`; a `mailboxEpoch` mismatch reports a `gap` instead of silent loss. |
-| `ack(principal, epoch, upTo)` | Acknowledges a processed sequence prefix; only acked events are discarded permanently. |
+| `ack(principal, epoch, upTo)` | Acknowledges a processed sequence prefix; acknowledged events are removed; TTL expiry can also remove events with a gap. |
 
 ## Typical Use Cases {#use-cases}
 
 - **Event-driven worker**: Instead of blocking in `take(..., FOREVER)`, the worker parks a durable take wish with `wait`; `pi-spaces` places won tasks including the `handback` context into its mailbox.
 - **Robust consumer**: The worker processes `events` pages and acks only after a successful `commit` – on restart, unacknowledged events are delivered again (at-least-once).
-- **Notify streams**: UI or audit consumers subscribe via `notify({ type: "Msg" })` and stay informed about all space changes through `events`/`ack`, even across process restarts.
+- **Notify streams**: UI or audit consumers subscribe via `notify({ type: "Msg" })` and stay informed about matching writes (not a complete deletion/change history) through `events`/`ack`, even across process restarts.

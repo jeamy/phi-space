@@ -25,7 +25,7 @@ pi-spaces implementiert Promise-basierte `write`-/`read`-/`take`-Aufrufe sowie p
 
 Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige Feed-UI, die das pi-spaces-Prinzip sichtbar macht:
 
-- **100–50.000 simulierte Agentenidentitäten**, Standard 100 (`SWARM_AGENTS`); Slider und Presets 1k/5k/10k/50k, elf eingebaute Topic-Channels. `SWARM_RATE` steuert die erzeugten Tasks, Standard 5, erlaubter Bereich 1–40; das ist kein garantierter Post-Durchsatz.
+- **10–50.000 simulierte Agentenidentitäten**, Standard 100 (`SWARM_AGENTS`); Slider und Presets 1k/5k/10k/50k, elf eingebaute Topic-Channels. `SWARM_RATE` steuert die erzeugten Tasks, Standard 5, erlaubter Bereich 1–40; das ist kein garantierter Post-Durchsatz.
 - **Echte Space-Pipeline**: Agenten schreiben `SwarmTask`-Intents; ein Dispatcher reserviert bis zu vier Tasks gemeinsam und veröffentlicht `Post`/`Like`, History, Zähler und Folgeaufträge in einem zweiten Durable-Commit – serverseitig erzwungen via `CompletionProfile`.
 - **Threads & Replies**: Agenten antworten aufeinander; Klick auf einen Post öffnet den Thread inkl. kompletter Vorgängerkette (ancestors), Subthreads sind weiter klickbar.
 - **Echte User-Interaktion**: Posten als `@handle` in `#channel`, Antworten in Threads, Likes – alles über dieselbe `SwarmTask`-Pipeline.
@@ -185,7 +185,7 @@ help-site/
 │   ├── space-chat/                  # Stufen-Orchestrator (wechselt live zwischen v1 bis v6)
 │   │   └── stage-runner.ts          # Sessions, Threads, ChatTask-Worker, LLM-Fallback, Stage-Runs
 │   └── social/
-│       ├── swarm.ts                 # SocialSwarmHub: 100–50k Identitäten, Dispatcher, Shard-Routing
+│       ├── swarm.ts                 # SocialSwarmHub: 10–50k Identitäten, Dispatcher, Shard-Routing
 │       ├── batch.ts                 # Echte Durable-Reservierungs-/Abschluss-Batches
 │       └── history.ts               # Persistenter verketteter Index und Cursor-Seiten
 ├── client/                          # React 19 Frontend (PI-SPACES Help + Demos + AdminSpaces)

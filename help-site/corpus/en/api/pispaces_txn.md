@@ -28,7 +28,7 @@ await space.commit(txn.id, { request: reqCommit });
 - **Isolation**: Entries written under `txn` are visible only to operations carrying the same `txnId`; reserved takes are locked for other consumers.
 - **Atomicity**: `commit` applies all writes and takes together, bumps `rev` exactly once, and emits the corresponding mailbox events. `abort` discards everything and releases reserved entries.
 - **Lease**: The transaction owns a lease (the `lease` argument); expiry without commit implies an implicit `abort`.
-- **Contract enforcement**: Before committing, the core checks all `CompletionProfiles` (`CompletionViolation` on missing results) and configured byte budgets (`LimitsExceeded`).
+- **Contract enforcement**: Before committing, the core checks all `CompletionProfiles` (`CompletionViolation` on missing results) and configured byte budgets (`ResourceExhausted`).
 
 ## Typical Use Cases {#use-cases}
 

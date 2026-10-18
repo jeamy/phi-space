@@ -1,6 +1,7 @@
 {
   "name": "pi-spaces",
   "version": "0.0.1",
+  "license": "MIT",
   "type": "module",
   "description": "JavaSpaces-style space for @earendil-works/pi-durable",
   "main": "dist/index.js",
@@ -44,6 +45,7 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "LICENSE",
     "README.md"
   ]
 }

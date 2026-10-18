@@ -10,6 +10,26 @@ function escapeHtml(text: string): string {
 		.replace(/"/g, "&quot;");
 }
 
+/** Pipes inside code spans belong to the type, not the table structure. */
+export function splitTableRow(line: string): string[] {
+	const text = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+	const cells: string[] = []; let cell = "", code = 0;
+	for (let i = 0; i < text.length; i++) {
+		const ch = text[i]!;
+		if (ch === "\\" && text[i + 1] === "|") { cell += "|"; i++; continue; }
+		if (ch === "`") {
+			let n = 1; while (text[i + n] === "`") n++;
+			code = code === n ? 0 : code === 0 ? n : code;
+			cell += "`".repeat(n); i += n - 1; continue;
+		}
+		if (ch === "|" && code === 0) { cells.push(cell.trim()); cell = ""; }
+		else cell += ch;
+	}
+	cells.push(cell.trim()); return cells;
+}
+
+const listItem = (line: string) => /^( *)(?:(\d+)\.\s+|([-*])\s+)(.*)$/.exec(line);
+
 function renderInline(raw: string): string {
 	const codeSpans: string[] = [];
 	const withPlaceholders = raw.replace(/`([^`]+)`/g, (_m, code) => {
@@ -22,6 +42,7 @@ function renderInline(raw: string): string {
 	// Links: [label](target)
 	html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, href) => {
 		const cleanHref = href.trim();
+		if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(cleanHref) && !/^https?:\/\//i.test(cleanHref)) return label;
 		if (cleanHref.startsWith("help.")) {
 			return `<a href="#${cleanHref}" data-help-link="${cleanHref}">${label}</a>`;
 		}
@@ -83,13 +104,7 @@ export function renderMarkdownToHtml(markdown: string): string {
 
 		// GFM Table
 		if (line.trim().startsWith("|") && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1]!)) {
-			const parseRow = (rowLine: string) =>
-				rowLine
-					.trim()
-					.replace(/^\|/, "")
-					.replace(/\|$/, "")
-					.split(/(?<!\\)\|/)
-					.map((c) => c.replace(/\\\|/g, "|").trim());
+			const parseRow = splitTableRow;
 
 			const headers = parseRow(line);
 			i += 2; // skip header and separator
@@ -121,25 +136,32 @@ export function renderMarkdownToHtml(markdown: string): string {
 			continue;
 		}
 
-		// Unordered list
-		if (/^\s*[-*]\s+/.test(line)) {
-			const items: string[] = [];
-			while (i < lines.length && /^\s*[-*]\s+/.test(lines[i]!)) {
-				items.push(`<li>${renderInline(lines[i]!.replace(/^\s*[-*]\s+/, "").trim())}</li>`);
-				i++;
+		// Preserve starting numbers and nested lists instead of flattening hierarchy.
+		const first = listItem(line);
+		if (first) {
+			const indent = first[1]!.length, ordered = first[2] !== undefined;
+			const tag = ordered ? "ol" : "ul", items: string[] = [];
+			while (i < lines.length) {
+				const item = listItem(lines[i]!);
+				if (!item || item[1]!.length !== indent || (item[2] !== undefined) !== ordered) break;
+				const width = item[0].length - item[4]!.length;
+				i++; const children: string[] = [];
+				while (i < lines.length) {
+					if (!lines[i]!.trim()) {
+						let next = i + 1; while (next < lines.length && !lines[next]!.trim()) next++;
+						const following = lines[next];
+						if (following && following.search(/\S/) > indent) { children.push(""); i++; continue; }
+						if (following && listItem(following)?.[1]!.length === indent) i = next;
+						break;
+					}
+					const leading = lines[i]!.search(/\S/);
+					if (leading <= indent) break;
+					children.push(lines[i]!.slice(Math.min(width, leading))); i++;
+				}
+				items.push(`<li>${renderInline(item[4]!)}${children.length ? renderMarkdownToHtml(children.join("\n")) : ""}</li>`);
 			}
-			out.push(`<ul>${items.join("")}</ul>`);
-			continue;
-		}
-
-		// Ordered list
-		if (/^\s*\d+\.\s+/.test(line)) {
-			const items: string[] = [];
-			while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i]!)) {
-				items.push(`<li>${renderInline(lines[i]!.replace(/^\s*\d+\.\s+/, "").trim())}</li>`);
-				i++;
-			}
-			out.push(`<ol>${items.join("")}</ol>`);
+			const start = ordered && Number(first[2]) !== 1 ? ` start="${Number(first[2])}"` : "";
+			out.push(`<${tag}${start}>${items.join("")}</${tag}>`);
 			continue;
 		}
 

@@ -21,13 +21,15 @@ since: 0.0.1
 const host = await startFederationHost(harness, ctx, {
   hostId,
   authorityId,
-  keys: hostSigner,
-  verifier: authorityPublicKey,
-  gate: { listen: { host: "127.0.0.1", port: 0 }, directory },
-  boot: { external: register, installed: bootState },
-  control: { host: harness, authority: authoritySigner }
+  keys: keyDirectory,
+  verifier: grantVerifier,
+  listen: { host: "127.0.0.1", port: 0 },
+  directory,
+  boot: { external: register, installed: installedRegister }
 });
 ```
+
+Die Beispielvariablen keyDirectory, grantVerifier, directory und die beiden unabhängigen Register sind vorab sicher zu konfigurieren; ein öffentlicher Schlüssel allein ist kein GrantVerifier. listen/directory liegen direkt auf den Host-Optionen, nicht unter gate. Der lokale v4-Runner zeigt den vollständigen Aufbau.
 
 ## Komponenten im Überblick {#parameters}
 

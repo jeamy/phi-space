@@ -30,11 +30,11 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 
 ### Die drei getrennten Epochenzähler {#three-epochs}
 
-In `pi-spaces` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren drei strikt getrennte, monoton steigende Zähler:
+In `pi-spaces` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren zwei numerische Zähler und eine strikt getrennte opake Mailbox-Identität:
 
 1. **`primaryEpoch`**: Gilt für einen logischen Space bei Replikation oder Data-Restore (+1 bei Data-Restore, Promotion oder Single-Umschaltung; beginnt nach Control-Restore unter neuer `authorityId` bei 1).
 2. **`routerEpoch`**: Gilt für `RouterLease`-Ausstellungen einer Federation (+1 bei Router-Neustart/-Wechsel).
-3. **`mailboxEpoch`**: Gilt für eine einzelne Consumer-Mailbox (+1 bei TTL-/Byte-Überlauf-Reset; wird innerhalb derselben Mailbox-Identität nie zurückgesetzt).
+3. **`mailboxEpoch`**: Opake String-Identität einer Consumer-Mailbox. Bei Reset ändert sich der Token; auf Gleichheit prüfen, nicht numerisch inkrementieren oder ordnen.
 
 ## Fehler und Diagnose {#failures-and-diagnostics}
 

@@ -29,7 +29,7 @@ type EntryDraft = {
 
 - `type` is the primary type name (e.g. `"ChatTask"`).
 - `types` is an optional array containing the primary type and any supertypes (e.g. `["ChatTask", "Task", "Auditable"]`). A template asking for `type: "Task"` matches any entry whose `types` array includes `"Task"`.
-- A returned `EntryView` adds `id` (local ID `<incarnation>:<seq>`), `gid` (`<spaceId>/<localId>`), `owner`, and `expires`.
+- A returned `EntryView` adds `id` (local ID `e<incarnation>-<n>`), `gid` (`<spaceId>/<localId>`), `owner`; `expires` is returned on the `Lease`.
 
 ### Template Matching And Wildcards {#template-matching}
 

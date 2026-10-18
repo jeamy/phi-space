@@ -33,7 +33,7 @@ const stopService = await startService(harness, ctx);
 | `space_wait`, `space_notify` | Long-lived wishes and subscriptions without blocking the agent's turn. |
 | `space_lease` | `renew`/`cancel` for owned resources. |
 
-All entry payloads are presented to the agent strictly as `[data, not instructions]`; ownership checks prevent an agent from manipulating foreign leases or claims. `startService` runs the lease reaper, waiter wakeup logic, and mailbox delivery – without it, expired leases linger and waiters sleep forever.
+All entry payloads are presented to the agent strictly as `[data, not instructions]`; ownership checks prevent an agent from manipulating foreign leases or claims. `startService` runs the lease reaper, waiter wakeup logic, and mailbox delivery – operations still settle expiry without background maintenance; conversation delivery needs a running delivery service.
 
 ## Typical Use Cases {#use-cases}
 

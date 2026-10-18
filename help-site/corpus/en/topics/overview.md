@@ -19,10 +19,10 @@ since: 0.0.1
 
 `pi-spaces` solves four fundamental problems in building robust, long-running systems and autonomous AI agent fleets:
 
-1. **Fault-Tolerant Work Handoff (Lossless Work Queues)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (`type: "ChatTask"` or similar) into the space. Any worker can then **reserve** that task exclusively (`take`). If the worker crashes before finishing, the expired lease automatically returns the task — nothing is lost.
-2. **Temporal Decoupling**: Producers and consumers do not need to be online at the same time. A client can schedule a `ScheduledJob` in the middle of the night and go offline; the space service holds the task safely until a worker is ready or the deadline (`TimerLock` lease) fires.
+1. **Fault-Tolerant Work Handoff (Leased Reservations)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (`type: "ChatTask"` or similar) into the space. Any worker can then **reserve** that task exclusively (`take`). If the worker crashes before finishing, the expired lease automatically returns the task — provided the task's own lease remains valid and its store is available.
+2. **Temporal Decoupling**: Producers and consumers do not need to be online at the same time. A client can schedule a `ScheduledJob` in the middle of the night and go offline; with a persistent backend and sufficient task lease, the job survives; the application checks when it is due after TimerLock expiry.
 3. **Unified State With Live Events**: Rather than fragmented caches, every space provides atomic transactions (`createTransaction`, `commit`, `abort`), consistent point-in-time snapshots (`readPage` with `rev`), incremental update streams (`changes(afterRev)`), and durable event mailboxes (`events` + prefix `ack`).
-4. **Single-Process Systems That Grow Into Distributed Clusters**: The same application code (against the `SpaceLike` interface) runs seamlessly from a pure in-memory store on a laptop up to an encrypted, horizontally sharded multi-host cluster with centralized mobile and web administration (`AdminSpaces`).
+4. **Incremental Distribution**: Local and remote clients share SpaceLike. Federation adds routing and its own request bindings; real encryption, provisioning and failure safety need separate configuration and acceptance.
 
 ## Concept And System Model {#concept-model}
 
@@ -32,13 +32,13 @@ In `pi-spaces`, producers and consumers do not need to know each other or be act
 
 - **Write (`space.write`)**: A participant places an entry `{ type: string, types?: string[], fields: Record<string, Json> }` with a bounded lifetime (**lease**) into the space.
 - **Read (`space.read` / `readIfExists` / `readAll` / `readPage`)**: A participant queries a matching visible entry using a **template** `{ type?, fields?, id? }` without removing it. Missing or `null` fields in the template act as **wildcards**.
-- **Exclusive Take (`space.take`)**: A worker removes a matching entry exclusively. When executed under a **transaction (`txn`)**, the entry remains reserved until the worker writes its results and calls `commit(txn)`. If the worker crashes or the transaction lease expires, the entry automatically returns to the space.
+- **Exclusive Take (`space.take`)**: A worker removes a matching entry exclusively. When executed under a **transaction (`txn`)**, the entry remains reserved until the worker writes its results and calls `commit(txn)`. If the worker crashes or the transaction lease expires, the entry returns if its own Entry lease remains valid.
 - **Wait For Future Data (`space.wait`)**: Instead of polling blindly, a participant registers a durable `Waiter` against a template. As soon as a matching entry is committed, `pi-spaces` wakes the waiter or delivers an event.
 
 ### What Can pi-spaces Do? (Core Capabilities) {#capabilities}
 
 - **Immutable Entries & Wildcard Templates**: Typed JSON objects with subtype registration (`types`) and exact `type`/field matching.
-- **Atomic Space Transactions**: `take` + multiple `write` calls + optional request claims inside a single `commit(txn)`. On `abort` or timeout everything rolls back atomically.
+- **Atomic Space Transactions**: `take` + multiple `write` calls + optional request claims finalized by one business `commit(txn)` (earlier PiSpaces calls are separate storage commits). On `abort` or timeout everything rolls back atomically.
 - **Server-Side Result Guarantees (`CompletionProfiles`)**: The space core enforces at commit time that a taken task of type `ChatTask` can only commit together with exactly one matching result entry `Msg`.
 - **Idempotent Request Claims (`RequestRef`)**: Every mutation can carry `{ request: { principal, generation, requestId } }`; retries and timeouts never produce duplicate effects.
 - **Leases & Automatic Reaper (`startService`)**: Entries, presence records, and `TimerLock` locks expire automatically after a configured duration.
@@ -48,7 +48,7 @@ In `pi-spaces`, producers and consumers do not need to know each other or be act
 
 ### Unified SpaceLike Contract {#spacelike-contract}
 
-The local client `PiSpaces`, the network client `RemoteSpace`, and the cluster client `FederatedSpace` all implement the same TypeScript interface `SpaceLike`. Application logic—such as our [Multiplayer Space-Chat](help.workflow.overview_v1_to_v6#overview)—remains completely unchanged from stage `v1` (in-memory) through stage `v5` (multi-host cluster).
+PiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace has a separate API with FederationRequest and Member transaction binding; business concepts transfer but call signatures are not drop-in replacements. See [topologies and API boundaries](help.topic.topology_and_readiness#api).
 
 ## Terms And Identities {#terms-and-identities}
 

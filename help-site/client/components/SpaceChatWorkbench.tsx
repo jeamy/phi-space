@@ -6,6 +6,7 @@ import { startChatConnection, type ChatSocket } from "../lib/chat-connection.ts"
 interface WorkbenchProps {
 	locale: "de" | "en";
 	sessionId: string;
+	initialStage?: string;
 	onOpenArticle: (id: string) => void;
 }
 
@@ -50,7 +51,8 @@ const STAGES = [
 
 export function SpaceChatWorkbench(props: WorkbenchProps) {
 	const { locale, sessionId, onOpenArticle } = props;
-	const [activeStage, setActiveStage] = useState<string>("v2");
+	const [activeStage, setActiveStage] = useState<string>(props.initialStage ?? "v2");
+	useEffect(() => { if (props.initialStage) setActiveStage(props.initialStage); }, [props.initialStage]);
 	const [stageReport, setStageReport] = useState<any>(null);
 	const [runningStage, setRunningStage] = useState<boolean>(false);
 

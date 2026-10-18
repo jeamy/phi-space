@@ -24,7 +24,7 @@ Stufe 6 (`help-site/examples/v6-mobile-control/run.ts` sowie der Web-Bereich **`
 
 ### Schritt 1: Login in AdminSpaces & QR-Pairing für das Smartphone {#step-1-login-and-qr}
 
-1. Auf `https://spaces.eibrain.org` klickt der Administrator oben rechts auf **`ADMIN`** und meldet sich per Admin-Passwort oder Enrollment-Token an.
+1. Auf `https://spaces.eibrain.org` klickt der Administrator oben rechts auf **`ADMIN`** und meldet sich mit dem konfigurierten privaten Web-Admin-Passwort (Enrollment-Tokens koppeln ausschließlich Peers) an.
 2. Im Bereich **Identität & Geräte-Pairing** kann mit einem Klick ein neues Enrollment-Token samt `enrollQr`-Payload generiert werden, das direkt in `spaces.html` der Android-App eingefügt oder gescannt wird.
 
 ### Schritt 2: Worker-Skalierung, RunGate-Steuerung und Space-Lebenszyklus {#step-2-control}

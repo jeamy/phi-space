@@ -27,8 +27,8 @@ const gauges = await space.stats();
 
 | Methode | Rückgabe | Zweck |
 | --- | --- | --- |
-| `readPage(template?, opts?)` | `Page { entries, rev, token? }` | Unveränderlicher Punkt-in-Zeit-Snapshot, bytebegrenzt seitenweise über `token` fortsetzbar. |
-| `changes(afterRev, opts?)` | `Changes { rev, batches, gaps? }` | Alle seit `afterRev` committeten Deltas in Reihenfolge; `gaps` markiert verdichtete Bereiche. |
+| `readPage(template?, opts?)` | `Page { items, next, rev, streamId, token? }` | Unveränderlicher Punkt-in-Zeit-Snapshot, bytebegrenzt seitenweise über `token` fortsetzbar. |
+| `changes(afterRev, opts?)` | `Changes { streamId, batches, next, rev, more }` | Alle seit `afterRev` committeten Deltas in Reihenfolge; bei veraltetem Log wird `SnapshotExpired` ausgelöst. |
 | `readAll(template?, { limit?, txn? })` | `EntryView[]` | Bequemer Komplettabruf ohne Paging (für kleine Ergebnismengen). |
 | `count(template?, txn?)` / `stats()` | `number` / Gauges | Schnelle Größen- und Füllstandsabfragen für Dashboards. |
 

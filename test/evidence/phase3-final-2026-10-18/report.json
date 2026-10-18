@@ -1,0 +1,839 @@
+{
+ "partA": {
+  "passed": true,
+  "bundle": "3b562462512b0868 (44a924a)",
+  "steps": {
+   "preflight": {
+    "bundle": "3b562462512b0868"
+   },
+   "merge-partition": {
+    "partitionMs": 656355,
+    "healed": {
+     "healed": true,
+     "droppedPackets": 89
+    },
+    "events": [
+     {
+      "at": 21037,
+      "name": "a puts tomb",
+      "v": "[\"r-nano\",\"i-nano-f\",5]"
+     },
+     {
+      "at": 33613,
+      "name": "b puts tomb (older than the delete)",
+      "v": "[\"r-100\",\"i-100-f\",4]"
+     },
+     {
+      "at": 62379,
+      "name": "a deletes tomb",
+      "v": true
+     },
+     {
+      "at": 70960,
+      "name": "a puts renewed (2 min)",
+      "v": "[\"r-nano\",\"i-nano-f\",13]"
+     },
+     {
+      "at": 83568,
+      "name": "b puts ver v2 (2 min)",
+      "v": "[\"r-100\",\"i-100-f\",10]"
+     },
+     {
+      "at": 91257,
+      "name": "a removes t0",
+      "v": true
+     },
+     {
+      "at": 105167,
+      "name": "b renews t0",
+      "v": 9007199254740991
+     },
+     {
+      "at": 152311,
+      "name": "a renews renewed (30 min)",
+      "v": true
+     },
+     {
+      "at": 602204,
+      "name": "heal",
+      "v": {
+       "healed": true,
+       "droppedPackets": 89
+      }
+     }
+    ],
+    "view": {
+     "lww": 7,
+     "set": 31,
+     "shared": {
+      "sensorId": "shared",
+      "by": "b",
+      "n": 29
+     }
+    }
+   },
+   "kill-standby": {
+    "label": "kill-standby",
+    "writes": 28,
+    "confirmed": 28,
+    "resolved": 0,
+    "sealedAnswers": 0,
+    "longestOpenMs": 0,
+    "events": {
+     "kill": {
+      "killed": 2269,
+      "cleared": {
+       "staleOwnerLockCleared": {
+        "pid": 2269,
+        "mode": "run",
+        "reason": "processGone"
+       }
+      },
+      "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
+     },
+     "killAt": 43897
+    },
+    "heads": {
+     "revision": 30,
+     "hash": "a64ebaec23c3db123af15d4b818549b7f6dc8036f12dd897ac5baa7368a16a82",
+     "configHash": "14db1585353a8945661cee8d6aee421f3bd5bc5bdb34d096cc5f9d64be62a133"
+    },
+    "lossless": {
+     "decided": 28,
+     "entries": 28
+    }
+   },
+   "kill-primary": {
+    "label": "kill-primary",
+    "writes": 29,
+    "confirmed": 29,
+    "resolved": 0,
+    "sealedAnswers": 0,
+    "longestOpenMs": 0,
+    "events": {
+     "kill": {
+      "killed": 8,
+      "cleared": {
+       "staleOwnerLockCleared": {
+        "pid": 8,
+        "mode": "run",
+        "reason": "processGone"
+       }
+      },
+      "ready": "{\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}"
+     },
+     "killAt": 39761
+    },
+    "heads": {
+     "revision": 59,
+     "hash": "9ca252dd41322c484fb772a2e51be33f60b837ceb6566010a1510c30ae511fd0",
+     "configHash": "14db1585353a8945661cee8d6aee421f3bd5bc5bdb34d096cc5f9d64be62a133"
+    },
+    "lossless": {
+     "decided": 57,
+     "entries": 57
+    }
+   },
+   "netbird-outage": {
+    "label": "netbird-outage",
+    "writes": 45,
+    "confirmed": 44,
+    "resolved": 1,
+    "sealedAnswers": 51,
+    "longestOpenMs": 140677,
+    "events": {
+     "agent-stop": {
+      "stoppedForS": 120
+     },
+     "agent-stopAt": 23993
+    },
+    "heads": {
+     "revision": 104,
+     "hash": "617008dfc37c47a182d756b02e306a5787c64589f98435db7595f0507763771f",
+     "configHash": "14db1585353a8945661cee8d6aee421f3bd5bc5bdb34d096cc5f9d64be62a133"
+    },
+    "lossless": {
+     "decided": 102,
+     "entries": 102
+    },
+    "standbyDaemonRestarts": 0,
+    "standbyErrors": [],
+    "standbyGateEpoch": 1
+   },
+   "journal-full": {
+    "writes": 57,
+    "refusal": "Error: primary/sync journal: sync history is full; no committed result was discarded",
+    "counted": 57,
+    "heads": {
+     "revision": 59,
+     "hash": "5a42f618eb9089b8b87d5c64a7bd55534fd2c1a2e8729f58b4384660a0fd4587",
+     "configHash": "13db00e89e8cd2fb0dbc13879159dc790c7bffe74639cb879f14e692ef4f58dd"
+    },
+    "otherSpaceWritable": true
+   }
+  },
+  "writesByPhase": {
+   "kill-standby": {
+    "writes": 28,
+    "confirmed": 28,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   },
+   "kill-primary": {
+    "writes": 29,
+    "confirmed": 29,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   },
+   "netbird-outage": {
+    "writes": 45,
+    "confirmed": 44,
+    "resolved": 1,
+    "failed": 0,
+    "pending": 0
+   }
+  }
+ },
+ "partB_firstRun": {
+  "passed": false,
+  "bundle": "3b562462512b0868",
+  "space": "jobs-root (abandoned)",
+  "steps": {
+   "preflight": {
+    "bundle": "3b562462512b0868",
+    "member": {
+     "id": "final-member",
+     "target": {
+      "hostId": "nano-test",
+      "spaceId": "sp-3466d2b1-e31a-4ff2-a610-3a8e98a4b31e",
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "5624fd54",
+      "primaryEpoch": 1
+     },
+     "state": "active",
+     "replication": {
+      "primaryReplica": "nano-test",
+      "standbyReplica": "standby-100",
+      "replicaConfigVersion": 1,
+      "durability": "sync"
+     }
+    }
+   },
+   "routed": {
+    "label": "routed",
+    "writes": 2,
+    "confirmed": 2,
+    "resolved": 0,
+    "failed": 0,
+    "longestOpenMs": 0,
+    "errors": [],
+    "events": {},
+    "heads": {
+     "revision": 10,
+     "hash": "a2aad41ab9c914d6b6b70dc9665b1eea37ace3f57be1e60740e2b3b8449fd0a7",
+     "configHash": "1ae8daf85cd111a4a62425181736eef734ac283966c2ba17e97812772fb0a3bd"
+    }
+   },
+   "routed-partition": {
+    "label": "partition",
+    "writes": 3,
+    "confirmed": 2,
+    "resolved": 1,
+    "failed": 0,
+    "longestOpenMs": 198134,
+    "errors": [
+     "a commit of this Space is sealed but not confirmed (revision 13); the outcome is pending, poll or retry the same request"
+    ],
+    "events": {
+     "cut": {
+      "cut": true
+     },
+     "cutAt": 30893,
+     "heal": {
+      "healed": true,
+      "droppedPackets": 103
+     },
+     "healAt": 206311
+    },
+    "heads": {
+     "revision": 17,
+     "hash": "0d9d27d211682cf94e81c1e8a96fd22cf7527dd0558ee529832b6a06877af187",
+     "configHash": "1ae8daf85cd111a4a62425181736eef734ac283966c2ba17e97812772fb0a3bd"
+    },
+    "lossless": {
+     "decided": 5,
+     "failed": 0,
+     "entries": 6
+    }
+   },
+   "fork": {
+    "fork": {
+     "revision": 18,
+     "hash": "7b818220c6193320c8f9a00b96f33566b284c1e8b01ef90ef2ce70379852733d",
+     "configHash": "1ae8daf85cd111a4a62425181736eef734ac283966c2ba17e97812772fb0a3bd"
+    },
+    "answer": {
+     "id": "final-1792316421374-20",
+     "passed": false,
+     "error": "a commit of this Space is sealed but not confirmed (revision 18); the outcome is pending, poll or retry the same request"
+    }
+   },
+   "promote": {
+    "recoveryId": "final-promote",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 2,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 2,
+     "spaceId": "sp-3466d2b1-e31a-4ff2-a610-3a8e98a4b31e",
+     "standbyReplica": "nano-test"
+    },
+    "proof": {
+     "kind": "cloud",
+     "evidence": {
+      "provider": "netcup",
+      "serverId": 964249,
+      "state": "SHUTOFF",
+      "autostart": false,
+      "reason": "promote final-promote"
+     }
+    }
+   },
+   "primaryNow": "standby-100",
+   "degrade": {
+    "recoveryId": "final-degrade",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 3,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 3,
+     "spaceId": "sp-3466d2b1-e31a-4ff2-a610-3a8e98a4b31e",
+     "standbyReplica": null
+    },
+    "recoveredCommitted": [],
+    "proof": {
+     "kind": "cloud",
+     "evidence": {
+      "provider": "netcup",
+      "serverId": 964249,
+      "state": "SHUTOFF",
+      "autostart": false,
+      "reason": "degrade final-degrade"
+     }
+    }
+   },
+   "start-new-primary": {
+    "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}",
+    "adopted": {
+     "id": "final-member",
+     "target": {
+      "hostId": "standby-100",
+      "spaceId": "sp-3466d2b1-e31a-4ff2-a610-3a8e98a4b31e",
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "5624fd54",
+      "primaryEpoch": 3
+     },
+     "state": "active",
+     "replication": {
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 3,
+      "durability": "single",
+      "recoveryId": "final-degrade"
+     }
+    }
+   }
+  },
+  "writesByPhase": {
+   "routed": {
+    "writes": 2,
+    "confirmed": 2,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   },
+   "partition": {
+    "writes": 3,
+    "confirmed": 2,
+    "resolved": 1,
+    "failed": 0,
+    "pending": 0
+   },
+   "fork": {
+    "writes": 1,
+    "confirmed": 0,
+    "resolved": 0,
+    "failed": 1,
+    "pending": 0
+   }
+  },
+  "failure": "fork write was a sealed generation commit, not the write; after adoption its new child was refused (stale policy version) and went to review"
+ },
+ "partB": {
+  "passed": "all steps except not-committed (finding, fixed in 91e24c1)",
+  "space": "jobs-root2",
+  "member": "final-member-2",
+  "bundles": {
+   "preflight..start-new-primary": "58bd80cd22649f86 (0f7e280)",
+   "routed-single..set-standby": "e6b159968e4671b4 (91e24c1)",
+   "degrade-revoke": "8469912f62af08e4 (6a13da7)",
+   "revoke-way-back": "ebb87f58f04afa28 (275924a)"
+  },
+  "steps": {
+   "preflight": {
+    "bundle": "58bd80cd22649f86",
+    "member": {
+     "id": "final-member-2",
+     "target": {
+      "hostId": "nano-test",
+      "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "ef25a669",
+      "primaryEpoch": 1
+     },
+     "state": "active",
+     "replication": {
+      "primaryReplica": "nano-test",
+      "standbyReplica": "standby-100",
+      "replicaConfigVersion": 1,
+      "durability": "sync"
+     }
+    }
+   },
+   "routed": {
+    "label": "routed",
+    "writes": 2,
+    "confirmed": 2,
+    "resolved": 0,
+    "failed": 0,
+    "longestOpenMs": 0,
+    "errors": [],
+    "events": {},
+    "heads": {
+     "revision": 10,
+     "hash": "a644c2c28050e737bbb8aecdc816da456a53289bc707b26b52ff40a853c48af1",
+     "configHash": "97bd6b7876ace220b79c2b26bfeb6ed46d1a0e1faaac39885769a3047981ff72"
+    }
+   },
+   "routed-partition": {
+    "label": "partition",
+    "writes": 3,
+    "confirmed": 2,
+    "resolved": 1,
+    "failed": 0,
+    "longestOpenMs": 196483,
+    "errors": [
+     "a commit of this Space is sealed but not confirmed (revision 13); the outcome is pending, poll or retry the same request"
+    ],
+    "events": {
+     "cut": {
+      "cut": true
+     },
+     "cutAt": 31189,
+     "heal": {
+      "healed": true,
+      "droppedPackets": 60
+     },
+     "healAt": 205012
+    },
+    "heads": {
+     "revision": 17,
+     "hash": "683b88174a137eb7c56f177225d4c9b72328f3c797502d1108022e81cdaf72b1",
+     "configHash": "97bd6b7876ace220b79c2b26bfeb6ed46d1a0e1faaac39885769a3047981ff72"
+    },
+    "lossless": {
+     "decided": 5,
+     "failed": 0,
+     "entries": 6
+    }
+   },
+   "fork": {
+    "fork": {
+     "revision": 20,
+     "hash": "ae98e3d2ff849c246ae4e6e75252460d5a9c0488c4a927e9c0eecce7c7affc43",
+     "configHash": "97bd6b7876ace220b79c2b26bfeb6ed46d1a0e1faaac39885769a3047981ff72"
+    },
+    "txn": {
+     "id": "tef25a669-7",
+     "expires": 1792321161982,
+     "member": "final-member-2",
+     "originId": "fork-txn"
+    },
+    "answer": {
+     "id": "final-1792321108326-21",
+     "passed": false,
+     "error": "bound child outcome is unresolved"
+    }
+   },
+   "promote": {
+    "recoveryId": "final-promote",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "sync",
+     "primaryEpoch": 2,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 2,
+     "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+     "standbyReplica": "nano-test"
+    },
+    "proof": {
+     "kind": "cloud",
+     "evidence": {
+      "provider": "netcup",
+      "serverId": 964249,
+      "state": "SHUTOFF",
+      "autostart": false,
+      "reason": "promote final-promote"
+     }
+    }
+   },
+   "primaryNow": "standby-100",
+   "degrade": {
+    "recoveryId": "final-degrade",
+    "config": {
+     "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+     "durability": "single",
+     "primaryEpoch": 3,
+     "primaryReplica": "standby-100",
+     "replicaConfigVersion": 3,
+     "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+     "standbyReplica": null
+    },
+    "recoveredCommitted": [],
+    "proof": {
+     "kind": "cloud",
+     "evidence": {
+      "provider": "netcup",
+      "serverId": 964249,
+      "state": "SHUTOFF",
+      "autostart": false,
+      "reason": "degrade final-degrade"
+     }
+    }
+   },
+   "start-new-primary": {
+    "ready": "{\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}",
+    "adopted": {
+     "id": "final-member-2",
+     "target": {
+      "hostId": "standby-100",
+      "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "ef25a669",
+      "primaryEpoch": 3
+     },
+     "state": "active",
+     "replication": {
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 3,
+      "durability": "single",
+      "recoveryId": "final-degrade"
+     }
+    }
+   },
+   "not-committed": {
+    "finding": "the Root resolved the fork step at the promoted primary, but the Member refused the resolution with StalePolicyVersion (the adoption had raised the policy version; the resolution was treated as a new operation); step needsReview, the fork had no effect. Fixed in 91e24c1 (resolution runs under the request policy), proven locally; this fork stays in review.",
+    "forkWrite": {
+     "n": 5,
+     "requestId": "fork",
+     "label": "fork",
+     "status": "failed",
+     "issuedAt": 1792321108326,
+     "attempts": 2,
+     "errors": [
+      "bound child outcome is unresolved",
+      "definitive child failure or review requires explicit review"
+     ],
+     "txn": {
+      "id": "tef25a669-7",
+      "expires": 1792321161982,
+      "member": "final-member-2",
+      "originId": "fork-txn"
+     },
+     "decidedAt": 1792321284929
+    }
+   },
+   "release": {
+    "state": "quarantine",
+    "by": "operator before the driver resumed (bundle e6b15996 deployed while stopped)"
+   },
+   "routed-single": {
+    "label": "single",
+    "writes": 1,
+    "confirmed": 1,
+    "resolved": 0,
+    "failed": 0,
+    "longestOpenMs": 0,
+    "errors": [],
+    "events": {}
+   },
+   "wipe-old": {
+    "aside": "/data/nano/sync-jobs-root2.aside-1792322749444"
+   },
+   "start-quarantine": {
+    "quarantine": "{\"quarantine\":true,\"listeners\":[\"jobs-root2\"],\"failed\":[]}"
+   },
+   "set-standby": {
+    "during": {
+     "label": "set-standby",
+     "writes": 3,
+     "confirmed": 2,
+     "resolved": 1,
+     "failed": 0,
+     "longestOpenMs": 1114726,
+     "errors": [
+      "bound child outcome is unresolved",
+      "a commit of this Space is sealed but not confirmed (revision 30); the outcome is pending, poll or retry the same request"
+     ],
+     "events": {
+      "set-standby": {
+       "config": {
+        "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+        "durability": "sync",
+        "primaryEpoch": 3,
+        "primaryReplica": "standby-100",
+        "replicaConfigVersion": 4,
+        "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+        "standbyReplica": "nano-test"
+       },
+       "left": null,
+       "readmitted": [
+        "sp-0e8bf457-66ec-4324-95dc-488d5afe9356",
+        "sp-e0b3c2b3-301a-4c6d-9ee4-aadf42f450cd"
+       ],
+       "ready": "{\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}"
+      },
+      "set-standbyAt": 24381
+     }
+    },
+    "adopted": {
+     "id": "final-member-2",
+     "replication": {
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 4,
+      "durability": "sync",
+      "standbyReplica": "nano-test",
+      "recoveryId": "final-standby"
+     },
+     "state": "active",
+     "target": {
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "ef25a669",
+      "hostId": "standby-100",
+      "primaryEpoch": 3,
+      "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341"
+     }
+    },
+    "after": {
+     "label": "after-standby",
+     "writes": 1,
+     "confirmed": 1,
+     "resolved": 0,
+     "failed": 0,
+     "longestOpenMs": 0,
+     "errors": [],
+     "events": {}
+    },
+    "heads": {
+     "revision": 38,
+     "hash": "965589fae81371a1b9c282ded934b7d77dd961b067ef2c9fe209e250f86f2886",
+     "configHash": "79732550e8d250d7b6f183f9e29d7907e47f5df5df5954f957ff7828de5a5af9"
+    }
+   },
+   "revokeCandidate": 39,
+   "degrade-revoke": {
+    "degrade": {
+     "config": {
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "durability": "single",
+      "primaryEpoch": 4,
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 5,
+      "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+      "standbyReplica": null
+     },
+     "recoveredCommitted": [
+      39
+     ]
+    },
+    "adopted": {
+     "id": "final-member-2",
+     "replication": {
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 5,
+      "durability": "single",
+      "recoveryId": "final-degrade-revoke"
+     },
+     "state": "active",
+     "target": {
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "ef25a669",
+      "hostId": "standby-100",
+      "primaryEpoch": 4,
+      "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341"
+     }
+    },
+    "write": {
+     "n": 11,
+     "requestId": "revoke-candidate",
+     "label": "revoke",
+     "status": "resolved",
+     "issuedAt": 1792324078821,
+     "attempts": 2,
+     "errors": [
+      "a commit of this Space is sealed but not confirmed (revision 39); the outcome is pending, poll or retry the same request"
+     ],
+     "decidedAt": 1792325070578
+    }
+   },
+   "revoke-way-back": {
+    "wipe": {
+     "aside": "/data/nano/sync-jobs-root2.aside-1792326980093"
+    },
+    "ready": "{\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}",
+    "during": {
+     "label": "revoke-back",
+     "writes": 2,
+     "confirmed": 1,
+     "resolved": 1,
+     "failed": 0,
+     "longestOpenMs": 141098,
+     "errors": [
+      "replica transition final-standby-2 in progress; writes are paused",
+      "bound child outcome is unresolved"
+     ],
+     "events": {
+      "set-standby": {
+       "config": {
+        "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+        "durability": "sync",
+        "primaryEpoch": 4,
+        "primaryReplica": "standby-100",
+        "replicaConfigVersion": 6,
+        "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341",
+        "standbyReplica": "nano-test"
+       }
+      },
+      "set-standbyAt": 59650
+     }
+    },
+    "adopted": {
+     "id": "final-member-2",
+     "replication": {
+      "primaryReplica": "standby-100",
+      "replicaConfigVersion": 6,
+      "durability": "sync",
+      "standbyReplica": "nano-test",
+      "recoveryId": "final-standby-2"
+     },
+     "state": "active",
+     "target": {
+      "authorityId": "a-c22244a8-b5d3-43f8-84e6-0a7a92004f54",
+      "dataIncarnation": "ef25a669",
+      "hostId": "standby-100",
+      "primaryEpoch": 4,
+      "spaceId": "sp-fd6f1598-abf2-4fa8-a295-5f9598b9d341"
+     }
+    },
+    "after": {
+     "label": "after-revoke",
+     "writes": 1,
+     "confirmed": 1,
+     "resolved": 0,
+     "failed": 0,
+     "longestOpenMs": 0,
+     "errors": [],
+     "events": {}
+    },
+    "heads": {
+     "revision": 56,
+     "hash": "2eafcf9462e971ee1a55c53949008cbd3ccdc9593aca2f3b5393daf876bff1cf",
+     "configHash": "8f945f29435cf891aef9d11601c7a8baad86998776d6cadc27a45bf927312f92"
+    },
+    "lossless": {
+     "decided": 14,
+     "failed": 1,
+     "entries": 15
+    }
+   }
+  },
+  "writesByPhase": {
+   "routed": {
+    "writes": 2,
+    "confirmed": 2,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   },
+   "partition": {
+    "writes": 3,
+    "confirmed": 2,
+    "resolved": 1,
+    "failed": 0,
+    "pending": 0
+   },
+   "fork": {
+    "writes": 1,
+    "confirmed": 0,
+    "resolved": 0,
+    "failed": 1,
+    "pending": 0
+   },
+   "single": {
+    "writes": 1,
+    "confirmed": 1,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   },
+   "set-standby": {
+    "writes": 3,
+    "confirmed": 2,
+    "resolved": 1,
+    "failed": 0,
+    "pending": 0
+   },
+   "after-standby": {
+    "writes": 1,
+    "confirmed": 1,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   },
+   "revoke": {
+    "writes": 1,
+    "confirmed": 0,
+    "resolved": 1,
+    "failed": 0,
+    "pending": 0
+   },
+   "revoke-back": {
+    "writes": 2,
+    "confirmed": 1,
+    "resolved": 1,
+    "failed": 0,
+    "pending": 0
+   },
+   "after-revoke": {
+    "writes": 1,
+    "confirmed": 1,
+    "resolved": 0,
+    "failed": 0,
+    "pending": 0
+   }
+  },
+  "driverStateEditedByHand": [
+   "not-committed recorded as finding (no NotCommitted, StalePolicyVersion at the successor)",
+   "release done by the operator before resuming",
+   "revokeCandidate injected from recoveredCommitted (39) after the interrupted degrade-revoke"
+  ]
+ },
+ "notCommittedCycle": {
+  "space": "jobs-root3",
+  "member": "final-member-3",
+  "state": "abandoned: addMember stuck in phase committed (finding)"
+ }
+}

@@ -2,72 +2,20 @@
 // Main PI-SPACES / HELP React Application.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { applyThemeToDocument, PALETTES } from "./lib/palettes.ts";
-import { searchAreas, searchArticles } from "./lib/search.ts";
+import { scoreArticle, searchAreas, searchArticles } from "./lib/search.ts";
 import { renderMarkdownToHtml } from "./lib/markdown.ts";
 import { startArticleLoad } from "./lib/article-load.ts";
+import { helpUrl, parseHelpView, resourceView, type ViewState } from "./lib/help-navigation.ts";
+import { startIndexLoad } from "./lib/index-load.ts";
 import { SpaceChatWorkbench } from "./components/SpaceChatWorkbench.tsx";
 import { AdminSpacesView } from "./components/AdminSpacesView.tsx";
 import { SocialFeedView } from "./components/SocialFeedView.tsx";
 
-type ViewState =
-	| { kind: "home" }
-	| { kind: "area"; id: string }
-	| { kind: "article"; id: string }
-	| { kind: "search"; query: string }
-	| { kind: "browse"; owner: string; articleType?: string }
-	| {
-			kind: "api-finder";
-			mode: "api" | "modules";
-			query: string;
-			provider: string;
-			category: string;
-			execution: string;
-			idempotency: string;
-			scope: string;
-	  }
-	| { kind: "space-chat"; sessionId: string }
-	| { kind: "feed" }
-	| { kind: "admin" };
-
-function parseViewFromUrl(): ViewState {
-	const params = new URLSearchParams(window.location.search);
-	const view = params.get("view");
-	if (view === "space-chat") {
-		return { kind: "space-chat", sessionId: params.get("session") ?? "lobby" };
-	}
-	if (view === "feed") {
-		return { kind: "feed" };
-	}
-	if (view === "admin") {
-		return { kind: "admin" };
-	}
-	if (view === "api-finder" || params.get("area") === "step_by_step_and_api_reference" && params.get("tab") === "api") {
-		return {
-			kind: "api-finder",
-			mode: params.get("mode") === "modules" ? "modules" : "api",
-			query: params.get("oq") ?? "",
-			provider: params.get("provider") ?? "all",
-			category: params.get("category") ?? "all",
-			execution: params.get("execution") ?? "all",
-			idempotency: params.get("idempotency") ?? "all",
-			scope: params.get("scope") ?? "all",
-		};
-	}
-	const article = params.get("article");
-	if (article) return { kind: "article", id: article };
-	const area = params.get("area");
-	if (area) return { kind: "area", id: area };
-	const q = params.get("q");
-	if (q) return { kind: "search", query: q };
-	const owner = params.get("owner");
-	const type = params.get("type");
-	if (owner || type) return { kind: "browse", owner: owner ?? "all", articleType: type ?? undefined };
-	return { kind: "home" };
-}
-
 const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
 
 export function HelpApp(props: { initialIndex?: any } = {}) {
+	const [indexError, setIndexError] = useState<string | null>(null);
+	const [indexAttempt, setIndexAttempt] = useState(0);
 	const [indexData, setIndexData] = useState<any>(props.initialIndex ?? null);
 	const [locale, setLocale] = useState<"de" | "en">("en");
 	const [mode, setMode] = useState<"dark" | "light">("dark");
@@ -79,24 +27,30 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 	const searchRef = useRef<HTMLInputElement | null>(null);
 
 	useEffect(() => {
-		const savedLocale = window.localStorage.getItem("pi-spaces-help-locale");
+		const savedLocale = new URLSearchParams(window.location.search).get("lang") ?? window.localStorage.getItem("pi-spaces-help-locale");
 		if (savedLocale === "de" || savedLocale === "en") setLocale(savedLocale);
 		const savedMode = window.localStorage.getItem("pi-spaces-help-mode");
 		if (savedMode === "dark" || savedMode === "light") setMode(savedMode);
 		const savedPalette = window.localStorage.getItem("pi-spaces-help-palette");
 		if (savedPalette) setPalette(savedPalette);
-		setView(parseViewFromUrl());
+		setView(parseHelpView(window.location.search));
 
-		if (!props.initialIndex) {
-			fetch("/help/index.json")
-				.then((r) => r.json())
-				.then((data) => setIndexData(data))
-				.catch(() => {});
-		}
-		const onPop = () => setView(parseViewFromUrl());
+
+		const onPop = () => { setView(parseHelpView(window.location.search)); const language = new URLSearchParams(window.location.search).get("lang"); if (language === "de" || language === "en") setLocale(language); };
 		window.addEventListener("popstate", onPop);
 		return () => window.removeEventListener("popstate", onPop);
 	}, []);
+
+ useEffect(() => {
+  if(props.initialIndex) return;
+  setIndexError(null);
+  return startIndexLoad({content:setIndexData,error:e=>setIndexError(String(e))});
+ }, [indexAttempt]);
+ const changeLocale = (value: "de" | "en") => {
+  setLocale(value);
+  const url=new URL(window.location.href); url.searchParams.set("lang",value);
+  window.history.replaceState(null,"",url.pathname+url.search+url.hash);
+ };
 
 	useEffect(() => {
 		applyThemeToDocument(mode, palette);
@@ -122,32 +76,19 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
 
-	const navigate = (next: ViewState, hash = "") => {
-		const p = new URLSearchParams();
-		if (next.kind === "article") p.set("article", next.id);
-		else if (next.kind === "area") p.set("area", next.id);
-		else if (next.kind === "search") p.set("q", next.query);
-		else if (next.kind === "browse") {
-			p.set("owner", next.owner);
-			if (next.articleType) p.set("type", next.articleType);
-		} else if (next.kind === "api-finder") {
-			p.set("view", "api-finder");
-			if (next.mode !== "api") p.set("mode", next.mode);
-		} else if (next.kind === "space-chat") {
-			p.set("view", "space-chat");
-			p.set("session", next.sessionId);
-		} else if (next.kind === "feed") {
-			p.set("view", "feed");
-		} else if (next.kind === "admin") {
-			p.set("view", "admin");
-		}
-		const qs = p.toString();
-		window.history.pushState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${hash}`);
-		setView(next);
-	};
+
+ const navigate = (next: ViewState, hash = "") => {
+  window.history.pushState(null,"",window.location.pathname+helpUrl(next,locale,hash));
+  setView(next);
+ };
+ const updateFilters = (next: ViewState) => {
+  window.history.replaceState(null,"",window.location.pathname+helpUrl(next,locale));
+  setView(next);
+ };
 
 	const openArticle = (id: string, anchor?: string) => {
 		navigate({ kind: "article", id }, anchor ? `#${anchor.replace(/^#/, "")}` : "");
+		if (anchor && view.kind === "article" && view.id === id) requestAnimationFrame(() => document.getElementById(anchor.replace(/^#/, ""))?.scrollIntoView());
 	};
 
 	const localizedArticles = useMemo(() => {
@@ -206,9 +147,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 			if (view.idempotency !== "all" && api.idempotency !== view.idempotency) return false;
 			if (view.scope !== "all" && api.scope !== view.scope) return false;
 			if (view.query.trim()) {
-				const q = view.query.toLowerCase();
-				const text = `${a.title} ${a.short} ${api.symbol} ${api.signature}`.toLowerCase();
-				if (!text.includes(q)) return false;
+				if (scoreArticle(a, view.query) < 0) return false;
 			}
 			return true;
 		});
@@ -219,7 +158,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 			<main className="corpus-bootstrap" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
 				<div>
 					<strong>PI-SPACES / HELP</strong>
-					<p>Kanonischer Help-Corpus wird geladen …</p>
+					<p role={indexError ? "alert" : "status"}>{indexError ? (locale === "de" ? `Hilfe konnte nicht geladen werden: ${indexError}` : `Help could not be loaded: ${indexError}`) : (locale === "de" ? "Help-Corpus wird geladen …" : "Loading help corpus …")}</p>
+					{indexError ? <button type="button" onClick={() => setIndexAttempt(n => n + 1)}>{locale === "de" ? "Erneut versuchen" : "Retry"}</button> : null}
 				</div>
 			</main>
 		);
@@ -289,14 +229,14 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						<button
 							type="button"
 							className={locale === "de" ? "is-active" : ""}
-							onClick={() => setLocale("de")}
+							onClick={() => changeLocale("de")}
 						>
 							DE
 						</button>
 						<button
 							type="button"
 							className={locale === "en" ? "is-active" : ""}
-							onClick={() => setLocale("en")}
+							onClick={() => changeLocale("en")}
 						>
 							EN
 						</button>
@@ -470,12 +410,12 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									<button
 										type="button"
 										className="primary-action"
-										onClick={() => openArticle("help.workflow.overview_v1_to_v6")}
+										onClick={() => openArticle("help.topic.first_running_space")}
 									>
 										<span>
 											{locale === "de"
-												? "6-Stufen-Anleitung (v1–v6) starten →"
-												: "Start 6-Stage Guide (v1–v6) →"}
+												? "Ersten vollständigen Space starten →"
+												: "Start Your First Complete Space →"}
 										</span>
 									</button>
 									<button
@@ -614,8 +554,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									</div>
 									<figcaption className="model-note">
 										{locale === "de"
-											? "PiSpaces und RemoteSpace teilen denselben SpaceLike-Vertrag. Dadurch wächst derselbe Anwendungscode nahtlos von Stufe v1 (In-Memory) bis Stufe v6 (Föderierter Cluster mit Mobile/Web-Admin)."
-											: "PiSpaces and RemoteSpace share the exact same SpaceLike contract. Application code scales seamlessly from Stage v1 (in-memory) to Stage v6 (federated cluster with mobile/web admin)."}
+											? "PiSpaces und RemoteSpace teilen denselben SpaceLike-Vertrag. Lokaler und Remote-Client teilen den Basisvertrag; Federation benötigt einen eigenen Request-/Routing-Adapter."
+											: "PiSpaces and RemoteSpace share the exact same SpaceLike contract. Application concepts transfer between local and remote clients; federation needs its own request/routing adapter."}
 									</figcaption>
 								</figure>
 							</section>
@@ -833,7 +773,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 											<input
 												id="api-finder-query"
 												value={view.query}
-												onChange={(e: any) => setView({ ...view, query: e.target.value })}
+												onChange={(e: any) => updateFilters({ ...view, query: e.target.value })}
 												placeholder={
 													locale === "de"
 														? "Methode, Signatur, Tool oder Fehlerklasse filtern …"
@@ -847,7 +787,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 													key={prov}
 													type="button"
 													className={view.provider === prov ? "is-active" : ""}
-													onClick={() => setView({ ...view, provider: prov })}
+													onClick={() => updateFilters({ ...view, provider: prov })}
 												>
 													<span>{prov === "all" ? "ALL" : `_${prov.toUpperCase()}`}</span>
 												</button>
@@ -858,7 +798,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												<span>Category</span>
 												<select
 													value={view.category}
-													onChange={(e: any) => setView({ ...view, category: e.target.value })}
+													onChange={(e: any) => updateFilters({ ...view, category: e.target.value })}
 												>
 													<option value="all">All categories</option>
 													<option value="mutation">Mutation</option>
@@ -874,7 +814,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												<span>Execution</span>
 												<select
 													value={view.execution}
-													onChange={(e: any) => setView({ ...view, execution: e.target.value })}
+													onChange={(e: any) => updateFilters({ ...view, execution: e.target.value })}
 												>
 													<option value="all">All execution modes</option>
 													<option value="atomic_commit">Atomic Commit</option>
@@ -892,7 +832,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												<span>Idempotency</span>
 												<select
 													value={view.idempotency}
-													onChange={(e: any) => setView({ ...view, idempotency: e.target.value })}
+													onChange={(e: any) => updateFilters({ ...view, idempotency: e.target.value })}
 												>
 													<option value="all">All idempotency models</option>
 													<option value="request_ref">RequestRef Claim</option>
@@ -905,7 +845,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												<span>Scope</span>
 												<select
 													value={view.scope}
-													onChange={(e: any) => setView({ ...view, scope: e.target.value })}
+													onChange={(e: any) => updateFilters({ ...view, scope: e.target.value })}
 												>
 													<option value="all">All scopes</option>
 													<option value="single_or_remote">Single or RemoteSpace</option>
@@ -1153,7 +1093,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 														<button
 															type="button"
 															className="wb-btn"
-															onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+															onClick={() => navigate(resourceView(res.stage))}
 														>
 															{locale === "de"
 																? "In der Live-Workbench starten →"
@@ -1171,6 +1111,9 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 										</section>
 									) : null}
 
+									<nav aria-label={locale === "de" ? "Weiterführende Artikel" : "Related articles"} className="article-related">
+										{(currentArticle.related ?? []).map((id: string) => articleById.has(id) ? <button type="button" key={id} onClick={() => openArticle(id)}>{articleById.get(id).title} →</button> : null)}
+									</nav>
 									<footer className="article-footer">
 										<div>
 											<span>HELP-ID</span>
@@ -1187,7 +1130,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 										<div>
 											<span>SOURCE</span>
 											<strong>
-												{currentArticle.source.repository}@{currentArticle.source.commit}
+												{currentArticle.source.repository}@{currentArticle.source.commit}{currentArticle.source.dirty ? "+dirty" : ""}
 											</strong>
 										</div>
 									</footer>
@@ -1203,6 +1146,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						<SpaceChatWorkbench
 							locale={locale}
 							sessionId={view.sessionId}
+							initialStage={view.stage}
 							onOpenArticle={(id) => openArticle(id)}
 						/>
 					) : null}

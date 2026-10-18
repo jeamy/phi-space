@@ -32,7 +32,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "c
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 ```
 
@@ -44,7 +44,7 @@ When `alice` and `bob` join the session, each client writes a `Presence` entry w
 
 1. `alice` atomically writes her user `Msg` (`seq: 1`) and a matching `ChatTask`.
 2. The chat worker reserves `ChatTask` under a transaction (`space.take(..., { txn })`), writes the assistant reply `Msg` (`seq: 2`) carrying the same `taskId`, and calls `space.commit(txn)`.
-3. `bob` forks the thread at `seq: 2` (`forkThread` atomically copies committed messages up to `seq <= 2` into the new forked thread).
+3. `bob` forks the thread at `seq: 2` (`forkThread` stores the parent pointer and boundary; inherited messages up to `seq <= 2` are resolved on read, not physically copied).
 
 ### Run From Terminal {#run-cli}
 

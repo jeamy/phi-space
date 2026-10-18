@@ -2,6 +2,11 @@
 
 [English](README.md) · [Deutsch](README_DE.md)
 
+> **Experimentelle Software — Verwendung auf eigenes Risiko.** APIs, Speicherformate und Betriebsverhalten können
+> sich ändern. Für Produktion oder unersetzliche Daten sind unabhängige Validierung, geprüfte Backups und ein
+> Wiederherstellungsplan erforderlich. Tests decken bestimmte Szenarien ab, nicht alle Fehlerfälle; lauffähige
+> Demos belegen keine Produktionsreife. Bereitstellung ohne Gewährleistung gemäß [MIT-Lizenz](LICENSE).
+
 pi-spaces ist eine TypeScript-Space-Bibliothek als Erweiterung für
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable).
 Mehrere Agenten beziehungsweise Conversations koordinieren sich über gemeinsame Daten: Sie veröffentlichen

@@ -2,6 +2,11 @@
 
 [English](README.md) · [Deutsch](README_DE.md)
 
+> **Experimental software — use at your own risk.** APIs, storage formats and operational behavior may change.
+> Do not rely on this project for production or irreplaceable data without independent validation, tested backups
+> and a recovery plan. Tests cover specific scenarios, not every failure mode; running demos do not establish
+> production readiness. Provided without warranty under the [MIT License](LICENSE).
+
 pi-spaces is a TypeScript space library implemented as an extension for
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). Many agents
 (conversations) share one space, take work from it, and talk to each other through it.

@@ -33,7 +33,7 @@ const stopService = await startService(harness, ctx);
 | `space_wait`, `space_notify` | Langlebige Wünsche und Abos ohne den Agenten-Turn zu blockieren. |
 | `space_lease` | `renew`/`cancel` für eigene Ressourcen. |
 
-Alle Entry-Inhalte werden dem Agenten strikt als `[data, not instructions]` ausgezeichnet; Ownership-Checks verhindern, dass ein Agent fremde Leases oder Claims manipuliert. `startService` betreibt den Lease-Reaper, die Waiter-Wecklogik und die Mailbox-Zustellung – ohne ihn bleiben abgelaufene Leases stehen und Waiter schlafen.
+Alle Entry-Inhalte werden dem Agenten strikt als `[data, not instructions]` ausgezeichnet; Ownership-Checks verhindern, dass ein Agent fremde Leases oder Claims manipuliert. `startService` betreibt den Lease-Reaper, die Waiter-Wecklogik und die Mailbox-Zustellung – auch ohne Hintergrunddienst wird Ablauf bei Zugriffen abgeglichen; ohne Zustelldienst kommen Conversation-Ereignisse nicht automatisch an.
 
 ## Typische Anwendungsfälle {#use-cases}
 

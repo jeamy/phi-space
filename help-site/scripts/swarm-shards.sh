@@ -14,6 +14,10 @@
 
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# help-site/.env fills unset vars first — the explicit env= prefixes below must see
+# SWARM_AGENTS/SWARM_RATE/etc. from there, because exported env beats the .env
+# file that server/index.ts only uses as a fallback.
+set -a; [ -f "$ROOT/help-site/.env" ] && . "$ROOT/help-site/.env"; set +a
 PORT="${PORT:-3599}"
 SOCKET="${SOCKET:-/tmp/swarm-b.sock}"
 HUB_DB="${HUB_DB:-/tmp/swarm-a-test.sqlite}"

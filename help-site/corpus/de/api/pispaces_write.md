@@ -33,9 +33,10 @@ const lease = await space.write(
 
 | Parameter | Typ | Bedeutung |
 | --- | --- | --- |
-| `entry` | `EntryDraft` | Unveränderlicher Entwurf: Pflicht-`type`, optionale Subtypenliste `types` und freie JSON-`fields`. |
+| `entry` | `EntryDraft` | Entwurf: Pflicht-`type`, optionale Subtypenliste `types` und freie JSON-`fields`. |
 | `txn` | `string | null` | ID einer offenen Transaktion; `null` = sofortiger eigenständiger Commit. |
 | `lease` | `number` | Lebensdauer in Millisekunden oder `FOREVER` für unbegrenzt. |
+| `options.unique` | `string[]` | Optionale atomare Erstanlage über Schlüsselfelder; keine globale Unique-Zusage über Shards. Remote benötigt write.unique. |
 | `options.request` | `RequestRef` | Optionaler Claim `{ principal, generation, requestId }` für neustartfeste Idempotenz. |
 | **Rückgabe** | `Promise<Lease>` | `{ id, expires }` – Grundlage für `renew`/`cancel` und Presence-Heartbeats. |
 

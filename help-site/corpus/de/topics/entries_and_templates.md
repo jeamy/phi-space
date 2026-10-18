@@ -29,7 +29,7 @@ type EntryDraft = {
 
 - `type` ist der primäre Typname (z.B. `"ChatTask"`).
 - `types` ist eine optionale Liste mit dem Haupttyp und seinen Supertypen (z.B. `["ChatTask", "Task", "Auditable"]`). Ein Template mit `type: "Task"` findet auch jeden Entry, dessen `types`-Array `"Task"` enthält.
-- Ein gespeicherter `EntryView` enthält zusätzlich `id` (lokale ID `<incarnation>:<seq>`), `gid` (`<spaceId>/<localId>`), `owner` und `expires`.
+- Ein gespeicherter `EntryView` enthält zusätzlich `id` (lokale ID `e<incarnation>-<n>`), `gid` (`<spaceId>/<localId>`), `owner`; `expires` steht auf der zurückgegebenen `Lease`.
 
 ### Template-Matching und Wildcards {#template-matching}
 

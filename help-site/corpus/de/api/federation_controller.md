@@ -19,14 +19,11 @@ since: 0.0.1
 
 ```ts
 const fed = await createFederationController({
-  host: coordinatorHarness,
+  ...federationOptions, // Configured keys, transport, grants, lease and authority/admin guards.
+  host: harness,
   ctx,
-  routerId: "router-main",
-  authorityId,
-  journalPartitions: 4,
-  lease: renewableRouterLease(controlRemote),
-  rpcTarget,
-  assertAuthority
+  id: "router-main",
+  journalPartitions: 4
 });
 ```
 

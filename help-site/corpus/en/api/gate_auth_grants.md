@@ -21,13 +21,15 @@ since: 0.0.1
 const host = await startFederationHost(harness, ctx, {
   hostId,
   authorityId,
-  keys: hostSigner,
-  verifier: authorityPublicKey,
-  gate: { listen: { host: "127.0.0.1", port: 0 }, directory },
-  boot: { external: register, installed: bootState },
-  control: { host: harness, authority: authoritySigner }
+  keys: keyDirectory,
+  verifier: grantVerifier,
+  listen: { host: "127.0.0.1", port: 0 },
+  directory,
+  boot: { external: register, installed: installedRegister }
 });
 ```
+
+Configure keyDirectory, grantVerifier, directory and both independent registers before this fragment; a public key alone is not a GrantVerifier. listen/directory are top-level host options, not a gate subobject. The local v4 runner demonstrates the complete setup.
 
 ## Components At A Glance {#parameters}
 

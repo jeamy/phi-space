@@ -150,7 +150,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "c
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 \`\`\`
 
@@ -162,7 +162,7 @@ Wenn \`alice\` und \`bob\` den Chat betreten, schreibt jeder Client einen \`Pres
 
 1. \`alice\` schreibt in einer Transaktion ihre \`Msg\` (\`seq: 1\`) und den zugehörigen \`ChatTask\`.
 2. Der Chat-Worker nimmt \`ChatTask\` unter einer Transaktion (\`space.take(..., { txn })\`), erzeugt die Antwort-\`Msg\` (\`seq: 2\`) mit derselben \`taskId\` und ruft \`space.commit(txn)\` auf.
-3. \`bob\` forkt den Thread ab \`seq: 2\` (\`forkThread\` kopiert die sichtbaren Nachrichten bis \`seq <= 2\` in einer Transaktion in den neuen Fork-Thread).
+3. \`bob\` forkt den Thread ab \`seq: 2\` (\`forkThread\` schreibt nur Parent-Verweis und Grenze; geerbte Nachrichten bis \`seq <= 2\` werden beim Lesen aufgelöst, nicht physisch kopiert).
 
 ### Ausführung im Terminal {#run-cli}
 
@@ -198,7 +198,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "c
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 \`\`\`
 
@@ -210,7 +210,7 @@ When \`alice\` and \`bob\` join the session, each client writes a \`Presence\` e
 
 1. \`alice\` atomically writes her user \`Msg\` (\`seq: 1\`) and a matching \`ChatTask\`.
 2. The chat worker reserves \`ChatTask\` under a transaction (\`space.take(..., { txn })\`), writes the assistant reply \`Msg\` (\`seq: 2\`) carrying the same \`taskId\`, and calls \`space.commit(txn)\`.
-3. \`bob\` forks the thread at \`seq: 2\` (\`forkThread\` atomically copies committed messages up to \`seq <= 2\` into the new forked thread).
+3. \`bob\` forks the thread at \`seq: 2\` (\`forkThread\` stores the parent pointer and boundary; inherited messages up to \`seq <= 2\` are resolved on read, not physically copied).
 
 ### Run From Terminal {#run-cli}
 
@@ -708,7 +708,7 @@ Stufe 6 (\`help-site/examples/v6-mobile-control/run.ts\` sowie der Web-Bereich *
 
 ### Schritt 1: Login in AdminSpaces & QR-Pairing für das Smartphone {#step-1-login-and-qr}
 
-1. Auf \`https://spaces.eibrain.org\` klickt der Administrator oben rechts auf **\`ADMIN\`** und meldet sich per Admin-Passwort oder Enrollment-Token an.
+1. Auf \`https://spaces.eibrain.org\` klickt der Administrator oben rechts auf **\`ADMIN\`** und meldet sich mit dem konfigurierten privaten Web-Admin-Passwort (Enrollment-Tokens koppeln ausschließlich Peers) an.
 2. Im Bereich **Identität & Geräte-Pairing** kann mit einem Klick ein neues Enrollment-Token samt \`enrollQr\`-Payload generiert werden, das direkt in \`spaces.html\` der Android-App eingefügt oder gescannt wird.
 
 ### Schritt 2: Worker-Skalierung, RunGate-Steuerung und Space-Lebenszyklus {#step-2-control}
@@ -746,7 +746,7 @@ Stage 6 (\`help-site/examples/v6-mobile-control/run.ts\` and the **\`AdminSpaces
 
 ### Step 1: Login To AdminSpaces & QR Pairing For Mobile {#step-1-login-and-qr}
 
-1. On \`https://spaces.eibrain.org\`, the administrator clicks **\`ADMIN\`** in the topbar and logs in with the admin password or an enrollment token.
+1. On \`https://spaces.eibrain.org\`, the administrator clicks **\`ADMIN\`** in the topbar and logs in with the configured private web-admin password; enrollment tokens pair peers only.
 2. Under **Identity & Device Pairing**, a one-click action generates a fresh enrollment token and \`enrollQr\` payload ready to paste or scan in \`spaces.html\` on Android.
 
 ### Step 2: Worker Scaling, RunGate Control, And Space Lifecycle {#step-2-control}
@@ -802,10 +802,10 @@ const lease = await space.write(
 
 | Parameter | Typ | Bedeutung |
 | --- | --- | --- |
-| \`entry\` | \`EntryDraft\` | Unveränderlicher Entwurf: Pflicht-\`type\`, optionale Subtypenliste \`types\` und freie JSON-\`fields\`. |
+| \`entry\` | \`EntryDraft\` | Entwurf: Pflicht-\`type\`, optionale Subtypenliste \`types\` und freie JSON-\`fields\`. |
 | \`txn\` | \`string \| null\` | ID einer offenen Transaktion; \`null\` = sofortiger eigenständiger Commit. |
 | \`lease\` | \`number\` | Lebensdauer in Millisekunden oder \`FOREVER\` für unbegrenzt. |
-| \`options.request\` | \`RequestRef\` | Optionaler Claim \`{ principal, generation, requestId }\` für neustartfeste Idempotenz. |
+| \`options.unique\` | \`string[]\` | Optionale atomare Erstanlage über Schlüsselfelder; keine globale Unique-Zusage über Shards. Remote benötigt write.unique. |\n| \`options.request\` | \`RequestRef\` | Optionaler Claim \`{ principal, generation, requestId }\` für neustartfeste Idempotenz. |
 | **Rückgabe** | \`Promise<Lease>\` | \`{ id, expires }\` – Grundlage für \`renew\`/\`cancel\` und Presence-Heartbeats. |
 
 ## Typische Anwendungsfälle {#use-cases}
@@ -843,7 +843,7 @@ const lease = await space.write(
 | \`entry\` | \`EntryDraft\` | Immutable draft: mandatory \`type\`, optional subtype list \`types\`, and free-form JSON \`fields\`. |
 | \`txn\` | \`string \| null\` | ID of an open transaction; \`null\` = immediate standalone commit. |
 | \`lease\` | \`number\` | Lifetime in milliseconds or \`FOREVER\` for unbounded. |
-| \`options.request\` | \`RequestRef\` | Optional claim \`{ principal, generation, requestId }\` for restart-safe idempotency. |
+| \`options.unique\` | \`string[]\` | Optional atomic creation by key fields; no global cross-shard uniqueness. Remote requires write.unique. |\n| \`options.request\` | \`RequestRef\` | Optional claim \`{ principal, generation, requestId }\` for restart-safe idempotency. |
 | **Return** | \`Promise<Lease>\` | \`{ id, expires }\` – the basis for \`renew\`/\`cancel\` and presence heartbeats. |
 
 ## Typical Use Cases {#use-cases}
@@ -1021,7 +1021,7 @@ await space.commit(txn.id, { request: reqCommit });
 - **Isolation**: Unter \`txn\` geschriebene Entries sind nur für Operationen mit derselben \`txnId\` sichtbar; reservierte Takes sind für andere Consumer gesperrt.
 - **Atomarität**: \`commit\` wendet alle Writes und Takes gemeinsam an, erhöht \`rev\` genau einmal und stößt die zugehörigen Mailbox-Ereignisse an. \`abort\` verwirft alles und gibt reservierte Entries frei.
 - **Lease**: Die Transaktion besitzt eine eigene Lease (Argument \`lease\`); bei Ablauf ohne Commit erfolgt implizit ein \`abort\`.
-- **Vertragsprüfung**: Vor dem Commit prüft der Kern alle \`CompletionProfiles\` (\`CompletionViolation\` bei fehlenden Ergebnissen) und die konfigurierten Byte-Budgets (\`LimitsExceeded\`).
+- **Vertragsprüfung**: Vor dem Commit prüft der Kern alle \`CompletionProfiles\` (\`CompletionViolation\` bei fehlenden Ergebnissen) und die konfigurierten Byte-Budgets (\`ResourceExhausted\`).
 
 ## Typische Anwendungsfälle {#use-cases}
 
@@ -1049,7 +1049,7 @@ await space.commit(txn.id, { request: reqCommit });
 - **Isolation**: Entries written under \`txn\` are visible only to operations carrying the same \`txnId\`; reserved takes are locked for other consumers.
 - **Atomicity**: \`commit\` applies all writes and takes together, bumps \`rev\` exactly once, and emits the corresponding mailbox events. \`abort\` discards everything and releases reserved entries.
 - **Lease**: The transaction owns a lease (the \`lease\` argument); expiry without commit implies an implicit \`abort\`.
-- **Contract enforcement**: Before committing, the core checks all \`CompletionProfiles\` (\`CompletionViolation\` on missing results) and configured byte budgets (\`LimitsExceeded\`).
+- **Contract enforcement**: Before committing, the core checks all \`CompletionProfiles\` (\`CompletionViolation\` on missing results) and configured byte budgets (\`ResourceExhausted\`).
 
 ## Typical Use Cases {#use-cases}
 
@@ -1146,8 +1146,8 @@ const gauges = await space.stats();
 
 | Methode | Rückgabe | Zweck |
 | --- | --- | --- |
-| \`readPage(template?, opts?)\` | \`Page { entries, rev, token? }\` | Unveränderlicher Punkt-in-Zeit-Snapshot, bytebegrenzt seitenweise über \`token\` fortsetzbar. |
-| \`changes(afterRev, opts?)\` | \`Changes { rev, batches, gaps? }\` | Alle seit \`afterRev\` committeten Deltas in Reihenfolge; \`gaps\` markiert verdichtete Bereiche. |
+| \`readPage(template?, opts?)\` | \`Page { items, next, rev, streamId, token? }\` | Unveränderlicher Punkt-in-Zeit-Snapshot, bytebegrenzt seitenweise über \`token\` fortsetzbar. |
+| \`changes(afterRev, opts?)\` | \`Changes { streamId, batches, next, rev, more }\` | Alle seit \`afterRev\` committeten Deltas in Reihenfolge; bei veraltetem Log wird \`SnapshotExpired\` ausgelöst. |
 | \`readAll(template?, { limit?, txn? })\` | \`EntryView[]\` | Bequemer Komplettabruf ohne Paging (für kleine Ergebnismengen). |
 | \`count(template?, txn?)\` / \`stats()\` | \`number\` / Gauges | Schnelle Größen- und Füllstandsabfragen für Dashboards. |
 
@@ -1176,8 +1176,8 @@ const gauges = await space.stats();
 
 | Method | Return | Purpose |
 | --- | --- | --- |
-| \`readPage(template?, opts?)\` | \`Page { entries, rev, token? }\` | Immutable point-in-time snapshot, continued page-by-page via \`token\` under a byte budget. |
-| \`changes(afterRev, opts?)\` | \`Changes { rev, batches, gaps? }\` | All commit deltas since \`afterRev\` in order; \`gaps\` marks compacted ranges. |
+| \`readPage(template?, opts?)\` | \`Page { items, next, rev, streamId, token? }\` | Immutable point-in-time snapshot, continued page-by-page via \`token\` under a byte budget. |
+| \`changes(afterRev, opts?)\` | \`Changes { streamId, batches, next, rev, more }\` | All commit deltas since \`afterRev\` in order; an expired log raises \`SnapshotExpired\`. |
 | \`readAll(template?, { limit?, txn? })\` | \`EntryView[]\` | Convenience full read without paging (for small result sets). |
 | \`count(template?, txn?)\` / \`stats()\` | \`number\` / gauges | Fast size and fill-level queries for dashboards. |
 
@@ -1207,10 +1207,10 @@ const gauges = await space.stats();
 \`\`\`ts
 const waitId = await space.wait(
   { type: "ChatTask" },
-  { take: true, target: principal, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
+  { take: true, target: conversationId, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
 );
-const mailboxPage = await space.events(principal, { after: lastSeq });
-if (mailboxPage.next !== null) {
+const mailboxPage = await space.events(principal, { after: lastSeq });\nif (mailboxPage.gap) throw new Error("Mailbox reset: reload state before processing");\nfor (const item of mailboxPage.events) await handleEvent(item.event); // Commit any take reservation first.
+if (mailboxPage.events.length > 0) {
   await space.ack(principal, mailboxPage.mailboxEpoch, mailboxPage.next);
 }
 \`\`\`
@@ -1222,13 +1222,13 @@ if (mailboxPage.next !== null) {
 | \`wait(template, opts)\` | Parkt einen langlebigen Read-/Take-Wunsch (\`take: true\` reserviert automatisch unter einer impliziten Transaktion mit \`txnLeaseMs\`); liefert die Treffer an die Mailbox von \`target\`. |
 | \`notify(template, opts)\` | Abonniert Änderungen auf ein Template und liefert Events in die eigene Principal-Mailbox. |
 | \`events(principal, { mailboxEpoch?, after?, maxBytes? })\` | Bytebegrenzte Seite ausgelieferter Ereignisse ab Sequenz \`after\`; \`mailboxEpoch\`-Mismatch meldet eine \`gap\` statt stiller Verluste. |
-| \`ack(principal, epoch, upTo)\` | Bestätigt ein verarbeitetes Sequenz-Präfix; erst ge-ack-te Ereignisse werden dauerhaft verworfen. |
+| \`ack(principal, epoch, upTo)\` | Bestätigt ein verarbeitetes Sequenz-Präfix; bestätigte Ereignisse werden entfernt; TTL-Ablauf kann mit gap ebenfalls aufräumen. |
 
 ## Typische Anwendungsfälle {#use-cases}
 
 - **Ereignisgesteuerter Worker**: Statt \`take(..., FOREVER)\` zu blockieren, parkt der Worker einen dauerhaften Take-Wunsch mit \`wait\`; \`pi-spaces\` legt gewonnene Tasks samt \`handback\`-Kontext in seine Mailbox.
 - **Robuster Consumer**: Der Worker verarbeitet \`events\`-Seiten und ackt erst nach erfolgreichem \`commit\` – bei Neustart werden unbestätigte Ereignisse erneut geliefert (At-least-once).
-- **Notify-Streams**: UI- oder Audit-Consumer abonnieren \`notify({ type: "Msg" })\` und bleiben über \`events\`/\`ack\` über alle Raum-Änderungen informiert, auch über Prozessneustarts hinweg.`
+- **Notify-Streams**: UI- oder Audit-Consumer abonnieren \`notify({ type: "Msg" })\` und bleiben über \`events\`/\`ack\` über passende Writes informiert (keine vollständige Änderungs-/Löschhistorie), auch über Prozessneustarts hinweg.`
 		},
 		en: {
 			title: "wait, notify, events & ack – Reactive Delivery and Consumer Mailboxes",
@@ -1242,10 +1242,10 @@ if (mailboxPage.next !== null) {
 \`\`\`ts
 const waitId = await space.wait(
   { type: "ChatTask" },
-  { take: true, target: principal, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
+  { take: true, target: conversationId, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
 );
-const mailboxPage = await space.events(principal, { after: lastSeq });
-if (mailboxPage.next !== null) {
+const mailboxPage = await space.events(principal, { after: lastSeq });\nif (mailboxPage.gap) throw new Error("Mailbox reset: reload state before processing");\nfor (const item of mailboxPage.events) await handleEvent(item.event); // Commit any take reservation first.
+if (mailboxPage.events.length > 0) {
   await space.ack(principal, mailboxPage.mailboxEpoch, mailboxPage.next);
 }
 \`\`\`
@@ -1257,13 +1257,13 @@ if (mailboxPage.next !== null) {
 | \`wait(template, opts)\` | Parks a long-lived read/take wish (\`take: true\` reserves automatically under an implicit transaction with \`txnLeaseMs\`); delivers matches to the \`target\` mailbox. |
 | \`notify(template, opts)\` | Subscribes to changes matching a template and delivers events into the caller's principal mailbox. |
 | \`events(principal, { mailboxEpoch?, after?, maxBytes? })\` | Byte-bounded page of delivered events after sequence \`after\`; a \`mailboxEpoch\` mismatch reports a \`gap\` instead of silent loss. |
-| \`ack(principal, epoch, upTo)\` | Acknowledges a processed sequence prefix; only acked events are discarded permanently. |
+| \`ack(principal, epoch, upTo)\` | Acknowledges a processed sequence prefix; acknowledged events are removed; TTL expiry can also remove events with a gap. |
 
 ## Typical Use Cases {#use-cases}
 
 - **Event-driven worker**: Instead of blocking in \`take(..., FOREVER)\`, the worker parks a durable take wish with \`wait\`; \`pi-spaces\` places won tasks including the \`handback\` context into its mailbox.
 - **Robust consumer**: The worker processes \`events\` pages and acks only after a successful \`commit\` – on restart, unacknowledged events are delivered again (at-least-once).
-- **Notify streams**: UI or audit consumers subscribe via \`notify({ type: "Msg" })\` and stay informed about all space changes through \`events\`/\`ack\`, even across process restarts.`
+- **Notify streams**: UI or audit consumers subscribe via \`notify({ type: "Msg" })\` and stay informed about matching writes (not a complete deletion/change history) through \`events\`/\`ack\`, even across process restarts.`
 		}
 	},
 	{
@@ -1341,7 +1341,7 @@ const status = await space.pollOperation({ principal: { peerId: "alice" }, gener
 		since: "0.0.1",
 		de: {
 			title: "setCompletionProfiles & setLimits – Serverseitige Ergebnis- und Budgetverträge",
-			short: "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (matchFields) und Anzahl; verwaltet Byte-Limits.",
+			short: "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (equalFields) und Anzahl; verwaltet Byte-Limits.",
 			body: `## Überblick {#overview}
 
 Nur administrativer Host-Code (ohne gesetztes \`conversationId\`) darf \`setCompletionProfiles(profiles)\` und \`setLimits(partialLimits)\` aufrufen. Eine Absenkung von Limits unter bereits bestehende Abschlussverpflichtungen wird vom Space-Kern abgewiesen.
@@ -1350,7 +1350,7 @@ Nur administrativer Host-Code (ohne gesetztes \`conversationId\`) darf \`setComp
 
 \`\`\`ts
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 \`\`\`
 
@@ -1359,21 +1359,21 @@ await space.setCompletionProfiles([
 | Feld | Bedeutung |
 | --- | --- |
 | \`taskType\` | Entry-Typ, der unter der Transaktion genommen wurde und eine Ergebnispflicht auslöst. |
-| \`resultType\` | Entry-Typ, der in derselben Transaktion geschrieben werden muss. |
-| \`matchFields\` | Felder, deren Werte zwischen Task und Ergebnis übereinstimmen müssen (Korrelation). |
-| \`minResults\` / \`maxResults\` | Erwartete Anzahl korrelierender Ergebnis-Entries. |
-| \`maxResultBytes\` | Byte-Obergrenze pro Ergebnis (föderierte Profile verlangen dieses Pflichtfeld). |
+| \`resultTypes\` | Entry-Typ, der in derselben Transaktion geschrieben werden muss. |
+| \`equalFields\` | Felder, deren Werte zwischen Task und Ergebnis übereinstimmen müssen (Korrelation). |
+| \`maxResultCount\` | Höchstzahl korrelierender Ergebnisse; mindestens eines ist erforderlich. |
+| \`maxResultBytes\` | Gesamtbytegrenze der zu einem Task gehörenden Ergebnisse; zusätzlich maxLeaseMs für begrenzte Reservierungen und optional gateField. |
 
 Verletzt ein Commit das Profil, schlägt \`commit\` mit \`CompletionViolation\` fehl und nichts wird sichtbar. \`setLimits\` verwaltet Byte-/Größenbudgets des Spaces (z.B. \`maxFrameBytes\`, \`maxEventBytes\`, \`mailboxTtlMs\`).
 
 ## Typische Anwendungsfälle {#use-cases}
 
-- **Antwortgarantie im Chat**: Der Commit scheitert serverseitig, wenn der Worker den \`ChatTask\` entnimmt, aber keine passende \`Msg\` mit gleicher \`taskId\`/\`threadId\` schreibt – der Task geht nie verloren.
+- **Antwortgarantie im Chat**: Der Commit scheitert serverseitig, wenn der Worker den \`ChatTask\` entnimmt, aber keine passende \`Msg\` mit gleicher \`taskId\`/\`threadId\` schreibt – die Reservierung kann bei Abort zurückgegeben werden, solange Task-Lease und Storage bestehen.
 - **Subagent-Vertrag**: \`SearchTask → SearchResult\` garantiert, dass jede föderierte Suche mit einem korrelierten Ergebnis endet.`
 		},
 		en: {
 			title: "setCompletionProfiles & setLimits – Server-Side Result and Budget Contracts",
-			short: "Enforces expected result type, correlating fields (matchFields), and count before committing a take transaction; manages byte limits.",
+			short: "Enforces expected result type, correlating fields (equalFields), and count before committing a take transaction; manages byte limits.",
 			body: `## Overview {#overview}
 
 Only administrative host code (without \`conversationId\`) may invoke \`setCompletionProfiles(profiles)\` and \`setLimits(partialLimits)\`. Lowering limits below existing completion obligations is rejected by the space core.
@@ -1382,7 +1382,7 @@ Only administrative host code (without \`conversationId\`) may invoke \`setCompl
 
 \`\`\`ts
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 \`\`\`
 
@@ -1391,16 +1391,16 @@ await space.setCompletionProfiles([
 | Field | Meaning |
 | --- | --- |
 | \`taskType\` | Entry type taken under the transaction that triggers a result obligation. |
-| \`resultType\` | Entry type that must be written within the same transaction. |
-| \`matchFields\` | Fields whose values must match between task and result (correlation). |
-| \`minResults\` / \`maxResults\` | Expected number of correlating result entries. |
-| \`maxResultBytes\` | Byte cap per result (federated profiles require this field). |
+| \`resultTypes\` | Entry type that must be written within the same transaction. |
+| \`equalFields\` | Fields whose values must match between task and result (correlation). |
+| \`maxResultCount\` | Maximum correlating result count; at least one is required. |
+| \`maxResultBytes\` | Total result bytes assigned to one task; also maxLeaseMs for bounded reservations and optional gateField. |
 
 If a commit violates the profile, \`commit\` fails with \`CompletionViolation\` and nothing becomes visible. \`setLimits\` manages the space's byte/size budgets (e.g. \`maxFrameBytes\`, \`maxEventBytes\`, \`mailboxTtlMs\`).
 
 ## Typical Use Cases {#use-cases}
 
-- **Reply guarantee in chat**: The commit fails server-side if the worker takes a \`ChatTask\` but writes no matching \`Msg\` with the same \`taskId\`/\`threadId\` – the task is never lost.
+- **Reply guarantee in chat**: The commit fails server-side if the worker takes a \`ChatTask\` but writes no matching \`Msg\` with the same \`taskId\`/\`threadId\` – abort can return the reservation while the task lease and storage remain available.
 - **Subagent contract**: \`SearchTask → SearchResult\` guarantees that every federated search ends with a correlated result.`
 		}
 	},
@@ -1436,7 +1436,7 @@ const stopService = await startService(harness, ctx);
 | \`space_wait\`, \`space_notify\` | Langlebige Wünsche und Abos ohne den Agenten-Turn zu blockieren. |
 | \`space_lease\` | \`renew\`/\`cancel\` für eigene Ressourcen. |
 
-Alle Entry-Inhalte werden dem Agenten strikt als \`[data, not instructions]\` ausgezeichnet; Ownership-Checks verhindern, dass ein Agent fremde Leases oder Claims manipuliert. \`startService\` betreibt den Lease-Reaper, die Waiter-Wecklogik und die Mailbox-Zustellung – ohne ihn bleiben abgelaufene Leases stehen und Waiter schlafen.
+Alle Entry-Inhalte werden dem Agenten strikt als \`[data, not instructions]\` ausgezeichnet; Ownership-Checks verhindern, dass ein Agent fremde Leases oder Claims manipuliert. \`startService\` betreibt den Lease-Reaper, die Waiter-Wecklogik und die Mailbox-Zustellung – auch ohne Hintergrunddienst wird Ablauf bei Zugriffen abgeglichen; ohne Zustelldienst kommen Conversation-Ereignisse nicht automatisch an.
 
 ## Typische Anwendungsfälle {#use-cases}
 
@@ -1468,7 +1468,7 @@ const stopService = await startService(harness, ctx);
 | \`space_wait\`, \`space_notify\` | Long-lived wishes and subscriptions without blocking the agent's turn. |
 | \`space_lease\` | \`renew\`/\`cancel\` for owned resources. |
 
-All entry payloads are presented to the agent strictly as \`[data, not instructions]\`; ownership checks prevent an agent from manipulating foreign leases or claims. \`startService\` runs the lease reaper, waiter wakeup logic, and mailbox delivery – without it, expired leases linger and waiters sleep forever.
+All entry payloads are presented to the agent strictly as \`[data, not instructions]\`; ownership checks prevent an agent from manipulating foreign leases or claims. \`startService\` runs the lease reaper, waiter wakeup logic, and mailbox delivery – operations still settle expiry without background maintenance; conversation delivery needs a running delivery service.
 
 ## Typical Use Cases {#use-cases}
 
@@ -1558,15 +1558,15 @@ const remote = new RemoteSpace(socketTransport({ path: "/tmp/space.sock" }), { s
 const host = await startFederationHost(harness, ctx, {
   hostId,
   authorityId,
-  keys: hostSigner,
-  verifier: authorityPublicKey,
-  gate: { listen: { host: "127.0.0.1", port: 0 }, directory },
-  boot: { external: register, installed: bootState },
-  control: { host: harness, authority: authoritySigner }
+  keys: keyDirectory,
+  verifier: grantVerifier,
+  listen: { host: "127.0.0.1", port: 0 },
+  directory,
+  boot: { external: register, installed: installedRegister }
 });
 \`\`\`
 
-## Komponenten im Überblick {#parameters}
+Die Beispielvariablen keyDirectory, grantVerifier, directory und die beiden unabhängigen Register sind vorab sicher zu konfigurieren; ein öffentlicher Schlüssel allein ist kein GrantVerifier. listen/directory liegen direkt auf den Host-Optionen, nicht unter gate. Der lokale v4-Runner zeigt den vollständigen Aufbau.\n\n## Komponenten im Überblick {#parameters}
 
 | Komponente | Aufgabe |
 | --- | --- |
@@ -1596,15 +1596,15 @@ const host = await startFederationHost(harness, ctx, {
 const host = await startFederationHost(harness, ctx, {
   hostId,
   authorityId,
-  keys: hostSigner,
-  verifier: authorityPublicKey,
-  gate: { listen: { host: "127.0.0.1", port: 0 }, directory },
-  boot: { external: register, installed: bootState },
-  control: { host: harness, authority: authoritySigner }
+  keys: keyDirectory,
+  verifier: grantVerifier,
+  listen: { host: "127.0.0.1", port: 0 },
+  directory,
+  boot: { external: register, installed: installedRegister }
 });
 \`\`\`
 
-## Components At A Glance {#parameters}
+Configure keyDirectory, grantVerifier, directory and both independent registers before this fragment; a public key alone is not a GrantVerifier. listen/directory are top-level host options, not a gate subobject. The local v4 runner demonstrates the complete setup.\n\n## Components At A Glance {#parameters}
 
 | Component | Task |
 | --- | --- |
@@ -1640,14 +1640,11 @@ const host = await startFederationHost(harness, ctx, {
 
 \`\`\`ts
 const fed = await createFederationController({
-  host: coordinatorHarness,
+  ...federationOptions, // Configured keys, transport, grants, lease and authority/admin guards.
+  host: harness,
   ctx,
-  routerId: "router-main",
-  authorityId,
-  journalPartitions: 4,
-  lease: renewableRouterLease(controlRemote),
-  rpcTarget,
-  assertAuthority
+  id: "router-main",
+  journalPartitions: 4
 });
 \`\`\`
 
@@ -1678,14 +1675,11 @@ const fed = await createFederationController({
 
 \`\`\`ts
 const fed = await createFederationController({
-  host: coordinatorHarness,
+  ...federationOptions, // Configured keys, transport, grants, lease and authority/admin guards.
+  host: harness,
   ctx,
-  routerId: "router-main",
-  authorityId,
-  journalPartitions: 4,
-  lease: renewableRouterLease(controlRemote),
-  rpcTarget,
-  assertAuthority
+  id: "router-main",
+  journalPartitions: 4
 });
 \`\`\`
 
@@ -1723,10 +1717,10 @@ Diese Controller bilden das Backend für die mobile Steuerung (\`pi-termux-mobil
 ## Technische Referenz {#technical-reference}
 
 \`\`\`ts
-await runController.start(spec);
-await runController.pause(runId, "cmd-pause-1");
-await runController.resume(runId, "cmd-resume-1");
-const alerts = collectAlerts({ runs, workers, capabilities, now: Date.now() });
+await runController.start("cmd-start-1", spec);
+await runController.pause("cmd-pause-1", runId);
+await runController.resume("cmd-resume-1", runId);
+const alerts = await collectAlerts({ host: harness, ctx, controlSpaceId, runs: runController, now: Date.now });
 \`\`\`
 
 ## Controller im Überblick {#parameters}
@@ -1755,10 +1749,10 @@ These controllers power both the mobile control pages (\`pi-termux-mobile\`) and
 ## Technical Reference {#technical-reference}
 
 \`\`\`ts
-await runController.start(spec);
-await runController.pause(runId, "cmd-pause-1");
-await runController.resume(runId, "cmd-resume-1");
-const alerts = collectAlerts({ runs, workers, capabilities, now: Date.now() });
+await runController.start("cmd-start-1", spec);
+await runController.pause("cmd-pause-1", runId);
+await runController.resume("cmd-resume-1", runId);
+const alerts = await collectAlerts({ host: harness, ctx, controlSpaceId, runs: runController, now: Date.now });
 \`\`\`
 
 ## Controllers At A Glance {#parameters}

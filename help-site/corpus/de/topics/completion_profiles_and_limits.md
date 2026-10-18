@@ -25,17 +25,15 @@ Ein `CompletionProfile` legt fest, welche Ergebnis-Entries beim `commit(txn)` f�
 await space.setCompletionProfiles([
   {
     taskType: "ChatTask",
-    resultType: "Msg",
-    matchFields: ["taskId", "threadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["Msg"],
+    equalFields: ["taskId", "threadId"],
+    maxResultCount: 1
   },
   {
     taskType: "SearchTask",
-    resultType: "SearchResult",
-    matchFields: ["searchId", "parentThreadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["SearchResult"],
+    equalFields: ["searchId", "parentThreadId"],
+    maxResultCount: 1
   }
 ]);
 ```
@@ -51,9 +49,9 @@ Versucht ein Worker `commit(txn)` aufzurufen, ohne dass für den genommenen `Cha
 | `maxFrameBytes` | `256 KiB` | Maximale RPC-Framegröße am Gate/Socket |
 | `maxEventBytes` | `160 KiB` | Maximale Größe eines zugestellten Events |
 | `maxSpaceBytes` | `64 MiB` | Summe aller Entry-Felder in einem Space |
-| `maxClaimsBytes` | `32 MiB` | Speicherbudget für Request-Claims |
+| `maxClaimBytes` | `32 MiB` | Speicherbudget für Request-Claims |
 | `maxOutboxBytes` | `8 MiB` | Speicherbudget für Outbox / Mailboxes (max. 7 Tage TTL) |
-| `maxStorageBytes` | `128 MiB` | Gesamtdokumentgröße eines Spaces |
+| `maxDocBytes` | `128 MiB` | Gesamtdokumentgröße eines Spaces |
 
 Vor **jeder** Erweiterung einer Transaktion reserviert `core.ts` die konservativen Kosten für **Commit und Abort**. Überschreitet ein Schritt das Budget, scheitert dieser Schritt sofort mit `ResourceExhausted`, sodass die bisherige Transaktion niemals beim abschließenden `commit` oder `abort` am Byte-Limit hängenbleibt.
 

@@ -24,7 +24,7 @@ import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
 
 export const SWARM_ALIAS = "social-swarm";
-export const SWARM_AGENT_COUNT = Math.max(100, Math.min(50_000, Number(process.env.SWARM_AGENTS ?? 100)));
+export const SWARM_AGENT_COUNT = Math.max(10, Math.min(50_000, Number(process.env.SWARM_AGENTS ?? 100)));
 export const SWARM_AGENT_MAX = 50_000;
 /** A single dispatcher loop: one waiting take = one doc watch probe per commit; processing pipelines async. */
 const WORKER_COUNT = 1;
@@ -486,6 +486,8 @@ export class SocialSwarmHub {
 	}
 
 	#initPromise: Promise<void> | null = null;
+	#historyTask: Promise<void> | null = null;
+	#historyAbort = new AbortController();
 	#readyResolve!: () => void;
 	#ready: Promise<void> = new Promise<void>((r) => {
 		this.#readyResolve = r;
@@ -493,6 +495,7 @@ export class SocialSwarmHub {
 
 	/** Start init in the background – resolves when the space is seeded/loaded and workers run. */
 	init(): Promise<void> {
+		if (this.#closed) return Promise.reject(new Error("Swarm hub is closed"));
 		this.#initPromise ??= this.#doInit().finally(() => this.#readyResolve());
 		return this.#initPromise;
 	}
@@ -508,6 +511,7 @@ export class SocialSwarmHub {
 		this.space = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: info.spaceId,
 		});
+		if (this.#closed) return;
 		const admin = this.space as SpaceLike & { setCompletionProfiles?: (p: CompletionProfile[]) => Promise<void> };
 		if (typeof admin.setCompletionProfiles === "function") {
 			try {
@@ -520,14 +524,15 @@ export class SocialSwarmHub {
 
 		// The head must exist before workers append; the one-time index migration of large
 		// stores runs in the background – paging falls back to bounded scans until it is ready.
-		await ensureHistoryHead(this.space);
+		await ensureHistoryHead(this.space, this.#historyAbort.signal);
+		if (this.#closed) return;
 		// Producers pause while the index migrates: worker appends hold the history head per
 		// batch and would otherwise starve the migrator's head replace for minutes.
 		const wasRunning = this.#running;
 		this.#running = false;
-		void initializeHistory(this.space, { host: this.host, spaceId: this.spaceId, ctx: this.ctx })
+		this.#historyTask = initializeHistory(this.space, { host: this.host, spaceId: this.spaceId, ctx: this.ctx, signal: this.#historyAbort.signal })
 			.then(() => { this.#historyReady = true; })
-			.catch((e) => this.#shardWarn("history migration failed – scan paging stays active", e))
+			.catch((e) => { if (!this.#closed) this.#shardWarn("history migration failed – scan paging stays active", e); })
 			.finally(() => { this.#running = wasRunning; });
 		this.#seedAgents(this.#agentCount);
 		const existing = await this.space.readAll({ type: "Agent" }, { limit: 4 });
@@ -575,6 +580,7 @@ export class SocialSwarmHub {
 			await this.#syncRemoteShard();
 		}
 
+		if (this.#closed) return;
 		for (let w = 0; w < WORKER_COUNT; w++) {
 			this.#workers.push(this.#workerLoop(w));
 		}
@@ -640,7 +646,11 @@ export class SocialSwarmHub {
 
 	async close(): Promise<void> {
 		this.#closed = true;
+		this.#historyAbort.abort();
+		// Init is intentionally backgrounded by the HTTP server. Never let it install timers after close.
+		await this.#initPromise?.catch(() => {});
 		for (const t of this.#timers) clearInterval(t);
+		await this.#historyTask;
 		for (const c of this.clients) c.close();
 		this.clients.clear();
 		await Promise.allSettled(this.#workers);
@@ -1559,7 +1569,7 @@ export class SocialSwarmHub {
 					}
 					case "swarm.agentCount": {
 						if (!requireAdmin()) break;
-						const n = Math.max(100, Math.min(SWARM_AGENT_MAX, Math.round(Number(msg.count ?? this.#agentCount))));
+						const n = Math.max(10, Math.min(SWARM_AGENT_MAX, Math.round(Number(msg.count ?? this.#agentCount))));
 						if (n !== this.#agentCount) {
 							const userAgent = this.#agentIndex.get("agent-you");
 							this.#agentCount = n;

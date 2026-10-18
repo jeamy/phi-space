@@ -32,7 +32,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "c
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 ```
 
@@ -44,7 +44,7 @@ Wenn `alice` und `bob` den Chat betreten, schreibt jeder Client einen `Presence`
 
 1. `alice` schreibt in einer Transaktion ihre `Msg` (`seq: 1`) und den zugehörigen `ChatTask`.
 2. Der Chat-Worker nimmt `ChatTask` unter einer Transaktion (`space.take(..., { txn })`), erzeugt die Antwort-`Msg` (`seq: 2`) mit derselben `taskId` und ruft `space.commit(txn)` auf.
-3. `bob` forkt den Thread ab `seq: 2` (`forkThread` kopiert die sichtbaren Nachrichten bis `seq <= 2` in einer Transaktion in den neuen Fork-Thread).
+3. `bob` forkt den Thread ab `seq: 2` (`forkThread` schreibt nur Parent-Verweis und Grenze; geerbte Nachrichten bis `seq <= 2` werden beim Lesen aufgelöst, nicht physisch kopiert).
 
 ### Ausführung im Terminal {#run-cli}
 

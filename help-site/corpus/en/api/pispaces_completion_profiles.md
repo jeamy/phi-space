@@ -2,7 +2,7 @@
 standard: help_api
 id: help.api.pispaces_completion_profiles
 title: "setCompletionProfiles & setLimits – Server-Side Result and Budget Contracts"
-short: "Enforces expected result type, correlating fields (matchFields), and count before committing a take transaction; manages byte limits."
+short: "Enforces expected result type, correlating fields (equalFields), and count before committing a take transaction; manages byte limits."
 tags: [setcompletionprofiles, setlimits, completionprofile, completionviolation]
 owner: core
 related: [help.topic.completion_profiles_and_limits]
@@ -19,7 +19,7 @@ Only administrative host code (without `conversationId`) may invoke `setCompleti
 
 ```ts
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 ```
 
@@ -28,14 +28,14 @@ await space.setCompletionProfiles([
 | Field | Meaning |
 | --- | --- |
 | `taskType` | Entry type taken under the transaction that triggers a result obligation. |
-| `resultType` | Entry type that must be written within the same transaction. |
-| `matchFields` | Fields whose values must match between task and result (correlation). |
-| `minResults` / `maxResults` | Expected number of correlating result entries. |
-| `maxResultBytes` | Byte cap per result (federated profiles require this field). |
+| `resultTypes` | Entry type that must be written within the same transaction. |
+| `equalFields` | Fields whose values must match between task and result (correlation). |
+| `maxResultCount` | Maximum correlating result count; at least one is required. |
+| `maxResultBytes` | Total result bytes assigned to one task; also maxLeaseMs for bounded reservations and optional gateField. |
 
 If a commit violates the profile, `commit` fails with `CompletionViolation` and nothing becomes visible. `setLimits` manages the space's byte/size budgets (e.g. `maxFrameBytes`, `maxEventBytes`, `mailboxTtlMs`).
 
 ## Typical Use Cases {#use-cases}
 
-- **Reply guarantee in chat**: The commit fails server-side if the worker takes a `ChatTask` but writes no matching `Msg` with the same `taskId`/`threadId` – the task is never lost.
+- **Reply guarantee in chat**: The commit fails server-side if the worker takes a `ChatTask` but writes no matching `Msg` with the same `taskId`/`threadId` – abort can return the reservation while the task lease and storage remain available.
 - **Subagent contract**: `SearchTask → SearchResult` guarantees that every federated search ends with a correlated result.

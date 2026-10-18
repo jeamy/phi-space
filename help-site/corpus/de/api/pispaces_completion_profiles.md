@@ -2,7 +2,7 @@
 standard: help_api
 id: help.api.pispaces_completion_profiles
 title: "setCompletionProfiles & setLimits – Serverseitige Ergebnis- und Budgetverträge"
-short: "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (matchFields) und Anzahl; verwaltet Byte-Limits."
+short: "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (equalFields) und Anzahl; verwaltet Byte-Limits."
 tags: [setcompletionprofiles, setlimits, completionprofile, completionviolation]
 owner: core
 related: [help.topic.completion_profiles_and_limits]
@@ -19,7 +19,7 @@ Nur administrativer Host-Code (ohne gesetztes `conversationId`) darf `setComplet
 
 ```ts
 await space.setCompletionProfiles([
-  { taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }
+  { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
 ]);
 ```
 
@@ -28,14 +28,14 @@ await space.setCompletionProfiles([
 | Feld | Bedeutung |
 | --- | --- |
 | `taskType` | Entry-Typ, der unter der Transaktion genommen wurde und eine Ergebnispflicht auslöst. |
-| `resultType` | Entry-Typ, der in derselben Transaktion geschrieben werden muss. |
-| `matchFields` | Felder, deren Werte zwischen Task und Ergebnis übereinstimmen müssen (Korrelation). |
-| `minResults` / `maxResults` | Erwartete Anzahl korrelierender Ergebnis-Entries. |
-| `maxResultBytes` | Byte-Obergrenze pro Ergebnis (föderierte Profile verlangen dieses Pflichtfeld). |
+| `resultTypes` | Entry-Typ, der in derselben Transaktion geschrieben werden muss. |
+| `equalFields` | Felder, deren Werte zwischen Task und Ergebnis übereinstimmen müssen (Korrelation). |
+| `maxResultCount` | Höchstzahl korrelierender Ergebnisse; mindestens eines ist erforderlich. |
+| `maxResultBytes` | Gesamtbytegrenze der zu einem Task gehörenden Ergebnisse; zusätzlich maxLeaseMs für begrenzte Reservierungen und optional gateField. |
 
 Verletzt ein Commit das Profil, schlägt `commit` mit `CompletionViolation` fehl und nichts wird sichtbar. `setLimits` verwaltet Byte-/Größenbudgets des Spaces (z.B. `maxFrameBytes`, `maxEventBytes`, `mailboxTtlMs`).
 
 ## Typische Anwendungsfälle {#use-cases}
 
-- **Antwortgarantie im Chat**: Der Commit scheitert serverseitig, wenn der Worker den `ChatTask` entnimmt, aber keine passende `Msg` mit gleicher `taskId`/`threadId` schreibt – der Task geht nie verloren.
+- **Antwortgarantie im Chat**: Der Commit scheitert serverseitig, wenn der Worker den `ChatTask` entnimmt, aber keine passende `Msg` mit gleicher `taskId`/`threadId` schreibt – die Reservierung kann bei Abort zurückgegeben werden, solange Task-Lease und Storage bestehen.
 - **Subagent-Vertrag**: `SearchTask → SearchResult` garantiert, dass jede föderierte Suche mit einem korrelierten Ergebnis endet.

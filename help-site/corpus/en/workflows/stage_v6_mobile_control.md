@@ -24,7 +24,7 @@ Stage 6 (`help-site/examples/v6-mobile-control/run.ts` and the **`AdminSpaces`**
 
 ### Step 1: Login To AdminSpaces & QR Pairing For Mobile {#step-1-login-and-qr}
 
-1. On `https://spaces.eibrain.org`, the administrator clicks **`ADMIN`** in the topbar and logs in with the admin password or an enrollment token.
+1. On `https://spaces.eibrain.org`, the administrator clicks **`ADMIN`** in the topbar and logs in with the configured private web-admin password; enrollment tokens pair peers only.
 2. Under **Identity & Device Pairing**, a one-click action generates a fresh enrollment token and `enrollQr` payload ready to paste or scan in `spaces.html` on Android.
 
 ### Step 2: Worker Scaling, RunGate Control, And Space Lifecycle {#step-2-control}

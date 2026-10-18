@@ -9,7 +9,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "write(entry: EntryDraft, txn?: string | null, lease?: number, options?: { request?: RequestRef }): Promise<Lease>",
     "title": {
       "de": "write – Entry schreiben",
       "en": "write – Write an Entry"
@@ -29,7 +28,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "read(template: Template, timeout: number, options?: OpOptions): Promise<EntryView | null>",
     "title": {
       "de": "read & readIfExists – Entry zerstörungsfrei lesen",
       "en": "read & readIfExists – Non-Destructive Entry Read"
@@ -49,7 +47,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "take(template: Template, timeout: number, options?: OpOptions): Promise<EntryView | null>",
     "title": {
       "de": "take & takeIfExists – Entry exklusiv entnehmen oder reservieren",
       "en": "take & takeIfExists – Exclusively Remove or Reserve an Entry"
@@ -69,7 +66,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "createTransaction(lease?: number, opts?: { request?: RequestRef }): Promise<Lease>; commit(txn: string, opts?): Promise<void>; abort(txn: string, opts?): Promise<void>",
     "title": {
       "de": "Transaktionen – createTransaction, commit & abort",
       "en": "Transactions – createTransaction, commit & abort"
@@ -89,7 +85,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "renew(leaseId: string, ms: number, opts?: { request?: RequestRef }): Promise<number>; cancel(leaseId: string, opts?): Promise<void>",
     "title": {
       "de": "Leases – renew & cancel",
       "en": "Leases – renew & cancel"
@@ -109,7 +104,6 @@
     "idempotency": "read_only",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "readPage(template?: Template, opts?: PageOptions): Promise<Page>; changes(afterRev: number, opts?: ChangeOptions): Promise<Changes>",
     "title": {
       "de": "readPage & changes – Konsistente Snapshots und Revisionsströme",
       "en": "readPage & changes – Consistent Snapshots and Revision Streams"
@@ -129,7 +123,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "wait(template: Template, opts: WaitOptions): Promise<string>; notify(template: Template, opts: NotifyOptions): Promise<{ eventId: string; lease: Lease }>; events(principal, opts?): Promise<MailboxPage>; ack(principal, epoch, upTo): Promise<AckResult>",
     "title": {
       "de": "wait, notify, events & ack – Reaktive Zustellung und Consumer-Mailboxes",
       "en": "wait, notify, events & ack – Reactive Delivery and Consumer Mailboxes"
@@ -149,7 +142,6 @@
     "idempotency": "request_ref",
     "scope": "single_or_remote",
     "role": "user_or_worker",
-    "signature": "issueGeneration(principal: Principal): Promise<GenerationInfo>; pollOperation(req: RequestRef): Promise<ClaimView | null>; resolveOperation(req, method, argHash, epoch): Promise<AdmissionResolution>",
     "title": {
       "de": "Request-Claims & Generationen – Neustartfeste Idempotenz",
       "en": "Request Claims & Generations – Restart-Safe Idempotency"
@@ -169,7 +161,6 @@
     "idempotency": "cas_epoch",
     "scope": "single_space",
     "role": "host_admin",
-    "signature": "setCompletionProfiles(profiles: CompletionProfile[]): Promise<void>; setLimits(partial: Partial<Limits>): Promise<Limits>",
     "title": {
       "de": "setCompletionProfiles & setLimits – Serverseitige Ergebnis- und Budgetverträge",
       "en": "setCompletionProfiles & setLimits – Server-Side Result and Budget Contracts"
@@ -189,7 +180,6 @@
     "idempotency": "task_claim",
     "scope": "conversation_owned",
     "role": "user_or_worker",
-    "signature": "createSpaces(meter?: Meter): Extension; startService(harness: SpaceHost, ctx: Context, opts?: { space?: string }): Promise<() => Promise<void>>",
     "title": {
       "de": "Agent-Tools (spaces) & startService – Replay-sichere LLM-Werkzeuge",
       "en": "Agent Tools (spaces) & startService – Replay-Safe LLM Tools"
@@ -209,7 +199,6 @@
     "idempotency": "request_ref",
     "scope": "unix_or_tcp",
     "role": "user_or_worker",
-    "signature": "new SpaceService(opts); serveSpace(service, { listen, connection }); new RemoteSpace(transport, opts)",
     "title": {
       "de": "SpaceService, serveSpace & RemoteSpace – Netzwerk-RPC über Socket & TCP",
       "en": "SpaceService, serveSpace & RemoteSpace – Network RPC over Socket & TCP"
@@ -229,7 +218,6 @@
     "idempotency": "request_ref",
     "scope": "control_and_data",
     "role": "host_admin",
-    "signature": "startFederationHost(harness, ctx, options): Promise<FederationHost>; GrantAuthority.issue(conn, purpose); remote.enroll(token); remote.rotateKey(challenge, signer)",
     "title": {
       "de": "Gate, Schicht A/B, Enrollment, 60s-Grants & Rotation",
       "en": "Gate, Layer A/B, Enrollment, 60s Grants & Rotation"
@@ -249,7 +237,6 @@
     "idempotency": "request_ref",
     "scope": "multi_member_cluster",
     "role": "router",
-    "signature": "createFederationController(opts): Promise<FederationController>; federatedSpace.write/read/take/takeWaiting/readAll; membership.execute(cmdId, kind, member)",
     "title": {
       "de": "createFederationController & FederatedSpace – Router, HRW-Sharding & Membership",
       "en": "createFederationController & FederatedSpace – Router, HRW Sharding & Membership"
@@ -269,7 +256,6 @@
     "idempotency": "cas_epoch",
     "scope": "coordinator_control",
     "role": "host_admin",
-    "signature": "runController.start/pause/resume/stop/schedule/export; startWorkerSupervisor(opts); spaceLifecycle.execute(req); collectAlerts(state)",
     "title": {
       "de": "RunController, WorkerSupervisor, SpaceLifecycle & Alerts – Betriebserweiterung (B2–B10)",
       "en": "RunController, WorkerSupervisor, SpaceLifecycle & Alerts – Operations Extension (B2–B10)"

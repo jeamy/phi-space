@@ -27,8 +27,8 @@ const gauges = await space.stats();
 
 | Method | Return | Purpose |
 | --- | --- | --- |
-| `readPage(template?, opts?)` | `Page { entries, rev, token? }` | Immutable point-in-time snapshot, continued page-by-page via `token` under a byte budget. |
-| `changes(afterRev, opts?)` | `Changes { rev, batches, gaps? }` | All commit deltas since `afterRev` in order; `gaps` marks compacted ranges. |
+| `readPage(template?, opts?)` | `Page { items, next, rev, streamId, token? }` | Immutable point-in-time snapshot, continued page-by-page via `token` under a byte budget. |
+| `changes(afterRev, opts?)` | `Changes { streamId, batches, next, rev, more }` | All commit deltas since `afterRev` in order; an expired log raises `SnapshotExpired`. |
 | `readAll(template?, { limit?, txn? })` | `EntryView[]` | Convenience full read without paging (for small result sets). |
 | `count(template?, txn?)` / `stats()` | `number` / gauges | Fast size and fill-level queries for dashboards. |
 

@@ -25,17 +25,15 @@ A `CompletionProfile` declares which result entries must be written inside the s
 await space.setCompletionProfiles([
   {
     taskType: "ChatTask",
-    resultType: "Msg",
-    matchFields: ["taskId", "threadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["Msg"],
+    equalFields: ["taskId", "threadId"],
+    maxResultCount: 1
   },
   {
     taskType: "SearchTask",
-    resultType: "SearchResult",
-    matchFields: ["searchId", "parentThreadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["SearchResult"],
+    equalFields: ["searchId", "parentThreadId"],
+    maxResultCount: 1
   }
 ]);
 ```
@@ -51,9 +49,9 @@ If a worker calls `commit(txn)` without having written exactly one `Msg` with ma
 | `maxFrameBytes` | `256 KiB` | Maximum RPC wire frame size at the gate/socket |
 | `maxEventBytes` | `160 KiB` | Maximum size of a delivered event |
 | `maxSpaceBytes` | `64 MiB` | Total entry field bytes in a space |
-| `maxClaimsBytes` | `32 MiB` | Budget for stored request claims |
+| `maxClaimBytes` | `32 MiB` | Budget for stored request claims |
 | `maxOutboxBytes` | `8 MiB` | Budget for outbox / mailboxes (max 7 days TTL) |
-| `maxStorageBytes` | `128 MiB` | Total document size of a space |
+| `maxDocBytes` | `128 MiB` | Total document size of a space |
 
 Before **every** transaction extension, `core.ts` reserves conservative byte budgets for **both commit and abort**. If an operation would exceed the budget, it fails immediately with `ResourceExhausted`, ensuring an open transaction never becomes uncommittable or unabortable due to byte limits.
 

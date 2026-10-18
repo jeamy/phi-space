@@ -48,10 +48,10 @@ export const TOPIC_AND_WORKFLOW_ARTICLES: ArticleSeed[] = [
 
 \`pi-spaces\` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
 
-1. **Fehlertolerante Aufgabenübergabe (Work Queues ohne Verlust)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (\`type: "ChatTask"\` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (\`take\`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – nichts geht verloren.
-2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen \`ScheduledJob\` einstellen und offline gehen; der Space-Service hält den Task sicher, bis ein Worker bereit ist oder die Deadline (\`TimerLock\`-Lease) ausgelöst wird.
+1. **Fehlertolerante Aufgabenübergabe (mit geleaster Reservierung)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (\`type: "ChatTask"\` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (\`take\`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – sofern die eigene Task-Lease noch gilt und der Store verfügbar ist.
+2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen \`ScheduledJob\` einstellen und offline gehen; mit persistentem Backend und ausreichender Task-Lease bleibt der Auftrag erhalten; die Anwendung prüft nach Ablauf des TimerLock die Fälligkeit.
 3. **Einheitlicher Zustand mit Live-Ereignissen**: Statt fragmentierter Caches bietet jeder Space atomare Transaktionen (\`createTransaction\`, \`commit\`, \`abort\`), konsistente Snapshots (\`readPage\` mit \`rev\`), inkrementelle Update-Streams (\`changes(afterRev)\`) und langlebige Ereignis-Mailboxes (\`events\` + Präfix-\`ack\`).
-4. **Einkomponentige Systeme zu verteilten Cluster wachsen**: Derselbe Fachcode (auf dem Interface \`SpaceLike\`) läuft nahtlos von einem reinen RAM-Store auf einem Laptop bis hin zum verschlüsselten, horizontal geshardeten Multi-Host-Cluster mit zentraler Mobile- und Web-Administration (\`AdminSpaces\`).
+4. **Schrittweise Verteilung**: Lokale und Remote-Clients teilen den SpaceLike-Basisvertrag. Federation ergänzt Routing und eigene Request-Bindungen; reale Verschlüsselung, Provisionierung und Ausfallsicherheit benötigen gesonderte Konfiguration und Abnahme.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -61,13 +61,13 @@ In \`pi-spaces\` müssen Produzent und Konsument einander nicht kennen und nicht
 
 - **Schreiben (\`space.write\`)**: Ein Teilnehmer legt einen Entry \`{ type: string, types?: string[], fields: Record<string, Json> }\` mit einer definierten Ablaufzeit (**Lease**) im Space ab.
 - **Lesen (\`space.read\` / \`readIfExists\` / \`readAll\` / \`readPage\`)**: Ein Teilnehmer sucht mit einem **Template** \`{ type?, fields?, id? }\` nach einem passenden sichtbaren Entry, ohne ihn zu entfernen. Fehlende oder \`null\`-Felder im Template wirken als **Wildcards**.
-- **Exklusives Entnehmen (\`space.take\`)**: Ein Worker entnimmt einen passenden Entry exklusiv. Erfolgt der \`take\` unter einer **Transaktion (\`txn\`)**, bleibt der Entry reserviert, bis der Worker seine Ergebnisse geschrieben und \`commit(txn)\` aufgerufen hat. Stürzt der Worker ab oder läuft die Transaktions-Lease ab, kehrt der Entry automatisch und verlustfrei in den Space zurück.
+- **Exklusives Entnehmen (\`space.take\`)**: Ein Worker entnimmt einen passenden Entry exklusiv. Erfolgt der \`take\` unter einer **Transaktion (\`txn\`)**, bleibt der Entry reserviert, bis der Worker seine Ergebnisse geschrieben und \`commit(txn)\` aufgerufen hat. Stürzt der Worker ab oder läuft die Transaktions-Lease ab, kehrt der Entry zurück, sofern seine eigene Entry-Lease noch gilt.
 - **Warten auf zukünftige Daten (\`space.wait\`)**: Statt blind zu pollen, registriert ein Teilnehmer einen langlebigen \`Waiter\` auf ein Template. Sobald ein passender Entry committet wird, weckt \`pi-spaces\` den Waiter oder sendet ein Ereignis.
 
 ### Was kann pi-spaces? (Kernfähigkeiten) {#capabilities}
 
 - **Unveränderliche Entries & Wildcard-Templates**: Typisierte JSON-Objekte mit Subtypen-Registrierung (\`types\`) und exaktem \`type\`/Feld-Matching.
-- **Atomare Space-Transaktionen**: \`take\` + mehrere \`write\` + optionale Request-Claims in einem einzigen \`commit(txn)\`. Bei \`abort\` oder Timeout wird alles atomar zurückgerollt.
+- **Atomare Space-Transaktionen**: \`take\` + mehrere \`write\` + optionale Request-Claims mit einem fachlichen \`commit(txn)\` (vorherige PiSpaces-Aufrufe sind separate Storage-Commits). Bei \`abort\` oder Timeout wird alles atomar zurückgerollt.
 - **Serverseitige Ergebnisgarantien (\`CompletionProfiles\`)**: Der Space-Kern erzwingt beim Commit, dass ein genommener Task des Typs \`ChatTask\` nur zusammen mit genau einem passenden Ergebnis-Entry \`Msg\` erfolgreich commitet werden kann.
 - **Idempotente Request-Claims (\`RequestRef\`)**: Jede Mutation kann mit \`{ request: { principal, generation, requestId } }\` ausgeführt werden; Wiederholungen und Timeouts erzeugen keine doppelte Wirkung.
 - **Leases & automatischer Reaper (\`startService\`)**: Entries, Presence-Zustände und \`TimerLock\`-Schlösser laufen nach definierter Zeit automatisch ab.
@@ -77,7 +77,7 @@ In \`pi-spaces\` müssen Produzent und Konsument einander nicht kennen und nicht
 
 ### Einheitlicher Basisvertrag SpaceLike {#spacelike-contract}
 
-Der lokale Client \`PiSpaces\`, der Netzwerk-Client \`RemoteSpace\` und der Cluster-Client \`FederatedSpace\` implementieren denselben TypeScript-Basisvertrag \`SpaceLike\`. Anwendungscode – wie unser [Multiplayer Space-Chat](help.workflow.overview_v1_to_v6#overview) – bleibt dadurch von Stufe \`v1\` (In-Memory) bis Stufe \`v5\` (Multi-Host-Cluster) im Kern vollkommen unverändert.
+PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpace besitzt eine eigene API mit FederationRequest und Member-Transaktionsbindung; Fachkonzepte sind übertragbar, Aufrufsignaturen nicht unverändert austauschbar. Siehe [Topologien und API-Grenzen](help.topic.topology_and_readiness#api).
 
 ## Begriffe und Identitäten {#terms-and-identities}
 
@@ -116,10 +116,10 @@ Der lokale Client \`PiSpaces\`, der Netzwerk-Client \`RemoteSpace\` und der Clus
 
 \`pi-spaces\` solves four fundamental problems in building robust, long-running systems and autonomous AI agent fleets:
 
-1. **Fault-Tolerant Work Handoff (Lossless Work Queues)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (\`type: "ChatTask"\` or similar) into the space. Any worker can then **reserve** that task exclusively (\`take\`). If the worker crashes before finishing, the expired lease automatically returns the task — nothing is lost.
-2. **Temporal Decoupling**: Producers and consumers do not need to be online at the same time. A client can schedule a \`ScheduledJob\` in the middle of the night and go offline; the space service holds the task safely until a worker is ready or the deadline (\`TimerLock\` lease) fires.
+1. **Fault-Tolerant Work Handoff (Leased Reservations)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (\`type: "ChatTask"\` or similar) into the space. Any worker can then **reserve** that task exclusively (\`take\`). If the worker crashes before finishing, the expired lease automatically returns the task — provided the task's own lease remains valid and its store is available.
+2. **Temporal Decoupling**: Producers and consumers do not need to be online at the same time. A client can schedule a \`ScheduledJob\` in the middle of the night and go offline; with a persistent backend and sufficient task lease, the job survives; the application checks when it is due after TimerLock expiry.
 3. **Unified State With Live Events**: Rather than fragmented caches, every space provides atomic transactions (\`createTransaction\`, \`commit\`, \`abort\`), consistent point-in-time snapshots (\`readPage\` with \`rev\`), incremental update streams (\`changes(afterRev)\`), and durable event mailboxes (\`events\` + prefix \`ack\`).
-4. **Single-Process Systems That Grow Into Distributed Clusters**: The same application code (against the \`SpaceLike\` interface) runs seamlessly from a pure in-memory store on a laptop up to an encrypted, horizontally sharded multi-host cluster with centralized mobile and web administration (\`AdminSpaces\`).
+4. **Incremental Distribution**: Local and remote clients share SpaceLike. Federation adds routing and its own request bindings; real encryption, provisioning and failure safety need separate configuration and acceptance.
 
 ## Concept And System Model {#concept-model}
 
@@ -129,13 +129,13 @@ In \`pi-spaces\`, producers and consumers do not need to know each other or be a
 
 - **Write (\`space.write\`)**: A participant places an entry \`{ type: string, types?: string[], fields: Record<string, Json> }\` with a bounded lifetime (**lease**) into the space.
 - **Read (\`space.read\` / \`readIfExists\` / \`readAll\` / \`readPage\`)**: A participant queries a matching visible entry using a **template** \`{ type?, fields?, id? }\` without removing it. Missing or \`null\` fields in the template act as **wildcards**.
-- **Exclusive Take (\`space.take\`)**: A worker removes a matching entry exclusively. When executed under a **transaction (\`txn\`)**, the entry remains reserved until the worker writes its results and calls \`commit(txn)\`. If the worker crashes or the transaction lease expires, the entry automatically returns to the space.
+- **Exclusive Take (\`space.take\`)**: A worker removes a matching entry exclusively. When executed under a **transaction (\`txn\`)**, the entry remains reserved until the worker writes its results and calls \`commit(txn)\`. If the worker crashes or the transaction lease expires, the entry returns if its own Entry lease remains valid.
 - **Wait For Future Data (\`space.wait\`)**: Instead of polling blindly, a participant registers a durable \`Waiter\` against a template. As soon as a matching entry is committed, \`pi-spaces\` wakes the waiter or delivers an event.
 
 ### What Can pi-spaces Do? (Core Capabilities) {#capabilities}
 
 - **Immutable Entries & Wildcard Templates**: Typed JSON objects with subtype registration (\`types\`) and exact \`type\`/field matching.
-- **Atomic Space Transactions**: \`take\` + multiple \`write\` calls + optional request claims inside a single \`commit(txn)\`. On \`abort\` or timeout everything rolls back atomically.
+- **Atomic Space Transactions**: \`take\` + multiple \`write\` calls + optional request claims finalized by one business \`commit(txn)\` (earlier PiSpaces calls are separate storage commits). On \`abort\` or timeout everything rolls back atomically.
 - **Server-Side Result Guarantees (\`CompletionProfiles\`)**: The space core enforces at commit time that a taken task of type \`ChatTask\` can only commit together with exactly one matching result entry \`Msg\`.
 - **Idempotent Request Claims (\`RequestRef\`)**: Every mutation can carry \`{ request: { principal, generation, requestId } }\`; retries and timeouts never produce duplicate effects.
 - **Leases & Automatic Reaper (\`startService\`)**: Entries, presence records, and \`TimerLock\` locks expire automatically after a configured duration.
@@ -145,7 +145,7 @@ In \`pi-spaces\`, producers and consumers do not need to know each other or be a
 
 ### Unified SpaceLike Contract {#spacelike-contract}
 
-The local client \`PiSpaces\`, the network client \`RemoteSpace\`, and the cluster client \`FederatedSpace\` all implement the same TypeScript interface \`SpaceLike\`. Application logic—such as our [Multiplayer Space-Chat](help.workflow.overview_v1_to_v6#overview)—remains completely unchanged from stage \`v1\` (in-memory) through stage \`v5\` (multi-host cluster).
+PiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace has a separate API with FederationRequest and Member transaction binding; business concepts transfer but call signatures are not drop-in replacements. See [topologies and API boundaries](help.topic.topology_and_readiness#api).
 
 ## Terms And Identities {#terms-and-identities}
 
@@ -329,11 +329,11 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 
 ### Die drei getrennten Epochenzähler {#three-epochs}
 
-In \`pi-spaces\` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren drei strikt getrennte, monoton steigende Zähler:
+In \`pi-spaces\` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren zwei numerische Zähler und eine strikt getrennte opake Mailbox-Identität:
 
 1. **\`primaryEpoch\`**: Gilt für einen logischen Space bei Replikation oder Data-Restore (+1 bei Data-Restore, Promotion oder Single-Umschaltung; beginnt nach Control-Restore unter neuer \`authorityId\` bei 1).
 2. **\`routerEpoch\`**: Gilt für \`RouterLease\`-Ausstellungen einer Federation (+1 bei Router-Neustart/-Wechsel).
-3. **\`mailboxEpoch\`**: Gilt für eine einzelne Consumer-Mailbox (+1 bei TTL-/Byte-Überlauf-Reset; wird innerhalb derselben Mailbox-Identität nie zurückgesetzt).
+3. **\`mailboxEpoch\`**: Opake String-Identität einer Consumer-Mailbox. Bei Reset ändert sich der Token; auf Gleichheit prüfen, nicht numerisch inkrementieren oder ordnen.
 
 ## Fehler und Diagnose {#failures-and-diagnostics}
 
@@ -372,7 +372,7 @@ Using the word "epoch" without a qualifier is invalid in \`pi-spaces\`. Three in
 
 1. **\`primaryEpoch\`**: Scoped to a logical space for replication or data restore (+1 on data restore, promotion, or single-mode switch; resets to 1 under a new \`authorityId\` after control restore).
 2. **\`routerEpoch\`**: Scoped to \`RouterLease\` issuance in a federation (+1 on router restart or failover).
-3. **\`mailboxEpoch\`**: Scoped to a consumer mailbox (+1 on TTL/byte-budget reset; never resets within the same mailbox identity).
+3. **\`mailboxEpoch\`**: An opaque consumer-mailbox string identity. Reset changes the token; compare equality, never increment or order it numerically.
 
 ## Failures And Diagnostics {#failures-and-diagnostics}
 
@@ -414,7 +414,7 @@ type EntryDraft = {
 
 - \`type\` ist der primäre Typname (z.B. \`"ChatTask"\`).
 - \`types\` ist eine optionale Liste mit dem Haupttyp und seinen Supertypen (z.B. \`["ChatTask", "Task", "Auditable"]\`). Ein Template mit \`type: "Task"\` findet auch jeden Entry, dessen \`types\`-Array \`"Task"\` enthält.
-- Ein gespeicherter \`EntryView\` enthält zusätzlich \`id\` (lokale ID \`<incarnation>:<seq>\`), \`gid\` (\`<spaceId>/<localId>\`), \`owner\` und \`expires\`.
+- Ein gespeicherter \`EntryView\` enthält zusätzlich \`id\` (lokale ID \`e<incarnation>-<n>\`), \`gid\` (\`<spaceId>/<localId>\`), \`owner\`; \`expires\` steht auf der zurückgegebenen \`Lease\`.
 
 ### Template-Matching und Wildcards {#template-matching}
 
@@ -477,7 +477,7 @@ type EntryDraft = {
 
 - \`type\` is the primary type name (e.g. \`"ChatTask"\`).
 - \`types\` is an optional array containing the primary type and any supertypes (e.g. \`["ChatTask", "Task", "Auditable"]\`). A template asking for \`type: "Task"\` matches any entry whose \`types\` array includes \`"Task"\`.
-- A returned \`EntryView\` adds \`id\` (local ID \`<incarnation>:<seq>\`), \`gid\` (\`<spaceId>/<localId>\`), \`owner\`, and \`expires\`.
+- A returned \`EntryView\` adds \`id\` (local ID \`e<incarnation>-<n>\`), \`gid\` (\`<spaceId>/<localId>\`), \`owner\`; \`expires\` is returned on the \`Lease\`.
 
 ### Template Matching And Wildcards {#template-matching}
 
@@ -680,17 +680,15 @@ Ein \`CompletionProfile\` legt fest, welche Ergebnis-Entries beim \`commit(txn)\
 await space.setCompletionProfiles([
   {
     taskType: "ChatTask",
-    resultType: "Msg",
-    matchFields: ["taskId", "threadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["Msg"],
+    equalFields: ["taskId", "threadId"],
+    maxResultCount: 1
   },
   {
     taskType: "SearchTask",
-    resultType: "SearchResult",
-    matchFields: ["searchId", "parentThreadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["SearchResult"],
+    equalFields: ["searchId", "parentThreadId"],
+    maxResultCount: 1
   }
 ]);
 \`\`\`
@@ -706,9 +704,9 @@ Versucht ein Worker \`commit(txn)\` aufzurufen, ohne dass für den genommenen \`
 | \`maxFrameBytes\` | \`256 KiB\` | Maximale RPC-Framegröße am Gate/Socket |
 | \`maxEventBytes\` | \`160 KiB\` | Maximale Größe eines zugestellten Events |
 | \`maxSpaceBytes\` | \`64 MiB\` | Summe aller Entry-Felder in einem Space |
-| \`maxClaimsBytes\` | \`32 MiB\` | Speicherbudget für Request-Claims |
+| \`maxClaimBytes\` | \`32 MiB\` | Speicherbudget für Request-Claims |
 | \`maxOutboxBytes\` | \`8 MiB\` | Speicherbudget für Outbox / Mailboxes (max. 7 Tage TTL) |
-| \`maxStorageBytes\` | \`128 MiB\` | Gesamtdokumentgröße eines Spaces |
+| \`maxDocBytes\` | \`128 MiB\` | Gesamtdokumentgröße eines Spaces |
 
 Vor **jeder** Erweiterung einer Transaktion reserviert \`core.ts\` die konservativen Kosten für **Commit und Abort**. Überschreitet ein Schritt das Budget, scheitert dieser Schritt sofort mit \`ResourceExhausted\`, sodass die bisherige Transaktion niemals beim abschließenden \`commit\` oder \`abort\` am Byte-Limit hängenbleibt.
 
@@ -734,17 +732,15 @@ A \`CompletionProfile\` declares which result entries must be written inside the
 await space.setCompletionProfiles([
   {
     taskType: "ChatTask",
-    resultType: "Msg",
-    matchFields: ["taskId", "threadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["Msg"],
+    equalFields: ["taskId", "threadId"],
+    maxResultCount: 1
   },
   {
     taskType: "SearchTask",
-    resultType: "SearchResult",
-    matchFields: ["searchId", "parentThreadId"],
-    minResults: 1,
-    maxResults: 1
+    resultTypes: ["SearchResult"],
+    equalFields: ["searchId", "parentThreadId"],
+    maxResultCount: 1
   }
 ]);
 \`\`\`
@@ -760,9 +756,9 @@ If a worker calls \`commit(txn)\` without having written exactly one \`Msg\` wit
 | \`maxFrameBytes\` | \`256 KiB\` | Maximum RPC wire frame size at the gate/socket |
 | \`maxEventBytes\` | \`160 KiB\` | Maximum size of a delivered event |
 | \`maxSpaceBytes\` | \`64 MiB\` | Total entry field bytes in a space |
-| \`maxClaimsBytes\` | \`32 MiB\` | Budget for stored request claims |
+| \`maxClaimBytes\` | \`32 MiB\` | Budget for stored request claims |
 | \`maxOutboxBytes\` | \`8 MiB\` | Budget for outbox / mailboxes (max 7 days TTL) |
-| \`maxStorageBytes\` | \`128 MiB\` | Total document size of a space |
+| \`maxDocBytes\` | \`128 MiB\` | Total document size of a space |
 
 Before **every** transaction extension, \`core.ts\` reserves conservative byte budgets for **both commit and abort**. If an operation would exceed the budget, it fails immediately with \`ResourceExhausted\`, ensuring an open transaction never becomes uncommittable or unabortable due to byte limits.
 
@@ -1008,18 +1004,18 @@ Während \`read(template, timeout)\` und \`take(template, timeout)\` den aktuell
 Entfernte Clients (\`RemoteSpace\`) rufen ihre Mailbox über \`events\` ab und bestätigen verarbeitete Nachrichten per \`ack\`:
 
 \`\`\`ts
-const page = await remote.events("self", { after: cursor, waitMs: 5_000 });
-for (const ev of page.events) {
-  // Bei einem Take-Waiter trägt ev.txn die reservierte Transaktion:
-  // Ergebnis schreiben und ev.txn committen!
+const page = await remote.events({ after: cursor, waitMs: 5_000 });
+if (page.gap) throw new Error("Mailbox reset: reload state before processing");
+for (const item of page.events) {
+  await handleEvent(item.event); // Must persist result and commit event.txn before returning.
 }
-if (page.next !== null) {
-  await remote.ack("self", page.mailboxEpoch, page.next);
+if (page.events.length > 0) {
+  await remote.ack(page.mailboxEpoch, page.next);
 }
 \`\`\`
 
-- **Wichtige Grenze**: \`ack(epoch, upTo)\` bestätigt ausschließlich, dass der Consumer die Mailbox-Nachrichten bis Sequenz \`upTo\` erhalten hat – es ist **kein** Transaktions-Commit! Die übergebene Take-Transaktion muss separat mit \`commit(ev.txn)\` abgeschlossen werden.
-- Läuft eine Mailbox wegen 7-Tage-TTL oder 8-MiB-Limit über, erhöht sich \`mailboxEpoch\`, \`gap\` wird gemeldet und nicht bestätigte Take-Reservierungen werden wieder freigegeben.
+- **Wichtige Grenze**: \`ack(epoch, upTo)\` bestätigt ausschließlich, dass der Consumer die Mailbox-Nachrichten bis Sequenz \`upTo\` erhalten hat – es ist **kein** Transaktions-Commit! Die übergebene Take-Transaktion muss separat mit \`commit(ev.event.txn)\` abgeschlossen werden.
+- Bei TTL-Ablauf wechselt mailboxEpoch; gap meldet den Verlustbereich und betroffene Take-Reservierungen werden freigegeben. Bei vollem Bytebudget werden neue Wirkungen mit ResourceExhausted abgewiesen, nicht still Events verworfen.
 
 ## Siehe auch {#see-also}
 
@@ -1045,18 +1041,18 @@ While \`read(template, timeout)\` and \`take(template, timeout)\` block the acti
 Remote clients (\`RemoteSpace\`) poll their mailbox via \`events\` and acknowledge processed prefixes via \`ack\`:
 
 \`\`\`ts
-const page = await remote.events("self", { after: cursor, waitMs: 5_000 });
-for (const ev of page.events) {
-  // For a take-waiter, ev.txn holds the reserved transaction:
-  // write result and commit ev.txn!
+const page = await remote.events({ after: cursor, waitMs: 5_000 });
+if (page.gap) throw new Error("Mailbox reset: reload state before processing");
+for (const item of page.events) {
+  await handleEvent(item.event); // Must persist result and commit event.txn before returning.
 }
-if (page.next !== null) {
-  await remote.ack("self", page.mailboxEpoch, page.next);
+if (page.events.length > 0) {
+  await remote.ack(page.mailboxEpoch, page.next);
 }
 \`\`\`
 
-- **Critical Boundary**: \`ack(epoch, upTo)\` only acknowledges receipt of mailbox events up to sequence \`upTo\`—it is **not** a transaction commit! A delivered take transaction must still be committed explicitly via \`commit(ev.txn)\`.
-- If a mailbox overflows its 7-day TTL or 8 MiB limit, \`mailboxEpoch\` increments, \`gap\` is reported, and unacknowledged take reservations are released.
+- **Critical Boundary**: \`ack(epoch, upTo)\` only acknowledges receipt of mailbox events up to sequence \`upTo\`—it is **not** a transaction commit! A delivered take transaction must still be committed explicitly via \`commit(ev.event.txn)\`.
+- TTL expiry changes mailboxEpoch, reports gap and releases affected take reservations. Byte exhaustion rejects new effects with ResourceExhausted instead of silently dropping events.
 
 ## See Also {#see-also}
 
@@ -1076,7 +1072,7 @@ if (page.next !== null) {
 			short: "Wie PiSpaces auf dem Default-Space oder benannten Spaces (NamedSpace) arbeitet und wie startService Reaper und Event-Delivery betreibt.",
 			body: `## Überblick {#overview}
 
-Ein \`@earendil-works/pi-durable\`-Harness verwaltet standardmäßig den Default-Space (\`pi-spaces.space\`, Alias \`"default"\`) sowie über die \`Registry\` (\`pi-spaces.registry\`) beliebig viele isolierte **benannte Spaces** (\`pi-spaces.named-space\`).
+Ein \`@earendil-works/pi-durable\`-Harness verwaltet standardmäßig den Default-Space (\`pi-spaces.space\`, Alias \`"default"\`) sowie über die \`Registry\` (\`pi-spaces.registry\`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (\`pi-spaces.named-space\`).
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -1111,7 +1107,7 @@ const stopService = await startService(harness, ctx);
 			short: "How PiSpaces operates on the default space or named spaces (NamedSpace) and how startService drives the reaper and event delivery.",
 			body: `## Overview {#overview}
 
-A \`@earendil-works/pi-durable\` harness hosts the default space (\`pi-spaces.space\`, alias \`"default"\`) plus any number of isolated **named spaces** (\`pi-spaces.named-space\`) tracked in the \`Registry\` (\`pi-spaces.registry\`).
+A \`@earendil-works/pi-durable\` harness hosts the default space (\`pi-spaces.space\`, alias \`"default"\`) plus resource-bounded isolated **named spaces** (\`pi-spaces.named-space\`) tracked in the \`Registry\` (\`pi-spaces.registry\`).
 
 ## Concept And System Model {#concept-model}
 

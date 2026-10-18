@@ -34,7 +34,7 @@ Using the word "epoch" without a qualifier is invalid in `pi-spaces`. Three inde
 
 1. **`primaryEpoch`**: Scoped to a logical space for replication or data restore (+1 on data restore, promotion, or single-mode switch; resets to 1 under a new `authorityId` after control restore).
 2. **`routerEpoch`**: Scoped to `RouterLease` issuance in a federation (+1 on router restart or failover).
-3. **`mailboxEpoch`**: Scoped to a consumer mailbox (+1 on TTL/byte-budget reset; never resets within the same mailbox identity).
+3. **`mailboxEpoch`**: An opaque consumer-mailbox string identity. Reset changes the token; compare equality, never increment or order it numerically.
 
 ## Failures And Diagnostics {#failures-and-diagnostics}
 

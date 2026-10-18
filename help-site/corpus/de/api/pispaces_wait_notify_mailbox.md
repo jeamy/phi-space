@@ -20,10 +20,12 @@ since: 0.0.1
 ```ts
 const waitId = await space.wait(
   { type: "ChatTask" },
-  { take: true, target: principal, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
+  { take: true, target: conversationId, timeout: FOREVER, txnLeaseMs: 60_000, handback: { worker: "w1" } }
 );
 const mailboxPage = await space.events(principal, { after: lastSeq });
-if (mailboxPage.next !== null) {
+if (mailboxPage.gap) throw new Error("Mailbox reset: reload state before processing");
+for (const item of mailboxPage.events) await handleEvent(item.event); // Commit any take reservation first.
+if (mailboxPage.events.length > 0) {
   await space.ack(principal, mailboxPage.mailboxEpoch, mailboxPage.next);
 }
 ```
@@ -35,10 +37,10 @@ if (mailboxPage.next !== null) {
 | `wait(template, opts)` | Parkt einen langlebigen Read-/Take-Wunsch (`take: true` reserviert automatisch unter einer impliziten Transaktion mit `txnLeaseMs`); liefert die Treffer an die Mailbox von `target`. |
 | `notify(template, opts)` | Abonniert Änderungen auf ein Template und liefert Events in die eigene Principal-Mailbox. |
 | `events(principal, { mailboxEpoch?, after?, maxBytes? })` | Bytebegrenzte Seite ausgelieferter Ereignisse ab Sequenz `after`; `mailboxEpoch`-Mismatch meldet eine `gap` statt stiller Verluste. |
-| `ack(principal, epoch, upTo)` | Bestätigt ein verarbeitetes Sequenz-Präfix; erst ge-ack-te Ereignisse werden dauerhaft verworfen. |
+| `ack(principal, epoch, upTo)` | Bestätigt ein verarbeitetes Sequenz-Präfix; bestätigte Ereignisse werden entfernt; TTL-Ablauf kann mit gap ebenfalls aufräumen. |
 
 ## Typische Anwendungsfälle {#use-cases}
 
 - **Ereignisgesteuerter Worker**: Statt `take(..., FOREVER)` zu blockieren, parkt der Worker einen dauerhaften Take-Wunsch mit `wait`; `pi-spaces` legt gewonnene Tasks samt `handback`-Kontext in seine Mailbox.
 - **Robuster Consumer**: Der Worker verarbeitet `events`-Seiten und ackt erst nach erfolgreichem `commit` – bei Neustart werden unbestätigte Ereignisse erneut geliefert (At-least-once).
-- **Notify-Streams**: UI- oder Audit-Consumer abonnieren `notify({ type: "Msg" })` und bleiben über `events`/`ack` über alle Raum-Änderungen informiert, auch über Prozessneustarts hinweg.
+- **Notify-Streams**: UI- oder Audit-Consumer abonnieren `notify({ type: "Msg" })` und bleiben über `events`/`ack` über passende Writes informiert (keine vollständige Änderungs-/Löschhistorie), auch über Prozessneustarts hinweg.

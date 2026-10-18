@@ -27,18 +27,18 @@ While `read(template, timeout)` and `take(template, timeout)` block the active c
 Remote clients (`RemoteSpace`) poll their mailbox via `events` and acknowledge processed prefixes via `ack`:
 
 ```ts
-const page = await remote.events("self", { after: cursor, waitMs: 5_000 });
-for (const ev of page.events) {
-  // For a take-waiter, ev.txn holds the reserved transaction:
-  // write result and commit ev.txn!
+const page = await remote.events({ after: cursor, waitMs: 5_000 });
+if (page.gap) throw new Error("Mailbox reset: reload state before processing");
+for (const item of page.events) {
+  await handleEvent(item.event); // Must persist result and commit event.txn before returning.
 }
-if (page.next !== null) {
-  await remote.ack("self", page.mailboxEpoch, page.next);
+if (page.events.length > 0) {
+  await remote.ack(page.mailboxEpoch, page.next);
 }
 ```
 
-- **Critical Boundary**: `ack(epoch, upTo)` only acknowledges receipt of mailbox events up to sequence `upTo`—it is **not** a transaction commit! A delivered take transaction must still be committed explicitly via `commit(ev.txn)`.
-- If a mailbox overflows its 7-day TTL or 8 MiB limit, `mailboxEpoch` increments, `gap` is reported, and unacknowledged take reservations are released.
+- **Critical Boundary**: `ack(epoch, upTo)` only acknowledges receipt of mailbox events up to sequence `upTo`—it is **not** a transaction commit! A delivered take transaction must still be committed explicitly via `commit(ev.event.txn)`.
+- TTL expiry changes mailboxEpoch, reports gap and releases affected take reservations. Byte exhaustion rejects new effects with ResourceExhausted instead of silently dropping events.
 
 ## See Also {#see-also}
 

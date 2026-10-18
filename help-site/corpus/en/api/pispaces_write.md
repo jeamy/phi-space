@@ -36,6 +36,7 @@ const lease = await space.write(
 | `entry` | `EntryDraft` | Immutable draft: mandatory `type`, optional subtype list `types`, and free-form JSON `fields`. |
 | `txn` | `string | null` | ID of an open transaction; `null` = immediate standalone commit. |
 | `lease` | `number` | Lifetime in milliseconds or `FOREVER` for unbounded. |
+| `options.unique` | `string[]` | Optional atomic creation by key fields; no global cross-shard uniqueness. Remote requires write.unique. |
 | `options.request` | `RequestRef` | Optional claim `{ principal, generation, requestId }` for restart-safe idempotency. |
 | **Return** | `Promise<Lease>` | `{ id, expires }` – the basis for `renew`/`cancel` and presence heartbeats. |
 

@@ -1,6 +1,6 @@
 {
   "schema": "pi-spaces-help-product-catalog-v1",
-  "reviewed": "2026-10-16",
+  "reviewed": "2026-10-18",
   "areas": [
     {
       "id": "spaces_system_map",
@@ -15,14 +15,40 @@
         "en": "Technical system map for tuple spaces, the 6 architecture layers, the data and consistency model, and binding guarantees and boundaries."
       },
       "searchAliases": {
-        "de": ["pi-spaces", "system", "system map", "übersicht", "architektur", "tuple space", "linda", "javaspaces", "garantien", "grenzen", "schichten"],
-        "en": ["pi-spaces", "system", "system map", "overview", "architecture", "tuple space", "linda", "javaspaces", "guarantees", "boundaries", "layers"]
+        "de": [
+          "pi-spaces",
+          "system",
+          "system map",
+          "übersicht",
+          "architektur",
+          "tuple space",
+          "linda",
+          "javaspaces",
+          "garantien",
+          "grenzen",
+          "schichten"
+        ],
+        "en": [
+          "pi-spaces",
+          "system",
+          "system map",
+          "overview",
+          "architecture",
+          "tuple space",
+          "linda",
+          "javaspaces",
+          "guarantees",
+          "boundaries",
+          "layers"
+        ]
       },
       "articleIds": [
         "help.topic.overview",
         "help.topic.architecture_layers",
         "help.topic.guarantees_and_boundaries",
-        "help.topic.comparison_earendil_vs_pi_spaces"
+        "help.topic.comparison_earendil_vs_pi_spaces",
+        "help.topic.async_interaction",
+        "help.topic.topology_and_readiness"
       ]
     },
     {
@@ -38,13 +64,40 @@
         "en": "Pure state machine, document version 5, global IDs (gid), subtypes, wildcard templates, leases, transactions, CompletionProfiles, and byte budgets."
       },
       "searchAliases": {
-        "de": ["core", "entry", "entries", "template", "wildcard", "gid", "lease", "txn", "transaktion", "completionprofile", "limits", "budget"],
-        "en": ["core", "entry", "entries", "template", "wildcard", "gid", "lease", "txn", "transaction", "completionprofile", "limits", "budget"]
+        "de": [
+          "core",
+          "entry",
+          "entries",
+          "template",
+          "wildcard",
+          "gid",
+          "lease",
+          "txn",
+          "transaktion",
+          "completionprofile",
+          "limits",
+          "budget"
+        ],
+        "en": [
+          "core",
+          "entry",
+          "entries",
+          "template",
+          "wildcard",
+          "gid",
+          "lease",
+          "txn",
+          "transaction",
+          "completionprofile",
+          "limits",
+          "budget"
+        ]
       },
       "articleIds": [
         "help.topic.entries_and_templates",
         "help.topic.leases_and_transactions",
-        "help.topic.completion_profiles_and_limits"
+        "help.topic.completion_profiles_and_limits",
+        "help.topic.task_lifecycle"
       ]
     },
     {
@@ -60,13 +113,40 @@
         "en": "Idempotent request claims (RequestRef + generation), RFC-8785 argument hashes, byte-bounded snapshot pages (readPage), revision streams (changes), and consumer mailboxes (events/ack)."
       },
       "searchAliases": {
-        "de": ["claims", "requestref", "generation", "idempotenz", "readpage", "snapshot", "changes", "revision", "rev", "mailbox", "events", "ack"],
-        "en": ["claims", "requestref", "generation", "idempotency", "readpage", "snapshot", "changes", "revision", "rev", "mailbox", "events", "ack"]
+        "de": [
+          "claims",
+          "requestref",
+          "generation",
+          "idempotenz",
+          "readpage",
+          "snapshot",
+          "changes",
+          "revision",
+          "rev",
+          "mailbox",
+          "events",
+          "ack"
+        ],
+        "en": [
+          "claims",
+          "requestref",
+          "generation",
+          "idempotency",
+          "readpage",
+          "snapshot",
+          "changes",
+          "revision",
+          "rev",
+          "mailbox",
+          "events",
+          "ack"
+        ]
       },
       "articleIds": [
         "help.topic.request_claims_and_generations",
         "help.topic.snapshots_and_change_streams",
-        "help.topic.durable_mailboxes_and_ack"
+        "help.topic.durable_mailboxes_and_ack",
+        "help.topic.live_sync_recipe"
       ]
     },
     {
@@ -82,12 +162,37 @@
         "en": "Local client PiSpaces, named spaces (NamedSpace/Registry), reaper and event delivery (startService), plus the 8 replay-safe LLM agent tools."
       },
       "searchAliases": {
-        "de": ["pispaces", "client", "namedspace", "createspace", "listspaces", "startservice", "reaper", "tools", "space_write", "space_take", "agent"],
-        "en": ["pispaces", "client", "namedspace", "createspace", "listspaces", "startservice", "reaper", "tools", "space_write", "space_take", "agent"]
+        "de": [
+          "pispaces",
+          "client",
+          "namedspace",
+          "createspace",
+          "listspaces",
+          "startservice",
+          "reaper",
+          "tools",
+          "space_write",
+          "space_take",
+          "agent"
+        ],
+        "en": [
+          "pispaces",
+          "client",
+          "namedspace",
+          "createspace",
+          "listspaces",
+          "startservice",
+          "reaper",
+          "tools",
+          "space_write",
+          "space_take",
+          "agent"
+        ]
       },
       "articleIds": [
         "help.topic.local_client_and_named_spaces",
-        "help.topic.agent_tools_and_replay"
+        "help.topic.agent_tools_and_replay",
+        "help.topic.first_running_space"
       ]
     },
     {
@@ -103,11 +208,34 @@
         "en": "Transport-independent SpaceService, role policy, RemoteSpace over Unix socket, TCP, and pi-serverd, plus safe resolution of OutcomeUnknown."
       },
       "searchAliases": {
-        "de": ["spaceservice", "remotespace", "socket", "tcp", "pi-server", "pi-serverd", "outcomeunknown", "polloperation", "policy", "identityadapter"],
-        "en": ["spaceservice", "remotespace", "socket", "tcp", "pi-server", "pi-serverd", "outcomeunknown", "polloperation", "policy", "identityadapter"]
+        "de": [
+          "spaceservice",
+          "remotespace",
+          "socket",
+          "tcp",
+          "pi-server",
+          "pi-serverd",
+          "outcomeunknown",
+          "polloperation",
+          "policy",
+          "identityadapter"
+        ],
+        "en": [
+          "spaceservice",
+          "remotespace",
+          "socket",
+          "tcp",
+          "pi-server",
+          "pi-serverd",
+          "outcomeunknown",
+          "polloperation",
+          "policy",
+          "identityadapter"
+        ]
       },
       "articleIds": [
-        "help.topic.space_service_and_remote_space"
+        "help.topic.space_service_and_remote_space",
+        "help.topic.failure_playbook"
       ]
     },
     {
@@ -123,11 +251,42 @@
         "en": "Two-layer security (Layer A NetBird peer, Layer B Ed25519/P-256 challenge), token/QR enrollment, 60s grants, key rotation, boot guard, and restore."
       },
       "searchAliases": {
-        "de": ["gate", "netbird", "auth", "challenge", "ed25519", "enroll", "qr", "grant", "grants", "rotation", "boot", "recovery", "restore", "fencing"],
-        "en": ["gate", "netbird", "auth", "challenge", "ed25519", "enroll", "qr", "grant", "grants", "rotation", "boot", "recovery", "restore", "fencing"]
+        "de": [
+          "gate",
+          "netbird",
+          "auth",
+          "challenge",
+          "ed25519",
+          "enroll",
+          "qr",
+          "grant",
+          "grants",
+          "rotation",
+          "boot",
+          "recovery",
+          "restore",
+          "fencing"
+        ],
+        "en": [
+          "gate",
+          "netbird",
+          "auth",
+          "challenge",
+          "ed25519",
+          "enroll",
+          "qr",
+          "grant",
+          "grants",
+          "rotation",
+          "boot",
+          "recovery",
+          "restore",
+          "fencing"
+        ]
       },
       "articleIds": [
-        "help.topic.gate_auth_grants_and_recovery"
+        "help.topic.gate_auth_grants_and_recovery",
+        "help.topic.safe_operations"
       ]
     },
     {
@@ -143,8 +302,32 @@
         "en": "RouterController with journal partitions, signed RouterLease and delegation, FederationPolicy (HRW/expand), FederatedSpace, waiter race, membership, and principal erasure."
       },
       "searchAliases": {
-        "de": ["federation", "router", "routerlease", "delegation", "hrw", "expand", "federatedspace", "takewaiting", "membership", "drain", "erasure"],
-        "en": ["federation", "router", "routerlease", "delegation", "hrw", "expand", "federatedspace", "takewaiting", "membership", "drain", "erasure"]
+        "de": [
+          "federation",
+          "router",
+          "routerlease",
+          "delegation",
+          "hrw",
+          "expand",
+          "federatedspace",
+          "takewaiting",
+          "membership",
+          "drain",
+          "erasure"
+        ],
+        "en": [
+          "federation",
+          "router",
+          "routerlease",
+          "delegation",
+          "hrw",
+          "expand",
+          "federatedspace",
+          "takewaiting",
+          "membership",
+          "drain",
+          "erasure"
+        ]
       },
       "articleIds": [
         "help.topic.federation_router_and_membership"
@@ -163,11 +346,38 @@
         "en": "RunGate & RunController, WorkerSupervisor, space lifecycle, control via mobile app (pi-termux-mobile) & web admin (AdminSpaces), plus Phase 3 replication."
       },
       "searchAliases": {
-        "de": ["rungate", "runcontroller", "workersupervisor", "worker", "mobile", "admin", "adminspaces", "steuerung", "replikation", "lww", "hlc", "primary"],
-        "en": ["rungate", "runcontroller", "workersupervisor", "worker", "mobile", "admin", "adminspaces", "control", "replication", "lww", "hlc", "primary"]
+        "de": [
+          "rungate",
+          "runcontroller",
+          "workersupervisor",
+          "worker",
+          "mobile",
+          "admin",
+          "adminspaces",
+          "steuerung",
+          "replikation",
+          "lww",
+          "hlc",
+          "primary"
+        ],
+        "en": [
+          "rungate",
+          "runcontroller",
+          "workersupervisor",
+          "worker",
+          "mobile",
+          "admin",
+          "adminspaces",
+          "control",
+          "replication",
+          "lww",
+          "hlc",
+          "primary"
+        ]
       },
       "articleIds": [
-        "help.topic.operations_mobile_and_replication"
+        "help.topic.operations_mobile_and_replication",
+        "help.topic.social_swarm_pipeline"
       ]
     },
     {
@@ -183,8 +393,36 @@
         "en": "Hands-on guide from a local zero-setup space (v1) to a federated cluster with mobile/web admin (v6) using the Multiplayer Space-Chat, plus the faceted API & Tool Finder."
       },
       "searchAliases": {
-        "de": ["tutorial", "schritt für schritt", "multiplayer", "chat", "v1", "v2", "v3", "v4", "v5", "v6", "api", "referenz", "beispiele"],
-        "en": ["tutorial", "step by step", "multiplayer", "chat", "v1", "v2", "v3", "v4", "v5", "v6", "api", "reference", "examples"]
+        "de": [
+          "tutorial",
+          "schritt für schritt",
+          "multiplayer",
+          "chat",
+          "v1",
+          "v2",
+          "v3",
+          "v4",
+          "v5",
+          "v6",
+          "api",
+          "referenz",
+          "beispiele"
+        ],
+        "en": [
+          "tutorial",
+          "step by step",
+          "multiplayer",
+          "chat",
+          "v1",
+          "v2",
+          "v3",
+          "v4",
+          "v5",
+          "v6",
+          "api",
+          "reference",
+          "examples"
+        ]
       },
       "articleIds": [
         "help.workflow.overview_v1_to_v6",
@@ -195,7 +433,15 @@
         "help.workflow.stage_v5_federated_cluster",
         "help.workflow.stage_v6_mobile_control"
       ],
-      "providers": ["core", "client", "tools", "remote", "security", "federation", "ops"]
+      "providers": [
+        "core",
+        "client",
+        "tools",
+        "remote",
+        "security",
+        "federation",
+        "ops"
+      ]
     }
   ],
   "modulePackages": [
@@ -212,9 +458,20 @@
         "de": "Reine Tuple-Space-Semantik: Entries, Subtypen, Templates, Leases, Transaktionen, CompletionProfiles, RunGates und Limits.",
         "en": "Pure tuple-space semantics: entries, subtypes, templates, leases, transactions, CompletionProfiles, RunGates, and limits."
       },
-      "families": ["entries_templates", "leases_transactions", "completion_profiles", "limits_quotas"],
-      "modes": ["pure_sync", "atomic_commit"],
-      "scopes": ["single_space", "named_space"]
+      "families": [
+        "entries_templates",
+        "leases_transactions",
+        "completion_profiles",
+        "limits_quotas"
+      ],
+      "modes": [
+        "pure_sync",
+        "atomic_commit"
+      ],
+      "scopes": [
+        "single_space",
+        "named_space"
+      ]
     },
     {
       "id": "pkg_client",
@@ -229,9 +486,21 @@
         "de": "Lokaler SpaceLike-Client, RequestRef-Claims, Snapshot-Paginierung (readPage), Revisionsströme (changes) und dauerhafte Consumer-Mailboxes.",
         "en": "Local SpaceLike client, RequestRef claims, snapshot pagination (readPage), revision streams (changes), and durable consumer mailboxes."
       },
-      "families": ["local_client", "request_claims", "streams_snapshots", "durable_mailboxes"],
-      "modes": ["blocking_wait", "non_blocking_event", "snapshot_stream"],
-      "scopes": ["single_space", "named_space"]
+      "families": [
+        "local_client",
+        "request_claims",
+        "streams_snapshots",
+        "durable_mailboxes"
+      ],
+      "modes": [
+        "blocking_wait",
+        "non_blocking_event",
+        "snapshot_stream"
+      ],
+      "scopes": [
+        "single_space",
+        "named_space"
+      ]
     },
     {
       "id": "pkg_tools",
@@ -246,9 +515,18 @@
         "de": "8 replay-sichere Agenten-Tools (space_write bis space_lease) mit task-gebundenen Claims sowie startService (Reaper & Delivery).",
         "en": "8 replay-safe agent tools (space_write through space_lease) with task-scoped claims plus startService (reaper & delivery)."
       },
-      "families": ["agent_tools", "service_reaper"],
-      "modes": ["replay_safe_tool", "background_loop"],
-      "scopes": ["conversation_owned", "host_admin"]
+      "families": [
+        "agent_tools",
+        "service_reaper"
+      ],
+      "modes": [
+        "replay_safe_tool",
+        "background_loop"
+      ],
+      "scopes": [
+        "conversation_owned",
+        "host_admin"
+      ]
     },
     {
       "id": "pkg_remote",
@@ -263,9 +541,20 @@
         "de": "Transportunabhängiger Space-RPC-Dienst, Rollen-Policy und RemoteSpace-Client mit automatischem Retry und OutcomeUnknown-Auflösung.",
         "en": "Transport-independent Space RPC service, role policy, and RemoteSpace client with automatic retry and OutcomeUnknown resolution."
       },
-      "families": ["rpc_service", "remote_client", "transports"],
-      "modes": ["rpc_retry", "mailbox_poll"],
-      "scopes": ["unix_socket", "tcp_overlay", "pi_serverd"]
+      "families": [
+        "rpc_service",
+        "remote_client",
+        "transports"
+      ],
+      "modes": [
+        "rpc_retry",
+        "mailbox_poll"
+      ],
+      "scopes": [
+        "unix_socket",
+        "tcp_overlay",
+        "pi_serverd"
+      ]
     },
     {
       "id": "pkg_security",
@@ -280,9 +569,22 @@
         "de": "NetBird-Peer-Prüfung, Ed25519/P-256-Challenge, Token/QR-Enrollment, 60-s-Grants, Schlüsselrotation, CAS-Boot-Register und Restore-Quarantäne.",
         "en": "NetBird peer verification, Ed25519/P-256 challenge, token/QR enrollment, 60s grants, key rotation, CAS boot register, and restore quarantine."
       },
-      "families": ["overlay_gate", "enrollment_rotation", "short_lived_grants", "boot_and_restore"],
-      "modes": ["crypto_challenge", "cas_register", "journaled_restore"],
-      "scopes": ["control_space", "data_space", "recovery_socket"]
+      "families": [
+        "overlay_gate",
+        "enrollment_rotation",
+        "short_lived_grants",
+        "boot_and_restore"
+      ],
+      "modes": [
+        "crypto_challenge",
+        "cas_register",
+        "journaled_restore"
+      ],
+      "scopes": [
+        "control_space",
+        "data_space",
+        "recovery_socket"
+      ]
     },
     {
       "id": "pkg_federation",
@@ -297,9 +599,21 @@
         "de": "Journalisierter RouterController, RouterLease, Original-Principal-Delegation, HRW-Sharding, FederatedSpace, Waiter-Wettlauf und Principal-Erasure.",
         "en": "Journaled RouterController, RouterLease, original-principal delegation, HRW sharding, FederatedSpace, waiter race, and principal erasure."
       },
-      "families": ["router_journal", "delegation_policy", "federated_space", "membership_erasure"],
-      "modes": ["journaled_command", "hrw_routing", "waiter_race"],
-      "scopes": ["multi_member_cluster", "partitioned_journal"]
+      "families": [
+        "router_journal",
+        "delegation_policy",
+        "federated_space",
+        "membership_erasure"
+      ],
+      "modes": [
+        "journaled_command",
+        "hrw_routing",
+        "waiter_race"
+      ],
+      "scopes": [
+        "multi_member_cluster",
+        "partitioned_journal"
+      ]
     },
     {
       "id": "pkg_ops",
@@ -314,9 +628,22 @@
         "de": "RunController mit ACK-Barriere, WorkerSupervisor, Space-Lebenszyklus, Deployment-Bootstrap, Alerts/Audit sowie MobileSpaces & AdminSpaces.",
         "en": "RunController with ACK barrier, WorkerSupervisor, space lifecycle, deployment bootstrap, alerts/audit, plus MobileSpaces & AdminSpaces."
       },
-      "families": ["run_control", "worker_supervisor", "space_lifecycle", "mobile_web_admin"],
-      "modes": ["ack_barrier", "signed_assignment", "admin_command"],
-      "scopes": ["coordinator_control", "mobile_app", "web_admin"]
+      "families": [
+        "run_control",
+        "worker_supervisor",
+        "space_lifecycle",
+        "mobile_web_admin"
+      ],
+      "modes": [
+        "ack_barrier",
+        "signed_assignment",
+        "admin_command"
+      ],
+      "scopes": [
+        "coordinator_control",
+        "mobile_app",
+        "web_admin"
+      ]
     }
   ]
 }

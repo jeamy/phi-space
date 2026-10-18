@@ -12,7 +12,8 @@ export async function appendHistory(space: SpaceLike, post: SwarmPost, txn: stri
 }
 
 /** Idempotently creates the history head. Awaited before workers so appendHistory never misses it. */
-export async function ensureHistoryHead(space: SpaceLike): Promise<void> {
+export async function ensureHistoryHead(space: SpaceLike, signal?: AbortSignal): Promise<void> {
+	signal?.throwIfAborted();
 	let head = await space.read({ type: "PostHistoryHead" }, 0);
 	if (head) return;
 	try {
@@ -23,6 +24,7 @@ export async function ensureHistoryHead(space: SpaceLike): Promise<void> {
 		// brings it back — probe until its lease lapses (60s) instead of killing init.
 		const deadline = Date.now() + 90_000;
 		while (!head && Date.now() < deadline) {
+			signal?.throwIfAborted();
 			await new Promise((r) => setTimeout(r, 2_000));
 			head = await space.read({ type: "PostHistoryHead" }, 0);
 		}
@@ -35,17 +37,19 @@ export async function ensureHistoryHead(space: SpaceLike): Promise<void> {
  * commit (head take once, N node writes, head write once) instead of ~3 commits per post –
  * on a 30k-entry store that is the difference between minutes and hours.
  */
-export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHost; spaceId: string; ctx: Context }): Promise<void> {
+export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHost; spaceId: string; ctx: Context; signal?: AbortSignal }): Promise<void> {
+	bulk?.signal?.throwIfAborted();
 	let head = await space.read({ type: "PostHistoryHead" }, 0);
 	if (head && head.fields.ready !== false) return;
 	if (!head) {
-		await ensureHistoryHead(space);
+		await ensureHistoryHead(space, bulk?.signal);
 		head = await space.read({ type: "PostHistoryHead" }, 0);
 	}
 	// One-time migration before workers start. Snapshot pages bound transport; only this migration sorts all historical posts.
 	const posts: SwarmPost[] = [];
 	let after: string | null = null, token: string | undefined;
 	do {
+		bulk?.signal?.throwIfAborted();
 		const page = await space.readPage({ type: "Post" }, { after, token, maxBytes: 64_000 });
 		posts.push(...page.items.map(e => e.fields as unknown as SwarmPost)); after = page.next; token = page.token;
 	} while (after !== null);
@@ -57,6 +61,7 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 	let maxBatch = bulk ? 128 : 8;
 	const retryDeadline = Date.now() + 120_000;
 	for (let i = 0; i < pending.length;) {
+		bulk?.signal?.throwIfAborted();
 		const start = i;
 		try {
 			if (bulk) {
@@ -91,6 +96,7 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 				await space.commit(txn.id);
 			} catch (e) { await space.abort(txn.id).catch(() => {}); throw e; }
 		} catch (e) {
+			bulk?.signal?.throwIfAborted();
 			i = start;
 			if (e instanceof ResourceExhausted && maxBatch > 1) { maxBatch >>= 1; continue; }
 			// Contention with live appends (the head is a hot entry): bounded retry, then fail.
@@ -98,6 +104,7 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 			throw e;
 		}
 	}
+	bulk?.signal?.throwIfAborted();
 	const txn = await space.createTransaction(10_000);
 	try {
 		const last = await space.take({ type: "PostHistoryHead" }, 5_000, { txn: txn.id });

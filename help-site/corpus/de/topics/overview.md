@@ -19,10 +19,10 @@ since: 0.0.1
 
 `pi-spaces` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
 
-1. **Fehlertolerante Aufgabenübergabe (Work Queues ohne Verlust)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (`type: "ChatTask"` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (`take`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – nichts geht verloren.
-2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen `ScheduledJob` einstellen und offline gehen; der Space-Service hält den Task sicher, bis ein Worker bereit ist oder die Deadline (`TimerLock`-Lease) ausgelöst wird.
+1. **Fehlertolerante Aufgabenübergabe (mit geleaster Reservierung)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (`type: "ChatTask"` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (`take`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – sofern die eigene Task-Lease noch gilt und der Store verfügbar ist.
+2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen `ScheduledJob` einstellen und offline gehen; mit persistentem Backend und ausreichender Task-Lease bleibt der Auftrag erhalten; die Anwendung prüft nach Ablauf des TimerLock die Fälligkeit.
 3. **Einheitlicher Zustand mit Live-Ereignissen**: Statt fragmentierter Caches bietet jeder Space atomare Transaktionen (`createTransaction`, `commit`, `abort`), konsistente Snapshots (`readPage` mit `rev`), inkrementelle Update-Streams (`changes(afterRev)`) und langlebige Ereignis-Mailboxes (`events` + Präfix-`ack`).
-4. **Einkomponentige Systeme zu verteilten Cluster wachsen**: Derselbe Fachcode (auf dem Interface `SpaceLike`) läuft nahtlos von einem reinen RAM-Store auf einem Laptop bis hin zum verschlüsselten, horizontal geshardeten Multi-Host-Cluster mit zentraler Mobile- und Web-Administration (`AdminSpaces`).
+4. **Schrittweise Verteilung**: Lokale und Remote-Clients teilen den SpaceLike-Basisvertrag. Federation ergänzt Routing und eigene Request-Bindungen; reale Verschlüsselung, Provisionierung und Ausfallsicherheit benötigen gesonderte Konfiguration und Abnahme.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -32,13 +32,13 @@ In `pi-spaces` müssen Produzent und Konsument einander nicht kennen und nicht g
 
 - **Schreiben (`space.write`)**: Ein Teilnehmer legt einen Entry `{ type: string, types?: string[], fields: Record<string, Json> }` mit einer definierten Ablaufzeit (**Lease**) im Space ab.
 - **Lesen (`space.read` / `readIfExists` / `readAll` / `readPage`)**: Ein Teilnehmer sucht mit einem **Template** `{ type?, fields?, id? }` nach einem passenden sichtbaren Entry, ohne ihn zu entfernen. Fehlende oder `null`-Felder im Template wirken als **Wildcards**.
-- **Exklusives Entnehmen (`space.take`)**: Ein Worker entnimmt einen passenden Entry exklusiv. Erfolgt der `take` unter einer **Transaktion (`txn`)**, bleibt der Entry reserviert, bis der Worker seine Ergebnisse geschrieben und `commit(txn)` aufgerufen hat. Stürzt der Worker ab oder läuft die Transaktions-Lease ab, kehrt der Entry automatisch und verlustfrei in den Space zurück.
+- **Exklusives Entnehmen (`space.take`)**: Ein Worker entnimmt einen passenden Entry exklusiv. Erfolgt der `take` unter einer **Transaktion (`txn`)**, bleibt der Entry reserviert, bis der Worker seine Ergebnisse geschrieben und `commit(txn)` aufgerufen hat. Stürzt der Worker ab oder läuft die Transaktions-Lease ab, kehrt der Entry zurück, sofern seine eigene Entry-Lease noch gilt.
 - **Warten auf zukünftige Daten (`space.wait`)**: Statt blind zu pollen, registriert ein Teilnehmer einen langlebigen `Waiter` auf ein Template. Sobald ein passender Entry committet wird, weckt `pi-spaces` den Waiter oder sendet ein Ereignis.
 
 ### Was kann pi-spaces? (Kernfähigkeiten) {#capabilities}
 
 - **Unveränderliche Entries & Wildcard-Templates**: Typisierte JSON-Objekte mit Subtypen-Registrierung (`types`) und exaktem `type`/Feld-Matching.
-- **Atomare Space-Transaktionen**: `take` + mehrere `write` + optionale Request-Claims in einem einzigen `commit(txn)`. Bei `abort` oder Timeout wird alles atomar zurückgerollt.
+- **Atomare Space-Transaktionen**: `take` + mehrere `write` + optionale Request-Claims mit einem fachlichen `commit(txn)` (vorherige PiSpaces-Aufrufe sind separate Storage-Commits). Bei `abort` oder Timeout wird alles atomar zurückgerollt.
 - **Serverseitige Ergebnisgarantien (`CompletionProfiles`)**: Der Space-Kern erzwingt beim Commit, dass ein genommener Task des Typs `ChatTask` nur zusammen mit genau einem passenden Ergebnis-Entry `Msg` erfolgreich commitet werden kann.
 - **Idempotente Request-Claims (`RequestRef`)**: Jede Mutation kann mit `{ request: { principal, generation, requestId } }` ausgeführt werden; Wiederholungen und Timeouts erzeugen keine doppelte Wirkung.
 - **Leases & automatischer Reaper (`startService`)**: Entries, Presence-Zustände und `TimerLock`-Schlösser laufen nach definierter Zeit automatisch ab.
@@ -48,7 +48,7 @@ In `pi-spaces` müssen Produzent und Konsument einander nicht kennen und nicht g
 
 ### Einheitlicher Basisvertrag SpaceLike {#spacelike-contract}
 
-Der lokale Client `PiSpaces`, der Netzwerk-Client `RemoteSpace` und der Cluster-Client `FederatedSpace` implementieren denselben TypeScript-Basisvertrag `SpaceLike`. Anwendungscode – wie unser [Multiplayer Space-Chat](help.workflow.overview_v1_to_v6#overview) – bleibt dadurch von Stufe `v1` (In-Memory) bis Stufe `v5` (Multi-Host-Cluster) im Kern vollkommen unverändert.
+PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpace besitzt eine eigene API mit FederationRequest und Member-Transaktionsbindung; Fachkonzepte sind übertragbar, Aufrufsignaturen nicht unverändert austauschbar. Siehe [Topologien und API-Grenzen](help.topic.topology_and_readiness#api).
 
 ## Begriffe und Identitäten {#terms-and-identities}
 

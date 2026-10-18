@@ -28,7 +28,7 @@ await space.commit(txn.id, { request: reqCommit });
 - **Isolation**: Unter `txn` geschriebene Entries sind nur für Operationen mit derselben `txnId` sichtbar; reservierte Takes sind für andere Consumer gesperrt.
 - **Atomarität**: `commit` wendet alle Writes und Takes gemeinsam an, erhöht `rev` genau einmal und stößt die zugehörigen Mailbox-Ereignisse an. `abort` verwirft alles und gibt reservierte Entries frei.
 - **Lease**: Die Transaktion besitzt eine eigene Lease (Argument `lease`); bei Ablauf ohne Commit erfolgt implizit ein `abort`.
-- **Vertragsprüfung**: Vor dem Commit prüft der Kern alle `CompletionProfiles` (`CompletionViolation` bei fehlenden Ergebnissen) und die konfigurierten Byte-Budgets (`LimitsExceeded`).
+- **Vertragsprüfung**: Vor dem Commit prüft der Kern alle `CompletionProfiles` (`CompletionViolation` bei fehlenden Ergebnissen) und die konfigurierten Byte-Budgets (`ResourceExhausted`).
 
 ## Typische Anwendungsfälle {#use-cases}
 

@@ -1,0 +1,48 @@
+// Displayed API signatures come from the compiler, never a manually maintained string.
+import ts from "typescript";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const bindings: Record<string, string[]> = {
+	pispaces_write: ["PiSpaces.write"], pispaces_read: ["PiSpaces.read", "PiSpaces.readIfExists"],
+	pispaces_take: ["PiSpaces.take", "PiSpaces.takeIfExists"],
+	pispaces_txn: ["PiSpaces.createTransaction", "PiSpaces.commit", "PiSpaces.abort"],
+	pispaces_lease: ["PiSpaces.renew", "PiSpaces.cancel"],
+	pispaces_read_page_changes: ["PiSpaces.readPage", "PiSpaces.changes", "PiSpaces.readAll", "PiSpaces.count", "PiSpaces.stats"],
+	pispaces_wait_notify_mailbox: ["PiSpaces.wait", "PiSpaces.notify", "PiSpaces.events", "PiSpaces.ack", "RemoteSpace.events", "RemoteSpace.ack"],
+	pispaces_claims: ["PiSpaces.issueGeneration", "PiSpaces.pollOperation", "PiSpaces.cancelOperation", "PiSpaces.resolveOperation"],
+	pispaces_completion_profiles: ["PiSpaces.setCompletionProfiles", "PiSpaces.setLimits"],
+	agent_tools: ["createSpaces", "startService"],
+	space_service_and_remote: ["SpaceService", "serveSpace", "RemoteSpace", "socketTransport"],
+	gate_auth_grants: ["startFederationHost", "GrantAuthority.issue", "RemoteSpace.enroll", "RemoteSpace.rotateKey"],
+	federation_controller: ["createFederationController", "FederatedSpace.write", "FederatedSpace.read", "FederatedSpace.take", "FederatedSpace.takeWaiting", "FederatedSpace.readAll"],
+	operations_runs_workers: ["RunController.start", "RunController.pause", "RunController.resume", "RunController.stop", "collectAlerts"],
+};
+
+export function apiSignatures(): Map<string, string> {
+	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts");
+	const program = ts.createProgram([path], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
+	const checker = program.getTypeChecker(), source = program.getSourceFile(path)!;
+	const exports = new Map(checker.getExportsOfModule(checker.getSymbolAtLocation(source)!).map(s => [s.name,s]));
+	const output = new Map<string,string>();
+	for(const [id, names] of Object.entries(bindings)) {
+		const signatures = names.map(binding => {
+			const [name, method] = binding.split(".");
+			let symbol = exports.get(name!);
+			if(!symbol)throw new Error(`Missing documented API export ${binding}`);
+			if(symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+			let type: ts.Type;
+			if(method) {
+				const instance = checker.getDeclaredTypeOfSymbol(symbol), property = checker.getPropertyOfType(instance,method);
+				if(!property)throw new Error(`Missing documented API method ${binding}`);
+				type=checker.getTypeOfSymbolAtLocation(property,property.valueDeclaration ?? source);
+			} else type=checker.getTypeOfSymbolAtLocation(symbol,symbol.valueDeclaration ?? source);
+			const call=checker.getSignaturesOfType(type,ts.SignatureKind.Call), construct=checker.getSignaturesOfType(type,ts.SignatureKind.Construct);
+			const signatures=call.length?call:construct;
+			if(!signatures.length)throw new Error(`No callable API signature ${binding}`);
+			return `${!call.length?"new ":""}${binding}${checker.signatureToString(signatures[0]!,source,ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope)}`;
+		});
+		output.set(`help.api.${id}`,signatures.join("; "));
+	}
+	return output;
+}

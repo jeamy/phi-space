@@ -27,18 +27,18 @@ Während `read(template, timeout)` und `take(template, timeout)` den aktuellen A
 Entfernte Clients (`RemoteSpace`) rufen ihre Mailbox über `events` ab und bestätigen verarbeitete Nachrichten per `ack`:
 
 ```ts
-const page = await remote.events("self", { after: cursor, waitMs: 5_000 });
-for (const ev of page.events) {
-  // Bei einem Take-Waiter trägt ev.txn die reservierte Transaktion:
-  // Ergebnis schreiben und ev.txn committen!
+const page = await remote.events({ after: cursor, waitMs: 5_000 });
+if (page.gap) throw new Error("Mailbox reset: reload state before processing");
+for (const item of page.events) {
+  await handleEvent(item.event); // Must persist result and commit event.txn before returning.
 }
-if (page.next !== null) {
-  await remote.ack("self", page.mailboxEpoch, page.next);
+if (page.events.length > 0) {
+  await remote.ack(page.mailboxEpoch, page.next);
 }
 ```
 
-- **Wichtige Grenze**: `ack(epoch, upTo)` bestätigt ausschließlich, dass der Consumer die Mailbox-Nachrichten bis Sequenz `upTo` erhalten hat – es ist **kein** Transaktions-Commit! Die übergebene Take-Transaktion muss separat mit `commit(ev.txn)` abgeschlossen werden.
-- Läuft eine Mailbox wegen 7-Tage-TTL oder 8-MiB-Limit über, erhöht sich `mailboxEpoch`, `gap` wird gemeldet und nicht bestätigte Take-Reservierungen werden wieder freigegeben.
+- **Wichtige Grenze**: `ack(epoch, upTo)` bestätigt ausschließlich, dass der Consumer die Mailbox-Nachrichten bis Sequenz `upTo` erhalten hat – es ist **kein** Transaktions-Commit! Die übergebene Take-Transaktion muss separat mit `commit(ev.event.txn)` abgeschlossen werden.
+- Bei TTL-Ablauf wechselt mailboxEpoch; gap meldet den Verlustbereich und betroffene Take-Reservierungen werden freigegeben. Bei vollem Bytebudget werden neue Wirkungen mit ResourceExhausted abgewiesen, nicht still Events verworfen.
 
 ## Siehe auch {#see-also}
 

@@ -1,5 +1,6 @@
 // Comprehensive test suite for PI-SPACES / HELP, the 6 Multiplayer Space-Chat stages (v1..v6),
 // the RFC-6455 WebSocket gateway, and the login-protected AdminSpaces portal.
+import "./test-env.ts";
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -19,6 +20,7 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { createModels } from "@earendil-works/pi-ai/models";
 import { Meter, spaces, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport } from "../../src/index.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "../server/social/swarm.ts";
+import { ALL_ARTICLES } from "../scripts/corpus.ts";
 
 test("1. Help Corpus, Markdown {#anchor} rendering & token-aware search", async () => {
 	await buildHelpSite();
@@ -33,8 +35,8 @@ test("1. Help Corpus, Markdown {#anchor} rendering & token-aware search", async 
 		const index = await res.json();
 		assert.equal(index.schema, "pi-spaces-help-site-index-v1");
 		assert.equal(index.areas.length, 9);
-		assert.equal(index.stats.uniqueArticles, 37);
-		assert.equal(index.stats.localizedRecords, 74);
+		assert.equal(index.stats.uniqueArticles, ALL_ARTICLES.length);
+		assert.equal(index.stats.localizedRecords, ALL_ARTICLES.length * 2);
 
 		const deArticles = index.articles.filter((a: any) => a.locale === "de");
 		const gidHits = searchArticles(deArticles, "gid");
@@ -304,7 +306,8 @@ test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, 
 		connection: () => ({ peerId: "peer-hub" }),
 	});
 	const addrB = serverB.address() as AddressInfo;
-	const remoteSpace = new RemoteSpace(socketTransport({ host: "127.0.0.1", port: addrB.port }), { space: SWARM_ALIAS });
+	const transportB = socketTransport({ host: "127.0.0.1", port: addrB.port });
+	const remoteSpace = new RemoteSpace(transportB, { space: SWARM_ALIAS });
 
 	// 2. Hub A (big): own Harness with MemoryStorage, attach remote shard B
 	const regA = createRegistry();
@@ -431,6 +434,7 @@ test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, 
 		assert.ok(localTasks.length >= 1, "post was successfully queued on local Shard A during remote outage");
 	} finally {
 		await hubA.close();
+		transportB.close();
 		await hubB.close();
 		await serverB.close().catch(() => {});
 		await stopServiceA().catch(() => {});

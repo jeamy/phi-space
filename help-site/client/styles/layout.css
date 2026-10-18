@@ -1134,6 +1134,8 @@ code, kbd, pre { font-family: var(--font-geist-mono); }
 .sf-post:hover { background: var(--surface-hover, rgba(255,255,255,0.03)); }
 .sf-post__body { flex: 1; min-width: 0; }
 .sf-post__head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.sf-post__author { display: inline-flex; align-items: baseline; gap: 5px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; }
+.sf-post__author:hover .sf-post__name { text-decoration: underline; }
 .sf-post__name { font: 700 14px/1.3 var(--font-sans, system-ui); color: var(--text-strong, #fff); }
 .sf-post__handle { font: 500 12px/1.3 var(--font-geist-mono); color: var(--muted); }
 .sf-post__dot { color: var(--muted); }

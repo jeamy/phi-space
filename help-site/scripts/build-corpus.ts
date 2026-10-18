@@ -5,11 +5,13 @@
 //   - help-site/dist/public/help/articles/{de,en}/... (localized Markdown snapshots)
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOPIC_AND_WORKFLOW_ARTICLES, type ArticleSeed } from "./corpus-articles-data.ts";
-import { WORKFLOW_AND_API_ARTICLES } from "./corpus-workflows-and-api.ts";
+import type { ArticleSeed } from "./corpus-articles-data.ts";
+import { ALL_ARTICLES } from "./corpus.ts";
+import { corpusHash, validateCorpus } from "./corpus-validation.ts";
+import { apiSignatures } from "./api-signatures.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CORPUS_DIR = join(ROOT, "corpus");
@@ -62,6 +64,7 @@ export interface IndexedArticle {
 	source: {
 		repository: string;
 		commit: string;
+		dirty: boolean;
 	};
 }
 
@@ -150,10 +153,21 @@ export async function buildCorpus(): Promise<{
 	const catalogRaw = await readFile(join(CORPUS_DIR, "help_product_catalog.json"), "utf8");
 	const catalog = JSON.parse(catalogRaw);
 	const apiFactsRaw = await readFile(join(CORPUS_DIR, "api_facts.json"), "utf8");
-	const apiFacts = JSON.parse(apiFactsRaw) as Array<any>;
+	const signatures = apiSignatures();
+	const apiFacts = (JSON.parse(apiFactsRaw) as Array<any>).map(fact => {
+		const signature = signatures.get(fact.id);
+		if (!signature) throw new Error(`No compiler-derived signature for ${fact.id}`);
+		return { ...fact, signature };
+	});
 	const apiMap = new Map<string, any>(apiFacts.map((a) => [a.id, a]));
 
-	const allSeeds: ArticleSeed[] = [...TOPIC_AND_WORKFLOW_ARTICLES, ...WORKFLOW_AND_API_ARTICLES];
+	const allSeeds = ALL_ARTICLES;
+	validateCorpus(allSeeds, catalog, apiFacts);
+	let commit = "unversioned", dirty = true;
+	try {
+		commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+		dirty = !!execFileSync("git", ["status", "--porcelain", "--untracked-files=normal", "--", "scripts", "examples", "client", "corpus/api_facts.json", "corpus/help_product_catalog.json", "../src"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+	} catch { /* Archive/container builds may have no .git: report that honestly. */ }
 	const allIds = new Set(allSeeds.map((s) => s.id));
 
 	// Validate catalog article references
@@ -247,7 +261,8 @@ export async function buildCorpus(): Promise<{
 				})),
 				source: {
 					repository: "pi-spaces",
-					commit: "main-2026-10-16",
+					commit,
+					dirty,
 				},
 			});
 		}
@@ -260,10 +275,7 @@ export async function buildCorpus(): Promise<{
 		}
 	}
 
-	const hash = createHash("sha256")
-		.update(JSON.stringify(articles.map((a) => [a.id, a.locale, a.wordCount])))
-		.digest("hex")
-		.slice(0, 16);
+	const hash = corpusHash({ articles: allSeeds, catalog, apiFacts });
 
 	const siteIndex = {
 		schema: "pi-spaces-help-site-index-v1",
@@ -272,7 +284,8 @@ export async function buildCorpus(): Promise<{
 			theme: "PI_SPACES_HIGHEND_PRODUCT_REFERENCE",
 			domain: "https://spaces.eibrain.org",
 			status: "canonical-main-snapshot",
-			frozenOn: "2026-10-16",
+			frozenOn: catalog.reviewed,
+			builtAt: new Date().toISOString(),
 			hash,
 		},
 		locales: ["de", "en"],
