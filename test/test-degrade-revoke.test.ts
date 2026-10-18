@@ -114,3 +114,23 @@ test('the daemon path: an active standby with a revoked permit keeps serving its
   assert.deepEqual(s.journal.head(),p.journal.head());assert.equal(await jobs(p.harness).count({type:'Job'}),3);
  }finally{await p?.close().catch(()=>{});await s?.close().catch(()=>{});reg.close();installed.p.close();installed.s.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('an emptied replica that its genesis names primary, but whose permit is revoked, opens only its listener',async()=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {Harness,createRegistry}=await import('@earendil-works/pi-durable'),{openNodeSqliteStorage}=await import('@earendil-works/pi-durable/storage/sqlite/node'),{createModels}=await import('@earendil-works/pi-ai/models');
+ const {openSyncSpace,provisionFileSigner}=await import('../src/index.ts');
+ const dir=mkdtempSync(join(tmpdir(),'degrade-revoke-genesis-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
+ const spaceId='sp-0c7e6f1a-1111-4222-8333-944445555aab',incarnation='0a1b2c41',authorityId='authority';
+ const genesis:PrimarySyncConfig={spaceId,authorityId,primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s',durability:'sync'};
+ // p was the first primary; after promotion, way back and a degrade without fencing adapter its permit is revoked.
+ await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[spaceId]:{state:'revoked',authorityId,dataIncarnation:incarnation,role:'standby',primaryEpoch:4,replicaConfigVersion:5,durability:'sync',transitionId:'degrade-revoke'}}});
+ let sp:any;
+ try{
+  sp=await openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(dir,'p'),genesis,port:17573,peers:[{hostId:'s',algorithm:'ed25519',publicKey:provisionFileSigner(join(dir,'s.json')).publicKey,ip:'127.0.0.3'}]},
+   hostId:'p',authorityId,bindIp:'127.0.0.2',signer:provisionFileSigner(join(dir,'p.json')),external:reg,installed,ctx,
+   openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+  assert.equal(sp.harness,undefined,'not served');assert.equal(sp.journal.head().revision,0);
+  const {connect}=await import('node:net');
+  await new Promise<void>((ok,fail)=>{const c=connect({host:'127.0.0.2',port:17573},()=>{c.end();ok();});c.on('error',fail);});
+ }finally{await sp?.close().catch(()=>{});reg.close();installed.close();rmSync(dir,{recursive:true,force:true});}
+});

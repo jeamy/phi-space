@@ -165,33 +165,50 @@ const steps: Array<[string, () => Promise<unknown>]> = [
 	["start-quarantine", async () => { const t = mark(P); service(P, "start"); return { quarantine: await waitFor(P, t, '"quarantine":true') }; }],
 	// The way back with the Root running: routed writes go on while the standby is set up and its notice is adopted.
 	["set-standby", async () => {
-		let r: any;
-		const res = await load("set-standby", 120_000, [{ at: 10_000, name: "set-standby", run: async () => { await stopped(S); const t = mark(P); r = tool(S, { op: "set-standby", tid: "final-standby", target: P.hostId }); await started(S); return { config: r.config, left: await waitFor(P, t, '"leftQuarantine":true') }; } }]);
-		const reg = new TlsRecoveryRegister(cfg.operator.register), b = (await reg.get<any>("boot:" + P.hostId))!.value, readmitted: string[] = [];
-		for (const [id, p] of Object.entries<any>(b.spaces)) if (p.role === "local" && p.state === "revoked") { await readmitSpace(reg, P.hostId, id, { transitionId: "final-readmit", expectedDataIncarnation: p.dataIncarnation }); readmitted.push(id); }
-		reg.close();
-		const ready = await started(P), m = await waitTarget(S.hostId, r.config.replicaConfigVersion);
+		// The old primary leaves quarantine with set-standby and its quarantine daemon ends; it serves as the standby
+		// only after the re-admission and a normal start, so that happens inside the event (writes go on meanwhile).
+		const readmit = async () => {
+			const reg = new TlsRecoveryRegister(cfg.operator.register), b = (await reg.get<any>("boot:" + P.hostId))!.value, readmitted: string[] = [];
+			for (const [id, p] of Object.entries<any>(b.spaces)) if (p.role === "local" && p.state === "revoked") { await readmitSpace(reg, P.hostId, id, { transitionId: "final-readmit", expectedDataIncarnation: p.dataIncarnation }); readmitted.push(id); }
+			reg.close(); return readmitted;
+		};
+		const res = await load("set-standby", 120_000, [{ at: 10_000, name: "set-standby", run: async () => {
+			const before = cfgOf(S); let config = before, left: string | null = null;
+			if (before.standbyReplica !== P.hostId || before.durability !== "sync") { await stopped(S); const t = mark(P); config = tool(S, { op: "set-standby", tid: "final-standby", target: P.hostId }).config; await started(S); left = await waitFor(P, t, '"leftQuarantine":true'); }
+			const readmitted = await readmit(), ready = await started(P);
+			return { config, left, readmitted, ready: ready.slice(0, 120) };
+		} }]);
+		const version = (res.events["set-standby"] as any).config.replicaConfigVersion, m = await waitTarget(S.hostId, version);
 		const after = await load("after-standby", 30_000);
-		check(after.failed === 0 && after.confirmed + after.resolved === after.writes, "routed writes are confirmed by the restored standby");
-		return { during: res, readmitted, ready: ready.slice(0, 120), adopted: m, after, heads: sameHeads() };
+		check(res.failed === 0 && after.failed === 0 && after.confirmed + after.resolved === after.writes, "routed writes during and after set-standby are decided without review; the restored standby confirms");
+		return { during: res, adopted: m, after, heads: sameHeads() };
 	}],
 	// B5: the standby (old primary) is lost; degrade without a fencing adapter revokes only its permit for this Space.
 	["degrade-revoke", async () => {
-		await stopped(P);
-		const w = newWrite("revoke", "revoke-candidate"); attempt(w);
-		const h = head(S); check(w.status === "pending" && h.head.revision === h.applied + 1, "without the standby the routed write is a sealed candidate");
-		await stopped(S);
-		const c = cfgOf(S), r = tool(S, { op: "degrade", tid: "final-degrade-revoke", epoch: c.primaryEpoch, version: c.replicaConfigVersion, revokeStandbySpace: true, fencing: undefined });
-		check(r.config?.durability === "single" && r.recoveredCommitted?.includes(h.head.revision), "degrade without a fencing adapter completed the sealed candidate locally");
+		// Repeatable: a candidate and a degrade that already happened are not repeated.
+		let w = state.writes.find(x => x.requestId === "revoke-candidate"), candidate: number;
+		if (!w) {
+			await stopped(P);
+			w = newWrite("revoke", "revoke-candidate"); attempt(w);
+			const h = head(S); check(w.status === "pending" && h.head.revision === h.applied + 1, "without the standby the routed write is a sealed candidate");
+			candidate = h.head.revision; (state.done as any).revokeCandidate = candidate; save();
+		} else candidate = (state.done as any).revokeCandidate;
+		let r: any;
+		if (cfgOf(S).durability === "sync") {
+			await stopped(S);
+			const c = cfgOf(S); r = tool(S, { op: "degrade", tid: "final-degrade-revoke", epoch: c.primaryEpoch, version: c.replicaConfigVersion, revokeStandbySpace: true, fencing: undefined });
+			check(r.config?.durability === "single" && r.recoveredCommitted?.includes(candidate), "degrade without a fencing adapter completed the sealed candidate locally");
+		} else r = { config: cfgOf(S), recoveredCommitted: head(S).recoveredCommitted };
 		const reg = new TlsRecoveryRegister(cfg.operator.register), b = (await reg.get<any>("boot:" + P.hostId))!.value; reg.close();
 		const sid = head(S).config.spaceId;
 		check(b.state === "active" && b.spaces[sid].state === "revoked" && Object.entries<any>(b.spaces).filter(([k]) => k !== sid).every(([, p]) => p.state === "active"), "the old primary stays active; only its permit for this Space is revoked");
 		await started(S); const m = await waitTarget(S.hostId, r.config.replicaConfigVersion);
 		for (let n = 0; n < 20 && w.status === "pending"; n++) { attempt(w); if (w.status === "pending") await sleep(10_000); }
-		check(w.status === "resolved", "the routed write of the completed candidate is decided with its original result");
+		check(w.status === "resolved", "the routed write of the completed candidate is decided with its original result (resolved at the successor: same host, new epoch)");
 		return { degrade: r, adopted: m, write: w };
 	}],
 	["revoke-way-back", async () => {
+		await stopped(P);// (repeatable: a previous attempt may have started it)
 		const wipe = JSON.parse(node(P, "sync", { op: "wipe", alias: cfg.alias }));
 		const ready = await started(P);// a normal start of the active host: its other Spaces are served, this one only listens
 		const res = await load("revoke-back", 120_000, [{ at: 10_000, name: "set-standby", run: async () => { await stopped(S); const r = tool(S, { op: "set-standby", tid: "final-standby-2", target: P.hostId }); await started(S); return { config: r.config }; } }]);

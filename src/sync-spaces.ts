@@ -101,10 +101,13 @@ export async function openSyncSpace(o: {
 		if (!o.listenOnly && role() === "primary") {
 			try { await serve(); }
 			catch (e) {
-				// A sealed candidate the standby cannot confirm now stays unresolved; resolve() tries again. Anything else
-				// (no permit, another configuration) keeps the Space unserved as before.
-				if (journal.head().revision === journal.appliedRevision || e instanceof PrimarySyncBlocked) throw e;
-				console.error(`primary/sync Space ${c.alias} has an unresolved sealed candidate:`, e instanceof Error ? e.message : String(e));
+				// A sealed candidate the standby cannot confirm now stays unresolved; resolve() tries again.
+				// An emptied replica (its history set aside) starts from the genesis, which may name it primary; without
+				// an active permit it is not served but keeps its listener for setStandby's catch-up.
+				// Anything else (no permit, another configuration) keeps the Space unserved as before.
+				if (journal.head().revision === 0) console.error(`primary/sync Space ${c.alias} is an empty replica and waits for setStandby:`, e instanceof Error ? e.message : String(e));
+				else if (journal.head().revision === journal.appliedRevision || e instanceof PrimarySyncBlocked) throw e;
+				else console.error(`primary/sync Space ${c.alias} has an unresolved sealed candidate:`, e instanceof Error ? e.message : String(e));
 			}
 		}
 	} catch (e) { for (const t of transports) t.close(); await listener.close(); journal.close(); throw e; }
