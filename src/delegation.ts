@@ -393,7 +393,9 @@ export class DelegationVerifier {
         const policy = await this.o.policy();
         if (policy.authorityId !== this.o.authorityId || !positive(policy.policyVersion))
             throw new DelegationDenied("new operation must use current installed policy");
-        if (!reference && d.policyVersion !== policy.policyVersion)
+        // Resolving a missing request decides only its outcome (notAdmitted or NotCommitted, no effect): like other
+        // follow-ups it runs under the request's own policy version, bound by targetRequest above.
+        if (!reference && !missingResolution && d.policyVersion !== policy.policyVersion)
             throw new core.StalePolicyVersion("new operation must use current installed policy");
         if (known && (known.policyVersion ?? 1) !== d.policyVersion)
             throw new DelegationDenied("retry changed original policy");
@@ -412,7 +414,7 @@ export class DelegationVerifier {
         await this.o.host.commit(async tx => {
             const e = await tx.doc(DelegationEpochs, key, null);
             if (l.routerEpoch < e.routerEpoch || l.controlPrimaryEpoch < e.controlPrimaryEpoch ||
-                !reference && d.policyVersion < e.policyVersion)
+                !reference && !missingResolution && d.policyVersion < e.policyVersion)
                 throw new DelegationDenied("delegation superseded by higher epoch/policy");
             e.routerEpoch = Math.max(e.routerEpoch, l.routerEpoch);
             e.controlPrimaryEpoch = Math.max(e.controlPrimaryEpoch, l.controlPrimaryEpoch);
@@ -441,7 +443,7 @@ export class DelegationVerifier {
                 const e = await tx.doc(DelegationEpochs, key, null);
                 if (e.routerEpoch > l.routerEpoch ||
                     e.controlPrimaryEpoch > l.controlPrimaryEpoch ||
-                    !reference && e.policyVersion > d.policyVersion)
+                    !reference && !missingResolution && e.policyVersion > d.policyVersion)
                     throw new DelegationDenied("epoch changed before commit");
             }
         };

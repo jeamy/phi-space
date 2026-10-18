@@ -775,11 +775,11 @@ for(const backend of BACKENDS)for(const promoted of [false,true])test(`${backend
  o.setReplica(1,1);
  const lost=o.call('write',{entry:{type:'Job',fields:{n:7}}}),kept=o.call('write',{entry:{type:'Job',fields:{n:8}}});
  assert.ok((await o.invoke(kept,undefined,{targetReplicaConfigVersion:1})).ok,'confirmed before the transition');
- o.setReplica(2,2);// epoch 2, configuration 2 (degrade or promotion)
+ o.setReplica(2,2);o.setPolicy(2);// epoch 2, configuration 2 (degrade or promotion); the adoption raised the policy
  const host=promoted?'member-b':'member',svc=o.service({hostId:host,promotionProof:async()=>({hash:'c'.repeat(64)})});
  const {FederationRpc}=await import('../src/federation-rpc.ts');
  const bound={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1};
- const state={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'m'},rules:[],completionProfiles:[]},
+ const state={policy:{authorityId:'authority',policyVersion:2,default:{mode:'local',member:'m'},rules:[],completionProfiles:[]},noticePolicyVersions:[2],
   members:{m:{id:'m',state:'active',target:{...bound,hostId:host,primaryEpoch:2},replication:{primaryReplica:host,replicaConfigVersion:2,durability:'single'}}}};
  let sent:string[]=[];
  const server=await serveSpace(new ProvingService(svc,{keys:o.keys,gateHostId:host,now:o.clock}),{listen:{host:'127.0.0.1',port:0},connection:()=>({peerId:'router',credentials:{roles:['router']}})}),socket=socketTransport({host:'127.0.0.1',port:(server.address() as any).port});
