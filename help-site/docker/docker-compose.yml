@@ -35,6 +35,10 @@ services:
       HELP_PORT: "${PORT:-3500}"
       HELP_SQLITE: /data/spaces-eibrain.sqlite
       PI_SPACES_ADMIN_PASSWORD: ${PI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
+    # Lets SWARM_REMOTE reach host-local sockets (e.g. an SSH tunnel bound to
+    # 127.0.0.1 on the docker host) as tcp:host.docker.internal:<port>.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       # Empty HOST_BIND publishes on all interfaces (IPv4 + IPv6) so "localhost" works either way.
       - "${HOST_BIND:+$HOST_BIND:}${PORT:-3500}:${PORT:-3500}"
