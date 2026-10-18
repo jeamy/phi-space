@@ -3,7 +3,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PiSpaces, spaces } from "../src/index.ts";
+import { FOREVER, PhiSpaces, spaces } from "../src/index.ts";
 
 const faux = fauxProvider();
 const models = createModels();
@@ -12,7 +12,7 @@ const registry = createRegistry();
 registry.install(spaces);
 const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 const root = await h.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] } });
-const s = new PiSpaces(h, ctx);
+const s = new PhiSpaces(h, ctx);
 setTimeout(() => void s.write({ type: "Job", fields: { n: 1 } }, null, FOREVER), 300);
 faux.setResponses([
 	fauxAssistantMessage(fauxToolCall("space_take", { type: "Job", timeoutMs: 5000 }), { stopReason: "toolUse" }),

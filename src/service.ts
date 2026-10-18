@@ -16,7 +16,7 @@ import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import {rpcDomain} from "./rpc-domain.ts";
-import { PiSpaces, type SpaceHost } from "./client.ts";
+import { PhiSpaces, type SpaceHost } from "./client.ts";
 import { listSpaces, snapshotSpace, spaceDoc, UnknownSpaceError, DEFAULT_ALIAS, Registry } from "./spaces.ts";
 import type { Principal, RequestRef } from "./claims.ts";
 import type { Json } from "./core.ts";
@@ -69,7 +69,7 @@ export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
 	| "ResourceExhausted" | "ReplicaConfigPending" | "StalePolicyVersion" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "NotCommitted" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
-export type ClaimReceipt={protocol:'pi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
+export type ClaimReceipt={protocol:'phi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PhiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
 export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("@earendil-works/pi-durable").Tx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
@@ -196,7 +196,7 @@ export class SpaceService {
 				request = { principal: id.principal, generation: str(r.generation, "request.generation"), requestId: str(r.requestId, "request.requestId") };
 			}
 			const space = call.space === undefined ? undefined : str(call.space, "space");
-			const client = new PiSpaces(this.o.host, this.o.ctx, this.now, undefined, principalId(id.principal), { space: space === DEFAULT_ALIAS ? undefined : space, authorityId: this.o.authorityId, maxPending: this.o.maxPendingPerPrincipal, maxPendingPeer: this.o.maxPendingPerPeer, consumer: id.principal, authorization });
+			const client = new PhiSpaces(this.o.host, this.o.ctx, this.now, undefined, principalId(id.principal), { space: space === DEFAULT_ALIAS ? undefined : space, authorityId: this.o.authorityId, maxPending: this.o.maxPendingPerPrincipal, maxPendingPeer: this.o.maxPendingPerPeer, consumer: id.principal, authorization });
 			const frameBytes = Math.min(transportFrameBytes, (await client.configuration()).limits.maxFrameBytes);
 			responseFrame = frameBytes;
 			if ((rawBytes ?? encodedBytes(call)) > frameBytes) throw new core.ResourceExhausted("the request exceeds the space frame limit");
@@ -214,7 +214,7 @@ export class SpaceService {
                     const resolutionGrant=this.allowed(id,'resolveOperation');
                     if('result' in record.resolution&&isObj(record.resolution.result)&&Array.isArray(record.resolution.result.types))this.checkTypes(resolutionGrant,record.resolution.result.types as string[],'this retained result');
                     const hostId=this.o.hostId??(await this.o.host.snapshot(Registry,this.o.ctx))?.hostId;
-                    if(hostId)reply.claimReceipt={protocol:'pi-spaces-claim-receipt-v1',hostId,...record};
+                    if(hostId)reply.claimReceipt={protocol:'phi-spaces-claim-receipt-v1',hostId,...record};
                 }catch{/* Effect may already be committed. Leave the witness absent; never fabricate completion. */}
             }
 			if (encodedBytes(reply) > frameBytes) throw new core.ResourceExhausted("the configured frame cannot carry the result; use a compatible transport frame");
@@ -254,7 +254,7 @@ export class SpaceService {
 
 	// ---- methods
 
-	private async dispatch(method: Method, a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; space?: string; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
+	private async dispatch(method: Method, a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PhiSpaces; space?: string; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		const { client, request, grant } = c;
 		const merged = await this.mergeCall(method, a, c);
 		if (merged !== undefined) return merged;
@@ -360,7 +360,7 @@ export class SpaceService {
 		if (v !== undefined && (!isObj(v) || principalId(v as unknown as Principal) !== principalId(id.principal))) throw new Denied("a consumer must be your authenticated principal");
 	}
 
-	private async hello(a: Record<string, Json>, c: { id: Identity; space?: string; client: PiSpaces; frameBytes: number }): Promise<Json> {
+	private async hello(a: Record<string, Json>, c: { id: Identity; space?: string; client: PhiSpaces; frameBytes: number }): Promise<Json> {
 		if (a.protocol !== PROTOCOL_VERSION) throw new UnsupportedProtocol(`this host speaks protocol ${PROTOCOL_VERSION}`);
 		const infos = await listSpaces(this.o.host, this.o.ctx);
 		let info = infos.find((i) => i.alias === (c.space ?? DEFAULT_ALIAS) || i.spaceId === c.space);
@@ -456,7 +456,7 @@ export class SpaceService {
 		return undefined;
 	}
 
-	private async readTake(method: "read" | "take", a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
+	private async readTake(method: "read" | "take", a: Record<string, Json>, c: { id: Identity; request?: RequestRef; client: PhiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		const { client, request, grant } = c;
 		const t = template(a.template);
 		if (grant.types !== "*") this.checkTypes(grant, t?.type ? [t.type] : undefined, "this template");
@@ -471,7 +471,7 @@ export class SpaceService {
 	}
 
 	/** The state of an own request; waits up to `waitMs` (at most maxPollMs) for it to leave `pending`. Never extends a deadline. */
-	private async poll(a: Record<string, Json>, c: { id: Identity; client: PiSpaces }): Promise<Json> {
+	private async poll(a: Record<string, Json>, c: { id: Identity; client: PhiSpaces }): Promise<Json> {
 		const t = this.target(a.targetRequest, c.id);
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
 		const end = this.now() + waitMs;
@@ -484,7 +484,7 @@ export class SpaceService {
 	}
 
 	/** Commit batches after a revision; `resync` tells the client to read pages again (history dropped or another stream). */
-	private async changes(a: Record<string, Json>, c: { client: PiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
+	private async changes(a: Record<string, Json>, c: { client: PhiSpaces; grant: { types: ReadonlySet<string> | "*" }; frameBytes: number }): Promise<Json> {
 		if (c.grant.types !== "*") throw new Denied("the change stream carries every type; it needs a role without type limits");
 		const after = int(a.afterRev, "afterRev", 0);
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);

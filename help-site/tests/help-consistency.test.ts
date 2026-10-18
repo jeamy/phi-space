@@ -15,7 +15,7 @@ import { SnapshotExpired, type Changes, type Page } from "../../src/core.ts";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, Meter, PiSpaces, spaces } from "../../src/index.ts";
+import { FOREVER, Meter, PhiSpaces, spaces } from "../../src/index.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 
 test("help corpus: identities, API facts, links, anchors and table structure are consistent", async () => {
@@ -35,7 +35,7 @@ test("help corpus: identities, API facts, links, anchors and table structure are
 
 test("help examples: actual DE/EN TypeScript fences compile against the current API", () => {
 	assert.ok(checkCorpusExamples().examples >= 40);
-	const invalid = structuredClone(ALL_ARTICLES.filter(a => a.id === "help.api.pispaces_write"));
+	const invalid = structuredClone(ALL_ARTICLES.filter(a => a.id === "help.api.phispaces_write"));
 	invalid[0]!.de.body = '```ts\nawait space.write({type: "Broken", fields: { bad: undefined }});\n```';
 	assert.throws(() => checkCorpusExamples(invalid), /undefined/);
 });
@@ -43,10 +43,10 @@ test("help examples: actual DE/EN TypeScript fences compile against the current 
 test("help API index: displayed signatures are extracted from actual exports", () => {
 	const signatures = apiSignatures();
 	assert.equal(signatures.size, 14);
-	assert.match(signatures.get("help.api.pispaces_write")!, /PiSpaces.write\(entry:/);
+	assert.match(signatures.get("help.api.phispaces_write")!, /PhiSpaces.write\(entry:/);
 	assert.match(signatures.get("help.api.operations_runs_workers")!, /start\(commandId: string, spec: RunSpec\)/);
-	assert.match(signatures.get("help.api.pispaces_wait_notify_mailbox")!, /RemoteSpace.events\(/);
-	assert.match(signatures.get("help.api.pispaces_read")!, /Promise<core.EntryView \| null>/);
+	assert.match(signatures.get("help.api.phispaces_wait_notify_mailbox")!, /RemoteSpace.events\(/);
+	assert.match(signatures.get("help.api.phispaces_read")!, /Promise<core.EntryView \| null>/);
 	for (const signature of signatures.values()) assert.doesNotMatch(signature, /import\("(?:\/|[A-Za-z]:)/);
 });
 
@@ -74,11 +74,11 @@ test("help index: failure is visible, retry succeeds and stale completion is ign
 		startIndexLoad({ content: () => assert.fail(), error: () => { errors++; resolve(); } }, async () => new Response("bad", {status:503}));
 	});
 	await new Promise<void>(resolve => {
-		startIndexLoad({ content: () => { loaded++; resolve(); }, error: e => assert.fail(String(e)) }, async () => Response.json({schema:"pi-spaces-help-site-index-v1",articles:[],areas:[]}));
+		startIndexLoad({ content: () => { loaded++; resolve(); }, error: e => assert.fail(String(e)) }, async () => Response.json({schema:"phi-spaces-help-site-index-v1",articles:[],areas:[]}));
 	});
 	let finish!: (r: Response) => void;
 	const stop = startIndexLoad({content:() => loaded++,error:() => errors++}, () => new Promise(r => {finish=r;}));
-	stop(); finish(Response.json({schema:"pi-spaces-help-site-index-v1",articles:[],areas:[]}));
+	stop(); finish(Response.json({schema:"phi-spaces-help-site-index-v1",articles:[],areas:[]}));
 	await new Promise(r => setImmediate(r));
 	assert.equal(errors, 1); assert.equal(loaded, 1);
 });
@@ -134,11 +134,11 @@ test("help live sync: expired/mismatched stream discards partial state, failure 
 	assert.deepEqual([...old.entries.keys()],["old"]);
 });
 
-test("help live sync: actual PiSpaces puts/deletes converge without mutating the old mirror", async () => {
+test("help live sync: actual PhiSpaces puts/deletes converge without mutating the old mirror", async () => {
 	const registry = createRegistry(); registry.install(spaces);
 	const host = await Harness.open(new MemoryStorage(),{models:createModels(),registry},ctx);
 	try {
-		const space = new PiSpaces(host,ctx);
+		const space = new PhiSpaces(host,ctx);
 		const first = await space.write({type:"Job",fields:{n:1}},null,FOREVER);
 		await space.write({type:"Job",fields:{n:2}},null,FOREVER);
 		const old = await refreshMirror(space);

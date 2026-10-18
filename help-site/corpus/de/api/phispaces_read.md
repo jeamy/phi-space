@@ -1,11 +1,11 @@
 ---
 standard: help_api
-id: help.api.pispaces_read
+id: help.api.phispaces_read
 title: "read & readIfExists – Entry zerstörungsfrei lesen"
 short: "Sucht einen passenden sichtbaren Entry anhand eines Templates (fehlende/null-Felder sind Wildcards) und wartet bis zum Timeout."
 tags: [read, readifexists, template, wildcard, timeout]
 owner: client
-related: [help.topic.entries_and_templates, help.api.pispaces_take]
+related: [help.topic.entries_and_templates, help.api.phispaces_take]
 since: 0.0.1
 ---
 

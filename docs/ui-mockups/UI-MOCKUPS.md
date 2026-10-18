@@ -1,6 +1,6 @@
-# pi-spaces Live Dashboard — UI Mockups
+# phi-spaces Live Dashboard — UI Mockups
 
-Übersicht und Dokumentation der Dashboard-UI-Konzepte für die Verwaltung und Überwachung von pi-spaces.
+Übersicht und Dokumentation der Dashboard-UI-Konzepte für die Verwaltung und Überwachung von phi-spaces.
 
 ## Mockup-Galerie
 

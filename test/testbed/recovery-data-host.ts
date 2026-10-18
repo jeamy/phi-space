@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as ctx } from '@earendil-works/chord/context';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, openSync, closeSync, unlinkSync, existsSync, readdirSync, rmSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { privateFile, loadFileSigner, TlsRecoveryRegister, SqliteRecoveryRegister, listSpaces, snapshotSpace, startConfiguredRecovery, PiSpaces, type FederationConfig, type PrivateRecoveryConfig } from '../../src/index.ts';
+import { privateFile, loadFileSigner, TlsRecoveryRegister, SqliteRecoveryRegister, listSpaces, snapshotSpace, startConfiguredRecovery, PhiSpaces, type FederationConfig, type PrivateRecoveryConfig } from '../../src/index.ts';
 const [mode,home,alias="jobs"]=process.argv.slice(2);if(!home||!['backup','run','inspect'].includes(mode))throw new Error('use backup|run|inspect PRIVATE_HOME');
 if(mode==='backup'){
  if(!['jobs','control'].includes(alias))throw new Error('backup alias must be jobs or control');
@@ -28,7 +28,7 @@ if(mode==='backup'){
   if(!stopped())throw new Error('normal target restarted while opening recovery storage');
   if(mode==='inspect'){
    const info=(await listSpaces(h,ctx)).find(s=>s.alias==='jobs');if(!info)throw new Error('jobs space missing');const state=await snapshotSpace(h,info.spaceId,ctx);
-   const local=new PiSpaces(h,ctx,Date.now,undefined,undefined,{space:'jobs'}),objects=await local.readAll({type:'AcceptanceObject'}),taken=await local.take({type:'AcceptanceObject'},0);
+   const local=new PhiSpaces(h,ctx,Date.now,undefined,undefined,{space:'jobs'}),objects=await local.readAll({type:'AcceptanceObject'}),taken=await local.take({type:'AcceptanceObject'},0);
    if(objects.length!==1||taken!==null||!state?.entries.every(e=>e.restoredUnverified))throw new Error('restored data quarantine is not intact');
    console.log(JSON.stringify({restoredObjectsReadable:true,quarantineBlocksTake:true,objects:objects.length,space:info.spaceId,incarnation:state.incarnation}));
   }else{

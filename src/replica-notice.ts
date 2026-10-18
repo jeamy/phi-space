@@ -23,7 +23,7 @@ export type ReplicaConfigNotice = {
 	primaryEpoch: number; replicaConfigVersion: number; durability: "single" | "sync"; dataIncarnation: string;
 };
 export type SignedReplicaConfigNotice = { notice: ReplicaConfigNotice; issuer: string; algorithm: Algorithm; signature: string };
-const bytes = (n: ReplicaConfigNotice) => Buffer.from("pi-spaces/replica-config-notice/v1\n" + canonicalJson(n as unknown as Json));
+const bytes = (n: ReplicaConfigNotice) => Buffer.from("phi-spaces/replica-config-notice/v1\n" + canonicalJson(n as unknown as Json));
 
 /**
  * The notice of a completed transition, derived from its configuration entry in the chain: a crash between completing

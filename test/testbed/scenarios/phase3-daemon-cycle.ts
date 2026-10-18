@@ -33,7 +33,7 @@ function sh(h: Host, script: string, o: { allowFail?: boolean; timeoutMs?: numbe
 const node = (h: Host, args: string, input?: unknown) => {
 	// The here-document belongs to docker exec, before the pipe; the filter only drops runtime warnings.
 	const run = `docker exec -i ${h.container} node ${h.home}/federation-host.mjs ${args} ${h.home}`, filter = `2>&1 | grep -v -i -E "warn|trace-warnings"`;
-	return sh(h, input === undefined ? `${run} </dev/null ${filter}` : `${run} <<'PI_SPACES_JSON' ${filter}\n${JSON.stringify(input)}\nPI_SPACES_JSON`, { timeoutMs: 600_000 }).trim().split("\n").at(-1)!;
+	return sh(h, input === undefined ? `${run} </dev/null ${filter}` : `${run} <<'PHI_SPACES_JSON' ${filter}\n${JSON.stringify(input)}\nPHI_SPACES_JSON`, { timeoutMs: 600_000 }).trim().split("\n").at(-1)!;
 };
 const head = (h: Host) => (JSON.parse(node(h, "sync-head")) as any[]).find(x => x.alias === cfg.alias);
 const tool = (op: Record<string, unknown>) => { const r = node(cfg.standby, "sync", { alias: cfg.alias, ...cfg.tool, ...op }); try { return JSON.parse(r); } catch { throw new Error(`sync tool: ${r.slice(0, 300)}`); } };

@@ -1,23 +1,23 @@
 ---
 standard: help_topic
 id: help.topic.overview
-title: "pi-spaces Systemüberblick: Was es ist und was es kann"
-short: "Verständlicher, ausführlicher Einblick: Was pi-spaces ist, wie das transaktionale Tuple-Space-Modell funktioniert, welche Probleme es löst und was es von v1 (In-Memory) bis v6 (Federated Cluster + Mobile/Web Admin) leisten kann."
-tags: [pi-spaces, overview, tuple-space, architecture, pispaces, remotespace, federatedspace]
+title: "phi-spaces Systemüberblick: Was es ist und was es kann"
+short: "Verständlicher, ausführlicher Einblick: Was phi-spaces ist, wie das transaktionale Tuple-Space-Modell funktioniert, welche Probleme es löst und was es von v1 (In-Memory) bis v6 (Federated Cluster + Mobile/Web Admin) leisten kann."
+tags: [phi-spaces, overview, tuple-space, architecture, phispaces, remotespace, federatedspace]
 owner: core
 related: [help.topic.architecture_layers, help.topic.guarantees_and_boundaries, help.workflow.overview_v1_to_v6]
 since: 0.0.1
 ---
 
-# pi-spaces Systemüberblick: Was es ist und was es kann
+# phi-spaces Systemüberblick: Was es ist und was es kann
 
 ## Überblick {#overview}
 
-`pi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für `@earendil-works/pi-durable`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
+`phi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für `@earendil-works/pi-durable`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
 
-## Was ist pi-spaces und warum wurde es gebaut? {#what-is-pi-spaces}
+## Was ist phi-spaces und warum wurde es gebaut? {#what-is-phi-spaces}
 
-`pi-spaces` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
+`phi-spaces` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
 
 1. **Fehlertolerante Aufgabenübergabe (mit geleaster Reservierung)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (`type: "ChatTask"` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (`take`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – sofern die eigene Task-Lease noch gilt und der Store verfügbar ist.
 2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen `ScheduledJob` einstellen und offline gehen; mit persistentem Backend und ausreichender Task-Lease bleibt der Auftrag erhalten; die Anwendung prüft nach Ablauf des TimerLock die Fälligkeit.
@@ -28,17 +28,17 @@ since: 0.0.1
 
 ### Entkopplung in Raum und Zeit {#decoupling}
 
-In `pi-spaces` müssen Produzent und Konsument einander nicht kennen und nicht gleichzeitig aktiv sein:
+In `phi-spaces` müssen Produzent und Konsument einander nicht kennen und nicht gleichzeitig aktiv sein:
 
 - **Schreiben (`space.write`)**: Ein Teilnehmer legt einen Entry `{ type: string, types?: string[], fields: Record<string, Json> }` mit einer definierten Ablaufzeit (**Lease**) im Space ab.
 - **Lesen (`space.read` / `readIfExists` / `readAll` / `readPage`)**: Ein Teilnehmer sucht mit einem **Template** `{ type?, fields?, id? }` nach einem passenden sichtbaren Entry, ohne ihn zu entfernen. Fehlende oder `null`-Felder im Template wirken als **Wildcards**.
 - **Exklusives Entnehmen (`space.take`)**: Ein Worker entnimmt einen passenden Entry exklusiv. Erfolgt der `take` unter einer **Transaktion (`txn`)**, bleibt der Entry reserviert, bis der Worker seine Ergebnisse geschrieben und `commit(txn)` aufgerufen hat. Stürzt der Worker ab oder läuft die Transaktions-Lease ab, kehrt der Entry zurück, sofern seine eigene Entry-Lease noch gilt.
-- **Warten auf zukünftige Daten (`space.wait`)**: Statt blind zu pollen, registriert ein Teilnehmer einen langlebigen `Waiter` auf ein Template. Sobald ein passender Entry committet wird, weckt `pi-spaces` den Waiter oder sendet ein Ereignis.
+- **Warten auf zukünftige Daten (`space.wait`)**: Statt blind zu pollen, registriert ein Teilnehmer einen langlebigen `Waiter` auf ein Template. Sobald ein passender Entry committet wird, weckt `phi-spaces` den Waiter oder sendet ein Ereignis.
 
-### Was kann pi-spaces? (Kernfähigkeiten) {#capabilities}
+### Was kann phi-spaces? (Kernfähigkeiten) {#capabilities}
 
 - **Unveränderliche Entries & Wildcard-Templates**: Typisierte JSON-Objekte mit Subtypen-Registrierung (`types`) und exaktem `type`/Feld-Matching.
-- **Atomare Space-Transaktionen**: `take` + mehrere `write` + optionale Request-Claims mit einem fachlichen `commit(txn)` (vorherige PiSpaces-Aufrufe sind separate Storage-Commits). Bei `abort` oder Timeout wird alles atomar zurückgerollt.
+- **Atomare Space-Transaktionen**: `take` + mehrere `write` + optionale Request-Claims mit einem fachlichen `commit(txn)` (vorherige PhiSpaces-Aufrufe sind separate Storage-Commits). Bei `abort` oder Timeout wird alles atomar zurückgerollt.
 - **Serverseitige Ergebnisgarantien (`CompletionProfiles`)**: Der Space-Kern erzwingt beim Commit, dass ein genommener Task des Typs `ChatTask` nur zusammen mit genau einem passenden Ergebnis-Entry `Msg` erfolgreich commitet werden kann.
 - **Idempotente Request-Claims (`RequestRef`)**: Jede Mutation kann mit `{ request: { principal, generation, requestId } }` ausgeführt werden; Wiederholungen und Timeouts erzeugen keine doppelte Wirkung.
 - **Leases & automatischer Reaper (`startService`)**: Entries, Presence-Zustände und `TimerLock`-Schlösser laufen nach definierter Zeit automatisch ab.
@@ -48,7 +48,7 @@ In `pi-spaces` müssen Produzent und Konsument einander nicht kennen und nicht g
 
 ### Einheitlicher Basisvertrag SpaceLike {#spacelike-contract}
 
-PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpace besitzt eine eigene API mit FederationRequest und Member-Transaktionsbindung; Fachkonzepte sind übertragbar, Aufrufsignaturen nicht unverändert austauschbar. Siehe [Topologien und API-Grenzen](help.topic.topology_and_readiness#api).
+PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpace besitzt eine eigene API mit FederationRequest und Member-Transaktionsbindung; Fachkonzepte sind übertragbar, Aufrufsignaturen nicht unverändert austauschbar. Siehe [Topologien und API-Grenzen](help.topic.topology_and_readiness#api).
 
 ## Begriffe und Identitäten {#terms-and-identities}
 
@@ -60,7 +60,7 @@ PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpa
 ## Arbeitsablauf {#workflow}
 
 1. **Vertrag definieren**: Entry-Typen (`type`), Pflichtfelder (`fields`) und optionale `CompletionProfiles` (welcher Task-Typ erfordert welchen Ergebnis-Typ beim Transaktions-Commit?) festlegen.
-2. **Space öffnen und Dienst starten**: `new PiSpaces(harness, ctx, Date.now, meter, undefined, { space })` erstellen und `await startService(harness, ctx)` für Lease-Reaper und Event-Zustellung starten.
+2. **Space öffnen und Dienst starten**: `new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space })` erstellen und `await startService(harness, ctx)` für Lease-Reaper und Event-Zustellung starten.
 3. **Aufgaben einstellen und bearbeiten**: Produzenten schreiben Aufgaben mit `RequestRef`-Claim; Worker reservieren Aufgaben per `take(..., { txn })`, schreiben Ergebnisse unter derselben `txn` und rufen `commit(txn)` auf.
 4. **Live-Beobachtung und Steuerung**: UI-Clients lesen initial `readPage()` (Snapshot mit `rev`) und folgen Änderungen über `changes(afterRev)` oder Consumer-Mailboxes (`events` / `ack`).
 

@@ -1,4 +1,4 @@
-// Read-only live dashboard over a pi-spaces host (docs/dashboard.md; design: docs/ui-mockups/).
+// Read-only live dashboard over a phi-spaces host (docs/dashboard.md; design: docs/ui-mockups/).
 // Phase 1 by decision: no mutation endpoint exists on the dashboard itself; the UI observes spaces, gauges, entries,
 // transactions, waiters and the process meter. The optional space socket (`serve`) lets real clients produce the
 // traffic the dashboard then shows; their identity comes from the trusted local boundary (file permissions of the
@@ -218,7 +218,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 
 // ---- standalone start: `npm run dashboard -- --dir <jsonl-dir>` or `--sqlite <file>` (docs/dashboard.md).
 
-const usage = `pi-spaces dashboard (read-only Phase 1)
+const usage = `phi-spaces dashboard (read-only Phase 1)
   --dir <path>      open a JSONL store directory
   --sqlite <file>   open a SQLite store file (exactly one of --dir/--sqlite is required)
   --port <n>        HTTP port (default 8787)

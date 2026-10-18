@@ -1,11 +1,11 @@
 ---
 standard: help_api
-id: help.api.pispaces_take
+id: help.api.phispaces_take
 title: "take & takeIfExists – Exclusively Remove or Reserve an Entry"
 short: "Removes a matching entry immediately or reserves it exclusively under a transaction (returning it on abort or lease expiry)."
 tags: [take, takeifexists, exclusive, reservation, txn]
 owner: client
-related: [help.topic.leases_and_transactions, help.api.pispaces_txn]
+related: [help.topic.leases_and_transactions, help.api.phispaces_txn]
 since: 0.0.1
 ---
 

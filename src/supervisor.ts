@@ -122,7 +122,7 @@ export class Supervisor {
 			running = true;
 			current = (async () => {
 				try { do { again = false; await this.tick(); } while (again && !stopped); }
-				catch (e) { (this.o.onError ?? ((x) => console.error("pi-spaces supervisor:", x)))(e); }
+				catch (e) { (this.o.onError ?? ((x) => console.error("phi-spaces supervisor:", x)))(e); }
 				finally { running = false; }
 			})();
 			await current;

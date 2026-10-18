@@ -1,11 +1,11 @@
-// pi-spaces: a JavaSpaces-style space as a pi-durable extension.
+// phi-spaces: a JavaSpaces-style space as a pi-durable extension.
 //   core.ts    pure spec semantics (entries, templates, leases, transactions, notify)
-//   client.ts  local PiSpaces API over a Session document, with blocking read/take
+//   client.ts  local PhiSpaces API over a Session document, with blocking read/take
 //   index.ts   LLM tools, prompt section, event delivery
 import { Type } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/chord";
 import { defineDoc, defineExtension, defineTool, section, type ConversationId, type Harness, type Tx } from "@earendil-works/pi-durable";
-import { PiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
+import { PhiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
 import { listSpaces, NamedSpace, Registry, spaceDoc } from "./spaces.ts";
 import * as core from "./core.ts";
 import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
@@ -82,8 +82,8 @@ const TemplateParams = {
  * `spaces` counts into the process-wide `meter`.
  */
 export function createSpaces(meter: Meter = defaultMeter) {
-	/** The PiSpaces a tool acts through: as its own conversation, so it owns what it creates and touches nothing else. */
-	const spaceFor = (api: SpaceHost & { conversationId: core.Target }, ctx: Context): SpaceLike => new PiSpaces(api, ctx, Date.now, meter, api.conversationId);
+	/** The PhiSpaces a tool acts through: as its own conversation, so it owns what it creates and touches nothing else. */
+	const spaceFor = (api: SpaceHost & { conversationId: core.Target }, ctx: Context): SpaceLike => new PhiSpaces(api, ctx, Date.now, meter, api.conversationId);
 	return defineExtension({
 		name: "spaces",
 		tools: [
@@ -266,7 +266,7 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
 			else {
 				// Namespaced: request ids dedupe per conversation forever, so a bare "n3:1" could swallow or collide with
 				// another sender's submission.
-				await conv.submit({ type: "input", requestId: `pi-spaces:${key(e)}`, content: describe(e) }, ctx);
+				await conv.submit({ type: "input", requestId: `phi-spaces:${key(e)}`, content: describe(e) }, ctx);
 				done.add(key(e));
 				if (e.kind === "waiter") served.push(e.txn ? "takes" : "reads");
 			}
@@ -308,7 +308,7 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
 	for (const c of served) m.inc(c);
 	if (undeliverable) m.inc("failures", undeliverable); // per event, once: it left the outbox undelivered
 	if (failed.size) m.inc("retries", failed.size); // per failed attempt
-	for (const g of gaveUp) (o.onError ?? ((e) => console.error("pi-spaces delivery:", e)))(new Error(g));
+	for (const g of gaveUp) (o.onError ?? ((e) => console.error("phi-spaces delivery:", e)))(new Error(g));
 	return done.size;
 }
 
@@ -353,7 +353,7 @@ function serialized(fn: () => Promise<void>): () => Promise<void> {
 
 export async function startMaintenance(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
 	const now = o.now ?? Date.now;
-	const onError = o.onError ?? ((e) => console.error("pi-spaces reaper:", e));
+	const onError = o.onError ?? ((e) => console.error("phi-spaces reaper:", e));
 	const retryMs = o.retryMs ?? 1000;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let stopped = false;
@@ -422,7 +422,7 @@ export async function startService(harness: Harness, ctx: Context, o: ServiceOpt
 			}
 		} catch (e) {
 			if ((e as Error)?.message?.includes("Session is closed")) return;
-			(o.onError ?? ((x) => console.error("pi-spaces service:", x)))(e);
+			(o.onError ?? ((x) => console.error("phi-spaces service:", x)))(e);
 		}
 	});
 	await harness.commit(async (tx) => { await tx.doc(Registry); }, ctx);
@@ -434,7 +434,7 @@ export async function startService(harness: Harness, ctx: Context, o: ServiceOpt
 
 /** Deliver whenever the space changes, and retry failed events on a timer. Returns a stop function. */
 export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
-	const onError = o.onError ?? ((e) => console.error("pi-spaces delivery:", e));
+	const onError = o.onError ?? ((e) => console.error("phi-spaces delivery:", e));
 	const retryMs = o.retryMs ?? 1000;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let stopped = false;

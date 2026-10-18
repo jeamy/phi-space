@@ -18,7 +18,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, GateIdentity, NetbirdDirectory, PiSpaces, RemoteSpace, createSpace, listSpaces, snapshotSpace, startMaintenance, SpaceService, StaticIdentity, serveSpace, socketTransport, startGate, type Connection, type Identity, type IdentityAdapter, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
+import { FOREVER, GateIdentity, NetbirdDirectory, PhiSpaces, RemoteSpace, createSpace, listSpaces, snapshotSpace, startMaintenance, SpaceService, StaticIdentity, serveSpace, socketTransport, startGate, type Connection, type Identity, type IdentityAdapter, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
 import { segmentedSieve } from "../../../examples/sieve.ts";
 
 const USAGE = `Usage: sieve-remote.ts <serve|client|all> [options]
@@ -45,7 +45,7 @@ const isPrime = (n: number) => { if (n < 2) return false; for (let d = 2; d * d 
 type Opts = { dir: string; end: number; block: number; workers: number; workMs: number; crashWorkers: number; leaseMs: number; killHost: boolean; downMs: number; listen?: string; tcpPeer: string; gate: boolean; connect?: string; timeoutS: number; fresh: boolean };
 function parse(argv: string[]): { mode: string; o: Opts } {
 	const [mode = "help", ...rest] = argv;
-	const o: Opts = { dir: existsSync("/data") ? "/data/sieve-remote" : join(tmpdir(), "pi-spaces-sieve-remote"), end: 4001, block: 250, workers: 3, workMs: 150, crashWorkers: 2, leaseMs: 1200, killHost: false, downMs: 700, tcpPeer: "worker", gate: false, timeoutS: 90, fresh: false };
+	const o: Opts = { dir: existsSync("/data") ? "/data/sieve-remote" : join(tmpdir(), "phi-spaces-sieve-remote"), end: 4001, block: 250, workers: 3, workMs: 150, crashWorkers: 2, leaseMs: 1200, killHost: false, downMs: 700, tcpPeer: "worker", gate: false, timeoutS: 90, fresh: false };
 	for (let i = 0; i < rest.length; i++) {
 		const a = rest[i]!;
 		const val = () => { const v = rest[++i]; if (v === undefined) throw new Error(`${a} needs a value`); return v; };
@@ -97,7 +97,7 @@ async function serve(o: Opts): Promise<void> {
 	const storage = await openNodeJsonlStorage(join(o.dir, "data"), ctx);
 	const h = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
 	const sieveInfo = (await listSpaces(h, ctx)).find(info => info.alias === SIEVE_SPACE) ?? await h.commit(tx => createSpace(tx, SIEVE_SPACE, Date.now()), ctx);
-	const local = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: SIEVE_SPACE });
+	const local = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: SIEVE_SPACE });
 	// Preserve active transactions on a crash/reopen; the profile is installed before the first task is admitted.
 	if (!(await snapshotSpace(h, sieveInfo.spaceId, ctx))?.completionProfiles?.length) await local.setCompletionProfiles([{ taskType: "SieveTask", resultTypes: ["SieveResult"], equalFields: ["block", "rangeStart", "rangeEnd"], maxResultCount: 1 }]);
 	const stopMaintenance = await startMaintenance(h, ctx, { space: SIEVE_SPACE });

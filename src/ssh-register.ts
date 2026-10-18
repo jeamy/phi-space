@@ -12,7 +12,7 @@ export class SshRecoveryRegister implements RecoveryRegister {
 		const key = call.key;
 		if (typeof key !== "string" || !key || key.length > 512) return Promise.reject(new Error("invalid register key"));
 		return new Promise((resolve, reject) => {
-			const child = spawn("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", this.target, this.operator ? "pi-spaces-register-operator" : "pi-spaces-register-read"], { stdio: ["pipe", "pipe", "ignore"] });
+			const child = spawn("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", this.target, this.operator ? "phi-spaces-register-operator" : "phi-spaces-register-read"], { stdio: ["pipe", "pipe", "ignore"] });
 			let output = Buffer.alloc(0), settled = false;
 			const finish = (error?: Error, value?: any) => { if (settled) return; settled = true; clearTimeout(timer); child.kill(); error ? reject(error) : resolve(value); };
 			const timer = setTimeout(() => finish(new Error("independent SSH register timed out")), this.timeoutMs);

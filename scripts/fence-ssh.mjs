@@ -4,9 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { openSync, writeFileSync, fsyncSync, closeSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 const [hostId, unit, state] = process.argv.slice(2), command = process.env.SSH_ORIGINAL_COMMAND;
-if (!hostId || !/^[A-Za-z0-9_.@-]+\.service$/.test(unit || '') || !state?.startsWith('/') || !['pi-spaces-fence', 'pi-spaces-fence-status'].includes(command)) throw new Error('fencing command refused');
+if (!hostId || !/^[A-Za-z0-9_.@-]+\.service$/.test(unit || '') || !state?.startsWith('/') || !['phi-spaces-fence', 'phi-spaces-fence-status'].includes(command)) throw new Error('fencing command refused');
 const lock = join(state, 'restart.lock');
-if (command === 'pi-spaces-fence') {
+if (command === 'phi-spaces-fence') {
   let fd;
   try { fd = openSync(lock, 'wx', 0o600); writeFileSync(fd, JSON.stringify({ hostId, at: Date.now() }) + '\n'); fsyncSync(fd); }
   catch (e) { if (e.code !== 'EEXIST') throw e; }

@@ -1,5 +1,5 @@
 "use client";
-// Main PI-SPACES / HELP React Application.
+// Main PHI-SPACES / HELP React Application.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { applyThemeToDocument, PALETTES } from "./lib/palettes.ts";
 import { scoreArticle, searchAreas, searchArticles } from "./lib/search.ts";
@@ -27,11 +27,11 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 	const searchRef = useRef<HTMLInputElement | null>(null);
 
 	useEffect(() => {
-		const savedLocale = new URLSearchParams(window.location.search).get("lang") ?? window.localStorage.getItem("pi-spaces-help-locale");
+		const savedLocale = new URLSearchParams(window.location.search).get("lang") ?? window.localStorage.getItem("phi-spaces-help-locale");
 		if (savedLocale === "de" || savedLocale === "en") setLocale(savedLocale);
-		const savedMode = window.localStorage.getItem("pi-spaces-help-mode");
+		const savedMode = window.localStorage.getItem("phi-spaces-help-mode");
 		if (savedMode === "dark" || savedMode === "light") setMode(savedMode);
-		const savedPalette = window.localStorage.getItem("pi-spaces-help-palette");
+		const savedPalette = window.localStorage.getItem("phi-spaces-help-palette");
 		if (savedPalette) setPalette(savedPalette);
 		setView(parseHelpView(window.location.search));
 
@@ -54,13 +54,13 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 
 	useEffect(() => {
 		applyThemeToDocument(mode, palette);
-		window.localStorage.setItem("pi-spaces-help-mode", mode);
-		window.localStorage.setItem("pi-spaces-help-palette", palette);
+		window.localStorage.setItem("phi-spaces-help-mode", mode);
+		window.localStorage.setItem("phi-spaces-help-palette", palette);
 	}, [mode, palette]);
 
 	useEffect(() => {
 		document.documentElement.lang = locale;
-		window.localStorage.setItem("pi-spaces-help-locale", locale);
+		window.localStorage.setItem("phi-spaces-help-locale", locale);
 	}, [locale]);
 
 	useEffect(() => {
@@ -157,7 +157,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 		return (
 			<main className="corpus-bootstrap" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
 				<div>
-					<strong>PI-SPACES / HELP</strong>
+					<strong>PHI-SPACES / HELP</strong>
 					<p role={indexError ? "alert" : "status"}>{indexError ? (locale === "de" ? `Hilfe konnte nicht geladen werden: ${indexError}` : `Help could not be loaded: ${indexError}`) : (locale === "de" ? "Help-Corpus wird geladen …" : "Loading help corpus …")}</p>
 					{indexError ? <button type="button" onClick={() => setIndexAttempt(n => n + 1)}>{locale === "de" ? "Erneut versuchen" : "Retry"}</button> : null}
 				</div>
@@ -172,7 +172,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 			{/* Topbar */}
 			<header className="topbar">
 				<button type="button" className="brand" onClick={() => navigate({ kind: "home" })}>
-					<span className="brand__name">PI-SPACES</span>
+					<span className="brand__name">PHI-SPACES</span>
 					<span className="brand__divider">/</span>
 					<span className="brand__section">HELP</span>
 				</button>
@@ -378,7 +378,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						<div className="home-view">
 							<section className="home-hero">
 								<div className="eyebrow">
-									<span>PI-SPACES</span>
+									<span>PHI-SPACES</span>
 									<span className="eyebrow__line" />
 									<span>
 										{locale === "de"
@@ -403,8 +403,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 								</h1>
 								<p className="home-hero__lead">
 									{locale === "de"
-										? "Die technische Produktreferenz und interaktive Entwicklungsplattform für pi-spaces: Vom lokalen Tuple-Space über RequestRef-Claims, CompletionProfiles, Overlay-Gate (Schicht A/B) und HRW-Federation bis zum 6-stufigen Multiplayer Space-Chat und der mobilen Steuerung."
-										: "The technical product reference and interactive workbench for pi-spaces: from local tuple spaces through RequestRef claims, CompletionProfiles, overlay gate (Layer A/B), and HRW federation to the 6-stage Multiplayer Space-Chat and mobile control."}
+										? "Die technische Produktreferenz und interaktive Entwicklungsplattform für phi-spaces: Vom lokalen Tuple-Space über RequestRef-Claims, CompletionProfiles, Overlay-Gate (Schicht A/B) und HRW-Federation bis zum 6-stufigen Multiplayer Space-Chat und der mobilen Steuerung."
+										: "The technical product reference and interactive workbench for phi-spaces: from local tuple spaces through RequestRef claims, CompletionProfiles, overlay gate (Layer A/B), and HRW federation to the 6-stage Multiplayer Space-Chat and mobile control."}
 								</p>
 								<div className="hero-actions">
 									<button
@@ -467,7 +467,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 								</div>
 								<figure className="execution-model">
 									<div className="execution-model__bar">
-										<span>PI-SPACES EXECUTION FLOW</span>
+										<span>PHI-SPACES EXECUTION FLOW</span>
 										<span>SINGLE-HOST VS. FEDERATED CLUSTER</span>
 									</div>
 									<div className="execution-lane execution-lane--rt">
@@ -554,8 +554,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									</div>
 									<figcaption className="model-note">
 										{locale === "de"
-											? "PiSpaces und RemoteSpace teilen denselben SpaceLike-Vertrag. Lokaler und Remote-Client teilen den Basisvertrag; Federation benötigt einen eigenen Request-/Routing-Adapter."
-											: "PiSpaces and RemoteSpace share the exact same SpaceLike contract. Application concepts transfer between local and remote clients; federation needs its own request/routing adapter."}
+											? "PhiSpaces und RemoteSpace teilen denselben SpaceLike-Vertrag. Lokaler und Remote-Client teilen den Basisvertrag; Federation benötigt einen eigenen Request-/Routing-Adapter."
+											: "PhiSpaces and RemoteSpace share the exact same SpaceLike contract. Application concepts transfer between local and remote clients; federation needs its own request/routing adapter."}
 									</figcaption>
 								</figure>
 							</section>
@@ -740,8 +740,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									</h1>
 									<p>
 										{locale === "de"
-											? "Facettierte Referenz über PiSpaces, RemoteSpace, SpaceService, die 8 LLM-Agent-Tools, Gate/Grants, Federation und Betrieb."
-											: "Faceted reference across PiSpaces, RemoteSpace, SpaceService, the 8 LLM agent tools, Gate/Grants, Federation, and Operations."}
+											? "Facettierte Referenz über PhiSpaces, RemoteSpace, SpaceService, die 8 LLM-Agent-Tools, Gate/Grants, Federation und Betrieb."
+											: "Faceted reference across PhiSpaces, RemoteSpace, SpaceService, the 8 LLM agent tools, Gate/Grants, Federation, and Operations."}
 									</p>
 								</div>
 								<span className="meta-pill meta-pill--accent">{apiArticles.length} API ENTRIES</span>
@@ -906,7 +906,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						<div className="listing-view">
 							<div className="listing-heading">
 								<div>
-									<span className="eyebrow-copy">PI-SPACES CORPUS</span>
+									<span className="eyebrow-copy">PHI-SPACES CORPUS</span>
 									<h1>
 										{view.articleType === "workflow"
 											? locale === "de"

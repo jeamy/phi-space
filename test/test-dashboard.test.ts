@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { PiSpaces } from "../src/index.ts";
+import { PhiSpaces } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
 import { startDashboard } from "../src/dashboard.ts";
 import { ctx } from "./support/persistent.ts";
@@ -14,7 +14,7 @@ const memory = () => Harness.open(new MemoryStorage(), { models: createModels(),
 test("dashboard: spaces, detail, entries and metrics over HTTP; GET only", async () => {
 	const h = await memory();
 	const meter = new Meter();
-	const client = new PiSpaces(h, ctx, Date.now, meter);
+	const client = new PhiSpaces(h, ctx, Date.now, meter);
 	const dash = await startDashboard({ host: h, ctx, port: 0, meter });
 	try {
 		const spaces = await (await fetch(`${dash.url}/api/spaces`)).json();
@@ -76,7 +76,7 @@ test("dashboard: SSE says hello, then pushes space and metrics events after a co
 	})().catch(() => {});
 	try {
 		await wait("hello");
-		await new PiSpaces(h, ctx, Date.now, meter).write({ type: "Probe", fields: {} });
+		await new PhiSpaces(h, ctx, Date.now, meter).write({ type: "Probe", fields: {} });
 		await wait("space");
 		assert.ok((events.find((e) => e.type === "space")!.stats as { entries: number }).entries >= 1);
 		// An earlier periodic metric can legitimately precede the write under suite load.

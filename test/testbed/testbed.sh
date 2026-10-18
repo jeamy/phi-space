@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remote docker test bed for pi-spaces: builds the production artifacts here (the pi-spaces.mjs bundle, compiled
+# Remote docker test bed for phi-spaces: builds the production artifacts here (the pi-spaces.mjs bundle, compiled
 # examples and scenarios), ships ONLY those to a server over ssh, builds a production-like image from them there and
 # runs scenarios, and later the federation hosts, in docker containers. No source code reaches the server.
 # Docs: docs/testumgebung-big.md (German), test/testbed/README.md. Usage: testbed.sh --help
@@ -57,8 +57,8 @@ Commands:
 Settings (environment or test/testbed/testbed.env), defaults in brackets:
   TESTBED_SSH_TARGET [big]  TESTBED_SSH_USER  TESTBED_SSH_PORT  TESTBED_SSH_KEY  TESTBED_SSH_OPTS
   TESTBED_SSH_PASSWORD (needs sshpass; a key is preferred)  TESTBED_SSH_BATCH [1]
-  TESTBED_REMOTE_DIR [/media/docker/pi-spaces]  TESTBED_SUDO [no|yes]  TESTBED_DOCKER_HOST (rootless socket, autodetected)
-  TESTBED_PROJECT [pi-spaces-test]  TESTBED_NODE_IMAGE [node:22-bookworm-slim]
+  TESTBED_REMOTE_DIR [/media/docker/phi-spaces]  TESTBED_SUDO [no|yes]  TESTBED_DOCKER_HOST (rootless socket, autodetected)
+  TESTBED_PROJECT [phi-spaces-test]  TESTBED_NODE_IMAGE [node:22-bookworm-slim]
   TESTBED_MEM_LIMIT [512m] TESTBED_CPUS [0.5] TESTBED_RUNNER_MEM [2g] TESTBED_RUNNER_CPUS [2.0] TESTBED_PIDS_LIMIT [1024]
   (limits apply per container; 0 switches a limit off)
   TESTBED_NETBIRD_DOMAIN [spacebird.eibrain.org]  TESTBED_NETBIRD_PROJECT [spacebird]
@@ -93,10 +93,10 @@ load_env_file() {
 configure() {
 	load_env_file "$ENV_FILE"
 	: "${TESTBED_SSH_TARGET:=big}"
-	: "${TESTBED_REMOTE_DIR:=/media/docker/pi-spaces}"
+	: "${TESTBED_REMOTE_DIR:=/media/docker/phi-spaces}"
 	: "${TESTBED_SUDO:=no}"
 	: "${TESTBED_SSH_BATCH:=1}"
-	: "${TESTBED_PROJECT:=pi-spaces-test}"
+	: "${TESTBED_PROJECT:=phi-spaces-test}"
 	: "${TESTBED_NODE_IMAGE:=node:22-bookworm-slim}"
 	: "${TESTBED_MEM_LIMIT:=512m}" "${TESTBED_CPUS:=0.5}" "${TESTBED_RUNNER_MEM:=2g}" "${TESTBED_RUNNER_CPUS:=2.0}" "${TESTBED_PIDS_LIMIT:=1024}"
 	: "${TESTBED_NETBIRD_DOMAIN:=spacebird.eibrain.org}" "${TESTBED_NETBIRD_PROJECT:=spacebird}"
@@ -123,7 +123,7 @@ configure() {
 	for v in "$TESTBED_CPUS" "$TESTBED_RUNNER_CPUS"; do [[ $v =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "cpu limit '$v' (e.g. 1.0)"; done
 
 	SSH_ARGS=(-o ConnectTimeout=10 -o ServerAliveInterval=15 -o ControlMaster=auto -o ControlPersist=120
-		-o "ControlPath=${TMPDIR:-/tmp}/pi-spaces-testbed-%C")
+		-o "ControlPath=${TMPDIR:-/tmp}/phi-spaces-testbed-%C")
 	[[ -n ${TESTBED_SSH_USER:-} ]] && SSH_ARGS+=(-l "$TESTBED_SSH_USER")
 	[[ -n ${TESTBED_SSH_PORT:-} ]] && SSH_ARGS+=(-p "$TESTBED_SSH_PORT")
 	[[ -n ${TESTBED_SSH_KEY:-} ]] && SSH_ARGS+=(-i "$TESTBED_SSH_KEY" -o IdentitiesOnly=yes)
@@ -339,7 +339,7 @@ cmd_status() {
 SMOKE_JS="$(cat <<'JS'
 import * as m from '/opt/app/pi-spaces.mjs';
 import { readFileSync } from 'node:fs';
-const need = ['PiSpaces', 'createSpace', 'listSpaces', 'claims', 'startService', 'spaces', 'FOREVER'];
+const need = ['PhiSpaces', 'createSpace', 'listSpaces', 'claims', 'startService', 'spaces', 'FOREVER'];
 const missing = need.filter((k) => !(k in m));
 const man = JSON.parse(readFileSync('/opt/app/MANIFEST.json', 'utf8'));
 console.log(`node ${process.version}, NODE_ENV=${process.env.NODE_ENV}, uid ${process.getuid()}, artifact ${man.commit}${man.dirty ? ' (uncommitted changes)' : ''} built ${man.builtAt}`);

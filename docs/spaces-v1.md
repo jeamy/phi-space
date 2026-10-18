@@ -1,4 +1,4 @@
-# pi-spaces: historischer lokaler Implementierungsstand
+# phi-spaces: historischer lokaler Implementierungsstand
 
 > **Überholt durch [implementierungsstand.md](implementierungsstand.md).**
 > Diese Momentaufnahme vom 2026-10-07 bleibt nur für die damaligen Kennungen
@@ -24,7 +24,7 @@ Der Storage und dessen Fehlervertrag bestimmen Dauerhaftigkeit, nicht die Space-
 | doc.ts | Dokument des Default-Space und Migration |
 | spaces.ts | Registry, benannte Spaces (`createSpace`, `listSpaces`), Auflösung Alias → `spaceId` |
 | claims.ts | dauerhafte Request-Claims und Request-Generationen (v3 6.2) |
-| client.ts | lokaler pi-spaces-Client (API-Klasse `PiSpaces`, Interface `SpaceLike`), blockierende Operationen, once-Hook, Snapshot-Lesen |
+| client.ts | lokaler phi-spaces-Client (API-Klasse `PhiSpaces`, Interface `SpaceLike`), blockierende Operationen, once-Hook, Snapshot-Lesen |
 | index.ts | Agenten-Tools, Claims, Prompt, Reaper und Delivery |
 | meter.ts | prozesslokale Zähler und Raten |
 | canonical.ts | kanonische JSON-Kodierung für Feldvergleich |
@@ -33,10 +33,10 @@ SpaceState enthält nextId, entries, txns, regs, waiters, outbox, returned, limi
 rpc (Claims/Generationen). EntryRec speichert type/types/fields, expires, writtenUnder, takenBy, readBy, owner und
 optionale Größe. Lokale IDs haben die Form `<präfix><inkarnation>-<zähler>` (ältere `e<n>` bleiben gültig); Views
 tragen zusätzlich die globale ID `gid = <spaceId>/<lokale ID>`. `spaceId` und Inkarnation entstehen bei der
-Registrierung, der Default-Space bei der ersten Nutzung über `PiSpaces` oder die Tools.
+Registrierung, der Default-Space bei der ersten Nutzung über `PhiSpaces` oder die Tools.
 Zeitpunkte sind absolute Millisekunden; FOREVER bleibt unverfallend.
 
-**Request-Claims:** `PiSpaces`-Mutationen und read/take akzeptieren optional `request: {principal, generation,
+**Request-Claims:** `PhiSpaces`-Mutationen und read/take akzeptieren optional `request: {principal, generation,
 requestId}`. Claim, Wirkung und Ergebnis entstehen im selben Commit; gespeichert wird nur ein Hash der fachlichen
 Argumente. Ein Retry mit gleicher Identität und gleichen Argumenten liefert das gespeicherte Ergebnis (auch nach
 Neustart); ein offener Request läuft mit seiner ersten Deadline weiter. Fehlerfälle: `RequestConflict`,

@@ -60,7 +60,7 @@ export class PersistentHome {
 	#open = new Set<Harness>();
 	constructor(backend: Backend) {
 		this.backend = backend;
-		this.dir = mkdtempSync(join(tmpdir(), `pi-spaces-${backend}-`));
+		this.dir = mkdtempSync(join(tmpdir(), `phi-spaces-${backend}-`));
 	}
 	async storage(): Promise<Storage> {
 		const s = this.backend === "jsonl" ? await openNodeJsonlStorage(this.dir, ctx) : await openNodeSqliteStorage(join(this.dir, "harness.sqlite"));

@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
-import { PiSpaces } from "../src/client.ts";
+import { PhiSpaces } from "../src/client.ts";
 import { beginRestore, completeRestore, restoreBatch, snapshotHash } from "../src/restore.ts";
 import { RunBusy, RunController, localRunMember, type RunIdentity, type RunMember, type RunSpec } from "../src/run-controller.ts";
 import { createSpace, snapshotSpace, spaceDoc } from "../src/spaces.ts";
@@ -131,7 +131,7 @@ for (const backend of BACKENDS) test(`${backend}: case 9: an older journal and a
 		const done = await old.resolve("res9", "run9", { expectedViewHash: view.recovery!.viewHash!, decision: "resume" });
 		assert.equal(done.state, "running"); assert.equal(done.revision, 7, "pause barrier at 6 above all evidence, resume at 7");
 		assert.equal((await o.gate(b, "run9"))!.revision, 7);
-		const wb = new PiSpaces(o.h, ctx, Date.now, undefined, undefined, { space: b });
+		const wb = new PhiSpaces(o.h, ctx, Date.now, undefined, undefined, { space: b });
 		const tx = await wb.createTransaction(30_000);
 		assert.equal(await wb.take(T("Job"), 0, { txn: tx.id }), null, "restoredUnverified Jobs stay untakeable after the resume");
 		assert.ok(await wb.count(T("Job")) > 0);
@@ -159,7 +159,7 @@ for (const backend of BACKENDS) test(`${backend}: case 12: partial resume, lost 
 		const hash = view.recovery!.viewHash!;
 		await assert.rejects(controller.resolve("res", "run12", { expectedViewHash: hash, decision: "resume" }), /never resumed/);
 		assert.equal((await controller.status("run12"))!.state, "needsReview", "the recovery fence stays");
-		const wa = new PiSpaces(o.h, ctx, Date.now, undefined, undefined, { space: a });
+		const wa = new PhiSpaces(o.h, ctx, Date.now, undefined, undefined, { space: a });
 		assert.equal(await wa.take(T("Job"), 0, { txn: (await wa.createTransaction(30_000)).id }), null, "no work while unresolved");
 		const stopped = await controller.resolve("res-stop", "run12", { expectedViewHash: hash, decision: "stop" });
 		assert.equal(stopped.state, "stopped"); assert.equal(stopped.revision, 10);

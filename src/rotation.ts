@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import type { Context } from "@earendil-works/chord";
 import type { SpaceHost } from "./client.ts";
-import { PiSpaces } from "./client.ts";
+import { PhiSpaces } from "./client.ts";
 import type { Algorithm } from "./auth.ts";
 import { keyFingerprint, CONTROL_SPACE } from "./enroll.ts";
 import { spaceDoc } from "./spaces.ts";
@@ -11,7 +11,7 @@ import { verifyDetached } from "./grants.ts";
 import * as core from "./core.ts";
 
 export type RotationChallenge = { nonce: string; peerId: string; oldKeyId: string; newKeyId: string; newAlgorithm: Algorithm; newPublicKey: string; issuedAt: number; expiresAt: number };
-export const rotationBytes = (c: RotationChallenge) => Buffer.from("pi-spaces/rotate/v1\n" + canonicalJson(c as unknown as core.Json));
+export const rotationBytes = (c: RotationChallenge) => Buffer.from("phi-spaces/rotate/v1\n" + canonicalJson(c as unknown as core.Json));
 export async function createRotationChallenge(host: SpaceHost, ctx: Context, peerId: string, oldKeyId: string, algorithm: Algorithm, publicKey: string, now = Date.now(), check: () => void = () => {}): Promise<RotationChallenge> {
 	if (!["ed25519", "ecdsa-p256"].includes(algorithm) || Buffer.byteLength(publicKey) > 1024) throw new core.IllegalArgumentError("invalid replacement key");
 	return host.commit(async tx => {
@@ -67,7 +67,7 @@ export class RotationService {
 			if (!key || key.state !== "active") throw new core.PermissionError("the app key is no longer active");
 			const authorization = this.o.verifier.check(call.frame?.grant, id, { ...call, space: CONTROL_SPACE } as Call, conn); authorization.check();
 			const a = call.args ?? {}, now = (this.o.now ?? Date.now)();
-			if (call.method === "rotationGeneration") return { ok: true, result: await new PiSpaces(this.o.host, this.o.ctx, this.o.now, undefined, undefined, { space: CONTROL_SPACE, authorization }).issueGeneration(id.principal) };
+			if (call.method === "rotationGeneration") return { ok: true, result: await new PhiSpaces(this.o.host, this.o.ctx, this.o.now, undefined, undefined, { space: CONTROL_SPACE, authorization }).issueGeneration(id.principal) };
 			if (call.method === "rotationChallenge") return { ok: true, result: await createRotationChallenge(this.o.host, this.o.ctx, id.principal.peerId, proof.keyId, a.algorithm, a.publicKey, now, authorization.check) as unknown as core.Json };
 			if (call.method === "rotationStatus") {
 				const state = await this.o.host.snapshot((await import("./spaces.ts")).Registry, this.o.ctx);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { GrantAuthority, GrantVerifier, GrantDenied, generateKey, PiSpaces, core, type Grant, type SignedGrant, type Connection } from "../src/index.ts";
+import { GrantAuthority, GrantVerifier, GrantDenied, generateKey, PhiSpaces, core, type Grant, type SignedGrant, type Connection } from "../src/index.ts";
 import { canonicalJson } from "../src/canonical.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
@@ -9,7 +9,7 @@ test("signed grants reject tampering, foreign keys/scopes, resolution effects an
 	const key = generateKey("ed25519", "control"), principal = { peerId: "worker" }, id = { principal, roles: ["member"] };
 	const conn: Connection = { peerId: "worker", state: { proof: { keyId: "app-1" } } };
 	const grant: Grant = { id: "g", authorityId: "authority", issuerHostId: "control", principal, keyId: "app-1", scope: ["default"], roles: ["member"], issuedAt: now, expiresAt: now + 60000, purpose: "effect" };
-	const sign = async (g: Grant): Promise<SignedGrant> => ({ grant: g, algorithm: key.signer.algorithm, signature: Buffer.from(await key.signer.sign(Buffer.from("pi-spaces/grant/v1\n" + canonicalJson(g as unknown as core.Json)))).toString("base64") });
+	const sign = async (g: Grant): Promise<SignedGrant> => ({ grant: g, algorithm: key.signer.algorithm, signature: Buffer.from(await key.signer.sign(Buffer.from("phi-spaces/grant/v1\n" + canonicalJson(g as unknown as core.Json)))).toString("base64") });
 	const verifier = new GrantVerifier({ authorityId: "authority", issuerHostId: "control", publicKey: key.publicKey, algorithm: "ed25519", now: () => now });
 	const token = await sign(grant);
 	assert.throws(() => verifier.check({ ...token, grant: { ...grant, scope: ["*"] } }, id, { method: "write" }, conn), GrantDenied);
@@ -20,9 +20,9 @@ test("signed grants reject tampering, foreign keys/scopes, resolution effects an
 	assert.throws(() => verifier.check(resolution, id, { method: "txn", args: { action: "commit" } }, conn), GrantDenied);
 	assert.equal(verifier.check(resolution, id, { method: "pollOperation" }, conn).canExecutePending("take", null), false);
 	await forEachBackend(async home => {
-		now = 10000; const h = await home.open(), local = new PiSpaces(h, ctx, () => now);
+		now = 10000; const h = await home.open(), local = new PhiSpaces(h, ctx, () => now);
 		await local.write({ type: "Seed", fields: {} });
-		const authorization = verifier.check(token, id, { method: "write" }, conn), remote = new PiSpaces(h, ctx, () => now, undefined, "worker", { authorization });
+		const authorization = verifier.check(token, id, { method: "write" }, conn), remote = new PhiSpaces(h, ctx, () => now, undefined, "worker", { authorization });
 		now = grant.expiresAt - 2000;
 		await assert.rejects(remote.write({ type: "Expired", fields: {} }), GrantDenied);
 		assert.equal(await local.count({ type: "Expired" }), 0);
@@ -47,10 +47,10 @@ test("transaction commit rechecks rights on its original entries after a role ch
 	await forEachBackend(async home => {
 		const h = await home.open(); let allowed = true;
 		const authorization = { validUntil: 100000, roles: ["member"], check() {}, canExecutePending: () => allowed };
-		const client = new PiSpaces(h, ctx, () => 1, undefined, "worker", { authorization });
+		const client = new PhiSpaces(h, ctx, () => 1, undefined, "worker", { authorization });
 		const txn = await client.createTransaction(60000); await client.write({ type: "Protected", fields: {} }, txn.id);
 		allowed = false; await assert.rejects(client.commit(txn.id), core.PermissionError);
-		assert.equal(await new PiSpaces(h, ctx, () => 1).count({ type: "Protected" }), 0);
+		assert.equal(await new PhiSpaces(h, ctx, () => 1).count({ type: "Protected" }), 0);
 		await client.abort(txn.id);
 	});
 });

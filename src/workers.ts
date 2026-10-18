@@ -8,7 +8,7 @@ import { defineDoc } from "@earendil-works/pi-durable";
 import { createHash } from "node:crypto";
 import type { Algorithm, Signer } from "./auth.ts";
 import { canonicalJson } from "./canonical.ts";
-import { PiSpaces, type SpaceHost, type SpaceLike } from "./client.ts";
+import { PhiSpaces, type SpaceHost, type SpaceLike } from "./client.ts";
 import { verifyDetached } from "./grants.ts";
 import { listSpaces } from "./spaces.ts";
 import * as core from "./core.ts";
@@ -20,7 +20,7 @@ export type WorkerPin = { issuer: string; algorithm: Algorithm; publicKey: strin
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/;
 const MAX_COUNT = 64, MAX_PER_HOST = 32, MAX_ASSIGNMENTS = 1024, MAX_COMMANDS = 1024;
-const bytes = (v: WorkerList) => Buffer.from("pi-spaces/worker-assignments/v1\n" + canonicalJson(v as unknown as core.Json));
+const bytes = (v: WorkerList) => Buffer.from("phi-spaces/worker-assignments/v1\n" + canonicalJson(v as unknown as core.Json));
 const hashOf = (v: unknown) => createHash("sha256").update(canonicalJson(v as core.Json)).digest("hex");
 export function verifyWorkers(t: SignedWorkers, pin: WorkerPin): WorkerList {
 	if (!t || typeof t !== "object" || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm || typeof t.signature !== "string" || !verifyDetached(pin.algorithm, pin.publicKey, bytes(t.value), t.signature)) throw new core.PermissionError("invalid worker assignment signature");
@@ -171,7 +171,7 @@ export class WorkerSupervisor {
 	/** Stop is checked between steps (a task is never cut off); a wait for work is interrupted at once. */
 	private async loop(r: Running, signal: AbortSignal): Promise<void> {
 		const kind = this.o.kinds[r.spec.kind]!, spec = r.spec;
-		const space = (this.o.space ?? (id => new PiSpaces(this.o.host, this.o.ctx, this.o.now, undefined, undefined, { space: id })))(spec.targetSpace);
+		const space = (this.o.space ?? (id => new PhiSpaces(this.o.host, this.o.ctx, this.o.now, undefined, undefined, { space: id })))(spec.targetSpace);
 		const sleep = this.o.sleep ?? abortableSleep, { minMs, maxMs } = this.o.backoff ?? { minMs: 100, maxMs: 5000 };
 		let delay = 0;
 		while (!signal.aborted) {

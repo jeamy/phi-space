@@ -3,7 +3,7 @@ standard: help_workflow
 id: help.workflow.stage_v1_local_memory
 title: "Stufe 1 (v1-local-memory): Lokaler Sofortstart ohne Setup"
 short: "Die einfachste lauffähige Version des Multiplayer Space-Chats im Arbeitsspeicher: Threads, Forking, Presence-Leases und transaktionale Antwortverarbeitung."
-tags: [v1, memory, quickstart, pispaces, thread, fork, presence, completionprofile]
+tags: [v1, memory, quickstart, phispaces, thread, fork, presence, completionprofile]
 owner: client
 related: [help.workflow.overview_v1_to_v6, help.workflow.stage_v2_local_durable]
 since: 0.0.1
@@ -19,7 +19,7 @@ Stufe 1 (`help-site/examples/v1-local-memory/run.ts`) benötigt keinerlei Einric
 
 - **1 Prozess**, **1 Harness** auf `MemoryStorage` (flüchtig, kein Restart-Szenario).
 - **1 benannter Space** (`chat-v1`): alle Entries (`Presence`, `Thread`, `Msg`, `ChatTask`) liegen in genau diesem Space.
-- Clients (alice/bob) und Worker greifen in-process über dasselbe `PiSpaces`-Objekt zu — kein Socket, keine Datei, kein Netz.
+- Clients (alice/bob) und Worker greifen in-process über dasselbe `PhiSpaces`-Objekt zu — kein Socket, keine Datei, kein Netz.
 
 ## Arbeitsablauf {#workflow}
 
@@ -28,7 +28,7 @@ Stufe 1 (`help-site/examples/v1-local-memory/run.ts`) benötigt keinerlei Einric
 ```ts
 const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([

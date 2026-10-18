@@ -1,5 +1,5 @@
 import subprocess,time,json,pathlib,urllib.request,sys
-base=pathlib.Path('/home/mux/.local/share/pi-spaces-operations');report=base/'netbird-matrix-progress.json'
+base=pathlib.Path('/home/mux/.local/share/phi-spaces-operations');report=base/'netbird-matrix-progress.json'
 cases=[('management-5m',['management'],300)]
 if '--all' in sys.argv:cases += [('management-1h',['management'],3600),('signal-10m',['signal'],600),('relay-30m',['relay'],1800),('management-relay-1h',['management','relay'],3600)]
 state={'started':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'state':'starting','faultScope':'two-owned-test-peers-only','globalServerStopped':False,'runs':[]}
@@ -22,15 +22,15 @@ def status(container):
  return {'management':bool((d.get('management') or {}).get('connected')),'signal':bool((d.get('signal') or {}).get('connected')),'relayAvailable':any(x.get('available') for x in relays if x.get('uri','').startswith('rels:')),'peers':[{'ip':p.get('netbirdIp'),'state':p.get('status'),'type':p.get('connectionType')} for p in peers]}
 
 def objects():
- r=docker('pi-spaces-test-host-b-1','node','/data/phase1b-restore-source/netbird-probe.mjs')
+ r=docker('phi-spaces-test-host-b-1','node','/data/phase1b-restore-source/netbird-probe.mjs')
  try:return json.loads(r.stdout)
  except:return {'passed':False,'error':'ProbeProcessFailed'}
 def fault(blocked):
  req=urllib.request.Request('http://127.0.0.1:19991/fault',data=json.dumps({'blocked':blocked}).encode(),headers={'Content-Type':'application/json'},method='POST');return json.load(urllib.request.urlopen(req,timeout=5))
 def tunnel():
- r=docker('pi-spaces-test-host-b-1','node','--input-type=module','-e',"import net from 'node:net';const s=net.connect(7421,'100.89.116.183');s.setTimeout(3000);s.on('connect',()=>{console.log('true');s.destroy();});s.on('timeout',()=>{console.log('false');s.destroy();});s.on('error',()=>console.log('false'));")
+ r=docker('phi-spaces-test-host-b-1','node','--input-type=module','-e',"import net from 'node:net';const s=net.connect(7421,'100.89.116.183');s.setTimeout(3000);s.on('connect',()=>{console.log('true');s.destroy();});s.on('timeout',()=>{console.log('false');s.destroy();});s.on('error',()=>console.log('false'));")
  return r.stdout.strip()=='true'
-def sample(start):return {'seconds':round(time.monotonic()-start,1),'hostB':status('pi-spaces-test-nb-host-b-1'),'member2':status('pi-spaces-test-nb-member-2-1'),'objects':objects(),'directTcpConnect':tunnel()}
+def sample(start):return {'seconds':round(time.monotonic()-start,1),'hostB':status('phi-spaces-test-nb-host-b-1'),'member2':status('phi-spaces-test-nb-member-2-1'),'objects':objects(),'directTcpConnect':tunnel()}
 try:
  state['baselineObjects']=objects();assert state['baselineObjects']['passed'],'baseline objects failed'
  for name,blocked,duration in cases:
@@ -42,8 +42,8 @@ try:
   fault(blocked);start=time.monotonic();restarted=False
   while True:
    if name=='signal-10m' and not restarted and time.monotonic()-start>=60:
-    docker('pi-spaces-test-nb-host-b-1','netbird','down')
-    subprocess.Popen(['docker','exec','pi-spaces-test-nb-host-b-1','netbird','up'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    docker('phi-spaces-test-nb-host-b-1','netbird','down')
+    subprocess.Popen(['docker','exec','phi-spaces-test-nb-host-b-1','netbird','up'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     restarted=True;run['hostBReconnectRequestedAtSeconds']=round(time.monotonic()-start,1)
    run['samples'].append(sample(start));run['elapsedSeconds']=round(time.monotonic()-start,1);save()
    if time.monotonic()-start>=duration:break
@@ -52,7 +52,7 @@ try:
   while not objects()['passed']:
    if not recoveryRestarted and time.monotonic()-recoveryStart>75:
     run['explicitAgentReconnectForRecovery']=True;recoveryRestarted=True
-    for container in ['pi-spaces-test-nb-host-b-1','pi-spaces-test-nb-member-2-1']:subprocess.Popen(['docker','exec',container,'netbird','up'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    for container in ['phi-spaces-test-nb-host-b-1','phi-spaces-test-nb-member-2-1']:subprocess.Popen(['docker','exec',container,'netbird','up'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
    if time.monotonic()>deadline:raise RuntimeError('post-fault object access not recovered')
    time.sleep(5)
   run['recoveredObjects']=True;run['finished']=True;save()

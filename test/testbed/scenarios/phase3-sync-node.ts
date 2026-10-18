@@ -9,7 +9,7 @@ import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
 import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
-import {PrimarySyncJournal,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,TlsRecoveryRegister,SimulatorFencing,TlsFencing,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,serveSpace,socketTransport,loadFileSigner,signedReplicaPeer,replicaSyncHandler,canonicalJson,type PrimarySyncConfig,type FencingAdapter,type FenceProof,type ReplicaPin,type RecoveryRegister} from '../../../src/index.ts';
+import {PrimarySyncJournal,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,SqliteRecoveryRegister,TlsRecoveryRegister,SimulatorFencing,TlsFencing,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,serveSpace,socketTransport,loadFileSigner,signedReplicaPeer,replicaSyncHandler,canonicalJson,type PrimarySyncConfig,type FencingAdapter,type FenceProof,type ReplicaPin,type RecoveryRegister} from '../../../src/index.ts';
 
 type Remote=ReplicaPin&{ip:string};
 type Config={self:string;bindIp:string;port:number;signerFile:string;remotes:Remote[];genesis:PrimarySyncConfig;dataIncarnation:string;
@@ -40,14 +40,14 @@ async function handle(q:any):Promise<unknown>{
   case 'open-primary':{await closeHost();const peer=journal.config.durability==='single'?null:peerFor(journal.config.standbyReplica),assert=assertSyncPrimary(register,cfg.self,journal),s=await rawStorage();
    await recoverPrimarySync(s,journal,peer,ctx,assert);host=await Harness.open(primarySyncStorage(s,journal,peer,{assertPrimary:assert}),{models:createModels(),registry:createRegistry()},ctx);return status();}
   case 'write':{if(!host)throw Error('open-primary first');const out:unknown[]=[];
-   for(let n=0;n<(q.count??1);n++){try{const e=await new PiSpaces(host,ctx).write({type:'SyncProbe',fields:{writer:cfg.self,label:q.label,n}},null,core.FOREVER);out.push({n,ok:true,id:(e as any).id??null});}
+   for(let n=0;n<(q.count??1);n++){try{const e=await new PhiSpaces(host,ctx).write({type:'SyncProbe',fields:{writer:cfg.self,label:q.label,n}},null,core.FOREVER);out.push({n,ok:true,id:(e as any).id??null});}
     catch(e){out.push({n,ok:false,sealed:e instanceof CommitSealed?{revision:e.revision,hash:e.hash}:null,error:(e as Error).message.slice(0,200)});if(q.stopOnError!==false)break;}}
    return {writes:out,...status()};}
   case 'close':{await closeHost();return status();}
   case 'status':return status();
-  case 'state':{const h=host;if(h)return {...status(),entries:await new PiSpaces(h,ctx).count({type:'SyncProbe'}),snapshot:digest(await h.snapshot(Space,ctx))};
+  case 'state':{const h=host;if(h)return {...status(),entries:await new PhiSpaces(h,ctx).count({type:'SyncProbe'}),snapshot:digest(await h.snapshot(Space,ctx))};
    await closeHost();const s=await rawStorage();await materializeSyncHistory(s,journal,ctx);await s.close(ctx);
-   const v=await Harness.open(await rawStorage(),{models:createModels(),registry:createRegistry()},ctx);try{return {...status(),entries:await new PiSpaces(v,ctx).count({type:'SyncProbe'}),snapshot:digest(await v.snapshot(Space,ctx))};}finally{await v.close(ctx);}}
+   const v=await Harness.open(await rawStorage(),{models:createModels(),registry:createRegistry()},ctx);try{return {...status(),entries:await new PhiSpaces(v,ctx).count({type:'SyncProbe'}),snapshot:digest(await v.snapshot(Space,ctx))};}finally{await v.close(ctx);}}
   case 'fence':{if(!adapter)throw Error('no fencing adapter on this host');proof=await adapter.fence(q.target,q.reason);writeFileSync(join(home,'proof.json'),JSON.stringify(proof),{mode:0o600});return proof;}
   case 'verify':return proof&&adapter?await adapter.verify(proof):null;
   case 'promote':{if(!adapter||!proof)throw Error('fence first');return withRaw(s=>promote({...common(s),recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter:adapter!,proof:proof!}));}

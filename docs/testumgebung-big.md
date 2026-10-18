@@ -17,7 +17,7 @@ Tests und später die Federation-Hosts laufen in Docker-Containern auf einem Ser
 Ein Skript erledigt Einrichtung und Betrieb:
 
 ```
-lokaler Rechner                              Server big (ssh), Verzeichnis /media/docker/pi-spaces
+lokaler Rechner                              Server big (ssh), Verzeichnis /media/docker/phi-spaces
 src/, examples/, scenarios/ (TypeScript)
    │  esbuild (build-artifacts.mjs)
    ▼
@@ -52,13 +52,13 @@ Sie auf dem Server auszuführen hieße, Quellen dorthin zu kopieren.
 |---|---|---|
 | Zugang | `ssh big` meldet sich als normaler Benutzer an, nicht als `root`. | SSH-Alias `big` verwenden |
 | Docker | **rootless**, ein Daemon je Benutzer (Socket unter `/run/user/<uid>/`). Der System-Daemon ist maskiert; **`root` erreicht keinen Daemon.** | Skript läuft als der Daemon-Benutzer, nicht als `root` |
-| Verzeichnis | `/media/docker/pi-spaces` existierte, gehörte dem Daemon-Benutzer und war leer. | passt zum Benutzer |
+| Verzeichnis | `/media/docker/phi-spaces` existierte, gehörte dem Daemon-Benutzer und war leer. | passt zum Benutzer |
 | sudo | `sudo -n` verlangt für diesen Benutzer ein Passwort | kein sudo, `TESTBED_SUDO=no` |
 | Ressourcen | geteilter Server mit mehreren laufenden Containern anderer Projekte; die Platte war zu über 90 % belegt | knappe Limits je Container, keine veröffentlichten Ports; `check` zeigt den freien Platz |
 | cgroup | v2, systemd-Treiber; Docker meldet `cpuset` und `io.weight` als nicht unterstützt | Speicher-, CPU- und PID-Limits werden gesetzt; ob die CPU-Quota greift, zeigt der erste Lauf |
 | Werkzeuge | docker 29.8.2, compose 5.6.0, rsync vorhanden | nichts zu installieren |
 
-„Als root“ aus der Aufgabenstellung wurde deshalb als **Projektwurzel** `/media/docker/pi-spaces` unter dem Benutzer
+„Als root“ aus der Aufgabenstellung wurde deshalb als **Projektwurzel** `/media/docker/phi-spaces` unter dem Benutzer
 des Docker-Daemons umgesetzt.
 
 ## 3. Voraussetzungen
@@ -79,10 +79,10 @@ Alle Einstellungen kommen aus Umgebungsvariablen oder der Datei `test/testbed/te
 | `TESTBED_SSH_USER`, `_PORT`, `_KEY`, `_OPTS` | – | überschreiben die ssh-Konfiguration |
 | `TESTBED_SSH_PASSWORD` | – | Passwort über `sshpass`; ein Schlüssel ist vorzuziehen |
 | `TESTBED_SSH_BATCH` | `1` | `0` erlaubt Passphrase-/Passwortabfragen im Terminal |
-| `TESTBED_REMOTE_DIR` | `/media/docker/pi-spaces` | Projektverzeichnis auf dem Server (absolut, mindestens zwei Ebenen) |
+| `TESTBED_REMOTE_DIR` | `/media/docker/phi-spaces` | Projektverzeichnis auf dem Server (absolut, mindestens zwei Ebenen) |
 | `TESTBED_SUDO` | `no` | `yes`: Befehle über `sudo -n` |
 | `TESTBED_DOCKER_HOST` | automatisch | Docker-Socket, z.B. `unix:///run/user/<uid>/docker.sock`; erkannt, wenn kein System-Socket existiert |
-| `TESTBED_PROJECT` | `pi-spaces-test` | Compose-Projektname; Präfix für Container, Netz, Volumes, Image |
+| `TESTBED_PROJECT` | `phi-spaces-test` | Compose-Projektname; Präfix für Container, Netz, Volumes, Image |
 | `TESTBED_NODE_IMAGE` | `node:22-bookworm-slim` | Basisimage |
 | `TESTBED_RUNNER_MEM` / `_CPUS` | `2g` / `2.0` | Limits des Runners |
 | `TESTBED_MEM_LIMIT` / `_CPUS` / `_PIDS_LIMIT` | `512m` / `0.5` / `1024` | Limits je Host-Container; `0` schaltet ein Limit ab |
@@ -99,7 +99,7 @@ Alle Befehle: `npm run testbed -- <befehl>` oder `bash test/testbed/testbed.sh <
 2. **Prüfen:** `check`. Nur lesend: Werkzeuge, ssh, Benutzer, Docker (rootless?), Compose, rsync, Verzeichnis, freier Platz,
    vorhandene Container des Projekts. Mit `--dry-run` zeigt jeder Befehl, was er auf dem Server tun würde.
 3. **Starten:** `up` (oder `up federation`). Das Skript
-   - legt `/media/docker/pi-spaces` und `build/` an, falls sie fehlen;
+   - legt `/media/docker/phi-spaces` und `build/` an, falls sie fehlen;
    - schreibt `docker-compose.yml`, `Dockerfile`, `.dockerignore` und `.env`, **nur wenn sie fehlen**;
      weicht eine vorhandene Datei von der Vorlage ab, wird gewarnt und nichts überschrieben (`init --force` überschreibt);
    - baut die Artefakte lokal (`build`) und überträgt nur diese nach `build/` (`ship`);
@@ -109,7 +109,7 @@ Alle Befehle: `npm run testbed -- <befehl>` oder `bash test/testbed/testbed.sh <
    - zeigt den Status.
 4. **Testen:** `test` (Standard `all`) führt vorher `up core` aus, liefert also den aktuellen Stand aus, und prüft im Runner:
    `smoke` (das Bündel lädt und exportiert, was die Laufzeit braucht; Node-Version, `NODE_ENV`, Benutzer und Artefakt-Commit
-   werden ausgegeben; **keine TypeScript-Datei** im Image und unter `/media/docker/pi-spaces`), `examples` (die kompilierten
+   werden ausgegeben; **keine TypeScript-Datei** im Image und unter `/media/docker/phi-spaces`), `examples` (die kompilierten
    Beispiele `workers`, `sensor-pipeline`, `chat`, `cache` und `sieve 1001 2` mit „168 primes“) und `scenario` (Primzahlsieb mit
    simuliertem Handy, Abschnitt 10). Einzeln: `test smoke|examples|scenario`. Alle Schritte laufen auch bei einem Fehlschlag
    durch; der Exit-Code ist dann 1.
@@ -170,9 +170,9 @@ Hand: Container stoppen und sein Volume mit `docker volume rm` entfernen.
 | `sudo: interactive authentication is required` | `TESTBED_SUDO=yes` ist gesetzt, aber `sudo` verlangt ein Passwort. Auf `big` wird kein sudo gebraucht |
 | `docker: NOT REACHABLE` | Daemon des Benutzers läuft nicht (`systemctl --user status docker` auf dem Server) oder anderer Socket: `TESTBED_DOCKER_HOST` |
 | `docker.sock: no such file` als `root` | Der Daemon gehört einem anderen Benutzer; als dieser arbeiten (der normale ssh-Alias) |
-| `image build failed` | Auf dem Server `cd /media/docker/pi-spaces && docker compose build runner` für die volle Ausgabe; meist Netzzugang oder Plattenplatz |
+| `image build failed` | Auf dem Server `cd /media/docker/phi-spaces && docker compose build runner` für die volle Ausgabe; meist Netzzugang oder Plattenplatz |
 | `TypeScript source found in … refusing to ship` | Ein Build hätte Quellcode in die Artefakte gelegt; `build-artifacts.mjs` prüfen |
-| `smoke` meldet TypeScript-Dateien auf dem Server | Rest einer früheren Version: `purge-sources`; sonst nachsehen, was unter `/media/docker/pi-spaces` liegt |
+| `smoke` meldet TypeScript-Dateien auf dem Server | Rest einer früheren Version: `purge-sources`; sonst nachsehen, was unter `/media/docker/phi-spaces` liegt |
 | `npm ci` meldet `lock file ... does not satisfy` | `package-lock.json` passt nicht zu `package.json`. Das war hier der Fall (esbuild fehlte im Lock). Lokal `npm install --package-lock-only` und die Änderung prüfen |
 | `Permission denied (publickey)` mit einem fremden Benutzernamen | `test/testbed/testbed.env` enthält einen aktiven Platzhalter (`TESTBED_SSH_USER=deploy`). Zeile entfernen oder einkommentiert lassen; Umgebungsvariablen haben Vorrang, `TESTBED_SSH_USER=` (leer) nimmt den Benutzer aus `~/.ssh/config` |
 | `… on the server differs from the template` | Server-Datei wurde geändert oder die Vorlage wurde aktualisiert: Unterschied prüfen, dann `init --force` |
@@ -382,14 +382,14 @@ der Backup-/Register-Host, big bleibt wegen seiner übrigen Dienste kein Fencing
 | Netz | **nur IPv6** (netcup-Image ohne IPv4). `spacebird.eibrain.org` hat seit 2026-10-16 den AAAA-Eintrag `2a0a:4cc0:c0:62f2:8000::1000` (big, nginx auf `[::]:443`). nanoi löst ihn über den netcup-Resolver auf; der vorübergehende `/etc/hosts`-Eintrag ist entfernt. |
 | NetBird | Client 0.80.0 aus dem signierten Repository `pkgs.netbird.io`, auf die Server-Version gepinnt (`apt-mark hold`); Peer `nano-test`, 100.89.28.88, Gruppe `space-hosts` über den vorhandenen Setup-Key `testbed-hosts` (von big direkt weitergereicht, nie ausgegeben). Verbindungen zu IPv4-Peers laufen über das Relay. |
 | Firewall | `pi-nft-host.service` lädt `/etc/nftables-pi-host.nft`: eingehend nur SSH, ICMP/ICMPv6, WireGuard (UDP 51820) und alles über `wt0`; ausgehend frei. Beim Einrichten mit Totmannschalter angewendet und per neuer SSH-Verbindung geprüft. |
-| Laufzeit | Debian `docker.io`; Image `pi-spaces-test-node:local` von big übertragen (Node v22.23.3, Produktionsabhängigkeiten). Verzeichnisse `/opt/pi-spaces/artifacts` und `/var/lib/pi-spaces` (0700). Es werden wie auf big nur gebaute Artefakte ausgeliefert. |
+| Laufzeit | Debian `docker.io`; Image `phi-spaces-test-node:local` von big übertragen (Node v22.23.3, Produktionsabhängigkeiten). Verzeichnisse `/opt/phi-spaces/artifacts` und `/var/lib/phi-spaces` (0700). Es werden wie auf big nur gebaute Artefakte ausgeliefert. |
 | Zeit | systemd-timesyncd aktiv, synchronisiert (Voraussetzung für die HLC-Uhrprüfung). |
 
-| Federation-Member | Container `pi-spaces-nano` (Benutzer `node`, read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz) mit Daten in `/var/lib/pi-spaces/nano` (`/data/nano`); eigenständig gebündelter Daemon `federation-host.mjs` aus `test/testbed/federation-host.ts`; Dienst `pi-spaces-nano.service`. Host `nano-test`, Member von Control `phase1b-host-a`, Gate `100.89.28.88:7421`, eigener Ed25519-Host-Schlüssel (`keyId 6e11de52…`) beim Control-Supervisor als `host` enrolled. |
-| Register | eigenes Reader-Zertifikat `CN=pi-spaces-register-reader-nano` aus der Operator-CA (Fingerprint `4e935bd2…`, kein Operator-Recht), Zugriff über IPv6 auf `2a02:c207:2252:8263:8000::`:17422 mit `serverName: pi-spaces-register`; externer `boot:nano-test` (Version 1) per Operator-CAS geschrieben |
+| Federation-Member | Container `phi-spaces-nano` (Benutzer `node`, read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz) mit Daten in `/var/lib/phi-spaces/nano` (`/data/nano`); eigenständig gebündelter Daemon `federation-host.mjs` aus `test/testbed/federation-host.ts`; Dienst `phi-spaces-nano.service`. Host `nano-test`, Member von Control `phase1b-host-a`, Gate `100.89.28.88:7421`, eigener Ed25519-Host-Schlüssel (`keyId 6e11de52…`) beim Control-Supervisor als `host` enrolled. |
+| Register | eigenes Reader-Zertifikat `CN=phi-spaces-register-reader-nano` aus der Operator-CA (Fingerprint `4e935bd2…`, kein Operator-Recht), Zugriff über IPv6 auf `2a02:c207:2252:8263:8000::`:17422 mit `serverName: phi-spaces-register`; externer `boot:nano-test` (Version 1) per Operator-CAS geschrieben |
 | NetBird-Abfragen | lesender Management-Token wie bei member-1 (`management-token`, 0600) |
 
-Geprüft: Neustart von nanoi, danach Firewall, Docker, NetBird und `pi-spaces-nano` aktiv und `ready`; ein Admin
+Geprüft: Neustart von nanoi, danach Firewall, Docker, NetBird und `phi-spaces-nano` aktiv und `ready`; ein Admin
 (`lux27`) authentifiziert sich über das Overlay am Gate von nanoi (Schlüssel über den Control-Host nachgeschlagen)
 und liest dessen Data Space.
 
@@ -411,12 +411,12 @@ Details in [ap3-replica-control.md](ap3-replica-control.md#netcup-adapter). nano
 MAC `2a:38:5f:38:de:22`; nur dieser Server steht in der Liste der Ziele. Ein echter Abschaltlauf ist am 2026-10-16 bestanden
 ([Nachweis](../test/evidence/f1-netcup-2026-10-16/README.md)).
 
-Nach einem harten Ausschalten bleibt `/var/lib/pi-spaces/nano/owner.lock` liegen, und `pi-spaces-nano` startet
+Nach einem harten Ausschalten bleibt `/var/lib/phi-spaces/nano/owner.lock` liegen, und `phi-spaces-nano` startet
 nicht von selbst. Vorgehen:
 
 1. Prüfen, dass die eingetragene PID im Container nicht mehr existiert.
 2. Erst dann die Sperre löschen.
-3. `systemctl start pi-spaces-nano` ausführen.
+3. `systemctl start phi-spaces-nano` ausführen.
 
 ## 19. Test-Standby 100 (Phase 3, fester synchroner Standby zu nanoi)
 
@@ -429,14 +429,14 @@ außen geht er nur über IPv4, mit derselben öffentlichen Adresse wie lux27 (`2
 | Rolle | Fester Standby zu nanoi als Primary. Promotion auf 100 nach netcup-Fencing von nanoi ist möglich. `degradeToSingle` auf nanoi bleibt gesperrt, weil es für 100 keinen Fencing-Adapter gibt (keine Power-API). |
 | NetBird | Client 0.80.0 aus `pkgs.netbird.io` (Schlüssel von nanoi übernommen), `apt-mark hold`. Auf 100 lag eine ältere Konfiguration für netbird.io, die nach der Installation kurz wieder aktiv wurde. Sie bleibt als inaktives Profil `default` erhalten; aktiv ist das neue Profil `spacebird` mit Peer `standby-100`, 100.89.187.150, Gruppe `space-hosts`, Peer-ID `db96lcflh8lg008bddjg`. Sicherung des vorherigen Zustands: `/root/netbird-state.before-spacebird-20261016`. Zu nanoi (nur IPv6) läuft die Verbindung über das Relay. |
 | Firewall | `pi-nft-host.service` mit `/etc/nftables-pi-host.nft`, Policy `accept`, damit LAN-Dienste (NFS, SSH) unverändert bleiben. Über `wt0` werden nur neue Verbindungen auf TCP 7421 angenommen; 7421 ist außerhalb des Overlays gesperrt. |
-| Laufzeit | Docker, Image `pi-spaces-test-node:local` von big; Daemon-Artefakt identisch mit nanoi. Container `pi-spaces-standby` (read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz), Daten in `/var/lib/pi-spaces/standby`; Dienst `pi-spaces-standby.service`. |
+| Laufzeit | Docker, Image `phi-spaces-test-node:local` von big; Daemon-Artefakt identisch mit nanoi. Container `phi-spaces-standby` (read-only, keine Capabilities, 2 CPU/2 GiB, Host-Netz), Daten in `/var/lib/phi-spaces/standby`; Dienst `phi-spaces-standby.service`. |
 | Federation-Member | Host `standby-100`, Member von Control `phase1b-host-a`, Gate `100.89.187.150:7421`, eigener Ed25519-Schlüssel (`keyId 83503563…`), als `host` enrolled. Ablauf wie bei nanoi: befristete Gruppe `standby-enroll-20261016` mit Policy, danach gelöscht. |
-| Register | Reader-Zertifikat `CN=pi-spaces-register-reader-standby-100` (Fingerprint `d57baa5c…`, Schlüssel auf 100 erzeugt), Zugriff über `207.180.233.218:17422`. `tls.json` auf vpsc ergänzt (Sicherung `tls.json.before-standby-100-20261016`). `boot:standby-100` (Version 1) per Operator-CAS. Keine neue ufw-Regel nötig: Die Adresse ist schon für den Operator freigegeben, getrennt wird über das Zertifikat. |
+| Register | Reader-Zertifikat `CN=phi-spaces-register-reader-standby-100` (Fingerprint `d57baa5c…`, Schlüssel auf 100 erzeugt), Zugriff über `207.180.233.218:17422`. `tls.json` auf vpsc ergänzt (Sicherung `tls.json.before-standby-100-20261016`). `boot:standby-100` (Version 1) per Operator-CAS. Keine neue ufw-Regel nötig: Die Adresse ist schon für den Operator freigegeben, getrennt wird über das Zertifikat. |
 | NetBird-Abfragen | lesender Management-Token wie bei nanoi |
 
 Geprüft:
 
 - Ein Admin (lux27) liest über das Overlay den Data Space von `standby-100`.
 - nanoi erreicht `standby-100:7421` über das Relay.
-- Nach einem Neustart von 100 kamen Firewall, NetBird (Profil `spacebird`), Docker, NFS und `pi-spaces-standby`
+- Nach einem Neustart von 100 kamen Firewall, NetBird (Profil `spacebird`), Docker, NFS und `phi-spaces-standby`
   von selbst wieder. Der Dienst war danach `ready`, und das Admin-Lesen klappte erneut.

@@ -28,7 +28,7 @@ A runnable example demonstrates a workflow, not automatically real distribution 
 
 ## Which API Is Interchangeable? {#api}
 
-PiSpaces and RemoteSpace implement the SpaceLike base contract; mailbox access is explicitly client-specific. FederatedSpace has a separate FederationRequest with principal, stable operation ID and optional Member transaction binding. write(entry, request, leaseMs), read(template, request) and finishTransaction are not drop-in local methods. Business concepts transfer, but routing, complete/partial results and request bindings need adaptation. Do not promise general atomic transactions across arbitrary hosts.
+PhiSpaces and RemoteSpace implement the SpaceLike base contract; mailbox access is explicitly client-specific. FederatedSpace has a separate FederationRequest with principal, stable operation ID and optional Member transaction binding. write(entry, request, leaseMs), read(template, request) and finishTransaction are not drop-in local methods. Business concepts transfer, but routing, complete/partial results and request bindings need adaptation. Do not promise general atomic transactions across arbitrary hosts.
 
 ## Replication Modes and Acceptance {#replication}
 

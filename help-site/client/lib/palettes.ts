@@ -1,4 +1,4 @@
-// The 14 canonical PI-SPACES / HELP color palettes (Dark & Light modes) and WCAG contrast helper.
+// The 14 canonical PHI-SPACES / HELP color palettes (Dark & Light modes) and WCAG contrast helper.
 
 export interface PaletteModeColors {
 	a: string;
@@ -21,7 +21,7 @@ export interface ThemePalette {
 export const PALETTES: ThemePalette[] = [
 	{
 		id: "spaces_default",
-		label: { de: "PI-SPACES Standard", en: "PI-SPACES Default" },
+		label: { de: "PHI-SPACES Standard", en: "PHI-SPACES Default" },
 		dark: { a: "#AED83C", b: "#152B35", c: "#5C8EA0", editableInput: "#3B82F6", labelWhite: "#E8EAED", labelGrey: "#969CA3", iconWhite: "#E2E6EA", iconGrey: "#A1A8AF" },
 		light: { a: "#AED83C", b: "#82A8BA", c: "#5C8EA0", editableInput: "#2563EB", labelWhite: "#F1F3F5", labelGrey: "#62676D", iconWhite: "#ECEFF2", iconGrey: "#555B62" },
 	},

@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_read_page_changes
+id: help.api.phispaces_read_page_changes
 title: "readPage & changes – Konsistente Snapshots und Revisionsströme"
 short: "Liest bytebegrenzte Seiten eines unveränderlichen Snapshots (mit token und rev) und holt nachfolgende Commit-Batches über changes(afterRev) auf."
 tags: [readpage, changes, readall, count, stats, snapshot]

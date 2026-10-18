@@ -19,14 +19,14 @@ spec.loader.exec_module(driver)
 
 class BackupDriverTest(unittest.TestCase):
     def setUp(self):
-        parent = pathlib.Path.home() / '.local/share/pi-spaces-ops'
+        parent = pathlib.Path.home() / '.local/share/phi-spaces-ops'
         parent.mkdir(parents=True, exist_ok=True)
         self.base = pathlib.Path(tempfile.mkdtemp(prefix='ap2-remaining-driver-test-', dir=parent))
         self.home = self.base / 'd'
         self.home.mkdir(mode=0o700)
         (self.home / 'restart.lock').write_text('exclusive test maintenance\n')
         self.state = self.base / 'state.json'
-        self.state.write_text(json.dumps({'tag': self.base.name, 'base': '/home/mux/.local/share/pi-spaces-operations/' + self.base.name, 'members': {'d': {}}, 'localHome': str(self.home), 'running': {}}))
+        self.state.write_text(json.dumps({'tag': self.base.name, 'base': '/home/mux/.local/share/phi-spaces-operations/' + self.base.name, 'members': {'d': {}}, 'localHome': str(self.home), 'running': {}}))
         self.db = sqlite3.connect(self.home / 'harness.sqlite')
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA wal_autocheckpoint=0')

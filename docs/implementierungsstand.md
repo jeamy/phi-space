@@ -1,4 +1,4 @@
-# pi-spaces: aktueller Implementierungsstand
+# phi-spaces: aktueller Implementierungsstand
 
 Stand: 2026-10-16. Diese Seite ist die Ist-Stand-Referenz für Code und
 automatisierte Nachweise. Der [Föderationsplan v3](federation-plan-v3.md) bleibt
@@ -9,7 +9,7 @@ Ergänzung vom 18. Oktober 2026: Die Hilfesystem-/Demo-Befunde F01–F23 wurden
 mit gezielten lokalen Regressionstests bearbeitet. Änderungen, Nachweise und
 bewusste Grenzen stehen in der [Umsetzungstabelle der Analyse](analyse-hilfesystem-demo-apps-2026-10-18.md#7-schrittweise-umsetzung-vom-18-oktober-2026)
 und im [Betriebsvertrag des Hilfesystems](../help-site/README.md#runtime-contract-and-restart).
-`PiSpaces.write` und `RemoteSpace.write` unterstützen eine optionale atomare
+`PhiSpaces.write` und `RemoteSpace.write` unterstützen eine optionale atomare
 Singleton-Erstanlage über `unique`-Schlüsselfelder; ältere Remote-Server ohne
 `write.unique` werden dafür abgewiesen. Dies ist eine lokale/RPC-Erweiterung,
 keine neue Zusage globaler Eindeutigkeit oder einer abgenommenen Replikation.
@@ -28,7 +28,7 @@ Der Default-Space (`pi-spaces.space`) und benannte Spaces
 unveränderlichen `spaceId`s zu; Entry-Views tragen zusätzlich
 `gid = <spaceId>/<localId>`.
 
-Der lokale Client `PiSpaces` und der Dienst `SpaceService` benutzen dieselbe
+Der lokale Client `PhiSpaces` und der Dienst `SpaceService` benutzen dieselbe
 Kernsemantik. Der Dienst ist über In-Process-, Unix-Socket- und TCP-Transport
 nutzbar; `RemoteSpace` implementiert dafür den gemeinsamen Basisvertrag
 `SpaceLike`. Gate, Overlay-Identität, Schlüssel-Challenge, Enrollment, Grants und
@@ -40,7 +40,7 @@ abgeschlossenen Betriebs- und Geräteabnahmen im geprüften F15-Modell.
 | Baustein | Vorhanden | Nicht daraus ableitbar |
 |---|---|---|
 | Core | Entries, Templates, Leases, Txns, Notify, Waiter, Limits, Revisionslog und Abschlussprofile | globale Reihenfolge oder externe Exactly-once-Wirkung |
-| Lokaler Client | `PiSpaces`, benannte Spaces, Claims, Seiten, Changes | Zugriff auf einen fremden Host ohne Dienst |
+| Lokaler Client | `PhiSpaces`, benannte Spaces, Claims, Seiten, Changes | Zugriff auf einen fremden Host ohne Dienst |
 | Dienst | Rollen-/Typprüfung, signierte Generationen, dauerhafte Pending/Poll, Mailbox-ACK, Token-Seiten und Quoten | Replikation oder abgenommener Recovery-Betrieb |
 | Remote | `RemoteSpace`, stabile Retries, Notify/Wait/Events/ACK, Unix/TCP, pi-server-Adapter, Schlüsselbeweis, Enrollment, Grant-Provider und Rotation | automatische Federation-Provisionierung |
 | Phase 1b | zwei dauerhafte echte NetBird-Gates auf big, unabhängiges Register auf vpsc, private SSH-/TLS-Zugänge, Control-ACK, Control-/Data-Restore-Controller, Member-Installation, native Android-Keystore-Abnahme, echte Handy–big-Kopplung/Objektzugriff/Rotation sowie verteilte Live-Data-/Control-Restores mit bestätigten Member-ACKs, sichtbare Handy-Schlüsselsteuerung, zehn Minuten Bildschirm-aus/Hintergrund und kontrollierter tiefer Doze-Test | F15-Modell und kontrollierte komponentenbezogene Ausfälle abgenommen; keine Phase-2-/Replikations-/Promotion-Freigabe |
@@ -182,7 +182,7 @@ Archivbindungen innerhalb seines CAS-Commits. Verspätete Archivregistrierung,
 Rücksetzen von Quarantäne und Löschen von Katalogbelegen werden abgelehnt;
 die Prüfung der Versiegelung liest den Archivkatalog in derselben Transaktion.
 Die Tests prüfen echte Backup-Dateien und Wiederanlauf. `compactErasedSqlite`
-konsolidiert ausschließlich sessionweite pi-spaces-Dokumente eines exklusiv
+konsolidiert ausschließlich sessionweite phi-spaces-Dokumente eines exklusiv
 gesperrten SQLite-Stores (pi-durable-Schema 1), bewahrt aktuelle Werte, IDs,
 Revisionen und Replay-Belege und entfernt alte Revisionen sowie freie Seiten
 mittels Secure-Delete, Checkpoint und VACUUM. Der neue Test prüft den

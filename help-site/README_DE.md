@@ -1,20 +1,20 @@
-# pi-spaces Help & Multiplayer-Chat Webserver (`help-site`)
+# phi-spaces Help & Multiplayer-Chat Webserver (`help-site`)
 
 [English](README.md) · [Deutsch](README_DE.md)
 
-Dieses Verzeichnis enthält das lauffähige Node.js/React-Hilfesystem (`PI-SPACES / HELP`) inklusive zweier interaktiver Live-Demos: der 6-stufigen **Multiplayer Space-Chat**-Workbench und dem selbstlaufenden **Social Swarm** (ein Agenten-Sozialnetzwerk auf `pi-spaces`-Entries).
+Dieses Verzeichnis enthält das lauffähige Node.js/React-Hilfesystem (`PHI-SPACES / HELP`) inklusive zweier interaktiver Live-Demos: der 6-stufigen **Multiplayer Space-Chat**-Workbench und dem selbstlaufenden **Social Swarm** (ein Agenten-Sozialnetzwerk auf `phi-spaces`-Entries).
 
 Abgeglichen mit dem Checkout am 18. Oktober 2026. Die Demos zeigen implementierte Abläufe, keine automatische Multi-Host-/Produktivabnahme. Maßgeblich sind der [Implementierungsstand](../docs/implementierungsstand.md), die [Phase-3-Abnahmematrix](../docs/ap3-abnahme.md) und die [Demo-Analyse](../docs/analyse-hilfesystem-demo-apps-2026-10-18.md).
 
 ## Was die Demos am Tuple-Space-Modell zeigen
 
-Die [Grundlagen zu Linda, JavaSpaces und pi-spaces](../README_DE.md#tuple-spaces-koordination-über-daten) stehen in der Root-README. Hier wird das Prinzip praktisch: Producer schreiben `SwarmTask`-/`ChatTask`-Entries statt einen konkreten Worker aufzurufen; Worker reservieren passende Tasks über Templates und schreiben ihre Ergebnisse transaktional. Für einen späteren Consumer müssen Task-Lease und Storage den Zeitraum überdauern. Ein Task ist keine direkte Referenz auf seinen Erzeuger.
+Die [Grundlagen zu Linda, JavaSpaces und phi-spaces](../README_DE.md#tuple-spaces-koordination-über-daten) stehen in der Root-README. Hier wird das Prinzip praktisch: Producer schreiben `SwarmTask`-/`ChatTask`-Entries statt einen konkreten Worker aufzurufen; Worker reservieren passende Tasks über Templates und schreiben ihre Ergebnisse transaktional. Für einen späteren Consumer müssen Task-Lease und Storage den Zeitraum überdauern. Ein Task ist keine direkte Referenz auf seinen Erzeuger.
 
-pi-spaces implementiert Promise-basierte `write`-/`read`-/`take`-Aufrufe sowie persistente `wait`-Registrierungen und `notify`-Subscriptions. `write` bestätigt die Speicherung, nicht die abgeschlossene Verarbeitung. Ein wartendes `await read/take` hält den aufrufenden Ablauf an, nicht den gesamten Event-Loop; `space_wait` beendet dagegen nach der Registrierung den Agent-Turn und liefert später ein Ereignis. Wartung und lokale Auslieferung übernimmt `startService`. Die Swarm-Demo verwendet einen Dispatcher mit begrenztem Polling, nicht einen dauerhaft wartenden Take pro Agent. Die konfigurierbaren Agenten sind Identitäten, keine 50.000 parallelen Prozesse oder Modellaufrufe. CPU-Arbeit und Durable-Serialisierung können weiterhin den Event-Loop belasten.
+phi-spaces implementiert Promise-basierte `write`-/`read`-/`take`-Aufrufe sowie persistente `wait`-Registrierungen und `notify`-Subscriptions. `write` bestätigt die Speicherung, nicht die abgeschlossene Verarbeitung. Ein wartendes `await read/take` hält den aufrufenden Ablauf an, nicht den gesamten Event-Loop; `space_wait` beendet dagegen nach der Registrierung den Agent-Turn und liefert später ein Ereignis. Wartung und lokale Auslieferung übernimmt `startService`. Die Swarm-Demo verwendet einen Dispatcher mit begrenztem Polling, nicht einen dauerhaft wartenden Take pro Agent. Die konfigurierbaren Agenten sind Identitäten, keine 50.000 parallelen Prozesse oder Modellaufrufe. CPU-Arbeit und Durable-Serialisierung können weiterhin den Event-Loop belasten.
 
 ## Ziel-Domain & Betrieb
 
-- **Öffentliche Web- & Hilfe-Domain**: `https://spaces.eibrain.org` (HTTPS für das `PI-SPACES / HELP`-Portal und `wss://spaces.eibrain.org/ws/chat/:sessionId` für das Multiplayer-Space-Chat-Gateway).
+- **Öffentliche Web- & Hilfe-Domain**: `https://spaces.eibrain.org` (HTTPS für das `PHI-SPACES / HELP`-Portal und `wss://spaces.eibrain.org/ws/chat/:sessionId` für das Multiplayer-Space-Chat-Gateway).
 - **Lokal**: Port `3500` als Standard, änderbar über `PORT` bzw. `HELP_PORT`. Direkter Start verwendet `HELP_BIND`; Docker Production verwendet Host-Networking und `HOST_BIND`. Für rein lokalen Zugriff explizit `127.0.0.1` setzen. Die `.env.example` öffnet den Direktstart mit `HELP_BIND=0.0.0.0` auf allen IPv4-Interfaces.
 - **Geschützter Web-Admin-Bereich (`AdminSpaces` unter `/?view=admin`)**: Login-geschützte Steuerung von Spaces, Läufen (`RunGate`), Workern, Deployment-Plänen, Alarmen und Schlüsseln der konfigurierten Instanz. Der Zugriff ist kein automatisches Recht auf beliebige fremde Hosts.
 - **Mobile Steuerung & Überwachung**: Gemeinsame Betriebsbausteine mit `pi-termux-mobile` (`runtime/spaces-mobile.mjs`, `spaces.html`, `steuerung.html`). Android-Keystore, Enrollment und NetBird-Betrieb benötigen die separate mobile/Host-Konfiguration; der Web-Demostart provisioniert sie nicht.
@@ -23,7 +23,7 @@ pi-spaces implementiert Promise-basierte `write`-/`read`-/`take`-Aufrufe sowie p
 
 ### Social Swarm (`/?view=feed`)
 
-Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige Feed-UI, die das pi-spaces-Prinzip sichtbar macht:
+Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige Feed-UI, die das phi-spaces-Prinzip sichtbar macht:
 
 - **10–50.000 simulierte Agentenidentitäten**, Standard 100 (`SWARM_AGENTS`); Slider und Presets 1k/5k/10k/50k, elf eingebaute Topic-Channels. `SWARM_RATE` steuert die erzeugten Tasks, Standard 5, erlaubter Bereich 1–40; das ist kein garantierter Post-Durchsatz.
 - **Echte Space-Pipeline**: Agenten schreiben `SwarmTask`-Intents; ein Dispatcher reserviert bis zu vier Tasks gemeinsam und veröffentlicht `Post`/`Like`, History, Zähler und Folgeaufträge in einem zweiten Durable-Commit – serverseitig erzwungen via `CompletionProfile`.
@@ -47,7 +47,7 @@ Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige 
 - **🤖 ON/OFF-Toggle**: `POST /api/llm/model {on:false}` schaltet Live-Generierung zur Laufzeit ab – sofortiger Fallback auf deterministische Templates.
 - **Space-Chat**: LLM-Antworten mit Thread-History, `llmModel`/`llmTokens` in der UI.
 - **Gemeinsames Modellbudget**: höchstens sechs Aufrufe pro Minute, zwei gleichzeitig, maximal 400 Ausgabetokens pro Aufruf und 20 Sekunden Laufzeit. Bei ausgeschöpftem Budget verwendet die Demo deterministische Antworten.
-- **Credentials**: `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` oder pi-CLI `auth.json` (`PI_AUTH_DIR`, im Container read-only gemountet). Live-Aufrufe sind zusätzlich ausdrücklich mit `PI_SPACES_LLM=1` einzuschalten. Vorhandene Credentials allein aktivieren sie nicht. `PI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell vor.
+- **Credentials**: `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` oder pi-CLI `auth.json` (`PI_AUTH_DIR`, im Container read-only gemountet). Live-Aufrufe sind zusätzlich ausdrücklich mit `PHI_SPACES_LLM=1` einzuschalten. Vorhandene Credentials allein aktivieren sie nicht. `PHI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell vor.
 
 ## Schnellstart (Docker Production & Lokales Dev/Test-Docker sowie Direktstart)
 
@@ -77,14 +77,14 @@ npm --prefix help-site run docker:dev:logs
 npm --prefix help-site run docker:dev:down
 ```
 
-**Konfiguration via `help-site/.env`** (Vorlage: [`help-site/.env.example`](.env.example), vorhandene Datei nicht überschreiben). Compose verlangt ein privates `PI_SPACES_ADMIN_PASSWORD`, auch bei Auswahl eines Testprofils:
+**Konfiguration via `help-site/.env`** (Vorlage: [`help-site/.env.example`](.env.example), vorhandene Datei nicht überschreiben). Compose verlangt ein privates `PHI_SPACES_ADMIN_PASSWORD`, auch bei Auswahl eines Testprofils:
 
 - `PORT=3500` – Host- und Container-Port.
 - `HOST_BIND=` – Docker Production bindet dann auf `0.0.0.0`; `127.0.0.1` beschränkt die Host-Network-Instanz auf Loopback. Im Dev-Service steuert dies die veröffentlichte Portadresse.
 - `HELP_BIND` – Bind-Adresse beim Direktstart; sicher lokal mit `127.0.0.1`. Dev-Docker verwendet intern `0.0.0.0`.
-- `PI_SPACES_ADMIN_PASSWORD` – Passwort für den AdminSpaces-Login.
+- `PHI_SPACES_ADMIN_PASSWORD` – Passwort für den AdminSpaces-Login.
 - `PI_AUTH_DIR` – Host-Verzeichnis der pi-CLI-Credentials (`~/.pi/agent`), wird read-only in den Container gemountet; Live-Aufrufe benötigen zusätzlich die ausdrückliche Aktivierung.
-- `PI_SPACES_LLM` – Standard `0`; `1` erlaubt Live-LLM mit vorhandenen Credentials. `PI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell.
+- `PHI_SPACES_LLM` – Standard `0`; `1` erlaubt Live-LLM mit vorhandenen Credentials. `PHI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell.
 - `HELP_SQLITE` – SQLite-Pfad beim Direktstart (Standard `help-site/.local/spaces-eibrain.sqlite`); Production-Compose legt `/data/spaces-eibrain.sqlite` im Volume fest.
 
 Der Prod-Container nutzt den vorgebauten `.next`-Build; der Dev-Container kompiliert mit Turbopack. Startzeit und Durchsatz hängen auch von Storegröße und Host ab. Die öffentliche Ziel-Domain ist kein Nachweis einer Veröffentlichung dieses Checkouts. Die folgenden Startbefehle ändern lokalen Laufzeitzustand; Deployment auf geteilten Hosts separat freigeben.
@@ -96,10 +96,10 @@ Der Prod-Container nutzt den vorgebauten `.next`-Build; der Dev-Container kompil
 npm --prefix help-site run build
 
 # 2. Next.js 16 + WebSocket + AdminSpaces Produktivserver starten (Standard aus .env: http://localhost:3500):
-HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm --prefix help-site start
+HELP_BIND=127.0.0.1 PHI_SPACES_LLM=0 npm --prefix help-site start
 
 # Optional: Entwicklungsmodus (Next.js Dev-Server + Live-WebSocket):
-HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm --prefix help-site run dev
+HELP_BIND=127.0.0.1 PHI_SPACES_LLM=0 npm --prefix help-site run dev
 
 # 3. Alle 6 Ausbaustufen (v1 bis v6) einzeln im Terminal ausführen:
 node --experimental-strip-types help-site/examples/v1-local-memory/run.ts
@@ -110,13 +110,13 @@ node --experimental-strip-types help-site/examples/v5-federated-cluster/run.ts
 node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 
 # 4. Automatisierte Testsuite für Corpus, Stufen v1–v6, Chat-Gateway und AdminSpaces ausführen:
-PI_SPACES_LLM=0 npm --prefix help-site test
+PHI_SPACES_LLM=0 npm --prefix help-site test
 
 # Frischen Next-Produktionsbuild und dessen SSR-Auslieferung prüfen:
-PI_SPACES_LLM=0 npm --prefix help-site run test:production
+PHI_SPACES_LLM=0 npm --prefix help-site run test:production
 ```
 
-- **AdminSpaces Login (`/?view=admin`)**: eigenes Passwort über `PI_SPACES_ADMIN_PASSWORD` setzen. Ohne Passwortkonfiguration ist die Web-Anmeldung deaktiviert; es gibt kein Standardpasswort. Peer-Enrollment-Tokens gelten ausschließlich für Peer-Kopplung und ermöglichen keine Web-Anmeldung. Die Docker-Konfiguration verlangt ein gesetztes Passwort.
+- **AdminSpaces Login (`/?view=admin`)**: eigenes Passwort über `PHI_SPACES_ADMIN_PASSWORD` setzen. Ohne Passwortkonfiguration ist die Web-Anmeldung deaktiviert; es gibt kein Standardpasswort. Peer-Enrollment-Tokens gelten ausschließlich für Peer-Kopplung und ermöglichen keine Web-Anmeldung. Die Docker-Konfiguration verlangt ein gesetztes Passwort.
 
 Die CLI-Stufen sind lokale Demonstrationen: v3 nutzt echte Socket-Kommunikation, v5 mehrere In-Memory-Members im selben Prozess, v6 lokale Betriebsbausteine mit Beispiel-Enrollment. Sie installieren weder ein reales Multi-Host-Cluster noch koppeln sie selbständig ein Telefon. Stage-Läufe im Web erzeugen unveränderliche Berichtsspiegel; sie ersetzen keine ausführbare Deployment-Konfiguration.
 
@@ -161,8 +161,8 @@ npm --prefix help-site run build
 
 `client/main.tsx` startet ausschließlich die Standalone-App; Next.js importiert `HelpApp` ohne zweiten React-Root. `tests/help-consistency.test.ts` prüft Corpus, Renderer, Navigation, Loader, Tutorial, Shutdown und Live-Mirror.
 
-- [`VERGLEICH-EARENDIL-VS-PI-SPACES.md`](VERGLEICH-EARENDIL-VS-PI-SPACES.md) – **Architektur- und Konzeptvergleich (Deutsch)**: Earendil Multiplayer Chat (`Pi Durable on Cloudflare`) vs. `pi-spaces` (`v1` In-Memory bis `v5`/`v6` Federated Space) mit detaillierter Vor-/Nachteilsanalyse aller Stufen.
-- [`COMPARISON-EARENDIL-VS-PI-SPACES-EN.md`](COMPARISON-EARENDIL-VS-PI-SPACES-EN.md) – **Architectural & Concept Comparison (English)**: Full English edition of the comparison from In-Memory (`v1`) to Federated Space (`v5`/`v6`).
+- [`VERGLEICH-EARENDIL-VS-PHI-SPACES.md`](VERGLEICH-EARENDIL-VS-PHI-SPACES.md) – **Architektur- und Konzeptvergleich (Deutsch)**: Earendil Multiplayer Chat (`Pi Durable on Cloudflare`) vs. `phi-spaces` (`v1` In-Memory bis `v5`/`v6` Federated Space) mit detaillierter Vor-/Nachteilsanalyse aller Stufen.
+- [`COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md`](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md) – **Architectural & Concept Comparison (English)**: Full English edition of the comparison from In-Memory (`v1`) to Federated Space (`v5`/`v6`).
 - [`PLAN.md`](PLAN.md) – Architektur- und Umsetzungsplan, kein alleiniger Nachweis des aktuellen Laufzeitverhaltens. Die ausführbaren Stufen zeigen lokale Bausteine von Memory über SQLite/Socket und Authentifizierung bis Föderations-/Betriebssteuerung; reale Netz-, Geräte- und Failover-Abnahmen stehen getrennt in den Root-Dokumenten.
 - [API-Referenz](../docs/api.md), [Beispiele](../docs/examples.md) und [Implementierungsstand](../docs/implementierungsstand.md) beschreiben die aktuellen Verträge.
 
@@ -183,7 +183,7 @@ help-site/
 │   └── en/                          # Englische Referenz-, API- und Stufen-Tutorials (v1–v6)
 ├── examples/                        # Die 6 ausführbaren Ausbaustufen (CLI & Web-Backend)
 │   ├── shared/                      # Gemeinsame Entry-Typen, CompletionProfiles & LLM-Fallback
-│   ├── v1-local-memory/             # Stufe 1: Zero-Setup In-Memory PiSpaces Demo
+│   ├── v1-local-memory/             # Stufe 1: Zero-Setup In-Memory PhiSpaces Demo
 │   ├── v2-local-durable/            # Stufe 2: SQLite, RequestRef-Claims, Alarme & Subagent
 │   ├── v3-remote-socket/            # Stufe 3: SpaceService + RemoteSpace (Unix-Socket/TCP + Mailbox-ACK)
 │   ├── v4-gated-auth/               # Stufe 4: Gate (Schicht A/B), Enrollment, 60s-Grants & BootGuard
@@ -202,7 +202,7 @@ help-site/
 │       ├── swarm.ts                 # SocialSwarmHub: 10–50k Identitäten, Dispatcher, Shard-Routing
 │       ├── batch.ts                 # Echte Durable-Reservierungs-/Abschluss-Batches
 │       └── history.ts               # Persistenter verketteter Index und Cursor-Seiten
-├── client/                          # React 19 Frontend (PI-SPACES Help + Demos + AdminSpaces)
+├── client/                          # React 19 Frontend (PHI-SPACES Help + Demos + AdminSpaces)
 │   ├── styles/layout.css            # Token-/Layout-System, Paletten, Feed-/Chat-/Picker-Styles
 │   ├── App.tsx                      # Topbar, Routing (?view=feed|space-chat|admin|…)
 │   ├── components/
@@ -219,7 +219,7 @@ help-site/
 ├── deploy/                          # Reverse-Proxy- & Service-Vorlagen für spaces.eibrain.org
 │   ├── Caddyfile
 │   ├── nginx-spaces.eibrain.org.conf
-│   └── pi-spaces-help.service       # systemd-Einheit (Alternativbetrieb ohne Docker)
+│   └── phi-spaces-help.service       # systemd-Einheit (Alternativbetrieb ohne Docker)
 ├── scripts/
 │   ├── build-corpus.ts              # Validiert Markdown/Facts und erzeugt public/help/index.json
 │   ├── corpus-articles-data.ts      # API-Referenz-Artikel (Signaturen, Parameter, Use-Cases)

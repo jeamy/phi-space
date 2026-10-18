@@ -12,7 +12,7 @@ Die Auswahl lädt die Projektkonfiguration und zeigt Hosts, Spaces, Modus und Re
 Erst Starten löst die Bereitstellung aus. Voraussetzung sind zuvor eingerichteter Host-Zugang und
 autorisierte Installations-/Enrollment-Rechte. Danach muss der Benutzer nicht jeden Space einzeln installieren.
 
-pi-spaces ist unsere TypeScript-Bibliothek. Sie läuft als Erweiterung im pi-durable-Harness
+phi-spaces ist unsere TypeScript-Bibliothek. Sie läuft als Erweiterung im pi-durable-Harness
 des jeweiligen pi-serverd. Logische Spaces sind persistente Dokumente mit stabilen IDs.
 
 ## 2. Was die vorhandene mobile Runtime bereits macht

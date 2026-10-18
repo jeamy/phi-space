@@ -1,13 +1,13 @@
 # AGENTS.md
 
-pi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run directly with
+phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run directly with
 `node --experimental-strip-types` (no build step for tests or examples).
 
 ## Commands
 
 - Typecheck: `npm run typecheck` (`tsc`, covers `src`, `examples`, `*.test.ts`)
 - Bundle: `npm run bundle` (also synchronizes the sibling mobile runtime and compiled example modules;
-  `PI_SPACES_MOBILE_ROOT` selects another mobile checkout)
+  `PHI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner, all suites in `test/`: `test/test-core.test.ts`, `test/test-meter.test.ts`, `test/integration.test.ts`,
   `test/test-persistence.test.ts`, `test/test-spaces.test.ts`, `test/test-claims.test.ts`, `test/test-budgets.test.ts`, `test/test-stream.test.ts`, `test/test-service.test.ts`, `test/test-remote.test.ts`, `test/test-socket.test.ts`, `test/test-gate.test.ts`, `test/test-auth.test.ts`, `test/test-enroll.test.ts`, `test/test-supervisor.test.ts`,
   `test/test-scenario.test.ts`, `test/test-tui.test.ts`, `test/test-ap1.test.ts`, `test/test-pi-server.test.ts`, `test/test-federation-runtime.test.ts`, `test/test-grants.test.ts`, `test/test-recovery.test.ts`, `test/test-operations.test.ts`, `test/test-recovery-boundaries.test.ts`, `test/test-router.test.ts`, `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts`, `test/test-workers.test.ts`, `test/test-space-lifecycle.test.ts`, `test/test-deployment.test.ts`, `test/test-alerts.test.ts`, `test/test-run-export.test.ts`, `test/test-primary-sync.test.ts`, `test/test-replica-control.test.ts`, `test/test-netcup-fencing.test.ts`, `test/test-replica-transport.test.ts`, `test/test-bootstrap.test.ts`, `test/test-container-fencing.test.ts`, `test/test-control-host-change.test.ts`, `test/test-merge-service.test.ts`, `test/test-entry-erasure.test.ts`, `test/test-entry-compaction.test.ts`, `test/test-commit-sealed.test.ts`, `test/test-not-committed.test.ts`, `test/test-degrade-revoke.test.ts`); crash/reopen helpers for JSONL and SQLite
@@ -29,7 +29,7 @@ Run typecheck and tests after every change.
 ## Layout
 
 - `src/core.ts` pure semantics, `src/doc.ts` the default Space document, `src/spaces.ts` registry and named spaces,
-  `src/claims.ts` request claims/generations, `src/client.ts` `PiSpaces`, `src/index.ts` tools, delivery, reaper,
+  `src/claims.ts` request claims/generations, `src/client.ts` `PhiSpaces`, `src/index.ts` tools, delivery, reaper,
   `src/meter.ts` metrics; `src/stream.ts`, `src/snapshot.ts`, `src/paging.ts` changes/snapshots/byte pages,
   `src/mailbox.ts` durable mailboxes, `src/pi-server.ts` the structural pi-server adapter.
   `src/service.ts` the transport-independent `space` service, `src/remote.ts` `RemoteSpace`, `src/socket.ts` its unix-socket/TCP transport and server,
@@ -55,5 +55,5 @@ Run typecheck and tests after every change.
 - No new dependencies without asking; nothing is installed locally.
 - Scripted model tests: filter out system messages before checking the last message (see `docs/examples.md` §5).
 - Documentation in `docs/` is German; code comments and README are English.
-- Call this project's library and spaces pi-spaces; the local client class is `PiSpaces`.
+- Call this project's library and spaces phi-spaces; the local client class is `PhiSpaces`.
   JavaSpaces names the historical reference only.

@@ -9,7 +9,7 @@ import {ContainerFencing,ContainerFencingError,type CommandRunner} from '../src/
 function fakeHost(dir:string,o:{stuck?:boolean}={}){
  const c:Record<string,{running:boolean;restart:string}>={'host-a':{running:true,restart:'unless-stopped'},'member-1':{running:true,restart:'unless-stopped'}};
  const units:Record<string,{container:string;active:boolean}>={'host-a.service':{container:'host-a',active:true}};const calls:string[]=[];
- const blocked=(u:string)=>existsSync(join(dir,u+'.d','zz-pi-spaces-fenced.conf'));
+ const blocked=(u:string)=>existsSync(join(dir,u+'.d','zz-phi-spaces-fenced.conf'));
  const run:CommandRunner=async(cmd,args)=>{calls.push([cmd,...args].join(' '));const ok=(stdout='')=>({code:0,stdout,stderr:''});
   if(cmd==='docker'&&args[0]==='inspect'){const x=c[args.at(-1)!];return x?ok(`${x.running} "${x.restart}"`):{code:1,stdout:'',stderr:'no such container'};}
   if(cmd==='docker'&&args[0]==='update'){c[args.at(-1)!]!.restart=args[1]!.slice('--restart='.length);return ok();}
@@ -30,7 +30,7 @@ test('container fencing locks the pinned container three ways, verifies live sta
   const proof=await f.fence('phase1b-host-a','promotion test');
   assert.deepEqual([proof.kind,proof.restartLocked,(proof.evidence as any).container],['container',true,'host-a']);
   assert.deepEqual(h.c['host-a'],{running:false,restart:'no'});assert.equal(h.units['host-a.service']!.active,false);
-  assert.ok(existsSync(join(dir,'host-a.service.d','zz-pi-spaces-fenced.conf')));assert.deepEqual(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')),{'phase1b-host-a':{restartPolicy:'unless-stopped'}});
+  assert.ok(existsSync(join(dir,'host-a.service.d','zz-phi-spaces-fenced.conf')));assert.deepEqual(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')),{'phase1b-host-a':{restartPolicy:'unless-stopped'}});
   assert.equal(h.c['member-1']!.running,true,'other containers untouched');
   // The unit lock holds against an operator start; verify re-reads the live state.
   await h.run('systemctl',['--user','start','host-a.service']);assert.equal(h.c['host-a']!.running,false);
@@ -41,7 +41,7 @@ test('container fencing locks the pinned container three ways, verifies live sta
   await f.fence('phase1b-host-a','again');assert.deepEqual(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')),{'phase1b-host-a':{restartPolicy:'unless-stopped'}});
   await f.release('phase1b-host-a','quarantine');
   assert.deepEqual(h.c['host-a'],{running:true,restart:'unless-stopped'});assert.equal(h.units['host-a.service']!.active,true);
-  assert.equal(existsSync(join(dir,'host-a.service.d','zz-pi-spaces-fenced.conf')),false);assert.deepEqual(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')),{});
+  assert.equal(existsSync(join(dir,'host-a.service.d','zz-phi-spaces-fenced.conf')),false);assert.deepEqual(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')),{});
   // A container that does not stop is reported, never claimed as fenced.
   const s=fakeHost(dir,{stuck:true}),g=new ContainerFencing({pins:{'phase1b-host-a':{container:'host-a',unit:'host-a.service'}},unitDir:dir,stateFile:join(dir,'state2.json'),run:s.run});
   await assert.rejects(g.fence('phase1b-host-a','x'),/not fenced/);

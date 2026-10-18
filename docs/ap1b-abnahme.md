@@ -138,7 +138,7 @@ Images. Der neue Federation-Dienst wurde nicht in diese Container ausgerollt.
 
 Die anschließende Handy-Abnahme ist bestanden: Xiaomi M2007J17G, Android 12,
 Node v26.4.0, WLAN-ADB. Die zwei frisch gebauten Testmodule wurden im separaten
-App-Verzeichnis `files/runtime/pi-spaces-acceptance` ausgeführt. Ergebnis:
+App-Verzeichnis `files/runtime/phi-spaces-acceptance` ausgeführt. Ergebnis:
 1 Federation-Integrationstest und 3 Recovery-/Boot-/Restore-Tests bestanden,
 keine Fehler und keine Auslassungen. Die Backend-Fälle laufen auf JSONL und SQLite;
 Testdaten verwenden eigene temporäre Verzeichnisse.
@@ -200,8 +200,8 @@ enthalten.
   Bootstrap/Admin-Proof, Supervisor-Host-Enrollment, Objektabfrage, Write/Take,
   Control-Grants und P-256-Rotation sind bestanden. Die alte App-Identität wird
   abgewiesen; neue Identität/Rotation bleiben nach Dienstneustart nutzbar.
-- **Dauerhafter Betrieb:** `pi-spaces-phase1b-host-a.service` und
-  `pi-spaces-phase1b-member-1.service` starten ihre vorhandenen Container und
+- **Dauerhafter Betrieb:** `phi-spaces-phase1b-host-a.service` und
+  `phi-spaces-phase1b-member-1.service` starten ihre vorhandenen Container und
   den gebauten Federation-Daemon. Exklusiver Owner-Lock verhindert einen zweiten
   Writer. Stop prüft die tatsächlichen Container-Prozesse; Recovery startet nur
   bei gesperrtem Normalbetrieb, ohne Gate und ohne Agenten.
@@ -216,7 +216,7 @@ enthalten.
   gültiges Restore-ACK wurde auf beiden Backends automatisiert und anschließend
   innerhalb des verteilten Live-Data-Restores geprüft.
 - **Android:** Aktualisierte APK auf Xiaomi M2007J17G/Android 12 installiert;
-  echte P-256-Signaturen aus Android Keystore durch pi-spaces und Node crypto
+  echte P-256-Signaturen aus Android Keystore durch phi-spaces und Node crypto
   geprüft. Fremder Peer/Host, abgelaufene Challenge, beliebige Nachricht und
   Private-Key-Export werden abgewiesen. Beide Rotationssignaturen funktionieren;
   Aliase/öffentliche Schlüssel bleiben nach Force-stop und App-Neustart gleich.
@@ -380,7 +380,7 @@ bleiben auf ihrem normalen Pfad. Management, Signal und Relay wurden jeweils
 in gesunder Baseline als verbunden gemessen; der neue auf `jobs` beschränkte
 Testclient las das vorhandene restaurierte Objekt erfolgreich.
 
-Historische Fortschrittsnotiz vor Abschluss: Die zeitlich vollständige Matrix lief unter `pi-spaces-netbird-matrix.service`
+Historische Fortschrittsnotiz vor Abschluss: Die zeitlich vollständige Matrix lief unter `phi-spaces-netbird-matrix.service`
 auf big mit atomarem Fortschrittsbericht und unabhängiger zeitgesteuerter
 Rückkehr zum ursprünglichen Netzwerkpfad. Im laufenden Management-Fall blieben
 Signal/Relay und direkter TCP-Tunnel erhalten, während das echte Data-Gate nach

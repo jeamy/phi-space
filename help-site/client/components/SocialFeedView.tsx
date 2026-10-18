@@ -1,7 +1,7 @@
 "use client";
 // Social Swarm live feed – a social-feed multiplayer chat surface where
 // ~1000 autonomous agents post, reply, and like across topic channels. Everything
-// visible here is backed by real pi-spaces entries (SwarmTask -> Post/Like, AgentPulse
+// visible here is backed by real phi-spaces entries (SwarmTask -> Post/Like, AgentPulse
 // leases, changes(rev) live stream).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LlmModelPicker } from "./LlmModelPicker.tsx";

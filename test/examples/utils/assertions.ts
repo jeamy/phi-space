@@ -1,9 +1,9 @@
-// Custom Assertions für pi-spaces Tests
+// Custom Assertions für phi-spaces Tests
 // Erweitert Vitest/Jest Assertions um Space-spezifische Prüfungen
 
 import { expect } from "../compat.ts";
-import type { PiSpaces, Taken } from "../../../src/index.ts";
-import type { PiSpaces as Space } from "../../../src/index.ts";
+import type { PhiSpaces, Taken } from "../../../src/index.ts";
+import type { PhiSpaces as Space } from "../../../src/index.ts";
 type Entry = Taken;
 import type { TestHarness } from "./harness.ts";
 

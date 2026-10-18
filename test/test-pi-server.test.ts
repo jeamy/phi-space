@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
-import { PiSpaces, SpaceService, StaticIdentity, RemoteSpace, withSpaceService, piServerTransport, FOREVER } from "../src/index.ts";
+import { PhiSpaces, SpaceService, StaticIdentity, RemoteSpace, withSpaceService, piServerTransport, FOREVER } from "../src/index.ts";
 import { PersistentHome, ctx } from "./support/persistent.ts";
 
 test("native pi-server Unix RPC preserves sessions and routes RemoteSpace through space", async t => {
@@ -16,7 +16,7 @@ test("native pi-server Unix RPC preserves sessions and routes RemoteSpace throug
 	const { createUnixServer } = await import(pathToFileURL(serverPath).href);
 	const { Client } = await import(pathToFileURL(join(runtime, "node_modules/@earendil-works/pi-client/dist/index.js")).href);
 	const { createUnixTransportFactory } = await import(pathToFileURL(join(runtime, "node_modules/@earendil-works/pi-client/dist/unix.js")).href);
-	const home = new PersistentHome("sqlite"), dir = mkdtempSync("/tmp/pi-spaces-native-server-");
+	const home = new PersistentHome("sqlite"), dir = mkdtempSync("/tmp/phi-spaces-native-server-");
 	let server: any, client: any;
 	try {
 		const h = await home.open();
@@ -32,7 +32,7 @@ test("native pi-server Unix RPC preserves sessions and routes RemoteSpace throug
 		assert.equal((await remote.info()).principal, "trusted");
 		await remote.write({ type: "Native", fields: { n: 1 } }, null, FOREVER);
 		assert.equal((await remote.take({ type: "Native" }, 0))?.fields.n, 1);
-		assert.equal(await new PiSpaces(h, ctx).count({ type: "Native" }), 0);
+		assert.equal(await new PhiSpaces(h, ctx).count({ type: "Native" }), 0);
 		const forged = await client.request({ serverId }, { serviceId: "space", member: "hello", args: [{ method: "hello", args: { protocol: 1 }, principal: { peerId: "attacker" }, roles: ["admin"] }] });
 		assert.equal(forged.result.principal, "trusted", "client presentation/arguments cannot replace the trusted connection identity");
 		await client.dispose(); client = undefined; await server.close(); server = undefined; assert.ok(released > 0);
@@ -47,7 +47,7 @@ test("built bundle in actual pi-serverd serves space and sessions; socket grants
 	const { spawn } = await import("node:child_process");
 	const { Client } = await import(pathToFileURL(join(runtime, "node_modules/@earendil-works/pi-client/dist/index.js")).href);
 	const { createUnixTransportFactory } = await import(pathToFileURL(join(runtime, "node_modules/@earendil-works/pi-client/dist/unix.js")).href);
-	const dir = mkdtempSync("/tmp/pi-spaces-serverd-acceptance-");
+	const dir = mkdtempSync("/tmp/phi-spaces-serverd-acceptance-");
 	let child: any, client: any, output = "";
 	try {
 		for (const name of readdirSync(runtime)) if (name.endsWith(".mjs")) copyFileSync(join(runtime, name), join(dir, name));

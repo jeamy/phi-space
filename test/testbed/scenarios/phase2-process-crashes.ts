@@ -10,7 +10,7 @@ import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/nod
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
 import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
-import {PiSpaces,argHash,rpcDomain,core,Registry,spaceDoc,SpaceService,StaticIdentity,FederatedSpace,FederationPending,
+import {PhiSpaces,argHash,rpcDomain,core,Registry,spaceDoc,SpaceService,StaticIdentity,FederatedSpace,FederationPending,
  RouterController,RouterJournal,partitionRouterId,type RouterStep,type RouterReceipt,type RouterTarget,
  type FederationIO,type RoutingState} from '../../../src/index.ts';
 
@@ -55,7 +55,7 @@ if(!mode){
  };
  try{
   for(const name of ['root','a','b','c'])hosts.set(name,await Harness.open(await storage(name),{models:createModels(),registry:createRegistry()},ctx));
-  const client=(name:string)=>new PiSpaces(hosts.get(name)!,ctx,now,undefined,undefined,{authorityId:'authority-1'});
+  const client=(name:string)=>new PhiSpaces(hosts.get(name)!,ctx,now,undefined,undefined,{authorityId:'authority-1'});
   const targets=Object.fromEntries(['a','b','c'].map(name=>[name,{hostId:name,spaceId:'space-'+name,authorityId:'authority-1',dataIncarnation:'inc-'+name,primaryEpoch:1}]));
   if(mode==='prepare')for(const name of ['a','b','c'])await hosts.get(name)!.commit(async tx=>{
    const s=await spaceDoc(tx,undefined,now()),r=await tx.doc(Registry),t=targets[name]!;
@@ -67,7 +67,7 @@ if(!mode){
   const receipt=(s:Readonly<RouterStep>,view:any):RouterReceipt=>({target:structuredClone(s.target),principal:structuredClone(s.principal),method:s.method,generation:s.generation,requestId:s.requestId,argHash:s.argHash,
    outcome:view.state==='notAdmitted'?'notAdmitted':view.error?'failed':view.state==='done'?'done':view.state==='cancelled'?'cancelled':'pending',...(view.result===undefined?{}:{result:view.result}),...(view.error?{evidence:view.error.code}:{})});
   // Resolve through the exact wire domain, including waiter registration and lease arguments.
-  const target:RouterTarget={protocol:'pi-spaces-rpc-v1',resolve:async s=>{const d=rpcDomain({method:s.method,args:s.args as any},s.principal);return receipt(s,await client(s.target.hostId).resolveOperation({principal:s.principal,generation:s.generation,requestId:s.requestId},d.method,argHash(d.method,d.args),s.target.primaryEpoch));},invoke:async s=>{
+  const target:RouterTarget={protocol:'phi-spaces-rpc-v1',resolve:async s=>{const d=rpcDomain({method:s.method,args:s.args as any},s.principal);return receipt(s,await client(s.target.hostId).resolveOperation({principal:s.principal,generation:s.generation,requestId:s.requestId},d.method,argHash(d.method,d.args),s.target.primaryEpoch));},invoke:async s=>{
    const r=await services[s.target.hostId]!.handle({method:s.method,space:s.target.spaceId,request:{generation:s.generation,requestId:s.requestId},frame:{authorityId:s.target.authorityId,primaryEpoch:s.target.primaryEpoch,...(s.targetRequest?{delegation:{} as core.Json}:{})},args:s.args},{peerId:principal.peerId});
    assert.equal(r.ok,true,JSON.stringify(r));return receipt(s,await client(s.target.hostId).pollOperation({principal:s.principal,generation:s.generation,requestId:s.requestId}));
   }};

@@ -5,7 +5,7 @@ title: "Leases, Transactions, and Visibility"
 short: "How leases enable self-healing state and how transactions (createTransaction, commit, abort) isolate writes and takes atomically."
 tags: [leases, transactions, txn, visibility, locks, ifexists, renew, cancel]
 owner: core
-related: [help.topic.entries_and_templates, help.topic.completion_profiles_and_limits, help.api.pispaces_txn]
+related: [help.topic.entries_and_templates, help.topic.completion_profiles_and_limits, help.api.phispaces_txn]
 since: 0.0.1
 ---
 
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-In distributed systems, processes crash and network links drop. `pi-spaces` addresses this with two complementary mechanisms: **leases** (bounded lifetimes for entries, transactions, waiters, and subscriptions) and **space transactions** (atomic grouping of `take` reservations and `write` drafts).
+In distributed systems, processes crash and network links drop. `phi-spaces` addresses this with two complementary mechanisms: **leases** (bounded lifetimes for entries, transactions, waiters, and subscriptions) and **space transactions** (atomic grouping of `take` reservations and `write` drafts).
 
 ## Concept And System Model {#concept-model}
 
@@ -70,4 +70,4 @@ try {
 ## See Also {#see-also}
 
 - [CompletionProfiles and Resource Limits](help.topic.completion_profiles_and_limits#overview)
-- [Transactions – createTransaction, commit & abort](help.api.pispaces_txn)
+- [Transactions – createTransaction, commit & abort](help.api.phispaces_txn)

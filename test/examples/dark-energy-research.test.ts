@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PiSpaces, spaces, startService } from "../../src/index.ts";
+import { FOREVER, PhiSpaces, spaces, startService } from "../../src/index.ts";
 import { research } from "../../examples/arxiv-tool.ts";
 
 // ============================================================================
@@ -365,7 +365,7 @@ async function setupDarkEnergyHarness() {
   registry.install(research);
   
   const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-  const host = new PiSpaces(h, ctx);
+  const host = new PhiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
   return { h, host, stopService, models, faux };
@@ -392,7 +392,7 @@ async function teardownDarkEnergyHarness(h: Harness, stopService: () => Promise<
 
 describe("dark-energy-research.ts", () => {
   let h: Harness;
-  let host: PiSpaces;
+  let host: PhiSpaces;
   let stopService: () => Promise<void>;
 
   beforeEach(async () => {
@@ -1186,11 +1186,11 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
 // ============================================================================
 
 expect.extend({
-  async toHavePhaseComplete(host: PiSpaces, type: string) {
+  async toHavePhaseComplete(host: PhiSpaces, type: string) {
     const entries = await host.readAll({ type });
     return entries.length > 0 ? { pass: true } : { pass: false, expected: true, actual: false };
   },
-  async toHaveProgress(host: PiSpaces, expectedProgress: Record<string, boolean>) {
+  async toHaveProgress(host: PhiSpaces, expectedProgress: Record<string, boolean>) {
     const systemStatuses = await host.readAll({ type: "SystemStatus" });
     if (systemStatuses.length === 0) {
       return { pass: false, message: () => "No SystemStatus found" };

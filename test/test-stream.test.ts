@@ -1,7 +1,7 @@
 // AP 1.3: revisions and the change stream (federation-plan-v3.md 6.1).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PiSpaces, FOREVER, core } from "../src/index.ts";
+import { PhiSpaces, FOREVER, core } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
 const apply = (visible: Map<string, string>, batches: core.Changes["batches"]) => {
@@ -12,7 +12,7 @@ const truth = (s: core.SpaceState, now = 1) => new Map(core.list(s, now).map((e)
 test("each commit gets its own revision, several changes in one commit share one batch, no change means no revision", async () => {
 	await forEachBackend(async (home) => {
 		const h = await home.open();
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		assert.equal((await s.changes(0)).rev, 0);
 		await s.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 		await s.write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
@@ -30,7 +30,7 @@ test("each commit gets its own revision, several changes in one commit share one
 		assert.equal(c.rev, 6, "one commit, one revision");
 		assert.deepEqual(c.batches[0]!.ops.map((o) => o.op), ["put", "put"], "both entries appear at commit, in one batch");
 		home.crash(h);
-		const again = new PiSpaces(await home.open(), ctx);
+		const again = new PhiSpaces(await home.open(), ctx);
 		assert.equal((await again.changes(0)).rev, 6, "revisions survive a restart");
 		await again.write({ type: "Job", fields: { n: 4 } }, null, FOREVER);
 		assert.equal((await again.changes(0)).rev, 7);
@@ -60,7 +60,7 @@ test("replaying the batches reproduces the visible set: write, take, lock, abort
 test("paging a live read and then changes after its first revision converges", async () => {
 	await forEachBackend(async (home) => {
 		const h = await home.open();
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		for (let i = 0; i < 30; i++) await s.write({ type: "Job", fields: { i, pad: "x".repeat(100) } }, null, FOREVER);
 		const first = await s.readPage(null, { maxBytes: 1_500 });
 		const startRev = first.rev;
@@ -130,7 +130,7 @@ test("the stream counts toward the document budget and survives migration of a s
 test("on a real storage the log is bounded and keeps counting after a restart", async () => {
 	await forEachBackend(async (home) => {
 		let h = await home.open();
-		let s = new PiSpaces(h, ctx);
+		let s = new PhiSpaces(h, ctx);
 		await s.setLimits({ maxLogBytes: 3_000 });
 		for (let i = 0; i < 40; i++) await s.write({ type: "Job", fields: { i, pad: "p".repeat(120) } }, null, FOREVER);
 		const c = await s.changes(40);
@@ -138,7 +138,7 @@ test("on a real storage the log is bounded and keeps counting after a restart", 
 		await assert.rejects(s.changes(0), core.SnapshotExpired);
 		home.crash(h);
 		h = await home.open();
-		s = new PiSpaces(h, ctx);
+		s = new PhiSpaces(h, ctx);
 		await s.write({ type: "Job", fields: { i: 41 } }, null, FOREVER);
 		assert.equal((await s.changes(41)).rev, 42);
 		await assert.rejects(s.changes(0), core.SnapshotExpired, "the floor survived the restart");

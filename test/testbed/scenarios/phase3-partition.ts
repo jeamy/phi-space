@@ -38,7 +38,7 @@ function sh(h: Host, script: string, o: { allowFail?: boolean; timeoutMs?: numbe
 let lastToolOutput = "";
 const node = (h: Host, args: string, input?: unknown) => {
 	const run = `docker exec -i ${h.container} node ${h.home}/federation-host.mjs ${args} ${h.home}`, filter = `2>&1 | grep -v -i -E "warn|trace-warnings"`;
-	lastToolOutput = sh(h, input === undefined ? `${run} </dev/null ${filter}` : `${run} <<'PI_SPACES_JSON' ${filter}\n${JSON.stringify(input)}\nPI_SPACES_JSON`, { timeoutMs: 600_000 }).trim();
+	lastToolOutput = sh(h, input === undefined ? `${run} </dev/null ${filter}` : `${run} <<'PHI_SPACES_JSON' ${filter}\n${JSON.stringify(input)}\nPHI_SPACES_JSON`, { timeoutMs: 600_000 }).trim();
 	return lastToolOutput.split("\n").at(-1)!;
 };
 const head = (h: Host) => (JSON.parse(node(h, "sync-head")) as any[]).find(x => x.alias === cfg.alias);
@@ -128,9 +128,9 @@ async function lossless(h: Host, labels: string[]) {
 	} finally { c.close(); }
 }
 const sameHeads = () => { const a = head(P), b = head(S); check(a.head.hash === b.head.hash && a.applied === a.head.revision, "primary and standby journal heads are equal, nothing unresolved"); return a.head; };
-const dropRule = `iifname "wt0" ip saddr ${cfg.partition.sourceIp} counter drop comment "pi-spaces-partition"`;
+const dropRule = `iifname "wt0" ip saddr ${cfg.partition.sourceIp} counter drop comment "phi-spaces-partition"`;
 const cut = async () => { sh(S, `nft insert rule inet ${cfg.partition.chain} ${dropRule}`); return { cut: true }; };
-const heal = async () => { const out = sh(S, `nft -a list chain inet ${cfg.partition.chain} | grep pi-spaces-partition || true`); const handle = out.match(/handle (\d+)/)?.[1], packets = out.match(/packets (\d+)/)?.[1]; if (handle) sh(S, `nft delete rule inet ${cfg.partition.chain} handle ${handle}`); return { healed: !!handle, droppedPackets: Number(packets ?? 0) }; };
+const heal = async () => { const out = sh(S, `nft -a list chain inet ${cfg.partition.chain} | grep phi-spaces-partition || true`); const handle = out.match(/handle (\d+)/)?.[1], packets = out.match(/packets (\d+)/)?.[1]; if (handle) sh(S, `nft delete rule inet ${cfg.partition.chain} handle ${handle}`); return { healed: !!handle, droppedPackets: Number(packets ?? 0) }; };
 /** SIGKILL of the daemon (not the container); the operator step removes the owner lock once the process is gone. */
 const kill = async (h: Host) => {
 	const pid = JSON.parse(sh(h, `docker exec ${h.container} cat ${h.home}/owner.lock`)).pid;
@@ -142,7 +142,7 @@ const forkHash = (w: Write) => claims.argHash("write", { entry: { type: cfg.coun
 
 const steps: Array<[string, () => Promise<unknown>]> = [
 	["preflight", async () => {
-		const bundles = [P, S].map(h => sh(h, `sha256sum /var/lib/pi-spaces/${h.home.split("/").pop()}/federation-host.mjs | cut -c1-16`).trim());
+		const bundles = [P, S].map(h => sh(h, `sha256sum /var/lib/phi-spaces/${h.home.split("/").pop()}/federation-host.mjs | cut -c1-16`).trim());
 		check(bundles[0] === bundles[1], `same daemon bundle on both hosts (${bundles[0]})`);
 		const a = head(P), b = head(S); check(a.head.hash === b.head.hash && a.config.primaryReplica === P.hostId, "both replicas agree and the primary leads");
 		const c = await client(P); try { state.generation = (await c.space.requestGeneration()).generation; } finally { c.close(); } save();
@@ -152,7 +152,7 @@ const steps: Array<[string, () => Promise<unknown>]> = [
 	["partition-long", async () => { const r = await load("long", cfg.partitionMs + 120_000, [{ at: 60_000, name: "cut", run: cut }, { at: 60_000 + cfg.partitionMs, name: "heal", run: heal }]); check(r.sealedAnswers > 0 && r.resolved > 0, "the long partition sealed a write, and it resolved after healing"); return { ...r, heads: sameHeads(), lossless: await lossless(P, ["short", "long"]) }; }],
 	// With the bounded standby wait (f96a7f7) a cut overlay turns the pending commit into CommitSealed within seconds.
 	["partition-bounded", async () => {
-		const bundles = [P, S].map(h => sh(h, `sha256sum /var/lib/pi-spaces/${h.home.split("/").pop()}/federation-host.mjs | cut -c1-16`).trim());
+		const bundles = [P, S].map(h => sh(h, `sha256sum /var/lib/phi-spaces/${h.home.split("/").pop()}/federation-host.mjs | cut -c1-16`).trim());
 		check(bundles[0] === bundles[1], `same daemon bundle on both hosts (${bundles[0]})`);
 		const r = await load("bounded", 180_000 + 60_000, [{ at: 30_000, name: "cut", run: cut }, { at: 210_000, name: "heal", run: heal }]);
 		const first = (r.probes as any[])[0];

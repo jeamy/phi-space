@@ -1,4 +1,4 @@
-// Test-Fixtures für pi-spaces Beispiele
+// Test-Fixtures für phi-spaces Beispiele
 // Bereitstellung von Test-Daten und Mock-Implementierungen
 
 import { FOREVER } from "../../../src/index.ts";

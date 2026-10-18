@@ -4,19 +4,19 @@ import assert from "node:assert/strict";
 import { createRegistry, defineDoc, type Tx } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { PiSpaces, FOREVER, Space, spaces, type Once } from "../src/index.ts";
+import { PhiSpaces, FOREVER, Space, spaces, type Once } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 
 test("persistent home: committed writes survive close and crash", async () => {
 	await forEachBackend(async (home) => {
 		let h = await home.open();
-		await new PiSpaces(h, ctx).write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
+		await new PhiSpaces(h, ctx).write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 		await home.close(h);
 		h = await home.open();
-		await new PiSpaces(h, ctx).write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
+		await new PhiSpaces(h, ctx).write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
 		home.crash(h);
 		h = await home.open();
-		assert.equal(await new PiSpaces(h, ctx).count({ type: "Job" }), 2);
+		assert.equal(await new PhiSpaces(h, ctx).count({ type: "Job" }), 2);
 	});
 });
 
@@ -24,15 +24,15 @@ test("fault switch: failBeforeCommit writes nothing, loseAnswer is durable but r
 	await forEachBackend(async (home) => {
 		let h = await home.open();
 		home.faults.arm("failBeforeCommit");
-		await assert.rejects(new PiSpaces(h, ctx).write({ type: "Job", fields: { n: 1 } }, null, FOREVER), InjectedFault);
+		await assert.rejects(new PhiSpaces(h, ctx).write({ type: "Job", fields: { n: 1 } }, null, FOREVER), InjectedFault);
 		home.crash(h);
 		h = await home.open();
-		assert.equal(await new PiSpaces(h, ctx).count({ type: "Job" }), 0);
+		assert.equal(await new PhiSpaces(h, ctx).count({ type: "Job" }), 0);
 		home.faults.arm("loseAnswer");
-		await assert.rejects(new PiSpaces(h, ctx).write({ type: "Job", fields: { n: 2 } }, null, FOREVER), InjectedFault);
+		await assert.rejects(new PhiSpaces(h, ctx).write({ type: "Job", fields: { n: 2 } }, null, FOREVER), InjectedFault);
 		home.crash(h);
 		h = await home.open();
-		assert.equal(await new PiSpaces(h, ctx).count({ type: "Job" }), 1);
+		assert.equal(await new PhiSpaces(h, ctx).count({ type: "Job" }), 1);
 		assert.equal(home.faults.fired, 2);
 	});
 });
@@ -48,16 +48,16 @@ const once: Once = {
 test("take with lost answer: after reopen the retry returns the same entry, no second take", async () => {
 	await forEachBackend(async (home) => {
 		let h = await home.open();
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		await s.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 		await s.write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
 		home.faults.arm("loseAnswer", (writes) => writes.length > 0);
 		await assert.rejects(s.take({ type: "Job" }, 0, { once }), InjectedFault);
 		home.crash(h);
 		h = await home.open();
-		const retry = await new PiSpaces(h, ctx).take({ type: "Job" }, 0, { once });
+		const retry = await new PhiSpaces(h, ctx).take({ type: "Job" }, 0, { once });
 		assert.equal(retry?.fields.n, 1);
-		assert.equal(await new PiSpaces(h, ctx).count({ type: "Job" }), 1, "exactly one entry was taken");
+		assert.equal(await new PhiSpaces(h, ctx).count({ type: "Job" }), 1, "exactly one entry was taken");
 	});
 });
 
@@ -94,7 +94,7 @@ test("tool replay after a crash returns the stored result, not an error, and beg
 test("a Space gets a base every 500 deltas", async () => {
 	await forEachBackend(async (home) => {
 		let h = await home.open();
-		for (let n = 0; n < 510; n++) await new PiSpaces(h, ctx).write({ type: "Small", fields: { n } }, null, FOREVER);
+		for (let n = 0; n < 510; n++) await new PhiSpaces(h, ctx).write({ type: "Small", fields: { n } }, null, FOREVER);
 		await home.close(h);
 		const st = await home.storage(), d = await st.findDocument({ kind: "pi-spaces.space", scope: { kind: "session" } } as any, "current", ctx);
 		try { assert.ok(d && (await st.document(d.id, "current", ctx))!.deltasSinceBase < 500, "a base was written"); } finally { await st.close(ctx); }

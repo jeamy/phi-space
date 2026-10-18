@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_lease
+id: help.api.phispaces_lease
 title: "Leases – renew & cancel"
 short: "Extends or cancels the lifetime of owned entries, transactions, notify subscriptions, and waiters (basis for presence & heartbeats)."
 tags: [renew, cancel, lease, ttl, presence, heartbeat]

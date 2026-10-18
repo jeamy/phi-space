@@ -1,11 +1,11 @@
-# Docker Compose configuration for PI-SPACES / HELP (https://spaces.eibrain.org)
+# Docker Compose configuration for PHI-SPACES / HELP (https://spaces.eibrain.org)
 # Provides:
 #   1. `spaces-help-prod`: Hardened production container (NODE_ENV=production, Next.js 16 + WebSocket + SQLite in /data)
 #   2. `spaces-help-test`: Local dev/test container running the automated test suite in Docker (profile: test)
 #   3. `spaces-help-dev`:  Local interactive dev container with Next.js dev mode (profile: dev)
 #   4. `swarm-nano`:       Headless swarm shard host for the big/nano two-host setup (profile: nano)
 
-name: pi-spaces-help
+name: phi-spaces-help
 
 services:
   # ---- 1. Production Server for https://spaces.eibrain.org ----
@@ -14,8 +14,8 @@ services:
       context: ../..
       dockerfile: help-site/docker/Dockerfile
       target: production
-    image: pi-spaces-help:prod
-    container_name: pi-spaces-help-prod
+    image: phi-spaces-help:prod
+    container_name: phi-spaces-help-prod
     init: true
     restart: unless-stopped
     user: "node"
@@ -38,7 +38,7 @@ services:
       PORT: "${PORT:-3500}"
       HELP_PORT: "${PORT:-3500}"
       HELP_SQLITE: /data/spaces-eibrain.sqlite
-      PI_SPACES_ADMIN_PASSWORD: ${PI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
+      PHI_SPACES_ADMIN_PASSWORD: ${PHI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
     network_mode: host
     volumes:
       - spaces-help-data:/data
@@ -52,7 +52,7 @@ services:
       context: ../..
       dockerfile: help-site/docker/Dockerfile
       target: dev-test
-    image: pi-spaces-help:dev-test
+    image: phi-spaces-help:dev-test
     profiles:
       - test
     init: true
@@ -76,7 +76,7 @@ services:
       context: ../..
       dockerfile: help-site/docker/Dockerfile
       target: dev-test
-    image: pi-spaces-help:dev-test
+    image: phi-spaces-help:dev-test
     profiles:
       - dev
     init: true
@@ -105,8 +105,8 @@ services:
       context: ../..
       dockerfile: help-site/docker/Dockerfile
       target: nano
-    image: pi-spaces-help:nano
-    container_name: pi-spaces-swarm-nano
+    image: phi-spaces-help:nano
+    container_name: phi-spaces-swarm-nano
     profiles:
       - nano
     init: true

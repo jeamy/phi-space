@@ -1,7 +1,7 @@
 [
   {
-    "id": "help.api.pispaces_write",
-    "symbol": "PiSpaces.write / RemoteSpace.write",
+    "id": "help.api.phispaces_write",
+    "symbol": "PhiSpaces.write / RemoteSpace.write",
     "provider": "client",
     "family": "entries_templates",
     "category": "mutation",
@@ -19,8 +19,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_read",
-    "symbol": "PiSpaces.read / readIfExists",
+    "id": "help.api.phispaces_read",
+    "symbol": "PhiSpaces.read / readIfExists",
     "provider": "client",
     "family": "entries_templates",
     "category": "query_snapshot",
@@ -38,8 +38,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_take",
-    "symbol": "PiSpaces.take / takeIfExists",
+    "id": "help.api.phispaces_take",
+    "symbol": "PhiSpaces.take / takeIfExists",
     "provider": "client",
     "family": "entries_templates",
     "category": "mutation",
@@ -57,8 +57,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_txn",
-    "symbol": "PiSpaces.createTransaction / commit / abort",
+    "id": "help.api.phispaces_txn",
+    "symbol": "PhiSpaces.createTransaction / commit / abort",
     "provider": "client",
     "family": "leases_transactions",
     "category": "transaction_lease",
@@ -76,8 +76,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_lease",
-    "symbol": "PiSpaces.renew / cancel",
+    "id": "help.api.phispaces_lease",
+    "symbol": "PhiSpaces.renew / cancel",
     "provider": "client",
     "family": "leases_transactions",
     "category": "transaction_lease",
@@ -95,8 +95,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_read_page_changes",
-    "symbol": "PiSpaces.readPage / changes / readAll / count / stats",
+    "id": "help.api.phispaces_read_page_changes",
+    "symbol": "PhiSpaces.readPage / changes / readAll / count / stats",
     "provider": "client",
     "family": "streams_snapshots",
     "category": "query_snapshot",
@@ -114,8 +114,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_wait_notify_mailbox",
-    "symbol": "PiSpaces.wait / notify / events / ack",
+    "id": "help.api.phispaces_wait_notify_mailbox",
+    "symbol": "PhiSpaces.wait / notify / events / ack",
     "provider": "client",
     "family": "durable_mailboxes",
     "category": "wait_stream_mailbox",
@@ -133,8 +133,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_claims",
-    "symbol": "PiSpaces.issueGeneration / pollOperation / resolveOperation / cancelOperation",
+    "id": "help.api.phispaces_claims",
+    "symbol": "PhiSpaces.issueGeneration / pollOperation / resolveOperation / cancelOperation",
     "provider": "client",
     "family": "request_claims",
     "category": "mutation",
@@ -152,8 +152,8 @@
     }
   },
   {
-    "id": "help.api.pispaces_completion_profiles",
-    "symbol": "PiSpaces.setCompletionProfiles / setLimits",
+    "id": "help.api.phispaces_completion_profiles",
+    "symbol": "PhiSpaces.setCompletionProfiles / setLimits",
     "provider": "core",
     "family": "completion_profiles",
     "category": "transaction_lease",

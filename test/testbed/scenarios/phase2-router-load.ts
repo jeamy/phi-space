@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {performance} from 'node:perf_hooks';
-import {core,claims,principalId,hrw,createSpace,spaceDoc,snapshotSpace,PiSpaces,SpaceService,StaticIdentity,
+import {core,claims,principalId,hrw,createSpace,spaceDoc,snapshotSpace,PhiSpaces,SpaceService,StaticIdentity,
     RouterController,FederatedSpace,FederationPending,FederationOperations,RouterJournal,
     parentJournalKey,partitionRouterId,operationPartition,rpcDomain,
     type FederationPolicy,type RoutingState,type RouterTarget,type RouterStep,type RouterReceipt,
@@ -26,9 +26,9 @@ const ids=Array.from({length:jobs},(_,n)=>['produce','begin','take','result','co
 for(const id of ids)occupancy[operationPartition(id,partitions)]++;
 assert.ok(Math.max(...occupancy)<=16,'preflight Parent partition budget');
 const services:SpaceService[]=[];
-function client(i:number,p?:Principal){return new PiSpaces(hosts[i]!,ctx,now,undefined,p?principalId(p):undefined,{space:spaces[i],authorityId:policy.authorityId,consumer:p});}
+function client(i:number,p?:Principal){return new PhiSpaces(hosts[i]!,ctx,now,undefined,p?principalId(p):undefined,{space:spaces[i],authorityId:policy.authorityId,consumer:p});}
 function receipt(s:Readonly<RouterStep>,outcome:RouterReceipt['outcome'],result?:Json,evidence?:string):RouterReceipt{return{target:s.target,principal:s.principal,method:s.method,generation:s.generation,requestId:s.requestId,argHash:s.argHash,outcome,...(result===undefined?{}:{result}),...(evidence?{evidence}:{})};}
-const target:RouterTarget={protocol:'pi-spaces-rpc-v1',invoke:async s=>{
+const target:RouterTarget={protocol:'phi-spaces-rpc-v1',invoke:async s=>{
  const i=members.indexOf(s.target.hostId);assert.ok(i>=0);assert.deepEqual(s.target,state.members[s.target.hostId]!.target);
  const reply=await services[i]!.handle({method:s.method,space:s.target.spaceId,args:s.args,request:{generation:s.generation,requestId:s.requestId},frame:{authorityId:s.target.authorityId,primaryEpoch:s.target.primaryEpoch}}, {peerId:s.principal.peerId});
  if(!reply.ok)throw new Error('target RPC '+reply.error.code+': '+reply.error.message);

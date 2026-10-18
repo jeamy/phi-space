@@ -1,4 +1,4 @@
-// Validates and builds the canonical bilingual Help corpus for PI-SPACES / HELP.
+// Validates and builds the canonical bilingual Help corpus for PHI-SPACES / HELP.
 // Produces:
 //   - help-site/corpus/{de,en}/{topics,workflows,api}/*.md (generated from the canonical TypeScript seeds)
 //   - help-site/dist/public/help/index.json (validated index consumed by the React HelpApp)
@@ -260,7 +260,7 @@ export async function buildCorpus(): Promise<{
 					command: r.command,
 				})),
 				source: {
-					repository: "pi-spaces",
+					repository: "phi-spaces",
 					commit,
 					dirty,
 				},
@@ -278,10 +278,10 @@ export async function buildCorpus(): Promise<{
 	const hash = corpusHash({ articles: allSeeds, catalog, apiFacts });
 
 	const siteIndex = {
-		schema: "pi-spaces-help-site-index-v1",
+		schema: "phi-spaces-help-site-index-v1",
 		corpus: {
-			schema: "pi-spaces-help-web-corpus-v1",
-			theme: "PI_SPACES_HIGHEND_PRODUCT_REFERENCE",
+			schema: "phi-spaces-help-web-corpus-v1",
+			theme: "PHI_SPACES_HIGHEND_PRODUCT_REFERENCE",
 			domain: "https://spaces.eibrain.org",
 			status: "canonical-main-snapshot",
 			frozenOn: catalog.reviewed,
@@ -320,5 +320,5 @@ export async function buildCorpus(): Promise<{
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
 	const res = await buildCorpus();
-	console.log(`Built PI-SPACES / HELP corpus: ${res.uniqueArticles} unique articles (${res.localizedRecords} localized records) -> ${res.indexPath}`);
+	console.log(`Built PHI-SPACES / HELP corpus: ${res.uniqueArticles} unique articles (${res.localizedRecords} localized records) -> ${res.indexPath}`);
 }

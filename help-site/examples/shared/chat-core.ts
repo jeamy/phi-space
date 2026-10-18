@@ -1,10 +1,10 @@
-// Shared pure pi-spaces Multiplayer Chat core used across stages v1 through v6.
-// Implements the Earendil Multiplayer Chat capabilities purely with pi-spaces primitives:
+// Shared pure phi-spaces Multiplayer Chat core used across stages v1 through v6.
+// Implements the Earendil Multiplayer Chat capabilities purely with phi-spaces primitives:
 //   1. Session isolation via NamedSpace
 //   2. Unique threads & pointer forks with durable application request identities
 //   3. Ordered multiplayer inbox & replies via transactional ChatTask + CompletionProfile
 //   4. Live state snapshots (readPage), revision deltas (changes), and Presence leases (renew/cancel)
-//   5. Scheduled alarms via ScheduledJob (FOREVER) + TimerLock (lease = delayMs) reaped by pi-spaces
+//   5. Scheduled alarms via ScheduledJob (FOREVER) + TimerLock (lease = delayMs) reaped by phi-spaces
 //   6. Cross-thread search subagent via SearchTask -> SubagentStep -> SearchResult under CompletionProfile
 
 import {
@@ -435,7 +435,7 @@ export class SpaceChatEngine {
 	}
 
 	/**
-	 * Schedule a future instruction using pure pi-spaces primitives:
+	 * Schedule a future instruction using pure phi-spaces primitives:
 	 *   - `ScheduledJob` entry with FOREVER lease (`status: "pending"`)
 	 *   - `TimerLock` entry with `lease = delayMs`
 	 * When `TimerLock` expires (reaped by `startService`), `tickAlarms()` promotes the job into a `ChatTask`.
@@ -850,7 +850,7 @@ export class SpaceChatEngine {
 				msgId: `reply:${task.taskId}`,
 				threadId: task.threadId,
 				seq: nextSeq,
-				author: "pi-space-agent",
+				author: "phi-space-agent",
 				role: task.kind === "scheduled_wakeup" ? "alarm" : "assistant",
 				text: replyText,
 				taskId: task.taskId,

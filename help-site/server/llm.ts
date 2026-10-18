@@ -2,7 +2,7 @@
 //
 // Uses the same credential resolution as the --live examples (env API keys such
 // as ANTHROPIC_API_KEY/OPENAI_API_KEY or the pi CLI's ~/.pi/agent/auth.json).
-// Enabled explicitly with PI_SPACES_LLM=1 and credentials; set PI_SPACES_LLM=0
+// Enabled explicitly with PHI_SPACES_LLM=1 and credentials; set PHI_SPACES_LLM=0
 // (or "false") to force-disable. Costs: ~0.5-1.5k tokens per chat reply, and the
 // swarm is capped (see LLM_PER_MIN in server/social/swarm.ts).
 
@@ -76,7 +76,7 @@ export async function setLlmModel(wanted: string): Promise<string | null> {
 
 export function sharedLlm(): Promise<SharedLlm | null> {
 	llmPromise ??= (async () => {
-		const flag = (process.env.PI_SPACES_LLM ?? "").toLowerCase();
+		const flag = (process.env.PHI_SPACES_LLM ?? "").toLowerCase();
 		if (!["1", "true", "on"].includes(flag)) return null;
 		try {
 			const { models, model } = await liveModels();
@@ -84,8 +84,8 @@ export function sharedLlm(): Promise<SharedLlm | null> {
 			const avail: readonly any[] = await models.getAvailable();
 			if (avail.length === 0) return null;
 			// Demo cost guard: prefer the smallest available model – haiku tier max.
-			// Override with PI_SPACES_LLM_MODEL (substring or exact id) or PI_MODEL.
-			const wanted = (process.env.PI_SPACES_LLM_MODEL ?? process.env.PI_MODEL ?? "").toLowerCase();
+			// Override with PHI_SPACES_LLM_MODEL (substring or exact id) or PI_MODEL.
+			const wanted = (process.env.PHI_SPACES_LLM_MODEL ?? process.env.PI_MODEL ?? "").toLowerCase();
 			let full: any;
 			if (wanted) {
 				full =
@@ -142,12 +142,12 @@ async function complete(systemPrompt: string, userContent: string, maxTokens = 4
 	} finally { activeCalls--; }
 }
 
-/** Reply generator for the space-chat lobby assistant (pi-space-agent). */
+/** Reply generator for the space-chat lobby assistant (phi-space-agent). */
 export async function chatReplyGenerator(): Promise<ReplyGenerator | null> {
 	if (!(await sharedLlm())) return null;
 	return async ({ threadId, author, prompt, history, signal }) =>
 		complete(
-			`You are "pi-space-agent", the resident assistant inside a durable pi-spaces ` +
+			`You are "phi-space-agent", the resident assistant inside a durable phi-spaces ` +
 				`multiplayer chat. Reply helpfully in 1-3 short sentences. Match the user's ` +
 				`language (German or English). Reference earlier messages when useful.`,
 			`Thread: ${threadId}\nRecent messages:\n${history.map((m) => `${m.author}: ${m.text}`).join("\n")}\n\n${author}: ${prompt}\n\nYour reply to ${author}:`,

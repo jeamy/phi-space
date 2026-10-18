@@ -17,7 +17,7 @@ export type ControlHostChange = {
 };
 export type SignedControlHostChange = { change: ControlHostChange; algorithm: Algorithm; signature: string };
 export class ControlHostChangeBlocked extends Error {}
-const bytes = (c: ControlHostChange) => Buffer.from("pi-spaces/control-host-change/v1\n" + canonicalJson(c as unknown as Json));
+const bytes = (c: ControlHostChange) => Buffer.from("phi-spaces/control-host-change/v1\n" + canonicalJson(c as unknown as Json));
 const id = (v: unknown) => typeof v === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(v);
 
 export async function signControlHostChange(change: ControlHostChange, signer: Signer): Promise<SignedControlHostChange> {

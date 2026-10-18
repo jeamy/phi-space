@@ -15,7 +15,7 @@ export type ReplicaPin = { hostId: string; algorithm: Algorithm; publicKey: stri
 type Method = "accept" | "catchUp" | "head";
 type Request = { from: string; to: string; method: Method; nonce: string; ts: number; bodyHash: string };
 type Signed<T> = { value: T; signature: string };
-const DOMAIN = { request: "pi-spaces/replica-sync/v1/request\n", response: "pi-spaces/replica-sync/v1/response\n" };
+const DOMAIN = { request: "phi-spaces/replica-sync/v1/request\n", response: "phi-spaces/replica-sync/v1/response\n" };
 const bytes = (kind: keyof typeof DOMAIN, v: unknown) => Buffer.from(DOMAIN[kind] + canonicalJson(v as Json));
 const digest = (v: unknown) => createHash("sha256").update(canonicalJson((v ?? null) as Json)).digest("hex");
 const sign = async <T>(kind: keyof typeof DOMAIN, value: T, signer: Signer): Promise<Signed<T>> => ({ value, signature: Buffer.from(await signer.sign(bytes(kind, value))).toString("base64") });

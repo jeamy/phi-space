@@ -3,16 +3,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { PiSpaces, FOREVER, Space, createSpace, listSpaces, UnknownSpaceError, startService, core, DEFAULT_ALIAS } from "../src/index.ts";
+import { PhiSpaces, FOREVER, Space, createSpace, listSpaces, UnknownSpaceError, startService, core, DEFAULT_ALIAS } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
 const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-const named = (h: Harness, space: string) => new PiSpaces(h, ctx, Date.now, undefined, undefined, { space });
+const named = (h: Harness, space: string) => new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space });
 
 test("default space is registered on first use: spaceId, incarnation, gid", async () => {
 	const h = await memory();
 	try {
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		const lease = await s.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 		const [info] = await listSpaces(h, ctx);
 		assert.equal(info!.alias, DEFAULT_ALIAS);
@@ -40,7 +40,7 @@ test("named spaces: generated ids, idempotent per alias, isolated, no id collisi
 		assert.notEqual(la.id, lb.id, "local ids differ between spaces");
 		assert.equal(await named(h, "sieve-a").count({ type: "Task" }), 1);
 		assert.equal(await named(h, "sieve-b").count({ type: "Task" }), 1);
-		assert.equal(await new PiSpaces(h, ctx).count({ type: "Task" }), 0, "the default space is separate");
+		assert.equal(await new PhiSpaces(h, ctx).count({ type: "Task" }), 0, "the default space is separate");
 		const t = await named(h, "sieve-b").take({ type: "Task" }, 0);
 		assert.equal(t?.gid, `${b.spaceId}/${lb.id}`);
 		assert.equal(await named(h, "sieve-a").count({ type: "Task" }), 1);
@@ -61,7 +61,7 @@ test("a space written before registration keeps its entries and old ids", async 
 	const h = await memory();
 	try {
 		await h.commit(async (tx) => { core.write(await tx.doc(Space), Date.now(), { type: "Old", fields: {} }, null, FOREVER); }, ctx);
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		const l = await s.write({ type: "New", fields: {} }, null, FOREVER);
 		const [info] = await listSpaces(h, ctx);
 		const old = await s.read({ type: "Old" }, 0);

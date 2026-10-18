@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_txn
+id: help.api.phispaces_txn
 title: "Transactions – createTransaction, commit & abort"
 short: "Groups takes (reservations) and writes (invisible drafts) atomically; verifies all CompletionProfiles and byte budgets on commit."
 tags: [createtransaction, commit, abort, txn, atomic]

@@ -31,7 +31,7 @@ export type SignedFederationPolicy = {
     policy: FederationPolicy; issuer : string; algorithm : Algorithm; signature : string
 };
 const policyBytes = (p: FederationPolicy) =>
-    Buffer.from('pi-spaces/federation-policy/v1\n' + canonicalJson(p as unknown as Json));
+    Buffer.from('phi-spaces/federation-policy/v1\n' + canonicalJson(p as unknown as Json));
 export class FederationPolicyAuthority {
     private o: {
         host: SpaceHost; ctx : Context; controlSpaceId : string; authorityId : string;

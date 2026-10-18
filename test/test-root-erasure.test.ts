@@ -14,7 +14,7 @@ for(const backend of BACKENDS)test(`${backend}: fenced Root erasure clears subje
   let host=await home.open(),fenced=true,effects=0;const principal={peerId:'subject',agentId:'private-agent'},foreign={peerId:'other'},target={hostId:'a',spaceId:'jobs',authorityId:'authority',dataIncarnation:'inc',primaryEpoch:1};
   const assertFenced=async()=>{if(!fenced)throw Error('exclusive fenced owner required');};
   const make=()=>new RootHistoryErasure({host,ctx,federationId:'root',authorize:async()=>{},assertExclusiveFenced:assertFenced});
-  const router=()=>new RouterController({host,ctx,routerId:'root',authorityId:'authority',target:{protocol:'pi-spaces-rpc-v1',invoke:async()=>{effects++;throw Error('unexpected effect');},resolve:async()=>{effects++;throw Error('unexpected resolution');}},assertAuthority:async()=>{}});
+  const router=()=>new RouterController({host,ctx,routerId:'root',authorityId:'authority',target:{protocol:'phi-spaces-rpc-v1',invoke:async()=>{effects++;throw Error('unexpected effect');},resolve:async()=>{effects++;throw Error('unexpected resolution');}},assertAuthority:async()=>{}});
   await host.commit(async tx=>{const layout=await tx.doc(FederationJournalLayout,'root',null);layout.partitions=1;layout.routerIds=['root'];},ctx);const initialRouter=router();await initialRouter.recover();
   const child=await initialRouter.submit({id:'owned-child',area:'jobs',steps:[{target,principal,generation:'generation',method:'write',args:{entry:{type:'Secret',fields:{value:'subject-payload'}}}}]});
   const other=await initialRouter.submit({id:'foreign-child',area:'jobs',steps:[{target,principal:foreign,generation:'foreign-generation',method:'read',args:{template:{type:'Secret'}}}]});

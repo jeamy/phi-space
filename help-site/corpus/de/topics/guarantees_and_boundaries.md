@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.guarantees_and_boundaries
 title: "Verbindliche Garantien und Systemgrenzen"
-short: "Was pi-spaces bei lokalen Commits, Retries, Transaktionen, Restores und in der Federation verbindlich garantiert – und was bewusst ausgeschlossen ist."
+short: "Was phi-spaces bei lokalen Commits, Retries, Transaktionen, Restores und in der Federation verbindlich garantiert – und was bewusst ausgeschlossen ist."
 tags: [guarantees, boundaries, idempotency, consistency, limits, restore, epochs]
 owner: core
 related: [help.topic.overview, help.topic.request_claims_and_generations, help.topic.gate_auth_grants_and_recovery]
@@ -19,7 +19,7 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 
 ### Garantienmatrix {#guarantee-matrix}
 
-| Ebene | Verbindlicher Vertrag in `pi-spaces` | Was ausdrücklich NICHT daraus folgt |
+| Ebene | Verbindlicher Vertrag in `phi-spaces` | Was ausdrücklich NICHT daraus folgt |
 |---|---|---|
 | **Lokaler Commit** | Space-Mutation, RPC-Claim, Revisionsnummer `rev` und Mailbox-Event werden unteilbar zusammen gespeichert. | Keine externe Exactly-once-Wirkung für HTTP-Calls, E-Mails oder LLM-Tokenkosten außerhalb des Spaces. |
 | **Idempotenter Retry** | Gleiches `{ principal, generation, requestId }` mit identischem RFC-8785-Argument-Hash liefert auch nach Prozessneustart dasselbe gespeicherte Ergebnis ohne zweite Mutation. | Nach Ablauf der Aufbewahrungsfrist (Standard 24 h) liefert ein Retry `ResultExpired` ohne erneute Ausführung. |
@@ -30,7 +30,7 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 
 ### Die drei getrennten Epochenzähler {#three-epochs}
 
-In `pi-spaces` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren zwei numerische Zähler und eine strikt getrennte opake Mailbox-Identität:
+In `phi-spaces` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren zwei numerische Zähler und eine strikt getrennte opake Mailbox-Identität:
 
 1. **`primaryEpoch`**: Gilt für einen logischen Space bei Replikation oder Data-Restore (+1 bei Data-Restore, Promotion oder Single-Umschaltung; beginnt nach Control-Restore unter neuer `authorityId` bei 1).
 2. **`routerEpoch`**: Gilt für `RouterLease`-Ausstellungen einer Federation (+1 bei Router-Neustart/-Wechsel).

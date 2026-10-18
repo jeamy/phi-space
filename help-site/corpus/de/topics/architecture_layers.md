@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Die Codebasis von `pi-spaces` ist strikt schichtenweise aufgebaut. Der Kern (`src/core.ts`) ist eine völlig reine, deterministische Zustandsmaschine ohne Netzwerk-, Krypto- oder Dateisystem-Abhängigkeiten. Alle höheren Schichten (Persistenz, RPC, Kryptografie, Overlay-Gate, Router-Federation und Betriebssteuerung) bauen darauf auf, ohne die Kerninvarianten zu umgehen.
+Die Codebasis von `phi-spaces` ist strikt schichtenweise aufgebaut. Der Kern (`src/core.ts`) ist eine völlig reine, deterministische Zustandsmaschine ohne Netzwerk-, Krypto- oder Dateisystem-Abhängigkeiten. Alle höheren Schichten (Persistenz, RPC, Kryptografie, Overlay-Gate, Router-Federation und Betriebssteuerung) bauen darauf auf, ohne die Kerninvarianten zu umgehen.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -34,7 +34,7 @@ Die Codebasis von `pi-spaces` ist strikt schichtenweise aufgebaut. Der Kern (`sr
 │  runtime.ts · boot.ts · restore.ts · recovery-register.ts                  │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Schicht 3: Lokaler Client, LLM-Agent-Tools & Netzwerkdienst                │
-│  client.ts (PiSpaces) · index.ts (Tools & Reaper) · service.ts             │
+│  client.ts (PhiSpaces) · index.ts (Tools & Reaper) · service.ts             │
 │  remote.ts (RemoteSpace) · socket.ts · pi-server.ts · meter.ts             │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Schicht 2: Dauerhafte Claims, Streams, Snapshots & Mailboxes (Phase 1)     │
@@ -57,12 +57,12 @@ Die Codebasis von `pi-spaces` ist strikt schichtenweise aufgebaut. Der Kern (`sr
 |---|---|---|
 | **1. Core & Docs** | `src/core.ts`, `src/doc.ts`, `src/spaces.ts` | `core`, `Space`, `NamedSpace`, `Registry`, `createSpace`, `listSpaces`, `DEFAULT_LIMITS` |
 | **2. Claims & Streams** | `src/claims.ts`, `src/stream.ts`, `src/mailbox.ts` | `RequestRef`, `ClaimView`, `argHash`, `MailboxPage`, `principalId` |
-| **3. Client & RPC** | `src/client.ts`, `src/index.ts`, `src/service.ts`, `src/remote.ts`, `src/socket.ts` | `PiSpaces`, `spaces`, `startService`, `SpaceService`, `RemoteSpace`, `serveSpace`, `socketTransport` |
+| **3. Client & RPC** | `src/client.ts`, `src/index.ts`, `src/service.ts`, `src/remote.ts`, `src/socket.ts` | `PhiSpaces`, `spaces`, `startService`, `SpaceService`, `RemoteSpace`, `serveSpace`, `socketTransport` |
 | **4. Gate & Recovery** | `src/gate.ts`, `src/auth.ts`, `src/enroll.ts`, `src/grants.ts`, `src/runtime.ts`, `src/boot.ts`, `src/restore.ts` | `startGate`, `ProvingService`, `EnrollmentService`, `GrantAuthority`, `GrantVerifier`, `startFederationHost`, `installBootGuard`, `RecoveryController` |
 | **5. Federation** | `src/router.ts`, `src/delegation.ts`, `src/federation-policy.ts`, `src/federated-space.ts`, `src/membership.ts` | `RouterController`, `createFederationController`, `FederatedSpace`, `MembershipController`, `DistributedPrincipalErasure` |
 | **6. Operations & Sync** | `src/run-controller.ts`, `src/workers.ts`, `src/space-lifecycle.ts`, `src/deployment.ts`, `src/alerts.ts`, `src/entry-replication.ts` | `RunController`, `WorkerSupervisor`, `SpaceLifecycle`, `DeploymentController`, `collectAlerts`, `EntryReplicationController` |
 
 ## Siehe auch {#see-also}
 
-- [pi-spaces Systemüberblick](help.topic.overview#overview)
+- [phi-spaces Systemüberblick](help.topic.overview#overview)
 - [Verbindliche Garantien und Systemgrenzen](help.topic.guarantees_and_boundaries#overview)

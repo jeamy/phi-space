@@ -1,4 +1,4 @@
-// Canonical bilingual topic and workflow articles for PI-SPACES / HELP.
+// Canonical bilingual topic and workflow articles for PHI-SPACES / HELP.
 // Every H2/H3 uses explicit locale-independent {#anchor} identifiers as required by the Help Topic Standard.
 
 export interface ArticleSeed {
@@ -34,19 +34,19 @@ export const TOPIC_AND_WORKFLOW_ARTICLES: ArticleSeed[] = [
 		id: "help.topic.overview",
 		type: "topic",
 		provider: "core",
-		tags: ["pi-spaces", "overview", "tuple-space", "architecture", "pispaces", "remotespace", "federatedspace"],
+		tags: ["phi-spaces", "overview", "tuple-space", "architecture", "phispaces", "remotespace", "federatedspace"],
 		related: ["help.topic.architecture_layers", "help.topic.guarantees_and_boundaries", "help.workflow.overview_v1_to_v6"],
 		since: "0.0.1",
 		de: {
-			title: "pi-spaces Systemüberblick: Was es ist und was es kann",
-			short: "Verständlicher, ausführlicher Einblick: Was pi-spaces ist, wie das transaktionale Tuple-Space-Modell funktioniert, welche Probleme es löst und was es von v1 (In-Memory) bis v6 (Federated Cluster + Mobile/Web Admin) leisten kann.",
+			title: "phi-spaces Systemüberblick: Was es ist und was es kann",
+			short: "Verständlicher, ausführlicher Einblick: Was phi-spaces ist, wie das transaktionale Tuple-Space-Modell funktioniert, welche Probleme es löst und was es von v1 (In-Memory) bis v6 (Federated Cluster + Mobile/Web Admin) leisten kann.",
 			body: `## Überblick {#overview}
 
-\`pi-spaces\` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für \`@earendil-works/pi-durable\`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
+\`phi-spaces\` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für \`@earendil-works/pi-durable\`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
 
-## Was ist pi-spaces und warum wurde es gebaut? {#what-is-pi-spaces}
+## Was ist phi-spaces und warum wurde es gebaut? {#what-is-phi-spaces}
 
-\`pi-spaces\` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
+\`phi-spaces\` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
 
 1. **Fehlertolerante Aufgabenübergabe (mit geleaster Reservierung)**: Ein Server, UI-Client oder Agent übergibt Arbeit nicht direkt an einen Worker, sondern schreibt einen Aufgaben-Entry (\`type: "ChatTask"\` o.Ä.) in den Space. Jeder Worker kann sich diesen Task exklusiv **reservieren** (\`take\`). Stürzt der Worker vor der Fertigstellung ab, gibt die abgelaufene Lease den Task automatisch wieder frei – sofern die eigene Task-Lease noch gilt und der Store verfügbar ist.
 2. **Zeitliche Entkopplung**: Produzenten und Konsumenten müssen nicht gleichzeitig online sein. Ein Client kann mitten in der Nacht einen \`ScheduledJob\` einstellen und offline gehen; mit persistentem Backend und ausreichender Task-Lease bleibt der Auftrag erhalten; die Anwendung prüft nach Ablauf des TimerLock die Fälligkeit.
@@ -57,17 +57,17 @@ export const TOPIC_AND_WORKFLOW_ARTICLES: ArticleSeed[] = [
 
 ### Entkopplung in Raum und Zeit {#decoupling}
 
-In \`pi-spaces\` müssen Produzent und Konsument einander nicht kennen und nicht gleichzeitig aktiv sein:
+In \`phi-spaces\` müssen Produzent und Konsument einander nicht kennen und nicht gleichzeitig aktiv sein:
 
 - **Schreiben (\`space.write\`)**: Ein Teilnehmer legt einen Entry \`{ type: string, types?: string[], fields: Record<string, Json> }\` mit einer definierten Ablaufzeit (**Lease**) im Space ab.
 - **Lesen (\`space.read\` / \`readIfExists\` / \`readAll\` / \`readPage\`)**: Ein Teilnehmer sucht mit einem **Template** \`{ type?, fields?, id? }\` nach einem passenden sichtbaren Entry, ohne ihn zu entfernen. Fehlende oder \`null\`-Felder im Template wirken als **Wildcards**.
 - **Exklusives Entnehmen (\`space.take\`)**: Ein Worker entnimmt einen passenden Entry exklusiv. Erfolgt der \`take\` unter einer **Transaktion (\`txn\`)**, bleibt der Entry reserviert, bis der Worker seine Ergebnisse geschrieben und \`commit(txn)\` aufgerufen hat. Stürzt der Worker ab oder läuft die Transaktions-Lease ab, kehrt der Entry zurück, sofern seine eigene Entry-Lease noch gilt.
-- **Warten auf zukünftige Daten (\`space.wait\`)**: Statt blind zu pollen, registriert ein Teilnehmer einen langlebigen \`Waiter\` auf ein Template. Sobald ein passender Entry committet wird, weckt \`pi-spaces\` den Waiter oder sendet ein Ereignis.
+- **Warten auf zukünftige Daten (\`space.wait\`)**: Statt blind zu pollen, registriert ein Teilnehmer einen langlebigen \`Waiter\` auf ein Template. Sobald ein passender Entry committet wird, weckt \`phi-spaces\` den Waiter oder sendet ein Ereignis.
 
-### Was kann pi-spaces? (Kernfähigkeiten) {#capabilities}
+### Was kann phi-spaces? (Kernfähigkeiten) {#capabilities}
 
 - **Unveränderliche Entries & Wildcard-Templates**: Typisierte JSON-Objekte mit Subtypen-Registrierung (\`types\`) und exaktem \`type\`/Feld-Matching.
-- **Atomare Space-Transaktionen**: \`take\` + mehrere \`write\` + optionale Request-Claims mit einem fachlichen \`commit(txn)\` (vorherige PiSpaces-Aufrufe sind separate Storage-Commits). Bei \`abort\` oder Timeout wird alles atomar zurückgerollt.
+- **Atomare Space-Transaktionen**: \`take\` + mehrere \`write\` + optionale Request-Claims mit einem fachlichen \`commit(txn)\` (vorherige PhiSpaces-Aufrufe sind separate Storage-Commits). Bei \`abort\` oder Timeout wird alles atomar zurückgerollt.
 - **Serverseitige Ergebnisgarantien (\`CompletionProfiles\`)**: Der Space-Kern erzwingt beim Commit, dass ein genommener Task des Typs \`ChatTask\` nur zusammen mit genau einem passenden Ergebnis-Entry \`Msg\` erfolgreich commitet werden kann.
 - **Idempotente Request-Claims (\`RequestRef\`)**: Jede Mutation kann mit \`{ request: { principal, generation, requestId } }\` ausgeführt werden; Wiederholungen und Timeouts erzeugen keine doppelte Wirkung.
 - **Leases & automatischer Reaper (\`startService\`)**: Entries, Presence-Zustände und \`TimerLock\`-Schlösser laufen nach definierter Zeit automatisch ab.
@@ -77,7 +77,7 @@ In \`pi-spaces\` müssen Produzent und Konsument einander nicht kennen und nicht
 
 ### Einheitlicher Basisvertrag SpaceLike {#spacelike-contract}
 
-PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpace besitzt eine eigene API mit FederationRequest und Member-Transaktionsbindung; Fachkonzepte sind übertragbar, Aufrufsignaturen nicht unverändert austauschbar. Siehe [Topologien und API-Grenzen](help.topic.topology_and_readiness#api).
+PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpace besitzt eine eigene API mit FederationRequest und Member-Transaktionsbindung; Fachkonzepte sind übertragbar, Aufrufsignaturen nicht unverändert austauschbar. Siehe [Topologien und API-Grenzen](help.topic.topology_and_readiness#api).
 
 ## Begriffe und Identitäten {#terms-and-identities}
 
@@ -89,7 +89,7 @@ PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpa
 ## Arbeitsablauf {#workflow}
 
 1. **Vertrag definieren**: Entry-Typen (\`type\`), Pflichtfelder (\`fields\`) und optionale \`CompletionProfiles\` (welcher Task-Typ erfordert welchen Ergebnis-Typ beim Transaktions-Commit?) festlegen.
-2. **Space öffnen und Dienst starten**: \`new PiSpaces(harness, ctx, Date.now, meter, undefined, { space })\` erstellen und \`await startService(harness, ctx)\` für Lease-Reaper und Event-Zustellung starten.
+2. **Space öffnen und Dienst starten**: \`new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space })\` erstellen und \`await startService(harness, ctx)\` für Lease-Reaper und Event-Zustellung starten.
 3. **Aufgaben einstellen und bearbeiten**: Produzenten schreiben Aufgaben mit \`RequestRef\`-Claim; Worker reservieren Aufgaben per \`take(..., { txn })\`, schreiben Ergebnisse unter derselben \`txn\` und rufen \`commit(txn)\` auf.
 4. **Live-Beobachtung und Steuerung**: UI-Clients lesen initial \`readPage()\` (Snapshot mit \`rev\`) und folgen Änderungen über \`changes(afterRev)\` oder Consumer-Mailboxes (\`events\` / \`ack\`).
 
@@ -106,15 +106,15 @@ PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpa
 - [6-Stufen-Praxisleitfaden: Multiplayer Space-Chat (v1–v6)](help.workflow.overview_v1_to_v6#overview)`
 		},
 		en: {
-			title: "pi-spaces System Overview: What It Is And What It Can Do",
-			short: "A clear, in-depth look at what pi-spaces is, how the transactional tuple-space model works, which problems it solves, and what it can do from v1 (in-memory) through v6 (federated cluster + mobile/web admin).",
+			title: "phi-spaces System Overview: What It Is And What It Can Do",
+			short: "A clear, in-depth look at what phi-spaces is, how the transactional tuple-space model works, which problems it solves, and what it can do from v1 (in-memory) through v6 (federated cluster + mobile/web admin).",
 			body: `## Overview {#overview}
 
-\`pi-spaces\` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) built on \`@earendil-works/pi-durable\`. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
+\`phi-spaces\` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) built on \`@earendil-works/pi-durable\`. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
 
-## What Is pi-spaces And Why Was It Built? {#what-is-pi-spaces}
+## What Is phi-spaces And Why Was It Built? {#what-is-phi-spaces}
 
-\`pi-spaces\` solves four fundamental problems in building robust, long-running systems and autonomous AI agent fleets:
+\`phi-spaces\` solves four fundamental problems in building robust, long-running systems and autonomous AI agent fleets:
 
 1. **Fault-Tolerant Work Handoff (Leased Reservations)**: A server, UI client, or agent does not call a worker directly; it writes a task entry (\`type: "ChatTask"\` or similar) into the space. Any worker can then **reserve** that task exclusively (\`take\`). If the worker crashes before finishing, the expired lease automatically returns the task — provided the task's own lease remains valid and its store is available.
 2. **Temporal Decoupling**: Producers and consumers do not need to be online at the same time. A client can schedule a \`ScheduledJob\` in the middle of the night and go offline; with a persistent backend and sufficient task lease, the job survives; the application checks when it is due after TimerLock expiry.
@@ -125,17 +125,17 @@ PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSpa
 
 ### Decoupling In Space And Time {#decoupling}
 
-In \`pi-spaces\`, producers and consumers do not need to know each other or be active at the same time:
+In \`phi-spaces\`, producers and consumers do not need to know each other or be active at the same time:
 
 - **Write (\`space.write\`)**: A participant places an entry \`{ type: string, types?: string[], fields: Record<string, Json> }\` with a bounded lifetime (**lease**) into the space.
 - **Read (\`space.read\` / \`readIfExists\` / \`readAll\` / \`readPage\`)**: A participant queries a matching visible entry using a **template** \`{ type?, fields?, id? }\` without removing it. Missing or \`null\` fields in the template act as **wildcards**.
 - **Exclusive Take (\`space.take\`)**: A worker removes a matching entry exclusively. When executed under a **transaction (\`txn\`)**, the entry remains reserved until the worker writes its results and calls \`commit(txn)\`. If the worker crashes or the transaction lease expires, the entry returns if its own Entry lease remains valid.
-- **Wait For Future Data (\`space.wait\`)**: Instead of polling blindly, a participant registers a durable \`Waiter\` against a template. As soon as a matching entry is committed, \`pi-spaces\` wakes the waiter or delivers an event.
+- **Wait For Future Data (\`space.wait\`)**: Instead of polling blindly, a participant registers a durable \`Waiter\` against a template. As soon as a matching entry is committed, \`phi-spaces\` wakes the waiter or delivers an event.
 
-### What Can pi-spaces Do? (Core Capabilities) {#capabilities}
+### What Can phi-spaces Do? (Core Capabilities) {#capabilities}
 
 - **Immutable Entries & Wildcard Templates**: Typed JSON objects with subtype registration (\`types\`) and exact \`type\`/field matching.
-- **Atomic Space Transactions**: \`take\` + multiple \`write\` calls + optional request claims finalized by one business \`commit(txn)\` (earlier PiSpaces calls are separate storage commits). On \`abort\` or timeout everything rolls back atomically.
+- **Atomic Space Transactions**: \`take\` + multiple \`write\` calls + optional request claims finalized by one business \`commit(txn)\` (earlier PhiSpaces calls are separate storage commits). On \`abort\` or timeout everything rolls back atomically.
 - **Server-Side Result Guarantees (\`CompletionProfiles\`)**: The space core enforces at commit time that a taken task of type \`ChatTask\` can only commit together with exactly one matching result entry \`Msg\`.
 - **Idempotent Request Claims (\`RequestRef\`)**: Every mutation can carry \`{ request: { principal, generation, requestId } }\`; retries and timeouts never produce duplicate effects.
 - **Leases & Automatic Reaper (\`startService\`)**: Entries, presence records, and \`TimerLock\` locks expire automatically after a configured duration.
@@ -145,7 +145,7 @@ In \`pi-spaces\`, producers and consumers do not need to know each other or be a
 
 ### Unified SpaceLike Contract {#spacelike-contract}
 
-PiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace has a separate API with FederationRequest and Member transaction binding; business concepts transfer but call signatures are not drop-in replacements. See [topologies and API boundaries](help.topic.topology_and_readiness#api).
+PhiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace has a separate API with FederationRequest and Member transaction binding; business concepts transfer but call signatures are not drop-in replacements. See [topologies and API boundaries](help.topic.topology_and_readiness#api).
 
 ## Terms And Identities {#terms-and-identities}
 
@@ -157,7 +157,7 @@ PiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace h
 ## Workflow {#workflow}
 
 1. **Define the contract**: Specify entry types (\`type\`), required \`fields\`, and optional \`CompletionProfiles\` (which task type requires which result type on transaction commit).
-2. **Open the space and start maintenance**: Instantiate \`new PiSpaces(harness, ctx, Date.now, meter, undefined, { space })\` and call \`await startService(harness, ctx)\` for lease reaping and event delivery.
+2. **Open the space and start maintenance**: Instantiate \`new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space })\` and call \`await startService(harness, ctx)\` for lease reaping and event delivery.
 3. **Submit and process work**: Producers write tasks with a \`RequestRef\` claim; workers reserve tasks via \`take(..., { txn })\`, write results under the same \`txn\`, and call \`commit(txn)\`.
 4. **Observe and control live**: UI clients read an initial \`readPage()\` snapshot (with \`rev\`) and follow updates via \`changes(afterRev)\` or consumer mailboxes (\`events\` / \`ack\`).
 
@@ -186,7 +186,7 @@ PiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace h
 			short: "Vollständige Zuordnung aller Quellmodule in src/ zu den 6 Architekturschichten von der reinen Zustandsmaschine bis zu Federation, RunGate und Replikation.",
 			body: `## Überblick {#overview}
 
-Die Codebasis von \`pi-spaces\` ist strikt schichtenweise aufgebaut. Der Kern (\`src/core.ts\`) ist eine völlig reine, deterministische Zustandsmaschine ohne Netzwerk-, Krypto- oder Dateisystem-Abhängigkeiten. Alle höheren Schichten (Persistenz, RPC, Kryptografie, Overlay-Gate, Router-Federation und Betriebssteuerung) bauen darauf auf, ohne die Kerninvarianten zu umgehen.
+Die Codebasis von \`phi-spaces\` ist strikt schichtenweise aufgebaut. Der Kern (\`src/core.ts\`) ist eine völlig reine, deterministische Zustandsmaschine ohne Netzwerk-, Krypto- oder Dateisystem-Abhängigkeiten. Alle höheren Schichten (Persistenz, RPC, Kryptografie, Overlay-Gate, Router-Federation und Betriebssteuerung) bauen darauf auf, ohne die Kerninvarianten zu umgehen.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -207,7 +207,7 @@ Die Codebasis von \`pi-spaces\` ist strikt schichtenweise aufgebaut. Der Kern (\
 │  runtime.ts · boot.ts · restore.ts · recovery-register.ts                  │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Schicht 3: Lokaler Client, LLM-Agent-Tools & Netzwerkdienst                │
-│  client.ts (PiSpaces) · index.ts (Tools & Reaper) · service.ts             │
+│  client.ts (PhiSpaces) · index.ts (Tools & Reaper) · service.ts             │
 │  remote.ts (RemoteSpace) · socket.ts · pi-server.ts · meter.ts             │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Schicht 2: Dauerhafte Claims, Streams, Snapshots & Mailboxes (Phase 1)     │
@@ -230,14 +230,14 @@ Die Codebasis von \`pi-spaces\` ist strikt schichtenweise aufgebaut. Der Kern (\
 |---|---|---|
 | **1. Core & Docs** | \`src/core.ts\`, \`src/doc.ts\`, \`src/spaces.ts\` | \`core\`, \`Space\`, \`NamedSpace\`, \`Registry\`, \`createSpace\`, \`listSpaces\`, \`DEFAULT_LIMITS\` |
 | **2. Claims & Streams** | \`src/claims.ts\`, \`src/stream.ts\`, \`src/mailbox.ts\` | \`RequestRef\`, \`ClaimView\`, \`argHash\`, \`MailboxPage\`, \`principalId\` |
-| **3. Client & RPC** | \`src/client.ts\`, \`src/index.ts\`, \`src/service.ts\`, \`src/remote.ts\`, \`src/socket.ts\` | \`PiSpaces\`, \`spaces\`, \`startService\`, \`SpaceService\`, \`RemoteSpace\`, \`serveSpace\`, \`socketTransport\` |
+| **3. Client & RPC** | \`src/client.ts\`, \`src/index.ts\`, \`src/service.ts\`, \`src/remote.ts\`, \`src/socket.ts\` | \`PhiSpaces\`, \`spaces\`, \`startService\`, \`SpaceService\`, \`RemoteSpace\`, \`serveSpace\`, \`socketTransport\` |
 | **4. Gate & Recovery** | \`src/gate.ts\`, \`src/auth.ts\`, \`src/enroll.ts\`, \`src/grants.ts\`, \`src/runtime.ts\`, \`src/boot.ts\`, \`src/restore.ts\` | \`startGate\`, \`ProvingService\`, \`EnrollmentService\`, \`GrantAuthority\`, \`GrantVerifier\`, \`startFederationHost\`, \`installBootGuard\`, \`RecoveryController\` |
 | **5. Federation** | \`src/router.ts\`, \`src/delegation.ts\`, \`src/federation-policy.ts\`, \`src/federated-space.ts\`, \`src/membership.ts\` | \`RouterController\`, \`createFederationController\`, \`FederatedSpace\`, \`MembershipController\`, \`DistributedPrincipalErasure\` |
 | **6. Operations & Sync** | \`src/run-controller.ts\`, \`src/workers.ts\`, \`src/space-lifecycle.ts\`, \`src/deployment.ts\`, \`src/alerts.ts\`, \`src/entry-replication.ts\` | \`RunController\`, \`WorkerSupervisor\`, \`SpaceLifecycle\`, \`DeploymentController\`, \`collectAlerts\`, \`EntryReplicationController\` |
 
 ## Siehe auch {#see-also}
 
-- [pi-spaces Systemüberblick](help.topic.overview#overview)
+- [phi-spaces Systemüberblick](help.topic.overview#overview)
 - [Verbindliche Garantien und Systemgrenzen](help.topic.guarantees_and_boundaries#overview)`
 		},
 		en: {
@@ -245,7 +245,7 @@ Die Codebasis von \`pi-spaces\` ist strikt schichtenweise aufgebaut. Der Kern (\
 			short: "Complete mapping of all source modules in src/ across the 6 architecture layers, from the pure state machine to federation, RunGate, and replication.",
 			body: `## Overview {#overview}
 
-The \`pi-spaces\` codebase is strictly layered. Its core (\`src/core.ts\`) is a pure, deterministic state machine with no network, cryptography, or filesystem dependencies. All higher layers (persistence, RPC, cryptography, overlay gate, router federation, and operations control) build on top of it without bypassing core invariants.
+The \`phi-spaces\` codebase is strictly layered. Its core (\`src/core.ts\`) is a pure, deterministic state machine with no network, cryptography, or filesystem dependencies. All higher layers (persistence, RPC, cryptography, overlay gate, router federation, and operations control) build on top of it without bypassing core invariants.
 
 ## Concept And System Model {#concept-model}
 
@@ -266,7 +266,7 @@ The \`pi-spaces\` codebase is strictly layered. Its core (\`src/core.ts\`) is a 
 │  runtime.ts · boot.ts · restore.ts · recovery-register.ts                  │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Layer 3: Local Client, LLM Agent Tools & Network Service                   │
-│  client.ts (PiSpaces) · index.ts (Tools & Reaper) · service.ts             │
+│  client.ts (PhiSpaces) · index.ts (Tools & Reaper) · service.ts             │
 │  remote.ts (RemoteSpace) · socket.ts · pi-server.ts · meter.ts             │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ Layer 2: Durable Claims, Streams, Snapshots & Mailboxes (Phase 1)          │
@@ -289,14 +289,14 @@ The \`pi-spaces\` codebase is strictly layered. Its core (\`src/core.ts\`) is a 
 |---|---|---|
 | **1. Core & Docs** | \`src/core.ts\`, \`src/doc.ts\`, \`src/spaces.ts\` | \`core\`, \`Space\`, \`NamedSpace\`, \`Registry\`, \`createSpace\`, \`listSpaces\`, \`DEFAULT_LIMITS\` |
 | **2. Claims & Streams** | \`src/claims.ts\`, \`src/stream.ts\`, \`src/mailbox.ts\` | \`RequestRef\`, \`ClaimView\`, \`argHash\`, \`MailboxPage\`, \`principalId\` |
-| **3. Client & RPC** | \`src/client.ts\`, \`src/index.ts\`, \`src/service.ts\`, \`src/remote.ts\`, \`src/socket.ts\` | \`PiSpaces\`, \`spaces\`, \`startService\`, \`SpaceService\`, \`RemoteSpace\`, \`serveSpace\`, \`socketTransport\` |
+| **3. Client & RPC** | \`src/client.ts\`, \`src/index.ts\`, \`src/service.ts\`, \`src/remote.ts\`, \`src/socket.ts\` | \`PhiSpaces\`, \`spaces\`, \`startService\`, \`SpaceService\`, \`RemoteSpace\`, \`serveSpace\`, \`socketTransport\` |
 | **4. Gate & Recovery** | \`src/gate.ts\`, \`src/auth.ts\`, \`src/enroll.ts\`, \`src/grants.ts\`, \`src/runtime.ts\`, \`src/boot.ts\`, \`src/restore.ts\` | \`startGate\`, \`ProvingService\`, \`EnrollmentService\`, \`GrantAuthority\`, \`GrantVerifier\`, \`startFederationHost\`, \`installBootGuard\`, \`RecoveryController\` |
 | **5. Federation** | \`src/router.ts\`, \`src/delegation.ts\`, \`src/federation-policy.ts\`, \`src/federated-space.ts\`, \`src/membership.ts\` | \`RouterController\`, \`createFederationController\`, \`FederatedSpace\`, \`MembershipController\`, \`DistributedPrincipalErasure\` |
 | **6. Operations & Sync** | \`src/run-controller.ts\`, \`src/workers.ts\`, \`src/space-lifecycle.ts\`, \`src/deployment.ts\`, \`src/alerts.ts\`, \`src/entry-replication.ts\` | \`RunController\`, \`WorkerSupervisor\`, \`SpaceLifecycle\`, \`DeploymentController\`, \`collectAlerts\`, \`EntryReplicationController\` |
 
 ## See Also {#see-also}
 
-- [pi-spaces System Overview](help.topic.overview#overview)
+- [phi-spaces System Overview](help.topic.overview#overview)
 - [Binding Guarantees and System Boundaries](help.topic.guarantees_and_boundaries#overview)`
 		}
 	},
@@ -309,7 +309,7 @@ The \`pi-spaces\` codebase is strictly layered. Its core (\`src/core.ts\`) is a 
 		since: "0.0.1",
 		de: {
 			title: "Verbindliche Garantien und Systemgrenzen",
-			short: "Was pi-spaces bei lokalen Commits, Retries, Transaktionen, Restores und in der Federation verbindlich garantiert – und was bewusst ausgeschlossen ist.",
+			short: "Was phi-spaces bei lokalen Commits, Retries, Transaktionen, Restores und in der Federation verbindlich garantiert – und was bewusst ausgeschlossen ist.",
 			body: `## Überblick {#overview}
 
 Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garantien und seine Grenzen explizit benannt und durch Tests auf persistentem Speicher (JSONL und SQLite) nachgewiesen sind. Dieser Artikel fasst den aktuellen Ist-Stand (\`docs/implementierungsstand.md\`) und den Vertragsrahmen (\`docs/federation-plan-v3.md\`) zusammen.
@@ -318,7 +318,7 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 
 ### Garantienmatrix {#guarantee-matrix}
 
-| Ebene | Verbindlicher Vertrag in \`pi-spaces\` | Was ausdrücklich NICHT daraus folgt |
+| Ebene | Verbindlicher Vertrag in \`phi-spaces\` | Was ausdrücklich NICHT daraus folgt |
 |---|---|---|
 | **Lokaler Commit** | Space-Mutation, RPC-Claim, Revisionsnummer \`rev\` und Mailbox-Event werden unteilbar zusammen gespeichert. | Keine externe Exactly-once-Wirkung für HTTP-Calls, E-Mails oder LLM-Tokenkosten außerhalb des Spaces. |
 | **Idempotenter Retry** | Gleiches \`{ principal, generation, requestId }\` mit identischem RFC-8785-Argument-Hash liefert auch nach Prozessneustart dasselbe gespeicherte Ergebnis ohne zweite Mutation. | Nach Ablauf der Aufbewahrungsfrist (Standard 24 h) liefert ein Retry \`ResultExpired\` ohne erneute Ausführung. |
@@ -329,7 +329,7 @@ Ein verlässliches verteiltes System zeichnet sich dadurch aus, dass seine Garan
 
 ### Die drei getrennten Epochenzähler {#three-epochs}
 
-In \`pi-spaces\` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren zwei numerische Zähler und eine strikt getrennte opake Mailbox-Identität:
+In \`phi-spaces\` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es existieren zwei numerische Zähler und eine strikt getrennte opake Mailbox-Identität:
 
 1. **\`primaryEpoch\`**: Gilt für einen logischen Space bei Replikation oder Data-Restore (+1 bei Data-Restore, Promotion oder Single-Umschaltung; beginnt nach Control-Restore unter neuer \`authorityId\` bei 1).
 2. **\`routerEpoch\`**: Gilt für \`RouterLease\`-Ausstellungen einer Federation (+1 bei Router-Neustart/-Wechsel).
@@ -348,7 +348,7 @@ In \`pi-spaces\` ist der Begriff „Epoche“ ohne Präfix unzulässig. Es exist
 		},
 		en: {
 			title: "Binding Guarantees and System Boundaries",
-			short: "What pi-spaces strictly guarantees for local commits, retries, transactions, restores, and federation—and what is intentionally out of scope.",
+			short: "What phi-spaces strictly guarantees for local commits, retries, transactions, restores, and federation—and what is intentionally out of scope.",
 			body: `## Overview {#overview}
 
 A reliable distributed system defines both its guarantees and its boundaries explicitly and proves them on persistent storage (JSONL and SQLite). This article summarizes the current implementation state (\`docs/implementierungsstand.md\`) and contract (\`docs/federation-plan-v3.md\`).
@@ -357,7 +357,7 @@ A reliable distributed system defines both its guarantees and its boundaries exp
 
 ### Guarantee Matrix {#guarantee-matrix}
 
-| Layer | Binding Contract in \`pi-spaces\` | What Does Explicitly NOT Follow |
+| Layer | Binding Contract in \`phi-spaces\` | What Does Explicitly NOT Follow |
 |---|---|---|
 | **Local Commit** | Space mutation, RPC claim, revision \`rev\`, and mailbox event are persisted atomically together. | No external exactly-once guarantee for HTTP calls, emails, or LLM token costs outside the space. |
 | **Idempotent Retry** | Identical \`{ principal, generation, requestId }\` with matching RFC-8785 argument hash returns the stored result across process restarts without repeating the mutation. | After retention expiry (default 24 h), a retry returns \`ResultExpired\` without re-executing. |
@@ -368,7 +368,7 @@ A reliable distributed system defines both its guarantees and its boundaries exp
 
 ### The Three Distinct Epoch Counters {#three-epochs}
 
-Using the word "epoch" without a qualifier is invalid in \`pi-spaces\`. Three independent monotonic counters exist:
+Using the word "epoch" without a qualifier is invalid in \`phi-spaces\`. Three independent monotonic counters exist:
 
 1. **\`primaryEpoch\`**: Scoped to a logical space for replication or data restore (+1 on data restore, promotion, or single-mode switch; resets to 1 under a new \`authorityId\` after control restore).
 2. **\`routerEpoch\`**: Scoped to \`RouterLease\` issuance in a federation (+1 on router restart or failover).
@@ -391,14 +391,14 @@ Using the word "epoch" without a qualifier is invalid in \`pi-spaces\`. Three in
 		type: "topic",
 		provider: "core",
 		tags: ["entries", "templates", "wildcards", "subtypes", "gid", "matching"],
-		related: ["help.topic.leases_and_transactions", "help.api.pispaces_write", "help.api.pispaces_read"],
+		related: ["help.topic.leases_and_transactions", "help.api.phispaces_write", "help.api.phispaces_read"],
 		since: "0.0.1",
 		de: {
 			title: "Entries, Subtypen und Template-Matching",
 			short: "Aufbau von Entries ({type, types?, fields}), globale Identitäten (gid), hierarchische Subtypen und exakte Wildcard-Regeln beim Template-Matching.",
 			body: `## Überblick {#overview}
 
-Alle Nutz- und Koordinationsdaten in \`pi-spaces\` werden als **Entries** abgelegt und über **Templates** abgefragt. Das Matching arbeitet über strukturelle Typprüfung und tiefe JSON-Gleichheit auf oberster Feldebene.
+Alle Nutz- und Koordinationsdaten in \`phi-spaces\` werden als **Entries** abgelegt und über **Templates** abgefragt. Das Matching arbeitet über strukturelle Typprüfung und tiefe JSON-Gleichheit auf oberster Feldebene.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -454,14 +454,14 @@ const msg = await space.read({
 ## Siehe auch {#see-also}
 
 - [Leases, Transaktionen und Sichtbarkeit](help.topic.leases_and_transactions#overview)
-- [write – Entry schreiben](help.api.pispaces_write)`
+- [write – Entry schreiben](help.api.phispaces_write)`
 		},
 		en: {
 			title: "Entries, Subtypes, and Template Matching",
 			short: "Structure of entries ({type, types?, fields}), global identities (gid), hierarchical subtypes, and exact wildcard rules during template matching.",
 			body: `## Overview {#overview}
 
-All application and coordination state in \`pi-spaces\` is stored as **entries** and queried using **templates**. Matching combines structural type checks with deep JSON equality across top-level fields.
+All application and coordination state in \`phi-spaces\` is stored as **entries** and queried using **templates**. Matching combines structural type checks with deep JSON equality across top-level fields.
 
 ## Concept And System Model {#concept-model}
 
@@ -517,7 +517,7 @@ const msg = await space.read({
 ## See Also {#see-also}
 
 - [Leases, Transactions, and Visibility](help.topic.leases_and_transactions#overview)
-- [write – Write an Entry](help.api.pispaces_write)`
+- [write – Write an Entry](help.api.phispaces_write)`
 		}
 	},
 	{
@@ -525,14 +525,14 @@ const msg = await space.read({
 		type: "topic",
 		provider: "core",
 		tags: ["leases", "transactions", "txn", "visibility", "locks", "ifexists", "renew", "cancel"],
-		related: ["help.topic.entries_and_templates", "help.topic.completion_profiles_and_limits", "help.api.pispaces_txn"],
+		related: ["help.topic.entries_and_templates", "help.topic.completion_profiles_and_limits", "help.api.phispaces_txn"],
 		since: "0.0.1",
 		de: {
 			title: "Leases, Transaktionen und Sichtbarkeit",
 			short: "Wie Leases selbstheilende Zustände ermöglichen und wie Transaktionen (createTransaction, commit, abort) Writes und Takes atomar isolieren.",
 			body: `## Überblick {#overview}
 
-In verteilten Systemen stürzen Prozesse ab und Netzwerkverbindungen brechen ab. \`pi-spaces\` löst dieses Problem durch zwei komplementäre Mechanismen: **Leases** (zeitlich begrenzte Lebensdauer für Entries, Transaktionen, Waiter und Abos) und **Space-Transaktionen** (atomare Gruppierung von \`take\`-Reservierungen und \`write\`-Entwürfen).
+In verteilten Systemen stürzen Prozesse ab und Netzwerkverbindungen brechen ab. \`phi-spaces\` löst dieses Problem durch zwei komplementäre Mechanismen: **Leases** (zeitlich begrenzte Lebensdauer für Entries, Transaktionen, Waiter und Abos) und **Space-Transaktionen** (atomare Gruppierung von \`take\`-Reservierungen und \`write\`-Entwürfen).
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -589,14 +589,14 @@ try {
 ## Siehe auch {#see-also}
 
 - [CompletionProfiles und Ressourcen-Limits](help.topic.completion_profiles_and_limits#overview)
-- [Transaktionen – createTransaction, commit & abort](help.api.pispaces_txn)`
+- [Transaktionen – createTransaction, commit & abort](help.api.phispaces_txn)`
 		},
 		en: {
 			title: "Leases, Transactions, and Visibility",
 			short: "How leases enable self-healing state and how transactions (createTransaction, commit, abort) isolate writes and takes atomically.",
 			body: `## Overview {#overview}
 
-In distributed systems, processes crash and network links drop. \`pi-spaces\` addresses this with two complementary mechanisms: **leases** (bounded lifetimes for entries, transactions, waiters, and subscriptions) and **space transactions** (atomic grouping of \`take\` reservations and \`write\` drafts).
+In distributed systems, processes crash and network links drop. \`phi-spaces\` addresses this with two complementary mechanisms: **leases** (bounded lifetimes for entries, transactions, waiters, and subscriptions) and **space transactions** (atomic grouping of \`take\` reservations and \`write\` drafts).
 
 ## Concept And System Model {#concept-model}
 
@@ -653,7 +653,7 @@ try {
 ## See Also {#see-also}
 
 - [CompletionProfiles and Resource Limits](help.topic.completion_profiles_and_limits#overview)
-- [Transactions – createTransaction, commit & abort](help.api.pispaces_txn)`
+- [Transactions – createTransaction, commit & abort](help.api.phispaces_txn)`
 		}
 	},
 	{
@@ -661,14 +661,14 @@ try {
 		type: "topic",
 		provider: "core",
 		tags: ["completionprofile", "completionviolation", "limits", "quotas", "bytes", "budget"],
-		related: ["help.topic.leases_and_transactions", "help.api.pispaces_completion_profiles"],
+		related: ["help.topic.leases_and_transactions", "help.api.phispaces_completion_profiles"],
 		since: "0.0.1",
 		de: {
 			title: "CompletionProfiles und Ressourcen-Limits",
 			short: "Serverseitige Ergebnisprüfung beim Commit von Take-Transaktionen (CompletionProfile) sowie die festen Byte- und Owner-Quoten (DEFAULT_LIMITS).",
 			body: `## Überblick {#overview}
 
-Damit ein fehlerhafter Worker oder ein halluzinierender KI-Agent niemals eine Aufgabe aus dem Space entnehmen und die Transaktion ohne gültiges Ergebnis committen kann, erzwingt \`pi-spaces\` serverseitige **\`CompletionProfiles\`** sowie strikte **Byte- und Objekt-Budgets (\`DEFAULT_LIMITS\`)**.
+Damit ein fehlerhafter Worker oder ein halluzinierender KI-Agent niemals eine Aufgabe aus dem Space entnehmen und die Transaktion ohne gültiges Ergebnis committen kann, erzwingt \`phi-spaces\` serverseitige **\`CompletionProfiles\`** sowie strikte **Byte- und Objekt-Budgets (\`DEFAULT_LIMITS\`)**.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -713,14 +713,14 @@ Vor **jeder** Erweiterung einer Transaktion reserviert \`core.ts\` die konservat
 ## Siehe auch {#see-also}
 
 - [Leases, Transaktionen und Sichtbarkeit](help.topic.leases_and_transactions#overview)
-- [setCompletionProfiles & setLimits](help.api.pispaces_completion_profiles)`
+- [setCompletionProfiles & setLimits](help.api.phispaces_completion_profiles)`
 		},
 		en: {
 			title: "CompletionProfiles and Resource Limits",
 			short: "Server-side result verification when committing take transactions (CompletionProfile) and fixed byte and owner quotas (DEFAULT_LIMITS).",
 			body: `## Overview {#overview}
 
-To ensure a buggy worker or hallucinating AI agent can never take a task from the space and commit the transaction without producing a valid result, \`pi-spaces\` enforces server-side **\`CompletionProfiles\`** and strict **byte and object budgets (\`DEFAULT_LIMITS\`)**.
+To ensure a buggy worker or hallucinating AI agent can never take a task from the space and commit the transaction without producing a valid result, \`phi-spaces\` enforces server-side **\`CompletionProfiles\`** and strict **byte and object budgets (\`DEFAULT_LIMITS\`)**.
 
 ## Concept And System Model {#concept-model}
 
@@ -765,7 +765,7 @@ Before **every** transaction extension, \`core.ts\` reserves conservative byte b
 ## See Also {#see-also}
 
 - [Leases, Transactions, and Visibility](help.topic.leases_and_transactions#overview)
-- [setCompletionProfiles & setLimits](help.api.pispaces_completion_profiles)`
+- [setCompletionProfiles & setLimits](help.api.phispaces_completion_profiles)`
 		}
 	},
 	{
@@ -773,14 +773,14 @@ Before **every** transaction extension, \`core.ts\` reserves conservative byte b
 		type: "topic",
 		provider: "client",
 		tags: ["claims", "requestref", "generation", "idempotency", "rfc8785", "polloperation", "resolveoperation"],
-		related: ["help.topic.guarantees_and_boundaries", "help.api.pispaces_claims", "help.workflow.stage_v2_local_durable"],
+		related: ["help.topic.guarantees_and_boundaries", "help.api.phispaces_claims", "help.workflow.stage_v2_local_durable"],
 		since: "0.0.1",
 		de: {
 			title: "Request-Claims, Generationen und Idempotenz",
-			short: "Wie pi-spaces über {principal, generation, requestId} und kanonische RFC-8785-Hashes doppelte Mutationen nach Verbindungsabbruch oder Neustart verhindert.",
+			short: "Wie phi-spaces über {principal, generation, requestId} und kanonische RFC-8785-Hashes doppelte Mutationen nach Verbindungsabbruch oder Neustart verhindert.",
 			body: `## Überblick {#overview}
 
-Im Cloudflare-Blogpost zu \`pi-durable\` musste für \`conversation.create\` ein eigenes \`ConversationCommandReceipts\`-Dokument programmiert werden, damit ein WebSocket-Reconnect keine doppelten Konversationen erzeugt. In \`pi-spaces\` ist dieser Mechanismus bereits als universelle Kernfunktion **Request-Claims (\`src/claims.ts\`)** für **alle** Mutationen (\`write\`, \`take\`, \`createTransaction\`, \`commit\`, \`abort\`, \`renew\`, \`cancel\`, \`notify\`, \`wait\`) eingebaut.
+Im Cloudflare-Blogpost zu \`pi-durable\` musste für \`conversation.create\` ein eigenes \`ConversationCommandReceipts\`-Dokument programmiert werden, damit ein WebSocket-Reconnect keine doppelten Konversationen erzeugt. In \`phi-spaces\` ist dieser Mechanismus bereits als universelle Kernfunktion **Request-Claims (\`src/claims.ts\`)** für **alle** Mutationen (\`write\`, \`take\`, \`createTransaction\`, \`commit\`, \`abort\`, \`renew\`, \`cancel\`, \`notify\`, \`wait\`) eingebaut.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -796,7 +796,7 @@ type RequestRef = {
 \`\`\`
 
 1. **Generation eröffnen (\`issueGeneration\`)**: Vor der ersten Mutation ruft der Client \`const { generation } = await space.issueGeneration(principal)\` auf. Die Generation ist kryptografisch (HMAC/Signatur) an Principal, \`spaceId\`, Dateninkarnation und \`authorityId\` gebunden (Standardlaufzeit: 1 Stunde).
-2. **Kanonischer Argument-Hash (\`argHash\`)**: Für jeden Aufruf berechnet \`pi-spaces\` über \`canonicalJson\` (RFC 8785) den SHA-256-Hash ausschließlich über die **fachlichen Argumente** (ohne erneuerbare Rahmenfelder wie einen frischen 60-s-Grant).
+2. **Kanonischer Argument-Hash (\`argHash\`)**: Für jeden Aufruf berechnet \`phi-spaces\` über \`canonicalJson\` (RFC 8785) den SHA-256-Hash ausschließlich über die **fachlichen Argumente** (ohne erneuerbare Rahmenfelder wie einen frischen 60-s-Grant).
 3. **Atomare Speicherung**: Der Claim \`(principal, spaceId, generation, requestId)\` und das Operationsergebnis werden im selben Commit wie die Space-Mutation gespeichert.
 
 ### Verhalten bei Wiederholung (Retry) {#retry-behavior}
@@ -834,14 +834,14 @@ const lease2 = await space.write(
 ## Siehe auch {#see-also}
 
 - [Stufe 2 (v2-local-durable): Persistenz, RequestRef-Claims, Alarme & Subagent](help.workflow.stage_v2_local_durable#overview)
-- [Request-Claims & Generationen API](help.api.pispaces_claims)`
+- [Request-Claims & Generationen API](help.api.phispaces_claims)`
 		},
 		en: {
 			title: "Request Claims, Generations, and Idempotency",
-			short: "How pi-spaces prevents duplicate mutations across connection drops or restarts using {principal, generation, requestId} and canonical RFC-8785 hashes.",
+			short: "How phi-spaces prevents duplicate mutations across connection drops or restarts using {principal, generation, requestId} and canonical RFC-8785 hashes.",
 			body: `## Overview {#overview}
 
-In the Cloudflare \`pi-durable\` post, preventing duplicate conversations after a WebSocket reconnect required writing a custom \`ConversationCommandReceipts\` document. In \`pi-spaces\`, this mechanism is built directly into the core as **Request Claims (\`src/claims.ts\`)** for **every** mutation (\`write\`, \`take\`, \`createTransaction\`, \`commit\`, \`abort\`, \`renew\`, \`cancel\`, \`notify\`, \`wait\`).
+In the Cloudflare \`pi-durable\` post, preventing duplicate conversations after a WebSocket reconnect required writing a custom \`ConversationCommandReceipts\` document. In \`phi-spaces\`, this mechanism is built directly into the core as **Request Claims (\`src/claims.ts\`)** for **every** mutation (\`write\`, \`take\`, \`createTransaction\`, \`commit\`, \`abort\`, \`renew\`, \`cancel\`, \`notify\`, \`wait\`).
 
 ## Concept And System Model {#concept-model}
 
@@ -857,7 +857,7 @@ type RequestRef = {
 \`\`\`
 
 1. **Open a Generation (\`issueGeneration\`)**: Before mutating, the client calls \`const { generation } = await space.issueGeneration(principal)\`. The generation is cryptographically bound to the principal, \`spaceId\`, data incarnation, and \`authorityId\` (default lifetime: 1 hour).
-2. **Canonical Argument Hash (\`argHash\`)**: For every call, \`pi-spaces\` computes an RFC-8785 canonical JSON hash over the **semantic arguments only** (excluding renewable envelope fields like a refreshed 60s grant).
+2. **Canonical Argument Hash (\`argHash\`)**: For every call, \`phi-spaces\` computes an RFC-8785 canonical JSON hash over the **semantic arguments only** (excluding renewable envelope fields like a refreshed 60s grant).
 3. **Atomic Persistence**: The claim \`(principal, spaceId, generation, requestId)\` and its result are committed atomically alongside the space mutation.
 
 ### Retry Semantics {#retry-behavior}
@@ -895,7 +895,7 @@ const lease2 = await space.write(
 ## See Also {#see-also}
 
 - [Stage 2 (v2-local-durable): Persistence, RequestRef Claims, Alarms & Subagent](help.workflow.stage_v2_local_durable#overview)
-- [Request Claims & Generations API](help.api.pispaces_claims)`
+- [Request Claims & Generations API](help.api.phispaces_claims)`
 		}
 	},
 	{
@@ -903,14 +903,14 @@ const lease2 = await space.write(
 		type: "topic",
 		provider: "client",
 		tags: ["readpage", "changes", "snapshot", "stream", "revision", "rev", "pagination"],
-		related: ["help.topic.durable_mailboxes_and_ack", "help.api.pispaces_read_page_changes"],
+		related: ["help.topic.durable_mailboxes_and_ack", "help.api.phispaces_read_page_changes"],
 		since: "0.0.1",
 		de: {
 			title: "Snapshot-Seiten (readPage) und Revisionsströme (changes)",
 			short: "Wie Clients mit readPage konsistente, bytebegrenzte Snapshots lesen und über changes(afterRev) lückenlos nachfolgende Commits streamen.",
 			body: `## Überblick {#overview}
 
-Um eine Live-Oberfläche – wie unseren Multiplayer Space-Chat oder das Space-Dashboard – synchron zu halten, kombiniert \`pi-spaces\` **unveränderliche Punkt-in-Zeit-Snapshots (\`readPage\`)** mit einem **monotonen Revisionsstrom (\`changes\`)**.
+Um eine Live-Oberfläche – wie unseren Multiplayer Space-Chat oder das Space-Dashboard – synchron zu halten, kombiniert \`phi-spaces\` **unveränderliche Punkt-in-Zeit-Snapshots (\`readPage\`)** mit einem **monotonen Revisionsstrom (\`changes\`)**.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -939,14 +939,14 @@ const delta = await space.changes(page.rev, { maxBytes: 65536 });
 ## Siehe auch {#see-also}
 
 - [Dauerhafte Mailboxes (events / ack), wait und notify](help.topic.durable_mailboxes_and_ack#overview)
-- [readPage & changes API](help.api.pispaces_read_page_changes)`
+- [readPage & changes API](help.api.phispaces_read_page_changes)`
 		},
 		en: {
 			title: "Snapshot Pages (readPage) and Revision Streams (changes)",
 			short: "How clients read consistent, byte-bounded snapshots via readPage and stream subsequent commits seamlessly via changes(afterRev).",
 			body: `## Overview {#overview}
 
-To keep a live UI—such as our Multiplayer Space-Chat or the Space Dashboard—in sync, \`pi-spaces\` combines **immutable point-in-time snapshots (\`readPage\`)** with a **monotonic revision stream (\`changes\`)**.
+To keep a live UI—such as our Multiplayer Space-Chat or the Space Dashboard—in sync, \`phi-spaces\` combines **immutable point-in-time snapshots (\`readPage\`)** with a **monotonic revision stream (\`changes\`)**.
 
 ## Concept And System Model {#concept-model}
 
@@ -975,7 +975,7 @@ const delta = await space.changes(page.rev, { maxBytes: 65536 });
 ## See Also {#see-also}
 
 - [Durable Mailboxes (events / ack), wait, and notify](help.topic.durable_mailboxes_and_ack#overview)
-- [readPage & changes API](help.api.pispaces_read_page_changes)`
+- [readPage & changes API](help.api.phispaces_read_page_changes)`
 		}
 	},
 	{
@@ -983,7 +983,7 @@ const delta = await space.changes(page.rev, { maxBytes: 65536 });
 		type: "topic",
 		provider: "client",
 		tags: ["mailbox", "events", "ack", "wait", "notify", "mailboxepoch"],
-		related: ["help.topic.snapshots_and_change_streams", "help.api.pispaces_wait_notify_mailbox", "help.workflow.stage_v3_remote_socket"],
+		related: ["help.topic.snapshots_and_change_streams", "help.api.phispaces_wait_notify_mailbox", "help.workflow.stage_v3_remote_socket"],
 		since: "0.0.1",
 		de: {
 			title: "Dauerhafte Mailboxes (events / ack), wait und notify",
@@ -1020,7 +1020,7 @@ if (page.events.length > 0) {
 ## Siehe auch {#see-also}
 
 - [Stufe 3 (v3-remote-socket): SpaceService, RemoteSpace & Mailboxes](help.workflow.stage_v3_remote_socket#overview)
-- [wait, notify, events & ack API](help.api.pispaces_wait_notify_mailbox)`
+- [wait, notify, events & ack API](help.api.phispaces_wait_notify_mailbox)`
 		},
 		en: {
 			title: "Durable Mailboxes (events / ack), wait, and notify",
@@ -1057,19 +1057,19 @@ if (page.events.length > 0) {
 ## See Also {#see-also}
 
 - [Stage 3 (v3-remote-socket): SpaceService, RemoteSpace & Mailboxes](help.workflow.stage_v3_remote_socket#overview)
-- [wait, notify, events & ack API](help.api.pispaces_wait_notify_mailbox)`
+- [wait, notify, events & ack API](help.api.phispaces_wait_notify_mailbox)`
 		}
 	},
 	{
 		id: "help.topic.local_client_and_named_spaces",
 		type: "topic",
 		provider: "client",
-		tags: ["pispaces", "namedspace", "registry", "createspace", "listspaces", "startservice"],
-		related: ["help.topic.agent_tools_and_replay", "help.api.pispaces_write"],
+		tags: ["phispaces", "namedspace", "registry", "createspace", "listspaces", "startservice"],
+		related: ["help.topic.agent_tools_and_replay", "help.api.phispaces_write"],
 		since: "0.0.1",
 		de: {
-			title: "Lokaler Client PiSpaces, benannte Spaces und startService",
-			short: "Wie PiSpaces auf dem Default-Space oder benannten Spaces (NamedSpace) arbeitet und wie startService Reaper und Event-Delivery betreibt.",
+			title: "Lokaler Client PhiSpaces, benannte Spaces und startService",
+			short: "Wie PhiSpaces auf dem Default-Space oder benannten Spaces (NamedSpace) arbeitet und wie startService Reaper und Event-Delivery betreibt.",
 			body: `## Überblick {#overview}
 
 Ein \`@earendil-works/pi-durable\`-Harness verwaltet standardmäßig den Default-Space (\`pi-spaces.space\`, Alias \`"default"\`) sowie über die \`Registry\` (\`pi-spaces.registry\`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (\`pi-spaces.named-space\`).
@@ -1079,7 +1079,7 @@ Ein \`@earendil-works/pi-durable\`-Harness verwaltet standardmäßig den Default
 ### Benannte Spaces anlegen und öffnen {#named-spaces}
 
 \`\`\`ts
-import { createSpace, listSpaces, PiSpaces, startService } from "pi-spaces";
+import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 
 // 1. Benannten Space für eine Chat-Session im Harness-Commit anlegen:
 await harness.commit(async (tx) => {
@@ -1087,7 +1087,7 @@ await harness.commit(async (tx) => {
 }, ctx);
 
 // 2. Client auf diesen benannten Space richten:
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, {
   space: "chat-session-alpha"
 });
 
@@ -1095,7 +1095,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
 const stopService = await startService(harness, ctx);
 \`\`\`
 
-- Wird im \`PiSpaces\`-Konstruktor \`conversationId\` übergeben, prüft der Client strikt die Ownership (eine Conversation darf nur ihre eigenen Transaktionen committen/abbrechen und nur ihre eigenen Leases verlängern/kündigen).
+- Wird im \`PhiSpaces\`-Konstruktor \`conversationId\` übergeben, prüft der Client strikt die Ownership (eine Conversation darf nur ihre eigenen Transaktionen committen/abbrechen und nur ihre eigenen Leases verlängern/kündigen).
 - Lässt Host-Code \`conversationId\` weg (\`undefined\`), agiert der Client administrativ und darf \`setCompletionProfiles\` sowie \`setLimits\` aufrufen.
 
 ## Siehe auch {#see-also}
@@ -1103,8 +1103,8 @@ const stopService = await startService(harness, ctx);
 - [Die 8 LLM-Agent-Tools und Replay-Sicherheit](help.topic.agent_tools_and_replay#overview)`
 		},
 		en: {
-			title: "Local Client PiSpaces, Named Spaces, and startService",
-			short: "How PiSpaces operates on the default space or named spaces (NamedSpace) and how startService drives the reaper and event delivery.",
+			title: "Local Client PhiSpaces, Named Spaces, and startService",
+			short: "How PhiSpaces operates on the default space or named spaces (NamedSpace) and how startService drives the reaper and event delivery.",
 			body: `## Overview {#overview}
 
 A \`@earendil-works/pi-durable\` harness hosts the default space (\`pi-spaces.space\`, alias \`"default"\`) plus resource-bounded isolated **named spaces** (\`pi-spaces.named-space\`) tracked in the \`Registry\` (\`pi-spaces.registry\`).
@@ -1114,15 +1114,15 @@ A \`@earendil-works/pi-durable\` harness hosts the default space (\`pi-spaces.sp
 ### Creating And Opening Named Spaces {#named-spaces}
 
 \`\`\`ts
-import { createSpace, listSpaces, PiSpaces, startService } from "pi-spaces";
+import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 
 // 1. Create a named space for a chat session inside a harness commit:
 await harness.commit(async (tx) => {
   await createSpace(tx, "chat-session-alpha", Date.now());
 }, ctx);
 
-// 2. Point a PiSpaces client at the named space:
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
+// 2. Point a PhiSpaces client at the named space:
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, {
   space: "chat-session-alpha"
 });
 
@@ -1130,7 +1130,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
 const stopService = await startService(harness, ctx);
 \`\`\`
 
-- Passing \`conversationId\` to \`PiSpaces\` enables strict ownership enforcement (a conversation can only commit/abort its own transactions and renew/cancel its own leases).
+- Passing \`conversationId\` to \`PhiSpaces\` enables strict ownership enforcement (a conversation can only commit/abort its own transactions and renew/cancel its own leases).
 - Omitting \`conversationId\` (\`undefined\`) runs in host/administrative mode, unlocking \`setCompletionProfiles\` and \`setLimits\`.
 
 ## See Also {#see-also}
@@ -1457,33 +1457,33 @@ Both \`MobileSpaces\` (\`pi-termux-mobile/runtime/spaces-mobile.mjs\`) and our w
 		}
 	},
 	{
-		id: "help.topic.comparison_earendil_vs_pi_spaces",
+		id: "help.topic.comparison_earendil_vs_phi_spaces",
 		type: "topic",
 		provider: "core",
 		tags: ["comparison", "earendil", "cloudflare", "durable-objects", "pros-cons", "v1", "v2", "v3", "v4", "v5", "v6", "federated"],
 		related: ["help.topic.overview", "help.workflow.overview_v1_to_v6", "help.topic.federation_router_and_membership"],
 		since: "0.0.1",
 		de: {
-			title: "Konzeptvergleich: Earendil Multiplayer Chat vs. pi-spaces (v1 bis v6)",
-			short: "Systematischer Vergleich des Cloudflare-Durable-Object-Ansatzes mit dem Tuple-Space-Modell von pi-spaces samt Vor- und Nachteilen von In-Memory (v1) bis Federated Space (v5/v6).",
+			title: "Konzeptvergleich: Earendil Multiplayer Chat vs. phi-spaces (v1 bis v6)",
+			short: "Systematischer Vergleich des Cloudflare-Durable-Object-Ansatzes mit dem Tuple-Space-Modell von phi-spaces samt Vor- und Nachteilen von In-Memory (v1) bis Federated Space (v5/v6).",
 			body: `## Überblick {#overview}
 
-Sowohl die Vorlage [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#overview) als auch unser \`pi-spaces\`-Referenzprojekt nutzen \`@earendil-works/pi-durable\` als transaktionalen Speicherunterbau, verfolgen aber zwei grundlegend unterschiedliche Architekturparadigmen:
+Sowohl die Vorlage [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#overview) als auch unser \`phi-spaces\`-Referenzprojekt nutzen \`@earendil-works/pi-durable\` als transaktionalen Speicherunterbau, verfolgen aber zwei grundlegend unterschiedliche Architekturparadigmen:
 
 - **Earendil-Vorlage (Actor / Session-Hülle)**: Jede Session ist ein einzelnes Cloudflare Durable Object, das WebSockets, SQLite-Datenbank, den einzigen DO-Alarm und den \`pi-durable\`-Harness direkt in einer Objektinstanz kapselt.
-- **\`pi-spaces\` (Entkoppelter Koordinationsraum / Tuple Space)**: Der gesamte Anwendungs- und Koordinationszustand liegt als Menge typisierter JSON-Entries (\`Thread\`, \`Msg\`, \`ChatTask\`, \`Presence\`, \`ScheduledJob\`, \`SearchTask\`) in einem Space. Web-Gateway, KI-Worker, Subagenten und Administratoren sind lose gekoppelte Teilnehmer über den einheitlichen Vertrag \`SpaceLike\`.
+- **\`phi-spaces\` (Entkoppelter Koordinationsraum / Tuple Space)**: Der gesamte Anwendungs- und Koordinationszustand liegt als Menge typisierter JSON-Entries (\`Thread\`, \`Msg\`, \`ChatTask\`, \`Presence\`, \`ScheduledJob\`, \`SearchTask\`) in einem Space. Web-Gateway, KI-Worker, Subagenten und Administratoren sind lose gekoppelte Teilnehmer über den einheitlichen Vertrag \`SpaceLike\`.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
 ### Gegenüberstellung der 6 Kernmechanismen {#mechanism-comparison}
 
-| Mechanismus | Earendil Cloudflare DO | \`pi-spaces\` (\`v1\` bis \`v6\`) |
+| Mechanismus | Earendil Cloudflare DO | \`phi-spaces\` (\`v1\` bis \`v6\`) |
 |---|---|---|
 | **1. Session-Isolation** | 1 Durable Object Instanz pro \`sessionId\` (harte Silo-Grenze). | 1 benannter Space (\`NamedSpace\`) bzw. in \`v5\` HRW-Sharding nach \`threadId\` über mehrere Member-Spaces. |
 | **2. Reconnect-Idempotenz** | Manuell programmiertes \`ConversationCommandReceipts\`-Dokument je Befehl. | **Eingebaute \`RequestRef\`-Claims (\`src/claims.ts\`)** mit kanonischem RFC-8785-Argument-Hash für alle Space-Mutationen. |
 | **3. Geordnete Abarbeitung & Korrektheit** | \`conversation.submit({ whenBusy: "followUp" })\` ohne formale Ergebnisprüfung. | Exklusives \`take\` unter Space-Transaktion (\`txn\`) + serverseitig erzwungenes **\`CompletionProfile\`** (\`ChatTask → Msg\`). |
 | **4. Live-Stream & Presence** | \`watchEvents\` + Cloudflare WebSocket-Attachments (nicht außerhalb abfragbar). | \`readPage\`-Snapshot + \`changes(afterRev)\` + Consumer-Mailboxes (\`events\`/\`ack\`) + **\`Presence\`-Entries mit 30-s-Space-Lease**. |
-| **5. Geplante Aufgaben (Alarme)** | Nur 1 Hardware-Alarm je DO; manuelles \`#refreshAlarm()\` über alle Tasks nötig. | Beliebig viele parallele \`ScheduledJob\`- + \`TimerLock\`-Leases; automatischer Ablauf durch den \`pi-spaces\`-Reaper. |
+| **5. Geplante Aufgaben (Alarme)** | Nur 1 Hardware-Alarm je DO; manuelles \`#refreshAlarm()\` über alle Tasks nötig. | Beliebig viele parallele \`ScheduledJob\`- + \`TimerLock\`-Leases; automatischer Ablauf durch den \`phi-spaces\`-Reaper. |
 | **6. Subagent-Suche (\`search_history\`)** | Child-Conversation in derselben lokalen DO-SQLite-DB. | Entkoppelter Subagent-Worker über \`SearchTask\` / \`SubagentStep\` / \`SearchResult\` – in \`v5\` **clusterweit über mehrere Hosts**! |
 
 ## Regeln, Garantien und Grenzen {#rules-and-boundaries}
@@ -1492,8 +1492,8 @@ Sowohl die Vorlage [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#ov
 
 | Ausbaustufe | Zentrale Vorteile | Bewusste Grenzen / Nachteile |
 |---|---|---|
-| **\`v1\` In-Memory Space** (\`MemoryStorage\` + \`PiSpaces\`) | **0 ms Setup**, volle Space-Einsicht, \`SpaceLifecycle\`, \`WorkerSupervisor\` und \`DeploymentController\` direkt im RAM; ideal für Tests & Prototyping. | Zustand ist flüchtig (verloren bei Prozessende); auf einen einzelnen Node.js-Prozess beschränkt; kein \`RunGate\` im Chat aktiv. |
-| **\`v2\` Local Durable Space** (\`SQLite\`/\`JSONL\` + \`PiSpaces\`) | **Volle ACID-Dauerhaftigkeit** in einer Datei; $O(1)$ Pointer-basiertes Thread-Forking; steuer- und einsehbar über \`AdminSpaces\`, Live-Dashboard (\`npm run dashboard\`), TUI (\`npm run tui\`) und \`npm run bootstrap\`. | Single-Owner-Prinzip (nur 1 schreibender Host-Prozess auf der SQLite-Datei); kein Serverless-Scale-to-Zero. |
+| **\`v1\` In-Memory Space** (\`MemoryStorage\` + \`PhiSpaces\`) | **0 ms Setup**, volle Space-Einsicht, \`SpaceLifecycle\`, \`WorkerSupervisor\` und \`DeploymentController\` direkt im RAM; ideal für Tests & Prototyping. | Zustand ist flüchtig (verloren bei Prozessende); auf einen einzelnen Node.js-Prozess beschränkt; kein \`RunGate\` im Chat aktiv. |
+| **\`v2\` Local Durable Space** (\`SQLite\`/\`JSONL\` + \`PhiSpaces\`) | **Volle ACID-Dauerhaftigkeit** in einer Datei; $O(1)$ Pointer-basiertes Thread-Forking; steuer- und einsehbar über \`AdminSpaces\`, Live-Dashboard (\`npm run dashboard\`), TUI (\`npm run tui\`) und \`npm run bootstrap\`. | Single-Owner-Prinzip (nur 1 schreibender Host-Prozess auf der SQLite-Datei); kein Serverless-Scale-to-Zero. |
 | **\`v3\` Remote Socket Space** (\`SpaceService\` + \`RemoteSpace\`) | **Prozess-Entkopplung**: Web-Gateway, Chat-Worker, Subagent und Inspector verbinden über Unix-Socket/TCP; ereignisgesteuerte Mailboxes (\`events\` + \`ack\`). | Zusätzlicher Serialisierungs- und Socket-I/O-Hop; Aufrufer müssen bei Verbindungsabbruch \`OutcomeUnknown\` via \`pollOperation\` auflösen. |
 | **\`v4\` Gated Auth Space** (\`startGate\` Schicht A/B + 60s-Grants) | **Zero-Trust-Steuerung von außen**: Smartphone (\`pi-termux-mobile\`), CLI und Web-Admin koppeln sich per QR/Token (\`enrollQr\`) und steuern/inspizieren Spaces mit 60-s-Grants. | Höherer Einrichtungsaufwand (Key-Management, Enrollment, Boot-Register); neue Remote-Grants benötigen erreichbaren Control-Host. |
 | **\`v5\`/\`v6\` Federated Space & Cluster-Admin** (\`FederatedSpace\` + HRW + \`RunGate\` in v6 + AP3-Replikation im Core) | **Horizontale Skalierung & Hochverfügbarkeit**: Orchestriert mehrere Member-Hosts; AP3 Primary/Sync Replikation im Core; \`RunGate\` in v6 für bestätigte Barrieren. | Keine member-übergreifenden Transaktionen (\`RoutingConflict\`); HRW-Member-Menge in v3 fest (\`MigrationRequired\` bei Entfernung); Test in v5 läuft in-process mit MemoryStorage. |
@@ -1501,7 +1501,7 @@ Sowohl die Vorlage [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#ov
 ### Wann ist welches Modell überlegen? {#decision-guide}
 
 - **Wähle das Cloudflare-DO-Modell**, wenn du tausende kleine, voneinander komplett isolierte Chat-Sessions in einer Serverless-Cloud mit *Scale-to-Zero* betreiben willst und keine externen Worker-Flotten oder On-Premise-Hoheit benötigst.
-- **Wähle \`pi-spaces\` (\`v1\`–\`v6\`)**, wenn du **volle Infrastruktur-Unabhängigkeit** (Docker, Linux-VPS, lokal, Mobile), **serverseitig erzwungene Ergebnisverträge (\`CompletionProfiles\`)**, **entkoppelte heterogene Worker/Subagenten**, **horizontales HRW-Sharding über mehrere Hosts**, **selbstgehostete Primary/Sync-Replikation mit Fencing (AP3)** oder eine **integrierte Betriebs- und Laufsteuerung (\`RunGate\` ab v6, \`WorkerSupervisor\`, Mobile/Web-Admin)** benötigst.
+- **Wähle \`phi-spaces\` (\`v1\`–\`v6\`)**, wenn du **volle Infrastruktur-Unabhängigkeit** (Docker, Linux-VPS, lokal, Mobile), **serverseitig erzwungene Ergebnisverträge (\`CompletionProfiles\`)**, **entkoppelte heterogene Worker/Subagenten**, **horizontales HRW-Sharding über mehrere Hosts**, **selbstgehostete Primary/Sync-Replikation mit Fencing (AP3)** oder eine **integrierte Betriebs- und Laufsteuerung (\`RunGate\` ab v6, \`WorkerSupervisor\`, Mobile/Web-Admin)** benötigst.
 
 ## Siehe auch {#see-also}
 
@@ -1509,26 +1509,26 @@ Sowohl die Vorlage [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#ov
 - [Federation, Router, HRW-Sharding und Membership](help.topic.federation_router_and_membership#overview)`
 		},
 		en: {
-			title: "Concept Comparison: Earendil Multiplayer Chat vs. pi-spaces (v1 to v6)",
-			short: "Systematic comparison of the Cloudflare Durable Object approach with the pi-spaces tuple-space model, including pros and cons from In-Memory (v1) to Federated Space (v5/v6).",
+			title: "Concept Comparison: Earendil Multiplayer Chat vs. phi-spaces (v1 to v6)",
+			short: "Systematic comparison of the Cloudflare Durable Object approach with the phi-spaces tuple-space model, including pros and cons from In-Memory (v1) to Federated Space (v5/v6).",
 			body: `## Overview {#overview}
 
-Both the [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#overview) reference and our \`pi-spaces\` implementation build on \`@earendil-works/pi-durable\` for transactional storage, yet they follow two fundamentally different architectural paradigms:
+Both the [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#overview) reference and our \`phi-spaces\` implementation build on \`@earendil-works/pi-durable\` for transactional storage, yet they follow two fundamentally different architectural paradigms:
 
 - **Earendil Reference (Stateful Actor / Session Wrapper)**: Each session is a single Cloudflare Durable Object encapsulating WebSockets, an embedded SQLite database, the single DO alarm, and the \`pi-durable\` harness inside one object instance.
-- **\`pi-spaces\` (Decoupled Coordination Space / Tuple Space)**: All application and coordination state lives as typed JSON entries (\`Thread\`, \`Msg\`, \`ChatTask\`, \`Presence\`, \`ScheduledJob\`, \`SearchTask\`) inside a space. Web gateways, AI workers, subagents, and administrators interact as loosely coupled participants through the unified \`SpaceLike\` contract.
+- **\`phi-spaces\` (Decoupled Coordination Space / Tuple Space)**: All application and coordination state lives as typed JSON entries (\`Thread\`, \`Msg\`, \`ChatTask\`, \`Presence\`, \`ScheduledJob\`, \`SearchTask\`) inside a space. Web gateways, AI workers, subagents, and administrators interact as loosely coupled participants through the unified \`SpaceLike\` contract.
 
 ## Concept And System Model {#concept-model}
 
 ### Side-By-Side Comparison Of The 6 Core Mechanisms {#mechanism-comparison}
 
-| Mechanism | Earendil Cloudflare DO | \`pi-spaces\` (\`v1\` to \`v6\`) |
+| Mechanism | Earendil Cloudflare DO | \`phi-spaces\` (\`v1\` to \`v6\`) |
 |---|---|---|
 | **1. Session Isolation** | 1 Durable Object instance per \`sessionId\` (strict silo boundary). | 1 named space (\`NamedSpace\`) or, in \`v5\`, HRW sharding by \`threadId\` across multiple member spaces. |
 | **2. Reconnect Idempotency** | Custom per-command \`ConversationCommandReceipts\` document written by hand. | **Built-in \`RequestRef\` claims (\`src/claims.ts\`)** with canonical RFC-8785 argument hashing across all space mutations. |
 | **3. Ordered Processing & Correctness** | \`conversation.submit({ whenBusy: "followUp" })\` without formal result verification. | Exclusive \`take\` under a space transaction (\`txn\`) + server-enforced **\`CompletionProfile\`** (\`ChatTask → Msg\`). |
 | **4. Live Stream & Presence** | \`watchEvents\` + Cloudflare WebSocket attachments (not queryable outside the socket). | \`readPage\` snapshot + \`changes(afterRev)\` + consumer mailboxes (\`events\`/\`ack\`) + **\`Presence\` entries with 30s space leases**. |
-| **5. Scheduled Tasks (Alarms)** | Only 1 hardware alarm per DO; requires manual \`#refreshAlarm()\` projection across all tasks. | Arbitrary concurrent \`ScheduledJob\` + \`TimerLock\` leases; expired locks are automatically reaped by \`pi-spaces\`. |
+| **5. Scheduled Tasks (Alarms)** | Only 1 hardware alarm per DO; requires manual \`#refreshAlarm()\` projection across all tasks. | Arbitrary concurrent \`ScheduledJob\` + \`TimerLock\` leases; expired locks are automatically reaped by \`phi-spaces\`. |
 | **6. Subagent Search (\`search_history\`)** | Child conversation inside the same local DO SQLite database. | Decoupled subagent worker via \`SearchTask\` / \`SubagentStep\` / \`SearchResult\`—searching **cluster-wide across hosts** in \`v5\`! |
 
 ## Rules, Guarantees And Boundaries {#rules-and-boundaries}
@@ -1537,8 +1537,8 @@ Both the [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#overview) re
 
 | Stage | Key Advantages | Trade-Offs / Boundaries |
 |---|---|---|
-| **\`v1\` In-Memory Space** (\`MemoryStorage\` + \`PiSpaces\`) | **0 ms setup**, full space inspection, \`SpaceLifecycle\`, \`WorkerSupervisor\`, and \`DeploymentController\` directly in RAM; ideal for tests & prototyping. | Volatile state (lost when process exits); limited to a single Node.js process; no \`RunGate\` active in chat. |
-| **\`v2\` Local Durable Space** (\`SQLite\`/\`JSONL\` + \`PiSpaces\`) | **Full ACID durability** in a single file; $O(1)$ pointer-based thread forking; inspectable and controllable via \`AdminSpaces\`, live Dashboard (\`npm run dashboard\`), TUI (\`npm run tui\`), and \`npm run bootstrap\`. | Single-owner file lock (only 1 writing host process on the SQLite store); no serverless scale-to-zero. |
+| **\`v1\` In-Memory Space** (\`MemoryStorage\` + \`PhiSpaces\`) | **0 ms setup**, full space inspection, \`SpaceLifecycle\`, \`WorkerSupervisor\`, and \`DeploymentController\` directly in RAM; ideal for tests & prototyping. | Volatile state (lost when process exits); limited to a single Node.js process; no \`RunGate\` active in chat. |
+| **\`v2\` Local Durable Space** (\`SQLite\`/\`JSONL\` + \`PhiSpaces\`) | **Full ACID durability** in a single file; $O(1)$ pointer-based thread forking; inspectable and controllable via \`AdminSpaces\`, live Dashboard (\`npm run dashboard\`), TUI (\`npm run tui\`), and \`npm run bootstrap\`. | Single-owner file lock (only 1 writing host process on the SQLite store); no serverless scale-to-zero. |
 | **\`v3\` Remote Socket Space** (\`SpaceService\` + \`RemoteSpace\`) | **Process decoupling**: web gateway, chat workers, subagents, and inspectors connect via Unix socket/TCP; event-driven mailboxes (\`events\` + \`ack\`). | Additional serialization and socket I/O hop; callers must handle \`OutcomeUnknown\` via \`pollOperation\` on transport drop. |
 | **\`v4\` Gated Auth Space** (\`startGate\` Layer A/B + 60s Grants) | **External zero-trust control**: smartphone (\`pi-termux-mobile\`), CLI, and web admin pair via QR/token (\`enrollQr\`) and inspect/control spaces with 60s grants. | Higher setup complexity (key provisioning, enrollment, boot register); issuing new remote grants requires a reachable control host. |
 | **\`v5\`/\`v6\` Federated Space & Cluster Admin** (\`FederatedSpace\` + HRW + \`RunGate\` in v6 + AP3 Replication in Core) | **Horizontal scale & High Availability**: orchestrates multiple member hosts; AP3 Primary/Sync replication in core; \`RunGate\` in v6 for confirmed barriers. | No cross-member transactions (\`RoutingConflict\`); fixed HRW member set in v3 (\`MigrationRequired\` on removal); Stage v5 test runs in-process with MemoryStorage. |
@@ -1546,7 +1546,7 @@ Both the [Pi Durable on Cloudflare](help.workflow.overview_v1_to_v6#overview) re
 ### When To Choose Which Model {#decision-guide}
 
 - **Choose the Cloudflare DO model** when you want to host thousands of small, completely isolated chat sessions on serverless edge infrastructure with *scale-to-zero* and no external worker fleets.
-- **Choose \`pi-spaces\` (\`v1\`–\`v6\`)** when you need **full infrastructure sovereignty** (Docker, Linux VPS, on-premise, mobile), **server-enforced result contracts (\`CompletionProfiles\`)**, **decoupled heterogeneous worker/subagent fleets**, **horizontal HRW sharding across hosts**, **self-hosted Primary/Sync replication with fencing (AP3)**, or **integrated operational control (\`RunGate\` from v6, \`WorkerSupervisor\`, Mobile/Web Admin)**.
+- **Choose \`phi-spaces\` (\`v1\`–\`v6\`)** when you need **full infrastructure sovereignty** (Docker, Linux VPS, on-premise, mobile), **server-enforced result contracts (\`CompletionProfiles\`)**, **decoupled heterogeneous worker/subagent fleets**, **horizontal HRW sharding across hosts**, **self-hosted Primary/Sync replication with fencing (AP3)**, or **integrated operational control (\`RunGate\` from v6, \`WorkerSupervisor\`, Mobile/Web Admin)**.
 
 ## See Also {#see-also}
 

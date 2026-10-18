@@ -59,7 +59,7 @@ const publicKeyObject = (algorithm: Algorithm, publicKey: string): KeyObject => 
 	}
 	return createPublicKey({ key: raw, format: "der", type: "spki" });
 };
-const DOMAIN = "pi-spaces/auth/v1\n";
+const DOMAIN = "phi-spaces/auth/v1\n";
 /** What is signed: a domain tag plus the canonical encoding of the challenge. */
 export const signedBytes = (challenge: Challenge): Buffer => Buffer.from(DOMAIN + canonicalJson(challenge as unknown as Json), "utf8");
 

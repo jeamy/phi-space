@@ -5,7 +5,7 @@ title: "Entries, Subtypes, and Template Matching"
 short: "Structure of entries ({type, types?, fields}), global identities (gid), hierarchical subtypes, and exact wildcard rules during template matching."
 tags: [entries, templates, wildcards, subtypes, gid, matching]
 owner: core
-related: [help.topic.leases_and_transactions, help.api.pispaces_write, help.api.pispaces_read]
+related: [help.topic.leases_and_transactions, help.api.phispaces_write, help.api.phispaces_read]
 since: 0.0.1
 ---
 
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-All application and coordination state in `pi-spaces` is stored as **entries** and queried using **templates**. Matching combines structural type checks with deep JSON equality across top-level fields.
+All application and coordination state in `phi-spaces` is stored as **entries** and queried using **templates**. Matching combines structural type checks with deep JSON equality across top-level fields.
 
 ## Concept And System Model {#concept-model}
 
@@ -69,4 +69,4 @@ const msg = await space.read({
 ## See Also {#see-also}
 
 - [Leases, Transactions, and Visibility](help.topic.leases_and_transactions#overview)
-- [write – Write an Entry](help.api.pispaces_write)
+- [write – Write an Entry](help.api.phispaces_write)

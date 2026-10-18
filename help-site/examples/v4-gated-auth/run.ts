@@ -26,7 +26,7 @@ import {
 	hashToken,
 	listSpaces,
 	newEnrollToken,
-	PiSpaces,
+	PhiSpaces,
 	RemoteSpace,
 	socketTransport,
 	spaceDoc,
@@ -48,7 +48,7 @@ const until = async (fn: () => Promise<boolean>, ms = 5_000) => {
 };
 
 export async function runStageV4() {
-	const dir = await mkdtemp(join(tmpdir(), "pi-spaces-chat-v4-"));
+	const dir = await mkdtemp(join(tmpdir(), "phi-spaces-chat-v4-"));
 	const controlDb = join(dir, "control.sqlite");
 	const dataDb = join(dir, "data.sqlite");
 	const externalReg = new SqliteRecoveryRegister(join(dir, "external-boot.sqlite"));
@@ -193,7 +193,7 @@ export async function runStageV4() {
 		await controlClient.authenticate();
 
 		// 2. Prepare Data Host with "chat-v4" space and CompletionProfiles
-		const localDataSpace = new PiSpaces(dataHarness, ctx, Date.now, undefined, undefined, { space: "chat-v4" });
+		const localDataSpace = new PhiSpaces(dataHarness, ctx, Date.now, undefined, undefined, { space: "chat-v4" });
 		await new SpaceChatEngine(localDataSpace).installProfilesIfSupported();
 
 		const networkKeys = {
@@ -248,7 +248,7 @@ export async function runStageV4() {
 		await until(
 			async () =>
 				(
-					await new PiSpaces(controlHarness, ctx, Date.now, undefined, undefined, {
+					await new PhiSpaces(controlHarness, ctx, Date.now, undefined, undefined, {
 						space: CONTROL_SPACE,
 					}).readAll({ type: "Result", fields: { commandId: rotation.commandId } })
 				).length === 1,

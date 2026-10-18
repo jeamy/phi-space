@@ -9,7 +9,7 @@ import {createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
 import {staleOwnerLock,procStartTime,clearStaleOwnerLock} from "./owner-lock.ts";
 import {ProvingService,EntryReplicationController,lastConfigTransition,promotionEvidence,releaseHostToQuarantine,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
-import { provisionFileSigner, loadFileSigner, privateFile, PiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
+import { provisionFileSigner, loadFileSigner, privateFile, PhiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
 const [mode, home="/data/phase1b"] = process.argv.slice(2);
 mkdirSync(home,{recursive:true,mode:0o700});
 if(mode==="recovery-call") {
@@ -176,7 +176,7 @@ try{
    writeFileSync(configFile,JSON.stringify(config)+'\n',{mode:0o600});
    for(const info of spaces)await installed.compareAndSet(`installed:${config.hostId}:${info.spaceId}`,null,{state:"active",authorityId:config.authorityId,dataIncarnation:info.incarnation,role:"local",transitionId:"bootstrap-20261011"});
    await installed.compareAndSet(`installed-authority:${config.controlSpaceId}`,null,{authorityId:config.authorityId});
-   if(config.mode==="member"&&input.seedAcceptance!==false)await new PiSpaces(h,ctx,Date.now,undefined,undefined,{space:"jobs"}).write({type:"AcceptanceObject",fields:{origin:config.hostId,n:1}},null,core.FOREVER);
+   if(config.mode==="member"&&input.seedAcceptance!==false)await new PhiSpaces(h,ctx,Date.now,undefined,undefined,{space:"jobs"}).write({type:"AcceptanceObject",fields:{origin:config.hostId,n:1}},null,core.FOREVER);
   }
   const signer=loadFileSigner(config.keyFile),spaces:Record<string,any>={};for(const info of await listSpaces(h,ctx))spaces[info.spaceId]=(await installed.get<any>(`installed:${config.hostId}:${info.spaceId}`))!.value;
   console.log(JSON.stringify({hostId:config.hostId,peerId:config.peerId,controlSpaceId:config.controlSpaceId,publicKey:signer.publicKey,keyId:signer.keyId,algorithm:signer.algorithm,boot:{hostId:config.hostId,state:"active",spaces}}));
@@ -211,7 +211,7 @@ try{
   type Timing={calls:number;ms:number};const timings=new AsyncLocalStorage<Record<string,Timing>>();
   const observe=(object:any,name:string,label:string)=>{const original=object[name];object[name]=async function(...args:any[]){const bucket=timings.getStore(),start=performance.now();try{return await original.apply(this,args);}finally{if(bucket){const t=bucket[label]??={calls:0,ms:0};t.calls++;t.ms+=performance.now()-start;}}};};
   for(const method of ['get','getMany'])observe(TlsRecoveryRegister.prototype,method,'register.'+method);
-  if(process.env.PI_SPACES_TESTBED_TRACE==='1'){
+  if(process.env.PHI_SPACES_TESTBED_TRACE==='1'){
    const send=(RemoteSpace.prototype as any).send;(RemoteSpace.prototype as any).send=async function(...args:any[]){const bucket=timings.getStore(),label='wire.'+String(args[0]?.method??'unknown'),start=performance.now();try{return await send.apply(this,args);}finally{if(bucket){const t=bucket[label]??={calls:0,ms:0};t.calls++;t.ms+=performance.now()-start;}}};
    const handle=ProvingService.prototype.handle;ProvingService.prototype.handle=async function(...args:Parameters<typeof handle>){const bucket:Record<string,Timing>={},start=performance.now();return timings.run(bucket,async()=>{try{return await handle.apply(this,args);}finally{console.log(JSON.stringify({timingCall:(args[0] as any)?.method??'unknown',elapsedMs:Math.round(performance.now()-start),timings:bucket}));}});};
   }
@@ -230,7 +230,7 @@ try{
   runtime=await startConfiguredFederation(h,ctx,configFile,syncFactories);console.log(JSON.stringify({ready:true,hostId:runtime.config.hostId,address:runtime.address()}));
   for(const method of ["snapshot","commit"])observe(h,method,"host."+method);
   if(runtime.root){for(const method of ["step","invoke","resolve"])observe(runtime.root.rpc,method,"rpc."+method);for(const method of ["prepare","admit","finish"])observe(runtime.root.space,method,"root."+method);}
-  const acceptFile=process.env.PI_SPACES_ROOT_ACCEPTANCE_FILE;
+  const acceptFile=process.env.PHI_SPACES_ROOT_ACCEPTANCE_FILE;
   if(acceptFile){
    if(!runtime.root)throw new Error('native Root acceptance requires explicit Root provisioning');const nativeConfig=runtime.config;let stopped=terminated;void terminate.then(()=>{stopped=true;});void runtime.controlChanged.then(c=>{console.log(JSON.stringify({controlHostChanged:c.targetHostId,recoveryId:c.recoveryId,restart:true}));restartExit=true;stopped=true;});
    while(!stopped){

@@ -1,5 +1,5 @@
 {
-  "name": "pi-spaces-help-site",
+  "name": "phi-spaces-help-site",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "dev": "node --experimental-strip-types server/index.ts --dev",
     "start": "node --experimental-strip-types server/index.ts",
     "test": "node --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
-    "test:production": "npm run build && PI_SPACES_TEST_NEXT=1 node --experimental-strip-types --test --test-name-pattern='4. Next' tests/help-site.test.ts",
+    "test:production": "npm run build && PHI_SPACES_TEST_NEXT=1 node --experimental-strip-types --test --test-name-pattern='4. Next' tests/help-site.test.ts",
     "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build spaces-help-test",
     "docker:prod:build": "docker compose --env-file .env -f docker/docker-compose.yml build spaces-help-prod",
     "docker:prod:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d --build spaces-help-prod",

@@ -97,7 +97,7 @@ export function formatWidget(l: Live): string[] {
 export function watchLive(harness: Harness, ctx: Context, cb: (l: Live) => void, o: { intervalMs?: number; windowSec?: number; meter?: Meter; now?: () => number; onError?: (e: unknown) => void } = {}): () => void {
 	const m = o.meter ?? meter;
 	const now = o.now ?? Date.now;
-	const onError = o.onError ?? ((e) => console.error("pi-spaces live:", e));
+	const onError = o.onError ?? ((e) => console.error("phi-spaces live:", e));
 	let stopped = false;
 	let busy = false;
 	const sample = async () => {

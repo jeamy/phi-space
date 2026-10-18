@@ -150,7 +150,7 @@ Version vor Stufe 1b anhand der offiziellen Dokumentation festgestellt (Gate 5).
 | WireGuard-Schlüssel, Austausch, NAT-Traversal, Relay | NetBird |
 | Beitritt Hosts / Clients | Setup-Key / Login |
 | Erreichbarkeit (Netz-ACL über Gruppen) | NetBird-Policies |
-| Identität, Rechte, Quoten im Space | pi-spaces (4.3, 9) |
+| Identität, Rechte, Quoten im Space | phi-spaces (4.3, 9) |
 
 Gruppen (Vorschlag): `space-hosts`, `space-admin`, `space-observer`; Policies erlauben nur den Space-Port und SSH
 für Admins. WireGuard bindet die Quell-IP eines Pakets kryptografisch an den Peer-Schlüssel (Cryptokey Routing);
@@ -1314,7 +1314,7 @@ sind zusätzliche noch offene Implementierungen. Vorhandenes Remote-Connect ist 
 - **Handy:** `remoteState` → Verbindungsliste (`hostId → RemoteConnection`, Space-/Replikat-Auflösung getrennt);
   Seite Spaces (`spaces.html`, eigene CSS-Datei, Endpunkte in `constants.js`): Status, Policy, Statistik, Inhalte,
   Commands, Pairing per QR. Long-Polls nur bei sichtbarer Seite.
-- **Desktop/CLI:** Paket `pi-spaces-client` (RemoteSpace, TCP-Transport, Pairing).
+- **Desktop/CLI:** Paket `phi-spaces-client` (RemoteSpace, TCP-Transport, Pairing).
 - **Browser (Stufe 4):** Gateway mit TLS, Anmeldung per App-Schlüssel (WebCrypto-Unterstützung prüfen);
   NetBird-SSO allein ersetzt keine App-Autorisierung. Sessions an einzelne Principals gebunden, Origin/CSRF
   geprüft, keine Host-Rechte weitergereicht.

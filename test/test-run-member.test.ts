@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
 import { generateKey } from "../src/auth.ts";
-import { PiSpaces } from "../src/client.ts";
+import { PhiSpaces } from "../src/client.ts";
 import { GrantVerifier } from "../src/grants.ts";
 import { principalId } from "../src/mailbox.ts";
 import { RemoteSpace } from "../src/remote.ts";
@@ -63,17 +63,17 @@ for (const backend of BACKENDS) test(`${backend}: case 3: an unreachable remote 
 		assert.equal(first.state, "preparing"); assert.match(first.pending!.errors[sd]!, /reply lost/);
 		const started = await controller.advance("run-r");
 		assert.equal(started.state, "running", "the repeated prepare returns the stored ACK, no second preparation");
-		assert.equal(await new PiSpaces(d, ctx, Date.now, undefined, undefined, { space: sd }).count(T("Job")), 2);
+		assert.equal(await new PhiSpaces(d, ctx, Date.now, undefined, undefined, { space: sd }).count(T("Job")), 2);
 
 		down = true;
 		const incomplete = await controller.pause("halt", "run-r");
 		assert.equal(incomplete.state, "pauseIncomplete");
 		assert.deepEqual(incomplete.pending!.applied, [sb]); assert.deepEqual(incomplete.pending!.missing, [sd]);
-		const worker = new PiSpaces(d, ctx, Date.now, undefined, undefined, { space: sd }), tx = await worker.createTransaction(30_000);
+		const worker = new PhiSpaces(d, ctx, Date.now, undefined, undefined, { space: sd }), tx = await worker.createTransaction(30_000);
 		assert.ok(await worker.take(T("Job"), 0, { txn: tx.id }), "the unreachable Member works on until its own fence");
 		await worker.write({ type: "Done", fields: { runId: "run-r", n: 1 } }, tx.id, c.FOREVER);
 		await worker.commit(tx.id);
-		assert.equal(await new PiSpaces(b, ctx, Date.now, undefined, undefined, { space: sb }).take(T("Job"), 0, { txn: (await new PiSpaces(b, ctx, Date.now, undefined, undefined, { space: sb }).createTransaction(30_000)).id }), null, "the confirmed Member is paused");
+		assert.equal(await new PhiSpaces(b, ctx, Date.now, undefined, undefined, { space: sb }).take(T("Job"), 0, { txn: (await new PhiSpaces(b, ctx, Date.now, undefined, undefined, { space: sb }).createTransaction(30_000)).id }), null, "the confirmed Member is paused");
 
 		homes[0]!.crash(control);
 		control = await homes[0]!.open();

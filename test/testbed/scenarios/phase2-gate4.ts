@@ -4,7 +4,7 @@ import net from 'node:net';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { core, claims, PiSpaces, createSpace, spaceDoc, snapshotSpace, serveSpace, socketTransport, startGate, type PeerDirectory } from '../../../src/index.ts';
+import { core, claims, PhiSpaces, createSpace, spaceDoc, snapshotSpace, serveSpace, socketTransport, startGate, type PeerDirectory } from '../../../src/index.ts';
 import { PersistentHome, ctx } from '../../support/persistent.ts';
 
 const output = process.argv[2];
@@ -37,7 +37,7 @@ try {
   }, ctx);
  }
  let clock = Date.now();
- const client = new PiSpaces(host, ctx, () => clock, undefined, undefined, { space: id });
+ const client = new PhiSpaces(host, ctx, () => clock, undefined, undefined, { space: id });
  const seen = new Set<string>(), snapshotStart = performance.now();
  let page = await client.readPage({ type: 'Inventory' }, { maxBytes: limits.maxFrameBytes - 1024 });
  const firstMs = performance.now() - snapshotStart, firstToken = page.token;

@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PiSpaces, Space, spaces, startService } from "../../../src/index.ts";
+import { FOREVER, PhiSpaces, Space, spaces, startService } from "../../../src/index.ts";
 import { FederatedSpace, type FederationIO } from "../../../src/federated-space.ts";
 import { partitionRouterId } from "../../../src/federation-journals.ts";
 import { RouterController } from "../../../src/router.ts";
@@ -45,10 +45,10 @@ export async function runStageV5() {
 	];
 
 	try {
-		const memberSpaces: Record<MemberId, PiSpaces> = {
-			"member-1": new PiSpaces(memberHosts["member-1"], ctx),
-			"member-2": new PiSpaces(memberHosts["member-2"], ctx),
-			"member-3": new PiSpaces(memberHosts["member-3"], ctx),
+		const memberSpaces: Record<MemberId, PhiSpaces> = {
+			"member-1": new PhiSpaces(memberHosts["member-1"], ctx),
+			"member-2": new PhiSpaces(memberHosts["member-2"], ctx),
+			"member-3": new PhiSpaces(memberHosts["member-3"], ctx),
 		};
 		for (const m of memberIds) {
 			await memberSpaces[m].setCompletionProfiles(CHAT_COMPLETION_PROFILES);
@@ -95,7 +95,7 @@ export async function runStageV5() {
 		}
 
 		const targetAdapter = {
-			protocol: "pi-spaces-rpc-v1" as const,
+			protocol: "phi-spaces-rpc-v1" as const,
 			invoke: async (step: any) => {
 				const m = step.target.spaceId as MemberId;
 				const sp = memberSpaces[m];

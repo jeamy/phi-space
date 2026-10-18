@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {openSyncSpace,provisionFileSigner,SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport,OutcomeUnknown,PiSpaces,core,type SyncSpace,type PrimarySyncConfig,type Reply,type Connection} from '../src/index.ts';
+import {openSyncSpace,provisionFileSigner,SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport,OutcomeUnknown,PhiSpaces,core,type SyncSpace,type PrimarySyncConfig,type Reply,type Connection} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {CommitSealedPending} from '../src/remote.ts';
 import {sealedResolver,sealedCandidateOf,type SealedSyncSpace} from '../src/sync-spaces.ts';
@@ -69,7 +69,7 @@ test('a sealed write answers CommitSealed; poll, retry and cancel stay pending; 
   assert.ok(lease,'the retry returns the original result');
   assert.equal((await remote.pollOperation(request)).state,'done');
   assert.equal((await take)?.fields.n,1,'the waiting take finished');
-  const jobs=new PiSpaces(p.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
+  const jobs=new PhiSpaces(p.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
   assert.equal(await jobs.count({type:'Job',fields:{n:2}}),1,'the sealed write took effect exactly once');
   assert.deepEqual(s.journal.head(),p.journal.head(),'the standby holds the candidate');
   await resolver.stop();
@@ -106,7 +106,7 @@ test('a primary starting with an unresolved candidate and no standby stays unser
   p=await o.open('p');assert.equal(p.harness,undefined,'no Harness while the candidate is unresolved');assert.ok(sealedCandidateOf(p));
   assert.equal((await p.resolve()).state,'pending','the standby is still away');
   s=await o.open('s');assert.equal((await p.resolve()).state,'served');
-  const jobs=new PiSpaces(p.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
+  const jobs=new PhiSpaces(p.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
   assert.equal(await jobs.count({type:'Job',fields:{n:2}}),1,'the candidate was applied after the restart');
  }finally{await p?.close().catch(()=>{});await s?.close().catch(()=>{});}
 }));

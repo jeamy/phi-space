@@ -703,7 +703,7 @@ Diese Punkte sind **keine Blocker**, aber verbessern die **Betriebszuverlässigk
    - [ ] Fencing-Adapter ([14.1](#141-fencing-adapter-für-sichere-promotion))
    - [ ] Sicheres Pairing ([14.2](#142-sicheres-pairing-protokoll))
    - [ ] Router-Journal atomar ([14.4](#144-atomare-router-journal--entry-mutation))
-3. **Testumgebung aufbauen** (Docker-Compose für NetBird + pi-spaces)
+3. **Testumgebung aufbauen** (Docker-Compose für NetBird + phi-spaces)
 4. **Phase 2 (hohe Risiken)** implementieren
 5. **Abnahme nach jeder Phase**
 

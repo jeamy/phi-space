@@ -1,4 +1,4 @@
-# pi-spaces remote test bed. testbed.sh installs this as docker-compose.yml on the server (only if missing; `init --force`
+# phi-spaces remote test bed. testbed.sh installs this as docker-compose.yml on the server (only if missing; `init --force`
 # overwrites). Settings come from the .env next to it. No ports are published: containers talk over the private network.
 # The server runs rootless docker (one daemon per user): container root is the host user, bind mounts stay owned by it.
 #
@@ -6,14 +6,14 @@
 # unprivileged user, a read-only root filesystem with a tmpfs /tmp, and all capabilities dropped. State lives in /data.
 # Containers idle (`sleep infinity`); scenarios and, later, pi-serverd / gate / supervisor processes are started in them.
 # Each host has its own /data volume, so storage is never shared between hosts and survives a container kill.
-name: ${TESTBED_PROJECT:-pi-spaces-test}
+name: ${TESTBED_PROJECT:-phi-spaces-test}
 
 x-env: &env
   NODE_ENV: production
   TESTBED: "1"
 
 x-node: &node
-  image: ${TESTBED_PROJECT:-pi-spaces-test}-node:local
+  image: ${TESTBED_PROJECT:-phi-spaces-test}-node:local
   pull_policy: never # built by testbed.sh (docker compose build runner), never pulled
   init: true
   restart: unless-stopped

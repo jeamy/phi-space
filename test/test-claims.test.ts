@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
-	PiSpaces, FOREVER, Space, core, claims, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled,
+	PhiSpaces, FOREVER, Space, core, claims, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled,
 	type Principal, type RequestRef,
 } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
@@ -12,14 +12,14 @@ import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
 const alice: Principal = { peerId: "peer-a", agentId: "worker-1" };
 class Clock { t = 1_000_000; now = () => this.t; }
-const client = (h: Harness, c: Clock) => new PiSpaces(h, ctx, c.now);
+const client = (h: Harness, c: Clock) => new PhiSpaces(h, ctx, c.now);
 const req = (generation: string, requestId: string, principal = alice): RequestRef => ({ principal, generation, requestId });
 const tick = () => new Promise((r) => setTimeout(r, 30));
 
 test("take with lost answer: the retry returns the stored result after reopen, no second take, no plaintext args", async () => {
 	await forEachBackend(async (home) => {
 		let h = await home.open();
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		await s.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
 		await s.write({ type: "Job", fields: { n: 2 } }, null, FOREVER);
 		const { generation } = await s.issueGeneration(alice);
@@ -29,7 +29,7 @@ test("take with lost answer: the retry returns the stored result after reopen, n
 		await assert.rejects(s.take(tmpl, 0, { request: r }), InjectedFault);
 		home.crash(h);
 		h = await home.open();
-		const again = new PiSpaces(h, ctx);
+		const again = new PhiSpaces(h, ctx);
 		assert.equal(home.faults.fired, 1);
 		assert.equal((await again.pollOperation(r)).state, "done", "the deciding commit was durable; only its answer was lost");
 		const got = await again.take(tmpl, 0, { request: r });
@@ -44,13 +44,13 @@ test("take with lost answer: the retry returns the stored result after reopen, n
 test("immediate mutations: write and txn begin replay their stored result, also after a lost answer", async () => {
 	await forEachBackend(async (home) => {
 		let h = await home.open();
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		const { generation } = await s.issueGeneration(alice);
 		home.faults.arm("loseAnswer");
 		await assert.rejects(s.write({ type: "J", fields: {} }, null, FOREVER, { request: req(generation, "w") }), InjectedFault);
 		home.crash(h);
 		h = await home.open();
-		const s2 = new PiSpaces(h, ctx);
+		const s2 = new PhiSpaces(h, ctx);
 		const l1 = await s2.write({ type: "J", fields: {} }, null, FOREVER, { request: req(generation, "w") });
 		const l2 = await s2.write({ type: "J", fields: {} }, null, FOREVER, { request: req(generation, "w") });
 		assert.deepEqual(l1, l2);

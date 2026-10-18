@@ -9,7 +9,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PiSpaces, spaces, startService } from "../src/index.ts";
+import { FOREVER, PhiSpaces, spaces, startService } from "../src/index.ts";
 import { liveModels } from "./live-models.ts";
 import { pathToFileURL } from "node:url";
 
@@ -60,7 +60,7 @@ const { models, model } = live ? await liveModels() : (() => {
 const registry = createRegistry();
 registry.install(spaces);
 const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-const host = new PiSpaces(h, ctx);
+const host = new PhiSpaces(h, ctx);
 const stopService = await startService(h, ctx);
 
 const subs: string[] = [];

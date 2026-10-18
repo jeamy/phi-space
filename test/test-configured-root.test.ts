@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,unlinkSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {FederationRouting,ReplicaNoticeBoard,signReplicaConfigNotice,serveSpace,createConfiguredRoot,SpaceKeyDirectory,PiSpaces,revokePeerKey,installBootGuard,MemoryKeyDirectory,provisionFileSigner,createSpace,spaceDoc,snapshotSpace,GateIdentity,GrantAuthority,RouterLeaseAuthority,SqliteRecoveryRegister,BootBlocked} from '../src/index.ts';
+import {FederationRouting,ReplicaNoticeBoard,signReplicaConfigNotice,serveSpace,createConfiguredRoot,SpaceKeyDirectory,PhiSpaces,revokePeerKey,installBootGuard,MemoryKeyDirectory,provisionFileSigner,createSpace,spaceDoc,snapshotSpace,GateIdentity,GrantAuthority,RouterLeaseAuthority,SqliteRecoveryRegister,BootBlocked} from '../src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
 for(const backend of BACKENDS)for(const batchAuthority of [false,true])test(`${backend}/${batchAuthority?'batched':'legacy'}: configured native Root retains lease and blocks invalid boot, key and lost lease`,async()=>{
  const home=new PersistentHome(backend),dir=mkdtempSync(join(tmpdir(),'configured-root-')),external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;
@@ -31,7 +31,7 @@ for(const backend of BACKENDS)test(`${backend}: pinned Control keys observe revo
  const external=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));let stop:(()=>void)|undefined;
  try{
   const host=await home.open(),info=await host.commit(tx=>createSpace(tx,'control',1000),ctx),key=provisionFileSigner(join(dir,'key'));
-  await new PiSpaces(host,ctx,()=>1000,undefined,undefined,{space:info.spaceId}).write({type:'PeerKey',fields:{peerId:'peer',keyId:key.keyId,principal:'peer',algorithm:key.algorithm,publicKey:key.publicKey!,roles:['router'],scope:['*'],state:'active'}});
+  await new PhiSpaces(host,ctx,()=>1000,undefined,undefined,{space:info.spaceId}).write({type:'PeerKey',fields:{peerId:'peer',keyId:key.keyId,principal:'peer',algorithm:key.algorithm,publicKey:key.publicKey!,roles:['router'],scope:['*'],state:'active'}});
   const permit={state:'active',authorityId:'authority',dataIncarnation:info.incarnation,role:'local',transitionId:'fixture'};
   await external.compareAndSet('boot:host',null,{hostId:'host',state:'active',spaces:{[info.spaceId]:permit}});await installed.compareAndSet('installed:host:'+info.spaceId,null,permit);
   stop=installBootGuard(host,ctx,{hostId:'host',authorityId:'authority',external,installed});

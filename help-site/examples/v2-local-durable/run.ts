@@ -1,5 +1,5 @@
 // Stage 2 (v2-local-durable): Local SQLite Persistence, Crash/Reopen Recovery, Alarms & Search Subagent.
-// Demonstrates the full Earendil sequence on persistent SQLite storage using pure pi-spaces primitives:
+// Demonstrates the full Earendil sequence on persistent SQLite storage using pure phi-spaces primitives:
 //   1. Thread 1: Alice states "We decided to use PostgreSQL for the event store."
 //   2. Thread 2: Bob asks "Was haben wir bezüglich des Event-Stores entschieden?" -> Search Subagent runs
 //   3. Alice schedules an alarm ("Erinnere uns in 50 ms daran, das Backup-Fenster zu prüfen")
@@ -14,11 +14,11 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createSpace, Meter, PiSpaces, spaces, startService } from "../../../src/index.ts";
+import { createSpace, Meter, PhiSpaces, spaces, startService } from "../../../src/index.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } = {}) {
-	const dir = options.dbDir ?? (await mkdtemp(join(tmpdir(), "pi-spaces-chat-v2-")));
+	const dir = options.dbDir ?? (await mkdtemp(join(tmpdir(), "phi-spaces-chat-v2-")));
 	const dbPath = join(dir, "chat-v2.sqlite");
 	const meter = new Meter();
 
@@ -36,7 +36,7 @@ export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } 
 
 			try {
 
-				const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v2" });
+				const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v2" });
 				const engine = new SpaceChatEngine(space);
 				await engine.installProfilesIfSupported();
 
@@ -96,7 +96,7 @@ export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } 
 			const stopService = await startService(harness, ctx);
 
 			try {
-				const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v2" });
+				const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v2" });
 				const engine = new SpaceChatEngine(space);
 
 				const triggeredJobs = await engine.tickAlarms();

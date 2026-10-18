@@ -20,7 +20,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { createSpace, FOREVER, listSpaces, PiSpaces, snapshotSpace, type Principal, type RequestRef } from "../../../src/index.ts";
+import { createSpace, FOREVER, listSpaces, PhiSpaces, snapshotSpace, type Principal, type RequestRef } from "../../../src/index.ts";
 import { collectSieveResults, segmentedSieve, type SieveConfig, type SieveResult, type SieveTask } from "../../../examples/sieve.ts";
 
 const USAGE = `Usage: sieve-mobile.ts <create|run|evaluate|all> [options]
@@ -97,7 +97,7 @@ class Host {
 		await h.commit((tx) => createSpace(tx, ALIAS, Date.now()), ctx); // idempotent per alias
 		return new Host(h);
 	}
-	space(as?: number): PiSpaces { return new PiSpaces(this.h, ctx, Date.now, undefined, as, { space: ALIAS }); }
+	space(as?: number): PhiSpaces { return new PhiSpaces(this.h, ctx, Date.now, undefined, as, { space: ALIAS }); }
 	async close(): Promise<void> { await this.h.close(ctx); }
 }
 
@@ -204,7 +204,7 @@ async function run(o: Opts): Promise<void> {
 	const progress = async (host: Host) => host.space().count({ type: "SieveResult", fields: { runId: cfg.runId } });
 	let workers: Promise<void>[] = [];
 
-	const workOne = async (w: PiSpaces, crash: boolean): Promise<"done" | "empty" | "abandoned"> => {
+	const workOne = async (w: PhiSpaces, crash: boolean): Promise<"done" | "empty" | "abandoned"> => {
 		const txn = await w.createTransaction(crash ? o.leaseMs : 30_000);
 		try {
 			const entry = await w.take({ type: "SieveTask", fields: { runId: cfg.runId } }, 0, { txn: txn.id });

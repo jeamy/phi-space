@@ -8,7 +8,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { createSpace, FOREVER, PiSpaces } from "../src/index.ts";
+import { createSpace, FOREVER, PhiSpaces } from "../src/index.ts";
 import { inspect } from "./testbed/inspect.ts";
 import { actions } from "./tui/actions.ts";
 import { Backend, clean, outcome, tapCounts } from "./tui/backend.ts";
@@ -19,7 +19,7 @@ test("inspector reads named spaces, reservations, uncommitted entries and claims
 	const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
 	try {
 		await h.commit(tx => createSpace(tx, "demo", Date.now()), ctx);
-		const space = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: "demo" });
+		const space = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: "demo" });
 		const principal = { peerId: "tui-test" }, generation = (await space.issueGeneration(principal)).generation;
 		await space.write({ type: "Task", fields: { n: 7 } }, null, FOREVER, { request: { principal, generation, requestId: "write" } });
 		const txn = await space.createTransaction(FOREVER);
@@ -96,6 +96,6 @@ test("terminal control sequences are stripped from object content and rendering 
 });
 
 test("inspector sees live SQLite spaces through a consistent private backup",async()=>{
- const {PersistentHome,ctx}=await import("./support/persistent.ts"),{PiSpaces}=await import("../src/index.ts"),{inspect}=await import("./testbed/inspect.ts");
- const home=new PersistentHome("sqlite"),h=await home.open();try{const local=new PiSpaces(h,ctx);await local.write({type:"LiveSQLite",fields:{n:1}});const before=await local.stats();const result=await inspect(home.dir);assert.equal(result.errors.length,0);assert.equal(result.spaces.length,1);assert.ok(result.spaces[0]!.items.some(i=>i.type==="LiveSQLite"));assert.deepEqual(await local.stats(),before);}finally{await home.dispose();}
+ const {PersistentHome,ctx}=await import("./support/persistent.ts"),{PhiSpaces}=await import("../src/index.ts"),{inspect}=await import("./testbed/inspect.ts");
+ const home=new PersistentHome("sqlite"),h=await home.open();try{const local=new PhiSpaces(h,ctx);await local.write({type:"LiveSQLite",fields:{n:1}});const before=await local.stats();const result=await inspect(home.dir);assert.equal(result.errors.length,0);assert.equal(result.spaces.length,1);assert.ok(result.spaces[0]!.items.some(i=>i.type==="LiveSQLite"));assert.deepEqual(await local.stats(),before);}finally{await home.dispose();}
 });

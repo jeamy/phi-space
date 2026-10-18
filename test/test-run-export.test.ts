@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
-import { PiSpaces } from "../src/client.ts";
+import { PhiSpaces } from "../src/client.ts";
 import { RunController, localRunMember, runCommands } from "../src/run-controller.ts";
 import { createSpace } from "../src/spaces.ts";
 import { SIEVE_EXPORTER, configureGatedSieveSpace, prepareSieveRun, processSieveTask, type SieveConfig } from "../examples/sieve.ts";
@@ -11,7 +11,7 @@ import { BACKENDS, ctx, PersistentHome } from "./support/persistent.ts";
 async function fixture(h: Awaited<ReturnType<PersistentHome["open"]>>, now: () => number) {
 	const sid = (await h.commit(tx => createSpace(tx, "sieve", Date.now()), ctx)).spaceId;
 	await configureGatedSieveSpace(h, sid);
-	const space = (id: string) => new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: id });
+	const space = (id: string) => new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: id });
 	const runs = new RunController({ host: h, ctx, now, member: id => localRunMember(h, ctx, id, (run, s) => prepareSieveRun(h, run.config as SieveConfig, { space: s }).then(() => {})), exporters: { sieve: SIEVE_EXPORTER }, space });
 	return { sid, runs, space };
 }

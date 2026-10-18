@@ -1,5 +1,5 @@
 {
-  "schema": "pi-spaces-help-product-catalog-v1",
+  "schema": "phi-spaces-help-product-catalog-v1",
   "reviewed": "2026-10-18",
   "areas": [
     {
@@ -16,7 +16,7 @@
       },
       "searchAliases": {
         "de": [
-          "pi-spaces",
+          "phi-spaces",
           "system",
           "system map",
           "übersicht",
@@ -29,7 +29,7 @@
           "schichten"
         ],
         "en": [
-          "pi-spaces",
+          "phi-spaces",
           "system",
           "system map",
           "overview",
@@ -46,7 +46,7 @@
         "help.topic.overview",
         "help.topic.architecture_layers",
         "help.topic.guarantees_and_boundaries",
-        "help.topic.comparison_earendil_vs_pi_spaces",
+        "help.topic.comparison_earendil_vs_phi_spaces",
         "help.topic.async_interaction",
         "help.topic.topology_and_readiness"
       ]
@@ -158,12 +158,12 @@
         "en": "Local Client & Agent Tools"
       },
       "short": {
-        "de": "Lokaler Client PiSpaces, benannte Spaces (NamedSpace/Registry), Reaper und Event-Delivery (startService) sowie die 8 replay-sicheren LLM-Agent-Tools.",
-        "en": "Local client PiSpaces, named spaces (NamedSpace/Registry), reaper and event delivery (startService), plus the 8 replay-safe LLM agent tools."
+        "de": "Lokaler Client PhiSpaces, benannte Spaces (NamedSpace/Registry), Reaper und Event-Delivery (startService) sowie die 8 replay-sicheren LLM-Agent-Tools.",
+        "en": "Local client PhiSpaces, named spaces (NamedSpace/Registry), reaper and event delivery (startService), plus the 8 replay-safe LLM agent tools."
       },
       "searchAliases": {
         "de": [
-          "pispaces",
+          "phispaces",
           "client",
           "namedspace",
           "createspace",
@@ -176,7 +176,7 @@
           "agent"
         ],
         "en": [
-          "pispaces",
+          "phispaces",
           "client",
           "namedspace",
           "createspace",
@@ -449,7 +449,7 @@
       "id": "pkg_core",
       "owner": "core",
       "kind": "built_in",
-      "repository": "pi-spaces/src/core.ts + doc.ts + spaces.ts",
+      "repository": "phi-spaces/src/core.ts + doc.ts + spaces.ts",
       "title": {
         "de": "Core & Dokumentmodell (v5)",
         "en": "Core & Document Model (v5)"
@@ -477,10 +477,10 @@
       "id": "pkg_client",
       "owner": "client",
       "kind": "built_in",
-      "repository": "pi-spaces/src/client.ts + claims.ts + stream.ts + mailbox.ts",
+      "repository": "phi-spaces/src/client.ts + claims.ts + stream.ts + mailbox.ts",
       "title": {
-        "de": "PiSpaces Client, Claims, Streams & Mailboxes",
-        "en": "PiSpaces Client, Claims, Streams & Mailboxes"
+        "de": "PhiSpaces Client, Claims, Streams & Mailboxes",
+        "en": "PhiSpaces Client, Claims, Streams & Mailboxes"
       },
       "short": {
         "de": "Lokaler SpaceLike-Client, RequestRef-Claims, Snapshot-Paginierung (readPage), Revisionsströme (changes) und dauerhafte Consumer-Mailboxes.",
@@ -506,7 +506,7 @@
       "id": "pkg_tools",
       "owner": "tools",
       "kind": "host_owned",
-      "repository": "pi-spaces/src/index.ts",
+      "repository": "phi-spaces/src/index.ts",
       "title": {
         "de": "LLM-Agent-Tools & Hintergrunddienst",
         "en": "LLM Agent Tools & Background Service"
@@ -532,7 +532,7 @@
       "id": "pkg_remote",
       "owner": "remote",
       "kind": "runtime_service",
-      "repository": "pi-spaces/src/service.ts + remote.ts + socket.ts + pi-server.ts",
+      "repository": "phi-spaces/src/service.ts + remote.ts + socket.ts + pi-server.ts",
       "title": {
         "de": "SpaceService, RemoteSpace & Socket/TCP-Transport",
         "en": "SpaceService, RemoteSpace & Socket/TCP Transport"
@@ -560,7 +560,7 @@
       "id": "pkg_security",
       "owner": "security",
       "kind": "runtime_service",
-      "repository": "pi-spaces/src/gate.ts + auth.ts + enroll.ts + grants.ts + boot.ts + restore.ts",
+      "repository": "phi-spaces/src/gate.ts + auth.ts + enroll.ts + grants.ts + boot.ts + restore.ts",
       "title": {
         "de": "Overlay-Gate (Schicht A/B), Grants, Boot & Restore",
         "en": "Overlay Gate (Layer A/B), Grants, Boot & Restore"
@@ -590,7 +590,7 @@
       "id": "pkg_federation",
       "owner": "federation",
       "kind": "runtime_service",
-      "repository": "pi-spaces/src/router.ts + delegation.ts + federated-space.ts + membership.ts",
+      "repository": "phi-spaces/src/router.ts + delegation.ts + federated-space.ts + membership.ts",
       "title": {
         "de": "Federation, Router, HRW-Policy & Membership",
         "en": "Federation, Router, HRW Policy & Membership"
@@ -619,7 +619,7 @@
       "id": "pkg_ops",
       "owner": "ops",
       "kind": "host_owned",
-      "repository": "pi-spaces/src/run-controller.ts + workers.ts + space-lifecycle.ts + deployment.ts + alerts.ts",
+      "repository": "phi-spaces/src/run-controller.ts + workers.ts + space-lifecycle.ts + deployment.ts + alerts.ts",
       "title": {
         "de": "Betrieb, Läufe (RunGate), Worker, Mobile & Web-Admin",
         "en": "Operations, Runs (RunGate), Workers, Mobile & Web Admin"

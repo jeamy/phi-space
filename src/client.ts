@@ -1,5 +1,5 @@
 import {assertMemberAdmission,permitRoutedWrite} from "./member-admission.ts";
-// The local pi-spaces client over the Session-scoped Space document. Host code, tasks and tools all use this.
+// The local phi-spaces client over the Session-scoped Space document. Host code, tasks and tools all use this.
 // Everything here runs against one harness: the harness process is the "space service".
 import type { DecisionAuthorization } from "./service.ts";
 import type { Session, Tx } from "@earendil-works/pi-durable";
@@ -22,7 +22,7 @@ export { Space };
 /** What the client needs; both `Harness` and a tool's `api` provide it. */
 export type SpaceHost = Pick<Session, "commit" | "watchDoc" | "snapshot">;
 /** `space`: alias or spaceId of a named space (see `createSpace`); omitted: the default space. */
-export type PiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal; authorization?: DecisionAuthorization };
+export type PhiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal; authorization?: DecisionAuthorization };
 export type Once = { get(tx: Tx): Promise<Json | undefined>; set(tx: Tx, v: Json): Promise<void> };
 export type Snapshot = { readonly entry: Readonly<EntryDraft> };
 export type OpOptions = {
@@ -46,7 +46,7 @@ export type Taken = ReturnType<typeof view>;
 /** Pause (plus up to as much again of jitter) between a change waking a blocked read/take and its next probe. */
 export const WAKE_DEBOUNCE_MS = 20;
 
-/** What tools and federated/remote implementations share. `PiSpaces` is the local one. */
+/** What tools and federated/remote implementations share. `PhiSpaces` is the local one. */
 export interface SpaceLike {
 	write(entry: EntryDraft, txn?: string | null, lease?: number, o?: Req): Promise<Lease>;
 	read(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
@@ -69,17 +69,17 @@ export interface SpaceLike {
 	cancel(leaseId: string, o?: Req): Promise<void>;
 }
 
-export class PiSpaces implements SpaceLike {
+export class PhiSpaces implements SpaceLike {
 	private host: SpaceHost;
 	private ctx: Context;
 	private now: () => number;
 	private meter: Meter;
 	private as: core.Target | undefined;
 	private space: string | undefined;
-	private options: PiSpacesOptions;
+	private options: PhiSpacesOptions;
 	/** `as`: the conversation acting (tools pass theirs). It owns what it creates and may only touch its own
 	 * transactions and leases. Omitted (host code): unrestricted. */
-	constructor(host: SpaceHost, ctx: Context, now: () => number = Date.now, meter: Meter = defaultMeter, as?: core.Target, o: PiSpacesOptions = {}) {
+	constructor(host: SpaceHost, ctx: Context, now: () => number = Date.now, meter: Meter = defaultMeter, as?: core.Target, o: PhiSpacesOptions = {}) {
 		this.meter = meter;
 		this.host = host;
 		this.ctx = ctx;

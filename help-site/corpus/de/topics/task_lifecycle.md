@@ -26,7 +26,7 @@ Ein Task-Entry und seine Transaktionsreservierung haben getrennte Leases. Die Re
 
 ## Chat: Sequenzen, Singleton und Fork {#chat}
 
-ThreadSequence ist ein Space-Entry und wird für die Sequenzvergabe transaktional reserviert; Msg und neuer Zählerstand committen zusammen. Nicht allein einen lokalen ++-Zähler verwenden. write mit unique: ["threadId"] prüft die Singleton-Erstanlage atomar; vorangestelltes read + write wäre ein Rennen. Ein Fork schreibt parentThreadId/forkUpToSeq; geerbte Nachrichten werden beim Lesen aufgelöst, nicht kopiert. [write API](help.api.pispaces_write#parameters).
+ThreadSequence ist ein Space-Entry und wird für die Sequenzvergabe transaktional reserviert; Msg und neuer Zählerstand committen zusammen. Nicht allein einen lokalen ++-Zähler verwenden. write mit unique: ["threadId"] prüft die Singleton-Erstanlage atomar; vorangestelltes read + write wäre ein Rennen. Ein Fork schreibt parentThreadId/forkUpToSeq; geerbte Nachrichten werden beim Lesen aufgelöst, nicht kopiert. [write API](help.api.phispaces_write#parameters).
 
 ## Abnahme und Grenzen {#failure-test}
 

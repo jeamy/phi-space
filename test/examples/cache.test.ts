@@ -7,12 +7,12 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, PiSpaces } from "../../src/index.ts";
+import { FOREVER, PhiSpaces } from "../../src/index.ts";
 import { SpaceCache, runCacheDemo } from "../../examples/cache.ts";
 
 async function memory() {
   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-  return { h, cache: new SpaceCache(h), space: new PiSpaces(h, ctx) };
+  return { h, cache: new SpaceCache(h), space: new PhiSpaces(h, ctx) };
 }
 
 test("Cache distinguishes a cached null from a miss and isolates namespaces", async () => {

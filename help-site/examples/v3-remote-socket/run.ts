@@ -20,7 +20,7 @@ import {
 	FOREVER,
 	GateIdentity,
 	Meter,
-	PiSpaces,
+	PhiSpaces,
 	RemoteSpace,
 	serveSpace,
 	socketTransport,
@@ -31,7 +31,7 @@ import {
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV3() {
-	const dir = await mkdtemp(join(tmpdir(), "pi-spaces-chat-v3-"));
+	const dir = await mkdtemp(join(tmpdir(), "phi-spaces-chat-v3-"));
 	const dbPath = join(dir, "chat-v3.sqlite");
 	const socketPath = join(dir, "space.sock");
 	const meter = new Meter();
@@ -46,7 +46,7 @@ export async function runStageV3() {
 	const stopService = await startService(harness, ctx);
 
 	// Host installs CompletionProfiles before exposing the socket
-	const hostAdminSpace = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v3" });
+	const hostAdminSpace = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v3" });
 	await new SpaceChatEngine(hostAdminSpace).installProfilesIfSupported();
 
 	const service = new SpaceService({

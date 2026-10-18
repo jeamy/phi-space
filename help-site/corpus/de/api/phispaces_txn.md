@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_txn
+id: help.api.phispaces_txn
 title: "Transaktionen – createTransaction, commit & abort"
 short: "Bündelt Takes (Reservierungen) und Writes (unsichtbare Entwürfe) atomar; prüft beim Commit alle CompletionProfiles und Byte-Budgets."
 tags: [createtransaction, commit, abort, txn, atomic]

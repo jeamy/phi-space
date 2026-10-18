@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-Stage 2 (`help-site/examples/v2-local-durable/run.ts`) makes the Multiplayer Space-Chat durable across process restarts and adds the two advanced capabilities from the Earendil post: **scheduled tasks (`schedule` alarms)** and **cross-conversation search via subagent (`search_history`)**—both built purely on `pi-spaces` primitives.
+Stage 2 (`help-site/examples/v2-local-durable/run.ts`) makes the Multiplayer Space-Chat durable across process restarts and adds the two advanced capabilities from the Earendil post: **scheduled tasks (`schedule` alarms)** and **cross-conversation search via subagent (`search_history`)**—both built purely on `phi-spaces` primitives.
 
 ## Topology: Space Distribution {#topology}
 
@@ -33,7 +33,7 @@ Instead of `MemoryStorage`, the host opens `await openNodeSqliteStorage(dbPath)`
    - a `ScheduledJob` entry with `status: "pending"` and `FOREVER` lease,
    - a `TimerLock` entry `{ jobId, threadId, executeAt }` with **`lease = delayMs`**.
 2. While `TimerLock` exists in the space, the job is not yet due.
-3. Once `delayMs` elapses—even if the server process was stopped and reopened on the same SQLite file!—the `pi-spaces` reaper expires `TimerLock`.
+3. Once `delayMs` elapses—even if the server process was stopped and reopened on the same SQLite file!—the `phi-spaces` reaper expires `TimerLock`.
 4. `tickAlarms()` takes the unlocked `ScheduledJob` inside a transaction, rewrites it with `status: "triggered"`, and atomically enqueues the wakeup `ChatTask`.
 
 ### Step 3: Cross-Thread Search Via Search Subagent {#step-3-subagent}

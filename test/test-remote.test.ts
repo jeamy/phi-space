@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
-	PiSpaces, SpaceService, StaticIdentity, RemoteSpace, inProcessTransport, OutcomeUnknown, UnsupportedOperation, FOREVER, core, RequestConflict, OperationCancelled,
+	PhiSpaces, SpaceService, StaticIdentity, RemoteSpace, inProcessTransport, OutcomeUnknown, UnsupportedOperation, FOREVER, core, RequestConflict, OperationCancelled,
 	type Transport,
 } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
@@ -59,7 +59,7 @@ test("the SpaceLike contract: the same steps give the same results locally and r
 		out.push([st.entries, st.byType]);
 		return out;
 	};
-	const local = await steps(new PiSpaces(await memory(), ctx, Date.now, undefined, "peer-a/w1"));
+	const local = await steps(new PhiSpaces(await memory(), ctx, Date.now, undefined, "peer-a/w1"));
 	const h = await memory();
 	const remote = await steps(new RemoteSpace(inProcessTransport(service(h), { peerId: "peer-a" }), fast));
 	assert.deepEqual(remote, local);
@@ -112,15 +112,15 @@ test("a blocked take is polled; the client's own patience ends only the waiting"
 	assert.ok(unknown instanceof OutcomeUnknown);
 	assert.ok(Date.now() - t0 < 2_000, "ended by the client's patience, not by the 10 s deadline");
 	assert.equal((await a.pollOperation(unknown!.request)).state, "pending", "the operation goes on");
-	await new PiSpaces(h, ctx).write({ type: "Late", fields: { v: 42 } }, null, FOREVER);
+	await new PhiSpaces(h, ctx).write({ type: "Late", fields: { v: 42 } }, null, FOREVER);
 	const view = await a.pollOperation(unknown!.request, 2_000);
 	assert.equal(view.state, "done");
 	assert.equal((view.result as { fields: { v: number } }).fields.v, 42, "the entry was not lost although nobody was waiting");
-	assert.equal(await new PiSpaces(h, ctx).count({ type: "Late" }), 0);
+	assert.equal(await new PhiSpaces(h, ctx).count({ type: "Late" }), 0);
 	// a patient client simply gets it
 	const patient = new RemoteSpace(inProcessTransport(sv, { peerId: "peer-a" }), fast);
 	const waiting = patient.take({ type: "Soon" }, 5_000);
-	setTimeout(() => void new PiSpaces(h, ctx).write({ type: "Soon", fields: { v: 1 } }, null, FOREVER), 100);
+	setTimeout(() => void new PhiSpaces(h, ctx).write({ type: "Soon", fields: { v: 1 } }, null, FOREVER), 100);
 	assert.equal((await waiting)?.fields.v, 1);
 });
 
@@ -175,7 +175,7 @@ test("changes through the remote client: batches, long poll, and resync as Snaps
 
 test("generations are renewed before they stop admitting, and a known request is answered after that", async () => {
 	const h = await memory();
-	await new PiSpaces(h, ctx).setLimits({ generationAdmitMs: 6_000 });
+	await new PhiSpaces(h, ctx).setLimits({ generationAdmitMs: 6_000 });
 	const inner = inProcessTransport(service(h), { peerId: "peer-a" });
 	const methods: string[] = [];
 	const counting: Transport = { request: (text) => { methods.push(JSON.parse(text).method); return inner.request(text); } };

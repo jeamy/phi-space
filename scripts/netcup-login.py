@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""netcup SCP device-flow login for the pi-spaces fencing adapter (runs on vpsc as the register user).
+"""netcup SCP device-flow login for the phi-spaces fencing adapter (runs on vpsc as the register user).
 
 login   : request a device code, print ONLY the approval URL/code, poll, store the offline refresh token (0600).
 inspect : refresh the access token (storing a rotated refresh token), save the per-user OpenAPI spec and list
@@ -10,7 +10,7 @@ import json, os, sys, time, urllib.parse, urllib.request, urllib.error, pathlib
 BASE = 'https://www.servercontrolpanel.de'
 OIDC = BASE + '/realms/scp/protocol/openid-connect'
 API = BASE + '/scp-core/api/v1'
-DIR = pathlib.Path.home() / '.config' / 'pi-spaces-fencing'
+DIR = pathlib.Path.home() / '.config' / 'phi-spaces-fencing'
 FILE = DIR / 'netcup.json'
 
 def post_form(url, data):

@@ -1,7 +1,7 @@
-# pi-spaces API
+# phi-spaces API
 
 Stand: 2026-10-11. Diese Referenz dokumentiert die öffentliche TypeScript-API
-des lokalen Clients `PiSpaces`, des Remote-Clients `RemoteSpace` und den
+des lokalen Clients `PhiSpaces`, des Remote-Clients `RemoteSpace` und den
 Servicevertrag. Sie beschreibt keine Federation-Garantie; dafür ist
 [federation-plan-v3.md](federation-plan-v3.md) maßgeblich.
 
@@ -24,17 +24,17 @@ Zeitangaben sind Millisekunden. `NO_WAIT` (`0`) wartet nicht,
 unbefristete Dauer. Über den Wire-Vertrag werden `ANY` als `null` und `FOREVER`
 als `"forever"` übertragen.
 
-## `PiSpaces`
+## `PhiSpaces`
 
 ```ts
-const space = new PiSpaces(harness, ctx, Date.now, meter, conversationId, {
+const space = new PhiSpaces(harness, ctx, Date.now, meter, conversationId, {
   space: "optional-alias-or-spaceId",
 });
 ```
 
 Ohne `space` verwendet der Client den Default-Space. Ein gesetztes
 `conversationId` aktiviert Ownership-Prüfungen; Host-Code lässt es weg.
-`PiSpaces` erfüllt `SpaceLike`.
+`PhiSpaces` erfüllt `SpaceLike`.
 
 | Methode | Ergebnis | Semantik |
 |---|---|---|
@@ -379,7 +379,7 @@ Es muss als Reconciliation-Hook vor der Control-Restore-Bestätigung eingebunden
 werden. Verwaltete Spaces erhalten ohne diesen Hook kein Control-Receipt.
 [Abnahmestand und Grenzen](ap2-abnahme.md).
 
-`PiSpaces.resolveOperation` erhält einen `RequestRef` einschließlich Principal;
+`PhiSpaces.resolveOperation` erhält einen `RequestRef` einschließlich Principal;
 `RemoteSpace.resolveOperation` erhält `{generation, requestId}` und verwendet
 die authentifizierte Identität. Methode und Hash bezeichnen die ursprünglichen
 normalisierten Claim-Argumente (`write`, `take`, `txn.begin` usw.). Der neue
@@ -489,7 +489,7 @@ bindet dies für den eigenen Testverbund an echte Prozesse, lokale Löschbelege,
 Archivdateien und die unabhängigen mTLS-Registereinträge.
 
 `compactErasedSqlite(path, assertExclusiveFenced)` bereinigt alte Revisionen
-der sessionweiten pi-spaces-Dokumente in einem gestoppten SQLite-Store mit
+der sessionweiten phi-spaces-Dokumente in einem gestoppten SQLite-Store mit
 pi-durable-Schema 1. Es bewahrt aktuelle Dokumentwerte und die letzte Sequenz
 und Version, entfernt überholte Revisionen, führt Secure-Delete, Checkpoints,
 VACUUM und Integrity-Check aus. Symlink-Dateien und andere Schema-Versionen
@@ -501,7 +501,7 @@ gesamten Aufrufs halten. Es ersetzt keine Löschregel für externe Kopien.
 ## Entry-Replikation: administrativer Phase-3-Baustein
 
 `EntryReplicationController` verwendet ein eigenes Dokument, keine automatische
-Replikation bestehender `PiSpaces`-Entries. Konfiguration, Aufrufmethoden,
+Replikation bestehender `PhiSpaces`-Entries. Konfiguration, Aufrufmethoden,
 Vertrauensgrenze und Betriebsbeschränkungen stehen in
 [Phase 3](ap3-replikation.md). Die exportierten HLC-Funktionen sind
 `advanceHybridClock`, `compareHybridClock` und `validateHybridClock`. Die Uhr
@@ -561,7 +561,7 @@ Fehlercode `CommitSealed`, im Client `CommitSealedPending` (Unterklasse von `Out
 `sealedCandidateOf` und `SyncSpace.resolve()/unserve()` klären den Kandidaten im laufenden Host
 ([Ablauf](ap3-primary-sync.md)). Nach einer Promotion beantwortet `resolveOperation` einen unbekannten Request
 älterer Epoche mit Nachweis (`promotionEvidence`, Dienstoption `promotionProof`) per Negativclaim mit `NotCommitted`
-(`claims.decideNotCommitted`, `PiSpaces.resolveNotCommitted`, Fehlerklasse `claims.NotCommitted`).
+(`claims.decideNotCommitted`, `PhiSpaces.resolveNotCommitted`, Fehlerklasse `claims.NotCommitted`).
 Diese API aktiviert noch keine produktive Sync-Policy oder Promotion.
 [Vertrauensbereich und Betriebsgrenzen](ap3-primary-sync.md).
 
@@ -605,7 +605,7 @@ Für Set-Regeln unterstützt `EntryMutation` jetzt zusätzlich
 einen lokal lebenden beobachteten Tag, erhält Felder/Owner und erzeugt atomar einen
 neuen Tag samt Entfernung des alten. Die Request-ID bleibt replaybar. Das ist
 weiter die administrative Entry-API, keine automatische Umleitung normaler
-`PiSpaces.renew`-Aufrufe.
+`PhiSpaces.renew`-Aufrufe.
 
 
 ## Laufsteuerung (Betriebserweiterung)

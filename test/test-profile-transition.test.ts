@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {generateKey} from '../src/auth.ts';
-import {PiSpaces} from '../src/client.ts';
+import {PhiSpaces} from '../src/client.ts';
 import {FOREVER} from '../src/core.ts';
 import {FederationRouting,FederationPolicyAuthority} from '../src/federation-policy.ts';
 import {ProfileTransitionController,ProfileTransitions} from '../src/profile-transition.ts';
@@ -24,7 +24,7 @@ for(const backend of BACKENDS){
    await hosts[0]!.commit(async tx=>{const s=await tx.doc(FederationRouting,control,null);s.policy=policy;s.members=members;},ctx);
    const node=(i:number)=>new MemberLifecycle({host:hosts[i+1]!,ctx,memberId:i?'b':'a',spaceId:sids[i]!.spaceId,authorityId:'authority',peerId:i?'b':'a',signer:keys[i]!.signer,controlPin:{issuer:'control',algorithm:'ed25519',publicKey:rootKey.publicKey},assertAuthority:async()=>{},now:()=>1000});
    for(let i=0;i<2;i++)for(const action of ['prepareAdd','activate'] as const)await node(i).apply(await signMembership('instruction',{id:'add-'+i,authorityId:'authority',memberId:i?'b':'a',spaceId:sids[i]!.spaceId,action,...(action==='activate'?{policy}:{})},'control',rootKey.signer));
-   const client=(i:number)=>new PiSpaces(hosts[i+1]!,ctx,()=>1000,undefined,undefined,{space:sids[i]!.spaceId});
+   const client=(i:number)=>new PhiSpaces(hosts[i+1]!,ctx,()=>1000,undefined,undefined,{space:sids[i]!.spaceId});
    await client(0).write({type:'Other',fields:{kept:true}},null,FOREVER);
    let drop:string|undefined;
    const transport:MembershipTransport={pin:async m=>({issuer:m.id,algorithm:'ed25519',publicKey:keys[m.id==='a'?0:1]!.publicKey}),apply:async(m,q)=>{const r=await node(m.id==='a'?0:1).apply(q);if(drop===q.value.action){drop=undefined;throw Error('lost committed Member reply');}return r;}};
@@ -60,7 +60,7 @@ for(const backend of BACKENDS){
    await assert.rejects(make().start('change',next),/Root work must settle/);assert.equal(Object.keys((await host.snapshot(ProfileTransitions,control,ctx))?.operations??{}).length,0);
    await host.commit(async tx=>{(await tx.doc(FederationOperations,'root',null)).operations.finish={id:'finish',kind:'txn',phase:'done',args:{action:'abort',originId:'begin'}} as any;},ctx);
    for(const action of ['prepareAdd','activate'] as const)await node.apply(await signMembership('instruction',{id:'add-a',authorityId:'authority',memberId:'a',spaceId:s.spaceId,action,...(action==='activate'?{policy}:{})},'control',key.signer));
-   const client=new PiSpaces(mh,ctx,()=>1000,undefined,undefined,{space:s.spaceId});await client.write({type:'Task',fields:{jobId:'job'}},null,FOREVER);await assert.rejects(make().execute('change',next),/no affected Tasks/);assert.equal((await host.snapshot(ProfileTransitions,control,ctx))!.operations.change!.phase,'freezing');assert.equal((await snapshotSpace(mh,s.spaceId,ctx))!.membership!.state,'active');
+   const client=new PhiSpaces(mh,ctx,()=>1000,undefined,undefined,{space:s.spaceId});await client.write({type:'Task',fields:{jobId:'job'}},null,FOREVER);await assert.rejects(make().execute('change',next),/no affected Tasks/);assert.equal((await host.snapshot(ProfileTransitions,control,ctx))!.operations.change!.phase,'freezing');assert.equal((await snapshotSpace(mh,s.spaceId,ctx))!.membership!.state,'active');
    await client.take({type:'Task'},0);assert.equal((await make().execute('change',next)).phase,'completed');
   }finally{await home.dispose();await memberHome.dispose();}
  });

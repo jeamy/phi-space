@@ -1,8 +1,8 @@
-# pi-spaces Help & Multiplayer Chat (`help-site`)
+# phi-spaces Help & Multiplayer Chat (`help-site`)
 
 [English](README.md) · [Deutsch](README_DE.md)
 
-This directory contains the runnable Node.js/React help system, **PI-SPACES / HELP**: bilingual documentation,
+This directory contains the runnable Node.js/React help system, **PHI-SPACES / HELP**: bilingual documentation,
 the six-stage Multiplayer Space-Chat workbench, the Social Swarm feed, and authenticated Web Admin.
 
 Checked against the checkout on 2026-10-18. A working demo is not a multi-host or production acceptance result.
@@ -12,12 +12,12 @@ See [implementation status](../docs/implementierungsstand.md), the
 
 ## What the demos demonstrate
 
-The root README explains [tuple spaces, JavaSpaces and pi-spaces](../README.md#tuple-spaces-coordination-through-data).
+The root README explains [tuple spaces, JavaSpaces and phi-spaces](../README.md#tuple-spaces-coordination-through-data).
 Here the model is executable: producers publish `SwarmTask`/`ChatTask` Entries rather than calling a particular
 worker; workers claim matching tasks and publish results transactionally. A later consumer requires the task's
 lease and storage to outlive the delay. A task is data, not a direct reference to its producer.
 
-What **pi-spaces actually implements**:
+What **phi-spaces actually implements**:
 
 - `write`, `read` and `take` return Promises. A completed write confirms its storage mutation, not consumer completion.
 - A pending `await read/take` suspends its caller, not the entire JavaScript event loop.
@@ -73,9 +73,9 @@ pair a real phone automatically. Web stage runs create immutable report mirrors,
 
 ### Optional live models
 
-Both demos work without a model. Credentials alone do not enable live calls: explicitly set `PI_SPACES_LLM=1`.
+Both demos work without a model. Credentials alone do not enable live calls: explicitly set `PHI_SPACES_LLM=1`.
 Credentials may come from provider environment variables or pi CLI `auth.json` (`PI_AUTH_DIR` for the Docker mount).
-`PI_SPACES_LLM_MODEL`/`PI_MODEL` select the initial model.
+`PHI_SPACES_LLM_MODEL`/`PI_MODEL` select the initial model.
 
 The shared picker lists allowed Codestral/Haiku models through `GET /api/llm/models`.
 Changes through `POST /api/llm/model`, including `{on:false}`, require an admin session and CSRF token.
@@ -96,16 +96,16 @@ an existing configuration. The supplied template has `HELP_BIND=0.0.0.0`, so ove
 npm --prefix help-site run build
 
 # Local-only production server; uses SQLite by default:
-HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm --prefix help-site start
+HELP_BIND=127.0.0.1 PHI_SPACES_LLM=0 npm --prefix help-site start
 
 # Alternatively, Next.js development mode:
-HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm --prefix help-site run dev
+HELP_BIND=127.0.0.1 PHI_SPACES_LLM=0 npm --prefix help-site run dev
 
 # Root shortcut for development (same bind/environment considerations):
-HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm run help
+HELP_BIND=127.0.0.1 PHI_SPACES_LLM=0 npm run help
 ```
 
-Admin login is disabled unless `PI_SPACES_ADMIN_PASSWORD` is configured. There is no default password.
+Admin login is disabled unless `PHI_SPACES_ADMIN_PASSWORD` is configured. There is no default password.
 Peer enrollment tokens are for peer pairing, not web login. Set a private password before using Web Admin.
 
 ### CLI stages and local checks
@@ -119,10 +119,10 @@ node --experimental-strip-types help-site/examples/v5-federated-cluster/run.ts
 node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 
 # All help, regression and worker-batch tests; no model calls:
-PI_SPACES_LLM=0 npm --prefix help-site test
+PHI_SPACES_LLM=0 npm --prefix help-site test
 
 # Fresh production build and separate Next.js SSR check:
-PI_SPACES_LLM=0 npm --prefix help-site run test:production
+PHI_SPACES_LLM=0 npm --prefix help-site run test:production
 ```
 
 ### Docker
@@ -136,7 +136,7 @@ Configuration: `help-site/docker/Dockerfile` and `help-site/docker/docker-compos
 | `spaces-help-test` | Fresh corpus/Next.js build and the full help test suite, profile `test`, with SSR enabled. |
 | `swarm-nano` | Optional headless worker shard, profile `nano`, separate SQLite volume and socket port 3600. |
 
-Compose requires a private `PI_SPACES_ADMIN_PASSWORD` during configuration, including test-profile selection.
+Compose requires a private `PHI_SPACES_ADMIN_PASSWORD` during configuration, including test-profile selection.
 Production uses a prebuilt `.next` output; development compiles with Turbopack.
 Startup time depends on the store and machine; no fixed latency is guaranteed.
 
@@ -165,9 +165,9 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `PORT` / `HELP_PORT` | Direct-server port, default 3500; Compose uses `PORT`. |
 | `HELP_BIND` | Direct-server bind; use `127.0.0.1` locally. Dev Docker binds internally to `0.0.0.0`. |
 | `HOST_BIND` | Production Docker host-network bind; empty defaults to `0.0.0.0`. For dev, controls the published host address. |
-| `PI_SPACES_ADMIN_PASSWORD` | Private web-login password; mandatory for Compose, otherwise login is disabled when absent. |
-| `PI_SPACES_LLM` | Default 0; explicit 1 allows configured live providers and token costs. |
-| `PI_SPACES_LLM_MODEL` / `PI_MODEL` | Initial model selection. |
+| `PHI_SPACES_ADMIN_PASSWORD` | Private web-login password; mandatory for Compose, otherwise login is disabled when absent. |
+| `PHI_SPACES_LLM` | Default 0; explicit 1 allows configured live providers and token costs. |
+| `PHI_SPACES_LLM_MODEL` / `PI_MODEL` | Initial model selection. |
 | `PI_AUTH_DIR` | Host credential directory mounted read-only by Docker; inspect the Compose mount before deployment. |
 | `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
 | `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
@@ -268,8 +268,8 @@ npm --prefix help-site run build
 ## Documents and layout
 
 - [PLAN.md](PLAN.md): architecture and implementation plan, not standalone proof of current runtime behavior.
-- [German architecture comparison](VERGLEICH-EARENDIL-VS-PI-SPACES.md) and
-  [English comparison](COMPARISON-EARENDIL-VS-PI-SPACES-EN.md): comparison with Earendil's chat architecture.
+- [German architecture comparison](VERGLEICH-EARENDIL-VS-PHI-SPACES.md) and
+  [English comparison](COMPARISON-EARENDIL-VS-PHI-SPACES-EN.md): comparison with Earendil's chat architecture.
 - [Root API reference](../docs/api.md), [examples](../docs/examples.md), and
   [implementation status](../docs/implementierungsstand.md) define the detailed current contracts.
 

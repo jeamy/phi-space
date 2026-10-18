@@ -71,7 +71,7 @@ test("the webhook publisher posts plain text with priority and refuses URLs with
 	const got: Array<{ body: string; priority: string | undefined; title: string | undefined }> = [];
 	const server = http.createServer(async (req, res) => { let body = ""; for await (const ch of req) body += ch; got.push({ body, priority: req.headers.priority as string, title: req.headers.title as string }); res.end("ok"); });
 	await new Promise<void>(r => server.listen(0, "127.0.0.1", r)); tc.after(() => server.close());
-	const publish = webhookPublisher(`http://127.0.0.1:${(server.address() as AddressInfo).port}/pi-spaces`, { title: "prime-demo" });
+	const publish = webhookPublisher(`http://127.0.0.1:${(server.address() as AddressInfo).port}/phi-spaces`, { title: "prime-demo" });
 	await publish({ raised: [{ key: "k", severity: "critical", source: "run", subject: "r1", message: "Pause unvollständig" }], resolved: [{ key: "j", severity: "warning", source: "host", subject: "h", message: "alt" }] });
 	assert.deepEqual(got[0], { body: "!! r1: Pause unvollständig\nok h: alt", priority: "high", title: "prime-demo" });
 	assert.throws(() => webhookPublisher("https://user:pw@ntfy.example/t"), c.IllegalArgumentError);

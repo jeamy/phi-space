@@ -1,6 +1,6 @@
 # Dashboard UI Implementation - Comprehensive Plan Summary
 
-Alle Dateien für die Implementierung einer Live-Dashboard UI für pi-spaces.
+Alle Dateien für die Implementierung einer Live-Dashboard UI für phi-spaces.
 
 > **Umsetzungsstand (Phase 1, implementiert):** Die erste Version ist als schreibgeschütztes Dashboard
 > umgesetzt — [docs/dashboard.md](../dashboard.md), `src/dashboard.ts` + `src/dashboard/`,
@@ -81,7 +81,7 @@ Alle Dateien für die Implementierung einer Live-Dashboard UI für pi-spaces.
     │                 │
     v                 v
 SpaceService     Meter
-(pi-spaces)      (Metrics)
+(phi-spaces)      (Metrics)
     │                 │
     ├─────────────────┤
     │

@@ -10,7 +10,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { core, FOREVER, Meter, PiSpaces, RemoteSpace, SpaceService, StaticIdentity, inProcessTransport, spaceDoc, spaces } from "../../src/index.ts";
+import { core, FOREVER, Meter, PhiSpaces, RemoteSpace, SpaceService, StaticIdentity, inProcessTransport, spaceDoc, spaces } from "../../src/index.ts";
 import { SpaceChatEngine } from "../examples/shared/chat-core.ts";
 import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 import { WebAdminController, WebAdminState } from "../server/admin/admin-controller.ts";
@@ -51,7 +51,7 @@ test("cold expiry watermark scans persisted entries after reopen", () => {
 test("F01/F21: concurrent engines coordinate sequences, repeats and unique threads", async () => {
 	const h = await memory();
 	try {
-		const s = new PiSpaces(h, ctx), a = new SpaceChatEngine(s), b = new SpaceChatEngine(new PiSpaces(h, ctx));
+		const s = new PhiSpaces(h, ctx), a = new SpaceChatEngine(s), b = new SpaceChatEngine(new PhiSpaces(h, ctx));
 		await a.installProfilesIfSupported();
 		const input = { threadId: "t", title: "Thread", createdBy: "a", requestId: "create" };
 		await Promise.all([a.createThread(input), b.createThread(input)]);
@@ -91,7 +91,7 @@ test("F01: legacy colliding sequences remain visible with distinct identities", 
 test("atomic unique write works locally, through RPC, and during a reservation", async () => {
 	const h = await memory();
 	try {
-		const local = new PiSpaces(h, ctx);
+		const local = new PhiSpaces(h, ctx);
 		const service = new SpaceService({ host: h, ctx, identity: new StaticIdentity({ peer: { principal: { peerId: "peer" }, roles: ["member"] } }) });
 		const remote = new RemoteSpace(inProcessTransport(service, { peerId: "peer" }));
 		const outcomes = await Promise.allSettled([local.write({ type: "Mutex", fields: { key: "k" } }, null, FOREVER, { unique: ["key"] }), remote.write({ type: "Mutex", fields: { key: "k" } }, null, FOREVER, { unique: ["key"] })]);
@@ -107,7 +107,7 @@ test("atomic unique write works locally, through RPC, and during a reservation",
 test("F08/F10: presence replay across engines and completed search provenance", async () => {
 	const h = await memory();
 	try {
-		const s = new PiSpaces(h, ctx), a = new SpaceChatEngine(s), b = new SpaceChatEngine(new PiSpaces(h, ctx));
+		const s = new PhiSpaces(h, ctx), a = new SpaceChatEngine(s), b = new SpaceChatEngine(new PhiSpaces(h, ctx));
 		const input = { participantId: "p", username: "P", activeThreadId: "t", requestId: "join" };
 		const [x, y] = await Promise.all([a.joinOrRefreshPresence(input), b.joinOrRefreshPresence(input)]);
 		assert.equal(x.leaseId, y.leaseId);
@@ -145,7 +145,7 @@ test("F03/F06/F07: durable admin replay, parallel requests, enrollment separatio
 		await admin.initialize();
 		assert.deepEqual((await admin.executeCommand(command)).result, first.result);
 		assert.equal(admin.login({ password: "test" }).publicKey, identity.publicKey);
-		const s = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: admin.controlSpaceId });
+		const s = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: admin.controlSpaceId });
 		assert.equal((await s.readAll({ type: "PeerKey", fields: { peerId: "web-admin-eibrain", state: "active" } })).length, 1);
 		const rotation = { commandId: "rotate", kind: "rotateKey", requestedBy: "tester" };
 		await Promise.all([admin.executeCommand(rotation), admin.executeCommand(rotation)]);
@@ -230,7 +230,7 @@ function post(n: number): SwarmPost { return { postId: "p" + n, seq: n, taskId: 
 test("F14/F15: indexed pages merge shards without omissions; shard failure preserves retry", async () => {
 	const h = await memory(), other = await memory();
 	try {
-		const sources = [new PiSpaces(h, ctx), new PiSpaces(other, ctx)];
+		const sources = [new PhiSpaces(h, ctx), new PhiSpaces(other, ctx)];
 		for (const s of sources) await initializeHistory(s);
 		for (let n = 1; n <= 30; n++) {
 			const s = sources[n % 2]!; const t = await s.createTransaction(30_000); const p = post(n);
@@ -262,7 +262,7 @@ test("F19: concurrent upload quota is enforced and retention reclaims generated 
 test("F20: exporter and collector reject invalid ranges, duplicate and conflicting results", async () => {
 	const h = await memory(), other = await memory();
 	try {
-		const s = new PiSpaces(h, ctx), config = { runId: "r", start: 1, end: 10, blockSize: 9 };
+		const s = new PhiSpaces(h, ctx), config = { runId: "r", start: 1, end: 10, blockSize: 9 };
 		const run = { runId: "r", config, members: ["a"] } as any;
 		const valid = { runId: "r", taskId: "r:0", rangeStart: 1, rangeEnd: 10, primes: [2, 3, 5, 7] };
 		await s.write({ type: "SieveResult", fields: { ...valid, rangeStart: 2 } }, null, FOREVER);
@@ -270,7 +270,7 @@ test("F20: exporter and collector reject invalid ranges, duplicate and conflicti
 		await assert.rejects(collectSieveResults(s, config), /mismatch/);
 		await s.take({ type: "SieveResult" }, 0); await s.write({ type: "SieveResult", fields: valid }, null, FOREVER);
 		assert.equal((await SIEVE_EXPORTER({ ...run, members: ["a", "b"] }, () => s)).complete, true);
-		const second = new PiSpaces(other, ctx);
+		const second = new PhiSpaces(other, ctx);
 		await second.write({ type: "SieveResult", fields: { ...valid, primes: [2, 3] } }, null, FOREVER);
 		await assert.rejects(SIEVE_EXPORTER({ ...run, members: ["a", "b"] }, id => id === "a" ? s : second), /Conflicting/);
 		await s.write({ type: "SieveResult", fields: valid }, null, FOREVER);
@@ -290,7 +290,7 @@ test("F03: recovery has no 10000-command cutoff and refuses interrupted effects"
 		await admin.initialize();
 		assert.deepEqual((await admin.executeCommand({ commandId: "cmd10000", kind: "listRuns", requestedBy: "test" })).result, { index: 10_000 });
 		await assert.rejects(admin.executeCommand({ commandId: "interrupted", kind: "createEnroll", requestedBy: "test" }), /requires review/);
-		const s = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: admin.controlSpaceId });
+		const s = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: admin.controlSpaceId });
 		assert.equal(await s.count({ type: "Enroll" }), 0);
 	} finally { await admin.close(); await h.close(ctx); }
 });
@@ -327,7 +327,7 @@ test("F18: article loader ignores stale completions and reports 404/network erro
 test("F11: slow reply generation is aborted and the task completes with bounded fallback", async () => {
 	const h = await memory();
 	try {
-		const s = new PiSpaces(h, ctx), engine = new SpaceChatEngine(s); let aborted = false;
+		const s = new PhiSpaces(h, ctx), engine = new SpaceChatEngine(s); let aborted = false;
 		await engine.installProfilesIfSupported(); await engine.createThread({ threadId: "t", title: "T", createdBy: "a", requestId: "t" });
 		engine.setReplyGenerator(({ signal }) => new Promise((_, reject) => { signal!.addEventListener("abort", () => { aborted = true; reject(new Error("aborted")); }); }));
 		await engine.submitMessage({ threadId: "t", author: "a", text: "slow reply", requestId: "slow" });
@@ -350,7 +350,7 @@ test("F16: failed post batches release reservations; failed follow-up intents re
 			}
 			return result;
 		}, context);
-		await s.write({ type: "SwarmTask", fields: { taskId: "question", kind: "post", agentId: "agent-you", channel: "pi-spaces", replyTo: null, userText: "How does this work?", createdAt: Date.now() } }, null, FOREVER);
+		await s.write({ type: "SwarmTask", fields: { taskId: "question", kind: "post", agentId: "agent-you", channel: "phi-spaces", replyTo: null, userText: "How does this work?", createdAt: Date.now() } }, null, FOREVER);
 		await until(async () => {
 			const question = await s.read({ type: "Post", fields: { taskId: "question" } }, 0);
 			return !failEffect && !!question && await s.count({ type: "Post", fields: { replyTo: question.fields.postId } }) > 0 && await s.count({ type: "PostEffect" }) === 0;
@@ -365,7 +365,7 @@ test("F16: failed post batches release reservations; failed follow-up intents re
 test("F15: interrupted history migration resumes across bounded commits without duplicated nodes", async () => {
 	const h = await memory();
 	try {
-		const s = new PiSpaces(h, ctx);
+		const s = new PhiSpaces(h, ctx);
 		for (let n = 1; n <= 40; n++) await s.write({ type: "Post", fields: { ...post(n), text: "x".repeat(5_000) } }, null, FOREVER);
 		const commit = s.commit.bind(s); let count = 0;
 		s.commit = async (...args) => {

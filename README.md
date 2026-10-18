@@ -1,4 +1,4 @@
-# pi-spaces
+# phi-spaces
 
 [English](README.md) · [Deutsch](README_DE.md)
 
@@ -7,12 +7,12 @@
 > and a recovery plan. Tests cover specific scenarios, not every failure mode; running demos do not establish
 > production readiness. Provided without warranty under the [MIT License](LICENSE).
 
-pi-spaces is a TypeScript space library implemented as an extension for
+phi-spaces is a TypeScript space library implemented as an extension for
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). Many agents
 (conversations) share one space, take work from it, and talk to each other through it.
 
-The coordination model comes from Linda tuple spaces and JavaSpaces. The local pi-spaces client is
-`PiSpaces`; this is a TypeScript/JSON implementation, not a JavaSpaces-compatible Java or RMI runtime.
+The coordination model comes from Linda tuple spaces and JavaSpaces. The local phi-spaces client is
+`PhiSpaces`; this is a TypeScript/JSON implementation, not a JavaSpaces-compatible Java or RMI runtime.
 
 **Status.** The library has a local durable space, named spaces, request claims, revisions and a single-host RPC
 service (`SpaceService`, `RemoteSpace`, Unix/TCP sockets), durable mailboxes and a composed federation host
@@ -40,7 +40,7 @@ data through the space rather than direct method calls between the producer and 
 
 ### The basic operations
 
-| Operation | Meaning in pi-spaces |
+| Operation | Meaning in phi-spaces |
 |---|---|
 | `write(entry)` | Publish a new Entry; writing again normally creates another Entry, not an update. |
 | `read(template)` | Return a matching Entry copy without consuming it. |
@@ -54,17 +54,17 @@ A space is not inherently a FIFO queue, and matching is not a SQL query language
 ### Four dimensions of loose coupling
 
 - **Time decoupling:** a producer can publish now and a consumer can act later, without overlapping lifetimes.
-  In pi-spaces this depends on the Entry's lease and continued availability of its Space/storage. A durable
+  In phi-spaces this depends on the Entry's lease and continued availability of its Space/storage. A durable
   backend can retain it across host-process restarts; `MemoryStorage` cannot.
 - **Location decoupling:** producer and consumer need not know each other's network addresses. They must still
   discover/configure and reach the appropriate Space endpoint, with authorization. Location independence does
   not remove service discovery, routing or network failures.
 - **Reference decoupling:** participants agree on Entry schemas and templates instead of keeping direct object
   references to one another. They remain coupled to that data contract. There can still be RPC **to the Space**:
-  JavaSpaces uses RMI; pi-spaces offers `SpaceService`/`RemoteSpace` over supported transports.
+  JavaSpaces uses RMI; phi-spaces offers `SpaceService`/`RemoteSpace` over supported transports.
 - **Synchronization decoupling:** publishing a job does not require its consumer to be ready or to finish the job.
   This does **not** mean every API operation is asynchronous. JavaSpaces calls are synchronous, and `read`/`take`
-  can wait until a match or timeout. pi-spaces returns Promises: awaiting a pending operation does not block
+  can wait until a match or timeout. phi-spaces returns Promises: awaiting a pending operation does not block
   the JavaScript event loop, but the caller still waits for its result. Use `NO_WAIT`, notifications or durable
   waiters according to the workflow; CPU work and serialization can still occupy the event loop.
 
@@ -72,11 +72,11 @@ Linda's time/process separation is described in the
 [original paper](https://www.cs.tufts.edu/comp/150FP/archive/david-gelernter/generative-linda.pdf).
 The blocking calls and RMI exceptions are explicit in the
 [JavaSpace API](https://river.apache.org/release-doc/current/api/net/jini/space/JavaSpace.html).
-The pi-spaces-specific behavior is documented in [our API](docs/api.md).
+The phi-spaces-specific behavior is documented in [our API](docs/api.md).
 
-### Asynchronous interaction actually implemented in pi-spaces
+### Asynchronous interaction actually implemented in phi-spaces
 
-`PiSpaces` and the common remote interface `SpaceLike` expose Promise-based operations. Their completion
+`PhiSpaces` and the common remote interface `SpaceLike` expose Promise-based operations. Their completion
 points differ:
 
 - `write` resolves after its storage mutation completes, not after a consumer processes the Entry. It is not
@@ -90,13 +90,13 @@ points differ:
   `space_wait` releases the turn after registration and can survive process restarts on persistent storage.
   Transactional take-waiters hand back a leased reservation, not an irrevocably consumed job.
 
-Thus pi-spaces implements both caller-waiting async operations and durable, event-driven interaction. It does
+Thus phi-spaces implements both caller-waiting async operations and durable, event-driven interaction. It does
 not make synchronous serialization/CPU work non-blocking or remove finite Space budgets. See
 [`src/client.ts`](src/client.ts), [`src/index.ts`](src/index.ts) and the [waiter API](docs/api.md).
 
-### What pi-spaces adds, and what it does not promise
+### What phi-spaces adds, and what it does not promise
 
-pi-spaces represents an Entry as `{ type, types?, fields }` with JSON data. It retains the coordination
+phi-spaces represents an Entry as `{ type, types?, fields }` with JSON data. It retains the coordination
 primitives and adds persistent request identities/replay, named Spaces, revision-based paging, mailboxes,
 completion profiles and operational controls. Matching uses deep JSON equality, not Java's serialized-field
 comparison. A transaction can reserve a task and publish its result atomically in its owning Space.
@@ -123,16 +123,16 @@ then use `node --experimental-strip-types tuple-demo.ts`. No model calls or serv
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, NO_WAIT, PiSpaces, spaces } from "./src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, spaces } from "./src/index.ts";
 
 const registry = createRegistry();
 registry.install(spaces);
 const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
 try {
-  const producer = new PiSpaces(harness, ctx);
+  const producer = new PhiSpaces(harness, ctx);
   await producer.write({ type: "Job", fields: { jobId: "square-7", value: 7 } }, null, FOREVER);
   // The producer need not wait for or address a particular worker.
-  const worker = new PiSpaces(harness, ctx);
+  const worker = new PhiSpaces(harness, ctx);
   const template = { type: "Job", fields: { jobId: "square-7" } };
   console.log("inspect:", (await worker.read(template, NO_WAIT))?.fields);
 
@@ -168,7 +168,7 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `src/doc.ts` | the `Space` document of the default space (shared by client and meter, so they do not import each other) |
 | `src/spaces.ts` | named spaces: registry (host id, alias → space id), `createSpace`, `listSpaces`, `snapshotSpace` |
 | `src/claims.ts` | durable request claims and request generations (idempotent mutations, `pollOperation`, `cancelOperation`) |
-| `src/client.ts` | `PiSpaces`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
+| `src/client.ts` | `PhiSpaces`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
 | `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section), notify delivery, reaper |
 | `src/meter.ts` | process-local counters and rates |
 | `src/canonical.ts` | canonical JSON (RFC 8785) for field comparison and hashes |
@@ -208,16 +208,16 @@ version 4 cannot open a storage that has run this version.
   the entries it writes and its waits and registrations, and may only use, commit, renew or cancel its own ones.
   Ownerless transactions and leases belong to host code, which is unrestricted.
 - **notify**: registration with lease, handback, per-registration strictly increasing sequence numbers. A listener is a
-  conversation: events are submitted as input with `requestId = pi-spaces:eventId:seq`, so redelivery is harmless.
+  conversation: events are submitted as input with `requestId = phi-spaces:eventId:seq`, so redelivery is harmless.
   Best effort.
-- **Waiters (non-blocking wait)**: `space_wait` / `PiSpaces.wait` parks a read or take for a conversation and returns at
+- **Waiters (non-blocking wait)**: `space_wait` / `PhiSpaces.wait` parks a read or take for a conversation and returns at
   once. When a match appears (or the timeout passes) the space sends the conversation a message. A take-waiter takes the
   entry under a fresh transaction, so a lost delivery is not a lost job: the receiver commits it with `space_txn`,
   otherwise it returns to the space when the transaction lease lapses, or at once if the conversation is gone or
   delivery gives up. Waiters live in the document and survive restarts; `space_wait` waits forever by default.
 - **snapshot**: a frozen copy only (JavaSpaces' snapshot is a serialization cache).
 - **Named spaces**: `await harness.commit((tx) => createSpace(tx, "sieve-a", Date.now()), ctx)` creates a space (idempotent per
-  alias; the alias is a name, the `spaceId` is generated and never changes). `new PiSpaces(h, ctx, Date.now, meter, as,
+  alias; the alias is a name, the `spaceId` is generated and never changes). `new PhiSpaces(h, ctx, Date.now, meter, as,
   { space: "sieve-a" })` works on it (alias or id); without `space` the client uses the default space, so existing code is
   unchanged. `listSpaces(h, ctx)` lists them. `startService` also serves spaces created later.
 - **Ids**: local ids carry the space's incarnation, `e<incarnation>-<n>`, and every entry view has a global id
@@ -240,12 +240,12 @@ instead receive a transport outcome or `OutcomeUnknown` and must poll the same r
 
 - **Ownership**: a conversation owns what it creates (entries, transactions, subscriptions, waits) and can only use,
   commit, abort, renew or cancel its own. What host code creates (no owner) is the host's: agents can read and take
-  host entries, but never cancel or renew them, nor use host transactions. Host code (`PiSpaces` without `as`) is
+  host entries, but never cancel or renew them, nor use host transactions. Host code (`PhiSpaces` without `as`) is
   unrestricted.
 - **Quotas** for conversations (host code is exempt), checked on every write, notify, wait and transaction:
   entry or handback up to 64 KiB of JSON, type names up to 128 characters and 16 types, 1000 entries per
   conversation, 10 000 in the space, 20 subscriptions, 20 waits and 20 open transactions per conversation. They throw
-  `LimitError`. Change them with `new PiSpaces(harness, ctx).setLimits({ maxEntries: 50_000 })`; the values are stored
+  `LimitError`. Change them with `new PhiSpaces(harness, ctx).setLimits({ maxEntries: 50_000 })`; the values are stored
   in the space document.
 
 - **Subscriptions** (`space_notify`) of a conversation need a type or at least one field, and send at most one event
@@ -259,7 +259,7 @@ instead receive a transport outcome or `OutcomeUnknown` and must poll the same r
 - **Blocked reads/takes** wait a jittered 20-40 ms after a change before probing again, so a burst of writes costs one
   round and many waiters do not probe in the same instant (`WAKE_DEBOUNCE_MS`).
 - **Per-harness metering**: the default `spaces` extension counts into the process-wide `meter`; use
-  `createSpaces(new Meter())` and `new PiSpaces(h, ctx, Date.now, thatMeter)` for your own.
+  `createSpaces(new Meter())` and `new PhiSpaces(h, ctx, Date.now, thatMeter)` for your own.
 
 - **By id**: a template may carry `id` (an entry id from an event message); `space_read/take/list` take `id` too.
 - **Space size**: `maxSpaceBytes` (default 64 MiB of entry fields) limits the whole space, host writes included.
@@ -287,7 +287,7 @@ month-long and `FOREVER` waits neither spin nor get lost.
 
 ## Monitoring
 
-- `PiSpaces.count(tmpl)` / `stats()` (pure `core.count`/`core.stats`): gauges from a snapshot, no commit, nobody woken.
+- `PhiSpaces.count(tmpl)` / `stats()` (pure `core.count`/`core.stats`): gauges from a snapshot, no commit, nobody woken.
   They judge an unsettled snapshot the way a read would after settling (a lapsed transaction's takes are back, its
   writes gone, timed-out waits no longer wait). `returned` is a durable total of entries given back by aborted or
   expired transactions.
@@ -302,9 +302,9 @@ month-long and `FOREVER` waits neither spin nor get lost.
 ## Develop
 
 `npm run bundle` builds the library and automatically refreshes the sibling pi-termux-mobile runtime,
-including compiled example modules. Set `PI_SPACES_MOBILE_ROOT` for another mobile checkout.
-The mobile Android pre-build task rebuilds from pi-spaces source and packages the updated assets;
-set `PI_SPACES_SOURCE` there if this source checkout is elsewhere.
+including compiled example modules. Set `PHI_SPACES_MOBILE_ROOT` for another mobile checkout.
+The mobile Android pre-build task rebuilds from phi-spaces source and packages the updated assets;
+set `PHI_SPACES_SOURCE` there if this source checkout is elsewhere.
 
 ```
 npm run typecheck
@@ -343,7 +343,7 @@ Use `--dry-run` to preview actions without contacting the server. See [docs/tui.
 | `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions | – (host code; no replication) |
 | `examples/golomb.ts` | local cooperative DFS with transactional tasks and isolated runs; persistent completed tasks resume; `--checkpoint` writes completion receipts, not partial DFS cursors | – (host code) |
 | `examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
-| [`help-site/`](help-site/README.md) | PI-SPACES / HELP: bilingual help, batched Social Swarm feed, 6-stage Space-Chat workbench and AdminSpaces | `npm run help` → http://localhost:3500 (default; configurable) |
+| [`help-site/`](help-site/README.md) | PHI-SPACES / HELP: bilingual help, batched Social Swarm feed, 6-stage Space-Chat workbench and AdminSpaces | `npm run help` → http://localhost:3500 (default; configurable) |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
 API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,

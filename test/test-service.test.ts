@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { PiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
+import { PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 
 const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
@@ -197,7 +197,7 @@ test("limits of the space come back as ResourceExhausted; too many pending opera
 	const other = await session(s, "peer-b");
 	assert.equal(ok(await other.call("take", { template: { type: "X3" }, timeoutMs: 1_200, waitMs: 20 })).state, "pending", "the limit is per principal");
 	for (const id of ["r1", "r2"]) ok(await a.call("cancelOperation", { targetRequest: { generation: a.generation, requestId: id } }));
-	const ownLimit = await new PiSpaces(h, ctx).setLimits({ maxEntries: 1 });
+	const ownLimit = await new PhiSpaces(h, ctx).setLimits({ maxEntries: 1 });
 	assert.equal(ownLimit.maxEntries, 1);
 	ok(await a.call("write", { entry: { type: "Job", fields: {} } }));
 	err(await a.call("write", { entry: { type: "Job", fields: {} } }), "ResourceExhausted");

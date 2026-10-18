@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, PiSpaces, NO_WAIT, TransactionError, type SpaceHost } from "../src/index.ts";
+import { FOREVER, PhiSpaces, NO_WAIT, TransactionError, type SpaceHost } from "../src/index.ts";
 
 export const SOURCES = ["station", "forecast", "cloud"] as const;
 export type Sample = { ts: number; kind: string; value: unknown };
@@ -18,14 +18,14 @@ export type Summary = { window: string; stats: Record<string, Stat>; missing: st
 
 const HOUR = 3600_000;
 /** A role acting as conversation `id`: it owns what it writes, and only it can commit its transactions. */
-export const role = (h: SpaceHost, id: number) => new PiSpaces(h, ctx, Date.now, undefined, id);
+export const role = (h: SpaceHost, id: number) => new PhiSpaces(h, ctx, Date.now, undefined, id);
 
 /** Host: announce a window to be analysed once all `sources` are done. */
-export const openWindow = (host: PiSpaces, id: string, sources: readonly string[] = SOURCES) =>
+export const openWindow = (host: PhiSpaces, id: string, sources: readonly string[] = SOURCES) =>
 	host.write({ type: "Window", fields: { id, sources: [...sources] } }, null, FOREVER);
 
 /** Collector: deliver readings for a window, then mark the source done (unless it "fails" before that). */
-export async function collect(s: PiSpaces, source: string, window: string, samples: Sample[], o: { done?: boolean } = {}) {
+export async function collect(s: PhiSpaces, source: string, window: string, samples: Sample[], o: { done?: boolean } = {}) {
 	for (const x of samples) await s.write({ type: "Reading", fields: { source, window, ts: x.ts, kind: x.kind, value: x.value as never } }, null, 24 * HOUR);
 	if (o.done !== false) await s.write({ type: "Done", fields: { source, window } }, null, 24 * HOUR);
 }
@@ -36,7 +36,7 @@ export async function collect(s: PiSpaces, source: string, window: string, sampl
  * written" one atomic step: an analyst that dies in between leaves no summary, and the window returns when its
  * transaction lease lapses, for another analyst to take.
  */
-export async function analyse(s: PiSpaces, o: { takeTimeoutMs?: number; doneTimeoutMs?: number; txnLeaseMs?: number; crash?: boolean } = {}): Promise<Summary | null> {
+export async function analyse(s: PhiSpaces, o: { takeTimeoutMs?: number; doneTimeoutMs?: number; txnLeaseMs?: number; crash?: boolean } = {}): Promise<Summary | null> {
 	const t = await s.createTransaction(o.txnLeaseMs ?? 60_000);
 	const w = await s.take({ type: "Window" }, o.takeTimeoutMs ?? NO_WAIT, { txn: t.id });
 	if (!w) { await s.abort(t.id); return null; }
@@ -81,7 +81,7 @@ export async function analyse(s: PiSpaces, o: { takeTimeoutMs?: number; doneTime
 }
 
 /** Presenter: take a summary and turn it into a short report entry. */
-export async function present(s: PiSpaces, timeoutMs = 5000): Promise<string | null> {
+export async function present(s: PhiSpaces, timeoutMs = 5000): Promise<string | null> {
 	const txn = await s.createTransaction(Math.max(60_000, timeoutMs + 30_000));
 	try {
 	const e = await s.take({ type: "Summary" }, timeoutMs, { txn: txn.id });
@@ -101,7 +101,7 @@ export async function present(s: PiSpaces, timeoutMs = 5000): Promise<string | n
 
 async function main() {
 	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-	const host = new PiSpaces(h, ctx);
+	const host = new PhiSpaces(h, ctx);
 	const [station, forecast, cloud] = [1, 2, 3].map((id) => role(h, id));
 	const analysts = [10, 11].map((id) => role(h, id));
 	const presenter = role(h, 20);

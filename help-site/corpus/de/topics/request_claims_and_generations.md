@@ -2,10 +2,10 @@
 standard: help_topic
 id: help.topic.request_claims_and_generations
 title: "Request-Claims, Generationen und Idempotenz"
-short: "Wie pi-spaces über {principal, generation, requestId} und kanonische RFC-8785-Hashes doppelte Mutationen nach Verbindungsabbruch oder Neustart verhindert."
+short: "Wie phi-spaces über {principal, generation, requestId} und kanonische RFC-8785-Hashes doppelte Mutationen nach Verbindungsabbruch oder Neustart verhindert."
 tags: [claims, requestref, generation, idempotency, rfc8785, polloperation, resolveoperation]
 owner: client
-related: [help.topic.guarantees_and_boundaries, help.api.pispaces_claims, help.workflow.stage_v2_local_durable]
+related: [help.topic.guarantees_and_boundaries, help.api.phispaces_claims, help.workflow.stage_v2_local_durable]
 since: 0.0.1
 ---
 
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Im Cloudflare-Blogpost zu `pi-durable` musste für `conversation.create` ein eigenes `ConversationCommandReceipts`-Dokument programmiert werden, damit ein WebSocket-Reconnect keine doppelten Konversationen erzeugt. In `pi-spaces` ist dieser Mechanismus bereits als universelle Kernfunktion **Request-Claims (`src/claims.ts`)** für **alle** Mutationen (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`) eingebaut.
+Im Cloudflare-Blogpost zu `pi-durable` musste für `conversation.create` ein eigenes `ConversationCommandReceipts`-Dokument programmiert werden, damit ein WebSocket-Reconnect keine doppelten Konversationen erzeugt. In `phi-spaces` ist dieser Mechanismus bereits als universelle Kernfunktion **Request-Claims (`src/claims.ts`)** für **alle** Mutationen (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`) eingebaut.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -29,7 +29,7 @@ type RequestRef = {
 ```
 
 1. **Generation eröffnen (`issueGeneration`)**: Vor der ersten Mutation ruft der Client `const { generation } = await space.issueGeneration(principal)` auf. Die Generation ist kryptografisch (HMAC/Signatur) an Principal, `spaceId`, Dateninkarnation und `authorityId` gebunden (Standardlaufzeit: 1 Stunde).
-2. **Kanonischer Argument-Hash (`argHash`)**: Für jeden Aufruf berechnet `pi-spaces` über `canonicalJson` (RFC 8785) den SHA-256-Hash ausschließlich über die **fachlichen Argumente** (ohne erneuerbare Rahmenfelder wie einen frischen 60-s-Grant).
+2. **Kanonischer Argument-Hash (`argHash`)**: Für jeden Aufruf berechnet `phi-spaces` über `canonicalJson` (RFC 8785) den SHA-256-Hash ausschließlich über die **fachlichen Argumente** (ohne erneuerbare Rahmenfelder wie einen frischen 60-s-Grant).
 3. **Atomare Speicherung**: Der Claim `(principal, spaceId, generation, requestId)` und das Operationsergebnis werden im selben Commit wie die Space-Mutation gespeichert.
 
 ### Verhalten bei Wiederholung (Retry) {#retry-behavior}
@@ -67,4 +67,4 @@ const lease2 = await space.write(
 ## Siehe auch {#see-also}
 
 - [Stufe 2 (v2-local-durable): Persistenz, RequestRef-Claims, Alarme & Subagent](help.workflow.stage_v2_local_durable#overview)
-- [Request-Claims & Generationen API](help.api.pispaces_claims)
+- [Request-Claims & Generationen API](help.api.phispaces_claims)

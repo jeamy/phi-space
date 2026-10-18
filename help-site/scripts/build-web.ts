@@ -1,4 +1,4 @@
-// Builds the canonical PI-SPACES / HELP corpus (for both Next.js public/help/ and dist/public/help/)
+// Builds the canonical PHI-SPACES / HELP corpus (for both Next.js public/help/ and dist/public/help/)
 // and also produces a standalone React 19 browser bundle for fast test assertions.
 
 import { copyFile, mkdir } from "node:fs/promises";
@@ -36,5 +36,5 @@ export async function buildHelpSite(): Promise<void> {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
 	await buildHelpSite();
-	console.log(`Built PI-SPACES / HELP corpus & React 19 assets -> ${DIST_PUBLIC}`);
+	console.log(`Built PHI-SPACES / HELP corpus & React 19 assets -> ${DIST_PUBLIC}`);
 }

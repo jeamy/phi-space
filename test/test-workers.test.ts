@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
 import { generateKey } from "../src/auth.ts";
-import { PiSpaces } from "../src/client.ts";
+import { PhiSpaces } from "../src/client.ts";
 import { GrantVerifier } from "../src/grants.ts";
 import { RemoteSpace } from "../src/remote.ts";
 import { RunController, localRunMember } from "../src/run-controller.ts";
@@ -140,7 +140,7 @@ for (const backend of BACKENDS) test(`${backend}: workers complete a gated sieve
 		const stop = startWorkerSupervisor(sup, { intervalMs: 20, publish: async s => { published.push(s); } });
 		try {
 			await new Promise(r => setTimeout(r, 300));
-			const space = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
+			const space = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
 			assert.equal(await space.count({ type: "SieveResult" }), 0, "paused: no task is taken");
 			assert.ok(steps < 40, `idle workers back off instead of spinning (${steps} steps in 300 ms)`);
 			await runs.resume("r", "wrun");

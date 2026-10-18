@@ -1,4 +1,4 @@
-// Node.js HTTP + WebSocket Server for PI-SPACES / HELP (https://spaces.eibrain.org).
+// Node.js HTTP + WebSocket Server for PHI-SPACES / HELP (https://spaces.eibrain.org).
 // Serves:
 //   - Static React HelpApp & assets (/ and /assets/*)
 //   - Canonical bilingual Help corpus (/help/index.json and /help/articles/*)
@@ -199,7 +199,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	// event loop at ~100% CPU and starve nextApp.prepare() for minutes on boot.
 	let swarmReady: Promise<void> | null = null;
 	const llm = await sharedLlm();
-	if (llm) console.log(`[llm] live replies enabled via ${llm.label} (PI_SPACES_LLM=0 disables)`);
+	if (llm) console.log(`[llm] live replies enabled via ${llm.label} (PHI_SPACES_LLM=0 disables)`);
 
 	let nextHandler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | null = null;
 	let nextUpgrade: ((req: IncomingMessage, socket: any, head: Buffer) => void) | null = null;
@@ -285,7 +285,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 				return sendJson(res, 200, await listLlmModels());
 			}
 			if (pathname === "/api/llm/model" && method === "POST") {
-				const session = admin.getSession(parseCookies(req.headers.cookie)["pi_spaces_admin_sid"]);
+				const session = admin.getSession(parseCookies(req.headers.cookie)["phi_spaces_admin_sid"]);
 				if (!session) return sendJson(res, 401, { error: "Admin login required" });
 				if (req.headers["x-csrf-token"] !== session.csrfToken) return sendJson(res, 403, { error: "Invalid CSRF token" });
 				const body = await readJsonBody(req);
@@ -325,7 +325,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 			// ---- 2. Login-Protected AdminSpaces API (/api/admin/*) ----
 			if (pathname.startsWith("/api/admin/")) {
 				const cookies = parseCookies(req.headers.cookie);
-				const sessionCookie = cookies["pi_spaces_admin_sid"];
+				const sessionCookie = cookies["phi_spaces_admin_sid"];
 				const clientIp = req.socket.remoteAddress ?? "local";
 
 				if (pathname === "/api/admin/login" && method === "POST") {
@@ -342,7 +342,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 						res,
 						200,
 						{ authenticated: true, session },
-						{ "set-cookie": `pi_spaces_admin_sid=${session.sessionId}; ${cookieFlags}` },
+						{ "set-cookie": `phi_spaces_admin_sid=${session.sessionId}; ${cookieFlags}` },
 					);
 				}
 
@@ -352,7 +352,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 						res,
 						200,
 						{ authenticated: false },
-						{ "set-cookie": "pi_spaces_admin_sid=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" },
+						{ "set-cookie": "phi_spaces_admin_sid=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" },
 					);
 				}
 
@@ -506,6 +506,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const sqlitePath = process.env.HELP_SQLITE ?? join(ROOT, ".local", "spaces-eibrain.sqlite");
 	const isDev = process.argv.includes("--dev");
 	const srv = await startHelpServer({ sqlitePath, useNext: true, dev: isDev });
-	console.log(`PI-SPACES / HELP (Next.js 16 + React 19) & Multiplayer Space-Chat Server listening on ${srv.url}`);
+	console.log(`PHI-SPACES / HELP (Next.js 16 + React 19) & Multiplayer Space-Chat Server listening on ${srv.url}`);
 	console.log(`Target production domain: https://spaces.eibrain.org`);
 }

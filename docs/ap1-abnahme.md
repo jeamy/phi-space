@@ -43,7 +43,7 @@ Das zusätzliche lokale Szenario:
 
 ```bash
 node --experimental-strip-types test/testbed/scenarios/sieve-remote.ts all \
-  --dir /tmp/pi-spaces-ap1-sieve-run --fresh --end 1001 --block 100 \
+  --dir /tmp/phi-spaces-ap1-sieve-run --fresh --end 1001 --block 100 \
   --workers 3 --crash-workers 2 --work-ms 60 --lease-ms 600 \
   --kill-host --timeout-s 25
 ```

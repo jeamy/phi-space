@@ -16,7 +16,7 @@
 //   --workers <num>   - Number of worker agents (default: 4)
 //   --max-length <l>  - Search rulers up to this length (default: known optimal or n*(n-1))
 //   --checkpoint <prefix> - Write per-task completion receipts; incomplete DFS work is rerun
-//   --dir <dir>       - State directory (default: /tmp/pi-spaces-golomb-<rand>); persistent,
+//   --dir <dir>       - State directory (default: /tmp/phi-spaces-golomb-<rand>); persistent,
 //                       a restarted master skips tasks with a GolombTaskDone entry
 //   --out <file>      - Output file for best ruler (default: <dir>/GOL_<n>.txt)
 
@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, PiSpaces, Space, startService, type Taken } from "../src/index.ts";
+import { FOREVER, PhiSpaces, Space, startService, type Taken } from "../src/index.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 
 // Known optimal lengths for Golomb rulers (canonical table, OEIS A003022)
@@ -208,7 +208,7 @@ export class GolombWorker {
 	private bound: number; // only rulers strictly shorter than this are interesting
 	private checked = 0;
 
-	private space: PiSpaces;
+	private space: PhiSpaces;
 	private workerId: string;
 	private order: number;
 	private maxLength: number;
@@ -217,7 +217,7 @@ export class GolombWorker {
 	private txn?: string;
 	private renewedAt = 0;
 
-	constructor(space: PiSpaces, workerId: string, order: number, maxLength: number, cpPath?: string, runId = `golomb-${order}-${maxLength}`) {
+	constructor(space: PhiSpaces, workerId: string, order: number, maxLength: number, cpPath?: string, runId = `golomb-${order}-${maxLength}`) {
 		this.space = space;
 		this.workerId = workerId;
 		this.order = order;
@@ -341,13 +341,13 @@ export class GolombWorker {
 export class GolombMaster {
 	private taskCount = 0;
 
-	private space: PiSpaces;
+	private space: PhiSpaces;
 	private order: number;
 	private maxLength: number;
 	private numTasks: number;
 	private runId: string;
 
-	constructor(space: PiSpaces, order: number, maxLength: number, numTasks: number, runId = `golomb-${order}-${maxLength}`) {
+	constructor(space: PhiSpaces, order: number, maxLength: number, numTasks: number, runId = `golomb-${order}-${maxLength}`) {
 		this.space = space;
 		this.order = order;
 		this.maxLength = maxLength;
@@ -425,11 +425,11 @@ export class GolombMaster {
 
 /** Validator: waits for the end of the search, then checks every ruler once. */
 export class GolombValidator {
-	private space: PiSpaces;
+	private space: PhiSpaces;
 	private order: number;
 	private runId?: string;
 
-	constructor(space: PiSpaces, order: number, runId?: string) {
+	constructor(space: PhiSpaces, order: number, runId?: string) {
 		this.space = space;
 		this.order = order;
 		this.runId = runId;
@@ -451,11 +451,11 @@ export class GolombValidator {
 
 /** Monitor: periodic progress line until the search ends. */
 export class GolombMonitor {
-	private space: PiSpaces;
+	private space: PhiSpaces;
 	private order: number;
 	private runId?: string;
 
-	constructor(space: PiSpaces, order: number, runId?: string) {
+	constructor(space: PhiSpaces, order: number, runId?: string) {
 		this.space = space;
 		this.order = order;
 		this.runId = runId;
@@ -484,7 +484,7 @@ function parseArgs() {
 		workers: parseInt(val("--workers") ?? "4"),
 		maxLength: val("--max-length") !== undefined ? parseInt(val("--max-length")!) : undefined,
 		checkpoint: val("--checkpoint"),
-		dir: val("--dir") ?? mkdtempSync(join(tmpdir(), "pi-spaces-golomb-")),
+		dir: val("--dir") ?? mkdtempSync(join(tmpdir(), "phi-spaces-golomb-")),
 		out: val("--out")
 	};
 }
@@ -503,7 +503,7 @@ async function main() {
 	const registry = createRegistry();
 	const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry }, ctx);
 	h.resume();
-		const host = new PiSpaces(h, ctx);
+		const host = new PhiSpaces(h, ctx);
 		// This CLI is the sole process permitted to own this store. Recover abandoned reservations
 		// before the master enumerates pending tasks; otherwise locked tasks could be recreated.
 		const state = await h.snapshot(Space, ctx);

@@ -46,7 +46,7 @@ const workerSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { sp
 const searchSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { space: "chat-v3" });
 ```
 
-Because `RemoteSpace` implements the exact same `SpaceLike` interface as `PiSpaces`, `SpaceChatEngine` from `help-site/examples/shared/chat-core.ts` runs unmodified over the wire protocol! Additionally, the worker registers a `notify`/`wait` subscription and drains its consumer mailbox via `events()` + `ack()`.
+Because `RemoteSpace` implements the exact same `SpaceLike` interface as `PhiSpaces`, `SpaceChatEngine` from `help-site/examples/shared/chat-core.ts` runs unmodified over the wire protocol! Additionally, the worker registers a `notify`/`wait` subscription and drains its consumer mailbox via `events()` + `ack()`.
 
 ### Run From Terminal {#run-cli}
 

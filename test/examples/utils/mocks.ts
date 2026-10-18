@@ -1,4 +1,4 @@
-// Mock-Implementierungen für pi-spaces Tests
+// Mock-Implementierungen für phi-spaces Tests
 // Bietet Mock-Versionen von externen Abhängigkeiten
 
 import { 

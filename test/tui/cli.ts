@@ -8,7 +8,7 @@ import { Backend, clean } from "./backend.ts";
 import { itemList, render, type ScreenState } from "./view.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const usage = `pi-spaces TUI
+const usage = `phi-spaces TUI
   npm run tui -- [--service runner|host-a|host-b|member-1|member-2] [--dry-run]
   npm run tui -- --local-dir /path/to/scenario-or-jsonl-storage
   npm run tui -- --once [--json] [--local-dir DIR]

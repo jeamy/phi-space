@@ -7,7 +7,7 @@ import type { ArticleSeed } from "./corpus-articles-data.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixture = `
- const space: api.PiSpaces = undefined!;
+ const space: api.PhiSpaces = undefined!;
  const remote: api.RemoteSpace = undefined!;
  const harness: durable.Harness = undefined!;
  const ctx: import("@earendil-works/chord").Context = undefined!;
@@ -23,7 +23,7 @@ const fixture = `
  const socketPath: string = "/tmp/docs.sock";
  const FOREVER = api.FOREVER, NO_WAIT = api.NO_WAIT;
  const Harness = durable.Harness, MemoryStorage = durable.MemoryStorage;
- const PiSpaces = api.PiSpaces, RemoteSpace = api.RemoteSpace;
+ const PhiSpaces = api.PhiSpaces, RemoteSpace = api.RemoteSpace;
  const createRegistry = durable.createRegistry, createSpace = api.createSpace;
  const startService = api.startService, SpaceService = api.SpaceService;
  const serveSpace = api.serveSpace, socketTransport = api.socketTransport;
@@ -72,7 +72,7 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 		const text = host.readFile(path); return text === undefined ? undefined : ts.createSourceFile(path, text, languageVersion, true);
 	};
 	host.resolveModuleNames = (names, containingFile) => names.map(name => {
-		if (name === "pi-spaces") return { resolvedFileName: resolve(ROOT, "src/index.ts"), extension: ts.Extension.Ts };
+		if (name === "phi-spaces") return { resolvedFileName: resolve(ROOT, "src/index.ts"), extension: ts.Extension.Ts };
 		if (name.startsWith("./help-site/")) return { resolvedFileName: resolve(ROOT, name), extension: ts.Extension.Ts };
 		return ts.resolveModuleName(name, containingFile, options, host).resolvedModule;
 	});

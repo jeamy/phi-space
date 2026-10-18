@@ -94,7 +94,7 @@ export class SpaceLifecycle {
 export type SignedLifecycle<T> = { value: T; issuer: string; algorithm: Algorithm; signature: string };
 export type LifecyclePin = { issuer: string; algorithm: Algorithm; publicKey: string };
 export type SpaceLifecycleInstruction = SpaceLifecycleRequest & { authorityId: string; hostId: string };
-const bytes = (kind: "instruction" | "result", v: unknown) => Buffer.from(`pi-spaces/space-lifecycle-${kind}/v1\n` + canonicalJson(v as core.Json));
+const bytes = (kind: "instruction" | "result", v: unknown) => Buffer.from(`phi-spaces/space-lifecycle-${kind}/v1\n` + canonicalJson(v as core.Json));
 export async function signLifecycle<T>(kind: "instruction" | "result", value: T, issuer: string, signer: Signer): Promise<SignedLifecycle<T>> {
 	return { value: core.plain(value), issuer, algorithm: signer.algorithm, signature: Buffer.from(await signer.sign(bytes(kind, value))).toString("base64") };
 }

@@ -1,15 +1,15 @@
-# Multi-Stage Dockerfile for PI-SPACES / HELP (Next.js 16.4 + React 19.3 + pi-spaces)
-# Build context: repository root (/media/data/programming/pi-spaces)
+# Multi-Stage Dockerfile for PHI-SPACES / HELP (Next.js 16.4 + React 19.3 + phi-spaces)
+# Build context: repository root (/media/data/programming/phi-spaces)
 # Targets:
 #   - dev-test:   Local development & automated test runner in Docker
 #   - production: Hardened production server for https://spaces.eibrain.org
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 
-# ---- Stage 1: Base dependencies (root pi-spaces + help-site Next.js/React) ----
+# ---- Stage 1: Base dependencies (root phi-spaces + help-site Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
-WORKDIR /opt/pi-spaces
+WORKDIR /opt/phi-spaces
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -19,7 +19,7 @@ RUN npm --prefix help-site ci
 
 # ---- Stage 2: Builder (Corpus generation + Next.js 16 Production Build + esbuild bundle) ----
 FROM deps AS builder
-WORKDIR /opt/pi-spaces
+WORKDIR /opt/phi-spaces
 
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
@@ -32,15 +32,15 @@ RUN npm --prefix help-site run build
 # ---- Stage 3: Local Dev & Test Docker Environment (`dev-test`) ----
 FROM builder AS dev-test
 ENV NODE_ENV=test \
-	PI_SPACES_LLM=0 \
-	PI_SPACES_TEST_NEXT=1 \
+	PHI_SPACES_LLM=0 \
+	PHI_SPACES_TEST_NEXT=1 \
     HELP_BIND=0.0.0.0 \
     PORT=3500 \
     HELP_PORT=3500
-RUN mkdir -p /data /opt/pi-spaces/help-site/.local && \
-    chown -R node:node /data /opt/pi-spaces
+RUN mkdir -p /data /opt/phi-spaces/help-site/.local && \
+    chown -R node:node /data /opt/phi-spaces
 USER node
-WORKDIR /opt/pi-spaces
+WORKDIR /opt/phi-spaces
 CMD ["npm", "--prefix", "help-site", "test"]
 
 # ---- Stage 4: Hardened Production Image (`production`) for https://spaces.eibrain.org ----
@@ -54,24 +54,24 @@ ENV NODE_ENV=production \
     HELP_PORT=3500 \
     HELP_SQLITE=/data/spaces-eibrain.sqlite
 
-WORKDIR /opt/pi-spaces
+WORKDIR /opt/phi-spaces
 
 # Copy production runtime dependencies and built artifacts
-COPY --from=builder --chown=node:node /opt/pi-spaces/package.json /opt/pi-spaces/package-lock.json ./
-COPY --from=builder --chown=node:node /opt/pi-spaces/node_modules ./node_modules
-COPY --from=builder --chown=node:node /opt/pi-spaces/src ./src
-COPY --from=builder --chown=node:node /opt/pi-spaces/examples ./examples
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/package.json /opt/pi-spaces/help-site/package-lock.json ./help-site/
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/node_modules ./help-site/node_modules
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/next.config.mjs /opt/pi-spaces/help-site/tsconfig.json ./help-site/
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/.next ./help-site/.next
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/public ./help-site/public
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/dist ./help-site/dist
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/corpus ./help-site/corpus
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/app ./help-site/app
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/client ./help-site/client
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/examples ./help-site/examples
-COPY --from=builder --chown=node:node /opt/pi-spaces/help-site/server ./help-site/server
+COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
+COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
+COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
+COPY --from=builder --chown=node:node /opt/phi-spaces/examples ./examples
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/package.json /opt/phi-spaces/help-site/package-lock.json ./help-site/
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/node_modules ./help-site/node_modules
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/next.config.mjs /opt/phi-spaces/help-site/tsconfig.json ./help-site/
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/.next ./help-site/.next
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/public ./help-site/public
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/dist ./help-site/dist
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/corpus ./help-site/corpus
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/app ./help-site/app
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/client ./help-site/client
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/examples ./help-site/examples
+COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/server ./help-site/server
 
 RUN mkdir -p /data && chown -R node:node /data
 USER node
@@ -84,7 +84,7 @@ CMD ["node", "--no-warnings", "--experimental-strip-types", "help-site/server/in
 
 # ---- Stage 5: Headless Swarm Shard Host (`nano`) for the big/nano two-host setup ----
 # Same sources + node_modules as production, but runs only the shard engine
-# (space + workers over pi-spaces socket) — no Next.js, no HTTP layer.
+# (space + workers over phi-spaces socket) — no Next.js, no HTTP layer.
 FROM production AS nano
 ENV SWARM_LISTEN=tcp:0.0.0.0:3600 \
     SWARM_DB=/data/swarm-b.sqlite \

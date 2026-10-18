@@ -5,7 +5,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createHash } from "node:crypto";
-import { core, FOREVER, PiSpaces, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
+import { core, FOREVER, PhiSpaces, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
 
 export type SieveConfig = { runId: string; start: number; end: number; blockSize: number };
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
@@ -178,11 +178,11 @@ export async function runSieve(options: { start?: number; end?: number; blockSiz
   const workers = options.workers ?? 4;
   if (!Number.isSafeInteger(workers) || workers < 1 || workers > 32) throw new Error("workers must be 1..32");
   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-  const host = new PiSpaces(h, ctx);
+  const host = new PhiSpaces(h, ctx);
   try {
     await prepareSieveRun(h, config);
     await Promise.all(Array.from({ length: workers }, (_, i) => (async () => {
-      const worker = new PiSpaces(h, ctx, Date.now, undefined, i + 1);
+      const worker = new PhiSpaces(h, ctx, Date.now, undefined, i + 1);
       while (await processSieveTask(worker, config.runId)) { /* next task */ }
     })()));
     const primes = await collectSieveResults(host, config);

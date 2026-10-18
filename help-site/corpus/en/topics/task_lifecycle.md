@@ -26,7 +26,7 @@ The task Entry and its transaction reservation have separate leases. A reservati
 
 ## Chat: Sequences, Singletons and Forks {#chat}
 
-ThreadSequence is a Space Entry reserved transactionally for sequence allocation; Msg and the updated counter commit together. Do not rely solely on a process-local increment. write with unique: ["threadId"] checks singleton creation atomically; read followed by write would race. A fork stores parentThreadId/forkUpToSeq; inherited messages are resolved on read rather than copied. [write API](help.api.pispaces_write#parameters).
+ThreadSequence is a Space Entry reserved transactionally for sequence allocation; Msg and the updated counter commit together. Do not rely solely on a process-local increment. write with unique: ["threadId"] checks singleton creation atomically; read followed by write would race. A fork stores parentThreadId/forkUpToSeq; inherited messages are resolved on read rather than copied. [write API](help.api.phispaces_write#parameters).
 
 ## Verification and Boundaries {#failure-test}
 

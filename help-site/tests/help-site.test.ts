@@ -1,4 +1,4 @@
-// Comprehensive test suite for PI-SPACES / HELP, the 6 Multiplayer Space-Chat stages (v1..v6),
+// Comprehensive test suite for PHI-SPACES / HELP, the 6 Multiplayer Space-Chat stages (v1..v6),
 // the RFC-6455 WebSocket gateway, and the login-protected AdminSpaces portal.
 import "./test-env.ts";
 
@@ -37,7 +37,7 @@ test("1. Help Corpus, Markdown {#anchor} rendering & token-aware search", async 
 		const res = await fetch(`${srv.url}/help/index.json`);
 		assert.equal(res.status, 200);
 		const index = await res.json();
-		assert.equal(index.schema, "pi-spaces-help-site-index-v1");
+		assert.equal(index.schema, "phi-spaces-help-site-index-v1");
 		assert.equal(index.areas.length, 9);
 		assert.equal(index.stats.uniqueArticles, ALL_ARTICLES.length);
 		assert.equal(index.stats.localizedRecords, ALL_ARTICLES.length * 2);
@@ -53,7 +53,7 @@ test("1. Help Corpus, Markdown {#anchor} rendering & token-aware search", async 
 	}
 });
 
-test("2. Evolutionary Stages v1 through v6 execute and verify all pi-spaces invariants", async () => {
+test("2. Evolutionary Stages v1 through v6 execute and verify all phi-spaces invariants", async () => {
 	const v1 = await runStageV1();
 	assert.equal(v1.idempotentThreadMatch, true);
 	assert.equal(v1.aliceLeaseRenewed, true);
@@ -99,7 +99,7 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 		const homeRes = await fetch(`${srv.url}/`);
 		assert.equal(homeRes.status, 200);
 		const homeHtml = await homeRes.text();
-		assert.ok(homeHtml.includes("PI-SPACES / HELP"));
+		assert.ok(homeHtml.includes("PHI-SPACES / HELP"));
 
 		const jsRes = await fetch(`${srv.url}/assets/app.js`);
 		assert.equal(jsRes.status, 200);
@@ -150,7 +150,7 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 		const cookiePair = setCookie.split(";")[0]!;
 		const loginData = await loginRes.json();
 		const csrfToken = loginData.session.csrfToken as string;
-		assert.ok(cookiePair.startsWith("pi_spaces_admin_sid="));
+		assert.ok(cookiePair.startsWith("phi_spaces_admin_sid="));
 		assert.ok(csrfToken.length >= 16);
 		assert.equal((await fetch(`${srv.url}/api/llm/model`, { method: "POST", headers: { "content-type": "application/json", cookie: cookiePair }, body: JSON.stringify({ on: true }) })).status, 403);
 
@@ -270,13 +270,13 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 	}
 });
 
-test("4. Next.js 16 Production Server (useNext: true) serves SSR App Router & Help Corpus", { skip: process.env.PI_SPACES_TEST_NEXT !== "1" }, async () => {
+test("4. Next.js 16 Production Server (useNext: true) serves SSR App Router & Help Corpus", { skip: process.env.PHI_SPACES_TEST_NEXT !== "1" }, async () => {
 	const srv = await startHelpServer({ port: 0, useNext: true, dev: false });
 	try {
 		const res = await fetch(`${srv.url}/`);
 		assert.equal(res.status, 200);
 		const html = await res.text();
-		assert.ok(html.includes("PI-SPACES"), "Next.js 16 SSR HTML contains PI-SPACES");
+		assert.ok(html.includes("PHI-SPACES"), "Next.js 16 SSR HTML contains PHI-SPACES");
 		assert.ok(html.includes("_next/static"), "Next.js 16 SSR HTML references _next/static chunks");
 
 		const indexRes = await fetch(`${srv.url}/help/index.json`);

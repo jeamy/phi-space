@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_completion_profiles
+id: help.api.phispaces_completion_profiles
 title: "setCompletionProfiles & setLimits – Serverseitige Ergebnis- und Budgetverträge"
 short: "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (equalFields) und Anzahl; verwaltet Byte-Limits."
 tags: [setcompletionprofiles, setlimits, completionprofile, completionviolation]

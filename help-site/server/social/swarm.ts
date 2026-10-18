@@ -1,6 +1,6 @@
-// Self-running Social Swarm demo for PI-SPACES / HELP.
+// Self-running Social Swarm demo for PHI-SPACES / HELP.
 // Simulates ~1000 autonomous agents posting, replying, and liking across many topic
-// channels – entirely through pi-spaces primitives:
+// channels – entirely through phi-spaces primitives:
 //   - Agents write `SwarmTask` intent entries (producers, decoupled in space & time)
 //   - A bounded set of worker loops `take` tasks under space transactions and commit
 //     `Post`/`Like` results, enforced by a server-side CompletionProfile
@@ -11,7 +11,7 @@ import {
 	createSpace,
 	FOREVER,
 	Meter,
-	PiSpaces,
+	PhiSpaces,
 	type CompletionProfile,
 	type Principal,
 	type RequestRef,
@@ -48,7 +48,7 @@ export interface ChannelDef {
 
 const CHANNELS: ChannelDef[] = [
 	{ channelId: "home", label: "#home", topic: "the front porch – where everyone lands" },
-	{ channelId: "pi-spaces", label: "#pi-spaces", topic: "entries, templates, transactions" },
+	{ channelId: "phi-spaces", label: "#phi-spaces", topic: "entries, templates, transactions" },
 	{ channelId: "federation", label: "#federation", topic: "HRW sharding, routers, members" },
 	{ channelId: "agents", label: "#agents", topic: "autonomous agent fleets" },
 	{ channelId: "durable", label: "#durable", topic: "persistence, claims, recovery" },
@@ -85,7 +85,7 @@ const BIOS = [
 ];
 
 const POST_TEMPLATES: Record<string, string[]> = {
-	"pi-spaces": [
+	"phi-spaces": [
 		"just committed a txn with 3 writes + 1 take, all atomic. spaces are underrated. #tuplespace",
 		"wild: my ChatTask literally cannot commit without its result entry. server-enforced CompletionProfile ftw",
 		"template matching is so clean – {type:'Task', fields:{status:null}} and the null acts as wildcard",
@@ -508,7 +508,7 @@ export class SocialSwarmHub {
 	async #doInit(): Promise<void> {
 		const info = await this.host.commit((tx) => createSpace(tx, SWARM_ALIAS, Date.now()), this.ctx);
 		this.spaceId = info.spaceId;
-		this.space = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
+		this.space = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: info.spaceId,
 		});
 		if (this.#closed) return;
@@ -800,7 +800,7 @@ export class SocialSwarmHub {
 
 	#pickChannel(): string {
 		const roll = this.#rng();
-		if (roll < 0.22) return "pi-spaces";
+		if (roll < 0.22) return "phi-spaces";
 		if (roll < 0.38) return "agents";
 		if (roll < 0.50) return "federation";
 		return this.channels[Math.floor(this.#rng() * this.channels.length)]!.channelId;
@@ -854,7 +854,7 @@ export class SocialSwarmHub {
 			list.push(fields);
 			perShard.set(target, list);
 		}
-		// Logical grouping alone does not coalesce the PiSpaces calls into one storage commit.
+		// Logical grouping alone does not coalesce the PhiSpaces calls into one storage commit.
 		for (const [space, tasks] of perShard) {
 			try {
 				const txn = await space.createTransaction(60_000);
@@ -1558,7 +1558,7 @@ export class SocialSwarmHub {
 						break;
 					}
 					case "admin.auth": {
-						// Swarm-control login – same password as AdminSpaces (PI_SPACES_ADMIN_PASSWORD).
+						// Swarm-control login – same password as AdminSpaces (PHI_SPACES_ADMIN_PASSWORD).
 						if (this.#adminCheck?.(String(msg.password ?? ""))) {
 							this.#admins.add(ws);
 							ws.send({ type: "admin.ok" });

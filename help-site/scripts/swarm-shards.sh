@@ -7,7 +7,7 @@
 #        /tmp/swarm-b.sock), HUB_DB (sqlite, default /tmp/swarm-a-test.sqlite),
 #        NANO_DB (nano shard sqlite, default help-site/.local/swarm-b.sqlite —
 #        durable; set SWARM_MEM=1 only for throwaway in-memory runs),
-#        PI_SPACES_LLM (unset = auto-on when credentials exist; set 0 to disable),
+#        PHI_SPACES_LLM (unset = auto-on when credentials exist; set 0 to disable),
 #        SWARM_RATE (default 5/s), SWARM_AGENTS (default 100),
 #        DEV (default 1 — Next dev mode, always current UI;
 #        DEV=0 uses the prod .next build, rebuilt automatically when sources are newer).
@@ -60,7 +60,7 @@ start() {
   echo $! > "$NANO_PID_FILE"
   sleep 1
   DEV_FLAG=""; if [ "${DEV:-1}" != "0" ]; then DEV_FLAG="--dev"; else build_if_stale; fi
-  LLM_ENV=(); [ -n "${PI_SPACES_LLM+x}" ] && LLM_ENV=("PI_SPACES_LLM=$PI_SPACES_LLM")
+  LLM_ENV=(); [ -n "${PHI_SPACES_LLM+x}" ] && LLM_ENV=("PHI_SPACES_LLM=$PHI_SPACES_LLM")
   env HELP_SQLITE="$HUB_DB" PORT="$PORT" \
     "${LLM_ENV[@]}" SWARM_REMOTE="unix:$SOCKET" \
     SWARM_RATE="${SWARM_RATE:-5}" SWARM_AGENTS="${SWARM_AGENTS:-100}" \

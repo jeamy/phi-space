@@ -1,15 +1,15 @@
 ---
 standard: help_topic
 id: help.topic.local_client_and_named_spaces
-title: "Lokaler Client PiSpaces, benannte Spaces und startService"
-short: "Wie PiSpaces auf dem Default-Space oder benannten Spaces (NamedSpace) arbeitet und wie startService Reaper und Event-Delivery betreibt."
-tags: [pispaces, namedspace, registry, createspace, listspaces, startservice]
+title: "Lokaler Client PhiSpaces, benannte Spaces und startService"
+short: "Wie PhiSpaces auf dem Default-Space oder benannten Spaces (NamedSpace) arbeitet und wie startService Reaper und Event-Delivery betreibt."
+tags: [phispaces, namedspace, registry, createspace, listspaces, startservice]
 owner: client
-related: [help.topic.agent_tools_and_replay, help.api.pispaces_write]
+related: [help.topic.agent_tools_and_replay, help.api.phispaces_write]
 since: 0.0.1
 ---
 
-# Lokaler Client PiSpaces, benannte Spaces und startService
+# Lokaler Client PhiSpaces, benannte Spaces und startService
 
 ## Überblick {#overview}
 
@@ -20,7 +20,7 @@ Ein `@earendil-works/pi-durable`-Harness verwaltet standardmäßig den Default-S
 ### Benannte Spaces anlegen und öffnen {#named-spaces}
 
 ```ts
-import { createSpace, listSpaces, PiSpaces, startService } from "pi-spaces";
+import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 
 // 1. Benannten Space für eine Chat-Session im Harness-Commit anlegen:
 await harness.commit(async (tx) => {
@@ -28,7 +28,7 @@ await harness.commit(async (tx) => {
 }, ctx);
 
 // 2. Client auf diesen benannten Space richten:
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, {
   space: "chat-session-alpha"
 });
 
@@ -36,7 +36,7 @@ const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
 const stopService = await startService(harness, ctx);
 ```
 
-- Wird im `PiSpaces`-Konstruktor `conversationId` übergeben, prüft der Client strikt die Ownership (eine Conversation darf nur ihre eigenen Transaktionen committen/abbrechen und nur ihre eigenen Leases verlängern/kündigen).
+- Wird im `PhiSpaces`-Konstruktor `conversationId` übergeben, prüft der Client strikt die Ownership (eine Conversation darf nur ihre eigenen Transaktionen committen/abbrechen und nur ihre eigenen Leases verlängern/kündigen).
 - Lässt Host-Code `conversationId` weg (`undefined`), agiert der Client administrativ und darf `setCompletionProfiles` sowie `setLimits` aufrufen.
 
 ## Siehe auch {#see-also}

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {Harness,createRegistry,type Storage} from '@earendil-works/pi-durable';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {PiSpaces,SpaceService,StaticIdentity,DEFAULT_POLICY,SimulatorFencing,promote,degradeToSingle,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,core,type PrimarySyncConfig,type PrimarySyncPeer,type Reply} from '../src/index.ts';
+import {PhiSpaces,SpaceService,StaticIdentity,DEFAULT_POLICY,SimulatorFencing,promote,degradeToSingle,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,core,type PrimarySyncConfig,type PrimarySyncPeer,type Reply} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {promotionEvidence} from '../src/primary-sync.ts';
 import * as claims from '../src/claims.ts';
@@ -32,7 +32,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   const ph=await open(primarySyncStorage(pRaw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}));
   // A Space created like a real primary/sync Space keeps the epoch of its creation in its document.
   if(created)await ph.commit(tx=>createSpace(tx,'jobs',1,{spaceId:config.spaceId,incarnation:INC}),ctx);
-  const so=created?{space:'jobs'}:undefined,pc=new PiSpaces(ph,ctx,clock,undefined,undefined,so),{generation}=await pc.issueGeneration(A,{primaryEpoch:1}),req=(requestId:string)=>({principal:A,generation,requestId});
+  const so=created?{space:'jobs'}:undefined,pc=new PhiSpaces(ph,ctx,clock,undefined,undefined,so),{generation}=await pc.issueGeneration(A,{primaryEpoch:1}),req=(requestId:string)=>({principal:A,generation,requestId});
   const r1=await pc.write({type:'Work',fields:{n:1}},null,core.FOREVER,{request:req('r1')});
   // t1: a confirmed take whose answer is lost (the client never sees it); two Jobs, so a second take would show.
   await pc.write({type:'Job',fields:{n:1}},null,core.FOREVER);await pc.write({type:'Job',fields:{n:2}},null,core.FOREVER);
@@ -60,7 +60,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   assert.deepEqual(ok(await resolve('r2',2)),v2,'repeatable');
   assert.equal(code(await resolve('r2',3)),'RequestConflict','other arguments under the same request ID');
   // A late original call meets the negative claim: no effect, ever.
-  const sc=new PiSpaces(sh,ctx,clock,undefined,undefined,so);
+  const sc=new PhiSpaces(sh,ctx,clock,undefined,undefined,so);
   await assert.rejects(sc.write({type:'Work',fields:{n:2}},null,core.FOREVER,{request:req('r2')}),claims.NotCommitted);
   assert.equal(await sc.count({type:'Work',fields:{n:2}}),0);assert.equal(await sc.count({type:'Work',fields:{n:1}}),1);
   const poll=ok(await service.handle({method:'pollOperation',...(so??{}),args:{targetRequest:{generation,requestId:'r2'}}} as any,{peerId:'peer-a'}));assert.equal(poll.error.code,'NotCommitted');
@@ -90,7 +90,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   const sh2=await open(primarySyncStorage(sRaw2,sJournal,null,{assertPrimary:assert_}));
   const service2=new SpaceService({host:sh2,ctx,identity:ids,policy:DEFAULT_POLICY,now:clock,epochForSpace:async()=>sJournal.config.primaryEpoch,promotionProof:async(_space,epoch)=>promotionEvidence(sJournal,epoch,'s')});
   const resolve2=(requestId:string,n:number)=>service2.handle({method:'resolveOperation',...(so??{}),args:{targetRequest:{generation,requestId},method:'write',argumentHash:writeHash(n),primaryEpoch:1}} as any,{peerId:'peer-a'});
-  const sc2=new PiSpaces(sh2,ctx,clock,undefined,undefined,so);
+  const sc2=new PhiSpaces(sh2,ctx,clock,undefined,undefined,so);
   assert.deepEqual(ok(await resolve2('r2',2)),v2,'the negative claim is durable');
   await assert.rejects(sc2.write({type:'Work',fields:{n:2}},null,core.FOREVER,{request:req('r2')}),claims.NotCommitted);
   assert.equal(await sc2.count({type:'Work',fields:{n:2}}),0);
@@ -106,7 +106,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
 
 test('a negative claim needs an admitting generation and uninterrupted history',async()=>{
  const {MemoryStorage}=await import('@earendil-works/pi-durable');const h=await open(new MemoryStorage());let now=1000;
- const c=new PiSpaces(h,ctx,()=>now),proof='a'.repeat(64);
+ const c=new PhiSpaces(h,ctx,()=>now),proof='a'.repeat(64);
  try{
   const {generation,admitUntil}=await c.issueGeneration(A,{primaryEpoch:1}),r=(requestId:string)=>({principal:A,generation,requestId});
   await assert.rejects(c.resolveNotCommitted(r('x'),'write',writeHash(1),1,1,proof),claims.IncarnationChanged,'not an earlier epoch');

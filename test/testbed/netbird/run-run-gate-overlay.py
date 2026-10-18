@@ -27,7 +27,7 @@ O.mkdir(mode=0o700, parents=True)
 signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
 SMOKE = args.local_smoke
 T = 'rungate-overlay-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d') + '-' + secrets.token_hex(4)
-B = '/home/mux/.local/share/pi-spaces-operations/' + T
+B = '/home/mux/.local/share/phi-spaces-operations/' + T
 localip, bigip = ('127.0.0.2', '127.0.0.3') if SMOKE else (args.local_ip, args.remote_ip)
 localhome = tempfile.mkdtemp(prefix='pi-rungate-local-'); memberhome = tempfile.mkdtemp(prefix='pi-rungate-member-') if SMOKE else None
 procs = {}; owned = {}; before = None; containers = []; steps = []; seq = 0
@@ -40,7 +40,7 @@ def ssh(argv, host='big'):
 
 def api(method, path, data=None):
     code = """import pathlib,json,urllib.request
-p=pathlib.Path('/media/docker/pi-spaces/netbird/secrets.env');e=dict(l.strip().split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#'));token=e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))
+p=pathlib.Path('/media/docker/phi-spaces/netbird/secrets.env');e=dict(l.strip().split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#'));token=e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))
 """ + 'method=' + repr(method) + ';path=' + repr(path) + ';data=' + repr(data) + "\nreq=urllib.request.Request('https://spacebird.eibrain.org/api'+path,data=json.dumps(data).encode() if data is not None else None,headers={'Authorization':'Token '+token,'Content-Type':'application/json'},method=method)\nwith urllib.request.urlopen(req,timeout=20) as r:\n raw=r.read().decode();print(raw if raw else '{}')\n"
     r = subprocess.run([*SSH, 'big', 'python3', '-'], input=code, text=True, capture_output=True, timeout=40)
     if r.returncode: raise RuntimeError('temporary NetBird fixture API failed: ' + r.stderr[-350:])
@@ -103,7 +103,7 @@ try:
         for source, dest in [('pi-spaces.mjs', 'pi-spaces.mjs'), (SCENARIO, 'run-gate-overlay-node.mjs')]:
             subprocess.run(['scp', *SSH[1:5], '-q', str(A / source), 'big:' + B + '/artifacts/' + dest], check=True)
     modulelink = A / 'node_modules'
-    if not modulelink.exists(): modulelink.symlink_to('/media/data/programming/pi-spaces/node_modules', target_is_directory=True)
+    if not modulelink.exists(): modulelink.symlink_to('/media/data/programming/phi-spaces/node_modules', target_is_directory=True)
     procs['controller'] = subprocess.Popen(['node', str(A / SCENARIO), localhome, 'controller', localip, bigip], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(O / 'controller.stderr', 'w'), text=True, bufsize=1)
     control = receive(procs['controller']); assert control['ready']
     m = start_member(1)

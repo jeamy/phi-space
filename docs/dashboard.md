@@ -25,10 +25,10 @@ bash scripts/dashboard.sh logs   # Log live verfolgen
 ```
 
 Das Skript konfiguriert sich über Umgebungsvariablen: `DASHBOARD_DIR` (JSONL-Store, Standard
-`~/.local/share/pi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (SQLite-Datei stattdessen), `DASHBOARD_PORT`
+`~/.local/share/phi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (SQLite-Datei stattdessen), `DASHBOARD_PORT`
 (Standard 8787), `DASHBOARD_BIND` (Standard 127.0.0.1). Weitere Flags nach dem Kommando werden an
 `src/dashboard.ts` durchgereicht, z.B. `bash scripts/dashboard.sh start --no-socket`. PID- und Log-Datei
-liegen unter `$XDG_RUNTIME_DIR/pi-spaces-dashboard-<uid>/` (Fallback `/tmp`); ein zweiter `start` meldet
+liegen unter `$XDG_RUNTIME_DIR/phi-spaces-dashboard-<uid>/` (Fallback `/tmp`); ein zweiter `start` meldet
 den laufenden Prozess, statt einen zweiten zu öffnen.
 
 Optionen des Daemons (gelten für beide Startarten): `--port` (Standard 8787), `--bind` (Standard 127.0.0.1 —

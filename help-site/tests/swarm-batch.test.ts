@@ -8,7 +8,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { core, createSpace, FOREVER, Meter, PiSpaces, spaceDoc, spaces } from "../../src/index.ts";
+import { core, createSpace, FOREVER, Meter, PhiSpaces, spaceDoc, spaces } from "../../src/index.ts";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch } from "../server/social/batch.ts";
 import type { SwarmPost } from "../server/social/swarm.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
@@ -34,7 +34,7 @@ async function fixture(n = 4) {
 		core.write(s, now, { type: "PostHistoryHead", fields: { key: "head", next: "", ready: true } }, null, FOREVER);
 		for (let i = 0; i < n; i++) core.write(s, now, { type: "SwarmTask", fields: { taskId: `task-${i}` } }, null, FOREVER);
 	}, ctx);
-	const space = new PiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
+	const space = new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
 	return { b, space, storage, close: () => host.close(ctx) };
 }
 
@@ -176,7 +176,7 @@ test("worker batches: SQLite reopen retains reservations and completed results w
 		await finishBatch(b, retry.txn, posts(retry.tasks), []);
 		await host.close(ctx); host = await open(); b = { ...b, host };
 		assert.equal(await reserveBatch(b), null, "completed tasks cannot produce another post after reopen");
-		const space = new PiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
+		const space = new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: info.spaceId });
 		assert.equal(await space.count({ type: "Post" }), 1);
 		assert.equal(await space.count({ type: "PostHistoryNode" }), 1);
 		assert.equal(await space.count({ type: "PostHistoryHead" }), 1);

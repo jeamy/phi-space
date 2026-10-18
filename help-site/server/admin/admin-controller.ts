@@ -29,7 +29,7 @@ import {
 	localRunMember,
 	Meter,
 	newEnrollToken,
-	PiSpaces,
+	PhiSpaces,
 	RunController,
 	snapshotSpace,
 	SpaceLifecycle,
@@ -151,7 +151,7 @@ export class WebAdminController {
 		this.ctx = options.ctx;
 		this.meter = options.meter;
 		// With no configured password, admin login is disabled (random unadvertised secret).
-		const pwd = options.adminPassword ?? process.env.PI_SPACES_ADMIN_PASSWORD ?? randomBytes(32).toString("hex");
+		const pwd = options.adminPassword ?? process.env.PHI_SPACES_ADMIN_PASSWORD ?? randomBytes(32).toString("hex");
 		this.#passwordHash = scryptSync(pwd, this.#passwordSalt, 64);
 	}
 
@@ -176,7 +176,7 @@ export class WebAdminController {
 		await configureGatedSieveSpace(this.host, this.defaultSieveSpaceId);
 
 		// Register initial admin PeerKey in CONTROL_SPACE
-		const controlSpace = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
+		const controlSpace = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: this.controlSpaceId,
 		});
 		await this.host.commit(async tx => {
@@ -281,7 +281,7 @@ export class WebAdminController {
 					}
 				}),
 			space: (spaceId: string) =>
-				new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, { space: spaceId }),
+				new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, { space: spaceId }),
 			exporters: {
 				sieve: SIEVE_EXPORTER,
 			},
@@ -300,7 +300,7 @@ export class WebAdminController {
 						...(args.limits ? { limits: args.limits as any } : {}),
 						...(args.profiles ? { profiles: args.profiles as any } : {}),
 					});
-					const sp = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
+					const sp = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 						space: created.spaceId,
 					});
 					await new SpaceChatEngine(sp).installProfilesIfSupported();
@@ -504,7 +504,7 @@ export class WebAdminController {
 	}
 
 	async inspectSpaceObjects(spaceIdOrAlias: string, limit = 100) {
-		const sp = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
+		const sp = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: spaceIdOrAlias,
 		});
 		const stats = await sp.stats();
@@ -576,7 +576,7 @@ export class WebAdminController {
 			throw new Error(admitted.error ?? "Interrupted command requires review; its effect may already exist");
 		}
 
-		const controlSpace = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
+		const controlSpace = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 			space: this.controlSpaceId,
 		});
 
@@ -653,7 +653,7 @@ export class WebAdminController {
 						action: "create",
 						alias,
 					});
-					const sp = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
+					const sp = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, {
 						space: (result as any).spaceId,
 					});
 					await new SpaceChatEngine(sp).installProfilesIfSupported();

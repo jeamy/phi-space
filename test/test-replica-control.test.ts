@@ -7,7 +7,7 @@ import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {startService,startQuarantineReplicas,serveRegister,signedReplicaPeer,socketTransport,openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from '../src/index.ts';
+import {startService,startQuarantineReplicas,serveRegister,signedReplicaPeer,socketTransport,openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from '../src/index.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
@@ -35,7 +35,7 @@ for(const backend of BACKENDS){
  test(`${backend}: promotion and degradeToSingle refuse simulator claims and unconfigured provider adapters without changing state`,async()=>{
   const t=await setup(backend);
   try{
-   const h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
+   const h=await t.pHome.open();await new PhiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
    const sim=new SimulatorFencing(),proof=await sim.fence('p','primary lost'),sStorage=await t.sHome.storage(),head=t.sJournal.head();
    const base={storage:sStorage,journal:t.sJournal,register:t.register,hostId:'s',dataIncarnation:'inc',ctx,recoveryId:'promote-1',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1};
    // A refused transition stays open (and pauses business seals) until it is abandoned; it sealed nothing.
@@ -57,7 +57,7 @@ for(const backend of BACKENDS){
  test(`${backend}: degradeToSingle recovers the sealed candidate locally, survives a crash before the boot CAS and setStandby reinstalls an empty quarantined target`,async()=>{
   const t=await setup(backend);
   try{
-   let h=await t.pHome.open();const client=()=>new PiSpaces(h,ctx);
+   let h=await t.pHome.open();const client=()=>new PhiSpaces(h,ctx);
    await client().write({type:'Work',fields:{n:1}},null,core.FOREVER);
    t.partition(true);await assert.rejects(client().write({type:'Work',fields:{n:2}},null,core.FOREVER),CommitSealed);
    const candidate=t.pJournal.head().revision;assert.equal(t.pJournal.appliedRevision,candidate-1);await t.pHome.close(h);
@@ -71,7 +71,7 @@ for(const backend of BACKENDS){
    const sBoot=(await t.register.get<any>('boot:s'))!.value;assert.equal(sBoot.state,'fenced');assert.equal(sBoot.spaces[config.spaceId].state,'revoked');
    // Local and external state disagree: writes stay blocked.
    await assert.rejects(assertSyncPrimary(t.register,'p',t.pJournal)(),PrimarySyncBlocked);
-   await storage.close(ctx);await assert.rejects(t.pHome.open().then(x=>new PiSpaces(x,ctx).write({type:'Blocked',fields:{}})),/boot permit does not match/);
+   await storage.close(ctx);await assert.rejects(t.pHome.open().then(x=>new PhiSpaces(x,ctx).write({type:'Blocked',fields:{}})),/boot permit does not match/);
    const storage2=await t.raw(),done=await degradeToSingle({...o,storage:storage2});await storage2.close(ctx);
    assert.deepEqual(done.recoveredCommitted,[candidate]);assert.equal(done.config.standbyReplica,null);
    assert.equal((await t.register.get<any>('boot:p'))!.value.spaces[config.spaceId].replicaConfigVersion,2);
@@ -112,7 +112,7 @@ for(const backend of BACKENDS){
  test(`${backend}: a candidate the standby accepted, ACK lost, then the primary dies and degrades: it takes effect once with its result; an old proof after setStandby is refused`,async()=>{
   const t=await setup(backend);
   try{
-   let h=await t.pHome.open();const c=()=>new PiSpaces(h,ctx),principal={peerId:'peer-a'};
+   let h=await t.pHome.open();const c=()=>new PhiSpaces(h,ctx),principal={peerId:'peer-a'};
    const {generation}=await c().issueGeneration(principal,{primaryEpoch:1}),request={principal,generation,requestId:'w1'};
    t.loseAck();await assert.rejects(c().write({type:'Work',fields:{n:1}},null,core.FOREVER,{request}),CommitSealed);
    const candidate=t.pJournal.head();assert.deepEqual(t.sJournal.head(),candidate,'the standby holds the candidate');
@@ -144,7 +144,7 @@ for(const backend of BACKENDS){
  test(`${backend}: setStandby whose confirming ACK is lost admits no write until the same transition completes`,async()=>{
   const t=await setup(backend);
   try{
-   let h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
+   let h=await t.pHome.open();await new PhiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
    t.partition(true);
    const sim=new SimulatorFencing(),st=await t.raw();
    await degradeToSingle({storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc',ctx,recoveryId:'degrade-1',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof:await sim.fence('s','standby lost'),allowSimulator:true});await st.close(ctx);
@@ -158,7 +158,7 @@ for(const backend of BACKENDS){
     assert.deepEqual(t.pJournal.openTransitionIds(),['standby-1']);
     assert.equal((await t.register.get<any>('boot:s'))!.value.state,'quarantine','no permit while the outcome is unclear');
     // Restart: no write before the same transition is completed; another transition cannot start.
-    await assert.rejects(t.pHome.open().then(x=>new PiSpaces(x,ctx).write({type:'Blocked',fields:{}},null,core.FOREVER)));
+    await assert.rejects(t.pHome.open().then(x=>new PhiSpaces(x,ctx).write({type:'Blocked',fields:{}},null,core.FOREVER)));
     st2=await t.raw();
     await assert.rejects(setStandby({...so,storage:st2,transitionId:'standby-2'}),/standby-1 is still open/);
     const res=await setStandby({...so,storage:st2});await st2.close(ctx);
@@ -175,8 +175,8 @@ for(const backend of BACKENDS){
  test(`${backend}: promotion on the standby excludes the old primary's unaccepted candidate; the old primary is fenced and cannot rejoin with its fork`,async()=>{
   const t=await setup(backend);
   try{
-   let h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);
-   t.partition(true);await assert.rejects(new PiSpaces(h,ctx).write({type:'Fork',fields:{}},null,core.FOREVER),CommitSealed);await t.pHome.close(h);
+   let h=await t.pHome.open();await new PhiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);
+   t.partition(true);await assert.rejects(new PhiSpaces(h,ctx).write({type:'Fork',fields:{}},null,core.FOREVER),CommitSealed);await t.pHome.close(h);
    const fork=t.pJournal.intent(t.pJournal.head().revision)!;assert.equal(t.sJournal.intent(fork.revision),null);
    const sim=new SimulatorFencing(),proof=await sim.fence('p','primary lost');
    const sRaw=await t.sHome.storage();t.register.failNext='boot:s';
@@ -191,9 +191,9 @@ for(const backend of BACKENDS){
    await assert.rejects(assertSyncPrimary(t.register,'p',t.pJournal)(),/boot permit/);
    // The promoted primary has no live standby yet: sync writes stay blocked until degradeToSingle with the same proof.
    const base=t.sHome.storage.bind(t.sHome);t.sHome.storage=async()=>primarySyncStorage(await base(),t.sJournal,null,{assertPrimary:assertSyncPrimary(t.register,'s',t.sJournal)});
-   await sRaw.close(ctx);const sh=t.sHome;h=await sh.open();await assert.rejects(new PiSpaces(h,ctx).write({type:'Blocked',fields:{}}),/confirming standby/);await sh.close(h);
+   await sRaw.close(ctx);const sh=t.sHome;h=await sh.open();await assert.rejects(new PhiSpaces(h,ctx).write({type:'Blocked',fields:{}}),/confirming standby/);await sh.close(h);
    const sRaw2=await base();await degradeToSingle({...o,storage:sRaw2,recoveryId:'degrade-s',expectedPrimaryEpoch:2,expectedReplicaConfigVersion:2});await sRaw2.close(ctx);
-   h=await sh.open();const c=new PiSpaces(h,ctx);assert.equal(await c.count({type:'Fork'}),0);assert.equal(await c.count({type:'Work'}),1);
+   h=await sh.open();const c=new PhiSpaces(h,ctx);assert.equal(await c.count({type:'Fork'}),0);assert.equal(await c.count({type:'Work'}),1);
    await c.write({type:'After',fields:{}},null,core.FOREVER);await sh.close(h);
    // Rejoin: the old primary in quarantine still has its fork, so it is refused as setStandby target.
    await releaseHostToQuarantine(t.register,'p','rejoin-p');const st=await base();
@@ -204,7 +204,7 @@ for(const backend of BACKENDS){
  test(`${backend}: setStandby seals nothing and keeps the target quarantined when the primary is fenced during catch-up`,async()=>{
   const t=await setup(backend);
   try{
-   const h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
+   const h=await t.pHome.open();await new PhiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
    const sim=new SimulatorFencing(),proof=await sim.fence('s','standby lost');let st=await t.raw();
    await degradeToSingle({storage:st,journal:t.pJournal,register:t.register,hostId:'p',dataIncarnation:'inc',ctx,recoveryId:'degrade-1',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof,allowSimulator:true});
    await releaseHostToQuarantine(t.register,'s','rejoin-s');const head=t.pJournal.head();
@@ -227,7 +227,7 @@ for(const backend of BACKENDS)test(`${backend}: an open replica transition pause
  const errors:unknown[]=[];let h=await home.open(),stop=await startMaintenance(h,ctx,{now:()=>now,retryMs:20,onError:e=>errors.push(e)});
  const live=async()=>(await h.snapshot(Space,ctx))!.entries.map(e=>e.fields.n);
  try{
-  const client=()=>new PiSpaces(h,ctx,()=>now);
+  const client=()=>new PhiSpaces(h,ctx,()=>now);
   await client().write({type:'Lease',fields:{n:1}},null,500);const long=await client().write({type:'Lease',fields:{n:2}},null,60_000);
   journal.beginTransition('paused-1',{kind:'test',phase:'started',hash:'x'});
   // The refused seal ends the serving session (pi-durable poisons it); the transition runs with the service down.
@@ -260,7 +260,7 @@ for(const backend of BACKENDS)test(`${backend}: the boot guard binds primary/syn
   const install=async()=>{for(const [id,inc] of [[one.spaceId,one.incarnation],[sync.spaceId,sync.incarnation]])await installAdmittedPermit({external:reg,installed,hostId:'p',spaceId:id,localDataIncarnation:inc}).catch(()=>{});};
   await install();
   const guard=()=>installBootGuard(h,ctx,{hostId:'p',authorityId:config.authorityId,external:reg,installed,replicaConfig:id=>id===sync.spaceId?current:null});stop=guard();
-  const a=()=>new PiSpaces(h,ctx,()=>1,undefined,undefined,{space:'one'}),b=()=>new PiSpaces(h,ctx,()=>1,undefined,undefined,{space:'sync'});
+  const a=()=>new PhiSpaces(h,ctx,()=>1,undefined,undefined,{space:'one'}),b=()=>new PhiSpaces(h,ctx,()=>1,undefined,undefined,{space:'sync'});
   await a().write({type:'Ok',fields:{}},null,core.FOREVER);await b().write({type:'Ok',fields:{}},null,core.FOREVER);
   // The journal moved on (a transition committed locally) but the permit did not: the replicated Space is blocked.
   current={...current,primaryEpoch:2,replicaConfigVersion:2};
@@ -293,7 +293,7 @@ for(const backend of BACKENDS)test(`${backend}: the router adopts a ReplicaConfi
  const issuerKey=async(h:string)=>h==='p'||h==='s'?{algorithm:'ed25519' as const,publicKey:keys[h].publicKey}:null;
  let rh=await router.open();
  try{
-  const h=await t.pHome.open();await new PiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
+  const h=await t.pHome.open();await new PhiSpaces(h,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);await t.pHome.close(h);
   const sim=new SimulatorFencing(),proof=await sim.fence('p','primary lost'),st=await t.sHome.storage();
   await promote({storage:st,journal:t.sJournal,register:t.register,hostId:'s',dataIncarnation:'inc',ctx,recoveryId:'promote-s',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,adapter:sim,proof,allowSimulator:true});await st.close(ctx);
   const control=await rh.commit(tx=>createSpace(tx,'control',1),ctx),o={controlSpaceId:control.spaceId,authorityId:config.authorityId,register:t.register,issuerKey};
@@ -348,7 +348,7 @@ for(const backend of BACKENDS)test(`${backend}: openSyncSpace serves a primary/s
  try{
   s=await open('s');assert.equal(s.role(),'standby');assert.equal(s.harness,undefined,'a standby serves no business calls');
   p=await open('p');assert.equal(p.role(),'primary');
-  const jobs=()=>new PiSpaces(p!.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
+  const jobs=()=>new PhiSpaces(p!.harness!,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
   for(let n=0;n<3;n++)await jobs().write({type:'Job',fields:{n}},null,core.FOREVER);
   assert.deepEqual(s.journal.head(),p.journal.head(),'every commit is confirmed by the standby');assert.equal(await jobs().count({type:'Job'}),3);
   // Reaper and delivery on a sync Harness: idle ticks are no sync decisions; with the standby down the start does not throw.

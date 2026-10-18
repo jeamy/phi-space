@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Local operator driver: temporary signed-wire fixtures on the existing NetBird test peers.
 import subprocess,json,uuid,pathlib,shlex,time,sys,argparse,re
-parser=argparse.ArgumentParser(description='Run isolated pi-spaces signed-wire acceptance over the existing NetBird peers')
+parser=argparse.ArgumentParser(description='Run isolated phi-spaces signed-wire acceptance over the existing NetBird peers')
 parser.add_argument('--rpc-faults',action='store_true',help='Inject before-send failures and discard successful replies for each effect kind on each Member (not process crashes)')
 parser.add_argument('--rpc-fault-boundary',choices=['beforeSend','afterReply','both'],default='afterReply',help='Inject only before send, only after successful reply, or both; missing outcomes require a current-epoch admission proof')
 parser.add_argument('--process-crashes',action='store_true',help='SIGKILL and restart only the owned Root fixture; retain lease epoch and request journals')
@@ -16,7 +16,7 @@ parser.add_argument('--entries',type=int,default=10000,help='Initial total inven
 parser.add_argument('--jobs',type=int,default=1000)
 parser.add_argument('--run-id',default=str(int(time.time())))
 parser.add_argument('--artifacts',type=pathlib.Path,required=True)
-parser.add_argument('--output',type=pathlib.Path,default=pathlib.Path('/tmp/pi-spaces-netbird-phase2'))
+parser.add_argument('--output',type=pathlib.Path,default=pathlib.Path('/tmp/phi-spaces-netbird-phase2'))
 args=parser.parse_args();jobs=args.jobs;tag=args.run_id
 if args.journal_crashes and (args.member_crashes or args.ack_crashes or args.process_crashes or args.rpc_faults):parser.error('run journal crashes separately')
 if len(set(args.journal_crash_kinds))!=len(args.journal_crash_kinds):parser.error('journal kinds must be unique')
@@ -29,14 +29,14 @@ if not 6<=jobs<=1000 or not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,47}',tag):parser.
 args.artifacts=args.artifacts.resolve();args.output.mkdir(parents=True,exist_ok=True)
 for name in ['pi-spaces.mjs','scenarios/phase2-netbird.mjs']:
  if not (args.artifacts/name).is_file():parser.error('missing built artifact: '+name)
-base='/home/mux/.local/share/pi-spaces-operations/ap2-netbird-'+tag
-names=['pi-spaces-ap2-netbird-'+tag+'-'+x for x in ['root','a','b','c']]
+base='/home/mux/.local/share/phi-spaces-operations/ap2-netbird-'+tag
+names=['phi-spaces-ap2-netbird-'+tag+'-'+x for x in ['root','a','b','c']]
 owned={};created=[];root_launched=False;base_created=False;status=args.output/(tag+'-progress.json')
 def ssh(cmd,input=None,timeout=60):return subprocess.check_output(['ssh','-oBatchMode=yes','-oConnectTimeout=10','-oServerAliveInterval=5','-oServerAliveCountMax=3','big',cmd],input=input,text=True,stderr=subprocess.PIPE,timeout=timeout)
 def remote(code,timeout=60):return json.loads(ssh('python3 -',code,timeout))
 def progress(stage):status.write_text(json.dumps({'stage':stage,'jobs':jobs,'date':time.time()}));print(stage,flush=True)
 api='''import json,pathlib,urllib.request
-p=pathlib.Path('/media/docker/pi-spaces/netbird/secrets.env');e=dict(l.strip().split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#'));token=e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))
+p=pathlib.Path('/media/docker/phi-spaces/netbird/secrets.env');e=dict(l.strip().split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#'));token=e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))
 def call(method,path,data=None):
  req=urllib.request.Request('https://spacebird.eibrain.org/api'+path,data=json.dumps(data).encode() if data is not None else None,headers={'Authorization':'Token '+token,'Content-Type':'application/json'},method=method)
  with urllib.request.urlopen(req,timeout=10) as r:return json.load(r) if r.status!=204 else None
@@ -54,10 +54,10 @@ assert not any(g['name']=='space-ap2-test' for g in call('GET','/groups'))
 g=call('POST','/groups',{'name':'space-ap2-test','peers':[p['id'] for p in peers.values()]})
 print(json.dumps({'groupId':g['id'],'peers':{n:{k:p[k] for k in ['id','ip']} for n,p in peers.items()}}))
 ''');owned['groupId']=result['groupId'];peers=result['peers']
- pol=remote(api+"\np=call('POST','/policies',"+repr({'name':'pi-spaces-ap2-isolated','description':'temporary signed wire fixture on tcp7423','enabled':True,'rules':[{'name':'ap2-wire','enabled':True,'action':'accept','bidirectional':False,'protocol':'tcp','ports':['7423'],'sources':[owned['groupId']],'destinations':[owned['groupId']]}]})+");print(json.dumps({'policyId':p['id']}))\n");owned.update(pol)
- config={'authorityId':'ap2-wire-'+str(uuid.uuid4()),'root':{'peerId':peers['host-a']['id'],'ip':peers['host-a']['ip']},'managementUrl':'https://spacebird.eibrain.org','jobs':jobs,'entries':args.entries,'journalCrashes':args.journal_crashes,'journalCrashKinds':args.journal_crash_kinds,'memberCrashes':args.member_crashes,'ackCrashes':args.ack_crashes,'processCrashes':args.process_crashes,'processCrashEffects':['SieveTask','SieveResult','take','txn-begin','txn-commit'] if args.process_crash_effect=='all' else [args.process_crash_effect],'processCrashEffect':args.process_crash_effect,'processCrashBoundary':args.process_crash_boundary,'processCrashMembers':args.process_crash_members,'rpcFaults':args.rpc_faults,'rpcFaultBoundary':args.rpc_fault_boundary,'members':[{'id':key,'hostId':'ap2-wire-'+key,'peerId':peers[name]['id'],'ip':peers[name]['ip'],'namespace':'pi-spaces-test-nb-'+name+'-1'} for key,name in [('a','host-b'),('b','member-1'),('c','member-2')]]}
+ pol=remote(api+"\np=call('POST','/policies',"+repr({'name':'phi-spaces-ap2-isolated','description':'temporary signed wire fixture on tcp7423','enabled':True,'rules':[{'name':'ap2-wire','enabled':True,'action':'accept','bidirectional':False,'protocol':'tcp','ports':['7423'],'sources':[owned['groupId']],'destinations':[owned['groupId']]}]})+");print(json.dumps({'policyId':p['id']}))\n");owned.update(pol)
+ config={'authorityId':'ap2-wire-'+str(uuid.uuid4()),'root':{'peerId':peers['host-a']['id'],'ip':peers['host-a']['ip']},'managementUrl':'https://spacebird.eibrain.org','jobs':jobs,'entries':args.entries,'journalCrashes':args.journal_crashes,'journalCrashKinds':args.journal_crash_kinds,'memberCrashes':args.member_crashes,'ackCrashes':args.ack_crashes,'processCrashes':args.process_crashes,'processCrashEffects':['SieveTask','SieveResult','take','txn-begin','txn-commit'] if args.process_crash_effect=='all' else [args.process_crash_effect],'processCrashEffect':args.process_crash_effect,'processCrashBoundary':args.process_crash_boundary,'processCrashMembers':args.process_crash_members,'rpcFaults':args.rpc_faults,'rpcFaultBoundary':args.rpc_fault_boundary,'members':[{'id':key,'hostId':'ap2-wire-'+key,'peerId':peers[name]['id'],'ip':peers[name]['ip'],'namespace':'phi-spaces-test-nb-'+name+'-1'} for key,name in [('a','host-b'),('b','member-1'),('c','member-2')]]}
  remote('import pathlib,json\nb=pathlib.Path('+repr(base)+")\n(b/'shared/config.json').write_text("+repr(json.dumps(config))+''');(b/'shared/config.json').chmod(0o600)
-e=dict(l.strip().split('=',1) for l in pathlib.Path('/media/docker/pi-spaces/netbird/gate.env').read_text().splitlines() if '=' in l and not l.startswith('#'))
+e=dict(l.strip().split('=',1) for l in pathlib.Path('/media/docker/phi-spaces/netbird/gate.env').read_text().splitlines() if '=' in l and not l.startswith('#'))
 p=b/'secrets/management-token';p.write_text(e['NB_GATE_TOKEN'].strip().strip(chr(34)).strip(chr(39)));p.chmod(0o600)
 print('{}')
 ''')
@@ -67,11 +67,11 @@ print('{}')
   if detach:args.remove('--rm');args+=['--detach']
   if mode in ['run','member']:args+=['--cidfile',base+'/'+data+'/run.cid']
   for src,target in [('pi-spaces.mjs','/opt/app/pi-spaces.mjs:ro'),('scenarios','/opt/app/scenarios:ro'),('shared','/shared:rw'),('secrets','/secrets:ro'),(data,'/data:rw')]:args+=['-v',base+'/'+src+':'+target]
-  args+=['pi-spaces-test-node:local','node','/opt/app/scenarios/phase2-netbird.mjs',mode,'/shared/config.json']
+  args+=['phi-spaces-test-node:local','node','/opt/app/scenarios/phase2-netbird.mjs',mode,'/shared/config.json']
   if mode=='member':args+=[data]
   return shlex.join(args)
  progress('provisioning')
- ssh(cmd(names[0],'pi-spaces-test-nb-host-a-1','root','prepare'))
+ ssh(cmd(names[0],'phi-spaces-test-nb-host-a-1','root','prepare'))
  for i,m in enumerate(config['members']):
   cid=ssh(cmd(names[i+1],m['namespace'],m['id'],'member',True)).strip();assert re.fullmatch('[a-f0-9]{64}',cid);created.append(cid)
  for _ in range(120):
@@ -84,7 +84,7 @@ print('{}')
   raise RuntimeError('Member startup timed out')
  progress('running');root_launched=True
  if args.member_crashes:
-  root_cid=ssh(cmd(names[0],'pi-spaces-test-nb-host-a-1','root','run',True)).strip();assert re.fullmatch('[a-f0-9]{64}',root_cid);created.append(root_cid)
+  root_cid=ssh(cmd(names[0],'phi-spaces-test-nb-host-a-1','root','run',True)).strip();assert re.fullmatch('[a-f0-9]{64}',root_cid);created.append(root_cid)
   restarts=[];counts={m['id']:0 for m in config['members']};deadline=time.monotonic()+1800
   while time.monotonic()<deadline:
    observed=remote('import pathlib,json,subprocess\nb=pathlib.Path('+repr(base)+');ids='+repr(created)+";members="+repr([m['id'] for m in config['members']])+";counts="+repr(counts)+'''
@@ -128,7 +128,7 @@ print(json.dumps({'passed':True,'rootStarts':root_starts,'rootExitCode':0,'membe
    time.sleep(.5)
   else:raise RuntimeError('Member crash fixture exceeded bounded runtime')
  elif args.process_crashes or args.ack_crashes or args.journal_crashes:
-  cid=ssh(cmd(names[0],'pi-spaces-test-nb-host-a-1','root','run',True)).strip();assert re.fullmatch('[a-f0-9]{64}',cid);created.append(cid)
+  cid=ssh(cmd(names[0],'phi-spaces-test-nb-host-a-1','root','run',True)).strip();assert re.fullmatch('[a-f0-9]{64}',cid);created.append(cid)
   expected=len(args.journal_crash_kinds)*2 if args.journal_crashes else 6 if args.ack_crashes else len(config['processCrashEffects'])*len(args.process_crash_members)*(2 if args.process_crash_boundary=='both' else 1);restarts=[];deadline=time.monotonic()+1800
   while True:
    result=subprocess.run(['ssh','-oBatchMode=yes','big','docker wait '+shlex.quote(cid)],capture_output=True,text=True,timeout=max(1,deadline-time.monotonic()))
@@ -146,7 +146,7 @@ print(json.dumps({'passed':True,'rootStarts':root_starts,'rootExitCode':0,'membe
   assert len(restarts)==expected,'all configured real process crashes must be observed'
  else:
   with (args.output/(tag+'.log')).open('w') as log:
-   proc=subprocess.run(['ssh','-oBatchMode=yes','big',cmd(names[0],'pi-spaces-test-nb-host-a-1','root','run')],stdout=log,stderr=subprocess.STDOUT,timeout=1800)
+   proc=subprocess.run(['ssh','-oBatchMode=yes','big',cmd(names[0],'phi-spaces-test-nb-host-a-1','root','run')],stdout=log,stderr=subprocess.STDOUT,timeout=1800)
   if proc.returncode:raise RuntimeError('Wire run failed; see '+str(args.output/(tag+'.log')))
  subprocess.run(['scp','big:'+base+'/shared/netbird-sieve.json',str(args.output/(tag+'.json'))],check=True,stdout=subprocess.DEVNULL)
  progress('passed')

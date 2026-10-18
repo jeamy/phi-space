@@ -92,15 +92,15 @@ Ein dedizierter SSH-Schlüssel bekommt beispielsweise diesen festen Zugang in
 `authorized_keys`; Pfade und Benutzer werden vom Betreiber installiert:
 
 ```text
-restrict,command="/usr/bin/node /opt/pi-spaces/scripts/recovery-ssh.mjs read /private/read.sock" ssh-ed25519 PUBLIC_READER_KEY
-restrict,command="/usr/bin/node /opt/pi-spaces/scripts/recovery-ssh.mjs recovery /private/recovery.sock" ssh-ed25519 PUBLIC_RECOVERY_ACCESS_KEY
+restrict,command="/usr/bin/node /opt/phi-spaces/scripts/recovery-ssh.mjs read /private/read.sock" ssh-ed25519 PUBLIC_READER_KEY
+restrict,command="/usr/bin/node /opt/phi-spaces/scripts/recovery-ssh.mjs recovery /private/recovery.sock" ssh-ed25519 PUBLIC_RECOVERY_ACCESS_KEY
 ```
 
-Reader akzeptieren nur `SSH_ORIGINAL_COMMAND=pi-spaces-register-read`, ein
+Reader akzeptieren nur `SSH_ORIGINAL_COMMAND=phi-spaces-register-read`, ein
 begrenztes JSON-`get` auf stdin und liefern einen JSON-Record auf stdout. Der
 Client verwendet BatchMode und StrictHostKeyChecking; ohne provisionierten
 SSH-Hostschlüssel oder ohne Register-Antwort wird abgewiesen. Der Recovery-Bridge
-akzeptiert ausschließlich `pi-spaces-recovery` und reicht einen begrenzten
+akzeptiert ausschließlich `phi-spaces-recovery` und reicht einen begrenzten
 signierten RPC an den fest vorgegebenen privaten Socket weiter. SSH-Zugang
 allein erteilt keine Recovery-Rolle: der Dienst prüft den separat provisionierten
 Operator-Schlüssel bzw. den aktuellen Supervisor-Schlüssel und das Host-Ziel.
@@ -108,9 +108,9 @@ Operator-Schlüssel bzw. den aktuellen Supervisor-Schlüssel und das Host-Ziel.
 ## F15 und dauerhafte Wiederanlaufsperre
 
 `scripts/fence-ssh.mjs HOST UNIT STATE_DIR` ist ein weiterer fest installierter
-Forced Command. `pi-spaces-fence` schreibt und synchronisiert `restart.lock`,
+Forced Command. `phi-spaces-fence` schreibt und synchronisiert `restart.lock`,
 stoppt die festgelegte systemd-User-Unit und liefert ihren Zustand.
-`pi-spaces-fence-status` prüft nur. Der Dienst muss mit `KillMode=control-group`
+`phi-spaces-fence-status` prüft nur. Der Dienst muss mit `KillMode=control-group`
 betrieben werden. Normaler `pi-serverd` verweigert bei vorhandener Sperre den
 Start, auch außerhalb systemd. Unit, Host-ID und State-Verzeichnis stammen
 niemals aus der SSH-Anfrage.
@@ -191,8 +191,8 @@ Erstkopplung über die sichtbaren Formulare und Kamera-QR bleiben separat.
 ## Installierter Betrieb auf big und vpsc
 
 Das Register läuft auf `vpsc` unter
-`/home/mux/.local/share/pi-spaces-recovery`; die Benutzer-Dienste
-`pi-spaces-recovery-register.service` und `pi-spaces-recovery-register-tls.service`
+`/home/mux/.local/share/phi-spaces-recovery`; die Benutzer-Dienste
+`phi-spaces-recovery-register.service` und `phi-spaces-recovery-register-tls.service`
 sind aktiviert. `npm run build:operations` baut eigenständige `.mjs`-Artefakte
 für den Register-/SSH-Betrieb ohne Anwendungsabhängigkeiten. Nur gebaute Artefakte
 wurden übertragen. Der TLS-Zugang dient ausschließlich dem unabhängigen
@@ -206,15 +206,15 @@ lässt nur freigegebene Client-Zertifikats-Fingerprints zu. Reader haben kein CA
 `writeKeys` beschränkt einen Dienst auf ausdrücklich genannte Registerschlüssel.
 Unbeschränkte Operator-Zertifikate und der CA-Privatschlüssel gehören nicht in
 normale Member-/Agenten-Konfigurationen. Seit 2026-10-16 lauscht der TLS-Zugang dual-stack (`::`); IPv6-Clients
-wie nanoi verwenden `serverName: "pi-spaces-register"`, weil das Serverzertifikat diesen Namen enthält
+wie nanoi verwenden `serverName: "phi-spaces-register"`, weil das Serverzertifikat diesen Namen enthält
 ([Testumgebung §18](testumgebung-big.md#18-testserver-nanoi-phase-3-test-primary-und-fencing-ziel)). Auf big liegen ausschließlich Reader-
 Zertifikat/Schlüssel in den normalen Laufzeiten.
 
 Auf big laufen die beiden Benutzer-Dienste:
 
 ```sh
-systemctl --user status pi-spaces-phase1b-host-a.service
-systemctl --user status pi-spaces-phase1b-member-1.service
+systemctl --user status phi-spaces-phase1b-host-a.service
+systemctl --user status phi-spaces-phase1b-member-1.service
 ```
 
 Ihre jeweiligen Container halten `/data/phase1b/harness.sqlite`, lokale
@@ -231,9 +231,9 @@ in `authorized_keys`. Er prüft sowohl den tatsächlichen Node-Prozess im
 Container als auch den gestoppten systemd-Dienst; ein verschwundener Docker-
 Exec-Client allein gilt nicht als Fencing. `scripts/recovery-docker-ssh.mjs`
 leitet nur den signierten privaten RPC zum festgelegten Container weiter.
-Die lokalen SSH-Aliase `pi-spaces-fence-host-a`, `pi-spaces-fence-member-1` und
-`pi-spaces-recovery-host-a` verwenden eigene Schlüssel mit Forced Commands.
-`pi-spaces-register-reader` erreicht den read-only Registerzugang auf vpsc.
+Die lokalen SSH-Aliase `phi-spaces-fence-host-a`, `phi-spaces-fence-member-1` und
+`phi-spaces-recovery-host-a` verwenden eigene Schlüssel mit Forced Commands.
+`phi-spaces-register-reader` erreicht den read-only Registerzugang auf vpsc.
 
 ## Control-Restore unter exklusivem Recovery-Besitz
 

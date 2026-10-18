@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, statSync, chmodSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { provisionFileSigner, loadFileSigner, serveRegister, SocketRecoveryRegister, SqliteRecoveryRegister, RecoveryClient, serveRecovery, generateKey, RecoveryBlocked, RecoveryController, RegisterConflict, PiSpaces, core, Space, startConfiguredFederation, bootstrapEnroll, newEnrollToken, hashToken, listSpaces, spaceDoc, Registry, beginRestore, restoreBatch, completeRestore, snapshotHash, dataRecoveryHandler, startMemberRecoveryOnly, signControlHostChange } from "../src/index.ts";
+import { provisionFileSigner, loadFileSigner, serveRegister, SocketRecoveryRegister, SqliteRecoveryRegister, RecoveryClient, serveRecovery, generateKey, RecoveryBlocked, RecoveryController, RegisterConflict, PhiSpaces, core, Space, startConfiguredFederation, bootstrapEnroll, newEnrollToken, hashToken, listSpaces, spaceDoc, Registry, beginRestore, restoreBatch, completeRestore, snapshotHash, dataRecoveryHandler, startMemberRecoveryOnly, signControlHostChange } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
 test("provisioned keys survive reopen and fail closed on missing, public or symlinked files", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "pi-spaces-keys-"));
+	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-keys-"));
 	try {
 		for (const algorithm of ["ed25519", "ecdsa-p256"] as const) {
 			const path = join(dir, algorithm), key = provisionFileSigner(path, algorithm), reopened = loadFileSigner(path);
@@ -22,7 +22,7 @@ test("provisioned keys survive reopen and fail closed on missing, public or syml
 });
 
 test("independent register sockets separate member reads from operator CAS and persist across reopen", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "pi-spaces-register-rpc-")), db = new SqliteRecoveryRegister(join(dir, "register.sqlite"));
+	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-register-rpc-")), db = new SqliteRecoveryRegister(join(dir, "register.sqlite"));
 	const readServer = await serveRegister(db, join(dir, "read.sock")), adminServer = await serveRegister(db, join(dir, "admin.sock"), { writable: true });
 	const reader = new SocketRecoveryRegister(join(dir, "read.sock")), forgedWriter = new SocketRecoveryRegister(join(dir, "read.sock"), { writable: true }), writer = new SocketRecoveryRegister(join(dir, "admin.sock"), { writable: true });
 	try {
@@ -34,7 +34,7 @@ test("independent register sockets separate member reads from operator CAS and p
 });
 
 test("out-of-band recovery validates pinned signatures, target and supervisor method boundary", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "pi-spaces-recovery-rpc-")), operator = generateKey("ed25519", "operator"), supervisor = generateKey("ed25519", "supervisor"), attacker = generateKey("ed25519", "attacker");
+	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-recovery-rpc-")), operator = generateKey("ed25519", "operator"), supervisor = generateKey("ed25519", "supervisor"), attacker = generateKey("ed25519", "attacker");
 	let effects = 0;
 	const server = await serveRecovery({ path: join(dir, "recovery.sock"), hostId: "host", operator: { algorithm: "ed25519", publicKey: operator.publicKey }, supervisor: async () => ({ algorithm: "ed25519", publicKey: supervisor.publicKey }), handle: async (c, role) => { effects++; return { method: c.method, role }; } });
 	const admin = new RecoveryClient(join(dir, "recovery.sock"), { hostId: "host", signer: operator.signer }), service = new RecoveryClient(join(dir, "recovery.sock"), { hostId: "host", signer: supervisor.signer }), foreign = new RecoveryClient(join(dir, "recovery.sock"), { hostId: "host", signer: attacker.signer }), wrongTarget = new RecoveryClient(join(dir, "recovery.sock"), { hostId: "other", signer: operator.signer });
@@ -51,10 +51,10 @@ test("out-of-band recovery validates pinned signatures, target and supervisor me
 test("durable restore controller resumes after crash, requires real control tuple and releases only scoped entries", async () => {
 	await forEachBackend(async home => {
 		let h = await home.open(), now = 1, fence = true, ack = false;
-		const local = () => new PiSpaces(h, ctx, () => now);
+		const local = () => new PhiSpaces(h, ctx, () => now);
 		for (let i = 0; i < 12; i++) await local().write({ type: "Task", fields: { n: i, pad: "x".repeat(600) } }, null, core.FOREVER);
 		const source = core.plain((await h.snapshot(Space, ctx))!); await local().setLimits({ maxCommitBytes: 4000 });
-		const dir = mkdtempSync(join(tmpdir(), "pi-spaces-controller-")), external = new SqliteRecoveryRegister(join(dir, "external.sqlite")), installed = new SqliteRecoveryRegister(join(dir, "installed.sqlite"));
+		const dir = mkdtempSync(join(tmpdir(), "phi-spaces-controller-")), external = new SqliteRecoveryRegister(join(dir, "external.sqlite")), installed = new SqliteRecoveryRegister(join(dir, "installed.sqlite"));
 		const permit = { state: "active", authorityId: "authority", dataIncarnation: source.incarnation!, role: "local", primaryEpoch: 1, transitionId: "initial" };
 		await external.compareAndSet("boot:target", null, { hostId: "target", state: "active", spaces: { [source.spaceId!]: permit } });
 		await external.compareAndSet(`placement:${source.spaceId}`, null, { authorityId: "authority", hostId: "lost-source", incarnation: source.incarnation!, primaryEpoch: 1 });
@@ -85,7 +85,7 @@ test("durable restore controller resumes after crash, requires real control tupl
 
 test("configured runtime checks independent boot, provisioned overlay ownership and native trusted context", async () => {
  await forEachBackend(async home => {
-  const h = await home.open(), dir = mkdtempSync(join(tmpdir(), "pi-spaces-configured-"));
+  const h = await home.open(), dir = mkdtempSync(join(tmpdir(), "phi-spaces-configured-"));
   const external = new SqliteRecoveryRegister(join(dir, "external.sqlite")), installedFile = join(dir, "installed.sqlite"), installed = new SqliteRecoveryRegister(installedFile);
   let groups = ["space-hosts"], peerId = "configured-peer", runtime: Awaited<ReturnType<typeof startConfiguredFederation>> | undefined;
   const api = createServer((req, res) => { if (req.headers.authorization !== "Token fixture-token") { res.writeHead(401); res.end(); return; } res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify([{ id: peerId, ip: "127.0.0.1", connected: true, groups: groups.map(name => ({ name })) }])); });
@@ -161,7 +161,7 @@ test("member recovery starts with a public OP pin and never exposes control-auth
 });
 
 test("two lww/set Members replicate their entry streams over proven, pinned host connections", async () => {
- const dir = mkdtempSync(join(tmpdir(), "pi-spaces-merge-")), external = new SqliteRecoveryRegister(join(dir, "external.sqlite"));
+ const dir = mkdtempSync(join(tmpdir(), "phi-spaces-merge-")), external = new SqliteRecoveryRegister(join(dir, "external.sqlite"));
  const peers = [{ id: "peer-a", ip: "127.0.0.1" }, { id: "peer-b", ip: "127.0.0.2" }, { id: "peer-c", ip: "127.0.0.3" }];
  const api = createServer((req, res) => { if (req.headers.authorization !== "Token fixture-token") { res.writeHead(401); res.end(); return; } res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(peers.map(p => ({ ...p, connected: true, groups: [{ name: "space-hosts" }] })))); });
  await new Promise<void>(resolve => api.listen(0, "127.0.0.1", resolve));
@@ -180,8 +180,8 @@ test("two lww/set Members replicate their entry streams over proven, pinned host
    await external.compareAndSet(`boot:host-${n}`, null, { hostId: `host-${n}`, state: "active", spaces });
    // The other Member's host key is known to this host's key directory (its own control Space in this fixture).
    const o = 1 - i, other = signers[o]!, outsider = i === 0 ? provisionFileSigner(join(dir, "signer-c.json")) : loadFileSigner(join(dir, "signer-c.json"));
-   await new PiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: "peer-c", keyId: outsider.keyId, principal: "enrolled:peer-c", algorithm: outsider.algorithm, publicKey: outsider.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
-   await new PiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: peers[o]!.id, keyId: other.keyId, principal: `enrolled:${peers[o]!.id}`, algorithm: other.algorithm, publicKey: other.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
+   await new PhiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: "peer-c", keyId: outsider.keyId, principal: "enrolled:peer-c", algorithm: outsider.algorithm, publicKey: outsider.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
+   await new PhiSpaces(h, ctx, undefined, undefined, undefined, { space: "control" }).write({ type: "PeerKey", fields: { peerId: peers[o]!.id, keyId: other.keyId, principal: `enrolled:${peers[o]!.id}`, algorithm: other.algorithm, publicKey: other.publicKey, roles: ["host"], scope: ["*"], state: "active" } }, null, core.FOREVER);
    const configFile = join(dir, `federation-${n}.json`);
    writeFileSync(configFile, JSON.stringify({ hostId: `host-${n}`, peerId: peers[i]!.id, authorityId: "authority", controlHostId: `host-${n}`, controlSpaceId, mode: "control", listen: { host: peers[i]!.ip, port: ports[i] }, keyFile: join(dir, `signer-${n}.json`), registerReadSocket: readSocket, installedRegisterFile: installedFile, management: { url: `http://127.0.0.1:${(api.address() as any).port}`, tokenFile }, control: { address: { host: peers[i]!.ip, port: ports[i] }, algorithm: signers[i]!.algorithm, publicKey: signers[i]!.publicKey },
     entryReplication: { space: "default", spaceId: "logical-sensors", replicaId: `r-${n}`, incarnation: `i-${n}`, members: [{ replicaId: "r-a", incarnation: "i-a" }, { replicaId: "r-b", incarnation: "i-b" }], rules: [{ type: "Sensor", variant: "lww", keyFields: ["sensorId"] }], pollMs: 100, compactEveryMs: 1000,

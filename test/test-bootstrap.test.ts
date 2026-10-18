@@ -4,19 +4,19 @@ import {join} from 'node:path';
 import {existsSync,copyFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {PrimarySyncJournal,PrimarySyncBlocked,bootstrapPrimarySync,captureStore,materializeSyncHistory,primarySyncStorage,recoverPrimarySync,PiSpaces,Space,core,createSpace,listSpaces,snapshotSpace,canonicalJson,type PrimarySyncConfig} from '../src/index.ts';
+import {PrimarySyncJournal,PrimarySyncBlocked,bootstrapPrimarySync,captureStore,materializeSyncHistory,primarySyncStorage,recoverPrimarySync,PhiSpaces,Space,core,createSpace,listSpaces,snapshotSpace,canonicalJson,type PrimarySyncConfig} from '../src/index.ts';
 import {BACKENDS,freePort,PersistentHome,ctx} from './support/persistent.ts';
 
 const single:PrimarySyncConfig={spaceId:'bootstrapped',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:null,durability:'single'};
 
-/** An existing store with pi-spaces activity plus synthetic conversation records and a conversation document. */
+/** An existing store with phi-spaces activity plus synthetic conversation records and a conversation document. */
 async function existingStore(home:PersistentHome){
- const h=await home.open(),local=new PiSpaces(h,ctx,()=>1000);
+ const h=await home.open(),local=new PhiSpaces(h,ctx,()=>1000);
  await h.commit(tx=>createSpace(tx,'jobs',1000),ctx);
  for(let n=0;n<12;n++)await local.write({type:'Job',fields:{n,pad:'x'.repeat(400)}},null,core.FOREVER);
  const request={principal:{peerId:'worker'},...(await local.issueGeneration({peerId:'worker'})),requestId:'claimed'};
  await local.write({type:'Claimed',fields:{}},null,core.FOREVER,{request});
- await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'jobs'}).write({type:'Named',fields:{}},null,core.FOREVER);
+ await new PhiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'jobs'}).write({type:'Named',fields:{}},null,core.FOREVER);
  await home.close(h);
  const st=await home.storage(),conv=await st.mintId<any>(),child=await st.mintId<any>(),e1=await st.mintId<any>(),e2=await st.mintId<any>(),doc=await st.mintId<any>();
  await st.commit([{type:'conversation',value:{id:conv}},{type:'entry',value:{id:e1,conversationId:conv,kind:'note',data:{n:1}}},{type:'entry',value:{id:e2,conversationId:conv,kind:'note',data:{n:2}}},
@@ -42,13 +42,13 @@ for(const backend of BACKENDS){
    const target=new PrimarySyncJournal(join(replica.dir,'journal.sqlite'),single);
    for(let n=1;n<=journal.head().revision;n++)await target.catchUp(journal.intent(n)!,async()=>{});
    const rs=await replica.storage();await materializeSyncHistory(rs,target,ctx);assert.equal((await captureStore(rs,ctx)).digest,before.digest);await rs.close(ctx);
-   const rh=await replica.open();assert.equal(await new PiSpaces(rh,ctx,()=>1000).count({type:'Job'}),12);assert.equal(await new PiSpaces(rh,ctx,()=>1000,undefined,undefined,{space:'jobs'}).count({type:'Named'}),1);
+   const rh=await replica.open();assert.equal(await new PhiSpaces(rh,ctx,()=>1000).count({type:'Job'}),12);assert.equal(await new PhiSpaces(rh,ctx,()=>1000,undefined,undefined,{space:'jobs'}).count({type:'Named'}),1);
    assert.deepEqual(await rh.snapshot(Space,ctx),await (async()=>{const h=await home.open();try{return await h.snapshot(Space,ctx);}finally{await home.close(h);}})());
    // New IDs minted after the bootstrap do not collide with captured ones (the counter follows the largest ID).
-   await new PiSpaces(rh,ctx,()=>1000).write({type:'After',fields:{}},null,core.FOREVER);await replica.close(rh);
+   await new PhiSpaces(rh,ctx,()=>1000).write({type:'After',fields:{}},null,core.FOREVER);await replica.close(rh);
    // The primary continues under primary/sync storage after the bootstrap.
    const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),journal,null,{assertPrimary:async()=>{}});
-   const ph=await home.open();await new PiSpaces(ph,ctx,()=>1000).write({type:'Job',fields:{n:99}},null,core.FOREVER);assert.equal(journal.head().revision,r.revisions+1);await home.close(ph);
+   const ph=await home.open();await new PhiSpaces(ph,ctx,()=>1000).write({type:'Job',fields:{n:99}},null,core.FOREVER);assert.equal(journal.head().revision,r.revisions+1);await home.close(ph);
    journal.close();target.close();
   }finally{await home.dispose();await replica.dispose();}
  });
@@ -66,7 +66,7 @@ for(const backend of BACKENDS){
    // A store that changed after sealing is refused.
    await existingStore(other);const j2=new PrimarySyncJournal(join(other.dir,'journal.sqlite'),single);let s2=await other.storage();
    other.faults.arm('failBeforeCommit');await assert.rejects(bootstrapPrimarySync(s2,j2,ctx));await s2.close(ctx);
-   const h=await other.open();await new PiSpaces(h,ctx,()=>1000).write({type:'Sneaked',fields:{}},null,core.FOREVER);await other.close(h);
+   const h=await other.open();await new PhiSpaces(h,ctx,()=>1000).write({type:'Sneaked',fields:{}},null,core.FOREVER);await other.close(h);
    s2=await other.storage();await assert.rejects(bootstrapPrimarySync(s2,j2,ctx),/changed since the bootstrap was sealed/);await s2.close(ctx);j2.close();
   }finally{await home.dispose();await other.dispose();}
  });
@@ -86,8 +86,8 @@ for(const backend of BACKENDS){
  });
 }
 
-const hostACopy=process.env.PI_SPACES_BOOTSTRAP_COPY;
-test('a read-only copy of a real control store bootstraps and replays with identical content',{skip:!hostACopy||!existsSync(hostACopy)?'set PI_SPACES_BOOTSTRAP_COPY to a store copy':false},async()=>{
+const hostACopy=process.env.PHI_SPACES_BOOTSTRAP_COPY;
+test('a read-only copy of a real control store bootstraps and replays with identical content',{skip:!hostACopy||!existsSync(hostACopy)?'set PHI_SPACES_BOOTSTRAP_COPY to a store copy':false},async()=>{
  const dir=mkdtempSync(join(tmpdir(),'bootstrap-copy-'));
  try{
   copyFileSync(hostACopy!,join(dir,'primary.sqlite'));
@@ -110,8 +110,8 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
  let listener:Awaited<ReturnType<typeof openSyncSpace>>|undefined;
  try{
   // A control host's main store: default Space plus the control Space.
-  let h=await home.open();const control=await h.commit(tx=>createSpace(tx,'control',1000),ctx);await new PiSpaces(h,ctx,()=>1000).write({type:'Default',fields:{}},null,core.FOREVER);
-  await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'PeerKey',fields:{peerId:'x'}},null,core.FOREVER);
+  let h=await home.open();const control=await h.commit(tx=>createSpace(tx,'control',1000),ctx);await new PhiSpaces(h,ctx,()=>1000).write({type:'Default',fields:{}},null,core.FOREVER);
+  await new PhiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'PeerKey',fields:{peerId:'x'}},null,core.FOREVER);
   const spaces=await listSpaces(h,ctx),def=spaces.find(i=>i.alias==='default')!;await home.close(h);
   const reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
   const genesis:PrimarySyncConfig={spaceId:control.spaceId,authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'a',standbyReplica:null,durability:'single'};
@@ -133,7 +133,7 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
   const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),journal,peer,{assertPrimary:assertSyncPrimary(reg,'a',journal)});
   for(const sp of [control,def]){const p=(await reg.get<any>('boot:a'))!.value.spaces[sp.spaceId];await installed.compareAndSet(`installed:a:${sp.spaceId}`,(await installed.get(`installed:a:${sp.spaceId}`))?.version??null,p);}
   h=await home.open();let stop=installBootGuard(h,ctx,{hostId:'a',authorityId:'authority',external:reg,installed,replicaConfig:()=>journal.config});
-  await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:1}},null,core.FOREVER);await new PiSpaces(h,ctx,()=>1000).write({type:'Default',fields:{n:2}},null,core.FOREVER);
+  await new PhiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:1}},null,core.FOREVER);await new PhiSpaces(h,ctx,()=>1000).write({type:'Default',fields:{n:2}},null,core.FOREVER);
   assert.equal(listener.journal.head().hash,journal.head().hash,'every control write is confirmed by the standby');
   stop();await home.close(h);
   // 4. The standby is lost: degradeToSingle with a fencing proof; both Spaces follow to epoch 2.
@@ -147,7 +147,7 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
   home.storage=async()=>primarySyncStorage(await raw(),journal,null,{assertPrimary:assertSyncPrimary(reg,'a',journal)});
   for(const sp of [control,def]){const p=(await reg.get<any>('boot:a'))!.value.spaces[sp.spaceId],cur=await installed.get(`installed:a:${sp.spaceId}`);await installed.compareAndSet(`installed:a:${sp.spaceId}`,cur!.version,p);}
   h=await home.open();stop=installBootGuard(h,ctx,{hostId:'a',authorityId:'authority',external:reg,installed,replicaConfig:()=>journal.config});
-  await new PiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:3}},null,core.FOREVER);
+  await new PhiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'control'}).write({type:'Command',fields:{n:3}},null,core.FOREVER);
   const router=provisionFileSigner(join(dir,'router.json')),keyDir=new MemoryKeyDirectory();keyDir.add({peerId:'router',keyId:router.keyId,algorithm:router.algorithm,publicKey:router.publicKey!,principal:'router',roles:['router'],scope:['*'],state:'active'});
   let clock=Date.now();const leases=new RouterLeaseAuthority({host:h,ctx,controlSpaceId:control.spaceId,authorityId:'authority',peerId:'a',signer:keys.a,keys:keyDir,assertAuthority:async()=>{},controlEpoch:()=>journal.config.primaryEpoch,now:()=>clock});
   const first=await leases.issue('router',router.keyId);assert.equal(first.lease.controlPrimaryEpoch,2,'the router lease carries the journal epoch');

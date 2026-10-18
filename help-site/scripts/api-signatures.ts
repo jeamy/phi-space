@@ -4,14 +4,14 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const bindings: Record<string, string[]> = {
-	pispaces_write: ["PiSpaces.write"], pispaces_read: ["PiSpaces.read", "PiSpaces.readIfExists"],
-	pispaces_take: ["PiSpaces.take", "PiSpaces.takeIfExists"],
-	pispaces_txn: ["PiSpaces.createTransaction", "PiSpaces.commit", "PiSpaces.abort"],
-	pispaces_lease: ["PiSpaces.renew", "PiSpaces.cancel"],
-	pispaces_read_page_changes: ["PiSpaces.readPage", "PiSpaces.changes", "PiSpaces.readAll", "PiSpaces.count", "PiSpaces.stats"],
-	pispaces_wait_notify_mailbox: ["PiSpaces.wait", "PiSpaces.notify", "PiSpaces.events", "PiSpaces.ack", "RemoteSpace.events", "RemoteSpace.ack"],
-	pispaces_claims: ["PiSpaces.issueGeneration", "PiSpaces.pollOperation", "PiSpaces.cancelOperation", "PiSpaces.resolveOperation"],
-	pispaces_completion_profiles: ["PiSpaces.setCompletionProfiles", "PiSpaces.setLimits"],
+	phispaces_write: ["PhiSpaces.write"], phispaces_read: ["PhiSpaces.read", "PhiSpaces.readIfExists"],
+	phispaces_take: ["PhiSpaces.take", "PhiSpaces.takeIfExists"],
+	phispaces_txn: ["PhiSpaces.createTransaction", "PhiSpaces.commit", "PhiSpaces.abort"],
+	phispaces_lease: ["PhiSpaces.renew", "PhiSpaces.cancel"],
+	phispaces_read_page_changes: ["PhiSpaces.readPage", "PhiSpaces.changes", "PhiSpaces.readAll", "PhiSpaces.count", "PhiSpaces.stats"],
+	phispaces_wait_notify_mailbox: ["PhiSpaces.wait", "PhiSpaces.notify", "PhiSpaces.events", "PhiSpaces.ack", "RemoteSpace.events", "RemoteSpace.ack"],
+	phispaces_claims: ["PhiSpaces.issueGeneration", "PhiSpaces.pollOperation", "PhiSpaces.cancelOperation", "PhiSpaces.resolveOperation"],
+	phispaces_completion_profiles: ["PhiSpaces.setCompletionProfiles", "PhiSpaces.setLimits"],
 	agent_tools: ["createSpaces", "startService"],
 	space_service_and_remote: ["SpaceService", "serveSpace", "RemoteSpace", "socketTransport"],
 	gate_auth_grants: ["startFederationHost", "GrantAuthority.issue", "RemoteSpace.enroll", "RemoteSpace.rotateKey"],

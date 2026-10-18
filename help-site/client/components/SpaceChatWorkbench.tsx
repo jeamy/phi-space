@@ -15,7 +15,7 @@ const STAGES = [
 		id: "v1",
 		articleId: "help.workflow.stage_v1_local_memory",
 		title: { de: "v1 · In-Memory", en: "v1 · In-Memory" },
-		sub: { de: "Zero-Setup PiSpaces", en: "Zero-Setup PiSpaces" },
+		sub: { de: "Zero-Setup PhiSpaces", en: "Zero-Setup PhiSpaces" },
 	},
 	{
 		id: "v2",
@@ -126,14 +126,14 @@ export function SpaceChatWorkbench(props: WorkbenchProps) {
 				<div>
 					<span className="eyebrow-copy">
 						{locale === "de"
-							? "INTERAKTIVE PI-SPACES WORKBENCH (STUFEN V1 BIS V6)"
-							: "INTERACTIVE PI-SPACES WORKBENCH (STAGES V1 TO V6)"}
+							? "INTERAKTIVE PHI-SPACES WORKBENCH (STUFEN V1 BIS V6)"
+							: "INTERACTIVE PHI-SPACES WORKBENCH (STAGES V1 TO V6)"}
 					</span>
 					<h1>Multiplayer Space-Chat</h1>
 					<p>
 						{locale === "de"
-							? "Das Earendil Multiplayer-Chat-Szenario vollständig umgesetzt mit nativen pi-spaces-Mitteln: NamedSpace, RequestRef-Claims, CompletionProfiles, Presence-Leases, TimerLock-Alarme und SearchTask-Subagent."
-							: "The Earendil Multiplayer Chat scenario implemented purely with native pi-spaces primitives: NamedSpace, RequestRef claims, CompletionProfiles, Presence leases, TimerLock alarms, and SearchTask subagent."}
+							? "Das Earendil Multiplayer-Chat-Szenario vollständig umgesetzt mit nativen phi-spaces-Mitteln: NamedSpace, RequestRef-Claims, CompletionProfiles, Presence-Leases, TimerLock-Alarme und SearchTask-Subagent."
+							: "The Earendil Multiplayer Chat scenario implemented purely with native phi-spaces primitives: NamedSpace, RequestRef claims, CompletionProfiles, Presence leases, TimerLock alarms, and SearchTask subagent."}
 					</p>
 				</div>
 				<span className="meta-pill meta-pill--accent">
@@ -254,8 +254,8 @@ export function SpaceChatWorkbench(props: WorkbenchProps) {
 						<div style={{ border: "1px solid var(--line)", padding: "10px", borderRadius: "5px", marginBottom: "12px", background: "var(--surface)" }}>
 							<div style={{ fontSize: "10px", fontFamily: "var(--font-geist-mono)", color: "var(--accent-readable)", marginBottom: "6px" }}>
 								{locale === "de"
-									? "SCHNELLTEST DER EARENDIL-SEQUENZ MIT PI-SPACES-MITTELN:"
-									: "QUICK-RUN EARENDIL SEQUENCE WITH PI-SPACES PRIMITIVES:"}
+									? "SCHNELLTEST DER EARENDIL-SEQUENZ MIT PHI-SPACES-MITTELN:"
+									: "QUICK-RUN EARENDIL SEQUENCE WITH PHI-SPACES PRIMITIVES:"}
 							</div>
 							<div className="wb-form-row" style={{ marginTop: 0 }}>
 								<button
@@ -417,10 +417,10 @@ export function SpaceChatWorkbench(props: WorkbenchProps) {
 					</div>
 				</div>
 
-				{/* Right Column: Live pi-spaces Inspector */}
+				{/* Right Column: Live phi-spaces Inspector */}
 				<div className="wb-panel">
 					<div className="wb-panel__hdr">
-						<span>LIVE PI-SPACES INSPECTOR (READPAGE + CHANGES)</span>
+						<span>LIVE PHI-SPACES INSPECTOR (READPAGE + CHANGES)</span>
 						<span>{snapshot?.rawEntryCount ?? 0} ENTRIES</span>
 					</div>
 					<div className="wb-panel__body">

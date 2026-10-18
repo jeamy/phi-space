@@ -12,7 +12,7 @@ import { RegisterConflict } from "./recovery-register.ts";
 
 export type RecoveryCall = { hostId: string; requestId: string; method: string; args: Json; issuedAt: number; expiresAt: number };
 export type SignedRecoveryCall = { call: RecoveryCall; algorithm: Algorithm; signature: string };
-export const recoveryBytes = (call: RecoveryCall) => Buffer.from("pi-spaces/recovery-rpc/v1\n" + canonicalJson(call as unknown as Json));
+export const recoveryBytes = (call: RecoveryCall) => Buffer.from("phi-spaces/recovery-rpc/v1\n" + canonicalJson(call as unknown as Json));
 export type RecoveryHandler = (call: RecoveryCall, role: "operator" | "supervisor" | "host") => Promise<Json>;
 const SUPERVISOR = new Set(["restoreDataSpace", "advanceRestore", "restoreStatus", "releaseRestored", "controlAck"]);
 export async function serveRecovery(o: { path: string; hostId: string; operator: { algorithm: Algorithm; publicKey: string }; supervisor?: () => Promise<{ algorithm: Algorithm; publicKey: string }>; hostKey?: (call: RecoveryCall) => Promise<{ algorithm: Algorithm; publicKey: string } | null>; handle: RecoveryHandler; now?: () => number }) {

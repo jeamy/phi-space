@@ -20,7 +20,7 @@ import {rpcDomain} from './rpc-domain.ts';
 import type {Call} from './service.ts';
 
 export class FederationRpc implements RouterTarget, FederationIO {
-    readonly protocol = 'pi-spaces-rpc-v1' as const;
+    readonly protocol = 'phi-spaces-rpc-v1' as const;
     private o: {
         state: () => Promise<RoutingState>; transport : (member: string) => Transport;
         signer : Signer;
@@ -157,7 +157,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
         const witness=answer.claimReceipt;
         if(witness){
             const ref=this.reference(s),b=witness.binding;
-            if(witness.protocol!=='pi-spaces-claim-receipt-v1'||witness.hostId!==s.target.hostId||!b||!b.principal||typeof b.principal!=='object'||typeof b.principal.peerId!=='string'||b.spaceId!==s.target.spaceId||b.authorityId!==s.target.authorityId||b.dataIncarnation!==s.target.dataIncarnation||b.primaryEpoch!==s.target.primaryEpoch||canonicalJson(b.principal as any)!==canonicalJson(s.principal as any)||b.generation!==s.generation||b.requestId!==s.requestId||b.method!==ref.method||b.argumentHash!==ref.argumentHash)
+            if(witness.protocol!=='phi-spaces-claim-receipt-v1'||witness.hostId!==s.target.hostId||!b||!b.principal||typeof b.principal!=='object'||typeof b.principal.peerId!=='string'||b.spaceId!==s.target.spaceId||b.authorityId!==s.target.authorityId||b.dataIncarnation!==s.target.dataIncarnation||b.primaryEpoch!==s.target.primaryEpoch||canonicalJson(b.principal as any)!==canonicalJson(s.principal as any)||b.generation!==s.generation||b.requestId!==s.requestId||b.method!==ref.method||b.argumentHash!==ref.argumentHash)
                 return this.receipt(s,'needsReview',undefined,'inline claim binding mismatch');
             if(witness.resolution?.state==='notAdmitted')return this.receipt(s,'needsReview',undefined,'effect replied without retained admission');
             return this.checkedResolution(s,witness.resolution);

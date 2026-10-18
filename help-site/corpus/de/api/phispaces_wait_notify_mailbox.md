@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_wait_notify_mailbox
+id: help.api.phispaces_wait_notify_mailbox
 title: "wait, notify, events & ack – Reaktive Zustellung und Consumer-Mailboxes"
 short: "Parkt langlebige Read/Take-Wünsche oder Event-Abos ohne Turn-Blockade; liefert Ergebnisse über dauerhafte Mailboxes mit Präfix-ACK."
 tags: [wait, notify, events, ack, mailbox]
@@ -41,6 +41,6 @@ if (mailboxPage.events.length > 0) {
 
 ## Typische Anwendungsfälle {#use-cases}
 
-- **Ereignisgesteuerter Worker**: Statt `take(..., FOREVER)` zu blockieren, parkt der Worker einen dauerhaften Take-Wunsch mit `wait`; `pi-spaces` legt gewonnene Tasks samt `handback`-Kontext in seine Mailbox.
+- **Ereignisgesteuerter Worker**: Statt `take(..., FOREVER)` zu blockieren, parkt der Worker einen dauerhaften Take-Wunsch mit `wait`; `phi-spaces` legt gewonnene Tasks samt `handback`-Kontext in seine Mailbox.
 - **Robuster Consumer**: Der Worker verarbeitet `events`-Seiten und ackt erst nach erfolgreichem `commit` – bei Neustart werden unbestätigte Ereignisse erneut geliefert (At-least-once).
 - **Notify-Streams**: UI- oder Audit-Consumer abonnieren `notify({ type: "Msg" })` und bleiben über `events`/`ack` über passende Writes informiert (keine vollständige Änderungs-/Löschhistorie), auch über Prozessneustarts hinweg.

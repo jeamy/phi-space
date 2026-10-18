@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Stufe 2 (`help-site/examples/v2-local-durable/run.ts`) macht den Multiplayer Space-Chat dauerhaft über Prozessneustarts hinweg und fügt genau die zwei fortgeschrittenen Funktionen aus dem Earendil-Artikel hinzu: **geplante Aufgaben (`schedule`-Alarme)** und die **konversationsübergreifende Suche per Subagent (`search_history`)** – beides rein mit `pi-spaces`-Mitteln.
+Stufe 2 (`help-site/examples/v2-local-durable/run.ts`) macht den Multiplayer Space-Chat dauerhaft über Prozessneustarts hinweg und fügt genau die zwei fortgeschrittenen Funktionen aus dem Earendil-Artikel hinzu: **geplante Aufgaben (`schedule`-Alarme)** und die **konversationsübergreifende Suche per Subagent (`search_history`)** – beides rein mit `phi-spaces`-Mitteln.
 
 ## Topologie: Space-Verteilung {#topology}
 
@@ -25,7 +25,7 @@ Stufe 2 (`help-site/examples/v2-local-durable/run.ts`) macht den Multiplayer Spa
 
 ### Schritt 1: SQLite-Storage und RequestRef-Claims {#step-1-sqlite-claims}
 
-Statt `MemoryStorage` öffnet der Host `await openNodeSqliteStorage(dbPath)`. Für jeden Teilnehmer wird `const { generation } = await space.issueGeneration(principal)` ausgestellt. Wird `createThread` oder `submitMessage` nach einem Verbindungsabbruch mit derselben `requestId` wiederholt, gibt `pi-spaces` exakt das erste Ergebnis zurück.
+Statt `MemoryStorage` öffnet der Host `await openNodeSqliteStorage(dbPath)`. Für jeden Teilnehmer wird `const { generation } = await space.issueGeneration(principal)` ausgestellt. Wird `createThread` oder `submitMessage` nach einem Verbindungsabbruch mit derselben `requestId` wiederholt, gibt `phi-spaces` exakt das erste Ergebnis zurück.
 
 ### Schritt 2: Geplante Alarme über ScheduledJob + TimerLock-Lease {#step-2-alarms}
 
@@ -33,7 +33,7 @@ Statt `MemoryStorage` öffnet der Host `await openNodeSqliteStorage(dbPath)`. F�
    - einen `ScheduledJob`-Entry mit `status: "pending"` und `FOREVER`-Lease,
    - einen `TimerLock`-Entry `{ jobId, threadId, executeAt }` mit **`lease = delayMs`**.
 2. Solange `TimerLock` im Space existiert, ist der Auftrag noch nicht fällig.
-3. Sobald `delayMs` verstrichen ist – selbst wenn der Prozess zwischendurch geschlossen und auf derselben SQLite-Datei neu geöffnet wurde! –, entfernt der `pi-spaces`-Reaper den abgelaufenen `TimerLock`.
+3. Sobald `delayMs` verstrichen ist – selbst wenn der Prozess zwischendurch geschlossen und auf derselben SQLite-Datei neu geöffnet wurde! –, entfernt der `phi-spaces`-Reaper den abgelaufenen `TimerLock`.
 4. `tickAlarms()` nimmt den nun ungesperrten `ScheduledJob` unter einer Transaktion, schreibt ihn mit `status: "triggered"` zurück und legt gleichzeitig den fälligen Wakeup-`ChatTask` an.
 
 ### Schritt 3: Konversationsübergreifende Suche per Search-Subagent {#step-3-subagent}

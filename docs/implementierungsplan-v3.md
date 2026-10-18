@@ -59,7 +59,7 @@ aufdeckt, wird zuerst `federation-plan-v3.md` korrigiert und dann weiterentwicke
 | F11 Startwerte Frame/Commit/Verbindungen | 1 (Startwerte), 2 (final) | **entschieden:** Startwerte übernommen, Lasttest bestätigt sie vor Stufe 2 | Implementierung |
 | F9 Löschung pro Principal | 2 | Admin-Command in Stufe 2 | Betreiber |
 | F1 Fencing-Adapter | 3 | Cloud-API des VPS-Anbieters | Betreiber |
-| Neue Abhängigkeit `pi-server` (TCP/Unix-Transport) für pi-spaces | 1b | **entschieden:** Peer-Dependency, Transport hinter einem Interface; eingetragen erst mit AP 1.9 | Betreiber |
+| Neue Abhängigkeit `pi-server` (TCP/Unix-Transport) für phi-spaces | 1b | **entschieden:** Peer-Dependency, Transport hinter einem Interface; eingetragen erst mit AP 1.9 | Betreiber |
 
 ## 4. Arbeitspakete und Reihenfolge
 
@@ -200,7 +200,7 @@ Failover mit `NotCommitted` und den Rückweg mit netcup-Fencing
 
 ### Phase 4 – Weitere Clients (Stufe 4)
 
-Desktop/CLI-Paket `pi-spaces-client` (RemoteSpace, TCP-Transport, Pairing); Browser-Gateway nur nach F12.
+Desktop/CLI-Paket `phi-spaces-client` (RemoteSpace, TCP-Transport, Pairing); Browser-Gateway nur nach F12.
 
 ## 5. Kritischer Pfad und erste Schritte
 
@@ -219,7 +219,7 @@ eingeschlossen, [ap1b-abnahme.md](ap1b-abnahme.md)). Phase 2 ist mit der Ausnahm
 | Risiko | Wirkung | Gegenmaßnahme |
 |---|---|---|
 | Ein großes Dokument pro Space | Commit-Kosten und Speicher wachsen mit Entries, Claims, Log | AP 0.3 misst früh; notfalls Claims/Log in eigene Familien-Dokumente |
-| `pi-server` als neue Abhängigkeit von pi-spaces | AGENTS.md verlangt Rückfrage | Transport hinter Interface; Unix/TCP-Adapter im Nachbarprojekt oder als optionale Peer-Dependency |
+| `pi-server` als neue Abhängigkeit von phi-spaces | AGENTS.md verlangt Rückfrage | Transport hinter Interface; Unix/TCP-Adapter im Nachbarprojekt oder als optionale Peer-Dependency |
 | NetBird-Verhalten weicht von den Hypothesen ab | Grant-/Cache-Logik passt nicht | 1b.1 vor 1b.2–1b.4 |
 | Android-Keystore ohne Ed25519 | Schicht B auf dem Handy | P-256 von Anfang an mit implementieren |
 | Fencing-API des Anbieters ohne echte Neustartsperre | Stufe 3 nicht abnehmbar | Anbieterwahl mit F1 klären, bevor Phase 3 beginnt |

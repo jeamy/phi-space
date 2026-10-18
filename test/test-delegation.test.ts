@@ -4,7 +4,7 @@ import test from "node:test";
 
 import {generateKey, type KeyDirectory, type PeerKeyRec, ProvingService} from "../src/auth.ts";
 import {argHash} from "../src/claims.ts";
-import {PiSpaces} from "../src/client.ts";
+import {PhiSpaces} from "../src/client.ts";
 import {FOREVER} from "../src/core.ts";
 import {
     DelegationDenied,
@@ -143,7 +143,7 @@ async function fixture(backend: typeof BACKENDS[number], f: (o: any) => Promise<
         };
         const invoke = async (call: Call, targetRequest?: TargetRequest, override: any = {}) =>
             service().handle(await signed(call, targetRequest, override), conn);
-        const gen = (await new PiSpaces(data, ctx, clock, undefined, undefined, {
+        const gen = (await new PhiSpaces(data, ctx, clock, undefined, undefined, {
                          authorityId : "authority"
                      }).issueGeneration(userIdentity.principal))
                         .generation;
@@ -214,7 +214,7 @@ for (const backend of BACKENDS) {
     test(
         `${backend}: signed delegation executes as original principal and deduplicates after restart`,
         () => fixture(backend, async o => {
-            await new PiSpaces(o.data, ctx, o.clock)
+            await new PhiSpaces(o.data, ctx, o.clock)
                 .write({type : "Job", fields : {n : 1}}, null, FOREVER);
             const c = o.call("take", {template : {type : "Job"}, waitMs : 0}, "take");
             const first = await o.invoke(c);
@@ -223,7 +223,7 @@ for (const backend of BACKENDS) {
             await o.reopenData();
             const replay = await o.invoke(c);
             assert.deepEqual(replay, first);
-            assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+            assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
             const poll = await o.invoke({
                 method : "pollOperation",
                 space : o.info.spaceId,
@@ -247,7 +247,7 @@ for (const backend of BACKENDS) {
             const t = await o.signed(c);
             t.frame.delegation.delegation.routerLease.lease.authorityId = "foreign";
             assert.equal((await o.service().handle(t, o.conn)).ok, false);
-            assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+            assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
         }));
     test(`${backend}: both signatures and active router/original keys are required`,
          () => fixture(backend, async o => {
@@ -263,7 +263,7 @@ for (const backend of BACKENDS) {
              o.records.get("router").state = "active";
              o.records.get("user").state = "revoked";
              await assert.rejects(o.signed(c));
-             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+             assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
          }));
     test(`${backend}: a replicated Member answers ReplicaConfigPending until the router routes under its configuration`,
          () => fixture(backend, async o => {
@@ -279,7 +279,7 @@ for (const backend of BACKENDS) {
              assert.ok(poll.ok, JSON.stringify(poll));
              const adopted = await o.invoke(fresh, undefined, {targetReplicaConfigVersion : 3});
              assert.ok(adopted.ok, JSON.stringify(adopted));
-             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 2, "local work and adopted calls only");
+             assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 2, "local work and adopted calls only");
              // After a promotion the journal epoch rises while the replicated Space document keeps its own: the
              // router's new target epoch is accepted, the old one is refused for new work.
              o.setReplica(4, 2);
@@ -326,9 +326,9 @@ for (const backend of BACKENDS) {
              await o.verifier.epochNotice(await o.leases.notice(1), o.info.spaceId);
              await o.reopenData();
              assert.equal((await o.service().handle(oldSigned, o.conn)).ok, false);
-             await new PiSpaces(o.data, ctx, o.clock)
+             await new PhiSpaces(o.data, ctx, o.clock)
                  .write({type : "Job", fields : {n : 1}}, null, FOREVER);
-             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 1,
+             assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 1,
                           "old waiter must not take after epoch notice");
              o.setLease(newer);
              const p = await o.invoke({
@@ -339,7 +339,7 @@ for (const backend of BACKENDS) {
                                       o.target(c));
              assert.ok(p.ok, JSON.stringify(p));
              assert.equal(p.result.state, "done");
-             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+             assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
          }));
     test(`${backend}: expired Root lease renews only with its signed retained token at the current epoch`,()=>fixture(backend,async o=>{
         const token=o.lease;o.setNow(token.lease.expiresAt+1000);
@@ -373,10 +373,10 @@ for (const backend of BACKENDS)
              await o.leases.issue("router", o.routerKey.signer.keyId);
              await o.verifier.epochNotice(await o.leases.notice(1), o.info.spaceId);
              const client =
-                 new PiSpaces(o.data, ctx, o.clock, undefined, "user", {authorization : auth});
+                 new PhiSpaces(o.data, ctx, o.clock, undefined, "user", {authorization : auth});
              await assert.rejects(client.write({type : "Job", fields : {n : 1}}, null, FOREVER),
                                   DelegationDenied);
-             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+             assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
          }));
 for (const backend of BACKENDS)
     test(
@@ -413,7 +413,7 @@ for (const backend of BACKENDS) {
              await o.leases.issue("router", o.routerKey.signer.keyId);
              await o.verifier.epochNotice(await o.leases.notice(1), o.info.alias);
              assert.equal((await o.service().handle(signed, o.conn)).ok, false);
-             assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+             assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
          }));
     test(`${backend}: delegated events renew only the referenced waiter`,
          () => fixture(backend, async o => {
@@ -506,14 +506,14 @@ for (const backend of BACKENDS)
                 await f.write({type : "Job", fields : {n : 1}}, {id : "tcp-write", principal});
                 const taken: any = await f.take({type : "Job"}, {id : "tcp-take", principal});
                 assert.equal(taken.fields.n, 1);
-                assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+                assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
                 await assert.rejects(
                     f.takeWaiting({type : "Job"}, 10000, 5000, {id : "tcp-race", principal}),
                     FederationPending);
-                await new PiSpaces(o.data, ctx, o.clock).write({type : "Job", fields : {n : 2}});
+                await new PhiSpaces(o.data, ctx, o.clock).write({type : "Job", fields : {n : 2}});
                 const winner: any = await f.resume("tcp-race");
                 assert.equal(winner.fields.n, 2);
-                assert.equal(await new PiSpaces(o.data, ctx, o.clock).count(), 0);
+                assert.equal(await new PhiSpaces(o.data, ctx, o.clock).count(), 0);
                 const claims = await o.data.commit(
                     async (tx: any) => JSON.parse(
                         JSON.stringify((await spaceDoc(tx, o.info.spaceId, o.now)).rpc!.claims)),
@@ -636,7 +636,7 @@ for(const backend of BACKENDS)test(`${backend}: complete Root composition reject
  const observedHost=new Proxy(o.root,{get(target,property){if(property==='commit')return(fn:any,c:any)=>target.commit(async(tx:any)=>{insideCommit=true;try{return await fn(tx);}finally{insideCommit=false;}},c);const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;}});
  const controller=await createFederationController({host:observedHost,ctx,id:'complete-root',journalPartitions:8,controlSpaceId:o.controlId,authorityId:'authority',routerPeerId:'router',routerSigner:o.routerKey.signer,controlPeerId:'supervisor',controlSigner:o.controlKey.signer,controlPublicKey:o.controlKey.publicKey,transport:()=>socket,memberPin:async()=>({issuer:'member',algorithm:'ed25519',publicKey:o.controlKey.publicKey}),lease:async()=>{assert.equal(insideCommit,false,'lease renewal must never run inside the journal commit');leaseRefreshes++;await o.root.commit(()=>{},ctx);return o.lease;},grant:o.grant,assertAuthority:async()=>{},authorizeAdmin:async()=>{},now:o.clock});
  assert.equal(controller.partitionRouters.length,8);assert.ok(leaseRefreshes>0);
- await controller.policy.install({authorityId:'authority',policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'member'}},0,async()=>{});await controller.space.write({type:'Job',fields:{n:1}},{id:'composition-write',principal:{peerId:'user'}});await o.leases.issue('router',o.routerKey.signer.keyId);await assert.rejects(controller.space.take({type:'Job'},{id:'old-owner-take',principal:{peerId:'user'}}),/superseded/);assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
+ await controller.policy.install({authorityId:'authority',policyVersion:1,rules:[],completionProfiles:[],default:{mode:'local',member:'member'}},0,async()=>{});await controller.space.write({type:'Job',fields:{n:1}},{id:'composition-write',principal:{peerId:'user'}});await o.leases.issue('router',o.routerKey.signer.keyId);await assert.rejects(controller.space.take({type:'Job'},{id:'old-owner-take',principal:{peerId:'user'}}),/superseded/);assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),1);
  }finally{socket.close();await server.close();}
 }));
 
@@ -656,7 +656,7 @@ for(const backend of BACKENDS)test(`${backend}: typed wire resolution errors per
    assert.equal((await router.advance('lost-'+code)).steps[0]!.state,'unknown');
    assert.equal((await router.advance('lost-'+code)).state,'needsReview');
    await router.recover();assert.equal((await router.advance('lost-'+code)).state,'needsReview');
-   assert.equal(sends,1);assert.equal(polls,1);assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),0);
+   assert.equal(sends,1);assert.equal(polls,1);assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),0);
   }
  }finally{socket.close();await server.close();}
 }));
@@ -673,10 +673,10 @@ for(const backend of BACKENDS)test(`${backend}: signed current-epoch admission r
   assert.equal((await router.advance('same-request')).steps[0]!.state,'unknown');
   assert.equal((await router.advance('same-request')).state,'completed');
   await router.recover();assert.equal((await router.advance('same-request')).state,'completed');
-  assert.equal(sends,2);assert.equal(misses,1);assert.equal(receipts,1);assert.equal(new Set(requests).size,1);assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
+  assert.equal(sends,2);assert.equal(misses,1);assert.equal(receipts,1);assert.equal(new Set(requests).size,1);assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),1);
   const oldMember=new FederationRpc({state:async()=>state,transport:()=>({request:async text=>JSON.parse(text).method==='resolveOperation'?JSON.stringify({ok:false,error:{code:'UnsupportedMethod',message:'old Member'}}):socket.request(text)}),signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
   assert.equal((await oldMember.resolve((await router.get('same-request'))!.steps[0]!)).outcome,'done');
-  assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
+  assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),1);
  }finally{socket.close();await server.close();}
 }));
 
@@ -688,7 +688,7 @@ for(const backend of BACKENDS)test(`${backend}: definitive wire transaction erro
    let effects=0,polls=0;const transport={request:async(text:string)=>{const call=JSON.parse(text);if(call.method==='take'){effects++;return JSON.stringify({ok:false,error:{code,message:'expired transaction before claim admission'}});}if(call.method==='resolveOperation')polls++;return socket.request(text);}};
    const rpc=new FederationRpc({state:async()=>state,transport:()=>transport,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock}),router=new RouterController({host:o.root,ctx,routerId:'definitive-'+code,authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
    const spec=await rpc.step('member',{peerId:'user'},'take',{template:{type:'Job'},timeoutMs:0,txn:'expired'},1);await router.submit({id:'refused-'+code,area:'federation',steps:[spec]});
-   assert.equal((await router.advance('refused-'+code)).state,'needsReview');await router.recover();const retained=await router.advance('refused-'+code);assert.equal(retained.state,'needsReview');assert.equal(retained.steps[0].evidence,code);assert.equal(effects,1);assert.equal(polls,0);assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),0);
+   assert.equal((await router.advance('refused-'+code)).state,'needsReview');await router.recover();const retained=await router.advance('refused-'+code);assert.equal(retained.state,'needsReview');assert.equal(retained.steps[0].evidence,code);assert.equal(effects,1);assert.equal(polls,0);assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),0);
   }
  }finally{socket.close();await server.close();}
 }));
@@ -725,7 +725,7 @@ for(const backend of BACKENDS)test(`${backend}: inline replies still verify reta
    if(['valid','raw-result','legacy'].includes(mode)){assert.equal(command.state,'completed');assert.notEqual((command.steps[0]!.result as any).id,'wrong-unbound-result');assert.equal(queries-before,mode==='legacy'?1:0);}
    else {assert.equal(command.state,'needsReview');assert.equal(queries,before);const sent=effects;await router.recover();assert.equal((await router.advance(id)).state,'needsReview');assert.equal(effects,sent);}
   }
-  assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),modes.length);assert.equal(effects,modes.length);
+  assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),modes.length);assert.equal(effects,modes.length);
  }finally{socket.close();await server.close();}
 }));
 
@@ -735,14 +735,14 @@ for(const backend of BACKENDS)test(`${backend}: transaction follow-ups reuse onl
   const target={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1},state:any={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'member'},rules:[],completionProfiles:[]},members:{member:{id:'member',target,state:'active'}}};
   let generations=0,proofs=0,effects=0;const transport={request:async(text:string)=>{const c=JSON.parse(text);if(c.method==='generation')generations++;if(c.method==='prove')proofs++;if(['take','write'].includes(c.method))effects++;return socket.request(text);}};
   const rpc=new FederationRpc({state:async()=>state,transport:()=>transport,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock}),router=new RouterController({host:o.root,ctx,routerId:'generation-reuse',authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
-  await new PiSpaces(o.data,ctx,o.clock).write({type:'Job',fields:{n:1}});
+  await new PhiSpaces(o.data,ctx,o.clock).write({type:'Job',fields:{n:1}});
   await router.submit({id:'begin',area:'begin',steps:[await rpc.step('member',{peerId:'user'},'txn',{action:'begin',leaseMs:60000},1)]});const begun=await router.advance('begin');assert.equal(begun.state,'completed');const origin=begun.steps[0]!,txn=(origin.result as any).id;assert.ok(origin.generationAdmitUntil!>o.now);const before=generations;
   await router.recover();const retained=(await router.get('begin'))!.steps[0]!;assert.equal(retained.generationAdmitUntil,origin.generationAdmitUntil);
   const take=await rpc.step('member',{peerId:'user'},'take',{template:{type:'Job'},timeoutMs:0,txn},1,retained);assert.equal(take.generation,origin.generation);assert.equal(generations,before);
   const priorProofs=proofs;await router.submit({id:'take',area:'take',steps:[take]});assert.equal((await router.advance('take')).state,'completed');assert.ok(proofs>priorProofs);assert.equal(effects,1);
   for(const bad of [{...origin,generationAdmitUntil:o.now},{...origin,generationAdmitUntil:undefined},{...origin,target:{...origin.target,dataIncarnation:'foreign'}},{...origin,principal:{peerId:'foreign'}}]){const n=generations;const spec=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{n:2}},txn},1,bad);assert.notEqual(spec.generation,origin.generation);assert.equal(generations,n+1);}
   const next=await rpc.step('member',{peerId:'user'},'write',{entry:{type:'Job',fields:{n:2}},txn},1,origin);await router.submit({id:'write',area:'write',steps:[next]});o.records.get('router').state='revoked';const prior=effects;const denied=await router.advance('write');assert.equal(denied.steps[0]!.state,'unknown');assert.equal(effects,prior);o.records.get('router').state='active';assert.equal((await router.advance('write')).state,'completed');assert.equal(effects,prior+1);
-  await router.submit({id:'abort',area:'abort',steps:[await rpc.step('member',{peerId:'user'},'txn',{action:'abort',id:txn},1,origin)]});assert.equal((await router.advance('abort')).state,'completed');assert.equal(await new PiSpaces(o.data,ctx,o.clock).count(),1);
+  await router.submit({id:'abort',area:'abort',steps:[await rpc.step('member',{peerId:'user'},'txn',{action:'abort',id:txn},1,origin)]});assert.equal((await router.advance('abort')).state,'completed');assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count(),1);
  }finally{socket.close();await server.close();}
 }));
 
@@ -760,7 +760,7 @@ for(const backend of BACKENDS)test(`${backend}: a delegated resolution of an unk
  // The late original call under the old epoch meets the negative claim.
  const late=await svc().handle(await o.signed(lost,undefined,{targetPrimaryEpoch:1,targetReplicaConfigVersion:2}),o.conn);
  assert.equal(late.ok,false);assert.equal((late as any).error.code,'NotCommitted',JSON.stringify(late));
- assert.equal(await new PiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n:7}}),0);
+ assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n:7}}),0);
  // The router turns it into a failed step without effect.
  const {FederationRpc}=await import('../src/federation-rpc.ts');
  const rpc=new FederationRpc({state:async()=>({policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'member'},rules:[],completionProfiles:[]},members:{}}) as any,transport:()=>({request:async()=>JSON.stringify(decided)}),signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
@@ -792,7 +792,7 @@ for(const backend of BACKENDS)for(const promoted of [false,true])test(`${backend
  sent=[];const r3=await rpc.invoke(step(lost,'prepared'));assert.deepEqual([r3.outcome,r3.evidence],['failed','NotCommitted'],JSON.stringify(r3));
  assert.ok(!sent.includes('write'),'no effect sent to a successor under the old binding: '+sent.join(','));
  assert.deepEqual([r2.target,r3.target],[bound,bound],'receipts keep the bound target');
- assert.equal(await new PiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n:7}}),0);
+ assert.equal(await new PhiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n:7}}),0);
  // Another Space, incarnation or a lower installed epoch is no successor.
  for(const t of [{...bound,dataIncarnation:'other'},{...bound,spaceId:'sp-other'}])await assert.rejects(rpc.resolve({...step(lost,'unknown'),target:t}),/no longer installed/);
  state.members.m.target.primaryEpoch=1;state.members.m.target.hostId='member-c';await assert.rejects(rpc.resolve({...step(lost,'unknown'),target:{...bound,primaryEpoch:2}}),/no longer installed/);
@@ -811,7 +811,7 @@ for(const backend of BACKENDS)test(`${backend}: a routed write in the ReplicaCon
   const rpc=new FederationRpc({state:async()=>state,transport:()=>socket,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
   const router=new RouterController({host:o.root,ctx,routerId:'pending-router',authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
   const f=new FederatedSpace({host:o.root,ctx,id:'pending-federation',router,state:async()=>state,io:rpc,assertAuthority:async()=>{},now:o.clock}),principal={peerId:'user'};
-  const count=(n:number)=>new PiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n}});
+  const count=(n:number)=>new PhiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n}});
   const adopt=(version:number,epoch=1)=>{state.policy.policyVersion++;state.noticePolicyVersions.push(state.policy.policyVersion);o.setPolicy(state.policy.policyVersion);state.members.m.replication.replicaConfigVersion=version;state.members.m.target={...state.members.m.target,primaryEpoch:epoch};};
   o.setReplica(1,1);await f.write({type:'Job',fields:{n:1}},{id:'w1',principal});
   // setStandby on the Member: configuration 2, the router has not adopted it yet.

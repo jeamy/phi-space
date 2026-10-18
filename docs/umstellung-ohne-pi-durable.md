@@ -1,8 +1,8 @@
-# Umstellung von pi-spaces auf eine eigenständige persistente Laufzeit
+# Umstellung von phi-spaces auf eine eigenständige persistente Laufzeit
 
 Stand: 2026-10-12. **Detaillierter Ziel- und Arbeitsplan; noch nicht implementiert.**
 
-Ziel ist ein pi-spaces, das ohne Installation, Import oder laufenden Prozess von
+Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
 Speicherung, Wiederaufnahme nach Ausfällen und kontrollierte Übernahme vorhandener Daten.
 Die bestehenden Space-, RPC- und Sicherheitssemantiken bleiben erhalten.
@@ -24,7 +24,7 @@ Das Zielprodukt besitzt:
 - einen persistenten SQLite-Speicher als ersten Produktionsbackend und einen
   ausdrücklich flüchtigen Memory-Backend ausschließlich für Tests;
 - einen eigenständig startbaren Space-Dienst über die vorhandenen Unix-/TCP-Protokolle;
-- unveränderte fachliche APIs von `PiSpaces`, `SpaceService` und `RemoteSpace`, soweit
+- unveränderte fachliche APIs von `PhiSpaces`, `SpaceService` und `RemoteSpace`, soweit
   sie nicht unmittelbar Harness-, Dokument- oder Task-Typen offenlegen;
 - ein versioniertes Export-/Importverfahren für bestehende JSONL-/SQLite-Bestände;
 - eine separat paketierte, optionale Agent-Anbindung. Nur diese darf weiterhin
@@ -354,7 +354,7 @@ Ein Paket gilt erst mit Artefakt, Abnahmekriterien und reproduzierbarem Nachweis
 | **U0 – Inventur und Verträge** | Start / M | vollständigen Import-/Typgraphen und Dokumentkatalog erstellen; aktuellen Git-Stand und lokale Änderungen festhalten; bestehende Tests als Baseline ausführen; Fehler/Skips getrennt erfassen; unterstützte Plattformen sowie p95-/p99-, Speicher-, Startup-, RPO-/RTO-Budgets festlegen | jeder persistente Datentyp und jede Harness-Funktion hat Zielzuordnung; Betriebsprofil und Messgrenzen dokumentiert |
 | **U1 – Eigene Host-Grenze** | U0 / M | eigene Doc-/Tx-/Host-Typen definieren; zunächst Legacy-Adapter für vergleichende Tests; `index.ts` von Tools trennen; Reaper/Delivery auslagern; privilegierte Recovery-Zugriffe explizit machen | Kern- und Host-Vertragstests unverändert fachlich erfolgreich; unabhängiger Importgraph enthält keine Durable-Typen |
 | **U2 – SQLite-Store** | U1 / L | Schema, Queue, Draft-Isolation, atomare Mehrdokument-Commits, FULL, Owner-Schutz, Watch-Rennen, Fehlerklassifikation und Formatmigration implementieren; Memory-Backend ergänzen; Lastprobe großer Dokumente | neue Conformance- und echte Crash-Tests bestanden; Isolation und Sync-Profil nachgewiesen; festgelegte Lastgrenzen eingehalten |
-| **U3 – Lokaler eigenständiger Dienst** | U2 / L | `PiSpaces`, Registry, Service, Meter, Reaper, Mailboxes, Fanout/Release und Standalone-Start portieren; Request-Replay/Deadline-Wiederaufnahme; `SpaceLike` und RPC prüfen | Sieb/Cache ohne Modell und ohne installiertes pi-durable über Unix/TCP; Restart erhält Pending-Operationen und Ergebnisse |
+| **U3 – Lokaler eigenständiger Dienst** | U2 / L | `PhiSpaces`, Registry, Service, Meter, Reaper, Mailboxes, Fanout/Release und Standalone-Start portieren; Request-Replay/Deadline-Wiederaufnahme; `SpaceLike` und RPC prüfen | Sieb/Cache ohne Modell und ohne installiertes pi-durable über Unix/TCP; Restart erhält Pending-Operationen und Ergebnisse |
 | **U4 – Federation und Recovery** | U3 / L | Router, Delegation, Policy, Membership, Admin-Batches, Supervisor, Control-ACK und Restore-Journale portieren; Boot-/Read-Guards und Recovery-Capability prüfen | relevante AP1b-/AP2-/Simulator-Fälle auf neuem Store bestanden; Fencing-/Restore-Garantien nicht abgeschwächt |
 | **U5 – Export/Import** | U0, U2; Endabnahme nach U4 / L | versionsgebundenen Legacy-Leser, Manifest, Session-Zuordnung, privaten Dokumentexport, wiederaufnehmbaren Import, Report, Probe-Cutover und Rollback-Grenzen implementieren | JSONL und SQLite inklusive laufender Jobs vollständig migriert; Teilimport gesperrt; Restart/Retry nach Import korrekt |
 | **U6 – Adapter, Mobile und Werkzeuge** | U3, U4, U5 / L | separates Agent-Paket und Tool-Identitäten; mobile Space-Datenbank/Lebenszyklus; pi-server-Anbindung; Beispiele, TUI, Inspector, Testbed und Bundles umstellen | Space-Dienst überlebt Agent-Neustart; alte Clients kompatibel; native/mobile Abnahme mit gebauten Artefakten; Legacy-Tasks kontrolliert behandelt |
@@ -402,7 +402,7 @@ Nach jedem Änderungspaket: `npm run typecheck` und `npm test`. Zusätzlich werd
 `npm run test:examples`, die unabhängige Host-Suite, Migrationssuite und
 `npm run test:pi-server` entsprechend dem Paket ausgeführt. Vor nativer Abnahme wird
 das geprüfte Artefakt gebaut; Bundle-Synchronisierung in das Nachbarprojekt erfolgt
-bewusst mit passendem `PI_SPACES_MOBILE_ROOT`. Keine Abhängigkeiten automatisch installieren.
+bewusst mit passendem `PHI_SPACES_MOBILE_ROOT`. Keine Abhängigkeiten automatisch installieren.
 Remote-Testbed zunächst mit `--dry-run`; der erste echte Versand/Containerstart auf
 `big` und kostenpflichtige Live-Modelltests benötigen die vorgesehene Freigabe.
 

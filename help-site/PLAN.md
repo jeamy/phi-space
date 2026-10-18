@@ -1,10 +1,10 @@
-# Detaillierter Architektur-, Dokumentations- und Umsetzungsplan: `PI-SPACES / HELP` & Multiplayer Space-Chat
+# Detaillierter Architektur-, Dokumentations- und Umsetzungsplan: `PHI-SPACES / HELP` & Multiplayer Space-Chat
 
 Stand: 2026-10-15
-Zielverzeichnis: `/media/data/programming/pi-spaces/help-site/`
+Zielverzeichnis: `/media/data/programming/phi-spaces/help-site/`
 Öffentliche Ziel-Domain: `https://spaces.eibrain.org`
 Mobile Integration: `pi-termux-mobile` (`/media/data/programming/pi-termux-mobile`, `spaces.html` & `steuerung.html`)
-Fachliche Vorlage für das Praxisbeispiel: [Pi Durable on Cloudflare](https://earendil.com/posts/pi-durable-on-cloudflare/) – **vollständig neu gedacht und umgesetzt mit nativen `pi-spaces`-Mitteln (in 6 Ausbaustufen `v1` bis `v6`)**
+Fachliche Vorlage für das Praxisbeispiel: [Pi Durable on Cloudflare](https://earendil.com/posts/pi-durable-on-cloudflare/) – **vollständig neu gedacht und umgesetzt mit nativen `phi-spaces`-Mitteln (in 6 Ausbaustufen `v1` bis `v6`)**
 
 ---
 
@@ -12,43 +12,43 @@ Fachliche Vorlage für das Praxisbeispiel: [Pi Durable on Cloudflare](https://ea
 
 Ziel dieses Vorhabens ist ein **Next.js- und React-basierter Webserver (`help-site/`)**, der zwei eng verzahnte Aufgaben erfüllt:
 
-1. **Kanonisches High-End-Hilfesystem (`PI-SPACES / HELP`)**:
+1. **Kanonisches High-End-Hilfesystem (`PHI-SPACES / HELP`)**:
    - Beantwortet präzise, quellcode- und vertragsgebunden:
-     - **Was ist `pi-spaces`?** (Idee, Tuple-Space-Paradigma, Abgrenzung, Einsatzgebiete)
-     - **Wie ist `pi-spaces` aufgebaut?** (Schichtenarchitektur von `src/core.ts` über `SpaceService`/`RemoteSpace` und NetBird-Gate bis zu `FederatedSpace`, Replikation und Betriebserweiterung)
-     - **Was kann `pi-spaces`?** (Atomare Commits, Leases, Transaktionen, Claims, Mailboxes, CompletionProfiles, verbindliche Garantien vs. explizite Grenzen)
-     - **Wie lautet die API?** (Interaktiver API- & Tool-Finder sowie vollständige Referenz für `PiSpaces`, `RemoteSpace`, `SpaceService`, Agent-Tools, `FederationController`, `RunController` und Fehlerklassen)
-     - **Wie baut man ein System mit `pi-spaces` Schritt für Schritt auf?** (Vom einzelnen Space bis zum verteilten Multiplayer-System)
-2. **Vollständige Umsetzung und Dokumentation eines `pi-spaces`-Referenzprojekts: „Multiplayer Space-Chat“**:
-   - Das im Blogpost *Pi Durable on Cloudflare* gezeigte Szenario (teilbare Session-URLs, mehrere Konversationen & Forking, idempotente Befehle bei Verbindungsabbruch, Multiplayer-Nachrichten mit Inbox-Reihenfolge, Live-Streaming & Teilnehmer-Präsenz, geplante Aufgaben/Alarme sowie ein Subagent zur Konversationssuche) wird **nicht** über rohe Cloudflare-Durable-Object- oder interne `pi-durable`-Session-Primitiven nachgebaut, sondern **vollständig mit den Mitteln von `pi-spaces`** (`NamedSpace`, `EntryDraft`/`Template`, `RequestRef`-Claims, `Lease`/`renew`, `Txn` + `CompletionProfile`, `readPage` + `changes`, `notify`/`wait` + Consumer-Mailboxes) realisiert.
+     - **Was ist `phi-spaces`?** (Idee, Tuple-Space-Paradigma, Abgrenzung, Einsatzgebiete)
+     - **Wie ist `phi-spaces` aufgebaut?** (Schichtenarchitektur von `src/core.ts` über `SpaceService`/`RemoteSpace` und NetBird-Gate bis zu `FederatedSpace`, Replikation und Betriebserweiterung)
+     - **Was kann `phi-spaces`?** (Atomare Commits, Leases, Transaktionen, Claims, Mailboxes, CompletionProfiles, verbindliche Garantien vs. explizite Grenzen)
+     - **Wie lautet die API?** (Interaktiver API- & Tool-Finder sowie vollständige Referenz für `PhiSpaces`, `RemoteSpace`, `SpaceService`, Agent-Tools, `FederationController`, `RunController` und Fehlerklassen)
+     - **Wie baut man ein System mit `phi-spaces` Schritt für Schritt auf?** (Vom einzelnen Space bis zum verteilten Multiplayer-System)
+2. **Vollständige Umsetzung und Dokumentation eines `phi-spaces`-Referenzprojekts: „Multiplayer Space-Chat“**:
+   - Das im Blogpost *Pi Durable on Cloudflare* gezeigte Szenario (teilbare Session-URLs, mehrere Konversationen & Forking, idempotente Befehle bei Verbindungsabbruch, Multiplayer-Nachrichten mit Inbox-Reihenfolge, Live-Streaming & Teilnehmer-Präsenz, geplante Aufgaben/Alarme sowie ein Subagent zur Konversationssuche) wird **nicht** über rohe Cloudflare-Durable-Object- oder interne `pi-durable`-Session-Primitiven nachgebaut, sondern **vollständig mit den Mitteln von `phi-spaces`** (`NamedSpace`, `EntryDraft`/`Template`, `RequestRef`-Claims, `Lease`/`renew`, `Txn` + `CompletionProfile`, `readPage` + `changes`, `notify`/`wait` + Consumer-Mailboxes) realisiert.
 
 ---
 
-## 2. Analyse der bestehenden `pi-spaces`-Dokumentation (`docs/`)
+## 2. Analyse der bestehenden `phi-spaces`-Dokumentation (`docs/`)
 
-Die Auswertung aller Dokumente in `/media/data/programming/pi-spaces/docs/` ergibt folgendes Gesamtbild, das als **einzige Wahrheitsquelle (Single Source of Truth)** in den Help-Corpus einfließt:
+Die Auswertung aller Dokumente in `/media/data/programming/phi-spaces/docs/` ergibt folgendes Gesamtbild, das als **einzige Wahrheitsquelle (Single Source of Truth)** in den Help-Corpus einfließt:
 
-### 2.1 Was ist `pi-spaces`?
+### 2.1 Was ist `phi-spaces`?
 
-- `pi-spaces` ist ein transaktionaler, persistenter Koordinationsraum (inspiriert von Linda / JavaSpaces), implementiert in TypeScript (ESM) als Erweiterung für `@earendil-works/pi-durable` (mit geplantem eigenständigem `SpaceHost`-Unterbau gemäß `docs/umstellung-ohne-pi-durable.md`).
+- `phi-spaces` ist ein transaktionaler, persistenter Koordinationsraum (inspiriert von Linda / JavaSpaces), implementiert in TypeScript (ESM) als Erweiterung für `@earendil-works/pi-durable` (mit geplantem eigenständigem `SpaceHost`-Unterbau gemäß `docs/umstellung-ohne-pi-durable.md`).
 - **Grundprinzip**: Teilnehmer (Clients, Worker-Schleifen, KI-Agenten, Koordinatoren) rufen sich nicht direkt gegenseitig auf, sondern koordinieren sich über typisierte JSON-Objekte (**Entries** `{ type, types?, fields }`) in logischen Räumen (**Spaces**).
 - **Entkopplung in Raum und Zeit**:
   - Ein Produzent schreibt (`write`) eine Aufgabe, Nachricht oder Beobachtung mit einer Ablaufzeit (**Lease**).
   - Ein Konsument liest (`read`) oder entnimmt exklusiv (`take`) passende Entries anhand eines **Templates** (`{ type?, fields?, id? }`, wobei fehlende oder `null`-Felder als Wildcards wirken).
   - Ist noch kein passender Entry vorhanden, wartet der Aufrufer entweder blockierend (`read`/`take` mit `timeout`) oder registriert einen dauerhaften, nichtblockierenden Auftrag (`wait` / `notify`), der auch Prozessneustarts überlebt.
 
-### 2.2 Wie ist `pi-spaces` aufgebaut? (Die 6 Architekturschichten)
+### 2.2 Wie ist `phi-spaces` aufgebaut? (Die 6 Architekturschichten)
 
 | Schicht | Quellmodule | Aufgaben und Mechanismen |
 |---|---|---|
 | **1. Reiner Kern & Dokumentmodell** | `src/core.ts`, `src/doc.ts`, `src/spaces.ts`, `src/canonical.ts` | Deterministische Zustandsmaschine mit explizitem `now`. Dokumentversion 5: Default-Space (`pi-spaces.space`), benannte Spaces (`pi-spaces.named-space`) und Registry (`pi-spaces.registry`, Alias $\rightarrow$ unveränderliche `spaceId`). Jeder Entry besitzt eine globale ID `gid = <spaceId>/<localId>` (`localId` = Inkarnation + monotoner Zähler). |
 | **2. Claims, Streams, Seiten & Mailboxes** | `src/claims.ts`, `src/stream.ts`, `src/snapshot.ts`, `src/paging.ts`, `src/mailbox.ts` | **Ein Commit, eine Wahrheit:** Space-Mutation, Request-Claim (`{ principal, generation, requestId }` + RFC-8785 Argument-Hash), Revisionsnummer (`rev`), Mailbox-Event und Byte-Budget-Reservierung erfolgen im selben atomaren Commit. `readPage` liefert konsistente, bytebegrenzte Snapshot-Seiten (`token`, `rev`, `streamId`); `changes(afterRev)` liefert Commit-Batches; Mailboxes (`events`/`ack`) sichern Event-Zustellung mit Präfix-ACK und `mailboxEpoch` ab. |
-| **3. Lokaler Client, Agent-Tools & Service** | `src/client.ts`, `src/index.ts`, `src/service.ts`, `src/remote.ts`, `src/socket.ts`, `src/pi-server.ts`, `src/meter.ts` | `PiSpaces` (lokale API) und `RemoteSpace` (Netzwerk-Client) implementieren denselben Basisvertrag `SpaceLike`. `src/index.ts` stellt 8 replay-sichere LLM-Tools (`space_write`, `space_read`, `space_take`, `space_list`, `space_txn`, `space_wait`, `space_notify`, `space_lease`) sowie Reaper & Event-Delivery (`startService`) bereit. `SpaceService` bedient Requests über In-Process-, Unix-Socket- (`0600`), TCP- oder `pi-serverd`-Transport. |
+| **3. Lokaler Client, Agent-Tools & Service** | `src/client.ts`, `src/index.ts`, `src/service.ts`, `src/remote.ts`, `src/socket.ts`, `src/pi-server.ts`, `src/meter.ts` | `PhiSpaces` (lokale API) und `RemoteSpace` (Netzwerk-Client) implementieren denselben Basisvertrag `SpaceLike`. `src/index.ts` stellt 8 replay-sichere LLM-Tools (`space_write`, `space_read`, `space_take`, `space_list`, `space_txn`, `space_wait`, `space_notify`, `space_lease`) sowie Reaper & Event-Delivery (`startService`) bereit. `SpaceService` bedient Requests über In-Process-, Unix-Socket- (`0600`), TCP- oder `pi-serverd`-Transport. |
 | **4. Overlay-Gate, Auth, Grants & Recovery (Phase 1b)** | `src/gate.ts`, `src/auth.ts`, `src/enroll.ts`, `src/grants.ts`, `src/rotation.ts`, `src/supervisor.ts`, `src/runtime.ts`, `src/boot.ts`, `src/restore.ts`, `src/recovery-*.ts` | **Schicht A:** NetBird-WireGuard-Peer-Identität und Gruppen (`space-hosts`, `space-admin`, `space-observer`). **Schicht B:** Verbindungsgebundene Ed25519/P-256-Challenge (30 s). Token-/QR-Enrollment im Control Space, 60-s-Kurzzeit-Grants (`effect` vs. `resolution`), Schlüsselrotation, externes CAS-Boot-Register und journalisierter Control-/Data-Restore (`restoredUnverified` Quarantäne bis `releaseRestored`). |
 | **5. Federation, Router & Membership (Phase 2)** | `src/router.ts`, `src/delegation.ts`, `src/federation-policy.ts`, `src/federated-space.ts`, `src/membership.ts`, `src/capability-directory.ts`, `src/data-admin.ts` | `RouterController` mit Command-Zustandsmaschine (`accepted` $\rightarrow$ `applying` $\rightarrow$ `completed`/`failed`/`needsReview`) und 1–1024 Journal-Partitionen. Signierte `RouterLease` & Original-Principal-Delegation. `FederationPolicy` (`local`, `expand` nach Typ, HRW über Feldwert, Capacity/Capability). `FederatedSpace` inkl. journalisiertem Waiter-Wettlauf bei `takeWaiting`. Membership (`addMember`, `drain`, `freezeForRemoval`, `EmptyProof`, `removeMember`) und `DistributedPrincipalErasure`. |
 | **6. Betriebserweiterung (Phase 2b) & Replikation (Phase 3)** | `src/run-controller.ts`, `src/run-member.ts`, `src/workers.ts`, `src/space-lifecycle.ts`, `src/deployment.ts`, `src/dashboard.ts`, `src/entry-replication.ts`, `src/primary-sync.ts`, `src/replica-control.ts` | `RunGate` im Core (Tasks nur bei `running` nehmbar), `RunController`, signierte `WorkerAssignments` + `WorkerSupervisor`, deklaratives Deployment (`npm run bootstrap`), lesendes HTTP+SSE-Dashboard (`src/dashboard.ts`) und TUI (`test/tui/`). Phase-3-Bausteine: HLC/LWW/Add-Wins-Replikation, gepagter Snapshot-/Stream-Transfer, Primary-Sync-Unterbau und Netcup-mTLS-Fencing. |
 
-### 2.3 Was kann `pi-spaces`? (Verbindliche Garantien vs. Grenzen)
+### 2.3 Was kann `phi-spaces`? (Verbindliche Garantien vs. Grenzen)
 
 Gemäß `docs/implementierungsstand.md` und `docs/federation-plan-v3.md` muss das Hilfesystem strikt zwischen **nachgewiesenen Garantien** und **bewussten Grenzen** unterscheiden:
 
@@ -66,9 +66,9 @@ Gemäß `docs/implementierungsstand.md` und `docs/federation-plan-v3.md` muss da
 
 ---
 
-## 3. Design- und UX-Architektur von `PI-SPACES / HELP`
+## 3. Design- und UX-Architektur von `PHI-SPACES / HELP`
 
-Die gestalterische und strukturelle Architektur definiert den Standard für `PI-SPACES / HELP`:
+Die gestalterische und strukturelle Architektur definiert den Standard für `PHI-SPACES / HELP`:
 
 ### 3.1 Visuelles System, Typografie und 14 Farbpaletten
 
@@ -76,7 +76,7 @@ Die gestalterische und strukturelle Architektur definiert den Standard für `PI-
   - Fließtext & Überschriften: `--font-geist-sans` (Geist Sans / System-UI-Fallback), markante Display-Headlines mit engem Tracking (`letter-spacing: -0.06em` bis `-0.07em`, `text-wrap: balance`).
   - Technische Bezeichner, IDs, Badges, Nummern, Eyebrows und Code: `--font-geist-mono` (Geist Mono / Monospace), `font-variant-numeric: tabular-nums`.
 - **Theme-Engine (`Dark` / `Light` + 14 Paletten)**:
-  - Persistenz in `localStorage` (`pi-spaces-help-locale`, `pi-spaces-help-mode`, `pi-spaces-help-palette`).
+  - Persistenz in `localStorage` (`phi-spaces-help-locale`, `phi-spaces-help-mode`, `phi-spaces-help-palette`).
   - Dynamische CSS-Custom-Properties auf `:root[data-mode="dark|light"][data-palette="..."]`:
     - Alle 14 Paletten: `spaces_default` (mit `#AED83C` / `#152B35` / `#5C8EA0`), `ocean_pulse`, `amber_signal`, `raspberry_velvet`, `duo_neon`, `infrared_blueprint`, `jade_clay`, `violet_cream`, `pearl_graphite`, `cobalt_saffron`, `classic_amber`, `jade_mono`, `cyan_mono`, `violet_mono`.
     - Automatische WCAG-Kontrastberechnung (`#101010` vs. `#FFFFFF`) für `--accent-ink` auf Primär-Buttons und aktiven Badges.
@@ -85,7 +85,7 @@ Die gestalterische und strukturelle Architektur definiert den Standard für `PI-
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ PI-SPACES / HELP    [ 🔍 Systeme, Methoden, Entry-Typen, Fehler … (Ctrl K) ] [DE|EN] [🌙|☀️] [🎨] │
+│ PHI-SPACES / HELP    [ 🔍 Systeme, Methoden, Entry-Typen, Fehler … (Ctrl K) ] [DE|EN] [🌙|☀️] [🎨] │
 ├─────────────────────┬────────────────────────────────────────────────────┬───────────────┤
 │ SIDEBAR (280px)     │ HAUPTBEREICH (.content-scroll, max 1120px)         │ TOC (250px)   │
 │                     │                                                    │               │
@@ -110,10 +110,10 @@ Die gestalterische und strukturelle Architektur definiert den Standard für `PI-
 
 ### 3.3 Die 9 kanonischen Systembereiche (`corpus/help_product_catalog.yaml`)
 
-Das gesamte Wissen über `pi-spaces` wird in **9 kanonische Systembereiche** gegliedert:
+Das gesamte Wissen über `phi-spaces` wird in **9 kanonische Systembereiche** gegliedert:
 
 1. **`01` – Spaces System Map (`spaces_system_map`)**
-   - *Was ist `pi-spaces`?* Technische Produktkarte für Tuple-Spaces, Entries, Templates, Leases, Transaktionen, Schichtenmodell und die Grenze zwischen lokalem `PiSpaces`, `RemoteSpace` und `FederatedSpace`.
+   - *Was ist `phi-spaces`?* Technische Produktkarte für Tuple-Spaces, Entries, Templates, Leases, Transaktionen, Schichtenmodell und die Grenze zwischen lokalem `PhiSpaces`, `RemoteSpace` und `FederatedSpace`.
    - Artikel: `help.topic.overview`, `help.topic.architecture_layers`, `help.topic.guarantees_and_boundaries`, `help.topic.data_and_consistency_model`.
 2. **`02` – Core, Entries & Transaktionen (`core_entries_transactions`)**
    - Reine Zustandsmaschine (`src/core.ts`), Dokumentversion 5 (`pi-spaces.space`, `pi-spaces.named-space`, `pi-spaces.registry`), globale IDs (`gid`), Subtypen, Wildcard-Matching, Leases, Transaktionen und `CompletionProfile`.
@@ -122,8 +122,8 @@ Das gesamte Wissen über `pi-spaces` wird in **9 kanonische Systembereiche** geg
    - Request-Claims (`{ principal, generation, requestId }`), kanonischer JSON-Hash (RFC 8785), `readPage`-Snapshots (`token`, `rev`, `streamId`), `changes(afterRev)`-Revisionsströme und langlebige Consumer-Mailboxes (`events`, Präfix-`ack`, `mailboxEpoch`).
    - Artikel: `help.topic.request_claims_and_generations`, `help.topic.snapshots_and_change_streams`, `help.topic.durable_mailboxes_and_ack`.
 4. **`04` – Lokaler Client & Agent-Tools (`client_and_agent_tools`)**
-   - `PiSpaces`-Client, benannte Spaces (`createSpace`, `listSpaces`), Reaper & Event-Delivery (`startService`) sowie die 8 replay-sicheren LLM-Agent-Tools (`space_write`, `space_read`, `space_take`, `space_list`, `space_txn`, `space_wait`, `space_notify`, `space_lease`).
-   - Artikel: `help.topic.local_client_pispaces`, `help.topic.agent_tools_and_replay`, `help.topic.reaper_and_event_delivery`.
+   - `PhiSpaces`-Client, benannte Spaces (`createSpace`, `listSpaces`), Reaper & Event-Delivery (`startService`) sowie die 8 replay-sicheren LLM-Agent-Tools (`space_write`, `space_read`, `space_take`, `space_list`, `space_txn`, `space_wait`, `space_notify`, `space_lease`).
+   - Artikel: `help.topic.local_client_phispaces`, `help.topic.agent_tools_and_replay`, `help.topic.reaper_and_event_delivery`.
 5. **`05` – SpaceService, RemoteSpace & Transporte (`service_remote_transport`)**
    - Transportunabhängiger `SpaceService`, `IdentityAdapter` & Rollen-`Policy`, `RemoteSpace` mit automatischem Retry, Unix-Socket (`0600`), TCP, `pi-serverd`-Integration und Umgang mit `OutcomeUnknown`.
    - Artikel: `help.topic.space_service_and_policy`, `help.topic.remote_space_and_transports`, `help.topic.error_handling_and_outcome_unknown`.
@@ -137,7 +137,7 @@ Das gesamte Wissen über `pi-spaces` wird in **9 kanonische Systembereiche** geg
    - `RunGate` & `RunController`, signierte `WorkerAssignments` & `WorkerSupervisor`, deklaratives Bootstrap (`npm run bootstrap`), Dashboard & TUI, Phase-3-Replikation (HLC/LWW/Add-Wins/Primary-Sync) und Ausblick auf den eigenständigen Host ohne `pi-durable`.
    - Artikel: `help.topic.runs_and_workers`, `help.topic.bootstrap_dashboard_and_tui`, `help.topic.replication_phase3`, `help.topic.standalone_runtime_outlook`.
 9. **`09` – Schritt-für-Schritt-Aufbau & Multiplayer Space-Chat (`step_by_step_and_multiplayer_chat`)**
-   - Kompletter Konstruktionsleitfaden vom ersten Space bis zur vollständigen Multiplayer-Chat-Anwendung mit ausschließlich `pi-spaces`-Mitteln sowie dem interaktiven API- & Tool-Finder.
+   - Kompletter Konstruktionsleitfaden vom ersten Space bis zur vollständigen Multiplayer-Chat-Anwendung mit ausschließlich `phi-spaces`-Mitteln sowie dem interaktiven API- & Tool-Finder.
    - Artikel: `help.workflow.build_system_step_by_step`, `help.workflow.multiplayer_space_chat`, `help.workflow.multiplayer_threads_and_forks`, `help.workflow.multiplayer_alarms_and_subagent`.
 
 ### 3.4 Kanonische Artikelstruktur und Stilregeln
@@ -189,13 +189,13 @@ Unter dem Bereich `API & Tools` bietet das Hilfesystem einen facettierten techni
 
 Damit Einsteiger sofort ohne Hürden lokal starten können und Fortgeschrittene denselben Anwendungsfall Schritt für Schritt bis zur voll ausgebauten, kryptografisch gesicherten Multi-Member-Federation **inklusive Steuerung und Überwachung über die mobile App (`pi-termux-mobile`)** ausbauen können, wird das Multiplayer-Space-Chat-Beispiel in **6 aufeinander aufbauenden, einzeln ausführbaren Versionen (`v1` bis `v6`)** umgesetzt und dokumentiert.
 
-Weil `PiSpaces` und `RemoteSpace` denselben Basisvertrag `SpaceLike` erfüllen und `FederatedSpace` die verteilte Entsprechung bereitstellt, bleibt das **fachliche Chat-Datenmodell (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `SearchTask`) über alle 6 Versionen identisch** – es ändert sich von Stufe zu Stufe nur die darunterliegende `pi-spaces`-Infrastruktur und Betriebsschicht!
+Weil `PhiSpaces` und `RemoteSpace` denselben Basisvertrag `SpaceLike` erfüllen und `FederatedSpace` die verteilte Entsprechung bereitstellt, bleibt das **fachliche Chat-Datenmodell (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `SearchTask`) über alle 6 Versionen identisch** – es ändert sich von Stufe zu Stufe nur die darunterliegende `phi-spaces`-Infrastruktur und Betriebsschicht!
 
 ### Übersicht der 6 Ausbaustufen
 
-| Version | Verzeichnis / Modus | Infrastruktur & Storage | Neu hinzukommende `pi-spaces`-Mittel | Ziel & Einsatzzweck |
+| Version | Verzeichnis / Modus | Infrastruktur & Storage | Neu hinzukommende `phi-spaces`-Mittel | Ziel & Einsatzzweck |
 |---|---|---|---|---|
-| **`v1`** | `examples/v1-local-memory/` | 1 Prozess, `MemoryStorage`, kein Setup | `PiSpaces`, `NamedSpace`, `write`/`read`/`take`, `Lease` (`renew`), `Txn` (`createTransaction`/`commit`/`abort`), `CompletionProfile`, `startService` | **Sofortstart für Demo & schnelle Tests**: Läuft überall in < 1 Sekunde ohne Dateien, Ports oder Keys. Zeigt Threads, Forking, Multiplayer-Presence und transaktionale Worker. |
+| **`v1`** | `examples/v1-local-memory/` | 1 Prozess, `MemoryStorage`, kein Setup | `PhiSpaces`, `NamedSpace`, `write`/`read`/`take`, `Lease` (`renew`), `Txn` (`createTransaction`/`commit`/`abort`), `CompletionProfile`, `startService` | **Sofortstart für Demo & schnelle Tests**: Läuft überall in < 1 Sekunde ohne Dateien, Ports oder Keys. Zeigt Threads, Forking, Multiplayer-Presence und transaktionale Worker. |
 | **`v2`** | `examples/v2-local-durable/` | 1 Prozess, persistenter Store (`SQLite` oder `JSONL`) | `issueGeneration` + `RequestRef`-Claims (Reconnect-Idempotenz), `readPage`-Snapshots (`rev`), `changes(afterRev)`-Stream, `TimerLock`-Leases für `schedule`-Alarme, `SearchTask`/`SubagentStep`/`SearchResult` | **Lokale Dauerhaftigkeit & Crash-Recovery**: Überlebt `SIGKILL` und Server-Neustarts ohne Datenverlust oder doppelte Ausführung; führt Alarme und den `search_history`-Subagenten ein. |
 | **`v3`** | `examples/v3-remote-socket/` | Getrennte Client-/Worker-Verbindungen über Unix-Socket (`0600`) oder TCP (`127.0.0.1`) | `SpaceService`, `serveSpace`, `RemoteSpace`, `socketTransport`, `StaticIdentity`/`GateIdentity`, Rollen-`Policy`, Consumer-Mailboxes (`events` + Präfix-`ack`), `pollOperation` bei `OutcomeUnknown` | **Echte Netzwerk-Entkopplung (`RemoteSpace`)**: Web-Gateway, Chat-Worker und Search-Subagent greifen nicht mehr direkt auf den Harness zu, sondern kommunizieren als Remote-Clients über Socket/TCP und Mailboxes. |
 | **`v4`** | `examples/v4-gated-auth/` | Mehrere Prozesse/Hosts hinter `startGate` + `CONTROL_SPACE` + `SqliteRecoveryRegister` | **Schicht A** (`PeerDirectory`/NetBird-Rollen), **Schicht B** (`ProvingService` Ed25519/P-256 Challenge), Token-Enrollment (`createEnroll`/`bootstrapEnroll`), 60-s-Grants (`GrantAuthority`/`GrantVerifier`), `rotateKey`, `installBootGuard` | **Zero-Trust & Mehr-Host-Sicherheit**: Jeder Remote-Worker beweist seinen privaten Schlüssel beim Verbindungsaufbau, holt vor Mutationen kurzlebige 60-s-Grants und prüft Boot-Berechtigungen. |
@@ -213,7 +213,7 @@ Für jede der 5 Stufen enthält das Hilfesystem ein vollständiges, eigenständi
 1. **Harness & benannten Space im Speicher öffnen**:
    - `const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx)`
    - `await harness.commit(tx => createSpace(tx, "chat-v1", Date.now()), ctx)`
-   - `const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" })`
+   - `const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" })`
    - `const stopService = await startService(harness, ctx)`
 2. **`CompletionProfile` registrieren**:
    - `await space.setCompletionProfiles([{ taskType: "ChatTask", resultType: "Msg", matchFields: ["taskId", "threadId"], minResults: 1, maxResults: 1 }])`
@@ -247,9 +247,9 @@ Für jede der 5 Stufen enthält das Hilfesystem ein vollständiges, eigenständi
 #### Stufe 3 (`v3-remote-socket`): Entkoppelte Prozesse mit `SpaceService` und `RemoteSpace`
 
 1. **Space-Host als eigener Server-Endpunkt (`serveSpace`)**:
-   - Der Host startet `const service = new SpaceService({ host: harness, ctx, identity: new StaticIdentity(...), policy: CHAT_POLICY })` und horcht über `serveSpace(service, { listen: { path: "/tmp/pi-spaces-chat.sock" }, connection })` (oder TCP Port).
+   - Der Host startet `const service = new SpaceService({ host: harness, ctx, identity: new StaticIdentity(...), policy: CHAT_POLICY })` und horcht über `serveSpace(service, { listen: { path: "/tmp/phi-spaces-chat.sock" }, connection })` (oder TCP Port).
 2. **Web-Gateway, Chat-Worker und Search-Subagent als `RemoteSpace`-Clients**:
-   - Jeder Dienst verbindet sich über `new RemoteSpace(socketTransport({ path: "/tmp/pi-spaces-chat.sock" }), { principal })`.
+   - Jeder Dienst verbindet sich über `new RemoteSpace(socketTransport({ path: "/tmp/phi-spaces-chat.sock" }), { principal })`.
    - Der Anwendungscode für `write`, `take`, `readAll`, `createTransaction`, `commit` und `renew` bleibt **unverändert**, da `RemoteSpace` ebenfalls `SpaceLike` implementiert!
 3. **Ereignisgesteuerte Worker über Consumer-Mailboxes (`wait`, `events`, `ack`)**:
    - Statt Polling registriert der Remote-Worker `await remoteSpace.wait({ type: "ChatTask" }, { take: true, target: "self", timeout: FOREVER, txnLeaseMs: 60_000 })`.
@@ -309,7 +309,7 @@ Diese Stufe verbindet den Multiplayer-Space-Chat-Cluster direkt mit der vorhande
 
 ### Interaktiver Stufen-Umschalter (`v1` bis `v6`) & Mobile-Control-Panel in der Web-UI
 
-In der Web-Oberfläche (`PI-SPACES / HELP` $\rightarrow$ **Live Space-Chat**) befindet sich oben eine **6-Stufen-Architekturleiste (`v1` | `v2` | `v3` | `v4` | `v5` | `v6`)**:
+In der Web-Oberfläche (`PHI-SPACES / HELP` $\rightarrow$ **Live Space-Chat**) befindet sich oben eine **6-Stufen-Architekturleiste (`v1` | `v2` | `v3` | `v4` | `v5` | `v6`)**:
 
 - Der Benutzer kann jederzeit zwischen den 6 Stufen umschalten.
 - Je nach gewählter Stufe zeigt das **rechte Inspector-Panel** live die stufenspezifischen Interna:
@@ -323,19 +323,19 @@ In der Web-Oberfläche (`PI-SPACES / HELP` $\rightarrow$ **Live Space-Chat**) be
 
 ---
 
-## 5. Das Referenzprojekt: „Multiplayer Space-Chat“ (Earendil-Szenario umgesetzt mit `pi-spaces`-Mitteln)
+## 5. Das Referenzprojekt: „Multiplayer Space-Chat“ (Earendil-Szenario umgesetzt mit `phi-spaces`-Mitteln)
 
-Der Artikel [Pi Durable on Cloudflare](https://earendil.com/posts/pi-durable-on-cloudflare/) demonstriert einen Multiplayer-Chat im 90s-Stil mit fünf Kernfähigkeiten. In unserem Projekt werden **alle fünf Fähigkeiten ausschließlich über `pi-spaces`-Konzepte und -APIs** realisiert.
+Der Artikel [Pi Durable on Cloudflare](https://earendil.com/posts/pi-durable-on-cloudflare/) demonstriert einen Multiplayer-Chat im 90s-Stil mit fünf Kernfähigkeiten. In unserem Projekt werden **alle fünf Fähigkeiten ausschließlich über `phi-spaces`-Konzepte und -APIs** realisiert.
 
-### 5.1 Gegenüberstellung: Earendil Cloudflare-Post vs. Unsere `pi-spaces`-Umsetzung
+### 5.1 Gegenüberstellung: Earendil Cloudflare-Post vs. Unsere `phi-spaces`-Umsetzung
 
-| Anforderung aus dem Earendil-Artikel | Dortige Umsetzung (Cloudflare DO + raw `pi-durable`) | Unsere Umsetzung **mit reinen `pi-spaces`-Mitteln** |
+| Anforderung aus dem Earendil-Artikel | Dortige Umsetzung (Cloudflare DO + raw `pi-durable`) | Unsere Umsetzung **mit reinen `phi-spaces`-Mitteln** |
 |---|---|---|
-| **1. Isolierte, teilbare Sessions per URL** | 1 Cloudflare Durable Object (`Session`) mit eigener SQLite-DB pro `sessionId`. | **1 benannter Space (`NamedSpace`) pro `sessionId`** (`createSpace(tx, sessionAlias, now)` / `new PiSpaces(host, ctx, Date.now, meter, undefined, { space: sessionId })`). Jeder Space besitzt eigene Entries, eigene Revisionsfolge (`rev`), eigene Request-Claims und eigene Limits. |
-| **2. Mehrere Konversationen & Forking ohne Duplikate bei Reconnect** | `tx.createConversation` / `tx.forkConversation` + eigenes `ConversationCommandReceipts`-Dokument für `requestId`. | **Entries vom Typ `Thread` und `Msg` + native `pi-spaces` Request-Claims (`RequestRef`)**: Jedes `thread.create` und `thread.fork` wird mit `{ principal, generation, requestId }` über `space.write()` bzw. eine Space-Transaktion (`space.createTransaction` + `space.commit`) ausgeführt. Ein Reconnect-Retry mit derselben `requestId` gibt dank `src/claims.ts` sofort das gespeicherte Ergebnis zurück. Beim Forken kopiert oder referenziert eine Space-Transaktion den Eltern-Stand bis `forkUpToSeq` atomar. |
+| **1. Isolierte, teilbare Sessions per URL** | 1 Cloudflare Durable Object (`Session`) mit eigener SQLite-DB pro `sessionId`. | **1 benannter Space (`NamedSpace`) pro `sessionId`** (`createSpace(tx, sessionAlias, now)` / `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: sessionId })`). Jeder Space besitzt eigene Entries, eigene Revisionsfolge (`rev`), eigene Request-Claims und eigene Limits. |
+| **2. Mehrere Konversationen & Forking ohne Duplikate bei Reconnect** | `tx.createConversation` / `tx.forkConversation` + eigenes `ConversationCommandReceipts`-Dokument für `requestId`. | **Entries vom Typ `Thread` und `Msg` + native `phi-spaces` Request-Claims (`RequestRef`)**: Jedes `thread.create` und `thread.fork` wird mit `{ principal, generation, requestId }` über `space.write()` bzw. eine Space-Transaktion (`space.createTransaction` + `space.commit`) ausgeführt. Ein Reconnect-Retry mit derselben `requestId` gibt dank `src/claims.ts` sofort das gespeicherte Ergebnis zurück. Beim Forken kopiert oder referenziert eine Space-Transaktion den Eltern-Stand bis `forkUpToSeq` atomar. |
 | **3. Multiplayer-Nachrichten mit Namens-Attribuierung & geordneter Abarbeitung** | `conversation.submit({ content: attributedPrompt(username, text), requestId, whenBusy: "followUp" })`. | **Transaktionale `ChatTask`-Queue im Space + `CompletionProfile`**: Jede Teilnehmer-Nachricht schreibt idempotent per `RequestRef` den User-`Msg`-Entry (`{ threadId, seq, author, role: "user", text }`) und einen `ChatTask`-Entry (`{ taskId, threadId, seq, author, text }`). Der Space-Chat-Worker entnimmt `ChatTask` exklusiv unter einer Space-Transaktion (`space.take(..., { txn })`), liest den Thread-Verlauf per `space.readAll({ type: "Msg", fields: { threadId } })` und committet die Assistant-`Msg` unter erzwungenem **`CompletionProfile`** (`ChatTask` $\rightarrow$ genau 1 `Msg`). Weitere Nachrichten warten geordnet als `ChatTask`-Entries im Space. |
-| **4. Live-Streaming & Multiplayer-Presence über denselben WebSocket** | `watchEvents(harness, conversationId)` + WebSocket-Attachments für Presence. | **Kombination aus `readPage` (Snapshot), `changes(afterRev)` (Delta-Stream), Consumer-Mailbox (`notify`/`events`/`ack`) und `Presence`-Entries mit Space-Leases**: Beim Beitreten schreibt der Teilnehmer einen `Presence`-Entry (`{ participantId, username, threadId, status }`) mit einer **Space-Lease (`ttlMs = 30_000`)**, die per `space.renew(leaseId, 30_000)` verlängert wird. Fällt ein Client weg, räumt der `pi-spaces`-Reaper die Lease ab und feuert eine Revisionsänderung. Der WebSocket streamt initial `readPage` (`snapshot`) und danach jede `changes(afterRev)`-Batch in Echtzeit an alle Browser im selben Space. |
-| **5. Aufwachen für geplante Aufgaben (`schedule`-Tool / Alarme)** | Durable Task schläft bis Deadline; `#refreshAlarm()` projiziert früheste Task-Deadline auf den einzigen Cloudflare DO `alarm()`. | **Persistente Space-Waiter / Timer-Leases + `SpaceAlarmScheduler`**: Wenn der Agent das `schedule`-Tool aufruft (z.B. „Prüfe in 2 Minuten den Systemstatus / das Wetter“), schreibt er einen `ScheduledJob`-Entry (`{ jobId, threadId, instruction, executeAt, status: "scheduled" }`, `FOREVER`) sowie einen **`TimerGate`-Entry mit `leaseMs = delayMs`** (bzw. registriert einen persistenten `space.wait()` mit `timeout = delayMs` und `handback`). Nach Ablauf der Frist – auch nach komplettem Server-Neustart aus SQLite! – erkennt der `pi-spaces`-Reaper (`startService` + `SpaceAlarmScheduler`, der die früheste Ablaufzeit aus `snapshotSpace` überwacht) den abgelaufenen Timer und wandelt den `ScheduledJob` transaktional und idempotent in einen ausführbaren `ChatTask` um. |
+| **4. Live-Streaming & Multiplayer-Presence über denselben WebSocket** | `watchEvents(harness, conversationId)` + WebSocket-Attachments für Presence. | **Kombination aus `readPage` (Snapshot), `changes(afterRev)` (Delta-Stream), Consumer-Mailbox (`notify`/`events`/`ack`) und `Presence`-Entries mit Space-Leases**: Beim Beitreten schreibt der Teilnehmer einen `Presence`-Entry (`{ participantId, username, threadId, status }`) mit einer **Space-Lease (`ttlMs = 30_000`)**, die per `space.renew(leaseId, 30_000)` verlängert wird. Fällt ein Client weg, räumt der `phi-spaces`-Reaper die Lease ab und feuert eine Revisionsänderung. Der WebSocket streamt initial `readPage` (`snapshot`) und danach jede `changes(afterRev)`-Batch in Echtzeit an alle Browser im selben Space. |
+| **5. Aufwachen für geplante Aufgaben (`schedule`-Tool / Alarme)** | Durable Task schläft bis Deadline; `#refreshAlarm()` projiziert früheste Task-Deadline auf den einzigen Cloudflare DO `alarm()`. | **Persistente Space-Waiter / Timer-Leases + `SpaceAlarmScheduler`**: Wenn der Agent das `schedule`-Tool aufruft (z.B. „Prüfe in 2 Minuten den Systemstatus / das Wetter“), schreibt er einen `ScheduledJob`-Entry (`{ jobId, threadId, instruction, executeAt, status: "scheduled" }`, `FOREVER`) sowie einen **`TimerGate`-Entry mit `leaseMs = delayMs`** (bzw. registriert einen persistenten `space.wait()` mit `timeout = delayMs` und `handback`). Nach Ablauf der Frist – auch nach komplettem Server-Neustart aus SQLite! – erkennt der `phi-spaces`-Reaper (`startService` + `SpaceAlarmScheduler`, der die früheste Ablaufzeit aus `snapshotSpace` überwacht) den abgelaufenen Timer und wandelt den `ScheduledJob` transaktional und idempotent in einen ausführbaren `ChatTask` um. |
 | **6. Konversationsübergreifende Suche per Subagent (`search_history`)** | Replay-sicheres Tool erzeugt Child-Conversation (`ownerTaskId: api.taskId`), sucht mit `search_conversations` in anderen Conversations und gibt nur die Antwort zurück. | **Subagent-Koordination über `SearchTask`-, `SubagentStep`- und `SearchResult`-Entries im Space**: Ruft der Haupt-Worker/Agent `search_history(question)` auf, schreibt er idempotent (gekeyt über `searchId = "search:" + taskId`) einen `SearchTask`-Entry (`{ searchId, parentThreadId, question }`) und wartet per `space.read({ type: "SearchResult", fields: { searchId } }, timeoutMs)` auf das Ergebnis. Ein spezialisierter **Search-Subagent-Worker** nimmt den `SearchTask` unter einer Space-Transaktion (`txn`), durchsucht per `space.readAll({ type: "Msg" })` alle Top-Level-Threads des Spaces (ignoriert eigene Subagent-Spuren und frühere Suchergebnisse), protokolliert seine Zwischenschritte als `SubagentStep`-Entries (damit sie in der UI-Sidebar live inspiziert werden können!) und committet das finale `SearchResult` unter einem eigenen **`CompletionProfile`**. Bei Absturz und Replay findet der Aufrufer über `searchId` / `RequestRef` sofort den bestehenden `SearchTask` bzw. das fertige `SearchResult`. |
 
 ### 5.2 Datenmodell des Multiplayer Space-Chats (Alle Entry-Typen im Session-Space)
@@ -491,7 +491,7 @@ Vor dem Start der Worker installiert der Host im Session-Space zwei verbindliche
 
    *Wirkung*: Der Search-Subagent kann seinen `SearchTask` nur abschließen, wenn er im selben Commit das strukturierte `SearchResult` ablegt.
 
-### 5.4 Der Demo-Durchlauf (1:1 zum Earendil-Artikel, aber auf `pi-spaces`)
+### 5.4 Der Demo-Durchlauf (1:1 zum Earendil-Artikel, aber auf `phi-spaces`)
 
 Benutzer können im Browser (auch mit zwei nebeneinander geöffneten Browserfenstern oder im Split-Screen-Multiplayer-Simulator der UI) exakt die Sequenz aus dem Earendil-Post durchspielen und dabei rechts im **Live Space-Inspector** jede Space-Operation beobachten:
 
@@ -511,7 +511,7 @@ Benutzer können im Browser (auch mit zwei nebeneinander geöffneten Browserfens
 6. **Geplante Aufgabe (`schedule`) testen**:
    - `alice` schreibt: *„Erinnere uns in 15 Sekunden daran, das Backup-Fenster zu prüfen.“*
    - Der Agent legt einen `ScheduledJob`-Entry (`FOREVER`) und einen `TimerLock`-Entry mit `leaseMs = 15_000` an.
-   - Selbst wenn alle Browserfenster geschlossen oder der Server-Worker kurz pausiert wird: Sobald die `TimerLock`-Lease abläuft, räumt der `pi-spaces`-Reaper den Lock ab, der `SpaceAlarmScheduler` erzeugt idempotent den Wakeup-`ChatTask`, und die Erinnerung erscheint als `Msg` im Thread.
+   - Selbst wenn alle Browserfenster geschlossen oder der Server-Worker kurz pausiert wird: Sobald die `TimerLock`-Lease abläuft, räumt der `phi-spaces`-Reaper den Lock ab, der `SpaceAlarmScheduler` erzeugt idempotent den Wakeup-`ChatTask`, und die Erinnerung erscheint als `Msg` im Thread.
 
 ---
 
@@ -521,8 +521,8 @@ Benutzer können im Browser (auch mit zwei nebeneinander geöffneten Browserfens
 
 - **Laufzeit**: Node.js (`>= 22.19.0`, direkt ausführbar mit `node --experimental-strip-types`), persistenter Storage über `openNodeSqliteStorage` (Standard: `.local/help-site-spaces.sqlite`) oder optional `MemoryStorage` für schnelle automatisierte Tests.
 - **HTTP-Endpunkte**:
-  - `GET /` und statische Assets (`/assets/*`): Liefert die gebaute React-Applikation (`PI-SPACES / HELP`) aus.
-  - `GET /help/index.json`: Liefert den validierten, zweisprachigen Help-Index (`schema: "pi-spaces-help-site-index-v1"`, `areas`, `apiEntries`, `articles`, `stats`, Repository-Commit-Provenienz).
+  - `GET /` und statische Assets (`/assets/*`): Liefert die gebaute React-Applikation (`PHI-SPACES / HELP`) aus.
+  - `GET /help/index.json`: Liefert den validierten, zweisprachigen Help-Index (`schema: "phi-spaces-help-site-index-v1"`, `areas`, `apiEntries`, `articles`, `stats`, Repository-Commit-Provenienz).
   - `GET /help/articles/:locale/:type/:slug.md`: Liefert den Markdown-Quelltext eines Artikels aus `help-site/corpus/`.
   - `POST /api/chat/sessions`: Erstellt oder öffnet einen benannten Session-Space (`chat-session-<id>`) und gibt `{ sessionId, spaceId, url }` zurück.
   - `GET /api/chat/sessions/:sessionId/inspect`: Liefert für den Live-Space-Inspector den aktuellen Space-Snapshot (`stats`, alle Entries gruppiert nach `Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `TimerLock`, `SearchTask`, `SubagentStep`, `SearchResult`, aktive Transaktionen, Waiter, Claims und nächste Alarm-Deadline).
@@ -541,10 +541,10 @@ Benutzer können im Browser (auch mit zwei nebeneinander geöffneten Browserfens
 
 ### 6.2 Frontend (`help-site/client/`)
 
-Das React-Frontend vereint das **`PI-SPACES / HELP`-Designsystem** mit der **interaktiven Multiplayer-Space-Chat-Workbench**:
+Das React-Frontend vereint das **`PHI-SPACES / HELP`-Designsystem** mit der **interaktiven Multiplayer-Space-Chat-Workbench**:
 
 1. **`App.tsx` (Topbar + 3-Spalten-Workspace)**:
-   - Topbar mit `PI-SPACES / HELP`, globaler Suche (`Ctrl+K` / `/`), `DE`/`EN`-Umschalter, `Dark`/`Light`-Umschalter und dem 14-Paletten-Picker.
+   - Topbar mit `PHI-SPACES / HELP`, globaler Suche (`Ctrl+K` / `/`), `DE`/`EN`-Umschalter, `Dark`/`Light`-Umschalter und dem 14-Paletten-Picker.
    - URL-Synchronisation über `URLSearchParams` (`?area=...`, `?article=...#anchor`, `?q=...`, `?view=api-finder`, `?view=space-chat&session=...`).
 2. **`HomeView.tsx`**:
    - **Hero**: High-End-Hero (*„Schreiben. Koordinieren. Überleben.“* / *„Write. Coordinate. Survive.“*) mit Primär-Button *„Spaces System Map öffnen“*, Sekundär-Button *„Multiplayer Space-Chat starten“* und Such-Fokus.
@@ -556,7 +556,7 @@ Das React-Frontend vereint das **`PI-SPACES / HELP`-Designsystem** mit der **int
    - **Sektion `03` – Source-eigener Bestand (`corpus-metrics`)**:
      - 4 große Kennzahlen-Kacheln (Anzahl dokumentierter API-Methoden & Agent-Tools, Anzahl kanonischer Referenzthemen, Anzahl verifizierter Architektur- & Beispielpfade, `EN/DE`-Bilingualität).
 3. **`ApiFinderView.tsx`**:
-   - Facettierte Echtzeit-Filterung über alle Methoden von `PiSpaces`, `RemoteSpace`, `SpaceService`, die 8 Agent-Tools, `RouterController`, `FederatedSpace`, `RunController` und Fehlerklassen.
+   - Facettierte Echtzeit-Filterung über alle Methoden von `PhiSpaces`, `RemoteSpace`, `SpaceService`, die 8 Agent-Tools, `RouterController`, `FederatedSpace`, `RunController` und Fehlerklassen.
 4. **`ArticleView.tsx`**:
    - Rendert Markdown-Artikel mit Tabellen, Codeblöcken, stabilen `{#anchor}`-Überschriften, Breadcrumbs, Ressourcen-Karten, verwandten Einträgen und rechter `AUF DIESER SEITE`-TOC-Spalte.
 5. **`SpaceChatWorkbench.tsx` (Das interaktive Multiplayer-Beispiel)**:
@@ -565,7 +565,7 @@ Das React-Frontend vereint das **`PI-SPACES / HELP`-Designsystem** mit der **int
        - Umschaltbarer oder paralleler Teilnehmer-Modus (z.B. „Als `alice` senden“ / „Als `bob` senden“ oder zweites Browserfenster per teilbarer Session-URL öffnen).
        - Thread-Liste inklusive **Fork-Baum** (*„Fork ab Nachricht #n“*) und **Subagent-Runs** (`search_history`-Inspektor).
        - Geplante Alarme mit Live-Countdown der `TimerLock`-Lease (`expires - now`).
-     - **Rechts (Live `pi-spaces` Inspector)**:
+     - **Rechts (Live `phi-spaces` Inspector)**:
        - Zeigt in Echtzeit den Zustand des zugrunde liegenden benannten Spaces: aktuelle Revision `rev`, aktive `Presence`-Leases mit Restlaufzeit, offene `ChatTask`- und `SearchTask`-Transaktionen, geprüfte `CompletionProfiles`, `RequestRef`-Claims und die rohen Space-Entries.
 
 ### 6.3 Geschützter Web-Admin-Bereich (`AdminSpaces`) & Produktiv-Deployment unter `https://spaces.eibrain.org`
@@ -589,7 +589,7 @@ Dabei wird der Vertrag für das HTTPS-Browser-Gateway aus `docs/federation-plan-
                │ http://127.0.0.1:8790                 │
                ▼                                       ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ Node.js Host (help-site/server/index.ts + pi-spaces Runtime)             │
+│ Node.js Host (help-site/server/index.ts + phi-spaces Runtime)             │
 │  ├─ Help-Server (/help/index.json, /help/articles/*, React UI)           │
 │  ├─ Browser-Chat-Gateway (/api/chat/*, /ws/chat/:sessionId)              │
 │  ├─ Web-Admin-Gateway (/api/admin/* -> WebAdminSpaces mit Ed25519-Signer)│
@@ -627,7 +627,7 @@ Nach dem Login in `AdminSpaces` stehen auf der Webseite **alle Funktionen aus `s
 #### 3. Reverse-Proxy- und Server-Konfiguration (`help-site/deploy/`)
 
 - `help-site/deploy/nginx-spaces.eibrain.org.conf` und `help-site/deploy/Caddyfile` (inkl. TLS, WebSocket-Upgrade für `/ws/chat/`, Cookie-/Header-Weiterleitung für `/api/admin/` und Security-Headern).
-- `help-site/deploy/pi-spaces-help.service` (systemd-Unit für den dauerhaften Betrieb auf dem Server).
+- `help-site/deploy/phi-spaces-help.service` (systemd-Unit für den dauerhaften Betrieb auf dem Server).
 
 ---
 
@@ -637,7 +637,7 @@ Jeder der folgenden Artikel wird sowohl auf **Deutsch (`corpus/de/...`)** als au
 
 ### 7.1 Konzept- und Architekturthemen (`topics/`)
 
-1. `help.topic.overview` – **pi-spaces Systemüberblick**: Was ist `pi-spaces`, das Tuple-Space-Modell, Zusammenspiel von `PiSpaces`, `SpaceService`, `RemoteSpace` und `FederatedSpace`.
+1. `help.topic.overview` – **phi-spaces Systemüberblick**: Was ist `phi-spaces`, das Tuple-Space-Modell, Zusammenspiel von `PhiSpaces`, `SpaceService`, `RemoteSpace` und `FederatedSpace`.
 2. `help.topic.architecture_layers` – **Schichtenarchitektur und Modul-Landkarte**: Alle Module aus `src/` von `core.ts` bis `replica-control.ts` und ihre Abhängigkeitsrichtung.
 3. `help.topic.guarantees_and_boundaries` – **Verbindliche Garantien und Systemgrenzen**: Was lokal, über RPC und in der Federation garantiert ist (und was bewusst nicht garantiert wird).
 4. `help.topic.entries_and_templates` – **Entries, Subtypen und Template-Matching**: `EntryDraft`, `types`, `Template`, tiefe JSON-Gleichheit, Wildcards und globale IDs (`gid`).
@@ -647,7 +647,7 @@ Jeder der folgenden Artikel wird sowohl auf **Deutsch (`corpus/de/...`)** als au
 8. `help.topic.request_claims_and_generations` – **Request-Claims, Generationen und Idempotenz**: `{ principal, generation, requestId }`, RFC-8785-Argument-Hash, `pollOperation`, `resolveOperation` und `ResultExpired`.
 9. `help.topic.snapshots_and_change_streams` – **Snapshot-Seiten (`readPage`) und Revisionsströme (`changes`)**: Konsistente Paginierung mit `token`/`rev` und Aufholen von Commits.
 10. `help.topic.durable_mailboxes_and_ack` – **Dauerhafte Mailboxes (`events` / `ack`), `wait` und `notify`**: Nichtblockierendes Warten, `mailboxEpoch`, Präfix-ACK und Gap-Behandlung.
-11. `help.topic.local_client_pispaces` – **Der lokale Client `PiSpaces` und benannte Spaces**: Default-Space vs. `NamedSpace`, `createSpace`, `listSpaces`, Ownership durch `conversationId`.
+11. `help.topic.local_client_phispaces` – **Der lokale Client `PhiSpaces` und benannte Spaces**: Default-Space vs. `NamedSpace`, `createSpace`, `listSpaces`, Ownership durch `conversationId`.
 12. `help.topic.agent_tools_and_replay` – **Die 8 LLM-Agent-Tools und Replay-Sicherheit**: `space_write`, `space_read`, `space_take`, `space_list`, `space_txn`, `space_wait`, `space_notify`, `space_lease` und Task-Claims.
 13. `help.topic.space_service_and_policy` – **`SpaceService`, `IdentityAdapter` und Rollen-`Policy`**: Authentisierung an der Vertrauensgrenze und Typ-/Methodenautorisierung.
 14. `help.topic.remote_space_and_transports` – **`RemoteSpace`, Socket-/TCP-Transport und `pi-serverd`**: Verbindungsaufbau, `hello`, automatische Retries und `OutcomeUnknown`.
@@ -659,7 +659,7 @@ Jeder der folgenden Artikel wird sowohl auf **Deutsch (`corpus/de/...`)** als au
 ### 7.2 Praxis-Workflows und 6-Stufen-Anleitungen (`workflows/`)
 
 19. `help.workflow.overview_v1_to_v6` – **Übersicht des 6-Stufen-Evolutionsmodells (`v1` bis `v6`)**: Vom lokalen Zero-Setup In-Memory-Space bis zur föderierten Multi-Member-Architektur mit mobiler Steuerung unter `spaces.eibrain.org`.
-20. `help.workflow.stage_v1_local_memory` – **Stufe 1 (`v1-local-memory`)**: Lokaler Sofortstart ohne Setup – `MemoryStorage`, `PiSpaces`, Threads, `Presence`-Leases, Transaktionen und `CompletionProfile`.
+20. `help.workflow.stage_v1_local_memory` – **Stufe 1 (`v1-local-memory`)**: Lokaler Sofortstart ohne Setup – `MemoryStorage`, `PhiSpaces`, Threads, `Presence`-Leases, Transaktionen und `CompletionProfile`.
 21. `help.workflow.stage_v2_local_durable` – **Stufe 2 (`v2-local-durable`)**: Lokale Persistenz mit SQLite, `RequestRef`-Claims für Reconnect-Idempotenz, `readPage`/`changes`, geplante Alarme (`TimerLock`-Leases) und der `search_history`-Subagent.
 22. `help.workflow.stage_v3_remote_socket` – **Stufe 3 (`v3-remote-socket`)**: Prozess-Entkopplung über `SpaceService` und `RemoteSpace` (Unix-Socket/TCP), Consumer-Mailboxes (`events` + Präfix-`ack`) und `OutcomeUnknown`-Auflösung.
 23. `help.workflow.stage_v4_gated_auth` – **Stufe 4 (`v4-gated-auth`)**: Zero-Trust-Mehrhost-Betrieb mit `startGate` (Schicht A Peer-Identität + Schicht B Ed25519/P-256 Challenge), Token-Enrollment, 60-Sekunden-Grants (`effect`/`resolution`), Schlüsselrotation und `HostBootState`-Boot-Guard.
@@ -669,16 +669,16 @@ Jeder der folgenden Artikel wird sowohl auf **Deutsch (`corpus/de/...`)** als au
 ### 7.3 Strukturierte API-Einträge (`api/`)
 
 26. Vollständige Einzelreferenzen für den **API- & Tool-Finder**:
-    - `help.api.pispaces_write`, `help.api.pispaces_read`, `help.api.pispaces_take`, `help.api.pispaces_read_page`, `help.api.pispaces_changes`, `help.api.pispaces_txn`, `help.api.pispaces_lease`, `help.api.pispaces_wait_notify`, `help.api.pispaces_events_ack`, `help.api.pispaces_claims`, `help.api.pispaces_completion_profiles`, `help.api.agent_tools`, `help.api.remote_space`, `help.api.space_service`, `help.api.federation_controller`, `help.api.run_controller`.
+    - `help.api.phispaces_write`, `help.api.phispaces_read`, `help.api.phispaces_take`, `help.api.phispaces_read_page`, `help.api.phispaces_changes`, `help.api.phispaces_txn`, `help.api.phispaces_lease`, `help.api.phispaces_wait_notify`, `help.api.phispaces_events_ack`, `help.api.phispaces_claims`, `help.api.phispaces_completion_profiles`, `help.api.agent_tools`, `help.api.remote_space`, `help.api.space_service`, `help.api.federation_controller`, `help.api.run_controller`.
 
 ---
 
 ## 8. Technische Randbedingungen und Einhaltung von `AGENTS.md`
 
-Gemäß `/media/data/programming/pi-spaces/AGENTS.md` gelten folgende Regeln verbindlich:
+Gemäß `/media/data/programming/phi-spaces/AGENTS.md` gelten folgende Regeln verbindlich:
 
 1. **Keine ungefragten neuen npm-Abhängigkeiten**:
-   - In `pi-spaces` ist `esbuild` (`^0.25.0`), TypeScript (`^7.0.2`), `@types/node` (`^26.6.4`), `@earendil-works/pi-durable`, `@earendil-works/pi-ai` und `@earendil-works/chord` bereits installiert.
+   - In `phi-spaces` ist `esbuild` (`^0.25.0`), TypeScript (`^7.0.2`), `@types/node` (`^26.6.4`), `@earendil-works/pi-durable`, `@earendil-works/pi-ai` und `@earendil-works/chord` bereits installiert.
    - **Für das Backend (`help-site/server/`)** werden **keinerlei neue Abhängigkeiten** benötigt:
      - HTTP-Server und statische Auslieferung nutzen `node:http`, `node:fs/promises` und `node:path` (wie `src/dashboard.ts`).
      - Der WebSocket-Server nutzt einen kompakten, standardkonformen RFC-6455-Upgrade-Handler auf Basis von `node:http` und `node:crypto` (ohne externes `ws`-Paket!).
@@ -705,7 +705,7 @@ Gemäß `/media/data/programming/pi-spaces/AGENTS.md` gelten folgende Regeln ver
 ### Phase 2: Die 6 ausführbaren Ausbaustufen des Multiplayer Space-Chats (`help-site/examples/v1..v6` & `help-site/server/space-chat/`)
 
 1. **`examples/shared/`**: Gemeinsame Entry-Schemata (`Thread`, `Msg`, `ChatTask`, `Presence`, `ScheduledJob`, `TimerLock`, `SearchTask`, `SubagentStep`, `SearchResult`), die zwei `CompletionProfiles` und der deterministische Scripted-Agent.
-2. **`examples/v1-local-memory/`**: Zero-Setup In-Memory-Version (`MemoryStorage` + `PiSpaces`), direkt per CLI oder im Browser startbar.
+2. **`examples/v1-local-memory/`**: Zero-Setup In-Memory-Version (`MemoryStorage` + `PhiSpaces`), direkt per CLI oder im Browser startbar.
 3. **`examples/v2-local-durable/`**: Persistente SQLite-Version mit `issueGeneration` / `RequestRef`-Claims, `readPage`/`changes`, `SpaceAlarmScheduler` (`TimerLock`-Lease-Ablauf) und `search_history`-Subagent.
 4. **`examples/v3-remote-socket/`**: Client/Server-Version mit `SpaceService` (`serveSpace` über Unix-Socket/TCP), getrennten `RemoteSpace`-Clients für Web-Gateway, Chat-Worker und Subagent sowie Consumer-Mailbox-Steuerung (`wait` + `events` + `ack`).
 5. **`examples/v4-gated-auth/`**: Gesicherte Version mit `startGate` (Schicht A Peer-Rollen + Schicht B Ed25519/P-256 Challenge), Token-Enrollment im `CONTROL_SPACE`, 60-Sekunden-Grants (`GrantAuthority`/`GrantVerifier`), Live-Schlüsselrotation und `SqliteRecoveryRegister` + `installBootGuard`.
@@ -718,12 +718,12 @@ Gemäß `/media/data/programming/pi-spaces/AGENTS.md` gelten folgende Regeln ver
 1. **`help-site/server/index.ts`**: Node.js-Server mit Help-API (`/help/index.json`, `/help/articles/...`), Space-Chat-REST-API (`/api/chat/...`), RFC-6455-WebSocket-Server (`/ws/chat/:sessionId`) für Live-`readPage`-Snapshots und `changes(afterRev)`-Broadcasts.
 2. **`help-site/client/`**:
    - High-End-Styling (Topbar, 14 Farbpaletten, Dark/Light, DE/EN, 3-Spalten-Workspace, 2-Lane-Systemmodell, 9 Systemkarten, Corpus-Metrics, API- & Tool-Finder, Markdown-Renderer mit `#anchor`-Support und rechter TOC-Spalte).
-   - Integrierte **`SpaceChatWorkbench`**: Multiplayer-Chat-Oberfläche (Threads, Forking, Teilnehmer-Umschalter/Mehr-Tab-Synchronisation, Countdown für geplante Alarme, Subagent-Trace-Viewer) kombiniert mit dem **Live `pi-spaces` Inspector** (Echtzeit-Anzeige von `rev`, Entries, Leases, Transaktionen und Claims).
+   - Integrierte **`SpaceChatWorkbench`**: Multiplayer-Chat-Oberfläche (Threads, Forking, Teilnehmer-Umschalter/Mehr-Tab-Synchronisation, Countdown für geplante Alarme, Subagent-Trace-Viewer) kombiniert mit dem **Live `phi-spaces` Inspector** (Echtzeit-Anzeige von `rev`, Entries, Leases, Transaktionen und Claims).
 
 ### Phase 4: Verifikation und Tests (`help-site/tests/`)
 
 1. **`corpus.test.ts`**: Prüft Schema, DE/EN-Parität, stabile Anker und Suchfunktion (inkl. Kurz-Tokens wie `tx`, `gid`, `ack`, `hrw`).
-2. **`chat-session.test.ts`**: Automatisierter End-to-End-Test des gesamten Earendil-Demo-Ablaufs auf `pi-spaces`:
+2. **`chat-session.test.ts`**: Automatisierter End-to-End-Test des gesamten Earendil-Demo-Ablaufs auf `phi-spaces`:
    - Idempotentes Thread-Create & Fork bei wiederholter `requestId`.
    - Multiplayer-Nachrichten von `alice` und `bob` mit `CompletionProfile`-Prüfung.
    - `Presence`-Lease-Erneuerung und automatischer Ablauf nach Timeout.

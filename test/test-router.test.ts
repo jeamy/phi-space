@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {RouterController, RouterBlocked, RouterConflict, RouterBudgetExceeded, RouterJournal, type RouterOptions, type RouterTarget, type RouterStep, type RouterReceipt} from "../src/router.ts";
 import {FederationSimulator, FederationReferenceModel, VirtualClock} from "./support/federation-simulator.ts";
 import {BACKENDS, PersistentHome, ctx, InjectedFault} from "./support/persistent.ts";
-import {PiSpaces} from "../src/client.ts";
+import {PhiSpaces} from "../src/client.ts";
 import {Space} from "../src/doc.ts";
 import {FOREVER} from "../src/core.ts";
 
@@ -57,7 +57,7 @@ for (const backend of BACKENDS) {
             assert.equal(done.steps[0]!.requestId, prior.steps[0]!.requestId);
             assert.equal((done.steps[0]!.result as any).fields.n, 1);
             assert.equal(
-                await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count({
+                await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count({
                     type: "Job"
                 }),
                 1);
@@ -94,7 +94,7 @@ for (const backend of BACKENDS) {
                 assert.equal(result.state, "completed");
                 assert.equal(result.steps[0]!.requestId, id);
                 assert.equal(
-                    await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(),
+                    await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(),
                     0);
                 await s.assertInventory();
             }));
@@ -186,7 +186,7 @@ for (const backend of BACKENDS) {
                 assert.equal(reviewed.state, "needsReview");
                 assert.equal(reviewed.steps[0]!.requestId, old);
                 assert.equal(
-                    await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(),
+                    await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(),
                     1);
                 assert.equal((await r.advance("review")).state, "needsReview");
                 await r.review(
@@ -216,9 +216,9 @@ for (const backend of BACKENDS) {
             await r.recover();
             assert.equal((await r.advance("small")).state, "needsReview");
             assert.equal(
-                await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 0);
+                await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 0);
             const forged: RouterTarget = {
-                protocol: "pi-spaces-rpc-v1",
+                protocol: "phi-spaces-rpc-v1",
                 resolve: s.resolve.bind(s),
                 invoke: async st => ({...await s.invoke(st), requestId: "forged"})
             };
@@ -257,7 +257,7 @@ for (const backend of BACKENDS) {
             await assert.rejects(
                 reopened.submit({id: "two", area: "jobs", steps: [step]}), RouterBudgetExceeded);
             assert.equal(
-                await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 1);
+                await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 1);
             assert.equal(s.trace.filter((e: any) => e.event === "invoke").length, 1);
         }));
     test(
@@ -302,7 +302,7 @@ for (const backend of BACKENDS) {
             assert.equal((await r.advance("multi")).state, "completed");
             await s.assertInventory();
             assert.equal(
-                await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 1);
+                await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 1);
         }));
 }
 test(
@@ -369,7 +369,7 @@ test("non-idempotent adapters and invalid budgets are rejected", () => {
             ctx,
             routerId: "r",
             authorityId: "a",
-            target: {...target, protocol: "pi-spaces-rpc-v1"},
+            target: {...target, protocol: "phi-spaces-rpc-v1"},
             assertAuthority: async () => {},
             limits: {maxCommands: 0}
         }),
@@ -431,7 +431,7 @@ for (const backend of BACKENDS)
         () => fixture(backend, async (s, home, o) => {
             let sends = 0;
             const adapter: RouterTarget = {
-                protocol: "pi-spaces-rpc-v1",
+                protocol: "phi-spaces-rpc-v1",
                 invoke: async st => {
                     sends++;
                     return {
@@ -461,7 +461,7 @@ for (const backend of BACKENDS)
             assert.equal((await r.advance("fail")).state, "failed");
             assert.equal(sends, 1);
             assert.equal(
-                await new PiSpaces(s.nodes.get("b")!.host, ctx, () => s.clock.now("b")).count(), 0);
+                await new PhiSpaces(s.nodes.get("b")!.host, ctx, () => s.clock.now("b")).count(), 0);
         }));
 for (const backend of BACKENDS)
     test(
@@ -610,7 +610,7 @@ for (const backend of BACKENDS)
             await s.seed("a", {n: 1});
             assert.equal((await r.advance("finite")).steps[0]!.requestId, id);
             assert.equal(
-                await new PiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 1);
+                await new PhiSpaces(s.nodes.get("a")!.host, ctx, () => s.clock.now("a")).count(), 1);
             await s.assertInventory();
         }));
 for (const backend of BACKENDS)

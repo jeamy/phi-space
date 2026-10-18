@@ -7,12 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { SpaceService, StaticIdentity, RemoteSpace, serveSpace, socketTransport, PiSpaces, FOREVER, core, type Connection } from "../src/index.ts";
+import { SpaceService, StaticIdentity, RemoteSpace, serveSpace, socketTransport, PhiSpaces, FOREVER, core, type Connection } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-obs": { principal: { peerId: "peer-obs" }, roles: ["observer"] } });
 const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-const sock = () => { const dir = mkdtempSync(join(tmpdir(), "pi-spaces-sock-")); return { dir, path: join(dir, "space.sock"), done: () => rmSync(dir, { recursive: true, force: true }) }; };
+const sock = () => { const dir = mkdtempSync(join(tmpdir(), "phi-spaces-sock-")); return { dir, path: join(dir, "space.sock"), done: () => rmSync(dir, { recursive: true, force: true }) }; };
 // A failing assertion must not leave a listening server behind (the run would hang instead of failing).
 const serve = async (t: TestContext, ...a: Parameters<typeof serveSpace>) => { const s = await serveSpace(...a); t.after(() => s.close().catch(() => {})); return s; };
 const fast = { sleep: () => Promise.resolve(), backoffMs: 1, attempts: 20 };
@@ -123,7 +123,7 @@ test("the client reconnects after the host restarted, and a TCP port on loopback
 	const rt = new RemoteSpace(socketTransport({ host: "127.0.0.1", port }), fast);
 	assert.equal(await rt.count({ type: "Job" }), 2);
 	await rt.write({ type: "Job", fields: { n: 3 } }, null, FOREVER);
-	assert.equal(await new PiSpaces(h, ctx).count({ type: "Job" }), 3);
+	assert.equal(await new PhiSpaces(h, ctx).count({ type: "Job" }), 3);
 	await tcp.close();
 });
 

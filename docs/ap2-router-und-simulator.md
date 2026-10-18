@@ -65,7 +65,7 @@ und geschützten Router-RPCs ist in AP 2.2 implementiert und separat geprüft.
 ## Simulator
 
 `test/support/federation-simulator.ts` betreibt mehrere echte persistente Harnesses
-mit `PiSpaces`, `SpaceService` und RPC-Claims. Der Transport ist simuliert;
+mit `PhiSpaces`, `SpaceService` und RPC-Claims. Der Transport ist simuliert;
 Overlay-Identität, TLS, Fencing-Hardware und Android werden damit nicht abgenommen.
 
 Eine virtuelle Ereignisuhr ordnet gleiche Zeitpunkte durch eine Sequenznummer.

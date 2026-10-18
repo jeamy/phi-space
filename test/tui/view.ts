@@ -20,7 +20,7 @@ const jsonLines = (value: unknown, width: number): string[] => JSON.stringify(va
 export function render(s: ScreenState, columns = 120, rows = 36): string {
 	const width = Math.max(40, Math.min(columns, 180)), height = Math.max(12, rows), bodyHeight = height - 8;
 	const lines = [
-		`pi-spaces  |  ${s.localDir ? `lokal: ${s.localDir}` : `Server / ${s.service}`}  |  ${s.dry ? "VORSCHAU" : "LIVE"}`,
+		`phi-spaces  |  ${s.localDir ? `lokal: ${s.localDir}` : `Server / ${s.service}`}  |  ${s.dry ? "VORSCHAU" : "LIVE"}`,
 		["Spaces", "Aktionen", "Berichte", "Log"].map((t, i) => `${s.tab === i ? "[" : " "}${i + 1} ${t}${s.tab === i ? "]" : " "}`).join("   "),
 		`${s.stale ? `VERALTET: ${s.stale}` : `${s.busy ? `LÄUFT: ${s.busy}` : "bereit"} | Snapshot: ${s.snapshot?.capturedAt ?? "noch keiner"}`}`,
 		"─".repeat(width),

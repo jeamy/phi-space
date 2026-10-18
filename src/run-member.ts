@@ -18,7 +18,7 @@ export type RunPin = { issuer: string; algorithm: Algorithm; publicKey: string }
 /** Registered host code that writes a run's tasks while its gate is preparing. Never a shell command. */
 export type RunPreparer = (run: RunSpec, spaceId: string) => Promise<void>;
 
-const bytes = (kind: "instruction" | "ack", v: unknown) => Buffer.from(`pi-spaces/run-gate-${kind}/v1\n` + canonicalJson(v as core.Json));
+const bytes = (kind: "instruction" | "ack", v: unknown) => Buffer.from(`phi-spaces/run-gate-${kind}/v1\n` + canonicalJson(v as core.Json));
 export async function signRun<T>(kind: "instruction" | "ack", value: T, issuer: string, signer: Signer): Promise<SignedRun<T>> {
 	return { value: core.plain(value), issuer, algorithm: signer.algorithm, signature: Buffer.from(await signer.sign(bytes(kind, value))).toString("base64") };
 }

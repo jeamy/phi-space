@@ -1,4 +1,4 @@
-// Token- and alias-aware search engine for PI-SPACES / HELP.
+// Token- and alias-aware search engine for PHI-SPACES / HELP.
 // Short tokens (<= 3 chars, such as "tx", "gid", "rev", "ack", "hrw", "lww", "v1".."v6")
 // match only exact word tokens rather than arbitrary substrings, preventing false positives.
 

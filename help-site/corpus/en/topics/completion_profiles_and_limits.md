@@ -5,7 +5,7 @@ title: "CompletionProfiles and Resource Limits"
 short: "Server-side result verification when committing take transactions (CompletionProfile) and fixed byte and owner quotas (DEFAULT_LIMITS)."
 tags: [completionprofile, completionviolation, limits, quotas, bytes, budget]
 owner: core
-related: [help.topic.leases_and_transactions, help.api.pispaces_completion_profiles]
+related: [help.topic.leases_and_transactions, help.api.phispaces_completion_profiles]
 since: 0.0.1
 ---
 
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-To ensure a buggy worker or hallucinating AI agent can never take a task from the space and commit the transaction without producing a valid result, `pi-spaces` enforces server-side **`CompletionProfiles`** and strict **byte and object budgets (`DEFAULT_LIMITS`)**.
+To ensure a buggy worker or hallucinating AI agent can never take a task from the space and commit the transaction without producing a valid result, `phi-spaces` enforces server-side **`CompletionProfiles`** and strict **byte and object budgets (`DEFAULT_LIMITS`)**.
 
 ## Concept And System Model {#concept-model}
 
@@ -58,4 +58,4 @@ Before **every** transaction extension, `core.ts` reserves conservative byte bud
 ## See Also {#see-also}
 
 - [Leases, Transactions, and Visibility](help.topic.leases_and_transactions#overview)
-- [setCompletionProfiles & setLimits](help.api.pispaces_completion_profiles)
+- [setCompletionProfiles & setLimits](help.api.phispaces_completion_profiles)

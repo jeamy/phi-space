@@ -45,7 +45,7 @@ export type RouterReceipt = {
 };
 /** An adapter must return bound durable claim evidence; transport errors NEVER prove failure. */
 export interface RouterTarget {
-    readonly protocol: "pi-spaces-rpc-v1";
+    readonly protocol: "phi-spaces-rpc-v1";
     invoke(step: Readonly<RouterStep>): Promise<RouterReceipt>;
     resolve(step: Readonly<RouterStep>): Promise<RouterReceipt>;
     /** A step refused before admission: its new binding, 'wait' (retry later) or 'refuse' (the refusal stands). */
@@ -136,7 +136,7 @@ export class RouterController {
     constructor(o: RouterOptions) {
         ident(o.routerId);
         ident(o.authorityId);
-        if (o.target.protocol !== "pi-spaces-rpc-v1" || typeof o.assertAuthority !== "function")
+        if (o.target.protocol !== "phi-spaces-rpc-v1" || typeof o.assertAuthority !== "function")
             throw new TypeError("idempotent target and authority guard required");
         this.o = o;
         this.limits = {...DEFAULT_ROUTER_LIMITS, ...o.limits};

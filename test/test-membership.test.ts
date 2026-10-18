@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {generateKey} from '../src/auth.ts';
-import {PiSpaces} from '../src/client.ts';
+import {PhiSpaces} from '../src/client.ts';
 import {FOREVER} from '../src/core.ts';
 import {FederationPolicyAuthority, FederationRouting} from '../src/federation-policy.ts';
 import {GrantVerifier} from "../src/grants.ts";
@@ -36,7 +36,7 @@ async function fixture(b: typeof BACKENDS[number], f: (o: any) => Promise<void>)
         const rootKey = generateKey('ed25519', 'control');
         const keys = [ generateKey('ed25519', 'a'), generateKey('ed25519', 'b') ];
         const members: Record < string, FederationMember >= {}, nodes: Record < string,
-            MemberLifecycle >= {}, clients: Record < string, PiSpaces >= {};
+            MemberLifecycle >= {}, clients: Record < string, PhiSpaces >= {};
         for (const [i, host] of [a, bh].entries()) {
             const id = i ? 'b' : 'a',
                   s = await host.commit(tx => createSpace(tx, 'jobs', now), ctx);
@@ -64,7 +64,7 @@ async function fixture(b: typeof BACKENDS[number], f: (o: any) => Promise<void>)
                 assertAuthority : async () => {},
                 now : clock
             });
-            clients[id] = new PiSpaces(host, ctx, clock, undefined, undefined, {space : s.spaceId});
+            clients[id] = new PhiSpaces(host, ctx, clock, undefined, undefined, {space : s.spaceId});
         }
         let drop: string|undefined;
         let referenced = false;
@@ -180,7 +180,7 @@ for (const b of BACKENDS) {
             await o.install(p);
             await o.clients.b.write({type : 'Task', fields : {jobId : 'j'}}, null, FOREVER);
             const consumer = {peerId : 'observer'};
-            await new PiSpaces(o.bh, ctx, o.clock, undefined, undefined, {
+            await new PhiSpaces(o.bh, ctx, o.clock, undefined, undefined, {
                 space : o.members.b.target.spaceId,
                 consumer
             }).notify({type : 'Task'}, {target : 'observer', lease : FOREVER});
@@ -202,13 +202,13 @@ for (const b of BACKENDS) {
                                  MemberDrained);
             assert.equal((await o.make().execute('remove-b', 'remove', o.members.b)).phase,
                          'completed');
-            const page = await new PiSpaces(o.bh, ctx, o.clock, undefined, undefined, {
+            const page = await new PhiSpaces(o.bh, ctx, o.clock, undefined, undefined, {
                              space : o.members.b.target.spaceId,
                              consumer
                          }).events(consumer);
             assert.ok(page.events.some((i: any) => i.event.kind === 'registrationClosed' &&
                                                    i.event.reason === 'removing'));
-            await new PiSpaces(o.bh, ctx, o.clock, undefined, undefined, {
+            await new PhiSpaces(o.bh, ctx, o.clock, undefined, undefined, {
                 space : o.members.b.target.spaceId,
                 consumer
             }).ack(consumer, page.mailboxEpoch, page.next);

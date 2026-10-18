@@ -782,7 +782,7 @@ Nachweise: [Löschlauf](../test/evidence/ap2-remaining-2026-10-15/distributed-er
 [alte Cache-Inhalte vorhanden](../test/evidence/ap2-remaining-2026-10-15/privacy-before-erasure.json),
 [Prüfstand](../test/evidence/ap2-remaining-2026-10-15/validation.json).
 
-Der abschließende Quellstand besteht Typecheck, 492 pi-spaces-Tests,
+Der abschließende Quellstand besteht Typecheck, 492 phi-spaces-Tests,
 20 mobile Runtime-Tests, vier mobile Lifecycle-Tests und zwei zusätzliche
 Python-Prüfungen mit echten SQLite-WAL-Daten. Letztere bestätigen konsistente
 Backups, unveränderte Bindung beim Replay und Löschverweigerung bei falschem

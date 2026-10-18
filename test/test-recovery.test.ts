@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteRecoveryRegister, RecoveryCoordinator, installAuthorityTransition, RegisterConflict, RecoveryBlocked, generateKey, installBootGuard, BootBlocked, PiSpaces, createSpace, spaceDoc, listSpaces, core, type HostBootState, type SpaceBootPermit, type AuthorityRecord } from "../src/index.ts";
+import { SqliteRecoveryRegister, RecoveryCoordinator, installAuthorityTransition, RegisterConflict, RecoveryBlocked, generateKey, installBootGuard, BootBlocked, PhiSpaces, createSpace, spaceDoc, listSpaces, core, type HostBootState, type SpaceBootPermit, type AuthorityRecord } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
 test("independent authority CAS admits one successor, persists retries, refuses wrong fence and rollback", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "pi-spaces-recovery-")); const key = generateKey("ed25519", "recovery-admin");
+	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-recovery-")); const key = generateKey("ed25519", "recovery-admin");
 	let external = new SqliteRecoveryRegister(`${dir}/external.sqlite`), local = new SqliteRecoveryRegister(`${dir}/installed.sqlite`);
 	try {
 		await external.compareAndSet("authority:control", null, { authorityId: "old", hostId: "old-host", supervisorKey: "old-supervisor", state: "active", lineage: {} });
@@ -31,7 +31,7 @@ test("independent authority CAS admits one successor, persists retries, refuses 
 
 test("boot checks are per space, fail closed after stale restore, and roll back when permit changes in a commit", async () => {
 	await forEachBackend(async home => {
-		const h = await home.open(), dir = mkdtempSync(join(tmpdir(), "pi-spaces-boot-"));
+		const h = await home.open(), dir = mkdtempSync(join(tmpdir(), "phi-spaces-boot-"));
 		const external = new SqliteRecoveryRegister(`${dir}/external.sqlite`), installed = new SqliteRecoveryRegister(`${dir}/installed.sqlite`); let stop: (() => void) | undefined;
 		try {
 			const one = await h.commit(tx => createSpace(tx, "one", 1), ctx), two = await h.commit(tx => createSpace(tx, "two", 1), ctx);
@@ -40,7 +40,7 @@ test("boot checks are per space, fail closed after stale restore, and roll back 
 			await external.compareAndSet("boot:host", null, state as any);
 			for (const info of [one, two]) await installed.compareAndSet(`installed:host:${info.spaceId}`, null, state.spaces[info.spaceId] as any);
 			stop = installBootGuard(h, ctx, { hostId: "host", authorityId: "a", external, installed });
-			const a = new PiSpaces(h, ctx, () => 1, undefined, undefined, { space: "one" }), b = new PiSpaces(h, ctx, () => 1, undefined, undefined, { space: "two" });
+			const a = new PhiSpaces(h, ctx, () => 1, undefined, undefined, { space: "one" }), b = new PhiSpaces(h, ctx, () => 1, undefined, undefined, { space: "two" });
 			await a.write({ type: "Ok", fields: {} }); await b.write({ type: "Ok", fields: {} });
 			let boot = (await external.get<any>("boot:host"))!; boot.value.spaces[one.spaceId].state = "revoked"; await external.compareAndSet("boot:host", boot.version, boot.value);
 			await assert.rejects(a.write({ type: "No", fields: {} }), BootBlocked); await b.write({ type: "StillOk", fields: {} });
@@ -56,7 +56,7 @@ test("boot checks are per space, fail closed after stale restore, and roll back 
 test("restore imports in bounded crash-resumable batches, keeps history read-only and quarantines tasks", async () => {
 	const { beginRestore, restoreBatch, snapshotHash, completeRestore, releaseRestored, claims, Registry, NamedSpace } = await import("../src/index.ts");
 	await forEachBackend(async home => {
-		let h = await home.open(), local = new PiSpaces(h, ctx, () => 1);
+		let h = await home.open(), local = new PhiSpaces(h, ctx, () => 1);
 		for (let i = 0; i < 12; i++) await local.write({ type: "Task", fields: { i, pad: "x".repeat(600) } }, null, core.FOREVER);
 		const request = { principal: { peerId: "worker" }, ...(await local.issueGeneration({ peerId: "worker" })), requestId: "old-pending" };
 		await local.beginOperation({ type: "Future" }, core.FOREVER, { request }, true, false);
@@ -67,7 +67,7 @@ test("restore imports in bounded crash-resumable batches, keeps history read-onl
 		const restoration = await h.commit(async t => { const s = await spaceDoc(t, undefined, 1), r = beginRestore(s, 1, args); const registry = await t.doc(Registry); registry.spaces[s.spaceId!]!.incarnation = r.incarnation; return r; }, ctx);
 		await h.commit(async t => restoreBatch(await spaceDoc(t, undefined, 1), 1, snapshot), ctx);
 		assert.ok((await h.snapshot(Space, ctx))!.restore!.cursor < snapshot.entries.length, "the restore uses more than one bounded batch");
-		home.crash(h); h = await home.open(); local = new PiSpaces(h, ctx, () => 1);
+		home.crash(h); h = await home.open(); local = new PhiSpaces(h, ctx, () => 1);
 		for (let i = 0; i < 30; i++) { const s = (await h.snapshot(Space, ctx))!; if (s.restore!.stage === "waiting") break; await h.commit(async t => restoreBatch(await spaceDoc(t, undefined, 1), 1, snapshot), ctx); }
 		assert.equal(await local.count({ type: "Task" }), 12); assert.equal(await local.count({ type: "Uncommitted" }), 0);
 		assert.ok((await local.read({ type: "Task" }, 0))!.restoredUnverified); assert.equal(await local.take({ type: "Task" }, 0), null);

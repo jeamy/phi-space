@@ -1,5 +1,5 @@
 // Headless swarm shard host ("nano"): owns its own SpaceHost + SQLite and serves the
-// `social-swarm` space over the pi-spaces socket transport (unix path or TCP). A shard
+// `social-swarm` space over the phi-spaces socket transport (unix path or TCP). A shard
 // engine runs the worker side locally – task processing, post commits and the O(entries)
 // doc scans for this shard happen on THIS machine, not on the hub host.
 //
@@ -7,7 +7,7 @@
 //   SWARM_DB=/data/swarm-b.sqlite         (default: help-site/.local/swarm-b.sqlite)
 //   SWARM_TAG=b-                          post-id prefix of this shard
 //   SWARM_PRODUCE=1                       also generate intents locally (default: 0)
-//   PI_SPACES_LLM=0                       disables the LLM generators (default anyway without creds)
+//   PHI_SPACES_LLM=0                       disables the LLM generators (default anyway without creds)
 //
 // Hub side (big): SWARM_REMOTE=unix:/tmp/swarm-b.sock  or  SWARM_REMOTE=tcp:nano:3600
 

@@ -1,4 +1,4 @@
-# NetBird management stack for the pi-spaces test bed (docs/testumgebung-big.md, "NetBird"). Installed by `testbed.sh netbird init`
+# NetBird management stack for the phi-spaces test bed (docs/testumgebung-big.md, "NetBird"). Installed by `testbed.sh netbird init`
 # as <dir>/netbird/docker-compose.yml. Layout follows NetBird's own getting-started.sh (v0.80) for an external reverse proxy:
 # the combined server (management + signal + relay + STUN) and the dashboard are published on 127.0.0.1 only; nginx on the host
 # terminates TLS and proxies to them. Separate compose project: `testbed.sh down` of the spaces test bed never touches it.

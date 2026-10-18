@@ -28,7 +28,7 @@ Ein lauffähiger Runner zeigt einen Ablauf, nicht automatisch reale Verteilung o
 
 ## Welche API ist austauschbar? {#api}
 
-PiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag; Mailbox-Zugriff ist ausdrücklich clientspezifisch. FederatedSpace hat einen eigenen FederationRequest mit Principal, stabiler Operations-ID und optionaler Member-Transaktionsbindung. write(entry, request, leaseMs), read(template, request) und finishTransaction sind kein direkter Ersatz für lokale Methoden. Gemeinsame Fachkonzepte bleiben nutzbar; Routing, vollständige/partielle Ergebnisse und Request-Bindungen müssen adaptiert werden. Keine allgemeinen atomaren Transaktionen über beliebige Hosts versprechen.
+PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag; Mailbox-Zugriff ist ausdrücklich clientspezifisch. FederatedSpace hat einen eigenen FederationRequest mit Principal, stabiler Operations-ID und optionaler Member-Transaktionsbindung. write(entry, request, leaseMs), read(template, request) und finishTransaction sind kein direkter Ersatz für lokale Methoden. Gemeinsame Fachkonzepte bleiben nutzbar; Routing, vollständige/partielle Ergebnisse und Request-Bindungen müssen adaptiert werden. Keine allgemeinen atomaren Transaktionen über beliebige Hosts versprechen.
 
 ## Replikationsarten und Freigabe {#replication}
 

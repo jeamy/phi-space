@@ -14,7 +14,7 @@ import * as core from "../src/core.ts";
 
 const N = Number(process.argv[2] ?? 10_000);
 const open = (s: Storage) => Harness.open(s, { models: createModels(), registry: createRegistry() }, ctx);
-const tmp = () => mkdtempSync(join(tmpdir(), "pi-spaces-spike-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "phi-spaces-spike-"));
 const bytes = (p: string): number => {
 	const st = statSync(p);
 	return st.isDirectory() ? readdirSync(p).reduce((n, f) => n + bytes(join(p, f)), 0) : st.size;

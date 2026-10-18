@@ -3,7 +3,7 @@ standard: help_workflow
 id: help.workflow.stage_v1_local_memory
 title: "Stage 1 (v1-local-memory): Zero-Setup Local Quickstart"
 short: "The simplest runnable version of the Multiplayer Space-Chat in memory: threads, forking, presence leases, and transactional reply processing."
-tags: [v1, memory, quickstart, pispaces, thread, fork, presence, completionprofile]
+tags: [v1, memory, quickstart, phispaces, thread, fork, presence, completionprofile]
 owner: client
 related: [help.workflow.overview_v1_to_v6, help.workflow.stage_v2_local_durable]
 since: 0.0.1
@@ -19,7 +19,7 @@ Stage 1 (`help-site/examples/v1-local-memory/run.ts`) requires zero setup, datab
 
 - **1 process**, **1 harness** on `MemoryStorage` (volatile, no restart scenario).
 - **1 named space** (`chat-v1`): every entry (`Presence`, `Thread`, `Msg`, `ChatTask`) lives in that single space.
-- Clients (alice/bob) and workers share the same in-process `PiSpaces` object — no socket, no file, no network.
+- Clients (alice/bob) and workers share the same in-process `PhiSpaces` object — no socket, no file, no network.
 
 ## Workflow {#workflow}
 
@@ -28,7 +28,7 @@ Stage 1 (`help-site/examples/v1-local-memory/run.ts`) requires zero setup, datab
 ```ts
 const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([

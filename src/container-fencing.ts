@@ -17,7 +17,7 @@ export const execRunner: CommandRunner = (command, args) => new Promise(resolve 
 		resolve({ code: e ? (typeof (e as { code?: unknown }).code === "number" ? (e as { code: number }).code : 1) : 0, stdout: String(stdout), stderr: String(stderr) }));
 });
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/, UNIT = /^[a-zA-Z0-9][a-zA-Z0-9_.@-]{0,127}\.service$/;
-const DROP_IN = "zz-pi-spaces-fenced.conf";
+const DROP_IN = "zz-phi-spaces-fenced.conf";
 
 export class ContainerFencing implements FencingAdapter {
 	readonly kind = "container" as const;
@@ -50,7 +50,7 @@ export class ContainerFencing implements FencingAdapter {
 		const state = this.saved();if (!state[hostId]) { state[hostId] = { restartPolicy: live.restartPolicy }; this.save(state); }
 		// The unit lock first: a stopped container must not come back through its unit or an operator restart.
 		mkdirSync(join(this.unitDir, pin.unit + ".d"), { recursive: true });
-		writeFileSync(this.dropIn(pin), `# pi-spaces fencing: ${reason.replace(/\n/g, " ").slice(0, 200)}\n[Unit]\nConditionPathExists=/nonexistent/pi-spaces-fenced\n`, { mode: 0o644 });
+		writeFileSync(this.dropIn(pin), `# phi-spaces fencing: ${reason.replace(/\n/g, " ").slice(0, 200)}\n[Unit]\nConditionPathExists=/nonexistent/phi-spaces-fenced\n`, { mode: 0o644 });
 		await this.must("systemctl", ["--user", "daemon-reload"]);
 		await this.run("systemctl", ["--user", "stop", pin.unit]);
 		if (live.restartPolicy !== "no") await this.must("docker", ["update", "--restart=no", pin.container]);

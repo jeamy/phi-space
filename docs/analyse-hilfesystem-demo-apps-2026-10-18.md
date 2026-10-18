@@ -109,7 +109,7 @@ Der WebAdmin legt Zeitpläne an, startet aber keinen Loop, der `pending()` und `
 
 **Belege:** `help-site/server/admin/admin-controller.ts:88`, `:109`, `:125`, `:496`.
 
-Ohne Konfiguration wurde damals ein festes Standardpasswort akzeptiert (seitdem entfernt: der Controller generiert jetzt ein zufälliges Secret bzw. erwartet `PI_SPACES_ADMIN_PASSWORD`). Das ist besonders relevant, sobald der Server über einen Proxy veröffentlicht wird. Zusätzlich erzeugt jede Controller-Instanz einen neuen privaten Schlüssel unter derselben anfänglichen Key-ID `web-admin-key-1` und schreibt erneut einen aktiven PeerKey. Die Rotation widerruft alte Records nur bei explizitem Rotationsbefehl; der Bootpfad tut dies nicht.
+Ohne Konfiguration wurde damals ein festes Standardpasswort akzeptiert (seitdem entfernt: der Controller generiert jetzt ein zufälliges Secret bzw. erwartet `PHI_SPACES_ADMIN_PASSWORD`). Das ist besonders relevant, sobald der Server über einen Proxy veröffentlicht wird. Zusätzlich erzeugt jede Controller-Instanz einen neuen privaten Schlüssel unter derselben anfänglichen Key-ID `web-admin-key-1` und schreibt erneut einen aktiven PeerKey. Die Rotation widerruft alte Records nur bei explizitem Rotationsbefehl; der Bootpfad tut dies nicht.
 
 **Maßnahme:** außerhalb eines ausdrücklich eingeschränkten Demo-Modus fehlende Zugangskonfiguration ablehnen; Identität persistent oder eindeutig mit geregelter Ersetzung führen. **Abnahme:** zwei Boots über gleichem Store ohne doppelte aktive Key-ID mit verschiedenen öffentlichen Schlüsseln; Startkonfiguration ohne Passwort explizit behandeln. Dies ist eine Prüfung des WebAdmin-Wrappers, keine Aussage, dass die Kern-Föderationsauthentifizierung gebrochen sei.
 
@@ -322,25 +322,25 @@ Die alte Datei enthält außerdem doppelte Kapitel 3.1/3.2, sowohl offene als au
 
 ## 5. Verifikation dieser Prüfung
 
-Alle Modellaufrufe wurden durch `PI_SPACES_LLM=0` deaktiviert. Vorhandene Dependencies wurden verwendet, keine installiert. Die Hilfesystemtests generieren lokale Corpus-/Standalone-Buildartefakte und starten lokale Testserver; die Tests schließen diese wieder.
+Alle Modellaufrufe wurden durch `PHI_SPACES_LLM=0` deaktiviert. Vorhandene Dependencies wurden verwendet, keine installiert. Die Hilfesystemtests generieren lokale Corpus-/Standalone-Buildartefakte und starten lokale Testserver; die Tests schließen diese wieder.
 
 | Prüfung | Ergebnis / Aussagegrenze |
 |---|---|
 | `npm run typecheck` | erfolgreich |
 | `./node_modules/.bin/tsc -p help-site/tsconfig.json --noEmit --incremental false` | erfolgreich |
 | zusätzliche `--noUnusedLocals --noUnusedParameters` | meldet die oben aufgeführten Symbole; erwarteter Diagnosefehlschlag, kein normaler Typecheck-Fehler |
-| `PI_SPACES_LLM=0 npm --prefix help-site test` | **5 Tests bestanden**, inklusive vorhandener Next-Produktionsartefakte und lokalem Zwei-Shard-Test |
-| `PI_SPACES_LLM=0 npm run test:examples`, ohne Sandbox-Einschränkungen | **158 Tests, 60 Suites, alle bestanden** |
-| `PI_SPACES_LLM=0 npm test`, ohne Sandbox-Einschränkungen | **731 Tests: 730 bestanden, 1 übersprungen, 0 fehlgeschlagen**, Laufzeit rund 78 s |
+| `PHI_SPACES_LLM=0 npm --prefix help-site test` | **5 Tests bestanden**, inklusive vorhandener Next-Produktionsartefakte und lokalem Zwei-Shard-Test |
+| `PHI_SPACES_LLM=0 npm run test:examples`, ohne Sandbox-Einschränkungen | **158 Tests, 60 Suites, alle bestanden** |
+| `PHI_SPACES_LLM=0 npm test`, ohne Sandbox-Einschränkungen | **731 Tests: 730 bestanden, 1 übersprungen, 0 fehlgeschlagen**, Laufzeit rund 78 s |
 | begrenzte lokale Reproduktionen | F01, F02, F03, F04, F08, F10 bestätigt |
 
-Übersprungen wurde der Bootstrap-Test mit einer realen Control-Store-Kopie, weil `PI_SPACES_BOOTSTRAP_COPY` nicht gesetzt war. Es wurde keine reale Store-Kopie beschafft oder verändert.
+Übersprungen wurde der Bootstrap-Test mit einer realen Control-Store-Kopie, weil `PHI_SPACES_BOOTSTRAP_COPY` nicht gesetzt war. Es wurde keine reale Store-Kopie beschafft oder verändert.
 
 Der erste eingeschränkte Beispieltestlauf meldete zwei fehlgeschlagene Testdateien (`golomb`, `recovery`); der uneingeschränkte Wiederholungslauf war grün. Der erste eingeschränkte Root-Lauf lieferte ebenfalls Fehler/stockenden Fortschritt und endete am gesetzten 180-s-Timeout (Exit 124). Diese Ergebnisse dürfen ohne Einzelursachenanalyse nicht als Produktregressionen ausgegeben werden. Maßgeblich sind hier die separat aufgeführten Wiederholungsläufe und gezielten Reproduktionen.
 
 Die fünf Hilfesystemtests belegen vor allem normale Abläufe: Corpus-Schema/-Anker, sequenzielle Stufen, HTTP/Admin-Happy-Path, vorhandenen Next-SSR-Build und Zwei-Shard-Verhalten. Sie prüfen **nicht** die oben reproduzierten Parallelitäts-/Replayfehler, Browser-Heartbeats oder echte WebSocket-Frame-Grenzfälle. Stufe v2 verwendet geordnetes Close/Reopen; das ist kein Stromausfall- oder harter Prozessabbruchnachweis.
 
-Die Reproduktionen wurden mit einem temporären Skript `/tmp/pi-spaces-help-review.mjs` ausgeführt. Logs dieser Sitzung liegen unter `/tmp/pi-spaces-review-*.log`; sie sind lokale, nicht dauerhaft versionierte Hilfsartefakte. Die konkreten Eingaben und Resultate sind deshalb zusätzlich bei jedem R-Befund dokumentiert.
+Die Reproduktionen wurden mit einem temporären Skript `/tmp/phi-spaces-help-review.mjs` ausgeführt. Logs dieser Sitzung liegen unter `/tmp/phi-spaces-review-*.log`; sie sind lokale, nicht dauerhaft versionierte Hilfsartefakte. Die konkreten Eingaben und Resultate sind deshalb zusätzlich bei jedem R-Befund dokumentiert.
 
 ## 6. Empfohlene Umsetzung und Abnahme
 
@@ -400,15 +400,15 @@ Die folgenden Ergebnisse gelten für die Umsetzung, nicht für die historische P
 |---|---|
 | Root-Typecheck `npm run typecheck` | erfolgreich |
 | Help-Typecheck `tsc -p help-site/tsconfig.json --noEmit --incremental false` | erfolgreich |
-| Hilfesystemtests mit `PI_SPACES_LLM=0` | 26 Tests: 25 bestanden, 1 bewusst ausgelassener separater Next-Produktionsfall |
-| `PI_SPACES_LLM=0 npm --prefix help-site run test:production` | frischer Corpus-/Standalone-/Next-Build erfolgreich; anschließender Next-SSR-Test bestanden |
-| `PI_SPACES_LLM=0 npm run test:examples` | 158 Tests, 60 Suites, alle bestanden |
-| `PI_SPACES_LLM=0 npm test -- --test-concurrency=4` | 731 Tests: 730 bestanden, 1 Bootstrap-Kopie-Test übersprungen, 0 Fehler |
+| Hilfesystemtests mit `PHI_SPACES_LLM=0` | 26 Tests: 25 bestanden, 1 bewusst ausgelassener separater Next-Produktionsfall |
+| `PHI_SPACES_LLM=0 npm --prefix help-site run test:production` | frischer Corpus-/Standalone-/Next-Build erfolgreich; anschließender Next-SSR-Test bestanden |
+| `PHI_SPACES_LLM=0 npm run test:examples` | 158 Tests, 60 Suites, alle bestanden |
+| `PHI_SPACES_LLM=0 npm test -- --test-concurrency=4` | 731 Tests: 730 bestanden, 1 Bootstrap-Kopie-Test übersprungen, 0 Fehler |
 | Zusätzlicher noUnused-Diagnoselauf | keine Befunde im Hilfesystem/Sieve; 13 bereits vorhandene Befunde in separaten Core-Dateien |
 
-Logs der lokalen Läufe: `/tmp/pi-spaces-fixes-help-final.log`, `/tmp/pi-spaces-fixes-production.log`, `/tmp/pi-spaces-fixes-examples-final.log`, `/tmp/pi-spaces-fixes-root-final.log` und `/tmp/pi-spaces-fixes-unused.log`. Diese temporären Dateien sind keine dauerhaft versionierte CI-Evidenz. Frühere Läufe hatten Fehler durch den inzwischen korrigierten kalten Expiry-Cache, den zeitabhängigen Reaper-Test und eine strengere Sieve-Fehlermeldung; die Tabelle nennt die danach ausgeführten erfolgreichen Läufe.
+Logs der lokalen Läufe: `/tmp/phi-spaces-fixes-help-final.log`, `/tmp/phi-spaces-fixes-production.log`, `/tmp/phi-spaces-fixes-examples-final.log`, `/tmp/phi-spaces-fixes-root-final.log` und `/tmp/phi-spaces-fixes-unused.log`. Diese temporären Dateien sind keine dauerhaft versionierte CI-Evidenz. Frühere Läufe hatten Fehler durch den inzwischen korrigierten kalten Expiry-Cache, den zeitabhängigen Reaper-Test und eine strengere Sieve-Fehlermeldung; die Tabelle nennt die danach ausgeführten erfolgreichen Läufe.
 
-Die Umsetzung schließt die beschriebenen Anwendungsfehler mit den genannten lokalen Nachweisen. Sie ist weiterhin **keine** Browser-E2E-, Container-, Produktiv-, Multi-Host-, Stromausfall- oder kostenpflichtige Provider-Abnahme. Docker-Dateien wurden angepasst, aber keine Container gebaut oder gestartet. Der Bootstrap-Test mit echter Store-Kopie bleibt ohne `PI_SPACES_BOOTSTRAP_COPY` bewusst übersprungen.
+Die Umsetzung schließt die beschriebenen Anwendungsfehler mit den genannten lokalen Nachweisen. Sie ist weiterhin **keine** Browser-E2E-, Container-, Produktiv-, Multi-Host-, Stromausfall- oder kostenpflichtige Provider-Abnahme. Docker-Dateien wurden angepasst, aber keine Container gebaut oder gestartet. Der Bootstrap-Test mit echter Store-Kopie bleibt ohne `PHI_SPACES_BOOTSTRAP_COPY` bewusst übersprungen.
 
 Bewusste Grenzen: `needsReview` verlangt bei unklarem Ausgang eine fachliche Prüfung statt einer Exactly-once-Behauptung über mehrere Controller hinweg. Stage-Spiegel sind Berichte und keine ausführbaren Backups. Die erstmalige Historienmigration benötigt für das Sortieren linearen Speicher; im Space selbst bleiben ID-Probes und Commitkosten von der Entry-Zahl abhängig. Ein Upload-Retentionlauf entfernt nur generierte Dateien und erfolgt beim nächsten Upload; Chatverläufe werden bei Session-Ablauf nicht automatisch gelöscht und zählen weiter zum Kontingent. Die Modellbudgetgrenzen sind lokale Prozessgrenzen, kein mandantenübergreifendes Abrechnungssystem.
 
@@ -416,7 +416,7 @@ Bewusste Grenzen: `needsReview` verlangt bei unklarem Ausgang eine fachliche Pr�
 
 **Status: Erledigt (Implementierung und lokale Prüfung).** Kein Deployment und keine Lastabnahme des produktiven 34k-Entry-Stores.
 
-Die bisherige logische Space-Transaktion war kein Storage-Batch: jeder `PiSpaces.take`/`write`/Transaktionsaufruf öffnete separat `host.commit`. Insbesondere benötigte `appendHistory` drei solcher Aufrufe pro Post; Post, Kanalzähler, Outbox und Taskreservierung kamen hinzu. Damit blieb die Dokumentserialisierung trotz mehrerer Tasks pro Space-Transaktion im Hot Path.
+Die bisherige logische Space-Transaktion war kein Storage-Batch: jeder `PhiSpaces.take`/`write`/Transaktionsaufruf öffnete separat `host.commit`. Insbesondere benötigte `appendHistory` drei solcher Aufrufe pro Post; Post, Kanalzähler, Outbox und Taskreservierung kamen hinzu. Damit blieb die Dokumentserialisierung trotz mehrerer Tasks pro Space-Transaktion im Hot Path.
 
 Umgesetzt in [`batch.ts`](../help-site/server/social/batch.ts) und [`swarm.ts`](../help-site/server/social/swarm.ts):
 
@@ -449,7 +449,7 @@ Aktuelle lokale Prüfungen des Nachtrags:
 - Root-Suite: 737 Tests, davon 736 bestanden, ein optionaler Bootstrap-Kopie-Test übersprungen, keine Fehler.
 - Beispiele mit `--test-concurrency=1`: 158/158 bestanden. Zwei vorherige parallele Läufe scheiterten ausschließlich am unveränderten Golomb-BitSet-Zeitlimit (109 bzw. 119 ms statt unter 100 ms); die Grenze wurde nicht aufgeweicht.
 
-Logs: `/tmp/pi-spaces-help-batch-final.log`, `/tmp/pi-spaces-root-batch-tests.log`, `/tmp/pi-spaces-examples-batch-serial.log`; temporäre lokale Evidenz, kein versioniertes CI-Artefakt. Der frühere Next-Produktionsnachweis aus Abschnitt 7.3 wurde für diesen rein serverseitigen Nachtrag nicht erneut ausgeführt.
+Logs: `/tmp/phi-spaces-help-batch-final.log`, `/tmp/phi-spaces-root-batch-tests.log`, `/tmp/phi-spaces-examples-batch-serial.log`; temporäre lokale Evidenz, kein versioniertes CI-Artefakt. Der frühere Next-Produktionsnachweis aus Abschnitt 7.3 wurde für diesen rein serverseitigen Nachtrag nicht erneut ausgeführt.
 
 **Verbleibende Performance-Grenzen:** Die Zähltests messen echte Storage-Aufrufe, nicht einen pauschalen CPU-/Durchsatzfaktor. Ein einzelner Commit serialisiert weiterhin das große Dokument, und Core-Operationen können die Entries linear durchsuchen. Producer-Intents, Remote-RPCs, Seeds und alte Outbox-Einträge verwenden weiterhin ihre bisherigen Aufrufpfade; deren Commits sind nicht in den zwei Worker-Commits enthalten. CPU, Event-Loop-Verzögerung sowie HTTP-p95/p99 auf dem großen Store und auf `big` wurden nicht gemessen. Die beobachteten 4:38 Minuten Offline-Migration stammen aus der Nutzermeldung, nicht aus diesem Testlauf. Kein Container/Host wurde neu gestartet oder veröffentlicht.
 

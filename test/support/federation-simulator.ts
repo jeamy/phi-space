@@ -1,7 +1,7 @@
 import {rpcDomain} from "../../src/rpc-domain.ts";
 // AP 2.8: real persistent harnesses + RPC claims; simulated transport, independent safety model.
 import assert from "node:assert/strict";
-import {PiSpaces} from "../../src/client.ts";
+import {PhiSpaces} from "../../src/client.ts";
 import {SpaceService, StaticIdentity} from "../../src/service.ts";
 import {Registry, spaceDoc} from "../../src/spaces.ts";
 import {Space} from "../../src/doc.ts";
@@ -153,7 +153,7 @@ const principal = {
     peerId: "router-fixture"
 };
 export class FederationSimulator implements RouterTarget {
-    readonly protocol = "pi-spaces-rpc-v1" as const;
+    readonly protocol = "phi-spaces-rpc-v1" as const;
     readonly clock = new VirtualClock();
     readonly model = new FederationReferenceModel();
     readonly trace: Json[] = [];
@@ -220,7 +220,7 @@ export class FederationSimulator implements RouterTarget {
     }
     async step(id: string, method: RouterStepSpec["method"], args: Json): Promise<RouterStepSpec> {
         const n = this.node(id),
-              g = await new PiSpaces(n.host, ctx, () => this.clock.now(id), undefined, undefined, {
+              g = await new PhiSpaces(n.host, ctx, () => this.clock.now(id), undefined, undefined, {
                       authorityId: n.binding.authorityId
                   }).issueGeneration(principal);
         this.generations.set(g.generation, "generation-" + (this.generations.size + 1));
@@ -329,7 +329,7 @@ export class FederationSimulator implements RouterTarget {
     private async poll(n: Node, s: Readonly<RouterStep>): Promise<RouterReceipt> {
         const request = {principal: s.principal, generation: s.generation, requestId: s.requestId};
         try {
-            const view = await new PiSpaces(
+            const view = await new PhiSpaces(
                              n.host, ctx, () => this.clock.now(n.binding.hostId), undefined,
                              undefined, {authorityId: n.binding.authorityId})
                              .pollOperation(request);
@@ -424,7 +424,7 @@ export class FederationSimulator implements RouterTarget {
         return this.network(s, "resolve", n => this.poll(n, s));
     }
     async seed(id: string, fields: Record<string, Json>, type = "Job") {
-        const n = this.node(id), p = new PiSpaces(n.host, ctx, () => this.clock.now(id));
+        const n = this.node(id), p = new PhiSpaces(n.host, ctx, () => this.clock.now(id));
         await p.write({type, fields}, null, FOREVER);
         const entry = (await p.readAll({type})).at(-1)!;
         this.model.inventory.set(entry.gid!, {node: id, type, fields: structuredClone(fields)});
@@ -433,7 +433,7 @@ export class FederationSimulator implements RouterTarget {
     async assertInventory() {
         for (const [id, n] of this.nodes) {
             if (!n.alive) continue;
-            const actual = await new PiSpaces(n.host, ctx, () => this.clock.now(id)).readAll();
+            const actual = await new PhiSpaces(n.host, ctx, () => this.clock.now(id)).readAll();
             const expected = [...this.model.inventory].filter(
                 ([gid, e]) => e.node === id && !e.writtenUnder &&
                     (e.expires ?? FOREVER) > this.clock.now(id) &&

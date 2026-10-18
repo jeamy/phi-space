@@ -1,11 +1,11 @@
 ---
 standard: help_api
-id: help.api.pispaces_write
+id: help.api.phispaces_write
 title: "write – Write an Entry"
 short: "Writes a typed entry with a lease; supports request replay and atomic singleton creation through unique."
 tags: [write, entry, lease, txn, requestref, mutation]
 owner: client
-related: [help.topic.entries_and_templates, help.api.pispaces_take]
+related: [help.topic.entries_and_templates, help.api.phispaces_take]
 since: 0.0.1
 ---
 

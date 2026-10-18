@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_claims
+id: help.api.phispaces_claims
 title: "Request-Claims & Generationen – Neustartfeste Idempotenz"
 short: "Bindet Mutationen und blockierende Operationen atomar an {principal, generation, requestId} und einen kanonischen RFC-8785-Argument-Hash."
 tags: [issuegeneration, polloperation, resolveoperation, canceloperation, requestref]

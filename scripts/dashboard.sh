@@ -6,17 +6,17 @@
 #         scripts/dashboard.sh start --no-socket        # example: extra flags are passed through
 #
 # Config via environment:
-#   DASHBOARD_DIR     JSONL store directory (default: ~/.local/share/pi-spaces/dashboard-store)
+#   DASHBOARD_DIR     JSONL store directory (default: ~/.local/share/phi-spaces/dashboard-store)
 #   DASHBOARD_SQLITE  SQLite store file; set this instead of DASHBOARD_DIR
 #   DASHBOARD_PORT    HTTP port (default 8787)
 #   DASHBOARD_BIND    bind address (default 127.0.0.1; loopback only by design)
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-store="${DASHBOARD_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/pi-spaces/dashboard-store}"
+store="${DASHBOARD_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/phi-spaces/dashboard-store}"
 port="${DASHBOARD_PORT:-8787}"
 bind="${DASHBOARD_BIND:-127.0.0.1}"
-run="${XDG_RUNTIME_DIR:-/tmp}/pi-spaces-dashboard-$(id -u)"
+run="${XDG_RUNTIME_DIR:-/tmp}/phi-spaces-dashboard-$(id -u)"
 pidfile="$run/dashboard.pid"
 logfile="$run/dashboard.log"
 url="http://$bind:$port"

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
-import { PiSpaces } from "../src/client.ts";
+import { PhiSpaces } from "../src/client.ts";
 import { createSpace, spaceDoc } from "../src/spaces.ts";
 import { RunBusy, RunController, localRunMember, type RunMember, type RunSpec } from "../src/run-controller.ts";
 import { SIEVE_GATED_PROFILE, collectSieveResults, configureGatedSieveSpace, prepareSieveRun, processSieveTask, type SieveConfig } from "../examples/sieve.ts";
@@ -150,13 +150,13 @@ for (const backend of BACKENDS) test(`${backend}: case 2 and 4: a controlled sie
 		h = await home.open();
 		controller = new RunController({ host: h, ctx, member: id => sieveMember(h, id) });
 		assert.equal((await controller.status("run-1"))!.state, "preparing");
-		const worker = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
+		const worker = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
 		assert.ok(await worker.count(T("SieveTask")) > 0, "partially prepared");
 		assert.equal(await processSieveTask(worker, "run-1"), false, "an existing worker takes nothing before release");
 		const started = await controller.start("start-1", spec); // same command: resumes, no second run
 		assert.equal(started.state, "running"); assert.equal(started.revision, 2);
 		await assert.rejects(controller.start("start-2", spec), c.RunGateConflict);
-		const local = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
+		const local = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
 		const ids = (await local.readAll(T("SieveTask"))).map(e => e.fields.taskId);
 		assert.equal(ids.length, 8); assert.equal(new Set(ids).size, 8, "no duplicate tasks after retry");
 
@@ -176,7 +176,7 @@ for (const backend of BACKENDS) test(`${backend}: case 2 and 4: a controlled sie
 		controller = new RunController({ host: h, ctx, member: id => sieveMember(h, id) });
 		assert.equal((await controller.status("run-1"))!.revision, 3, "revisions survive a restart");
 		assert.equal((await controller.resume("resume-1", "run-1")).state, "running");
-		const w2 = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
+		const w2 = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: sid });
 		while (await processSieveTask(w2, "run-1")) { /* finish */ }
 		const primes = await collectSieveResults(w2, sieve("run-1"));
 		assert.equal(primes.length, 168);
@@ -210,7 +210,7 @@ for (const backend of BACKENDS) test(`${backend}: an unreachable Member keeps th
 		assert.equal(incomplete.state, "pauseIncomplete");
 		assert.deepEqual(incomplete.pending!.applied, [ids[0]]); assert.match(incomplete.pending!.errors[ids[1]!]!, /unreachable/);
 		assert.deepEqual(await controller.pending(), ["jobs"]);
-		const b = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: ids[1] });
+		const b = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: ids[1] });
 		const tx = await b.createTransaction(60_000);
 		assert.ok(await b.take(T("Job"), 0, { txn: tx.id }), "until its local fence, the unreachable Member keeps working");
 		await b.abort(tx.id);

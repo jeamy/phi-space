@@ -5,7 +5,7 @@ title: "Snapshot Pages (readPage) and Revision Streams (changes)"
 short: "How clients read consistent, byte-bounded snapshots via readPage and stream subsequent commits seamlessly via changes(afterRev)."
 tags: [readpage, changes, snapshot, stream, revision, rev, pagination]
 owner: client
-related: [help.topic.durable_mailboxes_and_ack, help.api.pispaces_read_page_changes]
+related: [help.topic.durable_mailboxes_and_ack, help.api.phispaces_read_page_changes]
 since: 0.0.1
 ---
 
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-To keep a live UI—such as our Multiplayer Space-Chat or the Space Dashboard—in sync, `pi-spaces` combines **immutable point-in-time snapshots (`readPage`)** with a **monotonic revision stream (`changes`)**.
+To keep a live UI—such as our Multiplayer Space-Chat or the Space Dashboard—in sync, `phi-spaces` combines **immutable point-in-time snapshots (`readPage`)** with a **monotonic revision stream (`changes`)**.
 
 ## Concept And System Model {#concept-model}
 
@@ -42,4 +42,4 @@ const delta = await space.changes(page.rev, { maxBytes: 65536 });
 ## See Also {#see-also}
 
 - [Durable Mailboxes (events / ack), wait, and notify](help.topic.durable_mailboxes_and_ack#overview)
-- [readPage & changes API](help.api.pispaces_read_page_changes)
+- [readPage & changes API](help.api.phispaces_read_page_changes)

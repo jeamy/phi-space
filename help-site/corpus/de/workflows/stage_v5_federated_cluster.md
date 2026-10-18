@@ -22,7 +22,7 @@ Der Cluster läuft **simuliert in einem einzigen Prozess**: **4 Harnesses** (all
 - **1 Koordinator-Host**: `RouterController` (`router-root` + 2 Partition-Router für die Routing-Journals) und `FederatedSpace` (id `fed-v5`). Der Koordinator besitzt selbst keinen Chat-Daten-Space — er führt nur die Policy aus.
 - **3 Member-Hosts** (`member-1`, `member-2`, `member-3`): jeder hat einen eigenen, unabhängigen Space mit eigenem Space-Doc.
 - **HRW-Sharding**: die Federation-Policy routet `Thread`, `Msg` und `ChatTask` per Rendezvous-Hashing über `fields.threadId` deterministisch auf genau einen Member. Das Runner-Report-Feld `memberDistribution` zeigt die tatsächliche Verteilung, z.B. `{ member-1: [alpha, gamma], member-2: [beta], member-3: [delta] }`.
-- **`FederationIO`** ist in der Demo ein in-process Adapter auf die lokalen `PiSpaces`-Objekte; in einer echten Bereitstellung wären das `RemoteSpace`-/RPC-Aufrufe auf entfernte Hosts — die Semantik (`step`, `snapshot`, `events`, `ack`, `txnActive`) bleibt identisch.
+- **`FederationIO`** ist in der Demo ein in-process Adapter auf die lokalen `PhiSpaces`-Objekte; in einer echten Bereitstellung wären das `RemoteSpace`-/RPC-Aufrufe auf entfernte Hosts — die Semantik (`step`, `snapshot`, `events`, `ack`, `txnActive`) bleibt identisch.
 - **Replikation**: 2 `EntryReplicationController` (`rep-1` auf member-1, `rep-2` auf member-2) replizieren `Presence` via HLC + Last-Writer-Wins in den gemeinsamen Space `presence-global`.
 
 ## Arbeitsablauf {#workflow}

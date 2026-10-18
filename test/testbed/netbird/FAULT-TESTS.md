@@ -16,7 +16,7 @@ entspricht der [NetBird-Dokumentation](https://docs.netbird.io/selfhosted/extern
 und wurde gegen die tatsächlichen Agenten 0.80.0 geprüft.
 
 `fault-proxy.mjs CERT_FILE KEY_FILE` startet den administrativen Proxy. Auf big
-läuft er als eigener zeitlich begrenzter Dienst `pi-spaces-fault-proxy.service`.
+läuft er als eigener zeitlich begrenzter Dienst `phi-spaces-fault-proxy.service`.
 Zertifikatschlüssel werden weder kopiert noch protokolliert. Über
 `POST /fault` mit `{"blocked":["management"]}` werden Komponenten gewählt;
 eine leere Liste entfernt die Fehler. `GET /status` zeigt ausschließlich
@@ -39,7 +39,7 @@ Enrollment-Tokens stehen nur auf stdin; die vorübergehende Enrollment-Gruppe
 wird anschließend wieder entfernt.
 
 Die Python-Dateien werden auf big als private administrative Werkzeuge unter
-`/home/mux/.local/share/pi-spaces-operations/` bereitgestellt. Der Treiber nutzt
+`/home/mux/.local/share/phi-spaces-operations/` bereitgestellt. Der Treiber nutzt
 nur die ausdrücklich festgelegten eigenen Testcontainer und Verzeichnisse.
 Der Fortschritt steht atomar in `netbird-matrix-progress.json`; laufende Phasen
 sind noch keine bestandenen Abnahmen. Der echte Desktop-/Relay-Zugriff wird

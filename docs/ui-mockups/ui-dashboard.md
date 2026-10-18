@@ -1,4 +1,4 @@
-# pi-spaces Live Dashboard UI Mockup
+# phi-spaces Live Dashboard UI Mockup
 
 Eine Übersicht für eine Echtzeit-Web-Oberfläche, die Spaces, Clients, Agents und Mobile Devices visualisiert.
 

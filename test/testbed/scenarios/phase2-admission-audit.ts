@@ -28,7 +28,7 @@ try{
   assert.equal(Object.keys(index?.future??{}).length,0,'unused future reservations must be released');
   const journal=await root.snapshot(FederationOperations,parentJournalKey('ap2-netbird',1024,n),ctx);
   for(const parent of Object.values(journal?.operations??{})){assert.equal(parent.phase,'done');parentRecords.set(parent.id,parent);parents++;}
-  const router=new RouterController({host:readOnlyRoot,ctx,routerId:id,authorityId:config.authorityId,target:{protocol:'pi-spaces-rpc-v1',invoke:async()=>{throw new Error('audit must never send');},resolve:async()=>{throw new Error('audit must never resolve');}},assertAuthority:async()=>{}});
+  const router=new RouterController({host:readOnlyRoot,ctx,routerId:id,authorityId:config.authorityId,target:{protocol:'phi-spaces-rpc-v1',invoke:async()=>{throw new Error('audit must never send');},resolve:async()=>{throw new Error('audit must never resolve');}},assertAuthority:async()=>{}});
   for(const [id,ref] of Object.entries(index?.refs??{})){assert.equal(ref.state,'completed');const command=await router.get(id);assert.ok(command);assert.equal(command.hash,ref.hash);assert.equal(command.state,'completed');commands++;for(const step of command.steps){assert.equal(step.state,'done');const key=JSON.stringify([step.target.hostId,step.generation,step.requestId]);assert.equal(steps.has(key),false);steps.set(key,step);}}
  }
  assert.equal(parents,config.jobs*5+probes.length*4+readProbes.length);assert.equal(commands,config.jobs*5+probes.length*12+readProbes.length*3);

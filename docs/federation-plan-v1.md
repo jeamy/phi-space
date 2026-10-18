@@ -118,7 +118,7 @@ Ressourcen, Ports und Benutzerverwaltung werden für die ausgewählte Version vo
 | Beitritt Server/Hosts | Setup-Key (unbeaufsichtigt, bei der Provisionierung) |
 | Beitritt Handy/Desktop | Login über NetBird (lokale Benutzer oder SSO) |
 | Netz-ACLs | NetBird-Policies über Gruppen |
-| Rechte im Space | **pi-spaces** (4.3), nicht NetBird |
+| Rechte im Space | **phi-spaces** (4.3), nicht NetBird |
 
 Gruppen und Policies (Vorschlag):
 
@@ -261,7 +261,7 @@ Quorum-basierte automatische HA ist ein späterer Entwurf und wird durch eine bl
 
 ## 6. Bausteine
 
-### 6.1 Core-Erweiterungen (pi-spaces, Doc-Version 5)
+### 6.1 Core-Erweiterungen (phi-spaces, Doc-Version 5)
 
 1. **Revision**: jede dauerhafte Zustandsänderung erhöht `rev` einmal pro Commit. Ein Batch enthält alle Deltas
    dieses Commits atomar; Cursor stehen nur zwischen Batches. Stream-ID enthält Space, Historien-Inkarnation und
@@ -528,8 +528,8 @@ Alle Clients sprechen dasselbe Space-Protokoll; es gibt keine client-spezifische
     Statistik pro Member und summiert, Inhalte (`readAll`), Kommandos mit Ergebnis, Pairing (QR anzeigen/scannen).
   - Endpunkte (Vorschlag): `/api/spaces/{members,status,policy,command,result,list,entry,enroll,pair}`.
   - Long-Polls nur, solange die Seite sichtbar ist; das System braucht das Handy nicht.
-- **Desktop / CLI**: Node-Paket `pi-spaces-client` (RemoteSpace + TCP-Transport + Pairing), z.B. `pi-spaces status`,
-  `pi-spaces policy set …`, `pi-spaces pair`.
+- **Desktop / CLI**: Node-Paket `phi-spaces-client` (RemoteSpace + TCP-Transport + Pairing), z.B. `phi-spaces status`,
+  `phi-spaces policy set …`, `phi-spaces pair`.
 - **Browser**: Gateway auf einem Host übersetzt WebSocket/TLS auf das Space-Protokoll; Anmeldung per App-Schlüssel
   (WebCrypto-Unterstützung vorab prüfen). NetBird-SSO allein ersetzt keine App-Autorisierung. Das Gateway
   bindet Browser-Sessions an einzelne Principals, prüft Origin/CSRF und darf keine allgemeinen Host-Rechte

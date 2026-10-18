@@ -1,4 +1,4 @@
-// Canonical bilingual workflow (v1-v6) and API articles for PI-SPACES / HELP.
+// Canonical bilingual workflow (v1-v6) and API articles for PHI-SPACES / HELP.
 import type { ArticleSeed } from "./corpus-articles-data.ts";
 
 export const WORKFLOW_AND_API_ARTICLES: ArticleSeed[] = [
@@ -32,29 +32,29 @@ export const WORKFLOW_AND_API_ARTICLES: ArticleSeed[] = [
 		],
 		de: {
 			title: "Übersicht: Multiplayer Space-Chat in 6 Stufen (v1 bis v6)",
-			short: "Wie das Earendil Multiplayer-Chat-Szenario vollständig mit nativen pi-spaces-Mitteln umgesetzt wird – vom Zero-Setup In-Memory-Space (v1) bis zum Cluster mit Mobile- & Web-Admin (v6).",
+			short: "Wie das Earendil Multiplayer-Chat-Szenario vollständig mit nativen phi-spaces-Mitteln umgesetzt wird – vom Zero-Setup In-Memory-Space (v1) bis zum Cluster mit Mobile- & Web-Admin (v6).",
 			body: `## Überblick {#overview}
 
-Dieses Referenzprojekt setzt alle Fähigkeiten des bekannten [Pi Durable on Cloudflare Multiplayer-Chats](help.topic.overview#overview) **ausschließlich mit den Mitteln von \`pi-spaces\`** um – ohne Cloudflare-spezifische APIs und ohne manuelle Sonder-Tabellen außerhalb des Spaces.
+Dieses Referenzprojekt setzt alle Fähigkeiten des bekannten [Pi Durable on Cloudflare Multiplayer-Chats](help.topic.overview#overview) **ausschließlich mit den Mitteln von \`phi-spaces\`** um – ohne Cloudflare-spezifische APIs und ohne manuelle Sonder-Tabellen außerhalb des Spaces.
 
 Damit man sowohl in wenigen Sekunden lokal starten als auch den Weg bis zur verteilten Produktion nachvollziehen kann, ist das Beispiel in **6 aufeinander aufbauende, einzeln ausführbare Versionen (\`v1\` bis \`v6\`)** gegliedert.
 
 ## Begriffs- und Systemmodell {#concept-model}
 
-### Wie pi-spaces die 6 Kernanforderungen löst {#mapping-table}
+### Wie phi-spaces die 6 Kernanforderungen löst {#mapping-table}
 
-| Funktion des Multiplayer-Chats | Lösung mit reinen \`pi-spaces\`-Mitteln |
+| Funktion des Multiplayer-Chats | Lösung mit reinen \`phi-spaces\`-Mitteln |
 |---|---|
 | **1. Teilbare Session-Räume** | Jeder Chat-Raum ist ein isolierter **benannter Space (\`NamedSpace\`)** mit eigener \`spaceId\` und Revision \`rev\`. |
 | **2. Mehrere Threads & Forking ohne Duplikate** | Threads sind \`Thread\`-Entries (\`{ threadId, parentThreadId, forkUpToSeq }\`); Reconnect-Retries werden nativ über **Request-Claims (\`RequestRef\` + \`issueGeneration\`)** dedupliziert. |
 | **3. Multiplayer-Inbox & geordnete Antworten** | Jede Nachricht erzeugt in einer Transaktion \`Msg\` + \`ChatTask\`. Der Worker nimmt \`ChatTask\` exklusiv unter \`txn\` und muss laut **\`CompletionProfile\`** genau eine Antwort-\`Msg\` committen. |
 | **4. Live-Streaming & Teilnehmer-Präsenz** | Initialer Snapshot über \`readPage()\`, Live-Deltas über \`changes(afterRev)\`; Anwesenheit über \`Presence\`-Entries mit **30-s-Space-Lease** und \`renew()\`. |
-| **5. Geplante Aufgaben (\`schedule\` / Alarme)** | \`ScheduledJob\`-Entry (\`FOREVER\`) + \`TimerLock\`-Entry mit \`leaseMs = delayMs\`. Nach Ablauf der Lease räumt der \`pi-spaces\`-Reaper den Lock ab und löst idempotent den Wakeup-\`ChatTask\` aus. |
+| **5. Geplante Aufgaben (\`schedule\` / Alarme)** | \`ScheduledJob\`-Entry (\`FOREVER\`) + \`TimerLock\`-Entry mit \`leaseMs = delayMs\`. Nach Ablauf der Lease räumt der \`phi-spaces\`-Reaper den Lock ab und löst idempotent den Wakeup-\`ChatTask\` aus. |
 | **6. Konversationssuche per Subagent (\`search_history\`)** | \`SearchTask\`-Entry wird von einem Subagent-Worker unter \`txn\` genommen; er durchsucht alle Threads per \`readAll({ type: "Msg" })\`, protokolliert \`SubagentStep\`-Entries und committet \`SearchResult\` unter einem zweiten \`CompletionProfile\`. |
 
 ### Die 6 Stufen im Überblick {#six-stages}
 
-1. **[Stufe 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-Setup im Arbeitsspeicher (\`MemoryStorage\` + \`PiSpaces\`). Sofort ausführbar ohne Dateien oder Netzwerk.
+1. **[Stufe 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-Setup im Arbeitsspeicher (\`MemoryStorage\` + \`PhiSpaces\`). Sofort ausführbar ohne Dateien oder Netzwerk.
 2. **[Stufe 2 (\`v2-local-durable\`)](help.workflow.stage_v2_local_durable#overview)**: Lokale SQLite-Persistenz, \`RequestRef\`-Idempotenz, \`readPage\`/\`changes\`, \`TimerLock\`-Alarme und \`search_history\`-Subagent.
 3. **[Stufe 3 (\`v3-remote-socket\`)](help.workflow.stage_v3_remote_socket#overview)**: Trennung in Server und Remote-Worker über \`SpaceService\`, \`RemoteSpace\` (Unix-Socket/TCP) und Consumer-Mailboxes (\`events\` + \`ack\`).
 4. **[Stufe 4 (\`v4-gated-auth\`)](help.workflow.stage_v4_gated_auth#overview)**: Zwei-Schichten-Sicherheit (\`startGate\`, Ed25519-Challenge, Token-Enrollment, 60-s-Grants, Schlüsselrotation und Boot-Guard).
@@ -69,29 +69,29 @@ Jede Stufen-Beschreibung enthält einen Abschnitt **Topologie: Space-Verteilung*
 		},
 		en: {
 			title: "Overview: Multiplayer Space-Chat in 6 Stages (v1 to v6)",
-			short: "How the Earendil Multiplayer Chat scenario is implemented purely with native pi-spaces primitives—from a zero-setup in-memory space (v1) to a federated cluster with mobile & web admin (v6).",
+			short: "How the Earendil Multiplayer Chat scenario is implemented purely with native phi-spaces primitives—from a zero-setup in-memory space (v1) to a federated cluster with mobile & web admin (v6).",
 			body: `## Overview {#overview}
 
-This reference project implements every capability of the [Pi Durable on Cloudflare Multiplayer Chat](help.topic.overview#overview) **purely using \`pi-spaces\` primitives**—with no Cloudflare-specific APIs and no ad-hoc state tables outside the space.
+This reference project implements every capability of the [Pi Durable on Cloudflare Multiplayer Chat](help.topic.overview#overview) **purely using \`phi-spaces\` primitives**—with no Cloudflare-specific APIs and no ad-hoc state tables outside the space.
 
 To let you start locally in seconds and progressively scale to a distributed production cluster, the project is structured into **6 cumulative, individually runnable stages (\`v1\` through \`v6\`)**.
 
 ## Concept And System Model {#concept-model}
 
-### How pi-spaces Solves The 6 Core Requirements {#mapping-table}
+### How phi-spaces Solves The 6 Core Requirements {#mapping-table}
 
-| Multiplayer Chat Capability | Pure \`pi-spaces\` Solution |
+| Multiplayer Chat Capability | Pure \`phi-spaces\` Solution |
 |---|---|
 | **1. Shareable Session Rooms** | Each chat session is an isolated **named space (\`NamedSpace\`)** with its own \`spaceId\` and revision counter \`rev\`. |
 | **2. Multiple Threads & Forking Without Duplicates** | Threads are \`Thread\` entries (\`{ threadId, parentThreadId, forkUpToSeq }\`); reconnect retries are deduplicated natively via **Request Claims (\`RequestRef\` + \`issueGeneration\`)**. |
 | **3. Multiplayer Inbox & Ordered Replies** | Submitting a message atomically writes \`Msg\` + \`ChatTask\`. The worker reserves \`ChatTask\` under \`txn\` and must commit a matching reply \`Msg\` enforced by **\`CompletionProfile\`**. |
 | **4. Live Streaming & Participant Presence** | Initial snapshot via \`readPage()\`, live deltas via \`changes(afterRev)\`; presence via \`Presence\` entries with a **30 s space lease** and \`renew()\`. |
-| **5. Scheduled Tasks (\`schedule\` / Alarms)** | \`ScheduledJob\` entry (\`FOREVER\`) + \`TimerLock\` entry with \`leaseMs = delayMs\`. When the lease expires, the \`pi-spaces\` reaper removes the lock and idempotently triggers the wakeup \`ChatTask\`. |
+| **5. Scheduled Tasks (\`schedule\` / Alarms)** | \`ScheduledJob\` entry (\`FOREVER\`) + \`TimerLock\` entry with \`leaseMs = delayMs\`. When the lease expires, the \`phi-spaces\` reaper removes the lock and idempotently triggers the wakeup \`ChatTask\`. |
 | **6. Cross-Thread Search Subagent (\`search_history\`)** | A subagent worker takes \`SearchTask\` under \`txn\`, scans top-level threads via \`readAll({ type: "Msg" })\`, records \`SubagentStep\` trace entries, and commits \`SearchResult\` under a second \`CompletionProfile\`. |
 
 ### The 6 Stages At A Glance {#six-stages}
 
-1. **[Stage 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-setup in memory (\`MemoryStorage\` + \`PiSpaces\`). Runs immediately without files or network ports.
+1. **[Stage 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-setup in memory (\`MemoryStorage\` + \`PhiSpaces\`). Runs immediately without files or network ports.
 2. **[Stage 2 (\`v2-local-durable\`)](help.workflow.stage_v2_local_durable#overview)**: Local SQLite persistence, \`RequestRef\` idempotency, \`readPage\`/\`changes\`, \`TimerLock\` alarms, and \`search_history\` subagent.
 3. **[Stage 3 (\`v3-remote-socket\`)](help.workflow.stage_v3_remote_socket#overview)**: Process decoupling via \`SpaceService\`, \`RemoteSpace\` (Unix socket/TCP), and consumer mailboxes (\`events\` + \`ack\`).
 4. **[Stage 4 (\`v4-gated-auth\`)](help.workflow.stage_v4_gated_auth#overview)**: Two-layer security (\`startGate\`, Ed25519 challenge, token enrollment, 60s grants, key rotation, and boot guard).
@@ -109,7 +109,7 @@ Each stage description includes a **Topology: Space Distribution** section showi
 		id: "help.workflow.stage_v1_local_memory",
 		type: "workflow",
 		provider: "client",
-		tags: ["v1", "memory", "quickstart", "pispaces", "thread", "fork", "presence", "completionprofile"],
+		tags: ["v1", "memory", "quickstart", "phispaces", "thread", "fork", "presence", "completionprofile"],
 		related: ["help.workflow.overview_v1_to_v6", "help.workflow.stage_v2_local_durable"],
 		since: "0.0.1",
 		resources: [
@@ -137,7 +137,7 @@ Stufe 1 (\`help-site/examples/v1-local-memory/run.ts\`) benötigt keinerlei Einr
 
 - **1 Prozess**, **1 Harness** auf \`MemoryStorage\` (flüchtig, kein Restart-Szenario).
 - **1 benannter Space** (\`chat-v1\`): alle Entries (\`Presence\`, \`Thread\`, \`Msg\`, \`ChatTask\`) liegen in genau diesem Space.
-- Clients (alice/bob) und Worker greifen in-process über dasselbe \`PiSpaces\`-Objekt zu — kein Socket, keine Datei, kein Netz.
+- Clients (alice/bob) und Worker greifen in-process über dasselbe \`PhiSpaces\`-Objekt zu — kein Socket, keine Datei, kein Netz.
 
 ## Arbeitsablauf {#workflow}
 
@@ -146,7 +146,7 @@ Stufe 1 (\`help-site/examples/v1-local-memory/run.ts\`) benötigt keinerlei Einr
 \`\`\`ts
 const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([
@@ -185,7 +185,7 @@ Stage 1 (\`help-site/examples/v1-local-memory/run.ts\`) requires zero setup, dat
 
 - **1 process**, **1 harness** on \`MemoryStorage\` (volatile, no restart scenario).
 - **1 named space** (\`chat-v1\`): every entry (\`Presence\`, \`Thread\`, \`Msg\`, \`ChatTask\`) lives in that single space.
-- Clients (alice/bob) and workers share the same in-process \`PiSpaces\` object — no socket, no file, no network.
+- Clients (alice/bob) and workers share the same in-process \`PhiSpaces\` object — no socket, no file, no network.
 
 ## Workflow {#workflow}
 
@@ -194,7 +194,7 @@ Stage 1 (\`help-site/examples/v1-local-memory/run.ts\`) requires zero setup, dat
 \`\`\`ts
 const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
 await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
 const stopService = await startService(harness, ctx);
 
 await space.setCompletionProfiles([
@@ -249,7 +249,7 @@ node --experimental-strip-types help-site/examples/v1-local-memory/run.ts
 			short: "Erweitert Stufe 1 um SQLite-Speicherung, neustartfeste RequestRef-Claims, TimerLock-Leases für geplante Alarme und den search_history-Subagenten.",
 			body: `## Überblick {#overview}
 
-Stufe 2 (\`help-site/examples/v2-local-durable/run.ts\`) macht den Multiplayer Space-Chat dauerhaft über Prozessneustarts hinweg und fügt genau die zwei fortgeschrittenen Funktionen aus dem Earendil-Artikel hinzu: **geplante Aufgaben (\`schedule\`-Alarme)** und die **konversationsübergreifende Suche per Subagent (\`search_history\`)** – beides rein mit \`pi-spaces\`-Mitteln.
+Stufe 2 (\`help-site/examples/v2-local-durable/run.ts\`) macht den Multiplayer Space-Chat dauerhaft über Prozessneustarts hinweg und fügt genau die zwei fortgeschrittenen Funktionen aus dem Earendil-Artikel hinzu: **geplante Aufgaben (\`schedule\`-Alarme)** und die **konversationsübergreifende Suche per Subagent (\`search_history\`)** – beides rein mit \`phi-spaces\`-Mitteln.
 
 ## Topologie: Space-Verteilung {#topology}
 
@@ -261,7 +261,7 @@ Stufe 2 (\`help-site/examples/v2-local-durable/run.ts\`) macht den Multiplayer S
 
 ### Schritt 1: SQLite-Storage und RequestRef-Claims {#step-1-sqlite-claims}
 
-Statt \`MemoryStorage\` öffnet der Host \`await openNodeSqliteStorage(dbPath)\`. Für jeden Teilnehmer wird \`const { generation } = await space.issueGeneration(principal)\` ausgestellt. Wird \`createThread\` oder \`submitMessage\` nach einem Verbindungsabbruch mit derselben \`requestId\` wiederholt, gibt \`pi-spaces\` exakt das erste Ergebnis zurück.
+Statt \`MemoryStorage\` öffnet der Host \`await openNodeSqliteStorage(dbPath)\`. Für jeden Teilnehmer wird \`const { generation } = await space.issueGeneration(principal)\` ausgestellt. Wird \`createThread\` oder \`submitMessage\` nach einem Verbindungsabbruch mit derselben \`requestId\` wiederholt, gibt \`phi-spaces\` exakt das erste Ergebnis zurück.
 
 ### Schritt 2: Geplante Alarme über ScheduledJob + TimerLock-Lease {#step-2-alarms}
 
@@ -269,7 +269,7 @@ Statt \`MemoryStorage\` öffnet der Host \`await openNodeSqliteStorage(dbPath)\`
    - einen \`ScheduledJob\`-Entry mit \`status: "pending"\` und \`FOREVER\`-Lease,
    - einen \`TimerLock\`-Entry \`{ jobId, threadId, executeAt }\` mit **\`lease = delayMs\`**.
 2. Solange \`TimerLock\` im Space existiert, ist der Auftrag noch nicht fällig.
-3. Sobald \`delayMs\` verstrichen ist – selbst wenn der Prozess zwischendurch geschlossen und auf derselben SQLite-Datei neu geöffnet wurde! –, entfernt der \`pi-spaces\`-Reaper den abgelaufenen \`TimerLock\`.
+3. Sobald \`delayMs\` verstrichen ist – selbst wenn der Prozess zwischendurch geschlossen und auf derselben SQLite-Datei neu geöffnet wurde! –, entfernt der \`phi-spaces\`-Reaper den abgelaufenen \`TimerLock\`.
 4. \`tickAlarms()\` nimmt den nun ungesperrten \`ScheduledJob\` unter einer Transaktion, schreibt ihn mit \`status: "triggered"\` zurück und legt gleichzeitig den fälligen Wakeup-\`ChatTask\` an.
 
 ### Schritt 3: Konversationsübergreifende Suche per Search-Subagent {#step-3-subagent}
@@ -294,7 +294,7 @@ node --experimental-strip-types help-site/examples/v2-local-durable/run.ts
 			short: "Extends Stage 1 with SQLite storage, restart-safe RequestRef claims, TimerLock leases for scheduled alarms, and the search_history subagent.",
 			body: `## Overview {#overview}
 
-Stage 2 (\`help-site/examples/v2-local-durable/run.ts\`) makes the Multiplayer Space-Chat durable across process restarts and adds the two advanced capabilities from the Earendil post: **scheduled tasks (\`schedule\` alarms)** and **cross-conversation search via subagent (\`search_history\`)**—both built purely on \`pi-spaces\` primitives.
+Stage 2 (\`help-site/examples/v2-local-durable/run.ts\`) makes the Multiplayer Space-Chat durable across process restarts and adds the two advanced capabilities from the Earendil post: **scheduled tasks (\`schedule\` alarms)** and **cross-conversation search via subagent (\`search_history\`)**—both built purely on \`phi-spaces\` primitives.
 
 ## Topology: Space Distribution {#topology}
 
@@ -314,7 +314,7 @@ Instead of \`MemoryStorage\`, the host opens \`await openNodeSqliteStorage(dbPat
    - a \`ScheduledJob\` entry with \`status: "pending"\` and \`FOREVER\` lease,
    - a \`TimerLock\` entry \`{ jobId, threadId, executeAt }\` with **\`lease = delayMs\`**.
 2. While \`TimerLock\` exists in the space, the job is not yet due.
-3. Once \`delayMs\` elapses—even if the server process was stopped and reopened on the same SQLite file!—the \`pi-spaces\` reaper expires \`TimerLock\`.
+3. Once \`delayMs\` elapses—even if the server process was stopped and reopened on the same SQLite file!—the \`phi-spaces\` reaper expires \`TimerLock\`.
 4. \`tickAlarms()\` takes the unlocked \`ScheduledJob\` inside a transaction, rewrites it with \`status: "triggered"\`, and atomically enqueues the wakeup \`ChatTask\`.
 
 ### Step 3: Cross-Thread Search Via Search Subagent {#step-3-subagent}
@@ -394,7 +394,7 @@ const workerSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { sp
 const searchSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { space: "chat-v3" });
 \`\`\`
 
-Da \`RemoteSpace\` denselben \`SpaceLike\`-Vertrag wie \`PiSpaces\` implementiert, läuft \`SpaceChatEngine\` aus \`help-site/examples/shared/chat-core.ts\` ohne jede Codeänderung über das Netzwerkprotokoll! Zusätzlich registriert der Worker ein \`notify\`/\`wait\`-Abo und liest seine Consumer-Mailbox über \`events()\` + \`ack()\`.
+Da \`RemoteSpace\` denselben \`SpaceLike\`-Vertrag wie \`PhiSpaces\` implementiert, läuft \`SpaceChatEngine\` aus \`help-site/examples/shared/chat-core.ts\` ohne jede Codeänderung über das Netzwerkprotokoll! Zusätzlich registriert der Worker ein \`notify\`/\`wait\`-Abo und liest seine Consumer-Mailbox über \`events()\` + \`ack()\`.
 
 ### Ausführung im Terminal {#run-cli}
 
@@ -444,7 +444,7 @@ const workerSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { sp
 const searchSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { space: "chat-v3" });
 \`\`\`
 
-Because \`RemoteSpace\` implements the exact same \`SpaceLike\` interface as \`PiSpaces\`, \`SpaceChatEngine\` from \`help-site/examples/shared/chat-core.ts\` runs unmodified over the wire protocol! Additionally, the worker registers a \`notify\`/\`wait\` subscription and drains its consumer mailbox via \`events()\` + \`ack()\`.
+Because \`RemoteSpace\` implements the exact same \`SpaceLike\` interface as \`PhiSpaces\`, \`SpaceChatEngine\` from \`help-site/examples/shared/chat-core.ts\` runs unmodified over the wire protocol! Additionally, the worker registers a \`notify\`/\`wait\` subscription and drains its consumer mailbox via \`events()\` + \`ack()\`.
 
 ### Run From Terminal {#run-cli}
 
@@ -594,7 +594,7 @@ Der Cluster läuft **simuliert in einem einzigen Prozess**: **4 Harnesses** (all
 - **1 Koordinator-Host**: \`RouterController\` (\`router-root\` + 2 Partition-Router für die Routing-Journals) und \`FederatedSpace\` (id \`fed-v5\`). Der Koordinator besitzt selbst keinen Chat-Daten-Space — er führt nur die Policy aus.
 - **3 Member-Hosts** (\`member-1\`, \`member-2\`, \`member-3\`): jeder hat einen eigenen, unabhängigen Space mit eigenem Space-Doc.
 - **HRW-Sharding**: die Federation-Policy routet \`Thread\`, \`Msg\` und \`ChatTask\` per Rendezvous-Hashing über \`fields.threadId\` deterministisch auf genau einen Member. Das Runner-Report-Feld \`memberDistribution\` zeigt die tatsächliche Verteilung, z.B. \`{ member-1: [alpha, gamma], member-2: [beta], member-3: [delta] }\`.
-- **\`FederationIO\`** ist in der Demo ein in-process Adapter auf die lokalen \`PiSpaces\`-Objekte; in einer echten Bereitstellung wären das \`RemoteSpace\`-/RPC-Aufrufe auf entfernte Hosts — die Semantik (\`step\`, \`snapshot\`, \`events\`, \`ack\`, \`txnActive\`) bleibt identisch.
+- **\`FederationIO\`** ist in der Demo ein in-process Adapter auf die lokalen \`PhiSpaces\`-Objekte; in einer echten Bereitstellung wären das \`RemoteSpace\`-/RPC-Aufrufe auf entfernte Hosts — die Semantik (\`step\`, \`snapshot\`, \`events\`, \`ack\`, \`txnActive\`) bleibt identisch.
 - **Replikation**: 2 \`EntryReplicationController\` (\`rep-1\` auf member-1, \`rep-2\` auf member-2) replizieren \`Presence\` via HLC + Last-Writer-Wins in den gemeinsamen Space \`presence-global\`.
 
 ## Arbeitsablauf {#workflow}
@@ -639,7 +639,7 @@ The cluster is **simulated inside a single process**: **4 harnesses** (all \`Mem
 - **1 coordinator host**: \`RouterController\` (\`router-root\` + 2 partition routers for the routing journals) and \`FederatedSpace\` (id \`fed-v5\`). The coordinator owns no chat-data space itself — it only executes the policy.
 - **3 member hosts** (\`member-1\`, \`member-2\`, \`member-3\`): each owns its own independent space with its own space doc.
 - **HRW sharding**: the federation policy routes \`Thread\`, \`Msg\`, and \`ChatTask\` by rendezvous hashing over \`fields.threadId\` deterministically onto exactly one member. The runner report field \`memberDistribution\` shows the actual placement, e.g. \`{ member-1: [alpha, gamma], member-2: [beta], member-3: [delta] }\`.
-- **\`FederationIO\`** is an in-process adapter onto the local \`PiSpaces\` objects in this demo; in a real deployment these would be \`RemoteSpace\`/RPC calls to remote hosts — the semantics (\`step\`, \`snapshot\`, \`events\`, \`ack\`, \`txnActive\`) stay identical.
+- **\`FederationIO\`** is an in-process adapter onto the local \`PhiSpaces\` objects in this demo; in a real deployment these would be \`RemoteSpace\`/RPC calls to remote hosts — the semantics (\`step\`, \`snapshot\`, \`events\`, \`ack\`, \`txnActive\`) stay identical.
 - **Replication**: 2 \`EntryReplicationController\` instances (\`rep-1\` on member-1, \`rep-2\` on member-2) replicate \`Presence\` via HLC + Last-Writer-Wins into the shared \`presence-global\` space.
 
 ## Workflow {#workflow}
@@ -771,11 +771,11 @@ node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 	},
 	// ---- API Reference Articles (14 canonical API entries) ----
 	{
-		id: "help.api.pispaces_write",
+		id: "help.api.phispaces_write",
 		type: "api",
 		provider: "client",
 		tags: ["write", "entry", "lease", "txn", "requestref", "mutation"],
-		related: ["help.topic.entries_and_templates", "help.api.pispaces_take"],
+		related: ["help.topic.entries_and_templates", "help.api.phispaces_take"],
 		since: "0.0.1",
 		de: {
 			title: "write – Entry schreiben",
@@ -855,11 +855,11 @@ const lease = await space.write(
 		}
 	},
 	{
-		id: "help.api.pispaces_read",
+		id: "help.api.phispaces_read",
 		type: "api",
 		provider: "client",
 		tags: ["read", "readifexists", "template", "wildcard", "timeout"],
-		related: ["help.topic.entries_and_templates", "help.api.pispaces_take"],
+		related: ["help.topic.entries_and_templates", "help.api.phispaces_take"],
 		since: "0.0.1",
 		de: {
 			title: "read & readIfExists – Entry zerstörungsfrei lesen",
@@ -925,11 +925,11 @@ const immediate = await space.readIfExists({ type: "Thread", fields: { threadId:
 		}
 	},
 	{
-		id: "help.api.pispaces_take",
+		id: "help.api.phispaces_take",
 		type: "api",
 		provider: "client",
 		tags: ["take", "takeifexists", "exclusive", "reservation", "txn"],
-		related: ["help.topic.leases_and_transactions", "help.api.pispaces_txn"],
+		related: ["help.topic.leases_and_transactions", "help.api.phispaces_txn"],
 		since: "0.0.1",
 		de: {
 			title: "take & takeIfExists – Entry exklusiv entnehmen oder reservieren",
@@ -995,7 +995,7 @@ const task = await space.take({ type: "ChatTask", fields: { threadId: "main" } }
 		}
 	},
 	{
-		id: "help.api.pispaces_txn",
+		id: "help.api.phispaces_txn",
 		type: "api",
 		provider: "client",
 		tags: ["createtransaction", "commit", "abort", "txn", "atomic"],
@@ -1059,7 +1059,7 @@ await space.commit(txn.id, { request: reqCommit });
 		}
 	},
 	{
-		id: "help.api.pispaces_lease",
+		id: "help.api.phispaces_lease",
 		type: "api",
 		provider: "client",
 		tags: ["renew", "cancel", "lease", "ttl", "presence", "heartbeat"],
@@ -1121,7 +1121,7 @@ await space.cancel(presence.id);
 		}
 	},
 	{
-		id: "help.api.pispaces_read_page_changes",
+		id: "help.api.phispaces_read_page_changes",
 		type: "api",
 		provider: "client",
 		tags: ["readpage", "changes", "readall", "count", "stats", "snapshot"],
@@ -1189,7 +1189,7 @@ const gauges = await space.stats();
 		}
 	},
 	{
-		id: "help.api.pispaces_wait_notify_mailbox",
+		id: "help.api.phispaces_wait_notify_mailbox",
 		type: "api",
 		provider: "client",
 		tags: ["wait", "notify", "events", "ack", "mailbox"],
@@ -1226,7 +1226,7 @@ if (mailboxPage.events.length > 0) {
 
 ## Typische Anwendungsfälle {#use-cases}
 
-- **Ereignisgesteuerter Worker**: Statt \`take(..., FOREVER)\` zu blockieren, parkt der Worker einen dauerhaften Take-Wunsch mit \`wait\`; \`pi-spaces\` legt gewonnene Tasks samt \`handback\`-Kontext in seine Mailbox.
+- **Ereignisgesteuerter Worker**: Statt \`take(..., FOREVER)\` zu blockieren, parkt der Worker einen dauerhaften Take-Wunsch mit \`wait\`; \`phi-spaces\` legt gewonnene Tasks samt \`handback\`-Kontext in seine Mailbox.
 - **Robuster Consumer**: Der Worker verarbeitet \`events\`-Seiten und ackt erst nach erfolgreichem \`commit\` – bei Neustart werden unbestätigte Ereignisse erneut geliefert (At-least-once).
 - **Notify-Streams**: UI- oder Audit-Consumer abonnieren \`notify({ type: "Msg" })\` und bleiben über \`events\`/\`ack\` über passende Writes informiert (keine vollständige Änderungs-/Löschhistorie), auch über Prozessneustarts hinweg.`
 		},
@@ -1261,13 +1261,13 @@ if (mailboxPage.events.length > 0) {
 
 ## Typical Use Cases {#use-cases}
 
-- **Event-driven worker**: Instead of blocking in \`take(..., FOREVER)\`, the worker parks a durable take wish with \`wait\`; \`pi-spaces\` places won tasks including the \`handback\` context into its mailbox.
+- **Event-driven worker**: Instead of blocking in \`take(..., FOREVER)\`, the worker parks a durable take wish with \`wait\`; \`phi-spaces\` places won tasks including the \`handback\` context into its mailbox.
 - **Robust consumer**: The worker processes \`events\` pages and acks only after a successful \`commit\` – on restart, unacknowledged events are delivered again (at-least-once).
 - **Notify streams**: UI or audit consumers subscribe via \`notify({ type: "Msg" })\` and stay informed about matching writes (not a complete deletion/change history) through \`events\`/\`ack\`, even across process restarts.`
 		}
 	},
 	{
-		id: "help.api.pispaces_claims",
+		id: "help.api.phispaces_claims",
 		type: "api",
 		provider: "client",
 		tags: ["issuegeneration", "polloperation", "resolveoperation", "canceloperation", "requestref"],
@@ -1333,7 +1333,7 @@ const status = await space.pollOperation({ principal: { peerId: "alice" }, gener
 		}
 	},
 	{
-		id: "help.api.pispaces_completion_profiles",
+		id: "help.api.phispaces_completion_profiles",
 		type: "api",
 		provider: "core",
 		tags: ["setcompletionprofiles", "setlimits", "completionprofile", "completionviolation"],

@@ -47,7 +47,7 @@ export async function arxivSearch(o: { query: string; max?: number; fromYear?: n
 	if (o.fromYear || o.toYear) q = `(${q}) AND submittedDate:[${o.fromYear ?? 1990}01010000 TO ${o.toYear ?? 2100}12312359]`;
 	const url = `${API}?search_query=${encodeURIComponent(q)}&start=0&max_results=${Math.min(Math.max(o.max ?? 10, 1), 25)}&sortBy=${o.sort ?? "relevance"}&sortOrder=descending`;
 	return throttled(async () => {
-		const res = await fetch(url, { headers: { "User-Agent": "pi-spaces-example/0.1" }, signal: AbortSignal.timeout(30_000) });
+		const res = await fetch(url, { headers: { "User-Agent": "phi-spaces-example/0.1" }, signal: AbortSignal.timeout(30_000) });
 		if (!res.ok) throw new Error(`arXiv API: HTTP ${res.status}`);
 		return parseFeed(await res.text());
 	});

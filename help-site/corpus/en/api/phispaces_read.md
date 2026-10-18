@@ -1,11 +1,11 @@
 ---
 standard: help_api
-id: help.api.pispaces_read
+id: help.api.phispaces_read
 title: "read & readIfExists – Non-Destructive Entry Read"
 short: "Finds a matching visible entry using a template (missing/null fields are wildcards) and waits up to the timeout."
 tags: [read, readifexists, template, wildcard, timeout]
 owner: client
-related: [help.topic.entries_and_templates, help.api.pispaces_take]
+related: [help.topic.entries_and_templates, help.api.phispaces_take]
 since: 0.0.1
 ---
 

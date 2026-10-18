@@ -59,7 +59,7 @@ export async function createFederationController(o: {
         const l=t.lease;
         if (t.issuer !== o.controlPeerId || t.algorithm !== o.controlSigner.algorithm ||
             !verifyDetached(t.algorithm, o.controlPublicKey,
-                            Buffer.from('pi-spaces/router-lease/v1\n' + canonicalJson(l as any)),
+                            Buffer.from('phi-spaces/router-lease/v1\n' + canonicalJson(l as any)),
                             t.signature) ||
             l.authorityId !== o.authorityId || l.controlSpaceId !== o.controlSpaceId ||
             l.routerPeerId !== o.routerPeerId || l.routerKeyId !== o.routerSigner.keyId ||

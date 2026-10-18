@@ -1,4 +1,4 @@
-# pi-spaces
+# phi-spaces
 
 [English](README.md) · [Deutsch](README_DE.md)
 
@@ -7,12 +7,12 @@
 > Wiederherstellungsplan erforderlich. Tests decken bestimmte Szenarien ab, nicht alle Fehlerfälle; lauffähige
 > Demos belegen keine Produktionsreife. Bereitstellung ohne Gewährleistung gemäß [MIT-Lizenz](LICENSE).
 
-pi-spaces ist eine TypeScript-Space-Bibliothek als Erweiterung für
+phi-spaces ist eine TypeScript-Space-Bibliothek als Erweiterung für
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable).
 Mehrere Agenten beziehungsweise Conversations koordinieren sich über gemeinsame Daten: Sie veröffentlichen
 Aufträge, reservieren passende Arbeit und schreiben Ergebnisse zurück.
 
-Das Modell baut auf Linda-Tuple-Spaces und JavaSpaces auf. Der lokale Client heißt `PiSpaces`.
+Das Modell baut auf Linda-Tuple-Spaces und JavaSpaces auf. Der lokale Client heißt `PhiSpaces`.
 Die Implementierung verwendet TypeScript und JSON; sie ist kein kompatibler Java-/RMI-Laufzeitersatz für JavaSpaces.
 
 **Stand: 18. Oktober 2026.** Lokale und benannte Spaces, dauerhafte Request-Claims, Revisionen, RPC über Unix/TCP,
@@ -39,7 +39,7 @@ einem Datenfluss durch den Space statt direkten Methodenaufrufen zwischen Produc
 
 ### Grundoperationen
 
-| Operation | Bedeutung in pi-spaces |
+| Operation | Bedeutung in phi-spaces |
 |---|---|
 | `write(entry)` | Neuen Entry veröffentlichen; erneutes Schreiben ist normalerweise keine Aktualisierung des alten Entries. |
 | `read(template)` | Passende Kopie lesen, ohne den Entry zu verbrauchen. |
@@ -52,7 +52,7 @@ Ein Space garantiert nicht automatisch FIFO; Template-Matching ist keine allgeme
 
 ### Vier Dimensionen loser Kopplung
 
-- **Zeitliche Entkopplung:** Producer und Consumer müssen nicht gleichzeitig aktiv sein. In pi-spaces müssen
+- **Zeitliche Entkopplung:** Producer und Consumer müssen nicht gleichzeitig aktiv sein. In phi-spaces müssen
   Entry-Lease, Space-Verfügbarkeit und Storage den Zwischenraum überdauern. Ein persistenter Store kann
   Prozessneustarts überstehen; `MemoryStorage` nicht.
 - **Ortsentkopplung:** Teilnehmer müssen ihre gegenseitigen Netzwerkadressen nicht kennen. Sie benötigen
@@ -60,21 +60,21 @@ Ein Space garantiert nicht automatisch FIFO; Template-Matching ist keine allgeme
   Routing und Netzfehler verschwinden dadurch nicht.
 - **Referenzentkopplung:** Teilnehmer einigen sich auf Entry-Schemata und Templates statt direkte
   Objektreferenzen auf Kommunikationspartner zu halten. Die Kopplung an den Datenvertrag bleibt.
-  RPC **zum Space** ist möglich: bei JavaSpaces RMI, bei pi-spaces `SpaceService`/`RemoteSpace`.
+  RPC **zum Space** ist möglich: bei JavaSpaces RMI, bei phi-spaces `SpaceService`/`RemoteSpace`.
 - **Synchronisationsentkopplung:** Das Veröffentlichen eines Auftrags setzt keinen bereiten Consumer voraus
   und wartet nicht auf dessen fertiges Ergebnis. Das heißt nicht, dass jede Space-Operation sofort zurückkehrt:
-  JavaSpaces besitzt synchrone Aufrufe und wartende Reads/Takes. In pi-spaces sind Aufrufe Promise-basiert;
+  JavaSpaces besitzt synchrone Aufrufe und wartende Reads/Takes. In phi-spaces sind Aufrufe Promise-basiert;
   ein `await` wartet im aufrufenden Ablauf, ohne deshalb den gesamten Event-Loop zu blockieren.
 
 Die zeitliche Trennung beschreibt die
 [Linda-Originalarbeit](https://www.cs.tufts.edu/comp/150FP/archive/david-gelernter/generative-linda.pdf);
 das Warteverhalten der Java-Aufrufe die
 [JavaSpace-API](https://river.apache.org/release-doc/current/api/net/jini/space/JavaSpace.html).
-Für das tatsächliche pi-spaces-Verhalten gilt die [eigene API-Referenz](docs/api.md).
+Für das tatsächliche phi-spaces-Verhalten gilt die [eigene API-Referenz](docs/api.md).
 
-### Was davon in pi-spaces tatsächlich implementiert ist
+### Was davon in phi-spaces tatsächlich implementiert ist
 
-`PiSpaces` und der gemeinsame Remote-Basisvertrag `SpaceLike` liefern Promises. Entscheidend ist, **worauf**
+`PhiSpaces` und der gemeinsame Remote-Basisvertrag `SpaceLike` liefern Promises. Entscheidend ist, **worauf**
 der jeweilige Aufruf wartet:
 
 | Aufruf | Abschluss und Warteverhalten |
@@ -96,7 +96,7 @@ Synchrone CPU-Arbeit und Dokumentserialisierung können trotzdem den Event-Loop 
 
 ### Ergänzungen und Grenzen gegenüber der Grundlage
 
-pi-spaces verwendet `{ type, types?, fields }` mit JSON-Feldern. Neben den Koordinationsoperationen gibt es
+phi-spaces verwendet `{ type, types?, fields }` mit JSON-Feldern. Neben den Koordinationsoperationen gibt es
 Request-Identitäten mit dauerhaftem Replay, benannte Spaces, Revisionsseiten, Mailboxen, CompletionProfile
 und Betriebssteuerung. Feldvergleich ist tiefe JSON-Gleichheit, nicht Javas Vergleich serialisierter Felder.
 Eine Transaktion reserviert Tasks und veröffentlicht Ergebnisse atomar im zuständigen Space; sie ist keine
@@ -125,16 +125,16 @@ keine Modellaufrufe und kein Server nötig.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, NO_WAIT, PiSpaces, spaces } from "./src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, spaces } from "./src/index.ts";
 
 const registry = createRegistry();
 registry.install(spaces);
 const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
 try {
-  const producer = new PiSpaces(harness, ctx);
+  const producer = new PhiSpaces(harness, ctx);
   await producer.write({ type: "Job", fields: { jobId: "square-7", value: 7 } }, null, FOREVER);
   // The producer need not wait for or address a particular worker.
-  const worker = new PiSpaces(harness, ctx);
+  const worker = new PhiSpaces(harness, ctx);
   const template = { type: "Job", fields: { jobId: "square-7" } };
   console.log("inspect:", (await worker.read(template, NO_WAIT))?.fields);
 
@@ -169,7 +169,7 @@ Ein persistenter Backend-Store ermöglicht Wiederanlauf, `RemoteSpace` einen sep
 | `src/core.ts` | Reine Space-Semantik über JSON: Entries, Templates, Leases, Transaktionen, Notify, Limits. |
 | `src/doc.ts`, `src/spaces.ts` | Default-Space, benannte Spaces, Registry, Aliase und unveränderliche Space-IDs. |
 | `src/claims.ts` | Dauerhafte Request-Claims, Generationen, Replay, Poll und Cancel. |
-| `src/client.ts` | Lokaler Client `PiSpaces`. |
+| `src/client.ts` | Lokaler Client `PhiSpaces`. |
 | `src/index.ts` | Extension, Agent-Tools, Reaper und Ereigniszustellung. |
 | `src/meter.ts` | Prozesslokale Zähler und Raten. |
 | `src/canonical.ts`, `src/stream.ts` | Kanonisches JSON und begrenztes Revisionslog. |
@@ -249,8 +249,8 @@ injizierten Fehlern; ein `MemoryStorage`-Test allein belegt keine Durabilität.
 Serielle Beispieltests vermeiden zusätzliche gegenseitige Last bei zeitabhängigen Performance-Prüfungen.
 
 `npm run bundle` baut die Bibliothek **und aktualisiert standardmäßig das benachbarte Mobile-Runtime-Checkout**
-einschließlich kompilierter Beispiele; `PI_SPACES_MOBILE_ROOT` wählt ein anderes Ziel.
-Der Android-Prebuild übernimmt die pi-spaces-Quellen über `PI_SPACES_SOURCE`.
+einschließlich kompilierter Beispiele; `PHI_SPACES_MOBILE_ROOT` wählt ein anderes Ziel.
+Der Android-Prebuild übernimmt die phi-spaces-Quellen über `PHI_SPACES_SOURCE`.
 
 Das entfernte Docker-Testbed prüft gebaute Artefakte mit `npm run testbed -- <command>`.
 Ziele/Zugang kommen aus Umgebung beziehungsweise ignorierter Testbed-Konfiguration. Zuerst `--dry-run`
@@ -277,7 +277,7 @@ Siehe [Testbed](test/testbed/README.md), [Betrieb](docs/testumgebung-big.md) und
 npm run example:golomb -- 7 --workers 4
 npm run example:sieve -- 1001 4
 npm run example:cache
-HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm run help
+HELP_BIND=127.0.0.1 PHI_SPACES_LLM=0 npm run help
 ```
 
 Live-Beispiele wählen Modelle über `PI_PROVIDER`/`PI_MODEL` oder verfügbare Credentials und verursachen

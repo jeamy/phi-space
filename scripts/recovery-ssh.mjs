@@ -3,7 +3,7 @@
 import { RegisterConflict } from '../dist/recovery-register.js';
 import { SocketRecoveryRegister } from '../dist/register-service.js';
 import { socketTransport } from '../dist/socket.js';
-const [mode, socket] = process.argv.slice(2), expected = mode === 'read' ? 'pi-spaces-register-read' : mode === 'operator' ? 'pi-spaces-register-operator' : 'pi-spaces-recovery';
+const [mode, socket] = process.argv.slice(2), expected = mode === 'read' ? 'phi-spaces-register-read' : mode === 'operator' ? 'phi-spaces-register-operator' : 'phi-spaces-recovery';
 if (!['read', 'operator', 'recovery'].includes(mode) || !socket || process.env.SSH_ORIGINAL_COMMAND !== expected) throw new Error('SSH command refused');
 let bytes = 0, input = '';
 for await (const part of process.stdin) { bytes += part.length; if (bytes > 256 * 1024) throw new Error('request exceeds budget'); input += part.toString('utf8'); }

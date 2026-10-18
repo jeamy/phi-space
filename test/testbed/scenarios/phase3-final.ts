@@ -104,9 +104,9 @@ async function lossless(labels: string[]) {
 	} finally { c.close(); }
 }
 const sameHeads = (alias: string) => { const a = head(P, alias), b = head(S, alias); check(a.head.hash === b.head.hash && a.applied === a.head.revision, `${alias}: primary and standby journal heads equal, nothing unresolved`); return a.head; };
-const dropRule = `iifname "wt0" ip saddr ${cfg.partition.sourceIp} counter drop comment "pi-spaces-partition"`;
+const dropRule = `iifname "wt0" ip saddr ${cfg.partition.sourceIp} counter drop comment "phi-spaces-partition"`;
 const cut = async () => { sh(S, `nft insert rule inet ${cfg.partition.chain} ${dropRule}`); return { cut: true }; };
-const heal = async () => { const out = sh(S, `nft -a list chain inet ${cfg.partition.chain} | grep pi-spaces-partition || true`); const handle = out.match(/handle (\d+)/)?.[1], packets = out.match(/packets (\d+)/)?.[1]; if (handle) sh(S, `nft delete rule inet ${cfg.partition.chain} handle ${handle}`); return { healed: !!handle, droppedPackets: Number(packets ?? 0) }; };
+const heal = async () => { const out = sh(S, `nft -a list chain inet ${cfg.partition.chain} | grep phi-spaces-partition || true`); const handle = out.match(/handle (\d+)/)?.[1], packets = out.match(/packets (\d+)/)?.[1]; if (handle) sh(S, `nft delete rule inet ${cfg.partition.chain} handle ${handle}`); return { healed: !!handle, droppedPackets: Number(packets ?? 0) }; };
 /** SIGKILL of the daemon only. No operator step: the next start must clear the lock itself. */
 async function kill(h: Host) {
 	const lock = JSON.parse(sh(h, `docker exec ${h.container} cat ${h.home}/owner.lock`)), since = mark(h);
@@ -129,7 +129,7 @@ const retry = async <T>(what: string, f: () => Promise<T>): Promise<T> => { for 
 
 const steps: Array<[string, () => Promise<unknown>]> = [
 	["preflight", async () => {
-		const bundles = [P, S].map(h => sh(h, `sha256sum /var/lib/pi-spaces/${h.home.split("/").pop()}/federation-host.mjs | cut -c1-16`).trim());
+		const bundles = [P, S].map(h => sh(h, `sha256sum /var/lib/phi-spaces/${h.home.split("/").pop()}/federation-host.mjs | cut -c1-16`).trim());
 		check(bundles[0] === bundles[1], `same daemon bundle on both hosts (${bundles[0]})`);
 		for (const alias of [cfg.sync.alias, cfg.full.alias]) { const a = head(P, alias), b = head(S, alias); check(a.head.hash === b.head.hash && a.config.primaryReplica === P.hostId, `${alias}: both replicas agree and the primary leads`); }
 		const c = await client(P, cfg.sync.alias); try { state.generation = (await c.space.requestGeneration()).generation; } finally { c.close(); } save();
@@ -181,7 +181,7 @@ const steps: Array<[string, () => Promise<unknown>]> = [
 	// The standby's NetBird agent goes away and comes back by itself (a transient unit; ssh to it does not use the overlay).
 	["netbird-outage", async () => {
 		const since = mark(S), seconds = Math.round(cfg.netbird.outageMs / 1000);
-		const outage = async () => { sh(S, `systemd-run --unit=pi-spaces-nb-outage-$(date +%s) --collect sh -c 'systemctl stop ${cfg.netbird.unit}; sleep ${seconds}; systemctl start ${cfg.netbird.unit}'`); return { stoppedForS: seconds }; };
+		const outage = async () => { sh(S, `systemd-run --unit=phi-spaces-nb-outage-$(date +%s) --collect sh -c 'systemctl stop ${cfg.netbird.unit}; sleep ${seconds}; systemctl start ${cfg.netbird.unit}'`); return { stoppedForS: seconds }; };
 		const r = await load("netbird-outage", cfg.netbird.outageMs + 180_000, [{ at: 20_000, name: "agent-stop", run: outage }]);
 		check(sh(S, `systemctl is-active ${cfg.netbird.unit}`).trim() === "active", "the agent is back");
 		check(r.sealedAnswers > 0 && r.resolved > 0, "without the standby's overlay a write was sealed, and it resolved once the agent was back");

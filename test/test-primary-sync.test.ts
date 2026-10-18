@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {copyFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
-import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,type PrimarySyncPeer,type PrimaryCommitIntent,type PrimarySyncConfig} from '../src/index.ts';
+import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,type PrimarySyncPeer,type PrimaryCommitIntent,type PrimarySyncConfig} from '../src/index.ts';
 import {canonicalJson} from '../src/canonical.ts';
 import {SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport} from '../src/index.ts';
 import {SyncBudgetExceeded} from '../src/commit-sealed.ts';
@@ -18,7 +18,7 @@ for(const backend of BACKENDS){
   const assertPrimary=async()=>{if(!active)throw new PrimarySyncBlocked('fenced');};
   const peer:PrimarySyncPeer={accept:async i=>{if(fault&&failure==='beforeAccept'){fault=false;throw Error('network unavailable');}const ack=await standby.accept(i);if(fault&&failure==='lostAck'){fault=false;throw Error('lost standby ACK');}return ack;}};
   home.storage=async()=>{const storage=await raw();await recoverPrimarySync(storage,primary,peer,ctx,assertPrimary);return primarySyncStorage(storage,primary,peer,{assertPrimary});};
-  let host=await home.open();const client=()=>new PiSpaces(host,ctx);
+  let host=await home.open();const client=()=>new PhiSpaces(host,ctx);
   try{
    const {generation}=await client().issueGeneration({peerId:'subject'});const request={principal:{peerId:'subject'},generation,requestId:'confirmed-write'};
    assert.ok(primary.head().revision>=1,'initial documents are part of the replicated storage history');const before=primary.head().revision;
@@ -35,7 +35,7 @@ for(const backend of BACKENDS){
    await client().write({type:'Job',fields:{n:2}},null,core.FOREVER);
    // Every accepted decision, including claim replay and all singleton/family documents, is reconstructible.
    const standbyRaw=await standbyHome.storage();await materializeSyncHistory(standbyRaw,standby,ctx);await standbyRaw.close(ctx);const sh=await standbyHome.open();
-   assert.deepEqual(await sh.snapshot(Space,ctx),await host.snapshot(Space,ctx));assert.equal(await new PiSpaces(sh,ctx).count({type:'Job'}),2);
+   assert.deepEqual(await sh.snapshot(Space,ctx),await host.snapshot(Space,ctx));assert.equal(await new PhiSpaces(sh,ctx).count({type:'Job'}),2);
    const transactions=await client().createTransaction(10000);await client().write({type:'Result',fields:{n:3}},transactions.id,core.FOREVER);await client().commit(transactions.id);
    // A stopped storage replica must be reopened after applying additional complete history.
    await standbyHome.close(sh);const sr=await standbyHome.storage();await materializeSyncHistory(sr,standby,ctx);await sr.close(ctx);const sh2=await standbyHome.open();assert.deepEqual(await sh2.snapshot(Space,ctx),await host.snapshot(Space,ctx));
@@ -45,7 +45,7 @@ for(const backend of BACKENDS){
  test(`${backend}: standby rejects gaps, forks, wrong configuration and false ACKs; accepted decisions survive journal reopen`,async()=>{
   const home=new PersistentHome(backend),standbyHome=new PersistentHome(backend),primary=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),config);let standby=new PrimarySyncJournal(join(standbyHome.dir,'journal.sqlite'),config),badAck=false;
   const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),primary,{accept:async i=>{const a=await standby.accept(i);return badAck?{...a,hash:'0'.repeat(64)}:a;}},{assertPrimary:async()=>{}});
-  const host=await home.open();await new PiSpaces(host,ctx).issueGeneration({peerId:'subject'});const baseline=await host.snapshot(Space,ctx),applied=primary.appliedRevision;
+  const host=await home.open();await new PhiSpaces(host,ctx).issueGeneration({peerId:'subject'});const baseline=await host.snapshot(Space,ctx),applied=primary.appliedRevision;
   try{
    const first=primary.intent(1)!;assert.deepEqual(await standby.accept(first),{revision:1,hash:first.hash,configHash:primary.configHash});
    const changed=structuredClone(first);changed.validatedAt++;const {hash:_,...body}=changed;changed.hash=digest(body);await assert.rejects(standby.accept(changed),/immutable/);
@@ -53,7 +53,7 @@ for(const backend of BACKENDS){
    const wrong={...first,config:{...config,standbyReplica:'other'}};await assert.rejects(standby.accept(wrong),/intent/);
    standby.close();standby=new PrimarySyncJournal(join(standbyHome.dir,'journal.sqlite'),config);assert.equal(standby.head().hash,first.hash);
    assert.throws(()=>new PrimarySyncJournal(join(home.dir,'journal.sqlite'),{...config,primaryEpoch:2}),/configuration changed/);
-   badAck=true;await assert.rejects(new PiSpaces(host,ctx).write({type:'NotConfirmed',fields:{}}),CommitSealed);assert.equal(primary.appliedRevision,applied);await assert.rejects(host.snapshot(Space,ctx),/poisoned/);
+   badAck=true;await assert.rejects(new PhiSpaces(host,ctx).write({type:'NotConfirmed',fields:{}}),CommitSealed);assert.equal(primary.appliedRevision,applied);await assert.rejects(host.snapshot(Space,ctx),/poisoned/);
   }finally{primary.close();standby.close();await home.dispose();await standbyHome.dispose();}
  });
 }
@@ -62,7 +62,7 @@ for(const backend of BACKENDS){
   const home=new PersistentHome(backend),replica=new PersistentHome(backend),p=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),config),s=new PrimarySyncJournal(join(replica.dir,'journal.sqlite'),config),raw=home.storage.bind(home);
   home.storage=async()=>primarySyncStorage(await raw(),p,s,{assertPrimary:async()=>{}});
   try{
-   const h=await home.open(),client=new PiSpaces(h,ctx);await client.write({type:'Work',fields:{n:1}},null,core.FOREVER);await client.write({type:'Work',fields:{n:2}},null,core.FOREVER);
+   const h=await home.open(),client=new PhiSpaces(h,ctx);await client.write({type:'Work',fields:{n:1}},null,core.FOREVER);await client.write({type:'Work',fields:{n:2}},null,core.FOREVER);
    let storage=await replica.storage();replica.faults.arm(fault);await assert.rejects(materializeSyncHistory(storage,s,ctx));await storage.close(ctx);
    storage=await replica.storage();await materializeSyncHistory(storage,s,ctx);await storage.close(ctx);const sh=await replica.open();
    assert.equal(s.appliedRevision,s.head().revision);assert.deepEqual(await sh.snapshot(Space,ctx),await h.snapshot(Space,ctx));
@@ -73,7 +73,7 @@ for(const backend of BACKENDS){
   home.storage=async()=>primarySyncStorage(await raw(),p,s,{assertPrimary:async()=>{}});let h=await home.open();
   try{
    await assert.rejects(h.commit(async()=>{throw Error('decision validation failed');},ctx),/validation failed/);assert.equal(p.head().revision,0);
-   await new PiSpaces(h,ctx).write({type:'Seed',fields:{n:1}},null,core.FOREVER);const revision=p.head().revision;await home.close(h);
+   await new PhiSpaces(h,ctx).write({type:'Seed',fields:{n:1}},null,core.FOREVER);const revision=p.head().revision;await home.close(h);
    // Reopening with an empty journal must not turn existing application state into an unexplained base.
    const empty=new PrimarySyncJournal(join(home.dir,'empty-journal.sqlite'),config),storage=await raw();
    await assert.rejects(recoverPrimarySync(storage,empty,s,ctx,async()=>{}),/untracked/);empty.close();
@@ -96,7 +96,7 @@ for(const backend of BACKENDS){
    let n=0,refused:unknown;for(;n<1000&&!refused;n++)await r.write({type:'Job',fields:{n,pad:'x'.repeat(2000)}},null,core.FOREVER).catch(e=>{refused=e;});
    assert.ok(refused instanceof core.ResourceExhausted&&/journal: sync history is full/.test(refused.message),`ResourceExhausted, not Internal: ${refused}`);
    assert.deepEqual(s.head(),p.head(),'nothing sealed: no candidate, both replicas equal');assert.equal(p.appliedRevision,p.head().revision);
-   await assert.rejects(new PiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(2000)}},null,core.FOREVER),SyncBudgetExceeded);
+   await assert.rejects(new PhiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(2000)}},null,core.FOREVER),SyncBudgetExceeded);
    assert.equal(await r.count({type:'Job'}),n-1,'reads still served');
    await r.write({type:'Small',fields:{}},null,core.FOREVER);assert.deepEqual(s.head(),p.head(),'a write that fits is still confirmed');
   }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}
@@ -107,11 +107,11 @@ for(const backend of BACKENDS){
   home.storage=async()=>primarySyncStorage(await raw(),p,s,{assertPrimary:async()=>{}});let h=await home.open();
   try{
    // Five entries of 60 KB: the Space document is larger than one journal commit (256 KiB) as a whole.
-   for(let n=0;n<5;n++)await new PiSpaces(h,ctx).write({type:'Big',fields:{n,pad:'x'.repeat(60_000)}},null,core.FOREVER);
-   for(let n=0;n<520;n++)await new PiSpaces(h,ctx).write({type:'Small',fields:{n}},null,core.FOREVER);
+   for(let n=0;n<5;n++)await new PhiSpaces(h,ctx).write({type:'Big',fields:{n,pad:'x'.repeat(60_000)}},null,core.FOREVER);
+   for(let n=0;n<520;n++)await new PhiSpaces(h,ctx).write({type:'Small',fields:{n}},null,core.FOREVER);
    await home.close(h);h=await home.open();// a reload counts every delta since the last base again
-   for(let n=0;n<60;n++)await new PiSpaces(h,ctx).write({type:'Small',fields:{n:1000+n}},null,core.FOREVER);
-   assert.equal(await new PiSpaces(h,ctx).count({type:'Small'}),580);assert.deepEqual(s.head(),p.head());
+   for(let n=0;n<60;n++)await new PhiSpaces(h,ctx).write({type:'Small',fields:{n:1000+n}},null,core.FOREVER);
+   assert.equal(await new PhiSpaces(h,ctx).count({type:'Small'}),580);assert.deepEqual(s.head(),p.head());
   }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}
  });
 }

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {PiSpaces,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,SimulatorFencing,core,type PrimarySyncConfig,type PrimarySyncPeer} from '../src/index.ts';
+import {PhiSpaces,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,SimulatorFencing,core,type PrimarySyncConfig,type PrimarySyncPeer} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {revokeSpacePermit} from '../src/replica-control.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
@@ -22,8 +22,8 @@ for(const backend of BACKENDS)test(`${backend}: degradeToSingle without a fencin
   let raw=await pHome.storage();await recoverPrimarySync(raw,pJournal,peer,ctx,assertSyncPrimary(register,'p',pJournal));
   let h=await pHome.open();await h.close(ctx);// (default Space exists)
   const ph=await (await import('@earendil-works/pi-durable')).Harness.open(primarySyncStorage(raw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}),{models:(await import('@earendil-works/pi-ai/models')).createModels(),registry:(await import('@earendil-works/pi-durable')).createRegistry()},ctx);
-  await new PiSpaces(ph,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);
-  partitioned=true;await assert.rejects(new PiSpaces(ph,ctx).write({type:'Work',fields:{n:2}},null,core.FOREVER),/sealed/);
+  await new PhiSpaces(ph,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);
+  partitioned=true;await assert.rejects(new PhiSpaces(ph,ctx).write({type:'Work',fields:{n:2}},null,core.FOREVER),/sealed/);
   await ph.close(ctx).catch(()=>{});
   // Both parameters or neither: refused.
   raw=await pHome.storage();
@@ -48,8 +48,8 @@ for(const backend of BACKENDS)test(`${backend}: degradeToSingle without a fencin
   // The work goes on as single.
   raw=await pHome.storage();await recoverPrimarySync(raw,pJournal,null,ctx,assertSyncPrimary(register,'p',pJournal));
   const single=await (await import('@earendil-works/pi-durable')).Harness.open(primarySyncStorage(raw,pJournal,null,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}),{models:(await import('@earendil-works/pi-ai/models')).createModels(),registry:(await import('@earendil-works/pi-durable')).createRegistry()},ctx);
-  await new PiSpaces(single,ctx).write({type:'Work',fields:{n:3}},null,core.FOREVER);
-  assert.equal(await new PiSpaces(single,ctx).count({type:'Work'}),3);
+  await new PhiSpaces(single,ctx).write({type:'Work',fields:{n:3}},null,core.FOREVER);
+  assert.equal(await new PhiSpaces(single,ctx).count({type:'Work'}),3);
   await single.close(ctx);
   // Back as standby: the active host with the revoked permit is a setStandby target once its replica is emptied.
   sJournal.close();const fresh=join(sHome.dir,'journal-2.sqlite');sJournal=new PrimarySyncJournal(fresh,config,{self:'s',assertStandby:assertSyncStandby(register,'s')});
@@ -87,7 +87,7 @@ test('the daemon path: an active standby with a revoked permit keeps serving its
  const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:syncDir(h),genesis,port,peers:[peerOf(other(h))]},
   hostId:h,authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
   openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
- const jobs=(h:any)=>new PiSpaces(h,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
+ const jobs=(h:any)=>new PhiSpaces(h,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
  // Tool steps run with the daemon stopped, on the store files.
  const offline=async<T>(h:'p'|'s',f:(o:{storage:any;journal:PrimarySyncJournal})=>Promise<T>)=>{const journal=new PrimarySyncJournal(join(syncDir(h),'journal.sqlite'),genesis,{self:h,assertStandby:assertSyncStandby(reg,h)}),storage=await openNodeSqliteStorage(join(syncDir(h),'harness.sqlite'));try{return await f({storage,journal});}finally{await storage.close(ctx);journal.close();}};
  let p:any,s:any;

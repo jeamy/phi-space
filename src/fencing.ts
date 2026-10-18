@@ -10,7 +10,7 @@ export async function verifySshFence(register: RecoveryRegister, hostId: string,
 	const boot = await register.get<HostBootState & Record<string, Json>>(`boot:${hostId}`);
 	if (!boot || Object.values(boot.value.spaces).some(s => s.durability === "sync" || !["local", "primary"].includes(s.role))) throw new RecoveryBlocked("F15 is restricted to single-space hosting without replicas");
 	const status: any = await new Promise((resolve, reject) => {
-		const process = spawn("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", target, "pi-spaces-fence-status"], { stdio: ["ignore", "pipe", "ignore"] });
+		const process = spawn("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", target, "phi-spaces-fence-status"], { stdio: ["ignore", "pipe", "ignore"] });
 		let output = "", settled = false;
 		const finish = (error?: Error, value?: any) => { if (settled) return; settled = true; clearTimeout(timer); process.kill(); error ? reject(error) : resolve(value); };
 		const timer = setTimeout(() => finish(new RecoveryBlocked("independent fencing status timed out")), 10000);

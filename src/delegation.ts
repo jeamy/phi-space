@@ -53,7 +53,7 @@ export type SignedEpochNotice = {
     notice: EpochNotice; issuer : string; algorithm : Algorithm; signature : string
 };
 const bytes = (kind: string, v: unknown) =>
-    Buffer.from("pi-spaces/" + kind + "/v1\n" + canonicalJson(v as core.Json));
+    Buffer.from("phi-spaces/" + kind + "/v1\n" + canonicalJson(v as core.Json));
 const same = (a: unknown, b: unknown) =>
     canonicalJson(a as core.Json) === canonicalJson(b as core.Json);
 const positive = (n: unknown) => Number.isSafeInteger(n) && Number(n) > 0;

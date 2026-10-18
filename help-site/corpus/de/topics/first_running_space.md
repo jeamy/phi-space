@@ -20,7 +20,7 @@ Ein vollständiges Beispiel ohne Modell, Credentials oder Server: einen Job schr
 Im Repository-Root ausführen. Erwartet wird exakt { inspected: 7, squared: 49, jobsRemaining: 0 }. Lesen verbraucht den Job nicht; Ergebnis und endgültige Entnahme werden gemeinsam sichtbar. Der Task ist FOREVER, die Bearbeitungsreservierung 30 Sekunden gültig.
 
 ```bash
-PI_SPACES_LLM=0 node --experimental-strip-types help-site/examples/tuple-basics.ts
+PHI_SPACES_LLM=0 node --experimental-strip-types help-site/examples/tuple-basics.ts
 ```
 
 
@@ -34,14 +34,14 @@ import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, NO_WAIT, PiSpaces, spaces, startService } from "../../src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, spaces, startService } from "../../src/index.ts";
 
 export async function runTupleBasics() {
 	const registry = createRegistry(); registry.install(spaces);
 	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
 	let stop: (() => Promise<void>) | undefined;
 	try {
-		const space = new PiSpaces(harness, ctx);
+		const space = new PhiSpaces(harness, ctx);
 		await space.setCompletionProfiles([{ taskType: "Job", resultTypes: ["Result"], equalFields: ["jobId"], maxResultCount: 1 }]);
 		stop = await startService(harness, ctx);
 		await space.write({ type: "Job", fields: { jobId: "square-7", value: 7 } }, null, FOREVER);

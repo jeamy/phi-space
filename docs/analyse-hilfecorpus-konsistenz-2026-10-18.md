@@ -64,7 +64,7 @@ Alle folgenden Artikel sind **erledigt**, auf Deutsch und Englisch vorhanden und
 Das ausführbare [Tutorial](../help-site/examples/tuple-basics.ts) liefert
 `{ inspected: 7, squared: 49, jobsRemaining: 0 }` (CLI als JSON).
 Die [Live-Mirror-Implementierung](../help-site/examples/shared/live-mirror.ts) wird mit
-mehrseitigen Fake-Protokollen und echten PiSpaces-Put-/Delete-Operationen geprüft.
+mehrseitigen Fake-Protokollen und echten PhiSpaces-Put-/Delete-Operationen geprüft.
 Unvollständige oder gescheiterte Aktualisierungen verändern den vorher publizierten Mirror nicht.
 
 ## 4. Automatisierte Nachweise
@@ -95,10 +95,10 @@ Sprachabweichungen, ungültigen Beispielcode, Renderer, URL-Roundtrips, Retry/St
 Tutorial-Ausgabe, Shutdown und Mirror-Fehlergrenzen. Die Tests ersetzen keine pauschale
 Abnahme sämtlicher Prosa, Browsergeräte oder Ausfallszenarien.
 
-Aktuelle temporäre lokale Logs: `/tmp/pi-spaces-root-completion-final.log`,
-`/tmp/pi-spaces-examples-completion-final.log`, `/tmp/pi-spaces-help-completion-final.log`,
-`/tmp/pi-spaces-help-production-completion-final.log`. Die früheren Läufe bleiben unter
-`/tmp/pi-spaces-root-help-consistency.log`, `/tmp/pi-spaces-help-fixes-examples.log` und
+Aktuelle temporäre lokale Logs: `/tmp/phi-spaces-root-completion-final.log`,
+`/tmp/phi-spaces-examples-completion-final.log`, `/tmp/phi-spaces-help-completion-final.log`,
+`/tmp/phi-spaces-help-production-completion-final.log`. Die früheren Läufe bleiben unter
+`/tmp/phi-spaces-root-help-consistency.log`, `/tmp/phi-spaces-help-fixes-examples.log` und
 den `*-completion.log`-Dateien nachvollziehbar. Diese Logs sind keine versionierten CI-Artefakte.
 
 ## 5. Browserprüfung

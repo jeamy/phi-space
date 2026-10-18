@@ -1,5 +1,5 @@
 // Stage 1 (v1-local-memory): Zero-Setup In-Memory Multiplayer Space-Chat.
-// Runs immediately in RAM with MemoryStorage + PiSpaces + startService.
+// Runs immediately in RAM with MemoryStorage + PhiSpaces + startService.
 // Demonstrates:
 //   - NamedSpace isolation ("chat-v1")
 //   - Presence entries with 30s leases and heartbeat renewal
@@ -10,7 +10,7 @@
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createSpace, Meter, PiSpaces, spaces, startService } from "../../../src/index.ts";
+import { createSpace, Meter, PhiSpaces, spaces, startService } from "../../../src/index.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 import { pathToFileURL } from "node:url";
 
@@ -26,7 +26,7 @@ export async function runStageV1() {
 
 	try {
 
-		const space = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+		const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
 		const engine = new SpaceChatEngine(space);
 		await engine.installProfilesIfSupported();
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = resolve(root, 'dist/pi-spaces.mjs');
-const mobileRoot = resolve(process.env.PI_SPACES_MOBILE_ROOT || resolve(root, '../pi-termux-mobile'));
+const mobileRoot = resolve(process.env.PHI_SPACES_MOBILE_ROOT || resolve(root, '../pi-termux-mobile'));
 async function syncFile(target, bytes) {
   let prior;
   try { prior = await readFile(target); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -20,7 +20,7 @@ async function syncFile(target, bytes) {
 let available = false;
 try { available = (await stat(resolve(mobileRoot, 'runtime/package.json'))).isFile(); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
-if (!available && process.env.PI_SPACES_MOBILE_ROOT) throw new Error(`Mobile runtime not found: ${mobileRoot}`);
+if (!available && process.env.PHI_SPACES_MOBILE_ROOT) throw new Error(`Mobile runtime not found: ${mobileRoot}`);
 
 await build({ absWorkingDir: root, entryPoints: ['src/index.ts'], outfile: output,
   bundle: true, format: 'esm', platform: 'node', target: 'node22',
@@ -30,7 +30,7 @@ if (!available) {
 } else {
   const target = resolve(mobileRoot, 'runtime/pi-spaces.mjs');
   const bytes = await readFile(output);
-  console.log(await syncFile(target, bytes) ? `Updated ${target}` : 'Mobile pi-spaces bundle is current.');
+  console.log(await syncFile(target, bytes) ? `Updated ${target}` : 'Mobile phi-spaces bundle is current.');
   const examples = (await readdir(resolve(root, 'examples'))).filter(name => name.endsWith('.ts')).sort();
   const compiled = await build({ absWorkingDir: root, entryPoints: examples.map(name => `examples/${name}`),
     outdir: resolve(root, 'dist/mobile-examples'), outExtension: { '.js': '.mjs' }, write: false,

@@ -22,7 +22,7 @@ Der [Föderationsplan v3](federation-plan-v3.md) beschreibt zukünftige Infrastr
 `examples/chat.ts` und `help-site/examples/shared/chat-core.ts` (`SpaceChatEngine`) sind **absichtlich verschiedene
 Paradigmen** und kein Duplikat:
 
-- `examples/chat.ts` nutzt `pi-spaces` als Ereignis-Bus **zwischen langlebigen `pi-durable`-Conversations**
+- `examples/chat.ts` nutzt `phi-spaces` als Ereignis-Bus **zwischen langlebigen `pi-durable`-Conversations**
   (Aktor-Modell): jede Figur ist eine eigene Konversation mit Historie; der Space transportiert nur flache `Msg`-Benachrichtigungen.
 - `chat-core.ts` (Stufen v1 bis v6 im Hilfesystem) realisiert den Chat **vollständig in Space-Primitiven**:
   zustandslose Worker ziehen `ChatTask`-Tupel transaktional, Präsenz sind Lease-Einträge, Alarme sind

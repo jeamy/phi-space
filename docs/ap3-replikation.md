@@ -51,7 +51,7 @@ Signatur oder Transport-Autorisierung.
 ## API und Grenzen
 
 Die neue API ist ein **administrativer Baustein**, der noch keinen öffentlichen
-Replikationsdienst startet und bestehende `PiSpaces`-Entries nicht automatisch
+Replikationsdienst startet und bestehende `PhiSpaces`-Entries nicht automatisch
 übernimmt. `mutate(requestId, mutation)` ist ein eigener dauerhafter Schreibpfad;
 `read()` liefert dessen Sicht. Die normalen Space-Txns, `take`, Notify, Directory,
 Grants oder der Reaper benutzen ihn noch nicht.

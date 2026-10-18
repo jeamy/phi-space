@@ -56,7 +56,7 @@ export type SignedMembership < T >= {
     signature: string
 };
 const bytes = (kind: string, v: unknown) =>
-    Buffer.from('pi-spaces/membership-' + kind + '/v1\n' + canonicalJson(v as Json));
+    Buffer.from('phi-spaces/membership-' + kind + '/v1\n' + canonicalJson(v as Json));
 export async function signMembership<T>(kind: 'instruction'|'proof', value: T, issuer: string,
                                         signer: Signer): Promise<SignedMembership<T>> {
     return {

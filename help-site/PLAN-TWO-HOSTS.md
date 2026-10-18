@@ -19,7 +19,7 @@ Lasttreiber auf `big` (gemessen, siehe Profiling-Sessions):
 Seit Pruning entfernt wurde (alle Daten bleiben durable erhalten) wächst `N`
 kontinuierlich — die Verteilung wird damit langfristig *wichtiger*, nicht weniger.
 
-Vorhandene pi-spaces-Primitive, die direkt nutzbar sind:
+Vorhandene phi-spaces-Primitive, die direkt nutzbar sind:
 
 - `src/socket.ts` `serveSpace({ listen: { host, port } })` — Space über TCP exponieren.
 - `src/remote.ts` `RemoteSpace` — transparenter Client auf einen remote Space.
@@ -54,7 +54,7 @@ Vorhandene pi-spaces-Primitive, die direkt nutzbar sind:
 Vor jeder Änderung auf `big`:
 
 ```bash
-docker stats pi-spaces-help-prod --no-stream
+docker stats phi-spaces-help-prod --no-stream
 curl -o /dev/null -w '%{time_total}\n' http://localhost:3500/?view=feed
 ```
 

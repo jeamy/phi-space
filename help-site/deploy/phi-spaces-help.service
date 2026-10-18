@@ -1,15 +1,15 @@
 [Unit]
-Description=PI-SPACES / HELP & Multiplayer Space-Chat Server (spaces.eibrain.org)
+Description=PHI-SPACES / HELP & Multiplayer Space-Chat Server (spaces.eibrain.org)
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/media/data/programming/pi-spaces
+WorkingDirectory=/media/data/programming/phi-spaces
 Environment=NODE_ENV=production
 Environment=HELP_BIND=127.0.0.1
 Environment=PORT=3500
 Environment=HELP_PORT=3500
-Environment=HELP_SQLITE=/var/lib/pi-spaces/spaces-eibrain.sqlite
+Environment=HELP_SQLITE=/var/lib/phi-spaces/spaces-eibrain.sqlite
 ExecStart=/usr/bin/node --no-warnings --experimental-strip-types help-site/server/index.ts
 Restart=on-failure
 RestartSec=3

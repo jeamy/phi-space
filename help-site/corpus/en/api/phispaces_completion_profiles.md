@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_completion_profiles
+id: help.api.phispaces_completion_profiles
 title: "setCompletionProfiles & setLimits – Server-Side Result and Budget Contracts"
 short: "Enforces expected result type, correlating fields (equalFields), and count before committing a take transaction; manages byte limits."
 tags: [setcompletionprofiles, setlimits, completionprofile, completionviolation]

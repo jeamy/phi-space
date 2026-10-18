@@ -22,7 +22,7 @@ The cluster is **simulated inside a single process**: **4 harnesses** (all `Memo
 - **1 coordinator host**: `RouterController` (`router-root` + 2 partition routers for the routing journals) and `FederatedSpace` (id `fed-v5`). The coordinator owns no chat-data space itself — it only executes the policy.
 - **3 member hosts** (`member-1`, `member-2`, `member-3`): each owns its own independent space with its own space doc.
 - **HRW sharding**: the federation policy routes `Thread`, `Msg`, and `ChatTask` by rendezvous hashing over `fields.threadId` deterministically onto exactly one member. The runner report field `memberDistribution` shows the actual placement, e.g. `{ member-1: [alpha, gamma], member-2: [beta], member-3: [delta] }`.
-- **`FederationIO`** is an in-process adapter onto the local `PiSpaces` objects in this demo; in a real deployment these would be `RemoteSpace`/RPC calls to remote hosts — the semantics (`step`, `snapshot`, `events`, `ack`, `txnActive`) stay identical.
+- **`FederationIO`** is an in-process adapter onto the local `PhiSpaces` objects in this demo; in a real deployment these would be `RemoteSpace`/RPC calls to remote hosts — the semantics (`step`, `snapshot`, `events`, `ack`, `txnActive`) stay identical.
 - **Replication**: 2 `EntryReplicationController` instances (`rep-1` on member-1, `rep-2` on member-2) replicate `Presence` via HLC + Last-Writer-Wins into the shared `presence-global` space.
 
 ## Workflow {#workflow}

@@ -1,4 +1,4 @@
-// Test-Harness-Utilities für pi-spaces Beispiele
+// Test-Harness-Utilities für phi-spaces Beispiele
 // Bietet eine standardisierte Umgebung für Tests mit Harness, Space und Agenten
 
 import { 
@@ -20,7 +20,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { 
   FOREVER, 
-  PiSpaces,
+  PhiSpaces,
   spaces, 
   type EntryDraft
 } from "../../../src/index.ts";
@@ -51,7 +51,7 @@ export interface TestHarnessConfig {
  */
 export interface TestHarness {
   harness: Harness;
-  space: PiSpaces;
+  space: PhiSpaces;
   models: Models;
   config: TestHarnessConfig;
   context: typeof ctx;
@@ -78,7 +78,7 @@ export async function createTestHarness(config: TestHarnessConfig = {}): Promise
   const storage = useMemoryStorage 
     ? new MemoryStorage() 
     : await import("@earendil-works/pi-durable/storage/jsonl/node").then(
-        ({ openNodeJsonlStorage }) => openNodeJsonlStorage(config.storageDir || "/tmp/pi-spaces-test", ctx)
+        ({ openNodeJsonlStorage }) => openNodeJsonlStorage(config.storageDir || "/tmp/phi-spaces-test", ctx)
       );
 
   // Modelle erstellen
@@ -114,7 +114,7 @@ export async function createTestHarness(config: TestHarnessConfig = {}): Promise
 
   // Harness erstellen
   const harness = await Harness.open(storage, { models, registry }, ctx);
-  const space = new PiSpaces(harness, ctx);
+  const space = new PhiSpaces(harness, ctx);
 
   // Test-Harness-Objekt zurückgeben
   const result: TestHarness = {
@@ -142,11 +142,11 @@ export async function createTestHarness(config: TestHarnessConfig = {}): Promise
       const newStorage = useMemoryStorage 
         ? new MemoryStorage() 
         : await import("@earendil-works/pi-durable/storage/jsonl/node").then(
-            ({ openNodeJsonlStorage }) => openNodeJsonlStorage(config.storageDir || "/tmp/pi-spaces-test", ctx)
+            ({ openNodeJsonlStorage }) => openNodeJsonlStorage(config.storageDir || "/tmp/phi-spaces-test", ctx)
           );
       const newHarness = await Harness.open(newStorage, { models, registry }, ctx);
       result.harness = newHarness;
-      result.space = new PiSpaces(newHarness, ctx);
+      result.space = new PhiSpaces(newHarness, ctx);
     }
   };
   return result;
@@ -202,7 +202,7 @@ export function createTestEntries(count: number, typeName: string = "Test"): Ent
  * Hilfsfunktion zum Warten auf Bedingungen im Space
  */
 export async function waitForCondition(
-  space: PiSpaces,
+  space: PhiSpaces,
   condition: () => Promise<boolean>,
   timeout: number = 5000,
   interval: number = 100
@@ -221,7 +221,7 @@ export async function waitForCondition(
  * Hilfsfunktion zum Warten auf Entry im Space
  */
 export async function waitForEntry(
-  space: PiSpaces,
+  space: PhiSpaces,
   template: any,
   timeout: number = 5000
 ) {
@@ -236,7 +236,7 @@ export async function waitForEntry(
  * Hilfsfunktion zum Warten auf Count im Space
  */
 export async function waitForCount(
-  space: PiSpaces,
+  space: PhiSpaces,
   template: any,
   expectedCount: number,
   timeout: number = 5000

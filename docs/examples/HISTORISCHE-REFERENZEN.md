@@ -4,8 +4,8 @@ Stand: 2026-10-07. Hintergrund, keine Zusage implementierter Federation oder Jav
 
 Linda beschreibt Koordination über einen assoziativen Tuple Space: out schreibt, in nimmt destruktiv,
 rd liest ohne Entfernen. eval erzeugt aktive Tupel durch Ausführung; ein Write mit „Agent-Code“ ist
-im heutigen pi-spaces **kein** eval-Äquivalent. Verwendete Operationen sind JavaSpaces-inspirierte
-write/read/take mit Templates. pi-spaces nutzt JSON-Entries statt Java-Objekten und Remote-RMI.
+im heutigen phi-spaces **kein** eval-Äquivalent. Verwendete Operationen sind JavaSpaces-inspirierte
+write/read/take mit Templates. phi-spaces nutzt JSON-Entries statt Java-Objekten und Remote-RMI.
 
 Primärquelle: Carriero/Gelernter, [Linda in Context](https://doi.org/10.1145/63334.63337), 1989.
 Historische Patterns können moderne Beispiele motivieren; der lokale Code ist keine historische

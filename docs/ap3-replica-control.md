@@ -108,17 +108,17 @@ Betrieb:
 - Transitionshosts nutzen `TlsFencing` als schlanken Client.
 - Der Dienst läuft als eigener Prozess neben dem Register; das Register selbst sieht den Token nie.
 - Anmeldung per Device-Flow mit `scripts/netcup-login.py`, als Benutzer `mux` auf vpsc. Ergebnis ist ein
-  Offline-Refresh-Token in `~/.config/pi-spaces-fencing/netcup.json` (0600).
+  Offline-Refresh-Token in `~/.config/phi-spaces-fencing/netcup.json` (0600).
 - Keycloak rotiert den Refresh-Token. Dienst und Skript erneuern ihn deshalb nur unter derselben Sperrdatei
   `netcup.json.lock`.
 - Der Token verfällt nach etwa 30 Tagen ohne Nutzung; regelmäßige Statusabfragen halten ihn aktiv.
   Widerruf im SCP-Konto unter „Kontosicherheit → Geräteaktivität“.
 - Das SCP-Konto ist IP-beschränkt. Freigegeben sind die Adressen von vpsc: `2a02:c207:2252:8263:8000::`
   und `207.180.233.218`.
-- Ausgerollt am 2026-10-16 als User-Dienst `pi-spaces-fencing.service` von `mux` auf vpsc (Linger an).
-  Er lauscht auf `[::]:17423`, Konfiguration in `~/.local/share/pi-spaces-fencing/fencing.json`.
-  - Serverzertifikat `CN=pi-spaces-fencing-server` aus der Operator-CA mit SAN `207.180.233.218`,
-    `2a02:c207:2252:8263:8000::` und `pi-spaces-fencing`. Der Schlüssel wurde auf vpsc erzeugt; lokal wurde
+- Ausgerollt am 2026-10-16 als User-Dienst `phi-spaces-fencing.service` von `mux` auf vpsc (Linger an).
+  Er lauscht auf `[::]:17423`, Konfiguration in `~/.local/share/phi-spaces-fencing/fencing.json`.
+  - Serverzertifikat `CN=phi-spaces-fencing-server` aus der Operator-CA mit SAN `207.180.233.218`,
+    `2a02:c207:2252:8263:8000::` und `phi-spaces-fencing`. Der Schlüssel wurde auf vpsc erzeugt; lokal wurde
     nur die Anfrage signiert.
   - Freigegeben ist nur das Operator-Zertifikat (`a8baf286…`).
   - ufw erlaubt 17423 nur von der Operator-Adresse `212.186.197.226`.

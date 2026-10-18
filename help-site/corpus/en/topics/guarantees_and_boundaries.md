@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.guarantees_and_boundaries
 title: "Binding Guarantees and System Boundaries"
-short: "What pi-spaces strictly guarantees for local commits, retries, transactions, restores, and federation—and what is intentionally out of scope."
+short: "What phi-spaces strictly guarantees for local commits, retries, transactions, restores, and federation—and what is intentionally out of scope."
 tags: [guarantees, boundaries, idempotency, consistency, limits, restore, epochs]
 owner: core
 related: [help.topic.overview, help.topic.request_claims_and_generations, help.topic.gate_auth_grants_and_recovery]
@@ -19,7 +19,7 @@ A reliable distributed system defines both its guarantees and its boundaries exp
 
 ### Guarantee Matrix {#guarantee-matrix}
 
-| Layer | Binding Contract in `pi-spaces` | What Does Explicitly NOT Follow |
+| Layer | Binding Contract in `phi-spaces` | What Does Explicitly NOT Follow |
 |---|---|---|
 | **Local Commit** | Space mutation, RPC claim, revision `rev`, and mailbox event are persisted atomically together. | No external exactly-once guarantee for HTTP calls, emails, or LLM token costs outside the space. |
 | **Idempotent Retry** | Identical `{ principal, generation, requestId }` with matching RFC-8785 argument hash returns the stored result across process restarts without repeating the mutation. | After retention expiry (default 24 h), a retry returns `ResultExpired` without re-executing. |
@@ -30,7 +30,7 @@ A reliable distributed system defines both its guarantees and its boundaries exp
 
 ### The Three Distinct Epoch Counters {#three-epochs}
 
-Using the word "epoch" without a qualifier is invalid in `pi-spaces`. Three independent monotonic counters exist:
+Using the word "epoch" without a qualifier is invalid in `phi-spaces`. Three independent monotonic counters exist:
 
 1. **`primaryEpoch`**: Scoped to a logical space for replication or data restore (+1 on data restore, promotion, or single-mode switch; resets to 1 under a new `authorityId` after control restore).
 2. **`routerEpoch`**: Scoped to `RouterLease` issuance in a federation (+1 on router restart or failover).

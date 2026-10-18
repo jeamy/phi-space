@@ -7,17 +7,17 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { X509Certificate, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { SqliteRecoveryRegister, RegisterConflict, RecoveryBlocked, RecoveryCoordinator, MemberTransitionInstaller, PiSpaces, core, Space, installBootGuard, BootBlocked, serveTlsRegister, TlsRecoveryRegister, ControlAckService, RecoveryReceipts, RecoveryClient, serveRecovery, generateKey, spaceDoc, createSpace, type RecoveryRegister } from "../src/index.ts";
+import { SqliteRecoveryRegister, RegisterConflict, RecoveryBlocked, RecoveryCoordinator, MemberTransitionInstaller, PhiSpaces, core, Space, installBootGuard, BootBlocked, serveTlsRegister, TlsRecoveryRegister, ControlAckService, RecoveryReceipts, RecoveryClient, serveRecovery, generateKey, spaceDoc, createSpace, type RecoveryRegister } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 
 test("member authority installation replays a lost external ACK, invalidates old generations and permits another recovery", async () => {
  await forEachBackend(async home => {
   let h = await home.open();
-  const dir = mkdtempSync(join(tmpdir(), "pi-spaces-member-transition-")), external = new SqliteRecoveryRegister(join(dir,"external.sqlite")), installed = new SqliteRecoveryRegister(join(dir,"installed.sqlite")), operator = generateKey("ed25519","operator");
+  const dir = mkdtempSync(join(tmpdir(), "phi-spaces-member-transition-")), external = new SqliteRecoveryRegister(join(dir,"external.sqlite")), installed = new SqliteRecoveryRegister(join(dir,"installed.sqlite")), operator = generateKey("ed25519","operator");
   let failAck = true, stopped = false;
   const flaky: RecoveryRegister = { get: external.get.bind(external), compareAndSet: async (key, version, value) => { if (key.startsWith("authority-ack:") && failAck) { failAck=false; throw new Error("lost ACK connection"); } return external.compareAndSet(key,version,value); } };
   try {
-   const client = new PiSpaces(h,ctx,()=>1);
+   const client = new PhiSpaces(h,ctx,()=>1);
    await client.write({type:"Task",fields:{n:1}},null,core.FOREVER);
    const generation=await client.issueGeneration({peerId:"worker"});
    await client.write({type:"Decided",fields:{retained:true}},null,core.FOREVER,{request:{principal:{peerId:"worker"},...generation,requestId:"decided"}});
@@ -39,7 +39,7 @@ test("member authority installation replays a lost external ACK, invalidates old
    const resumed=await installer().advance(proof); assert.equal(resumed.completed,true); assert.deepEqual((await external.get<any>("authority-ack:recovery-1:member"))?.value,resumed.ack);
    let s=(await h.snapshot(Space,ctx))!;assert.equal(s.acceptedAuthorityId,proof.transition.newAuthorityId);assert.equal(s.primaryEpoch,1);assert.equal(s.entries[0]?.fields.n,1);assert.ok(s.restoredClaims && Object.keys(s.restoredClaims).length===1);assert.ok(s.invalidGenerations?.[generation.generation]);assert.equal(s.rpc?.claims && Object.keys(s.rpc.claims).length,1);assert.ok(Object.values(s.rpc!.claims)[0]!.orphanedAfterRestore);
    const guard=installBootGuard(h,ctx,{hostId:"member",authorityId:proof.transition.newAuthorityId,external,installed});
-   await new PiSpaces(h,ctx,()=>1).write({type:"New",fields:{}}); guard();
+   await new PhiSpaces(h,ctx,()=>1).write({type:"New",fields:{}}); guard();
    const authority=(await external.get<any>("authority:control"))!;await external.compareAndSet("authority:control",authority.version,{...authority.value,state:"active"});
    const second=await new RecoveryCoordinator(external,operator.signer).reserve({recoveryId:"recovery-2",expectedAuthorityId:proof.transition.newAuthorityId,controlSpaceId:"control",targetHostId:"third-root",supervisorKey:"third-key"},async hostId=>({hostId,restartLocked:true}));
    for(let i=0;i<20;i++)if((await installer().advance(second)).completed)break;
@@ -49,7 +49,7 @@ test("member authority installation replays a lost external ACK, invalidates old
    // A stale import with unchanged incarnation and epoch must still fail the outside-snapshot authority marker.
    stop(); await h.commit(async tx => { (await spaceDoc(tx,space,1)).acceptedAuthorityId="old"; },ctx);
    const staleGuard=installBootGuard(h,ctx,{hostId:"member",authorityId:second.transition.newAuthorityId,external,installed});
-   try { await assert.rejects(new PiSpaces(h,ctx,()=>1).count({type:"Task"}),BootBlocked); } finally { staleGuard(); }
+   try { await assert.rejects(new PhiSpaces(h,ctx,()=>1).count({type:"Task"}),BootBlocked); } finally { staleGuard(); }
   } finally { external.close();installed.close();rmSync(dir,{recursive:true,force:true}); }
  });
 });
@@ -70,7 +70,7 @@ function certificates(dir:string){
 }
 
 test("mutual TLS register separates readers, scoped writers and operators and persists CAS across restart",async()=>{
- const dir=mkdtempSync(join(tmpdir(),"pi-spaces-tls-register-")),pki=certificates(dir);let db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));
+ const dir=mkdtempSync(join(tmpdir(),"phi-spaces-tls-register-")),pki=certificates(dir);let db=new SqliteRecoveryRegister(join(dir,"register.sqlite"));
  const config={...pki.identity("server"),host:"127.0.0.1",port:0,peers:{[pki.fingerprint("reader")]:{operator:false},[pki.fingerprint("operator")]:{operator:true},[pki.fingerprint("scoped")]:{writeKeys:["boot:member"]}}};
  let server=await serveTlsRegister(db,config);
  const unixPath=join(dir,"register-tunnel.sock"),tunnelSockets=new Set<ReturnType<typeof rawConnect>>();
@@ -116,7 +116,7 @@ test("mutual TLS register separates readers, scoped writers and operators and pe
 
 test("signed control ACK is durable, rejects mismatched tuples and cannot bypass a fenced source",async()=>{
  await forEachBackend(async home=>{
-  let h=await home.open();const dir=mkdtempSync(join(tmpdir(),"pi-spaces-control-ack-")),db=new SqliteRecoveryRegister(join(dir,"external.sqlite")),admin=generateKey("ed25519","admin"),member=generateKey("ed25519","member");
+  let h=await home.open();const dir=mkdtempSync(join(tmpdir(),"phi-spaces-control-ack-")),db=new SqliteRecoveryRegister(join(dir,"external.sqlite")),admin=generateKey("ed25519","admin"),member=generateKey("ed25519","member");
   const info=await h.commit(tx=>createSpace(tx,"control",1),ctx),space=info.spaceId;
   const args={recoveryId:"restore-data",space:"data",incarnation:"new-data",primaryEpoch:2,authorityId:"authority",targetHostId:"target",argsHash:"hash"};
   await db.compareAndSet(`authority:${space}`,null,{state:"active",hostId:"control-host",authorityId:"authority"});
@@ -136,10 +136,10 @@ test("signed control ACK is durable, rejects mismatched tuples and cannot bypass
 test("control restore requires a new admin and every confirmed member ACK; retries retain one authority and closed old rights",async()=>{
  const {ControlRecoveryController,controlRecoveryHandler,createSpace,Registry,NamedSpace,claims}=await import("../src/index.ts");
  await forEachBackend(async home=>{
-  let h=await home.open(),now=1,stopped=true;const dir=mkdtempSync(join(tmpdir(),"pi-spaces-control-restore-")),external=new SqliteRecoveryRegister(join(dir,"external.sqlite")),installed=new SqliteRecoveryRegister(join(dir,"installed.sqlite")),operator=generateKey("ed25519","operator"),supervisor=generateKey("ed25519","supervisor"),admin=generateKey("ecdsa-p256","new-admin");
+  let h=await home.open(),now=1,stopped=true;const dir=mkdtempSync(join(tmpdir(),"phi-spaces-control-restore-")),external=new SqliteRecoveryRegister(join(dir,"external.sqlite")),installed=new SqliteRecoveryRegister(join(dir,"installed.sqlite")),operator=generateKey("ed25519","operator"),supervisor=generateKey("ed25519","supervisor"),admin=generateKey("ecdsa-p256","new-admin");
   try{
    const info=await h.commit(tx=>createSpace(tx,"control",now),ctx),space=info.spaceId;
-   const local=new PiSpaces(h,ctx,()=>now,undefined,undefined,{space});
+   const local=new PhiSpaces(h,ctx,()=>now,undefined,undefined,{space});
    await local.write({type:"PeerKey",fields:{peerId:"old-admin",keyId:"old-key",algorithm:"ed25519",publicKey:operator.publicKey,roles:["admin"],scope:["*"],state:"active"}},null,core.FOREVER);
    await local.write({type:"Member",fields:{hostId:"offline-member",state:"active"}},null,core.FOREVER);
    const source=core.plain((await h.snapshot(NamedSpace,space,ctx))!);
@@ -167,7 +167,7 @@ test("control restore requires a new admin and every confirmed member ACK; retri
 
 test("control ACK rechecks the enrolled host key inside the receipt commit",async()=>{
  await forEachBackend(async home=>{
-  const h=await home.open(),dir=mkdtempSync(join(tmpdir(),"pi-spaces-host-ack-")),db=new SqliteRecoveryRegister(join(dir,"external.sqlite")),key=generateKey("ed25519","host-app");
+  const h=await home.open(),dir=mkdtempSync(join(tmpdir(),"phi-spaces-host-ack-")),db=new SqliteRecoveryRegister(join(dir,"external.sqlite")),key=generateKey("ed25519","host-app");
   const info=await h.commit(tx=>createSpace(tx,"control",1),ctx),service=new ControlAckService({host:h,ctx,register:db,hostId:"root",authorityId:"a",controlSpaceId:info.spaceId,now:()=>1}),args={recoveryId:"r",space:"data",incarnation:"new",primaryEpoch:2,authorityId:"a",targetHostId:"target",argsHash:"hash"};
   try{
    await db.compareAndSet(`authority:${info.spaceId}`,null,{state:"active",hostId:"root",authorityId:"a"});await db.compareAndSet("data-transition:data",null,{...args,state:"restoring",sourceHostId:"source",expectedDataIncarnation:"old"});await db.compareAndSet("boot:source",null,{state:"fenced"});await db.compareAndSet("boot:target",null,{state:"active",spaces:{data:{state:"revoked",authorityId:"a",dataIncarnation:"old"}}});await db.compareAndSet("host-key:target",null,{state:"active",authorityId:"a",peerId:"target-peer",keyId:"host-app",algorithm:"ed25519",publicKey:key.publicKey});

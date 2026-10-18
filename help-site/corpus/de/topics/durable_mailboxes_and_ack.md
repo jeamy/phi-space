@@ -5,7 +5,7 @@ title: "Dauerhafte Mailboxes (events / ack), wait und notify"
 short: "Wie nichtblockierendes wait und notify Ereignisse in persistente Consumer-Mailboxes zustellen und was Präfix-ACK von einem Transaktions-Commit unterscheidet."
 tags: [mailbox, events, ack, wait, notify, mailboxepoch]
 owner: client
-related: [help.topic.snapshots_and_change_streams, help.api.pispaces_wait_notify_mailbox, help.workflow.stage_v3_remote_socket]
+related: [help.topic.snapshots_and_change_streams, help.api.phispaces_wait_notify_mailbox, help.workflow.stage_v3_remote_socket]
 since: 0.0.1
 ---
 
@@ -43,4 +43,4 @@ if (page.events.length > 0) {
 ## Siehe auch {#see-also}
 
 - [Stufe 3 (v3-remote-socket): SpaceService, RemoteSpace & Mailboxes](help.workflow.stage_v3_remote_socket#overview)
-- [wait, notify, events & ack API](help.api.pispaces_wait_notify_mailbox)
+- [wait, notify, events & ack API](help.api.phispaces_wait_notify_mailbox)

@@ -46,7 +46,7 @@ const workerSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { sp
 const searchSpace  = new RemoteSpace(socketTransport({ path: socketPath }), { space: "chat-v3" });
 ```
 
-Da `RemoteSpace` denselben `SpaceLike`-Vertrag wie `PiSpaces` implementiert, läuft `SpaceChatEngine` aus `help-site/examples/shared/chat-core.ts` ohne jede Codeänderung über das Netzwerkprotokoll! Zusätzlich registriert der Worker ein `notify`/`wait`-Abo und liest seine Consumer-Mailbox über `events()` + `ack()`.
+Da `RemoteSpace` denselben `SpaceLike`-Vertrag wie `PhiSpaces` implementiert, läuft `SpaceChatEngine` aus `help-site/examples/shared/chat-core.ts` ohne jede Codeänderung über das Netzwerkprotokoll! Zusätzlich registriert der Worker ein `notify`/`wait`-Abo und liest seine Consumer-Mailbox über `events()` + `ack()`.
 
 ### Ausführung im Terminal {#run-cli}
 

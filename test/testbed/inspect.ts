@@ -35,7 +35,7 @@ async function discover(root: string): Promise<{ stores: string[]; reports: stri
 async function copiedSpaces(dir: string): Promise<InspectedSpace[]> {
 	let last: unknown;
 	for (let attempt = 0; attempt < 3; attempt++) {
-		const copy = await mkdtemp(join(tmpdir(), "pi-spaces-inspect-"));
+		const copy = await mkdtemp(join(tmpdir(), "phi-spaces-inspect-"));
 		let h: Harness | undefined;
 		try {
 			let storage;

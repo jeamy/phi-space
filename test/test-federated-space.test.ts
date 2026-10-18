@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {PiSpaces} from '../src/client.ts';
+import {PhiSpaces} from '../src/client.ts';
 import {Space} from '../src/doc.ts';
 import {TransportFailure} from '../src/remote.ts';
 import {PermissionError} from '../src/core.ts';
@@ -86,17 +86,17 @@ async function fixture(b: typeof BACKENDS[number], fn: (o: any) => Promise<void>
                 const n = sim.nodes.get(id)!;
                 return {
                     entries :
-                        await new PiSpaces(n.host, ctx, () => sim.clock.now(id)).readAll(t, {txn}),
+                        await new PhiSpaces(n.host, ctx, () => sim.clock.now(id)).readAll(t, {txn}),
                     revision : (await n.host.snapshot(Space, ctx))!.rev
                 };
             },
             events : async (id, p) => {
                 const n = sim.nodes.get(id)!,
-                      page = await new PiSpaces(n.host, ctx, () => sim.clock.now(id)).events(p);
+                      page = await new PhiSpaces(n.host, ctx, () => sim.clock.now(id)).events(p);
                 return {epoch : page.mailboxEpoch, events : page.events, gap : !!page.gap};
             },
             ack : async (id, p, e, s) => {
-                await new PiSpaces(sim.nodes.get(id)!.host, ctx, () => sim.clock.now(id))
+                await new PhiSpaces(sim.nodes.get(id)!.host, ctx, () => sim.clock.now(id))
                     .ack(p, e, s);
             },
             txnActive : async (id, _p, t) => {
@@ -154,7 +154,7 @@ for (const b of BACKENDS) {
              await assert.rejects(o.f.take({type : 'Job'}, {id : 'take-1', principal : o.p}),
                                   FederationPending);
              assert.equal(
-                 (await new PiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('a'))
+                 (await new PhiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('a'))
                       .count()),
                  1);
              await o.reopen();
@@ -162,7 +162,7 @@ for (const b of BACKENDS) {
              assert.equal(r.fields.n, 1);
              assert.deepEqual(await o.f.take({type : 'Job'}, {id : 'take-1', principal : o.p}), r);
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('a'))
+                 await new PhiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('a'))
                      .count(),
                  1);
          }));
@@ -194,11 +194,11 @@ for (const b of BACKENDS) {
              await o.reopen();
              await o.f.resume('write-1');
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
+                 await new PhiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
                      .count(),
                  1);
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('a'))
+                 await new PhiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('a'))
                      .count(),
                  0);
              await assert.rejects(
@@ -223,18 +223,18 @@ for (const b of BACKENDS)
              await assert.rejects(
                  o.f.takeWaiting({type : 'Job'}, 10000, 5000, {id : 'race-win', principal : o.p}),
                  FederationPending);
-             await new PiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
+             await new PhiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
                  .write({type : 'Job', fields : {n : 1}});
-             await new PiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('b'))
+             await new PhiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('b'))
                  .write({type : 'Job', fields : {n : 2}});
              const result = await o.f.resume('race-win');
              assert.equal(result.fields.n, 1);
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
+                 await new PhiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
                      .count(),
                  0);
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('b'))
+                 await new PhiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('b'))
                      .count(),
                  1);
              await o.reopen();
@@ -248,7 +248,7 @@ for (const b of BACKENDS)
                  o.f.takeWaiting({type : 'Job'}, 10000, 5000, {id : 'race-lost', principal : o.p}),
                  FederationPending);
              for (const id of ['a', 'b'])
-                 await new PiSpaces(o.sim.nodes.get(id).host, ctx, () => o.sim.clock.now(id))
+                 await new PhiSpaces(o.sim.nodes.get(id).host, ctx, () => o.sim.clock.now(id))
                      .write({type : 'Job', fields : {member : id}});
              o.sim.fault('a', {dropReply : true});
              await assert.rejects(o.f.resume('race-lost'), FederationPending);
@@ -256,7 +256,7 @@ for (const b of BACKENDS)
              const r = await o.f.resume('race-lost');
              assert.equal(r.fields.member, 'a');
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('b'))
+                 await new PhiSpaces(o.sim.nodes.get('b').host, ctx, () => o.sim.clock.now('b'))
                      .count(),
                  1);
          }));
@@ -268,12 +268,12 @@ for (const b of BACKENDS)
              await o.f.write({type : 'Other', fields : {n : 1}},
                              {id : 'txn-write', principal : o.p, txn});
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
+                 await new PhiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
                      .count(),
                  0);
              await o.f.finishTransaction('txn-1', 'commit', {id : 'txn-finish', principal : o.p});
              assert.equal(
-                 await new PiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
+                 await new PhiSpaces(o.sim.nodes.get('a').host, ctx, () => o.sim.clock.now('a'))
                      .count(),
                  1);
              await assert.rejects(
@@ -285,7 +285,7 @@ for (const b of BACKENDS)
                  RoutingConflict);
          }));
 
-for(const b of BACKENDS)test(`${b}: waiting read returns a late entry without reserving or consuming it`,()=>fixture(b,async o=>{await assert.rejects(o.f.readWaiting({type:'Job'},10000,{id:'read-wait',principal:o.p}),FederationPending);await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).write({type:'Job',fields:{n:7}});assert.equal((await o.f.resume('read-wait')).fields.n,7);assert.equal(await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),1);assert.equal(Object.keys((await o.sim.nodes.get('b').host.snapshot(Space,ctx)).txns).length,0);}));
+for(const b of BACKENDS)test(`${b}: waiting read returns a late entry without reserving or consuming it`,()=>fixture(b,async o=>{await assert.rejects(o.f.readWaiting({type:'Job'},10000,{id:'read-wait',principal:o.p}),FederationPending);await new PhiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).write({type:'Job',fields:{n:7}});assert.equal((await o.f.resume('read-wait')).fields.n,7);assert.equal(await new PhiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),1);assert.equal(Object.keys((await o.sim.nodes.get('b').host.snapshot(Space,ctx)).txns).length,0);}));
 
 for(const b of BACKENDS)test(`${b}: restored child and completed parent require review after target update`,async()=>fixture(b,async(o:any)=>{
  const q={id:"restore-parent",principal:o.p};await o.f.write({type:"Job",fields:{n:1}},q);
@@ -309,7 +309,7 @@ for(const b of BACKENDS) {
    await o.f.write({type:'Job',fields:{n}},{id:'partition-load-'+n,principal:o.p});
   }
   assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,1000);
-  for(const id of ['a','b','c'])assert.ok(await new PiSpaces(o.sim.nodes.get(id).host,ctx,()=>o.sim.clock.now(id)).count()>300);
+  for(const id of ['a','b','c'])assert.ok(await new PhiSpaces(o.sim.nodes.get(id).host,ctx,()=>o.sim.clock.now(id)).count()>300);
   await o.reopen();
   for(const n of [0,1,17,999])await o.f.write({type:'Job',fields:{n}},{id:'partition-load-'+n,principal:o.p});
   assert.equal((await o.f.readAll({type:'Job'},o.p)).entries.length,1000);
@@ -330,7 +330,7 @@ for(const b of BACKENDS) {
   await o.f.finishTransaction(origin,'commit',{id:finish,principal:o.p});
   assert.equal(await refs(),false);
   await o.reopen();await o.f.finishTransaction(origin,'commit',{id:finish,principal:o.p});
-  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+  assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
  },8));
  test(`${b}: a full partition rejects new work while other partitions and known IDs still work`,()=>fixture(b,async o=>{
   const ids:string[]=[];for(let n=0;ids.length<17;n++)if(operationPartition('full-'+n,2)===0)ids.push('full-'+n);
@@ -371,21 +371,21 @@ for(const b of BACKENDS)test(`${b}: lost partitioned effect reply recovers the s
  await assert.rejects(o.f.write(entry,request),FederationPending);
  o.state.members.a.capacity.free=1;o.state.members.b.capacity.free=100;
  await o.reopen();await o.f.write(entry,request);
- assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
- assert.equal(await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
+ assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+ assert.equal(await new PhiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
 },8));
 
 for(const b of BACKENDS)for(const boundary of ['candidate','winner','completed','ack'] as const)for(const fault of ['failBeforeCommit','loseAnswer'] as const)
  test(`${b}: race ${boundary} ${fault} reopens with one winner and releases future reservations`,()=>fixture(b,async o=>{
   const id='race-boundary';await assert.rejects(o.f.takeWaiting({type:'Job'},10000,5000,{id,principal:o.p}),FederationPending);
-  for(const member of ['a','b'])await new PiSpaces(o.sim.nodes.get(member).host,ctx,()=>o.sim.clock.now(member)).write({type:'Job',fields:{member}});
+  for(const member of ['a','b'])await new PhiSpaces(o.sim.nodes.get(member).host,ctx,()=>o.sim.clock.now(member)).write({type:'Job',fields:{member}});
   let fired=false;const ack=o.io.ack;
   if(boundary==='ack')o.io.ack=async(...args:any[])=>{if(!fired&&fault==='failBeforeCommit'){fired=true;throw new Error('injected before ACK');}await ack(...args);if(!fired){fired=true;throw new Error('injected lost ACK reply');}};
   else o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>w.type==='document.change'&&w.content.kind==='delta'&&JSON.stringify(w.content.ops).includes('"operations"')&&(boundary==='candidate'?JSON.stringify(w.content.ops).includes('"candidates"')&&JSON.stringify(w.content.ops).includes('"event"')&&!JSON.stringify(w.content.ops).includes('"winner"'):boundary==='winner'?JSON.stringify(w.content.ops).includes('"winner"')&&!JSON.stringify(w.content.ops).includes('"done"'):JSON.stringify(w.content.ops).includes('"phase":"done"'))));
   await assert.rejects(o.f.resume(id));assert.ok(fired||o.home.faults.fired===1,'the selected boundary must be interrupted');
   o.io.ack=ack;await o.reopen();const result=await o.f.resume(id);assert.equal(result.fields.member,'a');
   await o.reopen();assert.deepEqual(await o.f.resume(id),result);
-  let entries=0;for(const member of ['a','b']){const h=o.sim.nodes.get(member).host;entries+=await new PiSpaces(h,ctx,()=>o.sim.clock.now(member)).count();assert.equal(Object.keys((await h.snapshot(Space,ctx)).txns).length,0);}
+  let entries=0;for(const member of ['a','b']){const h=o.sim.nodes.get(member).host;entries+=await new PhiSpaces(h,ctx,()=>o.sim.clock.now(member)).count();assert.equal(Object.keys((await h.snapshot(Space,ctx)).txns).length,0);}
   assert.equal(entries,1,'exactly one committed winner and one returned loser');
   for(const r of o.partitionRouters){const journal=await o.host.snapshot(RouterJournal,r.journalId,ctx);assert.deepEqual(journal?.future??{},{});}
  },8));
@@ -398,12 +398,12 @@ for(const b of BACKENDS){
   const key=parentJournalKey('federation',8,operationPartition(request.id,8));
   const parent=(await o.host.snapshot(FederationOperations,key,ctx)).operations[request.id];
   assert.equal(parent.phase,'admitting');assert.deepEqual(parent.members,['a']);assert.deepEqual(parent.children,{});
-  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
+  assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
   await assert.rejects(o.f.write({...entry,fields:{n:2}},request),RoutingConflict);
   o.state.members.a.capacity.free=1;o.state.members.b.capacity.free=100;
   await o.reopen();o.io.step=step;await o.f.write(entry,request);await o.f.write(entry,request);
-  assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
-  assert.equal(await new PiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
+  assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+  assert.equal(await new PhiSpaces(o.sim.nodes.get('b').host,ctx,()=>o.sim.clock.now('b')).count(),0);
   const done=(await o.host.snapshot(FederationOperations,key,ctx)).operations[request.id];assert.equal(done.phase,'done');assert.deepEqual(done.targets,parent.targets);assert.equal(done.hash,parent.hash);
   for(const router of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,router.journalId,ctx))?.future??{},{});
  },8));
@@ -431,7 +431,7 @@ test(`${b}: atomic Parent/Child ${boundary} ${fault} preserves one original effe
  o.home.faults.arm(fault,matches);await assert.rejects(o.f.write(entry,request));assert.equal(o.home.faults.fired,1,'the paired multi-document commit must be interrupted');
  const key=parentJournalKey('federation',8,operationPartition(request.id,8));let durablePhase:string|undefined;await o.reopen(async(host:any)=>{durablePhase=(await host.snapshot(FederationOperations,key,ctx)).operations[request.id].phase;});
  assert.equal(durablePhase,boundary==='admission'?(fault==='loseAnswer'?'ready':'admitting'):(fault==='loseAnswer'?'done':'ready'));
- const api=new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a'));assert.equal(await api.count(),boundary==='admission'?0:1);
+ const api=new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a'));assert.equal(await api.count(),boundary==='admission'?0:1);
  await o.reopen();const result=await o.f.write(entry,request);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await api.count(),1);
  const claims=Object.values((await o.sim.nodes.get('a').host.snapshot(Space,ctx)).rpc.claims) as any[];assert.equal(claims.filter(c=>c.method==='write').length,1);
  for(const router of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,router.journalId,ctx)).future??{},{});
@@ -443,13 +443,13 @@ test(`${b}: Parent admission and child budget ${fault} commit or roll back toget
  o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"operations"')&&JSON.stringify(w.content).includes('"admitting"'))&&writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"future"')&&JSON.stringify(w.content).includes('"slots"')));
  await assert.rejects(o.f.write(entry,request));assert.equal(o.home.faults.fired,1);let parent:any,slots=0;
  await o.reopen(async(host:any)=>{parent=(await host.snapshot(FederationOperations,parentJournalKey('federation',8,operationPartition(request.id,8)),ctx))?.operations[request.id];for(const r of o.partitionRouters){const j=await host.snapshot(RouterJournal,r.journalId,ctx);slots+=Object.values(j?.future??{}).reduce((n:number,x:any)=>n+x.slots,0);}});
- assert.equal(!!parent,fault==='loseAnswer');assert.equal(slots,fault==='loseAnswer'?1:0);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
- await o.f.write(entry,request);await o.reopen();await o.f.write(entry,request);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+ assert.equal(!!parent,fault==='loseAnswer');assert.equal(slots,fault==='loseAnswer'?1:0);assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
+ await o.f.write(entry,request);await o.reopen();await o.f.write(entry,request);assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
 },8));
 
 for(const b of BACKENDS)test(`${b}: large Parent stays on bounded separate commits when atomic room is insufficient`,()=>fixture(b,async o=>{
  let paired=0;o.home.faults.arm('failBeforeCommit',(writes:any[])=>{if(writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"operations"')&&/"ready"|"done"/.test(JSON.stringify(w.content)))&&writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"command"')&&JSON.stringify(w.content).includes('"steps"')))paired++;return false;});
- const request={id:'bounded-fallback',principal:o.p},entry={type:'Job',fields:{blob:'x'.repeat(27000)}};const result=await o.f.write(entry,request);assert.equal(paired,0);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await new PiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
+ const request={id:'bounded-fallback',principal:o.p},entry={type:'Job',fields:{blob:'x'.repeat(27000)}};const result=await o.f.write(entry,request);assert.equal(paired,0);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
  for(const r of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,r.journalId,ctx)).future??{},{});
 },8,{maxCommitBytes:60000,maxIndexBytes:1024,defaultResultBytes:64}));
 

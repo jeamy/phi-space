@@ -15,13 +15,13 @@ def main():
     state_path = pathlib.Path(opts.state)
     state = json.loads(state_path.read_text())
     tag, base = state['tag'], state['base']
-    if not tag.startswith('ap2-remaining-') or base != '/home/mux/.local/share/pi-spaces-operations/' + tag:
+    if not tag.startswith('ap2-remaining-') or base != '/home/mux/.local/share/phi-spaces-operations/' + tag:
         raise RuntimeError('not an owned remaining-block fixture')
     request = json.loads(sys.stdin.read(262145))
     members = ['root', *state['members']]
     # The local d Member is explicit; every other runtime is an owned big container.
     local = pathlib.Path(state['localHome']) if state.get('localHome') else None
-    if local and local != pathlib.Path.home() / '.local/share/pi-spaces-ops' / tag / 'd':
+    if local and local != pathlib.Path.home() / '.local/share/phi-spaces-ops' / tag / 'd':
         raise RuntimeError('local home disagrees with owned scope')
 
     def save():
@@ -59,7 +59,7 @@ def main():
                 raise RuntimeError('owned local operator failed: ' + reply.stderr[-1200:])
             return json.loads(reply.stdout)
         tunnel = json.loads(pathlib.Path(state['sharedTunnelState']).read_text())['tunnel']['socketDir']
-        command = ['docker', 'run', '--rm', '--interactive', '--user', '0:0', '--network', 'container:' + state['namespaces'][member], '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,nosuid,nodev,size=64m', '-v', base + '/artifacts/pi-spaces.mjs:/opt/app/pi-spaces.mjs:ro', '-v', base + '/artifacts/tools:/opt/app/tools:ro', '-v', home(member) + ':/data:rw', '-v', tunnel + ':/register-tunnel:ro', 'pi-spaces-test-node:local', 'node', '/opt/app/tools/' + tool, *args]
+        command = ['docker', 'run', '--rm', '--interactive', '--user', '0:0', '--network', 'container:' + state['namespaces'][member], '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,nosuid,nodev,size=64m', '-v', base + '/artifacts/pi-spaces.mjs:/opt/app/pi-spaces.mjs:ro', '-v', base + '/artifacts/tools:/opt/app/tools:ro', '-v', home(member) + ':/data:rw', '-v', tunnel + ':/register-tunnel:ro', 'phi-spaces-test-node:local', 'node', '/opt/app/tools/' + tool, *args]
         return json.loads(ssh(command, data))
 
     def stopped():

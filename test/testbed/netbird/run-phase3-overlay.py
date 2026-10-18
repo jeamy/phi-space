@@ -17,7 +17,7 @@ if O.exists():raise RuntimeError('refuse an existing output directory; use a fre
 if not all((A/s).is_file() for s in ['pi-spaces.mjs','scenarios/phase3-overlay-node.mjs','MANIFEST.json']):raise RuntimeError('compiled artifacts and manifest required')
 O.mkdir(mode=0o700,parents=True)
 signal.signal(signal.SIGTERM,lambda *_:(_ for _ in ()).throw(KeyboardInterrupt()))
-T='ap3-overlay-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d')+'-'+secrets.token_hex(4);B='/home/mux/.local/share/pi-spaces-operations/'+T;token=secrets.token_hex(32)
+T='ap3-overlay-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d')+'-'+secrets.token_hex(4);B='/home/mux/.local/share/phi-spaces-operations/'+T;token=secrets.token_hex(32)
 procs=[];localhome=tempfile.mkdtemp(prefix='pi-overlay-local-');bigip=args.remote_ip;localip=args.local_ip;started=time.monotonic();before=None;owned={}
 
 def ssh(args):
@@ -32,7 +32,7 @@ def rootssh(args):
 
 def api(method,path,data=None):
  code="""import pathlib,json,urllib.request
-p=pathlib.Path('/media/docker/pi-spaces/netbird/secrets.env');e=dict(l.strip().split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#'));token=e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))
+p=pathlib.Path('/media/docker/phi-spaces/netbird/secrets.env');e=dict(l.strip().split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#'));token=e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))
 """+'method='+repr(method)+';path='+repr(path)+';data='+repr(data)+"\nreq=urllib.request.Request('https://spacebird.eibrain.org/api'+path,data=json.dumps(data).encode() if data is not None else None,headers={'Authorization':'Token '+token,'Content-Type':'application/json'},method=method)\nwith urllib.request.urlopen(req,timeout=20) as r:\n raw=r.read().decode();print(raw if raw else '{}')\n"
  result=subprocess.run(['ssh','-oControlMaster=auto','-oControlPath=/tmp/pi-overlay-ssh-%r@%h-%p','-oControlPersist=120','-oBatchMode=yes','big','python3','-'],input=code,text=True,capture_output=True,timeout=40)
  if result.returncode:raise RuntimeError('temporary NetBird fixture API failed: '+result.stderr[-350:])
@@ -76,7 +76,7 @@ try:
  ssh(['test','!','-e',B]);ssh(['mkdir','-m','700',B]);ssh(['mkdir',B+'/artifacts',B+'/store'])
  for source,dest in [('pi-spaces.mjs','pi-spaces.mjs'),('scenarios/phase3-overlay-node.mjs','phase3-overlay-node.mjs')]:subprocess.run(['scp','-oControlMaster=auto','-oControlPath=/tmp/pi-overlay-ssh-%r@%h-%p','-oControlPersist=120','-q',str(A/source),'big:'+B+'/artifacts/'+dest],check=True)
  modulelink=A/'node_modules'
- if not modulelink.exists():modulelink.symlink_to('/media/data/programming/pi-spaces/node_modules',target_is_directory=True)
+ if not modulelink.exists():modulelink.symlink_to('/media/data/programming/phi-spaces/node_modules',target_is_directory=True)
  localerr=open(O/'local.stderr','w');remoteerr=open(O/'remote.stderr','w')
  local=subprocess.Popen(['node',str(A/'scenarios/phase3-overlay-node.mjs'),localhome,'a',localip,bigip,token],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=localerr,text=True,bufsize=1);procs.append(local)
  args=['docker','run','--rm','-i','--name',T,'--label','pi-spaces.owned-phase3='+T,'--network','host','--user','0','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','2','--memory','1g','--pids-limit','128','--tmpfs','/tmp:rw,size=64m','-e','NODE_ENV=production','-v',B+'/artifacts/pi-spaces.mjs:/opt/app/pi-spaces.mjs:ro','-v',B+'/artifacts/phase3-overlay-node.mjs:/opt/app/scenarios/phase3-overlay-node.mjs:ro','-v',B+'/store:/data','sha256:95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413','node','/opt/app/scenarios/phase3-overlay-node.mjs','/data','b',bigip,localip,token]

@@ -1,6 +1,6 @@
 # UI Implementation Plan: Verbindung Spaces -> Dashboard
 
-Plan für die Integration der pi-spaces Daten mit der Live-Dashboard-UI.
+Plan für die Integration der phi-spaces Daten mit der Live-Dashboard-UI.
 
 ## 1. Architektur-Übersicht
 
@@ -29,7 +29,7 @@ Plan für die Integration der pi-spaces Daten mit der Live-Dashboard-UI.
         └───────────────┼──────────────┘
                         │
         ┌───────────────v──────────────┐
-        │   pi-spaces Service Layer    │
+        │   phi-spaces Service Layer    │
         │  ┌───────────────────────┐   │
         │  │ SpaceService          │   │
         │  │ (federation-plan v3)  │   │

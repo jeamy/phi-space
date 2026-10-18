@@ -2,7 +2,7 @@
 standard: help_topic
 id: help.topic.async_interaction
 title: "Async Operations, Waiters and Agent Turns"
-short: "PiSpaces and RemoteSpace return Promises; persistent waiters and notify registrations are also implemented. JavaSpaces is the semantic foundation, not the runtime or transport implementation."
+short: "PhiSpaces and RemoteSpace return Promises; persistent waiters and notify registrations are also implemented. JavaSpaces is the semantic foundation, not the runtime or transport implementation."
 tags: [async, promise, await, wait, notify, event-loop, turn]
 owner: client
 related: [help.topic.overview, help.workflow.overview_v1_to_v6]
@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## What Is Actually Implemented {#overview}
 
-PiSpaces and RemoteSpace return Promises; persistent waiters and notify registrations are also implemented. JavaSpaces is the semantic foundation, not the runtime or transport implementation.
+PhiSpaces and RemoteSpace return Promises; persistent waiters and notify registrations are also implemented. JavaSpaces is the semantic foundation, not the runtime or transport implementation.
 
 ## What Each Call Waits For {#completion}
 
@@ -25,4 +25,4 @@ Use read/take with NO_WAIT for an immediate attempt. Use a bounded timeout for a
 
 ## Identity and Delivery {#delivery}
 
-Locally, target is a conversation ID (string/number), not a Principal object. Consumer-mailbox routing requires PiSpaces options.consumer. Remotely the consumer comes from the authenticated connection: remote.events(options), remote.ack(epoch, sequence). Locally use space.events(principal, options), space.ack(principal, epoch, sequence). startService runs local maintenance/delivery; operations still settle expiry without background maintenance, but conversation delivery is not automatic. [Mailbox contract](help.topic.durable_mailboxes_and_ack#overview).
+Locally, target is a conversation ID (string/number), not a Principal object. Consumer-mailbox routing requires PhiSpaces options.consumer. Remotely the consumer comes from the authenticated connection: remote.events(options), remote.ack(epoch, sequence). Locally use space.events(principal, options), space.ack(principal, epoch, sequence). startService runs local maintenance/delivery; operations still settle expiry without background maintenance, but conversation delivery is not automatic. [Mailbox contract](help.topic.durable_mailboxes_and_ack#overview).

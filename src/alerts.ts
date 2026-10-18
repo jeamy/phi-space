@@ -65,7 +65,7 @@ export function webhookPublisher(url: string, o: { fetch?: typeof fetch; title?:
 	return async (change: { raised: Alert[]; resolved: Alert[] }) => {
 		const lines = [...change.raised.map(a => `${a.severity === "critical" ? "!!" : "!"} ${a.subject}: ${a.message}`), ...change.resolved.map(a => `ok ${a.subject}: ${a.message}`)];
 		const critical = change.raised.some(a => a.severity === "critical");
-		const res = await (o.fetch ?? fetch)(url, { method: "POST", body: lines.join("\n").slice(0, 4000), headers: { "Content-Type": "text/plain; charset=utf-8", Title: o.title ?? "pi-spaces", Priority: critical ? "high" : "default" } });
+		const res = await (o.fetch ?? fetch)(url, { method: "POST", body: lines.join("\n").slice(0, 4000), headers: { "Content-Type": "text/plain; charset=utf-8", Title: o.title ?? "phi-spaces", Priority: critical ? "high" : "default" } });
 		if (!res.ok) throw new Error(`webhook answered ${res.status}`);
 	};
 }

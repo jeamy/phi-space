@@ -4,14 +4,14 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startFederationHost, GrantAuthority, GrantVerifier, GateIdentity, SpaceKeyDirectory, bootstrapEnroll, newEnrollToken, hashToken, generateKey, RemoteSpace, socketTransport, PiSpaces, FOREVER, CONTROL_SPACE, createSpace, rotationBytes, OutcomeUnknown, core, type Signer, type Grant, SqliteRecoveryRegister, listSpaces, spaceDoc } from "../../src/index.ts";
+import { startFederationHost, GrantAuthority, GrantVerifier, GateIdentity, SpaceKeyDirectory, bootstrapEnroll, newEnrollToken, hashToken, generateKey, RemoteSpace, socketTransport, PhiSpaces, FOREVER, CONTROL_SPACE, createSpace, rotationBytes, OutcomeUnknown, core, type Signer, type Grant, SqliteRecoveryRegister, listSpaces, spaceDoc } from "../../src/index.ts";
 import { forEachBackend, PersistentHome, ctx } from "./persistent.ts";
 
 const until = async (f: () => Promise<boolean>) => { const end = Date.now() + 5000; while (!(await f())) { if (Date.now() > end) throw new Error("timed out"); await new Promise(r => setTimeout(r, 10)); } };
 export async function exerciseFederationRuntime() {
 	await forEachBackend(async home => {
 		const other = new PersistentHome(home.backend); let h = await home.open(), data = await other.open();
-		const registerDir = mkdtempSync(join(tmpdir(), "pi-spaces-runtime-register-")), external = new SqliteRecoveryRegister(join(registerDir, "external.sqlite")), installed = new SqliteRecoveryRegister(join(registerDir, "installed.sqlite"));
+		const registerDir = mkdtempSync(join(tmpdir(), "phi-spaces-runtime-register-")), external = new SqliteRecoveryRegister(join(registerDir, "external.sqlite")), installed = new SqliteRecoveryRegister(join(registerDir, "installed.sqlite"));
 		const provisionBoot = async (host: typeof h, hostId: string) => { await host.commit(tx => spaceDoc(tx, undefined, now), ctx); const spaces: Record<string, any> = {}; for (const info of await listSpaces(host, ctx)) { const permit = { state: "active", authorityId: "authority", dataIncarnation: info.incarnation, role: "local", transitionId: "fixture-bootstrap" }; spaces[info.spaceId] = permit; await installed.compareAndSet(`installed:${hostId}:${info.spaceId}`, null, permit); } await external.compareAndSet(`boot:${hostId}`, null, { hostId, state: "active", spaces }); return { external, installed }; };
 		let now = 1_800_000_000_000; const clock = () => now;
 		const peers = new Map([ ["127.0.0.3", { id: "admin", name: "admin", ip: "127.0.0.3", connected: true, groups: ["space-enroll"] }], ["127.0.0.4", { id: "worker", name: "worker", ip: "127.0.0.4", connected: true, groups: ["space-enroll"] }], ["127.0.0.2", { id: "data-host", name: "data-host", ip: "127.0.0.2", connected: true, groups: ["space-enroll"] }] ]);
@@ -65,7 +65,7 @@ export async function exerciseFederationRuntime() {
 			await remote.write({ type: "Job", fields: { n: 1 } }, null, FOREVER); assert.equal((await remote.take({ type: "Job" }, 0))?.fields.n, 1); assert.equal((await remote.info()).primaryEpoch, 1, "initial single epoch agrees with recovery boot defaults");
 			let pending: any; try { await remote.take({ type: "Later" }, FOREVER); } catch (e) { assert.ok(e instanceof OutcomeUnknown); pending = e.request; }
 			assert.ok(pending); now += 61000;
-			const local = new PiSpaces(data, ctx, clock, undefined, undefined, { space: "jobs" }); await local.write({ type: "Later", fields: { safe: true } }, null, FOREVER);
+			const local = new PhiSpaces(data, ctx, clock, undefined, undefined, { space: "jobs" }); await local.write({ type: "Later", fields: { safe: true } }, null, FOREVER);
 			assert.equal(await local.count({ type: "Later" }), 1, "expired grant cannot complete the old remote take");
 			purpose = "resolution"; assert.equal((await remote.pollOperation(pending, 0)).state, "pending"); assert.equal(await local.count({ type: "Later" }), 1);
 			await assert.rejects(remote.write({ type: "Forbidden", fields: {} }), /resolution/);
@@ -73,7 +73,7 @@ export async function exerciseFederationRuntime() {
 			const syncSocket = socketTransport({ host: "127.0.0.1", port: (member.address() as any).port }, { localAddress: "127.0.0.3" }); sockets.push(syncSocket);
 			const syncRemote = new RemoteSpace(syncSocket, { space: "sync-jobs", signer: adminSigner, expectedGateHostId: "data-host", ownPeerId: "admin", now: clock, grantProvider: () => admin.requestGrant("effect"), maxClientWaitMs: 1000, attempts: 2, backoffMs: 1, callTimeoutMs: 3000 });
 			assert.equal((await syncRemote.info()).spaceId, syncInfo.spaceId);await syncRemote.write({ type: "Synced", fields: { n: 1 } }, null, FOREVER);
-			assert.equal(await new PiSpaces(syncHost, ctx, clock, undefined, undefined, { space: "sync-jobs" }).count({ type: "Synced" }), 1, "the call reached the dedicated store");
+			assert.equal(await new PhiSpaces(syncHost, ctx, clock, undefined, undefined, { space: "sync-jobs" }).count({ type: "Synced" }), 1, "the call reached the dedicated store");
 			assert.equal(await local.count({ type: "Synced" }), 0, "and not the host's main store");
 
 			const workerKey = generateKey("ecdsa-p256", "worker"), workerToken = newEnrollToken();
@@ -88,19 +88,19 @@ export async function exerciseFederationRuntime() {
 			await assert.rejects(worker.readAll({ type: "PeerKey" }), /scope/);
 			const workerReplacement = generateKey("ecdsa-p256", "worker-replacement"), workerChallenge = await worker.rotationChallenge(workerReplacement.signer.algorithm, workerReplacement.publicKey);
 			const workerRotation = await worker.rotateKey(workerChallenge, workerReplacement.signer);
-			await until(async () => (await new PiSpaces(h, ctx, clock, undefined, undefined, { space: CONTROL_SPACE }).readAll({ type: "Result", fields: { commandId: workerRotation.commandId } })).length === 1);
+			await until(async () => (await new PhiSpaces(h, ctx, clock, undefined, undefined, { space: CONTROL_SPACE }).readAll({ type: "Result", fields: { commandId: workerRotation.commandId } })).length === 1);
 			assert.equal((await keys.find("worker", workerPaired.keyId))?.state, "revoked"); assert.deepEqual((await keys.find("worker", workerChallenge.newKeyId))?.scope, ["jobs"]);
 
 			offline = true; await assert.rejects(admin.requestGrant(), /management down/); offline = false;
 			const replacement = generateKey("ecdsa-p256", "replacement"), ch = await admin.rotationChallenge(replacement.signer.algorithm, replacement.publicKey);
 			const accepted = await admin.rotateKey(ch, replacement.signer);
-			await until(async () => (await new PiSpaces(h, ctx, clock, undefined, undefined, { space: CONTROL_SPACE }).readAll({ type: "Result", fields: { commandId: accepted.commandId } })).length === 1);
+			await until(async () => (await new PhiSpaces(h, ctx, clock, undefined, undefined, { space: CONTROL_SPACE }).readAll({ type: "Result", fields: { commandId: accepted.commandId } })).length === 1);
 			assert.equal((await keys.find("admin", paired.keyId))?.state, "revoked"); assert.equal((await keys.find("admin", ch.newKeyId))?.state, "active");
 			await root.revalidate(); await member.revalidate();
 			await member.close(); member = undefined; await root.close(); root = undefined;
 			home.crash(h); other.crash(data); h = await home.open(); data = await other.open(); keys = new SpaceKeyDirectory(h, ctx, clock);
 			assert.equal((await keys.find("admin", ch.newKeyId))?.state, "active"); assert.equal((await keys.find("admin", paired.keyId))?.state, "revoked");
-			assert.equal(await new PiSpaces(data, ctx, clock, undefined, undefined, { space: "jobs" }).count({ type: "Later" }), 0);
+			assert.equal(await new PhiSpaces(data, ctx, clock, undefined, undefined, { space: "jobs" }).count({ type: "Later" }), 0);
 		} finally { sockets.forEach(s => s.close()); await member?.close(); await root?.close(); await other.dispose(); for (const sh of syncHomes) await sh.dispose(); external.close(); installed.close(); rmSync(registerDir, { recursive: true, force: true }); }
 	});
 }

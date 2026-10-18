@@ -119,11 +119,11 @@ später explizit gebundenen Snapshot-/Stream-Bootstrap.
 
 **Geprüft** mit `test/test-bootstrap.test.ts`:
 
-- ein pi-spaces-Store mit Spaces, Claims, synthetischen Conversations, Entries und Conversation-Dokument, in
+- ein phi-spaces-Store mit Spaces, Claims, synthetischen Conversations, Entries und Conversation-Dokument, in
   mehreren Stücken;
 - Fortsetzung nach Absturz und Abweisung eines geänderten Stores;
 - Schutzregeln;
-- optional (`PI_SPACES_BOOTSTRAP_COPY`) eine lesend gezogene Kopie des Control-Stores von host-a: alle Spaces
+- optional (`PHI_SPACES_BOOTSTRAP_COPY`) eine lesend gezogene Kopie des Control-Stores von host-a: alle Spaces
   sind auf dem Replikat identisch.
 
 ## Versiegelter, unbestätigter Commit im Dienst (`CommitSealed`)

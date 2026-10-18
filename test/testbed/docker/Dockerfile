@@ -1,4 +1,4 @@
-# Production-like image: Node, the production dependencies from the lock file and the BUILT artifacts of pi-spaces
+# Production-like image: Node, the production dependencies from the lock file and the BUILT artifacts of phi-spaces
 # (the same pi-spaces.mjs bundle the mobile runtime gets, compiled examples and scenarios). No TypeScript source, no
 # tests, no bind-mounted checkout. Built on the server from ./build, which build-artifacts.mjs fills.
 ARG NODE_IMAGE=node:22-bookworm-slim

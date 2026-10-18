@@ -23,7 +23,7 @@ import {
 	localRunMember,
 	Meter,
 	newEnrollToken,
-	PiSpaces,
+	PhiSpaces,
 	RunController,
 	SpaceLifecycle,
 	spaces,
@@ -59,7 +59,7 @@ export async function runStageV6() {
 	};
 
 	try {
-		const controlSpace = new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: controlSpaceId });
+		const controlSpace = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: controlSpaceId });
 
 		// 1. Generate a Mobile Enrollment QR payload (`enrollQr`) for `pi-termux-mobile` (`spaces.html`)
 		const mobileToken = newEnrollToken();
@@ -94,7 +94,7 @@ export async function runStageV6() {
 			alias: "chat-ops-room",
 		});
 
-		const chatSpace = new PiSpaces(harness, ctx, Date.now, meter, undefined, {
+		const chatSpace = new PhiSpaces(harness, ctx, Date.now, meter, undefined, {
 			space: createdChatSpace.spaceId,
 		});
 		const chatEngine = new SpaceChatEngine(chatSpace);
@@ -182,7 +182,7 @@ export async function runStageV6() {
 			host: harness,
 			ctx,
 			member: () => runMember,
-			space: (id: string) => new PiSpaces(harness, ctx, Date.now, meter, undefined, { space: id }),
+			space: (id: string) => new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: id }),
 			exporters: { sieve: SIEVE_EXPORTER },
 		});
 

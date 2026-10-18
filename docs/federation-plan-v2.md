@@ -57,9 +57,9 @@ Der Entwurf (vier Schichten, Modus pro Typ, Primär/Replikat, Verzeichnis, Stern
 |---|---|
 | "Identität kommt von der Verbindung (host:handy)" | Über `ssh -L` sieht pi-serverd nur einen lokalen Unix-Socket desselben Users; pi-server authentifiziert Peers nicht. → **NetBird-Peer-Identität plus signierte Challenge in der App ([4.3](#43-identität-delegation-und-widerruf) + [14.2](#142-sicheres-pairing))**. |
 | "requestId wie der Claim pro Tool-Aufruf" | Der Claim ist ein Task-Dokument und existiert nur innerhalb eines Tool-Tasks. → eigener Session-Speicher `(peer, requestId) → Ergebnis` mit Ablauf ([6.2](#62-dienst-space-in-pi-serverd) + [14.4](#144-router-journal)). |
-| "Blockierender Take legt Waiter auf allen Mitgliedern an" | Richtig, aber Waiter liefern heute nur an lokale Conversations; String-Ziele werden verworfen (L1). → Peer-Postfach (Mailbox) mit Long-Poll und Quittung ([6.1](#61-core-erweiterungen-pi-spaces-doc-version-5)). |
-| "Replikate bekommen einen nummerierten Änderungsstrom" | Es gibt keine Revision und keinen Strom (L2). → `rev` + Delta-Ring im Core ([6.1](#61-core-erweiterungen-pi-spaces-doc-version-5)). |
-| "Last-Writer-Wins für Location/Weather" | Tuple Spaces haben keine Schlüssel. → deklarierte Schlüsselfelder pro gespiegeltem Typ ([6.1](#61-core-erweiterungen-pi-spaces-doc-version-5) + [14.3](#143-lwwset-konsistenz)). |
+| "Blockierender Take legt Waiter auf allen Mitgliedern an" | Richtig, aber Waiter liefern heute nur an lokale Conversations; String-Ziele werden verworfen (L1). → Peer-Postfach (Mailbox) mit Long-Poll und Quittung ([6.1](#61-core-erweiterungen-phi-spaces-doc-version-5)). |
+| "Replikate bekommen einen nummerierten Änderungsstrom" | Es gibt keine Revision und keinen Strom (L2). → `rev` + Delta-Ring im Core ([6.1](#61-core-erweiterungen-phi-spaces-doc-version-5)). |
+| "Last-Writer-Wins für Location/Weather" | Tuple Spaces haben keine Schlüssel. → deklarierte Schlüsselfelder pro gespiegeltem Typ ([6.1](#61-core-erweiterungen-phi-spaces-doc-version-5) + [14.3](#143-lwwset-konsistenz)). |
 | "Es gewinnt der neuere asOf" | Uhren verschiedener Hosts driften. → Leases mit begrenzter Zeitunsicherheit; HLC ordnet Versionen, garantiert keine fachlich neueste Messung ([7.2](#72-sync-spiegeln) + [14.3](#143-lwwset-konsistenz)). |
 | "Transaktionen auf ein Mitglied beschränken" | Richtig; IDs müssen das Mitglied tragen (L3). → globale IDs `spaceId/localId`; Host-, Space- und Replikatidentität getrennt ([2](#2-begriffe)). |
 | "Verzeichnis mit Capability-Entries" | Richtig (Jini Lookup Service); braucht schreibgeschützte Typen. |
@@ -151,7 +151,7 @@ Netzfehler können ein unbekanntes Ergebnis hinterlassen. Ein Client fragt mit d
 | Beitritt Server/Hosts | Setup-Key |
 | Beitritt Clients | NetBird Login |
 | Netz-ACLs | NetBird-Policies |
-| **Rechte im Space** | **pi-spaces**, nicht NetBird |
+| **Rechte im Space** | **phi-spaces**, nicht NetBird |
 | **Zusätzliche Auth** | **mTLS + Challenge in space-gate ([14.7](#147-mtls-challenge))** |
 
 ---
@@ -326,7 +326,7 @@ Schicht B ist für Control Space, Admin, Router, Gateway, Replikation und delegi
 ## 10. Clients
 
 - **Handy**: `remoteState` → Verbindungsliste; Spaces-Seite mit Status/Policy/Pairing
-- **Desktop/CLI**: `pi-spaces-client` Paket
+- **Desktop/CLI**: `phi-spaces-client` Paket
 - **Browser**: Gateway mit WebSocket/TLS, **mTLS + Challenge ([14.7](#147-mtls-challenge))**
 
 ---
@@ -418,7 +418,7 @@ type FenceProof = {
 - **IPMI**: `ipmitool -H <BMC-IP> power status`
 - **AWS**: `ec2.describeInstances().State.Name === "stopped"`
 - **Docker**: `docker inspect <container>.State.Running === false`
-- **File**: Marker-Datei `/var/lib/pi-spaces/fencing/<hostId>.fenced`
+- **File**: Marker-Datei `/var/lib/phi-spaces/fencing/<hostId>.fenced`
 
 **Integration in Supervisor:**
 ```typescript

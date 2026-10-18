@@ -1,11 +1,11 @@
 ---
 standard: help_api
-id: help.api.pispaces_take
+id: help.api.phispaces_take
 title: "take & takeIfExists – Entry exklusiv entnehmen oder reservieren"
 short: "Entfernt einen passenden Entry sofort destruktiv oder reserviert ihn exklusiv unter einer Transaktion (Rückkehr bei Abort/Lease-Ablauf)."
 tags: [take, takeifexists, exclusive, reservation, txn]
 owner: client
-related: [help.topic.leases_and_transactions, help.api.pispaces_txn]
+related: [help.topic.leases_and_transactions, help.api.phispaces_txn]
 since: 0.0.1
 ---
 

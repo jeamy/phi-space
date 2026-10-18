@@ -1,6 +1,6 @@
 ---
 standard: help_api
-id: help.api.pispaces_claims
+id: help.api.phispaces_claims
 title: "Request Claims & Generations – Restart-Safe Idempotency"
 short: "Binds mutations and blocking operations atomically to {principal, generation, requestId} and a canonical RFC-8785 argument hash."
 tags: [issuegeneration, polloperation, resolveoperation, canceloperation, requestref]

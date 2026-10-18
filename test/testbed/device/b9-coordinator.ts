@@ -22,7 +22,7 @@ if (!dir || !LAN || !PHONE) throw new Error("usage: b9-coordinator.ts <dir> <bin
 const NETBIRD = mode === "--netbird";
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: string[] };
 const API = `import pathlib,json,urllib.request
-e=dict(l.strip().split('=',1) for l in pathlib.Path('/media/docker/pi-spaces/netbird/secrets.env').read_text().splitlines() if '=' in l and not l.startswith('#'))
+e=dict(l.strip().split('=',1) for l in pathlib.Path('/media/docker/phi-spaces/netbird/secrets.env').read_text().splitlines() if '=' in l and not l.startswith('#'))
 req=urllib.request.Request('https://spacebird.eibrain.org/api/peers',headers={'Authorization':'Token '+e['NB_PAT'].strip().strip(chr(34)).strip(chr(39))})
 print(json.dumps([{'id':p['id'],'name':p['name'],'ip':p['ip'],'connected':p['connected'],'groups':[g['name'] for g in p.get('groups',[])]} for p in json.loads(urllib.request.urlopen(req,timeout=20).read())]))`;
 let peers: { at: number; list: Peer[] } = { at: 0, list: [] };

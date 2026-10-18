@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
 import * as claims from "../src/claims.ts";
 import { generateKey } from "../src/auth.ts";
-import { PiSpaces } from "../src/client.ts";
+import { PhiSpaces } from "../src/client.ts";
 import { GrantVerifier } from "../src/grants.ts";
 import { principalId } from "../src/mailbox.ts";
 import { RemoteSpace } from "../src/remote.ts";
@@ -36,7 +36,7 @@ for (const backend of BACKENDS) test(`${backend}: create reuses an alias unchang
 		const s0 = (await snapshotSpace(h, made.spaceId, ctx))!;
 		assert.equal(c.limitsOf(s0).maxEntries, 50); assert.deepEqual(s0.completionProfiles, [PROFILE]);
 
-		const space = new PiSpaces(h, ctx, Date.now, undefined, undefined, { space: made.spaceId });
+		const space = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: made.spaceId });
 		await space.write({ type: "Note", fields: { n: 1 } }, null, c.FOREVER);
 		await assert.rejects(life().apply({ commandId: "d0", action: "delete", spaceId: made.spaceId }), /archive the Space first/);
 		assert.equal((await life().apply({ commandId: "a1", action: "archive", spaceId: made.spaceId })).state, "archived");

@@ -12,8 +12,8 @@ umgesetzt führt.
 | Komponente | Aktueller Stand |
 |---|---|
 | pi-durable Harness | führt Conversations/Tasks aus und speichert Dokumente über atomare Commits |
-| pi-spaces | Erweiterung mit Agenten-Tools; Default-Space Version 5; benannte Spaces über Registry und Dokumentfamilie |
-| Clients | `PiSpaces` lokal, `RemoteSpace` über Unix-Socket/TCP/pi-server, `FederatedSpace` über den Router |
+| phi-spaces | Erweiterung mit Agenten-Tools; Default-Space Version 5; benannte Spaces über Registry und Dokumentfamilie |
+| Clients | `PhiSpaces` lokal, `RemoteSpace` über Unix-Socket/TCP/pi-server, `FederatedSpace` über den Router |
 | Reaper und Delivery | `startService` verarbeitet Ablauf, Folgeaufträge und Events |
 | Stufe 1 (AP 1.1–1.9) | signierte Generationen, Claims, Snapshot-/Byte-Seiten, Mailboxes, Budgets, CompletionProfile |
 | Stufe 1b | Gate (Schicht A NetBird, Schicht B Schlüsselbeweis), Enrollment, Grants, Rotation, Supervisor (`createEnroll`, `revokePeer`, `rotateKey`), Recovery-Register, Control-/Data-Restore, Boot-Berechtigung je Space; live auf big/vpsc und mit dem Handy abgenommen |
@@ -41,10 +41,10 @@ Geprüfte mobile Quellen liegen im Nachbarprojekt: `runtime/server.mjs`, `runtim
 `runtime/public/spaces.html` und `runtime/public/constants.js`.
 `npm run bundle` baut die Bibliothek und aktualisiert automatisch `runtime/pi-spaces.mjs` im vorhandenen
 Nachbarprojekt. Beispiele werden als ausführbare JS-Module nach `runtime/space-examples/` gebündelt.
-Der Android-Build ruft vor dem Verpacken `scripts/prepare-runtime.py` auf: Er baut pi-spaces aus diesem
+Der Android-Build ruft vor dem Verpacken `scripts/prepare-runtime.py` auf: Er baut phi-spaces aus diesem
 Checkout erneut, erzeugt `runtime.bin` und eine Prüfsumme beider App-Payloads. Änderungen werden bei der
 App-Installation über diese Prüfsumme erkannt, ohne manuellen Runtime-Versionsbump.
-Andere Pfade lassen sich über `PI_SPACES_SOURCE` (mobiler Build) und `PI_SPACES_MOBILE_ROOT` (Bundle) wählen.
+Andere Pfade lassen sich über `PHI_SPACES_SOURCE` (mobiler Build) und `PHI_SPACES_MOBILE_ROOT` (Bundle) wählen.
 Fehlt beim Android-Build ein kompatibler Source-Checkout, erscheint eine Warnung; der Build verwendet
 die vorhandenen mobilen Bundles. Nur fehlende notwendige Bundle-Dateien oder Fehler beim Bauen eines
 vorhandenen Checkouts führen zum Abbruch. Ohne Source wird keine Aktualität gegenüber dem Checkout behauptet.
@@ -81,7 +81,7 @@ flowchart TB
   end
 ```
 
-**Verknüpfung:** pi-durable ist die Laufzeit und Persistenz. pi-spaces ergänzt ein Dokument und Tools
+**Verknüpfung:** pi-durable ist die Laufzeit und Persistenz. phi-spaces ergänzt ein Dokument und Tools
 innerhalb dieser Laufzeit. pi-serverd macht Conversations per Protokoll erreichbar. Ein Remote-Host ist
 kein zentraler pi-durable-Cloud-Dienst: Jeder Host besitzt seinen eigenen Harness und Storage.
 
@@ -580,7 +580,7 @@ getrennte Workerprozesse oder Hosts erforderlich.
 Das lesende Live-Dashboard (`npm run dashboard`) und die TUI zeigen Spaces, Objekte und Stats eines Stores;
 Läufe, Worker und Vorgänge kennen sie noch nicht.
 Eine langsam aktualisierte MemberStatus-Lease ist kein autoritativer Task-Abschlussbeleg.
-Bootstrap-Writes des Siebs verwenden direkte Core-Commits und werden nicht automatisch als Writes des pi-spaces-Clients
+Bootstrap-Writes des Siebs verwenden direkte Core-Commits und werden nicht automatisch als Writes des phi-spaces-Clients
 gezählt; der Fortschritt wird deshalb aus den tatsächlichen Laufdaten abgeleitet.
 
 ### 7.2 Konkrete Bedienelemente auf dem mobilen Gerät
@@ -717,7 +717,7 @@ Sicherheit und Diagnose und bauen auf vorhandenen Bausteinen auf.
 | Läufe | **Ergebnisexport mit Manifest-Hash und Prüfsumme** | trennt nachweisbar Voll- und Teilresultat |
 | Läufe | **Prioritäten und Quoten je Lauf** | mehrere Läufe in einem Space hungern sich nicht aus |
 | Läufe | **Zeitgesteuerte Pause** (Wartungsfenster) | normales journalisiertes `pauseRun` mit Startzeit; keine eigene Semantik |
-| Betrieb | **Admin-CLI** (`pi-spaces admin run start …`) mit denselben Commands wie das Handy | Bootstrap/Tests ohne Handy; keine Shell-Befehle auf Hosts |
+| Betrieb | **Admin-CLI** (`phi-spaces admin run start …`) mit denselben Commands wie das Handy | Bootstrap/Tests ohne Handy; keine Shell-Befehle auf Hosts |
 | Betrieb | **Config-Export und Diff** des angewendeten Zustands | Grundlage für Abschnitt 4 „Differenzen zeigen, nicht überschreiben“ |
 | Test | **Simulator-Szenarien für 7.4** im `federation-simulator` | deterministische Vorprüfung vor dem Testbed auf big |
 
@@ -728,7 +728,7 @@ Sicherheit und Diagnose und bauen auf vorhandenen Bausteinen auf.
 | B1 | Dokument an Ist-Stand angleichen | erledigt (2026-10-15) |
 | B2 | RunGate im Core (`core.applyRunGate`, `core.runGateView`): Take-Sperre auch für Waiter und Host-Code, Txn-Bindung, Fence gegen neue Bindung und Lease-Verlängerung, Revisionshistorie, `RunGateConflict`; gesperrte Tasks nur in `preparing` schreibbar, Ergebnisse nur unter gebundener Txn; Sieb-Profil prüft zusätzlich `rangeStart`/`rangeEnd` | umgesetzt; Fälle 2, 8, 10 als Zustandstests, endliche Lease (`maxLeaseMs` Pflicht für gesperrte Profile), Gate nur mit gesperrtem Profil, Profilwechsel bei aktivem Lauf abgewiesen; `test/test-run-gate.test.ts` |
 | B3 | `RunController` (`src/run-controller.ts`): start/pause/resume/stop, Journal `pi-spaces.run-controller`, gehashte Command-IDs, Serialisierung je Lauf (`RunBusy`), ACK-Prüfung inklusive Inkarnation/Autorität, `advance` nach Neustart; `localRunMember`; `configureGatedSieveSpace` und `prepareSieveRun({gate})` | umgesetzt; Fälle 2 und 4 mit Commit-Fehler und Neustart auf JSONL und SQLite; `stop` ersetzt eine hängende Vorbereitung |
-| B4 | Remote-Members (`src/run-member.ts`): der Controller signiert jede Gate-Anweisung (`pi-spaces/run-gate-instruction/v1`), der Member-Host prüft sie gegen den gepinnten Controller-Schlüssel, Autorität und lokalen Space, führt nur **registrierte** Vorbereiter je Laufart aus und signiert sein ACK; Methode `runGateInstruction` im Gate nur für bewiesene Service-Peers (`RemoteSpace.requestRunGate`). Admin-Commands `startRun`/`pauseRun`/`resumeRun`/`stopRun` über den Supervisor (`runCommands`, Ablehnung als `failed`-Result); serverseitige Fortsetzung offener Übergänge in `startFederationHost` (`control.runs`). Federation-Profile tragen `gateField`; `MemberLifecycle` entfernt es nicht unter einem aktiven Lauf | umgesetzt; Fall 3 mit zwei entfernten Members, verlorenem ACK und Controller-Neustart auf JSONL/SQLite, TCP über das zusammengesetzte Gate; `test/test-run-member.test.ts`. Fall 3 zusätzlich über das echte NetBird-Overlay bestanden (Controller und lokaler Member am Operator-Host, Member-Container auf big per `docker kill` offline und auf demselben Store neu gestartet; Schicht A als Fixture-Pin), [Nachweis](../test/evidence/run-gate-overlay-2026-10-15/README.md). Offen: automatischer Test der serverseitigen Fortsetzungsschleife |
+| B4 | Remote-Members (`src/run-member.ts`): der Controller signiert jede Gate-Anweisung (`phi-spaces/run-gate-instruction/v1`), der Member-Host prüft sie gegen den gepinnten Controller-Schlüssel, Autorität und lokalen Space, führt nur **registrierte** Vorbereiter je Laufart aus und signiert sein ACK; Methode `runGateInstruction` im Gate nur für bewiesene Service-Peers (`RemoteSpace.requestRunGate`). Admin-Commands `startRun`/`pauseRun`/`resumeRun`/`stopRun` über den Supervisor (`runCommands`, Ablehnung als `failed`-Result); serverseitige Fortsetzung offener Übergänge in `startFederationHost` (`control.runs`). Federation-Profile tragen `gateField`; `MemberLifecycle` entfernt es nicht unter einem aktiven Lauf | umgesetzt; Fall 3 mit zwei entfernten Members, verlorenem ACK und Controller-Neustart auf JSONL/SQLite, TCP über das zusammengesetzte Gate; `test/test-run-member.test.ts`. Fall 3 zusätzlich über das echte NetBird-Overlay bestanden (Controller und lokaler Member am Operator-Host, Member-Container auf big per `docker kill` offline und auf demselben Store neu gestartet; Schicht A als Fixture-Pin), [Nachweis](../test/evidence/run-gate-overlay-2026-10-15/README.md). Offen: automatischer Test der serverseitigen Fortsetzungsschleife |
 | B5 | Recovery-Eintrittssperre je Gate (`core.recoverRunGate`, gebunden an eine `recoveryId`: keine neue Bindung, keine Task-Writes, keine Lease-Verlängerung) und `RunRecoveryView`; Data-Restore macht lokale Gates zu historischen Nachweisen und importiert die Gates des Snapshots als kompakte Evidenz (Restore-Stufe `gates`). Unter Recovery gilt nur die Entscheidung dieser Recovery, mit Compare-and-Set auf den geprüften Gate-Stand; alte Kommandos schließen keine restaurierte Barriere ab. Controller: offene Übergänge tragen Control-Autorität/-Inkarnation und werden nach Wechsel nie erneut gesendet; `reconcile` parkt sie als Nachweis, sammelt alle Views, bestätigt nur identische stabile paused/stopped-Views bekannter Herkunft automatisch, sonst `needsReview` mit View-Hash; `resolve` (`resolveRunRecovery`) mit Pause-Barriere vor Resume, nie Resume bei stopped-Evidenz; Abweichungen führen zu neuer Prüfung mit sichtbaren Teilwirkungen. Admin-Commands `reconcileRun`/`resolveRunRecovery` | umgesetzt; Fälle 9, 11, 12, 13 und der Identitätswechsel auf JSONL/SQLite, `restoredUnverified` bleibt nach Resume gesperrt; `test/test-run-recovery.test.ts`. Ein Control-Restore (neue Control-Inkarnation) und ein Member unter Restore-Sperre starten `reconcile` beim nächsten `advance` bzw. Befehl selbst; Restore-IDs werden dafür in gültige Gate-IDs abgeleitet (`runRecoveryIdOf`). Offen: aktiver Hinweis eines Data-Restores an den Controller ohne folgenden Befehl |
 | B6 | `src/workers.ts`: `WorkerAssignments` (Journal, idempotentes `setWorkers` mit gehashter Command-ID, Generation je Änderung, signierte Liste je Host), Gate-Methode `workerAssignments` nur für bewiesene aktive Host-Schlüssel mit Host aus der Verbindung, `WorkerSupervisor` (Abgleich registrierter Workerarten, Stopp nach dem laufenden Task, Neustart bei neuem Ziel, Ablehnung unbekannter Arten und fremder Spaces, exponentieller Backoff ohne Spinnen bei gesperrtem Lauf oder Fehlern, Persistenz der angenommenen Liste, Sperre bei geänderter Control-Identität bis `acceptControlIdentity`), Rückmeldung als `metrics.workers` des Capability-Heartbeats (`appliedWorkers`), Sieb-Workerart `SIEVE_WORKER_KIND` | umgesetzt; `test/test-workers.test.ts` auf JSONL/SQLite inklusive Sieblauf mit Pause/Resume über Worker und Gate-RPC über TCP. Grenzen: Worker sind Schleifen im Daemon-Prozess (Koordination, keine CPU-Parallelität; `worker_threads`/Prozesse offen); die Member-Seite sendet den Heartbeat noch nicht aus `startFederationHost` heraus, der Aufrufer übergibt `publish` |
 | B7 | `src/space-lifecycle.ts`: `SpaceLifecycle` je Host, idempotent je Command-ID: `create` legt an oder verwendet einen vorhandenen Alias unverändert wieder (andere Limits/Profile: Konflikt), `archive` hält Daten lesbar und sperrt Writes, Takes, Txns, wartende Takes und Registrierungen (nicht für Federation-Members, offene Txns oder ungestoppte Läufe), `reactivate`, `delete` nur archiviert, leer, ohne Mitgliedschaft, offene Arbeit, aufbewahrte Claims, Mailbox-Ergebnisse oder ungestoppte Läufe; die spaceId bleibt als Grabstein reserviert, der Alias wird frei. Default- und Control-Space haben keinen Lebenszyklus. Signierte Anweisungen (`spaceLifecycleInstruction`, `SpaceLifecycleService`) und Admin-Commands `createSpace`/`archiveSpace`/`reactivateSpace`/`deleteSpace` (`spaceCommands`; Ablehnung als `failed`, unerreichbarer Host wird wiederholt) | umgesetzt; `test/test-space-lifecycle.test.ts` auf JSONL/SQLite inklusive TCP über das Gate. Grenzen: die Zuordnung Ablehnung/Transportfehler erkennt der Control-Host an der Fehlermeldung; Archivexport der Daten und automatische Aufnahme in die Federation (`addMember`) sind getrennte Schritte |

@@ -1,6 +1,6 @@
 // Persistent chat queues and immutable stage reports share the same snapshot interface.
 import type { Context } from "@earendil-works/chord";
-import { core, createSpace, FOREVER, listSpaces, Meter, PiSpaces, spaceDoc, type SpaceHost } from "../../../src/index.ts";
+import { core, createSpace, FOREVER, listSpaces, Meter, PhiSpaces, spaceDoc, type SpaceHost } from "../../../src/index.ts";
 import { SpaceChatEngine, type ReplyGenerator, type SpaceChatSnapshot } from "../../examples/shared/chat-core.ts";
 import { runStageV1 } from "../../examples/v1-local-memory/run.ts";
 import { runStageV2 } from "../../examples/v2-local-durable/run.ts";
@@ -90,7 +90,7 @@ export class SpaceChatHub {
    core.setLimits(s, { maxEntries: 2_000, maxSpaceBytes: 2_097_152, maxClaimBytes: 262_144, maxLogBytes: 65_536, maxDocBytes: 8_388_608, maxSnapshotBytes: 4_194_304, maxSnapshots: 2 });
    return info;
   }, this.ctx);
-  const space = new PiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, { space: info.spaceId });
+  const space = new PhiSpaces(this.host, this.ctx, Date.now, this.meter, undefined, { space: info.spaceId });
   const engine = new SpaceChatEngine(space);
   engine.setReplyGenerator(this.replyGenerator);
   const report = await space.read({ type: "ChatReport" }, 0);
