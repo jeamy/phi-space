@@ -204,8 +204,13 @@ Schritten; jeder Schritt hat eigene Tests auf beiden Backends.
   - `read`, `readAll` und `count` nutzen die konvergierende Sicht (gewinnende `lww`-Version, nicht entfernte
     `set`-Tags, abgelaufene Versionen unsichtbar). Antworten tragen `replicated: true`, denn sie können veraltet
     sein.
-  - Löschen: bei `lww` ein Tombstone mit eigener HLC-Version, bei `set` ein Remove der beobachteten Tags.
-  - `take`, Txns, `wait` und Lease-Eingriffe auf Merge-Typen werden mit `MergeTypeNotExclusive` abgewiesen
+  - Die Lease eines Merge-Eintrags ist seine sichtbare Version (ID aus `write`/`read`); nur ihr Owner ändert sie
+    (Entscheidung 2026-10-18):
+    - `lease cancel` löscht: bei `lww` ein Tombstone mit eigener HLC-Version, bei `set` ein Remove dieses Tags.
+    - `lease renew` schreibt eine neue Version mit der neuen Frist: bei `lww` ein Put derselben Felder, bei `set` ein
+      `renew`. Die Antwort nennt die neue ID.
+    - Ein Retry derselben Request-ID liefert das gespeicherte Ergebnis, auch wenn der Eintrag nicht mehr sichtbar ist.
+  - `take`, Txns und `wait` auf Merge-Typen werden mit `MergeTypeNotExclusive` abgewiesen
     (v3 7.2: keine exklusive Vergabe).
 - **Root:** Für eine Merge-Regel wählt der Root den Ziel-Member deterministisch per HRW.
   - Schreiben: bei `lww` über den kanonischen Schlüssel (fehlende Schlüsselfelder sind ein Fehler), bei `set` über

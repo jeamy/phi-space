@@ -286,6 +286,10 @@ export class EntryReplicationController {
   const state=base?await this.materialize(base,key=>this.o.host.snapshot(EntrySnapshotChunks,key,this.o.ctx)):undefined;
   await this.check(action);return state;
  }
+ /** This replica's own change for a local request ID (kept for retries, at least requestRetentionMs), or null. */
+ async changeForRequest(requestId: string): Promise<ReplicatedEntryChange | null> {
+  const s=await this.state('read');const e=s?.events.find(e=>e.originReplicaId===this.config.replicaId&&e.incarnation===this.config.incarnation&&e.requestId===requestId);return e?copy(e):null;
+ }
  async read(): Promise<ReplicatedEntryView[]> {
   const s=await this.state('read'),now=this.now();this.clockSafe(s??{lastWallTime:0},now);if(!s)return [];
   // lww: winners per key hash, so a redacted change (key hash only) keeps competing and hides the key when it wins.

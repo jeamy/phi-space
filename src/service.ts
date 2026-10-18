@@ -425,7 +425,33 @@ export class SpaceService {
 			if (method === "count") return { value: found.length, rev: 0, streamId: "merge:" + merge.controller.documentKey, replicated: true };
 			return { items: found.slice(0, 100).map(view), next: null, rev: 0, streamId: "merge:" + merge.controller.documentKey, replicated: true };
 		}
-		if (method === "lease" && typeof a.id === "string" && a.id.startsWith("[")) refuse("a lease change");
+		if (method === "lease" && typeof a.id === "string" && a.id.startsWith("[")) {
+			// The lease of a merge entry is its visible version: cancel deletes it (lww: tombstone, set: remove of the
+			// tag), renew writes a new version with the new deadline (lww: put, set: renew); only its owner may do either.
+			const action = str(a.action, "action"), id = a.id;
+			if (action !== "renew" && action !== "cancel") throw new Bad("action must be renew or cancel");
+			if (!c.request) throw new Bad("a merge lease change needs a request ID");
+			const changeRequest = createHash("sha256").update(canonicalJson([c.id.principal, c.request.generation, c.request.requestId] as unknown as Json)).digest("hex"), owner = { ...c.id.principal };
+			// A retried request answers from its stored change (the entry it changed may no longer be visible).
+			const prior = await merge.controller.changeForRequest(changeRequest);
+			if (prior) {
+				const m = prior.mutation, target = m.kind === "remove" ? m.tags[0] : m.kind === "renew" ? m.tag : undefined;
+				if (action === "cancel" && (m.kind === "delete" || m.kind === "remove" && target === id)) return { state: "cancelled", replicated: true };
+				if (action === "renew" && (m.kind === "put" || m.kind === "renew" && target === id)) return { expires: (m as { expiresAt: number | null }).expiresAt ?? core.FOREVER, id: entryChangeId(prior), replicated: true };
+				throw new claims.RequestConflict("the request ID was used for another merge change");
+			}
+			const v = (await merge.controller.read()).find(x => x.id === id), r = v && rule(v.type);
+			if (!v || !r) throw new core.UnknownLeaseError(`no visible merge entry ${id}`);
+			this.checkTypes(c.grant, [v.type], `type ${v.type}`);
+			if (canonicalJson(v.owner as unknown as Json) !== canonicalJson(c.id.principal as unknown as Json)) throw new core.PermissionError("only the owner may change the lease of a merge entry");
+			if (action === "cancel") {
+				await merge.controller.mutate(changeRequest, (r.variant === "lww" ? { kind: "delete", type: v.type, fields: v.fields, owner } : { kind: "remove", type: v.type, tags: [id], owner }) as never);
+				return { state: "cancelled", replicated: true };
+			}
+			const ms = duration(a.ms, "ms", core.ANY), expiresAt = ms === core.ANY || ms >= core.FOREVER ? null : this.now() + ms;
+			const change = await merge.controller.mutate(changeRequest, (r.variant === "lww" ? { kind: "put", type: v.type, fields: v.fields, owner, expiresAt } : { kind: "renew", type: v.type, tag: id, fields: v.fields, owner, expiresAt }) as never);
+			return { expires: expiresAt ?? core.FOREVER, id: entryChangeId(change), replicated: true };
+		}
 		return undefined;
 	}
 

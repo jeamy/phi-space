@@ -498,8 +498,10 @@ Vertrauensgrenze und Betriebsbeschränkungen stehen in
 `advanceHybridClock`, `compareHybridClock` und `validateHybridClock`. Die Uhr
 muss atomar mit der Änderung gespeichert werden; der Controller übernimmt dies.
 `EntryReplicas` ist eine interne administrative Dokumentfamilie und kein
-unautorisierter RPC-Importpfad. Der öffentliche Dienst bietet dafür noch keine
-Methoden an. Primary/Standby und Promotion werden dadurch nicht bereitgestellt.
+unautorisierter RPC-Importpfad. Über den `space`-Dienst gehen Merge-Typen (`SpaceServiceOptions.merge`) mit
+`write`, `read`, `readAll` und `count`; `lease cancel` löscht und `lease renew` erneuert die sichtbare Version
+(nur ihr Owner; die Antwort von `renew` nennt die neue ID). `changeForRequest(requestId)` liefert die eigene
+Änderung zu einer lokalen Request-ID für Retries. Primary/Standby und Promotion werden dadurch nicht bereitgestellt.
 
 
 ### Gepagter Snapshot-Import

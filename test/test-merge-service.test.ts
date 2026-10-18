@@ -10,7 +10,7 @@ const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agen
 const ok = (r: Reply): any => { assert.ok(r.ok, JSON.stringify(r)); return (r as { ok: true; result: unknown }).result; };
 const err = (r: Reply, code: string) => assert.ok(!r.ok && r.error.code === code, JSON.stringify(r));
 
-test("merge types write, read and count through the entry replication controller; exclusive operations are refused", async () => {
+test("merge types write, read, count, renew and delete through the entry replication controller; exclusive operations are refused", async () => {
 	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
 	const s0 = new SpaceService({ host: h, ctx, identity: ids, policy: DEFAULT_POLICY });
 	const g0 = ok(await s0.handle({ method: "generation" }, { peerId: "peer-a" }));void g0;
@@ -38,7 +38,25 @@ test("merge types write, read and count through the entry replication controller
 	err(await call("take", { template: { type: "Fact" } }), "MergeTypeNotExclusive");
 	err(await call("wait", { template: { type: "Sensor" }, timeoutMs: 1000 }), "MergeTypeNotExclusive");
 	err(await call("write", { entry: { type: "Fact", fields: {} }, txn: "t1" }), "MergeTypeNotExclusive");
-	err(await call("lease", { id: w1.id, leaseMs: 1000 }), "MergeTypeNotExclusive");
+	// The lease of a merge entry is its visible version: renew writes a new version, cancel deletes it; owner only.
+	err(await call("lease", { action: "cancel", id: w1.id }), "TransactionError");// superseded by v: 2
+	const s1 = ok(await call("read", { template: { type: "Sensor", fields: { sensorId: "s1" } } })).entry;
+	const renewed = ok(await call("lease", { action: "renew", id: s1.id, ms: 60_000 }));
+	assert.ok(renewed.expires > Date.now() && renewed.id !== s1.id, "a new version with the new deadline");
+	const s1b = ok(await call("read", { template: { type: "Sensor", fields: { sensorId: "s1" } } })).entry;
+	assert.deepEqual([s1b.id, s1b.fields.v, s1b.expires], [renewed.id, 2, renewed.expires]);
+	err(await s.handle({ method: "lease", request: { generation: ok(await s.handle({ method: "generation" }, { peerId: "peer-b" })).generation, requestId: "steal" }, args: { action: "cancel", id: s1b.id } } as Call, { peerId: "peer-b" }), "PermissionDenied");
+	assert.deepEqual(ok(await call("lease", { action: "cancel", id: s1b.id }, "del-1")), { state: "cancelled", replicated: true });
+	assert.deepEqual(ok(await call("lease", { action: "cancel", id: s1b.id }, "del-1")), { state: "cancelled", replicated: true }, "a retried delete");
+	assert.equal(ok(await call("read", { template: { type: "Sensor", fields: { sensorId: "s1" } } })).entry, null, "the key is deleted (tombstone)");
+	ok(await call("write", { entry: { type: "Sensor", fields: { sensorId: "s1", v: 3 } } }));
+	assert.equal(ok(await call("read", { template: { type: "Sensor", fields: { sensorId: "s1" } } })).entry.fields.v, 3, "a later put wins over the tombstone");
+	// set: cancel removes exactly that tag, renew replaces it by a new one.
+	const [f1, f2] = ok(await call("readAll", { template: { type: "Fact" } })).items;
+	ok(await call("lease", { action: "cancel", id: f1.id }));
+	const f2b = ok(await call("lease", { action: "renew", id: f2.id, ms: 60_000 }));
+	assert.deepEqual(ok(await call("readAll", { template: { type: "Fact" } })).items.map((i: any) => i.id), [f2b.id]);
+	err(await call("lease", { action: "extend", id: f2b.id }), "BadRequest");
 	// The same request ID from another principal (and another generation) is another request, not a conflict.
 	const gb = ok(await s.handle({ method: "generation" }, { peerId: "peer-b" }));
 	const wb = ok(await s.handle({ method: "write", request: { generation: gb.generation, requestId: "put-1" }, args: { entry: { type: "Sensor", fields: { sensorId: "s9", v: 9 } } } } as Call, { peerId: "peer-b" }));
