@@ -1,96 +1,116 @@
-# pi-spaces Help & Multiplayer-Chat Webserver (`help-site`)
+# pi-spaces Help & Multiplayer Chat (`help-site`)
 
-Dieses Verzeichnis enthält das lauffähige Node.js/React-Hilfesystem (`PI-SPACES / HELP`) inklusive zweier interaktiver Live-Demos: der 6-stufigen **Multiplayer Space-Chat**-Workbench und dem selbstlaufenden **Social Swarm** (ein Agenten-Sozialnetzwerk auf `pi-spaces`-Entries).
+[English](README.md) · [Deutsch](README_DE.md)
 
-## Ziel-Domain & Betrieb
+This directory contains the runnable Node.js/React help system, **PI-SPACES / HELP**: bilingual documentation,
+the six-stage Multiplayer Space-Chat workbench, the Social Swarm feed, and authenticated Web Admin.
 
-- **Öffentliche Web- & Hilfe-Domain**: `https://spaces.eibrain.org` (HTTPS für das `PI-SPACES / HELP`-Portal und `wss://spaces.eibrain.org/ws/chat/:sessionId` für das Multiplayer-Space-Chat-Gateway).
-- **Lokal**: `http://localhost:3500` (Docker, `PORT` aus `.env`; `HOST_BIND` leer = IPv4 + IPv6/Alle Interfaces, `127.0.0.1` = nur IPv4-Loopback).
-- **Geschützter Web-Admin-Bereich (`AdminSpaces` unter `/?view=admin`)**: Vollwertige Steuerung und Überwachung aller Spaces, Läufe (`RunGate`), Worker, Deployments, Alarme und Schlüssel direkt über die Webseite nach Login – funktionsgleich zur mobilen App (`spaces.html` + `steuerung.html`).
-- **Mobile Steuerung & Überwachung**: Vollständige Integration mit `pi-termux-mobile` (`runtime/spaces-mobile.mjs`, `spaces.html`, `steuerung.html`) über Android-Keystore, QR-/Token-Enrollment und NetBird-Overlay-Gate (`space-gate`).
+Checked against the checkout on 2026-10-18. A working demo is not a multi-host or production acceptance result.
+See [implementation status](../docs/implementierungsstand.md), the
+[Phase-3 acceptance matrix](../docs/ap3-abnahme.md), and the
+[demo analysis and completed fixes](../docs/analyse-hilfesystem-demo-apps-2026-10-18.md).
 
-## Live-Demos
+## What the demos demonstrate
 
-### Social Swarm (`/?view=feed`)
+The root README explains [tuple spaces, JavaSpaces and pi-spaces](../README.md#tuple-spaces-coordination-through-data).
+Here the model is executable: producers publish `SwarmTask`/`ChatTask` Entries rather than calling a particular
+worker; workers claim matching tasks and publish results transactionally. A later consumer requires the task's
+lease and storage to outlive the delay. A task is data, not a direct reference to its producer.
 
-Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige Feed-UI, die das pi-spaces-Prinzip sichtbar macht:
+What **pi-spaces actually implements**:
 
-- **1.000–50.000 autonome Agenten** (im Frontend steuerbar: Slider, Presets 1k/5k/10k/50k) in 10 Topic-Channels.
-- **Echte Space-Pipeline**: Agenten schreiben `SwarmTask`-Intents; ein Dispatcher reserviert bis zu vier Tasks gemeinsam und veröffentlicht `Post`/`Like`, History, Zähler und Folgeaufträge in einem zweiten Durable-Commit – serverseitig erzwungen via `CompletionProfile`.
-- **Threads & Replies**: Agenten antworten aufeinander; Klick auf einen Post öffnet den Thread inkl. kompletter Vorgängerkette (ancestors), Subthreads sind weiter klickbar.
-- **Echte User-Interaktion**: Posten als `@handle` in `#channel`, Antworten in Threads, Likes – alles über dieselbe `SwarmTask`-Pipeline.
-- **Presence**: `AgentPulse`-Entries mit 45-s-Lease + Reaper; die scrollbare **Online-Liste zeigt alle** Agenten mit gültiger Lease.
-- **Agent-Detail-Ansicht**: Klick auf einen Agenten (Online-Liste oder Top-Agenten) fragt **durable** alle seine Posts aus dem Space ab (`readAll({type:"Post", fields:{handle}})`).
-- **🤖 AI-Posts-Filter**: Button „AI-Posts anzeigen" listet alle LLM-generierten Posts aus dem Space (`fields:{viaLlm:true}`).
-- **Bilder in ~5% der Posts**: deterministisch generierte SVG-Karten direkt im Entry (`imageSeed`/`imageAlt`) – kein externer Dienst, offline- und docker-fähig.
-- **Live Space Internals**: Entries byType, rev, pending `SwarmTask`s, posts/min, Worker, LLM-Calls/-Tokens; Browser folgt `changes(rev)` via `/ws/feed`.
-- **Hilfe-Panel** erklärt `SwarmTask`, `Post`/`Like`, `AgentPulse`, Leases, Reaper und die Entkopplung Producer ↔ Worker.
+- `write`, `read` and `take` return Promises. A completed write confirms its storage mutation, not consumer completion.
+- A pending `await read/take` suspends its caller, not the entire JavaScript event loop.
+  `NO_WAIT` skips waiting for a future match, but does not eliminate operation/commit latency.
+- `wait` persists a one-shot registration; `notify` persists a leased subscription. They return registration
+  information, with events delivered later. `space_wait` lets an agent finish its turn after registration.
+  `startService` runs local maintenance and delivery.
+- The Swarm uses one bounded polling dispatcher, not a permanent blocking take per agent.
+  Agent counts represent simulated identities, not thousands of processes or simultaneous model calls.
+- Storage serialization and CPU work can still occupy the event loop. Async APIs do not remove quotas,
+  network failures or the cost of a large Space document.
 
-### Multiplayer Space-Chat (`/?view=space-chat&session=lobby`)
+## Endpoints and operating scope
 
-- 6 wählbare Stufen `v1`–`v6` (In-Memory → SQLite → Socket → Gate → Federation → Mobile/Admin), benannte Sessions mit eigenem Space.
-- Threads, Forks, Presence/Heartbeat, geplante Alarme (`ScheduledJob`+`TimerLock`), `SearchTask`-Subagent – alles als inspizierbare Entries.
+- **Target public domain:** `https://spaces.eibrain.org`; Chat WebSocket `/ws/chat/:sessionId`,
+  feed WebSocket `/ws/feed`. The domain is a deployment target, not evidence that this checkout is published.
+- **Local default:** port `3500`, overridden by `PORT` or `HELP_PORT`. Direct startup uses `HELP_BIND`;
+  production Docker uses host networking and `HOST_BIND`. Explicitly use `127.0.0.1` for local-only access.
+- **Web Admin:** `/?view=admin` controls the configured instance's Spaces, runs, workers, deployment plans,
+  alerts and keys after login. It does not automatically authorize control of unrelated hosts.
+- **Mobile:** shares operational building blocks with `pi-termux-mobile` (`spaces.html`, `steuerung.html`,
+  `runtime/spaces-mobile.mjs`). Android Keystore, enrollment and NetBird operation require separate
+  device/host configuration; starting the web demo does not provision them.
 
-### Live-LLM-Integration (beide Demos, optional)
+## Live demos
 
-- **Modell-Picker im Frontend** (🤖): erlaubte Codestral-/Haiku-Modelle via `pi-ai` (`GET /api/llm/models`); Änderungen über `POST /api/llm/model` benötigen Admin-Session und CSRF-Token. Auswahl gilt für beide Demos.
-- **🤖 ON/OFF-Toggle**: `POST /api/llm/model {on:false}` schaltet Live-Generierung zur Laufzeit ab – sofortiger Fallback auf deterministische Templates.
-- **Space-Chat**: LLM-Antworten mit Thread-History, `llmModel`/`llmTokens` in der UI.
-- **Gemeinsames Modellbudget**: höchstens sechs Aufrufe pro Minute, zwei gleichzeitig, maximal 400 Ausgabetokens pro Aufruf und 20 Sekunden Laufzeit. Bei ausgeschöpftem Budget verwendet die Demo deterministische Antworten.
-- **Credentials**: `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` oder pi-CLI `auth.json` (`PI_AUTH_DIR`, im Container read-only gemountet). Live-Aufrufe sind zusätzlich ausdrücklich mit `PI_SPACES_LLM=1` einzuschalten. Vorhandene Credentials allein aktivieren sie nicht. `PI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell vor.
+### Social Swarm: `/?view=feed`
 
-## Schnellstart (Docker Production & Lokales Dev/Test-Docker sowie Direktstart)
+- **100–50,000 simulated agent identities**, default 100 (`SWARM_AGENTS`), with slider and 1k/5k/10k/50k presets;
+  eleven built-in topic channels. `SWARM_RATE` defaults to 5, range 1–40: a generated-task setting, not a throughput guarantee.
+- **Real Space pipeline:** one dispatcher reserves up to four tasks together and publishes Posts/Likes,
+  history, counters and follow-up tasks in a second Durable commit, with a server-side `CompletionProfile`.
+- **Interaction:** operator posts, replies, likes, thread ancestors and nested replies use the same task pipeline.
+- **Presence:** `AgentPulse` Entries have 45-second leases; the online list follows valid leases.
+- **Durable history:** `feed.more`, `agent.posts` (handle filter) and `ai.posts` (`viaLlm:true`) page across configured
+  shards with continuation cursors. A scan fallback is used while the history index migrates.
+- **Images:** approximately 5% of generated posts use deterministic SVG cards from `imageSeed`/`imageAlt`, without
+  an external image service. User uploads are stored outside the Space document; Posts contain their URLs.
+- **Inspector:** Entry counts, revision, pending tasks, posts/minute, dispatcher and LLM metrics; feed deltas use `changes(rev)`.
 
-### 1. Docker-Umgebung (Production & Lokaler Dev-Test)
+An optional headless second shard runs in `server/nano-host.ts`, selected through `SWARM_REMOTE`.
+It has its own worker and store. This demo wiring is not a general replicated/failover cluster.
 
-Die Docker-Konfiguration liegt in `help-site/docker/Dockerfile` und `help-site/docker/docker-compose.yml` und besitzt drei Services:
+### Multiplayer Space-Chat: `/?view=space-chat&session=lobby`
 
-- **`spaces-help-prod`** – gehärteter Produktiv-Container (`NODE_ENV=production`, unprivilegierter User, `cap_drop`, SQLite-Volume `/data/spaces-eibrain.sqlite`, Healthcheck).
-- **`spaces-help-dev`** – Next.js Dev-Mode mit Live-Reload.
-- **`spaces-help-test`** – baut Corpus + Next.js und führt die komplette Testsuite isoliert aus.
+Six selectable stages `v1`–`v6`: memory, durable storage, sockets, authentication, federation, and operations/mobile
+building blocks. Named sessions contain threads, forks, Presence/heartbeats, `ScheduledJob`/`TimerLock` alarms and
+`SearchTask` subagents as inspectable Entries.
+
+The CLI stages are **local demonstrations**: v3 uses real sockets; v5 uses multiple in-memory Members in one process;
+v6 exercises local operational components and example enrollment data. They do not install a multi-host cluster or
+pair a real phone automatically. Web stage runs create immutable report mirrors, not executable deployments.
+
+### Optional live models
+
+Both demos work without a model. Credentials alone do not enable live calls: explicitly set `PI_SPACES_LLM=1`.
+Credentials may come from provider environment variables or pi CLI `auth.json` (`PI_AUTH_DIR` for the Docker mount).
+`PI_SPACES_LLM_MODEL`/`PI_MODEL` select the initial model.
+
+The shared picker lists allowed Codestral/Haiku models through `GET /api/llm/models`.
+Changes through `POST /api/llm/model`, including `{on:false}`, require an admin session and CSRF token.
+Budget: at most six provider calls/minute, two concurrent calls, 400 output tokens/call and 20 seconds/call.
+Budget exhaustion or provider failure uses deterministic fallback text. These are process-local limits, not a
+global billing quota. Space-Chat exposes model/token metadata in the UI.
+
+## Quick start
+
+Run commands below from the repository root, with dependencies already available. No installation is performed by
+the test commands. Review `help-site/.env.example` and create a private `help-site/.env` if needed; do not overwrite
+an existing configuration. The supplied template has `HELP_BIND=0.0.0.0`, so override it for local-only use.
+
+### Direct startup
 
 ```bash
-# A) Lokale Tests isoliert in der Dev-Docker-Umgebung bauen & ausführen:
-npm --prefix help-site run docker:test
-
-# B) Gehärteten Production-Container für https://spaces.eibrain.org im Hintergrund starten:
-npm --prefix help-site run docker:prod:up
-
-# Production-Logs verfolgen / Container stoppen:
-npm --prefix help-site run docker:prod:logs
-npm --prefix help-site run docker:prod:down
-
-# C) Lokalen Dev-Docker-Server (Next.js Dev-Mode auf http://localhost:3500 laut .env) starten / Logs / stoppen:
-npm --prefix help-site run docker:dev:up
-npm --prefix help-site run docker:dev:logs
-npm --prefix help-site run docker:dev:down
-```
-
-**Konfiguration via `.env`** (Vorlage: `.env.example`):
-
-- `PORT=3500` – Host- und Container-Port.
-- `HOST_BIND=` – leer = alle Interfaces (IPv4 + IPv6, `localhost` funktioniert dann immer; auch extern erreichbar für den Reverse-Proxy), `127.0.0.1` = nur lokaler Zugriff.
-- `HELP_BIND=0.0.0.0` – interner Bind im Container (für Docker nötig).
-- `PI_SPACES_ADMIN_PASSWORD` – Passwort für den AdminSpaces-Login.
-- `PI_AUTH_DIR` – Host-Verzeichnis der pi-CLI-Credentials (`~/.pi/agent`), wird read-only in den Container gemountet; Live-Aufrufe benötigen zusätzlich die ausdrückliche Aktivierung.
-- `PI_SPACES_LLM` – Standard `0`; `1` erlaubt Live-LLM mit vorhandenen Credentials. `PI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell.
-- `HELP_SQLITE` – Pfad der persistenten SQLite-Datenbank im Container (Posts/Spaces überleben Restarts im Volume).
-
-**Hinweis**: Der Prod-Container nutzt den precompilierten `.next`-Build und startet in Sekunden; der Dev-Container compiliert beim Start mit Turbopack und braucht auf langsamen Hosts deutlich länger – für den normalen Gebrauch `docker:prod:up` empfohlen.
-
-### 2. Direkter Start ohne Docker (Next.js 16.4 + React 19.3)
-
-```bash
-# 1. Zweisprachigen Help-Corpus (DE/EN) + Next.js 16 Production Build (Turbopack) erzeugen:
+# Build the bilingual corpus, standalone assets and Next.js production output:
 npm --prefix help-site run build
 
-# 2. Next.js 16 + WebSocket + AdminSpaces Produktivserver starten (Standard aus .env: http://localhost:3500):
-npm --prefix help-site start
+# Local-only production server; uses SQLite by default:
+HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm --prefix help-site start
 
-# Optional: Entwicklungsmodus (Next.js Dev-Server + Live-WebSocket):
-npm --prefix help-site run dev
+# Alternatively, Next.js development mode:
+HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm --prefix help-site run dev
 
-# 3. Alle 6 Ausbaustufen (v1 bis v6) einzeln im Terminal ausführen:
+# Root shortcut for development (same bind/environment considerations):
+HELP_BIND=127.0.0.1 PI_SPACES_LLM=0 npm run help
+```
+
+Admin login is disabled unless `PI_SPACES_ADMIN_PASSWORD` is configured. There is no default password.
+Peer enrollment tokens are for peer pairing, not web login. Set a private password before using Web Admin.
+
+### CLI stages and local checks
+
+```bash
 node --experimental-strip-types help-site/examples/v1-local-memory/run.ts
 node --experimental-strip-types help-site/examples/v2-local-durable/run.ts
 node --experimental-strip-types help-site/examples/v3-remote-socket/run.ts
@@ -98,110 +118,160 @@ node --experimental-strip-types help-site/examples/v4-gated-auth/run.ts
 node --experimental-strip-types help-site/examples/v5-federated-cluster/run.ts
 node --experimental-strip-types help-site/examples/v6-mobile-control/run.ts
 
-# 4. Automatisierte Testsuite für Corpus, Stufen v1–v6, Chat-Gateway und AdminSpaces ausführen:
-npm --prefix help-site test
+# All help, regression and worker-batch tests; no model calls:
+PI_SPACES_LLM=0 npm --prefix help-site test
 
-# Frischen Next-Produktionsbuild und dessen SSR-Auslieferung prüfen:
+# Fresh production build and separate Next.js SSR check:
 PI_SPACES_LLM=0 npm --prefix help-site run test:production
 ```
 
-- **AdminSpaces Login (`/?view=admin`)**: eigenes Passwort über `PI_SPACES_ADMIN_PASSWORD` setzen. Ohne Passwortkonfiguration ist die Web-Anmeldung deaktiviert; es gibt kein Standardpasswort. Peer-Enrollment-Tokens gelten ausschließlich für Peer-Kopplung und ermöglichen keine Web-Anmeldung. Die Docker-Konfiguration verlangt ein gesetztes Passwort.
+### Docker
 
-### Demo-Vertrag und Wiederanlauf
+Configuration: `help-site/docker/Dockerfile` and `help-site/docker/docker-compose.yml`, with four services:
 
-HTTP und WebSocket verwenden denselben validierten Chat-Dispatcher. Sequenzen werden über einen transaktional reservierten `ThreadSequence`-Entry vergeben; Nachricht und Zähler werden gemeinsam committed. Nach einem Neustart lädt der Hub vorhandene Sessions und arbeitet ihre dauerhaften Warteschlangen weiter ab. Ein fehlgeschlagenes Reply-Commit gibt den Task zurück; der nächste Scheduler-Durchlauf wiederholt ihn. Langsame Modellantworten enden begrenzt mit einer deterministischen Antwort.
+| Service | Purpose |
+|---|---|
+| `spaces-help-prod` | Production Next.js server, unprivileged user, dropped capabilities, SQLite volume and healthcheck; host networking. |
+| `spaces-help-dev` | Next.js development mode; published port and separate SQLite volume. |
+| `spaces-help-test` | Fresh corpus/Next.js build and tests, profile `test`. The current Compose command selects **only** `tests/help-site.test.ts`, with SSR enabled. |
+| `swarm-nano` | Optional headless worker shard, profile `nano`, separate SQLite volume and socket port 3600. |
 
-Stage-Spiegelungen sind **unveränderliche Berichtskopien** mit vollständig gespeichertem Snapshot (`ChatReport`, Schema 1). Pending Tasks, Suche und Timer bleiben im Bericht sichtbar, werden aber nicht nochmals ausgeführt. Für interaktive Änderungen eine Live-Session verwenden. Ein erneuter Stage-Lauf ersetzt den Bericht in einem Storage-Commit.
+Compose requires a private `PI_SPACES_ADMIN_PASSWORD` during configuration, including test-profile selection.
+Production uses a prebuilt `.next` output; development compiles with Turbopack.
+Startup time depends on the store and machine; no fixed latency is guaranteed.
 
-Öffentliche Chat-Sessions gelten eine Stunde, sind auf 64 pro Hub und auf 2 MiB Entry-Nutzlast je Space begrenzt; pro Session sind 16 WebSocket-Clients möglich. Abgelaufene Sessions werden nicht weiter ausgeführt und lehnen Änderungen ab. Ihre Daten bleiben für Inspektion erhalten und zählen weiter gegen das Kontingent. Alte Demo-Spaces gezielt administrativ entfernen und den Hub neu öffnen, um Plätze freizugeben; es gibt keine automatische Löschung von Chatverläufen. Öffentliche HTTP-Schreibzugriffe sind auf 60 pro Minute und Verbindungsadresse begrenzt; WebSocket-Verbindungen auf 256 insgesamt und 120 Nachrichten pro Minute je Verbindung.
+```bash
+# Current Compose-selected integration/SSR tests:
+npm --prefix help-site run docker:test
 
-Uploads sind auf 2 MiB je Datei, 256 Dateien und 64 MiB insgesamt begrenzt. Generierte Uploads verfallen nach 24 Stunden; beim nächsten Upload werden abgelaufene generierte Dateien entfernt. Andere Dateien werden nicht gelöscht. Quotenprüfungen sind serialisiert. Stage-Läufe sind global auf einen gleichzeitigen Lauf beschränkt. Überlast wird als HTTP 429 gemeldet, abgelaufene Sessions als 410.
+# Override that narrow selection to run all help regression/batch tests as well:
+npm --prefix help-site run docker:test -- npm --prefix help-site test
 
-Admin-Befehle besitzen ein dauerhaftes Journal mit Argument-/Principal-Bindung und wiederherstellbarem Ergebnis. Enrollment und Schlüsselrotation speichern Wirkung und Ergebnis atomar. Bei einem unterbrochenen anderen Befehl zeigt der Neustart `needsReview`: zuerst Wirkung anhand des Spaces bzw. des darunterliegenden Controllers prüfen, dann gegebenenfalls mit einer neuen ID fortfahren. Ein fehlgeschlagener Befehl wird unter derselben ID nicht nochmals ausgeführt. Private Signierschlüssel liegen im ausschließlich hostinternen Journal; Ergebnisse werden mit AES-GCM verschlüsselt gespeichert. Der Schlüssel liegt im selben Store: dies ist kein Ersatz für Zugriffsschutz, Datenträgerverschlüsselung oder Backups. Vorhandene alte Result-Einträge ohne Nutzlast werden nicht als erfolgreiche Replay-Ergebnisse ausgegeben.
+# Production start, logs, stop:
+npm --prefix help-site run docker:prod:up
+npm --prefix help-site run docker:prod:logs
+npm --prefix help-site run docker:prod:down
 
-Swarm-Historien verwenden einen mit jedem Post atomar geschriebenen verketteten Index. Eine Seite untersucht höchstens 512 Knoten pro Shard und liefert höchstens 200 Posts. Cursor setzen exakt bei unberücksichtigten Treffern fort; fehlende Shards liefern einen wiederholbaren Fehler ohne Cursorfortschritt. Filter können leere Zwischenseiten mit Fortsetzung erzeugen. Alte Stores erhalten eine wiederaufnehmbare Indexmigration in begrenzten Commits im Hintergrund; bis dahin verwendet das Paging einen Scan-Fallback. Diese einmalige Migration sortiert die vorhandenen Posts im Speicher. Die zugrunde liegende Space-Implementierung sucht Entry-IDs weiterhin linear; der Index garantiert begrenzte Seiten-/Transfergrößen, keinen konstanten Storagezugriff. Ganze Threads werden beim ausdrücklichen Öffnen weiterhin aus dem jeweiligen Shard gelesen.
+# Development start, logs, stop:
+npm --prefix help-site run docker:dev:up
+npm --prefix help-site run docker:dev:logs
+npm --prefix help-site run docker:dev:down
+```
 
-Der lokale Swarm-Worker verwendet echte Durable-Batches: ein Commit reserviert bis zu vier Tasks unter einer 45-s-Transaktion; danach werden Antworten außerhalb des Commit-Callbacks vorbereitet (höchstens ein Modellaufruf, höchstens 20 s Wartezeit). Ein zweiter Commit schreibt alle Ergebnisse, History-Knoten, einen History-Head, je einen Zähler pro betroffenem Kanal und die Antwort-/KI-Folgeaufträge und schließt die Transaktion ab. Erst danach werden Feed-Caches aktualisiert und Antwortbeobachter gestartet. Es entstehen keine neuen `PostEffect`-Einträge; alte Outbox-Einträge werden weiterhin verarbeitet. Doppelte Likes innerhalb eines Batches werden als Dedup-Marker behandelt.
+These commands change local runtime state. Deployment on shared hosts requires separate approval.
+Do not expose raw shard TCP sockets publicly without protection: use a trusted network or SSH tunnel.
 
-Bei fachlichem Fehler wird die Reservierung abgebrochen; bei `ResourceExhausted` halbiert der Worker die Batchgröße bis auf einen Task. Ein auch einzeln nicht verarbeitbarer Task wird nicht bestätigt, sondern mit Warnung erneut versucht. Nach einem Storage-Fehler bleibt die Durable-Session gesperrt und muss wiederhergestellt/geöffnet werden; es gibt keinen Async-Fallback. Leere Queue-Abfragen erzeugen keine normalen Storage-Commits; zwischen erfolgreichen Batches wird 25 ms, bei leerer Queue 500 ms gewartet. Zwei Worker-Commits für vier Posts sind lokal nachgewiesen, keine pauschale Laufzeitbeschleunigung: Dokumentserialisierung, Core-Scans, Producer-/Remote-RPCs, Seeds und der alte Outbox-Pfad bleiben gesonderte Kosten. Ein Custom-Provider ohne kooperativen Abbruch kann nach dem Wartezeitlimit im Hintergrund weiterlaufen; sein verspätetes Ergebnis wird nicht als Post veröffentlicht.
+### Configuration
 
-`npm test` prüft den Standalone-Pfad und die Regressionen ohne einen vorhandenen Next-Build zu benötigen. `test:production` baut die kanonische Next-Auslieferung frisch und prüft SSR separat. Der Docker-Testpfad verwendet den zuvor frisch erstellten Build und aktiviert auch den SSR-Test. Keine dieser Prüfungen ist eine Freigabe externer Hosts oder eines veröffentlichten Dienstes.
+| Variable | Current behavior |
+|---|---|
+| `PORT` / `HELP_PORT` | Direct-server port, default 3500; Compose uses `PORT`. |
+| `HELP_BIND` | Direct-server bind; use `127.0.0.1` locally. Dev Docker binds internally to `0.0.0.0`. |
+| `HOST_BIND` | Production Docker host-network bind; empty defaults to `0.0.0.0`. For dev, controls the published host address. |
+| `PI_SPACES_ADMIN_PASSWORD` | Private web-login password; mandatory for Compose, otherwise login is disabled when absent. |
+| `PI_SPACES_LLM` | Default 0; explicit 1 allows configured live providers and token costs. |
+| `PI_SPACES_LLM_MODEL` / `PI_MODEL` | Initial model selection. |
+| `PI_AUTH_DIR` | Host credential directory mounted read-only by Docker; inspect the Compose mount before deployment. |
+| `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
+| `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
+| `SWARM_REMOTE` | Optional hub-side shard endpoint, e.g. `tcp:127.0.0.1:3600` through an SSH tunnel. |
+| `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | Headless-shard listener, store, ID prefix and optional local intent generation; see `.env.example`. |
 
-## Dokumente in diesem Verzeichnis
+<a id="demo-vertrag-und-wiederanlauf"></a>
 
-- [`VERGLEICH-EARENDIL-VS-PI-SPACES.md`](VERGLEICH-EARENDIL-VS-PI-SPACES.md) – **Architektur- und Konzeptvergleich (Deutsch)**: Earendil Multiplayer Chat (`Pi Durable on Cloudflare`) vs. `pi-spaces` (`v1` In-Memory bis `v5`/`v6` Federated Space) mit detaillierter Vor-/Nachteilsanalyse aller Stufen.
-- [`COMPARISON-EARENDIL-VS-PI-SPACES-EN.md`](COMPARISON-EARENDIL-VS-PI-SPACES-EN.md) – **Architectural & Concept Comparison (English)**: Full English edition of the comparison from In-Memory (`v1`) to Federated Space (`v5`/`v6`).
-- [`PLAN.md`](PLAN.md) – Vollständiger Plan für:
-  1. **Analyse & Aufbereitung der `pi-spaces`-Dokumentation** (Was ist `pi-spaces`, Schichtenarchitektur, Garantien & Grenzen, vollständige API-Referenz).
-  2. **UI/UX-Architektur für `PI-SPACES / HELP` (`https://spaces.eibrain.org`)** (9 kanonische Systembereiche, 14 Farbpaletten, Dark/Light-Mode, DE/EN-Bilingualität, Token-/Alias-Suche, interaktiver API- & Tool-Finder, `Help ≠ Live State`).
-  3. **Detaillierte Schritt-für-Schritt-Anleitung (Vom Einfachen zum Komplexesten: Stufen `v1` bis `v6`)**:
-     - Jede Ausbaustufe besitzt eine eigene, direkt ausführbare Implementierung UND ein eigenes Schritt-für-Schritt-Kapitel im Hilfesystem:
-       - **`v1-local-memory` (Sofortstart / Zero-Setup Demo)**: Lokaler In-Memory-Space (`MemoryStorage` + `PiSpaces`), Multi-Threads, `Presence`-Leases, Transaktionen und `CompletionProfile` ohne jedes Setup.
-       - **`v2-local-durable` (Lokale Persistenz, Crash-Recovery, Alarme & Subagent)**: Persistenter SQLite-/JSONL-Store, `RequestRef`-Claims für Reconnect-Idempotenz, `readPage` + `changes(afterRev)`, geplante Alarme (`ScheduledJob` + `TimerLock`-Lease) und der `search_history`-Subagent (`SearchTask`/`SubagentStep`/`SearchResult`).
-       - **`v3-remote-socket` (`SpaceService` & `RemoteSpace` über Unix-Socket / TCP)**: Trennung von Chat-Server, Chat-Worker und Subagent in eigene Prozesse/Clients über `serveSpace`, `RemoteSpace`, Consumer-Mailboxes (`events`/`ack`) und `OutcomeUnknown`-Handling.
-       - **`v4-gated-auth` (Overlay-Gate, Schicht-A/B-Auth, Enrollment & 60s-Grants)**: Kryptografischer Verbindungsbeweis (Ed25519/P-256), Token-Enrollment im `CONTROL_SPACE`, 60-Sekunden-Grants (`GrantAuthority`/`GrantVerifier`), Schlüsselrotation und `HostBootState`-Schutz.
-       - **`v5-federated-cluster` (Föderierte Spaces mit Router, HRW-Sharding & `RunGate`)**: Mehrere Member-Spaces hinter `createFederationController` (`FederatedSpace`, `RouterLease`, Original-Principal-Delegation, HRW-Routing nach `threadId`, journalisierter Waiter-Wettlauf `takeWaiting`, `MembershipController`).
-       - **`v6-mobile-control` (Steuerung & Überwachung über Web-Admin-Login & Mobile App `pi-termux-mobile`)**: Login-geschützter **AdminSpaces-Bereich** auf `https://spaces.eibrain.org` sowie Anbindung der Android-App (`spaces.html` & `steuerung.html` / `MobileSpaces`): Pairing per QR-Code (`enrollQr` / `createEnroll`), Live-Überwachung von Spaces/Objekten/Alerts (`objects`, `listAlerts`, `auditLog`), Skalieren der Chat-, Subagent- und Sieb-Worker (`setWorkers`), Pausieren/Fortsetzen über `RunGate` (`pauseRun`/`resumeRun`/`scheduleRun`), Lebenszyklus-Steuerung (`createSpace`/`archiveSpace`/`reactivateSpace`/`deleteSpace`) und Deployment-Planung (`planDeployment`/`exportDeployment`).
-  4. **Konzeption, Umsetzung und Dokumentation des Beispiels „Multiplayer Space-Chat“** in Anlehnung an [Pi Durable on Cloudflare](https://earendil.com/posts/pi-durable-on-cloudflare/), aber **vollständig umgesetzt mit nativen `pi-spaces`-Mitteln** über alle 6 Stufen (`v1`–`v6`).
-  5. **Geschütztes Web-Admin-Portal (`/admin`) & Deployment-Architektur für `https://spaces.eibrain.org`**, Verzeichnisstruktur, Umsetzungsphasen und Verifikationsplan.
+## Runtime contract and restart
 
-## Verzeichnisstruktur
+The legacy German anchor above is retained for existing documentation links.
+
+HTTP and WebSocket share the validated Chat command dispatcher. A transactional `ThreadSequence` Entry allocates
+sequence numbers; the message and counter commit together. On restart, the hub reloads existing sessions and drains
+their durable queues. A failed reply commit releases its task for retry. Slow model replies have bounded fallback.
+
+Stage mirrors are **immutable reports**, including the full `ChatReport` snapshot (schema 1). Pending jobs, searches
+and timers remain inspectable but are not executed again. Use a live session for interaction. Re-running a stage
+replaces its report in one storage commit.
+
+Public sessions expire after one hour, with at most 64 sessions/hub, 2 MiB of Entry fields/session Space and
+16 WebSocket clients/session. Expired sessions stop executing and reject mutations; their history remains for
+inspection and counts against quotas. Remove old demo Spaces explicitly through administration and reopen the hub
+to free session slots; chat history is not automatically deleted.
+
+Public HTTP mutations allow 60 requests/minute/address. WebSockets are bounded to 256 connections overall and
+120 messages/minute/connection. Uploads are limited to 2 MiB/file, 256 files and 64 MiB total. Generated upload files
+expire after 24 hours and are cleaned up on the next upload; unrelated files are untouched. Upload quota checks are
+serialized. At most one stage run executes globally; overload returns 429, expired sessions return 410.
+
+Admin commands have a durable journal bound to arguments and principal. Enrollment/key rotation commit effect and
+result atomically. An interrupted other command can reopen as `needsReview`: inspect its actual effect before using
+a new command ID. Failed commands do not execute again under the same ID. Private signing keys are in a host-only
+document; journal results use AES-GCM with a key in the same store. This is not disk encryption or a substitute for
+access control/backups. Old result records without payload are not reported as successful replay.
+
+Swarm history uses a durable linked index committed with each Post. A page examines at most 512 nodes/shard and
+returns at most 200 Posts. Cursors preserve unconsumed candidates; missing shards return a retryable incomplete
+result without cursor advance. Filters may produce empty intermediate pages with continuation.
+Migration runs in bounded commits in the background, with scan-based paging until ready; its one-time sort uses
+memory proportional to old Posts. This is bounded indexed paging, not constant-time access to the underlying
+document. Opening a whole thread still reads that thread from its shard.
+
+### Actual Durable worker batches
+
+One storage commit reserves up to four tasks in a 45-second Space transaction. Preparation happens outside the
+Durable callback, with at most one model call and at most 20 seconds of waiting. A second commit writes all results,
+history nodes, one history head, one counter per affected channel and follow-up answer/AI tasks, then commits the
+Space transaction. Feed caches and answer observers change only after success. New batches do not write
+`PostEffect` Entries; legacy outbox Entries are still drained. Same-batch duplicate likes use dedup markers.
+
+A semantic failure rolls back the whole completion and explicitly aborts reservations. `ResourceExhausted` halves
+the batch size down to one task. A task that still cannot complete is not acknowledged and is retried with warnings.
+A storage failure poisons the Durable session; the worker stops when cleanup fails and recovery/reopening is required,
+without an async fallback. Normal empty-queue checks do not commit. The dispatcher yields 25 ms between successful
+batches and sleeps 500 ms when idle. A custom provider ignoring cancellation may continue after the wait deadline;
+its late result is not published as a Post.
+
+Two worker storage commits for four Posts are locally tested, not a claimed overall speedup. Document serialization,
+Core scans, producer/remote RPCs, seeds and the legacy outbox remain separate costs. Large-store CPU, event-loop and
+HTTP latency need deployment-specific measurements. Local suites are not browser E2E, power-loss or multi-host acceptance.
+
+### Local verification note, 2026-10-18
+
+The README example, both TypeScript checks and the root suite passed (740 passed, one optional test skipped).
+The 21 help regressions and eight worker-batch tests also passed separately. The full help test command currently
+has a shutdown limitation in this checkout: the integration file reports four passes and one skipped SSR case,
+but its process stays alive; a 60-second bounded run ended with timeout. This is not a clean full-suite result.
+No runtime code was changed to mask it, and no fresh production build, deployment or phone run was performed
+as part of this documentation update.
+
+## Documents and layout
+
+- [PLAN.md](PLAN.md): architecture and implementation plan, not standalone proof of current runtime behavior.
+- [German architecture comparison](VERGLEICH-EARENDIL-VS-PI-SPACES.md) and
+  [English comparison](COMPARISON-EARENDIL-VS-PI-SPACES-EN.md): comparison with Earendil's chat architecture.
+- [Root API reference](../docs/api.md), [examples](../docs/examples.md), and
+  [implementation status](../docs/implementierungsstand.md) define the detailed current contracts.
 
 ```text
 help-site/
-├── README.md                        # Übersicht und Schnellstart
-├── PLAN.md                          # Detaillierter Architektur-, Doku- und Umsetzungsplan
-├── .env / .env.example              # Port, Bind, Admin-Passwort, LLM-Credentials
-├── app/                             # Next.js 16 App Router
-│   ├── layout.tsx                   # Root-Layout + Metadaten (spaces.eibrain.org)
-│   └── page.tsx                     # SSR-Einstieg, lädt den Help-Corpus direkt
-├── corpus/                          # Kanonischer, dateibasierter Help-Corpus (DE/EN, 37 Artikel)
-│   ├── help_product_catalog.*       # Kanonische Systembereiche
-│   ├── de/                          # Deutsche Referenz-, API- und Stufen-Tutorials (v1–v6)
-│   └── en/                          # Englische Referenz-, API- und Stufen-Tutorials (v1–v6)
-├── examples/                        # Die 6 ausführbaren Ausbaustufen (CLI & Web-Backend)
-│   ├── shared/                      # Gemeinsame Entry-Typen, CompletionProfiles & LLM-Fallback
-│   ├── v1-local-memory/             # Stufe 1: Zero-Setup In-Memory PiSpaces Demo
-│   ├── v2-local-durable/            # Stufe 2: SQLite, RequestRef-Claims, Alarme & Subagent
-│   ├── v3-remote-socket/            # Stufe 3: SpaceService + RemoteSpace (Unix-Socket/TCP + Mailbox-ACK)
-│   ├── v4-gated-auth/               # Stufe 4: Gate (Schicht A/B), Enrollment, 60s-Grants & BootGuard
-│   ├── v5-federated-cluster/        # Stufe 5: FederatedSpace, Router, HRW-Sharding & Membership
-│   └── v6-mobile-control/           # Stufe 6: Web-Admin & Mobile App Steuerung (QR-Pairing, Worker, RunGate, Alerts)
-├── server/                          # Node.js HTTP + WebSocket Server (Custom Server um Next.js)
-│   ├── index.ts                     # Einstieg: Next-Handler, /api/feed/*, /api/llm/*, Admin-API, WS-Routing
-│   ├── llm.ts                       # pi-ai-Anbindung: Modell-Discovery, Picker-API, ON/OFF-Toggle, Generatoren
-│   ├── ws.ts                        # RFC-6455 WebSocket-Upgrade (/ws/chat/:session, /ws/feed)
-│   ├── admin/                       # Login-geschütztes Web-Admin-Backend (analog MobileSpaces)
-│   │   └── admin-controller.ts      # ADMIN_KINDS, QR-Enroll, Objekt-Inspektion, Deployment-Panel
-│   ├── space-chat/                  # Stufen-Orchestrator (wechselt live zwischen v1 bis v6)
-│   │   └── stage-runner.ts          # Sessions, Threads, ChatTask-Worker, LLM-Fallback, Stage-Runs
+├── README.md / README_DE.md       # English / German overview and operating contract
+├── app/                          # Next.js App Router entry
+├── corpus/                       # Canonical German/English help articles
+├── examples/                     # v1–v6 and shared Chat engine
+├── server/
+│   ├── index.ts                  # HTTP, Next.js, uploads, API and WebSocket routing
+│   ├── llm.ts                    # Optional providers, picker and budget
+│   ├── nano-host.ts              # Optional headless shard
+│   ├── admin/                    # Authenticated administrative control
+│   ├── space-chat/               # Command dispatcher, sessions and stage reports
 │   └── social/
-│       └── swarm.ts                 # SocialSwarmHub: 1k–50k Agenten, SwarmTask→Post/Like-Pipeline,
-│                                  #   AgentPulse-Leases, User-Posts, ai_reply & ~1% LLM-Posts,
-│                                  #   durable Queries (agent.posts / ai.posts) via readAll
-├── client/                          # React 19 Frontend (PI-SPACES Help + Demos + AdminSpaces)
-│   ├── styles/layout.css            # Token-/Layout-System, Paletten, Feed-/Chat-/Picker-Styles
-│   ├── App.tsx                      # Topbar, Routing (?view=feed|space-chat|admin|…)
-│   ├── components/
-│   │   ├── SocialFeedView.tsx       # Social-Feed: Threads+Ancestors, Filter, Controls
-│   │   ├── SpaceChatWorkbench.tsx   # Multiplayer-Chat-Workbench mit Space-Inspector
-│   │   ├── AdminSpacesView.tsx      # Login-geschützte Steuerung (Spaces, Worker, RunGate, Deploy)
-│   │   └── LlmModelPicker.tsx       # Geteilter 🤖-Picker: Modellauswahl + ON/OFF-Toggle
-│   └── lib/
-│       ├── palettes.ts              # Farbpaletten (Dark/Light) & Kontrastberechnung
-│       └── search.ts                # Token-/Alias-Suchalgorithmus
-├── docker/
-│   ├── Dockerfile                   # Multi-Stage: dev-test (Corpus+Build+Tests) & production
-│   └── docker-compose.yml           # spaces-help-prod / -dev / -test, Ports via .env
-├── deploy/                          # Reverse-Proxy- & Service-Vorlagen für spaces.eibrain.org
-│   ├── Caddyfile
-│   ├── nginx-spaces.eibrain.org.conf
-│   └── pi-spaces-help.service       # systemd-Einheit (Alternativbetrieb ohne Docker)
-├── scripts/
-│   ├── build-corpus.ts              # Validiert Markdown/Facts und erzeugt public/help/index.json
-│   ├── corpus-articles-data.ts      # API-Referenz-Artikel (Signaturen, Parameter, Use-Cases)
-│   ├── corpus-workflows-and-api.ts  # Stufen-Workflows und übergreifende Artikel
-│   └── build-web.ts                 # Bundelt den React-Client
+│       ├── swarm.ts              # Dispatcher, feed, simulated identities and shard routing
+│       ├── batch.ts              # Actual reserve/finish Durable batches
+│       └── history.ts            # Durable linked history and cursor paging
+├── client/                       # React UI, styles and client lifecycles
+├── docker/                       # Images and Compose services
+├── deploy/                       # Reverse-proxy/systemd templates
+├── scripts/                      # Corpus/assets/Next.js build path
 └── tests/
-    └── help-site.test.ts            # Corpus, Stufen v1–v6, Chat-WS, AdminSpaces, Feed-API
+    ├── help-site.test.ts          # Corpus, stages, HTTP/WS, Admin, feed and optional SSR
+    ├── regressions.test.ts        # Focused demo regressions
+    └── swarm-batch.test.ts        # Commit count, rollback, byte budget, SQLite reopen
 ```

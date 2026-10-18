@@ -91,7 +91,7 @@ async function load(label: string, totalMs: number, events: Array<{ at: number; 
 		longestOpenMs: Math.max(0, ...mine.filter(w => w.status === "resolved").map(w => w.decidedAt! - w.issuedAt)), errors: [...new Set(mine.flatMap(w => w.errors).map(e => e.replace(/[0-9a-f]{8,}/g, "…")))].slice(0, 8), events: results };
 }
 /** The member's target as the Root holds it. */
-const rootTarget = () => { const r = accept({ action: "status" }); if (!r.passed) throw new Error("status: " + r.error); return Object.values<any>(r.result.members)[0]; };
+const rootTarget = () => { const r = accept({ action: "status" }); if (!r.passed) throw new Error("status: " + r.error); return r.result.members[cfg.member] ?? Object.values<any>(r.result.members)[0]; };
 async function waitTarget(hostId: string, version: number, timeoutMs = 300_000) {
 	const end = Date.now() + timeoutMs;
 	for (;;) { const m = rootTarget(); if (m.target.hostId === hostId && m.replication?.replicaConfigVersion === version) return m; if (Date.now() > end) throw new Error(`Root did not adopt ${hostId}/v${version}: ${JSON.stringify(m).slice(0, 300)}`); await sleep(10_000); }

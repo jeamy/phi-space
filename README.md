@@ -1,17 +1,159 @@
 # pi-spaces
 
+[English](README.md) · [Deutsch](README_DE.md)
+
 pi-spaces is a TypeScript space library implemented as an extension for
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). Many agents
 (conversations) share one space, take work from it, and talk to each other through it.
 
-The historical JavaSpaces specification (Jini JavaSpaces Service Specification v2.2) is a reference
-for the coordination model. The local pi-spaces client is `PiSpaces`.
+The coordination model comes from Linda tuple spaces and JavaSpaces. The local pi-spaces client is
+`PiSpaces`; this is a TypeScript/JSON implementation, not a JavaSpaces-compatible Java or RMI runtime.
 
 **Status.** The library has a local durable space, named spaces, request claims, revisions and a single-host RPC
 service (`SpaceService`, `RemoteSpace`, Unix/TCP sockets), durable mailboxes and a composed federation host
-with overlay identity, key proof, enrollment, signed grants and key rotation. Router, replication, the full
-recovery workflow and mobile federation controls remain planned; the implemented scope and its limits are in
-[docs/implementierungsstand.md](docs/implementierungsstand.md).
+with overlay identity, key proof, enrollment, signed grants and key rotation. Federation routing, membership,
+run/worker/Space administration and mobile controls are implemented. Merge replication, primary/sync replication,
+promotion and recovery also have implementations and documented tests, but **Phase 3 is not fully accepted**.
+Implementation is not a production or failure-model guarantee: see
+[current implementation](docs/implementierungsstand.md) and the [Phase-3 acceptance matrix](docs/ap3-abnahme.md).
+This README was checked against the checkout on 2026-10-18; those documents carry the detailed evidence and open gates.
+
+## Tuple spaces: coordination through data
+
+A tuple space is a shared associative collection: participants publish data and look it up by its contents,
+not by a recipient's address. Think of a shared blackboard on which a producer leaves a job and a worker
+later claims a matching job. The worker need not know who published it, and the producer need not choose
+which worker will execute it. Linda introduced this form of generative communication; tuples outlive the
+interaction that created them, enabling communication across both process and time boundaries.
+[Source: Gelernter, *Generative Communication in Linda*](https://www.cs.tufts.edu/comp/150FP/archive/david-gelernter/generative-linda.pdf).
+
+JavaSpaces applies that idea to typed Java objects called **Entries**, with template-based lookup, leases
+and transactions. A template selects an Entry type and field values; unspecified fields are wildcards.
+Entries are exchanged as copies, not live shared object references. The application protocol is a flow of
+data through the space rather than direct method calls between the producer and consumer.
+[Source: Oracle's JavaSpaces introduction](https://www.oracle.com/technical-resources/articles/javase/javaspaces.html).
+
+### The basic operations
+
+| Operation | Meaning in pi-spaces |
+|---|---|
+| `write(entry)` | Publish a new Entry; writing again normally creates another Entry, not an update. |
+| `read(template)` | Return a matching Entry copy without consuming it. |
+| `take(template)` | Claim a matching Entry exclusively; under a transaction, removal becomes final at commit. |
+| `notify(template, ...)` | Register interest in matching future writes; this is notification, not exclusive job ownership. |
+
+These names follow JavaSpaces. Linda calls the corresponding publish/consume operations `out` and `in`.
+A space is not inherently a FIFO queue, and matching is not a SQL query language.
+[Source: JavaSpaces specification, JS.1.3–1.4 and JS.2](https://river.apache.org/release-doc/current/specs/html/js-spec.html).
+
+### Four dimensions of loose coupling
+
+- **Time decoupling:** a producer can publish now and a consumer can act later, without overlapping lifetimes.
+  In pi-spaces this depends on the Entry's lease and continued availability of its Space/storage. A durable
+  backend can retain it across host-process restarts; `MemoryStorage` cannot.
+- **Location decoupling:** producer and consumer need not know each other's network addresses. They must still
+  discover/configure and reach the appropriate Space endpoint, with authorization. Location independence does
+  not remove service discovery, routing or network failures.
+- **Reference decoupling:** participants agree on Entry schemas and templates instead of keeping direct object
+  references to one another. They remain coupled to that data contract. There can still be RPC **to the Space**:
+  JavaSpaces uses RMI; pi-spaces offers `SpaceService`/`RemoteSpace` over supported transports.
+- **Synchronization decoupling:** publishing a job does not require its consumer to be ready or to finish the job.
+  This does **not** mean every API operation is asynchronous. JavaSpaces calls are synchronous, and `read`/`take`
+  can wait until a match or timeout. pi-spaces returns Promises: awaiting a pending operation does not block
+  the JavaScript event loop, but the caller still waits for its result. Use `NO_WAIT`, notifications or durable
+  waiters according to the workflow; CPU work and serialization can still occupy the event loop.
+
+Linda's time/process separation is described in the
+[original paper](https://www.cs.tufts.edu/comp/150FP/archive/david-gelernter/generative-linda.pdf).
+The blocking calls and RMI exceptions are explicit in the
+[JavaSpace API](https://river.apache.org/release-doc/current/api/net/jini/space/JavaSpace.html).
+The pi-spaces-specific behavior is documented in [our API](docs/api.md).
+
+### Asynchronous interaction actually implemented in pi-spaces
+
+`PiSpaces` and the common remote interface `SpaceLike` expose Promise-based operations. Their completion
+points differ:
+
+- `write` resolves after its storage mutation completes, not after a consumer processes the Entry. It is not
+  fire-and-forget: commit latency and errors remain visible to the producer.
+- `read`/`take` resolve with a match or `null` at timeout. With `NO_WAIT` they do not wait for a future match,
+  but still need time to perform the operation. `await` suspends the caller, not the whole event loop.
+- `wait` persists a one-shot registration and resolves with its wait ID rather than holding the call until a
+  match. `notify` persists a leased subscription to matching writes. The service later delivers events to the
+  target conversation or configured consumer mailbox; `startService` runs local maintenance/delivery.
+- The agent tools `space_read`/`space_take` hold the current turn while waiting (capped at 60 seconds).
+  `space_wait` releases the turn after registration and can survive process restarts on persistent storage.
+  Transactional take-waiters hand back a leased reservation, not an irrevocably consumed job.
+
+Thus pi-spaces implements both caller-waiting async operations and durable, event-driven interaction. It does
+not make synchronous serialization/CPU work non-blocking or remove finite Space budgets. See
+[`src/client.ts`](src/client.ts), [`src/index.ts`](src/index.ts) and the [waiter API](docs/api.md).
+
+### What pi-spaces adds, and what it does not promise
+
+pi-spaces represents an Entry as `{ type, types?, fields }` with JSON data. It retains the coordination
+primitives and adds persistent request identities/replay, named Spaces, revision-based paging, mailboxes,
+completion profiles and operational controls. Matching uses deep JSON equality, not Java's serialized-field
+comparison. A transaction can reserve a task and publish its result atomically in its owning Space.
+Transactions are not a general cross-host two-phase-commit API.
+
+Multiple workers can compete for tasks without the producer assigning a worker. Leased reservations return
+unfinished work after abort/expiry, provided the task's own lease has not also expired. An application can use
+`CompletionProfile` to require a matching result before its task transaction commits. This does not make an
+external HTTP call, payment or file write exactly-once: those effects need their own idempotency or transaction.
+
+The blackboard is a **logical** shared repository; its physical implementation may be local, remote or federated.
+The pattern alone does not provide unlimited scaling, replication, failover or partition tolerance. In this
+implementation each Space is a document, so large documents, scans and serialization remain real costs.
+An asynchronous API is not CPU parallelism, and a logical Space transaction is not automatically one Durable
+storage commit. The Social Swarm worker explicitly batches up to four tasks into two storage commits; see
+the [Help-Site runtime contract](help-site/README.md#demo-vertrag-und-wiederanlauf).
+
+## Minimal example: publish, inspect, claim, complete
+
+Run this from the repository root with the already available dependencies: save the block as `tuple-demo.ts`,
+then use `node --experimental-strip-types tuple-demo.ts`. No model calls or server are needed.
+
+```ts
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { FOREVER, NO_WAIT, PiSpaces, spaces } from "./src/index.ts";
+
+const registry = createRegistry();
+registry.install(spaces);
+const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+try {
+  const producer = new PiSpaces(harness, ctx);
+  await producer.write({ type: "Job", fields: { jobId: "square-7", value: 7 } }, null, FOREVER);
+  // The producer need not wait for or address a particular worker.
+  const worker = new PiSpaces(harness, ctx);
+  const template = { type: "Job", fields: { jobId: "square-7" } };
+  console.log("inspect:", (await worker.read(template, NO_WAIT))?.fields);
+
+  const txn = await worker.createTransaction(30_000);
+  try {
+    const job = await worker.take(template, NO_WAIT, { txn: txn.id });
+    if (!job) throw new Error("No matching job");
+    await worker.write({ type: "Result", fields: {
+      jobId: job.fields.jobId, squared: Number(job.fields.value) ** 2,
+    } }, txn.id, FOREVER);
+    await worker.commit(txn.id);
+  } catch (error) {
+    await worker.abort(txn.id);
+    throw error;
+  }
+  console.log("result:", (await producer.read({ type: "Result" }, NO_WAIT))?.fields);
+  console.log("job remaining:", await producer.count(template));
+} finally {
+  await harness.close(ctx);
+}
+```
+
+The result is `squared: 49` and `job remaining: 0`. `read` leaves the job available; the transactional `take`
+and Result write become final together. This small example runs two clients in one process and uses volatile
+memory: it demonstrates coordination, not persistence or network failover. Use a durable backend for restart
+survival and `RemoteSpace` for a separate worker process; see [examples](docs/examples.md) and [API](docs/api.md).
 
 ## Layers
 
@@ -28,8 +170,14 @@ recovery workflow and mobile federation controls remain planned; the implemented
 | `src/stream.ts` | bounded revision log and visible-entry change batches |
 | `src/service.ts` | authenticated, role-checked single-host space RPC |
 | `src/remote.ts`, `src/socket.ts` | retrying remote client and Unix/TCP transport |
+| `src/federated-space.ts`, `src/router.ts` | policy-based federation routing and journaled coordination |
+| `src/entry-replication.ts`, `src/primary-sync.ts`, `src/replica-control.ts` | merge replication, synchronous commit replication and fenced transitions; acceptance limits apply |
+| `src/run-controller.ts`, `src/workers.ts`, `src/space-lifecycle.ts` | run, worker and Space administration |
+| `help-site/` | bilingual help, Social Swarm, Space-Chat stages and authenticated Web Admin |
 
-A space is one document, so a commit is atomic and survives restarts. The default space is the Session-scoped document
+A Space is one document; Durable commits provide atomic state changes. Restart survival requires a persistent backend,
+and power-loss/host-loss guarantees depend on storage settings and the deployment's replication/recovery model.
+The default space is the Session-scoped document
 `pi-spaces.space` (version 5); further named spaces live in the Session-scoped family `pi-spaces.named-space`, keyed by an
 immutable, generated `spaceId`. The registry document maps aliases to ids and holds this host's id.
 
@@ -76,7 +224,8 @@ version 4 cannot open a storage that has run this version.
   `issueGeneration(principal)` opens a generation that admits new request ids for `generationAdmitMs` (1 h); known requests stay
   answerable after that. Results are kept `claimResultMs` (24 h) after the decision, then `ResultExpired`; unknown ids of
   a closed generation give `RequestExpired`, never a new mutation. `pollOperation` reads a request, `cancelOperation` ends a
-  pending one (`OperationCancelled`). Generations are not signed yet; claims have their own byte budget
+  pending one (`OperationCancelled`). Generation tokens are HMAC-authenticated and bound to their recorded context;
+  claims have their own byte budget
   (`maxClaimBytes`).
 
 Ordering is unspecified, as in the spec; do not rely on FIFO. The local API has no `RemoteException`; remote callers
@@ -115,8 +264,9 @@ instead receive a transport outcome or `OutcomeUnknown` and must poll the same r
 One harness process owns one persistent storage and may expose it as a space service. Named spaces share that
 storage; they are not separate hosts. `SpaceService` and `RemoteSpace` let clients in other processes reach that host;
 the federation runtime (gate, enrollment, grants, router, `FederatedSpace`, membership) composes several hosts
-according to [docs/federation-plan-v3.md](docs/federation-plan-v3.md) — stages 1b and 2 are accepted, stage 3
-(replication, promotion) is in progress. The operations extension (runs, workers, Space lifecycle, deployment
+according to [docs/federation-plan-v3.md](docs/federation-plan-v3.md) — stages 1b and 2 have acceptance evidence
+within their documented profiles and exceptions. Stage 3 has working replication/promotion components but
+remaining system acceptance gates in [the current matrix](docs/ap3-abnahme.md). The operations extension (runs, workers, Space lifecycle, deployment
 bootstrap, mobile control) is described in [docs/betrieb-und-mobile-steuerung.md](docs/betrieb-und-mobile-steuerung.md).
 `space_take`/`space_read` with `timeoutMs` block the turn and are capped at 60 s; use `space_wait` for long waits.
 
@@ -188,7 +338,7 @@ Use `--dry-run` to preview actions without contacting the server. See [docs/tui.
 | `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions | – (host code; no replication) |
 | `examples/golomb.ts` | local cooperative DFS with transactional tasks and isolated runs; persistent completed tasks resume; `--checkpoint` writes completion receipts, not partial DFS cursors | – (host code) |
 | `examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
-| `help-site/` | PI-SPACES / HELP: interactive help system, Social Swarm feed, 6-stage Space-Chat workbench and the AdminSpaces portal | `npm run help` → http://localhost:3599 |
+| [`help-site/`](help-site/README.md) | PI-SPACES / HELP: bilingual help, batched Social Swarm feed, 6-stage Space-Chat workbench and AdminSpaces | `npm run help` → http://localhost:3500 (default; configurable) |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
 API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,
@@ -196,8 +346,9 @@ tests and limits of each example: [docs/examples.md](docs/examples.md) and [docs
 
 Actual research runners are tested with scripted models and persistent storage. Real-model quality and network
 integration are not validated by these tests. Research runs require fresh directories; automatic research resume
-is unsupported. Citation metrics are unavailable from arXiv metadata and remain null. No measured scaling or
-production benchmarks exist. Several async workers do not provide CPU parallelism.
+is unsupported. Citation metrics are unavailable from arXiv metadata and remain null. Example tests do not establish
+general production scaling: component/load measurements have their own documented scope. Several async workers
+do not provide CPU parallelism.
 
 ```
 npm run test:examples    # test/examples/ suite (node:test + compat shim, no vitest)
@@ -221,7 +372,8 @@ German documents in [docs/](docs/README.md):
 | [api.md](docs/api.md) | TypeScript, service and remote API reference |
 | [ap1b-abnahme.md](docs/ap1b-abnahme.md) | phase 1b integration evidence |
 | [ap2-abnahme.md](docs/ap2-abnahme.md) | phase 2 acceptance |
-| [ap3-replikation.md](docs/ap3-replikation.md) | phase 3 building blocks and what is still open |
+| [ap3-replikation.md](docs/ap3-replikation.md) | phase 3 replication architecture |
+| [ap3-abnahme.md](docs/ap3-abnahme.md) | phase 3 acceptance criteria, evidence and remaining gates |
 | [spaces-v1.md](docs/spaces-v1.md) | historical local snapshot (2026-10-07) |
 | [federation-plan-v3.md](docs/federation-plan-v3.md) | the contract for federated spaces (stages 0–2 implemented, 3 in progress) |
 | [implementierungsplan-v3.md](docs/implementierungsplan-v3.md) | readiness, decisions, work packages and progress |

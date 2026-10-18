@@ -265,17 +265,17 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 				<div className="topbar__actions">
 					<button
 						type="button"
-						className={view.kind === "space-chat" ? "nav-pill-btn is-active" : "nav-pill-btn"}
-						onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
-					>
-						<span>● LIVE CHAT (v1–v6)</span>
-					</button>
-					<button
-						type="button"
 						className={view.kind === "feed" ? "nav-pill-btn is-active" : "nav-pill-btn"}
 						onClick={() => navigate({ kind: "feed" })}
 					>
 						<span>◉ Space Chat</span>
+					</button>
+					<button
+						type="button"
+						className={view.kind === "space-chat" ? "nav-pill-btn is-active" : "nav-pill-btn"}
+						onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+					>
+						<span>● LIVE CHAT (v1–v6)</span>
 					</button>
 					<button
 						type="button"
@@ -381,19 +381,19 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						</button>
 						<button
 							type="button"
-							className={view.kind === "space-chat" ? "nav-link is-active" : "nav-link"}
-							onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
-						>
-							<span>{locale === "de" ? "Multiplayer Space-Chat (v1–v6)" : "Multiplayer Space-Chat (v1–v6)"}</span>
-							<span className="nav-link__badge">LIVE</span>
-						</button>
-						<button
-							type="button"
 							className={view.kind === "feed" ? "nav-link is-active" : "nav-link"}
 							onClick={() => navigate({ kind: "feed" })}
 						>
 							<span>{locale === "de" ? "Space Chat Feed (Agenten-Schwarm)" : "Space Chat Feed (agent swarm)"}</span>
 							<span className="nav-link__badge">SWARM</span>
+						</button>
+						<button
+							type="button"
+							className={view.kind === "space-chat" ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+						>
+							<span>{locale === "de" ? "Multiplayer Space-Chat (v1–v6)" : "Multiplayer Space-Chat (v1–v6)"}</span>
+							<span className="nav-link__badge">LIVE</span>
 						</button>
 						<button
 							type="button"
