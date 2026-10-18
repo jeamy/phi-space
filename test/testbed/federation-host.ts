@@ -267,7 +267,11 @@ try{
      }else if(command.action==='routed-write'){
       // Routed through the native Root (delegation to the Member that owns the type), e.g. a primary/sync Member.
       if(typeof command.type!=='string'||!/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(command.type)||typeof command.requestId!=='string'||!/^[A-Za-z0-9._-]{1,64}$/.test(command.requestId))throw Error('bounded routed write required');
-      const entry=await root.space.write({type:command.type,fields:{...(command.fields??{})}},{id:command.requestId,principal:{peerId:nativeConfig.peerId,agentId:'routed-probe'}},core.FOREVER);result={written:true,entry:(entry as any)?.id??null};
+      const entry=await root.space.write({type:command.type,fields:{...(command.fields??{})}},{id:command.requestId,principal:{peerId:nativeConfig.peerId,agentId:'routed-probe'},...(command.txn?{txn:command.txn}:{})},core.FOREVER);result={written:true,entry:(entry as any)?.id??null};
+     }else if(command.action==='routed-begin'){
+      // A routed transaction on one Member: its writes reuse the transaction's generation (no generation commit).
+      if(typeof command.member!=='string'||typeof command.requestId!=='string'||!/^[A-Za-z0-9._-]{1,64}$/.test(command.requestId))throw Error('bounded routed transaction required');
+      result={txn:await root.space.createTransaction(command.member,Math.min(Number(command.leaseMs)||60000,60000),{id:command.requestId,principal:{peerId:nativeConfig.peerId,agentId:'routed-probe'}})};
      }else if(command.action==='routed-count'){
       if(typeof command.type!=='string'||!/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(command.type))throw Error('bounded routed count required');
       result=await root.space.count({type:command.type},{peerId:nativeConfig.peerId,agentId:'routed-probe'});
