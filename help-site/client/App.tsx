@@ -450,6 +450,14 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 											{locale === "de" ? "⚙ AdminSpaces Login" : "⚙ AdminSpaces Login"}
 										</span>
 									</button>
+									<a
+										className="secondary-action"
+										href="https://github.com/jeamy/phi-space"
+										target="_blank"
+										rel="noopener noreferrer"
+									>
+										<span>{locale === "de" ? "⌥ GitHub-Repository" : "⌥ GitHub Repository"}</span>
+									</a>
 								</div>
 							</section>
 

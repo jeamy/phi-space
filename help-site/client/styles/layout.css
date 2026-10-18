@@ -346,6 +346,7 @@ code, kbd, pre { font-family: var(--font-geist-mono); }
 .primary-action { color: var(--accent-ink); background: var(--accent-fill); }
 .primary-action:hover { filter: brightness(1.06); }
 .secondary-action { border-color: var(--line-strong); color: var(--text-strong); background: var(--surface); }
+a.secondary-action, a.primary-action { text-decoration: none; }
 .secondary-action:hover { border-color: var(--accent); background: var(--surface-raised); }
 
 /* Section Headings & 2-Lane Execution Model */
