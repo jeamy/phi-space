@@ -8,8 +8,15 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 
 # ---- Stage 1: Base dependencies (root phi-spaces + help-site Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
+    NODE_OPTIONS=--dns-result-order=ipv4first \
+    npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000
 WORKDIR /opt/phi-spaces
+
+# Prefer IPv4 for npm registry lookups (IPv6 often breaks npm ci in Docker builds)
+RUN printf 'precedence ::ffff:0:0/96  100\n' >> /etc/gai.conf
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -32,8 +39,8 @@ RUN npm --prefix help-site run build
 # ---- Stage 3: Local Dev & Test Docker Environment (`dev-test`) ----
 FROM builder AS dev-test
 ENV NODE_ENV=test \
-	PHI_SPACES_LLM=0 \
-	PHI_SPACES_TEST_NEXT=1 \
+    PHI_SPACES_LLM=0 \
+    PHI_SPACES_TEST_NEXT=1 \
     HELP_BIND=0.0.0.0 \
     PORT=3500 \
     HELP_PORT=3500
