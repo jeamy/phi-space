@@ -68,7 +68,7 @@ export type Call = {
 export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "NotCommitted" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ReplicaConfigPending" | "StalePolicyVersion" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "NotCommitted" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
 export type ClaimReceipt={protocol:'pi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
@@ -509,6 +509,8 @@ export class SpaceService {
 		if (sealed) return this.noteSealed(sealed);
 		if(e instanceof RoutingConflict)return fail("RoutingConflict",e.message);if(e instanceof MemberDrained)return fail("MemberDrained",e.message);if(e instanceof MigrationRequired)return fail("MigrationRequired",e.message);
 		if (e instanceof Bad) return fail("BadRequest", e.message);
+		if (e instanceof core.ReplicaConfigPending) return fail("ReplicaConfigPending", e.message);
+		if (e instanceof core.StalePolicyVersion) return fail("StalePolicyVersion", e.message);
 		if (e instanceof Denied || e instanceof core.PermissionError) return fail("PermissionDenied", (e as Error).message);
 		if (e instanceof UnsupportedProtocol) return fail("UnsupportedProtocol", e.message);
 		if (e instanceof UnknownSpaceError) return fail("UnknownSpace", e.message);

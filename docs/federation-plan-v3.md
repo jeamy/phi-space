@@ -719,6 +719,16 @@ Primary**:
    `ReplicaConfigPending` gesperrt; Status/Recovery-Abgleich sind über die begrenzte Dienstrolle möglich.
    Lokale Arbeit darf nach Schritt 4 gemäß Single-Garantie weiterlaufen. Alte Policy darf die lokale Durability
    nie zurücksetzen. Bei unerreichbarem Control Space wird später abgeglichen, nicht lokal fremde Policy geschrieben.
+   Ergänzung 2026-10-18 (Router-Schritte über einen Übergang hinweg):
+   - `ReplicaConfigPending` ist kein endgültiger Fehler. Ein so abgelehnter Schritt war nie zugelassen; der Router
+     wartet auf die Übernahme. Danach bereitet er ihn mit aktuellem Ziel, neuer Generation und aktueller
+     Policy-Version neu vor, aber nur, wenn alle Policy-Versionen seit der des Schritts aus Notice-Übernahmen stammen.
+     Dasselbe gilt für einen nie zugelassenen Schritt, den der Member wegen einer älteren Policy-Version abweist
+     (`StalePolicyVersion`). Jeder andere Policy-Wechsel dazwischen lässt die Ablehnung stehen (Prüfung).
+   - Ein Schritt, der zugelassen sein könnte, wird nie neu gesendet. Nach einer übernommenen Promotion oder Umschaltung
+     klärt der Router ihn beim installierten Nachfolger seiner Bindung (gleicher Space, gleiche Autorität und
+     Dateninkarnation, installierte Epoche mindestens die gebundene) mit der gebundenen Epoche: das gespeicherte
+     Ergebnis oder `NotCommitted` nach 6.2. Die Bindung des Schritts selbst bleibt unverändert.
 6. **Sonderfall Control Space:** Seine eigene Policy liegt im selben lokalen Storage und wird bereits in
    Schritt 4 atomar mit erhöhtem `policyVersion` angepasst. Der Supervisor kann danach Grants und eine neue
    Router-Lease ausstellen; Router-Wechsel wartet zusätzlich den alten Lease-Ablauf ab und erhöht `routerEpoch`.

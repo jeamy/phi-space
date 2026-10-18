@@ -47,7 +47,9 @@ export type RouterReceipt = {
 export interface RouterTarget {
     readonly protocol: "pi-spaces-rpc-v1";
     invoke(step: Readonly<RouterStep>): Promise<RouterReceipt>;
-    resolve(step: Readonly<RouterStep>): Promise<RouterReceipt>
+    resolve(step: Readonly<RouterStep>): Promise<RouterReceipt>;
+    /** A step refused before admission: its new binding, 'wait' (retry later) or 'refuse' (the refusal stands). */
+    reprepare?(step: Readonly<RouterStep>): Promise<RouterStepSpec | 'wait' | 'refuse'>
 }
 export type RouterLimits = {
     maxCommands: number; maxSteps: number; maxCommandBytes: number; maxIndexBytes: number;
@@ -430,6 +432,7 @@ export class RouterController {
             let c = await this.get(id);
             if (!c) throw new RouterBlocked("unknown command");
             this.verify(c);if(c.erased)throw new ResultExpired("Child command content was erased");
+            const reprepared = new Set<number>();
             while (!terminal(c.state)) {
                 const n = c.steps.findIndex(s => s.state !== "done");
                 if (n < 0) throw new RouterBlocked("inconsistent command state");
@@ -437,6 +440,22 @@ export class RouterController {
                     c = await this.resolve(c, n,completed);
                     if (terminal(c.state)) break;
                     if ((c.steps[n] as RouterStep).state !== "prepared") return c;
+                }
+                // Refused before admission: prepare again under the current binding where that is allowed (v3 5.3.1).
+                const s0 = c.steps[n]!;
+                if (s0.evidence === "ReplicaConfigPending" || s0.evidence === "StalePolicyVersion") {
+                    let next: RouterStepSpec | "wait" | "refuse" = "refuse";
+                    try { next = this.o.target.reprepare ? await this.o.target.reprepare(copy(s0)) : "refuse"; } catch { return c; }
+                    if (next === "wait") return c;
+                    if (next === "refuse") return this.update(id, d => { d.steps[n]!.state = "needsReview"; d.state = "needsReview"; });
+                    const spec = next;
+                    c = await this.update(id, (d, _tx, i) => {
+                        const s = d.steps[n]!;
+                        s.target = copy(spec.target); s.generation = spec.generation; s.policyVersion = spec.policyVersion;
+                        if (spec.generationAdmitUntil === undefined) delete s.generationAdmitUntil; else s.generationAdmitUntil = spec.generationAdmitUntil;
+                        s.evidence = "prepared again under policy " + spec.policyVersion;
+                        d.hash = hash(specOf(d)); i.refs[id]!.hash = d.hash;
+                    });
                 }
                 c = await this.update(id, d => {
                     d.state = "applying";
@@ -465,7 +484,10 @@ export class RouterController {
                     throw e;
                 }
                 c = await this.applyReceipt(id, n, receipt,completed);
-                if ((c.steps[n] as RouterStep).state !== "done") return c;
+                // Refused before admission: prepare it again at once (once per call), see above.
+                const after = c.steps[n] as RouterStep;
+                if (after.state === "prepared" && (after.evidence === "ReplicaConfigPending" || after.evidence === "StalePolicyVersion") && !reprepared.has(n)) { reprepared.add(n); continue; }
+                if (after.state !== "done") return c;
             }
             return c;
         });

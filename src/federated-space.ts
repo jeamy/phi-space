@@ -9,6 +9,7 @@ import {canonicalJson} from './canonical.ts';
 import type {Principal} from './claims.ts';
 import type {SpaceHost, Taken} from './client.ts';
 import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
+import {ReplicaConfigPending} from './core.ts';
 import {FederationRouting} from "./federation-policy.ts";
 import {FederationJournalLayout, operationPartition, parentJournalKey, validateJournalPartitions} from './federation-journals.ts';
 import {TransportFailure} from './remote.ts';
@@ -333,7 +334,8 @@ export class FederatedSpace {
                                                       : undefined);
             } catch (e) {
                 // No effect has been dispatched; keep the persisted routing plan and reservation.
-                if (e instanceof TransportFailure) throw new FederationPending(op.id);
+                // The same while the Member waits for the router to adopt its replica configuration (v3 5.3.1 step 5).
+                if (e instanceof TransportFailure || e instanceof ReplicaConfigPending) throw new FederationPending(op.id);
                 throw e;
             }
             const expected = (await this.o.state()).members[member]?.target;

@@ -69,6 +69,11 @@ export class ResponseBudgetTooSmall extends Error {
 export class IllegalArgumentError extends Error {}
 /** A conversation tried to use or change something that is not its own. */
 export class PermissionError extends Error {}
+/** v3 5.3.1 step 5: a replicated Member refuses new work until the router routes under its current replica
+ * configuration. Nothing was admitted, so the caller retries later; never a definitive refusal. */
+export class ReplicaConfigPending extends PermissionError {}
+/** A new operation delegated under an older policy version than the installed one; refused before admission. */
+export class StalePolicyVersion extends PermissionError {}
 export class TransactionError extends Error {}
 export class CompletionViolation extends TransactionError {}
 /** A RunGate command conflicts with the gate's revision history, its pending transition or its terminal state. */

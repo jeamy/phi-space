@@ -2,7 +2,7 @@
 import {canonicalJson} from './canonical.ts';
 import type {Signer} from './auth.ts';
 import {argHash, NotCommitted, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, type ClaimView, type Principal} from './claims.ts';
-import {PermissionError, TransactionError, CompletionViolation, type Json, type Template} from './core.ts';
+import {PermissionError, ReplicaConfigPending, StalePolicyVersion, TransactionError, CompletionViolation, type Json, type Template} from './core.ts';
 import {
     delegationForCall,
     signDelegation,
@@ -30,14 +30,23 @@ export class FederationRpc implements RouterTarget, FederationIO {
         now?: () => number
     };
     constructor(o: FederationRpc['o']) { this.o = o; }
-    private async member(target: TargetBinding) {
+    private async member(target: TargetBinding) { return (await this.bound(target, false)).id; }
+    /**
+     * The Member of a step's target binding. With `successor`, a replicated Member whose installed target moved on by
+     * an adopted transition (degrade: same host, higher epoch; promotion: another host) also answers for the binding:
+     * same Space, authority and data incarnation, installed epoch at least the bound one (v3 5.3.1, decided
+     * 2026-10-18). Such a Member only resolves the bound request; it never receives its effect.
+     */
+    private async bound(target: TargetBinding, successor: boolean): Promise<{id: string; successor: boolean}> {
         const state = await this.o.state(),
               m = Object.values(state.members)
                       .find(m => m.target.spaceId === target.spaceId &&
                                  m.target.hostId === target.hostId);
-        if (!m || JSON.stringify(m.target) !== JSON.stringify(target))
-            throw new Error('target binding no longer installed');
-        return m.id;
+        if (m && JSON.stringify(m.target) === JSON.stringify(target)) return {id: m.id, successor: false};
+        const next = successor ? Object.values(state.members).find(m => m.replication && m.target.spaceId === target.spaceId &&
+            m.target.authorityId === target.authorityId && m.target.dataIncarnation === target.dataIncarnation && m.target.primaryEpoch >= target.primaryEpoch) : undefined;
+        if (!next) throw new Error('target binding no longer installed');
+        return {id: next.id, successor: true};
     }
     private reference(s: Readonly<RouterStepSpec>&{requestId?: string}): TargetRequest {
         const d = rpcDomain({method : s.method, args : s.args as any}, s.principal);
@@ -51,7 +60,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
             policyVersion : s.policyVersion
         };
     }
-    private async remote(id: string, p: Principal, policyVersion?: number, ref?: TargetRequest) {
+    private async remote(id: string, p: Principal, policyVersion?: number, ref?: TargetRequest, boundEpoch?: number) {
         const state = await this.o.state(), m = state.members[id];
         if (!m || !state.policy)
             throw new Error('Member or policy unavailable');
@@ -72,7 +81,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
                         policyVersion :
                             ref?.policyVersion ?? policyVersion ?? state.policy!.policyVersion,
                         spaceId : m.target.spaceId,
-                        primaryEpoch : m.target.primaryEpoch,
+                        primaryEpoch : boundEpoch ?? m.target.primaryEpoch,
                         grant : g as unknown as SignedGrant,
                         targetRequest : [
                             'pollOperation', 'resolveOperation', 'cancelOperation', 'events', 'txn', 'lease'
@@ -126,6 +135,8 @@ export class FederationRpc implements RouterTarget, FederationIO {
         };
     }
     async invoke(s: Readonly<RouterStep>) {
+        // A successor of the binding only resolves: the request may have reached the earlier primary.
+        if ((await this.bound(s.target, true)).successor) return this.resolve(s);
         const id = await this.member(s.target),
               r = await this.remote(id, s.principal, s.policyVersion, s.targetRequest);
         let answer:Awaited<ReturnType<RemoteSpace['requestBoundWithClaim']>>;
@@ -137,6 +148,9 @@ export class FederationRpc implements RouterTarget, FederationIO {
         }); }catch(e){
             // v3 6.2: decided after a promotion with a durable negative claim; the step had no effect.
             if(e instanceof NotCommitted)return this.receipt(s,'failed',undefined,'NotCommitted');
+            // v3 5.3.1 step 5: refused before admission until the router adopts the replica configuration; retried later.
+            if(e instanceof ReplicaConfigPending)return this.receipt(s,'notAdmitted',undefined,'ReplicaConfigPending');
+            if(e instanceof StalePolicyVersion)return this.receipt(s,'notAdmitted',undefined,'StalePolicyVersion');
             if(e instanceof RequestConflict||e instanceof RequestExpired||e instanceof ResultExpired||e instanceof IncarnationChanged||e instanceof PermissionError||e instanceof TransactionError||e instanceof CompletionViolation)return this.receipt(s,'needsReview',undefined,e.constructor.name);
             throw e;
         }
@@ -161,9 +175,26 @@ export class FederationRpc implements RouterTarget, FederationIO {
         if(v.resultExpired||v.unknownOutcome||v.restoredHistory)return this.receipt(s,'needsReview',undefined,'retained outcome unavailable');
         return this.receipt(s,v.error?'failed':v.state==='done'?'done':v.state==='cancelled'?'cancelled':'pending',v.result,v.error?.code);
     }
+    /**
+     * A step refused before admission (ReplicaConfigPending, StalePolicyVersion) gets the current target, a new
+     * generation and the current policy version, but only when every policy version since its own came from an adopted
+     * replica notice (which changes nothing but the replica configuration). 'wait': nothing to change yet; 'refuse':
+     * the refusal stands.
+     */
+    async reprepare(s: Readonly<RouterStep>): Promise<RouterStepSpec | 'wait' | 'refuse'> {
+        const state = await this.o.state(), current = state.policy?.policyVersion;
+        if (!current || !s.policyVersion || s.targetRequest || !['take', 'read', 'write'].includes(s.method)) return 'refuse';
+        let b: {id: string; successor: boolean};
+        try { b = await this.bound(s.target, true); } catch { return 'refuse'; }
+        if (s.policyVersion === current && !b.successor) return s.evidence === 'ReplicaConfigPending' ? 'wait' : 'refuse';
+        const notices = new Set(state.noticePolicyVersions ?? []);
+        for (let v = s.policyVersion + 1; v <= current; v++) if (!notices.has(v)) return 'refuse';
+        return this.step(b.id, s.principal, s.method, s.args, current);
+    }
     async resolve(s: Readonly<RouterStep>) {
-        const id = await this.member(s.target),
-              r = await this.remote(id, s.principal, s.policyVersion, this.reference(s));
+        // At a successor the delegation keeps the bound epoch: the Member decides the earlier request (v3 6.2).
+        const {id, successor} = await this.bound(s.target, true),
+              r = await this.remote(id, s.principal, s.policyVersion, this.reference(s), successor ? s.target.primaryEpoch : undefined);
         try {
             const ref=this.reference(s);
             let v:import('./claims.ts').AdmissionResolution;
@@ -171,6 +202,8 @@ export class FederationRpc implements RouterTarget, FederationIO {
             return this.checkedResolution(s,v);
         } catch (e) {
             if (e instanceof NotCommitted) return this.receipt(s, 'failed', undefined, 'NotCommitted');
+            // The resolution itself waits for the adoption: the outcome stays unknown, nothing is decided.
+            if (e instanceof ReplicaConfigPending) throw e;
             if (e instanceof RequestConflict || e instanceof RequestExpired || e instanceof ResultExpired ||
                 e instanceof IncarnationChanged || e instanceof PermissionError || e instanceof TransactionError || e instanceof CompletionViolation)
                 return this.receipt(s, 'needsReview', undefined, e.constructor.name);

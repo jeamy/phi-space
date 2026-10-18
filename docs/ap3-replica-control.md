@@ -347,6 +347,27 @@ verliert also nichts.
 - Folgeaufrufe bereits zugelassener Operationen laufen unter ihrer ursprünglichen Bindung weiter.
 - Lokale Arbeit ist nicht betroffen.
 - Nach der Übernahme gibt sich die Sperre ohne eigene Rückmeldung frei.
+- Liegt der Router hinter einem Übergang zurück (ältere Epoche, andere Konfigurationsversion), kommt ebenfalls
+  `ReplicaConfigPending`, nicht die Ablehnung wegen der Epoche.
+
+**Router über einen Übergang hinweg (Entscheidung 2026-10-18, v3 §5.3.1 Schritt 5):**
+
+- **Eigene Fehlercodes:** `ReplicaConfigPending` und `StalePolicyVersion` (neue Operation unter älterer
+  Policy-Version) gehen als eigene Codes über die Leitung. Beides heißt: nie zugelassen, ohne Wirkung.
+- **Warten:** `FederatedSpace` meldet eine schon bei der Generationsvergabe abgelehnte Operation als
+  `FederationPending`. Der Router nimmt einen abgelehnten Schritt als `notAdmitted` zurück nach `prepared`.
+- **Neu vorbereiten:** `RouterTarget.reprepare` gibt dem Schritt aktuelles Ziel, neue Generation und aktuelle
+  Policy-Version, wenn alle Policy-Versionen seither aus Notice-Übernahmen stammen. Die Übernahme vermerkt dafür ihre
+  Version in `noticePolicyVersions` des Routing-Zustands. Sonst wird der Schritt zur Prüfung (`needsReview`), bei
+  `ReplicaConfigPending` ohne Übernahme wartet er.
+- **Klären beim Nachfolger:** Ein Schritt, der zugelassen sein könnte, wird beim installierten Nachfolger seiner
+  Bindung nur geklärt, nie neu gesendet: gleicher Space, gleiche Autorität und Dateninkarnation, installierte Epoche
+  mindestens die gebundene. Die Delegation trägt die gebundene Epoche; der Member antwortet mit dem gespeicherten
+  Ergebnis oder `NotCommitted`. Das gilt nach einer Promotion (anderer Host) wie nach einem Degrade (derselbe Host,
+  höhere Epoche).
+- **Tests** (`test/test-delegation.test.ts`): Klärung beim Nachfolger nach Degrade und nach Promotion ohne Senden
+  des Effekts; ein gerouteter Write im Fenster wartet, läuft nach der Übernahme genau einmal, auch über einen Degrade
+  hinweg; ein anderer Policy-Wechsel dazwischen führt zur Prüfung.
 
 **Abholen:** Der Primary legt die Notice im Control Space ab, statt dass der Router ihn befragt. Der Router kennt
 den neuen Primary ja erst nach der Übernahme.

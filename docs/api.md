@@ -575,7 +575,10 @@ eines gefencten Hosts einzeln wieder zu. `signedReplicaPeer` und `replicaSyncHan
 Replikat-Transport. `replicaConfigNotice`, `signReplicaConfigNotice` und `adoptReplicaConfigNotice` tragen eine
 neue Replikatkonfiguration in die Member-Tabelle des Routers. Die Übernahme ist nur möglich, wenn das Register
 den neuen Primary mit genau diesen Werten zulässt. Delegationen tragen `targetReplicaConfigVersion`, und
-`DelegationVerifier({ replicaConfig })` antwortet bis zur Übernahme mit `ReplicaConfigPending`. Ein Primary
+`DelegationVerifier({ replicaConfig })` antwortet bis zur Übernahme mit `ReplicaConfigPending`. `ReplicaConfigPending` und `StalePolicyVersion`
+sind eigene Fehlercodes (Klassen in `core`); der Router wartet bzw. bereitet nie zugelassene Schritte über
+`RouterTarget.reprepare` neu vor und klärt offene Schritte beim installierten Nachfolger ihrer Bindung
+([Replikatsteuerung](ap3-replica-control.md)). Ein Primary
 veröffentlicht seine Notice mit `RemoteSpace.publishReplicaNotice` auf dem `ReplicaNoticeBoard` des Control Space;
 der native Root übernimmt sie im Heartbeat (`adoptReplicaNotices`) und adressiert Member über ihre provisionierten
 `replicas`.

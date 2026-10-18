@@ -767,3 +767,69 @@ for(const backend of BACKENDS)test(`${backend}: a delegated resolution of an unk
  const step:any={target:{hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1},principal:{peerId:'user'},generation:lost.request!.generation,requestId:lost.request!.requestId,method:'write',args:lost.args,policyVersion:1,state:'unknown'};
  const receipt=(rpc as any).checkedResolution(step,(decided as any).result);assert.equal(receipt.outcome,'failed');
 }));
+
+// v3 5.3.1 (decided 2026-10-18): after an adopted transition (degrade: same host, higher epoch; promotion: another
+// host) the router resolves a step bound to the earlier target at the installed successor, with the bound epoch, and
+// never sends its effect there.
+for(const backend of BACKENDS)for(const promoted of [false,true])test(`${backend}: the router resolves a step of an earlier epoch at the installed successor${promoted?' on another host':''} and never resends its effect`,()=>fixture(backend,async o=>{
+ o.setReplica(1,1);
+ const lost=o.call('write',{entry:{type:'Job',fields:{n:7}}}),kept=o.call('write',{entry:{type:'Job',fields:{n:8}}});
+ assert.ok((await o.invoke(kept,undefined,{targetReplicaConfigVersion:1})).ok,'confirmed before the transition');
+ o.setReplica(2,2);// epoch 2, configuration 2 (degrade or promotion)
+ const host=promoted?'member-b':'member',svc=o.service({hostId:host,promotionProof:async()=>({hash:'c'.repeat(64)})});
+ const {FederationRpc}=await import('../src/federation-rpc.ts');
+ const bound={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1};
+ const state={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'m'},rules:[],completionProfiles:[]},
+  members:{m:{id:'m',state:'active',target:{...bound,hostId:host,primaryEpoch:2},replication:{primaryReplica:host,replicaConfigVersion:2,durability:'single'}}}};
+ let sent:string[]=[];
+ const server=await serveSpace(new ProvingService(svc,{keys:o.keys,gateHostId:host,now:o.clock}),{listen:{host:'127.0.0.1',port:0},connection:()=>({peerId:'router',credentials:{roles:['router']}})}),socket=socketTransport({host:'127.0.0.1',port:(server.address() as any).port});
+ try{
+ const rpc=new FederationRpc({state:async()=>state as any,transport:()=>({request:async(text:string)=>{sent.push(JSON.parse(text).method);return socket.request(text);}}) as any,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
+ const step=(c:any,state:string):any=>({target:bound,principal:{peerId:'user'},generation:c.request.generation,requestId:c.request.requestId,method:'write',args:c.args,policyVersion:1,state,resultBudgetBytes:4096,argHash:o.target(c).argumentHash});
+ // The confirmed step keeps its result; the lost one is NotCommitted; neither sends an effect.
+ const r1=await rpc.resolve(step(kept,'unknown'));assert.equal(r1.outcome,'done',JSON.stringify(r1));
+ const r2=await rpc.resolve(step(lost,'unknown'));assert.deepEqual([r2.outcome,r2.evidence],['failed','NotCommitted'],JSON.stringify(r2));
+ sent=[];const r3=await rpc.invoke(step(lost,'prepared'));assert.deepEqual([r3.outcome,r3.evidence],['failed','NotCommitted'],JSON.stringify(r3));
+ assert.ok(!sent.includes('write'),'no effect sent to a successor under the old binding: '+sent.join(','));
+ assert.deepEqual([r2.target,r3.target],[bound,bound],'receipts keep the bound target');
+ assert.equal(await new PiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n:7}}),0);
+ // Another Space, incarnation or a lower installed epoch is no successor.
+ for(const t of [{...bound,dataIncarnation:'other'},{...bound,spaceId:'sp-other'}])await assert.rejects(rpc.resolve({...step(lost,'unknown'),target:t}),/no longer installed/);
+ state.members.m.target.primaryEpoch=1;state.members.m.target.hostId='member-c';await assert.rejects(rpc.resolve({...step(lost,'unknown'),target:{...bound,primaryEpoch:2}}),/no longer installed/);
+ }finally{socket.close();await server.close();}
+}));
+
+// v3 5.3.1 step 5 (decided 2026-10-18): a routed write refused before admission while the router has not adopted the
+// Member's replica configuration waits, then runs under the new binding once only notice adoptions changed the policy;
+// any other policy change since keeps the refusal (review).
+for(const backend of BACKENDS)test(`${backend}: a routed write in the ReplicaConfigPending window runs after the adoption; another policy change since makes it review`,()=>fixture(backend,async o=>{
+ const server=await serveSpace(new ProvingService(o.service(),{keys:o.keys,gateHostId:'member',now:o.clock}),{listen:{host:'127.0.0.1',port:0},connection:()=>({peerId:'router',credentials:{roles:['router']}})}),socket=socketTransport({host:'127.0.0.1',port:(server.address() as any).port});
+ try{
+  const target={hostId:'member',spaceId:o.info.spaceId,authorityId:'authority',dataIncarnation:o.info.incarnation,primaryEpoch:1};
+  const state:any={policy:{authorityId:'authority',policyVersion:1,default:{mode:'local',member:'m'},rules:[],completionProfiles:[]},noticePolicyVersions:[],
+   members:{m:{id:'m',state:'active',target,replication:{primaryReplica:'member',replicaConfigVersion:1,durability:'sync',standbyReplica:'s'}}}};
+  const rpc=new FederationRpc({state:async()=>state,transport:()=>socket,signer:o.routerKey.signer,peerId:'router',lease:async()=>o.lease,grant:o.grant,now:o.clock});
+  const router=new RouterController({host:o.root,ctx,routerId:'pending-router',authorityId:'authority',target:rpc,assertAuthority:async()=>{}});await router.recover();
+  const f=new FederatedSpace({host:o.root,ctx,id:'pending-federation',router,state:async()=>state,io:rpc,assertAuthority:async()=>{},now:o.clock}),principal={peerId:'user'};
+  const count=(n:number)=>new PiSpaces(o.data,ctx,o.clock).count({type:'Job',fields:{n}});
+  const adopt=(version:number,epoch=1)=>{state.policy.policyVersion++;state.noticePolicyVersions.push(state.policy.policyVersion);o.setPolicy(state.policy.policyVersion);state.members.m.replication.replicaConfigVersion=version;state.members.m.target={...state.members.m.target,primaryEpoch:epoch};};
+  o.setReplica(1,1);await f.write({type:'Job',fields:{n:1}},{id:'w1',principal});
+  // setStandby on the Member: configuration 2, the router has not adopted it yet.
+  o.setReplica(2,1);
+  await assert.rejects(f.write({type:'Job',fields:{n:2}},{id:'w2',principal}),FederationPending);
+  await assert.rejects(f.write({type:'Job',fields:{n:2}},{id:'w2',principal}),FederationPending,'still waiting for the adoption');
+  assert.equal(await count(2),0);
+  adopt(2);
+  await f.write({type:'Job',fields:{n:2}},{id:'w2',principal});assert.equal(await count(2),1,'runs once after the adoption');
+  await f.write({type:'Job',fields:{n:2}},{id:'w2',principal});assert.equal(await count(2),1,'a retry returns the result');
+  // A degrade (epoch 2) after the refusal: the step moves to the installed successor binding as well.
+  o.setReplica(3,2);
+  await assert.rejects(f.write({type:'Job',fields:{n:3}},{id:'w3',principal}),FederationPending);
+  adopt(3,2);await f.write({type:'Job',fields:{n:3}},{id:'w3',principal});assert.equal(await count(3),1);
+  // An ordinary policy change between refusal and adoption: the refusal stands.
+  o.setReplica(4,2);
+  await assert.rejects(f.write({type:'Job',fields:{n:4}},{id:'w4',principal}),FederationPending);
+  state.policy.policyVersion++;o.setPolicy(state.policy.policyVersion);adopt(4,2);
+  await assert.rejects(f.write({type:'Job',fields:{n:4}},{id:'w4',principal}),/review/);assert.equal(await count(4),0);
+ }finally{socket.close();await server.close();}
+}));

@@ -59,7 +59,8 @@ const same = (a: unknown, b: unknown) =>
 const positive = (n: unknown) => Number.isSafeInteger(n) && Number(n) > 0;
 export class DelegationDenied extends core.PermissionError {}
 /** v3 5.3.1 step 5: the Member changed its replica configuration and the router has not adopted the notice yet. */
-export class ReplicaConfigPending extends DelegationDenied {}
+export { ReplicaConfigPending } from "./core.ts";
+import { ReplicaConfigPending } from "./core.ts";
 export const DelegationEpochs =
     defineDocFamily<{routerEpoch : number; controlPrimaryEpoch : number; policyVersion : number},
                     null>({
@@ -375,6 +376,11 @@ export class DelegationVerifier {
         // it was created with, transitions only change the configuration.
         const replica = this.o.replicaConfig?.(info.spaceId);
         const epoch = replica?.primaryEpoch ?? s.primaryEpoch ?? 1;
+        // A router behind an adopted transition (older epoch, other configuration version) waits for the adoption: new
+        // work is pending, not denied (v3 5.3.1 step 5).
+        if (replica && !reference && !missingResolution && positive(d.targetPrimaryEpoch) && d.targetPrimaryEpoch <= epoch &&
+            d.targetReplicaConfigVersion !== replica.replicaConfigVersion)
+            throw new ReplicaConfigPending(`replica configuration ${replica.replicaConfigVersion} is not adopted by the router yet`);
         if (!positive(d.targetPrimaryEpoch) ||
             call.frame?.primaryEpoch !== undefined &&
                 call.frame.primaryEpoch !== d.targetPrimaryEpoch ||
@@ -385,9 +391,10 @@ export class DelegationVerifier {
         if (replica && !reference && d.targetReplicaConfigVersion !== replica.replicaConfigVersion)
             throw new ReplicaConfigPending(`replica configuration ${replica.replicaConfigVersion} is not adopted by the router yet`);
         const policy = await this.o.policy();
-        if (policy.authorityId !== this.o.authorityId || !positive(policy.policyVersion) ||
-            !reference && d.policyVersion !== policy.policyVersion)
+        if (policy.authorityId !== this.o.authorityId || !positive(policy.policyVersion))
             throw new DelegationDenied("new operation must use current installed policy");
+        if (!reference && d.policyVersion !== policy.policyVersion)
+            throw new core.StalePolicyVersion("new operation must use current installed policy");
         if (known && (known.policyVersion ?? 1) !== d.policyVersion)
             throw new DelegationDenied("retry changed original policy");
         const grant = call.frame?.grant as unknown as SignedGrant, g = grant?.grant;

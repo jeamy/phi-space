@@ -57,7 +57,7 @@ Weitere Inhalte der Stufe:
 
 | # | Punkt | Stand |
 |---|---|---|
-| B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | teilweise: geroutete Writes mit Promotion (`root-hosta-2026-10-17`); `CommitSealed`, Partition und `NotCommitted` liefen nur mit Admin-Grants |
+| B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | teilweise: geroutete Writes mit Partition und Promotion real (`root-hosta-2026-10-17`, Lauf vom 2026-10-18); der Router konnte offene Schritte nach Promotion oder Degrade nicht klären und beendete Writes im `ReplicaConfigPending`-Fenster endgültig, seit 2026-10-18 behoben und lokal geprüft (`test-delegation`); real offen |
 | B2 | Ausfall eines NetBird-Agenten | offen |
 | B3 | Erschöpfter Speicher | lokal: ein volles Journal lehnt vor dem Versiegeln mit `ResourceExhausted` ab, Lesen und kleinere Writes gehen weiter (`test-primary-sync`; bis 2026-10-18 sperrte es die Session); Historienbudget der Merge-Replikation (`test-entry-replication`); real offen; ein voller Datenträger (ENOSPC) wird nicht geprüft |
 | B4 | Prozessabbruch ohne Operatorschritt | lokal erfüllt: Der Daemon räumt eine Sperre, deren Prozess nachweislich fehlt (früherer Boot, oder kein Prozess mit ihrer PID und Startzeit; `test-replica-control`); real offen |

@@ -89,6 +89,7 @@ export async function adoptReplicaConfigNotice(host: SpaceHost, ctx: Context, o:
 			? (({ standbyReplica: _, ...rest }) => ({ ...rest, primaryReplica: n.primaryReplica, replicaConfigVersion: n.replicaConfigVersion, durability: n.durability, ...(n.standbyReplica ? { standbyReplica: n.standbyReplica } : {}) }))(rule)
 			: rule);
 		d.policy = { ...d.policy, rules, policyVersion: d.policy.policyVersion + 1 };
+		d.noticePolicyVersions = [...(d.noticePolicyVersions ?? []), d.policy.policyVersion].slice(-256);
 		const control = await spaceDoc(tx, o.controlSpaceId, Date.now());
 		control.authorityCounters ??= { routerEpoch: 0, policyVersion: 0 };
 		control.authorityCounters.policyVersion = d.policy.policyVersion;

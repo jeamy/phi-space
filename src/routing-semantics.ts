@@ -71,7 +71,9 @@ export type FederationMember = {
     capabilities?: {names : string[]; at : number}
 };
 export type RoutingState = {
-    policy: FederationPolicy|null; members : Record<string, FederationMember>
+    policy: FederationPolicy|null; members : Record<string, FederationMember>;
+    /** Policy versions produced by adopted replica notices (newest 256); they change only the replica configuration. */
+    noticePolicyVersions?: number[]
 };
 export class RoutingConflict extends Error {};
 export class MigrationRequired extends Error {};

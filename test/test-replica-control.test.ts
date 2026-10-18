@@ -316,7 +316,9 @@ for(const backend of BACKENDS)test(`${backend}: the router adopts a ReplicaConfi
   assert.deepEqual(m.replication,{primaryReplica:'s',standbyReplica:'p',replicaConfigVersion:2,durability:'sync',recoveryId:'promote-s'});
   assert.deepEqual(after.policy!.rules[0],{type:'Synced',mode:'sync',variant:'primary',member:'replicated',primaryReplica:'s',standbyReplica:'p',replicaConfigVersion:2,durability:'sync'});
   const strip=(r:any)=>({...r,policy:{...r.policy,policyVersion:0,rules:[null,...r.policy.rules.slice(1)]},members:{...r.members,replicated:{...r.members.replicated,target:null,replication:null}}});
-  assert.deepEqual(strip(after),strip(before),'only replication, target, the primary rule of the Member and policyVersion changed');
+  assert.deepEqual(after.noticePolicyVersions,[2],'the policy version of the adoption is recorded');
+  const {noticePolicyVersions:_,...rest}=after;
+  assert.deepEqual(strip(rest),strip(before),'only replication, target, the primary rule of the Member and policyVersion changed');
   // Rule and Member replica configuration agree before and after; a drifted rule is refused by the validator.
   validateFederationPolicy(before.policy!,before.members,null,new Set(),true);validateFederationPolicy(after.policy!,after.members,before.policy,new Set(),true);
   assert.throws(()=>validateFederationPolicy(before.policy!,after.members,null,new Set(),true),/disagrees with the member replica configuration/);
