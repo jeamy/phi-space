@@ -192,7 +192,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 			// shard stall a single read for minutes. Swarm-side guards bound the rest.
 			callTimeoutMs: Number(process.env.SWARM_REMOTE_CALL_TIMEOUT ?? 8_000),
 			attempts: Number(process.env.SWARM_REMOTE_ATTEMPTS ?? 3),
-		}));
+		}), "b-", spec);
 		console.log(`[swarm] remote shard configured: ${spec} (space alias ${SWARM_ALIAS})`);
 	}
 	// The swarm starts AFTER server.listen below: its workers would otherwise pin the

@@ -333,6 +333,8 @@ export class SocialSwarmHub {
 	#remoteRev = 0;
 	#remoteDownUntil = 0;
 	#remoteSyncing = false;
+	#remoteConnected = false;
+	#remoteLabel: string | null = null;
 	#lastShardWarn = 0;
 	/** Durable per-channel post totals on THIS shard (ChannelCount entries). */
 	#channelTotals = new Map<string, number>();
@@ -343,6 +345,26 @@ export class SocialSwarmHub {
 		if (Date.now() - this.#lastShardWarn < 30_000) return;
 		this.#lastShardWarn = Date.now();
 		console.warn(`[swarm] ${msg}:`, (err as Error).message);
+	}
+
+	/** Remote shard came up: log the connect once per up-transition. */
+	#markRemoteUp(detail?: string): void {
+		this.#remoteDownUntil = 0;
+		if (!this.#remoteConnected) {
+			this.#remoteConnected = true;
+			const target = this.#remoteLabel ? ` ${this.#remoteLabel}` : "";
+			console.log(`[swarm] remote shard connected${target}${detail ? ` — ${detail}` : ""}`);
+		}
+	}
+
+	/** Remote shard failed: back off and log the loss once per down-transition. */
+	#markRemoteDown(): void {
+		this.#remoteDownUntil = Date.now() + 5_000;
+		if (this.#remoteConnected) {
+			this.#remoteConnected = false;
+			const target = this.#remoteLabel ? ` ${this.#remoteLabel}` : "";
+			console.warn(`[swarm] remote shard lost${target} — retrying`);
+		}
 	}
 
 	#adminCheck: ((password: string) => boolean) | null = null;
@@ -360,9 +382,10 @@ export class SocialSwarmHub {
 	}
 
 	/** Attach a second shard space (primary hub only): task routing, delta merge and queries fan out to it. */
-	attachRemoteShard(space: SpaceLike, prefix = "b-"): void {
+	attachRemoteShard(space: SpaceLike, prefix = "b-", label?: string): void {
 		this.#remote = space;
 		this.#remotePrefix = prefix;
+		this.#remoteLabel = label ?? null;
 		if (this.spaceId) {
 			void this.#syncRemoteShard();
 		}
@@ -389,9 +412,9 @@ export class SocialSwarmHub {
 				this.#indexPost(e);
 			}
 			this.#remoteRev = (await this.#remote.readPage(null, { maxBytes: 1_000 })).rev;
-			this.#remoteDownUntil = 0;
+			this.#markRemoteUp(`${allRemote.length} posts, rev ${this.#remoteRev}`);
 		} catch (e) {
-			this.#remoteDownUntil = Date.now() + 5_000;
+			this.#markRemoteDown();
 			this.#shardWarn("remote shard sync failed", e);
 		} finally {
 			this.#remoteSyncing = false;
@@ -425,10 +448,10 @@ export class SocialSwarmHub {
 		if (space !== this.#remote) return space.readAll(tmpl, opts);
 		try {
 			const out = await this.#remoteCall(space.readAll(tmpl, opts), 20_000);
-			this.#remoteDownUntil = 0;
+			this.#markRemoteUp();
 			return out;
 		} catch (e) {
-			this.#remoteDownUntil = Date.now() + 5_000;
+			this.#markRemoteDown();
 			this.#shardWarn("remote readAll failed", e);
 			throw e;
 		}
@@ -830,14 +853,14 @@ export class SocialSwarmHub {
 						await space.write({ type: "SwarmTask", fields }, txn.id, 60_000);
 					}
 					await space.commit(txn.id);
-					if (space === this.#remote) this.#remoteDownUntil = 0;
+					if (space === this.#remote) this.#markRemoteUp();
 				} catch (e) {
-					if (space === this.#remote) this.#remoteDownUntil = Date.now() + 5_000;
+					if (space === this.#remote) this.#markRemoteDown();
 					this.#shardWarn(`shard txn failed (${tasks.length} tasks, remote=${space !== this.space})`, e);
 					try { await space.abort(txn.id); } catch { /* already gone */ }
 				}
 			} catch (e) {
-				if (space === this.#remote) this.#remoteDownUntil = Date.now() + 5_000;
+				if (space === this.#remote) this.#markRemoteDown();
 				this.#shardWarn(`shard txn open failed (remote=${space !== this.space})`, e);
 			}
 		}
@@ -1268,7 +1291,7 @@ export class SocialSwarmHub {
 					try {
 						const rpage = await this.#remote.changes(this.#remoteRev, { maxBytes: 300_000 });
 						this.#remoteRev = rpage.next;
-						this.#remoteDownUntil = 0;
+						this.#markRemoteUp();
 						for (const b of rpage.batches) {
 							for (const op of b.ops) {
 								if (op.op !== "put") continue;
@@ -1293,7 +1316,7 @@ export class SocialSwarmHub {
 							}
 						}
 					} catch (e) {
-						this.#remoteDownUntil = Date.now() + 5_000;
+						this.#markRemoteDown();
 						if (e instanceof SnapshotExpired || e instanceof RevisionAhead || (e as Error).name === "SnapshotExpired" || String(e).includes("dropped") || String(e).includes("ahead")) {
 							void this.#syncRemoteShard();
 						}
@@ -1343,11 +1366,11 @@ export class SocialSwarmHub {
 				const rs = await this.#remoteCall(this.#remote.stats(), 8_000);
 				totalEntries += rs.entries;
 				shardsUp++;
-				this.#remoteDownUntil = 0;
+				this.#markRemoteUp();
 				for (const [t, n] of Object.entries(rs.byType)) entries[t] = (entries[t] ?? 0) + Number(n);
 				pending += await this.#remoteCall(this.#remote.count({ type: "SwarmTask" }), 8_000);
 			} catch {
-				this.#remoteDownUntil = Date.now() + 5_000;
+				this.#markRemoteDown();
 				// shard host unreachable – report the local shard only
 			}
 		}
@@ -1449,7 +1472,7 @@ export class SocialSwarmHub {
 							);
 						} catch (err) {
 							if (shard === this.#remote) {
-								this.#remoteDownUntil = Date.now() + 5_000;
+								this.#markRemoteDown();
 								await this.space.write(
 									{ type: "SwarmTask", fields: { taskId, kind: replyTo ? "reply" : "post", agentId: userAgent.agentId, channel, replyTo, userText: text, userHandle: userAgent.handle, imageUrl, imageAlt, createdAt: Date.now() } },
 									null,
@@ -1479,7 +1502,7 @@ export class SocialSwarmHub {
 							);
 						} catch (err) {
 							if (shard === this.#remote) {
-								this.#remoteDownUntil = Date.now() + 5_000;
+								this.#markRemoteDown();
 							}
 						}
 						if (!this.#likeSets.has(postId)) this.#likeSets.set(postId, new Set());
