@@ -69,3 +69,48 @@ for(const backend of BACKENDS)test(`${backend}: degradeToSingle without a fencin
   void h;
  }finally{pJournal.close();sJournal.close();register.close();await pHome.dispose();await sHome.dispose();}
 });
+
+test('the daemon path: an active standby with a revoked permit keeps serving its listener; after a wipe setStandby catches it up over the signed transport',async()=>{
+ const {mkdtempSync,rmSync,renameSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {Harness,createRegistry}=await import('@earendil-works/pi-durable'),{openNodeSqliteStorage}=await import('@earendil-works/pi-durable/storage/sqlite/node'),{createModels}=await import('@earendil-works/pi-ai/models');
+ const {openSyncSpace,provisionFileSigner,signedReplicaPeer,socketTransport}=await import('../src/index.ts');
+ const dir=mkdtempSync(join(tmpdir(),'degrade-revoke-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),port=17571;
+ const keys={p:provisionFileSigner(join(dir,'p.json')),s:provisionFileSigner(join(dir,'s.json'))},ip={p:'127.0.0.2',s:'127.0.0.3'};
+ const spaceId='sp-0c7e6f1a-1111-4222-8333-944445555999',incarnation='0a1b2c3f',authorityId='authority';
+ const genesis:PrimarySyncConfig={spaceId,authorityId,primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s',durability:'sync'};
+ const sp=(role:'primary'|'standby')=>({state:'active',authorityId,dataIncarnation:incarnation,role,primaryEpoch:1,replicaConfigVersion:1,durability:'sync',transitionId:'provisioned'});
+ await reg.compareAndSet('boot:p',null,{hostId:'p',state:'active',spaces:{[spaceId]:sp('primary')}});
+ await reg.compareAndSet('boot:s',null,{hostId:'s',state:'active',spaces:{[spaceId]:sp('standby'),'other-space':permit('local')}});
+ const installed={p:new SqliteRecoveryRegister(join(dir,'installed-p.sqlite')),s:new SqliteRecoveryRegister(join(dir,'installed-s.sqlite'))};
+ const syncDir=(h:'p'|'s')=>join(dir,h,'sync'),other=(h:'p'|'s')=>h==='p'?'s':'p';
+ const peerOf=(h:'p'|'s')=>({hostId:h,algorithm:'ed25519' as const,publicKey:keys[h].publicKey,ip:ip[h]});
+ const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:syncDir(h),genesis,port,peers:[peerOf(other(h))]},
+  hostId:h,authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
+  openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+ const jobs=(h:any)=>new PiSpaces(h,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
+ // Tool steps run with the daemon stopped, on the store files.
+ const offline=async<T>(h:'p'|'s',f:(o:{storage:any;journal:PrimarySyncJournal})=>Promise<T>)=>{const journal=new PrimarySyncJournal(join(syncDir(h),'journal.sqlite'),genesis,{self:h,assertStandby:assertSyncStandby(reg,h)}),storage=await openNodeSqliteStorage(join(syncDir(h),'harness.sqlite'));try{return await f({storage,journal});}finally{await storage.close(ctx);journal.close();}};
+ let p:any,s:any;
+ try{
+  s=await open('s');p=await open('p');
+  await jobs(p.harness).write({type:'Job',fields:{n:1}},null,core.FOREVER);
+  await s.close();s=undefined;await p.close();p=undefined;// the standby is lost; the primary's daemon stops for the tool
+  const done=await offline('p',o=>degradeToSingle({...o,register:reg,hostId:'p',dataIncarnation:incarnation,ctx,recoveryId:'degrade-revoke',expectedPrimaryEpoch:1,expectedReplicaConfigVersion:1,revokeStandbySpace:true}));
+  assert.equal(done.config.durability,'single');
+  const sBoot=(await reg.get<any>('boot:s'))!.value;assert.deepEqual([sBoot.state,sBoot.spaces[spaceId].state,sBoot.spaces['other-space'].state],['active','revoked','active']);
+  // The excluded standby's old history is set aside; its normal daemon then opens the Space as a listener only.
+  renameSync(syncDir('s'),syncDir('s')+'.aside');
+  s=await open('s');assert.equal(s.harness,undefined,'not served');assert.equal(s.journal.head().revision,0);
+  p=await open('p');await jobs(p.harness).write({type:'Job',fields:{n:2}},null,core.FOREVER);await p.close();p=undefined;
+  // set-standby from the primary over the signed transport to the running standby daemon.
+  const t=socketTransport({host:ip.s,port},{localAddress:ip.p,connectTimeoutMs:8000,maxFrameBytes:1<<20});
+  try{
+   const back=await offline('p',o=>setStandby({...o,register:reg,hostId:'p',dataIncarnation:incarnation,ctx,transitionId:'standby-back',target:signedReplicaPeer({transport:t,signer:keys.p,self:'p',remote:peerOf('s')}),targetDataIncarnation:incarnation}));
+   assert.deepEqual([back.config.durability,back.config.standbyReplica],['sync','s']);
+  }finally{t.close();}
+  assert.equal((await reg.get<any>('boot:s'))!.value.spaces[spaceId].state,'active');
+  // Sync again: the next write is confirmed by the same standby daemon, which holds the whole history.
+  p=await open('p');await jobs(p.harness).write({type:'Job',fields:{n:3}},null,core.FOREVER);
+  assert.deepEqual(s.journal.head(),p.journal.head());assert.equal(await jobs(p.harness).count({type:'Job'}),3);
+ }finally{await p?.close().catch(()=>{});await s?.close().catch(()=>{});reg.close();installed.p.close();installed.s.close();rmSync(dir,{recursive:true,force:true});}
+});

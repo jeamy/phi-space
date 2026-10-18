@@ -9,7 +9,7 @@ import {dirname} from 'node:path';
 import type {Context} from '@earendil-works/chord';
 import type {Storage,StorageWrite,DocumentId,DocumentRecord,Seq} from '@earendil-works/pi-durable';
 import {canonicalJson} from './canonical.ts';
-import {CommitSealed} from './commit-sealed.ts';
+import {CommitSealed,SyncBudgetExceeded} from './commit-sealed.ts';
 import type {Json} from './core.ts';
 
 /** `durability` absent means sync (older configurations keep their hash). Single has no standby. */
@@ -28,6 +28,8 @@ export type PrimaryIntent=PrimaryCommitIntent|PrimaryConfigIntent|PrimaryBootstr
 export type PrimarySyncAck={revision:number;hash:string;configHash:string};
 export interface PrimarySyncPeer{accept(intent:PrimaryIntent):Promise<PrimarySyncAck>}
 export class PrimarySyncBlocked extends Error{}
+/** The journal's per-commit or history budget is used up; nothing was sealed. */
+export class SyncJournalFull extends PrimarySyncBlocked{}
 export {CommitSealed};
 const canonical=(v:unknown)=>canonicalJson(v as Json);
 const hash=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex');
@@ -97,7 +99,8 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  /** Validates an entry against the configuration in force before it. */
  private validate(i:PrimaryIntent,current:PrimarySyncConfig){
   const keys1=['version','config','revision','previousHash','batchHash','deltas','validatedAt','hash'],keys2=[...keys1,'previousConfigHash','reason'],keys3=[...keys1,'bootstrap'];
-  if(!i||!(i.version===1&&exact(i,keys1)||i.version===2&&exact(i,keys2)||i.version===3&&exact(i,keys3))||!integer(i.revision)||i.revision<1||!integer(i.validatedAt)||!Array.isArray(i.deltas)||Buffer.byteLength(canonical(i))>this.maxIntentBytes)throw new PrimarySyncBlocked('invalid or oversized commit intent');
+  if(!i||!(i.version===1&&exact(i,keys1)||i.version===2&&exact(i,keys2)||i.version===3&&exact(i,keys3))||!integer(i.revision)||i.revision<1||!integer(i.validatedAt)||!Array.isArray(i.deltas))throw new PrimarySyncBlocked('invalid or oversized commit intent');
+  if(Buffer.byteLength(canonical(i))>this.maxIntentBytes)throw new SyncJournalFull(`oversized commit intent (at most ${this.maxIntentBytes} bytes)`);
   if(i.version===1){if(canonical(i.config)!==canonical(current)||i.deltas.length<2)throw new PrimarySyncBlocked('invalid or oversized commit intent');}
   else if(i.version===3){
    const b=i.bootstrap;
@@ -125,7 +128,7 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   if(i.version===3&&before&&(before.version!==3||before.bootstrap.total!==i.bootstrap.total||before.bootstrap.storeHash!==i.bootstrap.storeHash))throw new PrimarySyncBlocked('bootstrap chunks must start the chain without gaps');
   if(i.version!==3&&before?.version===3&&before.bootstrap.index!==before.bootstrap.total-1)throw new PrimarySyncBlocked('the bootstrap is not complete');
   const encoded=canonical(i),used=(this.db.prepare('SELECT COALESCE(SUM(length(CAST(intent AS BLOB))),0) AS n FROM sync_intents').get() as {n:number}).n;
-  if(used+Buffer.byteLength(encoded)>this.maxHistoryBytes)throw new PrimarySyncBlocked('sync history is full; no committed result was discarded');
+  if(used+Buffer.byteLength(encoded)>this.maxHistoryBytes)throw new SyncJournalFull('sync history is full; no committed result was discarded');
   this.db.prepare('INSERT INTO sync_intents(revision,hash,intent) VALUES(?,?,?)').run(i.revision,i.hash,encoded);this.configs.push(copy(i.config));
  }
  private sealEntry(build:(head:PrimarySyncAck)=>Omit<PrimaryIntent,'hash'>):PrimaryIntent{
@@ -354,7 +357,9 @@ export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,pe
     await o.assertPrimary();sealed=journal.seal([...copy(writes),mark],now);
     if(sync){const ack=await peer!.accept(copy(sealed));if(canonical(ack)!==canonical({revision:sealed.revision,hash:sealed.hash,configHash:journal.configHash}))throw new PrimarySyncBlocked('standby ACK does not match sealed intent');}
     await o.assertPrimary();const seq=await apply(storage,journal,sealed,ctx);if(seq===null)throw new PrimarySyncBlocked('unexpected already-applied candidate');return seq;
-   }catch(e){if(sealed){poisoned=true;try{o.onPoisoned?.({revision:sealed.revision,hash:sealed.hash});}catch{}throw new CommitSealed(sealed,e);}throw e;}finally{busy=false;}
+   }catch(e){if(sealed){poisoned=true;try{o.onPoisoned?.({revision:sealed.revision,hash:sealed.hash});}catch{}throw new CommitSealed(sealed,e);}
+    // Refused before sealing for lack of journal budget: no storage effect, so the session stays usable.
+    if(e instanceof SyncJournalFull)throw new SyncBudgetExceeded(e.message,{cause:e});throw e;}finally{busy=false;}
   };
  }});
 }

@@ -413,7 +413,7 @@ test('an owner lock is cleared only when its process is provably gone: earlier b
  const boot=readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim(),self={bootId:boot,pid:process.pid,startTime:procStartTime};
  const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
  try{
-  const pid=child.pid!;let started:string|null=null;for(let n=0;n<100&&!started;n++){started=procStartTime(pid);if(!started)await new Promise(r=>setTimeout(r,10));}
+  const pid=child.pid!;let started:string|null|undefined=null;for(let n=0;n<100&&!started;n++){started=procStartTime(pid);if(!started)await new Promise(r=>setTimeout(r,10));}
   const lock={pid,mode:'run',bootId:boot,startTime:started};
   assert.equal(staleOwnerLock(lock,self),null,'a live owner keeps its lock');
   assert.equal(staleOwnerLock({...lock,startTime:'1'},self),'processGone','the PID was reused by another process');
@@ -421,6 +421,7 @@ test('an owner lock is cleared only when its process is provably gone: earlier b
   assert.equal(staleOwnerLock({...lock,pid:process.pid,startTime:'1'},self),'processGone','this process holds the PID now');
   assert.equal(staleOwnerLock({pid,mode:'run'},self),null,'an older lock without boot ID stays for the operator');
   assert.equal(staleOwnerLock({pid,mode:'run',bootId:boot},self),null,'and so does one without start time');
+  assert.equal(staleOwnerLock({...lock,startTime:'1'},{...self,startTime:()=>undefined}),null,'an unreadable process entry keeps the lock');
   child.kill('SIGKILL');await new Promise(r=>child.once('exit',r));
   for(let n=0;n<100&&procStartTime(pid)===started;n++)await new Promise(r=>setTimeout(r,10));
   assert.equal(staleOwnerLock(lock,self),'processGone','SIGKILL in the same boot');

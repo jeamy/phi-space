@@ -59,9 +59,12 @@ Weitere Inhalte der Stufe:
 |---|---|---|
 | B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | teilweise: geroutete Writes mit Promotion (`root-hosta-2026-10-17`); `CommitSealed`, Partition und `NotCommitted` liefen nur mit Admin-Grants |
 | B2 | Ausfall eines NetBird-Agenten | offen |
-| B3 | Erschöpfter Speicher | lokal: Journal- und Historienbudgets weisen ab (`test-primary-sync`, `test-entry-replication`); real offen |
+| B3 | Erschöpfter Speicher | lokal: ein volles Journal lehnt vor dem Versiegeln mit `ResourceExhausted` ab, Lesen und kleinere Writes gehen weiter (`test-primary-sync`; bis 2026-10-18 sperrte es die Session); Historienbudget der Merge-Replikation (`test-entry-replication`); real offen; ein voller Datenträger (ENOSPC) wird nicht geprüft |
 | B4 | Prozessabbruch ohne Operatorschritt | lokal erfüllt: Der Daemon räumt eine Sperre, deren Prozess nachweislich fehlt (früherer Boot, oder kein Prozess mit ihrer PID und Startzeit; `test-replica-control`); real offen |
 | B5 | `degrade` ohne Fencing-Adapter im Sync-Werkzeug | umgesetzt: `sync` mit `op: degrade, revokeStandbySpace: true` für primary/sync-Spaces (nicht für `main-sync` mit Geschwister-Spaces); real offen |
+
+Außerhalb der Abnahmekriterien, aber offen: Boot- und Löschintegration des Sync-Journals
+([ap3-primary-sync](ap3-primary-sync.md)).
 
 ## Offen für die Abnahme
 

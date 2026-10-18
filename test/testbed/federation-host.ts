@@ -59,7 +59,7 @@ if (mode==="run" && existsSync(join(home,"restart.lock"))) throw new Error("pers
 const bootId=(()=>{try{return readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();}catch{return null;}})(),startTime=procStartTime('self');
 const lock=join(home,"owner.lock");
 if(existsSync(lock)){try{const text=privateFile(lock).toString(),old=JSON.parse(text),why=staleOwnerLock(old,{bootId,pid:process.pid,startTime:procStartTime});if(why&&clearStaleOwnerLock(lock,text)){console.error(JSON.stringify({staleOwnerLockCleared:{pid:old.pid,mode:old.mode,reason:why,...(why==='previousBoot'?{previousBoot:old.bootId}:{})}}));}}catch(e){if(!(e instanceof SyntaxError))throw e;}}
-const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode,bootId,startTime})+'\n');closeSync(fd);
+const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode,bootId,startTime:startTime??null})+'\n');closeSync(fd);
 const releaseLock=()=>{try{unlinkSync(lock);}catch{}};
 // SIGTERM is caught from here on: a stop during startup lets the mode finish starting and then clean up (release the
 // lock) instead of killing the process with its lock in place. A second signal kills as before (the handler is once).
@@ -291,7 +291,7 @@ try{
   // Operator tool for one primary/sync Space, with the daemon stopped (this mode holds the owner lock).
   let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>65536)throw new Error("sync input exceeds budget");}
   const q=JSON.parse(text),cfg=JSON.parse(privateFile(configFile).toString()),c=(cfg.syncSpaces??[]).find((x:any)=>x.alias===q.alias);if(!c)throw new Error("unknown primary/sync Space");
-  const reader=new SyncRegister(cfg.registerTls),journal=new PrimarySyncJournal(join(c.dir,"journal.sqlite"),c.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)});
+  const reader=new SyncRegister(cfg.registerTls),journal=new PrimarySyncJournal(join(c.dir,"journal.sqlite"),c.genesis,{...c.journal,self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)});
   const signer=loadFileSigner(cfg.keyFile),raw=async()=>openNodeSqliteStorage(join(c.dir,"harness.sqlite"));let result:any;
   try{
    const status=()=>({alias:c.alias,head:journal.head(),applied:journal.appliedRevision,config:journal.config,open:journal.openTransitionIds(),recoveredCommitted:journal.recoveredCommitted});
@@ -313,7 +313,8 @@ try{
       result=q.op==="promote"?await promote({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof}):await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof});result={...result,proof:{kind:proof.kind,evidence:proof.evidence}};}
     }finally{await st.close(ctx);register.close();}
    }else if(q.op==="wipe"){
-    const b=await reader.get<any>("boot:"+cfg.hostId);if(b?.value.state==="active")throw new Error("an active host keeps its history; wipe only a fenced or quarantined replica");
+    // An active host keeps its history, unless this Space's permit was revoked (degrade without a fencing adapter).
+    const b=await reader.get<any>("boot:"+cfg.hostId),own=b?.value.spaces?.[c.spaceId];if(b?.value.state==="active"&&own&&own.state!=="revoked")throw new Error("an active host keeps its history; wipe only a fenced or quarantined replica, or one whose permit for this Space is revoked");
     journal.close();const aside=c.dir+".aside-"+Date.now();(await import("node:fs")).renameSync(c.dir,aside);result={aside};
    }else throw new Error("unknown sync op");
   }finally{try{journal.close();}catch{}reader.close();}

@@ -4,12 +4,15 @@ import {readFileSync,renameSync,linkSync,unlinkSync} from 'node:fs';
 
 export type OwnerLock = {pid: number; mode?: string; bootId?: string | null; startTime?: string | null};
 
-/** Field 22 of /proc/<pid>/stat (start time in clock ticks since boot); null when there is no such process. */
-export function procStartTime(pid: number | 'self'): string | null {
-	try {
-		const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-		return stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[19] ?? null;
-	} catch { return null; }
+/**
+ * Field 22 of /proc/<pid>/stat (start time in clock ticks since boot); null when there is no such process, undefined
+ * when it cannot be told (any other read error, an unexpected format).
+ */
+export function procStartTime(pid: number | 'self'): string | null | undefined {
+	let stat: string;
+	try { stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); } catch (e) { return (e as NodeJS.ErrnoException).code === 'ENOENT' ? null : undefined; }
+	const start = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[19];
+	return start && /^[0-9]+$/.test(start) ? start : undefined;
 }
 
 /**
@@ -19,12 +22,14 @@ export function procStartTime(pid: number | 'self'): string | null {
  *   (PIDs are reused, start times within one boot are not).
  * A lock without boot ID or start time (older format) is never cleared here.
  */
-export function staleOwnerLock(old: OwnerLock, self: {bootId: string | null; pid: number; startTime: (pid: number) => string | null}): 'previousBoot' | 'processGone' | null {
+export function staleOwnerLock(old: OwnerLock, self: {bootId: string | null; pid: number; startTime: (pid: number) => string | null | undefined}): 'previousBoot' | 'processGone' | null {
 	if (!self.bootId || !old.bootId) return null;
 	if (old.bootId !== self.bootId) return 'previousBoot';
 	if (!old.startTime || !Number.isSafeInteger(old.pid) || old.pid <= 0) return null;
 	if (old.pid === self.pid) return 'processGone';
-	return self.startTime(old.pid) === old.startTime ? null : 'processGone';
+	const now = self.startTime(old.pid);
+	// Unknown is not gone: a single-writer lock is kept unless the process is provably absent.
+	return now === undefined || now === old.startTime ? null : 'processGone';
 }
 
 /**

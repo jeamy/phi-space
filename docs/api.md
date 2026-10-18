@@ -580,7 +580,9 @@ der native Root übernimmt sie im Heartbeat (`adoptReplicaNotices`) und adressie
 
 `openSyncSpace` öffnet einen primary/sync-Space mit eigenem Store, Replikat-Listener, Boot-Guard und Notice.
 `startFederationHost({ syncSpaces })` und `startConfiguredFederation(host, ctx, file, { openSyncStorage,
-openSyncHarness })` binden solche Spaces in den Federation-Host ein. `createSpace(tx, alias, now, { spaceId,
+openSyncHarness })` binden solche Spaces in den Federation-Host ein. `SyncSpaceConfig.journal` setzt die Journal-Grenzen
+(`maxIntentBytes`, `maxHistoryBytes`); ein erschöpftes Budget lehnt den Commit mit `SyncBudgetExceeded` ab, ohne die
+Session zu sperren. `createSpace(tx, alias, now, { spaceId,
 incarnation })` legt einen Space mit vorgegebener Identität an.
 
 

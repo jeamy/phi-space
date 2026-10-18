@@ -57,8 +57,16 @@ Storage-Commit verlorene Antworten sind wiederholbar. Das erteilt ausdrücklich
 keine Promotions- oder Boot-Berechtigung.
 
 Der Journal besitzt standardmäßig 256 KiB je Intent und 64 MiB Gesamtbudget;
-beide sind beschränkt konfigurierbar. Bei Erschöpfung wird abgewiesen, keine
-Bestätigungshistorie zeitbasiert entfernt. Ein nicht leerer, bisher ungetrackter
+beide sind beschränkt konfigurierbar, für primary/sync-Spaces über `syncSpaces[].journal`
+(`maxIntentBytes`, `maxHistoryBytes`; alle Replikate eines Space gleich). Bei Erschöpfung wird abgewiesen, keine
+Bestätigungshistorie zeitbasiert entfernt.
+
+- **Vor dem Versiegeln:** Die Ablehnung kommt als `SyncBudgetExceeded` (ein `StorageRejected`). Nichts ist
+  geschrieben, die Session bleibt benutzbar: Lesen und kleinere Writes gehen weiter. Der Dienst antwortet
+  `ResourceExhausted`.
+- **Vorher:** Bis 2026-10-18 sperrte ein volles Journal die ganze Session, und jedes weitere Lesen scheiterte bis
+  zum Neustart (gefunden bei der Vorbereitung der Abnahme).
+- **Test:** `test/test-primary-sync.test.ts`. Ein nicht leerer, bisher ungetrackter
 Store wird nicht als Startpräfix akzeptiert. Bestehende Stores brauchen einen
 später explizit gebundenen Snapshot-/Stream-Bootstrap.
 

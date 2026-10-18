@@ -24,6 +24,8 @@ export type SyncSpaceConfig = {
 	peers: Array<ReplicaPin & { ip: string }>;
 	/** Logical Member installed by signed Control membership commands; its state lives in the replicated Space. */
 	membership?: { memberId: string };
+	/** Journal bounds (defaults 256 KiB per commit, 64 MiB history); every replica of the Space uses the same. */
+	journal?: { maxIntentBytes?: number; maxHistoryBytes?: number };
 };
 export type SyncSpace = {
 	config: SyncSpaceConfig; journal: PrimarySyncJournal; role: () => "primary" | "standby" | "excluded";
@@ -64,7 +66,7 @@ export async function openSyncSpace(o: {
 	if (c.genesis.spaceId !== c.spaceId || c.genesis.authorityId !== o.authorityId) throw new Error(`replica configuration of ${c.alias} names another Space or authority`);
 	if (!Number.isSafeInteger(c.port) || c.port < 1 || c.port > 65535 || !c.peers.length) throw new Error(`replica listener of ${c.alias} is not provisioned`);
 	mkdirSync(c.dir, { recursive: true, mode: 0o700 });
-	const journal = new PrimarySyncJournal(join(c.dir, "journal.sqlite"), c.genesis, { self: o.hostId, assertStandby: assertSyncStandby(o.external, o.hostId) });
+	const journal = new PrimarySyncJournal(join(c.dir, "journal.sqlite"), c.genesis, { ...c.journal, self: o.hostId, assertStandby: assertSyncStandby(o.external, o.hostId) });
 	const role = () => journal.config.primaryReplica === o.hostId ? "primary" as const : journal.config.standbyReplica === o.hostId ? "standby" as const : "excluded" as const;
 	const ips = new Set(c.peers.map(p => p.ip)), transports: Array<ReturnType<typeof socketTransport>> = [];
 	const listener = await serveSpace({ handleText: replicaSyncHandler({ journal: () => journal, signer: o.signer, self: o.hostId, remotes: c.peers, assertQuarantine: assertQuarantine(o.external, o.hostId, c.spaceId), now }) },

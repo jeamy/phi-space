@@ -6,6 +6,8 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PiSpaces,Space,core,type PrimarySyncPeer,type PrimaryCommitIntent,type PrimarySyncConfig} from '../src/index.ts';
 import {canonicalJson} from '../src/canonical.ts';
+import {SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport} from '../src/index.ts';
+import {SyncBudgetExceeded} from '../src/commit-sealed.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const digest=(v:unknown)=>createHash('sha256').update(canonicalJson(v as any)).digest('hex');
@@ -83,5 +85,20 @@ for(const backend of BACKENDS){
    await assert.rejects(s.accept(large),/oversized/);assert.equal(s.head().revision,revision);
    const damaged=join(home.dir,'damaged-journal.sqlite');copyFileSync(join(home.dir,'journal.sqlite'),damaged);const db=new DatabaseSync(damaged);db.exec("UPDATE sync_intents SET hash='corrupt' WHERE revision=1");db.close();assert.throws(()=>new PrimarySyncJournal(damaged,config),/index disagrees/);
   }finally{p.close();s.close();await home.dispose();await replica.dispose();}
+ });
+ test(`${backend}: a full sync history refuses the commit before sealing; the session keeps serving reads and smaller writes`,async()=>{
+  const home=new PersistentHome(backend),replica=new PersistentHome(backend),bounds={maxIntentBytes:65_536,maxHistoryBytes:200_000};
+  const p=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),config,bounds),s=new PrimarySyncJournal(join(replica.dir,'journal.sqlite'),config,bounds),raw=home.storage.bind(home);
+  home.storage=async()=>primarySyncStorage(await raw(),p,s,{assertPrimary:async()=>{}});const h=await home.open();
+  try{
+   const ids=new StaticIdentity({'peer-a':{principal:{peerId:'peer-a'},roles:['member']}}),svc=new SpaceService({host:h,ctx,identity:ids,policy:DEFAULT_POLICY});
+   const r=new RemoteSpace(inProcessTransport({handleText:(t,c)=>svc.handleText(t,c)},{peerId:'peer-a'}),{attempts:1});
+   let n=0,refused:unknown;for(;n<1000&&!refused;n++)await r.write({type:'Job',fields:{n,pad:'x'.repeat(2000)}},null,core.FOREVER).catch(e=>{refused=e;});
+   assert.ok(refused instanceof core.ResourceExhausted&&/journal: sync history is full/.test(refused.message),`ResourceExhausted, not Internal: ${refused}`);
+   assert.deepEqual(s.head(),p.head(),'nothing sealed: no candidate, both replicas equal');assert.equal(p.appliedRevision,p.head().revision);
+   await assert.rejects(new PiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(2000)}},null,core.FOREVER),SyncBudgetExceeded);
+   assert.equal(await r.count({type:'Job'}),n-1,'reads still served');
+   await r.write({type:'Small',fields:{}},null,core.FOREVER);assert.deepEqual(s.head(),p.head(),'a write that fits is still confirmed');
+  }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}
  });
 }
