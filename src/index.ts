@@ -316,7 +316,7 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
  * Reaper: removes expired entries/leases, aborts expired transactions and times out waiters at the moment they lapse
  * instead of at the next operation. Stateless (`settle` is idempotent), so after a restart just start it again.
  */
-export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number; meter?: Meter; /** alias or spaceId; omitted: the default space */ space?: string };
+export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number; meter?: Meter; /** alias or spaceId; omitted: the default space */ space?: string; /** Collapse watch-triggered maintenance runs to at most one per this window. 0 (default) keeps the old every-commit behaviour. Under sustained writes each commit would otherwise cost a full settle+nextExpiry scan. */ watchDebounceMs?: number };
 
 /** Committed state of a space for the background services (the default space even before it is registered). */
 async function snapshotOf(harness: Harness, space: string | undefined, ctx: Context): Promise<Readonly<core.SpaceState> | undefined> {
@@ -360,10 +360,18 @@ export async function startMaintenance(harness: Harness, ctx: Context, o: Servic
 	// Far-off expiries (months, or a clamped FOREVER-ish deadline) are reached in timer-sized steps: each early tick just
 	// settles (a no-op) and re-arms.
 	const arm = (ms: number) => { clearTimeout(timer); if (!stopped) timer = setTimeout(() => void tick(), core.timerDelay(ms)); };
+	const watchDebounceMs = Math.max(0, o.watchDebounceMs ?? 0);
+	let lastTickAt = 0;
+	// The tick's own settle commit fires the watch back – those frames need no extra pass: settle
+	// already ran inside the same transaction. External commits are debounced to one run per window;
+	// expiry handling only gets lazier (settle also runs inside every regular operation).
+	let inTick = false;
 	// A failed commit must not end the reaper (and a throwing watch listener would end the watch): log and retry.
 	const tick = serialized(async (): Promise<void> => {
 		if (stopped) return;
 		clearTimeout(timer);
+		lastTickAt = now();
+		inTick = true;
 		try {
 			const next = await harness.commit(async (tx) => {
 				const s = await spaceDoc(tx, o.space, now());
@@ -372,15 +380,22 @@ export async function startMaintenance(harness: Harness, ctx: Context, o: Servic
 			}, ctx);
 			if (next < core.FOREVER) arm(next - now());
 		} catch (e) {
+			if ((e as Error)?.message?.includes("Session is closed")) return;
 			onError(e);
 			arm(retryMs);
+		} finally {
+			inTick = false;
 		}
 	});
 	await harness.commit(async (tx) => { await spaceDoc(tx, o.space, now()); }, ctx); // the watch needs the doc to exist
 	// Attach the watch BEFORE the first tick: frames are only buffered from the attach on, so a commit between a tick
 	// and a later attach would be missed (and with an empty space no timer would be armed either).
 	const watch = await watchOf(harness, o.space, ctx);
-	watch?.start(tick); // tick never throws
+	watch?.start(async () => {
+		if (stopped || inTick) return;
+		if (watchDebounceMs <= 0) return void (await tick());
+		arm(Math.max(20, watchDebounceMs - (now() - lastTickAt)));
+	});
 	await tick();
 	return async () => { stopped = true; clearTimeout(timer); await watch?.stop(); };
 }
@@ -405,7 +420,10 @@ export async function startService(harness: Harness, ctx: Context, o: ServiceOpt
 				served.add(i.spaceId);
 				await one(i.spaceId);
 			}
-		} catch (e) { (o.onError ?? ((x) => console.error("pi-spaces service:", x)))(e); }
+		} catch (e) {
+			if ((e as Error)?.message?.includes("Session is closed")) return;
+			(o.onError ?? ((x) => console.error("pi-spaces service:", x)))(e);
+		}
 	});
 	await harness.commit(async (tx) => { await tx.doc(Registry); }, ctx);
 	const watch = await harness.watchDoc(Registry, ctx);
@@ -429,6 +447,7 @@ export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOp
 			for (const e of (await snapshotOf(harness, o.space, ctx))?.outbox ?? []) if (e.retryAt !== undefined) next = Math.min(next, e.retryAt);
 			if (next < Infinity && !stopped) timer = setTimeout(() => void run(), core.timerDelay(next - (o.now ?? Date.now)()));
 		} catch (e) {
+			if ((e as Error)?.message?.includes("Session is closed")) return;
 			onError(e);
 			if (!stopped) timer = setTimeout(() => void run(), retryMs);
 		}

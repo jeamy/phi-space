@@ -270,7 +270,8 @@ export class SpaceService {
 				const types = a.entry.types === undefined ? undefined : (Array.isArray(a.entry.types) && a.entry.types.every((t) => typeof t === "string") ? (a.entry.types as string[]) : (() => { throw new Bad("entry.types must be strings"); })());
 				if (!isObj(a.entry.fields)) throw new Bad("entry.fields must be an object");
 				this.checkTypes(grant, [type, ...(types ?? [])], `type ${type}`);
-				const lease = await client.write({ type, ...(types ? { types } : {}), fields: a.entry.fields }, (a.txn as string | null | undefined) ?? null, duration(a.leaseMs, "leaseMs", core.ANY), { request });
+				if (a.unique !== undefined && (!Array.isArray(a.unique) || !a.unique.every(k => typeof k === "string"))) throw new Bad("unique must be field names");
+				const lease = await client.write({ type, ...(types ? { types } : {}), fields: a.entry.fields }, (a.txn as string | null | undefined) ?? null, duration(a.leaseMs, "leaseMs", core.ANY), { request, ...(a.unique === undefined ? {} : { unique: a.unique as string[] }) });
 				return lease as unknown as Json;
 			}
 			case "read":
@@ -376,7 +377,7 @@ export class SpaceService {
 			spaceId: info.spaceId, alias: info.alias, incarnation: info.incarnation, streamId: core.streamIdOf(s ?? core.initialState()), rev: core.revision(s ?? core.initialState()),
 			authorityId: this.o.authorityId, primaryEpoch: await this.o.epochForSpace?.(info.spaceId) ?? this.o.primaryEpoch, role: "single",
 			principal: principalKey(c.id.principal), roles: c.id.roles,
-			features: [...METHODS],
+			features: [...METHODS, "write.unique"],
 			limits: { maxFrameBytes: Math.min(lim.maxFrameBytes, c.frameBytes), maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs, maxPendingPerPrincipal: this.o.maxPendingPerPrincipal, maxPendingPerPeer: this.o.maxPendingPerPeer },
 			capabilities: { snapshotPagination: true, mailboxes: true, completionProfiles: true, transactions: true, blockingTake: true, mode: "single" },
 		} as Json;

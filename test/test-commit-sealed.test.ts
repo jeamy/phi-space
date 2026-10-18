@@ -13,13 +13,13 @@ import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {CommitSealedPending} from '../src/remote.ts';
 import {sealedResolver,sealedCandidateOf,type SealedSyncSpace} from '../src/sync-spaces.ts';
 import {sealedReply} from '../src/service.ts';
-import {ctx} from './support/persistent.ts';
+import {ctx,freePort} from './support/persistent.ts';
 
 const ids=new StaticIdentity({'peer-a':{principal:{peerId:'peer-a'},roles:['member']}});
 type Svc={handleText(t:string,c:Connection):Promise<string>};
 
-async function fixture(port:number,fn:(o:{open:(h:'p'|'s')=>Promise<SyncSpace>;reg:SqliteRecoveryRegister;spaceId:string;slowStandby:(on:boolean)=>void})=>Promise<void>){
- const dir=mkdtempSync(join(tmpdir(),'commit-sealed-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite'));
+async function fixture(fn:(o:{open:(h:'p'|'s')=>Promise<SyncSpace>;reg:SqliteRecoveryRegister;spaceId:string;slowStandby:(on:boolean)=>void})=>Promise<void>){
+ const dir=mkdtempSync(join(tmpdir(),'commit-sealed-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),port=await freePort();
  const keys={p:provisionFileSigner(join(dir,'p.json')),s:provisionFileSigner(join(dir,'s.json'))},ip={p:'127.0.0.2',s:'127.0.0.3'};
  const spaceId='sp-0c7e6f1a-1111-4222-8333-944445555777',incarnation='0a1b2c3e',authorityId='authority';
  const genesis:PrimarySyncConfig={spaceId,authorityId,primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s',durability:'sync'};
@@ -46,7 +46,7 @@ function host(p:()=>SyncSpace){
 }
 const until=async(f:()=>Promise<boolean>,what:string)=>{for(let n=0;n<200;n++){if(await f())return;await new Promise(r=>setTimeout(r,25));}assert.fail(`timed out: ${what}`);};
 
-test('a sealed write answers CommitSealed; poll, retry and cancel stay pending; the host resolves it once the standby is back',()=>fixture(17561,async o=>{
+test('a sealed write answers CommitSealed; poll, retry and cancel stay pending; the host resolves it once the standby is back',()=>fixture(async o=>{
  let s:SyncSpace|undefined=await o.open('s'),p:SyncSpace|undefined=await o.open('p');
  try{
   const {remote,resolver}=host(()=>p!);
@@ -76,7 +76,7 @@ test('a sealed write answers CommitSealed; poll, retry and cancel stay pending; 
  }finally{await p?.close().catch(()=>{});await s?.close().catch(()=>{});}
 }));
 
-test('a host fenced while its candidate is unresolved stops trying and never applies it',()=>fixture(17563,async o=>{
+test('a host fenced while its candidate is unresolved stops trying and never applies it',()=>fixture(async o=>{
  let s:SyncSpace|undefined=await o.open('s');const p=await o.open('p');
  try{
   const {remote,resolver}=host(()=>p);
@@ -94,7 +94,7 @@ test('a host fenced while its candidate is unresolved stops trying and never app
  }finally{await p.close().catch(()=>{});await s?.close().catch(()=>{});}
 }));
 
-test('a primary starting with an unresolved candidate and no standby stays unserved, then serves once the standby returns',()=>fixture(17565,async o=>{
+test('a primary starting with an unresolved candidate and no standby stays unserved, then serves once the standby returns',()=>fixture(async o=>{
  let s:SyncSpace|undefined=await o.open('s'),p:SyncSpace|undefined=await o.open('p');
  try{
   const {remote}=host(()=>p!);
@@ -111,7 +111,7 @@ test('a primary starting with an unresolved candidate and no standby stays unser
  }finally{await p?.close().catch(()=>{});await s?.close().catch(()=>{});}
 }));
 
-test('a commit in flight is not a sealed candidate: concurrent reads and polls are served normally',()=>fixture(17567,async o=>{
+test('a commit in flight is not a sealed candidate: concurrent reads and polls are served normally',()=>fixture(async o=>{
  const s=await o.open('s'),p=await o.open('p');
  try{
   const {remote,resolver}=host(()=>p);const harness=p.harness;

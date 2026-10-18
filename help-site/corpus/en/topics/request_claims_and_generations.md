@@ -1,0 +1,70 @@
+---
+standard: help_topic
+id: help.topic.request_claims_and_generations
+title: "Request Claims, Generations, and Idempotency"
+short: "How pi-spaces prevents duplicate mutations across connection drops or restarts using {principal, generation, requestId} and canonical RFC-8785 hashes."
+tags: [claims, requestref, generation, idempotency, rfc8785, polloperation, resolveoperation]
+owner: client
+related: [help.topic.guarantees_and_boundaries, help.api.pispaces_claims, help.workflow.stage_v2_local_durable]
+since: 0.0.1
+---
+
+# Request Claims, Generations, and Idempotency
+
+## Overview {#overview}
+
+In the Cloudflare `pi-durable` post, preventing duplicate conversations after a WebSocket reconnect required writing a custom `ConversationCommandReceipts` document. In `pi-spaces`, this mechanism is built directly into the core as **Request Claims (`src/claims.ts`)** for **every** mutation (`write`, `take`, `createTransaction`, `commit`, `abort`, `renew`, `cancel`, `notify`, `wait`).
+
+## Concept And System Model {#concept-model}
+
+### RequestRef Structure {#requestref-shape}
+
+```ts
+type Principal = { peerId: string; agentId?: string };
+type RequestRef = {
+  principal: Principal;
+  generation: string;
+  requestId: string;
+};
+```
+
+1. **Open a Generation (`issueGeneration`)**: Before mutating, the client calls `const { generation } = await space.issueGeneration(principal)`. The generation is cryptographically bound to the principal, `spaceId`, data incarnation, and `authorityId` (default lifetime: 1 hour).
+2. **Canonical Argument Hash (`argHash`)**: For every call, `pi-spaces` computes an RFC-8785 canonical JSON hash over the **semantic arguments only** (excluding renewable envelope fields like a refreshed 60s grant).
+3. **Atomic Persistence**: The claim `(principal, spaceId, generation, requestId)` and its result are committed atomically alongside the space mutation.
+
+### Retry Semantics {#retry-behavior}
+
+- **Same `requestId` + identical arguments**: Immediately returns the stored result without repeating the mutation.
+- **Same `requestId` + different arguments**: Throws `RequestConflict`.
+- **Operation still `pending`**: A retry or `pollOperation(request)` reattaches to the persistent waiter, even if the original caller process restarted in the meantime!
+- **Admission Resolution (`resolveOperation`)**: In Phase 2 federation, the router uses `resolveOperation(request, method, argumentHash, primaryEpoch)` to verify whether a child request was admitted or can be safely retried in the same primary epoch.
+
+## Examples {#examples}
+
+```ts
+const principal = { peerId: "web-user-alice" };
+const { generation } = await space.issueGeneration(principal);
+const request = { principal, generation, requestId: "create-thread-42" };
+
+// First call (e.g. before WebSocket drop):
+const lease1 = await space.write(
+  { type: "Thread", fields: { threadId: "t-42", title: "Architecture" } },
+  null,
+  FOREVER,
+  { request }
+);
+
+// Second call after reconnect with the same requestId:
+const lease2 = await space.write(
+  { type: "Thread", fields: { threadId: "t-42", title: "Architecture" } },
+  null,
+  FOREVER,
+  { request }
+);
+// lease1.id === lease2.id -> Exactly ONE Thread entry was created!
+```
+
+## See Also {#see-also}
+
+- [Stage 2 (v2-local-durable): Persistence, RequestRef Claims, Alarms & Subagent](help.workflow.stage_v2_local_durable#overview)
+- [Request Claims & Generations API](help.api.pispaces_claims)

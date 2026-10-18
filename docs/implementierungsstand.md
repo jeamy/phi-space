@@ -5,6 +5,15 @@ automatisierte Nachweise. Der [Föderationsplan v3](federation-plan-v3.md) bleib
 der Zielvertrag: Seine Garantien gelten nicht allein deshalb, weil einzelne
 Bausteine unten bereits vorhanden sind.
 
+Ergänzung vom 18. Oktober 2026: Die Hilfesystem-/Demo-Befunde F01–F23 wurden
+mit gezielten lokalen Regressionstests bearbeitet. Änderungen, Nachweise und
+bewusste Grenzen stehen in der [Umsetzungstabelle der Analyse](analyse-hilfesystem-demo-apps-2026-10-18.md#7-schrittweise-umsetzung-vom-18-oktober-2026)
+und im [Betriebsvertrag des Hilfesystems](../help-site/README.md#demo-vertrag-und-wiederanlauf).
+`PiSpaces.write` und `RemoteSpace.write` unterstützen eine optionale atomare
+Singleton-Erstanlage über `unique`-Schlüsselfelder; ältere Remote-Server ohne
+`write.unique` werden dafür abgewiesen. Dies ist eine lokale/RPC-Erweiterung,
+keine neue Zusage globaler Eindeutigkeit oder einer abgenommenen Replikation.
+
 ## Umfang und Grenzen
 
 Ein Space ist ein persistentes Dokument im `@earendil-works/pi-durable`-Harness.

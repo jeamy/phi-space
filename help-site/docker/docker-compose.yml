@@ -1,0 +1,136 @@
+# Docker Compose configuration for PI-SPACES / HELP (https://spaces.eibrain.org)
+# Provides:
+#   1. `spaces-help-prod`: Hardened production container (NODE_ENV=production, Next.js 16 + WebSocket + SQLite in /data)
+#   2. `spaces-help-test`: Local dev/test container running the automated test suite in Docker (profile: test)
+#   3. `spaces-help-dev`:  Local interactive dev container with Next.js dev mode (profile: dev)
+#   4. `swarm-nano`:       Headless swarm shard host for the big/nano two-host setup (profile: nano)
+
+name: pi-spaces-help
+
+services:
+  # ---- 1. Production Server for https://spaces.eibrain.org ----
+  spaces-help-prod:
+    build:
+      context: ../..
+      dockerfile: help-site/docker/Dockerfile
+      target: production
+    image: pi-spaces-help:prod
+    container_name: pi-spaces-help-prod
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      HELP_BIND: 0.0.0.0
+      PORT: "${PORT:-3500}"
+      HELP_PORT: "${PORT:-3500}"
+      HELP_SQLITE: /data/spaces-eibrain.sqlite
+      PI_SPACES_ADMIN_PASSWORD: ${PI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
+    ports:
+      # Empty HOST_BIND publishes on all interfaces (IPv4 + IPv6) so "localhost" works either way.
+      - "${HOST_BIND:+$HOST_BIND:}${PORT:-3500}:${PORT:-3500}"
+    volumes:
+      - spaces-help-data:/data
+      # Optional: mount the host's pi CLI credentials so live LLM replies work
+      # (or set ANTHROPIC_API_KEY/OPENAI_API_KEY in .env). Set PI_AUTH_DIR= to skip.
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  # ---- 2. Local Dev/Test Runner in Docker ----
+  spaces-help-test:
+    build:
+      context: ../..
+      dockerfile: help-site/docker/Dockerfile
+      target: dev-test
+    image: pi-spaces-help:dev-test
+    profiles:
+      - test
+    init: true
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: test
+    command: ["node", "--experimental-strip-types", "--test", "help-site/tests/help-site.test.ts"]
+
+  # ---- 3. Local Development Server in Docker ----
+  spaces-help-dev:
+    build:
+      context: ../..
+      dockerfile: help-site/docker/Dockerfile
+      target: dev-test
+    image: pi-spaces-help:dev-test
+    profiles:
+      - dev
+    init: true
+    user: "node"
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: development
+      HELP_BIND: 0.0.0.0
+      PORT: "${PORT:-3500}"
+      HELP_PORT: "${PORT:-3500}"
+      HELP_SQLITE: /data/dev-spaces.sqlite
+    ports:
+      - "${HOST_BIND:+$HOST_BIND:}${PORT:-3500}:${PORT:-3500}"
+    volumes:
+      - spaces-help-dev-data:/data
+      # Optional: mount the host's pi CLI credentials so live LLM replies work in dev.
+      # Set PI_AUTH_DIR= in .env to skip, or use API keys (ANTHROPIC_API_KEY etc.) instead.
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+    command: ["node", "--experimental-strip-types", "help-site/server/index.ts", "--dev"]
+
+  # ---- 4. Headless Swarm Shard Host (profile: nano — deploy on the `nano` host) ----
+  swarm-nano:
+    build:
+      context: ../..
+      dockerfile: help-site/docker/Dockerfile
+      target: nano
+    image: pi-spaces-help:nano
+    container_name: pi-spaces-swarm-nano
+    profiles:
+      - nano
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      SWARM_LISTEN: "${SWARM_LISTEN:-tcp:0.0.0.0:3600}"
+      SWARM_DB: /data/swarm-b.sqlite
+      SWARM_TAG: "${SWARM_TAG:-b-}"
+      SWARM_PRODUCE: "${SWARM_PRODUCE:-0}"
+    ports:
+      # Set SWARM_BIND to the host's internal (LAN/NetBird) IP to keep the shard
+      # socket off the public interface — serveSpace has no TLS.
+      - "${SWARM_BIND:+$SWARM_BIND:}3600:3600"
+    volumes:
+      - swarm-nano-data:/data
+
+volumes:
+  spaces-help-data: {}
+  spaces-help-dev-data: {}
+  swarm-nano-data: {}

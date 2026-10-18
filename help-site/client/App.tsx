@@ -1,0 +1,1249 @@
+"use client";
+// Main PI-SPACES / HELP React Application.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { applyThemeToDocument, PALETTES } from "./lib/palettes.ts";
+import { searchAreas, searchArticles } from "./lib/search.ts";
+import { renderMarkdownToHtml } from "./lib/markdown.ts";
+import { startArticleLoad } from "./lib/article-load.ts";
+import { SpaceChatWorkbench } from "./components/SpaceChatWorkbench.tsx";
+import { AdminSpacesView } from "./components/AdminSpacesView.tsx";
+import { SocialFeedView } from "./components/SocialFeedView.tsx";
+
+type ViewState =
+	| { kind: "home" }
+	| { kind: "area"; id: string }
+	| { kind: "article"; id: string }
+	| { kind: "search"; query: string }
+	| { kind: "browse"; owner: string; articleType?: string }
+	| {
+			kind: "api-finder";
+			mode: "api" | "modules";
+			query: string;
+			provider: string;
+			category: string;
+			execution: string;
+			idempotency: string;
+			scope: string;
+	  }
+	| { kind: "space-chat"; sessionId: string }
+	| { kind: "feed" }
+	| { kind: "admin" };
+
+function parseViewFromUrl(): ViewState {
+	const params = new URLSearchParams(window.location.search);
+	const view = params.get("view");
+	if (view === "space-chat") {
+		return { kind: "space-chat", sessionId: params.get("session") ?? "lobby" };
+	}
+	if (view === "feed") {
+		return { kind: "feed" };
+	}
+	if (view === "admin") {
+		return { kind: "admin" };
+	}
+	if (view === "api-finder" || params.get("area") === "step_by_step_and_api_reference" && params.get("tab") === "api") {
+		return {
+			kind: "api-finder",
+			mode: params.get("mode") === "modules" ? "modules" : "api",
+			query: params.get("oq") ?? "",
+			provider: params.get("provider") ?? "all",
+			category: params.get("category") ?? "all",
+			execution: params.get("execution") ?? "all",
+			idempotency: params.get("idempotency") ?? "all",
+			scope: params.get("scope") ?? "all",
+		};
+	}
+	const article = params.get("article");
+	if (article) return { kind: "article", id: article };
+	const area = params.get("area");
+	if (area) return { kind: "area", id: area };
+	const q = params.get("q");
+	if (q) return { kind: "search", query: q };
+	const owner = params.get("owner");
+	const type = params.get("type");
+	if (owner || type) return { kind: "browse", owner: owner ?? "all", articleType: type ?? undefined };
+	return { kind: "home" };
+}
+
+const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
+
+export function HelpApp(props: { initialIndex?: any } = {}) {
+	const [indexData, setIndexData] = useState<any>(props.initialIndex ?? null);
+	const [locale, setLocale] = useState<"de" | "en">("en");
+	const [mode, setMode] = useState<"dark" | "light">("dark");
+	const [palette, setPalette] = useState<string>("spaces_default");
+	const [view, setView] = useState<ViewState>({ kind: "home" });
+	const [searchInput, setSearchInput] = useState<string>("");
+	const [articleMarkdown, setArticleMarkdown] = useState<string>("");
+	const [loadingArticle, setLoadingArticle] = useState<boolean>(false);
+	const searchRef = useRef<HTMLInputElement | null>(null);
+
+	useEffect(() => {
+		const savedLocale = window.localStorage.getItem("pi-spaces-help-locale");
+		if (savedLocale === "de" || savedLocale === "en") setLocale(savedLocale);
+		const savedMode = window.localStorage.getItem("pi-spaces-help-mode");
+		if (savedMode === "dark" || savedMode === "light") setMode(savedMode);
+		const savedPalette = window.localStorage.getItem("pi-spaces-help-palette");
+		if (savedPalette) setPalette(savedPalette);
+		setView(parseViewFromUrl());
+
+		if (!props.initialIndex) {
+			fetch("/help/index.json")
+				.then((r) => r.json())
+				.then((data) => setIndexData(data))
+				.catch(() => {});
+		}
+		const onPop = () => setView(parseViewFromUrl());
+		window.addEventListener("popstate", onPop);
+		return () => window.removeEventListener("popstate", onPop);
+	}, []);
+
+	useEffect(() => {
+		applyThemeToDocument(mode, palette);
+		window.localStorage.setItem("pi-spaces-help-mode", mode);
+		window.localStorage.setItem("pi-spaces-help-palette", palette);
+	}, [mode, palette]);
+
+	useEffect(() => {
+		document.documentElement.lang = locale;
+		window.localStorage.setItem("pi-spaces-help-locale", locale);
+	}, [locale]);
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			const tag = (e.target as HTMLElement | null)?.tagName;
+			const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+			if ((e.key === "/" && !inInput) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
+				e.preventDefault();
+				searchRef.current?.focus();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
+
+	const navigate = (next: ViewState, hash = "") => {
+		const p = new URLSearchParams();
+		if (next.kind === "article") p.set("article", next.id);
+		else if (next.kind === "area") p.set("area", next.id);
+		else if (next.kind === "search") p.set("q", next.query);
+		else if (next.kind === "browse") {
+			p.set("owner", next.owner);
+			if (next.articleType) p.set("type", next.articleType);
+		} else if (next.kind === "api-finder") {
+			p.set("view", "api-finder");
+			if (next.mode !== "api") p.set("mode", next.mode);
+		} else if (next.kind === "space-chat") {
+			p.set("view", "space-chat");
+			p.set("session", next.sessionId);
+		} else if (next.kind === "feed") {
+			p.set("view", "feed");
+		} else if (next.kind === "admin") {
+			p.set("view", "admin");
+		}
+		const qs = p.toString();
+		window.history.pushState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${hash}`);
+		setView(next);
+	};
+
+	const openArticle = (id: string, anchor?: string) => {
+		navigate({ kind: "article", id }, anchor ? `#${anchor.replace(/^#/, "")}` : "");
+	};
+
+	const localizedArticles = useMemo(() => {
+		if (!indexData?.articles) return [];
+		return indexData.articles.filter((a: any) => a.locale === locale);
+	}, [indexData, locale]);
+
+	const articleById = useMemo(
+		() => new Map<string, any>(localizedArticles.map((a: any) => [a.id, a])),
+		[localizedArticles],
+	);
+	const areas = indexData?.areas ?? [];
+	const areaById = useMemo(() => new Map<string, any>(areas.map((a: any) => [a.id, a])), [areas]);
+
+	const areaByArticleId = useMemo(() => {
+		const map = new Map<string, any>();
+		for (const area of areas) {
+			for (const id of area.articleIds ?? []) map.set(id, area);
+		}
+		return map;
+	}, [areas]);
+
+	const currentArticle = view.kind === "article" ? articleById.get(view.id) : undefined;
+
+	useEffect(() => {
+		if (!currentArticle) return;
+		setArticleMarkdown("");
+		setLoadingArticle(true);
+		return startArticleLoad(currentArticle.path, {
+			content: (md, signal) => {
+				setArticleMarkdown(md);
+				requestAnimationFrame(() => {
+					if (signal.aborted) return;
+					const hash = window.location.hash.slice(1);
+					if (hash) document.getElementById(hash)?.scrollIntoView();
+					else document.querySelector(".content-scroll")?.scrollTo(0, 0);
+				});
+			},
+			error: e => setArticleMarkdown(`Artikel konnte nicht geladen werden: ${String(e)}`),
+			done: () => setLoadingArticle(false),
+		});
+	}, [currentArticle?.path]);
+
+	const apiArticles = useMemo(
+		() => localizedArticles.filter((a: any) => a.type === "api" && a.api),
+		[localizedArticles],
+	);
+
+	const filteredApiArticles = useMemo(() => {
+		if (view.kind !== "api-finder") return apiArticles;
+		return apiArticles.filter((a: any) => {
+			const api = a.api;
+			if (view.provider !== "all" && a.provider !== view.provider) return false;
+			if (view.category !== "all" && api.category !== view.category) return false;
+			if (view.execution !== "all" && api.execution !== view.execution) return false;
+			if (view.idempotency !== "all" && api.idempotency !== view.idempotency) return false;
+			if (view.scope !== "all" && api.scope !== view.scope) return false;
+			if (view.query.trim()) {
+				const q = view.query.toLowerCase();
+				const text = `${a.title} ${a.short} ${api.symbol} ${api.signature}`.toLowerCase();
+				if (!text.includes(q)) return false;
+			}
+			return true;
+		});
+	}, [apiArticles, view]);
+
+	if (!indexData) {
+		return (
+			<main className="corpus-bootstrap" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
+				<div>
+					<strong>PI-SPACES / HELP</strong>
+					<p>Kanonischer Help-Corpus wird geladen …</p>
+				</div>
+			</main>
+		);
+	}
+
+	const hasRightToc = view.kind === "article" && currentArticle && (currentArticle.toc?.length ?? 0) > 0;
+
+	return (
+		<div className="help-app">
+			{/* Topbar */}
+			<header className="topbar">
+				<button type="button" className="brand" onClick={() => navigate({ kind: "home" })}>
+					<span className="brand__name">PI-SPACES</span>
+					<span className="brand__divider">/</span>
+					<span className="brand__section">HELP</span>
+				</button>
+
+				<form
+					className="global-search"
+					role="search"
+					onSubmit={(e) => {
+						e.preventDefault();
+						const q = searchInput.trim();
+						if (!q) navigate({ kind: "home" });
+						else navigate({ kind: "search", query: q });
+					}}
+				>
+					<span style={{ color: "var(--muted)" }}>⌕</span>
+					<input
+						id="global-help-search"
+						ref={searchRef}
+						value={searchInput}
+						onChange={(e: any) => setSearchInput(e.target.value)}
+						placeholder={
+							locale === "de"
+								? "Systeme, API-Methoden, Entry-Typen, Stufen v1–v6, Fehler …"
+								: "Systems, API methods, entry types, stages v1–v6, errors …"
+						}
+					/>
+					<kbd>Ctrl K</kbd>
+				</form>
+
+				<div className="topbar__actions">
+					<button
+						type="button"
+						className={view.kind === "space-chat" ? "nav-pill-btn is-active" : "nav-pill-btn"}
+						onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+					>
+						<span>● LIVE CHAT (v1–v6)</span>
+					</button>
+					<button
+						type="button"
+						className={view.kind === "feed" ? "nav-pill-btn is-active" : "nav-pill-btn"}
+						onClick={() => navigate({ kind: "feed" })}
+					>
+						<span>◉ Space Chat</span>
+					</button>
+					<button
+						type="button"
+						className={view.kind === "admin" ? "nav-pill-btn is-active" : "nav-pill-btn"}
+						onClick={() => navigate({ kind: "admin" })}
+					>
+						<span>⚙ ADMINSPACES</span>
+					</button>
+
+					<div className="locale-switch">
+						<button
+							type="button"
+							className={locale === "de" ? "is-active" : ""}
+							onClick={() => setLocale("de")}
+						>
+							DE
+						</button>
+						<button
+							type="button"
+							className={locale === "en" ? "is-active" : ""}
+							onClick={() => setLocale("en")}
+						>
+							EN
+						</button>
+					</div>
+
+					<div className="mode-switch">
+						<button
+							type="button"
+							className={mode === "dark" ? "is-active" : ""}
+							onClick={() => setMode("dark")}
+							title="Dark Mode"
+						>
+							☾
+						</button>
+						<button
+							type="button"
+							className={mode === "light" ? "is-active" : ""}
+							onClick={() => setMode("light")}
+							title="Light Mode"
+						>
+							☀
+						</button>
+					</div>
+
+					<div className="theme-picker">
+						<select
+							className="theme-picker__select"
+							value={palette}
+							onChange={(e: any) => setPalette(e.target.value)}
+							aria-label="Color Palette"
+						>
+							{PALETTES.map((p) => (
+								<option key={p.id} value={p.id}>
+									{p.label[locale]}
+								</option>
+							))}
+						</select>
+					</div>
+				</div>
+			</header>
+
+			{/* 3-Column Workspace */}
+			<div className={hasRightToc ? "workspace has-toc" : "workspace"}>
+				<aside className="sidebar">
+					<nav className="nav-section">
+						<span className="nav-section__label">
+							{locale === "de" ? "NAVIGATION" : "NAVIGATION"}
+						</span>
+						<button
+							type="button"
+							className={view.kind === "home" ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "home" })}
+						>
+							<span>{locale === "de" ? "Help-Übersicht" : "Help Overview"}</span>
+						</button>
+						<button
+							type="button"
+							className={view.kind === "browse" && view.owner === "all" ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "browse", owner: "all" })}
+						>
+							<span>{locale === "de" ? "Alle Inhalte" : "All Content"}</span>
+							<span className="nav-link__badge">{indexData.stats.uniqueArticles}</span>
+						</button>
+						<button
+							type="button"
+							className={view.kind === "api-finder" ? "nav-link is-active" : "nav-link"}
+							onClick={() =>
+								navigate({
+									kind: "api-finder",
+									mode: "api",
+									query: "",
+									provider: "all",
+									category: "all",
+									execution: "all",
+									idempotency: "all",
+									scope: "all",
+								})
+							}
+						>
+							<span>{locale === "de" ? "API & Tool Finder" : "API & Tool Finder"}</span>
+							<span className="nav-link__badge">{indexData.stats.apiArticles}</span>
+						</button>
+						<button
+							type="button"
+							className={view.kind === "space-chat" ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+						>
+							<span>{locale === "de" ? "Multiplayer Space-Chat (v1–v6)" : "Multiplayer Space-Chat (v1–v6)"}</span>
+							<span className="nav-link__badge">LIVE</span>
+						</button>
+						<button
+							type="button"
+							className={view.kind === "feed" ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "feed" })}
+						>
+							<span>{locale === "de" ? "Space Chat Feed (Agenten-Schwarm)" : "Space Chat Feed (agent swarm)"}</span>
+							<span className="nav-link__badge">SWARM</span>
+						</button>
+						<button
+							type="button"
+							className={view.kind === "admin" ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "admin" })}
+						>
+							<span>{locale === "de" ? "AdminSpaces Steuerung" : "AdminSpaces Control"}</span>
+							<span className="nav-link__badge">LOGIN</span>
+						</button>
+					</nav>
+
+					<nav className="nav-section">
+						<span className="nav-section__label">
+							{locale === "de" ? "9 KANONISCHE SYSTEME" : "9 CANONICAL SYSTEMS"}
+						</span>
+						{areas.map((area: any, idx: number) => (
+							<button
+								key={area.id}
+								type="button"
+								className={
+									view.kind === "area" && view.id === area.id ? "nav-link is-active" : "nav-link"
+								}
+								onClick={() => navigate({ kind: "area", id: area.id })}
+							>
+								<span>{area.title[locale]}</span>
+								<span style={{ font: "600 9px/1 var(--font-geist-mono)", color: "var(--muted)" }}>
+									{String(idx + 1).padStart(2, "0")}
+								</span>
+							</button>
+						))}
+					</nav>
+
+					<div className="sidebar__footer">
+						<span className="status-dot" />
+						<span>spaces.eibrain.org · {indexData.corpus.hash.slice(0, 8)}</span>
+					</div>
+				</aside>
+
+				<main className="content-scroll">
+					{/* HOME VIEW */}
+					{view.kind === "home" ? (
+						<div className="home-view">
+							<section className="home-hero">
+								<div className="eyebrow">
+									<span>PI-SPACES</span>
+									<span className="eyebrow__line" />
+									<span>
+										{locale === "de"
+											? `HELP-CORPUS · SPACES.EIBRAIN.ORG · ${indexData.corpus.frozenOn}`
+											: `HELP CORPUS · SPACES.EIBRAIN.ORG · ${indexData.corpus.frozenOn}`}
+									</span>
+								</div>
+								<h1>
+									{locale === "de" ? (
+										<>
+											Schreiben.
+											<br />
+											Koordinieren. <em>Überleben.</em>
+										</>
+									) : (
+										<>
+											Write.
+											<br />
+											Coordinate. <em>Survive.</em>
+										</>
+									)}
+								</h1>
+								<p className="home-hero__lead">
+									{locale === "de"
+										? "Die technische Produktreferenz und interaktive Entwicklungsplattform für pi-spaces: Vom lokalen Tuple-Space über RequestRef-Claims, CompletionProfiles, Overlay-Gate (Schicht A/B) und HRW-Federation bis zum 6-stufigen Multiplayer Space-Chat und der mobilen Steuerung."
+										: "The technical product reference and interactive workbench for pi-spaces: from local tuple spaces through RequestRef claims, CompletionProfiles, overlay gate (Layer A/B), and HRW federation to the 6-stage Multiplayer Space-Chat and mobile control."}
+								</p>
+								<div className="hero-actions">
+									<button
+										type="button"
+										className="primary-action"
+										onClick={() => openArticle("help.workflow.overview_v1_to_v6")}
+									>
+										<span>
+											{locale === "de"
+												? "6-Stufen-Anleitung (v1–v6) starten →"
+												: "Start 6-Stage Guide (v1–v6) →"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+									>
+										<span>
+											{locale === "de"
+												? "● Multiplayer Space-Chat live öffnen"
+												: "● Open Live Multiplayer Space-Chat"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "feed" })}
+									>
+										<span>
+											{locale === "de"
+												? "◉ Space Chat: Agenten-Schwarm live"
+												: "◉ Space Chat: agent swarm live"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "admin" })}
+									>
+										<span>
+											{locale === "de" ? "⚙ AdminSpaces Login" : "⚙ AdminSpaces Login"}
+										</span>
+									</button>
+								</div>
+							</section>
+
+							{/* Section 01: 2-Lane Execution Model */}
+							<section className="system-model">
+								<div className="section-heading">
+									<span>01</span>
+									<div>
+										<p>{locale === "de" ? "Kanonisches Modell" : "Canonical Model"}</p>
+										<h2>
+											{locale === "de"
+												? "Lokal atomar. Föderiert journalisiert."
+												: "Locally atomic. Federatedly journaled."}
+										</h2>
+									</div>
+								</div>
+								<figure className="execution-model">
+									<div className="execution-model__bar">
+										<span>PI-SPACES EXECUTION FLOW</span>
+										<span>SINGLE-HOST VS. FEDERATED CLUSTER</span>
+									</div>
+									<div className="execution-lane execution-lane--rt">
+										<div className="execution-lane__identity">
+											<strong>LOCAL</strong>
+											<span>V1–V3 SINGLE SPACE</span>
+										</div>
+										<ol className="execution-sequence">
+											<li className="process-plate">
+												<span className="process-plate__meta">
+													<b>01</b> <em>Input &amp; Claim</em>
+												</span>
+												<strong>Entry + RequestRef</strong>
+												<small>
+													{locale === "de"
+														? "Template-Match, Lease & RFC-8785 Hash"
+														: "Template match, lease & RFC-8785 hash"}
+												</small>
+											</li>
+											<li className="process-plate">
+												<span className="process-plate__meta">
+													<b>02</b> <em>Atomic Commit</em>
+												</span>
+												<strong>Txn + CompletionProfile</strong>
+												<small>
+													{locale === "de"
+														? "Mutation, Claim, rev & Budget in 1 Commit"
+														: "Mutation, claim, rev & budget in 1 commit"}
+												</small>
+											</li>
+											<li className="process-plate">
+												<span className="process-plate__meta">
+													<b>03</b> <em>Reactive Stream</em>
+												</span>
+												<strong>readPage / changes / Mailbox</strong>
+												<small>
+													{locale === "de"
+														? "Konsistente Snapshots & Präfix-ACK"
+														: "Consistent snapshots & prefix ACK"}
+												</small>
+											</li>
+										</ol>
+									</div>
+									<div className="execution-lane">
+										<div className="execution-lane__identity">
+											<strong>CLUSTER</strong>
+											<span>V4–V6 FEDERATED</span>
+										</div>
+										<ol className="execution-sequence">
+											<li className="process-plate">
+												<span className="process-plate__meta">
+													<b>01</b> <em>Zero-Trust Gate</em>
+												</span>
+												<strong>Layer A/B + 60s Grant</strong>
+												<small>
+													{locale === "de"
+														? "NetBird-Peer + Ed25519 Challenge"
+														: "NetBird peer + Ed25519 challenge"}
+												</small>
+											</li>
+											<li className="process-plate">
+												<span className="process-plate__meta">
+													<b>02</b> <em>Router &amp; Sharding</em>
+												</span>
+												<strong>HRW Policy &amp; Journal</strong>
+												<small>
+													{locale === "de"
+														? "Partitionierte Journale & takeWaiting"
+														: "Partitioned journals & takeWaiting"}
+												</small>
+											</li>
+											<li className="process-plate">
+												<span className="process-plate__meta">
+													<b>03</b> <em>Operations Control</em>
+												</span>
+												<strong>RunGate &amp; AdminSpaces</strong>
+												<small>
+													{locale === "de"
+														? "Steuerung via Smartphone & Web-Admin"
+														: "Control via smartphone & web admin"}
+												</small>
+											</li>
+										</ol>
+									</div>
+									<figcaption className="model-note">
+										{locale === "de"
+											? "PiSpaces und RemoteSpace teilen denselben SpaceLike-Vertrag. Dadurch wächst derselbe Anwendungscode nahtlos von Stufe v1 (In-Memory) bis Stufe v6 (Föderierter Cluster mit Mobile/Web-Admin)."
+											: "PiSpaces and RemoteSpace share the exact same SpaceLike contract. Application code scales seamlessly from Stage v1 (in-memory) to Stage v6 (federated cluster with mobile/web admin)."}
+									</figcaption>
+								</figure>
+							</section>
+
+							{/* Section 02: 9 Canonical Systems */}
+							<section className="topic-grid-section">
+								<div className="section-heading">
+									<span>02</span>
+									<div>
+										<p>{locale === "de" ? "Klare Inhaltsordnung" : "Clear Content Model"}</p>
+										<h2>
+											{locale === "de"
+												? "Neun Systeme. Eine kanonische Ordnung."
+												: "Nine systems. One canonical order."}
+										</h2>
+									</div>
+								</div>
+								<div className="help-area-grid">
+									{areas.map((area: any, idx: number) => (
+										<article key={area.id} className="help-area-card">
+											<header className="help-area-card__header">
+												<span className="help-area-card__number">
+													{String(idx + 1).padStart(2, "0")}
+												</span>
+												<span className="help-area-card__kind">
+													{area.kind === "reference" ? "REFERENCE" : "SYSTEM"} · CANONICAL
+												</span>
+											</header>
+											<div className="help-area-card__copy">
+												<button
+													type="button"
+													className="help-area-card__title"
+													onClick={() => navigate({ kind: "area", id: area.id })}
+												>
+													<span>{area.title[locale]}</span>
+													<span>→</span>
+												</button>
+												<p>{area.short[locale]}</p>
+											</div>
+											<div className="help-area-card__links">
+												{(area.articleIds ?? []).slice(0, 4).map((aid: string) => {
+													const art = articleById.get(aid);
+													if (!art) return null;
+													return (
+														<button key={aid} type="button" onClick={() => openArticle(aid)}>
+															<span>{art.title}</span>
+															<span>›</span>
+														</button>
+													);
+												})}
+											</div>
+										</article>
+									))}
+								</div>
+							</section>
+
+							{/* Section 03: Corpus Metrics */}
+							<section className="corpus-strip">
+								<div className="section-heading">
+									<span>03</span>
+									<div>
+										<p>{locale === "de" ? "Source-eigener Bestand" : "Source-Owned Corpus"}</p>
+										<h2>
+											{locale === "de"
+												? "Vertrag, Code und Live-Nachweis vereint."
+												: "Contract, code, and live evidence united."}
+										</h2>
+									</div>
+								</div>
+								<div className="corpus-metrics">
+									<button
+										type="button"
+										onClick={() =>
+											navigate({
+												kind: "api-finder",
+												mode: "api",
+												query: "",
+												provider: "all",
+												category: "all",
+												execution: "all",
+												idempotency: "all",
+												scope: "all",
+											})
+										}
+									>
+										<strong>{indexData.stats.apiArticles}</strong>
+										<span>
+											{locale === "de"
+												? "kanonische API- & Agent-Tool-Referenzen"
+												: "canonical API & agent tool references"}
+										</span>
+									</button>
+									<button
+										type="button"
+										onClick={() => navigate({ kind: "browse", owner: "all", articleType: "workflow" })}
+									>
+										<strong>{locale === "de" ? "6 Stufen" : "6 Stages"}</strong>
+										<span>
+											{locale === "de"
+												? "ausführbare Space-Chat-Versionen (v1 bis v6)"
+												: "runnable Space-Chat stages (v1 to v6)"}
+										</span>
+									</button>
+									<button type="button" onClick={() => navigate({ kind: "browse", owner: "all" })}>
+										<strong>{indexData.stats.uniqueArticles}</strong>
+										<span>
+											{locale === "de"
+												? "validierte Help-Identitäten im Corpus"
+												: "validated help identities in corpus"}
+										</span>
+									</button>
+									<div>
+										<strong>DE / EN</strong>
+										<span>
+											{locale === "de"
+												? "100 % Anker-Parität & Offline-Index"
+												: "100% anchor parity & offline index"}
+										</span>
+									</div>
+								</div>
+							</section>
+						</div>
+					) : null}
+
+					{/* AREA VIEW */}
+					{view.kind === "area" ? (
+						<div className="listing-view">
+							{(() => {
+								const area = areaById.get(view.id);
+								if (!area) return <p>Area not found</p>;
+								const items = (area.articleIds ?? [])
+									.map((id: string) => articleById.get(id))
+									.filter(Boolean);
+								return (
+									<>
+										<div className="listing-heading">
+											<div>
+												<span className="eyebrow-copy">{area.id.toUpperCase()}</span>
+												<h1>{area.title[locale]}</h1>
+												<p>{area.short[locale]}</p>
+											</div>
+											<span className="meta-pill meta-pill--accent">CANONICAL</span>
+										</div>
+										<div className="result-list">
+											{items.map((art: any) => (
+												<button
+													key={art.id}
+													type="button"
+													className="result-card"
+													onClick={() => openArticle(art.id)}
+												>
+													<span className="result-card__meta">
+														<span>_{art.provider.toUpperCase()}</span>
+														<span>{art.type.toUpperCase()}</span>
+													</span>
+													<span className="result-card__primary">
+														<strong>{art.title}</strong>
+														<code>{art.id}</code>
+													</span>
+													<span className="result-card__short">{art.short}</span>
+												</button>
+											))}
+										</div>
+									</>
+								);
+							})()}
+						</div>
+					) : null}
+
+					{/* API & TOOL FINDER VIEW */}
+					{view.kind === "api-finder" ? (
+						<div className="listing-view">
+							<div className="listing-heading">
+								<div>
+									<span className="eyebrow-copy">
+										{locale === "de" ? "TECHNISCHER INDEX" : "TECHNICAL INDEX"}
+									</span>
+									<h1>
+										{locale === "de"
+											? "API, Agent-Tools & Module"
+											: "API, Agent Tools & Modules"}
+									</h1>
+									<p>
+										{locale === "de"
+											? "Facettierte Referenz über PiSpaces, RemoteSpace, SpaceService, die 8 LLM-Agent-Tools, Gate/Grants, Federation und Betrieb."
+											: "Faceted reference across PiSpaces, RemoteSpace, SpaceService, the 8 LLM agent tools, Gate/Grants, Federation, and Operations."}
+									</p>
+								</div>
+								<span className="meta-pill meta-pill--accent">{apiArticles.length} API ENTRIES</span>
+							</div>
+
+							<div className="operator-mode-switch">
+								<button
+									type="button"
+									className={view.mode === "api" ? "is-active" : ""}
+									onClick={() => navigate({ ...view, mode: "api" })}
+								>
+									<span>API &amp; Tools</span>
+									<b>{apiArticles.length}</b>
+								</button>
+								<button
+									type="button"
+									className={view.mode === "modules" ? "is-active" : ""}
+									onClick={() => navigate({ ...view, mode: "modules" })}
+								>
+									<span>{locale === "de" ? "Architektur-Pakete" : "Architecture Packages"}</span>
+									<b>{(indexData.modulePackages ?? []).length}</b>
+								</button>
+							</div>
+
+							{view.mode === "api" ? (
+								<>
+									<section className="operator-finder">
+										<div className="operator-finder__search">
+											<input
+												id="api-finder-query"
+												value={view.query}
+												onChange={(e: any) => setView({ ...view, query: e.target.value })}
+												placeholder={
+													locale === "de"
+														? "Methode, Signatur, Tool oder Fehlerklasse filtern …"
+														: "Filter method, signature, tool, or error class …"
+												}
+											/>
+										</div>
+										<div className="operator-provider-filter">
+											{["all", ...PROVIDERS].map((prov) => (
+												<button
+													key={prov}
+													type="button"
+													className={view.provider === prov ? "is-active" : ""}
+													onClick={() => setView({ ...view, provider: prov })}
+												>
+													<span>{prov === "all" ? "ALL" : `_${prov.toUpperCase()}`}</span>
+												</button>
+											))}
+										</div>
+										<div className="operator-facet-grid">
+											<label>
+												<span>Category</span>
+												<select
+													value={view.category}
+													onChange={(e: any) => setView({ ...view, category: e.target.value })}
+												>
+													<option value="all">All categories</option>
+													<option value="mutation">Mutation</option>
+													<option value="query_snapshot">Query / Snapshot</option>
+													<option value="transaction_lease">Transaction / Lease</option>
+													<option value="wait_stream_mailbox">Wait / Mailbox</option>
+													<option value="security_grant">Security / Grant</option>
+													<option value="federation_routing">Federation / Routing</option>
+													<option value="operations_run">Operations / RunGate</option>
+												</select>
+											</label>
+											<label>
+												<span>Execution</span>
+												<select
+													value={view.execution}
+													onChange={(e: any) => setView({ ...view, execution: e.target.value })}
+												>
+													<option value="all">All execution modes</option>
+													<option value="atomic_commit">Atomic Commit</option>
+													<option value="blocking_wait">Blocking Wait</option>
+													<option value="non_blocking_event">Non-Blocking Event</option>
+													<option value="snapshot_stream">Snapshot / Stream</option>
+													<option value="replay_safe_tool">Replay-Safe Tool</option>
+													<option value="rpc_retry">RPC Retry</option>
+													<option value="crypto_challenge">Crypto Challenge</option>
+													<option value="journaled_command">Journaled Command</option>
+													<option value="ack_barrier">ACK Barrier</option>
+												</select>
+											</label>
+											<label>
+												<span>Idempotency</span>
+												<select
+													value={view.idempotency}
+													onChange={(e: any) => setView({ ...view, idempotency: e.target.value })}
+												>
+													<option value="all">All idempotency models</option>
+													<option value="request_ref">RequestRef Claim</option>
+													<option value="task_claim">Task Claim (replay: safe)</option>
+													<option value="read_only">Read-Only Snapshot</option>
+													<option value="cas_epoch">CAS / Epoch-Bound</option>
+												</select>
+											</label>
+											<label>
+												<span>Scope</span>
+												<select
+													value={view.scope}
+													onChange={(e: any) => setView({ ...view, scope: e.target.value })}
+												>
+													<option value="all">All scopes</option>
+													<option value="single_or_remote">Single or RemoteSpace</option>
+													<option value="single_space">Single Space</option>
+													<option value="conversation_owned">Conversation-Owned</option>
+													<option value="unix_or_tcp">Unix Socket / TCP</option>
+													<option value="control_and_data">Control &amp; Data Host</option>
+													<option value="multi_member_cluster">Multi-Member Cluster</option>
+													<option value="coordinator_control">Coordinator Control</option>
+												</select>
+											</label>
+										</div>
+									</section>
+
+									<div className="result-list">
+										{filteredApiArticles.map((art: any) => (
+											<button
+												key={art.id}
+												type="button"
+												className="result-card"
+												onClick={() => openArticle(art.id)}
+											>
+												<span className="result-card__meta">
+													<span>_{art.provider.toUpperCase()}</span>
+													<span>{art.api?.idempotency}</span>
+												</span>
+												<span className="result-card__primary">
+													<strong>{art.title}</strong>
+													<code>{art.api?.signature}</code>
+												</span>
+												<span className="result-card__short">{art.short}</span>
+											</button>
+										))}
+									</div>
+								</>
+							) : (
+								<div className="result-list">
+									{(indexData.modulePackages ?? []).map((pkg: any) => (
+										<div key={pkg.id} className="result-card" style={{ cursor: "default" }}>
+											<span className="result-card__meta">
+												<span>_{pkg.owner.toUpperCase()}</span>
+												<span>{pkg.kind}</span>
+											</span>
+											<span className="result-card__primary">
+												<strong>{pkg.title[locale]}</strong>
+												<code>{pkg.repository}</code>
+											</span>
+											<span className="result-card__short">{pkg.short[locale]}</span>
+										</div>
+									))}
+								</div>
+							)}
+						</div>
+					) : null}
+
+					{/* BROWSE VIEW */}
+					{view.kind === "browse" ? (
+						<div className="listing-view">
+							<div className="listing-heading">
+								<div>
+									<span className="eyebrow-copy">PI-SPACES CORPUS</span>
+									<h1>
+										{view.articleType === "workflow"
+											? locale === "de"
+												? "Alle 6 Stufen-Workflows (v1–v6)"
+												: "All 6 Stage Workflows (v1–v6)"
+											: locale === "de"
+												? "Alle Hilfethemen & Referenzen"
+												: "All Help Topics & References"}
+									</h1>
+								</div>
+								<span className="meta-pill">MAIN CORPUS</span>
+							</div>
+							<div className="result-list">
+								{localizedArticles
+									.filter(
+										(a: any) =>
+											(view.owner === "all" || a.provider === view.owner) &&
+											(!view.articleType || a.type === view.articleType),
+									)
+									.map((art: any) => (
+										<button
+											key={art.id}
+											type="button"
+											className="result-card"
+											onClick={() => openArticle(art.id)}
+										>
+											<span className="result-card__meta">
+												<span>_{art.provider.toUpperCase()}</span>
+												<span>{art.type.toUpperCase()}</span>
+											</span>
+											<span className="result-card__primary">
+												<strong>{art.title}</strong>
+												<code>{art.id}</code>
+											</span>
+											<span className="result-card__short">{art.short}</span>
+										</button>
+									))}
+							</div>
+						</div>
+					) : null}
+
+					{/* SEARCH VIEW */}
+					{view.kind === "search" ? (
+						<div className="listing-view">
+							{(() => {
+								const matchedAreas = searchAreas(areas, view.query, locale);
+								const matchedArticles = searchArticles(localizedArticles, view.query);
+								return (
+									<>
+										<div className="listing-heading">
+											<div>
+												<span className="eyebrow-copy">
+													{locale === "de"
+														? "TOKEN- & ALIAS-VOLLTEXTSUCHE"
+														: "TOKEN & ALIAS FULL-TEXT SEARCH"}
+												</span>
+												<h1>{locale === "de" ? "Suchergebnisse" : "Search Results"}</h1>
+												<p>
+													{matchedAreas.length + matchedArticles.length}{" "}
+													{locale === "de" ? "Treffer für" : "results for"}{" "}
+													<code>{view.query}</code>
+												</p>
+											</div>
+											<span className="meta-pill meta-pill--accent">OFFLINE INDEX</span>
+										</div>
+										<div className="result-list">
+											{matchedAreas.map((area: any) => (
+												<button
+													key={area.id}
+													type="button"
+													className="result-card"
+													onClick={() => navigate({ kind: "area", id: area.id })}
+												>
+													<span className="result-card__meta">
+														<span>SYSTEM AREA</span>
+													</span>
+													<span className="result-card__primary">
+														<strong>{area.title[locale]}</strong>
+														<code>{area.id}</code>
+													</span>
+													<span className="result-card__short">{area.short[locale]}</span>
+												</button>
+											))}
+											{matchedArticles.map((art: any) => (
+												<button
+													key={art.id}
+													type="button"
+													className="result-card"
+													onClick={() => openArticle(art.id)}
+												>
+													<span className="result-card__meta">
+														<span>_{art.provider.toUpperCase()}</span>
+														<span>{art.type.toUpperCase()}</span>
+													</span>
+													<span className="result-card__primary">
+														<strong>{art.title}</strong>
+														<code>{art.id}</code>
+													</span>
+													<span className="result-card__short">{art.short}</span>
+												</button>
+											))}
+										</div>
+									</>
+								);
+							})()}
+						</div>
+					) : null}
+
+					{/* ARTICLE VIEW */}
+					{view.kind === "article" ? (
+						<article className="article-view">
+							{currentArticle ? (
+								<>
+									<div className="article-meta">
+										<div className="breadcrumbs">
+											<button type="button" onClick={() => navigate({ kind: "home" })}>
+												HELP
+											</button>
+											{areaByArticleId.get(currentArticle.id) ? (
+												<>
+													<span>›</span>
+													<button
+														type="button"
+														onClick={() =>
+															navigate({
+																kind: "area",
+																id: areaByArticleId.get(currentArticle.id).id,
+															})
+														}
+													>
+														{areaByArticleId.get(currentArticle.id).title[locale].toUpperCase()}
+													</button>
+												</>
+											) : null}
+											<span>›</span>
+											<span>{currentArticle.title}</span>
+										</div>
+										<div className="article-meta__pills">
+											<span className="meta-pill">_{currentArticle.provider.toUpperCase()}</span>
+											<span className="meta-pill">{currentArticle.standard}</span>
+											<span className="meta-pill meta-pill--accent">MAIN CORPUS</span>
+										</div>
+									</div>
+
+									{loadingArticle ? (
+										<p style={{ color: "var(--muted)" }}>Loading article …</p>
+									) : (
+										<div
+											className="markdown-body"
+											onClick={(e: any) => {
+												const link = (e.target as HTMLElement | null)?.closest("[data-help-link]");
+												if (link) {
+													e.preventDefault();
+													const target = link.getAttribute("data-help-link") ?? "";
+													const [id, anchor] = target.split("#");
+													if (id) openArticle(id, anchor);
+												}
+											}}
+											dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(articleMarkdown) }}
+										/>
+									)}
+
+									{/* Canonical Stage Resources */}
+									{(currentArticle.resources ?? []).length > 0 ? (
+										<section style={{ borderTop: "1px solid var(--line)", marginTop: "42px", paddingTop: "24px" }}>
+											<span className="eyebrow-copy">
+												{locale === "de"
+													? "KANONISCHE RESSOURCEN & AUSFÜHRUNG"
+													: "CANONICAL RESOURCES & EXECUTION"}
+											</span>
+											{currentArticle.resources.map((res: any) => (
+												<div
+													key={res.id}
+													style={{
+														border: "1px solid var(--line-strong)",
+														background: "var(--surface-raised)",
+														padding: "18px",
+														marginTop: "14px",
+														borderRadius: "6px",
+													}}
+												>
+													<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+														<strong>{res.title}</strong>
+														<button
+															type="button"
+															className="wb-btn"
+															onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+														>
+															{locale === "de"
+																? "In der Live-Workbench starten →"
+																: "Launch in Live Workbench →"}
+														</button>
+													</div>
+													<p style={{ color: "var(--muted-strong)", fontSize: "13px", margin: "8px 0" }}>
+														{res.summary}
+													</p>
+													<code style={{ fontSize: "12px", color: "var(--accent-readable)" }}>
+														$ {res.command}
+													</code>
+												</div>
+											))}
+										</section>
+									) : null}
+
+									<footer className="article-footer">
+										<div>
+											<span>HELP-ID</span>
+											<code>{currentArticle.id}</code>
+										</div>
+										<div>
+											<span>{locale === "de" ? "WÖRTER" : "WORDS"}</span>
+											<strong>{currentArticle.wordCount}</strong>
+										</div>
+										<div>
+											<span>LOCALE</span>
+											<strong>{currentArticle.locale.toUpperCase()}</strong>
+										</div>
+										<div>
+											<span>SOURCE</span>
+											<strong>
+												{currentArticle.source.repository}@{currentArticle.source.commit}
+											</strong>
+										</div>
+									</footer>
+								</>
+							) : (
+								<p>Article not found: {view.id}</p>
+							)}
+						</article>
+					) : null}
+
+					{/* MULTIPLAYER SPACE-CHAT WORKBENCH (v1..v6) */}
+					{view.kind === "space-chat" ? (
+						<SpaceChatWorkbench
+							locale={locale}
+							sessionId={view.sessionId}
+							onOpenArticle={(id) => openArticle(id)}
+						/>
+					) : null}
+
+					{/* SELF-RUNNING SOCIAL SWARM FEED (1000 agents) */}
+					{view.kind === "feed" ? <SocialFeedView locale={locale} /> : null}
+
+					{/* LOGIN-PROTECTED ADMINSPACES PORTAL */}
+					{view.kind === "admin" ? <AdminSpacesView locale={locale} /> : null}
+				</main>
+
+				{/* Right TOC Column */}
+				{hasRightToc ? (
+					<aside className="toc">
+						<span className="toc__label">
+							{locale === "de" ? "AUF DIESER SEITE" : "ON THIS PAGE"}
+						</span>
+						<nav>
+							{currentArticle.toc.map((item: any) => (
+								<a
+									key={item.anchor}
+									href={`#${item.anchor}`}
+									className={item.level === 3 ? "toc__subitem" : ""}
+								>
+									{item.title}
+								</a>
+							))}
+						</nav>
+						<div className="toc__rule">
+							<span>Help ≠ Live State</span>
+							<p>
+								{locale === "de"
+									? "Stabile Semantik und Verträge hier. Aktuelle Laufzeitdaten im Live-Chat-Inspector und in AdminSpaces."
+									: "Stable semantics and contracts here. Current runtime facts live in the Chat Inspector and AdminSpaces."}
+							</p>
+						</div>
+					</aside>
+				) : null}
+			</div>
+		</div>
+	);
+}
+
+export default HelpApp;

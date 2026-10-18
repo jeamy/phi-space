@@ -440,13 +440,39 @@ function prune<T>(a: T[], drop: (x: T) => boolean): number {
 	for (let i = a.length - 1; i >= 0; i--) if (drop(a[i]!)) { a.splice(i, 1); n++; }
 	return n;
 }
+/**
+ * Fast expiry bookkeeping: `settle` sweeps entries on EVERY operation, and in large durable
+ * spaces almost every sweep expires nothing — the `[...entries].filter` copy per operation
+ * dominated CPU. The watermark holds the smallest `expires` seen on the last full sweep;
+ * above it the entry sweep is provably a no-op (reg/waiter deadlines are still checked).
+ * It lives outside the document (nothing persisted or migrated). It can only ever be stale
+ * LOW — removals leave it behind, which costs one extra scan; anything that shrinks an
+ * entry's expiry pushes it down eagerly, so a stale HIGH watermark cannot occur.
+ */
+const expiryWatermarks = new WeakMap<SpaceState, number>();
+const noteExpiry = (s: SpaceState, expires: number): void => {
+	// An unknown document may contain older deadlines than the newly imported entry.
+	const known = expiryWatermarks.get(s);
+	if (known !== undefined && expires < known) expiryWatermarks.set(s, expires);
+};
 function expire(s: SpaceState, at: number): boolean {
-	for (const e of [...s.entries].filter(e => e.expires <= at).sort((a, b) => a.expires - b.expires || a.id.localeCompare(b.id))) {
-		if (!canCharge(s, 128)) { deferMaintenance(s, at, e.id); return false; }
-		charge(s, 128);
-		if (e.writtenUnder === null && e.takenBy === null) logDel(s, at, e.id);
-		s.entries.splice(s.entries.indexOf(e), 1);
-		touch(s, at);
+	// A reopened document has no watermark: its persisted entries must be scanned once.
+	if ((expiryWatermarks.get(s) ?? -Infinity) <= at) {
+		let min = Infinity;
+		const dead: EntryRec[] = [];
+		for (const e of s.entries) {
+			if (e.expires <= at) dead.push(e);
+			else if (e.expires < min) min = e.expires;
+		}
+		expiryWatermarks.set(s, min);
+		dead.sort((a, b) => a.expires - b.expires || a.id.localeCompare(b.id));
+		for (const e of dead) {
+			if (!canCharge(s, 128)) { expiryWatermarks.set(s, at); deferMaintenance(s, at, e.id); return false; }
+			charge(s, 128);
+			if (e.writtenUnder === null && e.takenBy === null) logDel(s, at, e.id);
+			s.entries.splice(s.entries.indexOf(e), 1);
+			touch(s, at);
+		}
 	}
 	for (const r of [...s.regs].filter(r => r.expires <= at).sort((a, b) => a.expires - b.expires || a.id.localeCompare(b.id))) {
 		const cost = jsonBytes(r.handback) + (r.pendingEntry ? jsonBytes(r.pendingEntry) : 0) + 512;
@@ -518,6 +544,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	charge(s, jsonBytes(rec));
 	s.nextId++;
 	s.entries.push(rec);
+	noteExpiry(s, expires);
 	chargeMemberWrite(s, entry, txn);
 	touch(s, now);
 	if (txn === null) logPut(s, now, rec); // visible at once; under a transaction it appears at commit
@@ -852,7 +879,7 @@ function leased(s: SpaceState, id: string, as: Target | undefined): { set(v: num
 	const t = s.txns[id] as TxnRec | undefined;
 	const r = s.regs.find((x) => x.id === id);
 	const l = w ? { owner: w.target, set: (v: number) => { w.deadline = v; }, waiter: true }
-		: e ? { owner: e.owner, set: (v: number) => { e.expires = v; }, waiter: false }
+		: e ? { owner: e.owner, set: (v: number) => { e.expires = v; noteExpiry(s, v); }, waiter: false }
 		: t ? { owner: t.owner, set: (v: number) => { t.expires = v; }, waiter: false }
 		: r ? { owner: r.target, set: (v: number) => { r.expires = v; }, waiter: false }
 		: undefined;
@@ -890,8 +917,12 @@ export function cancel(s: SpaceState, now: number, id: string, as?: Target): voi
 
 /** Earliest time something can change without a commit (lease expiry); the waiter must wake then. */
 export function nextExpiry(s: Readonly<SpaceState>): number {
-	let min = FOREVER; // loops, not Math.min(...spread): spreading a large array overflows the stack
-	for (const e of s.entries) if (e.expires < min) min = e.expires;
+	// The watermark replaces the O(entries) sweep: `maintain` asks this before EVERY mutation,
+	// so a full scan per operation was the dominant cost on large durable spaces.
+	// loops, not Math.min(...spread): spreading a large array overflows the stack
+	const knownMin = expiryWatermarks.get(s as SpaceState);
+	let min = knownMin ?? FOREVER;
+	if (knownMin === undefined) { for (const e of s.entries) if (e.expires < min) min = e.expires; expiryWatermarks.set(s as SpaceState, min); }
 	for (const r of s.regs) {
 		if (r.expires < min) min = r.expires;
 		if (r.pending && r.lastEventAt !== undefined) min = Math.min(min, r.lastEventAt + intervalOf(s, r)); // bundled event due
@@ -994,7 +1025,7 @@ export function importRestoredEntry(s: SpaceState, now: number, e: EntryRec): bo
 	if (s.entries.some(x => x.id === e.id) || s.entries.length >= lim.maxEntries || jsonBytes(e.fields) > lim.maxEntryBytes || used > lim.maxSpaceBytes || used + overheadBytes(s) + cost > lim.maxDocBytes) throw new ResourceExhausted("restored entry violates current space limits or has a duplicate id");
 	if (cost + 1024 > lim.maxCommitBytes) throw new ResourceExhausted("restored entry cannot fit the commit budget");
 	if (!maintenanceStep(s, cost, now, `restore-entry:${e.id}`)) return false;
-	s.entries.push(clone(e)); logPut(s, now, e); return true;
+	s.entries.push(clone(e)); noteExpiry(s, e.expires); logPut(s, now, e); return true;
 }
 export function releaseRestoredEntry(s: SpaceState, now: number, e: EntryRec): boolean {
 	const lim = limitsOf(s), preview = clone(e); delete preview.restoredUnverified;

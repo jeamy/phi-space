@@ -15,7 +15,7 @@ import type { EntryDraft, Fields, Json, Lease, Template } from "./core.ts";
 import { snapshotPage, type SnapshotPageOptions } from "./snapshot.ts";
 import { mailboxPage, ackMailbox, type MailboxPage } from "./mailbox.ts";
 
-export { NO_WAIT, ANY, FOREVER, DEFAULT_LIMITS, IllegalArgumentError, LimitError, PermissionError, TransactionError, UnknownLeaseError } from "./core.ts";
+export { NO_WAIT, ANY, FOREVER, DEFAULT_LIMITS, IllegalArgumentError, LimitError, PermissionError, ResourceExhausted, TransactionError, UnknownLeaseError } from "./core.ts";
 export type { EntryDraft, Fields, Json, Lease, Limits, Template } from "./core.ts";
 export { Space };
 
@@ -39,7 +39,7 @@ export type OpOptions = {
 	resultBudget?: number;
 };
 /** Request identity for an immediate mutation. */
-export type Req = { request?: RequestRef };
+export type Req = { request?: RequestRef; /** Atomically reject another physical entry of this type with these key fields, including reservations. */ unique?: string[] };
 
 const view = core.view;
 export type Taken = ReturnType<typeof view>;
@@ -113,7 +113,14 @@ export class PiSpaces implements SpaceLike {
 	async configuration(): Promise<{ spaceId?: string; limits: core.Limits }> { const s = await this.snap(); return { spaceId: s?.spaceId, limits: core.limitsOf(s ?? core.initialState()) }; }
 
 	async write(entry: EntryDraft, txn: string | null = null, lease: number = core.ANY, o: Req = {}): Promise<Lease> {
-		const r = await this.mutate("write", { entry, txn, lease } as unknown as Json, o.request, (s, now) => core.write(s, now, entry, txn, lease, this.as));
+		const r = await this.mutate("write", { entry, txn, lease, ...(o.unique ? { unique: o.unique } : {}) } as unknown as Json, o.request, (s, now) => {
+			if (o.unique !== undefined) {
+				if (!Array.isArray(o.unique) || !o.unique.length || o.unique.some(k => typeof k !== "string" || !Object.hasOwn(entry.fields, k))) throw new core.IllegalArgumentError("unique needs existing field names");
+				core.settle(s, now);
+				if (s.entries.some(e => e.type === entry.type && o.unique!.every(k => core.deepEqual(e.fields[k] ?? null, entry.fields[k]!)))) throw new core.IllegalArgumentError("unique entry already exists");
+			}
+			return core.write(s, now, entry, txn, lease, this.as);
+		});
 		if (r.fresh) this.meter.inc("writes");
 		return r.value;
 	}
@@ -267,7 +274,10 @@ export class PiSpaces implements SpaceLike {
 	async createTransaction(lease: number = core.ANY, o: Req = {}) { return (await this.mutate("txn.begin", { lease }, o.request, (s, now) => core.createTxn(s, now, lease, this.as))).value; }
 	setCompletionProfiles(profiles: core.CompletionProfile[]): Promise<void> {
 		if (this.as !== undefined) throw new core.PermissionError("only host code may configure completion profiles");
-		return this.host.commit(async tx => core.setCompletionProfiles(await this.doc(tx), profiles, this.now()), this.ctx);
+		return this.host.commit(async tx => {
+			const s = await this.doc(tx);
+			if (!core.deepEqual((s.completionProfiles ?? []) as unknown as Json, profiles as unknown as Json)) core.setCompletionProfiles(s, profiles, this.now());
+		}, this.ctx);
 	}
 	private checkTransactionRights(s: core.SpaceState, txn: string): void {
 		const authorization = this.options.authorization;

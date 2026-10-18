@@ -1,0 +1,37 @@
+{
+  "name": "pi-spaces-help-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js 16 + React 19 Help System, 6-Stage Multiplayer Space-Chat & AdminSpaces Portal for https://spaces.eibrain.org",
+  "scripts": {
+    "build": "node --experimental-strip-types scripts/build-web.ts && next build",
+    "dev": "node --experimental-strip-types server/index.ts --dev",
+    "start": "node --experimental-strip-types server/index.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:production": "npm run build && PI_SPACES_TEST_NEXT=1 node --experimental-strip-types --test --test-name-pattern='4. Next' tests/help-site.test.ts",
+    "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build spaces-help-test",
+    "docker:prod:build": "docker compose --env-file .env -f docker/docker-compose.yml build spaces-help-prod",
+    "docker:prod:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d --build spaces-help-prod",
+    "docker:prod:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
+    "docker:prod:logs": "docker compose --env-file .env -f docker/docker-compose.yml logs -f spaces-help-prod",
+    "docker:dev:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev up -d --build spaces-help-dev",
+    "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
+    "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f spaces-help-dev",
+    "docker:nano:build": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano build swarm-nano",
+    "docker:nano:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano up -d --build swarm-nano",
+    "docker:nano:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano down",
+    "docker:nano:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano logs -f swarm-nano"
+  },
+  "dependencies": {
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "5.9.3"
+  }
+}

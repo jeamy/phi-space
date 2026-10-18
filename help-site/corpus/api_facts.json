@@ -1,0 +1,282 @@
+[
+  {
+    "id": "help.api.pispaces_write",
+    "symbol": "PiSpaces.write / RemoteSpace.write",
+    "provider": "client",
+    "family": "entries_templates",
+    "category": "mutation",
+    "execution": "atomic_commit",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "write(entry: EntryDraft, txn?: string | null, lease?: number, options?: { request?: RequestRef }): Promise<Lease>",
+    "title": {
+      "de": "write – Entry schreiben",
+      "en": "write – Write an Entry"
+    },
+    "short": {
+      "de": "Erzeugt immer einen neuen typisierten Entry mit Lease; unter einer Transaktion bis zum Commit für andere unsichtbar.",
+      "en": "Always creates a new typed entry with a lease; under a transaction it remains invisible to others until commit."
+    }
+  },
+  {
+    "id": "help.api.pispaces_read",
+    "symbol": "PiSpaces.read / readIfExists",
+    "provider": "client",
+    "family": "entries_templates",
+    "category": "query_snapshot",
+    "execution": "blocking_wait",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "read(template: Template, timeout: number, options?: OpOptions): Promise<EntryView | null>",
+    "title": {
+      "de": "read & readIfExists – Entry zerstörungsfrei lesen",
+      "en": "read & readIfExists – Non-Destructive Entry Read"
+    },
+    "short": {
+      "de": "Sucht einen passenden sichtbaren Entry anhand eines Templates (fehlende/null-Felder sind Wildcards) und wartet bis zum Timeout.",
+      "en": "Finds a matching visible entry using a template (missing/null fields are wildcards) and waits up to the timeout."
+    }
+  },
+  {
+    "id": "help.api.pispaces_take",
+    "symbol": "PiSpaces.take / takeIfExists",
+    "provider": "client",
+    "family": "entries_templates",
+    "category": "mutation",
+    "execution": "blocking_wait",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "take(template: Template, timeout: number, options?: OpOptions): Promise<EntryView | null>",
+    "title": {
+      "de": "take & takeIfExists – Entry exklusiv entnehmen oder reservieren",
+      "en": "take & takeIfExists – Exclusively Remove or Reserve an Entry"
+    },
+    "short": {
+      "de": "Entfernt einen passenden Entry sofort destruktiv oder reserviert ihn exklusiv unter einer Transaktion (Rückkehr bei Abort/Lease-Ablauf).",
+      "en": "Removes a matching entry immediately or reserves it exclusively under a transaction (returning it on abort or lease expiry)."
+    }
+  },
+  {
+    "id": "help.api.pispaces_txn",
+    "symbol": "PiSpaces.createTransaction / commit / abort",
+    "provider": "client",
+    "family": "leases_transactions",
+    "category": "transaction_lease",
+    "execution": "atomic_commit",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "createTransaction(lease?: number, opts?: { request?: RequestRef }): Promise<Lease>; commit(txn: string, opts?): Promise<void>; abort(txn: string, opts?): Promise<void>",
+    "title": {
+      "de": "Transaktionen – createTransaction, commit & abort",
+      "en": "Transactions – createTransaction, commit & abort"
+    },
+    "short": {
+      "de": "Bündelt Takes (Reservierungen) und Writes (unsichtbare Entwürfe) atomar; prüft beim Commit alle CompletionProfiles und Byte-Budgets.",
+      "en": "Groups takes (reservations) and writes (invisible drafts) atomically; verifies all CompletionProfiles and byte budgets on commit."
+    }
+  },
+  {
+    "id": "help.api.pispaces_lease",
+    "symbol": "PiSpaces.renew / cancel",
+    "provider": "client",
+    "family": "leases_transactions",
+    "category": "transaction_lease",
+    "execution": "atomic_commit",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "renew(leaseId: string, ms: number, opts?: { request?: RequestRef }): Promise<number>; cancel(leaseId: string, opts?): Promise<void>",
+    "title": {
+      "de": "Leases – renew & cancel",
+      "en": "Leases – renew & cancel"
+    },
+    "short": {
+      "de": "Verlängert oder beendet die Lebensdauer eigener Entries, Transaktionen, Notify-Abos und Waiter (Grundlage für Presence & Heartbeats).",
+      "en": "Extends or cancels the lifetime of owned entries, transactions, notify subscriptions, and waiters (basis for presence & heartbeats)."
+    }
+  },
+  {
+    "id": "help.api.pispaces_read_page_changes",
+    "symbol": "PiSpaces.readPage / changes / readAll / count / stats",
+    "provider": "client",
+    "family": "streams_snapshots",
+    "category": "query_snapshot",
+    "execution": "snapshot_stream",
+    "idempotency": "read_only",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "readPage(template?: Template, opts?: PageOptions): Promise<Page>; changes(afterRev: number, opts?: ChangeOptions): Promise<Changes>",
+    "title": {
+      "de": "readPage & changes – Konsistente Snapshots und Revisionsströme",
+      "en": "readPage & changes – Consistent Snapshots and Revision Streams"
+    },
+    "short": {
+      "de": "Liest bytebegrenzte Seiten eines unveränderlichen Snapshots (mit token und rev) und holt nachfolgende Commit-Batches über changes(afterRev) auf.",
+      "en": "Reads byte-bounded pages of an immutable snapshot (with token and rev) and catches up on subsequent commit batches via changes(afterRev)."
+    }
+  },
+  {
+    "id": "help.api.pispaces_wait_notify_mailbox",
+    "symbol": "PiSpaces.wait / notify / events / ack",
+    "provider": "client",
+    "family": "durable_mailboxes",
+    "category": "wait_stream_mailbox",
+    "execution": "non_blocking_event",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "wait(template: Template, opts: WaitOptions): Promise<string>; notify(template: Template, opts: NotifyOptions): Promise<{ eventId: string; lease: Lease }>; events(principal, opts?): Promise<MailboxPage>; ack(principal, epoch, upTo): Promise<AckResult>",
+    "title": {
+      "de": "wait, notify, events & ack – Reaktive Zustellung und Consumer-Mailboxes",
+      "en": "wait, notify, events & ack – Reactive Delivery and Consumer Mailboxes"
+    },
+    "short": {
+      "de": "Parkt langlebige Read/Take-Wünsche oder Event-Abos ohne Turn-Blockade; liefert Ergebnisse über dauerhafte Mailboxes mit Präfix-ACK.",
+      "en": "Parks long-lived read/take requests or event subscriptions without blocking a turn; delivers results via durable mailboxes with prefix ACK."
+    }
+  },
+  {
+    "id": "help.api.pispaces_claims",
+    "symbol": "PiSpaces.issueGeneration / pollOperation / resolveOperation / cancelOperation",
+    "provider": "client",
+    "family": "request_claims",
+    "category": "mutation",
+    "execution": "atomic_commit",
+    "idempotency": "request_ref",
+    "scope": "single_or_remote",
+    "role": "user_or_worker",
+    "signature": "issueGeneration(principal: Principal): Promise<GenerationInfo>; pollOperation(req: RequestRef): Promise<ClaimView | null>; resolveOperation(req, method, argHash, epoch): Promise<AdmissionResolution>",
+    "title": {
+      "de": "Request-Claims & Generationen – Neustartfeste Idempotenz",
+      "en": "Request Claims & Generations – Restart-Safe Idempotency"
+    },
+    "short": {
+      "de": "Bindet Mutationen und blockierende Operationen atomar an {principal, generation, requestId} und einen kanonischen RFC-8785-Argument-Hash.",
+      "en": "Binds mutations and blocking operations atomically to {principal, generation, requestId} and a canonical RFC-8785 argument hash."
+    }
+  },
+  {
+    "id": "help.api.pispaces_completion_profiles",
+    "symbol": "PiSpaces.setCompletionProfiles / setLimits",
+    "provider": "core",
+    "family": "completion_profiles",
+    "category": "transaction_lease",
+    "execution": "atomic_commit",
+    "idempotency": "cas_epoch",
+    "scope": "single_space",
+    "role": "host_admin",
+    "signature": "setCompletionProfiles(profiles: CompletionProfile[]): Promise<void>; setLimits(partial: Partial<Limits>): Promise<Limits>",
+    "title": {
+      "de": "setCompletionProfiles & setLimits – Serverseitige Ergebnis- und Budgetverträge",
+      "en": "setCompletionProfiles & setLimits – Server-Side Result and Budget Contracts"
+    },
+    "short": {
+      "de": "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (matchFields) und Anzahl; verwaltet Byte-Limits.",
+      "en": "Enforces expected result type, correlating fields (matchFields), and count before committing a take transaction; manages byte limits."
+    }
+  },
+  {
+    "id": "help.api.agent_tools",
+    "symbol": "spaces / createSpaces (space_write, space_read, space_take, space_list, space_txn, space_wait, space_notify, space_lease)",
+    "provider": "tools",
+    "family": "agent_tools",
+    "category": "mutation",
+    "execution": "replay_safe_tool",
+    "idempotency": "task_claim",
+    "scope": "conversation_owned",
+    "role": "user_or_worker",
+    "signature": "createSpaces(meter?: Meter): Extension; startService(harness: SpaceHost, ctx: Context, opts?: { space?: string }): Promise<() => Promise<void>>",
+    "title": {
+      "de": "Agent-Tools (spaces) & startService – Replay-sichere LLM-Werkzeuge",
+      "en": "Agent Tools (spaces) & startService – Replay-Safe LLM Tools"
+    },
+    "short": {
+      "de": "Stellt KI-Agenten 8 replay-sichere Tools mit automatischem Task-Claim und Ownership-Schutz bereit; startService betreibt Reaper und Zustellung.",
+      "en": "Provides AI agents with 8 replay-safe tools with automatic task claims and ownership protection; startService runs the reaper and delivery."
+    }
+  },
+  {
+    "id": "help.api.space_service_and_remote",
+    "symbol": "SpaceService / serveSpace / RemoteSpace / socketTransport",
+    "provider": "remote",
+    "family": "remote_client",
+    "category": "wait_stream_mailbox",
+    "execution": "rpc_retry",
+    "idempotency": "request_ref",
+    "scope": "unix_or_tcp",
+    "role": "user_or_worker",
+    "signature": "new SpaceService(opts); serveSpace(service, { listen, connection }); new RemoteSpace(transport, opts)",
+    "title": {
+      "de": "SpaceService, serveSpace & RemoteSpace – Netzwerk-RPC über Socket & TCP",
+      "en": "SpaceService, serveSpace & RemoteSpace – Network RPC over Socket & TCP"
+    },
+    "short": {
+      "de": "Veröffentlicht Spaces über Unix-Socket, TCP oder pi-serverd mit Rollen-Policy und bedient RemoteSpace-Clients mit stabiler Retry-Identität.",
+      "en": "Exposes spaces over Unix socket, TCP, or pi-serverd with role policies and serves RemoteSpace clients with stable retry identity."
+    }
+  },
+  {
+    "id": "help.api.gate_auth_grants",
+    "symbol": "startGate / startFederationHost / GrantAuthority / GrantVerifier / EnrollmentService / RotationService",
+    "provider": "security",
+    "family": "overlay_gate",
+    "category": "security_grant",
+    "execution": "crypto_challenge",
+    "idempotency": "request_ref",
+    "scope": "control_and_data",
+    "role": "host_admin",
+    "signature": "startFederationHost(harness, ctx, options): Promise<FederationHost>; GrantAuthority.issue(conn, purpose); remote.enroll(token); remote.rotateKey(challenge, signer)",
+    "title": {
+      "de": "Gate, Schicht A/B, Enrollment, 60s-Grants & Rotation",
+      "en": "Gate, Layer A/B, Enrollment, 60s Grants & Rotation"
+    },
+    "short": {
+      "de": "Kombiniert NetBird-Peer-Auflösung (Schicht A), Ed25519/P-256-Challenge (Schicht B), QR/Token-Enrollment, 60-s-Grants und atomare Schlüsselrotation.",
+      "en": "Combines NetBird peer resolution (Layer A), Ed25519/P-256 challenge (Layer B), QR/token enrollment, 60s grants, and atomic key rotation."
+    }
+  },
+  {
+    "id": "help.api.federation_controller",
+    "symbol": "createFederationController / RouterController / FederatedSpace / MembershipController",
+    "provider": "federation",
+    "family": "federated_space",
+    "category": "federation_routing",
+    "execution": "journaled_command",
+    "idempotency": "request_ref",
+    "scope": "multi_member_cluster",
+    "role": "router",
+    "signature": "createFederationController(opts): Promise<FederationController>; federatedSpace.write/read/take/takeWaiting/readAll; membership.execute(cmdId, kind, member)",
+    "title": {
+      "de": "createFederationController & FederatedSpace – Router, HRW-Sharding & Membership",
+      "en": "createFederationController & FederatedSpace – Router, HRW Sharding & Membership"
+    },
+    "short": {
+      "de": "Verbindet Router-Journal-Partitionen, signierte RouterLease, Original-Principal-Delegation, HRW-Policy, Waiter-Wettlauf und Membership-Lifecycle.",
+      "en": "Connects router journal partitions, signed RouterLease, original-principal delegation, HRW policy, waiter race, and membership lifecycle."
+    }
+  },
+  {
+    "id": "help.api.operations_runs_workers",
+    "symbol": "RunController / WorkerSupervisor / SpaceLifecycle / DeploymentController / collectAlerts",
+    "provider": "ops",
+    "family": "run_control",
+    "category": "operations_run",
+    "execution": "ack_barrier",
+    "idempotency": "cas_epoch",
+    "scope": "coordinator_control",
+    "role": "host_admin",
+    "signature": "runController.start/pause/resume/stop/schedule/export; startWorkerSupervisor(opts); spaceLifecycle.execute(req); collectAlerts(state)",
+    "title": {
+      "de": "RunController, WorkerSupervisor, SpaceLifecycle & Alerts – Betriebserweiterung (B2–B10)",
+      "en": "RunController, WorkerSupervisor, SpaceLifecycle & Alerts – Operations Extension (B2–B10)"
+    },
+    "short": {
+      "de": "Steuert Läufe über RunGate-ACK-Barrieren, weist Hosts signierte Worker-Listen zu, verwaltet Space-Lebenszyklen und speist MobileSpaces & AdminSpaces.",
+      "en": "Controls runs via RunGate ACK barriers, assigns signed worker lists to hosts, manages space lifecycles, and powers MobileSpaces & AdminSpaces."
+    }
+  }
+]

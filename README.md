@@ -188,6 +188,7 @@ Use `--dry-run` to preview actions without contacting the server. See [docs/tui.
 | `examples/cache.ts` | atomic local cache replacement, TTL and persistent compare-and-set versions | – (host code; no replication) |
 | `examples/golomb.ts` | local cooperative DFS with transactional tasks and isolated runs; persistent completed tasks resume; `--checkpoint` writes completion receipts, not partial DFS cursors | – (host code) |
 | `examples/dark-energy-research.ts` | 7-stage research pipeline (crawl → classify → summarize → analyse → present → optional `--query` chat); host-side monitor writes `SystemStatus` | real model, network |
+| `help-site/` | PI-SPACES / HELP: interactive help system, Social Swarm feed, 6-stage Space-Chat workbench and the AdminSpaces portal | `npm run help` → http://localhost:3599 |
 
 Live examples pick the model from `PI_PROVIDER`/`PI_MODEL`, otherwise the first one available via environment
 API keys or `~/.pi/agent/auth.json` (`examples/live-models.ts`). They cost model tokens. Entry types, patterns,

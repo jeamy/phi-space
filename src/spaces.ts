@@ -35,6 +35,8 @@ export const NamedSpace = defineDocFamily<core.SpaceState & Record<string, any>,
 	family: true,
 	initial: () => core.initialState() as core.SpaceState & Record<string, any>,
 	migrate: (v, from) => core.migrate(v, from) as core.SpaceState & Record<string, any>,
+	// Same bound as doc.ts Space: base snapshot every 500 deltas keeps replay reads linear.
+	checkpointWhen: (_v, _ops, info) => info.deltasSinceBase >= 500,
 });
 
 export class UnknownSpaceError extends Error {}

@@ -1,0 +1,6 @@
+# Caddyfile for https://spaces.eibrain.org (Automatic Let's Encrypt TLS + WebSocket Proxy)
+
+spaces.eibrain.org {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3500
+}

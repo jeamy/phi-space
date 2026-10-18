@@ -1,6 +1,7 @@
 // Persistent harnesses for crash/reopen tests (AP 0.1, docs/implementierungsplan-v3.md). MemoryStorage proves
 // nothing about durability; every recovery acceptance case runs on JSONL and SQLite through these helpers.
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
@@ -98,3 +99,18 @@ export async function forEachBackend(f: (home: PersistentHome) => Promise<void>)
 }
 
 export { ctx };
+
+/**
+ * A currently-free TCP port (bound on 0.0.0.0, then released). Test fixtures use this instead of
+ * hardcoded ports – parallel test files can no longer collide on e.g. 127.0.0.2/127.0.0.3:17561.
+ */
+export async function freePort(): Promise<number> {
+	return await new Promise((resolve, reject) => {
+		const srv = createServer();
+		srv.once("error", reject);
+		srv.listen(0, "0.0.0.0", () => {
+			const port = (srv.address() as { port: number }).port;
+			srv.close(() => resolve(port));
+		});
+	});
+}

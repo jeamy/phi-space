@@ -15,6 +15,20 @@ Der [Föderationsplan v3](federation-plan-v3.md) beschreibt zukünftige Infrastr
 | Golomb | [golomb.ts](../examples/golomb.ts) | tatsächliche Ordnung-4-Suche, Ergebnisvalidierung und persistente Wiederaufnahme getestet |
 | Primzahlsieb | [sieve.ts](../examples/sieve.ts) | unabhängiger Referenzvergleich, Txn-Rollback, Lease-Recovery und JSONL-Reopen |
 | Cache | [cache.ts](../examples/cache.ts) | lokaler atomarer Ersatz, CAS, TTL und JSONL-Reopen; keine Replikation |
+| Space-Chat (v1–v6) | [help-site/examples/](../help-site/examples) | reine Tuple-Space-Architektur (`SpaceChatEngine`): Presence-Leases, `ChatTask`+CompletionProfile, `ScheduledJob`/`TimerLock`-Alarme; Stufen lokal bis föderiert |
+
+## Zwei verschiedene Chat-Architekturen
+
+`examples/chat.ts` und `help-site/examples/shared/chat-core.ts` (`SpaceChatEngine`) sind **absichtlich verschiedene
+Paradigmen** und kein Duplikat:
+
+- `examples/chat.ts` nutzt `pi-spaces` als Ereignis-Bus **zwischen langlebigen `pi-durable`-Conversations**
+  (Aktor-Modell): jede Figur ist eine eigene Konversation mit Historie; der Space transportiert nur flache `Msg`-Benachrichtigungen.
+- `chat-core.ts` (Stufen v1 bis v6 im Hilfesystem) realisiert den Chat **vollständig in Space-Primitiven**:
+  zustandslose Worker ziehen `ChatTask`-Tupel transaktional, Präsenz sind Lease-Einträge, Alarme sind
+  `ScheduledJob`+`TimerLock`. Kein Aktor-Framework, keine langlebigen Conversations.
+
+CLI-Einstieg für die reine Tuple-Space-Variante ohne Web-Server: `npm run example:space-chat` (Stufe v1).
 
 ## Ausführung
 
@@ -28,6 +42,9 @@ npm run example:chat
 npm run example:golomb -- 4 --workers 2
 npm run example:sieve -- 1001 4
 npm run example:cache
+npm run example:blocking
+npm run example:space-chat
+npm run help
 ```
 
 Live-Beispiele benötigen Zugangsdaten und verursachen Modellkosten. Gemäß AGENTS.md werden sie erst nach

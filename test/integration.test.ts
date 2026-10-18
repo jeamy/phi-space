@@ -77,16 +77,23 @@ test("tools + notify delivery run end to end with the faux provider", async () =
 });
 
 test("reaper: expired entries are removed and waiters time out without any operation", async () => {
-	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx);
-	const stop = await startMaintenance(h, ctx);
-	await s.write(job(1), null, 150);
-	await s.wait({ type: "Never" }, { target: "nobody", timeout: 200 });
-	assert.equal((await h.snapshot(Space, ctx))!.entries.length, 1);
-	await sleep(450);
-	const snap = await h.snapshot(Space, ctx)!; // nobody called an operation: the reaper did it
-	assert.equal(snap!.entries.length, 0); assert.equal(snap!.waiters.length, 0);
-	assert.equal(snap!.outbox[0]!.kind, "timeout");
-	await stop(); await h.close(ctx);
+	let now = 1_000;
+	const h = await open(new MemoryStorage()); const s = new PiSpaces(h, ctx, () => now);
+	const stop = await startMaintenance(h, ctx, { now: () => now });
+	try {
+		await s.write(job(1), null, 150);
+		await s.wait({ type: "Never" }, { target: "nobody", timeout: 200 });
+		assert.equal((await h.snapshot(Space, ctx))!.entries.length, 1);
+		now += 500;
+		const deadline = Date.now() + 5_000;
+		let snap = await h.snapshot(Space, ctx);
+		while (snap!.entries.length || snap!.waiters.length) {
+			assert.ok(Date.now() < deadline, "background reaper must make progress");
+			await sleep(20); snap = await h.snapshot(Space, ctx);
+		}
+		// Snapshot reads never invoke space maintenance: the background reaper did this.
+		assert.equal(snap!.outbox[0]!.kind, "timeout");
+	} finally { await stop(); await h.close(ctx); }
 });
 
 test("space_wait: tool returns at once; entry arrives later as a message and is committed by the agent", async () => {

@@ -10,4 +10,7 @@ export const Space = defineDoc<SpaceState & Record<string, any>>({
 	scope: "session",
 	initial: () => core.initialState() as SpaceState & Record<string, any>,
 	migrate: (v, from) => core.migrate(v, from) as SpaceState & Record<string, any>,
+	// Compact the delta tail periodically: without a base every read replays the
+	// whole journal, so unbounded spaces degrade to O(history) per read.
+	checkpointWhen: (_v, _ops, info) => info.deltasSinceBase >= 500,
 });

@@ -12,7 +12,7 @@ export function rpcDomain(call: Call, principal: Principal): {method: string; ar
     const a = call.args ?? {}, txn = a.txn ?? null;
     switch (call.method) {
     case "write":
-        return {method : "write", args : {entry : a.entry!, txn, lease : duration(a.leaseMs, -1)}};
+        return {method : "write", args : {entry : a.entry!, txn, lease : duration(a.leaseMs, -1), ...(a.unique === undefined ? {} : {unique: a.unique})}};
     case "read":
     case "take":
         return {

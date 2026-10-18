@@ -5,7 +5,7 @@ import {existsSync,copyFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {PrimarySyncJournal,PrimarySyncBlocked,bootstrapPrimarySync,captureStore,materializeSyncHistory,primarySyncStorage,recoverPrimarySync,PiSpaces,Space,core,createSpace,listSpaces,snapshotSpace,canonicalJson,type PrimarySyncConfig} from '../src/index.ts';
-import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
+import {BACKENDS,freePort,PersistentHome,ctx} from './support/persistent.ts';
 
 const single:PrimarySyncConfig={spaceId:'bootstrapped',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:null,durability:'single'};
 
@@ -122,7 +122,7 @@ for(const backend of BACKENDS)test(`${backend}: a control-like main store bootst
   const journal=new PrimarySyncJournal(join(home.dir,'main-journal.sqlite'),genesis,{self:'a'});let st=await home.storage();
   const boot=await bootstrapPrimarySync(st,journal,ctx);assert.ok(boot.revisions>=1);
   // 2. setStandby to a listen-only replica of the main store (the control standby), siblings follow on a.
-  const keys={a:provisionFileSigner(join(dir,'a.json')),n:provisionFileSigner(join(dir,'n.json'))},port=17561+(backend==='jsonl'?0:1);
+  const keys={a:provisionFileSigner(join(dir,'a.json')),n:provisionFileSigner(join(dir,'n.json'))},port=await freePort();
   listener=await openSyncSpace({config:{alias:'control-main',spaceId:control.spaceId,incarnation:control.incarnation,dir:join(dir,'replica'),genesis,port,peers:[{hostId:'a',algorithm:'ed25519',publicKey:keys.a.publicKey,ip:'127.0.0.2'}]},hostId:'n',authorityId:'authority',bindIp:'127.0.0.3',signer:keys.n,external:reg,installed:new SqliteRecoveryRegister(join(dir,'n-installed.sqlite')),ctx,openStorage:async()=>{throw Error('unused');},openHarness:async()=>{throw Error('unused');},listenOnly:true});
   const t=socketTransport({host:'127.0.0.3',port},{localAddress:'127.0.0.2'}),peer=signedReplicaPeer({transport:t,signer:keys.a,self:'a',remote:{hostId:'n',algorithm:'ed25519',publicKey:keys.n.publicKey}});
   const set=await setStandby({storage:st,journal,register:reg,hostId:'a',dataIncarnation:control.incarnation,ctx,transitionId:'control-standby',target:peer,targetDataIncarnation:control.incarnation,siblingSpaces:[def.spaceId]});

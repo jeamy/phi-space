@@ -309,7 +309,8 @@ export class RemoteSpace implements SpaceLike {
 	// ---- SpaceLike
 
 	async write(entry: EntryDraft, txn: string | null = null, lease: number = core.ANY, o: Req = {}): Promise<Lease> {
-		return (await this.mutate("write", { entry: entry as unknown as Json, txn, leaseMs: leaseArg(lease) }, o)) as unknown as Lease;
+		if (o.unique && !(await this.info()).features.includes("write.unique")) throw new UnsupportedOperation("server does not support atomic unique writes");
+		return (await this.mutate("write", { entry: entry as unknown as Json, txn, leaseMs: leaseArg(lease), ...(o.unique ? { unique: o.unique } : {}) }, o)) as unknown as Lease;
 	}
 	read(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, false); }
 	readIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, true); }

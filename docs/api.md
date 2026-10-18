@@ -38,7 +38,7 @@ Ohne `space` verwendet der Client den Default-Space. Ein gesetztes
 
 | Methode | Ergebnis | Semantik |
 |---|---|---|
-| `write(entry, txn?, lease?, { request? })` | `Lease` | Schreibt einen neuen Entry; unter `txn` zunächst unsichtbar. |
+| `write(entry, txn?, lease?, { request?, unique? })` | `Lease` | Schreibt einen neuen Entry; unter `txn` zunächst unsichtbar. `unique: ["feld"]` prüft atomar auf einen vorhandenen Entry desselben konkreten Typs mit denselben Schlüsselfeldern, auch wenn dieser reserviert oder noch uncommitted ist. |
 | `read(template, timeout, options?)` | `EntryView \| null` | Wartet auf einen sichtbaren Treffer. |
 | `readIfExists(template, timeout, options?)` | `EntryView \| null` | Wartet nur auf die Auflösung kollidierender Transaktionen. |
 | `take(template, timeout, options?)` | `EntryView \| null` | Entfernt sofort oder reserviert unter `txn`. |
@@ -57,7 +57,7 @@ Ohne `space` verwendet der Client den Default-Space. Ein gesetztes
 | `pollOperation(request)` / `cancelOperation(request)` | Claim-Status | Liest bzw. beendet eine bekannte Claim-Operation. |
 | `resolveOperation(request, method, argumentHash, primaryEpoch)` | `AdmissionResolution` | Prüft bekannte Claim-Bindungen oder erlaubt bei gültiger Generation derselben Epoche ausschließlich Retry derselben ID. |
 | `events(principal, options?)` / `ack(principal, epoch, upTo, options?)` | Mailbox-Seite / ACK-Stand | Eigene Consumer-Mailbox, Präfix-ACK ist kein Txn-Commit. |
-| `setCompletionProfiles(profiles)` | `void` | Nur Host-Code; Ergebnisvertrag vor Arbeit installieren. |
+| `setCompletionProfiles(profiles)` | `void` | Nur Host-Code; Ergebnisvertrag vor Arbeit installieren. Das erneute Setzen identischer Profile ist ein No-op, auch bei laufenden Transaktionen. |
 | `setLimits(partialLimits)` | `Limits` | Nur Host-Code: setzt Grenzen dieses Space. |
 
 `read`/`take` akzeptieren zusätzlich `OpOptions`: `txn`, eine absolute
@@ -71,6 +71,15 @@ führen zu `RequestConflict`.
 Take-Waiter hält den Entry in einer frischen Transaktion, bis der Empfänger
 committet oder deren Lease abläuft. Beide Methoden benötigen `startService`,
 damit Delivery und Reaper im Leerlauf laufen.
+
+Die optionale `write`-Prüfung `unique` ist eine atomare Prüfung dieses einzelnen
+Writes, kein dauerhaft registrierter Unique-Index. Alle Erzeuger eines Singleton-
+Typs müssen dieselben Schlüsselfelder angeben. Reservierte und uncommittete
+Duplikate werden ebenfalls abgewiesen; der transaktionale Ersatz eines reservierten
+Singletons erfolgt anschließend mit normalem `write` in derselben Transaktion.
+`RemoteSpace` verlangt dafür das Feature `write.unique` und lehnt ältere Server
+ab, statt die Eindeutigkeitsprüfung stillschweigend wegzulassen. Die Zusage gilt
+je Space, nicht über voneinander unabhängige Federation-Members hinweg.
 
 ## Benannte Spaces und Hintergrunddienst
 

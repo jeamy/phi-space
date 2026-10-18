@@ -5,7 +5,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createHash } from "node:crypto";
-import { core, FOREVER, PiSpaces, Space, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
+import { core, FOREVER, PiSpaces, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
 
 export type SieveConfig = { runId: string; start: number; end: number; blockSize: number };
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
@@ -111,16 +111,34 @@ export async function processSieveTask(space: SpaceLike, runId: string, options:
   }
 }
 
+export function normalizeSieveRunConfig(runId: string, rawConfig?: Record<string, unknown>): SieveConfig {
+  const cfg = rawConfig ?? {};
+  return {
+    runId,
+    start: Number(cfg.start ?? 1),
+    end: Number(cfg.end ?? 1001),
+    blockSize: Number(cfg.blockSize ?? 128),
+  };
+}
+
 /** Result export for `RunController` (kind "sieve"): completeness per expected task, hash over all results in order. */
 export const SIEVE_EXPORTER: RunExporter = async (run, space) => {
-  const config = run.config as SieveConfig;
+  const config = normalizeSieveRunConfig(run.runId, run.config as Record<string, unknown> | undefined);
   validate(config);
   const hash = createHash("sha256"), missing: string[] = [];
   let found = 0, primes = 0, first: number | null = null, last: number | null = null;
   for (let start = config.start, i = 0; start < config.end; start += config.blockSize, i++) {
     const taskId = `${config.runId}:${i}`;
     let result: SieveResult | undefined;
-    for (const member of run.members) { const e = await space(member).readAll({ type: "SieveResult", fields: { runId: config.runId, taskId } }); if (e.length) { result = e[0]!.fields as SieveResult; break; } }
+    for (const member of run.members) {
+      const entries = await space(member).readAll({ type: "SieveResult", fields: { runId: config.runId, taskId } });
+      if (entries.length > 1) throw new Error(`Duplicate member result for ${taskId}`);
+      if (!entries.length) continue;
+      const candidate = entries[0]!.fields as SieveResult;
+      validateSieveResult(candidate, config, i);
+      if (result && canonicalJson(result as unknown as core.Json) !== canonicalJson(candidate as unknown as core.Json)) throw new Error(`Conflicting member results for ${taskId}`);
+      result = candidate;
+    }
     if (!result) { missing.push(taskId); continue; }
     found++; primes += result.primes.length; hash.update(canonicalJson(result as unknown as core.Json));
     if (result.primes.length) { first ??= result.primes[0]!; last = result.primes[result.primes.length - 1]!; }
@@ -132,6 +150,13 @@ export const SIEVE_EXPORTER: RunExporter = async (run, space) => {
 /** Registered worker kind for `WorkerSupervisor`: one sieve task per step, bound to the assignment's run. */
 export const SIEVE_WORKER_KIND: WorkerKind = { requiresRun: true, step: ({ space, runId }) => processSieveTask(space, runId!) };
 
+export function validateSieveResult(result: SieveResult, config: SieveConfig, index: number): void {
+  const start = config.start + index * config.blockSize, end = Math.min(start + config.blockSize, config.end);
+  const taskId = `${config.runId}:${index}`;
+  if (result.runId !== config.runId || result.taskId !== taskId || result.rangeStart !== start || result.rangeEnd !== end) throw new Error(`Result range mismatch or identity mismatch for ${taskId}`);
+  if (!Array.isArray(result.primes) || result.primes.some((p, j) => !Number.isSafeInteger(p) || p < Math.max(2, start) || p >= end || (j > 0 && p <= result.primes[j - 1]!))) throw new Error(`Invalid result sequence for ${taskId}`);
+}
+
 /** Look up every expected ID: never infer completeness from a truncated result list/count. */
 export async function collectSieveResults(space: SpaceLike, config: SieveConfig): Promise<number[]> {
   validate(config);
@@ -141,11 +166,7 @@ export async function collectSieveResults(space: SpaceLike, config: SieveConfig)
     const entries = await space.readAll({ type: "SieveResult", fields: { runId: config.runId, taskId } });
     if (entries.length !== 1) throw new Error(`Expected exactly one result for ${taskId}; got ${entries.length}`);
     const result = entries[0].fields as SieveResult;
-    const end = Math.min(start + config.blockSize, config.end);
-    if (result.rangeStart !== start || result.rangeEnd !== end) throw new Error(`Result range mismatch for ${taskId}`);
-    if (!Array.isArray(result.primes) || result.primes.some((p, j) => !Number.isSafeInteger(p) || p < Math.max(2, start) || p >= end || (j > 0 && p <= result.primes[j - 1]))) {
-      throw new Error(`Invalid result sequence for ${taskId}`);
-    }
+    validateSieveResult(result, config, i);
     primes.push(...result.primes);
   }
   return primes;
