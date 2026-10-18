@@ -696,6 +696,9 @@ Primary**:
 2. **Fencing-Nachweis für den bisherigen Standby** nach 5.5. Nach Promotion ist der ausgeschlossene alte Primary
    das zu sperrende Gegenreplikat; dessen bereits verifizierter, weiterhin gültiger Nachweis wird verwendet.
    Ohne Sperre keine Umschaltung und keine Replikatfreigabe.
+   Ergänzung 2026-10-17: Für einen Standby ohne Fencing-Adapter gilt der Widerruf seiner Boot-Berechtigung für
+   diesen Space als Sperre ([Ablauf](ap3-replica-control.md#degradetosingle-ohne-fencing-adapter)); für eine
+   Promotion bleibt ein echter Adapter Pflicht.
 3. **Pending-Präfix abschließen:** Der Primary prüft seine lokale geordnete Historie und den höchstens einen
    versiegelten Commit-Kandidaten aus 7.2. Dieser wird unabhängig vom verlorenen Standby-ACK genau einmal mit
    seinen gespeicherten Deltas und Claims angewendet und als `recoveredCommitted` journalisiert. Auch ein vor

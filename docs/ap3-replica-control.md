@@ -519,16 +519,10 @@ Eine wiederverwendete ID mit anderen Argumenten wird abgelehnt.
   - Freigabe in Quarantäne und `setStandby` zurück zu nanoi;
   - am Ende identische Stände.
 
-  Das ist ein Fixture-Lauf neben dem Federation-Daemon, nicht der produktive Space-Dienst. Die Abnahme von 3.3/3.4 (F1/Gate 2) verlangt
-  diesen realen Lauf. Testziel ist nanoi
-  ([testumgebung-big.md](testumgebung-big.md) §18). big ist nie Fencing-Ziel. Standby ist Host 100 im
-  Heimnetz ([testumgebung-big.md](testumgebung-big.md) §19), nicht vpsc, das bereits Register und Fencing-Dienst
-  trägt. Für 100 gibt es keinen Fencing-Adapter. Deshalb ist nur Promotion auf 100 nach Fencing von nanoi
-  abnehmbar; `degradeToSingle` auf nanoi bleibt gesperrt.
+  Das war ein Fixture-Lauf. Der produktive Dienst lief danach im Daemon-Lauf und im Gesamtlauf 3.7
+  ([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)).
+- Für den Standby 100 gibt es keinen Fencing-Adapter. Promotion auf 100 läuft nach Fencing von nanoi;
+  `degradeToSingle` auf nanoi widerruft nur die Standby-Berechtigung des Space (siehe oben).
 - 3.6 ist im Kern umgesetzt (Guard-Hook, Standby-Sperre, Wiederzulassung je Space, Neustart). Den Hook mit dem
   Journal verbinden muss weiterhin, wer einen primary/sync-Space betreibt.
-- Noch offen:
-  - Veröffentlichen der Notice aus dem Federation-Daemon, sobald dort primary/sync-Spaces laufen;
-  - authentifizierter Transport zwischen den Replikaten;
-  - Control-Space-Sonderfall (3.8);
-  - Snapshot-Bootstrap eines nicht leeren Ziels.
+- Noch offen: Snapshot-Bootstrap eines nicht leeren Ziels; weitere Punkte in der [Abnahme-Matrix](ap3-abnahme.md).

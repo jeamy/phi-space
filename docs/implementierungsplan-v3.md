@@ -195,8 +195,8 @@ laufen.
 **Abnahme Phase 3:** v3 §11 Stufe 3 und alle Zeilen „3“ aus §12.1, real mit Fencing-Adapter.
 Stand 2026-10-17: Der Gesamtlauf über den produktiven Dienst ist bestanden. Er umfasste Partition, Prozessabbrüche,
 Failover mit `NotCommitted` und den Rückweg mit netcup-Fencing
-([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)). Offen für die Abnahme: Router-Delegation statt
-Admin-Grants, Ausfall eines NetBird-Agenten, erschöpfter Speicher.
+([Nachweis](../test/evidence/phase3-partition-2026-10-17/README.md)). Was für die Abnahme noch fehlt, steht in der
+[Abnahme-Matrix](ap3-abnahme.md).
 
 ### Phase 4 – Weitere Clients (Stufe 4)
 

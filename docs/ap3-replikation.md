@@ -4,6 +4,7 @@ Stand: 2026-10-17. **Phase 3 ist begonnen, aber nicht abgenommen.**
 Phase 2 und ihre dokumentierte Abschlussentscheidung bleiben unverändert.
 Der Zielvertrag steht in Abschnitt 7.2 und Stufe 3 des
 [Föderationsplans](federation-plan-v3.md).
+Den Abgleich mit den Abnahmekriterien enthält die [Abnahme-Matrix](ap3-abnahme.md).
 
 ## Umsetzung und verbleibende Schritte
 
