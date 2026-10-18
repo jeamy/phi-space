@@ -7,6 +7,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, openSync, closeSync
 import { join } from "node:path";
 import {createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
+import {staleOwnerLock,procStartTime,clearStaleOwnerLock} from "./owner-lock.ts";
 import {ProvingService,EntryReplicationController,lastConfigTransition,promotionEvidence,releaseHostToQuarantine,openSyncSpace,bootstrapPrimarySync,captureStore,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,startQuarantineReplicas,BootBlocked,PrimarySyncJournal,assertSyncStandby,promote,degradeToSingle,setStandby,TlsRecoveryRegister as SyncRegister,TlsFencing,signedReplicaPeer,materializeSyncHistory,canonicalJson as syncCanonical} from "../../src/index.ts";
 import { provisionFileSigner, loadFileSigner, privateFile, PiSpaces, bootstrapEnroll, hashToken, SqliteRecoveryRegister, listSpaces, spaceDoc, createSpace, startConfiguredFederation, startRecoveryOnly, startMemberRecoveryOnly, RemoteSpace, socketTransport, core, searchMembers, canonicalJson, type Taken, type FederationConfig, TlsRecoveryRegister, DataAdminController, RootHistoryErasure, RootErasures, snapshotSpace, FederationPending, FederationOperations, parentJournalKey, operationPartition } from "../../src/index.ts";
 const [mode, home="/data/phase1b"] = process.argv.slice(2);
@@ -53,12 +54,11 @@ if(mode==="sync-head"){
 const configFile=join(home,"federation.json"), installed=new SqliteRecoveryRegister(join(home,"installed.sqlite"));
 if (["recovery","member-recovery"].includes(mode) && !existsSync(join(home,"restart.lock"))) throw new Error("recovery requires a persistent restart lock");
 if (mode==="run" && existsSync(join(home,"restart.lock"))) throw new Error("persistent recovery restart lock blocks the normal daemon");
-// One harness writer. The operator removes a stale owner lock only after proving that its process is gone.
-// A lock from an earlier kernel boot (power-off, reboot) cannot belong to a live process: the daemon clears it itself.
-// Within the same boot the operator rule above applies; PIDs are reused across container restarts.
-const bootId=(()=>{try{return readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();}catch{return null;}})(),startTime=(()=>{try{return readFileSync('/proc/self/stat','utf8').split(') ')[1]!.split(' ')[19];}catch{return null;}})();
+// One harness writer. A lock whose process is provably gone (earlier boot, or no process with its PID and start time)
+// is cleared by the daemon itself; anything else stays for the operator.
+const bootId=(()=>{try{return readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();}catch{return null;}})(),startTime=procStartTime('self');
 const lock=join(home,"owner.lock");
-if(existsSync(lock)&&bootId){try{const old=JSON.parse(privateFile(lock).toString());if(old.bootId&&old.bootId!==bootId){unlinkSync(lock);console.error(JSON.stringify({staleOwnerLockCleared:{pid:old.pid,mode:old.mode,previousBoot:old.bootId}}));}}catch(e){if(!(e instanceof SyntaxError))throw e;}}
+if(existsSync(lock)){try{const text=privateFile(lock).toString(),old=JSON.parse(text),why=staleOwnerLock(old,{bootId,pid:process.pid,startTime:procStartTime});if(why&&clearStaleOwnerLock(lock,text)){console.error(JSON.stringify({staleOwnerLockCleared:{pid:old.pid,mode:old.mode,reason:why,...(why==='previousBoot'?{previousBoot:old.bootId}:{})}}));}}catch(e){if(!(e instanceof SyntaxError))throw e;}}
 const fd=openSync(lock,"wx",0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode,bootId,startTime})+'\n');closeSync(fd);
 const releaseLock=()=>{try{unlinkSync(lock);}catch{}};
 // SIGTERM is caught from here on: a stop during startup lets the mode finish starting and then clean up (release the
@@ -305,6 +305,10 @@ try{
      const base={storage:st,journal,register,hostId:cfg.hostId,dataIncarnation:c.incarnation,ctx};
      if(q.op==="set-standby"){const peer=c.peers.find((p:any)=>p.hostId===q.target);if(!peer)throw new Error("unpinned target");const t=socketTransport({host:peer.ip,port:c.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20});
       try{result=await setStandby({...base,transitionId:q.tid,target:signedReplicaPeer({transport:t,signer,self:cfg.hostId,remote:peer}),targetDataIncarnation:c.incarnation});}finally{t.close();}}
+     else if(q.op==="degrade"&&q.revokeStandbySpace===true){
+      // A standby without a fencing adapter: only its permit for this Space is revoked (v3 5.3.1 step 2, 2026-10-17).
+      if(q.fencing!==undefined)throw new Error("degrade takes either fencing or revokeStandbySpace");
+      result=await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,revokeStandbySpace:true});}
      else{const adapter=new TlsFencing(q.fencing),other=(q.op==="promote"?journal.config.primaryReplica:journal.config.standbyReplica)??"",proof=await adapter.fence(other,`${q.op} ${q.tid}`);
       result=q.op==="promote"?await promote({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof}):await degradeToSingle({...base,recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter,proof});result={...result,proof:{kind:proof.kind,evidence:proof.evidence}};}
     }finally{await st.close(ctx);register.close();}

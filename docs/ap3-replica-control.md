@@ -63,6 +63,8 @@ Für Standbys ohne Adapter (etwa im Heimnetz) gilt seit 2026-10-17 eine Erweiter
   nicht nur einen Host in Quarantäne. Dasselbe gilt für Catch-up (`assertQuarantine(register, host, spaceId)`) und
   für die Bestätigung der neuen Konfiguration.
   - Das Replikat muss vorher leer sein; das alte Journal des Space wird beiseitegelegt.
+- **Werkzeug:** Der Modus `sync` des Daemons nimmt `{op: "degrade", revokeStandbySpace: true}` ohne `fencing`. Für
+  `main-sync` gibt es den Weg nicht, weil dort der Widerruf die Geschwister-Spaces des Standby nicht träfe.
 - **Test:** `test/test-degrade-revoke.test.ts`:
   - Degrade mit versiegeltem Kandidaten.
   - Der Host bleibt aktiv, der andere Space ebenso.

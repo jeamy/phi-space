@@ -60,10 +60,9 @@ Weitere Inhalte der Stufe:
 | B1 | Router-Delegation auf einen Sync-Space im laufenden Betrieb | teilweise: geroutete Writes mit Promotion (`root-hosta-2026-10-17`); `CommitSealed`, Partition und `NotCommitted` liefen nur mit Admin-Grants |
 | B2 | Ausfall eines NetBird-Agenten | offen |
 | B3 | Erschöpfter Speicher | lokal: Journal- und Historienbudgets weisen ab (`test-primary-sync`, `test-entry-replication`); real offen |
-| B4 | Prozessabbruch ohne Operatorschritt | teilweise: Sperre eines früheren Boots räumt der Daemon selbst; dieselbe Boot-Sitzung braucht den Operator |
-| B5 | `degrade` ohne Fencing-Adapter im Sync-Werkzeug | offen: nur als API (`revokeStandbySpace`) |
+| B4 | Prozessabbruch ohne Operatorschritt | lokal erfüllt: Der Daemon räumt eine Sperre, deren Prozess nachweislich fehlt (früherer Boot, oder kein Prozess mit ihrer PID und Startzeit; `test-replica-control`); real offen |
+| B5 | `degrade` ohne Fencing-Adapter im Sync-Werkzeug | umgesetzt: `sync` mit `op: degrade, revokeStandbySpace: true` für primary/sync-Spaces (nicht für `main-sync` mit Geschwister-Spaces); real offen |
 
 ## Offen für die Abnahme
 
-1. Code: B4 (Sperre derselben Boot-Sitzung), B5 (Werkzeug).
-2. Echter Lauf: S1 (10-min-Partition auf dem Merge-Pfad), B1, B2, B3.
+Echter Lauf: S1 (10-min-Partition auf dem Merge-Pfad), B1, B2, B3, dazu B4 und B5 real.

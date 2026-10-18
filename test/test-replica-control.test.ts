@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync,readFileSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
@@ -405,4 +405,31 @@ test('a quarantined host opens only replica listeners, accepts catch-up and repo
   const active=q.untilActive();const b2=(await reg.get<any>('boot:p'))!;await reg.compareAndSet('boot:p',b2.version,{...b2.value,state:'active'});
   assert.equal(await active,true);
  }finally{await q?.close();await server.close();reg.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('an owner lock is cleared only when its process is provably gone: earlier boot, or no process with its PID and start time',async()=>{
+ const {staleOwnerLock,procStartTime,clearStaleOwnerLock}=await import('./testbed/owner-lock.ts');
+ const {spawn}=await import('node:child_process');
+ const boot=readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim(),self={bootId:boot,pid:process.pid,startTime:procStartTime};
+ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+ try{
+  const pid=child.pid!;let started:string|null=null;for(let n=0;n<100&&!started;n++){started=procStartTime(pid);if(!started)await new Promise(r=>setTimeout(r,10));}
+  const lock={pid,mode:'run',bootId:boot,startTime:started};
+  assert.equal(staleOwnerLock(lock,self),null,'a live owner keeps its lock');
+  assert.equal(staleOwnerLock({...lock,startTime:'1'},self),'processGone','the PID was reused by another process');
+  assert.equal(staleOwnerLock({...lock,bootId:'other'},self),'previousBoot');
+  assert.equal(staleOwnerLock({...lock,pid:process.pid,startTime:'1'},self),'processGone','this process holds the PID now');
+  assert.equal(staleOwnerLock({pid,mode:'run'},self),null,'an older lock without boot ID stays for the operator');
+  assert.equal(staleOwnerLock({pid,mode:'run',bootId:boot},self),null,'and so does one without start time');
+  child.kill('SIGKILL');await new Promise(r=>child.once('exit',r));
+  for(let n=0;n<100&&procStartTime(pid)===started;n++)await new Promise(r=>setTimeout(r,10));
+  assert.equal(staleOwnerLock(lock,self),'processGone','SIGKILL in the same boot');
+  // Clearing removes only the judged content; a lock written in between is put back.
+  const dir=mkdtempSync(join(tmpdir(),'owner-lock-')),file=join(dir,'owner.lock');
+  try{
+   writeFileSync(file,'old');assert.equal(clearStaleOwnerLock(file,'old'),true);assert.equal(existsSync(file),false);
+   writeFileSync(file,'new owner');assert.equal(clearStaleOwnerLock(file,'old'),false);assert.equal(readFileSync(file,'utf8'),'new owner');
+   assert.equal(clearStaleOwnerLock(join(dir,'missing'),'old'),false);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+ }finally{child.kill('SIGKILL');}
 });
