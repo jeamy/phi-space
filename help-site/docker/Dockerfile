@@ -8,21 +8,49 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 
 # ---- Stage 1: Base dependencies (root phi-spaces + help-site Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
-    NODE_OPTIONS=--dns-result-order=ipv4first \
+# nanoi is IPv6-only: never prefer IPv4 for DNS/npm (causes "Exit handler never called!")
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_AUDIT=false \
+    NODE_OPTIONS=--dns-result-order=ipv6first \
+    NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_MAXSOCKETS=3 \
     npm_config_fetch_retries=5 \
     npm_config_fetch_retry_mintimeout=20000 \
-    npm_config_fetch_retry_maxtimeout=120000
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_maxsockets=3
 WORKDIR /opt/phi-spaces
 
-# Prefer IPv4 for npm registry lookups (IPv6 often breaks npm ci in Docker builds)
-RUN printf 'precedence ::ffff:0:0/96  100\n' >> /etc/gai.conf
+# Prefer IPv6 globally inside the build container
+RUN set -eux; \
+    printf '\nlabel ::/0          1\nprecedence ::/0   100\nprecedence ::ffff:0:0/96  10\n' >> /etc/gai.conf; \
+    node -e "const dns=require('dns'); dns.setDefaultResultOrder('ipv6first'); console.log('dns', dns.getDefaultResultOrder())"
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    set -eux; \
+    for i in 1 2 3 4 5; do \
+      echo "npm ci attempt $i"; \
+      npm ci --no-audit --no-fund && exit 0; \
+      echo "npm ci failed on attempt $i"; \
+      rm -rf node_modules; \
+      sleep $((i * 3)); \
+    done; \
+    echo "npm ci failed after retries"; exit 1
 
 COPY help-site/package.json help-site/package-lock.json ./help-site/
-RUN npm --prefix help-site ci
+RUN --mount=type=cache,target=/root/.npm \
+    set -eux; \
+    for i in 1 2 3 4 5; do \
+      echo "help-site npm ci attempt $i"; \
+      npm --prefix help-site ci --no-audit --no-fund && exit 0; \
+      echo "help-site npm ci failed on attempt $i"; \
+      rm -rf help-site/node_modules; \
+      sleep $((i * 3)); \
+    done; \
+    echo "help-site npm ci failed after retries"; exit 1
 
 # ---- Stage 2: Builder (Corpus generation + Next.js 16 Production Build + esbuild bundle) ----
 FROM deps AS builder
