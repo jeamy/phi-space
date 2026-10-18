@@ -2,6 +2,19 @@
 import type { Context } from "@earendil-works/chord";
 import { core, FOREVER, ResourceExhausted, spaceDoc, type SpaceHost, type SpaceLike } from "../../../src/index.ts";
 import type { SwarmPost } from "./swarm.ts";
+import { UnsupportedOperation } from "../../../src/remote.ts";
+
+/** Stop a traversal on deadline/disconnect; an already sent read may finish, but no next read is issued. */
+export async function historyRead<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal) return operation;
+	let abort: () => void = () => {};
+	try {
+		return await Promise.race([operation, new Promise<never>((_, reject) => {
+			abort = () => reject(signal.reason ?? new Error("History read aborted"));
+			if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true });
+		})]);
+	} finally { signal.removeEventListener("abort", abort); }
+}
 
 export async function appendHistory(space: SpaceLike, post: SwarmPost, txn: string, normalizeTime = true): Promise<void> {
 	let head = await space.take({ type: "PostHistoryHead" }, 5_000, { txn });
@@ -115,16 +128,44 @@ export async function initializeHistory(space: SpaceLike, bulk?: { host: SpaceHo
 }
 
 export type HistoryCandidate = { post: SwarmPost; cursor: string; next: string };
-export async function historyPage(space: SpaceLike, input: { cursor?: string; beforeAt: number; beforeId: string; limit: number; channel?: string; handle?: string; ai?: boolean }): Promise<{ candidates: HistoryCandidate[]; next: string }> {
+export async function historyPage(space: SpaceLike, input: { cursor?: string; beforeAt: number; beforeId: string; limit: number; channel?: string; handle?: string; ai?: boolean; signal?: AbortSignal }): Promise<{ candidates: HistoryCandidate[]; next: string }> {
+	input.signal?.throwIfAborted();
+	if (space.readChain) {
+		try {
+			let cursor = input.cursor, scanned = 0;
+			const candidates: HistoryCandidate[] = [];
+			do {
+				input.signal?.throwIfAborted();
+				const page = await historyRead(space.readChain({ type: "PostHistoryNode" }, {
+					...(cursor === undefined ? { head: { type: "PostHistoryHead" } } : { cursor }),
+					limit: Math.min(input.limit - candidates.length, 512 - scanned), maxBytes: 128 * 1024,
+				}), input.signal);
+				if (!page.ready) throw new Error("Shard history index unavailable or migration incomplete");
+				for (const node of page.items) {
+					const post = JSON.parse(String(node.fields.post)) as SwarmPost;
+					scanned++;
+					if (post.at > input.beforeAt || (post.at === input.beforeAt && post.postId.localeCompare(input.beforeId) >= 0)) continue;
+					if (input.channel && post.channel !== input.channel || input.handle && post.handle !== input.handle || input.ai && !post.viaLlm) continue;
+					candidates.push({ post, cursor: node.id, next: String(node.fields.next ?? "") });
+				}
+				cursor = page.next;
+			} while (cursor && scanned < 512 && candidates.length < input.limit);
+			return { candidates, next: cursor ?? "" };
+		} catch (error) {
+			if (!(error instanceof UnsupportedOperation)) throw error;
+			// Older peers still use the sequential compatibility path.
+		}
+	}
 	let cursor = input.cursor;
 	if (cursor === undefined) {
-		const head = await space.read({ type: "PostHistoryHead" }, 0);
+		const head = await historyRead(space.read({ type: "PostHistoryHead" }, 0), input.signal);
 		if (!head || head.fields.ready === false) throw new Error("Shard history index unavailable or migration incomplete");
 		cursor = String(head.fields.next ?? "");
 	}
 	const candidates: HistoryCandidate[] = [];
 	for (let scanned = 0; cursor && scanned < 512 && candidates.length < input.limit; scanned++) {
-		const node = await space.read({ type: "PostHistoryNode", id: cursor }, 0);
+		input.signal?.throwIfAborted();
+		const node: Awaited<ReturnType<SpaceLike["read"]>> = await historyRead(space.read({ type: "PostHistoryNode", id: cursor }, 0), input.signal);
 		if (!node) throw new Error("History cursor no longer available");
 		const post = JSON.parse(String(node.fields.post)) as SwarmPost;
 		const current = cursor; cursor = String(node.fields.next ?? "");
@@ -135,9 +176,13 @@ export async function historyPage(space: SpaceLike, input: { cursor?: string; be
 	return { candidates, next: cursor ?? "" };
 }
 
-export async function mergedHistory(spaces: SpaceLike[], input: { cursors?: string[]; beforeAt: number; beforeId: string; limit: number; channel?: string; handle?: string; ai?: boolean }) {
+export async function mergedHistory(spaces: SpaceLike[], input: { cursors?: string[]; beforeAt: number; beforeId: string; limit: number; channel?: string; handle?: string; ai?: boolean; signal?: AbortSignal }) {
 	// A missing shard fails the page as a whole: callers retain all cursors and may retry safely.
-	const pages = await Promise.all(spaces.map((space, i) => historyPage(space, { ...input, cursor: input.cursors?.[i] })));
+	const stop = new AbortController();
+	const signal = input.signal ? AbortSignal.any([input.signal, stop.signal]) : stop.signal;
+	let pages: Awaited<ReturnType<typeof historyPage>>[];
+	try { pages = await Promise.all(spaces.map((space, i) => historyPage(space, { ...input, signal, cursor: input.cursors?.[i] }))); }
+	finally { stop.abort(); }
 	const selected = pages.flatMap((p, shard) => p.candidates.map(c => ({ ...c, shard })))
 		.sort((a, b) => b.post.at - a.post.at || b.post.postId.localeCompare(a.post.postId)).slice(0, input.limit);
 	const consumed = new Set(selected.map(c => c.shard + ":" + c.cursor));

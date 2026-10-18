@@ -3,9 +3,9 @@
   "temporaryGroupAbsent": true,
   "temporaryPolicyAbsent": true,
   "existingServices": {
-    "pi-spaces-phase1b-host-a.service": "active",
-    "pi-spaces-phase1b-member-1.service": "active",
-    "pi-spaces-restore-target.service": "active"
+    "phi-spaces-phase1b-host-a.service": "active",
+    "phi-spaces-phase1b-member-1.service": "active",
+    "phi-spaces-restore-target.service": "active"
   },
   "fencedOldSourcesChanged": false
 }

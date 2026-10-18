@@ -54,7 +54,7 @@ PhiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace 
 
 - **Entry**: An immutable JSON record `{ type: string, types?: string[], fields: Record<string, Json> }`. There is no in-place update; state transitions happen via `take` + `write` inside one transaction.
 - **Global ID (`gid`)**: Every entry carries `gid = <spaceId>/<localId>`. `localId` combines the space's data incarnation with a monotonic counter and is never reused.
-- **Named Space**: Alongside the default space (`pi-spaces.space`, alias `default`), the `Registry` (`pi-spaces.registry`) manages arbitrary named spaces (`pi-spaces.named-space`) with immutable `spaceId`s.
+- **Named Space**: Alongside the default space (`phi-spaces.space`, alias `default`), the `Registry` (`phi-spaces.registry`) manages arbitrary named spaces (`phi-spaces.named-space`) with immutable `spaceId`s.
 - **Principal**: Structured identity `{ peerId, agentId? }`. The service always derives identity from the trusted connection (`IdentityAdapter`), never from client-supplied payload fields.
 
 ## Workflow {#workflow}

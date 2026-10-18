@@ -16,12 +16,12 @@
 (node:7) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
 {"stage":"root-started","produced":1000,"completed":6,"priorCrashes":1,"routerEpoch":1,"leaseId":"abbf13ab-8b9e-48ea-b126-a0100c8e2769"}
-file:///opt/app/pi-spaces.mjs:8269
+file:///opt/app/phi-spaces.mjs:8269
         throw new FederationUnavailable("required Member snapshots unavailable: " + missing.join(","));
               ^
 
 FederationUnavailable [Error]: required Member snapshots unavailable: b
-    at FederatedSpace.readAll (file:///opt/app/pi-spaces.mjs:8269:15)
+    at FederatedSpace.readAll (file:///opt/app/phi-spaces.mjs:8269:15)
     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
     at async ackRun (file:///opt/app/scenarios/phase2-netbird.mjs:326:25)
     at async Promise.all (index 1)

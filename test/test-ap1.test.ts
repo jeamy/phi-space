@@ -16,7 +16,7 @@ const service = (h: any, now = Date.now, options = {}) => new SpaceService({ hos
 
 test("AP1 a persisted v4 singleton migrates to v5 without copying or changing old ids and ownership", async () => {
 	const fixture = JSON.parse(readFileSync(new URL("./fixtures/space-v4.json", import.meta.url), "utf8"));
-	const legacy = defineDoc<core.SpaceState & Record<string, any>>({ kind: "pi-spaces.space", version: 4, scope: "session", initial: () => structuredClone(fixture) });
+	const legacy = defineDoc<core.SpaceState & Record<string, any>>({ kind: "phi-spaces.space", version: 4, scope: "session", initial: () => structuredClone(fixture) });
 	await forEachBackend(async home => {
 		let h = await home.open(); await h.commit(async tx => { const s = await tx.doc(legacy); s.returned = 1; }, ctx); await home.close(h);
 		h = await home.open(); const local = new PhiSpaces(h, ctx);
@@ -269,6 +269,18 @@ test("AP1 peer-wide pending quota is atomic across agents and allows a known pen
 		assert.equal(ok(await svc.handle(call, { peerId: "one" })).state, "pending");
 		const refused = await svc.handle({ ...call, request: { generation: two, requestId: "other" } }, { peerId: "two" }); assert.ok(!refused.ok); assert.equal(refused.error.code, "ResourceExhausted");
 		assert.equal(ok(await svc.handle(call, { peerId: "one" })).state, "pending");
+	});
+});
+
+test("AP1 call rate table frees lapsed windows before it refuses a new peer as full", async () => {
+	await forEachBackend(async home => {
+		const c = clock(), svc = service(await home.open(), c.now, { maxCallsPerWindow: 2, rateWindowMs: 100 });
+		const rates = (svc as unknown as { rates: Map<string, { at: number; calls: number }> }).rates;
+		for (let i = 0; i < 9999; i++) rates.set(`filler-${i}`, { at: c.now(), calls: 1 });
+		c.advance(50); ok(await svc.handle({ method: "hello", args: { protocol: 1 } }, { peerId: "a" })); // sweeps; the fillers are still live
+		c.advance(70); // the fillers' windows have lapsed, the next periodic sweep is not yet due
+		ok(await svc.handle({ method: "hello", args: { protocol: 1 } }, { peerId: "b" }));
+		assert.ok(rates.size < 100);
 	});
 });
 

@@ -45,7 +45,7 @@
    "ok": true
   },
   {
-   "what": "stale owner.lock on nanoi (pid 35, gone in the container) removed, pi-spaces-nano started",
+   "what": "stale owner.lock on nanoi (pid 35, gone in the container) removed, phi-spaces-nano started",
    "ready": true
   },
   {
@@ -66,7 +66,7 @@
   }
  ],
  "retained": [
-  "fixture stores in /var/lib/pi-spaces/{nano,standby}/phase3 (nanoi: aside-1792177179833 holds the old journal with the fork at revision 6)",
+  "fixture stores in /var/lib/phi-spaces/{nano,standby}/phase3 (nanoi: aside-1792177179833 holds the old journal with the fork at revision 6)",
   "config backups tls.json.before-phase3-sync-20261016 and fencing.json.before-phase3-sync-20261016 on vpsc"
  ],
  "artifact": {

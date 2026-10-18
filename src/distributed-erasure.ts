@@ -1,7 +1,6 @@
 // Exclusive operator workflow. Each driver operation must be idempotent for commandHash.
 // The independent register and exact target bindings survive a coordinator restart.
-import {createHash} from 'node:crypto';
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import type {Principal} from './claims.ts';
 import type {RecoveryRegister} from './recovery-register.ts';
 import type {TargetBinding} from './router.ts';
@@ -22,7 +21,7 @@ export interface DistributedErasureDriver {
  /** Must recheck all sealed floors before resuming any writer; repeatable after partial release. */
  release(plan:Readonly<DistributedErasurePlan>,epochs:Readonly<Record<string,number>>):Promise<void>;
 }
-const digest=(v:unknown)=>createHash('sha256').update(canonicalJson(v as any)).digest('hex');
+const digest=(v:unknown)=>digestJson(v as any);
 const clone=<T>(v:T):T=>structuredClone(v);
 export class DistributedPrincipalErasure {
  private o:{register:RecoveryRegister;archives:ErasureArchiveController;driver:DistributedErasureDriver;authorize:()=>Promise<void>};

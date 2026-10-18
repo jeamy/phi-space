@@ -5,9 +5,8 @@
 // The control host sends signed instructions; each host verifies them against the pinned control key.
 import type { Context } from "@earendil-works/chord";
 import { defineDoc } from "@earendil-works/pi-durable";
-import { createHash } from "node:crypto";
 import type { Algorithm, Signer } from "./auth.ts";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost } from "./client.ts";
 import { verifyDetached } from "./grants.ts";
 import { CONTROL_SPACE } from "./enroll.ts";
@@ -21,9 +20,9 @@ export type SpaceLifecycleResult = { commandId: string; action: SpaceAction; spa
 export class SpaceInUse extends core.TransactionError {}
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/;
-const hashOf = (v: unknown) => createHash("sha256").update(canonicalJson(v as core.Json)).digest("hex");
+const hashOf = digestJson;
 export const SpaceLifecycleJournal = defineDoc<{ commands: Record<string, { hash: string; result: SpaceLifecycleResult }> }>({
-	kind: "pi-spaces.space-lifecycle", version: 1, scope: "session", initial: () => ({ commands: {} }),
+	kind: "phi-spaces.space-lifecycle", version: 1, scope: "session", initial: () => ({ commands: {} }),
 });
 
 function why(s: Readonly<core.SpaceState>, now: number): string | undefined {

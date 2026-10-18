@@ -99,7 +99,7 @@ if(mode==="main-sync"){
    }
    else if(["degrade","set-standby","promote"].includes(q.op)){
     // Step 6 (v3 5.3.1): the next start aligns the routing policy before serving; nothing may block that afterwards.
-    const profiles=await st.findDocument({kind:"pi-spaces.profile-transitions",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx),open=profiles&&Object.values((await st.document(profiles.id,"current",ctx))?.value?.operations??{}).some((op:any)=>op.phase!=="completed");
+    const profiles=await st.findDocument({kind:"phi-spaces.profile-transitions",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx),open=profiles&&Object.values((await st.document(profiles.id,"current",ctx))?.value?.operations??{}).some((op:any)=>op.phase!=="completed");
     if(open)throw new Error("an open profile transition blocks the policy step of a control transition");
     const register=new SyncRegister(q.controlRegister),siblings:string[]=q.siblings??[];
     try{

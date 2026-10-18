@@ -11,9 +11,9 @@ Die historischen v1/v2-Planfassungen sind nicht verbindlich.
 
 ## Architektur und Datenmodell
 
-Ein Harness-Prozess besitzt den Storage. Der Default-Space ist das session-scoped Dokument pi-spaces.space,
-Version 5. Weitere benannte Spaces liegen in der Session-Familie pi-spaces.named-space, geschlüsselt nach ihrer
-erzeugten `spaceId`; das Dokument pi-spaces.registry ordnet Aliase den IDs zu und hält die `hostId`.
+Ein Harness-Prozess besitzt den Storage. Der Default-Space ist das session-scoped Dokument phi-spaces.space,
+Version 5. Weitere benannte Spaces liegen in der Session-Familie phi-spaces.named-space, geschlüsselt nach ihrer
+erzeugten `spaceId`; das Dokument phi-spaces.registry ordnet Aliase den IDs zu und hält die `hostId`.
 Mutationen lesen/ändern/schreiben einen Space in einem Harness-Commit. Snapshot-Leseoperationen verwenden keinen Commit.
 MemoryStorage ist flüchtig; JSONL ermöglicht persistente Wiederaufnahme innerhalb des Harness-Vertrags.
 Der Storage und dessen Fehlervertrag bestimmen Dauerhaftigkeit, nicht die Space-API allein.

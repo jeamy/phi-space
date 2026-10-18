@@ -33,7 +33,7 @@ restarting-member-c-9
 restarting-member-c-10
 cleanup-finished
 Traceback (most recent call last):
-  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 98, in <module>
+  File "/media/data/programming/phi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 98, in <module>
     assert root_state['ExitCode']==0 and not root_state['OOMKilled'],'Root failed during Member recovery; see Root log'
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 AssertionError: Root failed during Member recovery; see Root log

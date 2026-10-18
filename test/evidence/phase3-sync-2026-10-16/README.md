@@ -43,7 +43,7 @@ Gesamtdauer etwa eine Minute; nanoi lief 16 s nach dem Einschalten wieder.
 
 - Beide Boot-Einträge sind auf ihre Werte vor dem Lauf zurückgesetzt (`fenceHostBoot` hatte auch die
   Federation-Berechtigungen von nanoi widerrufen).
-- Auf nanoi wurde die verwaiste `owner.lock` nach PID-Prüfung entfernt und `pi-spaces-nano` gestartet.
+- Auf nanoi wurde die verwaiste `owner.lock` nach PID-Prüfung entfernt und `phi-spaces-nano` gestartet.
 - NetBird-Gruppe und -Policy für 17432 sind gelöscht, die nft-Laufzeitregel auf 100 ist entfernt.
 - Die Rechte des Steuerzertifikats in Register und Fencing-Dienst sind entzogen.
 - Danach klappte das Admin-Lesen auf beiden Hosts wieder.

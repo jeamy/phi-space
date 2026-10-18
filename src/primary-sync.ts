@@ -3,15 +3,15 @@
 // entries of the same hash chain: a version-2 intent whose only write is the replication marker, carrying the new
 // configuration. The current configuration is derived from the chain, so markers, replay and catch-up stay exact.
 import {DatabaseSync} from 'node:sqlite';
-import {createHash} from 'node:crypto';
 import {mkdirSync,lstatSync,chmodSync} from 'node:fs';
 import {dirname} from 'node:path';
 import type {Context} from '@earendil-works/chord';
 import type {Storage,StorageWrite,DocumentId,DocumentRecord,Seq} from '@earendil-works/pi-durable';
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import {CommitSealed,SyncBudgetExceeded} from './commit-sealed.ts';
 import {limitCheckpointBytes} from './doc.ts';
 import type {Json} from './core.ts';
+import { canonicalCopy } from './json.ts';
 
 /** `durability` absent means sync (older configurations keep their hash). Single has no standby. */
 export type PrimarySyncConfig={spaceId:string;authorityId:string;primaryEpoch:number;replicaConfigVersion:number;primaryReplica:string;standbyReplica:string|null;durability?:'sync'|'single'};
@@ -33,9 +33,9 @@ export class PrimarySyncBlocked extends Error{}
 export class SyncJournalFull extends PrimarySyncBlocked{}
 export {CommitSealed};
 const canonical=(v:unknown)=>canonicalJson(v as Json);
-const hash=(v:unknown)=>createHash('sha256').update(canonical(v)).digest('hex');
-const copy=<T>(v:T):T=>JSON.parse(canonical(v));
-const zero='0'.repeat(64),kind='pi-spaces.primary-sync-storage-marker';
+const hash=(v:unknown)=>digestJson(v);
+const copy=canonicalCopy;
+const zero='0'.repeat(64),kind='phi-spaces.primary-sync-storage-marker';
 const exact=(v:object,keys:string[])=>Object.keys(v).sort().join(',')===[...keys].sort().join(',');
 const name=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(v);
 const integer=(v:unknown):v is number=>Number.isSafeInteger(v)&&(v as number)>=0;

@@ -5,12 +5,12 @@
 // template/entry, lease, timeout, txn, target request) are hashed; the renewable frame (authority, epoch, grants,
 // transport) is not part of the hash, so a retry with a renewed frame hits the same claim. Arguments are stored as a
 // hash only; the result is stored in full until its retention ends, then only the hash remains.
-import { createHash, createHmac, randomBytes } from "node:crypto";
-import { canonicalJson } from "./canonical.ts";
+import { createHmac, randomBytes } from "node:crypto";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import { LimitError, assertAdminIdle, maintenanceStep, claimBytes, limitsOf, touch, type Json, type SpaceState } from "./core.ts";
+import { jsonBytes } from "./json.ts";
 
-const encoder = new TextEncoder();
-const bytesOf = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
+const bytesOf = jsonBytes;
 
 export type Principal = { peerId: string; agentId?: string };
 /** Who asks, in which generation, under which id. `requestId` is chosen by the caller and kept across retries. */
@@ -69,7 +69,7 @@ const checkPrincipal = (p: Principal) => {
 };
 
 /** Canonical hash of a request's domain arguments. */
-export const argHash = (method: string, args: Json): string => createHash("sha256").update(canonicalJson({ method, args })).digest("hex");
+export const argHash = (method: string, args: Json): string => digestJson({ method, args });
 export const keyOf = (s: Readonly<SpaceState>, r: RequestRef): string => canonicalJson([r.principal as unknown as Json, s.spaceId ?? null, r.generation, r.requestId]);
 
 /** A new generation for `principal`: it admits new request ids until `admitUntil`. */
@@ -183,10 +183,11 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	if (!st) return;
 	const keep = limitsOf(s).claimResultMs;
 	// Select only expired records. Advancing a scan cursor over live claims would write on every watch tick.
-	const eligible = Object.keys(st.claims).sort().filter(k => {
+	// Filter first: only the (usually few) expired keys need the deterministic order.
+	const eligible = Object.keys(st.claims).filter(k => {
 		const c = st.claims[k]!, g = st.generations[c.generation];
 		return c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + keep <= now && (!c.resultExpired || !g || g.admitUntil < now);
-	});
+	}).sort();
 	let changed = false;
 	for (const k of eligible.slice(0, maxRecords)) {
 		if (!maintenanceStep(s, 128, now, `claim:${k}`)) break;
@@ -196,7 +197,7 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 		if (!g || g.admitUntil < now) { st.bytes = (st.bytes ?? 0) - bytesOf(c) - bytesOf(k) - 2; delete st.claims[k]; }
 		changed = true;
 	}
-	delete st.sweepCursor;
+	delete st.sweepCursor; // a field of earlier versions; no cursor is kept
 	const used = new Set(Object.values(st.claims).map(c => c.generation));
 	let removed = 0;
 	for (const [id, g] of Object.entries(st.generations)) if (removed < maxRecords && g.admitUntil < now && !used.has(id)) {

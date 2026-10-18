@@ -144,7 +144,7 @@
  ],
  "notes": [
   "no 'Root epoch notice' error was logged on host-a; whether the Member's high-water came from the EpochNotice or from the first delegation of the new epoch is not distinguishable in its store",
-  "'pi-spaces supervisor: Error: database is not open' appears once while stopping: the supervisor tick races the closed store"
+  "'phi-spaces supervisor: Error: database is not open' appears once while stopping: the supervisor tick races the closed store"
  ],
  "restore": {
   "host-a": "files from the step-6 backup, drop-in removed, boot record written back to epoch 3 / version 5 (register version 15)",

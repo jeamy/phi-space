@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remote docker test bed for phi-spaces: builds the production artifacts here (the pi-spaces.mjs bundle, compiled
+# Remote docker test bed for phi-spaces: builds the production artifacts here (the phi-spaces.mjs bundle, compiled
 # examples and scenarios), ships ONLY those to a server over ssh, builds a production-like image from them there and
 # runs scenarios, and later the federation hosts, in docker containers. No source code reaches the server.
 # Docs: docs/testumgebung-big.md (German), test/testbed/README.md. Usage: testbed.sh --help
@@ -337,7 +337,7 @@ cmd_status() {
 
 # JS run inside the container by `test smoke`: the shipped bundle loads and exports what the runtime uses.
 SMOKE_JS="$(cat <<'JS'
-import * as m from '/opt/app/pi-spaces.mjs';
+import * as m from '/opt/app/phi-spaces.mjs';
 import { readFileSync } from 'node:fs';
 const need = ['PhiSpaces', 'createSpace', 'listSpaces', 'claims', 'startService', 'spaces', 'FOREVER'];
 const missing = need.filter((k) => !(k in m));

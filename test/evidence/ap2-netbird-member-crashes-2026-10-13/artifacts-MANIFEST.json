@@ -18,7 +18,7 @@
     "examples/workers.mjs": "acff01e4b5249017",
     "package-lock.json": "f3e62502000ca9d2",
     "package.json": "65ec76a78aaef437",
-    "pi-spaces.mjs": "3d7f2f0a8496d8fa",
+    "phi-spaces.mjs": "3d7f2f0a8496d8fa",
     "scenarios/federation-runtime.mjs": "43f68d8ab05725c3",
     "scenarios/phase2-admission-audit.mjs": "aceb4b38b7499c89",
     "scenarios/phase2-load.mjs": "e59f13d0a36f7d4e",

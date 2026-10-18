@@ -64,7 +64,7 @@ import { ReplicaConfigPending } from "./core.ts";
 export const DelegationEpochs =
     defineDocFamily<{routerEpoch : number; controlPrimaryEpoch : number; policyVersion : number},
                     null>({
-        kind : "pi-spaces.delegation-epochs",
+        kind : "phi-spaces.delegation-epochs",
         version : 1,
         scope : "session",
         family : true,
@@ -79,7 +79,7 @@ export const ControlReplicaMarker =
     defineDocFamily<{transitionId : string | null; primaryEpoch : number; replicaConfigVersion : number;
                      fromEpoch : number; primaryReplica : string | null; samePrimary : boolean},
                     null>({
-        kind : "pi-spaces.control-replica-marker",
+        kind : "phi-spaces.control-replica-marker",
         version : 1,
         scope : "session",
         family : true,

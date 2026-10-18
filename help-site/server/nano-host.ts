@@ -4,7 +4,7 @@
 // doc scans for this shard happen on THIS machine, not on the hub host.
 //
 //   SWARM_LISTEN=unix:/tmp/swarm-b.sock   (default) or tcp:0.0.0.0:3600
-//   SWARM_DB=/data/swarm-b.sqlite         (default: help-site/.local/swarm-b.sqlite)
+//   SWARM_DB=/data/swarm-b.sqlite         (default: help-site/.local/swarm-b.phi.sqlite)
 //   SWARM_TAG=b-                          post-id prefix of this shard
 //   SWARM_PRODUCE=1                       also generate intents locally (default: 0)
 //   PHI_SPACES_LLM=0                       disables the LLM generators (default anyway without creds)
@@ -34,7 +34,7 @@ function parseListen(spec: string): ListenTarget {
 }
 
 const listen = parseListen(process.env.SWARM_LISTEN ?? "unix:/tmp/swarm-b.sock");
-const dbPath = process.env.SWARM_DB ?? join(ROOT, ".local", "swarm-b.sqlite");
+const dbPath = process.env.SWARM_DB ?? join(ROOT, ".local", "swarm-b.phi.sqlite");
 const shardTag = process.env.SWARM_TAG ?? "b-";
 const produce = process.env.SWARM_PRODUCE === "1";
 

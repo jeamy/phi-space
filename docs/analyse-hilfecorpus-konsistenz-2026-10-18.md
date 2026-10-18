@@ -1,5 +1,9 @@
 # Help-Corpus: Konsistenz, Umsetzung und Abschluss
 
+Dieser Bericht dokumentiert die Corpus-Korrekturen vor der vollständigen Namespace-Umstellung.
+Die neueren Schlussläufe einschließlich zusätzlicher Generatorbereinigung und Speicherformatwechsel
+stehen im [Namensumstellungsbericht](namensumstellung-2026-10-18.md).
+
 Stand: 18. Oktober 2026. Ergänzt die [Hilfesystem-/Demo-Analyse](analyse-hilfesystem-demo-apps-2026-10-18.md).
 Die historischen Befunde bleiben dort erhalten; F01–F23 und die nachfolgenden Corpus-Korrekturen
 sind lokal umgesetzt. „Erledigt“ bezeichnet die beschriebene Änderung und ihren lokalen Nachweis,

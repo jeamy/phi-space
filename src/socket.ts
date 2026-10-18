@@ -93,7 +93,7 @@ export async function serveSpace(service: Pick<SpaceService, "handleText">, o: S
 					if (inflight >= maxInflight) { reply(id, JSON.stringify({ ok: false, error: { code: "ResourceExhausted", message: `at most ${maxInflight} calls at once per connection` } })); return; }
 					inflight++;
 					identify().then((c) => service.handleText(text, c, maxFrame - HEADER))
-						.then((r) => reply(id, r), (e) => reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: e instanceof Error ? e.message : String(e) } })))
+						.then((r) => reply(id, r), (e) => { console.error("phi-spaces socket: internal error", e); reply(id, JSON.stringify({ ok: false, error: { code: "Internal", message: "internal error" } })); })
 						.finally(() => { inflight--; });
 				});
 			} catch { socket.destroy(); } // a frame over the limit: protocol violation

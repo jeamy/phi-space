@@ -1,7 +1,7 @@
 # Echter Fencing-Lauf gegen nanoi über die netcup-SCP-API — 2026-10-16
 
 Erster realer Lauf des netcup-Fencing-Adapters (`src/netcup-fencing.ts`). Der Fencing-Dienst lief auf vpsc
-(`pi-spaces-fencing.service`); der Lauf wurde von lux27 aus mit dem Operator-Zertifikat gesteuert. Das Skript
+(`phi-spaces-fencing.service`); der Lauf wurde von lux27 aus mit dem Operator-Zertifikat gesteuert. Das Skript
 liegt nicht im Repository; der Ablauf steht vollständig in `report.json`.
 
 Ablauf und Ergebnis (`report.json`, Zeiten in UTC):
@@ -18,7 +18,7 @@ Ablauf und Ergebnis (`report.json`, Zeiten in UTC):
 Befund: Nach dem harten Ausschalten blieb die Owner-Sperre `/data/nano/owner.lock` des Test-Daemons liegen. Wie
 vorgesehen (`test/testbed/federation-host.ts`) startete der Daemon deshalb nicht von selbst. Der Operator prüfte,
 dass der eingetragene Prozess (PID 8) im Container nicht mehr existierte, entfernte die Sperre und startete
-`pi-spaces-nano`. Danach war der Dienst `ready`, und ein Admin las den Data Space über das Overlay. Das Gate blieb
+`phi-spaces-nano`. Danach war der Dienst `ready`, und ein Admin las den Data Space über das Overlay. Das Gate blieb
 deshalb rund sechs Minuten unerreichbar; das liegt nicht am Fencing.
 
 Grenzen:

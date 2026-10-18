@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-Only administrative host code (without `conversationId`) may invoke `setCompletionProfiles(profiles)` and `setLimits(partialLimits)`. Lowering limits below existing completion obligations is rejected by the space core.
+Only administrative host code (without `conversationId`) may invoke `setCompletionProfiles(profiles)` and `setLimits(partialLimits)`. Lowering limits below existing completion obligations is rejected by the space core; this includes a smaller `maxEventBytes` while an existing registration or wait could then produce an oversized event.
 
 ## Technical Reference {#technical-reference}
 

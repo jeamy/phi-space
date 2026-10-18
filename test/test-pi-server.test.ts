@@ -53,7 +53,7 @@ test("built bundle in actual pi-serverd serves space and sessions; socket grants
 		for (const name of readdirSync(runtime)) if (name.endsWith(".mjs")) copyFileSync(join(runtime, name), join(dir, name));
 		copyFileSync(process.env.PI_SERVERD_SOURCE ?? join(runtime, "pi-serverd.mjs"), join(dir, "pi-serverd.mjs"));
 		symlinkSync(join(runtime, "node_modules"), join(dir, "node_modules"), "dir");
-		await build({ entryPoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))], outfile: join(dir, "pi-spaces.mjs"), bundle: true, format: "esm", platform: "node", target: "node22", external: ["@earendil-works/*"], legalComments: "none" });
+		await build({ entryPoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))], outfile: join(dir, "phi-spaces.mjs"), bundle: true, format: "esm", platform: "node", target: "node22", external: ["@earendil-works/*"], legalComments: "none" });
 		writeFileSync(join(dir, "auth.json"), "{}");
 		const serverId = randomUUID(), path = join(dir, "server.sock");
 		child = spawn(process.execPath, [join(dir, "pi-serverd.mjs")], { cwd: dir, env: { ...process.env, PI_SERVERD_STATE_DIR: join(dir, "state"), PI_SERVERD_AUTH_FILE: join(dir, "auth.json"), PI_WORKDIR: dir, PI_SERVERD_SOCK: path, PI_SERVERD_ID: serverId, PI_SERVERD_SPACE_PRINCIPAL: "local-operator", PI_SERVERD_SPACE_ROLES: "member" }, stdio: ["ignore", "pipe", "pipe"] });

@@ -5,7 +5,8 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const output = resolve(root, 'dist/pi-spaces.mjs');
+const output = resolve(root, 'dist/phi-spaces.mjs');
+const localOnly = process.argv.includes('--local');
 const mobileRoot = resolve(process.env.PHI_SPACES_MOBILE_ROOT || resolve(root, '../pi-termux-mobile'));
 async function syncFile(target, bytes) {
   let prior;
@@ -18,17 +19,17 @@ async function syncFile(target, bytes) {
   return true;
 }
 let available = false;
-try { available = (await stat(resolve(mobileRoot, 'runtime/package.json'))).isFile(); }
+try { available = !localOnly && (await stat(resolve(mobileRoot, 'runtime/package.json'))).isFile(); }
 catch (error) { if (error.code !== 'ENOENT') throw error; }
-if (!available && process.env.PHI_SPACES_MOBILE_ROOT) throw new Error(`Mobile runtime not found: ${mobileRoot}`);
+if (!available && !localOnly && process.env.PHI_SPACES_MOBILE_ROOT) throw new Error(`Mobile runtime not found: ${mobileRoot}`);
 
 await build({ absWorkingDir: root, entryPoints: ['src/index.ts'], outfile: output,
   bundle: true, format: 'esm', platform: 'node', target: 'node22',
   external: ['@earendil-works/*'], legalComments: 'none' });
 if (!available) {
-  console.log('Built dist/pi-spaces.mjs (no sibling mobile checkout).');
+  console.log('Built dist/phi-spaces.mjs (no sibling mobile checkout).');
 } else {
-  const target = resolve(mobileRoot, 'runtime/pi-spaces.mjs');
+  const target = resolve(mobileRoot, 'runtime/phi-spaces.mjs');
   const bytes = await readFile(output);
   console.log(await syncFile(target, bytes) ? `Updated ${target}` : 'Mobile phi-spaces bundle is current.');
   const examples = (await readdir(resolve(root, 'examples'))).filter(name => name.endsWith('.ts')).sort();

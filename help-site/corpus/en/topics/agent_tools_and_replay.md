@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-The `spaces` extension (`createSpaces(meter)` in `src/index.ts`) equips `pi-durable` conversations with 8 tools, all marked `replay: "safe"` and backed by a task-scoped `Claim` document (`pi-spaces.claim`).
+The `spaces` extension (`createSpaces(meter)` in `src/index.ts`) equips `pi-durable` conversations with 8 tools, all marked `replay: "safe"` and backed by a task-scoped `Claim` document (`phi-spaces.claim`).
 
 ## Technical Reference {#technical-reference}
 

@@ -217,3 +217,22 @@ test('an unfinished authentication does not block another transport',async tc=>{
  const pending=first.authenticate();await signing;
  try{assert.equal((await second.authenticate()).keyId,base.keyId);}finally{release();await pending;}
 });
+
+test("key rotation refuses when an entry it listed cannot be consumed, instead of keeping the old key active", async () => {
+	const { rotateKeyIn, rotationBytes } = await import("../src/rotation.ts");
+	const old = generateKey("ed25519", "old"), next = generateKey("ed25519", "new"), s = core.initialState(), now = 1000;
+	core.write(s, now, { type: "PeerKey", fields: { peerId: "p", keyId: "old", algorithm: "ed25519", publicKey: old.publicKey, state: "active" } }, null, FOREVER);
+	const challenge = { nonce: "n".repeat(64), peerId: "p", oldKeyId: "old", newKeyId: "new", newAlgorithm: "ed25519" as const, newPublicKey: next.publicKey, issuedAt: now, expiresAt: now + 30000 };
+	core.write(s, now, { type: "Rotation", fields: { ...challenge, state: "open" } }, null, 30000);
+	s.entries.find(e => e.type === "Rotation")!.restoredUnverified = true; // listed, but no take may consume it
+	const sign = async (k: { signer: Signer }) => Buffer.from(await k.signer.sign(rotationBytes(challenge))).toString("base64");
+	const o = { challenge, oldSignature: await sign(old), newSignature: await sign(next) };
+	assert.throws(() => rotateKeyIn(s, now, o, "p"), /could not be consumed/);
+});
+
+test("F15 fencing treats a primary permit without durability as sync and refuses it", async () => {
+	const { verifySshFence } = await import("../src/fencing.ts");
+	const boot = { hostId: "h", state: "active", spaces: { a: { state: "active", authorityId: "x", dataIncarnation: "i", role: "primary", transitionId: "t" } } };
+	const register = { get: async () => ({ value: boot, version: 1 }), compareAndSet: async () => { throw new Error("must not be reached"); } } as never;
+	await assert.rejects(verifySshFence(register, "h", { h: "fence@host" }), /restricted to single-space hosting/);
+});

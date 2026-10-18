@@ -34,7 +34,7 @@ const storage=new Proxy(rawStorage,{get(target,key){const value=Reflect.get(targ
     else{const prior=states.get(w.id)??await target.document(w.id,'current',context);if(!prior)continue;record=prior.record;before=prior.value;after=w.content.kind==='base'?structuredClone(w.content.value):applyImmutable(before,w.content.ops);}
     const kind=record.kind;
     if(journalTransitions(kind,before,after,selected.parentId,childIds,budgetId).includes(selected.kind)){
-     const select=(v:any)=>kind==='pi-spaces.federation-operations'?v?.operations?.[selected.parentId]??null:kind==='pi-spaces.router-command'?v?.command??null:{future:v?.future?.[budgetId]??null};
+     const select=(v:any)=>kind==='phi-spaces.federation-operations'?v?.operations?.[selected.parentId]??null:kind==='phi-spaces.router-command'?v?.command??null:{future:v?.future?.[budgetId]??null};
      match={documentId:record.id,documentKind:kind,documentKey:record.key,budgetId,before:select(before),plannedAfter:select(after),deltaHash:digest(w.content)};
     }
     states.set(record.id,{record,value:after});
@@ -43,7 +43,7 @@ const storage=new Proxy(rawStorage,{get(target,key){const value=Reflect.get(targ
   const kill=(commitSeq?:number)=>{const fault={...selected,effect:'journal',...match,commitSeq:commitSeq??null,activeWorkers,completedJobs:progress.done.length,at:new Date().toISOString()};progress.crashes.push(fault);atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'root-sigkill',kind:fault.kind,boundary:fault.boundary,parentId:fault.parentId,effect:fault.effect,commitSeq:fault.commitSeq,activeWorkers,completedJobs:fault.completedJobs}));process.kill(process.pid,'SIGKILL');throw Error('SIGKILL returned');};
   if(match&&selected.boundary==='beforeCommit')kill();
   const seq=await target.commit(writes,context);
-  if(match){const persisted=await target.document(match.documentId,'current',context);assert.ok(persisted);const v:any=persisted.value,readBack=match.documentKind==='pi-spaces.federation-operations'?v.operations?.[selected.parentId]??null:match.documentKind==='pi-spaces.router-command'?v.command??null:{future:v.future?.[match.budgetId]??null};assert.deepEqual(readBack,match.plannedAfter);kill(seq);}
+  if(match){const persisted=await target.document(match.documentId,'current',context);assert.ok(persisted);const v:any=persisted.value,readBack=match.documentKind==='phi-spaces.federation-operations'?v.operations?.[selected.parentId]??null:match.documentKind==='phi-spaces.router-command'?v.command??null:{future:v.future?.[match.budgetId]??null};assert.deepEqual(readBack,match.plannedAfter);kill(seq);}
   return seq;
  };
 }});

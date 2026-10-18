@@ -7,6 +7,11 @@
 > and a recovery plan. Tests cover specific scenarios, not every failure mode; running demos do not establish
 > production readiness. Provided without warranty under the [MIT License](LICENSE).
 
+> **Namespace upgrade:** Persistent document kinds now use `phi-spaces.*`; the runtime bundle is
+> `phi-spaces.mjs`. This is a breaking storage/integration change. Existing stores require a separately
+> verified offline migration before using this version. Document version 5 does not migrate document-kind
+> namespaces; an empty new namespace does not mean the previous data was deleted.
+
 phi-spaces is a TypeScript space library implemented as an extension for
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). Many agents
 (conversations) share one space, take work from it, and talk to each other through it.
@@ -183,7 +188,7 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 A Space is one document; Durable commits provide atomic state changes. Restart survival requires a persistent backend,
 and power-loss/host-loss guarantees depend on storage settings and the deployment's replication/recovery model.
 The default space is the Session-scoped document
-`pi-spaces.space` (version 5); further named spaces live in the Session-scoped family `pi-spaces.named-space`, keyed by an
+`phi-spaces.space` (version 5); further named spaces live in the Session-scoped family `phi-spaces.named-space`, keyed by an
 immutable, generated `spaceId`. The registry document maps aliases to ids and holds this host's id.
 
 **Storage compatibility.** Version 5 migrates a stored version-4 space forward. It is one-way: a bundle that only knows
@@ -243,9 +248,10 @@ instead receive a transport outcome or `OutcomeUnknown` and must poll the same r
   host entries, but never cancel or renew them, nor use host transactions. Host code (`PhiSpaces` without `as`) is
   unrestricted.
 - **Quotas** for conversations (host code is exempt), checked on every write, notify, wait and transaction:
-  entry or handback up to 64 KiB of JSON, type names up to 128 characters and 16 types, 1000 entries per
-  conversation, 10 000 in the space, 20 subscriptions, 20 waits and 20 open transactions per conversation. They throw
-  `LimitError`. Change them with `new PhiSpaces(harness, ctx).setLimits({ maxEntries: 50_000 })`; the values are stored
+  entry or handback up to 64 KiB of JSON, type names up to 128 characters and 16 types,
+  20 subscriptions, 20 waits and 20 open transactions per conversation. Entry counts have no default cap
+  (both count settings use the JSON-safe `FOREVER` value); byte and storage budgets still apply. Explicit quotas throw
+  `LimitError`. Set one with `new PhiSpaces(harness, ctx).setLimits({ maxEntries: 50_000 })`; the values are stored
   in the space document.
 
 - **Subscriptions** (`space_notify`) of a conversation need a type or at least one field, and send at most one event
@@ -319,7 +325,7 @@ alone proves nothing about durability.
 
 ### Remote test bed
 
-`npm run testbed -- <command>` verifies the **built artifact** (the `pi-spaces.mjs` bundle, compiled examples and scenarios; no
+`npm run testbed -- <command>` verifies the **built artifact** (the `phi-spaces.mjs` bundle, compiled examples and scenarios; no
 source code) in docker containers on a server instead of on this machine: `check`, `up`, `test`, `scenario`, `status`, `kill`,
 `partition`, `heal`, `down`. Server, directory and credentials come from environment variables or a git-ignored
 `test/testbed/testbed.env`. See [test/testbed/README.md](test/testbed/README.md) and

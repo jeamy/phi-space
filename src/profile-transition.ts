@@ -1,7 +1,6 @@
 // Durable, fail-closed profile replacement. Remote effects never run inside Control commits.
 import type {Context} from '@earendil-works/chord';
-import {createHash} from 'node:crypto';
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import {FederationRouting} from './federation-policy.ts';
 import {FederationOperations} from './federated-space.ts';
@@ -12,9 +11,10 @@ import {validateFederationPolicy,RoutingConflict,type FederationPolicy,type Fede
 import type {Signer} from './auth.ts';
 import {spaceDoc} from './spaces.ts';
 import {ProfileTransitions,type Operation} from './profile-transition-doc.ts';
+import { jsonCopy } from './json.ts';
 export {ProfileTransitions} from './profile-transition-doc.ts';
-const copy=<T>(v:T):T=>JSON.parse(JSON.stringify(v));
-const hash=(v:unknown)=>createHash('sha256').update(canonicalJson(v as any)).digest('hex');
+const copy=jsonCopy;
+const hash=(v:unknown)=>digestJson(v as any);
 export class ProfileTransitionController{
  private o:{host:SpaceHost;ctx:Context;controlSpaceId:string;authorityId:string;federationId:string;journalPartitions:number;peerId:string;signer:Signer;transport:MembershipTransport;assertAuthority:()=>Promise<void>;authorize:()=>Promise<void>};
  constructor(o:ProfileTransitionController['o']){this.o=o;}

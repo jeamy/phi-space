@@ -4,8 +4,7 @@
 // command (same revision and command ID), which the gate answers with its stored confirmation.
 import type { Context } from "@earendil-works/chord";
 import { defineDoc } from "@earendil-works/pi-durable";
-import { createHash } from "node:crypto";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost, SpaceLike } from "./client.ts";
 import { spaceDoc } from "./spaces.ts";
 import * as core from "./core.ts";
@@ -33,7 +32,7 @@ export type RunView = {
 };
 
 export const RunJournal = defineDoc<{ runs: Record<string, RunRec> }>({
-	kind: "pi-spaces.run-controller", version: 1, scope: "session", initial: () => ({ runs: {} }),
+	kind: "phi-spaces.run-controller", version: 1, scope: "session", initial: () => ({ runs: {} }),
 });
 /** Another transition of the same run is still waiting for ACKs, or the run is under recovery; commands are serialized per run. */
 export class RunBusy extends core.TransactionError {}
@@ -42,7 +41,7 @@ export type RunExporter = (run: RunSpec, space: (spaceId: string) => SpaceLike) 
 
 const MAX_RUNS = 1024, MAX_MEMBERS = 64, MAX_CONFIG_BYTES = 16 * 1024, MAX_COMMANDS = 256, MAX_ISSUED = 128;
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/;
-const hashOf = (v: core.Json) => createHash("sha256").update(canonicalJson(v)).digest("hex");
+const hashOf = digestJson;
 const sameIdentity = (a: RunIdentity, b: RunIdentity) => a.authorityId === b.authorityId && a.incarnation === b.incarnation;
 function validate(spec: RunSpec): void {
 	if (!spec || !ID.test(spec.runId) || typeof spec.kind !== "string" || !ID.test(spec.kind)) throw new core.IllegalArgumentError("a run needs a runId and a kind");

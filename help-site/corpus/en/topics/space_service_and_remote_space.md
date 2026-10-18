@@ -19,11 +19,11 @@ When web servers, workers, and subagents run in separate processes or on differe
 
 ### Authentication Via IdentityAdapter And Policy {#identity-and-policy}
 
-`SpaceService` never trusts a principal sent inside a client JSON payload. Instead, its `IdentityAdapter` (`StaticIdentity` locally or `GateIdentity` over NetBird/Layer B) derives the `Principal` and roles (`admin`, `host`, `member`, `observer`) from the trusted `Connection` context. `Policy` checks allowed methods and entry types before executing any call.
+`SpaceService` never trusts a principal sent inside a client JSON payload. Instead, its `IdentityAdapter` (`StaticIdentity` locally or `GateIdentity` over NetBird/Layer B) derives the `Principal` and roles (`admin`, `host`, `member`, `observer`) from the trusted `Connection` context. `Policy` checks allowed methods and entry types before executing any call. A type grant covers subtypes: a write is allowed as soon as its type or one of its declared supertypes is granted. Because the writer declares the supertypes, a role granted `Job` can also write `{ type: "X", types: ["Job"] }`; type grants are therefore no integrity boundary for subtypes. Federation members, in contrast, enforce the supertypes declared in their type policy.
 
 ### Stable Retries And OutcomeUnknown In RemoteSpace {#remote-retries}
 
-Before its first mutation, `RemoteSpace` automatically calls `hello` and `generation` and assigns a stable `requestId` to every mutating call. If a reply is lost on the socket/TCP transport, `RemoteSpace` retries with the **exact same `requestId`**. If `maxClientWaitMs` expires, it throws `OutcomeUnknown` while the host operation continues and can be resolved via `pollOperation`.
+Before its first mutation, `RemoteSpace` automatically calls `hello` and `generation` and assigns a stable `requestId` to every mutating call. If a reply is lost on the socket/TCP transport, `RemoteSpace` retries with the **exact same `requestId`**. If `maxClientWaitMs` expires, it throws `OutcomeUnknown` while the host operation continues and can be resolved via `pollOperation`. Unclassified host errors arrive as code `Internal` with the fixed message `internal error`; only the host logs the actual error.
 
 ## See Also {#see-also}
 

@@ -33,7 +33,7 @@ vor dem Lauf zurückgesetzt. Die Daten stehen in `report.json`.
    - Ob die Marke aus der Notice oder aus der ersten Delegation der neuen Epoche stammt, ist im Store nicht zu
      unterscheiden.
 6. **Stoppen:** Jeder Stopp von host-a mit Root endete in etwa 2 Sekunden ohne Restprozess. Beim Stoppen erscheint
-   einmal „pi-spaces supervisor: Error: database is not open“: Der Supervisor-Takt läuft gegen den schon
+   einmal „phi-spaces supervisor: Error: database is not open“: Der Supervisor-Takt läuft gegen den schon
    geschlossenen Store. Das ist harmlos und noch nicht behoben.
 
 ## Rücksetzung

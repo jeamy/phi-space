@@ -5,8 +5,7 @@
 // enrolled host whose Capability heartbeat is fresh. Workers are registered with count 0; `startWorkers` starts them.
 import type { Context } from "@earendil-works/chord";
 import { defineDoc } from "@earendil-works/pi-durable";
-import { createHash } from "node:crypto";
-import { canonicalJson } from "./canonical.ts";
+import { digestJson } from "./canonical.ts";
 import type { SpaceHost } from "./client.ts";
 import type { WorkerAssignments } from "./workers.ts";
 import { CAPABILITY_LEASE_MS } from "./capability-directory.ts";
@@ -27,7 +26,7 @@ export type DeploymentPlan = { deployment: string; configHash: string; ready: bo
 
 const ALIAS = /^[a-z0-9][a-z0-9._-]{0,63}$/, ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/;
 const SECRET_KEY = /token|secret|password|passwd|private|apikey|api_key|bearer|seed|mnemonic/i;
-const hashOf = (v: unknown) => createHash("sha256").update(canonicalJson(v as core.Json)).digest("hex");
+const hashOf = digestJson;
 /** A stable sub-request ID of one deployment step (bounded length, valid as command ID). */
 const sub = (...parts: string[]) => "dep-" + hashOf(parts).slice(0, 40);
 
@@ -90,7 +89,7 @@ export function validateDeployment(raw: unknown): { config?: DeploymentConfig; c
 type StepRec = { status: "done" | "failed" | "pending" | "skipped"; result?: core.Json; error?: string };
 type Job = { deployment: string; configHash: string; config: DeploymentConfig; state: "applying" | "blocked" | "completed"; steps: Record<string, StepRec>; at: number };
 export const DeploymentState = defineDoc<{ hosts: Record<string, string>; spaces: Record<string, { host: string; spaceId: string }>; jobs: Record<string, Job> }>({
-	kind: "pi-spaces.deployment", version: 1, scope: "session", initial: () => ({ hosts: {}, spaces: {}, jobs: {} }),
+	kind: "phi-spaces.deployment", version: 1, scope: "session", initial: () => ({ hosts: {}, spaces: {}, jobs: {} }),
 });
 export type DeploymentPorts = {
 	/** Fresh Capability heartbeat of an enrolled host (e.g. from appliedWorkers/Capability entries). */

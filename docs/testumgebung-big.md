@@ -22,7 +22,7 @@ src/, examples/, scenarios/ (TypeScript)
    │  esbuild (build-artifacts.mjs)
    ▼
 dist/testbed-artifacts/                      docker-compose.yml  Dockerfile  .dockerignore  .env   (nur angelegt, wenn fehlend)
-  pi-spaces.mjs  examples/*.mjs  ── rsync ─► build/   (nur Artefakte + package.json/-lock.json + MANIFEST.json)
+  phi-spaces.mjs  examples/*.mjs  ── rsync ─► build/   (nur Artefakte + package.json/-lock.json + MANIFEST.json)
   scenarios/*.mjs  MANIFEST.json                │  docker build auf dem Server
                                                 ▼
                                           Image: Node + `npm ci --omit=dev` + Artefakte unter /opt/app
@@ -35,7 +35,7 @@ dist/testbed-artifacts/                      docker-compose.yml  Dockerfile  .do
 ```
 
 **Produktionsnähe statt Quellkopie.** Lokal werden dieselben Artefakte gebaut, die auch das mobile Projekt bekommt
-(`scripts/bundle-mobile.mjs`): das Bündel `pi-spaces.mjs` (**byte-identisch** zu dem in `pi-termux-mobile/runtime`), die
+(`scripts/bundle-mobile.mjs`): das Bündel `phi-spaces.mjs` (**byte-identisch** zu dem in `pi-termux-mobile/runtime`), die
 kompilierten Beispiele und die kompilierten Szenarien (sie importieren das ausgelieferte Bündel, keine zweite Kopie). Nur diese
 Dateien, die Abhängigkeitsmanifeste und ein `MANIFEST.json` (Commit, Zeitpunkt, Hashes) gehen auf den Server; `ship` bricht ab,
 wenn eine TypeScript-Datei darunter wäre. Das Image enthält Node, die Produktionsabhängigkeiten laut Lock (`npm ci --omit=dev`)

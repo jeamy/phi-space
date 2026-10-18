@@ -9,6 +9,7 @@
 // spaceDoc opens the batch once per Tx and space. Draft identity is reused across commits and is not a commit id.
 // A plain state object (unit tests) is one batch until `seal` is called.
 import type { Fields, Json, Target } from "./core.ts";
+import { jsonBytes } from "./json.ts";
 
 export type Op =
 	| { op: "put"; id: string; type: string; types: string[]; fields: Fields; expires: number; owner: Target | null; restoredUnverified?: true }
@@ -21,8 +22,7 @@ export type StreamState = {
 	log: Batch[];
 };
 
-const encoder = new TextEncoder();
-const bytesOf = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
+const bytesOf = jsonBytes;
 const opBytes = (o: Op): number => bytesOf(o) + 1;
 
 type Open = { rev: number; at: Map<string, number> }; // `at`: position of an entry's operation inside the batch

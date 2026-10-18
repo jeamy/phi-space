@@ -4,25 +4,26 @@ import {defineDocFamily} from '@earendil-works/pi-durable';
 import {createHash} from 'node:crypto';
 import type {SpaceHost} from './client.ts';
 import type {Principal} from './claims.ts';
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import {principalId} from './mailbox.ts';
 import {spaceDoc} from './spaces.ts';
 import {seal as sealStream} from './stream.ts';
 import * as core from './core.ts';
+import { jsonBytes } from './json.ts';
 
 type Phase = 'registrations'|'mailboxes'|'claims'|'generations'|'entries'|'history'|'completed';
 type Audit = {hash:string;at:number;kind:'purgeTasks'|'deletePrincipal';admin:string;count:number};
 type Command = Audit & {phase?:Phase;principal?:Principal;incarnation?:string|null;authorityId?:string|null;batches?:number};
 export const DataAdminJournal=defineDocFamily<{commands:Record<string,Command>},null>({
- kind:'pi-spaces.data-admin',version:1,scope:'session',family:true,initial:()=>({commands:{}})
+ kind:'phi-spaces.data-admin',version:1,scope:'session',family:true,initial:()=>({commands:{}})
 });
-const bytes=(v:unknown)=>Buffer.byteLength(JSON.stringify(v));
+const bytes=jsonBytes;
 const audit=(c:Command):Audit=>({hash:c.hash,at:c.at,kind:c.kind,admin:c.admin,count:c.count});
 function commandHash(id:string,kind:Audit['kind'],spaceId:string,admin:string,input:core.Template|Principal) {
  if(!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id)||['__proto__','constructor','prototype'].includes(id))throw new core.IllegalArgumentError('invalid admin command ID');
  if(typeof spaceId!=='string'||!spaceId||spaceId.length>128||typeof admin!=='string'||!admin||admin.length>128)throw new core.IllegalArgumentError('invalid admin or Space identifier');
  if(!['purgeTasks','deletePrincipal'].includes(kind))throw new core.IllegalArgumentError('invalid admin command kind');
- return createHash('sha256').update(canonicalJson({kind,spaceId,admin,input} as any)).digest('hex');
+ return digestJson({kind,spaceId,admin,input} as any);
 }
 function validatePrincipal(p:Principal) {
  if(!p||typeof p.peerId!=='string'||!p.peerId||p.peerId.length>128||p.agentId!==undefined&&(typeof p.agentId!=='string'||!p.agentId||p.agentId.length>128)||Object.keys(p).some(k=>!['peerId','agentId'].includes(k)))throw new core.IllegalArgumentError('invalid deletion principal');

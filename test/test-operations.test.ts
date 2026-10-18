@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { provisionFileSigner, loadFileSigner, serveRegister, SocketRecoveryRegister, SqliteRecoveryRegister, RecoveryClient, serveRecovery, generateKey, RecoveryBlocked, RecoveryController, RegisterConflict, PhiSpaces, core, Space, startConfiguredFederation, bootstrapEnroll, newEnrollToken, hashToken, listSpaces, spaceDoc, Registry, beginRestore, restoreBatch, completeRestore, snapshotHash, dataRecoveryHandler, startMemberRecoveryOnly, signControlHostChange } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
+import { socketTransport } from "../src/socket.ts";
 
 test("provisioned keys survive reopen and fail closed on missing, public or symlinked files", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-keys-"));
@@ -46,6 +47,22 @@ test("out-of-band recovery validates pinned signatures, target and supervisor me
 		await assert.rejects(wrongTarget.call("restoreDataSpace", {}), RecoveryBlocked);
 		assert.equal(effects, 2);
 	} finally { [admin, service, foreign, wrongTarget].forEach(c => c.close()); await server.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("out-of-band recovery answers a replayed signed call from the first reply without running the handler again", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-recovery-replay-")), operator = generateKey("ed25519", "operator");
+	let effects = 0;
+	const server = await serveRecovery({ path: join(dir, "recovery.sock"), hostId: "host", operator: { algorithm: "ed25519", publicKey: operator.publicKey }, handle: async c => ({ method: c.method, effect: ++effects }) });
+	const wire = socketTransport({ path: join(dir, "recovery.sock") }), sent: string[] = [];
+	const admin = new RecoveryClient({ request: text => { sent.push(text); return wire.request(text); } }, { hostId: "host", signer: operator.signer });
+	try {
+		assert.deepEqual(await admin.call("restoreStatus", {}, "same-id"), { method: "restoreStatus", effect: 1 });
+		assert.deepEqual(JSON.parse(await wire.request(sent[0]!)), { ok: true, result: { method: "restoreStatus", effect: 1 } }); // the captured envelope again
+		assert.equal(effects, 1);
+		// A retry under the same request ID is a newly signed call and runs (handlers judge idempotency themselves).
+		await new Promise(r => setTimeout(r, 2));
+		assert.deepEqual(await admin.call("restoreStatus", {}, "same-id"), { method: "restoreStatus", effect: 2 });
+	} finally { wire.close(); await server.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("durable restore controller resumes after crash, requires real control tuple and releases only scoped entries", async () => {

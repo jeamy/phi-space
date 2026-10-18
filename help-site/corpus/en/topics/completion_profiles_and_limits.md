@@ -42,6 +42,12 @@ If a worker calls `commit(txn)` without having written exactly one `Msg` with ma
 
 ### Byte Budgets And Owner Quotas (DEFAULT_LIMITS) {#default-limits}
 
+Entry counts have no default cap, either per space or per owner:
+`maxEntries` and `maxEntriesPerOwner` use `FOREVER` (a JSON-safe unlimited value).
+Explicit count quotas can still be set with `setLimits`. The byte budgets below and quotas
+for subscriptions, waiters and transactions still apply; unlimited counts do not mean
+unlimited memory or document size.
+
 | Limit | Default | Meaning |
 |---|---|---|
 | `maxEntryBytes` | `64 KiB` | Maximum size of a single entry or handback |

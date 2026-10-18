@@ -15,6 +15,11 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - Native pi-server acceptance: `npm run test:pi-server`; uses packages from the sibling mobile runtime
   (`PI_SERVER_RUNTIME_DIR` overrides the path); skips if not installed, never installs dependencies.
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> test/integration.test.ts`
+- Branding: `npm run check:branding` (read-only; rejects obsolete project names in tracked text, generated output
+  and local `.env` keys).
+- Namespace migration of an old store (offline copy, unreplicated SQLite v1 only, never in place):
+  `node scripts/migrate-namespace.mjs --input FILE --from NAMESPACE` (dry run), then `--output NEW_FILE --apply`;
+  test: `npm run test:migration` (also part of `npm test`). Docs: `docs/namensumstellung-2026-10-18.md`.
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
   `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
   docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.

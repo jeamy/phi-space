@@ -1,8 +1,8 @@
 // Trusted entry-replication substrate. Not the full-state primary/sync commit protocol.
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import type { Context } from '@earendil-works/chord';
 import { defineDocFamily, type Tx } from '@earendil-works/pi-durable';
-import { canonicalJson } from './canonical.ts';
+import { canonicalJson, digestJson } from './canonical.ts';
 import type { SpaceHost } from './client.ts';
 import type { Principal } from './claims.ts';
 import { RequestConflict } from './claims.ts';
@@ -10,6 +10,7 @@ import { SnapshotExpired, ResourceExhausted, type Json, type Fields } from './co
 import { advanceHybridClock, compareHybridClock, ReplicationClockError, validateHybridClock, type HybridClock } from './replication-clock.ts';
 import { EntrySnapshotChunks, EntrySnapshotTransfers, EntrySnapshotMaintenance, type EntrySnapshotMaintenanceJob, type EntrySnapshotManifest, type EntrySnapshotPage, type EntrySnapshotSegment, type EntrySnapshotImport } from './entry-replication-transfer.ts';
 import { EntryStreamCheckpoints, EntryStreamCursorConflict, type EntryStreamIdentity, type EntryStreamDescription, type EntryStreamPage, type EntryStreamCheckpoint, type EntryStreamResult } from './entry-replication-stream.ts';
+import { strictJsonCopy } from './json.ts';
 export type { EntrySnapshotManifest, EntrySnapshotPage, EntrySnapshotImport, EntrySnapshotMaintenanceJob } from './entry-replication-transfer.ts';
 export type EntryReplicationRule = { type: string; variant: 'lww'; keyFields: string[] } | { type: string; variant: 'set' };
 export type EntryReplicationConfig = {
@@ -45,7 +46,7 @@ export type EntryReplicationState = { config: EntryReplicationConfig | null; con
 export type EntryVersionVector = Record<string, number>;
 /** The last vector each peer advertised, as recorded here; `regressed` blocks compaction until the peer gets a new incarnation. */
 export type EntryPeerVectors = { peers: Record<string, { incarnation: string; vector: EntryVersionVector; recordedAt: number; regressed?: true }> };
-export const EntryReplicaPeers = defineDocFamily<EntryPeerVectors, null>({ kind: 'pi-spaces.entry-replica-peers', version: 1, scope: 'session', family: true, initial: () => ({ peers: {} }) });
+export const EntryReplicaPeers = defineDocFamily<EntryPeerVectors, null>({ kind: 'phi-spaces.entry-replica-peers', version: 1, scope: 'session', family: true, initial: () => ({ peers: {} }) });
 /** Why nothing can be compacted, or what would be removed (docs/ap3-replikation.md, step 4). */
 export type EntryCompactionStatus = { blocked: string | null; events: number; droppable: number; floor: EntryVersionVector };
 /** Expiry is judged this long after the deadline: the bound on remote clock skew. */
@@ -53,18 +54,12 @@ export const ENTRY_EXPIRY_GRACE_MS = 60_000;
 export type EntryReplicationSnapshot = { version: 1; spaceId: string; authorityId: string; configHash: string; events: ReplicatedEntryChange[]; sha256: string };
 export type ReplicatedEntryView = { id: string; type: string; fields: Fields; owner: Principal; expiresAt: number | null; clock: HybridClock; originReplicaId: string };
 export class ReplicationConflict extends Error {}
-export const EntryReplicas = defineDocFamily<EntryReplicationState, null>({ kind: 'pi-spaces.entry-replica', version: 2, scope: 'session', family: true,
+export const EntryReplicas = defineDocFamily<EntryReplicationState, null>({ kind: 'phi-spaces.entry-replica', version: 2, scope: 'session', family: true,
  initial: () => ({ config: null, configHash: '', clock: { physical: 0, logical: 0 }, lastWallTime: 0, seq: 0, events: [], segments: [] }), migrate: v => ({ ...v, segments: v.segments ?? [] }) as EntryReplicationState });
-function assertJson(v: unknown, depth=0, parents=new Set<object>()): void {
- if(depth>64)throw new ReplicationConflict('JSON nesting exceeds 64 levels');
- if(v===null||typeof v==='string'||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v))return;
- if(typeof v!=='object'||parents.has(v)||!Array.isArray(v)&&Object.getPrototypeOf(v)!==Object.prototype&&Object.getPrototypeOf(v)!==null||Object.getOwnPropertySymbols(v).length)throw new ReplicationConflict('plain finite JSON required');
- parents.add(v);if(Array.isArray(v)){for(let n=0;n<v.length;n++)assertJson(v[n],depth+1,parents);}else for(const k of Object.keys(v))assertJson((v as Record<string,unknown>)[k],depth+1,parents);parents.delete(v);
-}
-const copy = <T>(v: T): T => { assertJson(v); return JSON.parse(JSON.stringify(v)); };
+const copy = <T>(v: T): T => strictJsonCopy(v, m => new ReplicationConflict(m));
 const canonical = (v: unknown) => canonicalJson(v as Json);
 const bytes = (v: unknown) => Buffer.byteLength(canonical(v));
-const hash = (v: unknown) => createHash('sha256').update(canonical(v)).digest('hex');
+const hash = digestJson;
 const id = (v: unknown): v is string => typeof v === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(v);
 const number = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 const exact = (v: object, keys: string[]) => Object.keys(v).sort().join(',') === [...keys].sort().join(',');
@@ -177,10 +172,12 @@ export class EntryReplicationController {
  /** Redacts, in place, every change owned by an erased principal with a clock before the erase (smallest erase ID wins). */
  private applyErasures(events: ReplicatedEntryChange[]): number {
   const erases=events.filter(e=>e.mutation.kind==='erase');if(!erases.length)return 0;let n=0;
+  // Each erase's principal and change ID once, not again for every event compared against it.
+  const keyed=erases.map(x=>({x,principal:canonical((x.mutation as Extract<EntryMutation,{kind:'erase'}>).principal),id:entryChangeId(x)}));
   for(let i=0;i<events.length;i++){
    const e=events[i]!,m=e.mutation;if(m.kind==='erase'||m.kind==='remove')continue;
    const owner=canonical(m.owner);let best:string|undefined;
-   for(const x of erases){const xm=x.mutation as Extract<EntryMutation,{kind:'erase'}>;if(canonical(xm.principal)!==owner||compareHybridClock(e.clock,x.clock)>=0)continue;const xid=entryChangeId(x);if(best===undefined||xid<best)best=xid;}
+   for(const {x,principal,id:xid} of keyed){if(principal!==owner||compareHybridClock(e.clock,x.clock)>=0)continue;if(best===undefined||xid<best)best=xid;}
    if(best===undefined)continue;
    if(m.kind==='redacted'){if(m.erase<=best)continue;events[i]={...e,mutation:{...m,erase:best}};n++;continue;}
    events[i]=this.redact(e,best);n++;
@@ -319,9 +316,14 @@ export class EntryReplicationController {
  private pageAfter(s:EntryReplicationState|undefined,after:number,maxBytes:number,frame:(events:ReplicatedEntryChange[],positions:number[],next:number,more:boolean)=>unknown,tooLarge:string){
   const all=s?.events??[],at=positionsOf(all.length,s?.dropped),head=s?headOf(s):0;let n=0;while(n<at.length&&at[n]!<=after)n++;
   const page={events:[] as ReplicatedEntryChange[],positions:[] as number[],next:n<at.length?after:head,more:n<at.length};
+  // `listed` bounds the frame from above (every event and position with its comma, the positions key present); the
+  // frame itself is serialized only when that bound no longer fits, not once per event (quadratic per page).
+  let listed=14;
   for(;n<all.length&&page.events.length<1024;n++){
-   const events=[...page.events,copy(all[n]!)],positions=[...page.positions,at[n]!],more=n+1<all.length,next=more?at[n]!:head;
-   if(bytes(frame(events,positions,next,more))>maxBytes){if(!page.events.length)throw new ResourceExhausted(tooLarge);break;}Object.assign(page,{events,positions,next,more});
+   const event=copy(all[n]!),position=at[n]!,more=n+1<all.length,next=more?position:head,item=bytes(event)+1+String(position).length+1;
+   page.events.push(event);page.positions.push(position);
+   if(bytes(frame([],[],next,more))+listed+item>maxBytes&&bytes(frame(page.events,page.positions,next,more))>maxBytes){page.events.pop();page.positions.pop();if(!page.events.length)throw new ResourceExhausted(tooLarge);break;}
+   listed+=item;page.next=next;page.more=more;
   }
   return page;
  }
@@ -350,9 +352,15 @@ export class EntryReplicationController {
  private validatePage(m:EntrySnapshotManifest,p:EntrySnapshotPage,index:number,offset:number,previousHash:string) {
   if(!p||!exact(p,['snapshotId','index','offset','next','events','previousHash','sha256'])||p.snapshotId!==m.id||p.index!==index||p.offset!==offset||p.next!==index+1||p.previousHash!==previousHash||!Array.isArray(p.events)||p.events.length>1024||(!p.events.length&&m.eventCount!==0)||!sha(p.sha256)||pageHash(p)!==p.sha256||bytes(p)>m.pageBytes||offset+p.events.length>m.eventCount)throw new ReplicationConflict('snapshot page changed, is out of order or exceeds budget');
  }
- private async stagedEvents(m:EntrySnapshotManifest,load:(key:string)=>Promise<Readonly<{page:EntrySnapshotPage|null}>|undefined>,count=m.pageCount):Promise<ReplicatedEntryChange[]> {
+ /** `verified` (page admission): the chain up to `count` was checked when each page was staged, and the ledger's
+  * `chainHash` binds it; only the linkage is rechecked, not every page's canonical hash (quadratic per import).
+  * Finishing an import loads without it and checks the complete chain. */
+ private async stagedEvents(m:EntrySnapshotManifest,load:(key:string)=>Promise<Readonly<{page:EntrySnapshotPage|null}>|undefined>,count=m.pageCount,verified?:{chainHash:string;nextOffset:number}):Promise<ReplicatedEntryChange[]> {
   const events:ReplicatedEntryChange[]=[];let chain=m.seedHash;
-  for(let n=0;n<count;n++){const chunk=await load(chunkKey(this.documentKey,m.id,n));if(!chunk?.page)throw new ReplicationConflict('snapshot page is missing');this.validatePage(m,chunk.page,n,events.length,chain);events.push(...copy(chunk.page.events));chain=chunk.page.sha256;}
+  for(let n=0;n<count;n++){const chunk=await load(chunkKey(this.documentKey,m.id,n));if(!chunk?.page)throw new ReplicationConflict('snapshot page is missing');
+   if(verified){if(chunk.page.index!==n||chunk.page.offset!==events.length||chunk.page.previousHash!==chain)throw new ReplicationConflict('staged snapshot page changed');}else this.validatePage(m,chunk.page,n,events.length,chain);
+   events.push(...copy(chunk.page.events));chain=chunk.page.sha256;}
+  if(verified&&(chain!==verified.chainHash||events.length!==verified.nextOffset))throw new ReplicationConflict('staged snapshot pages disagree with the import ledger');
   if(count===m.pageCount&&(chain!==m.rootHash||events.length!==m.eventCount||bytes(events)!==m.bytes))throw new ReplicationConflict('snapshot is incomplete or its final hash changed');return events;
  }
  private packSnapshot(events:ReplicatedEntryChange[],template:EntrySnapshotManifest):ExportedSnapshot {
@@ -406,7 +414,7 @@ export class EntryReplicationController {
    if(page.index<t.nextPage){const prior=await tx.doc(EntrySnapshotChunks,chunkKey(this.documentKey,snapshotId,page.index),null);if((t.phase!=='receiving'&&t.phase!=='completed')||canonical(prior.page)!==canonical(page))throw new ReplicationConflict('duplicate page changed content');await this.check('import');return copy(t);}
    if(t.phase!=='receiving'||this.now()>=t.manifest.expiresAt)throw new SnapshotExpired('snapshot no longer accepts pages');
    this.validatePage(t.manifest,page,t.nextPage,t.nextOffset,t.chainHash);this.budget(page.events);
-   const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const logical=await this.materializeIn(tx,base),staged=await this.stagedEvents(t.manifest,key=>tx.doc(EntrySnapshotChunks,key,null),t.nextPage);
+   const base=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(base);const logical=await this.materializeIn(tx,base),staged=await this.stagedEvents(t.manifest,key=>tx.doc(EntrySnapshotChunks,key,null),t.nextPage,{chainHash:t.chainHash,nextOffset:t.nextOffset});
    this.append(logical,[...staged,...page.events],this.now());
    // Receipt is causal even while payloads remain hidden: subsequent local writes must have a newer HLC.
    let observedClock=copy(base.clock);for(const event of page.events){observedClock=advanceHybridClock(observedClock,this.now(),event.clock);if(event.originReplicaId===this.config.replicaId&&event.incarnation===this.config.incarnation)base.seq=Math.max(base.seq,event.seq);}

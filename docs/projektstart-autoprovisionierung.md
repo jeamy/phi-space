@@ -20,7 +20,7 @@ des jeweiligen pi-serverd. Logische Spaces sind persistente Dokumente mit stabil
 Codebefund im Nachbarprojekt pi-termux-mobile:
 
 - `runtime/server.mjs`: `remoteState.connect` ruft `ensureRemoteServer` vor dem Remote-Attach auf.
-- `runtime/remote-provision.mjs`: prüft Node/npm, überträgt pi-serverd, common.mjs, pi-spaces.mjs und
+- `runtime/remote-provision.mjs`: prüft Node/npm, überträgt pi-serverd, common.mjs, phi-spaces.mjs und
   Paketdateien; bereitet Dependencies vor, startet den Daemon und prüft das Sessions-Protokoll.
 - Runtime-Release wird vorbereitet, bevor der alte Daemon beendet wird; bei fehlgeschlagenem Start
   wird ein Rückwechsel zum vorherigen Release versucht. Das ist keine atomare Datenmigration.

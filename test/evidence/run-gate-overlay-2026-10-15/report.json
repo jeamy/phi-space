@@ -169,7 +169,7 @@
   ],
   "productionServiceActivated": false,
   "artifactHashes": {
-    "pi-spaces.mjs": "943d5fa098da45eafaf0a4ac2d39e254b5b25d21b22e7ffd355dc3e7d2f7ab12",
+    "phi-spaces.mjs": "943d5fa098da45eafaf0a4ac2d39e254b5b25d21b22e7ffd355dc3e7d2f7ab12",
     "scenarios/run-gate-overlay-node.mjs": "d79cd72adceb61bbaf47b0e6e0ba51837afbf40ed2facdecf4af26ab75865a80"
   }
 }

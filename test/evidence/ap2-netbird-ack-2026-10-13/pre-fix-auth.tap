@@ -6,17 +6,17 @@ not ok 1 - concurrent RemoteSpace instances share one transport without replacin
   ---
   duration_ms: 76.842382
   type: 'test'
-  location: '/media/data/programming/pi-spaces/test-auth.test.ts:193:1'
+  location: '/media/data/programming/phi-spaces/test-auth.test.ts:193:1'
   failureType: 'testCodeFailure'
   error: 'this is not the challenge issued on this connection'
   code: 'ERR_TEST_FAILURE'
   stack: |-
-    Object.PermissionDenied (file:///media/data/programming/pi-spaces/src/remote.ts:81:27)
-    toError (file:///media/data/programming/pi-spaces/src/remote.ts:88:114)
-    RemoteSpace.send (file:///media/data/programming/pi-spaces/src/remote.ts:161:22)
+    Object.PermissionDenied (file:///media/data/programming/phi-spaces/src/remote.ts:81:27)
+    toError (file:///media/data/programming/phi-spaces/src/remote.ts:88:114)
+    RemoteSpace.send (file:///media/data/programming/phi-spaces/src/remote.ts:161:22)
     process.processTicksAndRejections (node:internal/process/task_queues:103:5)
     async Promise.all (index 0)
-    async TestContext.<anonymous> (file:///media/data/programming/pi-spaces/test-auth.test.ts:197:16)
+    async TestContext.<anonymous> (file:///media/data/programming/phi-spaces/test-auth.test.ts:197:16)
     async Test.run (node:internal/test_runner/test:1054:7)
     async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
   ...
@@ -25,17 +25,17 @@ not ok 2 - concurrent RemoteSpace instances share one transport without replacin
   ---
   duration_ms: 25.619548
   type: 'test'
-  location: '/media/data/programming/pi-spaces/test-auth.test.ts:193:1'
+  location: '/media/data/programming/phi-spaces/test-auth.test.ts:193:1'
   failureType: 'testCodeFailure'
   error: 'this is not the challenge issued on this connection'
   code: 'ERR_TEST_FAILURE'
   stack: |-
-    Object.PermissionDenied (file:///media/data/programming/pi-spaces/src/remote.ts:81:27)
-    toError (file:///media/data/programming/pi-spaces/src/remote.ts:88:114)
-    RemoteSpace.send (file:///media/data/programming/pi-spaces/src/remote.ts:161:22)
+    Object.PermissionDenied (file:///media/data/programming/phi-spaces/src/remote.ts:81:27)
+    toError (file:///media/data/programming/phi-spaces/src/remote.ts:88:114)
+    RemoteSpace.send (file:///media/data/programming/phi-spaces/src/remote.ts:161:22)
     process.processTicksAndRejections (node:internal/process/task_queues:103:5)
     async Promise.all (index 0)
-    async TestContext.<anonymous> (file:///media/data/programming/pi-spaces/test-auth.test.ts:197:16)
+    async TestContext.<anonymous> (file:///media/data/programming/phi-spaces/test-auth.test.ts:197:16)
     async Test.run (node:internal/test_runner/test:1054:7)
     async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
@@ -44,7 +44,7 @@ not ok 3 - a rejected shared-transport proof releases the next authentication an
   ---
   duration_ms: 13.724542
   type: 'test'
-  location: '/media/data/programming/pi-spaces/test-auth.test.ts:202:1'
+  location: '/media/data/programming/phi-spaces/test-auth.test.ts:202:1'
   failureType: 'testCodeFailure'
   error: |-
     Expected values to be strictly equal:
@@ -59,7 +59,7 @@ not ok 3 - a rejected shared-transport proof releases the next authentication an
   actual: 'rejected'
   operator: 'strictEqual'
   stack: |-
-    TestContext.<anonymous> (file:///media/data/programming/pi-spaces/test-auth.test.ts:209:9)
+    TestContext.<anonymous> (file:///media/data/programming/phi-spaces/test-auth.test.ts:209:9)
     process.processTicksAndRejections (node:internal/process/task_queues:103:5)
     async Test.run (node:internal/test_runner/test:1054:7)
     async Test.processPendingSubtests (node:internal/test_runner/test:744:7)

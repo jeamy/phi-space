@@ -1,5 +1,5 @@
 
-> pi-spaces@0.0.1 test
+> phi-spaces@0.0.1 test
 > node --experimental-strip-types --test test-core.test.ts test-meter.test.ts integration.test.ts test-persistence.test.ts test-spaces.test.ts test-claims.test.ts test-budgets.test.ts test-stream.test.ts test-service.test.ts test-remote.test.ts test-socket.test.ts test-gate.test.ts test-auth.test.ts test-enroll.test.ts test-supervisor.test.ts test-scenario.test.ts test-tui.test.ts test-ap1.test.ts test-pi-server.test.ts test-federation-runtime.test.ts test-recovery.test.ts test-grants.test.ts test-operations.test.ts test-recovery-boundaries.test.ts test-router.test.ts test-delegation.test.ts test-routing-policy.test.ts test-federated-space.test.ts test-membership.test.ts test-capability-directory.test.ts test-data-admin.test.ts test-dashboard.test.ts test-journal-checkpoints.test.ts test-configured-root.test.ts test-profile-transition.test.ts test-root-erasure.test.ts test-erasure-archives.test.ts
 
 TAP version 13
@@ -107,8 +107,8 @@ ok 17 - tools act as their conversation: another conversation cannot commit a tr
   duration_ms: 71.494571
   type: 'test'
   ...
-# Subtest: PiSpaces.count and stats read the live space without waking anyone
-ok 18 - PiSpaces.count and stats read the live space without waking anyone
+# Subtest: PhiSpaces.count and stats read the live space without waking anyone
+ok 18 - PhiSpaces.count and stats read the live space without waking anyone
   ---
   duration_ms: 10.325372
   type: 'test'
@@ -161,8 +161,8 @@ ok 26 - watchLive reports gauges and rates without writing to the space
   duration_ms: 463.007259
   type: 'test'
   ...
-# Subtest: limits and ownership through PiSpaces: host sets limits, agents are held to them
-ok 27 - limits and ownership through PiSpaces: host sets limits, agents are held to them
+# Subtest: limits and ownership through PhiSpaces: host sets limits, agents are held to them
+ok 27 - limits and ownership through PhiSpaces: host sets limits, agents are held to them
   ---
   duration_ms: 16.449961
   type: 'test'

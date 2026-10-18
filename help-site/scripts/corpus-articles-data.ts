@@ -83,7 +83,7 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSp
 
 - **Entry**: Ein unveränderliches JSON-Dokument \`{ type: string, types?: string[], fields: Record<string, Json> }\`. Es gibt kein In-Place-Update; Zustandsübergänge erfolgen durch \`take\` + \`write\` in einer gemeinsamen Transaktion.
 - **Global ID (\`gid\`)**: Jeder Entry trägt \`gid = <spaceId>/<localId>\`. Die \`localId\` besteht aus der Dateninkarnation des Spaces plus einem monoton steigenden Zähler und wird niemals wiederverwendet.
-- **Named Space**: Neben dem Default-Space (\`pi-spaces.space\`, Alias \`default\`) verwaltet die \`Registry\` (\`pi-spaces.registry\`) beliebig viele benannte Spaces (\`pi-spaces.named-space\`) mit stabiler \`spaceId\`.
+- **Named Space**: Neben dem Default-Space (\`phi-spaces.space\`, Alias \`default\`) verwaltet die \`Registry\` (\`phi-spaces.registry\`) beliebig viele benannte Spaces (\`phi-spaces.named-space\`) mit stabiler \`spaceId\`.
 - **Principal**: Strukturierte Identität \`{ peerId, agentId? }\`. Der Server leitet sie immer aus der authentifizierten Verbindung (\`IdentityAdapter\`) ab, niemals aus ungeprüften Client-Payloads.
 
 ## Arbeitsablauf {#workflow}
@@ -151,7 +151,7 @@ PhiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace 
 
 - **Entry**: An immutable JSON record \`{ type: string, types?: string[], fields: Record<string, Json> }\`. There is no in-place update; state transitions happen via \`take\` + \`write\` inside one transaction.
 - **Global ID (\`gid\`)**: Every entry carries \`gid = <spaceId>/<localId>\`. \`localId\` combines the space's data incarnation with a monotonic counter and is never reused.
-- **Named Space**: Alongside the default space (\`pi-spaces.space\`, alias \`default\`), the \`Registry\` (\`pi-spaces.registry\`) manages arbitrary named spaces (\`pi-spaces.named-space\`) with immutable \`spaceId\`s.
+- **Named Space**: Alongside the default space (\`phi-spaces.space\`, alias \`default\`), the \`Registry\` (\`phi-spaces.registry\`) manages arbitrary named spaces (\`phi-spaces.named-space\`) with immutable \`spaceId\`s.
 - **Principal**: Structured identity \`{ peerId, agentId? }\`. The service always derives identity from the trusted connection (\`IdentityAdapter\`), never from client-supplied payload fields.
 
 ## Workflow {#workflow}
@@ -697,6 +697,12 @@ Versucht ein Worker \`commit(txn)\` aufzurufen, ohne dass für den genommenen \`
 
 ### Byte-Budgets und Owner-Quoten (DEFAULT_LIMITS) {#default-limits}
 
+Die Entry-Anzahl ist standardmäßig weder pro Space noch pro Owner begrenzt:
+\`maxEntries\` und \`maxEntriesPerOwner\` verwenden \`FOREVER\` (JSON-sicherer unbegrenzter Wert).
+Explizite Anzahlquoten sind mit \`setLimits\` weiterhin möglich. Die folgenden Byte-Budgets und
+die Quoten für Registrierungen, Waiter und Transaktionen bleiben wirksam; unbegrenzte Anzahl
+bedeutet nicht unbegrenzten Arbeitsspeicher oder unbegrenzte Dokumentgröße.
+
 | Limit | Standardwert | Bedeutung |
 |---|---|---|
 | \`maxEntryBytes\` | \`64 KiB\` | Maximale Größe eines einzelnen Entry oder Handbacks |
@@ -748,6 +754,12 @@ await space.setCompletionProfiles([
 If a worker calls \`commit(txn)\` without having written exactly one \`Msg\` with matching \`taskId\` and \`threadId\` for the taken \`ChatTask\`, the core throws \`CompletionViolation\`. The transaction remains open so the caller can either write the missing result or roll back via \`abort(txn)\`.
 
 ### Byte Budgets And Owner Quotas (DEFAULT_LIMITS) {#default-limits}
+
+Entry counts have no default cap, either per space or per owner:
+\`maxEntries\` and \`maxEntriesPerOwner\` use \`FOREVER\` (a JSON-safe unlimited value).
+Explicit count quotas can still be set with \`setLimits\`. The byte budgets below and quotas
+for subscriptions, waiters and transactions still apply; unlimited counts do not mean
+unlimited memory or document size.
 
 | Limit | Default | Meaning |
 |---|---|---|
@@ -1072,7 +1084,7 @@ if (page.events.length > 0) {
 			short: "Wie PhiSpaces auf dem Default-Space oder benannten Spaces (NamedSpace) arbeitet und wie startService Reaper und Event-Delivery betreibt.",
 			body: `## Überblick {#overview}
 
-Ein \`@earendil-works/pi-durable\`-Harness verwaltet standardmäßig den Default-Space (\`pi-spaces.space\`, Alias \`"default"\`) sowie über die \`Registry\` (\`pi-spaces.registry\`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (\`pi-spaces.named-space\`).
+Ein \`@earendil-works/pi-durable\`-Harness verwaltet standardmäßig den Default-Space (\`phi-spaces.space\`, Alias \`"default"\`) sowie über die \`Registry\` (\`phi-spaces.registry\`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (\`phi-spaces.named-space\`).
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -1107,7 +1119,7 @@ const stopService = await startService(harness, ctx);
 			short: "How PhiSpaces operates on the default space or named spaces (NamedSpace) and how startService drives the reaper and event delivery.",
 			body: `## Overview {#overview}
 
-A \`@earendil-works/pi-durable\` harness hosts the default space (\`pi-spaces.space\`, alias \`"default"\`) plus resource-bounded isolated **named spaces** (\`pi-spaces.named-space\`) tracked in the \`Registry\` (\`pi-spaces.registry\`).
+A \`@earendil-works/pi-durable\` harness hosts the default space (\`phi-spaces.space\`, alias \`"default"\`) plus resource-bounded isolated **named spaces** (\`phi-spaces.named-space\`) tracked in the \`Registry\` (\`phi-spaces.registry\`).
 
 ## Concept And System Model {#concept-model}
 
@@ -1150,7 +1162,7 @@ const stopService = await startService(harness, ctx);
 			short: "Wie KI-Agenten über space_write, space_read, space_take, space_list, space_txn, space_wait, space_notify und space_lease sicher koordinieren.",
 			body: `## Überblick {#overview}
 
-Die Erweiterung \`spaces\` (\`createSpaces(meter)\` in \`src/index.ts\`) stattet \`pi-durable\`-Conversations mit 8 Werkzeugen aus, die sämtlich mit \`replay: "safe"\` und einem task-gebundenen \`Claim\`-Dokument (\`pi-spaces.claim\`) abgesichert sind.
+Die Erweiterung \`spaces\` (\`createSpaces(meter)\` in \`src/index.ts\`) stattet \`pi-durable\`-Conversations mit 8 Werkzeugen aus, die sämtlich mit \`replay: "safe"\` und einem task-gebundenen \`Claim\`-Dokument (\`phi-spaces.claim\`) abgesichert sind.
 
 ## Technische Referenz {#technical-reference}
 
@@ -1174,7 +1186,7 @@ Die Erweiterung \`spaces\` (\`createSpaces(meter)\` in \`src/index.ts\`) stattet
 			short: "How AI agents coordinate safely through space_write, space_read, space_take, space_list, space_txn, space_wait, space_notify, and space_lease.",
 			body: `## Overview {#overview}
 
-The \`spaces\` extension (\`createSpaces(meter)\` in \`src/index.ts\`) equips \`pi-durable\` conversations with 8 tools, all marked \`replay: "safe"\` and backed by a task-scoped \`Claim\` document (\`pi-spaces.claim\`).
+The \`spaces\` extension (\`createSpaces(meter)\` in \`src/index.ts\`) equips \`pi-durable\` conversations with 8 tools, all marked \`replay: "safe"\` and backed by a task-scoped \`Claim\` document (\`phi-spaces.claim\`).
 
 ## Technical Reference {#technical-reference}
 
@@ -1212,11 +1224,11 @@ Sobald Web-Server, Worker und Subagenten in getrennten Prozessen oder auf versch
 
 ### Authentisierung über IdentityAdapter und Policy {#identity-and-policy}
 
-\`SpaceService\` vertraut niemals einer vom Client im JSON-Body mitgesendeten Identität. Stattdessen bestimmt der \`IdentityAdapter\` (\`StaticIdentity\` lokal oder \`GateIdentity\` über NetBird/Schicht B) aus dem \`Connection\`-Kontext den \`Principal\` und seine Rollen (\`admin\`, \`host\`, \`member\`, \`observer\`). Die \`Policy\` prüft vor jeder Operation sowohl die erlaubte Methode als auch die erlaubten Entry-Typen.
+\`SpaceService\` vertraut niemals einer vom Client im JSON-Body mitgesendeten Identität. Stattdessen bestimmt der \`IdentityAdapter\` (\`StaticIdentity\` lokal oder \`GateIdentity\` über NetBird/Schicht B) aus dem \`Connection\`-Kontext den \`Principal\` und seine Rollen (\`admin\`, \`host\`, \`member\`, \`observer\`). Die \`Policy\` prüft vor jeder Operation sowohl die erlaubte Methode als auch die erlaubten Entry-Typen. Ein Typ-Grant gilt auch für Subtypen: Ein Write ist erlaubt, sobald der Typ oder einer der deklarierten Supertypen freigegeben ist. Weil der Schreibende die Supertypen selbst angibt, kann eine Rolle mit Grant auf \`Job\` auch \`{ type: "X", types: ["Job"] }\` schreiben; Typ-Grants sind daher keine Integritätsgrenze für Subtypen. Federation-Members erzwingen dagegen die in der Typ-Policy deklarierten Supertypen.
 
 ### Stabile Retries und OutcomeUnknown in RemoteSpace {#remote-retries}
 
-Vor der ersten Mutation ruft \`RemoteSpace\` automatisch \`hello\` und \`generation\` auf und vergibt für jeden schreibenden Aufruf eine stabile \`requestId\`. Geht auf dem Socket/TCP-Transport eine Antwort verloren, wiederholt \`RemoteSpace\` denselben Aufruf mit **unveränderter \`requestId\`**. Läuft \`maxClientWaitMs\` ab, wirft der Client \`OutcomeUnknown\`, während die Operation am Host weiterläuft und über \`pollOperation\` aufgelöst werden kann.
+Vor der ersten Mutation ruft \`RemoteSpace\` automatisch \`hello\` und \`generation\` auf und vergibt für jeden schreibenden Aufruf eine stabile \`requestId\`. Geht auf dem Socket/TCP-Transport eine Antwort verloren, wiederholt \`RemoteSpace\` denselben Aufruf mit **unveränderter \`requestId\`**. Läuft \`maxClientWaitMs\` ab, wirft der Client \`OutcomeUnknown\`, während die Operation am Host weiterläuft und über \`pollOperation\` aufgelöst werden kann. Nicht klassifizierte Hostfehler kommen als Code \`Internal\` mit der festen Meldung \`internal error\` an; den eigentlichen Fehler protokolliert nur der Host.
 
 ## Siehe auch {#see-also}
 
@@ -1234,11 +1246,11 @@ When web servers, workers, and subagents run in separate processes or on differe
 
 ### Authentication Via IdentityAdapter And Policy {#identity-and-policy}
 
-\`SpaceService\` never trusts a principal sent inside a client JSON payload. Instead, its \`IdentityAdapter\` (\`StaticIdentity\` locally or \`GateIdentity\` over NetBird/Layer B) derives the \`Principal\` and roles (\`admin\`, \`host\`, \`member\`, \`observer\`) from the trusted \`Connection\` context. \`Policy\` checks allowed methods and entry types before executing any call.
+\`SpaceService\` never trusts a principal sent inside a client JSON payload. Instead, its \`IdentityAdapter\` (\`StaticIdentity\` locally or \`GateIdentity\` over NetBird/Layer B) derives the \`Principal\` and roles (\`admin\`, \`host\`, \`member\`, \`observer\`) from the trusted \`Connection\` context. \`Policy\` checks allowed methods and entry types before executing any call. A type grant covers subtypes: a write is allowed as soon as its type or one of its declared supertypes is granted. Because the writer declares the supertypes, a role granted \`Job\` can also write \`{ type: "X", types: ["Job"] }\`; type grants are therefore no integrity boundary for subtypes. Federation members, in contrast, enforce the supertypes declared in their type policy.
 
 ### Stable Retries And OutcomeUnknown In RemoteSpace {#remote-retries}
 
-Before its first mutation, \`RemoteSpace\` automatically calls \`hello\` and \`generation\` and assigns a stable \`requestId\` to every mutating call. If a reply is lost on the socket/TCP transport, \`RemoteSpace\` retries with the **exact same \`requestId\`**. If \`maxClientWaitMs\` expires, it throws \`OutcomeUnknown\` while the host operation continues and can be resolved via \`pollOperation\`.
+Before its first mutation, \`RemoteSpace\` automatically calls \`hello\` and \`generation\` and assigns a stable \`requestId\` to every mutating call. If a reply is lost on the socket/TCP transport, \`RemoteSpace\` retries with the **exact same \`requestId\`**. If \`maxClientWaitMs\` expires, it throws \`OutcomeUnknown\` while the host operation continues and can be resolved via \`pollOperation\`. Unclassified host errors arrive as code \`Internal\` with the fixed message \`internal error\`; only the host logs the actual error.
 
 ## See Also {#see-also}
 

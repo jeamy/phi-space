@@ -77,7 +77,7 @@ for(const backend of BACKENDS){
    // Reopening with an empty journal must not turn existing application state into an unexplained base.
    const empty=new PrimarySyncJournal(join(home.dir,'empty-journal.sqlite'),config),storage=await raw();
    await assert.rejects(recoverPrimarySync(storage,empty,s,ctx,async()=>{}),/untracked/);empty.close();
-   const marker=await storage.findDocument({kind:'pi-spaces.primary-sync-storage-marker',key:config.spaceId,scope:{kind:'session'}},'current',ctx);assert.ok(marker);
+   const marker=await storage.findDocument({kind:'phi-spaces.primary-sync-storage-marker',key:config.spaceId,scope:{kind:'session'}},'current',ctx);assert.ok(marker);
    const value=(await storage.document(marker.id,'current',ctx))!.value;
    await storage.commit([{type:'document.change',id:marker.id,content:{kind:'base',version:1,value:{...value,revision:9999}}}],ctx);
    await assert.rejects(recoverPrimarySync(storage,p,s,ctx,async()=>{}),/does not match/);await storage.close(ctx);assert.equal(p.head().revision,revision);

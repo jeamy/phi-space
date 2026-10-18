@@ -1,7 +1,6 @@
 // Operator-only control restoration. Runs under an exclusive recovery harness owner, with no normal gate or agents.
 import { defineDoc, type Session } from "@earendil-works/pi-durable";
 import type { Context } from "@earendil-works/chord";
-import { createHash } from "node:crypto";
 import type { Signer, Algorithm } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { RegisterConflict } from "./recovery-register.ts";
@@ -9,15 +8,15 @@ import { RecoveryBlocked, RecoveryCoordinator, verifyAuthorityTransition, type S
 import { MemberTransitionInstaller } from "./member-transition.ts";
 import { Registry, snapshotSpace, spaceDoc } from "./spaces.ts";
 import { beginRestore, restoreBatch, completeRestore, snapshotHash } from "./restore.ts";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import { keyFingerprint } from "./enroll.ts";
 import * as core from "./core.ts";
 export type ControlRestoreRequest = { recoveryId:string; controlSpaceId:string; snapshotRef:string; expectedAuthorityId:string; expectedDataIncarnation:string; expectedPrimaryEpoch:number; targetHostId:string; confirmedMembers:string[] };
 export type ControlRestoreJob = { request:ControlRestoreRequest; argsHash:string; snapshotHash:string; proof:SignedAuthorityTransition; sourceHostId:string; state:"importing"|"members"|"waiting"|"completed" };
-export const ControlRecoveryJobs=defineDoc<{jobs:Record<string,ControlRestoreJob>}>({kind:"pi-spaces.control-recovery-jobs",version:1,scope:"session",initial:()=>({jobs:{}})});
+export const ControlRecoveryJobs=defineDoc<{jobs:Record<string,ControlRestoreJob>}>({kind:"phi-spaces.control-recovery-jobs",version:1,scope:"session",initial:()=>({jobs:{}})});
 export type ReauthorizeKey={peerId:string;publicKey:string;algorithm:Algorithm;roles:string[];scope:string[]};
 export type ControlRecoveryOptions={host:Pick<Session,"commit"|"snapshot">;ctx:Context;hostId:string;external:RecoveryRegister;installed:RecoveryRegister;operator:Signer;supervisor:Signer;loadSnapshot:(ref:string)=>Promise<core.SpaceState>;verifyFence:(hostId:string)=>Promise<{hostId:string;restartLocked:boolean}>;assertQuiesced:()=>Promise<{hostId:string;normalStopped:boolean;restartLocked:boolean}>;now?:()=>number};
-const digest=(v:any)=>createHash("sha256").update(canonicalJson(v)).digest("hex");
+const digest=digestJson;
 export class ControlRecoveryController {
  private o:ControlRecoveryOptions;
  constructor(o:ControlRecoveryOptions){if(!o.operator.publicKey||!o.supervisor.publicKey)throw new RecoveryBlocked("provisioned recovery and supervisor public identities are required");this.o=o;}

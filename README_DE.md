@@ -7,6 +7,11 @@
 > Wiederherstellungsplan erforderlich. Tests decken bestimmte Szenarien ab, nicht alle Fehlerfälle; lauffähige
 > Demos belegen keine Produktionsreife. Bereitstellung ohne Gewährleistung gemäß [MIT-Lizenz](LICENSE).
 
+> **Namespace-Umstellung:** Persistente Dokumenttypen verwenden jetzt `phi-spaces.*`, das Bundle heißt
+> `phi-spaces.mjs`. Dies ist ein inkompatibler Speicher-/Integrationswechsel. Bestehende Stores benötigen
+> vor Verwendung dieser Version eine gesondert geprüfte Offline-Migration. Dokumentversion 5 migriert
+> keinen Dokumenttyp-Namespace; ein neuer leerer Namespace bedeutet nicht, dass die bisherigen Daten gelöscht sind.
+
 phi-spaces ist eine TypeScript-Space-Bibliothek als Erweiterung für
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable).
 Mehrere Agenten beziehungsweise Conversations koordinieren sich über gemeinsame Daten: Sie veröffentlichen
@@ -181,8 +186,8 @@ Ein persistenter Backend-Store ermöglicht Wiederanlauf, `RemoteSpace` einen sep
 
 Durable-Commits machen State-Änderungen atomar. Wiederanlaufpersistenz setzt einen persistenten Backend-Store
 voraus; Strom-/Hostausfallgarantien hängen von dessen Einstellungen und dem Replikations-/Recovery-Betrieb ab.
-Der Default-Space ist das sessionweite Dokument `pi-spaces.space`, benannte Spaces liegen in der Familie
-`pi-spaces.named-space`, jeweils Dokumentversion 5. Die Registry ordnet Aliase festen `spaceId`s zu.
+Der Default-Space ist das sessionweite Dokument `phi-spaces.space`, benannte Spaces liegen in der Familie
+`phi-spaces.named-space`, jeweils Dokumentversion 5. Die Registry ordnet Aliase festen `spaceId`s zu.
 Version 5 migriert Version 4 vorwärts; ein altes Bundle mit ausschließlich Version 4 kann den migrierten
 Store nicht mehr öffnen. Ein Storage hat einen besitzenden Harness-Prozess; benannte Spaces sind nicht
 automatisch unabhängige Hosts.
@@ -213,7 +218,8 @@ automatisch unabhängige Hosts.
 Die vollständigen Signaturen, Besitz-/Rollenregeln und Fehlerklassen stehen in [docs/api.md](docs/api.md).
 Voreinstellungen liegen in `DEFAULT_LIMITS`: unter anderem 64 KiB je Entry-Felder/Handback, 64 MiB
 Entry-Felder insgesamt, 128 MiB Gesamtdokument, 192 KiB Commit und 256 KiB Frame.
-Owner-Quoten begrenzen zusätzlich Entries, Registrierungen, Waiter und offene Transaktionen.
+Die Entry-Anzahl ist standardmäßig weder pro Space noch pro Owner begrenzt (`FOREVER` als JSON-sicherer Wert).
+Explizite Entry-Quoten bleiben konfigurierbar; Owner-Quoten begrenzen Registrierungen, Waiter und offene Transaktionen.
 `setLimits` speichert Änderungen pro Space. Globale Bytegrenzen gelten auch für Host-Writes.
 
 Entry-Inhalte sind fremde Daten und keine vertrauenswürdigen Anweisungen an Agenten.

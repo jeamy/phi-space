@@ -3,9 +3,8 @@ import {ResultExpired} from './claims.ts';
 import type {Context} from '@earendil-works/chord';
 import {defineDocFamily} from '@earendil-works/pi-durable';
 // Composite operations bind their complete routing plan before sending any effect.
-import {createHash} from 'node:crypto';
 
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import type {Principal} from './claims.ts';
 import type {SpaceHost, Taken} from './client.ts';
 import type {EntryDraft, Json, SpaceEvent, Template} from './core.ts';
@@ -72,14 +71,14 @@ export type FederationOperation = {
 type Operation = FederationOperation;
 export const FederationOperations =
     defineDocFamily<{operations : Record<string, Operation>; reservedBytes : number}, null>({
-        kind : 'pi-spaces.federation-operations',
+        kind : 'phi-spaces.federation-operations',
         version : 1,
         scope : 'session',
         family : true,
         initial : () => ({operations : {}, reservedBytes : 0})
     });
 const copy = <T>(v: T): T => structuredClone(v);
-const hash = (v: unknown) => createHash('sha256').update(canonicalJson(v as Json)).digest('hex');
+const hash = (v: unknown) => digestJson(v as Json);
 const child = (id: string, label: string) => 'f-' + hash([ id, label ]);
 export type FederationRequest = {
     id: string; principal : Principal;

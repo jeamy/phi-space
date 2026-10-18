@@ -207,7 +207,7 @@
   "adminReadAfterCleanup": "nano-test and standby-100 ok",
   "retained": [
    "daemon bundle 1cb5d7f1397cf5ed on both hosts (backups federation-host.mjs.before-sync-20261016)",
-   "sync stores /var/lib/pi-spaces/{nano,standby}/sync-jobs and nanoi sync-jobs.aside-*"
+   "sync stores /var/lib/phi-spaces/{nano,standby}/sync-jobs and nanoi sync-jobs.aside-*"
   ]
  },
  "limits": [

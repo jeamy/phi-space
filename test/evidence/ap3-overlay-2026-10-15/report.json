@@ -146,7 +146,7 @@
   "fullPhase3Accepted": false,
   "productionServiceActivated": false,
   "artifactHashes": {
-    "pi-spaces.mjs": "f8c489f160dfc7e450f38b847126654d711a5dbaa711edf8f41a220e3b9fdb2c",
+    "phi-spaces.mjs": "f8c489f160dfc7e450f38b847126654d711a5dbaa711edf8f41a220e3b9fdb2c",
     "scenarios/phase3-overlay-node.mjs": "fa998c0f384825629678ad18d9d534828c4760b44fe38063a20fb08eefd3e3f4"
   }
 }

@@ -10,7 +10,7 @@
       "parentId": "journal-race-0",
       "effect": "journal",
       "documentId": 2032,
-      "documentKind": "pi-spaces.federation-operations",
+      "documentKind": "phi-spaces.federation-operations",
       "documentKey": "e74df654a9b694274007883e5ee2a4d0d3e47c6832681bc740186cac11896d33",
       "budgetId": "f-568df68003d6aa5012a287d4538ad92fab2e1e9836686b4c38b9788f6f0acf58",
       "before": {
@@ -144,7 +144,7 @@
       "parentId": "journal-race-1",
       "effect": "journal",
       "documentId": 2087,
-      "documentKind": "pi-spaces.federation-operations",
+      "documentKind": "phi-spaces.federation-operations",
       "documentKey": "f7d8932d0b00f6f7a848b437e8265d4488b0d4393d10bbbfc38642fc6b71760b",
       "budgetId": "f-9470760e15cf3a3ae480629887846720d943a55d65f285a141185d8f59dfe993",
       "before": {

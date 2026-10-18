@@ -170,7 +170,7 @@
       "parentId": "journal-race-0",
       "effect": "journal",
       "documentId": 2032,
-      "documentKind": "pi-spaces.federation-operations",
+      "documentKind": "phi-spaces.federation-operations",
       "documentKey": "e74df654a9b694274007883e5ee2a4d0d3e47c6832681bc740186cac11896d33",
       "budgetId": "f-568df68003d6aa5012a287d4538ad92fab2e1e9836686b4c38b9788f6f0acf58",
       "before": {
@@ -581,7 +581,7 @@
       "parentId": "journal-race-1",
       "effect": "journal",
       "documentId": 2087,
-      "documentKind": "pi-spaces.federation-operations",
+      "documentKind": "phi-spaces.federation-operations",
       "documentKey": "f7d8932d0b00f6f7a848b437e8265d4488b0d4393d10bbbfc38642fc6b71760b",
       "budgetId": "f-9470760e15cf3a3ae480629887846720d943a55d65f285a141185d8f59dfe993",
       "before": {
@@ -992,7 +992,7 @@
       "parentId": "journal-race-2",
       "effect": "journal",
       "documentId": 1448,
-      "documentKind": "pi-spaces.federation-operations",
+      "documentKind": "phi-spaces.federation-operations",
       "documentKey": "ae431f5dded20c5c3c3bd996ba6bfb4d502e2fb69e2d2b1083ea776805fc89d0",
       "budgetId": "f-c81144e2760e0244b1f775c4845d783046058fe8f973dc30a7c5f068b9fa6d05",
       "before": {
@@ -1435,7 +1435,7 @@
       "parentId": "journal-race-3",
       "effect": "journal",
       "documentId": 1074,
-      "documentKind": "pi-spaces.federation-operations",
+      "documentKind": "phi-spaces.federation-operations",
       "documentKey": "b14fe71f79a4b9bc2cad5c3fb6a385ed3d95eeb1ef6d67c2a16624a807ca8ed4",
       "budgetId": "f-620e68f608f8b9f847e1b2a8be4fcf6a516fe1306afc4988f134e0bb2fa8cd97",
       "before": {
@@ -1878,7 +1878,7 @@
       "parentId": "journal-race-4",
       "effect": "journal",
       "documentId": 619,
-      "documentKind": "pi-spaces.router-journal",
+      "documentKind": "phi-spaces.router-journal",
       "documentKey": "partition-5f1789d69e4441a80b197df06d10c32104b67c9a7ee1d0bf077a316291993e3a",
       "budgetId": "f-b80424d0e569819f9b55ea6ba9dc3b89d90c6f4fe6f2ee75b9bb3e9401d8a052",
       "before": {
@@ -1902,7 +1902,7 @@
       "parentId": "journal-race-5",
       "effect": "journal",
       "documentId": 906,
-      "documentKind": "pi-spaces.router-journal",
+      "documentKind": "phi-spaces.router-journal",
       "documentKey": "partition-7f6a0763130c442e3809d3fdac4cb9b8f3bcc2766dfd31f7c60ea44afec2268e",
       "budgetId": "f-5876c4066ab75d77fb60bf599474fd89abf9b00a87053c50169b174bd3e1dbe3",
       "before": {

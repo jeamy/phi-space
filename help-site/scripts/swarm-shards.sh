@@ -5,7 +5,7 @@
 # Usage: help-site/scripts/swarm-shards.sh start|stop|status|logs
 # Env:   PORT (hub http, default 3599), SOCKET (unix socket, default
 #        /tmp/swarm-b.sock), HUB_DB (sqlite, default /tmp/swarm-a-test.sqlite),
-#        NANO_DB (nano shard sqlite, default help-site/.local/swarm-b.sqlite —
+#        NANO_DB (nano shard sqlite, default help-site/.local/swarm-b.phi.sqlite —
 #        durable; set SWARM_MEM=1 only for throwaway in-memory runs),
 #        PHI_SPACES_LLM (unset = auto-on when credentials exist; set 0 to disable),
 #        SWARM_RATE (default 5/s), SWARM_AGENTS (default 100),
@@ -21,7 +21,7 @@ set -a; [ -f "$ROOT/help-site/.env" ] && . "$ROOT/help-site/.env"; set +a
 PORT="${PORT:-3599}"
 SOCKET="${SOCKET:-/tmp/swarm-b.sock}"
 HUB_DB="${HUB_DB:-/tmp/swarm-a-test.sqlite}"
-NANO_DB="${NANO_DB:-$ROOT/help-site/.local/swarm-b.sqlite}"
+NANO_DB="${NANO_DB:-$ROOT/help-site/.local/swarm-b.phi.sqlite}"
 RUN=/tmp/swarm-shards
 HUB_PID_FILE=$RUN/hub.pid
 NANO_PID_FILE=$RUN/nano.pid

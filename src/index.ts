@@ -51,7 +51,7 @@ const MAX_WAIT_MS = 60_000; // a blocking tool holds the turn: cap it
 // Exactly-once per tool call: recorded in the same commit as the change, keyed by the tool task. Task documents
 // retire when the task is terminal, so there is nothing to clean up.
 const Claim = defineDoc<{ done: boolean; value: core.Json }>({
-	kind: "pi-spaces.claim",
+	kind: "phi-spaces.claim",
 	version: 1,
 	scope: "task",
 	initial: () => ({ done: false, value: null }),

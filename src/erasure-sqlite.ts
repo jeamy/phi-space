@@ -14,7 +14,7 @@ export async function compactErasedSqlite(path:string,assertExclusiveFenced:()=>
   try{
    const revisions=db.prepare('SELECT seq,kind,version,content FROM document_revisions WHERE document_id=? ORDER BY seq');
    for(const row of db.prepare("SELECT id,kind,retired_at FROM documents WHERE scope_kind='session'").all()){
-    const kind=JSON.parse(row.kind as string);if(typeof kind!=='string'||!kind.startsWith('pi-spaces.'))continue;
+    const kind=JSON.parse(row.kind as string);if(typeof kind!=='string'||!kind.startsWith('phi-spaces.'))continue;
     const rows=revisions.all(row.id as number);if(row.retired_at!==null){db.prepare('DELETE FROM document_revisions WHERE document_id=?').run(row.id as number);revisionsRemoved+=rows.length;continue;}
     let base=-1;for(let i=0;i<rows.length;i++)if(rows[i]!.kind==='base')base=i;if(base<0)throw Error('missing durable document base');let value=JSON.parse(rows[base]!.content as string);const version=rows[base]!.version;
     for(const r of rows.slice(base+1)){if(r.kind!=='delta'||r.version!==version)throw Error('invalid durable document revision chain');value=apply(value,JSON.parse(r.content as string));}

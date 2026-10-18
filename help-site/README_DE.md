@@ -2,6 +2,10 @@
 
 [English](README.md) · [Deutsch](README_DE.md)
 
+> Upgrade-Hinweis: Die vollständige Namensumstellung betrifft auch persistente `phi-spaces.*`-Dokumenttypen.
+> Bestehende Stores erst nach geprüfter Offline-Migration und mit Wiederherstellungskopie verwenden.
+> Gespeicherte Dokumente werden nicht automatisch migriert. Siehe [Umstellungsbericht](../docs/namensumstellung-2026-10-18.md).
+
 Dieses Verzeichnis enthält das lauffähige Node.js/React-Hilfesystem (`PHI-SPACES / HELP`) inklusive zweier interaktiver Live-Demos: der 6-stufigen **Multiplayer Space-Chat**-Workbench und dem selbstlaufenden **Social Swarm** (ein Agenten-Sozialnetzwerk auf `phi-spaces`-Entries).
 
 Abgeglichen mit dem Checkout am 18. Oktober 2026. Die Demos zeigen implementierte Abläufe, keine automatische Multi-Host-/Produktivabnahme. Maßgeblich sind der [Implementierungsstand](../docs/implementierungsstand.md), die [Phase-3-Abnahmematrix](../docs/ap3-abnahme.md) und die [Demo-Analyse](../docs/analyse-hilfesystem-demo-apps-2026-10-18.md).
@@ -142,7 +146,7 @@ Bei fachlichem Fehler wird die Reservierung abgebrochen; bei `ResourceExhausted`
 
 ## Dokumente in diesem Verzeichnis
 
-Prüfhinweis vom 18. Oktober 2026: Beide Typechecks erfolgreich; Root-Suite 740 bestanden, ein optionaler Bootstrap-Kopie-Test übersprungen; Beispiele seriell 158/158 bestanden. Die vollständige Help-Suite endet jetzt sauber: 44 bestanden, der separat geprüfte SSR-Fall übersprungen. Frischer Produktionsbuild und SSR-Test erfolgreich (1/1). Die Ursache des früheren Hängers ist behoben: Close während der Initialisierung bricht History-Arbeit ab und verhindert nachträglich gestartete Hintergrundtimer. Tests deaktivieren Modelle und konfigurierte Remote-Shards vor dem Serverimport ausdrücklich.
+Prüfhinweis vom 18. Oktober 2026: Beide Typechecks erfolgreich; Root-Suite 740 bestanden, ein optionaler Bootstrap-Kopie-Test übersprungen; Beispiele seriell 158/158 bestanden. Die vollständige Help-Suite endet jetzt sauber: 45 bestanden, der separat geprüfte SSR-Fall übersprungen. Frischer Produktionsbuild und SSR-Test erfolgreich (1/1). Die Ursache des früheren Hängers ist behoben: Close während der Initialisierung bricht History-Arbeit ab und verhindert nachträglich gestartete Hintergrundtimer. Tests deaktivieren Modelle und konfigurierte Remote-Shards vor dem Serverimport ausdrücklich.
 
 Lokale Browserprüfungen ergänzen diese Nachweise, sind aber keine vollständige Browser-E2E-, Barrierefreiheits-, Deployment-, Handy-, Großstore-, Stromausfall- oder Multi-Host-Abnahme. Details und offene Prüfgates stehen im [Abschlussbericht](../docs/analyse-hilfecorpus-konsistenz-2026-10-18.md).
 

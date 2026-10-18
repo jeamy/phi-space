@@ -63,7 +63,9 @@ export function assertMailboxBatch(s: core.SpaceState, p: Principal, events: cor
 }
 export function appendMail(s: core.SpaceState, p: Principal, event: core.SpaceEvent, now: number): void {
 	assertMailboxCapacity(s, p, event, now);
-	const b = box(s, p); b.events.push({ seq: b.next++, at: now, event: core.plain(event) }); b.bytes = encodedBytes(b.events); core.touch(s, now);
+	// A running tally (as expireBox keeps it): re-encoding the whole mailbox per append cost O(mailbox) per event.
+	const b = box(s, p), item = { seq: b.next++, at: now, event: core.plain(event) };
+	b.bytes += encodedBytes(item) + (b.events.length ? 1 : 0); b.events.push(item); core.touch(s, now);
 }
 
 export function mailboxPage(s: core.SpaceState, p: Principal, now: number, o: { mailboxEpoch?: string; after?: number; maxBytes?: number } = {}): MailboxPage {

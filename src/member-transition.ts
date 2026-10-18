@@ -2,16 +2,15 @@
 import type { Session } from "@earendil-works/pi-durable";
 import type { Context } from "@earendil-works/chord";
 import type { RecoveryRegister } from "./recovery-register.ts";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import { RecoveryBlocked, verifyAuthorityTransition, installAuthorityTransition, type SignedAuthorityTransition } from "./recovery.ts";
 import type { Algorithm } from "./auth.ts";
 import type { HostBootState, SpaceBootPermit } from "./boot.ts";
 import { listSpaces, spaceDoc, snapshotSpace } from "./spaces.ts";
 import * as core from "./core.ts";
-import { createHash } from "node:crypto";
 export type MemberAuthorityAck = { hostId: string; recoveryId: string; authorityId: string; bootDigest: string; spaces: Record<string,{ incarnation: string; primaryEpoch: number }> };
 export type MemberTransitionOptions = { host: Pick<Session,"commit" | "snapshot">; ctx: Context; hostId: string; external: RecoveryRegister; installed: RecoveryRegister; pinned: { algorithm: Algorithm; publicKey: string }; assertQuiesced: () => Promise<{ hostId: string; normalStopped: boolean; restartLocked: boolean }>; now?: () => number };
-const digest = (value: any) => createHash("sha256").update(canonicalJson(value)).digest("hex");
+const digest = digestJson;
 export class MemberTransitionInstaller {
  private o: MemberTransitionOptions;
  constructor(o: MemberTransitionOptions) { this.o = o; }

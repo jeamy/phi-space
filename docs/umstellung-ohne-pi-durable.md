@@ -267,7 +267,7 @@ und darf nicht automatisch alle Ereignisse löschen oder alle Reservierungen fre
 Endgültig entfernte Consumer, abgelaufene Leases und terminale Zustellfehler benötigen
 explizite, getestete Release-Regeln; endlose Reservierungen werden vermieden.
 
-Der bisherige task-scoped `pi-spaces.claim` aus `src/index.ts` wird nicht als neue
+Der bisherige task-scoped `phi-spaces.claim` aus `src/index.ts` wird nicht als neue
 Agent-Engine nachgebaut. Der optionale Adapter bildet stabile Tool-Aufruf-IDs auf
 Space-Request-Identitäten ab. Die Zuordnung wird vor dem ersten Aufruf im Agent-System
 persistiert; Space-Mutation und Ergebnis liegen im Space-Store atomar zusammen.

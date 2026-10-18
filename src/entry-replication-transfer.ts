@@ -15,8 +15,8 @@ export type EntrySnapshotImport = {
  reservedBytes: number; cleanupCursor: number; result?: { added: number; revision: number; sourceRevision: number };
 };
 export type EntrySnapshotTransfersState = { retainedBytes: number; transfers: Record<string, EntrySnapshotImport> };
-export const EntrySnapshotTransfers = defineDocFamily<EntrySnapshotTransfersState, null>({ kind: 'pi-spaces.entry-snapshot-transfers', version: 1, scope: 'session', family: true, initial: () => ({ retainedBytes: 0, transfers: {} }) });
-export const EntrySnapshotChunks = defineDocFamily<{ page: EntrySnapshotPage | null }, null>({ kind: 'pi-spaces.entry-snapshot-chunk', version: 1, scope: 'session', family: true, initial: () => ({ page: null }) });
+export const EntrySnapshotTransfers = defineDocFamily<EntrySnapshotTransfersState, null>({ kind: 'phi-spaces.entry-snapshot-transfers', version: 1, scope: 'session', family: true, initial: () => ({ retainedBytes: 0, transfers: {} }) });
+export const EntrySnapshotChunks = defineDocFamily<{ page: EntrySnapshotPage | null }, null>({ kind: 'phi-spaces.entry-snapshot-chunk', version: 1, scope: 'session', family: true, initial: () => ({ page: null }) });
 
 export type EntrySnapshotMaintenanceJob = {
  requestId: string; phase: 'copying' | 'aborting' | 'cleaning' | 'completed';
@@ -28,4 +28,4 @@ export type EntrySnapshotMaintenanceJob = {
  previous: Array<{ snapshotId: string; pageCount: number; nextPage: number }>;
 };
 /** One durable, bounded replacement job; old pages remain reachable until publication. */
-export const EntrySnapshotMaintenance = defineDocFamily<{ job: EntrySnapshotMaintenanceJob | null }, null>({ kind: 'pi-spaces.entry-snapshot-maintenance', version: 1, scope: 'session', family: true, initial: () => ({ job: null }) });
+export const EntrySnapshotMaintenance = defineDocFamily<{ job: EntrySnapshotMaintenanceJob | null }, null>({ kind: 'phi-spaces.entry-snapshot-maintenance', version: 1, scope: 'session', family: true, initial: () => ({ job: null }) });

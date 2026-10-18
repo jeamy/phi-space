@@ -79,7 +79,7 @@ export interface StoredAdminOperation {
 export const WebAdminState = defineDoc<{
 	keys: Record<string, { pem: string; publicKey: string; keyId: string }>;
 	operations: Record<string, string>;
-}>({ kind: "pi-spaces.help-web-admin", version: 1, scope: "session", initial: () => ({ keys: {}, operations: {} }) });
+}>({ kind: "phi-spaces.help-web-admin", version: 1, scope: "session", initial: () => ({ keys: {}, operations: {} }) });
 
 function freshKey(keyId: string) {
 	const { privateKey, publicKey } = generateKeyPairSync("ed25519");

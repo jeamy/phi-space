@@ -24,7 +24,7 @@ wiederholbar, wenn die Quelle inzwischen weitere Änderungen angehängt hat.
 Hash und Pin ersetzen keine authentifizierte Transportverbindung.
 
 `startStreamImport(source, snapshotId?)` erzeugt einen dauerhaften Quell-Checkpoint
-in `pi-spaces.entry-stream-checkpoints`. Ohne Snapshot beginnt er bei null. Ein
+in `phi-spaces.entry-stream-checkpoints`. Ohne Snapshot beginnt er bei null. Ein
 Snapshot darf ihn auf R vorsetzen, wenn dessen abgeschlossener Beleg und die
 tatsächlich veröffentlichte Generation exakt zu dieser Quelle gehören. Ein
 bestehender weiter fortgeschrittener Cursor wird niemals zurückgesetzt.

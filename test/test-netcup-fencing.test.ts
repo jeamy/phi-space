@@ -48,6 +48,9 @@ test('netcup fencing pins identity, disables autostart before a hard power-off a
   assert.equal(await a.verify({...proof,hostId:'big'}),false);
   await a.release('nano-test','quarantine');assert.deepEqual(t.servers[964249],{state:'RUNNING',autostart:true,macs:[NANO.mac]});
   assert.deepEqual(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')),{});
+  // Without the saved autostart value release fails closed and boots nothing.
+  await a.fence('nano-test','again');rmSync(join(dir,'state.json'));
+  await assert.rejects(a.release('nano-test','quarantine'),/no saved fence state/);assert.equal(t.servers[964249].state,'SHUTOFF');
   // big (730972) is not pinned: never touched.
   await assert.rejects(a.fence('big','x'),/not a netcup fencing target/);
   assert.equal(t.calls.some(c=>c.includes('730972')),false);

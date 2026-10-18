@@ -10,7 +10,7 @@ import { PROTOCOL_VERSION, MergeTypeNotExclusive, type Call, type ErrorCode, typ
 import { AUTH_PROTOCOL, signedBytes, type Challenge, type Signer } from "./auth.ts";
 import type { EntryDraft, Json, Lease, Template } from "./core.ts";
 import type { ClaimView, RequestRef } from "./claims.ts";
-import type { OpOptions, Req, SpaceLike, Taken } from "./client.ts";
+import type { OpOptions, Req, SpaceLike, Taken, ChainOptions, ChainPage } from "./client.ts";
 import { MailboxEpochMismatch, InvalidAck, type MailboxPage } from "./mailbox.ts";
 import { performance } from "node:perf_hooks";
 
@@ -379,6 +379,10 @@ export class RemoteSpace implements SpaceLike {
 		return await this.mutate("ack", { mailboxEpoch, upTo }, o) as unknown as { mailboxEpoch: string; acked: number };
 	}
 
+	async readChain(tmpl: Template, o: ChainOptions = {}): Promise<ChainPage> {
+		if (!(await this.info()).features.includes("read.chain")) throw new UnsupportedOperation("server does not support linked-entry pages");
+		return await this.send({ method: "readAll", args: { template: tmpl as Json, chain: core.plain(o) as Json } }) as unknown as ChainPage;
+	}
 	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; token?: string; txn?: string | null } = {}): Promise<core.Page> {
 		await this.info();
 		const args = { template: tmpl as unknown as Json, ...(o.maxBytes === undefined ? {} : { maxBytes: o.maxBytes }), ...(o.token === undefined ? {} : { token: o.token }), cursor: o.after ?? null, txn: o.txn ?? null };

@@ -47,6 +47,7 @@ Ohne `space` verwendet der Client den Default-Space. Ein gesetztes
 | `wait(template, options)` | `waiterId` | Parkt Read/Take für Conversation- oder Consumer-Zustellung. |
 | `readAll(template?, options?)` | `EntryView[]` | Snapshot-Liste, älteste zuerst, alle Treffer, optionales Limit. |
 | `readPage(template?, options?)` | `Page` | Bytebegrenzte Snapshot-Seite; mit `next` fortsetzen. |
+| `readChain(template, options?)` | `ChainPage` | Optionale `SpaceLike`-Fähigkeit: bis zu 512 verkettete Entries aus einem unveränderlichen Snapshot, ohne Commit. `head`-Template oder `cursor`, `nextField`, `limit`, `maxBytes`; `next` ist die erste nicht konsumierte Entry-ID. Remote als `readAll`-Variante mit Feature `read.chain`; dieselben Rollen-/Typrechte gelten auch für den Head. |
 | `changes(afterRev, options?)` | `Changes` | Sichtbare Commit-Batches nach einer Revision. |
 | `count(template?, txn?)` | `number` | Sichtbare Treffer ohne Commit oder Warten. |
 | `stats()` | `SpaceStats` | Punkt-in-Zeit-Gauges einschließlich Byte-Aufteilung. |
@@ -58,7 +59,12 @@ Ohne `space` verwendet der Client den Default-Space. Ein gesetztes
 | `resolveOperation(request, method, argumentHash, primaryEpoch)` | `AdmissionResolution` | Prüft bekannte Claim-Bindungen oder erlaubt bei gültiger Generation derselben Epoche ausschließlich Retry derselben ID. |
 | `events(principal, options?)` / `ack(principal, epoch, upTo, options?)` | Mailbox-Seite / ACK-Stand | Eigene Consumer-Mailbox, Präfix-ACK ist kein Txn-Commit. |
 | `setCompletionProfiles(profiles)` | `void` | Nur Host-Code; Ergebnisvertrag vor Arbeit installieren. Das erneute Setzen identischer Profile ist ein No-op, auch bei laufenden Transaktionen. |
-| `setLimits(partialLimits)` | `Limits` | Nur Host-Code: setzt Grenzen dieses Space. |
+| `setLimits(partialLimits)` | `Limits` | Nur Host-Code: setzt Grenzen dieses Space. Ein kleineres `maxEventBytes` wird abgelehnt (`ResourceExhausted`), solange eine bestehende Registrierung oder ein Wait damit ein zu großes Event erzeugen könnte. |
+
+Standardmäßig gibt es keine Entry-Anzahlquote pro Space oder Owner: `maxEntries` und
+`maxEntriesPerOwner` stehen auf `FOREVER` (`Number.MAX_SAFE_INTEGER`, JSON-sicher).
+Mit `setLimits` ausdrücklich gespeicherte Anzahlquoten bleiben wirksam; ein Update entfernt
+keine individuell gesetzte Quota. Byte-, Commit-, Frame- und Dokumentbudgets gelten weiterhin.
 
 `read`/`take` akzeptieren zusätzlich `OpOptions`: `txn`, eine absolute
 `deadline`, eine durable `request` und lokal einen `once`-Hook. Eine Request-ID
@@ -138,6 +144,11 @@ Eine vom Client geschickte Identität überschreibt den vertrauenswürdigen Conn
 
 Der Dienst authentisiert über `IdentityAdapter`, nicht über vom Client
 übermittelte Principals. `Policy` beschränkt Methoden und Entry-Typen je Rolle.
+Ein Typ-Grant gilt auch für Subtypen: Ein Write ist erlaubt, sobald der Typ oder einer der
+deklarierten Supertypen freigegeben ist. Da der Schreibende die Supertypen selbst angibt, kann eine
+Rolle mit Grant auf `Job` auch `{ type: "X", types: ["Job"] }` schreiben. Typ-Grants sind damit
+keine Integritätsgrenze für Subtypen; wer einem Typ vertrauen muss, braucht eine Federation-Typ-Policy
+mit festen Supertypen oder eigene Prüfungen der Felder.
 `StaticIdentity` ist ein lokaler Konfigurations-/Testadapter. TCP allein bietet keine
 Föderationsauthentisierung; die verbindungsgebundene Overlay-/Challenge-Schicht
 bleibt offen.
@@ -150,7 +161,8 @@ und `ResourceExhausted` beschreiben lokale Semantik bzw. Budgetverletzungen.
 Der Dienst serialisiert sie als Fehlercodes; der Remote-Client rekonstruiert
 bekannte Fehlerklassen als `RemoteError` oder die spezielle lokale Klasse.
 Ein maximaler Client-Wartezeitraum löst `OutcomeUnknown` aus, lässt die
-Host-Operation aber weiterlaufen.
+Host-Operation aber weiterlaufen. Nicht klassifizierte Fehler kommen als `Internal` mit der festen Meldung
+`internal error` an; den eigentlichen Fehler protokolliert nur der Host (`console.error`).
 
 Die API garantiert keine FIFO-Auswahl und keine Exactly-once-Ausführung
 außerhalb atomarer Space-Mutationen. Anwendungen müssen externe Effekte über
@@ -209,7 +221,9 @@ Konfiguration und SSH-Endpunkte sind in [ap1b-betrieb.md](ap1b-betrieb.md) erkl�
   `SocketRecoveryRegister` und `SshRecoveryRegister` erlauben Member-Lesezugriff.
 - `serveRecovery({ path, hostId, operator, supervisor?, handle })` verlangt
   signierte, zeitlich begrenzte Anfragen für das festgelegte Host-Ziel.
-  `RecoveryClient.call(method, args, requestId?)` sendet diese Anfragen.
+  `RecoveryClient.call(method, args, requestId?)` sendet diese Anfragen. Ein exakt wiederholter signierter
+  Call bekommt innerhalb seines Gültigkeitsfensters die erste Antwort, ohne dass der Handler erneut läuft;
+  ein neu signierter Call mit derselben `requestId` wird normal ausgeführt.
 - `RecoveryController.submit(request)`, `advance(recoveryId)`,
   `status(recoveryId)` und `release({ commandId, recoveryId, scope })`
   bilden einen journalisierten Data-Restore. `dataRecoveryHandler(controller)`
@@ -576,6 +590,10 @@ Konfigurationswechsel sind Einträge der Kette (`applyConfigTransition`,
 `NetcupFencing` (mit `NetcupScp`, `fileTokenProvider`, `fileFenceState`) ist der
 netcup-Adapter; `serveFencing` bietet einen Adapter per mTLS nur für
 Operator-Zertifikate an, `TlsFencing` ist der passende Client. Fehler: `NetcupError`.
+`ContainerFencing.release` bricht ab, wenn die Unit noch ein anderes `zz-*-fenced.conf`-Drop-in trägt
+(etwa von einer früheren Version); es wird nicht automatisch entfernt.
+Ohne gespeicherten Fence-Zustand (Autostart bzw. Restart-Policy) brechen `NetcupFencing.release` und
+`ContainerFencing.release` ab, statt einen Wert zu raten.
 
 `PrimarySyncJournal.beginTransition`, `openTransitionIds` und `abandonTransition` steuern die Schreibsperre
 während eines Übergangs. `installBootGuard(..., { replicaConfig })` bindet primary/sync-Spaces an die

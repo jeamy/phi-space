@@ -3,10 +3,9 @@ import {ProfileTransitions} from './profile-transition-doc.ts';
 import {validateProfileOnlyChange} from './profile-policy.ts';
 import type {Context} from '@earendil-works/chord';
 import {defineDocFamily} from '@earendil-works/pi-durable';
-import {createHash} from 'node:crypto';
 
 import type {Algorithm, Signer} from './auth.ts';
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import * as core from './core.ts';
 import type {Json} from './core.ts';
@@ -31,7 +30,8 @@ import {
 import {snapshotSpace, spaceDoc} from './spaces.ts';
 
 const copy = core.plain;
-const hash = (v: unknown) => createHash('sha256').update(canonicalJson(v as Json)).digest('hex');
+const hash = (v: unknown) => digestJson(v as Json);
+const policyPushId = (id: string, version: number) => 'policy.' + hash([ id, version ]).slice(0, 48);
 export type MembershipInstruction = {
     id: string; authorityId : string; memberId : string; spaceId : string;
     action : 'prepareAdd' | 'activate' | 'drain' | 'freeze' | 'detach' | 'policy' | 'rejectAdd' | 'profileFreeze' | 'profileInstall' | 'profileResume';
@@ -82,7 +82,7 @@ const MemberTransitions = defineDocFamily<{
                                               }>
 },
                                           null>({
-    kind : 'pi-spaces.member-transitions',
+    kind : 'phi-spaces.member-transitions',
     version : 1,
     scope : 'session',
     family : true,
@@ -310,7 +310,7 @@ type MembershipOperation = {
 };
 export const MembershipJournal =
     defineDocFamily<{operations : Record<string, MembershipOperation>}, null>({
-        kind : 'pi-spaces.membership-journal',
+        kind : 'phi-spaces.membership-journal',
         version : 1,
         scope : 'session',
         family : true,
@@ -365,6 +365,16 @@ export class MembershipController {
             p.spaceId !== q.spaceId || p.action !== action)
             throw new RoutingConflict('Member proof binding mismatch');
         return p;
+    }
+    private async currentPolicy(op: MembershipOperation) {
+        const current =
+                  await this.o.host.snapshot(FederationRouting, this.o.controlSpaceId, this.o.ctx),
+              latest = current?.policy;
+        if (!latest || latest.authorityId !== this.o.authorityId ||
+            latest.policyVersion < op.policy!.policyVersion)
+            throw new RoutingConflict(
+                'installed policy is older than the committed membership policy');
+        return {current : current!, latest};
     }
     async execute(id: string, kind: MembershipOperation['kind'], member: FederationMember,
                   newDefault?: string) {
@@ -496,10 +506,14 @@ export class MembershipController {
                     j.operations[id] = copy(op);
                 }, this.o.ctx);
             }
+            const {current, latest} = await this.currentPolicy(op),
+                  pushId = policyPushId(id, latest.policyVersion);
             await this.call(id, op, 'activate', op.policy);
-            for (const existing of Object.values(state.members))
+            for (const existing of Object.values(current.members))
                 if (existing.id !== member.id && [ 'active', 'draining' ].includes(existing.state))
-                    await this.call(id, {...op, member : existing}, 'policy', op.policy);
+                    await this.call(pushId, {...op, member : existing}, 'policy', latest);
+            if (latest.policyVersion > op.policy!.policyVersion)
+                await this.call(pushId, op, 'policy', latest);
             await this.o.host.commit(async tx => {
                 await this.o.assertAuthority();
                 const d = await tx.doc(FederationRouting, this.o.controlSpaceId, null);
@@ -568,9 +582,11 @@ export class MembershipController {
                         copy(op);
                 }, this.o.ctx);
             }
-            for (const existing of Object.values(state.members))
+            const {current, latest} = await this.currentPolicy(op),
+                  pushId = policyPushId(id, latest.policyVersion);
+            for (const existing of Object.values(current.members))
                 if (existing.id !== member.id && [ 'active', 'draining' ].includes(existing.state))
-                    await this.call(id, {...op, member : existing}, 'policy', op.policy);
+                    await this.call(pushId, {...op, member : existing}, 'policy', latest);
             await this.call(id, op, 'detach');
             op.phase = 'completed';
             await save();

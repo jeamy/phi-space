@@ -1,7 +1,7 @@
 # Remote test bed
 
 Verifies the **built, production-like artifact** in docker containers on a server instead of on the developer machine. No
-source code goes to the server. `testbed.sh` builds the artifacts locally (the `pi-spaces.mjs` bundle, compiled examples and
+source code goes to the server. `testbed.sh` builds the artifacts locally (the `phi-spaces.mjs` bundle, compiled examples and
 scenarios, byte-identical to what the mobile runtime gets), ships only those over ssh, builds an image from them there
 (Node, `npm ci --omit=dev`, the artifacts; unprivileged user, `NODE_ENV=production`, read-only root filesystem, no
 capabilities) and reconciles/starts the containers (Compose may recreate running containers when their image or configuration changes).

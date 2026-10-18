@@ -19,11 +19,11 @@ Sobald Web-Server, Worker und Subagenten in getrennten Prozessen oder auf versch
 
 ### Authentisierung über IdentityAdapter und Policy {#identity-and-policy}
 
-`SpaceService` vertraut niemals einer vom Client im JSON-Body mitgesendeten Identität. Stattdessen bestimmt der `IdentityAdapter` (`StaticIdentity` lokal oder `GateIdentity` über NetBird/Schicht B) aus dem `Connection`-Kontext den `Principal` und seine Rollen (`admin`, `host`, `member`, `observer`). Die `Policy` prüft vor jeder Operation sowohl die erlaubte Methode als auch die erlaubten Entry-Typen.
+`SpaceService` vertraut niemals einer vom Client im JSON-Body mitgesendeten Identität. Stattdessen bestimmt der `IdentityAdapter` (`StaticIdentity` lokal oder `GateIdentity` über NetBird/Schicht B) aus dem `Connection`-Kontext den `Principal` und seine Rollen (`admin`, `host`, `member`, `observer`). Die `Policy` prüft vor jeder Operation sowohl die erlaubte Methode als auch die erlaubten Entry-Typen. Ein Typ-Grant gilt auch für Subtypen: Ein Write ist erlaubt, sobald der Typ oder einer der deklarierten Supertypen freigegeben ist. Weil der Schreibende die Supertypen selbst angibt, kann eine Rolle mit Grant auf `Job` auch `{ type: "X", types: ["Job"] }` schreiben; Typ-Grants sind daher keine Integritätsgrenze für Subtypen. Federation-Members erzwingen dagegen die in der Typ-Policy deklarierten Supertypen.
 
 ### Stabile Retries und OutcomeUnknown in RemoteSpace {#remote-retries}
 
-Vor der ersten Mutation ruft `RemoteSpace` automatisch `hello` und `generation` auf und vergibt für jeden schreibenden Aufruf eine stabile `requestId`. Geht auf dem Socket/TCP-Transport eine Antwort verloren, wiederholt `RemoteSpace` denselben Aufruf mit **unveränderter `requestId`**. Läuft `maxClientWaitMs` ab, wirft der Client `OutcomeUnknown`, während die Operation am Host weiterläuft und über `pollOperation` aufgelöst werden kann.
+Vor der ersten Mutation ruft `RemoteSpace` automatisch `hello` und `generation` auf und vergibt für jeden schreibenden Aufruf eine stabile `requestId`. Geht auf dem Socket/TCP-Transport eine Antwort verloren, wiederholt `RemoteSpace` denselben Aufruf mit **unveränderter `requestId`**. Läuft `maxClientWaitMs` ab, wirft der Client `OutcomeUnknown`, während die Operation am Host weiterläuft und über `pollOperation` aufgelöst werden kann. Nicht klassifizierte Hostfehler kommen als Code `Internal` mit der festen Meldung `internal error` an; den eigentlichen Fehler protokolliert nur der Host.
 
 ## Siehe auch {#see-also}
 

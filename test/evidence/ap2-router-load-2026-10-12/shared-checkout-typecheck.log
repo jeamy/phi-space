@@ -1,5 +1,5 @@
 
-> pi-spaces@0.0.1 typecheck
+> phi-spaces@0.0.1 typecheck
 > tsc
 
 src/dashboard.ts(23,32): error TS2459: Module '"./spaces.ts"' declares 'Space' locally, but it is not exported.

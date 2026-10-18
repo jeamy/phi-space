@@ -4,7 +4,7 @@ import { mkdirSync, lstatSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Algorithm, Signer } from "./auth.ts";
 import { verifyDetached } from "./grants.ts";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import { serveSpace, socketTransport, type SocketTransport } from "./socket.ts";
 import type { Json } from "./core.ts";
 import { RecoveryBlocked } from "./recovery.ts";
@@ -19,6 +19,10 @@ export async function serveRecovery(o: { path: string; hostId: string; operator:
 	mkdirSync(dirname(o.path), { recursive: true, mode: 0o700 });
 	const parent = lstatSync(dirname(o.path));
 	if (!parent.isDirectory() || parent.isSymbolicLink() || (parent.mode & 0o077) !== 0) throw new Error("recovery socket directory must be private");
+	// A replayed envelope (the same signed call within its validity window) gets the first reply: the handler, with its
+	// fencing, snapshot loads and external CAS, runs once. A retry signs a new call and is judged on its own. Only verified
+	// calls are remembered, so unsigned traffic cannot fill the table.
+	const replies = new Map<string, { expiresAt: number; reply: Promise<Json> }>();
 	return serveSpace({ async handleText(text) {
 		try {
 			const signed = JSON.parse(text) as SignedRecoveryCall, c = signed.call, now = (o.now ?? Date.now)();
@@ -28,7 +32,15 @@ export async function serveRecovery(o: { path: string; hostId: string; operator:
 			else if (o.supervisor && SUPERVISOR.has(c.method)) { const key = await o.supervisor(); if (signed.algorithm === key.algorithm && verifyDetached(key.algorithm, key.publicKey, recoveryBytes(c), signed.signature)) role = "supervisor"; }
 			if (!role && o.hostKey && c.method === "controlAck") { const key = await o.hostKey(c); if (key && signed.algorithm === key.algorithm && verifyDetached(key.algorithm, key.publicKey, recoveryBytes(c), signed.signature)) role = "host"; }
 			if (!role) throw new RecoveryBlocked("recovery signature or method is not authorized");
-			return JSON.stringify({ ok: true, result: await o.handle(c, role) });
+			for (const [k, v] of replies) if (v.expiresAt <= now) replies.delete(k);
+			const key = digestJson([signed.algorithm, signed.signature, c as unknown as Json]);
+			let entry = replies.get(key);
+			if (!entry) {
+				if (replies.size >= 4096) throw new RecoveryBlocked("too many recovery calls in the validity window");
+				entry = { expiresAt: c.expiresAt, reply: o.handle(c, role) };
+				replies.set(key, entry);
+			}
+			return JSON.stringify({ ok: true, result: await entry.reply });
 		} catch (e) { return JSON.stringify({ ok: false, error: { code: e instanceof RegisterConflict ? "RequestConflict" : "PermissionDenied", message: e instanceof Error ? e.message : String(e) } }); }
 	} }, { listen: { path: o.path }, maxFrameBytes: 256 * 1024, maxConnections: 8, maxInflightPerConnection: 4 });
 }

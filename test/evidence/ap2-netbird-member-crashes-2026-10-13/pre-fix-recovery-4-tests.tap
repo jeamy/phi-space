@@ -6,7 +6,7 @@ not ok 1 - jsonl: transport loss preparing a child retains the admitted Parent f
   ---
   duration_ms: 96.585032
   type: 'test'
-  location: '/media/data/programming/pi-spaces/test-federated-space.test.ts:393:2'
+  location: '/media/data/programming/phi-spaces/test-federated-space.test.ts:393:2'
   failureType: 'testCodeFailure'
   error: |-
     The validation function is expected to return "true". Received false
@@ -17,8 +17,8 @@ not ok 1 - jsonl: transport loss preparing a child retains the admitted Parent f
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   stack: |-
-    async file:///media/data/programming/pi-spaces/test-federated-space.test.ts:396:3
-    async fixture (file:///media/data/programming/pi-spaces/test-federated-space.test.ts:121:9)
+    async file:///media/data/programming/phi-spaces/test-federated-space.test.ts:396:3
+    async fixture (file:///media/data/programming/phi-spaces/test-federated-space.test.ts:121:9)
     async Test.run (node:internal/test_runner/test:1054:7)
     async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
   ...
@@ -33,7 +33,7 @@ not ok 3 - sqlite: transport loss preparing a child retains the admitted Parent 
   ---
   duration_ms: 30.058621
   type: 'test'
-  location: '/media/data/programming/pi-spaces/test-federated-space.test.ts:393:2'
+  location: '/media/data/programming/phi-spaces/test-federated-space.test.ts:393:2'
   failureType: 'testCodeFailure'
   error: |-
     The validation function is expected to return "true". Received false
@@ -44,8 +44,8 @@ not ok 3 - sqlite: transport loss preparing a child retains the admitted Parent 
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   stack: |-
-    async file:///media/data/programming/pi-spaces/test-federated-space.test.ts:396:3
-    async fixture (file:///media/data/programming/pi-spaces/test-federated-space.test.ts:121:9)
+    async file:///media/data/programming/phi-spaces/test-federated-space.test.ts:396:3
+    async fixture (file:///media/data/programming/phi-spaces/test-federated-space.test.ts:121:9)
     async Test.run (node:internal/test_runner/test:1054:7)
     async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...

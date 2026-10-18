@@ -5,9 +5,8 @@
 // do not add CPU parallelism. Status travels back as `metrics.workers` of the host's Capability heartbeat.
 import type { Context } from "@earendil-works/chord";
 import { defineDoc } from "@earendil-works/pi-durable";
-import { createHash } from "node:crypto";
 import type { Algorithm, Signer } from "./auth.ts";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import { PhiSpaces, type SpaceHost, type SpaceLike } from "./client.ts";
 import { verifyDetached } from "./grants.ts";
 import { listSpaces } from "./spaces.ts";
@@ -21,14 +20,14 @@ export type WorkerPin = { issuer: string; algorithm: Algorithm; publicKey: strin
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/;
 const MAX_COUNT = 64, MAX_PER_HOST = 32, MAX_ASSIGNMENTS = 1024, MAX_COMMANDS = 1024;
 const bytes = (v: WorkerList) => Buffer.from("phi-spaces/worker-assignments/v1\n" + canonicalJson(v as unknown as core.Json));
-const hashOf = (v: unknown) => createHash("sha256").update(canonicalJson(v as core.Json)).digest("hex");
+const hashOf = digestJson;
 export function verifyWorkers(t: SignedWorkers, pin: WorkerPin): WorkerList {
 	if (!t || typeof t !== "object" || t.issuer !== pin.issuer || t.algorithm !== pin.algorithm || typeof t.signature !== "string" || !verifyDetached(pin.algorithm, pin.publicKey, bytes(t.value), t.signature)) throw new core.PermissionError("invalid worker assignment signature");
 	return core.plain(t.value);
 }
 
 export const WorkerJournal = defineDoc<{ generation: number; assignments: Record<string, WorkerSpec>; commands: Record<string, { hash: string; generation: number }> }>({
-	kind: "pi-spaces.worker-assignments", version: 1, scope: "session", initial: () => ({ generation: 0, assignments: {}, commands: {} }),
+	kind: "phi-spaces.worker-assignments", version: 1, scope: "session", initial: () => ({ generation: 0, assignments: {}, commands: {} }),
 });
 
 /** Control side: the desired worker state. `setWorkers` admin commands land here; hosts read their signed share. */
@@ -87,7 +86,7 @@ export type WorkerKind = { step(ctx: { space: SpaceLike; spaceId: string; runId?
 type Loop = { ctrl: AbortController; done: Promise<void> };
 type Running = { spec: WorkerSpec; loops: Loop[]; stopping: Loop[]; tasks: number; errors: number; lastError?: string };
 const WorkerState = defineDoc<{ authorityId: string | null; incarnation: string | null; generation: number; assignments: WorkerSpec[] }>({
-	kind: "pi-spaces.worker-supervisor", version: 1, scope: "session", initial: () => ({ authorityId: null, incarnation: null, generation: 0, assignments: [] }),
+	kind: "phi-spaces.worker-supervisor", version: 1, scope: "session", initial: () => ({ authorityId: null, incarnation: null, generation: 0, assignments: [] }),
 });
 export const abortableSleep = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
 	if (signal.aborted) return resolve();

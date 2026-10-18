@@ -2,6 +2,10 @@
 
 [English](README.md) · [Deutsch](README_DE.md)
 
+> Upgrade warning: the complete namespace change includes persistent `phi-spaces.*` document kinds.
+> Do not run this version against an existing store without a verified offline migration and recovery copy.
+> This change does not automatically migrate stored documents. See the [namespace report](../docs/namensumstellung-2026-10-18.md).
+
 This directory contains the runnable Node.js/React help system, **PHI-SPACES / HELP**: bilingual documentation,
 the six-stage Multiplayer Space-Chat workbench, the Social Swarm feed, and authenticated Web Admin.
 
@@ -233,7 +237,7 @@ HTTP latency need deployment-specific measurements. Local suites are not browser
 ### Local verification note, 2026-10-18
 
 Both TypeScript checks passed. The root suite passed 740 tests with one optional bootstrap-copy test skipped;
-the serial example suite passed 158/158. The full help suite now exits cleanly: 44 passed, with the separately
+the serial example suite passed 158/158. The full help suite now exits cleanly: 45 passed, with the separately
 tested SSR case skipped. A fresh production build and its SSR test passed (1/1). The shutdown race was fixed:
 closing during initialization cancels history work and cannot install background timers afterward. Tests explicitly
 disable models and operator-configured remote shards before importing the server.

@@ -17,7 +17,7 @@ import { WebAdminController, WebAdminState } from "../server/admin/admin-control
 import { SpaceChatHub } from "../server/space-chat/stage-runner.ts";
 import { dispatchChatCommand } from "../server/space-chat/commands.ts";
 import { upgradeWebSocket } from "../server/ws.ts";
-import { appendHistory, initializeHistory, mergedHistory } from "../server/social/history.ts";
+import { appendHistory, initializeHistory, mergedHistory, historyPage } from "../server/social/history.ts";
 import type { SwarmPost } from "../server/social/swarm.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 import { startArticleLoad } from "../client/lib/article-load.ts";
@@ -227,6 +227,20 @@ test("F17: real masked frames queue early input and enforce protocol and fragmen
 });
 
 function post(n: number): SwarmPost { return { postId: "p" + n, seq: n, taskId: "t" + n, author: "a", handle: "a", name: "A", hue: 1, channel: "test", text: "post " + n, replyTo: null, replyToHandle: null, at: n, likes: 0, replies: 0, imageSeed: null, imageAlt: null, imageUrl: null }; }
+test("history deadlines stop abandoned traversals before another shard read", async () => {
+	const h = await memory();
+	try {
+		const space = new PhiSpaces(h, ctx), stop = new AbortController();
+		let reads = 0, finish!: (value: any) => void;
+		space.readChain = async () => { reads++; return new Promise(resolve => { finish = resolve; }); };
+		const pending = historyPage(space, { beforeAt: Infinity, beforeId: "", limit: 100, signal: stop.signal });
+		const rejected = assert.rejects(pending, /deadline/);
+		stop.abort(new Error("deadline")); await rejected;
+		finish({ items: [], next: "another-node", ready: true });
+		await new Promise(resolve => setImmediate(resolve));
+		assert.equal(reads, 1);
+	} finally { await h.close(ctx); }
+});
 test("F14/F15: indexed pages merge shards without omissions; shard failure preserves retry", async () => {
 	const h = await memory(), other = await memory();
 	try {
@@ -239,9 +253,9 @@ test("F14/F15: indexed pages merge shards without omissions; shard failure prese
 		let cursors: string[] | undefined; const ids: string[] = [];
 		for (let i = 0; i < 10; i++) { const page = await mergedHistory(sources, { cursors, beforeAt: Infinity, beforeId: "", limit: 7 }); ids.push(...page.posts.map(p => p.postId)); cursors = page.cursors; if (page.exhausted) break; }
 		assert.equal(ids.length, 30); assert.equal(new Set(ids).size, 30); assert.equal(ids[0], "p30");
-		const read = sources[1]!.read.bind(sources[1]); sources[1]!.read = async () => { throw new Error("shard unavailable"); };
+		const read = sources[1]!.readChain.bind(sources[1]); sources[1]!.readChain = async () => { throw new Error("shard unavailable"); };
 		await assert.rejects(mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 7 }), /unavailable/);
-		sources[1]!.read = read;
+		sources[1]!.readChain = read;
 		assert.equal((await mergedHistory(sources, { beforeAt: Infinity, beforeId: "", limit: 7 })).posts[0]!.postId, "p30");
 	} finally { await h.close(ctx); await other.close(ctx); }
 });

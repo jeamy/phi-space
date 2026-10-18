@@ -14,7 +14,7 @@ for(const backend of BACKENDS){
  test(`${backend}: version-one entry history migrates without changing IDs, HLC or existing entries`,async()=>{
   const homes=[new PersistentHome(backend),new PersistentHome(backend)];let hosts=await Promise.all(homes.map(h=>h.open()));
   const node=(i:number)=>new EntryReplicationController({host:hosts[i]!,ctx,config:cfg('a'),authorize:async()=>{},assertActive:async()=>{},now:()=>1000,clockUncertaintyMs:()=>0});
-  const Legacy=defineDocFamily<import('../src/entry-replication.ts').EntryReplicationState,null>({kind:'pi-spaces.entry-replica',version:1,scope:'session',family:true,initial:()=>({config:null,configHash:'',clock:{physical:0,logical:0},seq:0,lastWallTime:0,events:[]})});
+  const Legacy=defineDocFamily<import('../src/entry-replication.ts').EntryReplicationState,null>({kind:'phi-spaces.entry-replica',version:1,scope:'session',family:true,initial:()=>({config:null,configHash:'',clock:{physical:0,logical:0},seq:0,lastWallTime:0,events:[]})});
   try{
    const event=await node(0).mutate('legacy',fact(1));const old=JSON.parse(JSON.stringify(await hosts[0]!.snapshot(EntryReplicas,node(0).documentKey,ctx)));delete old.segments;
    await hosts[1]!.commit(async tx=>{Object.assign(await tx.doc(Legacy,node(1).documentKey,null),old);},ctx);

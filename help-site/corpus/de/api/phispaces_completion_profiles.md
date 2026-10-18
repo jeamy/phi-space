@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Nur administrativer Host-Code (ohne gesetztes `conversationId`) darf `setCompletionProfiles(profiles)` und `setLimits(partialLimits)` aufrufen. Eine Absenkung von Limits unter bereits bestehende Abschlussverpflichtungen wird vom Space-Kern abgewiesen.
+Nur administrativer Host-Code (ohne gesetztes `conversationId`) darf `setCompletionProfiles(profiles)` und `setLimits(partialLimits)` aufrufen. Eine Absenkung von Limits unter bereits bestehende Abschlussverpflichtungen wird vom Space-Kern abgewiesen; das gilt auch für ein kleineres `maxEventBytes`, solange eine bestehende Registrierung oder ein Wait damit ein zu großes Event erzeugen könnte.
 
 ## Technische Referenz {#technical-reference}
 

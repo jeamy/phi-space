@@ -17,16 +17,17 @@ import {
 } from './routing-semantics.ts';
 import {spaceDoc} from './spaces.ts';
 import {ControlReplicaMarker} from './delegation.ts';
+import { jsonCopy } from './json.ts';
 
 export * from './routing-semantics.ts';
 export const FederationRouting = defineDocFamily<RoutingState, null>({
-    kind : 'pi-spaces.federation-routing',
+    kind : 'phi-spaces.federation-routing',
     version : 1,
     scope : 'session',
     family : true,
     initial : () => ({policy : null, members : {}})
 });
-const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+const copy = jsonCopy;
 export type SignedFederationPolicy = {
     policy: FederationPolicy; issuer : string; algorithm : Algorithm; signature : string
 };

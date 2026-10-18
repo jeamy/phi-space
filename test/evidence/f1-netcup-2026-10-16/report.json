@@ -117,7 +117,7 @@
   },
   {
    "at": "2026-10-16T17:51:30Z",
-   "name": "operator removed stale lock and started pi-spaces-nano",
+   "name": "operator removed stale lock and started phi-spaces-nano",
    "data": {
     "ready": true,
     "gate": "100.89.28.88:7421"

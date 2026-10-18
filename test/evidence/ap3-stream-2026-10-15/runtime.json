@@ -1,6 +1,6 @@
 {
   "tag": "ap3-stream-20261015-b6faaf39",
-  "base": "/home/mux/.local/share/pi-spaces-operations/ap3-stream-20261015-b6faaf39",
+  "base": "/home/mux/.local/share/phi-spaces-operations/ap3-stream-20261015-b6faaf39",
   "image": "95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413",
   "cpus": 2,
   "memoryBytes": 1073741824,
@@ -9,7 +9,7 @@
   "production": true,
   "sourceShipped": false,
   "artifactHashes": {
-    "pi-spaces.mjs": "31990c2e584cf5f944aed488d580226f1ae2f027ac201eaa11f8eb16ee69f2be",
+    "phi-spaces.mjs": "31990c2e584cf5f944aed488d580226f1ae2f027ac201eaa11f8eb16ee69f2be",
     "scenarios/phase3-stream-transfer.mjs": "825d6ba74bffb96bfc88bdc6d500f916479eebafebf9fa1a234b21fd3fda0856"
   }
 }

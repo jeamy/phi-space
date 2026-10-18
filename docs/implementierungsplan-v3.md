@@ -3,7 +3,7 @@
 Stand: 2026-10-16. Setzt [federation-plan-v3.md](federation-plan-v3.md) (Vertrag) und
 [betrieb-und-mobile-steuerung.md](betrieb-und-mobile-steuerung.md) (Betriebserweiterung) in
 Arbeitspakete um. Grundlage ist der [Implementierungsstand](implementierungsstand.md): Der Default-Space bleibt das
-session-scoped Dokument `pi-spaces.space` v5; weitere Spaces liegen in der Familie `pi-spaces.named-space`.
+session-scoped Dokument `phi-spaces.space` v5; weitere Spaces liegen in der Familie `phi-spaces.named-space`.
 `src/spaces.ts` stellt Registry/Identitäten bereit, `src/claims.ts` lokale Claims. Der erreichte Umfang und die
 noch offenen Teile stehen in Abschnitt 7; kein einzelnes lokales Paket ersetzt eine vollständige Stufenabnahme.
 
@@ -90,7 +90,7 @@ Reihenfolge innerhalb der Phase entlang der Abhängigkeiten:
 
 | AP | Inhalt | Module | Größe |
 |---|---|---|---|
-| 1.1 | **Doc-Version 5 und benannte Spaces:** Der bisherige Singleton `pi-spaces.space` bleibt der Default-Space; weitere Spaces liegen in `defineDocFamily` mit der eigenen `kind` `pi-spaces.named-space` und Schlüssel `spaceId`. Registry-Dokument `pi-spaces.registry` für `hostId` und Alias → `spaceId`. Migration 4 → 5 erhält den Default-Bestand; bei der Registrierung entstehen seine **erzeugte** `spaceId` und Alias `default`. Keine Umdeutung des Singletons zur Familie und keine Kopiermigration (Entscheidung aus AP 0.3). | `doc.ts`, `core.migrate`, `client.ts` | M |
+| 1.1 | **Doc-Version 5 und benannte Spaces:** Der bisherige Singleton `phi-spaces.space` bleibt der Default-Space; weitere Spaces liegen in `defineDocFamily` mit der eigenen `kind` `phi-spaces.named-space` und Schlüssel `spaceId`. Registry-Dokument `phi-spaces.registry` für `hostId` und Alias → `spaceId`. Migration 4 → 5 erhält den Default-Bestand; bei der Registrierung entstehen seine **erzeugte** `spaceId` und Alias `default`. Keine Umdeutung des Singletons zur Familie und keine Kopiermigration (Entscheidung aus AP 0.3). | `doc.ts`, `core.migrate`, `client.ts` | M |
 | 1.2 | **Identitäten:** `hostId`, `spaceId`, Dateninkarnation; lokale IDs = Inkarnation + Zähler; `gid = spaceId/localId`; `view()` liefert `gid`. | `core.ts` | S |
 | 1.3 | **Revision und Änderungsstrom:** Revision pro Commit; begrenzter, persistenter Batch-Log je Space; `changes(afterRev, maxBytes)` lokal; Snapshot-Token mit Revision R und begrenzter Vorhaltung (`SnapshotExpired`). | neues `src/stream.ts` | L |
 | 1.4 | **Budgets und Seiten:** `maxCommitBytes`, `maxEventBytes`; Reservierung für Commit **und** Abort vor jeder Txn-Erweiterung (v3 4.2); bytebegrenzte Seiten für `readAll`, Snapshot, `events`, `changes` mit Cursor ohne Lücken/Dubletten; bei zu kleinem Budget `ResponseBudgetTooSmall {requiredBytes}` ohne Cursor-/ACK-Fortschritt (v3 6.2 „Seitengrößen“). Ersetzt `MAX_LIST` ohne Cursor (L13). | `core.ts`, `stream.ts` | M |

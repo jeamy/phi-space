@@ -11,7 +11,7 @@ export type SieveConfig = { runId: string; start: number; end: number; blockSize
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
 export type SieveResult = { runId: string; taskId: string; rangeStart: number; rangeEnd: number; primes: number[] };
 const Runs = defineDoc<{ configs: SieveConfig[]; seeds?: Record<string, { spaceId: string; next: number }> }>({
-  kind: "pi-spaces.example-sieve-runs", version: 1, scope: "session", initial: () => ({ configs: [] })
+  kind: "phi-spaces.example-sieve-runs", version: 1, scope: "session", initial: () => ({ configs: [] })
 });
 
 function validate(config: SieveConfig): void {

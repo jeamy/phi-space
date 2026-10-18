@@ -1,8 +1,7 @@
 // Check every implemented Root journal in the same Control transaction as removal.
 import type {Tx} from '@earendil-works/pi-durable';
-import {createHash} from 'node:crypto';
 
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import {FederationJournalLayout,parentJournalKey,validateJournalPartitions} from './federation-journals.ts';
 import {FederationOperations} from './federated-space.ts';
 import {RouterCommands, RouterJournal} from './router.ts';
@@ -21,7 +20,7 @@ export async function memberReferencesIn(
     for (const [id, ref] of Object.entries(index.refs)) {
         if ([ 'completed', 'failed' ].includes(ref.state) || ref.released)
             continue;
-        const key = createHash('sha256').update(canonicalJson([ routerId, id ])).digest('hex'),
+        const key = digestJson([ routerId, id ]),
               command = (await tx.doc(RouterCommands, key, null)).command;
         if (!command)
             throw new Error('incomplete Router reference reconstruction');

@@ -25,7 +25,7 @@ const resultTasks: Record<string, string> = {
   QueryResponse: "UserQuery"
 };
 const Validation = defineDoc<{ checked: boolean }>({
-  kind: "pi-spaces.research-validation", version: 1, scope: "task", initial: () => ({ checked: false })
+  kind: "phi-spaces.research-validation", version: 1, scope: "task", initial: () => ({ checked: false })
 });
 
 export const researchSpaces = defineExtension({

@@ -2,6 +2,8 @@ import {assertMemberAdmission,permitRoutedWrite} from "./member-admission.ts";
 // The local phi-spaces client over the Session-scoped Space document. Host code, tasks and tools all use this.
 // Everything here runs against one harness: the harness process is the "space service".
 import type { DecisionAuthorization } from "./service.ts";
+import { readChain as chainPage, type ChainOptions, type ChainPage } from "./read-chain.ts";
+export type { ChainOptions, ChainPage } from "./read-chain.ts";
 import type { Session, Tx } from "@earendil-works/pi-durable";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Context } from "@earendil-works/chord";
@@ -48,6 +50,8 @@ export const WAKE_DEBOUNCE_MS = 20;
 
 /** What tools and federated/remote implementations share. `PhiSpaces` is the local one. */
 export interface SpaceLike {
+	/** Optional byte-bounded linked-entry read; one immutable snapshot, no commit. */
+	readChain?(tmpl: Template, options?: ChainOptions): Promise<ChainPage>;
 	write(entry: EntryDraft, txn?: string | null, lease?: number, o?: Req): Promise<Lease>;
 	read(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
 	readIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
@@ -230,6 +234,9 @@ export class PhiSpaces implements SpaceLike {
 		const out = s ? core.list(s, this.now(), tmpl, o.txn ?? null, o.limit, this.as) : [];
 		this.meter.inc("reads");
 		return out;
+	}
+	async readChain(tmpl: Template, options: ChainOptions = {}): Promise<ChainPage> {
+		return chainPage((await this.snap()) ?? core.initialState(), this.now(), tmpl, options, this.as);
 	}
 	/** Like `readAll`, one page limited by encoded bytes (core.listPage). Pass `next` of a page as `after` to continue. */
 	async readPage(tmpl: Template = null, o: SnapshotPageOptions = {}): Promise<core.Page> {

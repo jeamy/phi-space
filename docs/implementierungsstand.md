@@ -22,9 +22,14 @@ abgeschlossene lokale Korrekturen von weiterhin offenen Deployment-/Last-/Ausfal
 
 ## Umfang und Grenzen
 
+Die [vollständige Namensumstellung](namensumstellung-2026-10-18.md) umfasst jetzt auch alle
+persistenten `phi-spaces.*`-Dokumenttypen und das Bundle `phi-spaces.mjs`. Das ist ein
+inkompatibler Namespace-/Integrationswechsel, keine automatische Migration vorhandener Stores.
+Produktive Altbestände und externe Mobile-Verbraucher wurden in diesem Repository-Lauf nicht umgestellt.
+
 Ein Space ist ein persistentes Dokument im `@earendil-works/pi-durable`-Harness.
-Der Default-Space (`pi-spaces.space`) und benannte Spaces
-(`pi-spaces.named-space`) haben Dokumentversion 5. Eine Registry ordnet Aliase
+Der Default-Space (`phi-spaces.space`) und benannte Spaces
+(`phi-spaces.named-space`) haben Dokumentversion 5. Eine Registry ordnet Aliase
 unveränderlichen `spaceId`s zu; Entry-Views tragen zusätzlich
 `gid = <spaceId>/<localId>`.
 
@@ -437,7 +442,7 @@ Umgesetzt sind die Schritte B2–B5 der [Betriebserweiterung](betrieb-und-mobile
   nehmbar, auch für wartende Takes und Host-Code; der Take bindet die Txn an die Revision. Pause/Stop installieren
   zuerst einen Fence und wechseln erst ohne gebundene Txn. Dieselbe Revision mit anderem Command ergibt
   `RunGateConflict`. Gesperrte Profile lassen sich unter aktivem Lauf weder lokal noch per Federation-Policy entfernen.
-- **RunController** (`src/run-controller.ts`): Journal `pi-spaces.run-controller`, Start mit Vorbereitung hinter
+- **RunController** (`src/run-controller.ts`): Journal `phi-spaces.run-controller`, Start mit Vorbereitung hinter
   `preparing`, Pause/Resume/Stop mit ACK-Barriere, `pauseIncomplete` bei fehlenden ACKs, `advance` nach Neustart.
   Offene Übergänge tragen Control-Autorität und -Inkarnation und werden nach einem Wechsel nie erneut gesendet.
 - **Remote-Members** (`src/run-member.ts`): signierte Anweisungen und ACKs, Methode `runGateInstruction` im Gate,
@@ -463,7 +468,7 @@ erst bei der nächsten Aktion. Die serverseitige Fortsetzungsschleife hat keinen
 ## Worker-Steuerung (2026-10-16)
 
 Schritt B6 der Betriebserweiterung: Der Control-Host hält den Soll-Zustand je Host im Journal
-`pi-spaces.worker-assignments` (Admin-Command `setWorkers`, idempotent, monotone Generation). Ein Host holt über die
+`phi-spaces.worker-assignments` (Admin-Command `setWorkers`, idempotent, monotone Generation). Ein Host holt über die
 Gate-Methode `workerAssignments` nur seinen eigenen, signierten Anteil; maßgeblich ist der bewiesene aktive
 Host-Schlüssel der Verbindung. Der `WorkerSupervisor` des Hosts nimmt nur gültig signierte, neuere Listen derselben
 Control-Identität an, speichert sie und gleicht registrierte Workerarten ab: Skalieren, Stopp nach dem laufenden Task,

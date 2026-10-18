@@ -1,8 +1,7 @@
 // A durable single-space recovery state machine. Only the private recovery service receives this capability.
 import { defineDoc, type Session } from "@earendil-works/pi-durable";
 import type { Context } from "@earendil-works/chord";
-import { createHash } from "node:crypto";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import { Registry, spaceDoc, snapshotSpace } from "./spaces.ts";
 import { beginRestore, restoreBatch, completeRestore, releaseRestored, snapshotHash } from "./restore.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
@@ -13,7 +12,7 @@ import * as core from "./core.ts";
 
 export type DataRestoreRequest = { recoveryId: string; space: string; snapshotRef: string; targetHostId: string; expectedDataIncarnation: string; expectedPrimaryEpoch: number };
 export type RecoveryJob = { request: DataRestoreRequest; sourceHostId: string; argsHash: string; snapshotHash: string; state: "blocked" | "importing" | "waiting" | "installing" | "completed"; priorPermit: SpaceBootPermit; incarnation?: string; primaryEpoch?: number; error?: string };
-export const RecoveryJobs = defineDoc<{ jobs: Record<string, RecoveryJob>; releases: Record<string, { hash: string; count: number; completed: boolean }> }>({ kind: "pi-spaces.recovery-jobs", version: 1, scope: "session", initial: () => ({ jobs: {}, releases: {} }) });
+export const RecoveryJobs = defineDoc<{ jobs: Record<string, RecoveryJob>; releases: Record<string, { hash: string; count: number; completed: boolean }> }>({ kind: "phi-spaces.recovery-jobs", version: 1, scope: "session", initial: () => ({ jobs: {}, releases: {} }) });
 type RawHost = Pick<Session, "commit" | "snapshot">;
 export type RecoveryControllerOptions = {
 	host: RawHost; ctx: Context; hostId: string; authorityId: string;
@@ -33,7 +32,7 @@ export class RecoveryController {
 	private async job(id: string): Promise<RecoveryJob> { const job = (await this.o.host.snapshot(RecoveryJobs, this.o.ctx))?.jobs[id]; if (!job) throw new RecoveryBlocked("unknown recovery request"); return core.plain(job); }
 	async submit(request: DataRestoreRequest): Promise<RecoveryJob> {
 		if (![request.recoveryId, request.space, request.snapshotRef, request.targetHostId, request.expectedDataIncarnation].every(v => typeof v === "string" && v.length > 0 && v.length <= 512) || request.recoveryId.length > 256 || request.targetHostId !== this.o.hostId || !Number.isSafeInteger(request.expectedPrimaryEpoch) || request.expectedPrimaryEpoch < 0) throw new RecoveryBlocked("invalid recovery request or target");
-		const argsHash = createHash("sha256").update(canonicalJson(request as unknown as core.Json)).digest("hex");
+		const argsHash = digestJson(request);
 		const existing = (await this.o.host.snapshot(RecoveryJobs, this.o.ctx))?.jobs[request.recoveryId];
 		if (existing) { if (existing.argsHash !== argsHash) throw new RegisterConflict("recovery id has different arguments"); return core.plain(existing); }
 		const source = await this.o.loadSnapshot(request.snapshotRef);
@@ -118,7 +117,7 @@ export class RecoveryController {
 		const bootKey = `boot:${this.o.hostId}`, localKey = `installed:${this.o.hostId}:${job.request.space}`;
 		const boot = await this.o.external.get<any>(bootKey), local = await this.o.installed.get<any>(localKey), permit = boot?.value.spaces[job.request.space];
 		if (!local || boot?.value.state !== "active" || !permit || permit.state !== "active" || permit.authorityId !== this.o.authorityId || permit.dataIncarnation !== job.incarnation || permit.primaryEpoch !== job.primaryEpoch || canonicalJson(permit) !== canonicalJson(local?.value ?? null)) throw new RecoveryBlocked("release requires matching current external and local boot authorization");
-		const hash = createHash("sha256").update(canonicalJson(request as any)).digest("hex");
+		const hash = digestJson(request);
 		return this.o.host.commit(async tx => {
 			const jobs = await tx.doc(RecoveryJobs), prior = jobs.releases[request.commandId];
 			if (prior && prior.hash !== hash) throw new RegisterConflict("release command has different arguments");

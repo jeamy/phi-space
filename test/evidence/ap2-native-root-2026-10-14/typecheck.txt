@@ -1,4 +1,4 @@
 
-> pi-spaces@0.0.1 typecheck
+> phi-spaces@0.0.1 typecheck
 > tsc
 

@@ -19,7 +19,7 @@ import {
 	type SpaceLike,
 } from "../../../src/index.ts";
 import type { WsConnection } from "../ws.ts";
-import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory } from "./history.ts";
+import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
 import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "../../../src/core.ts";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
 
@@ -464,7 +464,7 @@ export class SocialSwarmHub {
 	 * (and whenever a shard's index is unavailable): one bounded scan per shard, merged,
 	 * cursor-filtered, newest-first. Slower than historyPage but always correct.
 	 */
-	async #pageScan(input: { kind: string; channel: string; handle: string; beforeAt: number; beforeId: string; limit: number }) {
+	async #pageScan(input: { kind: string; channel: string; handle: string; beforeAt: number; beforeId: string; limit: number }, signal?: AbortSignal) {
 		const fields: Fields = {};
 		if (input.kind === "feed.more" && input.channel !== "all") fields.channel = input.channel;
 		if (input.kind === "agent.posts") fields.handle = input.handle;
@@ -472,8 +472,13 @@ export class SocialSwarmHub {
 		const spaces = this.#remote ? [this.space, this.#remote] : [this.space];
 		const posts: SwarmPost[] = [];
 		for (const s of spaces) {
-			const entries = await this.#shardReadAll(s, { type: "Post", ...(Object.keys(fields).length ? { fields } : {}) });
-			for (const e of entries) posts.push(e.fields as unknown as SwarmPost);
+			let after: string | null = null, token: string | undefined;
+			do {
+				signal?.throwIfAborted();
+				const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await historyRead(s.readPage({ type: "Post", ...(Object.keys(fields).length ? { fields } : {}) }, { after, token, maxBytes: 128 * 1024 }), signal);
+				for (const e of page.items) posts.push(e.fields as unknown as SwarmPost);
+				after = page.next; token = page.token;
+			} while (after !== null);
 		}
 		const older = posts.filter((p) => p.at < input.beforeAt || (p.at === input.beforeAt && p.postId.localeCompare(input.beforeId) < 0));
 		older.sort((a, b) => b.at - a.at || b.postId.localeCompare(a.postId));
@@ -1435,6 +1440,8 @@ export class SocialSwarmHub {
 
 	async attachWebSocket(ws: WsConnection): Promise<void> {
 		await this.whenReady();
+		const lifetime = new AbortController();
+		ws.onClose(() => lifetime.abort());
 		this.clients.add(ws);
 		ws.onClose(() => { this.clients.delete(ws); this.#admins.delete(ws); });
 		const requireAdmin = (): boolean => {
@@ -1599,13 +1606,14 @@ export class SocialSwarmHub {
           cursors: Array.isArray(msg.cursors) && msg.cursors.every((c: unknown) => typeof c === "string") ? msg.cursors : undefined,
           ...(kind === "feed.more" && channel !== "all" ? { channel } : {}),
           ...(kind === "agent.posts" ? { handle } : {}), ai: kind === "ai.posts",
+          signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(15_000)]),
          }));
         } catch {
          // A shard index still migrating (or down) must not dead-end paging – scan instead.
-         result = await this.#pageScan(scan);
+         result = await this.#pageScan(scan, AbortSignal.any([lifetime.signal, AbortSignal.timeout(20_000)]));
         }
        } else {
-        result = await this.#pageScan(scan);
+        result = await this.#pageScan(scan, AbortSignal.any([lifetime.signal, AbortSignal.timeout(20_000)]));
        }
        for (const p of result.posts) { p.likes = this.#likeSets.get(p.postId)?.size ?? p.likes; p.replies = this.#replyCounts.get(p.postId) ?? p.replies; }
        ws.send({ type: kind, channel, handle, ...result, threads: [], append: Array.isArray(msg.cursors) });

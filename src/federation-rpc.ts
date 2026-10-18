@@ -42,7 +42,7 @@ export class FederationRpc implements RouterTarget, FederationIO {
               m = Object.values(state.members)
                       .find(m => m.target.spaceId === target.spaceId &&
                                  m.target.hostId === target.hostId);
-        if (m && JSON.stringify(m.target) === JSON.stringify(target)) return {id: m.id, successor: false};
+        if (m && canonicalJson(m.target as unknown as Json) === canonicalJson(target as unknown as Json)) return {id: m.id, successor: false};
         const next = successor ? Object.values(state.members).find(m => m.replication && m.target.spaceId === target.spaceId &&
             m.target.authorityId === target.authorityId && m.target.dataIncarnation === target.dataIncarnation && m.target.primaryEpoch >= target.primaryEpoch) : undefined;
         if (!next) throw new Error('target binding no longer installed');

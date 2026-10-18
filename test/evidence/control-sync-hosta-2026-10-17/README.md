@@ -18,7 +18,7 @@ Die Daten stehen in `report.json`.
 | Standby geleert | alte Replik nach `replica.after-degrade-1` verschoben; Listener startet mit Revision 0 |
 | `set-standby` `control-standby-2` | sync, Epoche 2, Version 4; Standby-Kopf nach dem Degrade bei Revision 16 (`50fc0708…`) |
 | `degrade` `control-degrade-2` | single, Epoche 3, Version 5; erneut `SHUTOFF` |
-| Freigabe `control-release-2` | nanoi wieder in Quarantäne und gestartet; die Einheit `pi-spaces-control-standby` bleibt deaktiviert |
+| Freigabe `control-release-2` | nanoi wieder in Quarantäne und gestartet; die Einheit `phi-spaces-control-standby` bleibt deaktiviert |
 
 Vor und nach jedem Übergang lief eine Grundprüfung: Admin-Lesen und ein harmloser Schreibvorgang im Control
 Space, dazu `info`/`stats` an jedem Member-Gate.

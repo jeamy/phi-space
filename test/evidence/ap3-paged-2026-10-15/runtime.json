@@ -1,6 +1,6 @@
 {
   "tag": "ap3-paged-20261015-58b61f68",
-  "base": "/home/mux/.local/share/pi-spaces-operations/ap3-paged-20261015-58b61f68",
+  "base": "/home/mux/.local/share/phi-spaces-operations/ap3-paged-20261015-58b61f68",
   "image": "95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413",
   "cpus": 2,
   "memoryBytes": 1073741824,
@@ -9,7 +9,7 @@
   "production": true,
   "sourceShipped": false,
   "artifactHashes": {
-    "pi-spaces.mjs": "5af968c5d222c4a23df2d8f80db8cd0259256ad46d698720b05bf7607758b4b1",
+    "phi-spaces.mjs": "5af968c5d222c4a23df2d8f80db8cd0259256ad46d698720b05bf7607758b4b1",
     "scenarios/phase3-snapshot-transfer.mjs": "4172d506fff1d97dbab079ee16a13cfd2b7f76ec442f20b52af42552a66057fa"
   }
 }

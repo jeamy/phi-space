@@ -72,7 +72,7 @@ test("tool replay after a crash returns the stored result, not an error, and beg
 		faux.setResponses([fauxAssistantMessage(fauxToolCall("space_txn", { action: "begin", leaseMs: "forever" }), { stopReason: "toolUse" }), fauxAssistantMessage("begun"), fauxAssistantMessage("begun")]);
 		let h = await home.open({ models, registry });
 		const a = await h.root(ctx, { agent });
-		home.faults.arm("loseAnswer", (w) => JSON.stringify(w).includes("pi-spaces.claim"));
+		home.faults.arm("loseAnswer", (w) => JSON.stringify(w).includes("phi-spaces.claim"));
 		const sub = await a.submit({ type: "input", content: "begin" }, ctx);
 		void sub.wait(ctx).catch(() => {}); // the crashed harness never settles it
 		for (let i = 0; i < 100 && home.faults.fired === 0; i++) await new Promise((r) => setTimeout(r, 20));
@@ -96,7 +96,7 @@ test("a Space gets a base every 500 deltas", async () => {
 		let h = await home.open();
 		for (let n = 0; n < 510; n++) await new PhiSpaces(h, ctx).write({ type: "Small", fields: { n } }, null, FOREVER);
 		await home.close(h);
-		const st = await home.storage(), d = await st.findDocument({ kind: "pi-spaces.space", scope: { kind: "session" } } as any, "current", ctx);
+		const st = await home.storage(), d = await st.findDocument({ kind: "phi-spaces.space", scope: { kind: "session" } } as any, "current", ctx);
 		try { assert.ok(d && (await st.document(d.id, "current", ctx))!.deltasSinceBase < 500, "a base was written"); } finally { await st.close(ctx); }
 	});
 });

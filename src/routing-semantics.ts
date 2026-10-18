@@ -1,9 +1,9 @@
 // AP 2.3: authoritative policy, immutable placements and deterministic HRW.
-import {createHash} from 'node:crypto';
 
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import type {EntryDraft, Json, Template} from './core.ts';
 import type {TargetBinding} from './router.ts';
+import { jsonCopy } from './json.ts';
 
 export type FederationRule =|{
     type: string;
@@ -80,14 +80,14 @@ export class MigrationRequired extends Error {};
 export class MemberDrained extends Error {};
 export class NoCapableMember extends Error {};
 export class CapacityUnavailable extends Error {};
-const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+const copy = jsonCopy;
 const name = (n: string) => {
     if (typeof n !== 'string' || !n || n.length > 128 ||
         [ '__proto__', 'constructor', 'prototype' ].includes(n))
         throw new RoutingConflict('invalid policy identifier');
 };
 const members = (r: FederationRule): string[] => 'member' in r ? [ r.member ] : r.members;
-const hash = (v: unknown) => createHash('sha256').update(canonicalJson(v as Json)).digest('hex');
+const hash = (v: unknown) => digestJson(v as Json);
 export function hrw(value: Json, ids: readonly string[]): string {
     if (!ids.length)
         throw new RoutingConflict('empty HRW set');

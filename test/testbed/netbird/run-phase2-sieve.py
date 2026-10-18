@@ -27,7 +27,7 @@ if len(set(args.process_crash_members))!=len(args.process_crash_members):parser.
 if not jobs<=args.entries<=10000:parser.error('entries must be jobs..10000')
 if not 6<=jobs<=1000 or not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,47}',tag):parser.error('jobs must be 6..1000 and run-id a short lowercase identifier')
 args.artifacts=args.artifacts.resolve();args.output.mkdir(parents=True,exist_ok=True)
-for name in ['pi-spaces.mjs','scenarios/phase2-netbird.mjs']:
+for name in ['phi-spaces.mjs','scenarios/phase2-netbird.mjs']:
  if not (args.artifacts/name).is_file():parser.error('missing built artifact: '+name)
 base='/home/mux/.local/share/phi-spaces-operations/ap2-netbird-'+tag
 names=['phi-spaces-ap2-netbird-'+tag+'-'+x for x in ['root','a','b','c']]
@@ -46,7 +46,7 @@ try:
  ssh('test ! -e '+shlex.quote(base))
  ssh('mkdir -p '+shlex.quote(base)+'/scenarios '+shlex.quote(base)+'/shared '+shlex.quote(base)+'/secrets '+' '.join(shlex.quote(base+'/'+x) for x in ['root','a','b','c']))
  base_created=True
- for local,dest in [(str(args.artifacts/'pi-spaces.mjs'),'pi-spaces.mjs'),(str(args.artifacts/'scenarios/phase2-netbird.mjs'),'scenarios/phase2-netbird.mjs')]:subprocess.run(['scp',local,'big:'+base+'/'+dest],check=True,stdout=subprocess.DEVNULL)
+ for local,dest in [(str(args.artifacts/'phi-spaces.mjs'),'phi-spaces.mjs'),(str(args.artifacts/'scenarios/phase2-netbird.mjs'),'scenarios/phase2-netbird.mjs')]:subprocess.run(['scp',local,'big:'+base+'/'+dest],check=True,stdout=subprocess.DEVNULL)
  result=remote(api+'''
 peers={p['name']:p for p in call('GET','/peers') if p.get('name') in ['host-a','host-b','member-1','member-2']}
 assert len(peers)==4 and all(p['connected'] for p in peers.values())
@@ -66,7 +66,7 @@ print('{}')
   if (mode=='run' and (config['processCrashes'] or config['ackCrashes'] or config['journalCrashes'])) or (mode=='member' and config['memberCrashes']):args+=['--init']
   if detach:args.remove('--rm');args+=['--detach']
   if mode in ['run','member']:args+=['--cidfile',base+'/'+data+'/run.cid']
-  for src,target in [('pi-spaces.mjs','/opt/app/pi-spaces.mjs:ro'),('scenarios','/opt/app/scenarios:ro'),('shared','/shared:rw'),('secrets','/secrets:ro'),(data,'/data:rw')]:args+=['-v',base+'/'+src+':'+target]
+  for src,target in [('phi-spaces.mjs','/opt/app/phi-spaces.mjs:ro'),('scenarios','/opt/app/scenarios:ro'),('shared','/shared:rw'),('secrets','/secrets:ro'),(data,'/data:rw')]:args+=['-v',base+'/'+src+':'+target]
   args+=['phi-spaces-test-node:local','node','/opt/app/scenarios/phase2-netbird.mjs',mode,'/shared/config.json']
   if mode=='member':args+=[data]
   return shlex.join(args)

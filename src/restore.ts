@@ -1,16 +1,16 @@
 // Budget-bounded snapshot installation under closed admission. Historical pending work is evidence, never executable work.
 import { createHash, randomBytes } from "node:crypto";
 import * as core from "./core.ts";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 
 export type RestoreState = { recoveryId: string; argumentHash: string; snapshotHash: string; incarnation: string; primaryEpoch: number; startedAt: number; waitUntil: number; stage: "entries" | "claims" | "generations" | "gates" | "waiting" | "completed"; cursor: number; kind: "data" | "control" };
 /** The recovery ID that fences run gates of a restore: the restore ID itself if it is a valid gate ID, else a stable hash. */
 export const runRecoveryIdOf = (recoveryId: string): string => /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/.test(recoveryId) ? recoveryId : "restore-" + createHash("sha256").update(recoveryId).digest("hex").slice(0, 32);
-export const snapshotHash = (s: core.SpaceState): string => createHash("sha256").update(canonicalJson(s as unknown as core.Json)).digest("hex");
+export const snapshotHash = (s: core.SpaceState): string => digestJson(s);
 export type RestoreArgs = { recoveryId: string; expectedDataIncarnation: string; expectedPrimaryEpoch: number; snapshotHash: string; kind: "data" | "control" };
 export function beginRestore(s: core.SpaceState, now: number, o: RestoreArgs): RestoreState {
 	if (!o.recoveryId || o.recoveryId.length > 256 || !/^[a-f0-9]{64}$/.test(o.snapshotHash) || !["data", "control"].includes(o.kind) || !Number.isSafeInteger(o.expectedPrimaryEpoch) || o.expectedPrimaryEpoch < 0 || !Number.isSafeInteger(o.expectedPrimaryEpoch + 1)) throw new core.IllegalArgumentError("invalid restore identity, snapshot hash or epoch");
-	const hash = createHash("sha256").update(canonicalJson(o as unknown as core.Json)).digest("hex");
+	const hash = digestJson(o);
 	if (s.restore) { if (s.restore.recoveryId === o.recoveryId && s.restore.argumentHash === hash) return core.plain(s.restore); if (s.restore.stage !== "completed") throw new core.PermissionError("a different restore is already installed"); }
 	if (!s.spaceId || s.incarnation !== o.expectedDataIncarnation || (s.primaryEpoch ?? 1) !== o.expectedPrimaryEpoch) throw new core.PermissionError("restore incarnation or epoch precondition failed");
 	const restoration: RestoreState = { recoveryId: o.recoveryId, argumentHash: hash, snapshotHash: o.snapshotHash, incarnation: randomBytes(4).toString("hex"), primaryEpoch: o.kind === "control" ? 1 : o.expectedPrimaryEpoch + 1, startedAt: now, waitUntil: now + 62000, stage: "entries", cursor: 0, kind: o.kind };

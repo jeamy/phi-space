@@ -42,6 +42,12 @@ Versucht ein Worker `commit(txn)` aufzurufen, ohne dass für den genommenen `Cha
 
 ### Byte-Budgets und Owner-Quoten (DEFAULT_LIMITS) {#default-limits}
 
+Die Entry-Anzahl ist standardmäßig weder pro Space noch pro Owner begrenzt:
+`maxEntries` und `maxEntriesPerOwner` verwenden `FOREVER` (JSON-sicherer unbegrenzter Wert).
+Explizite Anzahlquoten sind mit `setLimits` weiterhin möglich. Die folgenden Byte-Budgets und
+die Quoten für Registrierungen, Waiter und Transaktionen bleiben wirksam; unbegrenzte Anzahl
+bedeutet nicht unbegrenzten Arbeitsspeicher oder unbegrenzte Dokumentgröße.
+
 | Limit | Standardwert | Bedeutung |
 |---|---|---|
 | `maxEntryBytes` | `64 KiB` | Maximale Größe eines einzelnen Entry oder Handbacks |

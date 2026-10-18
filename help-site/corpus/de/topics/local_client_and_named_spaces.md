@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Ein `@earendil-works/pi-durable`-Harness verwaltet standardmäßig den Default-Space (`pi-spaces.space`, Alias `"default"`) sowie über die `Registry` (`pi-spaces.registry`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (`pi-spaces.named-space`).
+Ein `@earendil-works/pi-durable`-Harness verwaltet standardmäßig den Default-Space (`phi-spaces.space`, Alias `"default"`) sowie über die `Registry` (`phi-spaces.registry`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (`phi-spaces.named-space`).
 
 ## Begriffs- und Systemmodell {#concept-model}
 

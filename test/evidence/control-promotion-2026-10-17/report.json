@@ -13,11 +13,11 @@
  "controlSpace": "sp-75fb6996-72cc-43e0-acb3-e71be3ee6e59",
  "hosts": {
   "phase1b-host-a": {
-   "container": "pi-spaces-test-host-a-1",
+   "container": "phi-spaces-test-host-a-1",
    "overlay": "100.89.128.128"
   },
   "phase1b-host-c": {
-   "container": "pi-spaces-test-host-c-1 (temporary, own NetBird agent)",
+   "container": "phi-spaces-test-host-c-1 (temporary, own NetBird agent)",
    "overlay": "100.89.200.120"
   }
  },
@@ -65,8 +65,8 @@
      "kind": "container",
      "evidence": {
       "provider": "docker",
-      "container": "pi-spaces-test-host-a-1",
-      "unit": "pi-spaces-phase1b-host-a.service",
+      "container": "phi-spaces-test-host-a-1",
+      "unit": "phi-spaces-phase1b-host-a.service",
       "running": false,
       "restartPolicy": "no",
       "unitLocked": true,
@@ -102,8 +102,8 @@
   {
    "step": "host-c starts as control, members follow",
    "members": [
-    "pi-spaces-phase1b-member-1: {\"ready\":true,\"hostId\":\"phase1b-member-1\",\"address\":{\"address\":\"100.89.5.70\",\"family\":\"IPv4\",\"port\":7421}}",
-    "pi-spaces-restore-target: {\"ready\":true,\"hostId\":\"phase1b-restore-target\",\"address\":{\"address\":\"100.89.116.183\",\"family\":\"IPv4\",\"port\":7421}}",
+    "phi-spaces-phase1b-member-1: {\"ready\":true,\"hostId\":\"phase1b-member-1\",\"address\":{\"address\":\"100.89.5.70\",\"family\":\"IPv4\",\"port\":7421}}",
+    "phi-spaces-restore-target: {\"ready\":true,\"hostId\":\"phase1b-restore-target\",\"address\":{\"address\":\"100.89.116.183\",\"family\":\"IPv4\",\"port\":7421}}",
     "nano: {\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}",
     "100: {\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
    ],
@@ -152,8 +152,8 @@
      "kind": "container",
      "evidence": {
       "provider": "docker",
-      "container": "pi-spaces-test-host-c-1",
-      "unit": "pi-spaces-phase1b-host-c.service",
+      "container": "phi-spaces-test-host-c-1",
+      "unit": "phi-spaces-phase1b-host-c.service",
       "running": false,
       "restartPolicy": "no",
       "unitLocked": true,
@@ -189,8 +189,8 @@
   {
    "step": "host-a control again, members follow",
    "members": [
-    "pi-spaces-phase1b-member-1: {\"ready\":true,\"hostId\":\"phase1b-member-1\",\"address\":{\"address\":\"100.89.5.70\",\"family\":\"IPv4\",\"port\":7421}}",
-    "pi-spaces-restore-target: {\"ready\":true,\"hostId\":\"phase1b-restore-target\",\"address\":{\"address\":\"100.89.116.183\",\"family\":\"IPv4\",\"port\":7421}}",
+    "phi-spaces-phase1b-member-1: {\"ready\":true,\"hostId\":\"phase1b-member-1\",\"address\":{\"address\":\"100.89.5.70\",\"family\":\"IPv4\",\"port\":7421}}",
+    "phi-spaces-restore-target: {\"ready\":true,\"hostId\":\"phase1b-restore-target\",\"address\":{\"address\":\"100.89.116.183\",\"family\":\"IPv4\",\"port\":7421}}",
     "nano: {\"ready\":true,\"hostId\":\"nano-test\",\"address\":{\"address\":\"100.89.28.88\",\"family\":\"IPv4\",\"port\":7421}}",
     "100: {\"ready\":true,\"hostId\":\"standby-100\",\"address\":{\"address\":\"100.89.187.150\",\"family\":\"IPv4\",\"port\":7421}}"
    ],

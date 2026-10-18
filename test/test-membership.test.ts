@@ -68,8 +68,11 @@ async function fixture(b: typeof BACKENDS[number], f: (o: any) => Promise<void>)
         }
         let drop: string|undefined;
         let referenced = false;
+        const unreachable = new Set<string>();
         const transport: MembershipTransport = {
             apply : async (m, q) => {
+                if (unreachable.has(m.id))
+                    throw Error('member unreachable');
                 const r = await nodes[m.id]!.apply(q);
                 if (drop === q.value.action) {
                     drop = undefined;
@@ -117,6 +120,8 @@ async function fixture(b: typeof BACKENDS[number], f: (o: any) => Promise<void>)
             clock,
             setNow : (v: number) => now = v,
             drop : (s: string) => drop = s,
+            unreachable : (id: string, on: boolean) =>
+                on ? unreachable.add(id) : unreachable.delete(id),
             ref : (v: boolean) => referenced = v,
             make,
             authority,

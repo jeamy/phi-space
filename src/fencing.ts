@@ -8,7 +8,8 @@ export async function verifySshFence(register: RecoveryRegister, hostId: string,
 	const target = targets[hostId];
 	if (!target || !/^[A-Za-z0-9_.@:-]+$/.test(target) || target.startsWith("-")) throw new RecoveryBlocked("no independently provisioned fencing endpoint for this host");
 	const boot = await register.get<HostBootState & Record<string, Json>>(`boot:${hostId}`);
-	if (!boot || Object.values(boot.value.spaces).some(s => s.durability === "sync" || !["local", "primary"].includes(s.role))) throw new RecoveryBlocked("F15 is restricted to single-space hosting without replicas");
+	// A primary permit without durability is sync (durabilityOf, boot.ts): F15 refuses it like an explicit sync one.
+	if (!boot || Object.values(boot.value.spaces).some(s => s.durability === "sync" || (s.role === "primary" && s.durability === undefined) || !["local", "primary"].includes(s.role))) throw new RecoveryBlocked("F15 is restricted to single-space hosting without replicas");
 	const status: any = await new Promise((resolve, reject) => {
 		const process = spawn("ssh", ["-T", "-oBatchMode=yes", "-oStrictHostKeyChecking=yes", target, "phi-spaces-fence-status"], { stdio: ["ignore", "pipe", "ignore"] });
 		let output = "", settled = false;

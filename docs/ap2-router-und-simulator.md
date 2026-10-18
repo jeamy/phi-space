@@ -7,7 +7,7 @@ als [AP 2.2–2.5](ap2-delegation-routing-membership.md) implementiert; die voll
 ## Router
 
 `src/router.ts` implementiert `RouterController` über separate, session-scoped
-Dokumentfamilien `pi-spaces.router-journal` und `pi-spaces.router-command`.
+Dokumentfamilien `phi-spaces.router-journal` und `phi-spaces.router-command`.
 Journal und Commands liegen damit im gleichen persistenten Harness; Index,
 Zustand und Reservierung werden atomar verändert. Diese Dokumente sind keine
 über die normale Space-API lesbaren oder nehmbaren Entries.

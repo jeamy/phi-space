@@ -1,10 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as c from "../src/core.ts";
+import { MemberDrained } from "../src/routing-semantics.ts";
 
 const job = (n: number, extra: c.Fields = {}): c.EntryDraft => ({ type: "Job", fields: { n, ...extra } });
 const T = (type: string, fields: c.Fields = {}): c.Template => ({ type, fields });
 const mk = () => c.initialState();
+
+test("default entry counts are unbounded; explicit count quotas still apply", () => {
+	const s = mk();
+	c.write(s, 0, job(1), null, c.FOREVER);
+	const prototype = s.entries[0]!;
+	s.entries = Array.from({ length: 10_001 }, (_, n) => ({ ...prototype, id: `fixture-${n}`, owner: "producer", readBy: [] }));
+	assert.equal(c.limitsOf(s).maxEntries, c.FOREVER);
+	assert.equal(c.limitsOf(s).maxEntriesPerOwner, c.FOREVER);
+	assert.doesNotThrow(() => c.write(s, 1, job(2), null, c.FOREVER, "producer"));
+	c.setLimits(s, { maxEntries: s.entries.length });
+	assert.throws(() => c.write(s, 2, job(3), null, c.FOREVER, "producer"), /entries already/);
+});
 
 test("two takes never return the same entry", () => {
 	const s = mk(); c.write(s, 0, job(1), null, c.FOREVER);
@@ -245,6 +258,73 @@ test("migrate normalizes old documents", () => {
 	const m = c.migrate({ entries: [{ id: "e1", type: "J", fields: {}, expires: 5 }], txns: { t2: { id: "t2", expires: 9 } }, regs: [{ id: "n3", expires: 9 }], outbox: undefined }, 2);
 	assert.deepEqual(m.outbox, []); assert.deepEqual(m.entries[0]!.types, ["J"]); assert.deepEqual(m.entries[0]!.readBy, []);
 	assert.equal(m.entries[0]!.owner, null); assert.equal(m.txns.t2!.owner, null); assert.equal(m.regs[0]!.seq, 0);
+});
+test("migrate keeps run gates and the archive marker", () => {
+	const runGates = { r1: { state: "stopped", revision: 3 } } as unknown as c.SpaceState["runGates"], archived = { at: 7, commandId: "cmd-1" };
+	const m = c.migrate({ entries: [], runGates, archived }, 4);
+	assert.deepEqual(m.runGates, runGates); assert.deepEqual(m.archived, archived);
+	assert.throws(() => c.assertNotArchived(m), c.PermissionError);
+});
+test("an expiry sweep cut short by the commit budget keeps the earliest remaining expiry as the next wake-up", () => {
+	const s = mk();
+	for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) c.write(s, 0, job(n), null, n * 10);
+	c.setLimits(s, { maxCommitBytes: 1152 }, 0); // the envelope and one maintenance item
+	c.beginCommit(s); c.settle(s, 100);
+	assert.ok(s.entries.length > 0, "the budget must cut the sweep short");
+	assert.equal(c.nextExpiry(s), Math.min(...s.entries.map(e => e.expires)));
+});
+test("the mailbox byte tally matches the encoded mailbox after appends", () => {
+	const s = mk();
+	c.notify(s, 0, T("Job"), null, c.FOREVER, "h", "conv", undefined, { peerId: "p" });
+	for (const n of [1, 2, 3]) c.write(s, 1, job(n), null, c.FOREVER);
+	const b = Object.values(s.mailboxes!.boxes)[0]!;
+	assert.equal(b.events.length, 3); assert.equal(b.bytes, Buffer.byteLength(JSON.stringify(b.events)));
+});
+test("while draining, entry leases may be shortened but not extended; transactions keep their completion boundary", () => {
+	const s = mk();
+	const e = c.write(s, 0, job(1), null, 1000), t = c.createTxn(s, 0, 1000);
+	s.membership = { state: "draining" } as unknown as c.SpaceState["membership"]; // only the state matters here
+	assert.equal(c.renew(s, 1, e.id, 100), 101);
+	assert.throws(() => c.renew(s, 1, e.id, 5000), MemberDrained);
+	assert.throws(() => c.renew(s, 1, t.id, 10), MemberDrained, "a transaction without completion allowance");
+});
+test("subscriptions keep every transaction's completion reservation at the full recount", () => {
+	const jb = (v: unknown) => Buffer.byteLength(JSON.stringify(v));
+	const publish = (s: c.SpaceState, e: c.EntryRec) => {
+		const v = jb(c.view(e));
+		let n = jb({ op: "put", id: e.id, type: e.type, types: e.types, fields: e.fields, expires: e.expires, owner: e.owner }) + 1;
+		for (const x of [...s.regs, ...s.waiters]) if (c.matches(x.template, e)) n += v + jb(x.handback) + 256;
+		return n;
+	};
+	const full = (s: c.SpaceState, id: string) => s.entries.filter(e => (e.writtenUnder === id) !== (e.takenBy === id)).reduce((n, e) => n + publish(s, e), 0)
+		+ s.regs.filter(r => r.txn === id).reduce((n, r) => n + jb(r.handback) + 512, 0);
+	let seed = 7;
+	const rnd = (n: number) => { seed = (seed * 48271) % 2147483647; return Math.floor((seed / 2147483647) * n); }; // Park–Miller, exact in doubles
+	for (let round = 0; round < 20; round++) {
+		const s = mk(), txns = [0, 1, 2].map(() => c.createTxn(s, 0, c.FOREVER).id), types = ["A", "B", "C"];
+		for (let i = 0; i < 12; i++) c.write(s, 1, { type: types[rnd(3)]!, fields: { i, pad: "x".repeat(rnd(40)) } }, rnd(4) === 0 ? null : txns[rnd(3)]!, c.FOREVER);
+		for (let i = 0; i < 3; i++) c.probe(s, 2, { type: types[rnd(3)]!, fields: {} }, txns[rnd(3)]!, true);
+		for (let i = 0; i < 8; i++) {
+			const before = Object.fromEntries(txns.map(id => [id, s.txns[id]!.reserved ?? 0])), type = types[rnd(3)]!, handback = "h".repeat(rnd(30));
+			if (rnd(2)) c.notify(s, 3, { type, fields: {} }, rnd(3) === 0 ? txns[rnd(3)]! : null, c.FOREVER, handback, null);
+			else c.addWaiter(s, 3, { template: { type, fields: { i: 100 + i } }, take: false, target: null, timeout: 60_000, handback });
+			for (const id of txns) assert.equal(s.txns[id]!.reserved, Math.max(full(s, id), before[id]!), `round ${round}, step ${i}, ${id}`);
+		}
+	}
+});
+test("the document overhead counts mailboxes exactly as their encoding, from the per-box tally", () => {
+	const s = mk();
+	c.notify(s, 0, T("Job"), null, c.FOREVER, "h", "conv", undefined, { peerId: "p" });
+	c.notify(s, 0, T("Job"), null, c.FOREVER, "h2", "conv2", undefined, { peerId: "q", agentId: "a" });
+	for (const n of [1, 2, 3, 4]) c.write(s, 1, job(n, { t: "ü€" }), null, c.FOREVER);
+	const withoutMail = c.overheadBytes({ ...s, mailboxes: undefined } as c.SpaceState) - 2; // no mailboxes encode as {}
+	assert.equal(c.overheadBytes(s) - withoutMail, Buffer.byteLength(JSON.stringify(s.mailboxes)));
+});
+test("a lower event limit is refused while an existing subscription's events would exceed it", () => {
+	const s = mk();
+	c.notify(s, 0, T("Job"), null, c.FOREVER, "x".repeat(2000), null);
+	assert.throws(() => c.setLimits(s, { maxEventBytes: 1000 }, 0), c.ResourceExhausted);
+	assert.equal(c.setLimits(s, { maxEventBytes: 100_000 }, 0).maxEventBytes, 100_000);
 });
 
 test("lease 0: the entry is born expired and is never announced, served or held", () => {

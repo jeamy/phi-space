@@ -41,7 +41,7 @@ const str = (v: unknown): string | undefined => (typeof v === "string" && v !== 
 /** The owner of an entry is the principal id of its writer (mailbox.ts: canonical JSON [peerId, agentId]); a plain peer id works too. */
 const peerOf = (owner: string): string => { try { const v = JSON.parse(owner); if (Array.isArray(v) && typeof v[0] === "string") return v[0]; } catch { /* not JSON */ } return owner.split("/")[0]!; };
 
-const SupervisorJobs=defineDocFamily<{jobs:Record<string,{commandId:string;kind:string;args:Record<string,Json>;requestedBy:string;hash:string}>},null>({kind:"pi-spaces.supervisor-jobs",version:1,scope:"session",family:true,initial:()=>({jobs:{}})});
+const SupervisorJobs=defineDocFamily<{jobs:Record<string,{commandId:string;kind:string;args:Record<string,Json>;requestedBy:string;hash:string}>},null>({kind:"phi-spaces.supervisor-jobs",version:1,scope:"session",family:true,initial:()=>({jobs:{}})});
 export class Supervisor {
 	private host: Host; private ctx: Context; private o: SupervisorOptions;
 	constructor(host: Host, ctx: Context, o: SupervisorOptions = {}) { this.host = host; this.ctx = ctx; this.o = o; }

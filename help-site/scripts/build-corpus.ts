@@ -12,6 +12,7 @@ import type { ArticleSeed } from "./corpus-articles-data.ts";
 import { ALL_ARTICLES } from "./corpus.ts";
 import { corpusHash, validateCorpus } from "./corpus-validation.ts";
 import { apiSignatures } from "./api-signatures.ts";
+import { previousArticlePaths, retireGeneratedArticles } from "./generated-articles.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CORPUS_DIR = join(ROOT, "corpus");
@@ -163,6 +164,8 @@ export async function buildCorpus(): Promise<{
 
 	const allSeeds = ALL_ARTICLES;
 	validateCorpus(allSeeds, catalog, apiFacts);
+	const publicRoots = [DIST_PUBLIC, NEXT_PUBLIC];
+	const previous = await Promise.all(publicRoots.map(previousArticlePaths));
 	let commit = "unversioned", dirty = true;
 	try {
 		commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -305,6 +308,8 @@ export async function buildCorpus(): Promise<{
 	};
 
 	const indexPath = join(DIST_PUBLIC, "help", "index.json");
+	const current = new Set(articles.map(article => article.path));
+	for (let i = 0; i < publicRoots.length; i++) await retireGeneratedArticles(publicRoots[i]!, previous[i]!, current);
 	for (const pubRoot of [DIST_PUBLIC, NEXT_PUBLIC]) {
 		const p = join(pubRoot, "help", "index.json");
 		await mkdir(dirname(p), { recursive: true });

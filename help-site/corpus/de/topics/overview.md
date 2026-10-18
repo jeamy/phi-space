@@ -54,7 +54,7 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSp
 
 - **Entry**: Ein unveränderliches JSON-Dokument `{ type: string, types?: string[], fields: Record<string, Json> }`. Es gibt kein In-Place-Update; Zustandsübergänge erfolgen durch `take` + `write` in einer gemeinsamen Transaktion.
 - **Global ID (`gid`)**: Jeder Entry trägt `gid = <spaceId>/<localId>`. Die `localId` besteht aus der Dateninkarnation des Spaces plus einem monoton steigenden Zähler und wird niemals wiederverwendet.
-- **Named Space**: Neben dem Default-Space (`pi-spaces.space`, Alias `default`) verwaltet die `Registry` (`pi-spaces.registry`) beliebig viele benannte Spaces (`pi-spaces.named-space`) mit stabiler `spaceId`.
+- **Named Space**: Neben dem Default-Space (`phi-spaces.space`, Alias `default`) verwaltet die `Registry` (`phi-spaces.registry`) beliebig viele benannte Spaces (`phi-spaces.named-space`) mit stabiler `spaceId`.
 - **Principal**: Strukturierte Identität `{ peerId, agentId? }`. Der Server leitet sie immer aus der authentifizierten Verbindung (`IdentityAdapter`) ab, niemals aus ungeprüften Client-Payloads.
 
 ## Arbeitsablauf {#workflow}

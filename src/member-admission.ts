@@ -134,7 +134,14 @@ export function assertMemberRenew(s: SpaceState, id: string, expires: number) {
     assertMemberAdmission(s, 'lease.renew');
     if (a.state === 'draining') {
         const t = s.txns[id];
-        if (!t?.completion || expires > t.completion.until)
-            throw new MemberDrained('draining leases cannot extend completion boundary');
+        if (t) {
+            if (!t.completion || expires > t.completion.until)
+                throw new MemberDrained('draining leases cannot extend completion boundary');
+            return;
+        }
+        // Entry, subscription and wait leases may only be shortened while draining.
+        const current = s.entries.find(e => e.id === id)?.expires ?? s.regs.find(r => r.id === id)?.expires ?? s.waiters.find(w => w.id === id)?.deadline;
+        if (current === undefined || expires > current)
+            throw new MemberDrained('draining leases cannot be extended');
     }
 }

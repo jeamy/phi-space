@@ -23,7 +23,7 @@ not ok 1 - jsonl: complete Root composition rejects a superseded owner lease
     Object.guard [as assertAuthority] (file:///tmp/pi-netbird-phase2-work/src/federation-controller.ts:42:27)
     async file:///tmp/pi-netbird-phase2-work/src/federated-space.ts:115:69
     async file:///tmp/pi-netbird-phase2-work/test-delegation.test.ts:597:164
-    async #runCommit (file:///media/data/programming/pi-spaces/node_modules/@earendil-works/pi-durable/dist/session/session.js:255:22)
+    async #runCommit (file:///media/data/programming/phi-spaces/node_modules/@earendil-works/pi-durable/dist/session/session.js:255:22)
   ...
 # Subtest: sqlite: complete Root composition rejects a superseded owner lease
 not ok 2 - sqlite: complete Root composition rejects a superseded owner lease
@@ -48,7 +48,7 @@ not ok 2 - sqlite: complete Root composition rejects a superseded owner lease
     process.processTicksAndRejections (node:internal/process/task_queues:103:5)
     async file:///tmp/pi-netbird-phase2-work/src/federated-space.ts:115:69
     async file:///tmp/pi-netbird-phase2-work/test-delegation.test.ts:597:164
-    async #runCommit (file:///media/data/programming/pi-spaces/node_modules/@earendil-works/pi-durable/dist/session/session.js:255:22)
+    async #runCommit (file:///media/data/programming/phi-spaces/node_modules/@earendil-works/pi-durable/dist/session/session.js:255:22)
   ...
 1..2
 # tests 2

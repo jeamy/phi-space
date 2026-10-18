@@ -21,7 +21,7 @@ export type RegistryState = {
 };
 
 export const Registry = defineDoc<RegistryState>({
-	kind: "pi-spaces.registry",
+	kind: "phi-spaces.registry",
 	version: 1,
 	scope: "session",
 	initial: () => ({ hostId: null, defaultSpaceId: null, spaces: {}, aliases: {} }),
@@ -29,7 +29,7 @@ export const Registry = defineDoc<RegistryState>({
 
 /** Named spaces other than the default one. The key is the spaceId. */
 export const NamedSpace = defineDocFamily<core.SpaceState & Record<string, any>, null>({
-	kind: "pi-spaces.named-space",
+	kind: "phi-spaces.named-space",
 	version: 5,
 	scope: "session",
 	family: true,

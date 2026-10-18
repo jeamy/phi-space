@@ -1,6 +1,6 @@
 {
   "tag": "ap2-gate4-followup-20261015-0091d1f6",
-  "base": "/home/mux/.local/share/pi-spaces-operations/ap2-gate4-followup-20261015-0091d1f6",
+  "base": "/home/mux/.local/share/phi-spaces-operations/ap2-gate4-followup-20261015-0091d1f6",
   "image": "95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413",
   "cpus": 2,
   "memoryBytes": 1073741824,
@@ -9,7 +9,7 @@
   "production": true,
   "sourceShipped": false,
   "artifactHashes": {
-    "pi-spaces.mjs": "060a2242d3b40ff634206a48780d127195c48399bfdc4d793dc269548211f057",
+    "phi-spaces.mjs": "060a2242d3b40ff634206a48780d127195c48399bfdc4d793dc269548211f057",
     "scenarios/phase2-gate4-followup.mjs": "3b44601e729e080d820b7fe101e5266ada7ddd7bf514f1086a8b9ba05825bd8c"
   }
 }

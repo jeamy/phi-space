@@ -4,6 +4,7 @@
 |---|---|---|
 | [implementierungsstand.md](implementierungsstand.md) | implementierter Umfang, Nachweise und Grenzen | **aktuell** |
 | [api.md](api.md) | TypeScript-, Dienst- und Remote-API | **aktuell** |
+| [Vollständige Namensumstellung](namensumstellung-2026-10-18.md) | einheitliche Namen, Speicher-/Bundle-Formatbruch, Prüfnachweise und Betriebsgrenzen | lokal umgesetzt; bestehende Stores/externes Deployment separat |
 | [umstellung-ohne-pi-durable.md](umstellung-ohne-pi-durable.md) | eigenständiger Space-Host, Haltbarkeit, Datenmigration und Abnahme ohne pi-durable | detaillierter Ziel- und Arbeitsplan; nicht implementiert |
 | [UI-Mockups](ui-mockups/UI-MOCKUPS.md) | Galerie der Dashboard-Entwürfe | UI-Konzept |
 | [spaces-v1.md](spaces-v1.md) | lokaler Stand vom 2026-10-07 | historisch |

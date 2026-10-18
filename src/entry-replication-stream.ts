@@ -10,7 +10,7 @@ export type EntryStreamDescription = { source: EntryStreamIdentity; revision: nu
 export type EntryStreamPage = { source: EntryStreamIdentity; after: number; next: number; headRevision: number; more: boolean; events: ReplicatedEntryChange[]; positions?: number[]; sha256: string };
 export type EntryStreamResult = { added: number; revision: number; cursor: number };
 export type EntryStreamCheckpoint = { source: EntryStreamIdentity; cursor: number; seedSnapshotId?: string; last: null | { after: number; next: number; sha256: string; result: EntryStreamResult } };
-export const EntryStreamCheckpoints = defineDocFamily<{ links: Record<string, EntryStreamCheckpoint> }, null>({ kind: 'pi-spaces.entry-stream-checkpoints', version: 1, scope: 'session', family: true, initial: () => ({ links: {} }) });
+export const EntryStreamCheckpoints = defineDocFamily<{ links: Record<string, EntryStreamCheckpoint> }, null>({ kind: 'phi-spaces.entry-stream-checkpoints', version: 1, scope: 'session', family: true, initial: () => ({ links: {} }) });
 export class EntryStreamCursorConflict extends Error {
  readonly cursor: number;
  constructor(cursor: number) { super('source cursor changed; reload the durable checkpoint'); this.cursor=cursor; }

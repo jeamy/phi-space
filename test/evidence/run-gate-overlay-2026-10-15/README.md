@@ -2,7 +2,7 @@
 
 Acceptance case 3 of [Betrieb und mobile Steuerung](../../../docs/betrieb-und-mobile-steuerung.md) §7.4 (step B4):
 a Member is offline during a pause. Driver: `test/testbed/netbird/run-run-gate-overlay.py`, node fixture
-`test/testbed/scenarios/run-gate-overlay-node.ts` (only the compiled `.mjs` and `pi-spaces.mjs` were shipped).
+`test/testbed/scenarios/run-gate-overlay-node.ts` (only the compiled `.mjs` and `phi-spaces.mjs` were shipped).
 
 Setup: the run controller and a second Member ran on the operator host (NetBird 100.89.218.189). The other Member
 ran in an owned rootless container on `big` (NetBird 100.89.53.156) with the pinned test image, read-only root, no

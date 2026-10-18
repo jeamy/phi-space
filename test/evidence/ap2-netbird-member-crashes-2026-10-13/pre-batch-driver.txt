@@ -20,12 +20,12 @@ restarting-member-a-6
 restarting-member-b-6
 cleanup-finished
 Traceback (most recent call last):
-  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 90, in <module>
+  File "/media/data/programming/phi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 90, in <module>
     saved=remote('import pathlib,json\nb=pathlib.Path('+repr(base)+');m='+repr(m['id'])+";s=json.loads((b/m/'member-crashes.json').read_text());p=b/'shared'/(m+'-crashes.json');p.write_text(json.dumps(s));p.chmod(0o600);print(json.dumps(s))")
-  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 32, in remote
+  File "/media/data/programming/phi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 32, in remote
     def remote(code):return json.loads(ssh('python3 -',code))
                                        ~~~^^^^^^^^^^^^^^^^^^
-  File "/media/data/programming/pi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 31, in ssh
+  File "/media/data/programming/phi-spaces/test/testbed/netbird/run-phase2-sieve.py", line 31, in ssh
     def ssh(cmd,input=None):return subprocess.check_output(['ssh','-oBatchMode=yes','big',cmd],input=input,text=True,stderr=subprocess.PIPE)
                                    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/usr/lib64/python3.14/subprocess.py", line 473, in check_output

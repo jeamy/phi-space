@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-A `@earendil-works/pi-durable` harness hosts the default space (`pi-spaces.space`, alias `"default"`) plus resource-bounded isolated **named spaces** (`pi-spaces.named-space`) tracked in the `Registry` (`pi-spaces.registry`).
+A `@earendil-works/pi-durable` harness hosts the default space (`phi-spaces.space`, alias `"default"`) plus resource-bounded isolated **named spaces** (`phi-spaces.named-space`) tracked in the `Registry` (`phi-spaces.registry`).
 
 ## Concept And System Model {#concept-model}
 

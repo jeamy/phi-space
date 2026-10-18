@@ -11,7 +11,7 @@ import * as core from "./core.ts";
 import { SpaceKeyDirectory } from "./enroll.ts";
 import type { Algorithm } from "./auth.ts";
 export type ControlAck = { recoveryId: string; space: string; incarnation: string; primaryEpoch: number; authorityId: string; targetHostId: string; argsHash: string };
-export const RecoveryReceipts = defineDoc<{ receipts: Record<string, ControlAck> }>({ kind: "pi-spaces.control-recovery-receipts", version: 1, scope: "session", initial: () => ({ receipts: {} }) });
+export const RecoveryReceipts = defineDoc<{ receipts: Record<string, ControlAck> }>({ kind: "phi-spaces.control-recovery-receipts", version: 1, scope: "session", initial: () => ({ receipts: {} }) });
 export class ControlAckService {
  private o: { host: Pick<Session, "commit" | "snapshot">; ctx: Context; register: RecoveryRegister; hostId: string; authorityId: string; controlSpaceId: string; reconcileDataRestore?:(o:{hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string})=>Promise<unknown>; now?: () => number };
  constructor(o: ControlAckService["o"]) { this.o = o; }

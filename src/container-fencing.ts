@@ -4,7 +4,8 @@
 // container. "Restart-locked" means three independent locks, each re-read by `verify`: the container is stopped, its
 // docker restart policy is `no`, and a drop-in keeps its unit from starting.
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { atomicJsonFile } from "./json-file.ts";
 import { join } from "node:path";
 import type { FenceProof, FencingAdapter } from "./replica-control.ts";
 
@@ -43,8 +44,8 @@ export class ContainerFencing implements FencingAdapter {
 		const unit = (await this.run("systemctl", ["--user", "is-active", pin.unit])).stdout.trim();
 		return { running: i[0] === true, restartPolicy: String(i[1]), unit, dropIn: existsSync(this.dropIn(pin)) };
 	}
-	private saved(): Record<string, { restartPolicy: string }> { return existsSync(this.stateFile) ? JSON.parse(readFileSync(this.stateFile, "utf8")) : {}; }
-	private save(v: Record<string, { restartPolicy: string }>) { writeFileSync(this.stateFile + ".tmp", JSON.stringify(v), { mode: 0o600 }); renameSync(this.stateFile + ".tmp", this.stateFile); }
+	private saved(): Record<string, { restartPolicy: string }> { return atomicJsonFile<Record<string, { restartPolicy: string }>>(this.stateFile, () => ({})).read(); }
+	private save(v: Record<string, { restartPolicy: string }>) { atomicJsonFile(this.stateFile, () => ({})).write(v); }
 	async fence(hostId: string, reason: string): Promise<FenceProof> {
 		const pin = this.pinned(hostId);let live = await this.live(pin);
 		const state = this.saved();if (!state[hostId]) { state[hostId] = { restartPolicy: live.restartPolicy }; this.save(state); }
@@ -70,7 +71,13 @@ export class ContainerFencing implements FencingAdapter {
 	/** Called by releaseHostToQuarantine after the boot CAS: unlocks and starts the unit, whose daemon boots in quarantine. */
 	async release(hostId: string, mode: "quarantine"): Promise<void> {
 		if (mode !== "quarantine") throw new ContainerFencingError("release only leads into quarantine");
-		const pin = this.pinned(hostId), state = this.saved(), previous = state[hostId]?.restartPolicy ?? "unless-stopped";
+		const pin = this.pinned(hostId), state = this.saved(), previous = state[hostId]?.restartPolicy;
+		// Without the state fence saved, a guessed restart policy would be a decision nobody made: fail closed.
+		if (previous === undefined) throw new ContainerFencingError(`no saved fence state for ${hostId}; restore the state file entry or set the restart policy deliberately`);
+		// A lock written under another drop-in name (an earlier release of this adapter) would keep the unit from
+		// starting after ours is gone; it is reported, not removed: which version fenced the host is an operator decision.
+		const dir = join(this.unitDir, pin.unit + ".d"), foreign = existsSync(dir) ? readdirSync(dir).filter(n => n !== DROP_IN && /^zz-.+-fenced\.conf$/.test(n)) : [];
+		if (foreign.length) throw new ContainerFencingError(`${pin.unit} carries another fencing drop-in (${foreign.join(", ")}); remove it deliberately before release`);
 		if (existsSync(this.dropIn(pin))) unlinkSync(this.dropIn(pin));
 		await this.must("systemctl", ["--user", "daemon-reload"]);
 		if (previous !== "no") await this.must("docker", ["update", `--restart=${previous}`, pin.container]);

@@ -1,7 +1,9 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdtemp, mkdir, writeFile, rm, access } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { ALL_ARTICLES } from "../scripts/corpus.ts";
 import { corpusHash, validateCorpus } from "../scripts/corpus-validation.ts";
 import { checkCorpusExamples } from "../scripts/check-corpus-examples.ts";
@@ -17,6 +19,32 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { FOREVER, Meter, PhiSpaces, spaces } from "../../src/index.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
+import { previousArticlePaths, retireGeneratedArticles } from "../scripts/generated-articles.ts";
+
+test("local shard defaults select the migrated store after original deletion", async () => {
+	const script = await readFile(new URL("../scripts/swarm-shards.sh", import.meta.url), "utf8");
+	const host = await readFile(new URL("../server/nano-host.ts", import.meta.url), "utf8");
+	assert.ok(script.includes('NANO_DB="${NANO_DB:-$ROOT/help-site/.local/swarm-b.phi.sqlite}"'));
+	assert.ok(host.includes('join(ROOT, ".local", "swarm-b.phi.sqlite")'));
+});
+
+test("help generation: renamed articles retire only owned output, unsafe manifests delete nothing", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "phi-help-manifest-"));
+	const old = "/help/articles/en/topics/retired.md", kept = "/help/articles/en/topics/current.md";
+	try {
+		await mkdir(join(dir, "help/articles/en/topics"), {recursive:true});
+		for (const path of [old, kept, "/help/articles/en/topics/unowned.md"]) await writeFile(join(dir, path.slice(1)), "article");
+		await writeFile(join(dir, "help/index.json"), JSON.stringify({schema:"phi-spaces-help-site-index-v1",articles:[{path:old},{path:kept}]}));
+		const previous = await previousArticlePaths(dir);
+		await assert.rejects(retireGeneratedArticles(dir, [old,"/help/articles/../../outside.md"],new Set([kept])),/Unsafe/);
+		await access(join(dir,old.slice(1)));
+		await retireGeneratedArticles(dir,previous,new Set([kept]));
+		await assert.rejects(access(join(dir,old.slice(1))),{code:"ENOENT"});
+		await access(join(dir,kept.slice(1)));
+		await access(join(dir,"help/articles/en/topics/unowned.md"));
+		await retireGeneratedArticles(dir,previous,new Set([kept]));
+	} finally { await rm(dir,{recursive:true,force:true}); }
+});
 
 test("help corpus: identities, API facts, links, anchors and table structure are consistent", async () => {
 	const catalog = JSON.parse(await readFile(new URL("../corpus/help_product_catalog.json", import.meta.url), "utf8"));

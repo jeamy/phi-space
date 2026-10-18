@@ -5,6 +5,42 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { createModels } from "@earendil-works/pi-ai/models";
 import { PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
+import { RemoteSpace, core } from "../src/index.ts";
+import { readChain } from "../src/read-chain.ts";
+
+test("linked pages: one RPC, byte bounds, cursors, permissions and malformed chains", async () => {
+	const h = await memory();
+	try {
+		const local = new PhiSpaces(h, ctx);
+		let next = "";
+		for (let n = 0; n < 105; n++) next = (await local.write({ type: "Job", fields: { next, n } })).id;
+		await local.write({ type: "Head", fields: { next, ready: true } });
+		const service = svc(h); let calls = 0;
+		const remote = new RemoteSpace({ request: text => { calls++; return service.handleText(text, as("peer-obs")); } });
+		await remote.info(); const before = calls;
+		const page = await remote.readChain({ type: "Job" }, { head: { type: "Head" }, limit: 100 });
+		assert.equal(calls - before, 1); assert.equal(page.items.length, 100); assert.equal(page.items[0]!.fields.n, 104);
+		const tail = await remote.readChain({ type: "Job" }, { cursor: page.next, limit: 100 });
+		assert.equal(tail.items.length, 5); assert.equal(tail.next, "");
+		const small = await remote.readChain({ type: "Job" }, { head: { type: "Head" }, limit: 100, maxBytes: 1000 });
+		assert.ok(small.items.length > 0 && small.items.length < 100);
+		assert.ok(Buffer.byteLength(JSON.stringify(small)) <= 1000);
+		const resumed = await remote.readChain({ type: "Job" }, { cursor: small.next, limit: 1 });
+		assert.equal(resumed.items[0]!.fields.n, 104 - small.items.length);
+		const denied = await session(service, "peer-jobs");
+		err(await denied.call("readAll", { template: { type: "Job" }, chain: { head: { type: "Head" } } }), "PermissionDenied");
+		err(await denied.call("readAll", { template: { type: "Secret" }, chain: { cursor: next } }), "PermissionDenied");
+		await assert.rejects(remote.readChain({ type: "Job" }, { cursor: "missing" }), /unavailable/);
+		await assert.rejects(remote.readChain({ type: "Job" }, { cursor: next, limit: 513 }), /512/);
+		await assert.rejects(remote.readChain({ type: "Job" }, { cursor: next, maxBytes: 1 }), core.ResponseBudgetTooSmall);
+		const state = core.initialState();
+		const node = core.write(state, 0, { type: "Job", fields: { next: "" } }, null, core.FOREVER);
+		state.entries[0]!.fields.next = node.id;
+		assert.throws(() => readChain(state, 0, { type: "Job" }, { cursor: node.id }), /cyclic/);
+		state.entries[0]!.expires = 1;
+		assert.throws(() => readChain(state, 2, { type: "Job" }, { cursor: node.id }), /unavailable/);
+	} finally { await h.close(ctx); }
+});
 
 const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
 const ids = new StaticIdentity({

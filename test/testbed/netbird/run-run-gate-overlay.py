@@ -22,7 +22,7 @@ args = parser.parse_args()
 A = pathlib.Path(args.artifacts).resolve(); O = pathlib.Path(args.output).resolve()
 SCENARIO = 'scenarios/run-gate-overlay-node.mjs'; PORT = '17432'
 if O.exists(): raise RuntimeError('refuse an existing output directory; use a fresh run')
-if not all((A / s).is_file() for s in ['pi-spaces.mjs', SCENARIO, 'MANIFEST.json']): raise RuntimeError('compiled artifacts and manifest required')
+if not all((A / s).is_file() for s in ['phi-spaces.mjs', SCENARIO, 'MANIFEST.json']): raise RuntimeError('compiled artifacts and manifest required')
 O.mkdir(mode=0o700, parents=True)
 signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
 SMOKE = args.local_smoke
@@ -77,7 +77,7 @@ def start_member(n):
         argv = ['node', str(A / SCENARIO), memberhome, 'member', bigip, localip]
     else:
         name = f'{T}-{n}'; containers.append(name)
-        docker = ['docker', 'run', '--rm', '-i', '--name', name, '--label', 'pi-spaces.owned-rungate=' + T, '--network', 'host', '--user', '0', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--cpus', '1', '--memory', '512m', '--pids-limit', '128', '--tmpfs', '/tmp:rw,size=64m', '-e', 'NODE_ENV=production', '-v', B + '/artifacts/pi-spaces.mjs:/opt/app/pi-spaces.mjs:ro', '-v', B + '/artifacts/run-gate-overlay-node.mjs:/opt/app/scenarios/run-gate-overlay-node.mjs:ro', '-v', B + '/store:/data', args.image, 'node', '/opt/app/scenarios/run-gate-overlay-node.mjs', '/data', 'member', bigip, localip]
+        docker = ['docker', 'run', '--rm', '-i', '--name', name, '--label', 'phi-spaces.owned-rungate=' + T, '--network', 'host', '--user', '0', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--cpus', '1', '--memory', '512m', '--pids-limit', '128', '--tmpfs', '/tmp:rw,size=64m', '-e', 'NODE_ENV=production', '-v', B + '/artifacts/phi-spaces.mjs:/opt/app/phi-spaces.mjs:ro', '-v', B + '/artifacts/run-gate-overlay-node.mjs:/opt/app/scenarios/run-gate-overlay-node.mjs:ro', '-v', B + '/store:/data', args.image, 'node', '/opt/app/scenarios/run-gate-overlay-node.mjs', '/data', 'member', bigip, localip]
         argv = [*SSH, 'big', shlex.join(docker)]
     procs['member'] = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
     ready = receive(procs['member'], 60); assert ready['ready'] and ready['role'] == 'member'
@@ -100,7 +100,7 @@ try:
         policy = api('POST', '/policies', {'name': T, 'description': 'owned run gate case-3 fixture only; removed after test', 'enabled': True, 'rules': [{'name': T, 'enabled': True, 'action': 'accept', 'bidirectional': True, 'protocol': 'tcp', 'ports': [PORT], 'sources': [group['id']], 'destinations': [group['id']]}]}); owned['policyId'] = policy['id']; (O / 'owned.json').write_text(json.dumps({'tag': T, 'base': B, 'owned': owned}))
         time.sleep(3)
         ssh(['test', '!', '-e', B]); ssh(['mkdir', '-m', '700', B]); ssh(['mkdir', B + '/artifacts', B + '/store']); owned['remoteBase'] = True
-        for source, dest in [('pi-spaces.mjs', 'pi-spaces.mjs'), (SCENARIO, 'run-gate-overlay-node.mjs')]:
+        for source, dest in [('phi-spaces.mjs', 'phi-spaces.mjs'), (SCENARIO, 'run-gate-overlay-node.mjs')]:
             subprocess.run(['scp', *SSH[1:5], '-q', str(A / source), 'big:' + B + '/artifacts/' + dest], check=True)
     modulelink = A / 'node_modules'
     if not modulelink.exists(): modulelink.symlink_to('/media/data/programming/phi-spaces/node_modules', target_is_directory=True)
@@ -142,7 +142,7 @@ try:
     report = {'passed': True, 'date': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'scope': 'local-loopback-smoke' if SMOKE else 'real-netbird-two-host-run-gate', 'case': '7.4 case 3', 'run': run,
               'transport': 'loopback TCP' if SMOKE else f'TCP {PORT} bound to the existing NetBird IPv4 addresses', 'offlineMechanism': 'member process killed' if SMOKE else 'member container killed (docker kill), restarted on the same store',
               'authentication': 'layer B key proof and signed run gate instructions/ACKs; layer A fixture peer-IP pin, not the Management API', 'members': {'big': m['spaceId'], 'local': control['spaceId']},
-              'steps': steps, 'productionServiceActivated': False, 'artifactHashes': {s: hashlib.sha256((A / s).read_bytes()).hexdigest() for s in ['pi-spaces.mjs', SCENARIO]}}
+              'steps': steps, 'productionServiceActivated': False, 'artifactHashes': {s: hashlib.sha256((A / s).read_bytes()).hexdigest() for s in ['phi-spaces.mjs', SCENARIO]}}
     shutil.copyfile(A / 'MANIFEST.json', O / 'build.json'); (O / 'report.json').write_text(json.dumps(report, indent=2) + '\n'); print(json.dumps({'stage': 'passed'}), flush=True)
 finally:
     errors = []
@@ -158,7 +158,7 @@ finally:
                 for cid in ssh(['docker', 'ps', '-aq', '--filter', 'name=^/' + name + '$']).split():
                     try: v = json.loads(ssh(['docker', 'inspect', cid]))[0]
                     except Exception: continue  # --rm removed it meanwhile
-                    assert v['Name'] == '/' + name and v['Config']['Labels'].get('pi-spaces.owned-rungate') == T; ssh(['docker', 'rm', '-f', cid])
+                    assert v['Name'] == '/' + name and v['Config']['Labels'].get('phi-spaces.owned-rungate') == T; ssh(['docker', 'rm', '-f', cid])
         except Exception as e: errors.append(str(e))
         try:
             if owned.get('firewallRule'):

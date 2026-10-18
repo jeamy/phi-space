@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {mkdtempSync,existsSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,existsSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {ContainerFencing,ContainerFencingError,type CommandRunner} from '../src/index.ts';
 
 /** Fake docker host: one container per name, a user unit that (unless its drop-in blocks it) starts the container. */
@@ -21,6 +21,27 @@ function fakeHost(dir:string,o:{stuck?:boolean}={}){
   return {code:1,stdout:'',stderr:'unexpected '+cmd};};
  return {c,units,calls,run};
 }
+
+test('container fencing release fails closed without the saved fence state',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'container-fencing-nostate-'));
+ try{
+  const h=fakeHost(dir),f=new ContainerFencing({pins:{'phase1b-host-a':{container:'host-a',unit:'host-a.service'}},unitDir:dir,stateFile:join(dir,'state.json'),run:h.run});
+  await f.fence('phase1b-host-a','state test');rmSync(join(dir,'state.json'));
+  await assert.rejects(f.release('phase1b-host-a','quarantine'),/no saved fence state/);
+  assert.equal(h.c['host-a']!.running,false,'nothing was started');assert.ok(existsSync(join(dir,'host-a.service.d','zz-phi-spaces-fenced.conf')),'the lock stays');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('container fencing release refuses a unit that still carries another fencing drop-in',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'container-fencing-foreign-'));
+ try{
+  const h=fakeHost(dir),f=new ContainerFencing({pins:{'phase1b-host-a':{container:'host-a',unit:'host-a.service'}},unitDir:dir,stateFile:join(dir,'state.json'),run:h.run});
+  await f.fence('phase1b-host-a','upgrade test');
+  writeFileSync(join(dir,'host-a.service.d','zz-former-fenced.conf'),'[Unit]\nConditionPathExists=/nonexistent/former\n');
+  await assert.rejects(f.release('phase1b-host-a','quarantine'),/another fencing drop-in \(zz-former-fenced\.conf\)/);
+  assert.equal(h.c['host-a']!.running,false,'nothing was started');assert.ok(existsSync(join(dir,'host-a.service.d','zz-phi-spaces-fenced.conf')),'our lock stays');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
 
 test('container fencing locks the pinned container three ways, verifies live state and releases into a started unit',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'container-fencing-'));

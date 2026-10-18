@@ -7,7 +7,7 @@ import { core, Space, FOREVER, canonicalJson, type SpaceHost } from "../src/inde
 import type { Json, SpaceState } from "../src/core.ts";
 
 const Versions = defineDoc<{ next: number }>({
-  kind: "pi-spaces.example-cache-version", version: 1, scope: "session", initial: () => ({ next: 1 })
+  kind: "phi-spaces.example-cache-version", version: 1, scope: "session", initial: () => ({ next: 1 })
 });
 export type CacheHit = { value: Json; version: number; expiresAt: number };
 

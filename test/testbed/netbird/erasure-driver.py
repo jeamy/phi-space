@@ -59,7 +59,7 @@ def main():
                 raise RuntimeError('owned local operator failed: ' + reply.stderr[-1200:])
             return json.loads(reply.stdout)
         tunnel = json.loads(pathlib.Path(state['sharedTunnelState']).read_text())['tunnel']['socketDir']
-        command = ['docker', 'run', '--rm', '--interactive', '--user', '0:0', '--network', 'container:' + state['namespaces'][member], '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,nosuid,nodev,size=64m', '-v', base + '/artifacts/pi-spaces.mjs:/opt/app/pi-spaces.mjs:ro', '-v', base + '/artifacts/tools:/opt/app/tools:ro', '-v', home(member) + ':/data:rw', '-v', tunnel + ':/register-tunnel:ro', 'phi-spaces-test-node:local', 'node', '/opt/app/tools/' + tool, *args]
+        command = ['docker', 'run', '--rm', '--interactive', '--user', '0:0', '--network', 'container:' + state['namespaces'][member], '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,nosuid,nodev,size=64m', '-v', base + '/artifacts/phi-spaces.mjs:/opt/app/phi-spaces.mjs:ro', '-v', base + '/artifacts/tools:/opt/app/tools:ro', '-v', home(member) + ':/data:rw', '-v', tunnel + ':/register-tunnel:ro', 'phi-spaces-test-node:local', 'node', '/opt/app/tools/' + tool, *args]
         return json.loads(ssh(command, data))
 
     def stopped():

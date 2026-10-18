@@ -1,5 +1,6 @@
 // Canonical JSON (RFC 8785 / JCS): sorted keys (UTF-16 code units), no whitespace, ECMAScript number form. For hashes
 // and signatures; JSON.stringify alone is not deterministic across key orders.
+import { createHash } from "node:crypto";
 import type { Json } from "./core.ts";
 
 export function canonicalJson(v: Json): string {
@@ -15,3 +16,6 @@ export function canonicalJson(v: Json): string {
 	}
 	throw new TypeError(`canonical JSON: unsupported ${typeof v}`);
 }
+
+/** The hex SHA-256 of a value's canonical JSON: the one digest behind argument, command and binding hashes. */
+export const digestJson = (v: unknown): string => createHash("sha256").update(canonicalJson(v as Json)).digest("hex");

@@ -2,7 +2,7 @@
 // scenarios. No TypeScript source, tests or docs leave this machine. Same bundling as scripts/bundle-mobile.mjs
 // (esm, node22, @earendil-works/* external), so the library under test is what the mobile runtime gets.
 //   node test/testbed/build-artifacts.mjs <outDir>
-// outDir: pi-spaces.mjs  examples/*.mjs  scenarios/*.mjs  package.json  package-lock.json  MANIFEST.json
+// outDir: phi-spaces.mjs  examples/*.mjs  scenarios/*.mjs  package.json  package-lock.json  MANIFEST.json
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -20,16 +20,16 @@ const common = { absWorkingDir: root, bundle: true, format: 'esm', platform: 'no
 const names = async (dir) => (await readdir(resolve(root, dir))).filter((n) => n.endsWith('.ts')).sort();
 
 // 1. the library, exactly as the mobile runtime gets it
-await build({ ...common, entryPoints: ['src/index.ts'], outfile: resolve(out, 'pi-spaces.mjs') });
+await build({ ...common, entryPoints: ['src/index.ts'], outfile: resolve(out, 'phi-spaces.mjs') });
 
 // 2. the examples, self-contained like the ones in runtime/space-examples
 const examples = await names('examples');
 await build({ ...common, entryPoints: examples.map((n) => `examples/${n}`), outdir: resolve(out, 'examples'), outExtension: { '.js': '.mjs' } });
 
-// 3. the scenarios use the shipped library instead of a second copy: every import of src/index.ts becomes ../pi-spaces.mjs
+// 3. the scenarios use the shipped library instead of a second copy: every import of src/index.ts becomes ../phi-spaces.mjs
 const sharedLibrary = {
 	name: 'shared-library',
-	setup(b) { b.onResolve({ filter: /(^|\/)src\/index\.ts$/ }, () => ({ path: '../pi-spaces.mjs', external: true })); },
+	setup(b) { b.onResolve({ filter: /(^|\/)src\/index\.ts$/ }, () => ({ path: '../phi-spaces.mjs', external: true })); },
 };
 // Examples have a "run when started directly" block (import.meta.url === argv[1]). Inlined into a scenario bundle that
 // comparison would be true and start the example's CLI, so inside scenarios import.meta.url of an example is neutralised.

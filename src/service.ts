@@ -10,8 +10,7 @@ import { awaitWithContext } from "@earendil-works/chord/context";
 import { ReplicationConflict } from "./entry-replication.ts";
 import { ReplicationClockError } from "./replication-clock.ts";
 import { CommitSealed, SyncBudgetExceeded } from "./commit-sealed.ts";
-import { createHash } from "node:crypto";
-import { canonicalJson } from "./canonical.ts";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import type { Context } from "@earendil-works/chord";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
@@ -115,6 +114,8 @@ class Bad extends Error {}
 class Denied extends Error {}
 const fail = (code: ErrorCode, message: string, extra: { requiredBytes?: number } = {}): Reply => ({ ok: false, error: { code, message, ...extra } });
 
+/** A request is identified by principal, generation and request ID (claims); a merge controller gets that identity. */
+const changeRequestHash = (principal: Principal, r: RequestRef): string => digestJson([principal, r.generation, r.requestId]);
 const isObj = (v: unknown): v is Record<string, Json> => v !== null && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown, what: string): string => { if (typeof v !== "string" || v === "") throw new Bad(`${what} must be a non-empty string`); return v; };
 const int = (v: unknown, what: string, min = 0): number => { if (typeof v !== "number" || !Number.isInteger(v) || v < min) throw new Bad(`${what} must be an integer >= ${min}`); return v; };
@@ -142,6 +143,7 @@ export class SpaceService {
 	private policy: Policy;
 	private now: () => number;
 	private rates = new Map<string, { at: number; calls: number }>();
+	private rateSweepAt = -Infinity;
 	private sealed: { revision: number; hash: string } | null = null;
 	private noteSealed(c: { revision: number; hash: string }): Reply { if (!this.sealed) { this.sealed = { revision: c.revision, hash: c.hash }; this.o.onSealed?.(); } return sealedReply(this.sealed); }
 
@@ -155,10 +157,11 @@ export class SpaceService {
 
 	/** Decode, check the frame size, dispatch, encode. The size limit is the frame budget of the space (4.2). */
 	async handleText(text: string, conn: Connection, maxFrameBytes = core.DEFAULT_LIMITS.maxFrameBytes): Promise<string> {
-		if (new TextEncoder().encode(text).length > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", `a call may take at most ${maxFrameBytes} bytes`));
+		const bytes = Buffer.byteLength(text);
+		if (bytes > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", `a call may take at most ${maxFrameBytes} bytes`));
 		let call: unknown;
 		try { call = JSON.parse(text); } catch { return JSON.stringify(fail("BadRequest", "the call is not JSON")); }
-		const reply = await this.handle(call, conn, maxFrameBytes, Buffer.byteLength(text));
+		const reply = await this.handle(call, conn, maxFrameBytes, bytes);
 		const textReply = JSON.stringify(reply);
 		if (encodedBytes(reply) > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", "the transport frame cannot carry this response"));
 		return textReply;
@@ -185,7 +188,7 @@ export class SpaceService {
 			if (frame !== undefined) {
 				if (!isObj(frame)) throw new Bad("frame must be an object");
 				if (frame.authorityId !== undefined && frame.authorityId !== this.o.authorityId) return fail("AuthorityMismatch", `this host is authority ${this.o.authorityId}`);
-				const epoch = await this.o.epochForSpace?.(call.space as string | undefined) ?? this.o.primaryEpoch;
+				const epoch = await this.o.epochForSpace?.(call.space === undefined ? undefined : str(call.space, "space")) ?? this.o.primaryEpoch;
 				// resolveOperation judges an earlier epoch itself (v3 6.2: NotCommitted only with promotion evidence).
 				if (frame.primaryEpoch !== undefined && frame.primaryEpoch !== epoch && !((authorization?.knownRequest || method === "resolveOperation") && typeof frame.primaryEpoch==="number" && Number.isSafeInteger(frame.primaryEpoch) && frame.primaryEpoch<epoch)) return fail("StaleEpoch", `the primary epoch is ${epoch}`);
 			}
@@ -225,9 +228,14 @@ export class SpaceService {
 		}
 	}
 	private rate(peer: string): void {
-		const now = this.now();
-		for (const [key, value] of this.rates) if (value.at + this.o.rateWindowMs <= now) this.rates.delete(key);
+		const now = this.now(), window = this.o.rateWindowMs;
 		let r = this.rates.get(peer);
+		if (r && r.at + window <= now) { this.rates.delete(peer); r = undefined; }
+		if (!r && (now >= this.rateSweepAt || this.rates.size >= 10000)) {
+			// Other peers' expired windows are swept at most once per window (O(peers) each time), and before a full table refuses.
+			for (const [key, value] of this.rates) if (value.at + window <= now) this.rates.delete(key);
+			this.rateSweepAt = now + window;
+		}
 		if (!r) { if (this.rates.size >= 10000) throw new core.ResourceExhausted("the rate table is full"); r = { at: now, calls: 0 }; this.rates.set(peer, r); }
 		if (++r.calls > this.o.maxCallsPerWindow) throw new core.ResourceExhausted("the peer exceeded its call rate");
 	}
@@ -301,6 +309,19 @@ export class SpaceService {
 			case "readAll": {
 				const t = template(a.template);
 				if (grant.types !== "*") this.checkTypes(grant, t?.type ? [t.type] : undefined, "this template");
+				if (a.chain !== undefined) {
+					if (!isObj(a.chain) || a.txn != null || a.token !== undefined || a.cursor !== undefined) throw new Bad("invalid chain read");
+					const q = a.chain;
+					const head = q.head === undefined ? undefined : template(q.head);
+					if (head !== undefined && grant.types !== "*") this.checkTypes(grant, head?.type ? [head.type] : undefined, "this chain head");
+					return await client.readChain(t, {
+						...(head === undefined ? {} : { head }),
+						...(q.cursor === undefined ? {} : { cursor: typeof q.cursor === "string" ? q.cursor : str(q.cursor, "chain.cursor") }),
+						...(q.nextField === undefined ? {} : { nextField: str(q.nextField, "chain.nextField") }),
+						limit: q.limit === undefined ? 100 : int(q.limit, "chain.limit", 1),
+						maxBytes: Math.min(q.maxBytes === undefined ? c.frameBytes - 21 : int(q.maxBytes, "chain.maxBytes", 1), c.frameBytes - 21),
+					}) as unknown as Json;
+				}
 				const p = await client.readPage(t, { maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21), ...(a.token === undefined ? {} : { token: str(a.token, "token") }), after: (a.cursor as string | null | undefined) ?? null, txn: (a.txn as string | null | undefined) ?? null });
 				return p as unknown as Json;
 			}
@@ -377,7 +398,7 @@ export class SpaceService {
 			spaceId: info.spaceId, alias: info.alias, incarnation: info.incarnation, streamId: core.streamIdOf(s ?? core.initialState()), rev: core.revision(s ?? core.initialState()),
 			authorityId: this.o.authorityId, primaryEpoch: await this.o.epochForSpace?.(info.spaceId) ?? this.o.primaryEpoch, role: "single",
 			principal: principalKey(c.id.principal), roles: c.id.roles,
-			features: [...METHODS, "write.unique"],
+			features: [...METHODS, "write.unique", "read.chain"],
 			limits: { maxFrameBytes: Math.min(lim.maxFrameBytes, c.frameBytes), maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs, maxPendingPerPrincipal: this.o.maxPendingPerPrincipal, maxPendingPerPeer: this.o.maxPendingPerPeer },
 			capabilities: { snapshotPagination: true, mailboxes: true, completionProfiles: true, transactions: true, blockingTake: true, mode: "single" },
 		} as Json;
@@ -411,7 +432,7 @@ export class SpaceService {
 			if (!c.request) throw new Bad("a merge write needs a request ID");
 			const ms = duration(a.leaseMs, "leaseMs", core.ANY), expiresAt = ms === core.ANY || ms >= core.FOREVER ? null : this.now() + ms;
 			// A request is identified by principal, generation and request ID (claims); the controller gets that identity.
-			const changeRequest = createHash("sha256").update(canonicalJson([c.id.principal, c.request.generation, c.request.requestId] as unknown as Json)).digest("hex");
+			const changeRequest = changeRequestHash(c.id.principal, c.request);
 			const change = await merge.controller.mutate(changeRequest, { kind: r.variant === "lww" ? "put" : "add", type, fields: a.entry.fields as Record<string, Json>, owner: { ...c.id.principal }, expiresAt } as never);
 			return { id: entryChangeId(change), expires: expiresAt ?? core.FOREVER, replicated: true };
 		}
@@ -432,7 +453,7 @@ export class SpaceService {
 			const action = str(a.action, "action"), id = a.id;
 			if (action !== "renew" && action !== "cancel") throw new Bad("action must be renew or cancel");
 			if (!c.request) throw new Bad("a merge lease change needs a request ID");
-			const changeRequest = createHash("sha256").update(canonicalJson([c.id.principal, c.request.generation, c.request.requestId] as unknown as Json)).digest("hex"), owner = { ...c.id.principal };
+			const changeRequest = changeRequestHash(c.id.principal, c.request), owner = { ...c.id.principal };
 			// A retried request answers from its stored change (the entry it changed may no longer be visible).
 			const prior = await merge.controller.changeForRequest(changeRequest);
 			if (prior) {
@@ -534,7 +555,9 @@ export class SpaceService {
 		if (e instanceof ReplicationConflict) return fail("BadRequest", e.message);
 		if (e instanceof ReplicationClockError) return fail("ResourceExhausted", "replication clock: " + e.message);
 		if (e instanceof core.IllegalArgumentError || e instanceof TypeError) return fail("BadRequest", (e as Error).message);
-		return fail("Internal", e instanceof Error ? e.message : String(e));
+		// Unclassified errors stay on this host: their text can name local paths and internal identifiers.
+		console.error("phi-spaces service: internal error", e);
+		return fail("Internal", "internal error");
 	}
 }
 class UnsupportedProtocol extends Error {}

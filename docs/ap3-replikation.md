@@ -21,7 +21,7 @@ Den Abgleich mit den Abnahmekriterien enthält die [Abnahme-Matrix](ap3-abnahme.
 ## Baustein 3.1
 
 `EntryReplicationController` speichert ein eigenes persistentes Session-Dokument
-`pi-spaces.entry-replica`. Konfiguration und Dokumentadresse binden Space-ID,
+`phi-spaces.entry-replica`. Konfiguration und Dokumentadresse binden Space-ID,
 Autorität, Replikat-ID, Inkarnation, erlaubte Ursprünge und Typregeln. Alle Replikate
 verwenden denselben kanonisch gehashten Mitglieder-/Regelvertrag. Änderungen der
 Mitgliedschaft oder Inkarnation an einem bestehenden Dokument werden abgewiesen;
@@ -306,7 +306,7 @@ kompaktierenden Schatten, der genau dieselben Eingaben bekommt.
 - **Versionsvektoren:**
   - `describeStream()` meldet je Ursprung die lückenlos empfangene Sequenz (`vector`).
   - Die Pumpe speichert den Vektor jedes Peers mit Zeitpunkt (`recordPeerVector`, Dokument
-    `pi-spaces.entry-replica-peers`).
+    `phi-spaces.entry-replica-peers`).
   - Meldet ein Peer weniger als zuvor, gilt er als zurückgefallen und die Kompaktierung bleibt aus. Ein aus einer
     Sicherung wiederhergestelltes Replikat braucht deshalb eine neue Inkarnation.
 - **Stabilität:**

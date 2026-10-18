@@ -5,8 +5,9 @@
 // restart is the `fenced` boot state with revoked permits in the recovery register.
 import tls from "node:tls";
 import { createHash } from "node:crypto";
-import { closeSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, existsSync } from "node:fs";
+import { closeSync, openSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { privateFile } from "./keys.ts";
+import { atomicJsonFile } from "./json-file.ts";
 import type { RegisterTlsClient, RegisterTlsIdentity } from "./tls-register.ts";
 import type { FenceProof, FencingAdapter } from "./replica-control.ts";
 
@@ -57,8 +58,7 @@ export class NetcupScp {
 /** Previous autostart values, so release restores what fence changed. */
 export interface NetcupFenceState { load(hostId: string): { autostart: boolean } | null; save(hostId: string, v: { autostart: boolean }): void; clear(hostId: string): void }
 export function fileFenceState(path: string): NetcupFenceState {
-	const read = (): Record<string, { autostart: boolean }> => existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
-	const write = (v: Record<string, { autostart: boolean }>) => { writeFileSync(path + ".tmp", JSON.stringify(v), { mode: 0o600 }); renameSync(path + ".tmp", path); };
+	const { read, write } = atomicJsonFile<Record<string, { autostart: boolean }>>(path, () => ({}));
 	return { load: h => read()[h] ?? null, save: (h, v) => write({ ...read(), [h]: v }), clear: h => { const all = read(); delete all[h]; write(all); } };
 }
 export function memoryFenceState(): NetcupFenceState {
@@ -100,7 +100,10 @@ export class NetcupFencing implements FencingAdapter {
 	/** Called by releaseHostToQuarantine after the boot CAS: restores autostart, then powers on. */
 	async release(hostId: string, mode: "quarantine"): Promise<void> {
 		if (mode !== "quarantine") throw new NetcupError("release only leads into quarantine");
-		const pin = await this.pinned(hostId), previous = this.state.load(hostId)?.autostart ?? true;let live = await this.scp.live(pin.serverId);
+		const pin = await this.pinned(hostId), saved = this.state.load(hostId);
+		// Without the state fence saved, restoring a guessed autostart would be a decision nobody made: fail closed.
+		if (!saved) throw new NetcupError(`no saved fence state for ${hostId}; restore the fence state entry or set autostart deliberately`);
+		const previous = saved.autostart;let live = await this.scp.live(pin.serverId);
 		if (live.autostart !== previous) await this.scp.patch(pin.serverId, { autostart: previous });
 		if (live.state !== "RUNNING") await this.scp.patch(pin.serverId, { state: "ON" });
 		live = await this.scp.live(pin.serverId);if (live.state !== "RUNNING") throw new NetcupError(`netcup server ${pin.serverId} did not start (${live.state})`);

@@ -1,7 +1,6 @@
 // Exclusive, fenced history maintenance. It does not erase backend history or authorize live Data effects.
-import {createHash} from 'node:crypto';
 import type {Context} from '@earendil-works/chord';
-import {canonicalJson} from './canonical.ts';
+import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import type {Principal} from './claims.ts';
 import {FederationJournalLayout,parentJournalKey} from './federation-journals.ts';
@@ -9,9 +8,10 @@ import {FederationOperations} from './federated-space.ts';
 import {RouterCommands,RouterJournal} from './router.ts';
 import {RootErasures,ErasedEntryDigests,type RootErasureOperation} from './root-erasure-doc.ts';
 import {RoutingConflict} from './routing-semantics.ts';
+import { jsonCopy } from './json.ts';
 export {RootErasures} from './root-erasure-doc.ts';
-const hash=(value:unknown)=>createHash('sha256').update(canonicalJson(value as any)).digest('hex');
-const copy=<T>(v:T):T=>JSON.parse(JSON.stringify(v));
+const hash=(value:unknown)=>digestJson(value as any);
+const copy=jsonCopy;
 const evidenceKey=(root:string,id:string,digest:string)=>hash([root,id,'entry-digests',digest.slice(0,2)]);
 export class RootHistoryErasure {
  private o:{host:SpaceHost;ctx:Context;federationId:string;authorize:()=>Promise<void>;assertExclusiveFenced:()=>Promise<void>};

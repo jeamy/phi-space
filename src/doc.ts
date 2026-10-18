@@ -5,7 +5,7 @@ import * as core from "./core.ts";
 import type { SpaceState } from "./core.ts";
 
 export const Space = defineDoc<SpaceState & Record<string, any>>({
-	kind: "pi-spaces.space",
+	kind: "phi-spaces.space",
 	version: 5, // 5: spaceId and incarnation (named spaces, see spaces.ts)
 	scope: "session",
 	initial: () => core.initialState() as SpaceState & Record<string, any>,

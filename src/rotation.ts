@@ -36,8 +36,8 @@ export function rotateKeyIn(s: core.SpaceState, now: number, o: { challenge: Rot
 	if (core.count(s, now, { type: "PeerKey", fields: { peerId: c.peerId, keyId: c.newKeyId } })) throw new core.PermissionError("replacement key already exists");
 	const cost = Buffer.byteLength(JSON.stringify(old.fields)) * 2 + Buffer.byteLength(JSON.stringify(c)) + 1024;
 	if (cost > core.limitsOf(s).maxCommitBytes) throw new core.ResourceExhausted("rotation exceeds the atomic commit budget");
-	core.probe(s, now, { id: pending.id }, null, true);
-	core.probe(s, now, { id: old.id }, null, true);
+	// Both were listed as visible in this commit; a take that still misses would leave the old key active beside the new one.
+	if (core.probe(s, now, { id: pending.id }, null, true).status !== "found" || core.probe(s, now, { id: old.id }, null, true).status !== "found") throw new core.PermissionError("rotation entries could not be consumed");
 	core.write(s, now, { type: "PeerKey", fields: { ...old.fields, state: "revoked" } }, null, core.FOREVER);
 	core.write(s, now, { type: "PeerKey", fields: { ...old.fields, keyId: c.newKeyId, algorithm: c.newAlgorithm, publicKey: c.newPublicKey, state: "active" } }, null, core.FOREVER);
 	return { peerId: c.peerId, oldKeyId: c.oldKeyId, newKeyId: c.newKeyId };

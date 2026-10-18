@@ -1,10 +1,10 @@
 // AP 2.1: durable command orchestration. Boot/RouterLease/delegation wiring is AP 2.2.
-import {createHash} from "node:crypto";
 import {defineDocFamily, type Session} from "@earendil-works/pi-durable";
 import type {Context} from "@earendil-works/chord";
-import {canonicalJson} from "./canonical.ts";
+import {canonicalJson,digestJson} from "./canonical.ts";
 import {argHash, ResultExpired, type Principal} from "./claims.ts";
 import type {Json} from "./core.ts";
+import { jsonCopy, jsonBytes } from "./json.ts";
 
 export type TargetBinding = {
     hostId: string; spaceId: string; authorityId: string; dataIncarnation: string;
@@ -77,7 +77,7 @@ type Index = {
     reservedBytes: number
 };
 export const RouterJournal = defineDocFamily<Index, null>({
-    kind: "pi-spaces.router-journal",
+    kind: "phi-spaces.router-journal",
     version: 1,
     scope: "session",
     family: true,
@@ -85,7 +85,7 @@ export const RouterJournal = defineDocFamily<Index, null>({
         ({authorityId: null, mode: "recovering", limits: null, refs: {}, reservedBytes: 0})
 });
 export const RouterCommands = defineDocFamily<{command: RouterCommand | null}, null>({
-    kind: "pi-spaces.router-command",
+    kind: "phi-spaces.router-command",
     version: 1,
     scope: "session",
     family: true,
@@ -94,9 +94,9 @@ export const RouterCommands = defineDocFamily<{command: RouterCommand | null}, n
 export class RouterBlocked extends Error {}
 export class RouterConflict extends Error {}
 export class RouterBudgetExceeded extends Error {}
-const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v));
-const bytes = (v: unknown) => Buffer.byteLength(JSON.stringify(v));
-const hash = (v: unknown) => createHash("sha256").update(canonicalJson(v as Json)).digest("hex");
+const copy = jsonCopy;
+const bytes = jsonBytes;
+const hash = digestJson;
 const ident = (id: string) => {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id) ||
         ["constructor", "prototype", "__proto__"].includes(id))

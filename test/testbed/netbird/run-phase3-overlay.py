@@ -14,7 +14,7 @@ parser.add_argument('--remote-ip',default='100.89.53.156')
 args=parser.parse_args()
 A=pathlib.Path(args.artifacts).resolve();O=pathlib.Path(args.output).resolve()
 if O.exists():raise RuntimeError('refuse an existing output directory; use a fresh run')
-if not all((A/s).is_file() for s in ['pi-spaces.mjs','scenarios/phase3-overlay-node.mjs','MANIFEST.json']):raise RuntimeError('compiled artifacts and manifest required')
+if not all((A/s).is_file() for s in ['phi-spaces.mjs','scenarios/phase3-overlay-node.mjs','MANIFEST.json']):raise RuntimeError('compiled artifacts and manifest required')
 O.mkdir(mode=0o700,parents=True)
 signal.signal(signal.SIGTERM,lambda *_:(_ for _ in ()).throw(KeyboardInterrupt()))
 T='ap3-overlay-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d')+'-'+secrets.token_hex(4);B='/home/mux/.local/share/phi-spaces-operations/'+T;token=secrets.token_hex(32)
@@ -74,12 +74,12 @@ try:
  policy=api('POST','/policies',{'name':T,'description':'owned two-host AP3 fixture only; removed after test','enabled':True,'rules':[{'name':T,'enabled':True,'action':'accept','bidirectional':True,'protocol':'tcp','ports':['17431'],'sources':[group['id']],'destinations':[group['id']]}]});owned['policyId']=policy['id'];(O/'owned.json').write_text(json.dumps({'tag':T,'base':B,'owned':owned}))
  time.sleep(3)
  ssh(['test','!','-e',B]);ssh(['mkdir','-m','700',B]);ssh(['mkdir',B+'/artifacts',B+'/store'])
- for source,dest in [('pi-spaces.mjs','pi-spaces.mjs'),('scenarios/phase3-overlay-node.mjs','phase3-overlay-node.mjs')]:subprocess.run(['scp','-oControlMaster=auto','-oControlPath=/tmp/pi-overlay-ssh-%r@%h-%p','-oControlPersist=120','-q',str(A/source),'big:'+B+'/artifacts/'+dest],check=True)
+ for source,dest in [('phi-spaces.mjs','phi-spaces.mjs'),('scenarios/phase3-overlay-node.mjs','phase3-overlay-node.mjs')]:subprocess.run(['scp','-oControlMaster=auto','-oControlPath=/tmp/pi-overlay-ssh-%r@%h-%p','-oControlPersist=120','-q',str(A/source),'big:'+B+'/artifacts/'+dest],check=True)
  modulelink=A/'node_modules'
  if not modulelink.exists():modulelink.symlink_to('/media/data/programming/phi-spaces/node_modules',target_is_directory=True)
  localerr=open(O/'local.stderr','w');remoteerr=open(O/'remote.stderr','w')
  local=subprocess.Popen(['node',str(A/'scenarios/phase3-overlay-node.mjs'),localhome,'a',localip,bigip,token],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=localerr,text=True,bufsize=1);procs.append(local)
- args=['docker','run','--rm','-i','--name',T,'--label','pi-spaces.owned-phase3='+T,'--network','host','--user','0','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','2','--memory','1g','--pids-limit','128','--tmpfs','/tmp:rw,size=64m','-e','NODE_ENV=production','-v',B+'/artifacts/pi-spaces.mjs:/opt/app/pi-spaces.mjs:ro','-v',B+'/artifacts/phase3-overlay-node.mjs:/opt/app/scenarios/phase3-overlay-node.mjs:ro','-v',B+'/store:/data','sha256:95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413','node','/opt/app/scenarios/phase3-overlay-node.mjs','/data','b',bigip,localip,token]
+ args=['docker','run','--rm','-i','--name',T,'--label','phi-spaces.owned-phase3='+T,'--network','host','--user','0','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--cpus','2','--memory','1g','--pids-limit','128','--tmpfs','/tmp:rw,size=64m','-e','NODE_ENV=production','-v',B+'/artifacts/phi-spaces.mjs:/opt/app/phi-spaces.mjs:ro','-v',B+'/artifacts/phase3-overlay-node.mjs:/opt/app/scenarios/phase3-overlay-node.mjs:ro','-v',B+'/store:/data','sha256:95cb86e8e1be12e8daece82ac83c038bad97117802f45210b797747c6ba7c413','node','/opt/app/scenarios/phase3-overlay-node.mjs','/data','b',bigip,localip,token]
  remote=subprocess.Popen(['ssh','-oControlMaster=auto','-oControlPath=/tmp/pi-overlay-ssh-%r@%h-%p','-oControlPersist=120','-oBatchMode=yes','big',shlex.join(args)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=remoteerr,text=True,bufsize=1);procs.append(remote)
  assert receive(local)['ready'] and receive(remote,45)['ready']
  for p in procs:call(p,'listen')
@@ -113,7 +113,7 @@ try:
  for p in procs:call(p,'maintain',requestId='after-partition')
  for _ in range(2):call(local,'exchange',host=bigip)
  assert call(local,'describe')['revision']==ar and call(remote,'describe')['revision']==br,'forwarding grew an echo'
- report={'passed':True,'date':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'real-two-host-entry-overlay-component','transport':'TCP bound to existing NetBird IPv4 on port 17431','partitionMechanism':'both owned replication listeners stopped; existing VPN and other traffic unchanged','partitionStarted':start_wall,'partitionSeconds':duration,'samples':samples,'after':{'localRevision':ar,'bigRevision':br,'visibleEntries':len(a['entries']),'localReceivedExports':a['received'],'bigReceivedExports':b['received']},'snapshotUnderLoad':False,'realNetbirdReplication':True,'fullPhase3Accepted':False,'productionServiceActivated':False,'authentication':'fixture peer-IP pin and private token; not production layer-B/grants','artifactHashes':{s:hashlib.sha256((A/s).read_bytes()).hexdigest() for s in ['pi-spaces.mjs','scenarios/phase3-overlay-node.mjs']}}
+ report={'passed':True,'date':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'real-two-host-entry-overlay-component','transport':'TCP bound to existing NetBird IPv4 on port 17431','partitionMechanism':'both owned replication listeners stopped; existing VPN and other traffic unchanged','partitionStarted':start_wall,'partitionSeconds':duration,'samples':samples,'after':{'localRevision':ar,'bigRevision':br,'visibleEntries':len(a['entries']),'localReceivedExports':a['received'],'bigReceivedExports':b['received']},'snapshotUnderLoad':False,'realNetbirdReplication':True,'fullPhase3Accepted':False,'productionServiceActivated':False,'authentication':'fixture peer-IP pin and private token; not production layer-B/grants','artifactHashes':{s:hashlib.sha256((A/s).read_bytes()).hexdigest() for s in ['phi-spaces.mjs','scenarios/phase3-overlay-node.mjs']}}
  shutil.copyfile(A/'MANIFEST.json',O/'build.json');(O/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'stage':'passed','partitionSeconds':duration}),flush=True)
 finally:
  errors=[]
@@ -131,7 +131,7 @@ finally:
    except Exception:
     if not ssh(['docker','ps','-aq','--filter','name=^/'+T+'$']).strip():continue
     raise
-   assert v['Name']=='/'+T and v['Config']['Labels'].get('pi-spaces.owned-phase3')==T;ssh(['docker','rm','-f',cid])
+   assert v['Name']=='/'+T and v['Config']['Labels'].get('phi-spaces.owned-phase3')==T;ssh(['docker','rm','-f',cid])
  except Exception as e:errors.append(str(e))
  try:
   if owned.get('firewallRule'):

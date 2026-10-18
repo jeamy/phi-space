@@ -1,7 +1,7 @@
 # Entry replication across a real ten-minute NetBird partition — 2026-10-15
 
 Component run of `test/testbed/netbird/run-phase3-overlay.py` with the compiled fixture
-`scenarios/phase3-overlay-node.mjs` (only `pi-spaces.mjs` and the fixture were shipped). Two independent hosts:
+`scenarios/phase3-overlay-node.mjs` (only `phi-spaces.mjs` and the fixture were shipped). Two independent hosts:
 the operator host (NetBird 100.89.218.189) and an owned container on `big` (NetBird 100.89.53.156), each with its
 own SQLite store and `EntryReplicationController`, exchanging over TCP 17431 bound to the NetBird addresses.
 

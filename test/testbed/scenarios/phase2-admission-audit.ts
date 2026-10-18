@@ -38,15 +38,15 @@ try{
   assert.equal(new Set(journalFaults.map((f:any)=>f.kind+':'+f.boundary)).size,journalFaults.length);
   for(const fault of journalFaults){
    const parent=parentRecords.get(fault.parentId);assert.ok(parent);const cid=(label:string)=>'f-'+createHash('sha256').update(canonicalJson([fault.parentId,label])).digest('hex'),childIds=new Set(['initial:a','initial:b','initial:c','winner-commit','cancel:a','cancel:b','cancel:c','abort:a','abort:b','abort:c'].map(cid));
-   const wrap=(v:any)=>fault.documentKind==='pi-spaces.federation-operations'?{operations:{[fault.parentId]:v}}:fault.documentKind==='pi-spaces.router-command'?{command:v}:{future:v?.future?{[fault.budgetId]:v.future}:{}};
+   const wrap=(v:any)=>fault.documentKind==='phi-spaces.federation-operations'?{operations:{[fault.parentId]:v}}:fault.documentKind==='phi-spaces.router-command'?{command:v}:{future:v?.future?{[fault.budgetId]:v.future}:{}};
    assert.ok(journalTransitions(fault.documentKind,wrap(fault.before),wrap(fault.plannedAfter),fault.parentId,childIds,fault.budgetId).includes(fault.kind));
    assert.equal(fault.commitSeq===null,fault.boundary==='beforeCommit');if(fault.boundary==='afterCommit')assert.ok(Number.isSafeInteger(fault.commitSeq)&&fault.commitSeq>0);
-   if(fault.documentKind==='pi-spaces.federation-operations'){
+   if(fault.documentKind==='phi-spaces.federation-operations'){
     assert.equal(parent.hash,fault.plannedAfter.hash);assert.deepEqual(parent.principal,fault.plannedAfter.principal);assert.deepEqual(parent.targets,fault.plannedAfter.targets);
     if(fault.kind==='candidate'&&fault.boundary==='afterCommit')for(const [key,candidate]of Object.entries(fault.plannedAfter.candidates))assert.deepEqual(parent.candidates[key],candidate);
     if(fault.kind==='winner')assert.deepEqual(parent.winner,fault.plannedAfter.winner);
    }
-   if(fault.documentKind==='pi-spaces.router-command'&&!(fault.kind==='childAcceptance'&&fault.boundary==='beforeCommit'))for(const old of fault.plannedAfter.steps){
+   if(fault.documentKind==='phi-spaces.router-command'&&!(fault.kind==='childAcceptance'&&fault.boundary==='beforeCommit'))for(const old of fault.plannedAfter.steps){
     const actual=steps.get(JSON.stringify([old.target.hostId,old.generation,old.requestId]));assert.ok(actual,'durably accepted Child must keep the original request');for(const field of ['target','principal','method','args','argHash','generation','requestId'])assert.deepEqual((actual as any)[field],old[field]);
    }
    checkedJournals.push({kind:fault.kind,boundary:fault.boundary,parentId:fault.parentId,commitSeq:fault.commitSeq,originalParentPlanPreserved:true});

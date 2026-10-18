@@ -1344,7 +1344,7 @@ const status = await space.pollOperation({ principal: { peerId: "alice" }, gener
 			short: "Erzwingt vor dem Commit einer Take-Transaktion den erwarteten Ergebnistyp, korrelierende Felder (equalFields) und Anzahl; verwaltet Byte-Limits.",
 			body: `## Überblick {#overview}
 
-Nur administrativer Host-Code (ohne gesetztes \`conversationId\`) darf \`setCompletionProfiles(profiles)\` und \`setLimits(partialLimits)\` aufrufen. Eine Absenkung von Limits unter bereits bestehende Abschlussverpflichtungen wird vom Space-Kern abgewiesen.
+Nur administrativer Host-Code (ohne gesetztes \`conversationId\`) darf \`setCompletionProfiles(profiles)\` und \`setLimits(partialLimits)\` aufrufen. Eine Absenkung von Limits unter bereits bestehende Abschlussverpflichtungen wird vom Space-Kern abgewiesen; das gilt auch für ein kleineres \`maxEventBytes\`, solange eine bestehende Registrierung oder ein Wait damit ein zu großes Event erzeugen könnte.
 
 ## Technische Referenz {#technical-reference}
 
@@ -1376,7 +1376,7 @@ Verletzt ein Commit das Profil, schlägt \`commit\` mit \`CompletionViolation\` 
 			short: "Enforces expected result type, correlating fields (equalFields), and count before committing a take transaction; manages byte limits.",
 			body: `## Overview {#overview}
 
-Only administrative host code (without \`conversationId\`) may invoke \`setCompletionProfiles(profiles)\` and \`setLimits(partialLimits)\`. Lowering limits below existing completion obligations is rejected by the space core.
+Only administrative host code (without \`conversationId\`) may invoke \`setCompletionProfiles(profiles)\` and \`setLimits(partialLimits)\`. Lowering limits below existing completion obligations is rejected by the space core; this includes a smaller \`maxEventBytes\` while an existing registration or wait could then produce an oversized event.
 
 ## Technical Reference {#technical-reference}
 

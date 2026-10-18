@@ -7,6 +7,7 @@ import { sweep as sweepClaims, decide as decideClaim, type ClaimRec } from "./cl
 import { bytePage } from "./paging.ts";
 import { appendMail, assertMailboxCapacity, assertMailboxBatch, sweepMailboxes, type MailboxState } from "./mailbox.ts";
 import type { Principal } from "./claims.ts";
+import { jsonBytes, jsonCopy } from "./json.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 export type Fields = { [k: string]: Json };
@@ -34,8 +35,8 @@ export type Limits = {
 	maxEntryBytes: number; // JSON size of an entry's fields (and of a handback)
 	maxTypeChars: number; // longest type name
 	maxTypes: number; // type plus supertypes
-	maxEntries: number; // entries in the whole space, so one busy agent cannot fill it for the others
-	maxEntriesPerOwner: number;
+	maxEntries: number; // optional explicit count quota; FOREVER means no default count cap
+	maxEntriesPerOwner: number; // optional explicit owner quota; FOREVER by default
 	maxRegsPerOwner: number;
 	maxWaitersPerOwner: number;
 	maxTxnsPerOwner: number;
@@ -57,7 +58,7 @@ export type Limits = {
 	mailboxTtlMs: number;
 	maxJobBytes: number;
 };
-export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: 10_000, maxEntriesPerOwner: 1_000, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxCommitBytes: 192 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024, maxLogBytes: 4 * 1024 * 1024, maxSnapshotBytes: 64 * 1024 * 1024, maxSnapshots: 16, snapshotTtlMs: 60_000, maxMailboxBytes: 8 * 1024 * 1024, mailboxTtlMs: 7 * 24 * 3600 * 1000, maxJobBytes: 16 * 1024 * 1024 };
+export const DEFAULT_LIMITS: Limits = { maxEntryBytes: 64 * 1024, maxTypeChars: 128, maxTypes: 16, maxEntries: FOREVER, maxEntriesPerOwner: FOREVER, maxRegsPerOwner: 20, maxWaitersPerOwner: 20, maxTxnsPerOwner: 20, maxSpaceBytes: 64 * 1024 * 1024, notifyIntervalMs: 1000, claimResultMs: 24 * 3600 * 1000, generationAdmitMs: 3600 * 1000, maxClaimBytes: 32 * 1024 * 1024, maxOutboxBytes: 8 * 1024 * 1024, maxDocBytes: 128 * 1024 * 1024, maxCommitBytes: 192 * 1024, maxFrameBytes: 256 * 1024, maxEventBytes: 160 * 1024, maxLogBytes: 4 * 1024 * 1024, maxSnapshotBytes: 64 * 1024 * 1024, maxSnapshots: 16, snapshotTtlMs: 60_000, maxMailboxBytes: 8 * 1024 * 1024, mailboxTtlMs: 7 * 24 * 3600 * 1000, maxJobBytes: 16 * 1024 * 1024 };
 export class LimitError extends Error {}
 /** A limit would be exceeded; raised before anything changed (federation-plan-v3 4.2 `ResourceExhausted`). */
 export class ResourceExhausted extends LimitError {}
@@ -184,17 +185,17 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		...(v.restore ? { restore: v.restore } : {}),
 		...(v.restoredClaims ? { restoredClaims: v.restoredClaims } : {}),
 		...(v.invalidGenerations ? { invalidGenerations: v.invalidGenerations } : {}),
+		...(v.runGates ? { runGates: v.runGates } : {}),
+		...(v.archived ? { archived: v.archived } : {}),
 		returned: v.returned ?? d.returned,
 	};
 };
 export type Lease = { id: string; expires: number };
 
-const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)); // draft proxies are not structured-cloneable
+const clone = jsonCopy; // draft proxies are not structured-cloneable
 /** A plain copy of a value read from a document draft. Drafts are unusable once their commit settles, so anything a
  * commit returns that came from the document (a stored claim, for one) must be copied out inside the commit. */
 export const plain = <T>(v: T): T => (v === undefined ? v : clone(v));
-const encoder = new TextEncoder();
-const jsonBytes = (v: unknown): number => encoder.encode(JSON.stringify(v) ?? "").length;
 const commitBudgets = new WeakMap<object, { used: number }>();
 export function seal(s: object): void { sealStream(s); commitBudgets.delete(s); }
 /** Called once per storage transaction; all subsequent operations share its byte budget and revision. */
@@ -228,6 +229,12 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 	for (const t of Object.values(s.txns)) if ((t.reserved ?? 0) + COMMIT_FIXED > merged.maxCommitBytes) throw new ResourceExhausted("the new limit would invalidate an existing transaction's completion reservation");
 	if (merged.maxCommitBytes < COMMIT_FIXED + 128) throw new IllegalArgumentError("maxCommitBytes must allow the commit envelope and one maintenance item");
 	if (jsonBytes(s.jobs ?? []) + Object.values(s.txns).reduce((n, t) => n + (t.reserved ?? 0), 0) > merged.maxJobBytes) throw new ResourceExhausted("the new job budget would invalidate completion storage reservations");
+	// Completion events (registrationClosed, timeout, publishing a commit) must not fail later: a lower event limit has
+	// to fit every event the existing registrations and waits can still produce (the check at notify/addWaiter time).
+	if (merged.maxEventBytes < limitsOf(s).maxEventBytes) for (const x of [...s.regs, ...s.waiters]) {
+		const meta = jsonBytes(x.handback ?? null) + EVENT_OVERHEAD;
+		if (meta > merged.maxEventBytes || s.entries.some(e => matches(x.template, e) && jsonBytes(view(e, s.spaceId)) + meta > merged.maxEventBytes)) throw new ResourceExhausted("the new event limit would make an existing subscription's or wait's events fail");
+	}
 	s.limits = { ...(s.limits ?? {}), ...l };
 	touch(s, now);
 	return limitsOf(s);
@@ -235,7 +242,21 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
 /** Bytes of the parts of the document that are not entries (claims by their running tally). */
 export function overheadBytes(s: Readonly<SpaceState>): number {
-	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + jsonBytes(s.mailboxes ?? {}) + jsonBytes(s.runGates ?? {});
+	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + mailboxesBytes(s) + jsonBytes(s.runGates ?? {});
+}
+/**
+ * `jsonBytes(s.mailboxes)` without encoding every event: each box keeps the encoded size of its event array as
+ * `bytes` (mailbox.ts), so the box costs its metadata with an empty array plus that tally. Exact, and O(boxes).
+ */
+function mailboxesBytes(s: Readonly<SpaceState>): number {
+	if (!s.mailboxes) return 2;
+	let tally = 0;
+	const boxes: Record<string, unknown> = {};
+	for (const [id, b] of Object.entries(s.mailboxes.boxes)) {
+		boxes[id] = { ...b, events: [] };
+		tally += (Number.isSafeInteger(b.bytes) ? b.bytes : jsonBytes(b.events)) - 2;
+	}
+	return jsonBytes({ ...s.mailboxes, boxes }) + tally;
 }
 /** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
 export function claimBytes(s: Readonly<SpaceState>): number {
@@ -249,12 +270,12 @@ export function claimBytes(s: Readonly<SpaceState>): number {
  * An event carries the entry, a handback and metadata. A conservative bound (the largest handback of any registration or
  * wait, whether or not it matches) is checked before the write is accepted, so no event can exceed `maxEventBytes`.
  */
-function checkEventSize(s: Readonly<SpaceState>, rec: EntryRec, lim: Limits): void {
+function checkEventSize(s: Readonly<SpaceState>, rec: EntryRec, lim: Limits, viewBytes = jsonBytes(view(rec, s.spaceId))): void {
 	if (s.regs.length === 0 && s.waiters.length === 0) return;
 	let handback = 0;
 	for (const r of s.regs) handback = Math.max(handback, jsonBytes(r.handback));
 	for (const w of s.waiters) handback = Math.max(handback, jsonBytes(w.handback));
-	const bound = jsonBytes(view(rec, s.spaceId)) + handback + EVENT_OVERHEAD;
+	const bound = viewBytes + handback + EVENT_OVERHEAD;
 	if (bound > lim.maxEventBytes) throw new ResourceExhausted(`an event for this entry could take ${bound} bytes; the limit is ${lim.maxEventBytes}`);
 }
 const EVENT_OVERHEAD = 256; // kind, ids, sequence, target, count
@@ -264,8 +285,7 @@ const COMMIT_FIXED = 1024; // claim and result, batch envelope, bookkeeping of o
  * A conservative bound of what making `e` visible writes: its stream operation plus one event for every registration and
  * wait that matches it now (subscriptions made later are not counted).
  */
-function publishCost(s: Readonly<SpaceState>, e: EntryRec): number {
-	const v = jsonBytes(view(e, s.spaceId));
+function publishCost(s: Readonly<SpaceState>, e: EntryRec, v = jsonBytes(view(e, s.spaceId))): number {
 	let n = jsonBytes(putOp(e)) + 1;
 	for (const r of s.regs) if (matches(r.template, e)) n += v + jsonBytes(r.handback) + EVENT_OVERHEAD;
 	for (const w of s.waiters) if (matches(w.template, e)) n += v + jsonBytes(w.handback) + EVENT_OVERHEAD;
@@ -274,21 +294,47 @@ function publishCost(s: Readonly<SpaceState>, e: EntryRec): number {
 function refreshReservations(s: SpaceState, extra: { reg?: RegRec; waiter?: WaiterRec } = {}): Map<string, number> {
 	const preview = { ...s, regs: extra.reg ? [...s.regs, extra.reg] : s.regs, waiters: extra.waiter ? [...s.waiters, extra.waiter] : s.waiters };
 	const updated = new Map<string, number>();
+	// Every rise of a transaction's cost goes through `reserve` (its writes and takes) or through here (subscriptions),
+	// so `reserved` never falls below the full recount. A transaction the new subscription cannot touch therefore keeps
+	// exactly `reserved`; only the touched ones (and any without a reservation) are recounted, over their own entries.
+	const added = extra.reg ?? extra.waiter, recount = new Set<string>();
+	for (const t of Object.values(s.txns)) if (added === undefined || t.reserved === undefined || extra.reg?.txn === t.id) recount.add(t.id);
+	if (added !== undefined) for (const e of s.entries) if (e.writtenUnder !== e.takenBy && matches(added.template, e)) for (const id of [e.writtenUnder, e.takenBy]) if (id !== null) recount.add(id);
+	// One pass over the entries for all recounted transactions (an entry belongs to at most two).
+	const published = new Map<string, number>();
+	if (recount.size) for (const e of s.entries) {
+		if (e.writtenUnder === e.takenBy) continue; // written and taken in one transaction (or neither): nothing to publish
+		if (!(e.writtenUnder !== null && recount.has(e.writtenUnder)) && !(e.takenBy !== null && recount.has(e.takenBy))) continue;
+		const cost = publishCost(preview, e);
+		for (const id of [e.writtenUnder, e.takenBy]) if (id !== null) published.set(id, (published.get(id) ?? 0) + cost);
+	}
 	for (const t of Object.values(s.txns)) {
-		let cost = 0;
-		for (const e of s.entries) if ((e.writtenUnder === t.id && e.takenBy !== t.id) || (e.takenBy === t.id && e.writtenUnder !== t.id)) cost += publishCost(preview, e);
-		for (const r of preview.regs) if (r.txn === t.id) cost += jsonBytes(r.handback) + 512;
-		cost = Math.max(cost, t.reserved ?? 0);
+		let cost = t.reserved ?? 0;
+		if (recount.has(t.id)) {
+			let full = published.get(t.id) ?? 0;
+			for (const r of preview.regs) if (r.txn === t.id) full += jsonBytes(r.handback) + 512;
+			cost = Math.max(full, cost);
+		}
 		if (cost + COMMIT_FIXED > limitsOf(s).maxCommitBytes) throw new ResourceExhausted("the new subscription would invalidate a transaction's completion reservation");
 		updated.set(t.id, cost);
 	}
 	if (jsonBytes(s.jobs ?? []) + [...updated.values()].reduce((n, cost) => n + cost, 0) > limitsOf(s).maxJobBytes) throw new ResourceExhausted("the new subscription exceeds reserved completion storage");
 	return updated;
 }
+/** Whether a durable fanout job still holds an undelivered event for this consumer (or, without one, for this outbox target). */
+function pendingFanout(s: Readonly<SpaceState>, consumer: Principal | undefined, target: Target | null): boolean {
+	if (!s.jobs?.length) return false;
+	const key = consumer ? canonicalJson(consumer as unknown as Json) : undefined; // once, not per compared event
+	for (const j of s.jobs) for (let i = j.cursor; i < j.events.length; i++) {
+		const x = j.events[i]!;
+		if (key !== undefined ? !!x.consumer && canonicalJson(x.consumer as unknown as Json) === key : !x.consumer && x.event.target === target) return true;
+	}
+	return false;
+}
 function queueEvent(s: SpaceState, now: number, event: SpaceEvent, consumer?: Principal, completing = false): void {
 	if (jsonBytes(event) > limitsOf(s).maxEventBytes) throw new ResourceExhausted("the event exceeds maxEventBytes");
 	if (!completing) {
-		if (s.jobs?.some(j => j.events.slice(j.cursor).some(x => consumer ? x.consumer && canonicalJson(x.consumer as unknown as Json) === canonicalJson(consumer as unknown as Json) : !x.consumer && x.event.target === event.target))) throw new ResourceExhausted("the consumer has a pending durable fanout backlog");
+		if (pendingFanout(s, consumer, event.target)) throw new ResourceExhausted("the consumer has a pending durable fanout backlog");
 		if (consumer) appendMail(s, consumer, event, now);
 		else {
 			if (jsonBytes(s.outbox) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) throw new ResourceExhausted("the local outbox is full");
@@ -298,7 +344,7 @@ function queueEvent(s: SpaceState, now: number, event: SpaceEvent, consumer?: Pr
 		return;
 	}
 	// Completion must not fail when a consumer is slow. Admission reserves durable storage for this captured event.
-	if (!consumer && jsonBytes(s.outbox) + jsonBytes(event) + 1 <= limitsOf(s).maxOutboxBytes && !s.jobs?.some(j => j.events.slice(j.cursor).some(x => !x.consumer && x.event.target === event.target))) { s.outbox.push(clone(event)); touch(s, now); return; }
+	if (!consumer && jsonBytes(s.outbox) + jsonBytes(event) + 1 <= limitsOf(s).maxOutboxBytes && !pendingFanout(s, undefined, event.target)) { s.outbox.push(clone(event)); touch(s, now); return; }
 	s.jobs ??= [];
 	s.jobs.push({ id: newId(s, "j"), at: now, cursor: 0, events: [{ event: clone(event), ...(consumer ? { consumer: { ...consumer } } : {}) }] });
 	touch(s, now);
@@ -466,13 +512,18 @@ function expire(s: SpaceState, at: number): boolean {
 		}
 		expiryWatermarks.set(s, min);
 		dead.sort((a, b) => a.expires - b.expires || a.id.localeCompare(b.id));
+		const removed = new Set<EntryRec>();
+		let deferred = false;
 		for (const e of dead) {
-			if (!canCharge(s, 128)) { expiryWatermarks.set(s, at); deferMaintenance(s, at, e.id); return false; }
+			// The rest stays: the watermark is their (sorted) earliest expiry, so the next sweep cannot skip them.
+			if (!canCharge(s, 128)) { expiryWatermarks.set(s, Math.min(min, e.expires)); deferMaintenance(s, at, e.id); deferred = true; break; }
 			charge(s, 128);
 			if (e.writtenUnder === null && e.takenBy === null) logDel(s, at, e.id);
-			s.entries.splice(s.entries.indexOf(e), 1);
-			touch(s, at);
+			removed.add(e);
 		}
+		// One pass instead of indexOf per dead entry (quadratic when many expire at once).
+		if (removed.size) { prune(s.entries, e => removed.has(e)); touch(s, at); }
+		if (deferred) return false;
 	}
 	for (const r of [...s.regs].filter(r => r.expires <= at).sort((a, b) => a.expires - b.expires || a.id.localeCompare(b.id))) {
 		const cost = jsonBytes(r.handback) + (r.pendingEntry ? jsonBytes(r.pendingEntry) : 0) + 512;
@@ -516,7 +567,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 		for (const t of entry.types ?? []) if (typeof t !== "string" || t.length > lim.maxTypeChars) throw new LimitError("bad or too long supertype name");
 		checkSize("entry", entry.fields, lim);
 		if (s.entries.length >= lim.maxEntries) throw new LimitError(`the space holds ${lim.maxEntries} entries already`);
-		if (s.entries.filter(ownedBy(as)).length >= lim.maxEntriesPerOwner) throw new LimitError(`you already have ${lim.maxEntriesPerOwner} entries in the space`);
+		if (lim.maxEntriesPerOwner !== FOREVER && s.entries.filter(ownedBy(as)).length >= lim.maxEntriesPerOwner) throw new LimitError(`you already have ${lim.maxEntriesPerOwner} entries in the space`);
 	}
 	const types = [...new Set([entry.type, ...(entry.types ?? [])])]; // the type first, no duplicates
 	const rec: EntryRec = {
@@ -537,10 +588,13 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	if (used > lim.maxSpaceBytes) throw new LimitError(`the space would exceed ${lim.maxSpaceBytes} bytes`);
 	if (used + overheadBytes(s) > lim.maxDocBytes) throw new LimitError(`the space document would exceed ${lim.maxDocBytes} bytes`);
 	if (expires <= now) { s.nextId++; touch(s, now); return { id: rec.id, expires }; }
-	checkEventSize(s, rec, lim);
+	// The entry's view is measured once for every bound below (it was serialized again for each).
+	const viewBytes = jsonBytes(view(rec, s.spaceId));
+	checkEventSize(s, rec, lim, viewBytes);
 	preflightFanout(s, rec, txn, now);
-	if (!canCharge(s, jsonBytes(rec) + (txn === null ? publishCost(s, rec) : 0))) throw new ResourceExhausted("the write exceeds the remaining commit budget");
-	reserve(s, txn, publishCost(s, rec), lim); // before any change: a refusal leaves everything as it was
+	const cost = publishCost(s, rec, viewBytes);
+	if (!canCharge(s, jsonBytes(rec) + (txn === null ? cost : 0))) throw new ResourceExhausted("the write exceeds the remaining commit budget");
+	reserve(s, txn, cost, lim); // before any change: a refusal leaves everything as it was
 	charge(s, jsonBytes(rec));
 	s.nextId++;
 	s.entries.push(rec);
@@ -556,13 +610,14 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 function preflightFanout(s: SpaceState, rec: EntryRec, txn: string | null, now: number): void {
 	const consumers = new Map<string, { principal: Principal; events: SpaceEvent[] }>();
 	const local: SpaceEvent[] = [];
+	const entry = view(rec, s.spaceId); // only measured here, never stored: one view serves every candidate event
 	const add = (event: SpaceEvent, consumer?: Principal) => {
 		if (jsonBytes(event) > limitsOf(s).maxEventBytes) throw new ResourceExhausted("the event exceeds maxEventBytes");
 		if (consumer) { const key = canonicalJson(consumer as unknown as Json); let group = consumers.get(key); if (!group) { group = { principal: consumer, events: [] }; consumers.set(key, group); } group.events.push(event); }
 		else local.push(event);
 	};
-	for (const r of s.regs) if ((txn === null || r.txn === txn) && matches(r.template, rec)) add({ kind: "entry", eventId: r.id, seq: r.seq + 1, handback: r.handback, target: r.target, entry: view(rec, s.spaceId) }, r.consumer);
-	if (txn === null) for (const w of s.waiters) if (!w.claimKey && matches(w.template, rec)) add({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry: view(rec, s.spaceId) }, w.consumer);
+	for (const r of s.regs) if ((txn === null || r.txn === txn) && matches(r.template, rec)) add({ kind: "entry", eventId: r.id, seq: r.seq + 1, handback: r.handback, target: r.target, entry }, r.consumer);
+	if (txn === null) for (const w of s.waiters) if (!w.claimKey && matches(w.template, rec)) add({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry }, w.consumer);
 	for (const group of consumers.values()) assertMailboxBatch(s, group.principal, group.events, now);
 	if (jsonBytes(s.outbox) + local.reduce((n, e) => n + jsonBytes(e) + 1, 0) > limitsOf(s).maxOutboxBytes) throw new ResourceExhausted("the local outbox cannot hold this fanout");
 }
@@ -969,6 +1024,7 @@ export function count(s: Readonly<SpaceState>, now: number, tmpl: Template = nul
 	return n;
 }
 
+/** The largest `limit` the agent tool `space_list` accepts (its schema, index.ts); `list` itself has no cap for host code. */
 export const MAX_LIST = 1000;
 /**
  * All entries a `read` could see, oldest first, up to the optional `limit` (all matches by default). Does not lock or modify

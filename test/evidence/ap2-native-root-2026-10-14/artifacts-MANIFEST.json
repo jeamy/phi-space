@@ -18,7 +18,7 @@
     "examples/workers.mjs": "8abbd854a2a8f170",
     "package-lock.json": "f3e62502000ca9d2",
     "package.json": "e36f96ef502b5c0b",
-    "pi-spaces.mjs": "85c2af70d802b6d4",
+    "phi-spaces.mjs": "85c2af70d802b6d4",
     "scenarios/federation-runtime.mjs": "793201047c847580",
     "scenarios/journal-checkpoints.mjs": "72c255537ca7bf24",
     "scenarios/native-operator.mjs": "f9a5ab0b99fe9d78",

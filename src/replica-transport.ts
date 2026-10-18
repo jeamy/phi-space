@@ -2,8 +2,8 @@
 // is signed with the host's enrolled key under its own domain tag and checked against the pinned key of the other
 // host; a response is bound to the request nonce, so an ACK cannot be replayed onto another request. The transport
 // authenticates the peer; the journal still decides (configuration, chain, permits) and stays idempotent.
-import { randomBytes, createHash } from "node:crypto";
-import { canonicalJson } from "./canonical.ts";
+import { randomBytes } from "node:crypto";
+import { canonicalJson, digestJson } from "./canonical.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import type { Transport } from "./remote.ts";
 import { verifyDetached } from "./grants.ts";
@@ -17,7 +17,7 @@ type Request = { from: string; to: string; method: Method; nonce: string; ts: nu
 type Signed<T> = { value: T; signature: string };
 const DOMAIN = { request: "phi-spaces/replica-sync/v1/request\n", response: "phi-spaces/replica-sync/v1/response\n" };
 const bytes = (kind: keyof typeof DOMAIN, v: unknown) => Buffer.from(DOMAIN[kind] + canonicalJson(v as Json));
-const digest = (v: unknown) => createHash("sha256").update(canonicalJson((v ?? null) as Json)).digest("hex");
+const digest = (v: unknown) => digestJson(v ?? null);
 const sign = async <T>(kind: keyof typeof DOMAIN, value: T, signer: Signer): Promise<Signed<T>> => ({ value, signature: Buffer.from(await signer.sign(bytes(kind, value))).toString("base64") });
 const verify = (kind: keyof typeof DOMAIN, s: Signed<unknown>, pin: ReplicaPin) => !!s && typeof s.signature === "string" && verifyDetached(pin.algorithm, pin.publicKey, bytes(kind, s.value), s.signature);
 export class ReplicaTransportRefused extends Error {}

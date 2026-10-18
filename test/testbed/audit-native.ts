@@ -13,11 +13,11 @@ try{
   docs.push({kind:JSON.parse(row.kind as string),value});
  }
  if(mode==='root'){
-  const allParents=docs.filter(d=>d.kind==='pi-spaces.federation-operations').flatMap(d=>Object.values(d.value.operations??{}) as any[]),parents=allParents.filter(p=>p.id.startsWith(prefix+'-')),ids=new Set(parents.flatMap(p=>Object.values(p.children) as string[]));
-  const commands=docs.filter(d=>d.kind==='pi-spaces.router-command'&&ids.has(d.value.command?.id)).map(d=>d.value.command);
+  const allParents=docs.filter(d=>d.kind==='phi-spaces.federation-operations').flatMap(d=>Object.values(d.value.operations??{}) as any[]),parents=allParents.filter(p=>p.id.startsWith(prefix+'-')),ids=new Set(parents.flatMap(p=>Object.values(p.children) as string[]));
+  const commands=docs.filter(d=>d.kind==='phi-spaces.router-command'&&ids.has(d.value.command?.id)).map(d=>d.value.command);
   console.log(JSON.stringify({parents:parents.map(p=>({id:p.id,phase:p.phase,kind:p.kind,result:p.result??null})),commands:commands.map(c=>({id:c.id,state:c.state,steps:c.steps.map((s:any)=>{const domain=rpcDomain({method:s.method,args:s.args},s.principal);return{target:s.target,principal:s.principal,method:s.method,domainMethod:domain.method,argumentHash:argHash(domain.method,domain.args),generation:s.generation,generationAdmitUntil:s.generationAdmitUntil??null,requestId:s.requestId,state:s.state,evidence:s.evidence??null,result:s.result??null};})})),historicalReviewParents:allParents.filter(p=>!p.id.startsWith(prefix+'-')&&p.phase==='needsReview').map(p=>p.id)}));
  }else{
-  const spaces=docs.filter(d=>d.kind==='pi-spaces.named-space'||d.kind==='pi-spaces.space').map(d=>({spaceId:d.value.spaceId,incarnation:d.value.incarnation,activeTransactions:Object.keys(d.value.txns??{}),claims:Object.values(d.value.rpc?.claims??{}),scopedEntries:(d.value.entries??[]).filter((e:any)=>e.fields?.runId===prefix).map((e:any)=>({id:e.id,type:e.type,fields:e.fields,owner:e.owner}))}));
+  const spaces=docs.filter(d=>d.kind==='phi-spaces.named-space'||d.kind==='phi-spaces.space').map(d=>({spaceId:d.value.spaceId,incarnation:d.value.incarnation,activeTransactions:Object.keys(d.value.txns??{}),claims:Object.values(d.value.rpc?.claims??{}),scopedEntries:(d.value.entries??[]).filter((e:any)=>e.fields?.runId===prefix).map((e:any)=>({id:e.id,type:e.type,fields:e.fields,owner:e.owner}))}));
   console.log(JSON.stringify({spaces}));
  }
 }finally{db.close();}

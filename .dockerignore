@@ -8,3 +8,11 @@ dist
 .git
 .vscode
 test/evidence
+.env
+**/.env
+**/.env.*
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm
+**/*.pem
+**/*.key

@@ -1,5 +1,5 @@
 
-> pi-spaces@0.0.1 test:examples
+> phi-spaces@0.0.1 test:examples
 > node --experimental-strip-types --test test/examples/*.test.ts
 
 TAP version 13
