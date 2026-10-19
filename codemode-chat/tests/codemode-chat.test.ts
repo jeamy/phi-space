@@ -7,6 +7,8 @@ import { judge, loadCodemode } from "../server/judge.ts";
 import { customTask, taskById, TASKS } from "../server/tasks.ts";
 
 const cm = await loadCodemode();
+/** The room snapshot with the fields of the current task block lifted to the top level. */
+const view = (snap: any) => ({ ...snap, ...(snap.blocks.find((b: any) => b.blockId === snap.current) ?? {}), messages: snap.messages });
 const t = cm ? test : test.skip;
 const post = async (base: string, path: string, body: unknown) => {
 	const r = await fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -45,7 +47,7 @@ t("contribution -> score entry -> websocket frame, with limits", async () => {
 	try {
 		const frames: any[] = [];
 		const ws = new WebSocket(srv.url.replace("http", "ws") + "/ws/room1");
-		ws.onmessage = (e) => frames.push(JSON.parse(String(e.data)));
+		ws.onmessage = (e) => frames.push(view(JSON.parse(String(e.data))));
 		await until(async () => frames.length > 0);
 		assert.equal(frames[0].type, "snapshot");
 		assert.equal(frames[0].task.id, "primes");
@@ -73,7 +75,7 @@ t("a scripted run produces graded contributions and a best", async () => {
 	try {
 		await post(srv.url, "/api/sessions/run1/task", { taskId: "gcd" });
 		assert.equal((await post(srv.url, "/api/sessions/run1/run", { agents: 3, gens: 2, perAgent: 1, mode: "scripted" })).status, 200);
-		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/run1")).json() as any; return s.run && !s.run.active && s.contributions.length === 6 ? s : false; });
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/run1")).json()); return s.run && !s.run.active && s.contributions.length === 6 ? s : false; });
 		assert.equal(snap.contributions.filter((c: any) => c.ok !== null).length, 6);
 		assert.ok(snap.best);
 		assert.equal((await post(srv.url, "/api/sessions/run1/task", { taskId: "nope" })).status, 400);
@@ -89,7 +91,7 @@ t("big and nano: candidates are judged on both hosts and come back as one list",
 	try {
 		const good = taskById("primes")!.variants[2]!, bad = taskById("primes")!.variants[4]!;
 		for (let i = 0; i < 4; i++) await post(srv.url, "/api/sessions/shard1/code", { author: `p${i}`, source: i % 2 ? bad : good });
-		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/shard1")).json() as any; return s.contributions.length === 4 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/shard1")).json()); return s.contributions.length === 4 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
 		const hosts = new Set(snap.contributions.map((c: any) => c.host));
 		assert.deepEqual([...hosts].sort(), ["big", "nano"]);
 		assert.equal(snap.contributions.filter((c: any) => c.ok).length, 2);
@@ -107,7 +109,7 @@ t("a dead shard falls back to the local judge", async () => {
 		const good = taskById("gcd")!.variants[2]!;
 		await post(srv.url, "/api/sessions/dead1/task", { taskId: "gcd" });
 		for (let i = 0; i < 3; i++) await post(srv.url, "/api/sessions/dead1/code", { author: `p${i}`, source: good });
-		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/dead1")).json() as any; return s.contributions.length === 3 && s.contributions.every((c: any) => c.ok) ? s : false; }, 60_000);
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/dead1")).json()); return s.contributions.length === 3 && s.contributions.every((c: any) => c.ok) ? s : false; }, 60_000);
 		assert.equal(snap.best.source, good);
 		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
 		assert.equal(sys.shards[1].up, false);
@@ -125,7 +127,7 @@ t("several models compete in one run, assigned to the agents in turn", async () 
 	try {
 		await post(srv.url, "/api/sessions/vs/task", { taskId: "gcd" });
 		assert.equal((await post(srv.url, "/api/sessions/vs/run", { agents: 3, gens: 1, perAgent: 1, contenders: ["fake/fast", "fake/slow", "scripted"] })).status, 200);
-		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/vs")).json() as any; return s.run && !s.run.active && s.contributions.length === 3 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/vs")).json()); return s.run && !s.run.active && s.contributions.length === 3 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
 		assert.deepEqual(snap.run.contenders, ["fake/fast", "fake/slow", "scripted"]);
 		assert.deepEqual(snap.contributions.map((c: any) => c.via).sort(), ["fake/fast", "fake/slow", "scripted"]);
 		assert.deepEqual(seen.sort(), ["fake/fast", "fake/slow"]);
@@ -133,5 +135,42 @@ t("several models compete in one run, assigned to the agents in turn", async () 
 		assert.equal((await post(srv.url, "/api/sessions/vs/run", { contenders: ["nope/model"] })).status, 400);
 		assert.equal((await post(srv.url, "/api/sessions/vs/run", { contenders: ["scripted", "fake/fast", "fake/slow", "a", "b"] })).status, 400);
 		assert.equal((await post(srv.url, "/api/sessions/vs/run", { contenders: [] })).status, 400);
+	} finally { await srv.close(); }
+});
+
+t("every task is its own block with its own contributions and best code", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/blocks1")).json()) as any;
+		const gcd = taskById("gcd")!, primes = taskById("primes")!;
+		await post(srv.url, "/api/sessions/blocks1/task", { taskId: "gcd" });
+		await post(srv.url, "/api/sessions/blocks1/code", { author: "a", source: gcd.variants[2]! });
+		await until(async () => (await get()).blocks.at(-1).contributions.every((c: any) => c.ok !== null) && (await get()).blocks.at(-1).contributions.length === 1);
+		await post(srv.url, "/api/sessions/blocks1/task", { taskId: "primes" });
+		await post(srv.url, "/api/sessions/blocks1/code", { author: "b", source: primes.variants[3]! });
+		const snap = await until(async () => { const s = await get(); return s.blocks.length === 3 && s.blocks.at(-1).contributions.length === 1 && s.blocks.at(-1).contributions[0].ok !== null ? s : false; });
+		// block 0: the default first task (empty), 1: gcd, 2: primes
+		assert.deepEqual(snap.blocks.map((b: any) => b.task.id), ["primes", "gcd", "primes"]);
+		assert.equal(snap.blocks[1].contributions.length, 1);
+		assert.equal(snap.blocks[1].best.source, gcd.variants[2]);
+		assert.equal(snap.blocks[2].best.source, primes.variants[3]);
+		assert.equal(snap.blocks[0].best, null);
+		assert.equal(snap.current, snap.blocks[2].blockId);
+		assert.equal(snap.blocks.filter((b: any) => b.active).length, 1);
+		// the log lines of a block belong to it, the reserved author name is refused
+		assert.ok(snap.blocks[1].messages.some((m: any) => m.text.startsWith("Task: ")));
+		assert.equal((await post(srv.url, "/api/sessions/blocks1/message", { author: "System", text: "x" })).status, 400);
+	} finally { await srv.close(); }
+});
+
+t("a custom task without a model has no scripted agents: the run is refused, hand-in code still works", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: { models: async () => [], contribute: async () => { throw new Error("off"); } } as never });
+	try {
+		await post(srv.url, "/api/sessions/cust1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
+		assert.equal((await post(srv.url, "/api/sessions/cust1/run", { contenders: ["scripted"] })).status, 400);
+		await post(srv.url, "/api/sessions/cust1/code", { author: "me", source: "function double(x){return x*2}" });
+		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/cust1")).json() as any; const b = s.blocks.at(-1); return b.contributions.length === 1 && b.contributions[0].ok !== null ? s : false; });
+		assert.equal(snap.blocks.at(-1).task.id, "custom");
+		assert.equal(snap.blocks.at(-1).best.ms >= 0, true);
 	} finally { await srv.close(); }
 });

@@ -19,14 +19,9 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { createSpace, FOREVER, NO_WAIT, PhiSpaces, serveSpace, SpaceService, spaces, StaticIdentity, startService, TransactionError } from "../../src/index.ts";
 import { judge, loadCodemode, TIMEOUT_MS, type Codemode } from "./judge.ts";
 import { hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
-import { customTask, taskById, type Task } from "./tasks.ts";
+import { taskFromSpec } from "./tasks.ts";
 
 const DAY = 24 * 3600_000;
-
-const taskOf = (f: Record<string, any>): Task | null => {
-	if (f.taskId === "custom" && f.custom) { try { return customTask(f.custom); } catch { return null; } }
-	return taskById(String(f.taskId)) ?? null;
-};
 
 export async function startJudgeHost(o: { listen?: string; dbPath?: string | null; judges?: number } = {}) {
 	const cm = await loadCodemode();
@@ -56,10 +51,10 @@ export async function startJudgeHost(o: { listen?: string; dbPath?: string | nul
 			const c = await r.take({ type: "CodeCandidate" }, NO_WAIT, { txn: t.id });
 			if (!c) { await r.abort(t.id); await new Promise((ok) => setTimeout(ok, 250)); continue; }
 			const f = c.fields as Record<string, any>;
-			const task = taskOf(f);
+			const task = taskFromSpec(f);
 			const v = task ? await judge(cmx, task, String(f.source)) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
 			try {
-				await r.write({ type: "CodeScore", fields: { session: f.session, taskKey: f.taskKey, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
+				await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
 				await r.commit(t.id);
 			} catch (e) {
 				await r.abort(t.id).catch(() => {});

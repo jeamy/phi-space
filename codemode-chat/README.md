@@ -7,17 +7,22 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
 
 ## What happens
 
-- A **task** is a function to write (`firstPrimes(n)`, `fib(n)`, `sortNumbers(arr)`, `gcd(a, b)`), or a custom task
-  with a function name and test cases (`[{"args":[2],"expect":4}]`). The cases are the oracle.
-- A **run** lets N agents contribute for G generations. Scripted agents (no model) hand in hand-written variants,
-  some slow, some wrong; model agents (optional) write JavaScript themselves and see the best code so far.
+- A **task** is a function to write (`firstPrimes(n)`, `fib(n)`, `sortNumbers(arr)`, `gcd(a, b)`), or a custom task:
+  choose "Custom task …" in the dropdown, which opens the fields for the function name, a description and test cases
+  (`[{"args":[2],"expect":4}]`; the cases are the oracle). "Start task" adds the task to the chat as a new **task block**.
+- Every task block is one collapsible section of the conversation. Its contributions are **square tiles** (agent,
+  model, time, verdict); a click on a tile unfolds the code that agent delivered. The leaderboard, the standings per
+  contender and the best code on the right belong to the block that is open or was clicked last.
+- A **run** lets N agents contribute for G generations to the active block. Scripted agents (no model) hand in
+  hand-written variants, some slow, some wrong; model agents (optional) write JavaScript themselves and see the best
+  code so far. A custom task has no scripted variants, so choosing it hides the scripted agents and selects a model.
 - You can **hand in code yourself**; it goes through exactly the same path.
 - Every contribution is a `CodeCandidate` entry. A judge takes it under a transaction, runs it in a QuickJS sandbox
   (`@earendil-works/pi-codemode`: no tools, 5 s timeout, 64 MiB heap, at most 2 sandboxes at a time per process) and
   writes a `CodeScore` entry with the verdict, time, judging host and the code. `CodeBest` holds the fastest correct
-  one. The page shows the code of every contribution, wrong ones included.
+  one of its block. The page shows the code of every contribution, wrong ones included.
 
-Entries (`ChatMessage`, `CodeTask`, `CodeCandidate`, `CodeScore`, `CodeBest`, `HostInfo`) live in a durable space
+Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`, `CodeBest`, `HostInfo`) carry the `blockId` of their task block and live in a durable space
 (SQLite); the session name in the URL hash (`#room`) separates rooms.
 
 ## big and nano

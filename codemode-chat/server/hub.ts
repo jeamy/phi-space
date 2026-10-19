@@ -1,30 +1,34 @@
 // Chat sessions on one durable space. Everything that happens is an entry:
-//   ChatMessage  people talking          CodeTask       the current problem of a session
+//   ChatMessage  people talking          CodeTask       one task block of a room (everything below belongs to a block)
 //   CodeCandidate a contribution waiting CodeScore      the sandbox verdict, with the code (the visible contribution)
 //   CodeBest     the best correct code so far
 // Judges take a candidate under a transaction and write its score atomically, like the evolve example.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judge, MAX_SOURCE_CHARS, TIMEOUT_MS, type Codemode } from "./judge.ts";
-import { customTask, taskById, TASKS, type Task } from "./tasks.ts";
+import { customTask, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
 import { llmContribution, llmModels } from "./llm.ts";
 import { hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
 const DAY = 24 * 3600_000;
-const LIMITS = { agents: 8, gens: 6, perAgent: 3, sessions: 50, messages: 500, contributions: 300 };
+const LIMITS = { agents: 8, gens: 6, perAgent: 3, sessions: 50, messages: 500, contributions: 1000, blocks: 60 };
 export type RunMode = "scripted" | "llm";
 /** The model side of a run; replaceable in tests. */
 export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution };
 /** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
-export type RunInfo = { active: boolean; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; note?: string };
-export type Contribution = { candidateId: string; taskKey?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
-type Session = {
-	id: string; task: Task; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
+export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; note?: string };
+export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
+type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
 	best: { candidateId: string; ms: number; source: string } | null; buckets: Map<string, number[]>; remotePending: Map<string, number>; seen: Set<string>; poller?: ReturnType<typeof setInterval>; pushTimer?: ReturnType<typeof setTimeout>; loaded: boolean;
 };
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
+/** The fastest correct contribution (ties: the earlier one). */
+const bestOf = (cs: Contribution[]): { candidateId: string; ms: number; source: string } | null => {
+	const ok = cs.filter((c) => c.ok && c.ms !== null).sort((a, b) => a.ms! - b.ms! || a.ts - b.ts)[0];
+	return ok ? { candidateId: ok.candidateId, ms: ok.ms!, source: ok.source } : null;
+};
 const rnd = () => Math.random();
 
 export class CodeChatHub {
@@ -78,43 +82,71 @@ export class CodeChatHub {
 		let s = this.#sessions.get(id);
 		if (!s) {
 			if (this.#sessions.size >= LIMITS.sessions) throw new Error("Too many sessions");
-			s = { id, task: TASKS[0]!, clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, buckets: new Map(), remotePending: new Map(), seen: new Set(), loaded: false };
+			s = { id, task: TASKS[0]!, blockId: "", clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, buckets: new Map(), remotePending: new Map(), seen: new Set(), loaded: false };
 			this.#sessions.set(id, s);
 		}
 		if (!s.loaded) {
 			s.loaded = true;
-			const t = (await this.host.readAll({ type: "CodeTask", fields: { session: id } }, { limit: 50 })).map((e) => e.fields as Record<string, any>).sort((a, b) => a.ts - b.ts).pop();
-			if (t) s.task = t.taskId === "custom" ? customTask({ fn: t.fn, prompt: t.prompt, cases: t.cases }) : taskById(t.taskId) ?? s.task;
-			s.best = (await this.#scores(s, s.task)).filter((c) => c.ok).sort((a, b) => a.ms! - b.ms!).map((c) => ({ candidateId: c.candidateId, ms: c.ms!, source: c.source }))[0] ?? null;
+			const last = (await this.#taskEntries(id)).at(-1);
+			const task = last ? taskFromSpec(last) : null;
+			if (last && task) {
+				s.task = task; s.blockId = String(last.blockId ?? `t${last.ts}`);
+				s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === s.blockId));
+			} else await this.#openBlock(s, TASKS[0]!, false); // a room starts with the first catalog task
 		}
 		return s;
 	}
 
-	async #scores(s: Session, task: Task): Promise<Contribution[]> {
-		const tmpl = { type: "CodeScore", fields: { session: s.id, taskKey: this.#taskKey(task) } };
-		const [local, remote] = await Promise.all([this.host.readAll(tmpl, { limit: LIMITS.contributions }), this.#rcall((r) => r.readAll(tmpl, { limit: LIMITS.contributions }))]);
-		const rows = [...local, ...(remote ?? [])].map((e) => e.fields as unknown as Contribution);
-		return rows.sort((a, b) => a.ts - b.ts);
+	async #taskEntries(id: string): Promise<Array<Record<string, any>>> {
+		return (await this.host.readAll({ type: "CodeTask", fields: { session: id } }, { limit: LIMITS.blocks + 5 })).map((e) => e.fields as Record<string, any>).sort((a, b) => a.ts - b.ts);
 	}
-	#taskKey = (t: Task) => (t.id === "custom" ? `custom:${t.fn}:${t.prompt.en.length}` : t.id);
 
+	/** All verdicts of a room (this host and the shard), oldest first. */
+	async #scores(s: Session): Promise<Contribution[]> {
+		const tmpl = { type: "CodeScore", fields: { session: s.id } };
+		const [local, remote] = await Promise.all([this.host.readAll(tmpl, { limit: LIMITS.contributions }), this.#rcall((r) => r.readAll(tmpl, { limit: LIMITS.contributions }))]);
+		return [...local, ...(remote ?? [])].map((e) => e.fields as unknown as Contribution).sort((a, b) => a.ts - b.ts);
+	}
+
+	/** Opens a new task block: from now on candidates, scores and the best code belong to it. */
+	async #openBlock(s: Session, task: Task, announce: boolean): Promise<void> {
+		s.task = task; s.best = null;
+		s.blockId = `b${Date.now().toString(36)}${(s.seq++).toString(36)}`;
+		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { custom: { fn: task.fn, prompt: task.prompt.en, cases: task.cases } } : {}) } as never }, null, DAY);
+		if (announce) await this.#write(s, "system", `Task: ${task.title.en} (${task.fn})`, s.blockId);
+	}
+
+	/** The room as the page shows it: the task blocks (each with its own contributions, best code and log) and free chat. */
 	async snapshot(id: string) {
 		const s = await this.session(id);
-		const cand = { type: "CodeCandidate", fields: { session: id, taskKey: this.#taskKey(s.task) } };
-		const [msgs, scores, pendingLocal, pendingRemote] = await Promise.all([
+		const cand = { type: "CodeCandidate", fields: { session: id } };
+		const [entries, msgs, scores, pendingLocal, pendingRemote] = await Promise.all([
+			this.#taskEntries(id),
 			this.host.readAll({ type: "ChatMessage", fields: { session: id } }, { limit: LIMITS.messages }),
-			this.#scores(s, s.task),
-			this.host.readAll(cand, { limit: 100 }),
-			this.#rcall((r) => r.readAll(cand, { limit: 100 })),
+			this.#scores(s),
+			this.host.readAll(cand, { limit: 200 }),
+			this.#rcall((r) => r.readAll(cand, { limit: 200 })),
 		]);
-		const pending = [...pendingLocal, ...(pendingRemote ?? [])];
-		const messages = msgs.map((e) => e.fields as { author: string; text: string; ts: number }).sort((a, b) => a.ts - b.ts);
+		const messages = msgs.map((e) => e.fields as { author: string; text: string; ts: number; blockId?: string }).sort((a, b) => a.ts - b.ts);
 		const judged = new Set(scores.map((c) => c.candidateId));
-		const queued: Contribution[] = pending.map((e) => ({ ...(e.fields as unknown as Contribution), ok: null, ms: null })).filter((c) => !judged.has(c.candidateId));
+		const queued: Contribution[] = [...pendingLocal, ...(pendingRemote ?? [])].map((e) => ({ ...(e.fields as unknown as Contribution), ok: null, ms: null })).filter((c) => !judged.has(c.candidateId));
+		const all = [...scores, ...queued];
+		const known = new Set<string>();
+		const blocks = entries.flatMap((f) => {
+			const task = taskFromSpec(f);
+			if (!task) return [];
+			const blockId = String(f.blockId ?? `t${f.ts}`);
+			known.add(blockId);
+			const contributions = all.filter((c) => c.blockId === blockId);
+			return [{
+				blockId, ts: f.ts as number, active: blockId === s.blockId,
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined },
+				contributions, best: bestOf(contributions), messages: messages.filter((m) => m.blockId === blockId),
+			}];
+		});
 		return {
-			session: id, task: { id: s.task.id, fn: s.task.fn, title: s.task.title, prompt: s.task.prompt, cases: s.task.id === "custom" ? s.task.cases.length : undefined },
-			tasks: TASKS.map((t) => ({ id: t.id, title: t.title })),
-			messages, contributions: [...scores, ...queued], best: s.best, run: s.run,
+			session: id, current: s.blockId, tasks: TASKS.map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt })),
+			blocks, messages: messages.filter((m) => !m.blockId || !known.has(m.blockId)), run: s.run,
 		};
 	}
 
@@ -136,24 +168,29 @@ export class CodeChatHub {
 		ws.send({ type: "snapshot", ...(await this.snapshot(id)) });
 	}
 
+	async #write(s: Session, author: string, text: string, blockId?: string): Promise<void> {
+		await this.host.write({ type: "ChatMessage", fields: { session: s.id, author, text, ts: Date.now(), ...(blockId ? { blockId } : {}) } }, null, DAY);
+		this.push(s);
+	}
+
+	/** A person says something (the author name "system" is reserved for the server's own log lines). */
 	async message(id: string, author: string, text: string): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "message", 60)) throw new Error("Too many messages, slow down");
 		const t = clip(text, 2000).trim(), a = clip(author, 40).trim();
-		if (!t || !a) throw new Error("Invalid message");
-		await this.host.write({ type: "ChatMessage", fields: { session: id, author: a, text: t, ts: Date.now() } }, null, DAY);
-		this.push(s);
+		if (!t || !a || a.toLowerCase() === "system") throw new Error("Invalid message");
+		await this.#write(s, a, t);
 	}
 
+	/** Every call opens a new task block, also when the same task is chosen again. */
 	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any } }): Promise<void> {
 		const s = await this.session(id);
 		if (s.run?.active) throw new Error("A run is active; stop it first");
+		if (!this.allow(s, "task", 30)) throw new Error("Too many tasks, slow down");
+		if ((await this.#taskEntries(id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
 		const task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
-		s.task = task;
-		s.best = (await this.#scores(s, task)).filter((c) => c.ok).sort((a, b) => a.ms! - b.ms!).map((c) => ({ candidateId: c.candidateId, ms: c.ms!, source: c.source }))[0] ?? null;
-		await this.host.write({ type: "CodeTask", fields: { session: id, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { fn: task.fn, prompt: task.prompt.en, cases: task.cases as never } : {}) } as never }, null, DAY);
-		await this.message(id, "system", `Task: ${task.title.en} (${task.fn})`);
+		await this.#openBlock(s, task, true);
 		this.push(s);
 	}
 
@@ -168,7 +205,7 @@ export class CodeChatHub {
 
 	async #enqueue(s: Session, author: string, via: string, gen: number, source: string): Promise<string> {
 		const candidateId = `${Date.now().toString(36)}-${s.seq++}`;
-		const entry = { type: "CodeCandidate", fields: { session: s.id, taskKey: this.#taskKey(s.task), taskId: s.task.id, ...(s.task.id === "custom" ? { custom: { fn: s.task.fn, prompt: s.task.prompt.en, cases: s.task.cases } } : {}), candidateId, author, via, gen, source, ts: Date.now() } } as never;
+		const entry = { type: "CodeCandidate", fields: { session: s.id, blockId: s.blockId, taskId: s.task.id, ...(s.task.id === "custom" ? { custom: { fn: s.task.fn, prompt: s.task.prompt.en, cases: s.task.cases } } : {}), candidateId, author, via, gen, source, ts: Date.now() } } as never;
 		// every second candidate goes to the nano shard when it is up; if its write fails the candidate is judged here
 		if (this.#remote && this.remoteUp && this.#rr++ % 2 === 1) {
 			const ok = await this.#rcall(async (r) => { await r.write(entry, null, DAY); return true; });
@@ -189,21 +226,21 @@ export class CodeChatHub {
 		const r = this.#role(roleId);
 		while (!this.#closed) {
 			const t = await r.createTransaction(TIMEOUT_MS + 30_000);
-			const c = await r.take({ type: "CodeCandidate", fields: { session: s.id, taskKey: this.#taskKey(s.task) } }, NO_WAIT, { txn: t.id });
+			const c = await r.take({ type: "CodeCandidate", fields: { session: s.id } }, NO_WAIT, { txn: t.id });
 			if (!c) { await r.abort(t.id); return; }
-			const f = c.fields as unknown as Contribution;
-			const v = await judge(this.cm, s.task, f.source);
+			const f = c.fields as unknown as Contribution & { taskId?: string; custom?: unknown };
+const v = await judge(this.cm, taskFromSpec(f) ?? s.task, f.source); // the candidate names its own task: it may belong to an earlier block
 			try {
-				await r.write({ type: "CodeScore", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
+				await r.write({ type: "CodeScore", fields: { session: s.id, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
 				await r.commit(t.id);
 			} catch (e) {
 				await r.abort(t.id).catch(() => {});
 				if (!(e instanceof TransactionError)) throw e;
 				continue;
 			}
-			if (v.ok && (!s.best || v.ms < s.best.ms)) {
+			if (v.ok && f.blockId === s.blockId && (!s.best || v.ms < s.best.ms)) {
 				s.best = { candidateId: f.candidateId, ms: v.ms, source: f.source };
-				await this.host.write({ type: "CodeBest", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId: f.candidateId, ms: v.ms, source: f.source } }, null, DAY);
+				await this.host.write({ type: "CodeBest", fields: { session: s.id, blockId: s.blockId, candidateId: f.candidateId, ms: v.ms, source: f.source } }, null, DAY);
 			}
 			this.push(s);
 		}
@@ -222,9 +259,9 @@ export class CodeChatHub {
 				const f = e.fields as unknown as Contribution;
 				if (!s.remotePending.delete(f.candidateId)) continue;
 				changed = true;
-				if (f.ok && f.ms !== null && (!s.best || f.ms < s.best.ms) && f.taskKey === this.#taskKey(s.task)) {
+				if (f.ok && f.ms !== null && (!s.best || f.ms < s.best.ms) && f.blockId === s.blockId) {
 					s.best = { candidateId: f.candidateId, ms: f.ms, source: f.source };
-					await this.host.write({ type: "CodeBest", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId: f.candidateId, ms: f.ms, source: f.source } }, null, DAY);
+					await this.host.write({ type: "CodeBest", fields: { session: s.id, blockId: s.blockId, candidateId: f.candidateId, ms: f.ms, source: f.source } }, null, DAY);
 				}
 			}
 			if (changed) this.push(s);
@@ -259,9 +296,10 @@ export class CodeChatHub {
 		for (const c of contenders) if (c !== "scripted" && !allowed.includes(c)) throw new Error(`Model not available: ${c}`);
 		if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
 		const mode: RunMode = contenders.some((c) => c !== "scripted") ? "llm" : "scripted";
-		const run: RunInfo = { active: true, mode, contenders, gen: 0, gens, agents, perAgent };
+		const run: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent };
 		s.run = run; s.abort = false;
-		await this.message(id, "system", `Run started: ${agents} agents x ${gens} generations (${contenders.join(" vs ")})`);
+		const blockId = s.blockId;
+		await this.#write(s, "system", `Run started: ${agents} agents x ${gens} generations (${contenders.join(" vs ")})`, blockId);
 		void (async () => {
 			try {
 				for (let gen = 0; gen < gens && !s.abort && !this.#closed; gen++) {
@@ -275,8 +313,9 @@ export class CodeChatHub {
 								try { const c = await this.#llm.contribute({ task: s.task, lang: o.lang ?? "en", agent: a, gen, best, model: contender }); source = c.source; via = c.model; }
 								catch (e) { run.note = `${contender}: ${(e as Error).message}; scripted agent used`; }
 							}
-							source ??= s.task.variants[Math.floor(rnd() * s.task.variants.length)]!;
-							await this.#enqueue(s, `agent-${a}`, via, gen + 1, source);
+							if (source === undefined && s.task.variants.length) source = s.task.variants[Math.floor(rnd() * s.task.variants.length)]!;
+								if (source === undefined) continue; // a custom task has no scripted variants: this agent has nothing to hand in
+								await this.#enqueue(s, `agent-${a}`, via, gen + 1, source);
 						}
 					}));
 					await this.#idle(s);
@@ -285,7 +324,7 @@ export class CodeChatHub {
 				run.note = (e as Error).message;
 			} finally {
 				run.active = false;
-				await this.message(id, "system", `Run ${s.abort ? "stopped" : "finished"}${s.best ? `: best ${s.best.ms} ms` : ": no correct code"}`).catch(() => {});
+				await this.#write(s, "system", `Run ${s.abort ? "stopped" : "finished"}${s.best ? `: best ${s.best.ms} ms` : ": no correct code"}`, blockId).catch(() => {});
 				this.push(s);
 			}
 		})();

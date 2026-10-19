@@ -88,3 +88,12 @@ export function customTask(x: { fn: string; prompt: string; cases: Case[] }): Ta
 	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [] };
 	return { ...t, bench: `const cs = ${JSON.stringify(x.cases)}; for (let i = 0; i < 300; i++) for (const c of cs) ${x.fn}(...c.args);` };
 }
+
+/** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */
+export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
+	if (f.taskId === "custom") {
+		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[] };
+		try { return customTask(c); } catch { return null; }
+	}
+	return taskById(String(f.taskId)) ?? null;
+}
