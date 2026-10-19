@@ -332,6 +332,8 @@ export class SocialSwarmHub {
 	#timers: Array<ReturnType<typeof setInterval>> = [];
 	#rev = 0;
 	#busy = false;
+	/** The intent timer fires every 500 ms; over a slow shard link a tick takes longer and must not overlap the next. */
+	#intentInFlight = false;
 	#closed = false;
 	#workers: Promise<void>[] = [];
 	#llm: import("../llm.ts").SwarmReplyGenerator | null = null;
@@ -922,7 +924,12 @@ export class SocialSwarmHub {
 	 * One logical transaction per shard; remote writes still use individual RPC operations.
 	 */
 	async #intentTick(): Promise<void> {
-		if (!this.#running || this.#busy) return;
+		if (!this.#running || this.#busy || this.#intentInFlight) return;
+		this.#intentInFlight = true;
+		try { await this.#produceIntents(); } finally { this.#intentInFlight = false; }
+	}
+
+	async #produceIntents(): Promise<void> {
 		const burst = Math.max(1, Math.round(this.#rate * 0.5));
 		// Replies/likes stay on the target post's shard; new posts split ~50/50 across shards.
 		const perShard = new Map<SpaceLike, Fields[]>();
@@ -954,12 +961,13 @@ export class SocialSwarmHub {
 					await space.commit(txn.id);
 					if (space === this.#remote) this.#markRemoteUp();
 				} catch (e) {
-					if (space === this.#remote) this.#markRemoteDown();
+					// A limit refusal (too many calls or transactions) is back-pressure from a live shard, not a lost one.
+					if (space === this.#remote && !(e instanceof ResourceExhausted)) this.#markRemoteDown();
 					this.#shardWarn(`shard txn failed (${tasks.length} tasks, remote=${space !== this.space})`, e);
 					try { await space.abort(txn.id); } catch { /* already gone */ }
 				}
 			} catch (e) {
-				if (space === this.#remote) this.#markRemoteDown();
+				if (space === this.#remote && !(e instanceof ResourceExhausted)) this.#markRemoteDown();
 				this.#shardWarn(`shard txn open failed (remote=${space !== this.space})`, e);
 			}
 		}

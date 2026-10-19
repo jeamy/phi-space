@@ -27,6 +27,18 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 	const [loadingArticle, setLoadingArticle] = useState<boolean>(false);
 	// Below 1024 px the sidebar is a drawer; it opens from the menu button and closes on any navigation.
 	const [menuOpen, setMenuOpen] = useState<boolean>(false);
+	// A mostly horizontal swipe to the left closes the drawer; vertical scrolling in it stays untouched.
+	const swipeStart = useRef<{ x: number; y: number } | null>(null);
+	const drawerSwipe = {
+		onTouchStart: (e: any) => { const t = e.touches[0]; swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null; },
+		onTouchEnd: (e: any) => {
+			const s = swipeStart.current, t = e.changedTouches[0];
+			swipeStart.current = null;
+			if (!s || !t) return;
+			const dx = t.clientX - s.x, dy = t.clientY - s.y;
+			if (dx < -50 && Math.abs(dx) > Math.abs(dy) * 1.5) setMenuOpen(false);
+		},
+	};
 	const searchRef = useRef<HTMLInputElement | null>(null);
 
 	useEffect(() => {
@@ -300,8 +312,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 
 			{/* 3-Column Workspace */}
 			<div className={hasRightToc ? "workspace has-toc" : "workspace"}>
-				{menuOpen ? <div className="drawer-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" /> : null}
-				<aside id="help-sidebar" className={menuOpen ? "sidebar is-open" : "sidebar"}>
+				{menuOpen ? <div className="drawer-backdrop" onClick={() => setMenuOpen(false)} {...drawerSwipe} aria-hidden="true" /> : null}
+				<aside id="help-sidebar" className={menuOpen ? "sidebar is-open" : "sidebar"} {...(menuOpen ? drawerSwipe : {})}>
 					<nav className="nav-section">
 						<span className="nav-section__label">
 							{locale === "de" ? "NAVIGATION" : "NAVIGATION"}
