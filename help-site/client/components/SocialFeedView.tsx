@@ -239,7 +239,9 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	useEffect(() => () => { if (purgeTimer.current) clearTimeout(purgeTimer.current); }, []);
 	const [channel, setChannel] = useState<string>("home");
 	const [draft, setDraft] = useState("");
-	const [handle, setHandle] = useState("you");
+	// The field may be empty while a new name is typed; everything that posts uses "you" until a name is there.
+	const [handleInput, setHandleInput] = useState("you");
+	const handle = handleInput || "you";
 	const [attachOpen, setAttachOpen] = useState(false);
 	const [imgUrl, setImgUrl] = useState("");
 	const [imgAlt, setImgAlt] = useState("");
@@ -977,8 +979,9 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 						<div className="sf-composer__row">
 							<input
 								className="sf-handle-input"
-								value={handle}
-								onChange={(e) => setHandle(e.target.value.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 24) || "you")}
+								value={handleInput}
+								onChange={(e) => setHandleInput(e.target.value.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 24))}
+								onBlur={() => { if (!handleInput) setHandleInput("you"); }}
 								title="handle"
 							/>
 							<button
