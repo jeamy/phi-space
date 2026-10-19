@@ -124,7 +124,7 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 								<button type="button" className="btn" onClick={() => onCode(c.candidateId)}>{t.hide}</button>
 							</div>
 							{c.error ? <div className="err">{c.error}</div> : null}
-							<Code sid={sid} c={c} />
+							<Code key={c.candidateId} sid={sid} c={c} />
 						</div>
 					))}
 				</div>
@@ -346,7 +346,7 @@ export function CodemodeChat() {
 					<div className="panel">
 						<h2>{t.best} <HelpTip id="best" lang={lang} label={t.best} /></h2>
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
-						{focusBlock?.best ? <Code sid={sid} c={focusBlock.best} /> : <div className="empty">{t.nobest}</div>}
+						{focusBlock?.best ? <Code key={focusBlock.best.candidateId} sid={sid} c={focusBlock.best} /> : <div className="empty">{t.nobest}</div>}
 					</div>
 				</aside>
 			</main>

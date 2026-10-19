@@ -1,11 +1,14 @@
 // Optional model agents for the codemode chat. Off unless CODEMODE_CHAT_LLM=1 and credentials exist (same resolution as
 // the --live examples: environment keys or ~/.pi/agent/auth.json). Guards: a model whitelist (codestral-latest and the
-// newest haiku), at most 2 calls in flight (more wait for a slot) and CODEMODE_LLM_PER_MIN (default 20) per minute;
+// newest haiku), at most 2 calls in flight (more wait for a slot), CODEMODE_LLM_PER_MIN (default 20) per minute and
+// CODEMODE_LLM_PER_DAY (default 500) per day, because any visitor can start a run with model agents;
 // beyond that the caller falls back to scripted agents. Several models can take part in one run: the caller names the model.
 import { liveModels } from "../../examples/live-models.ts";
 import type { Task } from "./tasks.ts";
 
 const CALLS_PER_MIN = Number(process.env.CODEMODE_LLM_PER_MIN ?? 20);
+const CALLS_PER_DAY = Number(process.env.CODEMODE_LLM_PER_DAY ?? 500);
+let dayStart = 0, dayCalls = 0;
 type Shared = { models: any; model: any; label: string };
 let shared: Promise<Shared | null> | null = null;
 let on = true, inFlight = 0, windowStart = 0, calls = 0;
@@ -79,8 +82,10 @@ export async function llmContribution(c: { task: Task; lang: "de" | "en"; agent:
 	const model = c.model ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === c.model) : s.model;
 	if (!model) throw new Error(`model ${c.model} is not allowed`);
 	if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); calls = 0; }
+	if (Date.now() - dayStart >= 86_400_000) { dayStart = Date.now(); dayCalls = 0; }
 	if (calls >= CALLS_PER_MIN) throw new Error("model rate limit");
-	calls++;
+	if (dayCalls >= CALLS_PER_DAY) throw new Error("daily model budget used up");
+	calls++; dayCalls++;
 	if (inFlight >= 2) await new Promise<void>((ok) => slotWaiters.push(ok)); // wait for a free slot instead of failing
 	inFlight++;
 	try {

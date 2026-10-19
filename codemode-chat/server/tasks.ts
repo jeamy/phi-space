@@ -7,8 +7,11 @@ export type Task = {
 	fn: string;
 	prompt: { de: string; en: string };
 	cases: Case[];
-	/** Sandbox statements timed by the judge (they call `fn` by name); may `return { ok: false, error }` when a large input is answered wrongly. */
+	/** Sandbox statements timed by the judge (they call `fn` by name and leave their result in `__out`); may also
+	 *  `return { ok: false, error }` early. */
 	bench: string;
+	/** What `__out` must equal after the bench (computed here, compared outside the timed part); omitted: not checked. */
+	benchExpect?: unknown;
 	/** Optional sandbox expression for the bench input, evaluated BEFORE the contribution runs; the bench reads it as `__in`. */
 	benchInput?: string;
 	variants: string[];
@@ -19,6 +22,8 @@ const fibs = (n: number) => { let a = 0, b = 1; for (let i = 0; i < n; i++) [a, 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 const lcg = (seed: number) => () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) % 100000;
 const sampleArrays = (() => { const r = lcg(7); return [[], [1], [3, 1, 2], [10, 9, 100, -5, 0, 2, 2], Array.from({ length: 40 }, r)]; })();
+const sortInput = (() => { const r = lcg(11); return Array.from({ length: 4000 }, r); })(); // the sandbox builds the same numbers
+const gcdSum = (() => { let x = 0; for (let i = 1; i < 3000; i++) x += gcd(1000003 * i, 999983 * (i + 7)); return x; })();
 
 export const TASKS: Task[] = [
 	{
@@ -26,7 +31,8 @@ export const TASKS: Task[] = [
 		title: { de: "Die ersten n Primzahlen", en: "The first n primes" },
 		prompt: { de: "Schreibe firstPrimes(n): die ersten n Primzahlen als Array (aufsteigend).", en: "Write firstPrimes(n): the first n primes as an ascending array." },
 		cases: [0, 1, 2, 10, 100].map((n) => ({ args: [n], expect: primes(n) })),
-		bench: `const r = firstPrimes(3000); if (r.length !== 3000 || r[2999] !== ${primes(3000)[2999]}) return { ok: false, error: "wrong on n = 3000" };`,
+		bench: `__out = firstPrimes(3000);`,
+		benchExpect: primes(3000),
 		variants: [
 			`function firstPrimes(n){const p=[];for(let c=2;p.length<n;c++){let ok=true;for(let d=2;d<c;d++)if(c%d===0){ok=false;break}if(ok)p.push(c)}return p}`,
 			`function firstPrimes(n){const p=n>0?[2]:[];for(let c=3;p.length<n;c+=2){let ok=true;for(let d=2;d*d<=c;d++)if(c%d===0){ok=false;break}if(ok)p.push(c)}return p}`,
@@ -41,7 +47,8 @@ export const TASKS: Task[] = [
 		title: { de: "Fibonacci-Zahl", en: "Fibonacci number" },
 		prompt: { de: "Schreibe fib(n): die n-te Fibonacci-Zahl (fib(0)=0, fib(1)=1).", en: "Write fib(n): the n-th Fibonacci number (fib(0)=0, fib(1)=1)." },
 		cases: [0, 1, 2, 10, 20, 40, 70].map((n) => ({ args: [n], expect: fibs(n) })),
-		bench: `for (let i = 0; i < 20; i++) fib(24);`,
+		bench: `__out = []; for (let i = 0; i < 20; i++) __out[i] = fib(20 + (i % 5));`,
+		benchExpect: Array.from({ length: 20 }, (_, i) => fibs(20 + (i % 5))),
 		variants: [
 			`function fib(n){return n<2?n:fib(n-1)+fib(n-2)}`,
 			`function fib(n){let a=0,b=1;for(let i=0;i<n;i++){const t=a+b;a=b;b=t}return a}`,
@@ -56,7 +63,8 @@ export const TASKS: Task[] = [
 		prompt: { de: "Schreibe sortNumbers(arr): gibt die Zahlen aufsteigend sortiert zurück (neues Array).", en: "Write sortNumbers(arr): returns the numbers in ascending order (a new array)." },
 		cases: sampleArrays.map((a) => ({ args: [a], expect: [...a].sort((x, y) => x - y) })),
 		benchInput: `(() => { let s = 11; const a = []; for (let i = 0; i < 4000; i++) a[i] = (s = (Math.imul(s, 1103515245) + 12345) >>> 0) % 100000; return a; })()`,
-		bench: `const r = sortNumbers(__in); if (!r || r.length !== 4000) return { ok: false, error: "wrong length on 4000 numbers" }; for (let i = 1; i < 4000; i++) if (r[i - 1] > r[i]) return { ok: false, error: "not sorted on 4000 numbers" };`,
+		bench: `__out = sortNumbers(__in);`,
+		benchExpect: [...sortInput].sort((x, y) => x - y),
 		variants: [
 			`function sortNumbers(a){const r=[...a];for(let i=0;i<r.length;i++)for(let j=0;j<r.length-1-i;j++)if(r[j]>r[j+1]){const t=r[j];r[j]=r[j+1];r[j+1]=t}return r}`,
 			`function sortNumbers(a){const r=[...a];for(let i=1;i<r.length;i++){const x=r[i];let j=i-1;while(j>=0&&r[j]>x){r[j+1]=r[j];j--}r[j+1]=x}return r}`,
@@ -70,7 +78,8 @@ export const TASKS: Task[] = [
 		title: { de: "Größter gemeinsamer Teiler", en: "Greatest common divisor" },
 		prompt: { de: "Schreibe gcd(a, b): der größte gemeinsame Teiler zweier nichtnegativer ganzer Zahlen.", en: "Write gcd(a, b): the greatest common divisor of two non-negative integers." },
 		cases: [[12, 18], [17, 5], [0, 9], [9, 0], [1071, 462], [123456, 7890]].map(([a, b]) => ({ args: [a, b], expect: gcd(a!, b!) })),
-		bench: `let x = 0; for (let i = 1; i < 3000; i++) x += gcd(1000003 * i, 999983 * (i + 7));`,
+		bench: `let x = 0; for (let i = 1; i < 3000; i++) x += gcd(1000003 * i, 999983 * (i + 7)); __out = x;`,
+		benchExpect: gcdSum,
 		variants: [
 			`function gcd(a,b){let g=1;for(let d=1;d<=Math.min(a,b);d++)if(a%d===0&&b%d===0)g=d;return a===0?b:b===0?a:g}`,
 			`function gcd(a,b){while(a!==b){if(a===0)return b;if(b===0)return a;if(a>b)a-=b;else b-=a}return a}`,
@@ -92,8 +101,9 @@ export function customTask(x: { fn: string; prompt: string; cases: Case[] }): Ta
 	for (const c of x.cases) if (!c || !Array.isArray(c.args)) throw new Error("Every case needs args (array) and expect");
 	if (JSON.stringify(x.cases).length > 32_000) throw new Error("Cases too large");
 	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [] };
-	// index loops and the judge's captured Reflect.apply: a contribution that patches iterators cannot empty the bench
-	return { ...t, bench: `for (let __r = 0; __r < 300; __r++) for (let __j = 0; __j < __cases.length; __j++) __apply(${x.fn}, undefined, __cases[__j].args);` };
+	// index loops and the judge's captured Reflect.apply: a contribution that patches iterators cannot empty the bench;
+	// every call is checked, so code that is right only on the first calls (a call counter) does not win
+	return { ...t, bench: `for (let __r = 0; __r < 300; __r++) for (let __j = 0; __j < __cases.length; __j++) if (!__eq(__apply(${x.fn}, undefined, __cases[__j].args), __cases[__j].expect)) return { ok: false, error: "inconsistent on repeated calls" };` };
 }
 
 /** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */

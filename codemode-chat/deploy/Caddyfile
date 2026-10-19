@@ -2,5 +2,6 @@
 
 codemode.example.org {
     encode zstd gzip
+    # Caddy sets X-Forwarded-For to the client (an untrusted client's own header is dropped); the hub's per-IP quota reads it
     reverse_proxy 127.0.0.1:3700
 }

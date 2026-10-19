@@ -566,6 +566,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_CHAT_LLM\` | \`1\` schaltet Modell-Agenten ein |
 | \`CODEMODE_CHAT_MODEL\` | Teilname des Standardmodells |
 | \`CODEMODE_LLM_PER_MIN\` | Modellaufrufe pro Minute, Standard 20 |
+| \`CODEMODE_LLM_PER_DAY\` | Modellaufrufe pro Tag, Standard 500 (Kostendeckel) |
 | \`CODEMODE_REMOTE\` | Hub: Adresse des Shards (\`unix:…\` oder \`tcp:host:port\`) |
 | \`CODEMODE_LISTEN\` | nano: Adresse, an der der Shard lauscht |
 | \`CODEMODE_DB\` | nano: Speicher; \`CODEMODE_MEM=1\` = nur im Speicher |
@@ -619,6 +620,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_CHAT_LLM\` | \`1\` enables model agents |
 | \`CODEMODE_CHAT_MODEL\` | part of the default model name |
 | \`CODEMODE_LLM_PER_MIN\` | model calls per minute, default 20 |
+| \`CODEMODE_LLM_PER_DAY\` | model calls per day, default 500 (cost cap) |
 | \`CODEMODE_REMOTE\` | hub: address of the shard (\`unix:…\` or \`tcp:host:port\`) |
 | \`CODEMODE_LISTEN\` | nano: address the shard listens on |
 | \`CODEMODE_DB\` | nano: storage; \`CODEMODE_MEM=1\` = in memory only |

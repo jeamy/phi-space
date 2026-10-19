@@ -89,9 +89,9 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 			const url = new URL(req.url ?? "/", "http://localhost");
 			const p = url.pathname;
 			if (p === "/healthz") return json(res, 200, { ok: true });
-			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt }) => ({ id, title, fn, prompt })));
 			if (p.startsWith("/api/") && !allowed(clientIp(req))) return json(res, 429, { error: "Too many requests; retry in a minute" });
+			if (p === "/api/system") return json(res, 200, await hub.systemInfo()); // a shard call each time: under the quota
 			if (p === "/api/llm") {
 				if (req.method !== "POST") return json(res, 200, await llmInfo());
 				// switching the model agents is an operator action, not a visitor's

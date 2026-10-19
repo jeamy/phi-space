@@ -5,7 +5,7 @@
 // Judges take a candidate under a transaction and write its score atomically, like the evolve example.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
-import { judgeInSlot, MAX_SOURCE_CHARS, sandboxSlot, TIMEOUT_MS, type Codemode, type Verdict } from "./judge.ts";
+import { judgeInSlot, MAX_SOURCE_CHARS, plain, sandboxSlot, TIMEOUT_MS, type Codemode, type Verdict } from "./judge.ts";
 import { customTask, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
 import { llmContribution, llmModels } from "./llm.ts";
 import { hostFacts, type HostFacts } from "./shard.ts";
@@ -13,9 +13,11 @@ import type { WsConnection } from "./ws.ts";
 
 const DAY = 24 * 3600_000;
 const LIMITS = { agents: 8, gens: 6, perAgent: 3, sessions: 50, messages: 500, contributions: 1000, blocks: 60 };
-/** Code text a snapshot carries at most; the rest is fetched per contribution (`source()`), so a frame stays far below
- *  the 1 MiB WebSocket limit however many contributions a room holds. */
+/** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
+ *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
 const SNAPSHOT_SOURCE_BYTES = 384 * 1024;
+/** A snapshot above this size (counted as sent) goes out without any code at all. */
+const SNAPSHOT_MAX_BYTES = 900 * 1024;
 /** A candidate sent to the shard that has no verdict after this long is taken back and judged here. */
 const REMOTE_GRACE_MS = 90_000;
 export type RunMode = "scripted" | "llm";
@@ -172,7 +174,7 @@ export class CodeChatHub {
 		const keep = new Set<string>();
 		const spend = (c: { candidateId: string; source?: string } | null) => {
 			if (!c || keep.has(c.candidateId)) return;
-			const n = Buffer.byteLength(c.source ?? "");
+			const n = Buffer.byteLength(JSON.stringify(c.source ?? ""));
 			if (n <= budget) { budget -= n; keep.add(c.candidateId); }
 		};
 		const known = new Set<string>();
@@ -187,16 +189,21 @@ export class CodeChatHub {
 		spend(raw.find((b) => b.blockId === s.blockId)?.best ?? null);
 		for (const b of raw) spend(b.best);
 		for (const c of [...all].sort((a, b) => b.ts - a.ts)) spend(c);
-		const slim = <T extends { candidateId: string; source?: string }>(c: T): T => (keep.has(c.candidateId) ? c : { ...c, source: undefined, sourceOmitted: true });
-		const blocks = raw.map(({ f, task, blockId, contributions, best }) => ({
-			blockId, ts: f.ts as number, active: blockId === s.blockId,
-			task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined },
-			contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
-		}));
-		return {
-			session: id, current: s.blockId, tasks: TASKS.map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt })),
-			blocks, messages: messages.filter((m) => !m.blockId || !known.has(m.blockId)), run: s.run,
+		const build = (withCode: boolean) => {
+			const slim = <T extends { candidateId: string; source?: string }>(c: T): T => (withCode && keep.has(c.candidateId) ? c : { ...c, source: undefined, sourceOmitted: true });
+			const blocks = raw.map(({ f, task, blockId, contributions, best }) => ({
+				blockId, ts: f.ts as number, active: blockId === s.blockId,
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined },
+				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
+			}));
+			return {
+				session: id, current: s.blockId, tasks: TASKS.map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt })),
+				blocks, messages: messages.filter((m) => !m.blockId || !known.has(m.blockId)), run: s.run,
+			};
 		};
+		// the budget bounds the code; the last word is the size of the frame as it is sent
+		const full = build(true);
+		return Buffer.byteLength(JSON.stringify(full)) <= SNAPSHOT_MAX_BYTES ? full : build(false);
 	}
 
 	/** The code of one contribution (verdict or still waiting), here or on the shard; null when it is gone. */
@@ -269,7 +276,7 @@ export class CodeChatHub {
 		if (!this.allow(s, "code", 20)) throw new Error("Too many submissions, slow down");
 		const src = String(source ?? "");
 		if (!src.trim() || src.length > MAX_SOURCE_CHARS) throw new Error(`Code must be 1 to ${MAX_SOURCE_CHARS} characters`);
-		return this.#enqueue(s, clip(author, 40).trim() || "guest", "human", 0, src);
+		return this.#enqueue(s, plain(clip(author, 40)).trim() || "guest", "human", 0, src);
 	}
 
 	/** Contributions a room holds (verdicts and waiting candidates, here and on the shard). */

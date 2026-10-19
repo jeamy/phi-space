@@ -345,3 +345,34 @@ t("switching the model agents needs the admin token; the per-IP quota answers 42
 		assert.equal((await fetch(srv.url + "/healthz")).status, 200); // outside the API quota
 	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
 });
+
+t("code that is right only on the small cases does not win the bench", async () => {
+	const sort = taskById("sort")!, gcdT = taskById("gcd")!, fib = taskById("fibonacci")!;
+	// sorts the cases, answers the 4000-number bench with an empty shape
+	assert.equal((await judge(cm!, sort, "function sortNumbers(a){ return a.length === 4000 ? { length: 4000 } : [...a].sort((x, y) => x - y) }")).ok, false);
+	assert.equal((await judge(cm!, gcdT, "function gcd(a,b){ if (a > 100000) return 1; while (b) [a, b] = [b, a % b]; return a }")).ok, false);
+	assert.equal((await judge(cm!, fib, "const t = [0,1,1,2,3,5,8,13,21,34,55]; function fib(n){ if (n === 40) return 102334155; if (n === 70) return 190392490709135; return t[n] ?? 0 }")).ok, false);
+	// a call counter: right for the case calls, then 0
+	const custom = customTask({ fn: "double", prompt: "", cases: [{ args: [2], expect: 4 }, { args: [3], expect: 6 }] });
+	assert.equal((await judge(cm!, custom, "let calls = 0; function double(x){ return ++calls <= 2 ? x * 2 : 0 }")).ok, false);
+	// every catalog task still accepts its fastest honest variant
+	for (const task of TASKS) assert.ok((await Promise.all(task.variants.map((v) => judge(cm!, task, v)))).some((v) => v.ok), task.id);
+});
+
+t("code full of control characters does not blow the frame up (JSON escapes count)", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const first = (await (await fetch(srv.url + "/api/sessions/esc1")).json()) as any;
+		const src = "\u0001".repeat(15_000);
+		for (let i = 0; i < 60; i++) await srv.hub.host.write({ type: "CodeScore", fields: { session: "esc1", blockId: first.current, candidateId: `e${i}`, author: "\u0002".repeat(40), via: "human", gen: 0, ok: false, ms: 5000, error: "\u0003".repeat(200), source: src, ts: Date.now() + i } } as never, null, 3_600_000);
+		const ws = new WebSocket(srv.url.replace("http", "ws") + "/ws/esc1");
+		const frame = await new Promise<any>((ok, no) => { ws.onmessage = (e) => ok(e.data); ws.onclose = () => no(new Error("closed")); });
+		assert.ok(Buffer.byteLength(String(frame)) < 1_000_000, `frame ${Buffer.byteLength(String(frame))} bytes`);
+		assert.equal(JSON.parse(String(frame)).blocks[0].contributions.length, 60);
+		ws.close();
+		// what the hub writes itself is plain: a human author loses its control characters
+		await post(srv.url, "/api/sessions/esc1/code", { author: "a\u0001b", source: "function firstPrimes(){ return [] }" });
+		const mine = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/esc1")).json()) as any; return s.blocks[0].contributions.find((c: any) => c.author === "a b") ?? false; });
+		assert.equal(mine.author, "a b");
+	} finally { await srv.close(); }
+});

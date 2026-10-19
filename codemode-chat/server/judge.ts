@@ -4,7 +4,8 @@
 // The contribution never becomes part of the judging program's text: it is a string literal that an indirect eval runs
 // as a script of its own (a top-level `return` is a syntax error there, and it cannot see the judge's locals). The
 // builtins the judge relies on are captured before it runs, and the bench input is built before it, so a contribution
-// that patches globals (JSON.stringify, toJSON, iterators, Date) only fools itself.
+// that patches globals (JSON.stringify, toJSON, iterators, Date) only fools itself. The bench's results are checked as
+// well as the cases (outside the timed part): code that is only right on the small cases does not win.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
 
@@ -51,6 +52,7 @@ const __eq = (a, b) => {
 };
 const __cases = ${JSON.stringify(task.cases)};
 const __in = ${task.benchInput ?? "undefined"};
+const __expect = ${task.benchExpect === undefined ? "undefined" : JSON.stringify(task.benchExpect)};
 const __fn = __eval(${JSON.stringify(script)});
 if (typeof __fn !== "function") return { ok: false, error: "no function ${task.fn}" };
 for (let __i = 0; __i < __cases.length; __i++) {
@@ -58,12 +60,18 @@ for (let __i = 0; __i < __cases.length; __i++) {
 	if (!__eq(__apply(__fn, undefined, __c.args), __c.expect)) return { ok: false, error: "wrong on " + __str(__c.args).slice(0, 80) };
 }
 const ${task.fn} = __fn;
+let __out;
 const __t = __now();
 {
 ${task.bench}
 }
-return { ok: true, ms: __now() - __t };`;
+const __ms = __now() - __t;
+if (__expect !== undefined && !__eq(__out, __expect)) return { ok: false, error: "wrong on the bench input" };
+return { ok: true, ms: __ms };`;
 }
+
+/** An error text as the page shows it: no control characters (each would cost six bytes of JSON), at most 200 chars. */
+export const plain = (s: string): string => s.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
 
 /** Judges one contribution; the caller already holds a sandbox slot. */
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
@@ -71,12 +79,12 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string): Pro
 	const sandbox = new cm.CodemodeSandbox({ timeoutMs: TIMEOUT_MS, tools: [], memoryLimitBytes: 64 * 1024 * 1024 });
 	try {
 		const r = await sandbox.execute(judgeProgram(task, source));
-		if (!r.ok) return { ok: false, ms: TIMEOUT_MS, error: (r.error?.message ?? "failed").slice(0, 200) };
+		if (!r.ok) return { ok: false, ms: TIMEOUT_MS, error: plain(r.error?.message ?? "failed") };
 		const v = r.value as { ok?: unknown; ms?: unknown; error?: unknown } | null;
 		if (v?.ok === true) return typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0 ? { ok: true, ms: v.ms } : { ok: false, ms: TIMEOUT_MS, error: "invalid timing" };
-		return { ok: false, ms: TIMEOUT_MS, error: typeof v?.error === "string" ? v.error.slice(0, 200) : "no verdict" };
+		return { ok: false, ms: TIMEOUT_MS, error: typeof v?.error === "string" ? plain(v.error) : "no verdict" };
 	} catch (e) {
-		return { ok: false, ms: TIMEOUT_MS, error: (e as Error).message.slice(0, 200) };
+		return { ok: false, ms: TIMEOUT_MS, error: plain((e as Error).message) };
 	} finally {
 		await sandbox.close().catch(() => {});
 	}
