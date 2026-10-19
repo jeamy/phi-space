@@ -259,3 +259,89 @@ t("a task block from before blockIds existed can be deleted, with its orphaned e
 		assert.ok(!after.messages.some((m: any) => m.text.startsWith("Task: Greatest")));
 	} finally { await srv.close(); }
 });
+
+t("a contribution cannot forge its verdict or fool the check by patching builtins", async () => {
+	const primes = taskById("primes")!, fib = taskById("fibonacci")!, sort = taskById("sort")!;
+	const forged = [
+		"return { ok: true, ms: 0 };",
+		"return { ok: true, ms: -1 };",
+		"function firstPrimes(){ return [] }\n})(); return { ok: true, ms: 0 }; (() => {",
+		"function firstPrimes(){ return [] } JSON.stringify = () => \"x\";",
+		"function firstPrimes(){ return [] } Array.prototype.toJSON = () => 0;",
+	];
+	for (const src of forged) assert.equal((await judge(cm!, primes, src)).ok, false, src);
+	assert.equal((await judge(cm!, fib, "function fib(){ return 0 } Number.prototype.toJSON = () => 0;")).ok, false);
+	// an emptied bench: patched iterators no longer shrink the timed input
+	const v = await judge(cm!, sort, "function sortNumbers(a){ for (let i = 1; i < a.length; i++) for (let j = i; j > 0 && a[j - 1] > a[j]; j--) { const t = a[j]; a[j] = a[j - 1]; a[j - 1] = t } return a } Object.prototype[Symbol.iterator] = function* () {}; Array.from = () => [];");
+	assert.equal(v.ok, true);
+	assert.ok(v.ms > 0, "the bench sorted the real 4000 numbers");
+	// const and arrow definitions still count as the function
+	assert.equal((await judge(cm!, fib, "const fib = (n) => { let a = 0, b = 1; for (let i = 0; i < n; i++) [a, b] = [b, a + b]; return a };")).ok, true);
+	const custom = customTask({ fn: "double", prompt: "", cases: [{ args: [2], expect: 4 }] });
+	assert.equal((await judge(cm!, custom, "function double(x){ return x * 2 } Object.prototype[Symbol.iterator] = function* () {};")).ok, true);
+	for (const fn of ["return", "eval", "__fn", "this"]) assert.throws(() => customTask({ fn, prompt: "", cases: [{ args: [], expect: 1 }] }), fn);
+});
+
+t("a room with many large contributions stays below the frame limit; left-out code is fetched on demand", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const first = (await (await fetch(srv.url + "/api/sessions/big1")).json()) as any;
+		const src = "function firstPrimes(n){return []}\n" + "//".padEnd(15_900, "x");
+		for (let i = 0; i < 70; i++) await srv.hub.host.write({ type: "CodeScore", fields: { session: "big1", blockId: first.current, candidateId: `c${i}`, author: "x", via: "human", gen: 0, ok: false, ms: 5000, source: src, ts: Date.now() + i } } as never, null, 3_600_000);
+		const raw = await (await fetch(srv.url + "/api/sessions/big1")).text();
+		assert.ok(Buffer.byteLength(raw) < 600_000, `snapshot ${Buffer.byteLength(raw)} bytes`);
+		const cs = JSON.parse(raw).blocks[0].contributions as any[];
+		const omitted = cs.filter((c) => c.sourceOmitted);
+		assert.ok(omitted.length > 0 && omitted.length < 70);
+		assert.ok(cs.filter((c) => !c.sourceOmitted).every((c) => c.source === src));
+		const r = await fetch(`${srv.url}/api/sessions/big1/source/${omitted[0].candidateId}`);
+		assert.equal(((await r.json()) as any).source, src);
+		assert.equal((await fetch(`${srv.url}/api/sessions/big1/source/nope`)).status, 404);
+		// the WebSocket frame arrives (it used to exceed 1 MiB and close the socket)
+		const ws = new WebSocket(srv.url.replace("http", "ws") + "/ws/big1");
+		const frame = await new Promise<any>((ok, no) => { ws.onmessage = (e) => ok(JSON.parse(String(e.data))); ws.onclose = () => no(new Error("closed")); });
+		assert.equal(frame.blocks[0].contributions.length, 70);
+		ws.close();
+	} finally { await srv.close(); }
+});
+
+t("two concurrent run starts: exactly one wins", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		await post(srv.url, "/api/sessions/race1/task", { taskId: "gcd" });
+		const body = { agents: 1, gens: 1, perAgent: 1, contenders: ["scripted"] };
+		const codes = (await Promise.all([post(srv.url, "/api/sessions/race1/run", body), post(srv.url, "/api/sessions/race1/run", body)])).map((r) => r.status).sort();
+		assert.deepEqual(codes, [200, 400]);
+		await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/race1")).json()) as any; return s.run && !s.run.active; });
+	} finally { await srv.close(); }
+});
+
+t("idle rooms make way for new ones; candidates left in the store are judged when their room loads", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		for (let i = 0; i < 52; i++) await srv.hub.session(`idle${i}`);
+		// what a restart leaves behind: a block and a candidate of it that nobody judges yet
+		await srv.hub.host.write({ type: "CodeTask", fields: { session: "left1", blockId: "bL", taskId: "gcd", ts: Date.now() } } as never, null, 3_600_000);
+		await srv.hub.host.write({ type: "CodeCandidate", fields: { session: "left1", blockId: "bL", taskId: "gcd", candidateId: "l1", author: "a", via: "human", gen: 0, source: taskById("gcd")!.variants[2]!, ts: Date.now() } } as never, null, 3_600_000);
+		const s = await until(async () => { const v = (await (await fetch(srv.url + "/api/sessions/left1")).json()) as any; const c = v.blocks.flatMap((b: any) => b.contributions).find((x: any) => x.candidateId === "l1"); return c?.ok === true ? c : false; });
+		assert.equal(s.ok, true);
+	} finally { await srv.close(); }
+});
+
+t("switching the model agents needs the admin token; the per-IP quota answers 429", async () => {
+	process.env.CODEMODE_REQ_PER_MIN = "5";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	process.env.CODEMODE_REQ_PER_MIN = "100000";
+	try {
+		assert.equal((await post(srv.url, "/api/llm", { on: false })).status, 403);
+		process.env.CODEMODE_ADMIN_TOKEN = "secret-test";
+		const ok = await fetch(srv.url + "/api/llm", { method: "POST", headers: { "x-admin-token": "secret-test" }, body: "{}" });
+		assert.equal(ok.status, 200);
+		const wrong = await fetch(srv.url + "/api/llm", { method: "POST", headers: { "x-admin-token": "nope" }, body: "{}" });
+		assert.equal(wrong.status, 403);
+		const statuses: number[] = [];
+		for (let i = 0; i < 4; i++) statuses.push((await fetch(srv.url + "/api/sessions/q1")).status);
+		assert.equal(statuses.at(-1), 429);
+		assert.equal((await fetch(srv.url + "/healthz")).status, 200); // outside the API quota
+	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
+});

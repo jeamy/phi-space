@@ -132,9 +132,10 @@ services:
       CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
       CODEMODE_JUDGES: "${CODEMODE_JUDGES:-2}"
     ports:
-      # Set CODEMODE_SHARD_BIND to the host's internal (LAN/NetBird) IP to keep the shard socket off the public
-      # interface — serveSpace has no TLS.
-      - "${CODEMODE_SHARD_BIND:+$CODEMODE_SHARD_BIND:}3800:3800"
+      # Loopback by default: the shard socket has no TLS and treats every connection as the hub, and docker's port
+      # publishing bypasses the host firewall. Reach it through an SSH tunnel, or set CODEMODE_SHARD_BIND to the
+      # host's internal (LAN/NetBird) IP. Never 0.0.0.0 on a host with a public interface.
+      - "${CODEMODE_SHARD_BIND:-127.0.0.1}:3800:3800"
     volumes:
       - codemode-nano-data:/data
 

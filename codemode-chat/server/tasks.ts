@@ -7,8 +7,10 @@ export type Task = {
 	fn: string;
 	prompt: { de: string; en: string };
 	cases: Case[];
-	/** Sandbox statements timed by the judge; may `return { ok: false, error }` when a large input is answered wrongly. */
+	/** Sandbox statements timed by the judge (they call `fn` by name); may `return { ok: false, error }` when a large input is answered wrongly. */
 	bench: string;
+	/** Optional sandbox expression for the bench input, evaluated BEFORE the contribution runs; the bench reads it as `__in`. */
+	benchInput?: string;
 	variants: string[];
 };
 
@@ -53,7 +55,8 @@ export const TASKS: Task[] = [
 		title: { de: "Zahlen sortieren", en: "Sort numbers" },
 		prompt: { de: "Schreibe sortNumbers(arr): gibt die Zahlen aufsteigend sortiert zurück (neues Array).", en: "Write sortNumbers(arr): returns the numbers in ascending order (a new array)." },
 		cases: sampleArrays.map((a) => ({ args: [a], expect: [...a].sort((x, y) => x - y) })),
-		bench: `let s = 11; const a = Array.from({ length: 4000 }, () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) % 100000); const r = sortNumbers(a); for (let i = 1; i < r.length; i++) if (r[i - 1] > r[i]) return { ok: false, error: "not sorted on 4000 numbers" };`,
+		benchInput: `(() => { let s = 11; const a = []; for (let i = 0; i < 4000; i++) a[i] = (s = (Math.imul(s, 1103515245) + 12345) >>> 0) % 100000; return a; })()`,
+		bench: `const r = sortNumbers(__in); if (!r || r.length !== 4000) return { ok: false, error: "wrong length on 4000 numbers" }; for (let i = 1; i < 4000; i++) if (r[i - 1] > r[i]) return { ok: false, error: "not sorted on 4000 numbers" };`,
 		variants: [
 			`function sortNumbers(a){const r=[...a];for(let i=0;i<r.length;i++)for(let j=0;j<r.length-1-i;j++)if(r[j]>r[j+1]){const t=r[j];r[j]=r[j+1];r[j+1]=t}return r}`,
 			`function sortNumbers(a){const r=[...a];for(let i=1;i<r.length;i++){const x=r[i];let j=i-1;while(j>=0&&r[j]>x){r[j+1]=r[j];j--}r[j+1]=x}return r}`,
@@ -80,13 +83,17 @@ export const TASKS: Task[] = [
 export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id === id);
 
 /** A user-defined task: the function name and the cases are the oracle; the bench runs every case 300 times. */
+// Names a custom task cannot use as its function: reserved words, and the `__` prefix the judge keeps for itself.
+const RESERVED = new Set("arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof undefined var void while with yield NaN Infinity".split(" "));
+
 export function customTask(x: { fn: string; prompt: string; cases: Case[] }): Task {
-	if (!/^[A-Za-z_$][\w$]{0,40}$/.test(x.fn)) throw new Error("Invalid function name");
+	if (typeof x.fn !== "string" || !/^[A-Za-z_$][\w$]{0,40}$/.test(x.fn) || x.fn.startsWith("__") || RESERVED.has(x.fn)) throw new Error("Invalid function name");
 	if (!Array.isArray(x.cases) || x.cases.length < 1 || x.cases.length > 50) throw new Error("1 to 50 cases required");
 	for (const c of x.cases) if (!c || !Array.isArray(c.args)) throw new Error("Every case needs args (array) and expect");
 	if (JSON.stringify(x.cases).length > 32_000) throw new Error("Cases too large");
 	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [] };
-	return { ...t, bench: `const cs = ${JSON.stringify(x.cases)}; for (let i = 0; i < 300; i++) for (const c of cs) ${x.fn}(...c.args);` };
+	// index loops and the judge's captured Reflect.apply: a contribution that patches iterators cannot empty the bench
+	return { ...t, bench: `for (let __r = 0; __r < 300; __r++) for (let __j = 0; __j < __cases.length; __j++) __apply(${x.fn}, undefined, __cases[__j].args);` };
 }
 
 /** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */

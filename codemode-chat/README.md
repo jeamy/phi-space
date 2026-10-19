@@ -75,7 +75,8 @@ only after agreement:
 ```bash
 # big (hub): host networking, HOST_BIND=127.0.0.1 for the reverse proxy
 npm --prefix codemode-chat run docker:prod:up        # down | logs | build
-# nano (judge shard): publishes :3800, bind it with CODEMODE_SHARD_BIND=<internal ip> (no TLS)
+# nano (judge shard): publishes :3800 on 127.0.0.1 (SSH tunnel); CODEMODE_SHARD_BIND=<internal ip> for a private route.
+# Never a public interface: the socket has no TLS and every connection acts as the hub.
 npm --prefix codemode-chat run docker:nano:up        # down | logs | build
 # on one machine
 npm --prefix codemode-chat run docker:dev:up         # Next.js dev server in a container (ports from PORT/HOST_BIND)

@@ -570,7 +570,9 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_LISTEN\` | nano: Adresse, an der der Shard lauscht |
 | \`CODEMODE_DB\` | nano: Speicher; \`CODEMODE_MEM=1\` = nur im Speicher |
 | \`CODEMODE_JUDGES\` | nano: parallele Richter, Standard 2 |
-| \`CODEMODE_SHARD_BIND\` | Docker nano: Bindung des Shard-Ports an eine interne IP |
+| \`CODEMODE_SHARD_BIND\` | Docker nano: Bindung des Shard-Ports, Standard \`127.0.0.1\` (Tunnel); sonst eine interne IP, nie eine öffentliche |
+| \`CODEMODE_ADMIN_TOKEN\` | Hub: Token für \`POST /api/llm\` (Header \`x-admin-token\`); leer = Umschalten aus |
+| \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
 | \`PI_AUTH_DIR\` | Pfad der pi-Zugangsdaten für den Container |
 
 ## Lokal entwickeln {#local}
@@ -621,7 +623,9 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_LISTEN\` | nano: address the shard listens on |
 | \`CODEMODE_DB\` | nano: storage; \`CODEMODE_MEM=1\` = in memory only |
 | \`CODEMODE_JUDGES\` | nano: parallel judges, default 2 |
-| \`CODEMODE_SHARD_BIND\` | Docker nano: bind the shard port to an internal IP |
+| \`CODEMODE_SHARD_BIND\` | Docker nano: bind address of the shard port, default \`127.0.0.1\` (tunnel); else an internal IP, never a public one |
+| \`CODEMODE_ADMIN_TOKEN\` | hub: token for \`POST /api/llm\` (header \`x-admin-token\`); empty = switching off |
+| \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |
 | \`PI_AUTH_DIR\` | path of the pi credentials for the container |
 
 ## Developing locally {#local}
@@ -738,7 +742,7 @@ See [Judging and sandbox](help.topic.judging_and_sandbox#sandbox): no tools, fil
 		body: {
 			de: `## Überblick {#overview}
 
-Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler haben Status 400 und \`{"error": "…"}\`. Raumnamen bestehen aus Buchstaben, Ziffern, \`.\`, \`_\` und \`-\` (1 bis 48 Zeichen).
+Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler haben Status 400 und \`{"error": "…"}\`. Raumnamen bestehen aus Buchstaben, Ziffern, \`.\`, \`_\` und \`-\` (1 bis 48 Zeichen). Zu viele Anfragen einer IP beantwortet der Server mit 429, ein Admin-Aufruf ohne Token mit 403.
 
 ## REST {#rest}
 
@@ -748,7 +752,9 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`GET /api/tasks\` | Katalog der Aufgaben |
 | \`GET /api/system\` | Hosts der Systemleiste |
 | \`GET /api/llm\` | verfügbare Modelle |
-| \`GET /api/sessions/:id\` | Zustand eines Raums (Blöcke, Chat, Lauf) |
+| \`POST /api/llm\` | Modell-Agenten an/aus, Standardmodell: \`{on,model}\`; nur mit Header \`x-admin-token\` |
+| \`GET /api/sessions/:id\` | Zustand eines Raums (Blöcke, Chat, Lauf); in großen Räumen fehlt manchem Beitrag der Code (\`sourceOmitted\`) |
+| \`GET /api/sessions/:id/source/:candidateId\` | der Code eines Beitrags: \`{source}\` |
 | \`POST /api/sessions/:id/task\` | neuen Block anlegen: \`{taskId}\` oder \`{custom:{fn,prompt,cases}}\` |
 | \`POST /api/sessions/:id/run\` | Lauf starten: \`{agents,gens,perAgent,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | Lauf stoppen |
@@ -782,7 +788,7 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 - [Aufgaben und Blöcke](help.topic.tasks_and_blocks#overview)`,
 			en: `## Overview {#overview}
 
-The interface uses a small JSON API. All answers are JSON; errors have status 400 and \`{"error": "…"}\`. Room names consist of letters, digits, \`.\`, \`_\` and \`-\` (1 to 48 characters).
+The interface uses a small JSON API. All answers are JSON; errors have status 400 and \`{"error": "…"}\`. Room names consist of letters, digits, \`.\`, \`_\` and \`-\` (1 to 48 characters). Too many requests from one IP get 429, an admin call without the token 403.
 
 ## REST {#rest}
 
@@ -792,7 +798,9 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`GET /api/tasks\` | the task catalog |
 | \`GET /api/system\` | the hosts of the system bar |
 | \`GET /api/llm\` | available models |
-| \`GET /api/sessions/:id\` | state of a room (blocks, chat, run) |
+| \`POST /api/llm\` | model agents on/off, default model: \`{on,model}\`; only with the header \`x-admin-token\` |
+| \`GET /api/sessions/:id\` | state of a room (blocks, chat, run); in large rooms some contributions come without code (\`sourceOmitted\`) |
+| \`GET /api/sessions/:id/source/:candidateId\` | the code of one contribution: \`{source}\` |
 | \`POST /api/sessions/:id/task\` | create a block: \`{taskId}\` or \`{custom:{fn,prompt,cases}}\` |
 | \`POST /api/sessions/:id/run\` | start a run: \`{agents,gens,perAgent,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | stop the run |

@@ -11,9 +11,9 @@ import { parseCases } from "./lib/cases.ts";
 import { useTheme, type Lang } from "./lib/theme.ts";
 
 type L = { de: string; en: string };
-type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
+type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source?: string; sourceOmitted?: true; ts: number };
 type Message = { author: string; text: string; ts: number; blockId?: string };
-type Best = { candidateId: string; ms: number; source: string };
+type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
 type Block = { blockId: string; ts: number; active: boolean; task: { id: string; fn: string; title: L; prompt: L; cases?: number }; contributions: Contribution[]; best: Best | null; messages: Message[] };
 type Snapshot = {
 	session: string; current: string; tasks: { id: string; title: L; fn: string; prompt: L }[]; blocks: Block[]; messages: Message[];
@@ -37,6 +37,18 @@ async function api<R = unknown>(path: string, body?: unknown): Promise<R> {
 }
 const shortCpu = (cpu: string) => cpu.replace(/\((R|TM)\)/g, "").replace(/\b(\d+-Core )?Processor\b/i, "").replace(/\s+/g, " ").trim();
 const shortVia = (via: string) => via.replace(/^[^/]+\//, "").replace(/-\d{8}$/, "");
+
+/** Code of a contribution; a large room's snapshot leaves some code out, which is then fetched once when shown. */
+function Code({ sid, c }: { sid: string; c: { candidateId: string; source?: string; sourceOmitted?: true } }) {
+	const [fetched, setFetched] = useState<string | null>(null);
+	useEffect(() => {
+		if (!c.sourceOmitted) return;
+		let dead = false;
+		api<{ source: string }>(`/sessions/${sid}/source/${encodeURIComponent(c.candidateId)}`).then((x) => { if (!dead) setFetched(x.source); }).catch(() => { if (!dead) setFetched(""); });
+		return () => { dead = true; };
+	}, [sid, c.candidateId, c.sourceOmitted]);
+	return <pre className="code">{c.sourceOmitted ? (fetched ?? "…") : c.source}</pre>;
+}
 
 function Tile({ c, isBest, open, onClick, t }: { c: Contribution; isBest: boolean; open: boolean; onClick: () => void; t: Tr }) {
 	const state = c.ok === null ? "wait" : c.ok ? "ok" : "bad";
@@ -77,7 +89,7 @@ function ConfirmDialog({ title, text, yes, no, onYes, onNo }: { title: string; t
 	);
 }
 
-function BlockView({ b, open, focused, run, openCode, onToggle, onFocus, onCode, onDelete, t, lang }: { b: Block; open: boolean; focused: boolean; run: Snapshot["run"]; openCode: Set<string>; onToggle: () => void; onFocus: () => void; onCode: (id: string) => void; onDelete: () => void; t: Tr; lang: Lang }) {
+function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, onCode, onDelete, t, lang }: { sid: string; b: Block; open: boolean; focused: boolean; run: Snapshot["run"]; openCode: Set<string>; onToggle: () => void; onFocus: () => void; onCode: (id: string) => void; onDelete: () => void; t: Tr; lang: Lang }) {
 	const done = b.contributions.filter((c) => c.ok !== null).length, ok = b.contributions.filter((c) => c.ok).length;
 	const running = run?.active && run.blockId === b.blockId;
 	const opened = b.contributions.filter((c) => openCode.has(c.candidateId));
@@ -112,7 +124,7 @@ function BlockView({ b, open, focused, run, openCode, onToggle, onFocus, onCode,
 								<button type="button" className="btn" onClick={() => onCode(c.candidateId)}>{t.hide}</button>
 							</div>
 							{c.error ? <div className="err">{c.error}</div> : null}
-							<pre className="code">{c.source}</pre>
+							<Code sid={sid} c={c} />
 						</div>
 					))}
 				</div>
@@ -160,8 +172,9 @@ export function CodemodeChat() {
 		let dead = false, ws: WebSocket | null = null, retry = 0, timer: ReturnType<typeof setTimeout> | undefined;
 		const connect = () => {
 			ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/" + sid);
-			ws.onopen = () => { setLive(true); retry = 0; };
-			ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.type === "snapshot") setSnap(d); };
+			ws.onopen = () => setLive(true);
+			// the backoff resets only once a snapshot arrived: a socket the server drops right after opening backs off too
+			ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.type === "snapshot") { retry = 0; setSnap(d); } };
 			ws.onclose = () => { setLive(false); if (!dead) timer = setTimeout(connect, Math.min(10_000, 500 * 2 ** retry++)); };
 		};
 		connect();
@@ -313,7 +326,7 @@ export function CodemodeChat() {
 					{timeline.length ? (
 						<div className="timeline">
 							{timeline.map((i) => i.b
-								? <BlockView key={i.key} b={i.b} t={t} lang={lang} run={run ?? null} open={open.has(i.b.blockId)} focused={focusBlock?.blockId === i.b.blockId} openCode={openCode} onToggle={() => setOpen((cur) => toggleSet(cur, i.b!.blockId))} onFocus={() => setFocus(i.b!.blockId)} onCode={(id) => setOpenCode((cur) => toggleSet(cur, id))} onDelete={() => setConfirmDel(i.b!)} />
+								? <BlockView key={i.key} sid={sid} b={i.b} t={t} lang={lang} run={run ?? null} open={open.has(i.b.blockId)} focused={focusBlock?.blockId === i.b.blockId} openCode={openCode} onToggle={() => setOpen((cur) => toggleSet(cur, i.b!.blockId))} onFocus={() => setFocus(i.b!.blockId)} onCode={(id) => setOpenCode((cur) => toggleSet(cur, id))} onDelete={() => setConfirmDel(i.b!)} />
 								: <div key={i.key} className={"msg" + (i.m!.author === "system" ? " msg--system" : "")}><b>{i.m!.author}</b>{i.m!.text}</div>)}
 						</div>
 					) : <div className="empty">{t.noBlocks}</div>}
@@ -333,7 +346,7 @@ export function CodemodeChat() {
 					<div className="panel">
 						<h2>{t.best} <HelpTip id="best" lang={lang} label={t.best} /></h2>
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
-						{focusBlock?.best ? <pre className="code">{focusBlock.best.source}</pre> : <div className="empty">{t.nobest}</div>}
+						{focusBlock?.best ? <Code sid={sid} c={focusBlock.best} /> : <div className="empty">{t.nobest}</div>}
 					</div>
 				</aside>
 			</main>

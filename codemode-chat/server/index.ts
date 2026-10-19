@@ -1,8 +1,11 @@
 // Codemode chat: HTTP + WebSocket server around the Next.js 16 app (the API and /ws are served here, pages by Next).
 // Run: node --experimental-strip-types codemode-chat/server/index.ts [--dev]
 // Env (also read from codemode-chat/.env): PORT (3700), CODEMODE_BIND (127.0.0.1), CODEMODE_SQLITE (default .local/codemode-chat.sqlite), CODEMODE_CHAT_LLM=1,
-//      CODEMODE_REMOTE (judge shard on nano: tcp:host:port or unix:/path), CODEMODE_HOST_NAME (name in the system bar).
+//      CODEMODE_REMOTE (judge shard on nano: tcp:host:port or unix:/path), CODEMODE_HOST_NAME (name in the system bar),
+//      CODEMODE_ADMIN_TOKEN (switches the model agents via POST /api/llm with the header x-admin-token; unset: switching is off),
+//      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120).
 import http from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -20,6 +23,35 @@ import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
+const CANDIDATE = /^[a-z0-9-]{1,40}$/;
+
+/** The client address: behind the local reverse proxy (loopback peer) the last x-forwarded-for hop, else the peer. */
+function clientIp(req: http.IncomingMessage): string {
+	const peer = req.socket.remoteAddress ?? "local";
+	const xff = req.headers["x-forwarded-for"];
+	if (!/^(127\.|::1$|::ffff:127\.)/.test(peer) || typeof xff !== "string" || !xff.trim()) return peer;
+	return xff.split(",").at(-1)!.trim() || peer;
+}
+
+/** Sliding one-minute request quota per client IP (at most 4096 tracked addresses). */
+function quota(perMin: number): (ip: string) => boolean {
+	const seen = new Map<string, { at: number; count: number }>();
+	return (ip) => {
+		const now = Date.now();
+		if (seen.size >= 4096) for (const [k, v] of seen) if (now - v.at >= 60_000) seen.delete(k);
+		let v = seen.get(ip);
+		if (!v || now - v.at >= 60_000) { if (!v && seen.size >= 4096) return false; v = { at: now, count: 0 }; seen.set(ip, v); }
+		return ++v.count <= perMin;
+	};
+}
+
+/** Constant-time check of the admin token; without a configured token nobody is admin. */
+function isAdmin(req: http.IncomingMessage): boolean {
+	const want = process.env.CODEMODE_ADMIN_TOKEN, got = req.headers["x-admin-token"];
+	if (!want || typeof got !== "string") return false;
+	const h = (v: string) => createHash("sha256").update(v).digest();
+	return timingSafeEqual(h(want), h(got));
+}
 
 export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean; llm?: LlmApi } = {}) {
 	const cm = await loadCodemode();
@@ -43,6 +75,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 		if (typeof app.getUpgradeHandler === "function") nextUpgrade = app.getUpgradeHandler();
 	}
 
+	const allowed = quota(Number(process.env.CODEMODE_REQ_PER_MIN ?? 120));
 	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
 	const readBody = (req: http.IncomingMessage) => new Promise<Record<string, any>>((ok, fail) => {
 		let n = 0; const parts: Buffer[] = [];
@@ -58,7 +91,19 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 			if (p === "/healthz") return json(res, 200, { ok: true });
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt }) => ({ id, title, fn, prompt })));
-			if (p === "/api/llm") return json(res, 200, req.method === "POST" ? await setLlm(await readBody(req)) : await llmInfo());
+			if (p.startsWith("/api/") && !allowed(clientIp(req))) return json(res, 429, { error: "Too many requests; retry in a minute" });
+			if (p === "/api/llm") {
+				if (req.method !== "POST") return json(res, 200, await llmInfo());
+				// switching the model agents is an operator action, not a visitor's
+				if (!isAdmin(req)) return json(res, 403, { error: "Admin token required" });
+				return json(res, 200, await setLlm(await readBody(req)));
+			}
+			const src = /^\/api\/sessions\/([^/]+)\/source\/([^/]+)$/.exec(p);
+			if (src && req.method === "GET") {
+				if (!ID.test(src[1]!) || !CANDIDATE.test(src[2]!)) return json(res, 400, { error: "Invalid id" });
+				const source = await hub.source(src[1]!, src[2]!);
+				return source === null ? json(res, 404, { error: "Unknown contribution" }) : json(res, 200, { source });
+			}
 			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
@@ -89,7 +134,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	server.on("upgrade", (req, socket, head) => {
 		const m = /^\/ws\/([a-zA-Z0-9._-]{1,48})$/.exec(new URL(req.url ?? "/", "http://localhost").pathname);
 		if (!m) { if (nextUpgrade) nextUpgrade(req, socket, head); else socket.destroy(); return; }
-		if (sockets >= 256) return void socket.destroy();
+		if (sockets >= 256 || !allowed(clientIp(req))) return void socket.destroy();
 		const ws = upgradeWebSocket(req, socket, head);
 		if (!ws) return;
 		sockets++; ws.onClose(() => { sockets--; });

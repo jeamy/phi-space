@@ -17,7 +17,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createSpace, FOREVER, NO_WAIT, PhiSpaces, serveSpace, SpaceService, spaces, StaticIdentity, startService, TransactionError } from "../../src/index.ts";
-import { judge, loadCodemode, TIMEOUT_MS, type Codemode } from "./judge.ts";
+import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, type Codemode } from "./judge.ts";
 import { hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
 import { taskFromSpec } from "./tasks.ts";
 
@@ -44,21 +44,36 @@ export async function startJudgeHost(o: { listen?: string; dbPath?: string | nul
 
 	let stopping = false;
 	const loops: Promise<void>[] = [];
+	const pause = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+	/** One judge: the sandbox slot first, then the transaction (its lease only covers the judging). A failing round is
+	 *  logged and retried after a pause; the loop ends only on close(), never silently on an error. */
 	const worker = async (id: number, cmx: Codemode) => {
 		const r = space(300 + id);
 		while (!stopping) {
-			const t = await r.createTransaction(TIMEOUT_MS + 30_000);
-			const c = await r.take({ type: "CodeCandidate" }, NO_WAIT, { txn: t.id });
-			if (!c) { await r.abort(t.id); await new Promise((ok) => setTimeout(ok, 250)); continue; }
-			const f = c.fields as Record<string, any>;
-			const task = taskFromSpec(f);
-			const v = task ? await judge(cmx, task, String(f.source)) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
 			try {
-				await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
-				await r.commit(t.id);
+				const judged = await sandboxSlot(async () => {
+					const t = await r.createTransaction(TIMEOUT_MS + 30_000);
+					let c;
+					try { c = await r.take({ type: "CodeCandidate" }, NO_WAIT, { txn: t.id }); }
+					catch (e) { await r.abort(t.id).catch(() => {}); throw e; }
+					if (!c) { await r.abort(t.id); return false; }
+					const f = c.fields as Record<string, any>;
+					const task = taskFromSpec(f);
+					const v = task ? await judgeInSlot(cmx, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
+					try {
+						await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
+						await r.commit(t.id);
+					} catch (e) {
+						await r.abort(t.id).catch(() => {});
+						if (!(e instanceof TransactionError)) throw e;
+					}
+					return true;
+				});
+				if (!judged) await pause(250);
 			} catch (e) {
-				await r.abort(t.id).catch(() => {});
-				if (!(e instanceof TransactionError)) console.error("[nano] judge error", e);
+				if (stopping) return;
+				console.error("[nano] judge round failed", e);
+				await pause(1_000);
 			}
 		}
 	};
