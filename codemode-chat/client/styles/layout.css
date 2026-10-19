@@ -110,6 +110,10 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .tile--bad .tile__result { color: var(--danger); }
 .tile--part { border-color: color-mix(in srgb, var(--warning) 60%, var(--line-strong)); }
 .tile--part .tile__result { color: var(--warning); }
+.tile__flag { font-size: 11px; color: var(--danger); text-align: center; }
+.vetobar { display: flex; gap: 8px; align-items: center; padding: 8px 10px; background: var(--raised); border-top: 1px solid var(--line); }
+.vetobar input { flex: 1 1 auto; min-width: 0; }
+.vetobar .btn { flex: 0 0 auto; }
 .tile__lineage { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* teamwork: the check rule, the team's notes, case results and lineage of an unfolded contribution */
 .rule { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }

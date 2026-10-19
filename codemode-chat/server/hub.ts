@@ -3,6 +3,7 @@
 //   CodeCandidate a contribution waiting CodeScore      the sandbox verdict, with the code (the visible contribution)
 //   CodeBest     the best correct code of a block (one entry per block, replaced when beaten)
 //   CodeNote     an insight an agent leaves for the team (read by the next agents of the block)
+//   CodeVeto     a person's "not like this" on a contribution: it no longer counts as correct, and agents avoid it
 // Judges take a candidate under a transaction and write its score atomically, like the evolve example. Every score
 // carries how many cases passed and what each case returned, so agents can build on attempts that got close: a run is
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
@@ -31,7 +32,7 @@ export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmCo
 export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; polish: number; solvedGen: number | null; note?: string };
 /** `source` is left out of a snapshot when its byte budget is spent (`sourceOmitted`); `details()` returns it with the
  *  case results. `passed`/`total`: cases passed; `role`/`basedOn`: what an agent did and whose attempt it built on. */
-export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; source?: string; sourceOmitted?: true; ts: number };
+export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
 type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
 	best: { candidateId: string; ms: number; source: string } | null; deleted: Set<string>; buckets: Map<string, number[]>; remotePending: Map<string, { at: number; blockId?: string }>; poller?: ReturnType<typeof setInterval>; polling: boolean;
@@ -45,14 +46,17 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
 /** A verdict time that can stand in a ranking: finite and not negative (scores from the shard are data too). */
 const validMs = (ms: unknown): ms is number => typeof ms === "number" && Number.isFinite(ms) && ms >= 0;
-/** The fastest correct contribution (ties: the earlier one). */
+/** Correct and not rejected by a person. */
+const counts = (c: Contribution) => !!c.ok && !c.vetoed;
+/** The fastest contribution that counts (ties: the earlier one). */
 const bestOf = (cs: Contribution[]): { candidateId: string; ms: number; source: string } | null => {
-	const ok = cs.filter((c) => c.ok && validMs(c.ms)).sort((a, b) => a.ms! - b.ms! || a.ts - b.ts)[0];
+	const ok = cs.filter((c) => counts(c) && validMs(c.ms)).sort((a, b) => a.ms! - b.ms! || a.ts - b.ts)[0];
 	return ok ? { candidateId: ok.candidateId, ms: ok.ms!, source: ok.source ?? "" } : null;
 };
 const rnd = () => Math.random();
 /** How close an attempt got: correct first (fastest), then most cases passed, then the newest. */
-const closeness = (a: Contribution, b: Contribution) => Number(!!b.ok) - Number(!!a.ok) || (a.ok && b.ok ? a.ms! - b.ms! : 0) || (b.passed ?? 0) / (b.total || 1) - (a.passed ?? 0) / (a.total || 1) || b.ts - a.ts;
+const rejectedRank = (c: Contribution) => Number(!!c.vetoed || !!c.hardcoded);
+const closeness = (a: Contribution, b: Contribution) => rejectedRank(a) - rejectedRank(b) || Number(counts(b)) - Number(counts(a)) || (counts(a) && counts(b) ? a.ms! - b.ms! : 0) || (b.passed ?? 0) / (b.total || 1) - (a.passed ?? 0) / (a.total || 1) || b.ts - a.ts;
 
 export class CodeChatHub {
 	readonly host: PhiSpaces;
@@ -150,11 +154,43 @@ export class CodeChatHub {
 		return (await this.host.readAll({ type: "CodeTask", fields: { session: id } }, { limit: LIMITS.blocks + 5 })).map((e) => e.fields as Record<string, any>).sort((a, b) => a.ts - b.ts);
 	}
 
-	/** All verdicts of a room (this host and the shard), oldest first. */
+	/** All verdicts of a room (this host and the shard), oldest first, with the people's vetoes merged in. */
 	async #scores(s: Session): Promise<Contribution[]> {
 		const tmpl = { type: "CodeScore", fields: { session: s.id } };
-		const [local, remote] = await Promise.all([this.host.readAll(tmpl, { limit: LIMITS.contributions }), this.#rcall((r) => r.readAll(tmpl, { limit: LIMITS.contributions }))]);
-		return [...local, ...(remote ?? [])].map((e) => e.fields as unknown as Contribution).sort((a, b) => a.ts - b.ts);
+		const [local, remote, vetoes] = await Promise.all([this.host.readAll(tmpl, { limit: LIMITS.contributions }), this.#rcall((r) => r.readAll(tmpl, { limit: LIMITS.contributions })), this.#vetoes(s)]);
+		return [...local, ...(remote ?? [])].map((e) => { const c = e.fields as unknown as Contribution, v = vetoes.get(c.candidateId); return v ? { ...c, vetoed: v } : c; }).sort((a, b) => a.ts - b.ts);
+	}
+
+	async #vetoes(s: Session): Promise<Map<string, { by: string; reason: string }>> {
+		const rows = await this.host.readAll({ type: "CodeVeto", fields: { session: s.id } }, { limit: LIMITS.contributions });
+		return new Map(rows.map((e) => { const f = e.fields as { candidateId: string; by: string; reason: string }; return [f.candidateId, { by: f.by, reason: f.reason }]; }));
+	}
+
+	/** A person's "not like this" (or its withdrawal) on a contribution: it no longer counts as correct or as the best
+	 *  code, and agents see it as a rejected approach with the reason. */
+	async veto(id: string, candidateId: string, o: { by?: unknown; reason?: unknown; undo?: unknown }): Promise<void> {
+		const s = await this.session(id);
+		if (!this.allow(s, "veto", 30)) throw new Error("Too many vetoes, slow down");
+		const f = await this.#contribution(s, candidateId);
+		if (!f) throw new Error("Unknown contribution");
+		const by = plain(clip(o.by, 40)).trim() || "guest", reason = plain(clip(o.reason, 200)).trim();
+		const tmpl = { type: "CodeVeto", fields: { session: s.id, candidateId } };
+		while (await this.host.take(tmpl, NO_WAIT));
+		if (o.undo !== true) await this.host.write({ type: "CodeVeto", fields: { session: s.id, ...(typeof f.blockId === "string" ? { blockId: f.blockId } : {}), candidateId, by, reason, ts: Date.now() } }, null, this.#ttl);
+		if (f.blockId === s.blockId) await this.#resetBest(s);
+		await this.#write(s, "system", o.undo === true ? `${by} withdrew the veto on ${String(f.author)}'s contribution` : `${by} rejected ${String(f.author)}'s contribution${reason ? `: ${reason}` : ""}`, typeof f.blockId === "string" ? f.blockId : undefined);
+	}
+
+	/** The active block's best recomputed from its verdicts (after a veto), CodeBest replaced to match. */
+	#resetBest(s: Session): Promise<unknown> {
+		const work = s.bestTail.catch(() => {}).then(async () => {
+			const blockId = s.blockId;
+			s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === blockId));
+			while (await this.host.take({ type: "CodeBest", fields: { session: s.id, blockId } }, NO_WAIT));
+			if (s.best) await this.host.write({ type: "CodeBest", fields: { session: s.id, blockId, candidateId: s.best.candidateId, ms: s.best.ms, source: s.best.source } }, null, this.#ttl);
+		});
+		s.bestTail = work;
+		return work;
 	}
 
 	/** Opens a new task block: from now on candidates, scores and the best code belong to it. */
@@ -416,6 +452,7 @@ export class CodeChatHub {
 	#offerBest(s: Session, blockId: string | undefined, candidateId: string, ms: number, source: string): Promise<unknown> {
 		const work = s.bestTail.catch(() => {}).then(async () => {
 			if (!validMs(ms) || blockId !== s.blockId || (s.best && ms >= s.best.ms)) return;
+			if (await this.host.readIfExists({ type: "CodeVeto", fields: { session: s.id, candidateId } }, NO_WAIT)) return; // rejected by a person
 			s.best = { candidateId, ms, source };
 			while (await this.host.take({ type: "CodeBest", fields: { session: s.id, blockId } }, NO_WAIT));
 			await this.host.write({ type: "CodeBest", fields: { session: s.id, blockId, candidateId, ms, source } }, null, this.#ttl);
@@ -479,19 +516,21 @@ export class CodeChatHub {
 		const notes = (await this.host.readAll({ type: "CodeNote", fields: { session: s.id, blockId } }, { limit: LIMITS.notes + 5 }))
 			.map((e) => e.fields as { author: string; gen: number; text: string; ts: number }).sort((a, b) => a.ts - b.ts).slice(-8);
 		return {
-			attempts: scores.map((c) => ({ candidateId: c.candidateId, author: c.author, via: c.via, gen: c.gen, ok: !!c.ok, ms: c.ms, passed: c.passed, total: c.total, error: c.error, cases: c.cases, source: c.source ?? "" })),
+			attempts: scores.map((c) => ({ candidateId: c.candidateId, author: c.author, via: c.via, gen: c.gen, ok: counts(c), ms: c.ms, ...(c.vetoed ? { rejected: `rejected by ${c.vetoed.by}${c.vetoed.reason ? `: ${c.vetoed.reason}` : ""}` } : c.hardcoded ? { rejected: "rejected: it hard-codes the expected result instead of computing it" } : {}), passed: c.passed, total: c.total, error: c.error, cases: c.cases, source: c.source ?? "" })),
 			notes: notes.map(({ author, gen, text }) => ({ author, gen, text })),
 		};
 	}
 
 	/** Turn `k` of a generation: improve a correct solution, repair a close attempt, or explore (every third turn, and
 	 *  whenever there is nothing to build on). Targets rotate over the best few, so the team does not pile onto one. */
-	static plan(attempts: Attempt[], k: number): { role: Role; target: Attempt | null; others: Attempt[] } {
+	static plan(all: Attempt[], k: number): { role: Role; target: Attempt | null; others: Attempt[]; rejected: Attempt[] } {
+		// rejected attempts (a person's veto, hard-coded results) are nothing to build on: they are shown as "not like this"
+		const rejected = all.filter((a) => a.rejected).slice(0, 3), attempts = all.filter((a) => !a.rejected);
 		const correct = attempts.filter((a) => a.ok), failing = attempts.filter((a) => !a.ok);
 		let role: Role = "explore", target: Attempt | null = null;
 		if (k % 3 !== 2 && correct.length) { role = "improve"; target = correct[k % Math.min(2, correct.length)]!; }
 		else if (k % 3 !== 2 && failing.length) { role = "repair"; target = failing[k % Math.min(3, failing.length)]!; }
-		return { role, target, others: attempts.filter((a) => a !== target).slice(0, 3) };
+		return { role, target, others: attempts.filter((a) => a !== target).slice(0, 3), rejected };
 	}
 
 	/** A note an agent left for the team; beyond the room's cap the oldest notes give way. */
@@ -533,6 +572,7 @@ export class CodeChatHub {
 		void (async () => {
 			try {
 				for (let gen = 0; gen < gens && !s.abort && !this.#closed; gen++) {
+					if (run.solvedGen !== null && !s.best) run.solvedGen = null; // the solution was rejected by a person: not solved
 					if (run.solvedGen !== null && gen >= run.solvedGen + polish) break; // solved and improved enough
 					run.gen = gen + 1; this.push(s);
 					const board = await this.#board(s, blockId);
@@ -543,7 +583,7 @@ export class CodeChatHub {
 							if (contender !== "scripted") {
 								const plan = CodeChatHub.plan(board.attempts, a * perAgent + j);
 								try {
-									const c = await this.#llm.contribute({ task: s.task, lang: o.lang ?? "en", agent: a, gen, model: contender, role: plan.role, target: plan.target, others: plan.others, notes: board.notes, best: s.best ? { source: s.best.source, ms: s.best.ms } : null });
+									const c = await this.#llm.contribute({ task: s.task, lang: o.lang ?? "en", agent: a, gen, model: contender, role: plan.role, target: plan.target, others: plan.others, rejected: plan.rejected, notes: board.notes, best: s.best ? { source: s.best.source, ms: s.best.ms } : null });
 									source = c.source; via = c.model; lineage = { role: plan.role, ...(plan.target ? { basedOn: plan.target.candidateId } : {}) };
 									if (c.note) await this.#addNote(s, blockId, `agent-${a}`, c.model, gen + 1, c.note);
 								} catch (e) { run.note = `${contender}: ${(e as Error).message}${s.task.variants.length ? "; scripted agent used" : ""}`; }
@@ -586,9 +626,9 @@ export class CodeChatHub {
 		// entries from before task blocks existed have no blockId: the block is then identified by the time of its CodeTask
 		const legacy = target.blockId === undefined;
 		const tmplOf = (type: string): { type: string; fields: Record<string, string | number> } => (type === "CodeTask" && legacy ? { type, fields: { session: id, ts: target.ts } } : { type, fields: { session: id, blockId } });
-		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "CodeNote", "ChatMessage", "CodeTask"]) {
+		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "CodeNote", "CodeVeto", "ChatMessage", "CodeTask"]) {
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
-			if (type !== "CodeTask" && type !== "ChatMessage" && type !== "CodeNote" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
+			if (type !== "CodeTask" && type !== "ChatMessage" && type !== "CodeNote" && type !== "CodeVeto" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
 		}
 		// the last old-style block is gone: the old entries that never belonged to a block go with it
 		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {

@@ -53,6 +53,7 @@ Der Chat nutzt genau diese Mittel: Ein Beitrag wird als Entry hineingelegt, ein 
 | \`CodeScore\` | Das Urteil der Sandbox, samt Code (der sichtbare Beitrag) |
 | \`CodeBest\` | Der schnellste korrekte Code eines Blocks |
 | \`CodeNote\` | Eine Notiz, die ein Agent dem Team hinterlässt (die nächsten Agenten lesen sie) |
+| \`CodeVeto\` | Die Abwertung eines Beitrags durch einen Menschen („so nicht“, mit Grund) |
 | \`HostInfo\` | Beschreibung eines Hosts für die Systemleiste |
 
 Alle Einträge tragen den Raumnamen (\`session\`) und, soweit sie zu einer Aufgabe gehören, die \`blockId\` ihres Blocks.
@@ -89,6 +90,7 @@ The chat uses exactly these means: a contribution is put in as an entry, a judge
 | \`CodeScore\` | The sandbox verdict, with the code (the visible contribution) |
 | \`CodeBest\` | The fastest correct code of a block |
 | \`CodeNote\` | A note an agent leaves for the team (the next agents read it) |
+| \`CodeVeto\` | A person's rejection of a contribution ("not like this", with a reason) |
 | \`HostInfo\` | Description of a host for the system bar |
 
 All entries carry the room name (\`session\`) and, when they belong to a task, the \`blockId\` of their block.
@@ -404,6 +406,14 @@ Zuerst werden die **Testfälle** geprüft, dann läuft der Benchmark mit einer g
 
 Geprüft werden **alle** Fälle, nicht nur bis zum ersten Fehler. So sieht man (und sehen die Agenten), wie nahe ein Versuch an der Lösung ist und woran er scheitert.
 
+## So nicht: fest eingetragen und abgewertet {#rejected}
+
+Ein Beitrag soll das Ergebnis **berechnen**. Steht ein erwartetes Ergebnis als fester Wert im Code (zum Beispiel \`return [0, 1, 4, 9, 11]\`), gilt er als **„Ergebnis fest eingetragen“** und nicht als korrekt, auch wenn alle Fälle stimmen. Erkannt werden Listen, Objekte und Texte ab sechs Zeichen und Zahlen ab sechs Stellen.
+
+Was die Automatik nicht erkennt, wertest du selbst ab: Im aufgeklappten Code steht **👎 So nicht**. Eine kurze Begründung ist optional, die Agenten lesen sie. Ein abgewerteter Beitrag zählt nicht mehr als korrekt, nicht in der Rangliste und nicht als bester Code; ein laufender Lauf gilt dann wieder als ungelöst und arbeitet weiter. **Zurücknehmen** hebt die Abwertung auf.
+
+Fest eingetragene und abgewertete Versuche bekommen die Agenten als **„so nicht“** samt Grund gezeigt; sie bauen nicht darauf auf.
+
 **Bester Code** ist der schnellste korrekte Beitrag eines Blocks; bei gleicher Zeit gewinnt der frühere. Die Zeit ist Wandzeit und schwankt etwas von Lauf zu Lauf.
 
 ## Die Kachel {#tile}
@@ -461,6 +471,14 @@ The **test cases** are checked first, then the bench runs on a large input: its 
 - **wrong**, with the number of cases passed (e.g. 3/5) and per case the result and the expected one, or the error, or "time exceeded".
 
 **All** cases are checked, not only up to the first failure. So you (and the agents) see how close an attempt is to the solution and where it fails.
+
+## Not like this: hard-coded and rejected {#rejected}
+
+A contribution should **compute** the result. If an expected result stands in the code as a fixed value (for example \`return [0, 1, 4, 9, 11]\`), it counts as **"result hard-coded"** and not as correct, even when every case passes. Detected are lists, objects and strings of six or more characters and numbers with six or more digits.
+
+What the automatic check misses you reject yourself: the unfolded code has **👎 Not like this**. A short reason is optional; the agents read it. A rejected contribution no longer counts as correct, not on the leaderboard and not as the best code; a running run then counts as unsolved again and goes on. **Withdraw** lifts the rejection.
+
+Hard-coded and rejected attempts are shown to the agents as **"not like this"** with the reason; they do not build on them.
 
 The **best code** is the fastest correct contribution of a block; on equal time the earlier one wins. The time is wall-clock time and varies a little from run to run.
 
@@ -857,6 +875,7 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`POST /api/sessions/:id/stop\` | Lauf stoppen |
 | \`POST /api/sessions/:id/code\` | Code einreichen: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | Block löschen: \`{blockId}\` |
+| \`POST /api/sessions/:id/veto\` | Beitrag abwerten: \`{candidateId, by, reason}\`; mit \`undo: true\` zurücknehmen |
 
 ## WebSocket {#websocket}
 
@@ -904,6 +923,7 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`POST /api/sessions/:id/stop\` | stop the run |
 | \`POST /api/sessions/:id/code\` | hand in code: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | delete a block: \`{blockId}\` |
+| \`POST /api/sessions/:id/veto\` | reject a contribution: \`{candidateId, by, reason}\`; \`undo: true\` withdraws it |
 
 ## WebSocket {#websocket}
 

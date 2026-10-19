@@ -38,7 +38,11 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
   and the code. `CodeBest` holds the fastest correct
   one of its block. The page shows the code of every contribution, wrong ones included.
 
-Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`, `CodeBest`, `CodeNote`, `HostInfo`) carry the `blockId` of their task block and live in a durable space
+A contribution that writes an expected result into its code as a literal counts as hard-coded, not as correct; a
+person can reject any contribution ("not like this", with a reason). Both no longer count as correct, and the agents
+are shown them as approaches not to repeat.
+
+Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`, `CodeBest`, `CodeNote`, `CodeVeto`, `HostInfo`) carry the `blockId` of their task block and live in a durable space
 (SQLite); the session name in the URL hash (`#room`) separates rooms.
 
 ## big and nano

@@ -16,7 +16,8 @@ import type { Task } from "./tasks.ts";
 
 /** One case as the judge saw it: the call, whether it passed, what came out (or the error), what was expected. */
 export type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
-export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[] };
+/** `hardcoded`: the code passed, but only by returning an expected result written into it (not computed). */
+export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[]; hardcoded?: true };
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
 export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: []; memoryLimitBytes?: number }) => Sandbox };
 
@@ -176,6 +177,23 @@ const firstWrong = (cases: CaseResult[]): string | undefined => {
 	return c ? plain(c.error ? `${c.call}: ${c.error}` : `wrong on ${c.call}`) : undefined;
 };
 
+/** The expected result a source contains as a literal (whitespace and quote style ignored), if any: code that returns
+ *  the examples instead of computing them. Only results that cannot appear in honest code by chance count: arrays,
+ *  objects and strings of six or more characters as JSON, and numbers with six or more digits. */
+export function hardcodedLiteral(task: Task, source: string): string | null {
+	const squash = (t: string) => t.replace(/\s+/g, "").replace(/'/g, '"');
+	const src = squash(source);
+	for (const c of task.cases) {
+		const right = Object.hasOwn(c, "expectAny") ? c.expectAny! : Object.hasOwn(c, "expect") ? [c.expect] : [];
+		for (const v of right) {
+			const lit = squash(JSON.stringify(v) ?? "");
+			const substantial = typeof v === "number" ? Math.abs(v) >= 100_000 : typeof v === "boolean" || v === null ? false : lit.length >= 6;
+			if (substantial && src.includes(lit)) return lit.length > 60 ? lit.slice(0, 60) + "…" : lit;
+		}
+	}
+	return null;
+}
+
 /** Judges one contribution; the caller already holds a sandbox slot. */
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
 	const total = task.cases.length;
@@ -207,6 +225,8 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string): Pro
 			if (v.phase !== "done") return fail(typeof v.error === "string" ? v.error : firstWrong(cases) ?? "failed", cases, passed);
 		}
 		if (typeof v.ms !== "number" || !Number.isFinite(v.ms) || v.ms < 0) return fail("invalid timing", cases, total);
+		const literal = hardcodedLiteral(task, source);
+		if (literal) return { ...fail(`hard-coded: the code returns the expected result ${literal} as a literal instead of computing it`, cases, total), hardcoded: true };
 		return { ok: true, ms: Math.round(v.ms * 100) / 100, passed: total, total, cases };
 	} catch (e) {
 		return fail((e as Error).message);
@@ -214,6 +234,6 @@ export async function judgeInSlot(cm: Codemode, task: Task, source: string): Pro
 }
 
 /** The score fields of a verdict, as hub and shard write them: the case results failing ones first, at most 10. */
-export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}) });
+export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}), ...(v.hardcoded ? { hardcoded: true } : {}) });
 
 export const judge = (cm: Codemode, task: Task, source: string): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source));

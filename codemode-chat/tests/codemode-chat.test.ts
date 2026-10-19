@@ -606,3 +606,52 @@ test("the verifier prompt is generic: the description, the examples (with altern
 	const p = verifierPrompt(task, "it accepts the wrong result null");
 	for (const want of ["route", "Shortest route through the grid", 'route(["S.",".E"]) must return one of ["R","D"], ["D","R"]', "(result, args) => boolean", "Several different answers may be right", "it accepts the wrong result null"]) assert.ok(p.user.includes(want), want);
 });
+
+// ---- not like this: hard-coded results and people's vetoes ----
+
+t("code that writes the expected result into itself counts as hard-coded, not as correct", async () => {
+	const task = customTask({ fn: "golomb", prompt: "", cases: [{ args: [], expect: [0, 1, 4, 9, 11] }] });
+	const v = await judge(cm!, task, "function golomb() {\n  // a known optimal ruler\n  return [0, 1, 4, 9, 11];\n}");
+	assert.deepEqual([v.ok, v.hardcoded, v.passed], [false, true, 1]);
+	assert.match(v.error!, /hard-coded/);
+	const computed = await judge(cm!, task, "function golomb(){ const n = 5, len = 11, r = [0]; const ok = (m) => { const d = new Set(); for (let i = 0; i < m.length; i++) for (let j = i + 1; j < m.length; j++) { const x = m[j] - m[i]; if (d.has(x)) return false; d.add(x); } return true; }; const go = (m) => { if (m.length === n) return m.at(-1) === len ? m : null; for (let x = m.at(-1) + 1; x <= len; x++) { const t = [...m, x]; if (ok(t)) { const f = go(t); if (f) return f; } } return null; }; return go(r); }");
+	assert.equal(computed.ok, true, computed.error ?? "");
+	// the catalog's own variants are never mistaken for hard-coded
+	const { hardcodedLiteral } = await import("../server/judge.ts");
+	for (const task of TASKS) for (const src of task.variants) assert.equal(hardcodedLiteral(task, src), null, `${task.id}: ${src.slice(0, 40)}`);
+});
+
+t("a person's veto: the contribution stops counting, the best moves on, and the veto can be withdrawn", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const gcd = taskById("gcd")!;
+		await post(srv.url, "/api/sessions/veto1/task", { taskId: "gcd" });
+		const fast = (await post(srv.url, "/api/sessions/veto1/code", { author: "a", source: gcd.variants[2]! })).body.candidateId;
+		const slow = (await post(srv.url, "/api/sessions/veto1/code", { author: "b", source: gcd.variants[1]! })).body.candidateId;
+		const get = async () => ((await (await fetch(srv.url + "/api/sessions/veto1")).json()) as any).blocks.at(-1);
+		await until(async () => (await get()).contributions.filter((c: any) => c.ok).length === 2);
+		const best = (await get()).best.candidateId, other = best === fast ? slow : fast;
+		assert.equal((await post(srv.url, "/api/sessions/veto1/veto", { candidateId: best, by: "lux", reason: "copies a library call" })).status, 200);
+		let b = await get();
+		assert.deepEqual(b.contributions.find((c: any) => c.candidateId === best).vetoed, { by: "lux", reason: "copies a library call" });
+		assert.equal(b.best.candidateId, other); // the next one is the best now
+		assert.ok(b.messages.some((m: any) => m.text === "lux rejected a's contribution: copies a library call" || m.text === "lux rejected b's contribution: copies a library call"));
+		assert.equal((await post(srv.url, "/api/sessions/veto1/veto", { candidateId: best, by: "lux", undo: true })).status, 200);
+		b = await get();
+		assert.equal(b.contributions.find((c: any) => c.candidateId === best).vetoed, undefined);
+		assert.equal(b.best.candidateId, best);
+		assert.equal((await post(srv.url, "/api/sessions/veto1/veto", { candidateId: "nope" })).status, 400);
+	} finally { await srv.close(); }
+});
+
+test("rejected attempts are nothing to build on: the agents see them as 'not like this'", async () => {
+	const { CodeChatHub } = await import("../server/hub.ts");
+	const { teamPrompt } = await import("../server/llm.ts");
+	const a = (id: string, ok: boolean, rejected?: string) => ({ candidateId: id, author: id, via: "m", gen: 1, ok, ms: ok ? 1 : null, passed: ok ? 1 : 0, total: 1, source: `function f(){ /* ${id} */ }`, ...(rejected ? { rejected } : {}) });
+	const plan = CodeChatHub.plan([a("lit", false, "rejected: it hard-codes the expected result instead of computing it"), a("x", false)], 0);
+	assert.deepEqual([plan.role, plan.target?.candidateId, plan.rejected.map((r) => r.candidateId)], ["repair", "x", ["lit"]]);
+	assert.equal(CodeChatHub.plan([a("vetoed", false, "rejected by lux: no")], 0).role, "explore");
+	const p = teamPrompt({ task: customTask({ fn: "f", prompt: "p", cases: [{ args: [], expect: 1 }] }), lang: "en", agent: 0, gen: 1, ...plan });
+	assert.ok(p.user.includes("NOT like this") && p.user.includes("hard-codes the expected result") && p.user.includes("/* lit */"));
+	assert.ok(p.user.includes("never write an example result"));
+});

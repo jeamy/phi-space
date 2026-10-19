@@ -141,7 +141,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				}
 				return;
 			}
-			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete))?$/.exec(p);
+			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete|veto))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid session id" });
@@ -153,6 +153,10 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				else if (action === "run") await hub.startRun(id, b);
 				else if (action === "stop") await hub.stopRun(id);
 				else if (action === "delete") await hub.deleteBlock(id, String(b.blockId ?? ""));
+				else if (action === "veto") { // a person's "not like this" on a contribution ({candidateId, by, reason, undo})
+					if (!CANDIDATE.test(String(b.candidateId ?? ""))) return json(res, 400, { error: "Invalid id" });
+					await hub.veto(id, String(b.candidateId), b);
+				}
 				return json(res, 200, { ok: true });
 			}
 			if (nextHandler) return await nextHandler(req, res);
