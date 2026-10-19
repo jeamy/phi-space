@@ -9,7 +9,8 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
 
 - A **task** is a function to write (`firstPrimes(n)`, `fib(n)`, `sortNumbers(arr)`, `gcd(a, b)`), or a custom task:
   choose "Custom task …" in the dropdown, which opens the fields for the function name, a description and test cases
-  (`[{"args":[2],"expect":4}]`; the cases are the oracle). **Start run** opens a new **task block** in the chat when the
+  (`[{"args":[2],"expect":4}]`, or plain text such as `5 -> 120` or `Result: 0 1 4 9 11`, which is converted
+  to JSON for you; the cases are the oracle). **Start run** opens a new **task block** in the chat when the
   chosen task is not the active block yet, and then starts the run in it (with 0 agents it only creates the block, and
   you hand in the code yourself).
 - Every task block is one collapsible section of the conversation. Its contributions are **square tiles** (agent,

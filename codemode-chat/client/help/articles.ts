@@ -128,6 +128,17 @@ Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
 - **Funktionsname:** ein gültiger JavaScript-Name, höchstens 40 Zeichen.
 - **Beschreibung:** was die Funktion tun soll (höchstens 600 Zeichen); sie wird den Agenten gezeigt.
 - **Testfälle:** JSON, zum Beispiel \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 bis 50 Fälle, zusammen höchstens 32 000 Zeichen.
+  Du kannst auch **einfachen Text** schreiben; er wird beim Start automatisch in JSON umgewandelt, und das Feld zeigt danach das JSON:
+
+  | Du schreibst | Daraus wird |
+  |---|---|
+  | \`Ergebnis: 0 1 4 9 11\` | ein Aufruf ohne Eingabe, Ergebnis \`[0,1,4,9,11]\` |
+  | \`5 -> 120\` | Eingabe 5, Ergebnis 120 (auch \`=>\`) |
+  | \`3 4 -> 12\` | zwei Eingaben (3 und 4), Ergebnis 12 |
+  | \`[3,1,2] -> [1,2,3]\` | ein JSON-Array als Eingabe ist **ein** Argument |
+  | \`Eingabe: 3 4\` und darunter \`Ergebnis: 12\` | ein Fall aus zwei Zeilen |
+
+  Mehrere Fälle schreibst du untereinander, eine Zeile je Fall.
 
 Die Testfälle sind das **Orakel**: Ein Beitrag ist nur korrekt, wenn er für jeden Fall genau das erwartete Ergebnis liefert (Vergleich als JSON). Gemessen wird die Zeit, die alle Fälle 300-mal hintereinander brauchen.
 
@@ -173,6 +184,17 @@ Choose **"Custom task …"** in the dropdown. Three fields appear:
 - **Function name:** a valid JavaScript name, at most 40 characters.
 - **Description:** what the function should do (at most 600 characters); it is shown to the agents.
 - **Test cases:** JSON, for example \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 to 50 cases, at most 32,000 characters together.
+  You can also write **plain text**; it is turned into JSON automatically when you start, and the field then shows the JSON:
+
+  | You write | It becomes |
+  |---|---|
+  | \`Result: 0 1 4 9 11\` | a call without input, result \`[0,1,4,9,11]\` |
+  | \`5 -> 120\` | input 5, result 120 (also \`=>\`) |
+  | \`3 4 -> 12\` | two inputs (3 and 4), result 12 |
+  | \`[3,1,2] -> [1,2,3]\` | a JSON array as input is **one** argument |
+  | \`Input: 3 4\` and below it \`Result: 12\` | one case from two lines |
+
+  Write several cases one below the other, one line per case.
 
 The test cases are the **oracle**: a contribution is only correct if it returns exactly the expected result for every case (compared as JSON). The time measured is what all cases take, run 300 times in a row.
 
