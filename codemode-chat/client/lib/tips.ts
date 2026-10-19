@@ -78,10 +78,10 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	start: {
 		text: {
-			de: "Legt einen neuen Aufgabenblock an (wenn die gewählte Aufgabe noch nicht aktiv ist) und startet den Lauf. Er endet, wenn die Aufgabe gelöst ist und die Verbesserungsrunden vorbei sind, spätestens nach der höchsten Zahl Generationen oder mit „Stoppen“; eigener Code zählt auch danach noch.",
-			en: "Creates a new task block (when the chosen task is not active yet) and starts the run. It ends once the task is solved and the improvement rounds are over, at the latest after the maximum number of generations or with \"Stop\"; your own code still counts afterwards.",
+			de: "Legt einen neuen Aufgabenblock an (wenn die gewählte Aufgabe noch nicht aktiv ist) und startet den Lauf. Er endet, wenn die Aufgabe gelöst ist und die Verbesserungsrunden vorbei sind, spätestens nach der höchsten Zahl Generationen oder mit „Stoppen“. Nicht zufrieden? Abwerten, Hinweis ans Team geben und am Block „▶ Weiterarbeiten“.",
+			en: "Creates a new task block (when the chosen task is not active yet) and starts the run. It ends once the task is solved and the improvement rounds are over, at the latest after the maximum number of generations or with \"Stop\". Not happy? Reject, give the team a hint and press \"▶ Keep working\" on the block.",
 		},
-		article: "help.topic.runs_and_contenders", anchor: "ending",
+		article: "help.topic.runs_and_contenders", anchor: "continue",
 	},
 	code: {
 		text: {

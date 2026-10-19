@@ -655,3 +655,72 @@ test("rejected attempts are nothing to build on: the agents see them as 'not lik
 	assert.ok(p.user.includes("NOT like this") && p.user.includes("hard-codes the expected result") && p.user.includes("/* lit */"));
 	assert.ok(p.user.includes("never write an example result"));
 });
+
+// ---- keep working: a new run in the same block, with the people's rejections and hints ----
+
+t("not happy after a run: reject, give a hint, keep working in the same block", async () => {
+	const seen: any[] = [];
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async (c: any) => { seen.push(c); return { source: seen.length <= 2 ? "function double(x){ return x * 2 }" : "function double(x){ return x << 1 }", model: "fake/team" }; },
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/cont1")).json()) as any;
+		await post(srv.url, "/api/sessions/cont1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
+		const run = { agents: 2, gens: 3, perAgent: 1, polish: 0, contenders: ["fake/team"] };
+		assert.equal((await post(srv.url, "/api/sessions/cont1/run", run)).status, 200);
+		let snap = await until(async () => { const s = await get(); return s.run && !s.run.active ? s : false; }, 60_000);
+		assert.deepEqual(snap.currentCustom, { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] }); // the form can be filled again
+		const first = snap.blocks.at(-1);
+		assert.equal(first.contributions.filter((c: any) => c.ok).length, 2);
+		// not happy: reject both, tell the team what is wanted
+		for (const c of first.contributions) await post(srv.url, "/api/sessions/cont1/veto", { candidateId: c.candidateId, by: "lux", reason: "multiplication is not wanted" });
+		assert.equal((await post(srv.url, "/api/sessions/cont1/hint", { text: "use a bit shift", by: "lux" })).status, 200);
+		assert.equal((await post(srv.url, "/api/sessions/cont1/hint", { text: "   ", by: "lux" })).status, 400);
+		// keep working: a run without a new task block
+		assert.equal((await post(srv.url, "/api/sessions/cont1/run", run)).status, 200);
+		snap = await until(async () => { const s = await get(); return s.run && !s.run.active && s.blocks.at(-1).contributions.length === 4 ? s : false; }, 60_000);
+		assert.equal(snap.blocks.length, 2); // the default first block and this one: no new block
+		const b = snap.blocks.at(-1);
+		assert.equal(b.blockId, first.blockId);
+		assert.ok(b.best && !b.contributions.find((c: any) => c.candidateId === b.best.candidateId).vetoed);
+		assert.ok(b.notes.some((n: any) => n.human && n.text === "use a bit shift" && n.author === "lux"));
+		const later = seen.slice(2);
+		assert.ok(later.every((c) => c.notes.some((n: any) => n.human && n.text === "use a bit shift")), "every later agent got the hint");
+		assert.ok(later.every((c) => c.rejected.length === 2 && /multiplication is not wanted/.test(c.rejected[0].rejected)), "and the rejections");
+	} finally { await srv.close(); }
+});
+
+test("a person's hint comes first in the prompt, as guidance to follow", async () => {
+	const { teamPrompt } = await import("../server/llm.ts");
+	const p = teamPrompt({ task: customTask({ fn: "f", prompt: "p", cases: [{ args: [], expect: 1 }] }), lang: "en", agent: 0, gen: 1, notes: [{ author: "agent-1", gen: 1, text: "agent idea" }, { author: "lux", gen: 0, text: "use a bit shift", human: true }] });
+	assert.ok(p.user.indexOf("FOLLOW it") >= 0 && p.user.indexOf("use a bit shift") < p.user.indexOf("agent idea"));
+});
+
+t("the note of a rejected contribution is not passed on (an agent recommending to hard-code the answer)", async () => {
+	const seen: any[] = [];
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async (c: any) => {
+			seen.push(c);
+			return seen.length === 1
+				? { source: "function f(){ return [1, 2, 3, 4, 5] }", model: "fake/team", note: "just return the known answer, it is fastest" }
+				: { source: "function f(){ return Array.from({ length: 5 }, (_, i) => i + 1) }", model: "fake/team", note: "build it with Array.from" };
+		},
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/note1/task", { custom: { fn: "f", prompt: "the numbers 1 to 5", cases: [{ args: [], expect: [1, 2, 3, 4, 5] }] } });
+		await post(srv.url, "/api/sessions/note1/run", { agents: 1, gens: 3, perAgent: 1, polish: 0, contenders: ["fake/team"] });
+		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/note1")).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
+		const b = snap.blocks.at(-1);
+		assert.equal(b.contributions.find((c: any) => c.gen === 1).hardcoded, true);
+		assert.ok(b.best);
+		assert.equal(seen.length, 2);
+		assert.ok(!seen[1].notes.some((n: any) => /known answer/.test(n.text)), "the hard-coding advice did not reach the next agent");
+		assert.ok(seen[1].rejected.some((r: any) => /hard-codes/.test(r.rejected)));
+		assert.equal(b.notes.find((n: any) => /known answer/.test(n.text)).rejected, true); // shown struck through
+		assert.equal(b.notes.find((n: any) => /Array.from/.test(n.text)).rejected, undefined);
+	} finally { await srv.close(); }
+});

@@ -75,7 +75,8 @@ const STYLES = [
 export type Role = "repair" | "explore" | "improve";
 /** An earlier contribution as the team sees it: who, how far it got, what went wrong, its code. */
 export type Attempt = { candidateId: string; author: string; via: string; gen: number; ok: boolean; ms: number | null; passed?: number; total?: number; error?: string; cases?: Array<{ call: string; ok: boolean; got?: string; expect?: string; error?: string }>; rejected?: string; source: string };
-export type Note = { author: string; gen: number; text: string };
+/** `human`: a person's hint, which the agents follow before their own notes. */
+export type Note = { author: string; gen: number; text: string; human?: boolean };
 /** Everything an agent gets: the task with its cases, its role, the attempt to work on, others for reference, notes. */
 export type TeamContext = { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; best?: { source: string; ms: number } | null };
 
@@ -108,7 +109,9 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 		"Rules: plain JavaScript (QuickJS), no imports, no I/O, no timers. Results must be plain JSON values. COMPUTE the result: never write an example result (or any expected answer) into the code as a literal, also when the function takes no arguments. Code that returns hard-coded answers is rejected.",
 	];
 	if (c.rejected?.length) parts.push("NOT like this. These attempts were rejected; do not repeat their approach:\n" + c.rejected.map((a) => `- ${a.author} (${a.via}, generation ${a.gen}), ${a.rejected}:\n\`\`\`js\n${clipText(a.source, 800)}\n\`\`\``).join("\n"));
-	if (c.notes?.length) parts.push("Notes from your team (insights so far):\n" + c.notes.map((n) => `- ${n.author} (gen ${n.gen}): ${n.text}`).join("\n"));
+	const hints = c.notes?.filter((n) => n.human) ?? [], notes = c.notes?.filter((n) => !n.human) ?? [];
+	if (hints.length) parts.push("Guidance from the people you work for. FOLLOW it; it outranks everything else here:\n" + hints.map((n) => `- ${n.author}: ${n.text}`).join("\n"));
+	if (notes.length) parts.push("Notes from your team (insights so far):\n" + notes.map((n) => `- ${n.author} (gen ${n.gen}): ${n.text}`).join("\n"));
 	if (role === "repair" && c.target) parts.push(`Your job: REPAIR this attempt. Keep what works, fix what fails; the case results show where it goes wrong.\n${describeAttempt(c.target, true)}`);
 	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it faster or simpler. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
 	else parts.push(`Your job: EXPLORE. Write a solution with an approach of your own${c.others?.length ? ", different from the attempts below where they fail" : ""}.`);

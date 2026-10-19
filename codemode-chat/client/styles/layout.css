@@ -111,6 +111,11 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .tile--part { border-color: color-mix(in srgb, var(--warning) 60%, var(--line-strong)); }
 .tile--part .tile__result { color: var(--warning); }
 .tile__flag { font-size: 11px; color: var(--danger); text-align: center; }
+.teambar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.teambar input { flex: 1 1 240px; min-width: 0; }
+.teambar .btn { flex: 0 0 auto; }
+.notes .note--human { color: var(--text-strong); }
+.notes .note--rejected { text-decoration: line-through; opacity: .55; }
 .vetobar { display: flex; gap: 8px; align-items: center; padding: 8px 10px; background: var(--raised); border-top: 1px solid var(--line); }
 .vetobar input { flex: 1 1 auto; min-width: 0; }
 .vetobar .btn { flex: 0 0 auto; }

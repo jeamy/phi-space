@@ -299,6 +299,16 @@ Modell-Agenten schreiben den JavaScript-Code selbst, als Team (siehe [Zusammenar
 
 Ein Lauf endet, wenn die Aufgabe **gelöst** ist und danach die eingestellten **Verbesserungsrunden** gelaufen sind, spätestens nach der **höchsten Zahl Generationen**, oder bei **Stoppen**. Die letzte Protokollzeile sagt, in welcher Generation gelöst wurde, oder welcher Versuch am nächsten dran war (bestandene Fälle).
 
+## Nicht zufrieden? Weiterarbeiten {#continue}
+
+Ein beendeter Lauf ist kein Endpunkt. Im **aktiven Block** stehen ein Feld **Hinweis ans Team** und der Knopf **▶ Weiterarbeiten**:
+
+1. **Abwerten**, was dir nicht gefällt (👎, mit kurzem Grund). Sind alle Lösungen abgewertet, gilt die Aufgabe wieder als ungelöst.
+2. **Hinweis ans Team** geben, z. B. „mit Backtracking, keine feste Tabelle“ oder „n geht bis 12, es muss schnell sein“. Der Hinweis steht als 🧑-Notiz im Block. Die Agenten bekommen ihn als Vorgabe eines Menschen, vor ihren eigenen Notizen.
+3. **▶ Weiterarbeiten** startet einen neuen Lauf in **diesem** Block, mit den Einstellungen links. Es entsteht kein neuer Block: Die Agenten sehen alle bisherigen Versuche, deine Abwertungen und Hinweise und machen dort weiter. Gibt es noch eine Lösung, die du nicht abgewertet hast, verbessern sie diese in den Verbesserungsrunden.
+
+Dasselbe passiert mit **Lauf starten**, wenn die gewählte Aufgabe schon der aktive Block ist (bei einer eigenen Aufgabe: gleicher Funktionsname und gleiche Beschreibung). Nach einem Neuladen füllt die Seite das Formular einer aktiven eigenen Aufgabe wieder aus. Änderst du die Beschreibung, entsteht ein neuer Block.
+
 ## Eigener Code während und nach dem Lauf {#human}
 
 Code, den du über **Eigener Code** einreichst, läuft durch dieselbe Sandbox wie die Agenten, jederzeit: auch während oder nach einem Lauf. Er zählt für Rangliste und besten Code des **aktiven Blocks**. Agenten späterer Generationen sehen ihn mit seinen Testergebnissen und bauen darauf auf, wie auf die Versuche der anderen Agenten. Eingereichter Code geht immer in den aktiven Block.
@@ -357,6 +367,16 @@ Model agents write the JavaScript code themselves, as a team (see [Teamwork](#te
 ## When does a run end? {#ending}
 
 A run ends once the task is **solved** and the configured **improvement rounds** have run after it, at the latest after the **maximum number of generations**, or on **Stop**. The last log line says in which generation it was solved, or which attempt got closest (cases passed).
+
+## Not happy? Keep working {#continue}
+
+A finished run is not the end. The **active block** has a field **Hint to the team** and the button **▶ Keep working**:
+
+1. **Reject** what you do not like (👎, with a short reason). Once every solution is rejected, the task counts as unsolved again.
+2. Give a **hint to the team**, e.g. "use backtracking, no fixed table" or "n goes up to 12, it must be fast". The hint appears as a 🧑 note in the block. The agents get it as a person's guidance, before their own notes.
+3. **▶ Keep working** starts a new run in **this** block, with the settings on the left. No new block is created: the agents see every attempt so far, your rejections and hints, and carry on from there. If a solution you did not reject is left, they improve it in the improvement rounds.
+
+**Start run** does the same when the chosen task already is the active block (for a custom task: same function name and description). After a reload the page fills in the form of an active custom task again. If you change the description, a new block is created.
 
 ## Your own code during and after a run {#human}
 
@@ -876,6 +896,7 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`POST /api/sessions/:id/code\` | Code einreichen: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | Block löschen: \`{blockId}\` |
 | \`POST /api/sessions/:id/veto\` | Beitrag abwerten: \`{candidateId, by, reason}\`; mit \`undo: true\` zurücknehmen |
+| \`POST /api/sessions/:id/hint\` | Hinweis ans Team eines Blocks: \`{blockId?, text, by}\` (Standard: aktiver Block) |
 
 ## WebSocket {#websocket}
 
@@ -924,6 +945,7 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`POST /api/sessions/:id/code\` | hand in code: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | delete a block: \`{blockId}\` |
 | \`POST /api/sessions/:id/veto\` | reject a contribution: \`{candidateId, by, reason}\`; \`undo: true\` withdraws it |
+| \`POST /api/sessions/:id/hint\` | a hint to the team of a block: \`{blockId?, text, by}\` (default: the active block) |
 
 ## WebSocket {#websocket}
 
