@@ -63,7 +63,7 @@ t("contribution -> score entry -> websocket frame, with limits", async () => {
 		assert.equal(snap.best.source, good);
 
 		assert.equal((await post(srv.url, "/api/sessions/room1/code", { author: "x", source: "" })).status, 400);
-		assert.equal((await post(srv.url, "/api/sessions/bad id/message", { author: "x", text: "y" })).status, 400);
+		assert.equal((await post(srv.url, "/api/sessions/bad id/code", { author: "x", source: "y" })).status, 400);
 		assert.equal((await fetch(srv.url + "/api/sessions/room1/message", { method: "POST", body: "{}" })).status, 404); // there is no chat input any more
 		ws.close();
 	} finally { await srv.close(); }
