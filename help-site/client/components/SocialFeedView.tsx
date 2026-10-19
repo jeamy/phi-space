@@ -22,7 +22,7 @@ interface SwarmStats {
 	llmCalls: number; llmTokens: number;
 	retention?: {
 		cap: number | null; now: number;
-		shards: Array<{ shard: string; up: boolean; entries: number | null; lastPurgeAt: number | null; lastRemoved: number; totalRemoved: number; host?: { name: string } | null }>;
+		shards: Array<{ shard: string; up: boolean; entries: number | null; lastPurgeAt: number | null; lastRemoved: number; totalRemoved: number; host?: { name: string } | null; cap?: number | null }>;
 	};
 }
 const PURGE_BADGE_MS = 5_000;
