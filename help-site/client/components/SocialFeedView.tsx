@@ -199,6 +199,8 @@ function PostCard({
 
 export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const [connected, setConnected] = useState(false);
+	// Narrow screens show one column at a time; the tab bar (CSS, below 1180 px) picks it.
+	const [pane, setPane] = useState<"feed" | "channels" | "info">("feed");
 	const [posts, setPosts] = useState<SwarmPost[]>([]);
 	const [postMap, setPostMap] = useState<Map<string, SwarmPost>>(new Map());
 	const [channels, setChannels] = useState<ChannelDef[]>([]);
@@ -636,6 +638,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	// Channel navigation always returns to the live feed – post filters would otherwise
 	// make the list look frozen (e.g. a static "AI posts only" snapshot).
 	const selectChannel = (id: string) => {
+		setPane("feed");
 		setChannel(id);
 		setAiOnly(false);
 		setAgentFilter(null);
@@ -711,7 +714,14 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const typeTotal = Object.values(byType).reduce((n, v) => n + v, 0) || 1;
 
 	return (
-		<div className="sf-root">
+		<div className="sf-root" data-pane={pane}>
+			<div className="sf-mobile-tabs" role="tablist" aria-label={locale === "de" ? "Bereich" : "Section"}>
+				{([["feed", "Feed"], ["channels", locale === "de" ? "Kanäle" : "Channels"], ["info", locale === "de" ? "Infos" : "Info"]] as const).map(([id, label]) => (
+					<button key={id} type="button" role="tab" aria-selected={pane === id} className={`sf-mobile-tab sf-mobile-tab--${id}${pane === id ? " is-active" : ""}`} onClick={() => setPane(id)}>
+						{label}
+					</button>
+				))}
+			</div>
 			{purgeBadge ? (
 				<div className="sf-purge-badge" role="status">
 					<b>{locale === "de" ? "Testsystem:" : "Test system:"}</b>{" "}

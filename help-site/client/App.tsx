@@ -25,6 +25,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 	const [searchInput, setSearchInput] = useState<string>("");
 	const [articleMarkdown, setArticleMarkdown] = useState<string>("");
 	const [loadingArticle, setLoadingArticle] = useState<boolean>(false);
+	// Below 1024 px the sidebar is a drawer; it opens from the menu button and closes on any navigation.
+	const [menuOpen, setMenuOpen] = useState<boolean>(false);
 	const searchRef = useRef<HTMLInputElement | null>(null);
 
 	useEffect(() => {
@@ -81,7 +83,14 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
  const navigate = (next: ViewState, hash = "") => {
   window.history.pushState(null,"",window.location.pathname+helpUrl(next,locale,hash));
   setView(next);
+  setMenuOpen(false);
  };
+ useEffect(() => {
+  if (!menuOpen) return;
+  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+  window.addEventListener("keydown", onKey);
+  return () => window.removeEventListener("keydown", onKey);
+ }, [menuOpen]);
  const updateFilters = (next: ViewState) => {
   window.history.replaceState(null,"",window.location.pathname+helpUrl(next,locale));
   setView(next);
@@ -172,6 +181,16 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 		<div className="help-app">
 			{/* Topbar */}
 			<header className="topbar">
+				<button
+					type="button"
+					className="topbar__menu"
+					aria-label={locale === "de" ? "Navigation öffnen" : "Open navigation"}
+					aria-expanded={menuOpen}
+					aria-controls="help-sidebar"
+					onClick={() => setMenuOpen(!menuOpen)}
+				>
+					{menuOpen ? "✕" : "☰"}
+				</button>
 				<button type="button" className="brand" onClick={() => navigate({ kind: "home" })}>
 					<span className="brand__name">PHI-SPACES</span>
 					<span className="brand__divider">/</span>
@@ -281,7 +300,8 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 
 			{/* 3-Column Workspace */}
 			<div className={hasRightToc ? "workspace has-toc" : "workspace"}>
-				<aside className="sidebar">
+				{menuOpen ? <div className="drawer-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" /> : null}
+				<aside id="help-sidebar" className={menuOpen ? "sidebar is-open" : "sidebar"}>
 					<nav className="nav-section">
 						<span className="nav-section__label">
 							{locale === "de" ? "NAVIGATION" : "NAVIGATION"}
@@ -366,6 +386,23 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 							</button>
 						))}
 					</nav>
+
+					{/* Only in the drawer: the palette, which the topbar has no room for on a phone */}
+					<div className="nav-section sidebar__display">
+						<span className="nav-section__label">{locale === "de" ? "DARSTELLUNG" : "APPEARANCE"}</span>
+						<select
+							className="theme-picker__select"
+							value={palette}
+							onChange={(e: any) => setPalette(e.target.value)}
+							aria-label="Color Palette"
+						>
+							{PALETTES.map((p) => (
+								<option key={p.id} value={p.id}>
+									{p.label[locale]}
+								</option>
+							))}
+						</select>
+					</div>
 
 					<div className="sidebar__footer">
 						<span className="status-dot" />
@@ -1060,6 +1097,18 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 										</div>
 									</div>
 
+									{(currentArticle.toc?.length ?? 0) > 0 ? (
+										<details className="toc-mobile">
+											<summary>{locale === "de" ? "Auf dieser Seite" : "On this page"}</summary>
+											<nav onClick={(e: any) => { if ((e.target as HTMLElement).closest("a")) (e.currentTarget.parentElement as HTMLDetailsElement).open = false; }}>
+												{currentArticle.toc.map((item: any) => (
+													<a key={item.anchor} href={`#${item.anchor}`} className={item.level === 3 ? "toc__subitem" : ""}>
+														{item.title}
+													</a>
+												))}
+											</nav>
+										</details>
+									) : null}
 									{loadingArticle ? (
 										<p style={{ color: "var(--muted)" }}>Loading article …</p>
 									) : (
