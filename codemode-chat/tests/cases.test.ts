@@ -23,6 +23,11 @@ test("inputs with arrows and on separate lines", () => {
 	assert.deepEqual(parseCases("Eingabe: 5 -> Ergebnis: 120"), [{ args: [5], expect: 120 }]);
 });
 
+test("input lines alone are calls without a fixed result (for a check rule)", () => {
+	assert.deepEqual(parseCases("Eingabe: 5 11\nInput: 4 6"), [{ args: [5, 11] }, { args: [4, 6] }]);
+	assert.deepEqual(parseCases('[{"args":[5,11]}]'), [{ args: [5, 11] }]);
+});
+
 test("single values: numbers, booleans, text", () => {
 	assert.deepEqual(parseCases("Ergebnis: 42"), [{ args: [], expect: 42 }]);
 	assert.deepEqual(parseCases("true"), [{ args: [], expect: true }]);

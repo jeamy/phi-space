@@ -6,16 +6,26 @@
 // builtins the judge relies on are captured before it runs, and the bench input is built before it, so a contribution
 // that patches globals (JSON.stringify, toJSON, iterators, Date) only fools itself. The bench's results are checked as
 // well as the cases (outside the timed part): code that is only right on the small cases does not win.
+//
+// Every case is run and reported (what came out, what was expected, or the error), so a contribution that passes 3 of 5
+// cases is visibly closer than one that passes none; the team builds on that. A task with a check rule (a predicate
+// instead of fixed results) has the rule applied in a SECOND, fresh sandbox to the JSON results, out of the
+// contribution's reach: patched builtins cannot make the rule pass.
 import { pathToFileURL } from "node:url";
 import type { Task } from "./tasks.ts";
 
-export type Verdict = { ok: boolean; ms: number; error?: string };
+/** One case as the judge saw it: the call, whether it passed, what came out (or the error), what was expected. */
+export type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
+export type Verdict = { ok: boolean; ms: number; error?: string; passed: number; total: number; cases: CaseResult[] };
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
 export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: []; memoryLimitBytes?: number }) => Sandbox };
 
 export const TIMEOUT_MS = 5000;
 export const MAX_SOURCE_CHARS = 16_000;
+export const MAX_CHECK_CHARS = 2000;
 const MAX_PARALLEL = 2;
+/** Shown text of one value in a case result. */
+const SHOW_CHARS = 160;
 
 /** Loads pi-codemode (PI_CODEMODE_DIR overrides the location); null when it cannot be loaded. */
 export async function loadCodemode(dir = process.env.PI_CODEMODE_DIR): Promise<Codemode | null> {
@@ -34,10 +44,17 @@ export async function sandboxSlot<T>(fn: () => Promise<T>): Promise<T> {
 	try { return await fn(); } finally { running--; waiting.shift()?.(); }
 }
 
-/** The judging program: captured builtins, cases and bench input first, then the contribution, then check and bench. */
-export function judgeProgram(task: Task, source: string): string {
-	const script = `${source}\n;typeof ${task.fn} === "function" ? ${task.fn} : undefined`;
-	return `const __eval = eval, __now = Date.now, __str = JSON.stringify, __isArray = Array.isArray, __keys = Object.keys, __hasOwn = Object.hasOwn, __apply = Reflect.apply;
+/** Helpers every sandbox program starts with, captured before any contribution runs. */
+export const CAPTURED = `const __eval = eval, __now = Date.now, __str = JSON.stringify, __isArray = Array.isArray, __keys = Object.keys, __hasOwn = Object.hasOwn, __apply = Reflect.apply, __String = String;
+const __show = (v) => {
+	try {
+		if (typeof v === "string") return __str(v).length > ${SHOW_CHARS} ? __str(v).slice(0, ${SHOW_CHARS}) + "…" : __str(v);
+		if (typeof v === "function") return "[function]";
+		const s = __str(v);
+		return s === undefined ? __String(v) : s.length > ${SHOW_CHARS} ? s.slice(0, ${SHOW_CHARS}) + "…" : s;
+	} catch { return __String(v); }
+};
+const __msg = (e) => __String(e && e.message !== undefined ? e.message : e).slice(0, 200);
 const __eq = (a, b) => {
 	if (a === b) return true;
 	if (typeof a === "number" && typeof b === "number") return a !== a && b !== b;
@@ -49,45 +66,108 @@ const __eq = (a, b) => {
 	if (ka.length !== kb.length) return false;
 	for (let i = 0; i < ka.length; i++) if (!__hasOwn(b, ka[i]) || !__eq(a[ka[i]], b[ka[i]])) return false;
 	return true;
-};
+};`;
+
+/** The judging program: captured builtins, cases and bench input first, then the contribution, then cases and bench.
+ *  `pick`: the bench round whose results a check rule judges (random, so code cannot be right only there). */
+export function judgeProgram(task: Task, source: string, pick = 0): string {
+	const script = `${source}\n;typeof ${task.fn} === "function" ? ${task.fn} : undefined`;
+	const check = task.check !== undefined;
+	return `${CAPTURED}
 const __cases = ${JSON.stringify(task.cases)};
 const __in = ${task.benchInput ?? "undefined"};
 const __expect = ${task.benchExpect === undefined ? "undefined" : JSON.stringify(task.benchExpect)};
+const __pick = ${pick};
+let __picked = [], __last = [], __rounds;
 const __fn = __eval(${JSON.stringify(script)});
-if (typeof __fn !== "function") return { ok: false, error: "no function ${task.fn}" };
+if (typeof __fn !== "function") return { phase: "cases", cases: [], error: "no function ${task.fn}" };
+const __res = [], __outs = [];
+let __passed = 0, __threw = false;
 for (let __i = 0; __i < __cases.length; __i++) {
-	const __c = __cases[__i];
-	if (!__eq(__apply(__fn, undefined, __c.args), __c.expect)) return { ok: false, error: "wrong on " + __str(__c.args).slice(0, 80) };
+	const __c = __cases[__i], __call = "${task.fn}(" + __c.args.map(__show).join(", ") + ")";
+	try {
+		let __got = __apply(__fn, undefined, __c.args);
+		if (__got && typeof __got.then === "function") __got = await __got;
+		__outs[__i] = __got;
+		${check
+			? `__res.push({ call: __call, ok: false, got: __show(__got) });`
+			: `const __ok = __eq(__got, __c.expect);
+		if (__ok) __passed++;
+		__res.push({ call: __call, ok: __ok, got: __show(__got), expect: __show(__c.expect) });`}
+	} catch (e) { __threw = true; __outs[__i] = null; __res.push({ call: __call, ok: false, error: __msg(e)${check ? "" : ", expect: __show(__c.expect)"} }); }
 }
+${check
+	? `if (__threw) return { phase: "cases", cases: __res, outs: __outs };`
+	: `if (__passed < __cases.length) return { phase: "cases", cases: __res };`}
 const ${task.fn} = __fn;
 let __out;
 const __t = __now();
 {
 ${task.bench}
 }
-const __ms = __now() - __t;
-if (__expect !== undefined && !__eq(__out, __expect)) return { ok: false, error: "wrong on the bench input" };
-return { ok: true, ms: __ms };`;
+const __ms = (__now() - __t) / (__rounds || 1);
+if (__expect !== undefined && !__eq(__out, __expect)) return { phase: "bench", cases: __res, error: "wrong on the bench input" };
+return { phase: "done", cases: __res, ms: __ms${check ? ", outs: __outs, picked: __picked.length ? __picked : __last" : ""} };`;
+}
+
+/** The check rule applied to results in a fresh sandbox: per value true, false or the rule's error. */
+export function checkProgram(check: string, args: unknown[][], values: unknown[][]): string {
+	return `const __check = (${check}\n);
+const __args = ${JSON.stringify(args)};
+const __sets = ${JSON.stringify(values)};
+return __sets.map((vals) => vals.map((v, i) => { try { return __check(v, __args[i]) === true; } catch (e) { return "rule error: " + String(e && e.message !== undefined ? e.message : e).slice(0, 160); } }));`;
 }
 
 /** An error text as the page shows it: no control characters (each would cost six bytes of JSON), at most 200 chars. */
 export const plain = (s: string): string => s.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
 
+const cleanCases = (cs: unknown): CaseResult[] => (Array.isArray(cs) ? cs : []).slice(0, 50).map((c) => {
+	const x = (c ?? {}) as Record<string, unknown>, s = (v: unknown) => (typeof v === "string" ? plain(v) : undefined);
+	return { call: s(x.call) ?? "?", ok: x.ok === true, ...(s(x.got) !== undefined ? { got: s(x.got) } : {}), ...(s(x.expect) !== undefined ? { expect: s(x.expect) } : {}), ...(s(x.error) !== undefined ? { error: s(x.error) } : {}) };
+});
+const firstWrong = (cases: CaseResult[]): string | undefined => {
+	const c = cases.find((x) => !x.ok);
+	return c ? plain(c.error ? `${c.call}: ${c.error}` : `wrong on ${c.call}`) : undefined;
+};
+
 /** Judges one contribution; the caller already holds a sandbox slot. */
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
-	if (source.length > MAX_SOURCE_CHARS) return { ok: false, ms: TIMEOUT_MS, error: "source too long" };
-	const sandbox = new cm.CodemodeSandbox({ timeoutMs: TIMEOUT_MS, tools: [], memoryLimitBytes: 64 * 1024 * 1024 });
+	const total = task.cases.length;
+	const fail = (error: string, cases: CaseResult[] = [], passed = 0): Verdict => ({ ok: false, ms: TIMEOUT_MS, error: plain(error), passed, total, cases });
+	if (source.length > MAX_SOURCE_CHARS) return fail("source too long");
+	const run = async (program: string) => {
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: TIMEOUT_MS, tools: [], memoryLimitBytes: 64 * 1024 * 1024 });
+		try { return await sandbox.execute(program); } finally { await sandbox.close().catch(() => {}); }
+	};
 	try {
-		const r = await sandbox.execute(judgeProgram(task, source));
-		if (!r.ok) return { ok: false, ms: TIMEOUT_MS, error: plain(r.error?.message ?? "failed") };
-		const v = r.value as { ok?: unknown; ms?: unknown; error?: unknown } | null;
-		if (v?.ok === true) return typeof v.ms === "number" && Number.isFinite(v.ms) && v.ms >= 0 ? { ok: true, ms: v.ms } : { ok: false, ms: TIMEOUT_MS, error: "invalid timing" };
-		return { ok: false, ms: TIMEOUT_MS, error: typeof v?.error === "string" ? plain(v.error) : "no verdict" };
+		const r = await run(judgeProgram(task, source, Math.floor(Math.random() * 300)));
+		if (!r.ok) return fail(r.error?.message ?? "failed");
+		const v = (r.value ?? {}) as { phase?: unknown; cases?: unknown; error?: unknown; ms?: unknown; outs?: unknown; picked?: unknown };
+		const cases = cleanCases(v.cases);
+		if (task.check !== undefined) {
+			// the rule decides, outside the contribution's sandbox; cases that threw stay failed
+			const outs = Array.isArray(v.outs) ? v.outs : [], picked = Array.isArray(v.picked) ? v.picked : [];
+			const sets = v.phase === "done" ? [outs, picked] : [outs];
+			const c = await run(checkProgram(task.check, task.cases.map((x) => x.args), sets));
+			if (!c.ok) return fail(`check rule failed: ${c.error?.message ?? "error"}`, cases);
+			const [onCases, onBench] = c.value as Array<Array<true | false | string>>;
+			cases.forEach((x, i) => { if (x.error) return; const res = onCases?.[i]; x.ok = res === true; if (typeof res === "string") x.error = plain(res); });
+			const passed = cases.filter((x) => x.ok).length;
+			if (v.phase !== "done") return fail(typeof v.error === "string" ? v.error : firstWrong(cases) ?? "failed", cases, passed);
+			if (passed < total) return fail(firstWrong(cases) ?? "failed", cases, passed);
+			if (!onBench || onBench.length < total || onBench.some((x) => x !== true)) return fail("wrong on repeated calls", cases, passed);
+		} else {
+			const passed = cases.filter((x) => x.ok).length;
+			if (v.phase !== "done") return fail(typeof v.error === "string" ? v.error : firstWrong(cases) ?? "failed", cases, passed);
+		}
+		if (typeof v.ms !== "number" || !Number.isFinite(v.ms) || v.ms < 0) return fail("invalid timing", cases, total);
+		return { ok: true, ms: Math.round(v.ms * 100) / 100, passed: total, total, cases };
 	} catch (e) {
-		return { ok: false, ms: TIMEOUT_MS, error: plain((e as Error).message) };
-	} finally {
-		await sandbox.close().catch(() => {});
+		return fail((e as Error).message);
 	}
 }
+
+/** The score fields of a verdict, as hub and shard write them: the case results failing ones first, at most 10. */
+export const verdictFields = (v: Verdict) => ({ ok: v.ok, ms: v.ms, passed: v.passed, total: v.total, cases: [...v.cases.filter((c) => !c.ok), ...v.cases.filter((c) => c.ok)].slice(0, 10), ...(v.error ? { error: v.error } : {}) });
 
 export const judge = (cm: Codemode, task: Task, source: string): Promise<Verdict> => sandboxSlot(() => judgeInSlot(cm, task, source));

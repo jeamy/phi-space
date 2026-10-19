@@ -2,7 +2,7 @@
 // explains the field in full.
 import type { Lang } from "./theme.ts";
 
-export type TipId = "task" | "fn" | "prompt" | "cases" | "agents" | "gens" | "per" | "contenders" | "start" | "code" | "board" | "standings" | "best";
+export type TipId = "task" | "fn" | "prompt" | "cases" | "check" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -29,10 +29,17 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	cases: {
 		text: {
-			de: "Gegen diese Fälle prüft die Sandbox jeden Beitrag. JSON oder einfacher Text, eine Zeile je Fall: „5 -> 120“, „3 4 -> 12“, „[3,1,2] -> [1,2,3]“ oder „Ergebnis: 0 1 4 9 11“ (ohne Eingabe). 1 bis 50 Fälle.",
-			en: "The sandbox checks every contribution against these cases. JSON or plain text, one line per case: \"5 -> 120\", \"3 4 -> 12\", \"[3,1,2] -> [1,2,3]\" or \"Result: 0 1 4 9 11\" (no input). 1 to 50 cases.",
+			de: "Gegen diese Fälle prüft die Sandbox jeden Beitrag. JSON oder einfacher Text, eine Zeile je Fall: „5 -> 120“, „3 4 -> 12“, „[3,1,2] -> [1,2,3]“ oder „Ergebnis: 0 1 4 9 11“ (ohne Eingabe). Mit Prüfregel reicht die Eingabe: „Eingabe: 5 11“. 1 bis 50 Fälle. Die Agenten sehen die Fälle.",
+			en: "The sandbox checks every contribution against these cases. JSON or plain text, one line per case: \"5 -> 120\", \"3 4 -> 12\", \"[3,1,2] -> [1,2,3]\" or \"Result: 0 1 4 9 11\" (no input). With a check rule the input is enough: \"Input: 5 11\". 1 to 50 cases. The agents see the cases.",
 		},
 		article: "help.topic.tasks_and_blocks", anchor: "custom",
+	},
+	check: {
+		text: {
+			de: "Für Aufgaben mit mehreren richtigen Antworten: eine JavaScript-Funktion (result, args) => true/false statt eines festen Ergebnisses, z. B. für ein Golomb-Lineal „5 Marken, Länge 11, alle Abstände verschieden“. Sie läuft in einer eigenen Sandbox.",
+			en: "For tasks with more than one right answer: a JavaScript function (result, args) => true/false instead of a fixed result, e.g. for a Golomb ruler \"5 marks, length 11, all distances different\". It runs in a sandbox of its own.",
+		},
+		article: "help.topic.tasks_and_blocks", anchor: "check",
 	},
 	agents: {
 		text: {
@@ -43,8 +50,8 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	gens: {
 		text: {
-			de: "Runden des Laufs (1 bis 6). Jede Generation sieht den bisher besten Code des Blocks und versucht ihn zu schlagen.",
-			en: "Rounds of the run (1 to 6). Every generation sees the best code of the block so far and tries to beat it.",
+			de: "Höchstens so viele Runden (1 bis 10). Jede Generation sieht alle bisherigen Versuche mit ihren Testergebnissen und die Notizen des Teams. Ist die Aufgabe gelöst, endet der Lauf nach den Verbesserungsrunden früher.",
+			en: "At most this many rounds (1 to 10). Every generation sees all attempts so far with their test results and the team's notes. Once the task is solved, the run ends earlier, after the improvement rounds.",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "settings",
 	},
@@ -55,17 +62,24 @@ export const TIPS: Record<TipId, Tip> = {
 		},
 		article: "help.topic.runs_and_contenders", anchor: "settings",
 	},
+	polish: {
+		text: {
+			de: "Wie viele Generationen nach der ersten korrekten Lösung noch weiterlaufen, um sie schneller oder einfacher zu machen (0 bis 3). 0: der Lauf endet, sobald die Aufgabe gelöst ist.",
+			en: "How many generations still run after the first correct solution, to make it faster or simpler (0 to 3). 0: the run ends as soon as the task is solved.",
+		},
+		article: "help.topic.runs_and_contenders", anchor: "teamwork",
+	},
 	contenders: {
 		text: {
-			de: "Wer im Lauf antritt, bis zu vier gleichzeitig: Skript-Agenten (zufällige Varianten aus dem Katalog, kostenlos) und Modell-Agenten. Mehrere Haken = sie treten gegeneinander an. Eigene Aufgaben brauchen ein Modell.",
-			en: "Who competes in the run, up to four at once: scripted agents (random catalog variants, free) and model agents. Several ticks = they compete against each other. Custom tasks need a model.",
+			de: "Wer im Lauf mitarbeitet, bis zu vier gleichzeitig: Skript-Agenten (zufällige Varianten aus dem Katalog, kostenlos) und Modell-Agenten. Mehrere Modelle arbeiten zusammen und bauen auf den Versuchen der anderen auf. Eigene Aufgaben brauchen ein Modell.",
+			en: "Who works in the run, up to four at once: scripted agents (random catalog variants, free) and model agents. Several models work together and build on each other's attempts. Custom tasks need a model.",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "contenders",
 	},
 	start: {
 		text: {
-			de: "Legt einen neuen Aufgabenblock an (wenn die gewählte Aufgabe noch nicht aktiv ist) und startet den Lauf. Der Lauf endet nach der letzten Generation oder mit „Stoppen“; eigener Code zählt auch danach noch.",
-			en: "Creates a new task block (when the chosen task is not active yet) and starts the run. The run ends after the last generation or with \"Stop\"; your own code still counts afterwards.",
+			de: "Legt einen neuen Aufgabenblock an (wenn die gewählte Aufgabe noch nicht aktiv ist) und startet den Lauf. Er endet, wenn die Aufgabe gelöst ist und die Verbesserungsrunden vorbei sind, spätestens nach der höchsten Zahl Generationen oder mit „Stoppen“; eigener Code zählt auch danach noch.",
+			en: "Creates a new task block (when the chosen task is not active yet) and starts the run. It ends once the task is solved and the improvement rounds are over, at the latest after the maximum number of generations or with \"Stop\"; your own code still counts afterwards.",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "ending",
 	},
@@ -85,8 +99,8 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	standings: {
 		text: {
-			de: "Vergleich der Teilnehmer im gewählten Block: korrekte Beiträge von bewerteten und die beste Zeit je Teilnehmer.",
-			en: "Comparison of the contenders in the selected block: correct contributions out of judged ones and the best time per contender.",
+			de: "Was jeder Teilnehmer im gewählten Block beigetragen hat: korrekte von bewerteten Beiträgen und die beste Zeit.",
+			en: "What each contender contributed in the selected block: correct out of judged contributions and the best time.",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "contenders",
 	},

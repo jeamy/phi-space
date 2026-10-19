@@ -446,3 +446,91 @@ t("▶ Stop aborts a long run; a second run from the same client meanwhile is re
 		await again.body!.cancel();
 	} finally { await srv.close(); }
 });
+
+// ---- teamwork: partial results, check rules, the team prompt, runs until solved ----
+
+const GOLOMB_RULE = "(r, [n, len]) => Array.isArray(r) && r.length === n && r[0] === 0 && r[n - 1] === len && new Set(r.flatMap((a, i) => r.slice(i + 1).map((b) => b - a))).size === n * (n - 1) / 2";
+
+t("every case is reported: a contribution that passes some cases shows how far it got", async () => {
+	const task = customTask({ fn: "inc", prompt: "", cases: [{ args: [1], expect: 2 }, { args: [5], expect: 6 }, { args: [0], expect: 1 }] });
+	const v = await judge(cm!, task, "function inc(x){ if (x === 0) throw new Error('zero'); return x === 5 ? 7 : x + 1 }");
+	assert.equal(v.ok, false);
+	assert.equal(v.passed, 1);
+	assert.equal(v.total, 3);
+	assert.deepEqual(v.cases.map((c) => [c.call, c.ok]), [["inc(1)", true], ["inc(5)", false], ["inc(0)", false]]);
+	assert.equal(v.cases[1]!.got, "7");
+	assert.equal(v.cases[1]!.expect, "6");
+	assert.equal(v.cases[2]!.error, "zero");
+	const good = await judge(cm!, task, "function inc(x){ return x + 1 }");
+	assert.deepEqual([good.ok, good.passed, good.total], [true, 3, 3]);
+});
+
+t("a check rule accepts every right answer, and patched builtins cannot fool it", async () => {
+	const task = customTask({ fn: "golomb", prompt: "Golomb ruler", cases: [{ args: [5, 11] }], check: GOLOMB_RULE });
+	assert.equal((await judge(cm!, task, "function golomb(){ return [0, 1, 4, 9, 11] }")).ok, true);
+	assert.equal((await judge(cm!, task, "function golomb(){ return [0, 2, 7, 10, 11] }")).ok, true); // the mirror image
+	const wrong = await judge(cm!, task, "function golomb(){ return [0, 1, 2, 3, 11] }");
+	assert.deepEqual([wrong.ok, wrong.passed], [false, 0]);
+	// the rule runs in a fresh sandbox: the contribution's patches do not reach it
+	assert.equal((await judge(cm!, task, "function golomb(){ return [0, 1, 2, 3, 11] } globalThis.Set = function () { return { size: 10 } }; Array.prototype.flatMap = () => [1,2,3,4,5,6,7,8,9,10];")).ok, false);
+	// a call counter: right on the case call, garbage in the bench rounds
+	assert.equal((await judge(cm!, task, "let n = 0; function golomb(){ return ++n === 1 ? [0, 1, 4, 9, 11] : [] }")).ok, false);
+	assert.throws(() => customTask({ fn: "f", prompt: "", cases: [{ args: [] }] as never }), /expect/); // no rule: expect needed
+});
+
+t("a slow function is timed per round, not timed out", async () => {
+	const task = customTask({ fn: "slow", prompt: "", cases: [{ args: [1], expect: 1 }, { args: [2], expect: 2 }] });
+	const v = await judge(cm!, task, "function slow(x){ const e = Date.now() + 250; while (Date.now() < e) {} return x }");
+	assert.equal(v.ok, true, v.error ?? "");
+	assert.ok(v.ms >= 450 && v.ms < 1500, `ms per round ${v.ms}`);
+});
+
+test("the team prompt: cases, role, the attempt to build on with its results, others and notes", async () => {
+	const { teamPrompt } = await import("../server/llm.ts");
+	const task = customTask({ fn: "golomb", prompt: "Golomb ruler of order n and length len", cases: [{ args: [5, 11] }], check: GOLOMB_RULE });
+	const target = { candidateId: "c1", author: "agent-1", via: "m/a", gen: 1, ok: false, ms: null, passed: 0, total: 1, error: "wrong on golomb(5, 11)", cases: [{ call: "golomb(5, 11)", ok: false, got: "[0,1,2,3,11]" }], source: "function golomb(n, len){ return [0,1,2,3,len] }" };
+	const p = teamPrompt({ task, lang: "en", agent: 2, gen: 1, role: "repair", target, others: [{ ...target, candidateId: "c2", author: "agent-0", source: "function golomb(){}" }], notes: [{ author: "agent-0", gen: 1, text: "distances must all differ" }] });
+	for (const want of ["golomb(5, 11)", "check rule", GOLOMB_RULE, "REPAIR", "agent-1", "✗ golomb(5, 11) → [0,1,2,3,11]", "function golomb(n, len)", "agent-0", "distances must all differ", "NOTE:"]) assert.ok(p.user.includes(want), want);
+	assert.match(p.system, /team/);
+	const cat = teamPrompt({ task: taskById("fibonacci")!, lang: "en", agent: 0, gen: 0 });
+	assert.ok(cat.user.includes("fib(10) must return 55") && cat.user.includes("EXPLORE"));
+});
+
+test("roles: repair close attempts, explore every third turn, improve once solved", async () => {
+	const { CodeChatHub } = await import("../server/hub.ts");
+	const a = (id: string, ok: boolean, passed: number) => ({ candidateId: id, author: id, via: "m", gen: 1, ok, ms: ok ? 5 : null, passed, total: 3, source: "" });
+	assert.deepEqual([0, 1, 2].map((k) => CodeChatHub.plan([], k).role), ["explore", "explore", "explore"]);
+	const failing = [a("x", false, 2), a("y", false, 1)];
+	assert.deepEqual([0, 1, 2, 3].map((k) => [CodeChatHub.plan(failing, k).role, CodeChatHub.plan(failing, k).target?.candidateId ?? null]), [["repair", "x"], ["repair", "y"], ["explore", null], ["repair", "y"]]);
+	assert.deepEqual([0, 2].map((k) => CodeChatHub.plan([a("ok", true, 3), ...failing], k).role), ["improve", "explore"]);
+});
+
+t("a team run: a teammate repairs a close attempt, leaves a note, and the run ends once solved", async () => {
+	const seen: Array<{ role?: string; target?: string | null; passed?: number; notes: number }> = [];
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async (c: any) => {
+			seen.push({ role: c.role, target: c.target?.author ?? null, passed: c.target?.passed, notes: c.notes?.length ?? 0 });
+			if (c.role === "repair" && c.target) return { source: "function double(x){ return x * 2 }", model: "fake/team", note: "multiply by two, do not add" };
+			return { source: "function double(x){ return x + 2 }", model: "fake/team" }; // right for 2 only: 1 of 2 cases
+		},
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/team1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
+		assert.equal((await post(srv.url, "/api/sessions/team1/run", { agents: 2, gens: 6, perAgent: 1, polish: 0, contenders: ["fake/team"] })).status, 200);
+		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/team1")).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
+		const b = snap.blocks.at(-1);
+		assert.equal(snap.run.solvedGen, 2);
+		assert.equal(snap.run.gen, 2); // stopped once solved, not after 6 generations
+		assert.deepEqual(b.contributions.map((c: any) => [c.gen, c.role, c.ok, c.passed]).sort(), [[1, "explore", false, 1], [1, "explore", false, 1], [2, "repair", true, 2], [2, "repair", true, 2]]);
+		const repaired = b.contributions.find((c: any) => c.role === "repair");
+		assert.ok(b.contributions.some((c: any) => c.candidateId === repaired.basedOn), "the repair names the attempt it built on");
+		assert.deepEqual(seen.slice(2).map((x) => [x.role, x.passed]), [["repair", 1], ["repair", 1]]); // generation 2 saw how far gen 1 got
+		assert.equal(b.notes.length, 2);
+		assert.equal(b.notes[0].text, "multiply by two, do not add");
+		assert.ok(b.messages.some((m: any) => /solved in generation 2/.test(m.text)));
+		const d = (await (await fetch(`${srv.url}/api/sessions/team1/source/${b.contributions.find((c: any) => !c.ok).candidateId}`)).json()) as any;
+		assert.deepEqual(d.cases.map((c: any) => [c.call, c.ok]), [["double(5)", false], ["double(2)", true]]); // failing first
+	} finally { await srv.close(); }
+});

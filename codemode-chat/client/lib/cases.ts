@@ -7,9 +7,11 @@
 //   Ergebnis: 12
 //   [3,1,2] -> [1,2,3]                 a JSON array as input is ONE argument; "5 3" are two arguments
 //
+//   Eingabe: 5 11                      an input line alone: a call without a fixed result (for a task with a check rule)
+//
 // Labels such as Ergebnis/Result/Erwartet/Expected/Ausgabe/Output/Eingabe/Input are ignored.
 
-export type Case = { args: unknown[]; expect: unknown };
+export type Case = { args: unknown[]; expect?: unknown };
 
 const RESULT = "ergebnis|ausgabe|erwartet|result|output|expected";
 const INPUT = "eingabe|input|args?";
@@ -17,7 +19,8 @@ const label = (kind: string) => new RegExp(`^\\s*(?:${kind})\\s*[:=]\\s*`, "i");
 const ARROW = /\s*(?:->|=>|→|⇒)\s*/;
 
 const json = (s: string): { ok: true; value: unknown } | { ok: false } => { try { return { ok: true, value: JSON.parse(s) }; } catch { return { ok: false }; } };
-const isCase = (v: unknown): v is Case => !!v && typeof v === "object" && !Array.isArray(v) && Array.isArray((v as Case).args) && "expect" in (v as object);
+/** {args, expect} or, for a task with a check rule, {args} alone. */
+const isCase = (v: unknown): v is Case => !!v && typeof v === "object" && !Array.isArray(v) && Array.isArray((v as Case).args);
 const isNumber = (tok: string) => tok !== "" && Number.isFinite(Number(tok));
 const token = (tok: string): unknown => { const j = json(tok); return j.ok ? j.value : tok; };
 const words = (s: string) => s.split(/[\s,;]+/).filter(Boolean);
@@ -63,6 +66,7 @@ export function parseCases(text: string): Case[] | null {
 			i++;
 			continue;
 		}
+		if (label(INPUT).test(line) && !ARROW.test(line)) { out.push({ args: parseArgs(line.replace(label(INPUT), "")) }); continue; } // input only
 		const [left, right] = line.split(ARROW, 2) as [string, string | undefined];
 		if (right !== undefined) out.push({ args: parseArgs(left.replace(label(INPUT), "")), expect: parseValue(right.replace(label(RESULT), "")) });
 		else out.push({ args: [], expect: parseValue(line.replace(label(RESULT), "")) });

@@ -14,24 +14,29 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
   chosen task is not the active block yet, and then starts the run in it (with 0 agents it only creates the block, and
   you hand in the code yourself).
 - Every task block is one collapsible section of the conversation. Its contributions are **square tiles** (agent,
-  model, time, verdict); a click on a tile unfolds the code that agent delivered. The leaderboard, the standings per
+  model, time or cases passed such as 3/5, role and whose attempt it builds on); a click on a tile unfolds the test
+  results per case and the code. ▶ runs a contribution in the sandbox with a live console and Stop. The leaderboard, the standings per
   contender and the best code on the right belong to the block that is open or was clicked last.
-- A **run** lets N agents contribute for G generations to the active block. It ends when every generation has been
-  contributed and judged (or on Stop): there is no "good enough" criterion. Code you hand in at any time, also during or
-  after a run, is judged by the same sandbox and counts for the leaderboard and the best code of the active block;
-  agents of later generations see the new best and try to beat it. Code is always handed in to the active block. Scripted agents (no model) hand in
-  hand-written variants, some slow, some wrong; model agents (optional) write JavaScript themselves and see the best
-  code so far. A custom task has no scripted variants, so choosing it hides the scripted agents and selects a model.
+- A **run** is teamwork, not a race: N agents work on the active block for up to G generations. Every model agent sees
+  the task with its test cases (and check rule), the team's best attempts with their case results, and the team's
+  notes; it **repairs** an attempt that got close, **explores** a new approach (every third turn) or **improves** a
+  correct solution, and may leave a note for the next ones. The run ends once the task is solved and the improvement
+  rounds (0 to 3) are over, at the latest after G generations, or on Stop. Code you hand in at any time is judged by the
+  same sandbox and is part of the board the agents build on; it always goes to the active block. Scripted agents (no
+  model) hand in hand-written variants, some slow, some wrong. A custom task has no scripted variants, so choosing it
+  hides the scripted agents and selects a model. A custom task may have a **check rule** `(result, args) => boolean`
+  instead of fixed results, for tasks with more than one right answer; it runs in a fresh sandbox of its own.
 - You can **hand in code yourself**; it goes through exactly the same path.
 - A task block can be **deleted** with the bin icon in its header, after a yes/no dialog. This removes everything that
   belongs to it (task, contributions, verdicts on this host and on nano, best code, log lines). A block with a running
   run cannot be deleted; deleting the active block makes the newest remaining one active (or opens a fresh first task).
 - Every contribution is a `CodeCandidate` entry. A judge takes it under a transaction, runs it in a QuickJS sandbox
   (`@earendil-works/pi-codemode`: no tools, 5 s timeout, 64 MiB heap, at most 2 sandboxes at a time per process) and
-  writes a `CodeScore` entry with the verdict, time, judging host and the code. `CodeBest` holds the fastest correct
+  writes a `CodeScore` entry with the verdict (every case: result, expected, error; cases passed), time, judging host
+  and the code. `CodeBest` holds the fastest correct
   one of its block. The page shows the code of every contribution, wrong ones included.
 
-Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`, `CodeBest`, `HostInfo`) carry the `blockId` of their task block and live in a durable space
+Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`, `CodeBest`, `CodeNote`, `HostInfo`) carry the `blockId` of their task block and live in a durable space
 (SQLite); the session name in the URL hash (`#room`) separates rooms.
 
 ## big and nano

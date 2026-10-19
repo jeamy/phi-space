@@ -1,8 +1,10 @@
 // Optional model agents for the codemode chat. Off unless CODEMODE_CHAT_LLM=1 and credentials exist (same resolution as
 // the --live examples: environment keys or ~/.pi/agent/auth.json). Guards: a model whitelist (codestral-latest and the
-// newest haiku), at most 2 calls in flight (more wait for a slot), CODEMODE_LLM_PER_MIN (default 20) per minute and
-// CODEMODE_LLM_PER_DAY (default 500) per day, because any visitor can start a run with model agents;
-// beyond that the caller falls back to scripted agents. Several models can take part in one run: the caller names the model.
+// newest haiku), at most 2 calls in flight (more wait for a slot), CODEMODE_LLM_PER_MIN (default 20) per minute (a
+// full minute waits for the next) and CODEMODE_LLM_PER_DAY (default 500) per day, because any visitor can start a run
+// with model agents; beyond the day budget the caller falls back to scripted agents. Several models can take part in
+// one run: the caller names the model. Agents are teammates: each sees the cases, the team's attempts with their test
+// results, and the notes, and repairs, explores or improves (teamPrompt).
 import { liveModels } from "../../examples/live-models.ts";
 import type { Task } from "./tasks.ts";
 
@@ -69,35 +71,91 @@ const STYLES = [
 	"You like unusual ideas, but the result must stay correct.",
 ];
 
+/** What a team member does this turn: repair a failing attempt, try a new approach, or improve a correct solution. */
+export type Role = "repair" | "explore" | "improve";
+/** An earlier contribution as the team sees it: who, how far it got, what went wrong, its code. */
+export type Attempt = { candidateId: string; author: string; via: string; gen: number; ok: boolean; ms: number | null; passed?: number; total?: number; error?: string; cases?: Array<{ call: string; ok: boolean; got?: string; expect?: string; error?: string }>; source: string };
+export type Note = { author: string; gen: number; text: string };
+/** Everything an agent gets: the task with its cases, its role, the attempt to work on, others for reference, notes. */
+export type TeamContext = { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; notes?: Note[]; best?: { source: string; ms: number } | null };
+
+const clipText = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "\n// … (cut)" : s);
+const showValue = (v: unknown) => { const s = JSON.stringify(v); return s === undefined ? "undefined" : s.length > 200 ? s.slice(0, 200) + "…" : s; };
+
+/** The cases as the agents see them: the exact calls and what they must return (or that the rule decides). */
+export function describeCases(task: Task): string {
+	const lines = task.cases.slice(0, 12).map((c) => `  ${task.fn}(${c.args.map(showValue).join(", ")})${task.check !== undefined ? "" : ` must return ${showValue(c.expect)}`}`);
+	if (task.cases.length > 12) lines.push(`  … and ${task.cases.length - 12} more`);
+	return lines.join("\n");
+}
+
+const describeAttempt = (a: Attempt, full: boolean) => {
+	const head = `${a.author} (${a.via}, generation ${a.gen}): ${a.ok ? `correct, ${a.ms} ms` : `${a.passed ?? 0} of ${a.total ?? "?"} cases passed`}${a.error && !a.ok ? `; first problem: ${a.error}` : ""}`;
+	const cases = full && a.cases?.length ? "\nCase results:\n" + a.cases.slice(0, 8).map((c) => `  ${c.ok ? "✓" : "✗"} ${c.call} → ${c.error ? `throws ${c.error}` : c.got}${!c.ok && c.expect !== undefined ? ` (expected ${c.expect})` : ""}`).join("\n") : "";
+	return `${head}${cases}\n\`\`\`js\n${clipText(a.source, full ? 4000 : 1500)}\n\`\`\``;
+};
+
+/** The prompt of one turn: a teammate, not a competitor. */
+export function teamPrompt(c: TeamContext): { system: string; user: string } {
+	const role = c.role ?? (c.best ? "improve" : "explore");
+	const t = c.task;
+	const parts = [
+		`Task: ${t.prompt.en}`,
+		`Write a JavaScript function named \`${t.fn}\`. It is called exactly like in these test cases:\n${describeCases(t)}`,
+		...(t.check !== undefined ? [`A result passes when this check rule returns true for it (any result that satisfies the rule is right):\n\`\`\`js\n${t.check}\n\`\`\``] : []),
+		"Rules: plain JavaScript (QuickJS), no imports, no I/O, no timers. Results must be plain JSON values.",
+	];
+	if (c.notes?.length) parts.push("Notes from your team (insights so far):\n" + c.notes.map((n) => `- ${n.author} (gen ${n.gen}): ${n.text}`).join("\n"));
+	if (role === "repair" && c.target) parts.push(`Your job: REPAIR this attempt. Keep what works, fix what fails; the case results show where it goes wrong.\n${describeAttempt(c.target, true)}`);
+	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it faster or simpler. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
+	else parts.push(`Your job: EXPLORE. Write a solution with an approach of your own${c.others?.length ? ", different from the attempts below where they fail" : ""}.`);
+	if (c.others?.length) parts.push("Other attempts of the team (for reference; reuse what helps):\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n"));
+	parts.push("Answer with exactly one ```js block holding the complete function (and its helpers). After the block you may add ONE line `NOTE: …` (at most 200 characters) with an insight the next teammates should know.");
+	return {
+		system: `You are agent ${c.agent} in a team that solves a programming task together through a shared space (generation ${c.gen + 1}). Everyone sees every attempt, its test results and the team's notes; you build on each other's work. ${STYLES[c.agent % STYLES.length]}`,
+		user: parts.join("\n\n"),
+	};
+}
+
 /** Pull the program out of a model answer: the first fenced block, else the whole text. */
 export function extractCode(text: string): string {
 	const m = /```(?:js|javascript|ts|typescript)?\s*\n([\s\S]*?)```/i.exec(text);
 	return (m ? m[1]! : text).trim();
 }
 
-/** One model contribution as JavaScript source plus the model label; throws when the guards or the model say no. */
-export async function llmContribution(c: { task: Task; lang: "de" | "en"; agent: number; gen: number; best: { source: string; ms: number } | null; model?: string }): Promise<{ source: string; model: string }> {
+/** The `NOTE: …` line after the code block, if any. */
+export function extractNote(text: string): string | undefined {
+	const after = text.slice(text.lastIndexOf("```") + 3);
+	const m = /^\s*NOTE:\s*(.+)$/im.exec(after);
+	return m ? m[1]!.trim().slice(0, 200) : undefined;
+}
+
+/** One model contribution: source, the model label and an optional note; throws when the guards or the model say no.
+ *  A full minute window waits for the next one (a run is teamwork, not a race against the limit). */
+export async function llmContribution(c: TeamContext): Promise<{ source: string; model: string; note?: string }> {
 	const s = await sharedModel();
 	if (!s || !on) throw new Error("model agents are off");
 	const model = c.model ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === c.model) : s.model;
 	if (!model) throw new Error(`model ${c.model} is not allowed`);
-	if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); calls = 0; }
-	if (Date.now() - dayStart >= 86_400_000) { dayStart = Date.now(); dayCalls = 0; }
-	if (calls >= CALLS_PER_MIN) throw new Error("model rate limit");
-	if (dayCalls >= CALLS_PER_DAY) throw new Error("daily model budget used up");
+	for (;;) {
+		if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); calls = 0; }
+		if (Date.now() - dayStart >= 86_400_000) { dayStart = Date.now(); dayCalls = 0; }
+		if (dayCalls >= CALLS_PER_DAY) throw new Error("daily model budget used up");
+		if (calls < CALLS_PER_MIN) break;
+		await new Promise((ok) => setTimeout(ok, Math.max(250, windowStart + 60_000 - Date.now())));
+	}
 	calls++; dayCalls++;
 	if (inFlight >= 2) await new Promise<void>((ok) => slotWaiters.push(ok)); // wait for a free slot instead of failing
 	inFlight++;
 	try {
-		const prompt = `Task: ${c.task.prompt.en}
-The function must be named \`${c.task.fn}\`. Rules: plain JavaScript (QuickJS), no imports, no I/O, no timers; output exactly one \`\`\`js block and no explanation.
-${c.best ? `The fastest correct solution so far takes ${c.best.ms} ms:\n\`\`\`js\n${c.best.source}\n\`\`\`\nBeat it: make it faster or find a different way. It must stay correct.` : "No solution exists yet: write a first one."}`;
+		const p = teamPrompt(c);
 		const res: any = await s.models.completeSimple(model, {
-			systemPrompt: `You are contributor ${c.agent} (generation ${c.gen}) in a swarm that evolves an algorithm through a shared space. ${STYLES[c.agent % STYLES.length]}`,
-			messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
-		}, { maxTokens: 700, signal: AbortSignal.timeout(45_000) });
+			systemPrompt: p.system,
+			messages: [{ role: "user", content: p.user, timestamp: Date.now() }],
+		}, { maxTokens: 1500, signal: AbortSignal.timeout(60_000) });
 		const text = (res?.content ?? []).filter((x: any) => x?.type === "text").map((x: any) => x.text).join("");
 		if (!text.trim()) throw new Error(res?.errorMessage ?? "empty answer");
-		return { source: extractCode(text), model: `${model.provider}/${model.id}` };
+		const note = extractNote(text);
+		return { source: extractCode(text), model: `${model.provider}/${model.id}`, ...(note ? { note } : {}) };
 	} finally { inFlight--; slotWaiters.shift()?.(); }
 }

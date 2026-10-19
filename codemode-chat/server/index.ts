@@ -104,8 +104,8 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 			const src = /^\/api\/sessions\/([^/]+)\/source\/([^/]+)$/.exec(p);
 			if (src && req.method === "GET") {
 				if (!ID.test(src[1]!) || !CANDIDATE.test(src[2]!)) return json(res, 400, { error: "Invalid id" });
-				const source = await hub.source(src[1]!, src[2]!);
-				return source === null ? json(res, 404, { error: "Unknown contribution" }) : json(res, 200, { source });
+				const details = await hub.details(src[1]!, src[2]!); // code, case results, lineage
+				return details === null ? json(res, 404, { error: "Unknown contribution" }) : json(res, 200, details);
 			}
 			const ex = /^\/api\/sessions\/([^/]+)\/exec$/.exec(p);
 			if (ex && req.method === "POST") {

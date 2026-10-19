@@ -18,7 +18,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createSpace, FOREVER, NO_WAIT, PhiSpaces, serveSpace, SpaceService, spaces, StaticIdentity, startService, TransactionError } from "../../src/index.ts";
-import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, type Codemode } from "./judge.ts";
+import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { entryLeaseMs, hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
 import { taskFromSpec } from "./tasks.ts";
 
@@ -59,9 +59,9 @@ export async function startJudgeHost(o: { listen?: string; dbPath?: string | nul
 					if (!c) { await r.abort(t.id); return false; }
 					const f = c.fields as Record<string, any>;
 					const task = taskFromSpec(f);
-					const v = task ? await judgeInSlot(cmx, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
+					const v: Verdict = task ? await judgeInSlot(cmx, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 					try {
-						await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, ttl);
+						await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ...(f.role ? { role: f.role } : {}), ...(f.basedOn ? { basedOn: f.basedOn } : {}), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 						await r.commit(t.id);
 					} catch (e) {
 						await r.abort(t.id).catch(() => {});

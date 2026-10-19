@@ -52,6 +52,7 @@ Der Chat nutzt genau diese Mittel: Ein Beitrag wird als Entry hineingelegt, ein 
 | \`CodeCandidate\` | Ein Beitrag, der auf seine Bewertung wartet |
 | \`CodeScore\` | Das Urteil der Sandbox, samt Code (der sichtbare Beitrag) |
 | \`CodeBest\` | Der schnellste korrekte Code eines Blocks |
+| \`CodeNote\` | Eine Notiz, die ein Agent dem Team hinterlässt (die nächsten Agenten lesen sie) |
 | \`HostInfo\` | Beschreibung eines Hosts für die Systemleiste |
 
 Alle Einträge tragen den Raumnamen (\`session\`) und, soweit sie zu einer Aufgabe gehören, die \`blockId\` ihres Blocks.
@@ -87,6 +88,7 @@ The chat uses exactly these means: a contribution is put in as an entry, a judge
 | \`CodeCandidate\` | A contribution waiting for its verdict |
 | \`CodeScore\` | The sandbox verdict, with the code (the visible contribution) |
 | \`CodeBest\` | The fastest correct code of a block |
+| \`CodeNote\` | A note an agent leaves for the team (the next agents read it) |
 | \`HostInfo\` | Description of a host for the system bar |
 
 All entries carry the room name (\`session\`) and, when they belong to a task, the \`blockId\` of their block.
@@ -122,7 +124,7 @@ Eine **Aufgabe** ist eine Funktion, die geschrieben werden soll. Jede gestartete
 Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
 
 - **Funktionsname:** ein gültiger JavaScript-Name, höchstens 40 Zeichen.
-- **Beschreibung:** was die Funktion tun soll (höchstens 600 Zeichen); sie wird den Agenten gezeigt.
+- **Beschreibung:** was die Funktion tun soll (höchstens 600 Zeichen); sie wird den Agenten gezeigt, zusammen mit den Testfällen.
 - **Testfälle:** JSON, zum Beispiel \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 bis 50 Fälle, zusammen höchstens 32 000 Zeichen.
   Du kannst auch **einfachen Text** schreiben; er wird beim Start automatisch in JSON umgewandelt, und das Feld zeigt danach das JSON:
 
@@ -136,7 +138,18 @@ Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
 
   Mehrere Fälle schreibst du untereinander, eine Zeile je Fall.
 
-Die Testfälle sind das **Orakel**: Ein Beitrag ist nur korrekt, wenn er für jeden Fall genau das erwartete Ergebnis liefert (Vergleich als JSON). Gemessen wird die Zeit, die alle Fälle 300-mal hintereinander brauchen.
+Die Testfälle sind das **Orakel**: Ein Beitrag ist korrekt, wenn er für jeden Fall genau das erwartete Ergebnis liefert (Vergleich als JSON), oder, mit Prüfregel, wenn die Regel jedes Ergebnis annimmt. Die Agenten sehen die Fälle, also genau die Aufrufe und Ergebnisse. Gemessen wird die Zeit je Durchgang über alle Fälle: höchstens 300 Durchgänge oder etwa eine Sekunde, so dass auch langsame Funktionen gemessen und nicht abgebrochen werden.
+
+## Prüfregel {#check}
+
+Manche Aufgaben haben **mehrere richtige Antworten**: Zu einem Golomb-Lineal mit 5 Marken und Länge 11 passt \`[0,1,4,9,11]\` ebenso wie das gespiegelte \`[0,2,7,10,11]\`. Dafür gibt es das Feld **Prüfregel (optional)**: eine JavaScript-Funktion \`(result, args) => true/false\`, die über jedes Ergebnis entscheidet. Die Testfälle brauchen dann nur die Eingaben, zum Beispiel \`Eingabe: 5 11\` oder \`[{"args":[5,11]}]\`.
+
+\`\`\`js
+(r, [n, len]) => Array.isArray(r) && r.length === n && r[0] === 0 && r[n - 1] === len &&
+  new Set(r.flatMap((a, i) => r.slice(i + 1).map((b) => b - a))).size === n * (n - 1) / 2
+\`\`\`
+
+Die Regel läuft in einer **eigenen Sandbox** auf den Ergebnissen (als JSON). Ein Beitrag kann sie also nicht austricksen, auch nicht durch Verändern von Builtins wie \`Set\`. Auch einige Ergebnisse aus dem Benchmark prüft sie, zufällig gewählt: Code, der nur beim ersten Aufruf richtig liegt, fällt durch. Die Agenten sehen die Regel.
 
 Eine eigene Aufgabe hat **keine Skript-Varianten**. Deshalb werden die Skript-Agenten ausgeblendet und automatisch ein Modell gewählt; ohne Modell-Zugang kannst du nur selbst Code einreichen (siehe [Modell-Agenten](help.topic.model_agents#overview)).
 
@@ -146,7 +159,7 @@ Das Dropdown wählt nur aus. **Lauf starten** legt bei Bedarf selbst einen neuen
 
 ## Der Block im Chat {#block}
 
-Ein Block ist ein einklappbarer Abschnitt: Im Kopf stehen Titel, Funktion, Zahl der Beiträge, korrekt/bewertet, die beste Zeit und der Laufstatus. Aufgeklappt zeigt er die Beschreibung, die Protokollzeilen des Laufs und die Beiträge als **quadratische Kacheln** (Agent, Modell, Zeit oder ✗, Generation, Host). Ein Klick auf eine Kachel klappt darunter den **gelieferten Code** auf.
+Ein Block ist ein einklappbarer Abschnitt: Im Kopf stehen Titel, Funktion, Zahl der Beiträge, korrekt/bewertet, die beste Zeit und der Laufstatus. Aufgeklappt zeigt er die Beschreibung (und die Prüfregel), die Protokollzeilen des Laufs, die **Notizen des Teams** und die Beiträge als **quadratische Kacheln** (Agent, Modell, Zeit oder bestandene Fälle wie 3/5, Rolle und auf wessen Versuch er aufbaut, Generation, Host). Ein Klick auf eine Kachel klappt darunter die **Testergebnisse je Fall** und den **gelieferten Code** auf.
 
 **Rangliste, Wertung und bester Code** rechts gehören zu dem Block, der offen ist oder zuletzt angeklickt wurde („für …"). Ein neuer Block öffnet sich selbst und übernimmt diesen Fokus.
 
@@ -178,7 +191,7 @@ A **task** is a function to be written. Every task that is started appears as a 
 Choose **"Custom task …"** in the dropdown. Three fields appear:
 
 - **Function name:** a valid JavaScript name, at most 40 characters.
-- **Description:** what the function should do (at most 600 characters); it is shown to the agents.
+- **Description:** what the function should do (at most 600 characters); it is shown to the agents, together with the test cases.
 - **Test cases:** JSON, for example \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 to 50 cases, at most 32,000 characters together.
   You can also write **plain text**; it is turned into JSON automatically when you start, and the field then shows the JSON:
 
@@ -192,7 +205,18 @@ Choose **"Custom task …"** in the dropdown. Three fields appear:
 
   Write several cases one below the other, one line per case.
 
-The test cases are the **oracle**: a contribution is only correct if it returns exactly the expected result for every case (compared as JSON). The time measured is what all cases take, run 300 times in a row.
+The test cases are the **oracle**: a contribution is correct if it returns exactly the expected result for every case (compared as JSON), or, with a check rule, if the rule accepts every result. The agents see the cases, i.e. exactly the calls and results. The time measured is per pass over all cases: at most 300 passes or about a second, so slow functions are timed, not cut off.
+
+## Check rule {#check}
+
+Some tasks have **more than one right answer**: for a Golomb ruler with 5 marks and length 11, \`[0,1,4,9,11]\` fits just as well as its mirror \`[0,2,7,10,11]\`. For these there is the field **Check rule (optional)**: a JavaScript function \`(result, args) => true/false\` that decides every result. The test cases then only need the inputs, for example \`Input: 5 11\` or \`[{"args":[5,11]}]\`.
+
+\`\`\`js
+(r, [n, len]) => Array.isArray(r) && r.length === n && r[0] === 0 && r[n - 1] === len &&
+  new Set(r.flatMap((a, i) => r.slice(i + 1).map((b) => b - a))).size === n * (n - 1) / 2
+\`\`\`
+
+The rule runs in a **sandbox of its own** on the results (as JSON), so a contribution cannot fool it, not even by changing builtins such as \`Set\`. It also checks some results from the bench, picked at random: code that is only right on the first call fails. The agents see the rule.
 
 A custom task has **no scripted variants**. So the scripted agents are hidden and a model is selected automatically; without model access you can only hand in code yourself (see [Model agents](help.topic.model_agents#overview)).
 
@@ -202,7 +226,7 @@ The dropdown only selects. **Start run** opens a new block itself when the chose
 
 ## The block in the chat {#block}
 
-A block is a collapsible section: its header shows the title, the function, the number of contributions, correct/judged, the best time and the run status. Opened, it shows the description, the log lines of the run and the contributions as **square tiles** (agent, model, time or ✗, generation, host). A click on a tile unfolds the **code it delivered** below.
+A block is a collapsible section: its header shows the title, the function, the number of contributions, correct/judged, the best time and the run status. Unfolded it shows the description (and the check rule), the run's log lines, the **team notes** and the contributions as **square tiles** (agent, model, time or cases passed such as 3/5, role and whose attempt it builds on, generation, host). A click on a tile unfolds the **test results per case** and the **delivered code** below it.
 
 The **leaderboard, standings and best code** on the right belong to the block that is open or was clicked last ("for …"). A new block opens itself and takes that focus.
 
@@ -226,22 +250,42 @@ The bin in the block header deletes a block after a yes/no question. Everything 
 		body: {
 			de: `## Überblick {#overview}
 
-Ein **Lauf** lässt Agenten über mehrere **Generationen** Code zum aktiven Block liefern. In jeder Generation liefert jeder Agent seine Beiträge; erst wenn alle bewertet sind, beginnt die nächste.
+Ein **Lauf** ist **Zusammenarbeit**, kein Wettrennen: Agenten arbeiten über mehrere **Generationen** gemeinsam an der Aufgabe des aktiven Blocks. Jede Generation sieht alle bisherigen Versuche mit ihren Testergebnissen und baut darauf auf; erst wenn alle Beiträge einer Generation bewertet sind, beginnt die nächste.
 
 ## Einstellungen {#settings}
 
 | Einstellung | Bedeutung | Grenze |
 |---|---|---|
 | Agenten | Zahl der Agenten | 0 bis 8 (0 legt nur den Block an) |
-| Generationen | Zahl der Runden | 1 bis 6 |
+| Generationen (max) | höchstens so viele Runden; gelöst endet der Lauf früher | 1 bis 10 |
+| Verbesserungsrunden | Generationen nach der ersten korrekten Lösung | 0 bis 3 |
 | Beiträge je Agent | Beiträge pro Agent und Generation | 1 bis 3 |
 | Teilnehmer | wer die Agenten stellt | 1 bis 4 |
 
-## Teilnehmer gegeneinander {#contenders}
+## Zusammenarbeit {#teamwork}
 
-Unter **Teilnehmer** kreuzt du an, wer antritt: die **Skript-Agenten** und jedes erlaubte Modell. Die Agenten eines Laufs werden den Teilnehmern **reihum** zugeteilt: Agent 0 dem ersten, Agent 1 dem zweiten, und so weiter. So kann zum Beispiel \`mistral/codestral-latest\` gegen das neueste Haiku und gegen die Skript-Agenten als Vergleich antreten.
+Vor jedem Beitrag bekommt ein Modell-Agent:
 
-Das Panel **Wertung je Teilnehmer** (rechts) zeigt je Teilnehmer, wie viele Beiträge korrekt waren und welche beste Zeit erreicht wurde.
+- die **Aufgabe mit den Testfällen** (genaue Aufrufe und erwartete Ergebnisse, gegebenenfalls die Prüfregel),
+- eine **Rolle** und den Versuch, an dem er arbeiten soll,
+- die **besten bisherigen Versuche** des Teams mit Code, bestandenen Fällen und Fehlern,
+- die **Notizen des Teams**.
+
+| Rolle | Kachel | Was der Agent tut |
+|---|---|---|
+| reparieren | 🔧 | nimmt einen Versuch, der nahe dran ist (meiste bestandene Fälle), und behebt anhand der Testergebnisse, was fehlschlägt |
+| neuer Ansatz | 🧭 | probiert einen anderen Weg; jeder dritte Agent, und alle, solange es noch nichts gibt |
+| verbessern | ⚡ | macht eine korrekte Lösung schneller oder einfacher, ohne sie falsch zu machen |
+
+Die Ziele wechseln reihum über die besten Versuche, damit nicht alle am selben arbeiten. Nach seinem Code kann ein Agent eine **Notiz** für das Team hinterlassen, etwa „die Funktion bekommt keine Argumente“. Die nächsten Agenten lesen sie. Jede Kachel zeigt, auf wessen Versuch sie aufbaut (↳).
+
+Der Lauf endet, sobald die Aufgabe **gelöst** ist und die **Verbesserungsrunden** vorbei sind, spätestens nach der höchsten Zahl Generationen.
+
+## Teilnehmer {#contenders}
+
+Unter **Teilnehmer** kreuzt du an, wer mitarbeitet: die **Skript-Agenten** und jedes erlaubte Modell. Die Agenten eines Laufs werden den Teilnehmern **reihum** zugeteilt: Agent 0 dem ersten, Agent 1 dem zweiten, und so weiter. So arbeiten zum Beispiel \`mistral/codestral-latest\` und das neueste Haiku im selben Team und bauen auf den Versuchen des jeweils anderen auf.
+
+Das Panel **Beiträge je Teilnehmer** (rechts) zeigt je Teilnehmer, wie viele Beiträge korrekt waren und welche beste Zeit erreicht wurde.
 
 ## Skript-Agenten {#scripted}
 
@@ -249,15 +293,15 @@ Die Skript-Agenten brauchen kein Modell. Sie reichen handgeschriebene Varianten 
 
 ## Modell-Agenten {#model-agents}
 
-Modell-Agenten schreiben den JavaScript-Code selbst. Sie sehen die Aufgabe und den bisher besten Code samt Zeit und sollen ihn schlagen. Jeder Agent bekommt einen eigenen Stil (einfach, asymptotisch schnell, Mikro-Optimierung, ungewöhnlich), damit die Beiträge nicht auf eine Antwort zusammenfallen. Details: [Modell-Agenten](help.topic.model_agents#overview).
+Modell-Agenten schreiben den JavaScript-Code selbst, als Team (siehe [Zusammenarbeit](#teamwork)). Jeder Agent bekommt zusätzlich einen eigenen Stil (einfach, asymptotisch schnell, Mikro-Optimierung, ungewöhnlich), damit die Beiträge nicht auf eine Antwort zusammenfallen. Details: [Modell-Agenten](help.topic.model_agents#overview).
 
 ## Wann endet ein Lauf? {#ending}
 
-Ein Lauf endet, wenn **alle eingestellten Generationen** beigetragen und bewertet sind, oder bei **Stoppen**. Ein „gut genug"-Kriterium gibt es nicht; auch ein schon feststehendes Ergebnis beendet den Lauf nicht vorzeitig.
+Ein Lauf endet, wenn die Aufgabe **gelöst** ist und danach die eingestellten **Verbesserungsrunden** gelaufen sind, spätestens nach der **höchsten Zahl Generationen**, oder bei **Stoppen**. Die letzte Protokollzeile sagt, in welcher Generation gelöst wurde, oder welcher Versuch am nächsten dran war (bestandene Fälle).
 
 ## Eigener Code während und nach dem Lauf {#human}
 
-Code, den du über **Eigener Code** einreichst, läuft durch dieselbe Sandbox wie die Agenten, jederzeit: auch während oder nach einem Lauf. Er zählt für Rangliste und besten Code des **aktiven Blocks**. Agenten späterer Generationen sehen einen neuen Bestwert und versuchen, ihn zu schlagen. Eingereichter Code geht immer in den aktiven Block.
+Code, den du über **Eigener Code** einreichst, läuft durch dieselbe Sandbox wie die Agenten, jederzeit: auch während oder nach einem Lauf. Er zählt für Rangliste und besten Code des **aktiven Blocks**. Agenten späterer Generationen sehen ihn mit seinen Testergebnissen und bauen darauf auf, wie auf die Versuche der anderen Agenten. Eingereichter Code geht immer in den aktiven Block.
 
 ## Siehe auch {#see-also}
 
@@ -265,22 +309,42 @@ Code, den du über **Eigener Code** einreichst, läuft durch dieselbe Sandbox wi
 - [Modell-Agenten](help.topic.model_agents#overview)`,
 			en: `## Overview {#overview}
 
-A **run** lets agents deliver code to the active block over several **generations**. In every generation each agent delivers its contributions; only when all are judged does the next one begin.
+A **run** is **teamwork**, not a race: agents work together on the task of the active block over several **generations**. Every generation sees all attempts so far with their test results and builds on them; only when all contributions of a generation are judged does the next one start.
 
 ## Settings {#settings}
 
 | Setting | Meaning | Limit |
 |---|---|---|
 | Agents | number of agents | 0 to 8 (0 only creates the block) |
-| Generations | number of rounds | 1 to 6 |
+| Generations (max) | at most this many rounds; once solved the run ends earlier | 1 to 10 |
+| Improvement rounds | generations after the first correct solution | 0 to 3 |
 | Contributions per agent | contributions per agent and generation | 1 to 3 |
 | Contenders | who provides the agents | 1 to 4 |
 
-## Contenders against each other {#contenders}
+## Teamwork {#teamwork}
 
-Under **Contenders** you tick who takes part: the **scripted agents** and every allowed model. The agents of a run are assigned to the contenders **in turn**: agent 0 to the first, agent 1 to the second, and so on. So \`mistral/codestral-latest\` can run against the newest Haiku and against the scripted agents as a baseline.
+Before every contribution a model agent gets:
 
-The **Standings per contender** panel (right) shows, per contender, how many contributions were correct and the best time reached.
+- the **task with its test cases** (the exact calls and expected results, and the check rule if there is one),
+- a **role** and the attempt to work on,
+- the team's **best attempts so far** with code, cases passed and errors,
+- the **team notes**.
+
+| Role | Tile | What the agent does |
+|---|---|---|
+| repair | 🔧 | takes an attempt that got close (most cases passed) and fixes what fails, guided by the test results |
+| new approach | 🧭 | tries another way; every third agent, and all of them while there is nothing yet |
+| improve | ⚡ | makes a correct solution faster or simpler without breaking it |
+
+Targets rotate over the best attempts, so not everyone works on the same one. After its code an agent may leave a **note** for the team, e.g. "the function takes no arguments"; the next agents read it. Every tile shows whose attempt it builds on (↳).
+
+The run ends once the task is **solved** and the **improvement rounds** are over, at the latest after the maximum number of generations.
+
+## Contenders {#contenders}
+
+Under **Contenders** you tick who works in the run: the **scripted agents** and every allowed model. The agents of a run are assigned to the contenders **in turn**: agent 0 to the first, agent 1 to the second, and so on. So, for example, \`mistral/codestral-latest\` and the newest Haiku work in the same team and build on each other's attempts.
+
+The **Contributions per contender** panel (right) shows, per contender, how many contributions were correct and the best time reached.
 
 ## Scripted agents {#scripted}
 
@@ -288,15 +352,15 @@ The scripted agents need no model. They hand in hand-written variants: slow ones
 
 ## Model agents {#model-agents}
 
-Model agents write the JavaScript code themselves. They see the task and the best code so far with its time and should beat it. Each agent gets its own style (simple, asymptotically fast, micro-optimised, unusual) so the contributions do not collapse onto one answer. Details: [Model agents](help.topic.model_agents#overview).
+Model agents write the JavaScript code themselves, as a team (see [Teamwork](#teamwork)). Each agent also gets its own style (simple, asymptotically fast, micro-optimised, unusual), so the contributions do not collapse onto one answer. Details: [Model agents](help.topic.model_agents#overview).
 
 ## When does a run end? {#ending}
 
-A run ends when **all configured generations** have been contributed and judged, or on **Stop**. There is no "good enough" criterion; a result that already stands does not end the run early either.
+A run ends once the task is **solved** and the configured **improvement rounds** have run after it, at the latest after the **maximum number of generations**, or on **Stop**. The last log line says in which generation it was solved, or which attempt got closest (cases passed).
 
 ## Your own code during and after a run {#human}
 
-Code you hand in under **Your code** goes through the same sandbox as the agents', at any time: also during or after a run. It counts for the leaderboard and the best code of the **active block**. Agents of later generations see a new best and try to beat it. Handed-in code always goes to the active block.
+Code you hand in under **Your code** goes through the same sandbox as the agents', at any time: also during or after a run. It counts for the leaderboard and the best code of the **active block**. Agents of later generations see it with its test results and build on it, like on the other agents' attempts. Handed-in code always goes to the active block.
 
 ## See also {#see-also}
 
@@ -338,7 +402,9 @@ Die Sandbox ist QuickJS (WebAssembly) aus \`@earendil-works/pi-codemode\`. Sie h
 Zuerst werden die **Testfälle** geprüft, dann läuft der Benchmark mit einer großen Eingabe: seine Zeit wird gemessen und sein Ergebnis ebenfalls geprüft. Code, der nur die kleinen Fälle richtig hat, gewinnt also nicht. Das Ergebnis ist:
 
 - **korrekt** mit der gemessenen Zeit in Millisekunden,
-- **falsch**, mit dem ersten fehlgeschlagenen Fall, einem Fehler oder „Zeit überschritten".
+- **falsch**, mit der Zahl der bestandenen Fälle (z. B. 3/5) und je Fall dem gelieferten und dem erwarteten Ergebnis oder dem Fehler, oder „Zeit überschritten".
+
+Geprüft werden **alle** Fälle, nicht nur bis zum ersten Fehler. So sieht man (und sehen die Agenten), wie nahe ein Versuch an der Lösung ist und woran er scheitert.
 
 **Bester Code** ist der schnellste korrekte Beitrag eines Blocks; bei gleicher Zeit gewinnt der frühere. Die Zeit ist Wandzeit und schwankt etwas von Lauf zu Lauf.
 
@@ -348,7 +414,8 @@ Zuerst werden die **Testfälle** geprüft, dann läuft der Benchmark mit einer g
 |---|---|
 | wartet | gestrichelter Rand, „…" |
 | korrekt | grüner Rand, Zeit in ms |
-| falsch | roter Rand, ✗ (der Grund steht beim Überfahren und im aufgeklappten Code) |
+| teilweise | gelber Rand, bestandene Fälle wie 3/5 |
+| falsch | roter Rand, ✗ oder 0/5 (die Gründe je Fall stehen im aufgeklappten Code) |
 | bester | ★ in der Ecke |
 
 ## Code ausführen {#run}
@@ -393,7 +460,9 @@ The sandbox is QuickJS (WebAssembly) from \`@earendil-works/pi-codemode\`. It ha
 The **test cases** are checked first, then the bench runs on a large input: its time is measured and its result is checked as well, so code that is only right on the small cases does not win. The result is:
 
 - **correct**, with the measured time in milliseconds,
-- **wrong**, with the first failing case, an error, or "time exceeded".
+- **wrong**, with the number of cases passed (e.g. 3/5) and per case the result and the expected one, or the error, or "time exceeded".
+
+**All** cases are checked, not only up to the first failure. So you (and the agents) see how close an attempt is to the solution and where it fails.
 
 The **best code** is the fastest correct contribution of a block; on equal time the earlier one wins. The time is wall-clock time and varies a little from run to run.
 
@@ -403,7 +472,8 @@ The **best code** is the fastest correct contribution of a block; on equal time 
 |---|---|
 | waiting | dashed border, "…" |
 | correct | green border, time in ms |
-| wrong | red border, ✗ (the reason is in the tooltip and in the unfolded code) |
+| partly | yellow border, cases passed such as 3/5 |
+| wrong | red border, ✗ or 0/5 (the reasons per case are in the unfolded code) |
 | best | ★ in the corner |
 
 ## Running code {#run}
@@ -446,14 +516,15 @@ Wählbar sind nur \`codestral-latest\` (Mistral) und das neueste Haiku, sofern v
 |---|---|
 | Parallele Aufrufe | 2 (weitere warten auf einen freien Platz) |
 | Aufrufe pro Minute | \`CODEMODE_LLM_PER_MIN\`, Standard 20, für alle Teilnehmer zusammen |
-| Ausgabe je Aufruf | höchstens 700 Token |
-| Zeit je Aufruf | 45 Sekunden |
+| Aufrufe pro Tag | \`CODEMODE_LLM_PER_DAY\`, Standard 500 |
+| Ausgabe je Aufruf | höchstens 1500 Token (Code und eine Notiz) |
+| Zeit je Aufruf | 60 Sekunden |
 
-Sind das Minutenlimit oder das Modell nicht verfügbar, fällt der Agent auf eine **Skript-Variante** zurück (der Grund steht als Hinweis im Lauf-Panel). Bei eigenen Aufgaben, die keine Skript-Varianten haben, liefert der Agent dann einfach nichts.
+Ist das Minutenlimit erreicht, **wartet** der Agent auf die nächste Minute. Ist das Tageslimit erreicht oder das Modell nicht verfügbar, fällt der Agent auf eine **Skript-Variante** zurück (der Grund steht als Hinweis im Lauf-Panel). Bei eigenen Aufgaben, die keine Skript-Varianten haben, liefert der Agent dann nichts.
 
 ## Kosten {#cost}
 
-Jeder Beitrag eines Modell-Agenten kostet Token (größenordnungsmäßig einige Hundert je Aufruf). Starte Läufe mit Modellen bewusst: Agenten × Generationen × Beiträge je Agent ergibt die Zahl der Aufrufe.
+Jeder Beitrag eines Modell-Agenten kostet Token: einige Tausend je Aufruf, denn der Agent liest die Versuche des Teams mit. Starte Läufe mit Modellen bewusst: Agenten × Generationen × Beiträge je Agent ist die höchste Zahl der Aufrufe; ein gelöster Lauf endet früher.
 
 ## Siehe auch {#see-also}
 
@@ -477,14 +548,15 @@ Only \`codestral-latest\` (Mistral) and the newest Haiku can be chosen, where av
 |---|---|
 | Parallel calls | 2 (more wait for a free slot) |
 | Calls per minute | \`CODEMODE_LLM_PER_MIN\`, default 20, for all contenders together |
-| Output per call | at most 700 tokens |
-| Time per call | 45 seconds |
+| Calls per day | \`CODEMODE_LLM_PER_DAY\`, default 500 |
+| Output per call | at most 1500 tokens (code and a note) |
+| Time per call | 60 seconds |
 
-If the per-minute limit is reached or the model is unavailable, the agent falls back to a **scripted variant** (the reason appears as a note in the run panel). For custom tasks, which have no scripted variants, the agent then simply delivers nothing.
+When the per-minute limit is reached the agent **waits** for the next minute. When the daily limit is reached or the model is unavailable, the agent falls back to a **scripted variant** (the reason appears as a note in the run panel). For custom tasks, which have no scripted variants, the agent then delivers nothing.
 
 ## Cost {#cost}
 
-Every contribution of a model agent costs tokens (in the order of a few hundred per call). Start runs with models deliberately: agents × generations × contributions per agent gives the number of calls.
+Every contribution of a model agent costs tokens: a few thousand per call, since the agent reads the team's attempts. Start runs with models deliberately: agents × generations × contributions per agent is the most calls; a solved run ends earlier.
 
 ## See also {#see-also}
 
@@ -780,10 +852,10 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`GET /api/llm\` | verfügbare Modelle |
 | \`POST /api/llm\` | Modell-Agenten an/aus, Standardmodell: \`{on,model}\`; nur mit Header \`x-admin-token\` |
 | \`GET /api/sessions/:id\` | Zustand eines Raums (Blöcke, Chat, Lauf); in großen Räumen fehlt manchem Beitrag der Code (\`sourceOmitted\`) |
-| \`GET /api/sessions/:id/source/:candidateId\` | der Code eines Beitrags: \`{source}\` |
+| \`GET /api/sessions/:id/source/:candidateId\` | Code, Testergebnisse und Herkunft eines Beitrags: \`{source, cases, passed, total, role, basedOn}\` |
 | \`POST /api/sessions/:id/exec\` | einen Beitrag ausführen: \`{candidateId, call?}\`; Antwort als NDJSON-Strom (\`start\`, \`case\`, \`log\`, \`value\`, \`error\`, \`end\`), Abbruch der Anfrage stoppt den Lauf |
-| \`POST /api/sessions/:id/task\` | neuen Block anlegen: \`{taskId}\` oder \`{custom:{fn,prompt,cases}}\` |
-| \`POST /api/sessions/:id/run\` | Lauf starten: \`{agents,gens,perAgent,contenders}\` |
+| \`POST /api/sessions/:id/task\` | neuen Block anlegen: \`{taskId}\` oder \`{custom:{fn,prompt,cases,check?}}\` |
+| \`POST /api/sessions/:id/run\` | Lauf starten: \`{agents,gens,perAgent,polish,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | Lauf stoppen |
 | \`POST /api/sessions/:id/code\` | Code einreichen: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | Block löschen: \`{blockId}\` |
@@ -827,10 +899,10 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`GET /api/llm\` | available models |
 | \`POST /api/llm\` | model agents on/off, default model: \`{on,model}\`; only with the header \`x-admin-token\` |
 | \`GET /api/sessions/:id\` | state of a room (blocks, chat, run); in large rooms some contributions come without code (\`sourceOmitted\`) |
-| \`GET /api/sessions/:id/source/:candidateId\` | the code of one contribution: \`{source}\` |
+| \`GET /api/sessions/:id/source/:candidateId\` | code, test results and lineage of a contribution: \`{source, cases, passed, total, role, basedOn}\` |
 | \`POST /api/sessions/:id/exec\` | run a contribution: \`{candidateId, call?}\`; answered as an NDJSON stream (\`start\`, \`case\`, \`log\`, \`value\`, \`error\`, \`end\`); closing the request stops the run |
-| \`POST /api/sessions/:id/task\` | create a block: \`{taskId}\` or \`{custom:{fn,prompt,cases}}\` |
-| \`POST /api/sessions/:id/run\` | start a run: \`{agents,gens,perAgent,contenders}\` |
+| \`POST /api/sessions/:id/task\` | create a block: \`{taskId}\` or \`{custom:{fn,prompt,cases,check?}}\` |
+| \`POST /api/sessions/:id/run\` | start a run: \`{agents,gens,perAgent,polish,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | stop the run |
 | \`POST /api/sessions/:id/code\` | hand in code: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | delete a block: \`{blockId}\` |

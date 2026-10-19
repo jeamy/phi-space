@@ -105,9 +105,21 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .tile--open { outline: 2px solid var(--accent); }
 .tile__who { font-weight: 700; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile__via { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile__result { font: 700 22px/1.1 var(--font-mono); text-align: center; }
+.tile__result { font: 700 22px/1.1 var(--font-mono); text-align: center; white-space: nowrap; }
 .tile--ok .tile__result { color: var(--success); }
 .tile--bad .tile__result { color: var(--danger); }
+.tile--part { border-color: color-mix(in srgb, var(--warning) 60%, var(--line-strong)); }
+.tile--part .tile__result { color: var(--warning); }
+.tile__lineage { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* teamwork: the check rule, the team's notes, case results and lineage of an unfolded contribution */
+.rule { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+.rule code { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.notes { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--raised); border-radius: 0 8px 8px 0; font-size: 13px; display: grid; gap: 4px; }
+.notes__title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.notes .muted, .lineage { color: var(--muted); font-size: 12px; }
+.cases { padding: 6px 10px; background: var(--code-bg); border-bottom: 1px solid var(--line); font: 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; }
+.cases .ok { color: var(--success); }
+.cases .bad { color: var(--danger); }
 .tile__meta { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile__star { position: absolute; top: 6px; right: 8px; color: var(--accent); }
 .codecard { margin-top: 10px; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }

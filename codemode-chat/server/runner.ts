@@ -70,6 +70,8 @@ const __msg = (e) => __String(e && e.message !== undefined ? e.message : e);
 const __console = {};
 for (const level of ["log", "info", "warn", "error", "debug"]) __console[level] = (...a) => { __emit({ t: "log", level, text: a.map(__show).join(" ") }); };
 const __cases = ${JSON.stringify(task.cases)};
+const __rule = ${task.check !== undefined ? `__eval(${JSON.stringify(`(${task.check}
+)`)})` : "null"}; // the task's check rule, if any (a run is not scored)
 let __fn;
 try { __fn = __eval(${JSON.stringify(script)})(__console); } catch (e) { __emit({ t: "error", text: __msg(e) }); return; }
 if (typeof __fn !== "function") { __emit({ t: "error", text: "no function ${task.fn}" }); return; }
@@ -78,8 +80,9 @@ for (let __i = 0; __i < __cases.length; __i++) {
 	try {
 		let got = __apply(__fn, undefined, __c.args);
 		if (got && typeof got.then === "function") got = await got;
-		__emit({ t: "case", call, ok: __eq(got, __c.expect), got: __show(got), expect: __show(__c.expect) });
-	} catch (e) { __emit({ t: "case", call, ok: false, error: __msg(e), expect: __show(__c.expect) }); }
+		const ok = __rule ? __rule(got, __c.args) === true : __eq(got, __c.expect);
+		__emit({ t: "case", call, ok, got: __show(got), expect: __rule ? "a result the check rule accepts" : __show(__c.expect) });
+	} catch (e) { __emit({ t: "case", call, ok: false, error: __msg(e), expect: __rule ? "a result the check rule accepts" : __show(__c.expect) }); }
 }
 ${call ? `try {
 	let v = __eval(${JSON.stringify(callFn)})(__fn, __console);
