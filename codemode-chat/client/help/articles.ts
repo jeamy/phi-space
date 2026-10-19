@@ -42,8 +42,6 @@ Der Chat nutzt genau diese Mittel: Ein Beitrag wird als Entry hineingelegt, ein 
 - **Läufe mit Agenten:** Skript-Agenten oder echte Modelle liefern über mehrere Generationen Code, auch mehrere Modelle gegeneinander. Siehe [Läufe und Teilnehmer](help.topic.runs_and_contenders#overview).
 - **Eigener Code:** Du reichst jederzeit selbst Code ein; er läuft durch denselben Weg.
 - **Sichere Bewertung:** Fremder Code läuft nur in einer Sandbox ohne Werkzeuge, Dateien und Netz. Siehe [Bewertung und Sandbox](help.topic.judging_and_sandbox#overview).
-- **Zwei Hosts:** Ein zweiter Host (nano) kann die Bewertung auf seiner CPU übernehmen. Siehe [big und nano](help.topic.big_and_nano#overview).
-- **Zwei Sprachen und Themes:** Oberfläche und Hilfe gibt es in Deutsch und Englisch, mit denselben Paletten wie das phi-spaces-Hilfesystem.
 
 ## Einträge im Space {#entries}
 
@@ -79,8 +77,6 @@ The chat uses exactly these means: a contribution is put in as an entry, a judge
 - **Runs with agents:** scripted agents or real models contribute code over several generations, also several models against each other. See [Runs and contenders](help.topic.runs_and_contenders#overview).
 - **Your own code:** you can hand in code at any time; it takes the same path.
 - **Safe judging:** foreign code only runs in a sandbox without tools, files and network. See [Judging and sandbox](help.topic.judging_and_sandbox#overview).
-- **Two hosts:** a second host (nano) can take over judging on its CPU. See [big and nano](help.topic.big_and_nano#overview).
-- **Two languages and themes:** the interface and this help come in German and English, with the same palettes as the phi-spaces help system.
 
 ## Entries in the space {#entries}
 

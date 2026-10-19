@@ -168,3 +168,60 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .article__body th { background: var(--raised); color: var(--text-strong); font-weight: 600; }
 .article__body th[data-help-column="key"], .article__body td:first-child { white-space: nowrap; }
 .article__body blockquote { margin: 12px 0; padding: 4px 14px; border-left: 3px solid var(--accent); color: var(--muted); }
+
+/* "?" field help */
+.panel h2, .contenders legend { display: flex; align-items: center; gap: 6px; }
+.fieldlabel { display: flex; align-items: center; gap: 6px; margin: 8px 0 3px; color: var(--muted); font-size: 12px; }
+input.wide { width: 100%; }
+.tip { all: unset; box-sizing: border-box; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--muted); background: var(--surface); font: 700 11px/1 var(--font-sans); letter-spacing: 0; text-transform: none; cursor: pointer; }
+.tip:hover, .tip.is-open { color: var(--accent-ink); background: var(--accent-fill); border-color: var(--accent-fill); }
+.tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tip__pop { position: fixed; z-index: 30; width: min(300px, calc(100vw - 24px)); padding: 10px 12px; background: var(--raised); color: var(--text); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 12px 34px rgba(0, 0, 0, .4); font-size: 13px; line-height: 1.5; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.tip__title { display: block; color: var(--text-strong); margin-bottom: 4px; }
+.tip__pop p { margin: 0 0 6px; }
+.tip__pop a { color: var(--accent); font-size: 12px; }
+
+/* tablets and phones */
+main > * { min-width: 0; }
+.block__title { min-width: 0; overflow-wrap: anywhere; }
+.board td:first-child { overflow-wrap: anywhere; }
+@media (max-width: 1100px) and (min-width: 761px) {
+  main { grid-template-columns: 270px minmax(0, 1fr); }
+  main > aside:last-of-type { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 14px; align-items: start; }
+}
+@media (max-width: 760px) {
+  header.top { position: static; padding: 8px 12px; gap: 8px; }
+  .brand { font-size: 13px; }
+  header.top > .pill:not(.pill--accent) { display: none; }
+  .theme-controls { flex-wrap: wrap; order: 5; } /* the help link stays in the first row */
+  main { padding: 10px 12px; gap: 10px; }
+  .panel { padding: 10px; margin-bottom: 10px; }
+  h1 { font-size: 19px; }
+  /* 16px keeps iOS from zooming into a field on focus */
+  input, select, textarea { font-size: 16px; }
+  textarea { font-size: 14px; }
+  .row select, .row .btn { flex: 1 1 auto; }
+  .btn { padding: 8px 14px; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .tile { padding: 8px; }
+  .tile__result { font-size: 18px; }
+  .block__head { padding: 10px; }
+  .block__del { padding: 0 12px; }
+  pre.code { font-size: 12px; max-height: 280px; }
+  .system-bar { padding: 8px 12px; }
+  .modal__actions { flex-wrap: wrap; }
+  .modal__actions .btn { flex: 1 1 auto; }
+  /* help pages: articles as chips on top, search on its own row */
+  .help__search { order: 10; flex: 1 1 100%; width: auto; }
+  .help__nav { padding: 10px 12px; }
+  .help__section { display: flex; flex-wrap: wrap; gap: 6px; }
+  .help__sectionlabel { flex: 1 1 100%; margin: 8px 0 0; }
+  .help__link { display: inline-block; padding: 5px 10px; border-color: var(--line-strong); font-size: 13px; }
+  .article { padding: 14px 12px 40px; }
+  .article h1 { font-size: 22px; }
+}
+@media (pointer: coarse) {
+  .tip { width: 26px; height: 26px; font-size: 13px; }
+  .check { padding: 6px 0; }
+  .check input { width: 18px; height: 18px; }
+}

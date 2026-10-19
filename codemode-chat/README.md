@@ -95,6 +95,10 @@ middle, the table of contents on the right, a search box and addresses like
 check that both languages exist and that every link and anchor resolves. The top bar of the chat and of the help has
 the same controls as the help system: language (DE/EN), dark/light mode and the color palettes, remembered per browser.
 
+Every field in the chat has a small `?`: a click opens a short description with a link to the matching help section
+(texts in `client/lib/tips.ts`). Below 760 px the page switches to one column for phones (no sticky header, 16 px
+fields so iOS does not zoom, help articles as chips); between 760 and 1100 px it uses two columns.
+
 ## Contenders: several models against each other
 
 The run panel lists the **contenders** as checkboxes: the scripted agents and every allowed model. Tick up to four;
