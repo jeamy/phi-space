@@ -11,14 +11,14 @@ type Message = { author: string; text: string; ts: number };
 type Snapshot = {
 	session: string; task: { id: string; fn: string; title: L; prompt: L; cases?: number }; tasks: { id: string; title: L }[];
 	messages: Message[]; contributions: Contribution[]; best: { candidateId: string; ms: number; source: string } | null;
-	run: { active: boolean; mode: string; gen: number; gens: number; agents: number; perAgent: number; note?: string } | null;
+	run: { active: boolean; mode: string; contenders?: string[]; gen: number; gens: number; agents: number; perAgent: number; note?: string } | null;
 };
 type Llm = { enabled: boolean; on: boolean; current: string | null; models: { id: string; label: string }[] };
 type Shard = { shard: string; up: boolean; host: { name: string; cpu: string; cores: number; memGiB: number } | null; judged: number | null };
 
 const T = {
-	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jeder Beitrag ist ein Eintrag im Space; die Codemode-Sandbox bewertet ihn. Gezeigt wird der Code jedes Beitrags.", task: "Aufgabe", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", mode: "Agenten", scripted: "skriptgesteuert", llm: "Modell", start: "Lauf starten", stop: "Stoppen", custom: "Eigene Aufgabe", fn: "Funktionsname", cases: "Testfälle (JSON: [{\"args\":[2],\"expect\":4}])", useTask: "Aufgabe setzen", yours: "Eigener Code", submit: "Code einreichen", you: "Name", say: "Nachricht", send: "Senden", board: "Rangliste", best: "Bester Code", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar" },
-	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every contribution is an entry in the space; the codemode sandbox judges it. The code of each contribution is shown.", task: "Task", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", mode: "Agents", scripted: "scripted", llm: "model", start: "Start run", stop: "Stop", custom: "Custom task", fn: "Function name", cases: "Test cases (JSON: [{\"args\":[2],\"expect\":4}])", useTask: "Set task", yours: "Your code", submit: "Submit code", you: "Name", say: "Message", send: "Send", board: "Leaderboard", best: "Best code", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable" },
+	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jeder Beitrag ist ein Eintrag im Space; die Codemode-Sandbox bewertet ihn. Gezeigt wird der Code jedes Beitrags.", task: "Aufgabe", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", mode: "Agenten", scripted: "skriptgesteuert", llm: "Modell", start: "Lauf starten", stop: "Stoppen", custom: "Eigene Aufgabe", fn: "Funktionsname", cases: "Testfälle (JSON: [{\"args\":[2],\"expect\":4}])", useTask: "Aufgabe setzen", yours: "Eigener Code", submit: "Code einreichen", you: "Name", say: "Nachricht", send: "Senden", board: "Rangliste", best: "Bester Code", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", standings: "Wertung je Teilnehmer", versus: "gegeneinander", pick: "Mindestens ein Teilnehmer", correctN: "korrekt", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)" },
+	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every contribution is an entry in the space; the codemode sandbox judges it. The code of each contribution is shown.", task: "Task", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", mode: "Agents", scripted: "scripted", llm: "model", start: "Start run", stop: "Stop", custom: "Custom task", fn: "Function name", cases: "Test cases (JSON: [{\"args\":[2],\"expect\":4}])", useTask: "Set task", yours: "Your code", submit: "Submit code", you: "Name", say: "Message", send: "Send", board: "Leaderboard", best: "Best code", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", taskText: "Task description (what should the function do?)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", standings: "Standings per contender", versus: "versus", pick: "Pick at least one contender", correctN: "correct", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)" },
 } as const;
 
 const store = (k: string, v?: string): string | null => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); return v; } catch { return null; } };
@@ -64,7 +64,8 @@ export function CodemodeChat() {
 	const [code, setCode] = useState("");
 	const [msg, setMsg] = useState("");
 	const [custom, setCustom] = useState({ fn: "", prompt: "", cases: "" });
-	const [params, setParams] = useState({ agents: 4, gens: 3, per: 1, mode: "scripted" });
+	const [params, setParams] = useState({ agents: 4, gens: 3, per: 1 });
+	const [contenders, setContenders] = useState<string[]>(["scripted"]);
 	const t = T[lang];
 	const sid = encodeURIComponent(session);
 
@@ -102,6 +103,21 @@ export function CodemodeChat() {
 		return () => { dead = true; clearInterval(timer); };
 	}, []);
 
+	// A custom task has no scripted variants: as soon as one is active, switch the contenders to the available model(s).
+	const [autoModel, setAutoModel] = useState(false);
+	const customActive = snap?.task.id === "custom";
+	const modelLabels = (llm?.enabled && llm.on ? llm.models.map((m) => m.label) : []).join("|");
+	useEffect(() => {
+		if (!customActive) { setAutoModel(false); return; }
+		const models = modelLabels ? modelLabels.split("|") : [];
+		if (!models.length) return;
+		setContenders((cur) => {
+			const keep = cur.filter((c) => c !== "scripted" && models.includes(c));
+			return keep.length ? keep : [models[0]!];
+		});
+		setAutoModel(true);
+	}, [customActive, modelLabels]);
+
 	const act = useCallback(async (path: string, body: unknown) => {
 		setError("");
 		try { await api(`/sessions/${sid}${path}`, body); } catch (e) { setError((e as Error).message); }
@@ -111,6 +127,7 @@ export function CodemodeChat() {
 	const items: Item[] = [...(snap?.messages ?? []).map((m): Item => ({ ts: m.ts, m })), ...(snap?.contributions ?? []).map((c): Item => ({ ts: c.ts, c }))].sort((a, b) => a.ts - b.ts);
 	const board = (snap?.contributions ?? []).filter((c) => c.ok).sort((a, b) => a.ms! - b.ms!).slice(0, 8);
 	const run = snap?.run;
+	const standings = Object.values((snap?.contributions ?? []).filter((c) => c.via !== "human").reduce<Record<string, { via: string; n: number; ok: number; best: number | null }>>((acc, c) => { const e = (acc[c.via] ??= { via: c.via, n: 0, ok: 0, best: null }); if (c.ok !== null) { e.n++; if (c.ok) { e.ok++; e.best = e.best === null ? c.ms : Math.min(e.best, c.ms!); } } return acc; }, {})).sort((a, b) => (a.best ?? Infinity) - (b.best ?? Infinity));
 	const sendMsg = () => { const text = msg; if (!text.trim()) return; setMsg(""); void act("/message", { author: name, text }); };
 
 	return (
@@ -120,11 +137,7 @@ export function CodemodeChat() {
 				<span className="spacer" />
 				<span className="pill">{t.session}: {session}</span>
 				<span className={"pill" + (live ? " pill--accent" : "")}>{live ? t.live : t.offline}</span>
-				{llm?.enabled ? (
-					<select value={llm.current ?? ""} onChange={(e) => void api<Llm>("/llm", { model: e.target.value }).then(setLlm)}>
-						{llm.models.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
-					</select>
-				) : <span className="pill">{t.off}</span>}
+				<span className="pill">{llm?.enabled ? `${llm.models.length} ${t.llm}` : t.off}</span>
 				<button className="btn" onClick={() => { const n = lang === "de" ? "en" : "de"; setLang(n); store("cm.lang", n); }}>{lang.toUpperCase()}</button>
 				<button className="btn" onClick={() => { const n = mode === "dark" ? "light" : "dark"; setMode(n); store("cm.mode", n); }}>{mode === "dark" ? "☀" : "☾"}</button>
 			</header>
@@ -139,11 +152,11 @@ export function CodemodeChat() {
 							</select>
 						</div>
 						{snap ? <p className="lead">{snap.task.prompt[lang]} <code>{snap.task.fn}</code></p> : null}
-						<details>
+						<details open={snap?.task.id === "custom" || undefined}>
 							<summary>{t.custom}</summary>
 							<div className="row"><input placeholder={t.fn} value={custom.fn} onChange={(e) => setCustom({ ...custom, fn: e.target.value })} /></div>
-							<div className="row"><input style={{ width: "100%" }} placeholder={t.task} value={custom.prompt} onChange={(e) => setCustom({ ...custom, prompt: e.target.value })} /></div>
-							<textarea rows={4} placeholder={t.cases} value={custom.cases} onChange={(e) => setCustom({ ...custom, cases: e.target.value })} />
+							<textarea className="task-field" rows={6} placeholder={t.taskText} value={custom.prompt} onChange={(e) => setCustom({ ...custom, prompt: e.target.value })} />
+							<textarea className="task-field" rows={8} placeholder={t.cases} value={custom.cases} onChange={(e) => setCustom({ ...custom, cases: e.target.value })} />
 							<div className="row"><button className="btn" onClick={() => { let cases: unknown; try { cases = JSON.parse(custom.cases); } catch { setError("JSON?"); return; } void act("/task", { custom: { fn: custom.fn, prompt: custom.prompt, cases } }); }}>{t.useTask}</button></div>
 						</details>
 					</div>
@@ -155,18 +168,22 @@ export function CodemodeChat() {
 								<input id={"r" + k} type="number" min={1} max={k === "agents" ? 8 : k === "gens" ? 6 : 3} value={params[k]} onChange={(e) => setParams({ ...params, [k]: Number(e.target.value) })} />
 							</div>
 						))}
+						<fieldset className="contenders">
+							<legend>{t.contenders}</legend>
+							{[{ id: "scripted", label: t.scriptedAgents, off: snap?.task.id === "custom" }, ...(llm?.models ?? []).map((m) => ({ id: m.label, label: m.label, off: !llm?.enabled || !llm.on }))].map((c) => (
+								<label key={c.id} className="check">
+									<input type="checkbox" disabled={c.off || !!run?.active} checked={contenders.includes(c.id)} onChange={(e) => setContenders((cur) => e.target.checked ? [...cur, c.id].slice(-4) : cur.filter((x) => x !== c.id))} />
+									{c.label}
+								</label>
+							))}
+							{!llm?.enabled ? <div className="notice">{t.noModels}</div> : null}
+							{autoModel && customActive ? <div className="notice">{t.autoModel}</div> : null}
+						</fieldset>
 						<div className="row">
-							<label htmlFor="rmode">{t.mode}</label>
-							<select id="rmode" value={params.mode} onChange={(e) => setParams({ ...params, mode: e.target.value })}>
-								<option value="scripted">{t.scripted}</option>
-								<option value="llm" disabled={!llm?.enabled}>{t.llm}</option>
-							</select>
-						</div>
-						<div className="row">
-							<button className="btn btn--primary" disabled={!!run?.active} onClick={() => void act("/run", { agents: params.agents, gens: params.gens, perAgent: params.per, mode: params.mode, lang })}>{t.start}</button>
+							<button className="btn btn--primary" disabled={!!run?.active || contenders.length === 0} title={contenders.length === 0 ? t.pick : undefined} onClick={() => void act("/run", { agents: params.agents, gens: params.gens, perAgent: params.per, contenders, lang })}>{t.start}</button>
 							<button className="btn" disabled={!run?.active} onClick={() => void act("/stop", {})}>{t.stop}</button>
 						</div>
-						{run ? <div className={"pill" + (run.active ? " pill--accent" : "")}>{run.mode} · {run.gen}/{run.gens}</div> : null}
+						{run ? <div className={"pill" + (run.active ? " pill--accent" : "")}>{(run.contenders ?? [run.mode]).join(` ${t.versus} `)} · {run.gen}/{run.gens}</div> : null}
 						{run?.note ? <div className="notice">{run.note}</div> : null}
 					</div>
 					<div className="panel">
@@ -200,6 +217,12 @@ export function CodemodeChat() {
 						<h2>{t.board}</h2>
 						{board.length ? <table className="board"><tbody>{board.map((c, i) => <tr key={c.candidateId}><td>{i + 1}. {c.author}</td><td>{c.ms} ms</td></tr>)}</tbody></table> : <div className="empty">{t.nobest}</div>}
 					</div>
+					{standings.length > 1 || (standings.length === 1 && standings[0]!.via !== "scripted") ? (
+						<div className="panel">
+							<h2>{t.standings}</h2>
+							<table className="board"><tbody>{standings.map((e, i) => <tr key={e.via}><td>{i + 1}. {e.via}</td><td>{e.ok}/{e.n} {t.correctN} · {e.best === null ? "–" : `${e.best} ms`}</td></tr>)}</tbody></table>
+						</div>
+					) : null}
 					<div className="panel">
 						<h2>{t.best}</h2>
 						{snap?.best ? <pre className="code">{snap.best.source}</pre> : <div className="empty">{t.nobest}</div>}

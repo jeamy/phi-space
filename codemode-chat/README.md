@@ -68,11 +68,19 @@ container uses the host network). Deployment examples (host names are placeholde
 `deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`. Ports 3700/3800 do not collide with the help
 system (3500/3600).
 
+## Contenders: several models against each other
+
+The run panel lists the **contenders** as checkboxes: the scripted agents and every allowed model. Tick up to four;
+the agents of a run are assigned to them in turn (agent 0 to the first, agent 1 to the second, ...), and the
+"Standings per contender" panel shows correct contributions and the best time for each. So `mistral/codestral-latest`
+can run against the newest Haiku and against the scripted baseline in one run. A custom task has no scripted
+variants: as soon as one is active, the page switches the contenders to the available model automatically.
+
 ## Model agents
 
 Off by default. `CODEMODE_CHAT_LLM=1` plus credentials (environment keys or `~/.pi/agent/auth.json`) turns them on;
-the picker offers `codestral-latest` and the newest haiku only. Guards: 2 calls in flight, 12 per minute, 700 output
-tokens per call; when a guard or the model fails, the agent falls back to a scripted variant. Model calls cost tokens.
+only `codestral-latest` and the newest haiku can be chosen. Guards: 2 calls in flight (further agents wait for a slot),
+`CODEMODE_LLM_PER_MIN` calls per minute (default 20), 700 output tokens per call; when a guard or the model fails, the agent falls back to a scripted variant. Model calls cost tokens.
 
 ## Safety notes
 

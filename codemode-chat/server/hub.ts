@@ -7,14 +7,17 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judge, MAX_SOURCE_CHARS, TIMEOUT_MS, type Codemode } from "./judge.ts";
 import { customTask, taskById, TASKS, type Task } from "./tasks.ts";
-import { llmContribution } from "./llm.ts";
+import { llmContribution, llmModels } from "./llm.ts";
 import { hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
 const DAY = 24 * 3600_000;
 const LIMITS = { agents: 8, gens: 6, perAgent: 3, sessions: 50, messages: 500, contributions: 300 };
 export type RunMode = "scripted" | "llm";
-export type RunInfo = { active: boolean; mode: RunMode; gen: number; gens: number; agents: number; perAgent: number; note?: string };
+/** The model side of a run; replaceable in tests. */
+export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution };
+/** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
+export type RunInfo = { active: boolean; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; note?: string };
 export type Contribution = { candidateId: string; taskKey?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
 type Session = {
 	id: string; task: Task; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
@@ -37,7 +40,8 @@ export class CodeChatHub {
 	#remoteDownUntil = 0;
 	#rr = 0;
 	/** `remote`: the nano judge shard (optional); candidates alternate between this host and the shard. */
-	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null } = {}) { this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; }
+	readonly #llm: LlmApi;
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi } = {}) { this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution }; }
 
 	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
 	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
@@ -242,16 +246,22 @@ export class CodeChatHub {
 	}
 
 	/** Generations of agent contributions; model agents fall back to scripted variants when a guard says no. */
-	async startRun(id: string, o: { agents?: number; gens?: number; perAgent?: number; mode?: RunMode; lang?: "de" | "en" }): Promise<void> {
+	async startRun(id: string, o: { agents?: number; gens?: number; perAgent?: number; mode?: RunMode; contenders?: string[]; models?: string[]; lang?: "de" | "en" }): Promise<void> {
 		const s = await this.session(id);
 		if (s.run?.active) throw new Error("A run is already active");
 		if (!this.allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		const agents = Math.min(LIMITS.agents, Math.max(1, Math.floor(Number(o.agents ?? 4)))), gens = Math.min(LIMITS.gens, Math.max(1, Math.floor(Number(o.gens ?? 3)))), perAgent = Math.min(LIMITS.perAgent, Math.max(1, Math.floor(Number(o.perAgent ?? 1))));
-		const mode: RunMode = o.mode === "llm" ? "llm" : "scripted";
-		if (mode === "scripted" && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
-		const run: RunInfo = { active: true, mode, gen: 0, gens, agents, perAgent };
+		// contenders: "scripted" and/or allowed model labels; the older {mode, models} form still works
+		const allowed = await this.#llm.models();
+		let contenders = Array.isArray(o.contenders) ? o.contenders.map(String) : o.mode === "llm" ? (Array.isArray(o.models) && o.models.length ? o.models.map(String) : allowed.slice(0, 1)) : ["scripted"];
+		contenders = [...new Set(contenders)];
+		if (!contenders.length || contenders.length > 4) throw new Error("Choose 1 to 4 contenders");
+		for (const c of contenders) if (c !== "scripted" && !allowed.includes(c)) throw new Error(`Model not available: ${c}`);
+		if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
+		const mode: RunMode = contenders.some((c) => c !== "scripted") ? "llm" : "scripted";
+		const run: RunInfo = { active: true, mode, contenders, gen: 0, gens, agents, perAgent };
 		s.run = run; s.abort = false;
-		await this.message(id, "system", `Run started: ${agents} agents x ${gens} generations (${mode})`);
+		await this.message(id, "system", `Run started: ${agents} agents x ${gens} generations (${contenders.join(" vs ")})`);
 		void (async () => {
 			try {
 				for (let gen = 0; gen < gens && !s.abort && !this.#closed; gen++) {
@@ -260,9 +270,10 @@ export class CodeChatHub {
 					await Promise.all(Array.from({ length: agents }, async (_, a) => {
 						for (let j = 0; j < perAgent; j++) {
 							let source: string | undefined, via = "scripted";
-							if (mode === "llm") {
-								try { const c = await llmContribution({ task: s.task, lang: o.lang ?? "en", agent: a, gen, best }); source = c.source; via = c.model; }
-								catch (e) { run.note = `${(e as Error).message}; scripted agent used`; }
+							const contender = contenders[a % contenders.length]!;
+							if (contender !== "scripted") {
+								try { const c = await this.#llm.contribute({ task: s.task, lang: o.lang ?? "en", agent: a, gen, best, model: contender }); source = c.source; via = c.model; }
+								catch (e) { run.note = `${contender}: ${(e as Error).message}; scripted agent used`; }
 							}
 							source ??= s.task.variants[Math.floor(rnd() * s.task.variants.length)]!;
 							await this.#enqueue(s, `agent-${a}`, via, gen + 1, source);

@@ -13,7 +13,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { createModels } from "@earendil-works/pi-ai/models";
 import { spaces, startService } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
-import { CodeChatHub } from "./hub.ts";
+import { CodeChatHub, type LlmApi } from "./hub.ts";
 import { llmInfo, setLlm } from "./llm.ts";
 import { remoteJudgeSpace } from "./shard.ts";
 import { upgradeWebSocket } from "./ws.ts";
@@ -21,7 +21,7 @@ import { TASKS } from "./tasks.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
 
-export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean } = {}) {
+export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean; llm?: LlmApi } = {}) {
 	const cm = await loadCodemode();
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
 	const registry = createRegistry();
@@ -30,7 +30,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 400 });
 	const remoteSpec = o.remote === undefined ? process.env.CODEMODE_REMOTE : o.remote;
-	const hub = new CodeChatHub(harness, cm, remoteSpec ? { remote: remoteJudgeSpace(remoteSpec), remoteLabel: process.env.CODEMODE_REMOTE_NAME ?? "nano" } : {});
+	const hub = new CodeChatHub(harness, cm, remoteSpec ? { remote: remoteJudgeSpace(remoteSpec), remoteLabel: process.env.CODEMODE_REMOTE_NAME ?? "nano", ...(o.llm ? { llm: o.llm } : {}) } : (o.llm ? { llm: o.llm } : {}));
 	if (remoteSpec) console.log(`[codemode] judge shard configured: ${remoteSpec}`);
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;

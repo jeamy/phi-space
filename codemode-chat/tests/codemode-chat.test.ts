@@ -113,3 +113,25 @@ t("a dead shard falls back to the local judge", async () => {
 		assert.equal(sys.shards[1].up, false);
 	} finally { await srv.close(); }
 });
+
+t("several models compete in one run, assigned to the agents in turn", async () => {
+	const seen: string[] = [];
+	const task = taskById("gcd")!;
+	const llm = {
+		models: async () => ["fake/fast", "fake/slow"],
+		contribute: async (c: { model?: string }) => { seen.push(c.model!); return { source: c.model === "fake/fast" ? task.variants[2]! : task.variants[1]!, model: c.model! }; },
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/vs/task", { taskId: "gcd" });
+		assert.equal((await post(srv.url, "/api/sessions/vs/run", { agents: 3, gens: 1, perAgent: 1, contenders: ["fake/fast", "fake/slow", "scripted"] })).status, 200);
+		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/vs")).json() as any; return s.run && !s.run.active && s.contributions.length === 3 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
+		assert.deepEqual(snap.run.contenders, ["fake/fast", "fake/slow", "scripted"]);
+		assert.deepEqual(snap.contributions.map((c: any) => c.via).sort(), ["fake/fast", "fake/slow", "scripted"]);
+		assert.deepEqual(seen.sort(), ["fake/fast", "fake/slow"]);
+		// unknown model, too many contenders, nothing chosen
+		assert.equal((await post(srv.url, "/api/sessions/vs/run", { contenders: ["nope/model"] })).status, 400);
+		assert.equal((await post(srv.url, "/api/sessions/vs/run", { contenders: ["scripted", "fake/fast", "fake/slow", "a", "b"] })).status, 400);
+		assert.equal((await post(srv.url, "/api/sessions/vs/run", { contenders: [] })).status, 400);
+	} finally { await srv.close(); }
+});
