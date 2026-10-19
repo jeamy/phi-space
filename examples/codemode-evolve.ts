@@ -21,9 +21,13 @@ import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost } from ".
 
 export type Genome = { engine: "trial" | "sieve"; cands: "all" | "odd" | "6k"; divisors: "all" | "half" | "sqrt" | "primes"; early: boolean; edge: "ok" | "off" };
 export type Score = { candidateId: string; ok: boolean; ms: number; error?: string };
-type Scored = Score & { genome: Genome; source: string };
+type Scored = Score & { genome?: Genome; source: string };
+/** What an agent sees when it contributes, and what it hands in: JavaScript source (a genome only for the random agents). */
+export type Best = { genome?: Genome; source: string; ms: number };
+export type Contribution = { source: string; genome?: Genome };
+export type Contributor = (c: { gen: number; agent: number; j: number; best: Best | null; n: number; rand: Rng }) => Promise<Contribution>;
 
-const TIME_N = 5000; // the efficiency measurement runs a larger instance than the correctness check
+export const TIME_N = 5000; // the efficiency measurement runs a larger instance than the correctness check
 const TIMEOUT_MS = 6000; // too slow counts as failed, like a wrong answer
 const HOUR = 3600_000;
 
@@ -133,10 +137,10 @@ export async function evaluator(s: PhiSpaces, cm: CodemodeModule, runId: string,
 		const t = await s.createTransaction(TIMEOUT_MS + 30_000);
 		const c = await s.take({ type: "CodeCandidate", fields: { runId } }, NO_WAIT, { txn: t.id });
 		if (!c) { await s.abort(t.id); return done; }
-		const f = c.fields as { candidateId: string; gen: number; source: string; genome: Genome };
+		const f = c.fields as { candidateId: string; gen: number; source: string; genome?: Genome };
 		const score = await evaluate(cm, f.source, n, f.candidateId);
 		try {
-			await s.write({ type: "CodeScore", fields: { runId, gen: f.gen, ...score, genome: f.genome, source: f.source } as never }, t.id, FOREVER);
+			await s.write({ type: "CodeScore", fields: { runId, gen: f.gen, ...score, ...(f.genome ? { genome: f.genome } : {}), source: f.source } as never }, t.id, FOREVER);
 			await s.commit(t.id);
 			done++;
 		} catch (error) {
@@ -146,12 +150,18 @@ export async function evaluator(s: PhiSpaces, cm: CodemodeModule, runId: string,
 	}
 }
 
-export type Generation = { gen: number; candidates: number; correct: number; bestMs: number | null; genome: Genome | null };
-export type Result = { best: { genome: Genome; source: string; ms: number } | null; history: Generation[] };
+export type Generation = { gen: number; candidates: number; correct: number; bestMs: number | null; genome: Genome | null; candidateId: string | null };
+export type Result = { best: Best | null; history: Generation[] };
+
+/** The seeded random agents: 70 % mutate the best known genome, the rest start from scratch. */
+export const randomContributor: Contributor = async ({ best, rand }) => {
+	const genome = best?.genome && rand() < 0.7 ? mutate(best.genome, rand) : randomGenome(rand);
+	return { genome, source: genomeToSource(genome) };
+};
 
 /** The whole experiment: generations of agent contributions, parallel evaluators, a growing CodeBest. */
-export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: number; gens?: number; perAgent?: number; n?: number; seed?: number; evaluators?: number; log?: (m: string) => void } = {}): Promise<Result> {
-	const { agents = 6, gens = 4, perAgent = 2, n = 100, seed = 1, evaluators = 3, log = () => {} } = o;
+export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: number; gens?: number; perAgent?: number; n?: number; seed?: number; evaluators?: number; contributor?: Contributor; log?: (m: string) => void } = {}): Promise<Result> {
+	const { agents = 6, gens = 4, perAgent = 2, n = 100, seed = 1, evaluators = 3, contributor = randomContributor, log = () => {} } = o;
 	const runId = `primes-${seed}`;
 	const host = new PhiSpaces(h, ctx);
 	const agentRoles = Array.from({ length: agents }, (_, i) => role(h, 100 + i));
@@ -162,12 +172,13 @@ export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: num
 	let best: Result["best"] = null;
 	const history: Generation[] = [];
 	for (let gen = 0; gen < gens; gen++) {
-		const known = best?.genome ?? null; // what the agents can read from CodeBest at the start of the generation
+		const known = best; // what the agents can read from CodeBest at the start of the generation
 		let k = 0;
 		await Promise.all(agentRoles.map(async (a, i) => {
 			for (let j = 0; j < perAgent; j++) {
-				const genome = known && rand() < 0.7 ? mutate(known, rand) : randomGenome(rand);
-				await a.write({ type: "CodeCandidate", fields: { runId, gen, candidateId: `g${gen}-a${i}-${j}`, agent: i, genome: genome as never, source: genomeToSource(genome) } }, null, HOUR);
+				const c = await contributor({ gen, agent: i, j, best: known, n, rand }).catch((e) => { log(`agent ${i} failed: ${(e as Error).message}`); return null; });
+				if (!c) continue;
+				await a.write({ type: "CodeCandidate", fields: { runId, gen, candidateId: `g${gen}-a${i}-${j}`, agent: i, ...(c.genome ? { genome: c.genome as never } : {}), source: c.source } as never }, null, HOUR);
 				k++;
 			}
 		}));
@@ -176,11 +187,11 @@ export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: num
 		const winners = scores.filter((s) => s.ok).sort((a, b) => a.ms - b.ms || a.source.length - b.source.length);
 		const top = winners[0];
 		if (top && (!best || top.ms < best.ms)) {
-			best = { genome: top.genome, source: top.source, ms: top.ms };
-			await host.write({ type: "CodeBest", fields: { runId, gen, candidateId: top.candidateId, ms: top.ms, genome: top.genome as never, source: top.source } }, null, FOREVER);
+			best = { ...(top.genome ? { genome: top.genome } : {}), source: top.source, ms: top.ms };
+			await host.write({ type: "CodeBest", fields: { runId, gen, candidateId: top.candidateId, ms: top.ms, ...(top.genome ? { genome: top.genome as never } : {}), source: top.source } as never }, null, FOREVER);
 		}
-		history.push({ gen, candidates: k, correct: winners.length, bestMs: top?.ms ?? null, genome: top?.genome ?? null });
-		log(`gen ${gen}: ${winners.length}/${k} correct, fastest ${top ? `${top.ms} ms ${JSON.stringify(top.genome)}` : "none"}`);
+		history.push({ gen, candidates: k, correct: winners.length, bestMs: top?.ms ?? null, genome: top?.genome ?? null, candidateId: top?.candidateId ?? null });
+		log(`gen ${gen}: ${winners.length}/${k} correct, fastest ${top ? `${top.ms} ms ${top.genome ? JSON.stringify(top.genome) : top.candidateId}` : "none"}`);
 	}
 	return { best, history };
 }
@@ -191,7 +202,7 @@ async function main() {
 	if (!cm) { console.log("pi-codemode not found (set PI_CODEMODE_DIR); skipping"); return; }
 	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
 	const r = await evolve(h, cm, { agents: arg("agents", 6), gens: arg("gens", 4), perAgent: arg("per-agent", 2), n: arg("n", 100), seed: arg("seed", 1), log: console.log });
-	console.log(r.best ? `\nbest: ${r.best.ms} ms for ${TIME_N} primes, genome ${JSON.stringify(r.best.genome)}\n\n${r.best.source}` : "\nno correct candidate");
+	console.log(r.best ? `\nbest: ${r.best.ms} ms for ${TIME_N} primes${r.best.genome ? `, genome ${JSON.stringify(r.best.genome)}` : ""}\n\n${r.best.source}` : "\nno correct candidate");
 	await h.close(ctx);
 }
 
