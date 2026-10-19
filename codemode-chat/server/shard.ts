@@ -1,8 +1,16 @@
 // The second ("nano") judge shard: connection helpers shared by the hub (big) and the headless host.
 import os from "node:os";
-import { RemoteSpace, socketTransport, type ListenTarget, type SpaceLike } from "../../src/index.ts";
+import { FOREVER, RemoteSpace, socketTransport, type ListenTarget, type SpaceLike } from "../../src/index.ts";
 
 export const JUDGE_ALIAS = "codemode-judge";
+
+/** How long the entries of a room (blocks, contributions, verdicts, log lines) live: CODEMODE_TTL_HOURS, default 24;
+ *  0 keeps them until their block is deleted. The room caps (blocks, contributions, lines) bound them either way. */
+export function entryLeaseMs(raw = process.env.CODEMODE_TTL_HOURS): number {
+	const hours = raw === undefined || raw.trim() === "" ? 24 : Number(raw);
+	if (!Number.isFinite(hours) || hours < 0) throw new Error(`CODEMODE_TTL_HOURS must be a number of hours >= 0, got ${raw}`);
+	return hours === 0 ? FOREVER : Math.max(60_000, Math.round(hours * 3600_000));
+}
 export type HostFacts = { name: string; cpu: string; cores: number; memGiB: number; platform: string; startedAt: number };
 
 /** `tcp:host:port` or `unix:/path` (the same notation as SWARM_REMOTE / SWARM_LISTEN in the help system). */

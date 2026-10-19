@@ -376,3 +376,14 @@ t("code full of control characters does not blow the frame up (JSON escapes coun
 		assert.equal(mine.author, "a b");
 	} finally { await srv.close(); }
 });
+
+test("CODEMODE_TTL_HOURS: hours to a lease, 0 = no expiry, garbage refused", async () => {
+	const { entryLeaseMs } = await import("../server/shard.ts");
+	const { FOREVER } = await import("../../src/index.ts");
+	assert.equal(entryLeaseMs(undefined), 24 * 3600_000);
+	assert.equal(entryLeaseMs(""), 24 * 3600_000);
+	assert.equal(entryLeaseMs("168"), 168 * 3600_000);
+	assert.equal(entryLeaseMs("0.5"), 1800_000);
+	assert.equal(entryLeaseMs("0"), FOREVER);
+	for (const bad of ["-1", "abc", "Infinity"]) assert.throws(() => entryLeaseMs(bad), bad);
+});

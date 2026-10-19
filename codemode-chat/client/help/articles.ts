@@ -571,6 +571,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_LISTEN\` | nano: Adresse, an der der Shard lauscht |
 | \`CODEMODE_DB\` | nano: Speicher; \`CODEMODE_MEM=1\` = nur im Speicher |
 | \`CODEMODE_JUDGES\` | nano: parallele Richter, Standard 2 |
+| \`CODEMODE_TTL_HOURS\` | Hub und nano: Lebensdauer der Einträge eines Raums in Stunden, Standard 24; \`0\` = bis der Block gelöscht wird |
 | \`CODEMODE_SHARD_BIND\` | Docker nano: Bindung des Shard-Ports, Standard \`127.0.0.1\` (Tunnel); sonst eine interne IP, nie eine öffentliche |
 | \`CODEMODE_ADMIN_TOKEN\` | Hub: Token für \`POST /api/llm\` (Header \`x-admin-token\`); leer = Umschalten aus |
 | \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
@@ -625,6 +626,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_LISTEN\` | nano: address the shard listens on |
 | \`CODEMODE_DB\` | nano: storage; \`CODEMODE_MEM=1\` = in memory only |
 | \`CODEMODE_JUDGES\` | nano: parallel judges, default 2 |
+| \`CODEMODE_TTL_HOURS\` | hub and nano: lifetime of a room's entries in hours, default 24; \`0\` = until the block is deleted |
 | \`CODEMODE_SHARD_BIND\` | Docker nano: bind address of the shard port, default \`127.0.0.1\` (tunnel); else an internal IP, never a public one |
 | \`CODEMODE_ADMIN_TOKEN\` | hub: token for \`POST /api/llm\` (header \`x-admin-token\`); empty = switching off |
 | \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |

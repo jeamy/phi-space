@@ -3,7 +3,8 @@
 // Env (also read from codemode-chat/.env): PORT (3700), CODEMODE_BIND (127.0.0.1), CODEMODE_SQLITE (default .local/codemode-chat.sqlite), CODEMODE_CHAT_LLM=1,
 //      CODEMODE_REMOTE (judge shard on nano: tcp:host:port or unix:/path), CODEMODE_HOST_NAME (name in the system bar),
 //      CODEMODE_ADMIN_TOKEN (switches the model agents via POST /api/llm with the header x-admin-token; unset: switching is off),
-//      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120).
+//      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
+//      CODEMODE_TTL_HOURS (lifetime of a room's entries in hours, default 24; 0 = until the block is deleted).
 import http from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";

@@ -8,10 +8,9 @@ import { NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } 
 import { judgeInSlot, MAX_SOURCE_CHARS, plain, sandboxSlot, TIMEOUT_MS, type Codemode, type Verdict } from "./judge.ts";
 import { customTask, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
 import { llmContribution, llmModels } from "./llm.ts";
-import { hostFacts, type HostFacts } from "./shard.ts";
+import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
-const DAY = 24 * 3600_000;
 const LIMITS = { agents: 8, gens: 6, perAgent: 3, sessions: 50, messages: 500, contributions: 1000, blocks: 60 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
@@ -59,7 +58,9 @@ export class CodeChatHub {
 	#rr = 0;
 	/** `remote`: the nano judge shard (optional); candidates alternate between this host and the shard. */
 	readonly #llm: LlmApi;
-	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi } = {}) { this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution }; }
+	/** Lease of every room entry (CODEMODE_TTL_HOURS). */
+	readonly #ttl: number;
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution }; }
 
 	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
 	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
@@ -149,7 +150,7 @@ export class CodeChatHub {
 	/** Opens a new task block: from now on candidates, scores and the best code belong to it. */
 	async #openBlock(s: Session, task: Task, announce: boolean): Promise<void> {
 		const blockId = `b${Date.now().toString(36)}${(s.seq++).toString(36)}`;
-		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { custom: { fn: task.fn, prompt: task.prompt.en, cases: task.cases } } : {}) } as never }, null, DAY);
+		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { custom: { fn: task.fn, prompt: task.prompt.en, cases: task.cases } } : {}) } as never }, null, this.#ttl);
 		s.task = task; s.best = null; s.blockId = blockId; // only once the block exists
 		if (announce) await this.#write(s, "system", `Task: ${task.title.en} (${task.fn})`, s.blockId);
 	}
@@ -252,7 +253,7 @@ export class CodeChatHub {
 			const old = (await this.host.readAll(tmpl, { limit: LIMITS.messages + 5 })).sort((a, b) => Number((a.fields as { ts: number }).ts) - Number((b.fields as { ts: number }).ts));
 			for (const e of old.slice(0, old.length - LIMITS.messages + 1)) await this.host.take({ id: e.id }, NO_WAIT);
 		}
-		await this.host.write({ type: "ChatMessage", fields: { session: s.id, author, text, ts: Date.now(), ...(blockId ? { blockId } : {}) } }, null, DAY);
+		await this.host.write({ type: "ChatMessage", fields: { session: s.id, author, text, ts: Date.now(), ...(blockId ? { blockId } : {}) } }, null, this.#ttl);
 		this.push(s);
 	}
 
@@ -292,10 +293,10 @@ export class CodeChatHub {
 		const entry = { type: "CodeCandidate", fields: { session: s.id, blockId: s.blockId, taskId: s.task.id, ...(s.task.id === "custom" ? { custom: { fn: s.task.fn, prompt: s.task.prompt.en, cases: s.task.cases } } : {}), candidateId, author, via, gen, source, ts: Date.now() } } as never;
 		// every second candidate goes to the nano shard when it is up; if its write fails the candidate is judged here
 		if (this.#remote && this.remoteUp && this.#rr++ % 2 === 1) {
-			const ok = await this.#rcall(async (r) => { await r.write(entry, null, DAY); return true; });
+			const ok = await this.#rcall(async (r) => { await r.write(entry, null, this.#ttl); return true; });
 			if (ok) { s.remotePending.set(candidateId, { at: Date.now(), blockId: s.blockId }); this.#watchRemote(s); this.push(s); return candidateId; }
 		}
-		await this.#role(100 + (s.seq % 8)).write(entry, null, DAY);
+		await this.#role(100 + (s.seq % 8)).write(entry, null, this.#ttl);
 		this.push(s);
 		this.#kick(s);
 		return candidateId;
@@ -324,7 +325,7 @@ export class CodeChatHub {
 				const v: Verdict | null = gone() ? null : task ? await judgeInSlot(this.cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
 				try {
 					// its block was deleted while it waited or while it was judged: consume it, write nothing
-					if (v && !gone()) await r.write({ type: "CodeScore", fields: { session: s.id, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
+					if (v && !gone()) await r.write({ type: "CodeScore", fields: { session: s.id, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, this.#ttl);
 					await r.commit(t.id);
 				} catch (e) {
 					await r.abort(t.id).catch(() => {});
@@ -345,7 +346,7 @@ export class CodeChatHub {
 			if (!validMs(ms) || blockId !== s.blockId || (s.best && ms >= s.best.ms)) return;
 			s.best = { candidateId, ms, source };
 			while (await this.host.take({ type: "CodeBest", fields: { session: s.id, blockId } }, NO_WAIT));
-			await this.host.write({ type: "CodeBest", fields: { session: s.id, blockId, candidateId, ms, source } }, null, DAY);
+			await this.host.write({ type: "CodeBest", fields: { session: s.id, blockId, candidateId, ms, source } }, null, this.#ttl);
 		});
 		s.bestTail = work;
 		return work;
@@ -379,7 +380,7 @@ export class CodeChatHub {
 			if (Date.now() - p.at <= REMOTE_GRACE_MS) continue;
 			// no verdict in time (the shard's judges may be stuck): take the candidate back and judge it here
 			const back = await this.#rcall((r) => r.take({ type: "CodeCandidate", fields: tmpl }, NO_WAIT));
-			if (back) await this.#role(100 + (s.seq % 8)).write({ type: "CodeCandidate", fields: back.fields } as never, null, DAY);
+			if (back) await this.#role(100 + (s.seq % 8)).write({ type: "CodeCandidate", fields: back.fields } as never, null, this.#ttl);
 			if (back || this.remoteUp) { s.remotePending.delete(candidateId); changed = true; } // shard down: ask again later
 			if (back) this.#kick(s);
 		}

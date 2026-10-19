@@ -6,6 +6,7 @@
 //   CODEMODE_DB=/data/codemode-b.sqlite         (default: codemode-chat/.local/codemode-b.sqlite; CODEMODE_MEM=1 = throwaway)
 //   CODEMODE_HOST_NAME=nano                     name shown in the hub's system bar (default: hostname)
 //   CODEMODE_JUDGES=2                           parallel judge workers
+//   CODEMODE_TTL_HOURS=24                       lifetime of the verdicts (0 = until deleted); the same value as on the hub
 //
 // Hub side (big): CODEMODE_REMOTE=unix:/tmp/codemode-b.sock  or  CODEMODE_REMOTE=tcp:nano:3800
 import { ROOT } from "./env.ts";
@@ -18,14 +19,13 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createSpace, FOREVER, NO_WAIT, PhiSpaces, serveSpace, SpaceService, spaces, StaticIdentity, startService, TransactionError } from "../../src/index.ts";
 import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, type Codemode } from "./judge.ts";
-import { hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
+import { entryLeaseMs, hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
 import { taskFromSpec } from "./tasks.ts";
-
-const DAY = 24 * 3600_000;
 
 export async function startJudgeHost(o: { listen?: string; dbPath?: string | null; judges?: number } = {}) {
 	const cm = await loadCodemode();
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
+	const ttl = entryLeaseMs(); // the verdicts live as long as the hub's entries (CODEMODE_TTL_HOURS)
 	const registry = createRegistry();
 	registry.install(spaces);
 	const storage = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openNodeSqliteStorage(o.dbPath!); })() : new MemoryStorage();
@@ -61,7 +61,7 @@ export async function startJudgeHost(o: { listen?: string; dbPath?: string | nul
 					const task = taskFromSpec(f);
 					const v = task ? await judgeInSlot(cmx, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
 					try {
-						await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
+						await r.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, ttl);
 						await r.commit(t.id);
 					} catch (e) {
 						await r.abort(t.id).catch(() => {});
