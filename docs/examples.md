@@ -43,11 +43,20 @@ npm run example:chat
 npm run example:golomb -- 4 --workers 2
 npm run example:sieve -- 1001 4
 npm run example:cache
+npm run example:codemode-evolve -- --gens 6 --agents 8
 npm run example:blocking
 npm run example:dark-energy
 npm run example:space-chat
 npm run help
 ```
+
+`examples/codemode-evolve.ts` ist ein Experiment nach Art der Monte-Carlo-Methode: Viele zufällige Agentenbeiträge
+(`CodeCandidate`, JavaScript-Quelltext) lösen eine Aufgabe (`CodeTask`: die ersten n Primzahlen). Evaluatoren nehmen
+Kandidaten unter einer Transaktion, führen sie in einer QuickJS-Sandbox von `@earendil-works/pi-codemode` ohne Tools
+aus und schreiben ein `CodeScore` (richtig? wie schnell?); der Host hält das beste Ergebnis als `CodeBest`, auf dem
+die Agenten der nächsten Generation aufbauen. Ohne Modell lauf­fähig (Agenten sind Zufallsgeneratoren mit Seed); ein
+LLM-Agent würde den Quelltext selbst schreiben. Das Paket liegt bei pi-coding-agent und wird nicht installiert:
+`PI_CODEMODE_DIR` wählt den Pfad, fehlt es, wird übersprungen. Gemessene Zeit ist Wandzeit und schwankt.
 
 Live-Beispiele (`examples/chat.ts --live`, `npm run example:arxiv`) benötigen Zugangsdaten und verursachen
 Modellkosten; [live-models.ts](../examples/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden

@@ -20,6 +20,7 @@
     "example:golomb": "node --experimental-strip-types examples/golomb.ts",
     "example:dark-energy": "node --experimental-strip-types examples/dark-energy-research.ts",
     "example:sieve": "node --experimental-strip-types examples/sieve.ts",
+    "example:codemode-evolve": "node --experimental-strip-types examples/codemode-evolve.ts",
     "example:cache": "node --experimental-strip-types examples/cache.ts",
     "example:blocking": "node --experimental-strip-types examples/blocking-tool.ts",
     "example:space-chat": "node --experimental-strip-types help-site/examples/v1-local-memory/run.ts",
