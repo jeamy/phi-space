@@ -31,7 +31,7 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
 - You can **hand in code yourself**; it goes through exactly the same path.
 - A task block can be **deleted** with the bin icon in its header, after a yes/no dialog. This removes everything that
   belongs to it (task, contributions, verdicts on this host and on nano, best code, log lines). A block with a running
-  run cannot be deleted; deleting the active block makes the newest remaining one active (or opens a fresh first task).
+  run cannot be deleted; deleting the active block makes the newest remaining one active; deleting the last one leaves the room empty.
 - Every contribution is a `CodeCandidate` entry. A judge takes it under a transaction, runs it in a QuickJS sandbox
   (`@earendil-works/pi-codemode`: no tools, 5 s timeout (custom tasks choose their own, up to `CODEMODE_MAX_TIMEOUT_S`, default 60 s), 64 MiB heap, at most 2 sandboxes at a time per process) and
   writes a `CodeScore` entry with the verdict (every case: result, expected, error; cases passed), time, judging host

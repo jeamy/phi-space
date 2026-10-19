@@ -173,6 +173,25 @@ t("a custom task without a model has no scripted agents: the run is refused, han
 	} finally { await srv.close(); }
 });
 
+t("deleting the last block leaves the room empty, also after a restart; old deletion lines are cleaned up", async () => {
+	const sqlite = `/tmp/codemode-empty-${process.pid}.sqlite`;
+	const { rm } = await import("node:fs/promises");
+	await rm(sqlite, { force: true });
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: sqlite });
+	try {
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/empty1")).json()) as any;
+		const first = await get();
+		assert.equal(first.blocks.length, 1); // a new room starts with the first catalog task
+		await srv.hub.host.write({ type: "ChatMessage", fields: { session: "empty1", author: "system", text: "Task block deleted: The first n primes", ts: Date.now() } } as never, null, 3_600_000);
+		assert.equal((await post(srv.url, "/api/sessions/empty1/delete", { blockId: first.current })).status, 200);
+		const after = await get();
+		assert.deepEqual([after.blocks.length, after.messages.length], [0, 0]);
+		await srv.close();
+		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: sqlite });
+		assert.equal((await get()).blocks.length, 0); // no replacement block after a restart either
+	} finally { await srv.close(); await rm(sqlite, { force: true }); }
+});
+
 t("deleting a task block removes its entries; the active block moves on; a running block is protected", async () => {
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
 	try {
@@ -193,26 +212,29 @@ t("deleting a task block removes its entries; the active block moves on; a runni
 		assert.deepEqual(afterFirst.blocks.map((b: any) => b.blockId), [second]);
 		assert.equal(afterFirst.current, second);
 		assert.equal(await judged(), 1);
-		assert.ok(afterFirst.messages.some((m: any) => m.text.startsWith("Task block deleted")));
+		assert.ok(!afterFirst.messages.some((m: any) => m.text.startsWith("Task block deleted"))); // no log line: the block is simply gone
 
 		// unknown block
 		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: "nope" })).status, 400);
 
-		// delete the active block: a fresh first task takes over
+		// delete the last block: the room is empty and stays empty (no replacement block, also not when it loads again)
 		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: second })).status, 200);
 		const afterAll = await get();
-		assert.equal(afterAll.blocks.length, 1);
-		assert.equal(afterAll.blocks[0].task.id, "primes");
-		assert.equal(afterAll.blocks[0].contributions.length, 0);
-		assert.notEqual(afterAll.current, second);
+		assert.equal(afterAll.blocks.length, 0);
+		assert.equal(afterAll.current, "");
 		assert.equal(await judged(), 0);
+		assert.equal((await post(srv.url, "/api/sessions/del1/code", { author: "x", source: gcd.variants[2]! })).status, 400); // no task yet
+		assert.equal((await post(srv.url, "/api/sessions/del1/run", { agents: 1, contenders: ["scripted"] })).status, 400);
 
 		// a block with a running run cannot be deleted
+		await post(srv.url, "/api/sessions/del1/task", { taskId: "primes" });
+		const third = (await get()).current;
 		await post(srv.url, "/api/sessions/del1/run", { agents: 2, gens: 3, perAgent: 1, contenders: ["scripted"] });
-		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: afterAll.current })).status, 400);
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: third })).status, 400);
 		await post(srv.url, "/api/sessions/del1/stop", {});
 		await until(async () => { const s = await get(); return s.run && !s.run.active; });
-		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: afterAll.current })).status, 200);
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: third })).status, 200);
+		assert.equal((await get()).blocks.length, 0);
 	} finally { await srv.close(); }
 });
 
@@ -251,9 +273,7 @@ t("a task block from before blockIds existed can be deleted, with its orphaned e
 		assert.equal(snap.blocks[0].task.id, "gcd");
 		assert.equal((await post(srv.url, "/api/sessions/old1/delete", { blockId: snap.blocks[0].blockId })).status, 200);
 		const after = await get();
-		assert.equal(after.blocks.length, 1); // a fresh first task took its place
-		assert.notEqual(after.blocks[0].blockId, snap.blocks[0].blockId);
-		assert.equal(after.blocks[0].task.id, "primes");
+		assert.equal(after.blocks.length, 0); // the room is empty now
 		const sys = (await (await fetch(srv.url + "/api/system")).json()) as any;
 		assert.equal(sys.shards[0].judged, 0); // the orphaned score is gone too
 		assert.ok(!after.messages.some((m: any) => m.text.startsWith("Task: Greatest")));

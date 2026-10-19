@@ -4,6 +4,8 @@
 //   CodeBest     the best correct code of a block (one entry per block, replaced when beaten)
 //   CodeNote     an insight an agent leaves for the team, or a person's hint (`human`; agents follow it first)
 //   CodeVeto     a person's "not like this" on a contribution: it no longer counts as correct, and agents avoid it
+//   CodeRoom     marks a room that exists: only a new room starts with the first catalog task; one whose blocks were
+//                all deleted stays empty
 // Judges take a candidate under a transaction and write its score atomically, like the evolve example. Every score
 // carries how many cases passed and what each case returned, so agents can build on attempts that got close: a run is
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
@@ -143,10 +145,12 @@ export class CodeChatHub {
 	async #load(s: Session): Promise<void> {
 		const last = (await this.#taskEntries(s.id)).at(-1);
 		const task = last ? taskFromSpec(last) : null;
+		const known = !!(await this.host.readIfExists({ type: "CodeRoom", fields: { session: s.id } }, NO_WAIT));
+		if (!known) await this.host.write({ type: "CodeRoom", fields: { session: s.id, ts: Date.now() } }, null, this.#ttl);
 		if (last && task) {
 			s.task = task; s.blockId = String(last.blockId ?? `t${last.ts}`);
 			s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === s.blockId));
-		} else await this.#openBlock(s, TASKS[0]!, false); // a room starts with the first catalog task
+		} else if (!known) await this.#openBlock(s, TASKS[0]!, false); // a new room starts with the first catalog task
 		this.#kick(s); // candidates left from before a restart are judged now, not when the next one arrives
 	}
 
@@ -424,6 +428,7 @@ export class CodeChatHub {
 	}
 
 	async #enqueue(s: Session, author: string, via: string, gen: number, source: string, lineage: { role?: Role; basedOn?: string } = {}): Promise<string> {
+		if (!s.blockId) throw new Error("No task yet: create a task block first");
 		// the cap keeps every read of the room (snapshot, ranking) complete: a read limit never cuts contributions off
 		if ((await this.#contributionCount(s)) >= LIMITS.contributions) throw new Error("This room holds the maximum number of contributions; delete a task block");
 		const candidateId = `${Date.now().toString(36)}-${s.seq++}`;
@@ -599,6 +604,7 @@ export class CodeChatHub {
 		// in between; the run is claimed only after its announcement is written, so a failing write leaves no stuck run
 		const run = await this.#exclusive(s, async () => {
 			if (s.run?.active) throw new Error("A run is already active");
+			if (!s.blockId) throw new Error("No task yet: create a task block first");
 			if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
 			const claimed: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent, polish, solvedGen: s.best ? 0 : null };
 			await this.#write(s, "system", `Run started: ${agents} agents, up to ${gens} generations, ${polish} more after the solution (${contenders.join(" + ")})`, claimed.blockId);
@@ -682,15 +688,19 @@ export class CodeChatHub {
 		}
 		// the shard's candidates of this block are gone: nothing to wait for (a verdict that still arrives is removed by the poll)
 		for (const [candidateId, p] of s.remotePending) if (p.blockId === blockId) s.remotePending.delete(candidateId);
-		if (s.blockId === blockId) { // the active block went away: the newest remaining one takes over, or a fresh first task
+		if (s.blockId === blockId) { // the active block went away: the newest remaining one takes over, or the room is empty
 			const left = (await this.#taskEntries(id)).at(-1);
 			const task = left ? taskFromSpec(left) : null;
 			if (left && task) {
 				s.task = task; s.blockId = String(left.blockId ?? `t${left.ts}`);
 				s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === s.blockId));
-			} else await this.#openBlock(s, TASKS[0]!, false);
+			} else { s.task = TASKS[0]!; s.blockId = ""; s.best = null; }
 		}
-		await this.#write(s, "system", `Task block deleted: ${taskFromSpec(target)?.title.en ?? blockId}`);
+		// the block is simply gone (no log line); lines an older version wrote for deletions go too
+		for (const e of await this.host.readAll({ type: "ChatMessage", fields: { session: id, author: "system" } }, { limit: LIMITS.messages + 5 })) {
+			const f = e.fields as { text?: unknown; blockId?: unknown };
+			if (f.blockId === undefined && typeof f.text === "string" && f.text.startsWith("Task block deleted")) await this.host.take({ id: e.id }, NO_WAIT);
+		}
 	}
 
 	/** A person's hint to the team of a block: the agents of every later turn get it before their own notes. */

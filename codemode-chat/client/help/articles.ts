@@ -169,7 +169,7 @@ Ein Block ist ein einklappbarer Abschnitt: Im Kopf stehen Titel, Funktion, Zahl 
 
 Der **aktive Block** (der neueste) nimmt neue Läufe und eingereichten Code auf. Ältere Blöcke bleiben zum Ansehen erhalten.
 
-Mit dem Papierkorb im Blockkopf löschst du einen Block nach einer Ja/Nein-Rückfrage. Gelöscht wird alles, was dazugehört: Aufgabe, Beiträge, Urteile (auf big und nano), bester Code und Protokollzeilen. Ein Block mit laufendem Lauf kann nicht gelöscht werden. Löschst du den aktiven Block, wird der neueste verbleibende aktiv, oder es entsteht ein frischer Block mit der ersten Aufgabe.
+Mit dem Papierkorb im Blockkopf löschst du einen Block nach einer Ja/Nein-Rückfrage. Gelöscht wird alles, was dazugehört: Aufgabe, Beiträge, Urteile (auf big und nano), bester Code und Protokollzeilen. Ein Block mit laufendem Lauf kann nicht gelöscht werden. Löschst du den aktiven Block, wird der neueste verbleibende aktiv. Löschst du den letzten, ist der Raum leer, bis du eine neue Aufgabe anlegst.
 
 ## Siehe auch {#see-also}
 
@@ -236,7 +236,7 @@ The **leaderboard, standings and best code** on the right belong to the block th
 
 The **active block** (the newest) takes new runs and handed-in code. Older blocks stay for reading.
 
-The bin in the block header deletes a block after a yes/no question. Everything that belongs to it goes: the task, contributions, verdicts (on big and nano), best code and log lines. A block with a running run cannot be deleted. If you delete the active block, the newest remaining one becomes active, or a fresh block with the first task is created.
+The bin in the block header deletes a block after a yes/no question. Everything that belongs to it goes: the task, contributions, verdicts (on big and nano), best code and log lines. A block with a running run cannot be deleted. If you delete the active block, the newest remaining one becomes active. If you delete the last one, the room stays empty until you create a new task.
 
 ## See also {#see-also}
 
