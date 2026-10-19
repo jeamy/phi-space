@@ -2,8 +2,9 @@
 // The evaluators are unchanged: whatever a model writes is data and runs only in the sandbox, which can reach no tool.
 // Costs tokens (about 600 per contribution, agents x generations x per-agent calls), so ask before running it.
 //
-// Run: node --experimental-strip-types examples/codemode-evolve-live.ts [--agents 4] [--gens 3] [--per-agent 1] [--n 100]
+// Run: node --experimental-strip-types examples/codemode-evolve-live.ts [--agents 4] [--gens 3] [--per-agent 1] [--n 100] [--log FILE]
 // PI_PROVIDER / PI_MODEL pick another model; the default is the first Mistral model (codestral-latest if present).
+import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
@@ -52,12 +53,15 @@ ${best ? `The fastest correct solution so far takes ${best.ms} ms for n = ${TIME
 
 async function main() {
 	const arg = (name: string, d: number) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? Number(process.argv[i + 1]) : d; };
+	const logAt = process.argv.indexOf("--log");
+	const logFile = logAt > 0 ? process.argv[logAt + 1]! : `${tmpdir()}/codemode-evolve-live-${Date.now()}.md`;
 	const cm = await loadCodemode();
 	if (!cm) { console.log("pi-codemode not found; skipping"); return; }
 	const { contributor, label, usage } = await mistralContributor();
 	console.log(`agents: ${label}`);
 	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-	const r = await evolve(h, cm, { agents: arg("agents", 4), gens: arg("gens", 3), perAgent: arg("per-agent", 1), n: arg("n", 100), seed: 1, contributor, log: console.log });
+	const r = await evolve(h, cm, { agents: arg("agents", 4), gens: arg("gens", 3), perAgent: arg("per-agent", 1), n: arg("n", 100), seed: 1, contributor, logFile, log: console.log });
+	console.log(`log: ${logFile}`);
 	const u = usage();
 	console.log(`\n${u.calls} model calls, ${u.tokens} tokens`);
 	console.log(r.best ? `best: ${r.best.ms} ms for ${TIME_N} primes\n\n${r.best.source}` : "no correct candidate");

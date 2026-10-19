@@ -12,7 +12,10 @@
 // Entries are data: the evaluator never trusts a candidate, it only runs it in a sandbox that can reach no tool.
 //
 // Needs the `@earendil-works/pi-codemode` dependency; PI_CODEMODE_DIR overrides its location.
+// Every contribution (agent, verdict, time, code) goes to a markdown log: --log FILE (default: a file in the temp directory).
 // Run: node --experimental-strip-types examples/codemode-evolve.ts [--agents 6] [--gens 4] [--per-agent 2] [--n 100] [--seed 1]
+import { appendFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
@@ -153,6 +156,18 @@ export async function evaluator(s: PhiSpaces, cm: CodemodeModule, runId: string,
 export type Generation = { gen: number; candidates: number; correct: number; bestMs: number | null; genome: Genome | null; candidateId: string | null };
 export type Result = { best: Best | null; history: Generation[] };
 
+/** One generation as markdown: per contribution the agent, verdict, time and the code the agent wrote. */
+export function generationLog(gen: number, scores: Scored[], bestSource?: string): string {
+	const rows = [...scores].sort((a, b) => a.candidateId.localeCompare(b.candidateId, undefined, { numeric: true }));
+	const out = [`\n## Generation ${gen}: ${scores.filter((s) => s.ok).length}/${scores.length} correct\n`];
+	for (const s of rows) {
+		const agent = /-a(\d+)-/.exec(s.candidateId)?.[1] ?? "?";
+		const verdict = s.ok ? `correct, ${s.ms} ms` : `FAILED (${s.error ?? "unknown"})`;
+		out.push(`### ${s.candidateId} (agent ${agent}): ${verdict}${s.source === bestSource ? " [best so far]" : ""}`, s.genome ? `genome: \`${JSON.stringify(s.genome)}\`\n` : "", "```js", s.source, "```\n");
+	}
+	return out.join("\n");
+}
+
 /** The seeded random agents: 70 % mutate the best known genome, the rest start from scratch. */
 export const randomContributor: Contributor = async ({ best, rand }) => {
 	const genome = best?.genome && rand() < 0.7 ? mutate(best.genome, rand) : randomGenome(rand);
@@ -160,8 +175,8 @@ export const randomContributor: Contributor = async ({ best, rand }) => {
 };
 
 /** The whole experiment: generations of agent contributions, parallel evaluators, a growing CodeBest. */
-export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: number; gens?: number; perAgent?: number; n?: number; seed?: number; evaluators?: number; contributor?: Contributor; log?: (m: string) => void } = {}): Promise<Result> {
-	const { agents = 6, gens = 4, perAgent = 2, n = 100, seed = 1, evaluators = 3, contributor = randomContributor, log = () => {} } = o;
+export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: number; gens?: number; perAgent?: number; n?: number; seed?: number; evaluators?: number; contributor?: Contributor; logFile?: string; log?: (m: string) => void } = {}): Promise<Result> {
+	const { agents = 6, gens = 4, perAgent = 2, n = 100, seed = 1, evaluators = 3, contributor = randomContributor, logFile, log = () => {} } = o;
 	const runId = `primes-${seed}`;
 	const host = new PhiSpaces(h, ctx);
 	const agentRoles = Array.from({ length: agents }, (_, i) => role(h, 100 + i));
@@ -169,6 +184,7 @@ export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: num
 	const rand = rng(seed);
 	await host.write({ type: "CodeTask", fields: { runId, goal: `the first ${n} primes`, contract: "function firstPrimes(n): number[]" } }, null, FOREVER);
 
+	if (logFile) writeFileSync(logFile, `# codemode-evolve ${runId}: the first ${n} primes\n\nEvery contribution of every agent, with the sandbox verdict. Time is for ${TIME_N} primes.\n`);
 	let best: Result["best"] = null;
 	const history: Generation[] = [];
 	for (let gen = 0; gen < gens; gen++) {
@@ -190,6 +206,7 @@ export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: num
 			best = { ...(top.genome ? { genome: top.genome } : {}), source: top.source, ms: top.ms };
 			await host.write({ type: "CodeBest", fields: { runId, gen, candidateId: top.candidateId, ms: top.ms, ...(top.genome ? { genome: top.genome as never } : {}), source: top.source } as never }, null, FOREVER);
 		}
+		if (logFile) appendFileSync(logFile, generationLog(gen, scores, best?.source));
 		history.push({ gen, candidates: k, correct: winners.length, bestMs: top?.ms ?? null, genome: top?.genome ?? null, candidateId: top?.candidateId ?? null });
 		log(`gen ${gen}: ${winners.length}/${k} correct, fastest ${top ? `${top.ms} ms ${top.genome ? JSON.stringify(top.genome) : top.candidateId}` : "none"}`);
 	}
@@ -198,10 +215,13 @@ export async function evolve(h: SpaceHost, cm: CodemodeModule, o: { agents?: num
 
 async function main() {
 	const arg = (name: string, d: number) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? Number(process.argv[i + 1]) : d; };
+	const argText = (name: string) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
 	const cm = await loadCodemode();
 	if (!cm) { console.log("pi-codemode not found (set PI_CODEMODE_DIR); skipping"); return; }
 	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-	const r = await evolve(h, cm, { agents: arg("agents", 6), gens: arg("gens", 4), perAgent: arg("per-agent", 2), n: arg("n", 100), seed: arg("seed", 1), log: console.log });
+	const logFile = argText("log") ?? `${tmpdir()}/codemode-evolve-${Date.now()}.md`;
+	const r = await evolve(h, cm, { agents: arg("agents", 6), gens: arg("gens", 4), perAgent: arg("per-agent", 2), n: arg("n", 100), seed: arg("seed", 1), logFile, log: console.log });
+	console.log(`log: ${logFile}`);
 	console.log(r.best ? `\nbest: ${r.best.ms} ms for ${TIME_N} primes${r.best.genome ? `, genome ${JSON.stringify(r.best.genome)}` : ""}\n\n${r.best.source}` : "\nno correct candidate");
 	await h.close(ctx);
 }
