@@ -86,6 +86,14 @@ container uses the host network). Deployment examples (host names are placeholde
 `deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`. Ports 3700/3800 do not collide with the help
 system (3500/3600).
 
+## Help pages and themes
+
+`/help` has the help pages in the style of the phi-spaces help system: navigation on the left, the article in the
+middle, the table of contents on the right, a search box and addresses like
+`/help?lang=en&article=help.topic.overview`. The texts (German and English) are in `client/help/articles.ts`; the tests
+check that both languages exist and that every link and anchor resolves. The top bar of the chat and of the help has
+the same controls as the help system: language (DE/EN), dark/light mode and the color palettes, remembered per browser.
+
 ## Contenders: several models against each other
 
 The run panel lists the **contenders** as checkboxes: the scripted agents and every allowed model. Tick up to four;
@@ -103,6 +111,6 @@ only `codestral-latest` and the newest haiku can be chosen. Guards: 2 calls in f
 ## Safety notes
 
 Code from entries is data. It only ever runs inside the sandbox, which can reach no tool, file or network. The
-server limits source size (16 000 characters), message size, submissions and runs per minute and session, the number
+server limits source size (16 000 characters), submissions, runs, tasks and deletions per minute and room, the number
 of sessions and WebSocket clients. Identities are unauthenticated display names: do not expose this publicly without
 a reverse proxy in front.

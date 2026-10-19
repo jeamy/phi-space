@@ -339,10 +339,23 @@ const v = await judge(this.cm, taskFromSpec(f) ?? s.task, f.source); // the cand
 		if (!target) throw new Error("Unknown task block");
 		if (s.run?.active && s.run.blockId === blockId) throw new Error("This block has a running run; stop it first");
 		s.deleted.add(blockId);
-		const tmplOf = (type: string) => ({ type, fields: { session: id, blockId } });
+		// entries from before task blocks existed have no blockId: the block is then identified by the time of its CodeTask
+		const legacy = target.blockId === undefined;
+		const tmplOf = (type: string): { type: string; fields: Record<string, string | number> } => (type === "CodeTask" && legacy ? { type, fields: { session: id, ts: target.ts } } : { type, fields: { session: id, blockId } });
 		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "ChatMessage", "CodeTask"]) {
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
 			if (type !== "CodeTask" && type !== "ChatMessage" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
+		}
+		// the last old-style block is gone: the old entries that never belonged to a block go with it
+		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {
+			const orphans = async (sp: SpaceLike, types: string[]) => {
+				for (const type of types) for (const e of await sp.readAll({ type, fields: { session: id } }, { limit: LIMITS.contributions })) {
+					const f = e.fields as Record<string, unknown>;
+					if (f.blockId === undefined && (type !== "ChatMessage" || f.author === "system")) await sp.take({ id: e.id }, NO_WAIT);
+				}
+			};
+			await orphans(this.host, ["CodeScore", "CodeCandidate", "CodeBest", "ChatMessage"]);
+			await this.#rcall(async (r) => { await orphans(r, ["CodeScore", "CodeCandidate"]); return true; });
 		}
 		s.remotePending.delete(blockId);
 		if (s.blockId === blockId) { // the active block went away: the newest remaining one takes over, or a fresh first task

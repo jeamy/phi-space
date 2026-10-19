@@ -238,3 +238,26 @@ t("deleting a block also removes its verdicts on the nano shard", async () => {
 		assert.equal(after.shards[0].judged + after.shards[1].judged, 0);
 	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
 });
+
+t("a task block from before blockIds existed can be deleted, with its orphaned entries", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const at = Date.now() - 60_000;
+		// what an older version wrote: no blockId on any of them
+		await srv.hub.host.write({ type: "CodeTask", fields: { session: "old1", taskId: "gcd", ts: at } } as never, null, 3_600_000);
+		await srv.hub.host.write({ type: "CodeScore", fields: { session: "old1", candidateId: "x1", author: "a", via: "scripted", gen: 1, ok: true, ms: 5, source: "function gcd(){}", ts: at + 1 } } as never, null, 3_600_000);
+		await srv.hub.host.write({ type: "ChatMessage", fields: { session: "old1", author: "system", text: "Task: Greatest common divisor (gcd)", ts: at } } as never, null, 3_600_000);
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/old1")).json()) as any;
+		const snap = await get();
+		assert.equal(snap.blocks.length, 1);
+		assert.equal(snap.blocks[0].task.id, "gcd");
+		assert.equal((await post(srv.url, "/api/sessions/old1/delete", { blockId: snap.blocks[0].blockId })).status, 200);
+		const after = await get();
+		assert.equal(after.blocks.length, 1); // a fresh first task took its place
+		assert.notEqual(after.blocks[0].blockId, snap.blocks[0].blockId);
+		assert.equal(after.blocks[0].task.id, "primes");
+		const sys = (await (await fetch(srv.url + "/api/system")).json()) as any;
+		assert.equal(sys.shards[0].judged, 0); // the orphaned score is gone too
+		assert.ok(!after.messages.some((m: any) => m.text.startsWith("Task: Greatest")));
+	} finally { await srv.close(); }
+});

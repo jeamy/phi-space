@@ -5,8 +5,9 @@
 // ranking and best code on the right follow the block that is open or clicked. All text is rendered as React text
 // nodes: agent code is untrusted data and never becomes markup.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ThemeControls } from "./ThemeControls.tsx";
+import { useTheme, type Lang } from "./lib/theme.ts";
 
-type Lang = "de" | "en";
 type L = { de: string; en: string };
 type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
 type Message = { author: string; text: string; ts: number; blockId?: string };
@@ -20,8 +21,8 @@ type Llm = { enabled: boolean; on: boolean; current: string | null; models: { id
 type Shard = { shard: string; up: boolean; host: { name: string; cpu: string; cores: number; memGiB: number } | null; judged: number | null };
 
 const T = {
-	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle (JSON: [{\"args\":[2],\"expect\":4}])", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", you: "Name", say: "Nachricht", send: "Senden", board: "Rangliste", best: "Bester Code", standings: "Wertung je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "gegeneinander", correctN: "korrekt", contributions: "Beiträge", running: "läuft", block: "Aufgabe", del: "Block löschen", delRunning: "Der Lauf in diesem Block muss zuerst gestoppt werden", delTitle: "Aufgabenblock löschen?", delText: (title: string, n: number) => `Der Block „${title}“ mit ${n} Beiträgen, Rangliste und bestem Code wird dauerhaft gelöscht.`, yes: "Ja, löschen", no: "Nein", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe." },
-	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases (JSON: [{\"args\":[2],\"expect\":4}])", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", you: "Name", say: "Message", send: "Send", board: "Leaderboard", best: "Best code", standings: "Standings per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "versus", correctN: "correct", contributions: "contributions", running: "running", block: "Task", del: "Delete block", delRunning: "Stop the run in this block first", delTitle: "Delete task block?", delText: (title: string, n: number) => `The block "${title}" with ${n} contributions, its ranking and best code will be deleted permanently.`, yes: "Yes, delete", no: "No", forBlock: "for", hide: "Close", noBlocks: "No task yet." },
+	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle (JSON: [{\"args\":[2],\"expect\":4}])", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", board: "Rangliste", best: "Bester Code", standings: "Wertung je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "gegeneinander", correctN: "korrekt", helpLink: "Hilfe", contributions: "Beiträge", running: "läuft", block: "Aufgabe", del: "Block löschen", delRunning: "Der Lauf in diesem Block muss zuerst gestoppt werden", delTitle: "Aufgabenblock löschen?", delText: (title: string, n: number) => `Der Block „${title}“ mit ${n} Beiträgen, Rangliste und bestem Code wird dauerhaft gelöscht.`, yes: "Ja, löschen", no: "Nein", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe." },
+	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases (JSON: [{\"args\":[2],\"expect\":4}])", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", board: "Leaderboard", best: "Best code", standings: "Standings per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "versus", correctN: "correct", helpLink: "Help", contributions: "contributions", running: "running", block: "Task", del: "Delete block", delRunning: "Stop the run in this block first", delTitle: "Delete task block?", delText: (title: string, n: number) => `The block "${title}" with ${n} contributions, its ranking and best code will be deleted permanently.`, yes: "Yes, delete", no: "No", forBlock: "for", hide: "Close", noBlocks: "No task yet." },
 } as const;
 type Tr = (typeof T)[Lang];
 
@@ -119,8 +120,8 @@ function BlockView({ b, open, focused, run, openCode, onToggle, onFocus, onCode,
 }
 
 export function CodemodeChat() {
-	const [lang, setLang] = useState<Lang>("en");
-	const [mode, setMode] = useState<"dark" | "light">("dark");
+	const theme = useTheme();
+	const { lang } = theme;
 	const [name, setName] = useState("guest");
 	const [session, setSession] = useState("lobby");
 	const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -129,7 +130,6 @@ export function CodemodeChat() {
 	const [shards, setShards] = useState<Shard[]>([]);
 	const [error, setError] = useState("");
 	const [code, setCode] = useState("");
-	const [msg, setMsg] = useState("");
 	const [custom, setCustom] = useState({ fn: "", prompt: "", cases: "" });
 	const [params, setParams] = useState({ agents: 4, gens: 3, per: 1 });
 	const [contenders, setContenders] = useState<string[]>(["scripted"]);
@@ -143,15 +143,15 @@ export function CodemodeChat() {
 	const sid = encodeURIComponent(session);
 
 	useEffect(() => {
-		setLang((store("cm.lang") as Lang) || (navigator.language.startsWith("de") ? "de" : "en"));
-		setMode((store("cm.mode") as "dark" | "light") || "dark");
-		setName(store("cm.name") || "guest-" + Math.random().toString(36).slice(2, 5));
+		// no name field: code handed in is signed with a guest name that stays the same in this browser
+		const saved = store("cm.name"), guest = saved || "guest-" + Math.random().toString(36).slice(2, 5);
+		if (!saved) store("cm.name", guest);
+		setName(guest);
 		const fromHash = () => setSession(decodeURIComponent(location.hash.slice(1)) || "lobby");
 		fromHash();
 		window.addEventListener("hashchange", fromHash);
 		return () => window.removeEventListener("hashchange", fromHash);
 	}, []);
-	useEffect(() => { document.documentElement.dataset.mode = mode; }, [mode]);
 
 	useEffect(() => {
 		lastCurrent.current = "";
@@ -233,7 +233,6 @@ export function CodemodeChat() {
 	const focusBlock = snap?.blocks.find((b) => b.blockId === focus) ?? current;
 	const board = (focusBlock?.contributions ?? []).filter((c) => c.ok).sort((a, b) => a.ms! - b.ms!).slice(0, 8);
 	const standings = Object.values((focusBlock?.contributions ?? []).filter((c) => c.via !== "human").reduce<Record<string, { via: string; n: number; ok: number; best: number | null }>>((acc, c) => { const e = (acc[c.via] ??= { via: c.via, n: 0, ok: 0, best: null }); if (c.ok !== null) { e.n++; if (c.ok) { e.ok++; e.best = e.best === null ? c.ms : Math.min(e.best, c.ms!); } } return acc; }, {})).sort((a, b) => (a.best ?? Infinity) - (b.best ?? Infinity));
-	const sendMsg = () => { const text = msg; if (!text.trim()) return; setMsg(""); void act("/message", { author: name, text }); };
 	const blockLabel = focusBlock ? `${focusBlock.task.title[lang]} (${focusBlock.task.fn})` : "";
 
 	return (
@@ -244,8 +243,8 @@ export function CodemodeChat() {
 				<span className="pill">{t.session}: {session}</span>
 				<span className={"pill" + (live ? " pill--accent" : "")}>{live ? t.live : t.offline}</span>
 				<span className="pill">{llm?.enabled ? `${llm.models.length} ${t.llm}` : t.off}</span>
-				<button className="btn" onClick={() => { const n = lang === "de" ? "en" : "de"; setLang(n); store("cm.lang", n); }}>{lang.toUpperCase()}</button>
-				<button className="btn" onClick={() => { const n = mode === "dark" ? "light" : "dark"; setMode(n); store("cm.mode", n); }}>{mode === "dark" ? "☀" : "☾"}</button>
+				<a className="toplink" href={`/help?lang=${lang}`}>{t.helpLink}</a>
+				<ThemeControls lang={theme.lang} setLang={theme.setLang} mode={theme.mode} changeMode={theme.changeMode} palette={theme.palette} changePalette={theme.changePalette} />
 			</header>
 			<main>
 				<aside>
@@ -310,13 +309,6 @@ export function CodemodeChat() {
 								: <div key={i.key} className={"msg" + (i.m!.author === "system" ? " msg--system" : "")}><b>{i.m!.author}</b>{i.m!.text}</div>)}
 						</div>
 					) : <div className="empty">{t.noBlocks}</div>}
-					<div className="panel" style={{ marginTop: 14 }}>
-						<div className="row"><label htmlFor="name">{t.you}</label><input id="name" value={name} onChange={(e) => { setName(e.target.value.slice(0, 40)); store("cm.name", e.target.value.slice(0, 40)); }} /></div>
-						<div className="row">
-							<input style={{ flex: 1 }} placeholder={t.say} value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMsg()} />
-							<button className="btn" onClick={sendMsg}>{t.send}</button>
-						</div>
-					</div>
 				</section>
 				<aside>
 					<div className="panel">
