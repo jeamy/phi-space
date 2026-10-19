@@ -40,13 +40,13 @@ start() {
   cd "$APP" || exit 1
   mkdir -p "$(dirname "$NANO_DB")"
   env ${CODEMODE_MEM:+CODEMODE_MEM="$CODEMODE_MEM"} CODEMODE_DB="$NANO_DB" CODEMODE_LISTEN="unix:$SOCKET" CODEMODE_HOST_NAME="${NANO_NAME:-nano}" \
-    node --experimental-strip-types --no-warnings server/nano-host.ts > "$RUN/nano.log" 2>&1 &
+    node $([ "${DEV:-1}" = "1" ] && echo "--watch-path=server --watch-path=../src") --experimental-strip-types --no-warnings server/nano-host.ts > "$RUN/nano.log" 2>&1 &
   echo $! > "$NANO_PID_FILE"
   for _ in $(seq 1 50); do [ -S "$SOCKET" ] && break; sleep 0.2; done
   [ "${DEV:-1}" = "1" ] || build_if_stale
   env PORT="$PORT" CODEMODE_BIND="${CODEMODE_BIND:-127.0.0.1}" CODEMODE_SQLITE="$HUB_DB" CODEMODE_REMOTE="unix:$SOCKET" CODEMODE_HOST_NAME="${HUB_NAME:-big}" \
     CODEMODE_CHAT_LLM="${CODEMODE_CHAT_LLM:-0}" \
-    node --experimental-strip-types --no-warnings server/index.ts $([ "${DEV:-1}" = "1" ] && echo --dev) > "$RUN/hub.log" 2>&1 &
+    node $([ "${DEV:-1}" = "1" ] && echo "--watch-path=server --watch-path=../src") --experimental-strip-types --no-warnings server/index.ts $([ "${DEV:-1}" = "1" ] && echo --dev) > "$RUN/hub.log" 2>&1 &
   echo $! > "$HUB_PID_FILE"
   echo "started: hub http://127.0.0.1:$PORT (pid $(cat "$HUB_PID_FILE")), nano on $SOCKET (pid $(cat "$NANO_PID_FILE")); logs: $RUN"
 }

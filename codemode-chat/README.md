@@ -49,6 +49,11 @@ npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # pro
 npm run test:codemode-chat                     # tests (API, sandbox, big+nano, dead shard)
 ```
 
+Development reloads itself: Next.js recompiles `app/` and `client/` on every save (Fast Refresh), and `node --watch-path`
+restarts the server when `server/` or the phi-spaces sources in `../src` change (clients reconnect on their own, the
+SQLite state stays). In the Docker dev container these directories are mounted from the checkout. Open the dev page
+as `http://localhost:3700` — Next.js 16 does not hydrate dev pages that are requested through `127.0.0.1`.
+
 Docker (build context: the repository root). **Production and nano are two separate servers**, each started from its
 own `codemode-chat/.env`; the commands change containers on the machine they run on, so use them on a shared server
 only after agreement:

@@ -81,7 +81,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const listen = process.env.CODEMODE_LISTEN ?? "unix:/tmp/codemode-b.sock";
 	const host = await startJudgeHost({ listen, dbPath: mem ? null : dbPath, judges: Number(process.env.CODEMODE_JUDGES ?? 2) });
 	console.log(`[nano] judge shard live on ${listen} (space ${host.spaceId}, db ${mem ? "memory" : dbPath})`);
-	const shutdown = async () => { await host.close(); process.exit(0); };
+	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await host.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());
 }

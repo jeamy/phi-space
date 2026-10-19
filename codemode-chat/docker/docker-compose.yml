@@ -92,10 +92,16 @@ services:
       - "${HOST_BIND:+$HOST_BIND:}${PORT:-3700}:${PORT:-3700}"
     volumes:
       - codemode-chat-dev-data:/data
+      - ../app:/opt/phi-spaces/codemode-chat/app
+      - ../client:/opt/phi-spaces/codemode-chat/client
+      - ../server:/opt/phi-spaces/codemode-chat/server
+      - ../../src:/opt/phi-spaces/src
       # Optional: mount the host's pi CLI credentials so model agents work in dev (PI_AUTH_DIR= to skip).
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
     working_dir: /opt/phi-spaces/codemode-chat
-    command: ["node", "--experimental-strip-types", "server/index.ts", "--dev"]
+    # The sources are mounted from the checkout: Next.js recompiles app/ and client/ on change (Fast Refresh), and
+    # --watch-path restarts the server when server/ or the phi-spaces sources change.
+    command: ["node", "--watch-path=server", "--watch-path=../src", "--no-warnings", "--experimental-strip-types", "server/index.ts", "--dev"]
 
   # ---- 4. Headless judge shard (profile: nano — deploy on the `nano` host) ----
   codemode-nano:

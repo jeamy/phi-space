@@ -82,6 +82,9 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	};
 
 	const server = http.createServer((req, res) => void handle(req, res));
+	// upgraded sockets (our /ws and Next's HMR) are not closed by server.close(): track every socket and destroy them on shutdown
+	const conns = new Set<import("node:net").Socket>();
+	server.on("connection", (s) => { conns.add(s); s.on("close", () => conns.delete(s)); });
 	let sockets = 0;
 	server.on("upgrade", (req, socket, head) => {
 		const m = /^\/ws\/([a-zA-Z0-9._-]{1,48})$/.exec(new URL(req.url ?? "/", "http://localhost").pathname);
@@ -98,12 +101,18 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	const actual = typeof addr === "object" && addr ? addr.port : port;
 	return {
 		url: `http://127.0.0.1:${actual}`, port: actual, hub,
-		async close() { await hub.close(); await new Promise<void>((r) => { server.closeAllConnections?.(); server.close(() => r()); }); await stopService(); await harness.close(ctx); },
+		async close() { await hub.close(); await new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections?.(); for (const s of conns) s.destroy(); }); await stopService(); await harness.close(ctx); },
 	};
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? join(ROOT, ".local", "codemode-chat.sqlite"), useNext: true, dev: process.argv.includes("--dev") });
 	console.log(`PHI-SPACES / CODEMODE CHAT (Next.js 16) listening on ${srv.url}`);
-	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void srv.close().finally(() => process.exit(0)));
+	const dev = process.argv.includes("--dev");
+	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => {
+		// dev: exit at once, so `node --watch` can start the replacement before Next's dev lock is still held
+		if (dev) process.exit(0);
+		setTimeout(() => process.exit(0), 3000).unref();
+		void srv.close().finally(() => process.exit(0));
+	});
 }
