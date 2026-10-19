@@ -1,0 +1,43 @@
+{
+  "name": "phi-spaces-codemode-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js 16 + React 19 codemode chat: agents and people contribute code to a phi-space, judged in a codemode sandbox",
+  "scripts": {
+    "build": "next build",
+    "typecheck": "tsc",
+    "dev": "node --no-warnings --experimental-strip-types server/index.ts --dev",
+    "start": "node --no-warnings --experimental-strip-types server/index.ts",
+    "nano": "node --no-warnings --experimental-strip-types server/nano-host.ts",
+    "test": "node --no-warnings --experimental-strip-types --test tests/*.test.ts",
+    "shards:start": "bash scripts/codemode-shards.sh start",
+    "shards:stop": "bash scripts/codemode-shards.sh stop",
+    "shards:status": "bash scripts/codemode-shards.sh status",
+    "shards:logs": "bash scripts/codemode-shards.sh logs",
+    "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build codemode-chat-test",
+    "docker:prod:build": "docker compose --env-file .env -f docker/docker-compose.yml build codemode-chat-prod",
+    "docker:prod:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d --build codemode-chat-prod",
+    "docker:prod:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
+    "docker:prod:logs": "docker compose --env-file .env -f docker/docker-compose.yml logs -f codemode-chat-prod",
+    "docker:dev:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev up -d --build codemode-chat-dev",
+    "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
+    "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f codemode-chat-dev",
+    "docker:nano:build": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano build codemode-nano",
+    "docker:nano:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano up -d --build codemode-nano",
+    "docker:nano:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano down",
+    "docker:nano:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano logs -f codemode-nano"
+  },
+  "dependencies": {
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "5.9.3"
+  },
+  "license": "MIT"
+}

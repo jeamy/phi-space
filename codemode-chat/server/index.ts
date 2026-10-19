@@ -1,8 +1,10 @@
-// Codemode chat: HTTP + WebSocket server. Run: node --experimental-strip-types codemode-chat/server/index.ts
-// Env: PORT (3700), CODEMODE_BIND (0.0.0.0), CODEMODE_SQLITE (durable store; unset = in memory), CODEMODE_CHAT_LLM=1 (model agents).
+// Codemode chat: HTTP + WebSocket server around the Next.js 16 app (the API and /ws are served here, pages by Next).
+// Run: node --experimental-strip-types codemode-chat/server/index.ts [--dev]
+// Env: PORT (3700), CODEMODE_BIND (0.0.0.0), CODEMODE_SQLITE (durable store; unset = in memory), CODEMODE_CHAT_LLM=1 (model agents),
+//      CODEMODE_REMOTE (judge shard on nano: tcp:host:port or unix:/path), CODEMODE_HOST_NAME (name in the system bar).
 import http from "node:http";
-import { mkdir, readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
@@ -12,15 +14,15 @@ import { spaces, startService } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
 import { CodeChatHub } from "./hub.ts";
 import { llmInfo, setLlm } from "./llm.ts";
+import { remoteJudgeSpace } from "./shard.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CLIENT = resolve(HERE, "../client");
-const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml" };
+const ROOT = resolve(HERE, "..");
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
 
-export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null } = {}) {
+export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean } = {}) {
 	const cm = await loadCodemode();
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
 	const registry = createRegistry();
@@ -28,7 +30,19 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	const storage = o.sqlitePath ? await (async () => { await mkdir(dirname(o.sqlitePath!), { recursive: true }); return openNodeSqliteStorage(o.sqlitePath!); })() : new MemoryStorage();
 	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 400 });
-	const hub = new CodeChatHub(harness, cm);
+	const remoteSpec = o.remote === undefined ? process.env.CODEMODE_REMOTE : o.remote;
+	const hub = new CodeChatHub(harness, cm, remoteSpec ? { remote: remoteJudgeSpace(remoteSpec), remoteLabel: process.env.CODEMODE_REMOTE_NAME ?? "nano" } : {});
+	if (remoteSpec) console.log(`[codemode] judge shard configured: ${remoteSpec}`);
+
+	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
+	let nextUpgrade: ((req: http.IncomingMessage, socket: any, head: Buffer) => void) | null = null;
+	if (o.useNext) {
+		const mod = await import("next");
+		const app = ((mod as any).default ?? mod)({ dev: Boolean(o.dev), dir: ROOT });
+		await app.prepare();
+		nextHandler = app.getRequestHandler();
+		if (typeof app.getUpgradeHandler === "function") nextUpgrade = app.getUpgradeHandler();
+	}
 
 	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
 	const readBody = (req: http.IncomingMessage) => new Promise<Record<string, any>>((ok, fail) => {
@@ -43,6 +57,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 			const url = new URL(req.url ?? "/", "http://localhost");
 			const p = url.pathname;
 			if (p === "/healthz") return json(res, 200, { ok: true });
+			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt }) => ({ id, title, fn, prompt })));
 			if (p === "/api/llm") return json(res, 200, req.method === "POST" ? await setLlm(await readBody(req)) : await llmInfo());
 			const m = /^\/api\/sessions\/([^/]+)(?:\/(message|task|run|stop|code))?$/.exec(p);
@@ -59,13 +74,9 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				else if (action === "stop") await hub.stopRun(id);
 				return json(res, 200, { ok: true });
 			}
-			if (req.method !== "GET") return json(res, 405, { error: "Method not allowed" });
-			const file = p === "/" ? "index.html" : p.slice(1);
-			if (!/^[\w.-]+$/.test(file) || !TYPES[file.slice(file.lastIndexOf("."))]) { res.writeHead(404); return void res.end("Not found"); }
-			const data = await readFile(join(CLIENT, file)).catch(() => null);
-			if (!data) { res.writeHead(404); return void res.end("Not found"); }
-			res.writeHead(200, { "content-type": TYPES[file.slice(file.lastIndexOf("."))]!, "cache-control": "no-cache" });
-			res.end(data);
+			if (nextHandler) return await nextHandler(req, res);
+			res.writeHead(404, { "content-type": "text/plain" });
+			res.end("Not found");
 		} catch (e) {
 			json(res, 400, { error: (e as Error).message });
 		}
@@ -75,7 +86,8 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	let sockets = 0;
 	server.on("upgrade", (req, socket, head) => {
 		const m = /^\/ws\/([a-zA-Z0-9._-]{1,48})$/.exec(new URL(req.url ?? "/", "http://localhost").pathname);
-		if (!m || sockets >= 256) return void socket.destroy();
+		if (!m) { if (nextUpgrade) nextUpgrade(req, socket, head); else socket.destroy(); return; }
+		if (sockets >= 256) return void socket.destroy();
 		const ws = upgradeWebSocket(req, socket, head);
 		if (!ws) return;
 		sockets++; ws.onClose(() => { sockets--; });
@@ -92,7 +104,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? null });
-	console.log(`PHI-SPACES / CODEMODE CHAT listening on ${srv.url}`);
+	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? null, useNext: true, dev: process.argv.includes("--dev") });
+	console.log(`PHI-SPACES / CODEMODE CHAT (Next.js 16) listening on ${srv.url}`);
 	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void srv.close().finally(() => process.exit(0)));
 }

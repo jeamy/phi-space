@@ -16,3 +16,5 @@ test/evidence
 **/*.sqlite-shm
 **/*.pem
 **/*.key
+codemode-chat/.next
+codemode-chat/.local

@@ -1,0 +1,6 @@
+# Caddyfile example for the codemode chat (replace the host name; automatic TLS + WebSocket proxy)
+
+codemode.example.org {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3700
+}

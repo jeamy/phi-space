@@ -1,14 +1,21 @@
-# Codemode chat as its own Docker module (independent of the help system, which uses 3500/3600).
+# Docker Compose for PHI-SPACES / CODEMODE CHAT
+#   1. `codemode-chat-prod`: hardened production hub ("big": Next.js 16 + WebSocket + SQLite in /data)
+#   2. `codemode-chat-test`: test run in Docker (profile: test)
+#   3. `codemode-chat-dev`:  interactive Next.js dev server in Docker (profile: dev)
+#   4. `codemode-nano`:      headless judge shard for the big/nano two-host setup (profile: nano)
+# Ports: 3700 (hub), 3800 (shard) — the help system uses 3500/3600.
+
 name: phi-spaces-codemode
 
 services:
-  codemode-chat:
+  # ---- 1. Production hub ----
+  codemode-chat-prod:
     build:
       context: ../..
       dockerfile: codemode-chat/docker/Dockerfile
       target: production
     image: phi-spaces-codemode:prod
-    container_name: phi-spaces-codemode
+    container_name: phi-spaces-codemode-prod
     init: true
     restart: unless-stopped
     user: "node"
@@ -24,14 +31,107 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3700"
+      CODEMODE_BIND: 0.0.0.0
       CODEMODE_SQLITE: /data/codemode-chat.sqlite
       CODEMODE_CHAT_LLM: "${CODEMODE_CHAT_LLM:-0}"
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
+      # The judge shard on nano, e.g. tcp:<nano-internal-ip>:3800 (or tcp:127.0.0.1:3800 through an SSH tunnel).
+      CODEMODE_REMOTE: "${CODEMODE_REMOTE:-}"
     ports:
       - "${CODEMODE_HOST_BIND:-127.0.0.1}:${CODEMODE_HOST_PORT:-3700}:3700"
     volumes:
       - codemode-chat-data:/data
-      # Optional: the host's pi CLI credentials, only used when CODEMODE_CHAT_LLM=1.
+      # Optional: the host's pi CLI credentials, only used when CODEMODE_CHAT_LLM=1 (or set API keys in .env).
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
+  # ---- 2. Tests in Docker ----
+  codemode-chat-test:
+    build:
+      context: ../..
+      dockerfile: codemode-chat/docker/Dockerfile
+      target: dev-test
+    image: phi-spaces-codemode:dev-test
+    profiles:
+      - test
+    init: true
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: test
+      CODEMODE_CHAT_LLM: "0"
+    command: ["npm", "--prefix", "codemode-chat", "test"]
+
+  # ---- 3. Development server ----
+  codemode-chat-dev:
+    build:
+      context: ../..
+      dockerfile: codemode-chat/docker/Dockerfile
+      target: dev-test
+    image: phi-spaces-codemode:dev-test
+    profiles:
+      - dev
+    init: true
+    user: "node"
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: "3700"
+      CODEMODE_BIND: 0.0.0.0
+      CODEMODE_SQLITE: /data/dev-codemode-chat.sqlite
+    ports:
+      - "${CODEMODE_HOST_BIND:-127.0.0.1}:${CODEMODE_HOST_PORT:-3700}:3700"
+    volumes:
+      - codemode-chat-dev-data:/data
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+    working_dir: /opt/phi-spaces/codemode-chat
+    command: ["node", "--experimental-strip-types", "server/index.ts", "--dev"]
+
+  # ---- 4. Headless judge shard (profile: nano — deploy on the `nano` host) ----
+  codemode-nano:
+    build:
+      context: ../..
+      dockerfile: codemode-chat/docker/Dockerfile
+      target: nano
+    image: phi-spaces-codemode:nano
+    container_name: phi-spaces-codemode-nano
+    profiles:
+      - nano
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      CODEMODE_LISTEN: "${CODEMODE_LISTEN:-tcp:0.0.0.0:3800}"
+      CODEMODE_DB: /data/codemode-b.sqlite
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
+      CODEMODE_JUDGES: "${CODEMODE_JUDGES:-2}"
+    ports:
+      # Set CODEMODE_SHARD_BIND to the host's internal (LAN/NetBird) IP to keep the shard socket off the public
+      # interface — serveSpace has no TLS.
+      - "${CODEMODE_SHARD_BIND:+$CODEMODE_SHARD_BIND:}3800:3800"
+    volumes:
+      - codemode-nano-data:/data
+
 volumes:
-  codemode-chat-data:
+  codemode-chat-data: {}
+  codemode-chat-dev-data: {}
+  codemode-nano-data: {}

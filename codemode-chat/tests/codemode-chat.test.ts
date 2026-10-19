@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "../server/index.ts";
+import { startJudgeHost } from "../server/nano-host.ts";
 import { judge, loadCodemode } from "../server/judge.ts";
 import { customTask, taskById, TASKS } from "../server/tasks.ts";
 
@@ -76,5 +77,39 @@ t("a scripted run produces graded contributions and a best", async () => {
 		assert.equal(snap.contributions.filter((c: any) => c.ok !== null).length, 6);
 		assert.ok(snap.best);
 		assert.equal((await post(srv.url, "/api/sessions/run1/task", { taskId: "nope" })).status, 400);
+	} finally { await srv.close(); }
+});
+
+t("big and nano: candidates are judged on both hosts and come back as one list", async () => {
+	const sock = `/tmp/codemode-test-${process.pid}.sock`;
+	process.env.CODEMODE_HOST_NAME = "nano";
+	const nano = await startJudgeHost({ listen: `unix:${sock}`, dbPath: null, judges: 2 });
+	process.env.CODEMODE_HOST_NAME = "big";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: `unix:${sock}` });
+	try {
+		const good = taskById("primes")!.variants[2]!, bad = taskById("primes")!.variants[4]!;
+		for (let i = 0; i < 4; i++) await post(srv.url, "/api/sessions/shard1/code", { author: `p${i}`, source: i % 2 ? bad : good });
+		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/shard1")).json() as any; return s.contributions.length === 4 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
+		const hosts = new Set(snap.contributions.map((c: any) => c.host));
+		assert.deepEqual([...hosts].sort(), ["big", "nano"]);
+		assert.equal(snap.contributions.filter((c: any) => c.ok).length, 2);
+		assert.equal(snap.best.source, good);
+		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
+		assert.deepEqual(sys.shards.map((x: any) => [x.shard, x.up]), [["hub", true], ["nano", true]]);
+		assert.equal(sys.shards[1].host.name, "nano");
+		assert.ok(sys.shards[1].judged >= 1);
+	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
+});
+
+t("a dead shard falls back to the local judge", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: "unix:/tmp/codemode-nonexistent.sock" });
+	try {
+		const good = taskById("gcd")!.variants[2]!;
+		await post(srv.url, "/api/sessions/dead1/task", { taskId: "gcd" });
+		for (let i = 0; i < 3; i++) await post(srv.url, "/api/sessions/dead1/code", { author: `p${i}`, source: good });
+		const snap = await until(async () => { const s = await (await fetch(srv.url + "/api/sessions/dead1")).json() as any; return s.contributions.length === 3 && s.contributions.every((c: any) => c.ok) ? s : false; }, 60_000);
+		assert.equal(snap.best.source, good);
+		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
+		assert.equal(sys.shards[1].up, false);
 	} finally { await srv.close(); }
 });

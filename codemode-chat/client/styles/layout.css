@@ -73,3 +73,6 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .board td:last-child { text-align: right; font-family: var(--font-mono); }
 .notice { color: var(--warning); font-size: 12px; margin-top: 6px; }
 .empty { color: var(--muted); padding: 14px; text-align: center; border: 1px dashed var(--line-strong); border-radius: 10px; }
+.system-bar { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--header-bg); color: var(--muted); font-size: 12px; }
+.system-bar b { color: var(--text-strong); }
+.system-bar__host--down { color: var(--danger); }

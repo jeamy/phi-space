@@ -4,20 +4,21 @@
 //   CodeBest     the best correct code so far
 // Judges take a candidate under a transaction and write its score atomically, like the evolve example.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost } from "../../src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judge, MAX_SOURCE_CHARS, TIMEOUT_MS, type Codemode } from "./judge.ts";
 import { customTask, taskById, TASKS, type Task } from "./tasks.ts";
 import { llmContribution } from "./llm.ts";
+import { hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
 const DAY = 24 * 3600_000;
 const LIMITS = { agents: 8, gens: 6, perAgent: 3, sessions: 50, messages: 500, contributions: 300 };
 export type RunMode = "scripted" | "llm";
 export type RunInfo = { active: boolean; mode: RunMode; gen: number; gens: number; agents: number; perAgent: number; note?: string };
-export type Contribution = { candidateId: string; author: string; via: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
+export type Contribution = { candidateId: string; taskKey?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
 type Session = {
 	id: string; task: Task; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
-	best: { candidateId: string; ms: number; source: string } | null; buckets: Map<string, number[]>; pushTimer?: ReturnType<typeof setTimeout>; loaded: boolean;
+	best: { candidateId: string; ms: number; source: string } | null; buckets: Map<string, number[]>; remotePending: Map<string, number>; seen: Set<string>; poller?: ReturnType<typeof setInterval>; pushTimer?: ReturnType<typeof setTimeout>; loaded: boolean;
 };
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
@@ -30,7 +31,25 @@ export class CodeChatHub {
 	#sessions = new Map<string, Session>();
 	#closed = false;
 	#roles = new Map<number, PhiSpaces>();
-	constructor(h: SpaceHost, cm: Codemode) { this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); }
+	readonly facts: HostFacts = hostFacts();
+	#remote: SpaceLike | null;
+	#remoteLabel: string | null;
+	#remoteDownUntil = 0;
+	#rr = 0;
+	/** `remote`: the nano judge shard (optional); candidates alternate between this host and the shard. */
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null } = {}) { this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; }
+
+	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
+	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
+		if (!this.#remote || Date.now() < this.#remoteDownUntil) return null;
+		try {
+			return await Promise.race([fn(this.#remote), new Promise<never>((_, no) => setTimeout(() => no(new Error("shard timeout")), 8_000))]);
+		} catch {
+			this.#remoteDownUntil = Date.now() + 15_000;
+			return null;
+		}
+	}
+	get remoteUp(): boolean { return this.#remote !== null && Date.now() >= this.#remoteDownUntil; }
 
 	#role(id: number): PhiSpaces {
 		let r = this.#roles.get(id);
@@ -40,7 +59,7 @@ export class CodeChatHub {
 
 	async close(): Promise<void> {
 		this.#closed = true;
-		for (const s of this.#sessions.values()) { s.abort = true; for (const c of s.clients) c.close(); clearTimeout(s.pushTimer); }
+		for (const s of this.#sessions.values()) { s.abort = true; for (const c of s.clients) c.close(); clearTimeout(s.pushTimer); clearInterval(s.poller); }
 		this.#sessions.clear();
 	}
 
@@ -55,7 +74,7 @@ export class CodeChatHub {
 		let s = this.#sessions.get(id);
 		if (!s) {
 			if (this.#sessions.size >= LIMITS.sessions) throw new Error("Too many sessions");
-			s = { id, task: TASKS[0]!, clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, buckets: new Map(), loaded: false };
+			s = { id, task: TASKS[0]!, clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, buckets: new Map(), remotePending: new Map(), seen: new Set(), loaded: false };
 			this.#sessions.set(id, s);
 		}
 		if (!s.loaded) {
@@ -68,20 +87,26 @@ export class CodeChatHub {
 	}
 
 	async #scores(s: Session, task: Task): Promise<Contribution[]> {
-		const rows = await this.host.readAll({ type: "CodeScore", fields: { session: s.id, taskKey: this.#taskKey(task) } }, { limit: LIMITS.contributions });
-		return rows.map((e) => e.fields as unknown as Contribution).sort((a, b) => a.ts - b.ts);
+		const tmpl = { type: "CodeScore", fields: { session: s.id, taskKey: this.#taskKey(task) } };
+		const [local, remote] = await Promise.all([this.host.readAll(tmpl, { limit: LIMITS.contributions }), this.#rcall((r) => r.readAll(tmpl, { limit: LIMITS.contributions }))]);
+		const rows = [...local, ...(remote ?? [])].map((e) => e.fields as unknown as Contribution);
+		return rows.sort((a, b) => a.ts - b.ts);
 	}
 	#taskKey = (t: Task) => (t.id === "custom" ? `custom:${t.fn}:${t.prompt.en.length}` : t.id);
 
 	async snapshot(id: string) {
 		const s = await this.session(id);
-		const [msgs, scores, pending] = await Promise.all([
+		const cand = { type: "CodeCandidate", fields: { session: id, taskKey: this.#taskKey(s.task) } };
+		const [msgs, scores, pendingLocal, pendingRemote] = await Promise.all([
 			this.host.readAll({ type: "ChatMessage", fields: { session: id } }, { limit: LIMITS.messages }),
 			this.#scores(s, s.task),
-			this.host.readAll({ type: "CodeCandidate", fields: { session: id, taskKey: this.#taskKey(s.task) } }, { limit: 100 }),
+			this.host.readAll(cand, { limit: 100 }),
+			this.#rcall((r) => r.readAll(cand, { limit: 100 })),
 		]);
+		const pending = [...pendingLocal, ...(pendingRemote ?? [])];
 		const messages = msgs.map((e) => e.fields as { author: string; text: string; ts: number }).sort((a, b) => a.ts - b.ts);
-		const queued: Contribution[] = pending.map((e) => ({ ...(e.fields as unknown as Contribution), ok: null, ms: null }));
+		const judged = new Set(scores.map((c) => c.candidateId));
+		const queued: Contribution[] = pending.map((e) => ({ ...(e.fields as unknown as Contribution), ok: null, ms: null })).filter((c) => !judged.has(c.candidateId));
 		return {
 			session: id, task: { id: s.task.id, fn: s.task.fn, title: s.task.title, prompt: s.task.prompt, cases: s.task.id === "custom" ? s.task.cases.length : undefined },
 			tasks: TASKS.map((t) => ({ id: t.id, title: t.title })),
@@ -139,7 +164,13 @@ export class CodeChatHub {
 
 	async #enqueue(s: Session, author: string, via: string, gen: number, source: string): Promise<string> {
 		const candidateId = `${Date.now().toString(36)}-${s.seq++}`;
-		await this.#role(100 + (s.seq % 8)).write({ type: "CodeCandidate", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId, author, via, gen, source, ts: Date.now() } }, null, DAY);
+		const entry = { type: "CodeCandidate", fields: { session: s.id, taskKey: this.#taskKey(s.task), taskId: s.task.id, ...(s.task.id === "custom" ? { custom: { fn: s.task.fn, prompt: s.task.prompt.en, cases: s.task.cases } } : {}), candidateId, author, via, gen, source, ts: Date.now() } } as never;
+		// every second candidate goes to the nano shard when it is up; if its write fails the candidate is judged here
+		if (this.#remote && this.remoteUp && this.#rr++ % 2 === 1) {
+			const ok = await this.#rcall(async (r) => { await r.write(entry, null, DAY); return true; });
+			if (ok) { s.remotePending.set(candidateId, Date.now()); this.#watchRemote(s); this.push(s); return candidateId; }
+		}
+		await this.#role(100 + (s.seq % 8)).write(entry, null, DAY);
 		this.push(s);
 		this.#kick(s);
 		return candidateId;
@@ -159,7 +190,7 @@ export class CodeChatHub {
 			const f = c.fields as unknown as Contribution;
 			const v = await judge(this.cm, s.task, f.source);
 			try {
-				await r.write({ type: "CodeScore", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId: f.candidateId, author: f.author, via: f.via, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
+				await r.write({ type: "CodeScore", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
 				await r.commit(t.id);
 			} catch (e) {
 				await r.abort(t.id).catch(() => {});
@@ -174,8 +205,40 @@ export class CodeChatHub {
 		}
 	}
 
+	/** Candidates sent to the shard come back as CodeScore entries there: poll until each one has a verdict (or 90 s passed). */
+	#watchRemote(s: Session): void {
+		if (s.poller) return;
+		s.poller = setInterval(async () => {
+			const now = Date.now();
+			for (const [id, at] of s.remotePending) if (now - at > 90_000) s.remotePending.delete(id);
+			if (!s.remotePending.size || this.#closed) { clearInterval(s.poller); s.poller = undefined; return; }
+			const rows = await this.#rcall((r) => r.readAll({ type: "CodeScore", fields: { session: s.id } }, { limit: LIMITS.contributions }));
+			let changed = false;
+			for (const e of rows ?? []) {
+				const f = e.fields as unknown as Contribution;
+				if (!s.remotePending.delete(f.candidateId)) continue;
+				changed = true;
+				if (f.ok && f.ms !== null && (!s.best || f.ms < s.best.ms) && f.taskKey === this.#taskKey(s.task)) {
+					s.best = { candidateId: f.candidateId, ms: f.ms, source: f.source };
+					await this.host.write({ type: "CodeBest", fields: { session: s.id, taskKey: this.#taskKey(s.task), candidateId: f.candidateId, ms: f.ms, source: f.source } }, null, DAY);
+				}
+			}
+			if (changed) this.push(s);
+		}, 400);
+	}
+
+	/** What the test-system bar shows: this host and, when configured, the shard (CPU, memory, judged contributions). */
+	async systemInfo(): Promise<{ shards: Array<{ shard: string; up: boolean; host: HostFacts | null; judged: number | null }> }> {
+		const shards: Array<{ shard: string; up: boolean; host: HostFacts | null; judged: number | null }> = [{ shard: "hub", up: true, host: this.facts, judged: await this.host.count({ type: "CodeScore" }) }];
+		if (this.#remote) {
+			const r = await this.#rcall(async (sp) => ({ host: (await sp.readAll({ type: "HostInfo" }, { limit: 1 }))[0]?.fields as unknown as HostFacts | undefined, judged: await sp.count({ type: "CodeScore" }) }));
+			shards.push({ shard: this.#remoteLabel ?? "nano", up: r !== null, host: r?.host ?? null, judged: r?.judged ?? null });
+		}
+		return { shards };
+	}
+
 	async #idle(s: Session): Promise<void> {
-		while (!this.#closed && !s.abort && (s.draining > 0 || (await this.host.count({ type: "CodeCandidate", fields: { session: s.id } })) > 0)) await new Promise((r) => setTimeout(r, 60));
+		while (!this.#closed && !s.abort && (s.draining > 0 || s.remotePending.size > 0 || (await this.host.count({ type: "CodeCandidate", fields: { session: s.id } })) > 0)) await new Promise((r) => setTimeout(r, 60));
 	}
 
 	/** Generations of agent contributions; model agents fall back to scripted variants when a guard says no. */

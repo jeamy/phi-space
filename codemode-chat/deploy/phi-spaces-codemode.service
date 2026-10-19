@@ -1,0 +1,18 @@
+[Unit]
+Description=PHI-SPACES codemode chat
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/phi-spaces/codemode-chat
+Environment=NODE_ENV=production
+Environment=CODEMODE_BIND=127.0.0.1
+Environment=PORT=3700
+Environment=CODEMODE_SQLITE=/var/lib/phi-spaces/codemode-chat.sqlite
+ExecStart=/usr/bin/node --no-warnings --experimental-strip-types server/index.ts
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
