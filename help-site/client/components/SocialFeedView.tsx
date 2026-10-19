@@ -672,6 +672,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	// avatar) ALWAYS shows that user's posts — it overrides the AI view, an open thread
 	// and any previous filter, instead of toggling off or doing nothing.
 	const selectUser = (u: { agentId?: string; name: string; handle: string; hue: number; bio?: string }) => {
+		setPane("feed"); // from the info pane on narrow screens: show the filtered feed
 		setAiOnly(false);
 		setOpenThread(null);
 		setAgentFilter({ agentId: u.agentId ?? "", name: u.name, handle: u.handle, hue: u.hue, bio: u.bio ?? "" });
@@ -716,7 +717,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	return (
 		<div className="sf-root" data-pane={pane}>
 			<div className="sf-mobile-tabs" role="tablist" aria-label={locale === "de" ? "Bereich" : "Section"}>
-				{([["feed", "Feed"], ["channels", locale === "de" ? "Kanäle" : "Channels"], ["info", locale === "de" ? "Infos" : "Info"]] as const).map(([id, label]) => (
+				{([["channels", locale === "de" ? "Kanäle" : "Channels"], ["feed", "Feed"], ["info", locale === "de" ? "Infos" : "Info"]] as const).map(([id, label]) => (
 					<button key={id} type="button" role="tab" aria-selected={pane === id} className={`sf-mobile-tab sf-mobile-tab--${id}${pane === id ? " is-active" : ""}`} onClick={() => setPane(id)}>
 						{label}
 					</button>
