@@ -34,7 +34,7 @@ services:
       CODEMODE_BIND: 0.0.0.0
       CODEMODE_SQLITE: /data/codemode-chat.sqlite
       CODEMODE_CHAT_LLM: "${CODEMODE_CHAT_LLM:-0}"
-      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-big}"
       # The judge shard on nano, e.g. tcp:<nano-internal-ip>:3800 (or tcp:127.0.0.1:3800 through an SSH tunnel).
       CODEMODE_REMOTE: "${CODEMODE_REMOTE:-}"
     ports:
@@ -88,6 +88,8 @@ services:
       PORT: "3700"
       CODEMODE_BIND: 0.0.0.0
       CODEMODE_SQLITE: /data/dev-codemode-chat.sqlite
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-big}"
+      CODEMODE_REMOTE: "${CODEMODE_REMOTE:-}"
     ports:
       - "${CODEMODE_HOST_BIND:-127.0.0.1}:${CODEMODE_HOST_PORT:-3700}:3700"
     volumes:
@@ -122,7 +124,7 @@ services:
       NODE_ENV: production
       CODEMODE_LISTEN: "${CODEMODE_LISTEN:-tcp:0.0.0.0:3800}"
       CODEMODE_DB: /data/codemode-b.sqlite
-      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
+      CODEMODE_HOST_NAME: "${CODEMODE_NANO_NAME:-nano}"
       CODEMODE_JUDGES: "${CODEMODE_JUDGES:-2}"
     ports:
       # Set CODEMODE_SHARD_BIND to the host's internal (LAN/NetBird) IP to keep the shard socket off the public
