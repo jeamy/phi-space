@@ -9,11 +9,16 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
 
 - A **task** is a function to write (`firstPrimes(n)`, `fib(n)`, `sortNumbers(arr)`, `gcd(a, b)`), or a custom task:
   choose "Custom task …" in the dropdown, which opens the fields for the function name, a description and test cases
-  (`[{"args":[2],"expect":4}]`; the cases are the oracle). "Start task" adds the task to the chat as a new **task block**.
+  (`[{"args":[2],"expect":4}]`; the cases are the oracle). **Start run** opens a new **task block** in the chat when the
+  chosen task is not the active block yet, and then starts the run in it (with 0 agents it only creates the block, and
+  you hand in the code yourself).
 - Every task block is one collapsible section of the conversation. Its contributions are **square tiles** (agent,
   model, time, verdict); a click on a tile unfolds the code that agent delivered. The leaderboard, the standings per
   contender and the best code on the right belong to the block that is open or was clicked last.
-- A **run** lets N agents contribute for G generations to the active block. Scripted agents (no model) hand in
+- A **run** lets N agents contribute for G generations to the active block. It ends when every generation has been
+  contributed and judged (or on Stop): there is no "good enough" criterion. Code you hand in at any time, also during or
+  after a run, is judged by the same sandbox and counts for the leaderboard and the best code of the active block;
+  agents of later generations see the new best and try to beat it. Code is always handed in to the active block. Scripted agents (no model) hand in
   hand-written variants, some slow, some wrong; model agents (optional) write JavaScript themselves and see the best
   code so far. A custom task has no scripted variants, so choosing it hides the scripted agents and selects a model.
 - You can **hand in code yourself**; it goes through exactly the same path.

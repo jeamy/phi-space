@@ -20,8 +20,8 @@ type Llm = { enabled: boolean; on: boolean; current: string | null; models: { id
 type Shard = { shard: string; up: boolean; host: { name: string; cpu: string; cores: number; memGiB: number } | null; judged: number | null };
 
 const T = {
-	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle (JSON: [{\"args\":[2],\"expect\":4}])", setTask: "Aufgabe starten", setTaskHint: "Legt einen neuen Aufgabenblock im Chat an.", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", setFirst: "Zuerst die gewählte Aufgabe starten", yours: "Eigener Code", submit: "Code einreichen", you: "Name", say: "Nachricht", send: "Senden", board: "Rangliste", best: "Bester Code", standings: "Wertung je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "gegeneinander", correctN: "korrekt", contributions: "Beiträge", running: "läuft", block: "Aufgabe", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe." },
-	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases (JSON: [{\"args\":[2],\"expect\":4}])", setTask: "Start task", setTaskHint: "Adds a new task block to the chat.", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", setFirst: "Start the chosen task first", yours: "Your code", submit: "Submit code", you: "Name", say: "Message", send: "Send", board: "Leaderboard", best: "Best code", standings: "Standings per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "versus", correctN: "correct", contributions: "contributions", running: "running", block: "Task", forBlock: "for", hide: "Close", noBlocks: "No task yet." },
+	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle (JSON: [{\"args\":[2],\"expect\":4}])", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", you: "Name", say: "Nachricht", send: "Senden", board: "Rangliste", best: "Bester Code", standings: "Wertung je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "gegeneinander", correctN: "korrekt", contributions: "Beiträge", running: "läuft", block: "Aufgabe", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe." },
+	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases (JSON: [{\"args\":[2],\"expect\":4}])", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", you: "Name", say: "Message", send: "Send", board: "Leaderboard", best: "Best code", standings: "Standings per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "versus", correctN: "correct", contributions: "contributions", running: "running", block: "Task", forBlock: "for", hide: "Close", noBlocks: "No task yet." },
 } as const;
 type Tr = (typeof T)[Lang];
 
@@ -172,18 +172,29 @@ export function CodemodeChat() {
 		try { await api(`/sessions/${sid}${path}`, body); } catch (e) { setError((e as Error).message); }
 	}, [sid]);
 
-	const startTask = () => {
-		if (customChosen) {
-			let cases: unknown;
-			try { cases = JSON.parse(custom.cases); } catch { setError("JSON?"); return; }
-			void act("/task", { custom: { fn: custom.fn, prompt: custom.prompt, cases } });
-		} else void act("/task", { taskId: choice });
+	// "Start run" does everything: when the chosen task is not the active block yet, it opens a new task block first.
+	const startRun = async () => {
+		setError("");
+		try {
+			const sameCustom = current?.task.id === "custom" && current.task.fn === custom.fn.slice(0, 41) && current.task.prompt.en === custom.prompt.slice(0, 600);
+			if (customChosen ? !sameCustom : !(current && choice === current.task.id)) {
+				let body: unknown = { taskId: choice };
+				if (customChosen) {
+					let cases: unknown;
+					try { cases = JSON.parse(custom.cases); } catch { setError("JSON?"); return; }
+					body = { custom: { fn: custom.fn, prompt: custom.prompt, cases } };
+				}
+				await api(`/sessions/${sid}/task`, body);
+			}
+			if (params.agents > 0) await api(`/sessions/${sid}/run`, { agents: params.agents, gens: params.gens, perAgent: params.per, contenders: contenders.filter((c) => !customChosen || c !== "scripted"), lang });
+		} catch (e) { setError((e as Error).message); }
 	};
 	const toggleSet = (set: Set<string>, id: string) => { const n = new Set(set); if (n.has(id)) n.delete(id); else n.add(id); return n; };
 
 	const catalog = snap?.tasks.find((x) => x.id === choice);
 	const run = snap?.run;
-	const choiceIsActive = !!current && choice === current.task.id;
+	const customIncomplete = customChosen && (!custom.fn.trim() || !custom.prompt.trim() || !custom.cases.trim());
+	const needsContender = params.agents > 0 && contenders.filter((c) => !customChosen || c !== "scripted").length === 0;
 	type Item = { ts: number; key: string; m?: Message; b?: Block };
 	const timeline: Item[] = [
 		...(snap?.messages ?? []).map((m): Item => ({ ts: m.ts, key: `m${m.ts}${m.author}${m.text.length}`, m })),
@@ -224,14 +235,13 @@ export function CodemodeChat() {
 								<textarea className="task-field" rows={8} placeholder={t.cases} value={custom.cases} onChange={(e) => setCustom({ ...custom, cases: e.target.value })} />
 							</div>
 						) : null}
-						<div className="row"><button className="btn btn--primary" disabled={!!run?.active} title={t.setTaskHint} onClick={startTask}>{t.setTask}</button></div>
 					</div>
 					<div className="panel">
 						<h2>{t.run}</h2>
 						{(["agents", "gens", "per"] as const).map((k) => (
 							<div className="row" key={k}>
 								<label htmlFor={"r" + k}>{t[k]}</label>
-								<input id={"r" + k} type="number" min={1} max={k === "agents" ? 8 : k === "gens" ? 6 : 3} value={params[k]} onChange={(e) => setParams({ ...params, [k]: Number(e.target.value) })} />
+								<input id={"r" + k} type="number" min={k === "agents" ? 0 : 1} max={k === "agents" ? 8 : k === "gens" ? 6 : 3} value={params[k]} onChange={(e) => setParams({ ...params, [k]: Number(e.target.value) })} />
 							</div>
 						))}
 						<fieldset className="contenders">
@@ -246,7 +256,7 @@ export function CodemodeChat() {
 							{customChosen && llm?.enabled ? <div className="notice">{t.autoModel}</div> : null}
 						</fieldset>
 						<div className="row">
-							<button className="btn btn--primary" disabled={!!run?.active || !choiceIsActive || contenders.filter((c) => !customChosen || c !== "scripted").length === 0} title={!choiceIsActive ? t.setFirst : contenders.length === 0 ? t.pick : undefined} onClick={() => void act("/run", { agents: params.agents, gens: params.gens, perAgent: params.per, contenders: contenders.filter((c) => !customChosen || c !== "scripted"), lang })}>{t.start}</button>
+							<button className="btn btn--primary" disabled={!!run?.active || customIncomplete || needsContender} title={customIncomplete ? t.fillCustom : needsContender ? t.pick : params.agents === 0 ? t.agentsZero : undefined} onClick={() => void startRun()}>{params.agents > 0 ? t.start : t.newTask}</button>
 							<button className="btn" disabled={!run?.active} onClick={() => void act("/stop", {})}>{t.stop}</button>
 						</div>
 						{run ? <div className={"pill" + (run.active ? " pill--accent" : "")}>{(run.contenders ?? [run.mode]).join(` ${t.versus} `)} · {run.gen}/{run.gens}</div> : null}
