@@ -24,8 +24,10 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
   rounds (0 to 3) are over, at the latest after G generations, or on Stop. Code you hand in at any time is judged by the
   same sandbox and is part of the board the agents build on; it always goes to the active block. Scripted agents (no
   model) hand in hand-written variants, some slow, some wrong. A custom task has no scripted variants, so choosing it
-  hides the scripted agents and selects a model. A custom task may have a **check rule** `(result, args) => boolean`
-  instead of fixed results, for tasks with more than one right answer; it runs in a fresh sandbox of its own.
+  hides the scripted agents and selects a model. For tasks with more than one right answer, a case may list several
+  results ("4 -> 2 oder -2"), or a **verifier agent** writes a check rule `(result, args) => boolean` from the
+  description and the examples when the task is created; the rule must accept the examples and reject obvious wrong
+  results before it counts, and runs in a fresh sandbox of its own.
 - You can **hand in code yourself**; it goes through exactly the same path.
 - A task block can be **deleted** with the bin icon in its header, after a yes/no dialog. This removes everything that
   belongs to it (task, contributions, verdicts on this host and on nano, best code, log lines). A block with a running

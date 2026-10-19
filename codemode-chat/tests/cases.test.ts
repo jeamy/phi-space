@@ -23,6 +23,14 @@ test("inputs with arrows and on separate lines", () => {
 	assert.deepEqual(parseCases("Eingabe: 5 -> Ergebnis: 120"), [{ args: [5], expect: 120 }]);
 });
 
+test("several right results: oder / or / |", () => {
+	assert.deepEqual(parseCases("Eingabe: 5 11\nErgebnis: [0,1,4,9,11] oder [0,2,7,10,11]"), [{ args: [5, 11], expectAny: [[0, 1, 4, 9, 11], [0, 2, 7, 10, 11]] }]);
+	assert.deepEqual(parseCases("4 -> 2 or -2"), [{ args: [4], expectAny: [2, -2] }]);
+	assert.deepEqual(parseCases("x -> a | b | c"), [{ args: ["x"], expectAny: ["a", "b", "c"] }]);
+	assert.deepEqual(parseCases('1 -> "this or that"'), [{ args: [1], expect: "this or that" }]); // one JSON string
+	assert.deepEqual(parseCases('[{"args":[4],"expectAny":[2,-2]}]'), [{ args: [4], expectAny: [2, -2] }]);
+});
+
 test("input lines alone are calls without a fixed result (for a check rule)", () => {
 	assert.deepEqual(parseCases("Eingabe: 5 11\nInput: 4 6"), [{ args: [5, 11] }, { args: [4, 6] }]);
 	assert.deepEqual(parseCases('[{"args":[5,11]}]'), [{ args: [5, 11] }]);

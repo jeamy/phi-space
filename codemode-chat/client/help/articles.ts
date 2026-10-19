@@ -135,23 +135,22 @@ Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
   | \`3 4 -> 12\` | zwei Eingaben (3 und 4), Ergebnis 12 |
   | \`[3,1,2] -> [1,2,3]\` | ein JSON-Array als Eingabe ist **ein** Argument |
   | \`Eingabe: 3 4\` und darunter \`Ergebnis: 12\` | ein Fall aus zwei Zeilen |
+  | \`4 -> 2 oder -2\` | mehrere richtige Ergebnisse, eines davon genügt |
 
   Mehrere Fälle schreibst du untereinander, eine Zeile je Fall.
 
-Die Testfälle sind das **Orakel**: Ein Beitrag ist korrekt, wenn er für jeden Fall genau das erwartete Ergebnis liefert (Vergleich als JSON), oder, mit Prüfregel, wenn die Regel jedes Ergebnis annimmt. Die Agenten sehen die Fälle, also genau die Aufrufe und Ergebnisse. Gemessen wird die Zeit je Durchgang über alle Fälle: höchstens 300 Durchgänge oder etwa eine Sekunde, so dass auch langsame Funktionen gemessen und nicht abgebrochen werden.
+Die Testfälle sind das **Orakel**: Ein Beitrag ist korrekt, wenn er für jeden Fall eines der erwarteten Ergebnisse liefert (Vergleich als JSON), oder, mit Prüfregel, wenn die Regel jedes Ergebnis annimmt (siehe [Mehrere richtige Ergebnisse](#check)). Die Agenten sehen die Fälle, also genau die Aufrufe und Ergebnisse. Gemessen wird die Zeit je Durchgang über alle Fälle: höchstens 300 Durchgänge oder etwa eine Sekunde, so dass auch langsame Funktionen gemessen und nicht abgebrochen werden.
 
-## Prüfregel {#check}
+## Mehrere richtige Ergebnisse {#check}
 
-Manche Aufgaben haben **mehrere richtige Antworten**: Zu einem Golomb-Lineal mit 5 Marken und Länge 11 passt \`[0,1,4,9,11]\` ebenso wie das gespiegelte \`[0,2,7,10,11]\`. Dafür gibt es das Feld **Prüfregel (optional)**: eine JavaScript-Funktion \`(result, args) => true/false\`, die über jedes Ergebnis entscheidet. Die Testfälle brauchen dann nur die Eingaben, zum Beispiel \`Eingabe: 5 11\` oder \`[{"args":[5,11]}]\`.
+Viele Aufgaben haben **mehr als eine richtige Antwort**: eine Wurzel von 4 ist 2 oder −2, ein Weg durch ein Labyrinth, eine gültige Stundenplan-Belegung, ein Golomb-Lineal und sein Spiegelbild, eine Zerlegung in Faktoren in beliebiger Reihenfolge. Dafür gibt es zwei Wege, beide ohne Programmieren:
 
-\`\`\`js
-(r, [n, len]) => Array.isArray(r) && r.length === n && r[0] === 0 && r[n - 1] === len &&
-  new Set(r.flatMap((a, i) => r.slice(i + 1).map((b) => b - a))).size === n * (n - 1) / 2
-\`\`\`
+1. **Mehrere Ergebnisse angeben.** Schreibe alle richtigen Ergebnisse mit **„oder“** (auch \`or\` oder \`|\`) hintereinander: \`4 -> 2 oder -2\`, \`Eingabe: 5 11\` und darunter \`Ergebnis: [0,1,4,9,11] oder [0,2,7,10,11]\`. Ein Beitrag ist richtig, wenn er eines davon liefert. Das passt, wenn es wenige richtige Antworten gibt und du sie kennst.
+2. **Prüfer-Agent** (Haken **„Auch andere richtige Ergebnisse zulassen“**, Standard, braucht Modell-Agenten). Beim Anlegen der Aufgabe liest ein Modell deine Beschreibung und deine Beispiele und schreibt daraus eine **Prüfregel**: eine Funktion, die für jedes Ergebnis entscheidet, ob es die Aufgabe erfüllt. Du schreibst weiterhin nur Beschreibung und Beispiele.
 
-Die Regel läuft in einer **eigenen Sandbox** auf den Ergebnissen (als JSON). Ein Beitrag kann sie also nicht austricksen, auch nicht durch Verändern von Builtins wie \`Set\`. Auch einige Ergebnisse aus dem Benchmark prüft sie, zufällig gewählt: Code, der nur beim ersten Aufruf richtig liegt, fällt durch. Die Agenten sehen die Regel.
+Bevor die Regel gilt, wird sie **gegengeprüft**: Sie muss jedes deiner Beispielergebnisse annehmen und offensichtlich falsche Ergebnisse ablehnen (zum Beispiel \`null\`, leere Werte, knapp danebenliegende Varianten deiner Beispiele). Fällt sie durch, schreibt der Prüfer-Agent sie mit der Begründung neu, höchstens dreimal. Klappt es nicht, gelten deine Beispiele als exaktes Ergebnis. Eine Protokollzeile im Block sagt, was gilt; die Regel steht sichtbar im Block, und die Agenten sehen sie.
 
-Eine eigene Aufgabe hat **keine Skript-Varianten**. Deshalb werden die Skript-Agenten ausgeblendet und automatisch ein Modell gewählt; ohne Modell-Zugang kannst du nur selbst Code einreichen (siehe [Modell-Agenten](help.topic.model_agents#overview)).
+Die Regel läuft in einer **eigenen Sandbox** auf den Ergebnissen (als JSON), auch auf zufällig gewählten Ergebnissen aus dem Benchmark. Ein Beitrag kann sie nicht austricksen, auch nicht durch Verändern von Builtins.
 
 ## Block anlegen {#create}
 
@@ -202,23 +201,22 @@ Choose **"Custom task …"** in the dropdown. Three fields appear:
   | \`3 4 -> 12\` | two inputs (3 and 4), result 12 |
   | \`[3,1,2] -> [1,2,3]\` | a JSON array as input is **one** argument |
   | \`Input: 3 4\` and below it \`Result: 12\` | one case from two lines |
+  | \`4 -> 2 or -2\` | several right results, one of them is enough |
 
   Write several cases one below the other, one line per case.
 
-The test cases are the **oracle**: a contribution is correct if it returns exactly the expected result for every case (compared as JSON), or, with a check rule, if the rule accepts every result. The agents see the cases, i.e. exactly the calls and results. The time measured is per pass over all cases: at most 300 passes or about a second, so slow functions are timed, not cut off.
+The test cases are the **oracle**: a contribution is correct if it returns one of the expected results for every case (compared as JSON), or, with a check rule, if the rule accepts every result (see [Several right results](#check)). The agents see the cases, i.e. exactly the calls and results. The time measured is per pass over all cases: at most 300 passes or about a second, so slow functions are timed, not cut off.
 
-## Check rule {#check}
+## Several right results {#check}
 
-Some tasks have **more than one right answer**: for a Golomb ruler with 5 marks and length 11, \`[0,1,4,9,11]\` fits just as well as its mirror \`[0,2,7,10,11]\`. For these there is the field **Check rule (optional)**: a JavaScript function \`(result, args) => true/false\` that decides every result. The test cases then only need the inputs, for example \`Input: 5 11\` or \`[{"args":[5,11]}]\`.
+Many tasks have **more than one right answer**: a square root of 4 is 2 or −2; a path through a maze, a valid timetable, a Golomb ruler and its mirror image, a factorisation in any order. There are two ways for this, neither needs programming:
 
-\`\`\`js
-(r, [n, len]) => Array.isArray(r) && r.length === n && r[0] === 0 && r[n - 1] === len &&
-  new Set(r.flatMap((a, i) => r.slice(i + 1).map((b) => b - a))).size === n * (n - 1) / 2
-\`\`\`
+1. **Give several results.** Write all right results separated by **"or"** (also \`oder\` or \`|\`): \`4 -> 2 or -2\`, or \`Input: 5 11\` with \`Result: [0,1,4,9,11] or [0,2,7,10,11]\` below it. A contribution is right if it returns one of them. This fits when there are few right answers and you know them.
+2. **Verifier agent** (tick **"Accept other right results too"**, the default, needs model agents). When the task is created, a model reads your description and examples and writes a **check rule** from them: a function that decides for every result whether it fulfils the task. You still write only the description and examples.
 
-The rule runs in a **sandbox of its own** on the results (as JSON), so a contribution cannot fool it, not even by changing builtins such as \`Set\`. It also checks some results from the bench, picked at random: code that is only right on the first call fails. The agents see the rule.
+Before the rule counts it is **cross-checked**: it must accept every one of your example results and reject obviously wrong ones (e.g. \`null\`, empty values, near misses of your examples). If it fails, the verifier agent writes it again with the reason, at most three times. If that does not work, your examples count as the exact result. A log line in the block says which applies; the rule is shown in the block, and the agents see it.
 
-A custom task has **no scripted variants**. So the scripted agents are hidden and a model is selected automatically; without model access you can only hand in code yourself (see [Model agents](help.topic.model_agents#overview)).
+The rule runs in a **sandbox of its own** on the results (as JSON), also on randomly chosen results from the bench. A contribution cannot fool it, not even by changing builtins.
 
 ## Creating a block {#create}
 
@@ -854,7 +852,7 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`GET /api/sessions/:id\` | Zustand eines Raums (Blöcke, Chat, Lauf); in großen Räumen fehlt manchem Beitrag der Code (\`sourceOmitted\`) |
 | \`GET /api/sessions/:id/source/:candidateId\` | Code, Testergebnisse und Herkunft eines Beitrags: \`{source, cases, passed, total, role, basedOn}\` |
 | \`POST /api/sessions/:id/exec\` | einen Beitrag ausführen: \`{candidateId, call?}\`; Antwort als NDJSON-Strom (\`start\`, \`case\`, \`log\`, \`value\`, \`error\`, \`end\`), Abbruch der Anfrage stoppt den Lauf |
-| \`POST /api/sessions/:id/task\` | neuen Block anlegen: \`{taskId}\` oder \`{custom:{fn,prompt,cases,check?}}\` |
+| \`POST /api/sessions/:id/task\` | neuen Block anlegen: \`{taskId}\` oder \`{custom:{fn,prompt,cases,verify?,check?}}\`; Fälle mit \`expect\` oder \`expectAny\` (mehrere richtige); \`verify\` (Standard an): Prüfer-Agent; \`check\`: eigene Regel |
 | \`POST /api/sessions/:id/run\` | Lauf starten: \`{agents,gens,perAgent,polish,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | Lauf stoppen |
 | \`POST /api/sessions/:id/code\` | Code einreichen: \`{author,source}\` |
@@ -901,7 +899,7 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`GET /api/sessions/:id\` | state of a room (blocks, chat, run); in large rooms some contributions come without code (\`sourceOmitted\`) |
 | \`GET /api/sessions/:id/source/:candidateId\` | code, test results and lineage of a contribution: \`{source, cases, passed, total, role, basedOn}\` |
 | \`POST /api/sessions/:id/exec\` | run a contribution: \`{candidateId, call?}\`; answered as an NDJSON stream (\`start\`, \`case\`, \`log\`, \`value\`, \`error\`, \`end\`); closing the request stops the run |
-| \`POST /api/sessions/:id/task\` | create a block: \`{taskId}\` or \`{custom:{fn,prompt,cases,check?}}\` |
+| \`POST /api/sessions/:id/task\` | create a block: \`{taskId}\` or \`{custom:{fn,prompt,cases,verify?,check?}}\`; cases with \`expect\` or \`expectAny\` (several right); \`verify\` (default on): verifier agent; \`check\`: own rule |
 | \`POST /api/sessions/:id/run\` | start a run: \`{agents,gens,perAgent,polish,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | stop the run |
 | \`POST /api/sessions/:id/code\` | hand in code: \`{author,source}\` |

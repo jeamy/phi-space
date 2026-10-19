@@ -2,7 +2,7 @@
 // explains the field in full.
 import type { Lang } from "./theme.ts";
 
-export type TipId = "task" | "fn" | "prompt" | "cases" | "check" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
+export type TipId = "task" | "fn" | "prompt" | "cases" | "verify" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -29,15 +29,15 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	cases: {
 		text: {
-			de: "Gegen diese Fälle prüft die Sandbox jeden Beitrag. JSON oder einfacher Text, eine Zeile je Fall: „5 -> 120“, „3 4 -> 12“, „[3,1,2] -> [1,2,3]“ oder „Ergebnis: 0 1 4 9 11“ (ohne Eingabe). Mit Prüfregel reicht die Eingabe: „Eingabe: 5 11“. 1 bis 50 Fälle. Die Agenten sehen die Fälle.",
-			en: "The sandbox checks every contribution against these cases. JSON or plain text, one line per case: \"5 -> 120\", \"3 4 -> 12\", \"[3,1,2] -> [1,2,3]\" or \"Result: 0 1 4 9 11\" (no input). With a check rule the input is enough: \"Input: 5 11\". 1 to 50 cases. The agents see the cases.",
+			de: "Gegen diese Fälle prüft die Sandbox jeden Beitrag. JSON oder einfacher Text, eine Zeile je Fall: „5 -> 120“, „3 4 -> 12“, „[3,1,2] -> [1,2,3]“ oder „Ergebnis: 0 1 4 9 11“ (ohne Eingabe). Mehrere richtige Ergebnisse: „4 -> 2 oder -2“. 1 bis 50 Fälle. Die Agenten sehen die Fälle.",
+			en: "The sandbox checks every contribution against these cases. JSON or plain text, one line per case: \"5 -> 120\", \"3 4 -> 12\", \"[3,1,2] -> [1,2,3]\" or \"Result: 0 1 4 9 11\" (no input). Several right results: \"4 -> 2 or -2\". 1 to 50 cases. The agents see the cases.",
 		},
 		article: "help.topic.tasks_and_blocks", anchor: "custom",
 	},
-	check: {
+	verify: {
 		text: {
-			de: "Für Aufgaben mit mehreren richtigen Antworten: eine JavaScript-Funktion (result, args) => true/false statt eines festen Ergebnisses, z. B. für ein Golomb-Lineal „5 Marken, Länge 11, alle Abstände verschieden“. Sie läuft in einer eigenen Sandbox.",
-			en: "For tasks with more than one right answer: a JavaScript function (result, args) => true/false instead of a fixed result, e.g. for a Golomb ruler \"5 marks, length 11, all distances different\". It runs in a sandbox of its own.",
+			de: "Für Aufgaben mit mehreren richtigen Antworten. Ein Prüfer-Agent liest Beschreibung und Beispiele und schreibt daraus eine Prüfregel; sie muss deine Beispiele annehmen und offensichtlich falsche Ergebnisse ablehnen, sonst schreibt er sie neu. Ohne Haken zählen nur die angegebenen Ergebnisse (mehrere mit „oder“).",
+			en: "For tasks with more than one right answer. A verifier agent reads the description and the examples and writes a check rule from them; it must accept your examples and reject obviously wrong results, or the agent writes it again. Without the tick only the given results count (several with \"or\").",
 		},
 		article: "help.topic.tasks_and_blocks", anchor: "check",
 	},

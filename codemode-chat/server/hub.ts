@@ -8,9 +8,9 @@
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
-import { judgeInSlot, MAX_SOURCE_CHARS, plain, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
-import { customSpec, customTask, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
-import { llmContribution, llmModels, type Attempt, type Note, type Role } from "./llm.ts";
+import { judgeInSlot, MAX_SOURCE_CHARS, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { customSpec, customTask, expectedOf, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
+import { llmContribution, llmModels, llmVerifier, type Attempt, type Note, type Role } from "./llm.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
@@ -24,7 +24,7 @@ const SNAPSHOT_MAX_BYTES = 900 * 1024;
 const REMOTE_GRACE_MS = 90_000;
 export type RunMode = "scripted" | "llm";
 /** The model side of a run; replaceable in tests. */
-export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution };
+export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier };
 /** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
 /** `gens` is the most generations a run may take; it ends earlier once the task is solved and `polish` more
  *  generations improved the solution (`solvedGen`: the generation that solved it, 0 = solved before the run). */
@@ -70,7 +70,7 @@ export class CodeChatHub {
 	readonly #llm: LlmApi;
 	/** Lease of every room entry (CODEMODE_TTL_HOURS). */
 	readonly #ttl: number;
-	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution }; }
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier }; }
 
 	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
 	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
@@ -208,7 +208,7 @@ export class CodeChatHub {
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
 			const blocks = raw.map(({ f, task, blockId, contributions, best }) => ({
 				blockId, ts: f.ts as number, active: blockId === s.blockId,
-				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(task.check !== undefined ? { check: task.check } : {}) },
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}) },
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts }) => ({ author, via, gen, text, ts })),
 			}));
@@ -301,18 +301,43 @@ export class CodeChatHub {
 		this.push(s);
 	}
 
-	/** Every call opens a new task block, also when the same task is chosen again. */
-	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string } }): Promise<void> {
+	/** Every call opens a new task block, also when the same task is chosen again. A custom task with `verify` (the
+	 *  default) gets a check rule from the verifier agent, so other right results than the examples count too. */
+	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean } }): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "task", 30)) throw new Error("Too many tasks, slow down");
-		const task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
+		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
+		if (s.run?.active) throw new Error("A run is active; stop it first");
+		let verdict: string | null = null;
+		if (o.custom && task.check === undefined && o.custom.verify !== false) ({ task, verdict } = await this.#verify(task));
+		const chosen = task;
 		await this.#exclusive(s, async () => {
 			if (s.run?.active) throw new Error("A run is active; stop it first");
 			if ((await this.#taskEntries(id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
-			await this.#openBlock(s, task, true);
+			await this.#openBlock(s, chosen, true);
+			if (verdict) await this.#write(s, "system", verdict, s.blockId);
 		});
 		this.push(s);
+	}
+
+	/** The verifier agent writes a check rule from the description and the examples; the rule must pass testRule (accept
+	 *  every example result, reject obvious wrong ones) before it decides anything, else the agent tries again with the
+	 *  reason (three tries). Without models, or when no rule passes, the examples stay the exact oracle. */
+	async #verify(task: Task): Promise<{ task: Task; verdict: string | null }> {
+		const verify = this.#llm.verify;
+		if (!verify || !(await this.#llm.models()).length) return { task, verdict: null };
+		if (!task.cases.every((c) => expectedOf(c).length)) return { task, verdict: "No check rule: the verifier needs an expected result in every case" };
+		let feedback: string | undefined;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				const r = await verify({ task, ...(feedback ? { feedback } : {}) });
+				const why = await sandboxSlot(() => testRule(this.cm, task, r.check, expectedOf));
+				if (why === null) return { task: customTask({ fn: task.fn, prompt: task.prompt.en, cases: task.cases, check: r.check, checkBy: "verifier" }), verdict: `Check rule written by the verifier agent (${r.model}): other right results count too` };
+				feedback = why;
+			} catch (e) { feedback = plain((e as Error).message); if (/off|budget|not allowed/.test(feedback)) break; }
+		}
+		return { task, verdict: `No check rule (${feedback ?? "verifier failed"}): results must match the examples` };
 	}
 
 	/** A person hands in code; it is judged by the same sandbox as the agents' code. */

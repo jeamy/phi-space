@@ -534,3 +534,75 @@ t("a team run: a teammate repairs a close attempt, leaves a note, and the run en
 		assert.deepEqual(d.cases.map((c: any) => [c.call, c.ok]), [["double(5)", false], ["double(2)", true]]); // failing first
 	} finally { await srv.close(); }
 });
+
+// ---- several right results: alternatives in the cases, and the verifier agent's check rule ----
+
+t("a case with several right results accepts any of them, and only its own", async () => {
+	const task = customTask({ fn: "root", prompt: "a square root", cases: [{ args: [4], expectAny: [2, -2] }, { args: [9], expect: 3 }] });
+	assert.equal((await judge(cm!, task, "function root(x){ return -Math.sqrt(x) === -3 ? 3 : -2 }")).ok, true);
+	const wrong = await judge(cm!, task, "function root(x){ return 3 }");
+	assert.deepEqual([wrong.ok, wrong.passed], [false, 1]);
+	assert.equal(wrong.cases.find((c) => !c.ok)!.expect, "2 or -2");
+	// expectations are the case's own: a patched prototype cannot add one
+	assert.equal((await judge(cm!, task, "function root(){ const o = {}; Object.prototype.expectAny = [o]; Object.prototype.expect = o; return o }")).ok, false);
+});
+
+t("the cross-check of a rule: it must accept the examples and reject obvious wrong results, for any kind of task", async () => {
+	const { testRule } = await import("../server/judge.ts");
+	const { expectedOf } = await import("../server/tasks.ts");
+	const golomb = customTask({ fn: "golomb", prompt: "", cases: [{ args: [5, 11], expect: [0, 1, 4, 9, 11] }] });
+	assert.equal(await testRule(cm!, golomb, GOLOMB_RULE, expectedOf), null);
+	assert.match((await testRule(cm!, golomb, "() => true", expectedOf))!, /accepts the wrong result null/);
+	assert.match((await testRule(cm!, golomb, "(r) => Array.isArray(r) && r.length === 4", expectedOf))!, /rejects the right result/);
+	assert.match((await testRule(cm!, golomb, "(r) => r !== null", expectedOf))!, /too many wrong results/);
+	assert.match((await testRule(cm!, golomb, "(r) => {", expectedOf))!, /does not run/);
+	const root = customTask({ fn: "root", prompt: "", cases: [{ args: [4], expect: 2 }, { args: [9], expect: 3 }] });
+	assert.equal(await testRule(cm!, root, "(r, [x]) => typeof r === 'number' && Math.abs(r * r - x) < 1e-9", expectedOf), null);
+	const sort = customTask({ fn: "sortDesc", prompt: "", cases: [{ args: [[1, 3, 2]], expect: [3, 2, 1] }] });
+	assert.equal(await testRule(cm!, sort, "(r, [a]) => Array.isArray(r) && r.length === a.length && r.every((v, i) => i === 0 || r[i - 1] >= v) && [...a].sort().join() === [...r].sort().join()", expectedOf), null);
+});
+
+t("the verifier agent writes the rule when the task is created; a refused rule is rewritten with the reason", async () => {
+	const feedback: Array<string | undefined> = [];
+	const llm = {
+		models: async () => ["fake/verifier"],
+		contribute: async () => { throw new Error("not used"); },
+		verify: async (c: { feedback?: string }) => { feedback.push(c.feedback); return { check: feedback.length === 1 ? "() => true" : GOLOMB_RULE, model: "fake/verifier" }; },
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/ver1/task", { custom: { fn: "golomb", prompt: "Golomb ruler: n marks from 0 to len, all distances different", cases: [{ args: [5, 11], expect: [0, 1, 4, 9, 11] }] } });
+		const snap = (await (await fetch(srv.url + "/api/sessions/ver1")).json()) as any;
+		const b = snap.blocks.at(-1);
+		assert.equal(b.task.check, GOLOMB_RULE);
+		assert.equal(b.task.checkBy, "verifier");
+		assert.equal(feedback.length, 2);
+		assert.match(feedback[1]!, /accepts the wrong result null/); // the second try knew why the first was refused
+		assert.ok(b.messages.some((m: any) => /Check rule written by the verifier agent \(fake\/verifier\)/.test(m.text)));
+		// another right answer than the example now counts
+		await post(srv.url, "/api/sessions/ver1/code", { author: "me", source: "function golomb(){ return [0, 2, 7, 10, 11] }" });
+		await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/ver1")).json()) as any; return s.blocks.at(-1).contributions[0]?.ok === true; });
+		// without the tick: no verifier, the example is exact
+		await post(srv.url, "/api/sessions/ver2/task", { custom: { fn: "golomb", prompt: "x", cases: [{ args: [5, 11], expect: [0, 1, 4, 9, 11] }], verify: false } });
+		assert.equal(((await (await fetch(srv.url + "/api/sessions/ver2")).json()) as any).blocks.at(-1).task.check, undefined);
+		assert.equal(feedback.length, 2);
+	} finally { await srv.close(); }
+});
+
+t("no rule passes the cross-check: the examples stay exact, and the block says why", async () => {
+	const llm = { models: async () => ["fake/verifier"], contribute: async () => { throw new Error("not used"); }, verify: async () => ({ check: "() => true", model: "fake/verifier" }) };
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/ver3/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 2 }] } });
+		const b = ((await (await fetch(srv.url + "/api/sessions/ver3")).json()) as any).blocks.at(-1);
+		assert.equal(b.task.check, undefined);
+		assert.ok(b.messages.some((m: any) => /No check rule \(it accepts the wrong result null.*\): results must match the examples/.test(m.text)));
+	} finally { await srv.close(); }
+});
+
+test("the verifier prompt is generic: the description, the examples (with alternatives) and the reason of a refusal", async () => {
+	const { verifierPrompt } = await import("../server/llm.ts");
+	const task = customTask({ fn: "route", prompt: "Shortest route through the grid from S to E", cases: [{ args: [["S.", ".E"]], expectAny: [["R", "D"], ["D", "R"]] }] });
+	const p = verifierPrompt(task, "it accepts the wrong result null");
+	for (const want of ["route", "Shortest route through the grid", 'route(["S.",".E"]) must return one of ["R","D"], ["D","R"]', "(result, args) => boolean", "Several different answers may be right", "it accepts the wrong result null"]) assert.ok(p.user.includes(want), want);
+});

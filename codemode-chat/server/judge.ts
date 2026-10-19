@@ -66,7 +66,13 @@ const __eq = (a, b) => {
 	if (ka.length !== kb.length) return false;
 	for (let i = 0; i < ka.length; i++) if (!__hasOwn(b, ka[i]) || !__eq(a[ka[i]], b[ka[i]])) return false;
 	return true;
-};`;
+};
+// a case's own expectations only (never through the prototype, which a contribution can patch)
+const __match = (v, c) => {
+	if (__hasOwn(c, "expectAny")) { const any = c.expectAny; for (let i = 0; i < any.length; i++) if (__eq(v, any[i])) return true; return false; }
+	return __eq(v, c.expect);
+};
+const __expectText = (c) => (__hasOwn(c, "expectAny") ? c.expectAny.map(__show).join(" or ") : __show(c.expect));`;
 
 /** The judging program: captured builtins, cases and bench input first, then the contribution, then cases and bench.
  *  `pick`: the bench round whose results a check rule judges (random, so code cannot be right only there). */
@@ -91,10 +97,10 @@ for (let __i = 0; __i < __cases.length; __i++) {
 		__outs[__i] = __got;
 		${check
 			? `__res.push({ call: __call, ok: false, got: __show(__got) });`
-			: `const __ok = __eq(__got, __c.expect);
+			: `const __ok = __match(__got, __c);
 		if (__ok) __passed++;
-		__res.push({ call: __call, ok: __ok, got: __show(__got), expect: __show(__c.expect) });`}
-	} catch (e) { __threw = true; __outs[__i] = null; __res.push({ call: __call, ok: false, error: __msg(e)${check ? "" : ", expect: __show(__c.expect)"} }); }
+		__res.push({ call: __call, ok: __ok, got: __show(__got), expect: __expectText(__c) });`}
+	} catch (e) { __threw = true; __outs[__i] = null; __res.push({ call: __call, ok: false, error: __msg(e)${check ? "" : ", expect: __expectText(__c)"} }); }
 }
 ${check
 	? `if (__threw) return { phase: "cases", cases: __res, outs: __outs };`
@@ -116,6 +122,46 @@ export function checkProgram(check: string, args: unknown[][], values: unknown[]
 const __args = ${JSON.stringify(args)};
 const __sets = ${JSON.stringify(values)};
 return __sets.map((vals) => vals.map((v, i) => { try { return __check(v, __args[i]) === true; } catch (e) { return "rule error: " + String(e && e.message !== undefined ? e.message : e).slice(0, 160); } }));`;
+}
+
+/** Values that are wrong answers to almost any task, offered to a rule as counter-examples. */
+const JUNK: unknown[] = [null, [], {}, -1, 0, "", true, "wrong"];
+/** A nearby wrong answer for an example result: a changed last element, digit or character (often wrong, not always). */
+const nearby = (v: unknown): unknown[] => {
+	if (typeof v === "number") return [v + 1];
+	if (typeof v === "string") return [v + "x"];
+	if (Array.isArray(v) && v.length) { const last = v.at(-1); return [[...v.slice(0, -1), typeof last === "number" ? last + 1 : "x"], v.slice(0, -1)]; }
+	return [];
+};
+
+/** Tries a check rule before it may decide anything: it must accept every example result, reject null, and reject most
+ *  of the obvious wrong answers (junk values and near misses of the examples). Null when it passes, else the reason in
+ *  words for the verifier agent. Runs in a sandbox of its own. */
+export async function testRule(cm: Codemode, task: Task, check: string, expected: (c: Task["cases"][number]) => unknown[]): Promise<string | null> {
+	if (!check.trim() || check.length > MAX_CHECK_CHARS) return "it is empty or too long";
+	const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+	const samples: Array<{ args: unknown[]; value: unknown; want: boolean; strict: boolean }> = [];
+	for (const c of task.cases) {
+		const right = expected(c);
+		for (const v of right) samples.push({ args: c.args, value: v, want: true, strict: true });
+		for (const v of [...JUNK, ...right.flatMap(nearby)]) if (!right.some((r) => same(r, v))) samples.push({ args: c.args, value: v, want: false, strict: v === null });
+	}
+	const sandbox = new cm.CodemodeSandbox({ timeoutMs: TIMEOUT_MS, tools: [], memoryLimitBytes: 64 * 1024 * 1024 });
+	try {
+		const r = await sandbox.execute(checkProgram(check, samples.map((x) => x.args as unknown[]), [samples.map((x) => x.value)]));
+		if (!r.ok) return `it does not run: ${plain(r.error?.message ?? "error")}`;
+		const got = ((r.value as unknown[][])?.[0] ?? []) as Array<true | false | string>;
+		const show = (x: (typeof samples)[number]) => `${JSON.stringify(x.value)} for args ${JSON.stringify(x.args)}`;
+		const refused = samples.find((x, i) => x.want && got[i] !== true);
+		if (refused) return `it rejects the right result ${show(refused)}${typeof got[samples.indexOf(refused)] === "string" ? ` (${got[samples.indexOf(refused)]})` : ""}`;
+		const wrong = samples.filter((x) => !x.want), accepted = wrong.filter((x) => got[samples.indexOf(x)] === true);
+		const strict = accepted.find((x) => x.strict);
+		if (strict) return `it accepts the wrong result ${show(strict)}`;
+		if (accepted.length * 3 > wrong.length) return `it accepts too many wrong results, e.g. ${show(accepted[0]!)}`;
+		return null;
+	} catch (e) {
+		return plain((e as Error).message);
+	} finally { await sandbox.close().catch(() => {}); }
 }
 
 /** An error text as the page shows it: no control characters (each would cost six bytes of JSON), at most 200 chars. */

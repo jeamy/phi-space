@@ -66,6 +66,11 @@ const __eq = (a, b) => {
 	for (let i = 0; i < ka.length; i++) if (!__hasOwn(b, ka[i]) || !__eq(a[ka[i]], b[ka[i]])) return false;
 	return true;
 };
+const __match = (v, c) => {
+	if (__hasOwn(c, "expectAny")) { const any = c.expectAny; for (let i = 0; i < any.length; i++) if (__eq(v, any[i])) return true; return false; }
+	return __eq(v, c.expect);
+};
+const __expectText = (c) => (__hasOwn(c, "expectAny") ? c.expectAny.map(__show).join(" or ") : __show(c.expect));
 const __msg = (e) => __String(e && e.message !== undefined ? e.message : e);
 const __console = {};
 for (const level of ["log", "info", "warn", "error", "debug"]) __console[level] = (...a) => { __emit({ t: "log", level, text: a.map(__show).join(" ") }); };
@@ -80,9 +85,9 @@ for (let __i = 0; __i < __cases.length; __i++) {
 	try {
 		let got = __apply(__fn, undefined, __c.args);
 		if (got && typeof got.then === "function") got = await got;
-		const ok = __rule ? __rule(got, __c.args) === true : __eq(got, __c.expect);
-		__emit({ t: "case", call, ok, got: __show(got), expect: __rule ? "a result the check rule accepts" : __show(__c.expect) });
-	} catch (e) { __emit({ t: "case", call, ok: false, error: __msg(e), expect: __rule ? "a result the check rule accepts" : __show(__c.expect) }); }
+		const ok = __rule ? __rule(got, __c.args) === true : __match(got, __c);
+		__emit({ t: "case", call, ok, got: __show(got), expect: __rule ? "a result the check rule accepts" : __expectText(__c) });
+	} catch (e) { __emit({ t: "case", call, ok: false, error: __msg(e), expect: __rule ? "a result the check rule accepts" : __expectText(__c) }); }
 }
 ${call ? `try {
 	let v = __eval(${JSON.stringify(callFn)})(__fn, __console);

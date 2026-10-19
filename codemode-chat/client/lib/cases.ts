@@ -7,11 +7,12 @@
 //   Ergebnis: 12
 //   [3,1,2] -> [1,2,3]                 a JSON array as input is ONE argument; "5 3" are two arguments
 //
+//   5 11 -> [0,1,4,9,11] oder [0,2,7,10,11]   several right results (also "or" and "|"): any of them counts
 //   Eingabe: 5 11                      an input line alone: a call without a fixed result (for a task with a check rule)
 //
 // Labels such as Ergebnis/Result/Erwartet/Expected/Ausgabe/Output/Eingabe/Input are ignored.
 
-export type Case = { args: unknown[]; expect?: unknown };
+export type Case = { args: unknown[]; expect?: unknown; expectAny?: unknown[] };
 
 const RESULT = "ergebnis|ausgabe|erwartet|result|output|expected";
 const INPUT = "eingabe|input|args?";
@@ -34,6 +35,17 @@ function parseValue(raw: string): unknown {
 	if (ws.length === 1) return token(ws[0]!);
 	if (ws.length > 1 && ws.every(isNumber)) return ws.map(Number);
 	return s;
+}
+
+const ALTERNATIVES = /\s+(?:oder|or|\|)\s+/i;
+
+/** The result side of a case: one value, or several right ones separated by "oder" / "or" / "|" (a JSON value that
+ *  merely contains such a word stays one value). */
+function result(raw: string): { expect: unknown } | { expectAny: unknown[] } {
+	const s = raw.trim();
+	if (json(s).ok || !ALTERNATIVES.test(s)) return { expect: parseValue(s) };
+	const parts = s.split(ALTERNATIVES).filter((p) => p.trim());
+	return parts.length > 1 ? { expectAny: parts.map(parseValue) } : { expect: parseValue(s) };
 }
 
 /** Arguments: a JSON array is one argument, otherwise the words are the arguments. */
@@ -62,14 +74,14 @@ export function parseCases(text: string): Case[] | null {
 		const line = lines[i]!;
 		const next = lines[i + 1];
 		if (label(INPUT).test(line) && next && label(RESULT).test(next)) { // "Eingabe: …" followed by "Ergebnis: …"
-			out.push({ args: parseArgs(line.replace(label(INPUT), "")), expect: parseValue(next.replace(label(RESULT), "")) });
+			out.push({ args: parseArgs(line.replace(label(INPUT), "")), ...result(next.replace(label(RESULT), "")) });
 			i++;
 			continue;
 		}
 		if (label(INPUT).test(line) && !ARROW.test(line)) { out.push({ args: parseArgs(line.replace(label(INPUT), "")) }); continue; } // input only
 		const [left, right] = line.split(ARROW, 2) as [string, string | undefined];
-		if (right !== undefined) out.push({ args: parseArgs(left.replace(label(INPUT), "")), expect: parseValue(right.replace(label(RESULT), "")) });
-		else out.push({ args: [], expect: parseValue(line.replace(label(RESULT), "")) });
+		if (right !== undefined) out.push({ args: parseArgs(left.replace(label(INPUT), "")), ...result(right.replace(label(RESULT), "")) });
+		else out.push({ args: [], ...result(line.replace(label(RESULT), "")) });
 	}
 	return out.length ? out : null;
 }

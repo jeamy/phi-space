@@ -2,8 +2,9 @@
 // hand-written variants that the scripted (model-free) agents hand in. All code here runs only in the sandbox.
 import { MAX_CHECK_CHARS } from "./judge.ts";
 
-/** One test call. `expect` is the exact result; a task with a check rule may leave it out (the rule decides). */
-export type Case = { args: unknown[]; expect?: unknown };
+/** One test call. `expect` is the exact result, `expectAny` several results that are all right ("[0,1,4,9,11] oder
+ *  [0,2,7,10,11]"); a task with a check rule may give neither (the rule decides). */
+export type Case = { args: unknown[]; expect?: unknown; expectAny?: unknown[] };
 export type Task = {
 	id: string;
 	title: { de: string; en: string };
@@ -21,6 +22,8 @@ export type Task = {
 	/** Custom tasks: a JavaScript predicate `(result, args) => boolean` that decides a case instead of `expect`, for
 	 *  tasks with more than one right answer. Runs in its own sandbox on the JSON results. */
 	check?: string;
+	/** Who wrote the check rule: the verifier agent (from the description and the examples) or the API caller. */
+	checkBy?: "verifier" | "user";
 };
 
 const primes = (n: number) => { const p: number[] = []; for (let c = 2; p.length < n; c++) if (p.every((d) => d * d > c || c % d !== 0)) p.push(c); return p; };
@@ -101,17 +104,18 @@ export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id
 // Names a custom task cannot use as its function: reserved words, and the `__` prefix the judge keeps for itself.
 const RESERVED = new Set("arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof undefined var void while with yield NaN Infinity".split(" "));
 
-export function customTask(x: { fn: string; prompt: string; cases: Case[]; check?: string }): Task {
+export function customTask(x: { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user" }): Task {
 	if (typeof x.fn !== "string" || !/^[A-Za-z_$][\w$]{0,40}$/.test(x.fn) || x.fn.startsWith("__") || RESERVED.has(x.fn)) throw new Error("Invalid function name");
 	if (!Array.isArray(x.cases) || x.cases.length < 1 || x.cases.length > 50) throw new Error("1 to 50 cases required");
 	const check = typeof x.check === "string" && x.check.trim() ? x.check.trim() : undefined;
 	if (check !== undefined && check.length > MAX_CHECK_CHARS) throw new Error(`The check rule has at most ${MAX_CHECK_CHARS} characters`);
 	for (const c of x.cases) {
 		if (!c || !Array.isArray(c.args)) throw new Error("Every case needs args (an array)");
-		if (check === undefined && !Object.hasOwn(c, "expect")) throw new Error("Every case needs expect, or the task a check rule");
+		if (Object.hasOwn(c, "expectAny") && (!Array.isArray(c.expectAny) || c.expectAny.length < 1 || c.expectAny.length > 10)) throw new Error("expectAny holds 1 to 10 results");
+		if (check === undefined && !Object.hasOwn(c, "expect") && !Object.hasOwn(c, "expectAny")) throw new Error("Every case needs expect (or expectAny), or the task a check rule");
 	}
 	if (JSON.stringify(x.cases).length > 32_000) throw new Error("Cases too large");
-	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [], ...(check !== undefined ? { check } : {}) };
+	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [], ...(check !== undefined ? { check, checkBy: x.checkBy === "verifier" ? "verifier" as const : "user" as const } : {}) };
 	// Rounds of all cases until 300 rounds or about a second, whichever comes first; the time is per round, so a slow
 	// function is timed, not timed out. Index loops and the judge's captured Reflect.apply: a contribution that patches
 	// iterators cannot empty the bench. Every call is checked (fixed results), or one random round is kept for the check
@@ -119,19 +123,22 @@ export function customTask(x: { fn: string; prompt: string; cases: Case[]; check
 	const call = `let __v = __apply(${x.fn}, undefined, __cases[__j].args); if (__v && typeof __v.then === "function") __v = await __v;`;
 	const keep = check !== undefined
 		? `__last[__j] = __v; if (__r === __pick) __picked[__j] = __v;`
-		: `if (!__eq(__v, __cases[__j].expect)) return { ok: false, error: "inconsistent on repeated calls" };`;
+		: `if (!__match(__v, __cases[__j])) return { ok: false, error: "inconsistent on repeated calls" };`;
 	return { ...t, bench: `const __deadline = __now() + 1000; let __r = 0;
 for (; __r < 300 && (__r === 0 || __now() < __deadline); __r++) for (let __j = 0; __j < __cases.length; __j++) { ${call} ${keep} }
 __rounds = __r;` };
 }
 
 /** The spec a custom task is stored as (CodeTask, CodeCandidate). */
-export const customSpec = (t: Task) => ({ fn: t.fn, prompt: t.prompt.en, cases: t.cases, ...(t.check !== undefined ? { check: t.check } : {}) });
+export const customSpec = (t: Task) => ({ fn: t.fn, prompt: t.prompt.en, cases: t.cases, ...(t.check !== undefined ? { check: t.check, checkBy: t.checkBy ?? "user" } : {}) });
+
+/** The results a case accepts (empty: a check rule decides). */
+export const expectedOf = (c: Case): unknown[] => (Object.hasOwn(c, "expectAny") ? c.expectAny! : Object.hasOwn(c, "expect") ? [c.expect] : []);
 
 /** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */
 export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
 	if (f.taskId === "custom") {
-		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[]; check?: string };
+		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user" };
 		try { return customTask(c); } catch { return null; }
 	}
 	return taskById(String(f.taskId)) ?? null;

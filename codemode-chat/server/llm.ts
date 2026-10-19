@@ -84,7 +84,9 @@ const showValue = (v: unknown) => { const s = JSON.stringify(v); return s === un
 
 /** The cases as the agents see them: the exact calls and what they must return (or that the rule decides). */
 export function describeCases(task: Task): string {
-	const lines = task.cases.slice(0, 12).map((c) => `  ${task.fn}(${c.args.map(showValue).join(", ")})${task.check !== undefined ? "" : ` must return ${showValue(c.expect)}`}`);
+	const want = (c: Task["cases"][number]) => (Object.hasOwn(c, "expectAny") ? ` must return one of ${c.expectAny!.map(showValue).join(", ")}` : Object.hasOwn(c, "expect") ? ` must return ${showValue(c.expect)}` : "");
+	// with a check rule the examples stay visible: they show the shape of a right answer
+	const lines = task.cases.slice(0, 12).map((c) => `  ${task.fn}(${c.args.map(showValue).join(", ")})${task.check !== undefined && want(c) ? `${want(c).replace(" must return", " may return, for example,")}` : want(c)}`);
 	if (task.cases.length > 12) lines.push(`  … and ${task.cases.length - 12} more`);
 	return lines.join("\n");
 }
@@ -130,13 +132,13 @@ export function extractNote(text: string): string | undefined {
 	return m ? m[1]!.trim().slice(0, 200) : undefined;
 }
 
-/** One model contribution: source, the model label and an optional note; throws when the guards or the model say no.
+/** One guarded model call (whitelist, day budget, minute window, two in flight): the answer text and the model label.
  *  A full minute window waits for the next one (a run is teamwork, not a race against the limit). */
-export async function llmContribution(c: TeamContext): Promise<{ source: string; model: string; note?: string }> {
+async function guardedCall(modelLabel: string | undefined, system: string, user: string, maxTokens: number): Promise<{ text: string; model: string }> {
 	const s = await sharedModel();
 	if (!s || !on) throw new Error("model agents are off");
-	const model = c.model ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === c.model) : s.model;
-	if (!model) throw new Error(`model ${c.model} is not allowed`);
+	const model = modelLabel ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === modelLabel) : s.model;
+	if (!model) throw new Error(`model ${modelLabel} is not allowed`);
 	for (;;) {
 		if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); calls = 0; }
 		if (Date.now() - dayStart >= 86_400_000) { dayStart = Date.now(); dayCalls = 0; }
@@ -148,14 +150,42 @@ export async function llmContribution(c: TeamContext): Promise<{ source: string;
 	if (inFlight >= 2) await new Promise<void>((ok) => slotWaiters.push(ok)); // wait for a free slot instead of failing
 	inFlight++;
 	try {
-		const p = teamPrompt(c);
 		const res: any = await s.models.completeSimple(model, {
-			systemPrompt: p.system,
-			messages: [{ role: "user", content: p.user, timestamp: Date.now() }],
-		}, { maxTokens: 1500, signal: AbortSignal.timeout(60_000) });
+			systemPrompt: system,
+			messages: [{ role: "user", content: user, timestamp: Date.now() }],
+		}, { maxTokens, signal: AbortSignal.timeout(60_000) });
 		const text = (res?.content ?? []).filter((x: any) => x?.type === "text").map((x: any) => x.text).join("");
 		if (!text.trim()) throw new Error(res?.errorMessage ?? "empty answer");
-		const note = extractNote(text);
-		return { source: extractCode(text), model: `${model.provider}/${model.id}`, ...(note ? { note } : {}) };
+		return { text, model: `${model.provider}/${model.id}` };
 	} finally { inFlight--; slotWaiters.shift()?.(); }
+}
+
+/** One model contribution: source, the model label and an optional note; throws when the guards or the model say no. */
+export async function llmContribution(c: TeamContext): Promise<{ source: string; model: string; note?: string }> {
+	const p = teamPrompt(c);
+	const { text, model } = await guardedCall(c.model, p.system, p.user, 1500);
+	const note = extractNote(text);
+	return { source: extractCode(text), model, ...(note ? { note } : {}) };
+}
+
+/** The verifier agent's prompt: from the description and the example results, a rule that accepts every right answer
+ *  (not only the examples). `feedback`: why the previous rule was refused. */
+export function verifierPrompt(task: Task, feedback?: string): { system: string; user: string } {
+	return {
+		system: "You write test oracles: predicates that decide whether a result is a correct answer to a specified programming task.",
+		user: [
+			`A JavaScript function \`${task.fn}\` is specified as:\n${task.prompt.en}`,
+			`Example calls, each with a right result:\n${describeCases(task)}`,
+			`Write a JavaScript arrow function \`(result, args) => boolean\` that returns true exactly when \`result\` is a correct answer for the call with these \`args\` (the argument array), according to the specification. Several different answers may be right: check the properties the specification demands; do not just compare with the examples. It must accept every example result above, and return false (not throw) for results of a wrong type or shape. Plain JavaScript, no imports, no I/O; result and args are plain JSON values.`,
+			...(feedback ? [`Your previous rule was refused: ${feedback}. Write a better one.`] : []),
+			"Answer with exactly one ```js block that holds only the arrow function expression.",
+		].join("\n\n"),
+	};
+}
+
+/** The verifier agent: a check rule for a custom task, written by the default model (or `model`). */
+export async function llmVerifier(c: { task: Task; feedback?: string; model?: string }): Promise<{ check: string; model: string }> {
+	const p = verifierPrompt(c.task, c.feedback);
+	const { text, model } = await guardedCall(c.model, p.system, p.user, 800);
+	return { check: extractCode(text).replace(/;\s*$/, ""), model };
 }
