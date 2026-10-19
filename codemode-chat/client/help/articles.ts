@@ -596,6 +596,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_ADMIN_TOKEN\` | Hub: Token für \`POST /api/llm\` (Header \`x-admin-token\`); leer = Umschalten aus |
 | \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
 | \`PI_AUTH_DIR\` | Pfad der pi-Zugangsdaten für den Container |
+| \`CODEMODE_DEV_ORIGINS\` | nur Dev-Modus: weitere Hosts, unter denen die Seite geöffnet wird (z. B. eine LAN-IP); \`localhost\` und \`127.0.0.1\` gehen immer |
 
 ## Lokal entwickeln {#local}
 
@@ -651,6 +652,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_ADMIN_TOKEN\` | hub: token for \`POST /api/llm\` (header \`x-admin-token\`); empty = switching off |
 | \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |
 | \`PI_AUTH_DIR\` | path of the pi credentials for the container |
+| \`CODEMODE_DEV_ORIGINS\` | dev mode only: further hosts the page is opened from (e.g. a LAN IP); \`localhost\` and \`127.0.0.1\` always work |
 
 ## Developing locally {#local}
 
