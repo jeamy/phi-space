@@ -169,6 +169,10 @@ externen Mobile-Dateien oder Hosts wurden für diese Nachweise verändert.
 
 ## Sicherungen und verbleibender Betriebsaufwand
 
+**Stand 2026-10-19:** Alle in diesem Dokument genannten temporären Logs, Quell- und Release-Sicherungen unter `/tmp`
+(lokal und auf big) sowie die Release-Verzeichnisse `/media/docker/phi-spaces-release-*` sind gelöscht. Die
+Ergebnisse stehen in diesem Dokument und im Git-Verlauf; die Pfadangaben unten sind nur noch historisch.
+
 Die 44 gezielt geänderten Code-/Testdateien wurden vor der Umstellung gesichert:
 `/tmp/phi-namespace-source-backup-4HiS6d/sources.json`. Die Prüfung fand keine bereits vergebenen
 Ziel-Namespace-Werte. Die zuvor erzeugten `dist`-/Next-Dateien liegen für lokale Wiederherstellung unter

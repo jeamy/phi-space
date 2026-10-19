@@ -464,6 +464,8 @@ Geprüft: alle vier Dienste `ready` und nach Neustart wieder `ready`; der Admin 
 `standby-100:7421`; F15-Status über `phi-spaces-fence-host-a`/`-member-1` und der SSH-Registerleser antworten;
 der Fencing-Dienst erneuert das netcup-Token unter dem neuen Pfad.
 
-Sicherungen der Altbestände (privat, bis zur Freigabe): `~/legacy-backup-20261018` auf big, vpsc und lokal,
-`/root/backup/legacy-backup-20261018` auf nanoi und 100.
+Die Sicherungen der Altbestände (`~/legacy-backup-20261018` auf big, vpsc und lokal,
+`/root/backup/legacy-backup-20261018` auf nanoi und 100) wurden am 2026-10-19 nach der Abnahme gelöscht.
+Die Help-Site läuft aus dem Checkout `/media/docker/spaces` (`npm run docker:prod:down` / `docker:prod:up` im
+Verzeichnis `help-site`); die früheren Release-Verzeichnisse `/media/docker/phi-spaces-release-*` sind entfernt.
 
