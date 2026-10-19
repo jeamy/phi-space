@@ -260,6 +260,7 @@ export class CodeChatHub {
 			}));
 			return {
 				session: id, current: s.blockId, tasks: TASKS.map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt })),
+				limits: { maxTimeoutS: maxTimeoutMs() / 1000 }, // what the time-limit field may offer (CODEMODE_MAX_TIMEOUT_S)
 				// the active custom task in full, so the page can fill its form again (after a reload) and continue it
 				...(s.task.id === "custom" ? { currentCustom: { fn: s.task.fn, prompt: s.task.prompt.en, cases: s.task.cases } } : {}),
 				blocks, messages: messages.filter((m) => !m.blockId || !known.has(m.blockId)), run: s.run,

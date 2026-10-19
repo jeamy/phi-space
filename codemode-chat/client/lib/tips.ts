@@ -43,8 +43,8 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	timeout: {
 		text: {
-			de: "Wie lange ein Beitrag für alle Testfälle zusammen rechnen darf (1 bis 60 s, Standard 5). Schwere Aufgaben wie ein Golomb-Lineal der Ordnung 12 brauchen mehr. Die Agenten kennen das Limit; ein längeres Limit bewertet langsamer.",
-			en: "How long a contribution may compute for all test cases together (1 to 60 s, default 5). Hard tasks such as a Golomb ruler of order 12 need more. The agents know the limit; a longer limit judges more slowly.",
+			de: "Wie lange ein Beitrag für alle Testfälle zusammen rechnen darf (ab 1 s bis zur Obergrenze des Servers, die neben dem Feld steht; Standard 5 s, Obergrenze CODEMODE_MAX_TIMEOUT_S, Standard 60). Schwere Aufgaben wie ein Golomb-Lineal der Ordnung 12 brauchen mehr. Die Agenten kennen das Limit; ein längeres Limit bewertet langsamer.",
+			en: "How long a contribution may compute for all test cases together (from 1 s up to the server's upper bound shown next to the field; default 5 s, upper bound CODEMODE_MAX_TIMEOUT_S, default 60). Hard tasks such as a Golomb ruler of order 12 need more. The agents know the limit; a longer limit judges more slowly.",
 		},
 		article: "help.topic.tasks_and_blocks", anchor: "custom",
 	},

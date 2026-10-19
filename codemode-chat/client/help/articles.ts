@@ -127,7 +127,7 @@ Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
 
 - **Funktionsname:** ein gültiger JavaScript-Name, höchstens 40 Zeichen.
 - **Beschreibung:** was die Funktion tun soll (höchstens 600 Zeichen); sie wird den Agenten gezeigt, zusammen mit den Testfällen.
-- **Zeitlimit je Beitrag:** wie lange ein Beitrag für alle Fälle zusammen rechnen darf, 1 bis 60 Sekunden (Standard 5). Schwere Aufgaben brauchen mehr; die Agenten kennen das Limit. Brauchen die Fälle schon mehr als ein Drittel davon, wird nur ihre Zeit gemessen, ohne zweiten Durchgang.
+- **Zeitlimit je Beitrag:** wie lange ein Beitrag für alle Fälle zusammen rechnen darf: ab 1 Sekunde bis zur Obergrenze des Servers, die neben dem Feld steht (Standard 5 Sekunden; die Obergrenze setzt \`CODEMODE_MAX_TIMEOUT_S\`, Standard 60). Schwere Aufgaben brauchen mehr; die Agenten kennen das Limit. Brauchen die Fälle schon mehr als ein Drittel davon, wird nur ihre Zeit gemessen, ohne zweiten Durchgang.
 - **Testfälle:** JSON, zum Beispiel \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 bis 50 Fälle, zusammen höchstens 32 000 Zeichen.
   Du kannst auch **einfachen Text** schreiben; er wird beim Start automatisch in JSON umgewandelt, und das Feld zeigt danach das JSON:
 
@@ -161,7 +161,7 @@ Das Dropdown wählt nur aus. **Lauf starten** legt bei Bedarf selbst einen neuen
 
 ## Der Block im Chat {#block}
 
-Ein Block ist ein einklappbarer Abschnitt: Im Kopf stehen Titel, Funktion, Zahl der Beiträge, korrekt/bewertet, die beste Zeit und der Laufstatus. Aufgeklappt zeigt er die Beschreibung (und die Prüfregel), die Protokollzeilen des Laufs, die **Notizen des Teams** und die Beiträge als **quadratische Kacheln** (Agent, Modell, Zeit oder bestandene Fälle wie 3/5, Rolle und auf wessen Versuch er aufbaut, Generation, Host). Ein Klick auf eine Kachel klappt darunter die **Testergebnisse je Fall** und den **gelieferten Code** auf.
+Ein Block ist ein einklappbarer Abschnitt: Im Kopf stehen Titel, Funktion, Zahl der Beiträge, korrekt/bewertet, die beste Zeit und der Laufstatus. Aufgeklappt zeigt er die Beschreibung (und die Prüfregel), die Protokollzeilen des Laufs, die **Hinweise ans Team** und die Beiträge als **quadratische Kacheln** (Agent, Modell, Zeit oder bestandene Fälle wie 3/5, Rolle und auf wessen Versuch er aufbaut, Generation, Host). Ein Klick auf eine Kachel klappt darunter die **Notiz des Agenten**, die **Testergebnisse je Fall** und den **gelieferten Code** auf.
 
 **Rangliste, Wertung und bester Code** rechts gehören zu dem Block, der offen ist oder zuletzt angeklickt wurde („für …"). Ein neuer Block öffnet sich selbst und übernimmt diesen Fokus.
 
@@ -194,7 +194,7 @@ Choose **"Custom task …"** in the dropdown. Three fields appear:
 
 - **Function name:** a valid JavaScript name, at most 40 characters.
 - **Description:** what the function should do (at most 600 characters); it is shown to the agents, together with the test cases.
-- **Time limit per contribution:** how long a contribution may compute for all cases together, 1 to 60 seconds (default 5). Hard tasks need more; the agents know the limit. When the cases alone take more than a third of it, only their time is measured, without a second pass.
+- **Time limit per contribution:** how long a contribution may compute for all cases together: from 1 second up to the server's upper bound shown next to the field (default 5 seconds; \`CODEMODE_MAX_TIMEOUT_S\` sets the bound, default 60). Hard tasks need more; the agents know the limit. When the cases alone take more than a third of it, only their time is measured, without a second pass.
 - **Test cases:** JSON, for example \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 to 50 cases, at most 32,000 characters together.
   You can also write **plain text**; it is turned into JSON automatically when you start, and the field then shows the JSON:
 
@@ -228,7 +228,7 @@ The dropdown only selects. **Start run** opens a new block itself when the chose
 
 ## The block in the chat {#block}
 
-A block is a collapsible section: its header shows the title, the function, the number of contributions, correct/judged, the best time and the run status. Unfolded it shows the description (and the check rule), the run's log lines, the **team notes** and the contributions as **square tiles** (agent, model, time or cases passed such as 3/5, role and whose attempt it builds on, generation, host). A click on a tile unfolds the **test results per case** and the **delivered code** below it.
+A block is a collapsible section: its header shows the title, the function, the number of contributions, correct/judged, the best time and the run status. Unfolded it shows the description (and the check rule), the run's log lines, the **hints to the team** and the contributions as **square tiles** (agent, model, time or cases passed such as 3/5, role and whose attempt it builds on, generation, host). A click on a tile unfolds the **agent's note**, the **test results per case** and the **delivered code** below it.
 
 The **leaderboard, standings and best code** on the right belong to the block that is open or was clicked last ("for …"). A new block opens itself and takes that focus.
 
@@ -299,7 +299,7 @@ Modell-Agenten schreiben den JavaScript-Code selbst, als Team (siehe [Zusammenar
 
 ## Wann endet ein Lauf? {#ending}
 
-Ein Lauf endet, wenn die Aufgabe **gelöst** ist und danach die eingestellten **Verbesserungsrunden** gelaufen sind, spätestens nach der **höchsten Zahl Generationen**, oder bei **Stoppen**. Die letzte Protokollzeile sagt, in welcher Generation gelöst wurde, oder welcher Versuch am nächsten dran war (bestandene Fälle).
+Ein Lauf endet, wenn die Aufgabe **gelöst** ist und danach die eingestellten **Verbesserungsrunden** gelaufen sind, spätestens nach der **höchsten Zahl Generationen**, oder bei **Stoppen** (links im Lauf-Panel oder mit **■** neben „läuft“ im Blockkopf, nach einer Ja/Nein-Rückfrage). Die letzte Protokollzeile sagt, in welcher Generation gelöst wurde, oder welcher Versuch am nächsten dran war (bestandene Fälle).
 
 ## Nicht zufrieden? Weiterarbeiten {#continue}
 
@@ -368,7 +368,7 @@ Model agents write the JavaScript code themselves, as a team (see [Teamwork](#te
 
 ## When does a run end? {#ending}
 
-A run ends once the task is **solved** and the configured **improvement rounds** have run after it, at the latest after the **maximum number of generations**, or on **Stop**. The last log line says in which generation it was solved, or which attempt got closest (cases passed).
+A run ends once the task is **solved** and the configured **improvement rounds** have run after it, at the latest after the **maximum number of generations**, or on **Stop** (in the run panel on the left, or **■** next to "running" in the block header, after a yes/no question). The last log line says in which generation it was solved, or which attempt got closest (cases passed).
 
 ## Not happy? Keep working {#continue}
 
@@ -414,7 +414,7 @@ Die Sandbox ist QuickJS (WebAssembly) aus \`@earendil-works/pi-codemode\`. Sie h
 
 | Limit | Wert |
 |---|---|
-| Zeitlimit | 5 Sekunden; eigene Aufgaben 1 bis 60 Sekunden (Feld „Zeitlimit je Beitrag“, Obergrenze \`CODEMODE_MAX_TIMEOUT_S\`) |
+| Zeitlimit | 5 Sekunden; eigene Aufgaben wählen es selbst (Feld „Zeitlimit je Beitrag“), höchstens \`CODEMODE_MAX_TIMEOUT_S\` (Standard 60 Sekunden) |
 | Arbeitsspeicher | 64 MiB |
 | Quelltext | höchstens 16 000 Zeichen |
 | Parallele Sandboxes | höchstens 2 je Prozess |
@@ -438,7 +438,7 @@ Fest eingetragene und abgewertete Versuche bekommen die Agenten als **„so nich
 
 **Bester Code** ist der schnellste korrekte Beitrag eines Blocks; bei gleicher Zeit gewinnt der frühere. Die Zeit ist Wandzeit und schwankt etwas von Lauf zu Lauf.
 
-Die **Notiz** eines Agenten gehört zu seinem Beitrag: Aufgeklappt steht sie oben als Beschreibung des Versuchs, und ein Klick auf eine Notiz in der Liste klappt den Versuch auf.
+Die **Notiz** eines Agenten gehört zu seinem Beitrag: Aufgeklappt steht sie oben als Beschreibung des Versuchs (beim Überfahren der Kachel auch als Tooltip). Oben im Block stehen nur die Hinweise von Menschen.
 
 ## Die Kachel {#tile}
 
@@ -458,7 +458,7 @@ Unter jedem aufgeklappten Code und unter dem besten Code steht **▶ Ausführen*
 2. **▶ Ausführen** lässt die Funktion in derselben Sandbox gegen die Testfälle der Aufgabe laufen (✓/✗ je Fall, bei ✗ mit dem erwarteten Wert) und danach den eigenen Aufruf; dessen Wert erscheint als \`Aufruf = Wert\`.
 3. Ausgaben mit \`console.log\` erscheinen sofort, auch während der Code noch rechnet. **■ Stop** beendet den Lauf.
 
-Ein Lauf wird nicht bewertet und ändert nichts im Space. Grenzen: 60 Sekunden, ein Lauf je Besucher, zwei gleichzeitig auf dem Server, höchstens 1000 Zeilen Ausgabe.
+Ein Lauf wird nicht bewertet und ändert nichts im Space. Grenzen: 60 Sekunden (oder das Zeitlimit der Aufgabe, wenn es länger ist), ein Lauf je Besucher, zwei gleichzeitig auf dem Server, höchstens 1000 Zeilen Ausgabe.
 
 ## Siehe auch {#see-also}
 
@@ -482,7 +482,7 @@ The sandbox is QuickJS (WebAssembly) from \`@earendil-works/pi-codemode\`. It ha
 
 | Limit | Value |
 |---|---|
-| Time limit | 5 seconds; custom tasks 1 to 60 seconds (field "Time limit per contribution", upper bound \`CODEMODE_MAX_TIMEOUT_S\`) |
+| Time limit | 5 seconds; custom tasks choose their own (field "Time limit per contribution"), at most \`CODEMODE_MAX_TIMEOUT_S\` (default 60 seconds) |
 | Memory | 64 MiB |
 | Source | at most 16,000 characters |
 | Parallel sandboxes | at most 2 per process |
@@ -506,7 +506,7 @@ Hard-coded and rejected attempts are shown to the agents as **"not like this"** 
 
 The **best code** is the fastest correct contribution of a block; on equal time the earlier one wins. The time is wall-clock time and varies a little from run to run.
 
-An agent's **note** belongs to its contribution: unfolded, it stands on top as the description of the attempt, and a click on a note in the list unfolds the attempt.
+An agent's **note** belongs to its contribution: unfolded, it stands on top as the description of the attempt (and as the tile's tooltip). The top of the block shows only people's hints.
 
 ## The tile {#tile}
 
@@ -526,7 +526,7 @@ Below every unfolded code and below the best code there is **▶ Run**. It opens
 2. **▶ Run** runs the function in the same sandbox against the task's test cases (✓/✗ per case, with the expected value on ✗) and then the own call; its value appears as \`call = value\`.
 3. Output of \`console.log\` appears at once, also while the code is still computing. **■ Stop** ends the run.
 
-A run is not scored and changes nothing in the space. Limits: 60 seconds, one run per visitor, two at a time on the server, at most 1000 lines of output.
+A run is not scored and changes nothing in the space. Limits: 60 seconds (or the task's time limit when that is longer), one run per visitor, two at a time on the server, at most 1000 lines of output.
 
 ## See also {#see-also}
 
@@ -708,7 +708,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_TTL_HOURS\` | Hub und nano: Lebensdauer der Einträge eines Raums in Stunden, Standard 24; \`0\` = bis der Block gelöscht wird |
 | \`CODEMODE_SHARD_BIND\` | Docker nano: Bindung des Shard-Ports, Standard \`127.0.0.1\` (Tunnel); sonst eine interne IP, nie eine öffentliche |
 | \`CODEMODE_ADMIN_TOKEN\` | Hub: Token für \`POST /api/llm\` (Header \`x-admin-token\`); leer = Umschalten aus |
-| \`CODEMODE_MAX_TIMEOUT_S\` | Hub und nano: höchstes Zeitlimit, das eine eigene Aufgabe wählen darf, Standard 60 |
+| \`CODEMODE_MAX_TIMEOUT_S\` | Hub und nano (gleicher Wert): höchstes Zeitlimit je Beitrag, das eine eigene Aufgabe wählen darf, Standard 60; das Formularfeld richtet sich danach. Ein langes Limit belegt einen der zwei Bewertungsplätze je Prozess entsprechend lange |
 | \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
 | \`PI_AUTH_DIR\` | Pfad der pi-Zugangsdaten für den Container |
 | \`CODEMODE_DEV_ORIGINS\` | nur Dev-Modus: weitere Hosts, unter denen die Seite geöffnet wird (z. B. eine LAN-IP); \`localhost\` und \`127.0.0.1\` gehen immer |
@@ -765,7 +765,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_TTL_HOURS\` | hub and nano: lifetime of a room's entries in hours, default 24; \`0\` = until the block is deleted |
 | \`CODEMODE_SHARD_BIND\` | Docker nano: bind address of the shard port, default \`127.0.0.1\` (tunnel); else an internal IP, never a public one |
 | \`CODEMODE_ADMIN_TOKEN\` | hub: token for \`POST /api/llm\` (header \`x-admin-token\`); empty = switching off |
-| \`CODEMODE_MAX_TIMEOUT_S\` | hub and nano: the longest time limit a custom task may choose, default 60 |
+| \`CODEMODE_MAX_TIMEOUT_S\` | hub and nano (same value): the longest time limit per contribution a custom task may choose, default 60; the form's field follows it. A long limit keeps one of the two judge slots per process busy that long |
 | \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |
 | \`PI_AUTH_DIR\` | path of the pi credentials for the container |
 | \`CODEMODE_DEV_ORIGINS\` | dev mode only: further hosts the page is opened from (e.g. a LAN IP); \`localhost\` and \`127.0.0.1\` always work |

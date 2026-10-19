@@ -115,11 +115,9 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .teambar input { flex: 1 1 240px; min-width: 0; }
 .teambar .btn { flex: 0 0 auto; }
 .notes .note--human { color: var(--text-strong); }
-.notes .note--link { cursor: pointer; border-radius: 4px; }
-.notes .note--link:hover, .notes .note--link:focus-visible { background: color-mix(in srgb, var(--accent) 10%, transparent); outline: none; }
 .attempt-note { padding: 6px 10px; background: color-mix(in srgb, var(--accent) 8%, var(--raised)); border-top: 1px solid var(--line); font-size: 13px; color: var(--text-strong); }
 .chip--time { margin-left: 8px; vertical-align: middle; }
-.notes .note--rejected { text-decoration: line-through; opacity: .55; }
+.note--rejected { text-decoration: line-through; opacity: .55; }
 .vetobar { display: flex; gap: 8px; align-items: center; padding: 8px 10px; background: var(--raised); border-top: 1px solid var(--line); }
 .vetobar input { flex: 1 1 auto; min-width: 0; }
 .vetobar .btn { flex: 0 0 auto; }
@@ -156,6 +154,9 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .console__out .log--error { color: var(--danger); }
 .console__out .end { color: var(--muted); }
 
+.block__stop { all: unset; box-sizing: border-box; padding: 0 12px; cursor: pointer; color: var(--warning); display: flex; align-items: center; font-size: 15px; }
+.block__stop:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.block__stop:focus-visible { outline: 2px solid var(--danger); outline-offset: -2px; }
 .block__del { all: unset; box-sizing: border-box; padding: 0 14px; cursor: pointer; color: var(--muted); display: flex; align-items: center; }
 .block__del:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .block__del:focus-visible { outline: 2px solid var(--danger); outline-offset: -2px; }
