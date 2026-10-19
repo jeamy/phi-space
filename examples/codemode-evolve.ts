@@ -11,9 +11,8 @@
 // are seeded random generators so the run needs no model; an LLM agent would write `source` instead of a genome.
 // Entries are data: the evaluator never trusts a candidate, it only runs it in a sandbox that can reach no tool.
 //
-// Needs the `@earendil-works/pi-codemode` package (shipped with pi-coding-agent); PI_CODEMODE_DIR overrides its path.
+// Needs the `@earendil-works/pi-codemode` dependency; PI_CODEMODE_DIR overrides its location.
 // Run: node --experimental-strip-types examples/codemode-evolve.ts [--agents 6] [--gens 4] [--per-agent 2] [--n 100] [--seed 1]
-import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
@@ -24,7 +23,6 @@ export type Genome = { engine: "trial" | "sieve"; cands: "all" | "odd" | "6k"; d
 export type Score = { candidateId: string; ok: boolean; ms: number; error?: string };
 type Scored = Score & { genome: Genome; source: string };
 
-const DEFAULT_CODEMODE_DIR = "/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-codemode";
 const TIME_N = 5000; // the efficiency measurement runs a larger instance than the correctness check
 const TIMEOUT_MS = 6000; // too slow counts as failed, like a wrong answer
 const HOUR = 3600_000;
@@ -92,10 +90,13 @@ export function mutate(g: Genome, r: Rng): Genome {
 
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
 type CodemodeModule = { CodemodeSandbox: new (o: { timeoutMs: number; tools: [] }) => Sandbox };
-/** Loads pi-codemode from the pi-coding-agent installation; null when it is not there (nothing is installed here). */
-export async function loadCodemode(dir = process.env.PI_CODEMODE_DIR ?? DEFAULT_CODEMODE_DIR): Promise<CodemodeModule | null> {
-	const file = `${dir}/dist/index.js`;
-	return existsSync(file) ? ((await import(pathToFileURL(file).href)) as CodemodeModule) : null;
+/** Loads pi-codemode: PI_CODEMODE_DIR if set, else the dependency; null when it cannot be loaded. */
+export async function loadCodemode(dir = process.env.PI_CODEMODE_DIR): Promise<CodemodeModule | null> {
+	try {
+		return (dir ? await import(pathToFileURL(`${dir}/dist/index.js`).href) : await import("@earendil-works/pi-codemode")) as CodemodeModule;
+	} catch {
+		return null;
+	}
 }
 
 /**

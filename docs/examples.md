@@ -55,8 +55,8 @@ npm run help
 Kandidaten unter einer Transaktion, führen sie in einer QuickJS-Sandbox von `@earendil-works/pi-codemode` ohne Tools
 aus und schreiben ein `CodeScore` (richtig? wie schnell?); der Host hält das beste Ergebnis als `CodeBest`, auf dem
 die Agenten der nächsten Generation aufbauen. Ohne Modell lauf­fähig (Agenten sind Zufallsgeneratoren mit Seed); ein
-LLM-Agent würde den Quelltext selbst schreiben. Das Paket liegt bei pi-coding-agent und wird nicht installiert:
-`PI_CODEMODE_DIR` wählt den Pfad, fehlt es, wird übersprungen. Gemessene Zeit ist Wandzeit und schwankt.
+LLM-Agent würde den Quelltext selbst schreiben. `@earendil-works/pi-codemode` ist eine Abhängigkeit des Projekts
+(`PI_CODEMODE_DIR` wählt einen anderen Pfad); lässt es sich nicht laden, wird übersprungen. Gemessene Zeit ist Wandzeit und schwankt.
 
 Live-Beispiele (`examples/chat.ts --live`, `npm run example:arxiv`) benötigen Zugangsdaten und verursachen
 Modellkosten; [live-models.ts](../examples/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
