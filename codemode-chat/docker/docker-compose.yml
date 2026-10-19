@@ -3,12 +3,13 @@
 #   2. `codemode-chat-test`: test run in Docker (profile: test)
 #   3. `codemode-chat-dev`:  interactive Next.js dev server in Docker (profile: dev)
 #   4. `codemode-nano`:      headless judge shard for the big/nano two-host setup (profile: nano)
+# Like the help system: prod and nano are two separate servers (big and nano), started from their own .env.
 # Ports: 3700 (hub), 3800 (shard) — the help system uses 3500/3600.
 
 name: phi-spaces-codemode
 
 services:
-  # ---- 1. Production hub ----
+  # ---- 1. Production hub ("big") ----
   codemode-chat-prod:
     build:
       context: ../..
@@ -30,18 +31,17 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      PORT: "3700"
-      CODEMODE_BIND: 0.0.0.0
+      # Host networking: the app binds the host interface directly, so HOST_BIND=127.0.0.1 keeps it loopback-only for
+      # the reverse proxy, and CODEMODE_REMOTE can reach host-local sockets (e.g. an SSH tunnel on 127.0.0.1:<port>)
+      # as tcp:127.0.0.1:<port>.
+      CODEMODE_BIND: "${HOST_BIND:-0.0.0.0}"
+      PORT: "${PORT:-3700}"
       CODEMODE_SQLITE: /data/codemode-chat.sqlite
-      CODEMODE_CHAT_LLM: "${CODEMODE_CHAT_LLM:-0}"
-      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-big}"
-      # The judge shard on nano, e.g. tcp:<nano-internal-ip>:3800 (or tcp:127.0.0.1:3800 through an SSH tunnel).
-      CODEMODE_REMOTE: "${CODEMODE_REMOTE:-}"
-    ports:
-      - "${CODEMODE_HOST_BIND:-127.0.0.1}:${CODEMODE_HOST_PORT:-3700}:3700"
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
+    network_mode: host
     volumes:
       - codemode-chat-data:/data
-      # Optional: the host's pi CLI credentials, only used when CODEMODE_CHAT_LLM=1 (or set API keys in .env).
+      # Optional: mount the host's pi CLI credentials so model agents work (or set API keys in .env). PI_AUTH_DIR= skips.
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   # ---- 2. Tests in Docker ----
@@ -69,7 +69,7 @@ services:
       CODEMODE_CHAT_LLM: "0"
     command: ["npm", "--prefix", "codemode-chat", "test"]
 
-  # ---- 3. Development server ----
+  # ---- 3. Local development server in Docker ----
   codemode-chat-dev:
     build:
       context: ../..
@@ -85,15 +85,14 @@ services:
         required: false
     environment:
       NODE_ENV: development
-      PORT: "3700"
       CODEMODE_BIND: 0.0.0.0
+      PORT: "${PORT:-3700}"
       CODEMODE_SQLITE: /data/dev-codemode-chat.sqlite
-      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-big}"
-      CODEMODE_REMOTE: "${CODEMODE_REMOTE:-}"
     ports:
-      - "${CODEMODE_HOST_BIND:-127.0.0.1}:${CODEMODE_HOST_PORT:-3700}:3700"
+      - "${HOST_BIND:+$HOST_BIND:}${PORT:-3700}:${PORT:-3700}"
     volumes:
       - codemode-chat-dev-data:/data
+      # Optional: mount the host's pi CLI credentials so model agents work in dev (PI_AUTH_DIR= to skip).
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
     working_dir: /opt/phi-spaces/codemode-chat
     command: ["node", "--experimental-strip-types", "server/index.ts", "--dev"]
@@ -124,7 +123,7 @@ services:
       NODE_ENV: production
       CODEMODE_LISTEN: "${CODEMODE_LISTEN:-tcp:0.0.0.0:3800}"
       CODEMODE_DB: /data/codemode-b.sqlite
-      CODEMODE_HOST_NAME: "${CODEMODE_NANO_NAME:-nano}"
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
       CODEMODE_JUDGES: "${CODEMODE_JUDGES:-2}"
     ports:
       # Set CODEMODE_SHARD_BIND to the host's internal (LAN/NetBird) IP to keep the shard socket off the public

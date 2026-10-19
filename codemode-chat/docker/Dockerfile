@@ -38,8 +38,8 @@ CMD ["npm", "--prefix", "codemode-chat", "test"]
 FROM ${NODE_IMAGE} AS production
 ENV NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
-    PORT=3700 \
     CODEMODE_BIND=0.0.0.0 \
+    PORT=3700 \
     CODEMODE_SQLITE=/data/codemode-chat.sqlite
 WORKDIR /opt/phi-spaces
 COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./

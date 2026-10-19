@@ -1,11 +1,12 @@
 // Codemode chat: HTTP + WebSocket server around the Next.js 16 app (the API and /ws are served here, pages by Next).
 // Run: node --experimental-strip-types codemode-chat/server/index.ts [--dev]
-// Env: PORT (3700), CODEMODE_BIND (0.0.0.0), CODEMODE_SQLITE (durable store; unset = in memory), CODEMODE_CHAT_LLM=1 (model agents),
+// Env (also read from codemode-chat/.env): PORT (3700), CODEMODE_BIND (127.0.0.1), CODEMODE_SQLITE (default .local/codemode-chat.sqlite), CODEMODE_CHAT_LLM=1,
 //      CODEMODE_REMOTE (judge shard on nano: tcp:host:port or unix:/path), CODEMODE_HOST_NAME (name in the system bar).
 import http from "node:http";
+import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
@@ -18,8 +19,6 @@ import { remoteJudgeSpace } from "./shard.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, "..");
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
 
 export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean } = {}) {
@@ -93,7 +92,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 		sockets++; ws.onClose(() => { sockets--; });
 		void hub.attach(m[1]!, ws).catch(() => ws.close());
 	});
-	const port = o.port ?? Number(process.env.PORT ?? 3700), bind = o.bind ?? process.env.CODEMODE_BIND ?? "0.0.0.0";
+	const port = o.port ?? Number(process.env.PORT ?? 3700), bind = o.bind ?? process.env.CODEMODE_BIND ?? "127.0.0.1";
 	await new Promise<void>((ok, fail) => { server.once("error", fail); server.listen(port, bind, () => ok()); });
 	const addr = server.address();
 	const actual = typeof addr === "object" && addr ? addr.port : port;
@@ -104,7 +103,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? null, useNext: true, dev: process.argv.includes("--dev") });
+	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? join(ROOT, ".local", "codemode-chat.sqlite"), useNext: true, dev: process.argv.includes("--dev") });
 	console.log(`PHI-SPACES / CODEMODE CHAT (Next.js 16) listening on ${srv.url}`);
 	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void srv.close().finally(() => process.exit(0)));
 }

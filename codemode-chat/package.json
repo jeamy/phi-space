@@ -10,7 +10,7 @@
     "dev": "node --no-warnings --experimental-strip-types server/index.ts --dev",
     "start": "node --no-warnings --experimental-strip-types server/index.ts",
     "nano": "node --no-warnings --experimental-strip-types server/nano-host.ts",
-    "test": "node --no-warnings --experimental-strip-types --test tests/*.test.ts",
+    "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
     "shards:start": "bash scripts/codemode-shards.sh start",
     "shards:stop": "bash scripts/codemode-shards.sh stop",
     "shards:status": "bash scripts/codemode-shards.sh status",

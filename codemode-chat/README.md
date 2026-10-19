@@ -32,33 +32,41 @@ With `CODEMODE_REMOTE` set on the hub, every second candidate is written into na
 If nano is unreachable (calls are bounded to 8 s, then it counts as down for 15 s) candidates are judged on big.
 This is a demo wiring, not a replicated cluster; the socket has no TLS (bind it to an internal address or tunnel it).
 
-## Run it
+## Run it (same as the help system, with `CODEMODE_*` variables)
+
+Review `codemode-chat/.env.example` and create a private `codemode-chat/.env` (the servers read it themselves; real
+environment variables win). Local development keeps the shard on a unix socket:
 
 ```bash
-npm --prefix codemode-chat run build                    # Next.js production build
-npm run codemode-chat                                   # production server, http://localhost:3700 (in memory)
-CODEMODE_SQLITE=/tmp/cm.sqlite npm run codemode-chat    # durable
-npm run codemode-chat:dev                               # Next.js dev mode
-npm run test:codemode-chat                              # tests (API, sandbox, big+nano, dead shard)
+# .env: PORT=3700  CODEMODE_BIND=0.0.0.0  HOST_BIND=  CODEMODE_REMOTE=unix:/tmp/codemode-b.sock
 
-# local two-host test (hub + nano over a unix socket), http://127.0.0.1:3799
-npm --prefix codemode-chat run shards:start             # DEV=0 for the production build; also stop|status|logs
+npm --prefix codemode-chat run shards:start    # hub (Next.js dev mode) + nano over the socket; also stop|status|logs
+DEV=0 npm --prefix codemode-chat run shards:start   # the production build instead (built when stale)
+
+# or one server only (CODEMODE_REMOTE unset or the shard not running: judging stays on this host)
+npm --prefix codemode-chat run dev             # Next.js dev mode, http://localhost:3700
+npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # production server
+npm run test:codemode-chat                     # tests (API, sandbox, big+nano, dead shard)
 ```
 
-Docker (build context: the repository root; all commands change containers on **this** machine, run them on a
-shared server only after agreement):
+Docker (build context: the repository root). **Production and nano are two separate servers**, each started from its
+own `codemode-chat/.env`; the commands change containers on the machine they run on, so use them on a shared server
+only after agreement:
 
 ```bash
-npm --prefix codemode-chat run docker:test             # tests in a container
-npm --prefix codemode-chat run docker:prod:up          # hub on 127.0.0.1:3700   (down | logs | build)
-npm --prefix codemode-chat run docker:dev:up           # Next.js dev server in a container
-npm --prefix codemode-chat run docker:nano:up          # shard on :3800 (profile nano; on the nano host)
+# big (hub): host networking, HOST_BIND=127.0.0.1 for the reverse proxy
+npm --prefix codemode-chat run docker:prod:up        # down | logs | build
+# nano (judge shard): publishes :3800, bind it with CODEMODE_SHARD_BIND=<internal ip> (no TLS)
+npm --prefix codemode-chat run docker:nano:up        # down | logs | build
+# on one machine
+npm --prefix codemode-chat run docker:dev:up         # Next.js dev server in a container (ports from PORT/HOST_BIND)
+npm --prefix codemode-chat run docker:test           # tests in a container
 ```
 
-Configuration is in `codemode-chat/.env.example` (copy to `.env`): `PORT`, `CODEMODE_SQLITE`, `CODEMODE_REMOTE` (hub),
-`CODEMODE_LISTEN`/`CODEMODE_DB`/`CODEMODE_JUDGES` (nano), `CODEMODE_HOST_NAME`, `CODEMODE_CHAT_LLM`. Deployment
-examples (host names are placeholders): `deploy/Caddyfile`, `deploy/nginx-codemode.conf`,
-`deploy/phi-spaces-codemode.service`. Ports 3700/3800 do not collide with the help system (3500/3600).
+On big, `CODEMODE_REMOTE=tcp:<nano-internal-ip>:3800` (or `tcp:127.0.0.1:3800` through an SSH tunnel, because the hub
+container uses the host network). Deployment examples (host names are placeholders): `deploy/Caddyfile`,
+`deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`. Ports 3700/3800 do not collide with the help
+system (3500/3600).
 
 ## Model agents
 

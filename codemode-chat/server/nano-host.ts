@@ -8,9 +8,10 @@
 //   CODEMODE_JUDGES=2                           parallel judge workers
 //
 // Hub side (big): CODEMODE_REMOTE=unix:/tmp/codemode-b.sock  or  CODEMODE_REMOTE=tcp:nano:3800
+import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
@@ -20,7 +21,6 @@ import { judge, loadCodemode, TIMEOUT_MS, type Codemode } from "./judge.ts";
 import { hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
 import { customTask, taskById, type Task } from "./tasks.ts";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DAY = 24 * 3600_000;
 
 const taskOf = (f: Record<string, any>): Task | null => {
