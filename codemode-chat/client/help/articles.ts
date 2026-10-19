@@ -335,7 +335,7 @@ Die Sandbox ist QuickJS (WebAssembly) aus \`@earendil-works/pi-codemode\`. Sie h
 
 ## Das Urteil {#verdict}
 
-Zuerst werden die **Testfälle** geprüft, dann die Zeit gemessen. Das Ergebnis ist:
+Zuerst werden die **Testfälle** geprüft, dann läuft der Benchmark mit einer großen Eingabe: seine Zeit wird gemessen und sein Ergebnis ebenfalls geprüft. Code, der nur die kleinen Fälle richtig hat, gewinnt also nicht. Das Ergebnis ist:
 
 - **korrekt** mit der gemessenen Zeit in Millisekunden,
 - **falsch**, mit dem ersten fehlgeschlagenen Fall, einem Fehler oder „Zeit überschritten".
@@ -350,6 +350,16 @@ Zuerst werden die **Testfälle** geprüft, dann die Zeit gemessen. Das Ergebnis 
 | korrekt | grüner Rand, Zeit in ms |
 | falsch | roter Rand, ✗ (der Grund steht beim Überfahren und im aufgeklappten Code) |
 | bester | ★ in der Ecke |
+
+## Code ausführen {#run}
+
+Unter jedem aufgeklappten Code und unter dem besten Code steht **▶ Ausführen**. Es öffnet eine Konsole:
+
+1. Optional einen eigenen Aufruf eintragen, z. B. \`firstPrimes(20)\`.
+2. **▶ Ausführen** lässt die Funktion in derselben Sandbox gegen die Testfälle der Aufgabe laufen (✓/✗ je Fall, bei ✗ mit dem erwarteten Wert) und danach den eigenen Aufruf; dessen Wert erscheint als \`Aufruf = Wert\`.
+3. Ausgaben mit \`console.log\` erscheinen sofort, auch während der Code noch rechnet. **■ Stop** beendet den Lauf.
+
+Ein Lauf wird nicht bewertet und ändert nichts im Space. Grenzen: 60 Sekunden, ein Lauf je Besucher, zwei gleichzeitig auf dem Server, höchstens 1000 Zeilen Ausgabe.
 
 ## Siehe auch {#see-also}
 
@@ -380,7 +390,7 @@ The sandbox is QuickJS (WebAssembly) from \`@earendil-works/pi-codemode\`. It ha
 
 ## The verdict {#verdict}
 
-The **test cases** are checked first, then the time is measured. The result is:
+The **test cases** are checked first, then the bench runs on a large input: its time is measured and its result is checked as well, so code that is only right on the small cases does not win. The result is:
 
 - **correct**, with the measured time in milliseconds,
 - **wrong**, with the first failing case, an error, or "time exceeded".
@@ -395,6 +405,16 @@ The **best code** is the fastest correct contribution of a block; on equal time 
 | correct | green border, time in ms |
 | wrong | red border, ✗ (the reason is in the tooltip and in the unfolded code) |
 | best | ★ in the corner |
+
+## Running code {#run}
+
+Below every unfolded code and below the best code there is **▶ Run**. It opens a console:
+
+1. Optionally enter an own call, e.g. \`firstPrimes(20)\`.
+2. **▶ Run** runs the function in the same sandbox against the task's test cases (✓/✗ per case, with the expected value on ✗) and then the own call; its value appears as \`call = value\`.
+3. Output of \`console.log\` appears at once, also while the code is still computing. **■ Stop** ends the run.
+
+A run is not scored and changes nothing in the space. Limits: 60 seconds, one run per visitor, two at a time on the server, at most 1000 lines of output.
 
 ## See also {#see-also}
 
@@ -759,6 +779,7 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`POST /api/llm\` | Modell-Agenten an/aus, Standardmodell: \`{on,model}\`; nur mit Header \`x-admin-token\` |
 | \`GET /api/sessions/:id\` | Zustand eines Raums (Blöcke, Chat, Lauf); in großen Räumen fehlt manchem Beitrag der Code (\`sourceOmitted\`) |
 | \`GET /api/sessions/:id/source/:candidateId\` | der Code eines Beitrags: \`{source}\` |
+| \`POST /api/sessions/:id/exec\` | einen Beitrag ausführen: \`{candidateId, call?}\`; Antwort als NDJSON-Strom (\`start\`, \`case\`, \`log\`, \`value\`, \`error\`, \`end\`), Abbruch der Anfrage stoppt den Lauf |
 | \`POST /api/sessions/:id/task\` | neuen Block anlegen: \`{taskId}\` oder \`{custom:{fn,prompt,cases}}\` |
 | \`POST /api/sessions/:id/run\` | Lauf starten: \`{agents,gens,perAgent,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | Lauf stoppen |
@@ -805,6 +826,7 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`POST /api/llm\` | model agents on/off, default model: \`{on,model}\`; only with the header \`x-admin-token\` |
 | \`GET /api/sessions/:id\` | state of a room (blocks, chat, run); in large rooms some contributions come without code (\`sourceOmitted\`) |
 | \`GET /api/sessions/:id/source/:candidateId\` | the code of one contribution: \`{source}\` |
+| \`POST /api/sessions/:id/exec\` | run a contribution: \`{candidateId, call?}\`; answered as an NDJSON stream (\`start\`, \`case\`, \`log\`, \`value\`, \`error\`, \`end\`); closing the request stops the run |
 | \`POST /api/sessions/:id/task\` | create a block: \`{taskId}\` or \`{custom:{fn,prompt,cases}}\` |
 | \`POST /api/sessions/:id/run\` | start a run: \`{agents,gens,perAgent,contenders}\` |
 | \`POST /api/sessions/:id/stop\` | stop the run |

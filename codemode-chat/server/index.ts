@@ -17,6 +17,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { createModels } from "@earendil-works/pi-ai/models";
 import { spaces, startService } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
+import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { CodeChatHub, type LlmApi } from "./hub.ts";
 import { llmInfo, setLlm } from "./llm.ts";
 import { remoteJudgeSpace } from "./shard.ts";
@@ -77,6 +78,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	}
 
 	const allowed = quota(Number(process.env.CODEMODE_REQ_PER_MIN ?? 120));
+	const runsByIp = new Map<string, number>(); // ▶ runs in flight per client: one at a time
 	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
 	const readBody = (req: http.IncomingMessage) => new Promise<Record<string, any>>((ok, fail) => {
 		let n = 0; const parts: Buffer[] = [];
@@ -104,6 +106,40 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				if (!ID.test(src[1]!) || !CANDIDATE.test(src[2]!)) return json(res, 400, { error: "Invalid id" });
 				const source = await hub.source(src[1]!, src[2]!);
 				return source === null ? json(res, 404, { error: "Unknown contribution" }) : json(res, 200, { source });
+			}
+			const ex = /^\/api\/sessions\/([^/]+)\/exec$/.exec(p);
+			if (ex && req.method === "POST") {
+				// ▶ of a contribution: its function against the task's cases plus an optional call, streamed as NDJSON;
+				// closing the request (the page's Stop) aborts the sandbox
+				const b = await readBody(req);
+				const candidateId = String(b.candidateId ?? ""), call = typeof b.call === "string" ? b.call.trim() : "";
+				if (!ID.test(ex[1]!) || !CANDIDATE.test(candidateId)) return json(res, 400, { error: "Invalid id" });
+				if (call.length > MAX_CALL_CHARS) return json(res, 400, { error: `A call has at most ${MAX_CALL_CHARS} characters` });
+				const ip = clientIp(req);
+				if ((runsByIp.get(ip) ?? 0) >= 1) return json(res, 429, { error: "One run at a time; stop the other one first" });
+				const target = await hub.execTarget(ex[1]!, candidateId);
+				// a candidate the shard is judging right now is invisible for those seconds
+				if (!target) return json(res, 404, { error: "Unknown contribution, or it is being judged on the shard right now; try again in a moment" });
+				runsByIp.set(ip, (runsByIp.get(ip) ?? 0) + 1);
+				const stop = new AbortController();
+				res.on("close", () => { if (!res.writableFinished) stop.abort(); });
+				try {
+					let started = false;
+					const line = (e: ExecEvent) => {
+						if (!started) { started = true; res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" }); }
+						if (!res.destroyed) res.write(JSON.stringify(e) + "\n");
+					};
+					const end = await execute(cm, target.task, target.source, call, line, stop.signal);
+					line(end);
+					res.end();
+				} catch (e) {
+					if (!res.headersSent) return json(res, 429, { error: (e as Error).message });
+					res.end();
+				} finally {
+					const n = (runsByIp.get(ip) ?? 1) - 1;
+					if (n > 0) runsByIp.set(ip, n); else runsByIp.delete(ip);
+				}
+				return;
 			}
 			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete))?$/.exec(p);
 			if (m) {

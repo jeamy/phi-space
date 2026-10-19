@@ -23,8 +23,8 @@ type Llm = { enabled: boolean; on: boolean; current: string | null; models: { id
 type Shard = { shard: string; up: boolean; host: { name: string; cpu: string; cores: number; memGiB: number } | null; judged: number | null };
 
 const T = {
-	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle: JSON [{\"args\":[2],\"expect\":4}] oder einfacher Text, z. B. „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“", casesError: "Die Testfälle konnten nicht gelesen werden. Erlaubt: JSON oder einfacher Text wie „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“.", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", board: "Rangliste", best: "Bester Code", standings: "Wertung je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "gegeneinander", correctN: "korrekt", helpLink: "Hilfe", contributions: "Beiträge", running: "läuft", block: "Aufgabe", del: "Block löschen", delRunning: "Der Lauf in diesem Block muss zuerst gestoppt werden", delTitle: "Aufgabenblock löschen?", delText: (title: string, n: number) => `Der Block „${title}“ mit ${n} Beiträgen, Rangliste und bestem Code wird dauerhaft gelöscht.`, yes: "Ja, löschen", no: "Nein", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe.", fnLabel: "Funktionsname", promptLabel: "Beschreibung", casesLabel: "Testfälle", startLabel: "Lauf starten / stoppen" },
-	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases: JSON [{\"args\":[2],\"expect\":4}] or plain text, e.g. \"5 -> 120\" or \"Result: 0 1 4 9 11\"", casesError: "The test cases could not be read. Allowed: JSON or plain text like \"5 -> 120\" or \"Result: 0 1 4 9 11\".", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", board: "Leaderboard", best: "Best code", standings: "Standings per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "versus", correctN: "correct", helpLink: "Help", contributions: "contributions", running: "running", block: "Task", del: "Delete block", delRunning: "Stop the run in this block first", delTitle: "Delete task block?", delText: (title: string, n: number) => `The block "${title}" with ${n} contributions, its ranking and best code will be deleted permanently.`, yes: "Yes, delete", no: "No", forBlock: "for", hide: "Close", noBlocks: "No task yet.", fnLabel: "Function name", promptLabel: "Description", casesLabel: "Test cases", startLabel: "Start / stop the run" },
+	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle: JSON [{\"args\":[2],\"expect\":4}] oder einfacher Text, z. B. „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“", casesError: "Die Testfälle konnten nicht gelesen werden. Erlaubt: JSON oder einfacher Text wie „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“.", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", board: "Rangliste", best: "Bester Code", standings: "Wertung je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "gegeneinander", correctN: "korrekt", helpLink: "Hilfe", contributions: "Beiträge", running: "läuft", block: "Aufgabe", del: "Block löschen", delRunning: "Der Lauf in diesem Block muss zuerst gestoppt werden", delTitle: "Aufgabenblock löschen?", delText: (title: string, n: number) => `Der Block „${title}“ mit ${n} Beiträgen, Rangliste und bestem Code wird dauerhaft gelöscht.`, yes: "Ja, löschen", no: "Nein", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe.", fnLabel: "Funktionsname", promptLabel: "Beschreibung", casesLabel: "Testfälle", startLabel: "Lauf starten / stoppen", runCode: "▶ Ausführen", runClose: "Konsole schließen", runAgain: "▶ Erneut", runStop: "■ Stop", callLabel: "Eigener Aufruf (optional)", callPh: (fn: string) => `z. B. ${fn}(10)`, expected: "erwartet", runOk: (ms: number) => `fertig in ${ms} ms`, runTimeout: "Zeitlimit erreicht (60 s)", runAborted: "gestoppt", runLimit: "Ausgabelimit erreicht, Lauf beendet", runError: "mit Fehler beendet", consoleLabel: "Konsole", runHint: "Läuft die Funktion gegen die Testfälle der Aufgabe und danach den eigenen Aufruf; nichts wird bewertet." },
+	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases: JSON [{\"args\":[2],\"expect\":4}] or plain text, e.g. \"5 -> 120\" or \"Result: 0 1 4 9 11\"", casesError: "The test cases could not be read. Allowed: JSON or plain text like \"5 -> 120\" or \"Result: 0 1 4 9 11\".", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", board: "Leaderboard", best: "Best code", standings: "Standings per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "versus", correctN: "correct", helpLink: "Help", contributions: "contributions", running: "running", block: "Task", del: "Delete block", delRunning: "Stop the run in this block first", delTitle: "Delete task block?", delText: (title: string, n: number) => `The block "${title}" with ${n} contributions, its ranking and best code will be deleted permanently.`, yes: "Yes, delete", no: "No", forBlock: "for", hide: "Close", noBlocks: "No task yet.", fnLabel: "Function name", promptLabel: "Description", casesLabel: "Test cases", startLabel: "Start / stop the run", runCode: "▶ Run", runClose: "Close console", runAgain: "▶ Again", runStop: "■ Stop", callLabel: "Own call (optional)", callPh: (fn: string) => `e.g. ${fn}(10)`, expected: "expected", runOk: (ms: number) => `done in ${ms} ms`, runTimeout: "time limit reached (60 s)", runAborted: "stopped", runLimit: "output limit reached, run ended", runError: "ended with an error", consoleLabel: "Console", runHint: "Runs the function against the task's test cases, then the own call; nothing is scored." },
 } as const;
 type Tr = (typeof T)[Lang];
 
@@ -48,6 +48,86 @@ function Code({ sid, c }: { sid: string; c: { candidateId: string; source?: stri
 		return () => { dead = true; };
 	}, [sid, c.candidateId, c.sourceOmitted]);
 	return <pre className="code">{c.sourceOmitted ? (fetched ?? "…") : c.source}</pre>;
+}
+
+type ExecEvent =
+	| { t: "start"; fn: string; cases: number }
+	| { t: "case"; call: string; ok: boolean; got?: string; error?: string; expect: string }
+	| { t: "log"; level: string; text: string }
+	| { t: "value"; call: string; text: string }
+	| { t: "error"; text: string }
+	| { t: "end"; status: "ok" | "timeout" | "aborted" | "limit" | "error"; ms: number }
+	| { t: "stopped" };
+
+/** The ▶ console of one contribution: runs it in the server sandbox and shows what streams back; Stop ends the
+ *  request, which aborts the run. Output is text only (React text nodes), like the code itself. */
+function RunConsole({ sid, candidateId, fn, t }: { sid: string; candidateId: string; fn: string; t: Tr }) {
+	const [call, setCall] = useState("");
+	const [lines, setLines] = useState<ExecEvent[]>([]);
+	const [running, setRunning] = useState(false);
+	const ctl = useRef<AbortController | null>(null);
+	const box = useRef<HTMLDivElement>(null);
+	useEffect(() => () => ctl.current?.abort(), []);
+	useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight; }, [lines]);
+	const push = (e: ExecEvent) => setLines((cur) => (cur.length >= 2000 ? cur : [...cur, e]));
+	const run = async () => {
+		ctl.current?.abort();
+		const ac = new AbortController();
+		ctl.current = ac;
+		setLines([]); setRunning(true);
+		try {
+			const r = await fetch(`/api/sessions/${sid}/exec`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId, call }), signal: ac.signal });
+			if (!r.ok || !r.body) { const d = (await r.json().catch(() => ({}))) as { error?: string }; push({ t: "error", text: d.error || r.statusText }); return; }
+			const reader = r.body.getReader(), dec = new TextDecoder();
+			let buf = "";
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buf += dec.decode(value, { stream: true });
+				for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) { const l = buf.slice(0, i); buf = buf.slice(i + 1); if (l) push(JSON.parse(l) as ExecEvent); }
+			}
+		} catch (e) {
+			push(ac.signal.aborted ? { t: "stopped" } : { t: "error", text: (e as Error).message });
+		} finally {
+			if (ctl.current === ac) { ctl.current = null; setRunning(false); }
+		}
+	};
+	const endText = (e: Extract<ExecEvent, { t: "end" }>) => e.status === "ok" ? t.runOk(e.ms) : e.status === "timeout" ? t.runTimeout : e.status === "aborted" ? t.runAborted : e.status === "limit" ? t.runLimit : t.runError;
+	return (
+		<div className="console">
+			<div className="console__bar">
+				<label className="sr-only" htmlFor={`call-${candidateId}`}>{t.callLabel}</label>
+				<input id={`call-${candidateId}`} className="console__call" placeholder={`${t.callLabel}: ${t.callPh(fn)}`} autoCapitalize="off" autoCorrect="off" spellCheck={false} maxLength={500} value={call}
+					onChange={(e) => setCall(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !running) void run(); }} />
+				{running
+					? <button type="button" className="btn btn--danger" onClick={() => ctl.current?.abort()}>{t.runStop}</button>
+					: <button type="button" className="btn btn--primary" onClick={() => void run()} title={t.runHint}>{lines.length ? t.runAgain : t.runCode}</button>}
+			</div>
+			<div className="console__out" ref={box} role="log" aria-live="polite" aria-label={t.consoleLabel}>
+				{lines.map((e, i) =>
+					e.t === "start" ? null
+					: e.t === "case" ? <div key={i} className={e.ok ? "ok" : "bad"}>{e.ok ? "✓" : "✗"} {e.call} → {e.error ?? e.got}{e.ok ? "" : `   (${t.expected} ${e.expect})`}</div>
+					: e.t === "log" ? <div key={i} className={`log log--${e.level}`}>{e.text}</div>
+					: e.t === "value" ? <div key={i} className="value">{e.call} = {e.text}</div>
+					: e.t === "error" ? <div key={i} className="bad">{e.text}</div>
+					: e.t === "end" ? <div key={i} className="end">— {endText(e)}</div>
+					: <div key={i} className="end">— {t.runAborted}</div>)}
+				{running ? <div className="end">…</div> : null}
+			</div>
+		</div>
+	);
+}
+
+/** Code of a contribution with its ▶: the console opens below the code. */
+function CodeBlock({ sid, c, fn, t }: { sid: string; c: { candidateId: string; source?: string; sourceOmitted?: true }; fn: string; t: Tr }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<Code sid={sid} c={c} />
+			<div className="runrow"><button type="button" className="btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? t.runClose : t.runCode}</button></div>
+			{open ? <RunConsole sid={sid} candidateId={c.candidateId} fn={fn} t={t} /> : null}
+		</>
+	);
 }
 
 function Tile({ c, isBest, open, onClick, t }: { c: Contribution; isBest: boolean; open: boolean; onClick: () => void; t: Tr }) {
@@ -124,7 +204,7 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 								<button type="button" className="btn" onClick={() => onCode(c.candidateId)}>{t.hide}</button>
 							</div>
 							{c.error ? <div className="err">{c.error}</div> : null}
-							<Code key={c.candidateId} sid={sid} c={c} />
+							<CodeBlock key={c.candidateId} sid={sid} c={c} fn={b.task.fn} t={t} />
 						</div>
 					))}
 				</div>
@@ -346,7 +426,7 @@ export function CodemodeChat() {
 					<div className="panel">
 						<h2>{t.best} <HelpTip id="best" lang={lang} label={t.best} /></h2>
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
-						{focusBlock?.best ? <Code key={focusBlock.best.candidateId} sid={sid} c={focusBlock.best} /> : <div className="empty">{t.nobest}</div>}
+						{focusBlock?.best ? <CodeBlock key={focusBlock.best.candidateId} sid={sid} c={focusBlock.best} fn={focusBlock.task.fn} t={t} /> : <div className="empty">{t.nobest}</div>}
 					</div>
 				</aside>
 			</main>

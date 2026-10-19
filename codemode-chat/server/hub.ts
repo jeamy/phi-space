@@ -32,6 +32,8 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 	pushTimer?: ReturnType<typeof setTimeout>; pushing: boolean; pushAgain: boolean; loading: Promise<void>; lastUsed: number;
 	/** Serializes the operations that change the room's blocks or run (setTask, startRun, deleteBlock) and CodeBest. */
 	tail: Promise<unknown>; bestTail: Promise<unknown>;
+	/** Candidates this host's judges hold right now: taken under a transaction, so no read sees them until the verdict. */
+	judging: Map<string, Record<string, unknown>>;
 };
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
@@ -116,7 +118,7 @@ export class CodeChatHub {
 		if (!s) {
 			if (this.#sessions.size >= LIMITS.sessions) this.#evictIdle();
 			if (this.#sessions.size >= LIMITS.sessions) throw new Error("Too many sessions");
-			s = { id, task: TASKS[0]!, blockId: "", clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, deleted: new Set(), buckets: new Map(), remotePending: new Map(), polling: false, pushing: false, pushAgain: false, loading: Promise.resolve(), lastUsed: Date.now(), tail: Promise.resolve(), bestTail: Promise.resolve() };
+			s = { id, task: TASKS[0]!, blockId: "", clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, deleted: new Set(), buckets: new Map(), remotePending: new Map(), polling: false, pushing: false, pushAgain: false, loading: Promise.resolve(), lastUsed: Date.now(), tail: Promise.resolve(), bestTail: Promise.resolve(), judging: new Map() };
 			this.#sessions.set(id, s);
 			// every caller waits for the same load: a second request during the first load never sees a room without a block
 			s.loading = this.#load(s);
@@ -207,15 +209,33 @@ export class CodeChatHub {
 		return Buffer.byteLength(JSON.stringify(full)) <= SNAPSHOT_MAX_BYTES ? full : build(false);
 	}
 
-	/** The code of one contribution (verdict or still waiting), here or on the shard; null when it is gone. */
-	async source(id: string, candidateId: string): Promise<string | null> {
-		const s = await this.session(id);
+	/** The entry of one contribution (verdict or still waiting), here or on the shard; null when it is gone. */
+	async #contribution(s: Session, candidateId: string): Promise<Record<string, unknown> | null> {
+		const held = s.judging.get(candidateId);
+		if (held) return held;
 		for (const type of ["CodeScore", "CodeCandidate"]) {
 			const tmpl = { type, fields: { session: s.id, candidateId } };
 			const e = (await this.host.readAll(tmpl, { limit: 1 }))[0] ?? (await this.#rcall((r) => r.readAll(tmpl, { limit: 1 })))?.[0];
-			if (e) return String((e.fields as Record<string, unknown>).source ?? "");
+			if (e) return e.fields as Record<string, unknown>;
 		}
 		return null;
+	}
+
+	/** The code of one contribution; null when it is gone. */
+	async source(id: string, candidateId: string): Promise<string | null> {
+		const f = await this.#contribution(await this.session(id), candidateId);
+		return f ? String(f.source ?? "") : null;
+	}
+
+	/** What the ▶ of a contribution runs: its code and the task it was written for (the candidate names it, a verdict
+	 *  through its block; an entry from before task blocks falls back to the room's task). Null when it is gone. */
+	async execTarget(id: string, candidateId: string): Promise<{ source: string; task: Task } | null> {
+		const s = await this.session(id);
+		const f = await this.#contribution(s, candidateId);
+		if (!f) return null;
+		const block = f.blockId === undefined ? undefined : (await this.#taskEntries(id)).find((t) => String(t.blockId ?? `t${t.ts}`) === f.blockId);
+		const task = (f.taskId !== undefined ? taskFromSpec(f) : null) ?? (block ? taskFromSpec(block) : null) ?? s.task;
+		return { source: String(f.source ?? ""), task };
 	}
 
 	/** Push a fresh snapshot to every client of the session (debounced, so a burst of writes sends one frame). One
@@ -319,20 +339,23 @@ export class CodeChatHub {
 				catch (e) { await r.abort(t.id).catch(() => {}); throw e; }
 				if (!c) { await r.abort(t.id); return null; }
 				const f = c.fields as unknown as Contribution & { taskId?: string; custom?: unknown };
-				const gone = () => !!f.blockId && s.deleted.has(f.blockId);
-				// the candidate names its own task (it may belong to an earlier block); one that names none cannot be judged
-				const task = taskFromSpec(f);
-				const v: Verdict | null = gone() ? null : task ? await judgeInSlot(this.cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
+				s.judging.set(f.candidateId, c.fields as Record<string, unknown>);
 				try {
-					// its block was deleted while it waited or while it was judged: consume it, write nothing
-					if (v && !gone()) await r.write({ type: "CodeScore", fields: { session: s.id, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, this.#ttl);
-					await r.commit(t.id);
-				} catch (e) {
-					await r.abort(t.id).catch(() => {});
-					if (!(e instanceof TransactionError)) throw e;
-					return "retry";
-				}
-				return v && !gone() ? { f, v } : "retry";
+					const gone = () => !!f.blockId && s.deleted.has(f.blockId);
+					// the candidate names its own task (it may belong to an earlier block); one that names none cannot be judged
+					const task = taskFromSpec(f);
+					const v: Verdict | null = gone() ? null : task ? await judgeInSlot(this.cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task" };
+					try {
+						// its block was deleted while it waited or while it was judged: consume it, write nothing
+						if (v && !gone()) await r.write({ type: "CodeScore", fields: { session: s.id, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, this.#ttl);
+						await r.commit(t.id);
+					} catch (e) {
+						await r.abort(t.id).catch(() => {});
+						if (!(e instanceof TransactionError)) throw e;
+						return "retry";
+					}
+					return v && !gone() ? { f, v } : "retry";
+				} finally { s.judging.delete(f.candidateId); }
 			});
 			if (done === null) return;
 			if (done !== "retry" && done.v.ok) await this.#offerBest(s, done.f.blockId, done.f.candidateId, done.v.ms, String(done.f.source ?? ""));

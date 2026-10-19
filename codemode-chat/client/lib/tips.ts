@@ -92,8 +92,8 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	best: {
 		text: {
-			de: "Der Code des Siegers im gewählten Block. Ein Klick auf einen anderen Block zeigt dessen besten Code.",
-			en: "The winner's code in the selected block. Click another block to see its best code.",
+			de: "Der Code des Siegers im gewählten Block. Ein Klick auf einen anderen Block zeigt dessen besten Code. ▶ Ausführen lässt ihn in der Sandbox laufen, mit Konsole und Stop.",
+			en: "The winner's code in the selected block. Click another block to see its best code. ▶ Run runs it in the sandbox, with a console and Stop.",
 		},
 		article: "help.topic.judging_and_sandbox", anchor: "verdict",
 	},

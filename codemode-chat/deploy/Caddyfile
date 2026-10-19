@@ -1,7 +1,11 @@
 # Caddyfile example for the codemode chat (replace the host name; automatic TLS + WebSocket proxy)
 
 codemode.example.org {
-    encode zstd gzip
+    # the ▶ console streams its output (NDJSON): no compression there, and the proxy passes every line on at once
+    @compressible not path_regexp ^/api/sessions/[^/]+/exec$
+    encode @compressible zstd gzip
     # Caddy sets X-Forwarded-For to the client (an untrusted client's own header is dropped); the hub's per-IP quota reads it
-    reverse_proxy 127.0.0.1:3700
+    reverse_proxy 127.0.0.1:3700 {
+        flush_interval -1
+    }
 }

@@ -387,3 +387,62 @@ test("CODEMODE_TTL_HOURS: hours to a lease, 0 = no expiry, garbage refused", asy
 	assert.equal(entryLeaseMs("0"), FOREVER);
 	for (const bad of ["-1", "abc", "Infinity"]) assert.throws(() => entryLeaseMs(bad), bad);
 });
+
+/** Reads an NDJSON run response line by line until it ends. */
+const readRun = async (r: Response) => {
+	const out: any[] = [], reader = r.body!.getReader(), dec = new TextDecoder();
+	let buf = "";
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		buf += dec.decode(value, { stream: true });
+		for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) { const l = buf.slice(0, i); buf = buf.slice(i + 1); if (l) out.push(JSON.parse(l)); }
+	}
+	return out;
+};
+
+t("▶ runs a contribution: cases, console lines and the own call stream back; nothing is scored", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		await post(srv.url, "/api/sessions/exec1/task", { taskId: "gcd" });
+		const { body } = await post(srv.url, "/api/sessions/exec1/code", { author: "a", source: "function gcd(a,b){ console.log('gcd', a, b); while (b) [a, b] = [b, a % b]; return a }" });
+		await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/exec1")).json()) as any; return s.blocks.at(-1).contributions[0]?.ok === true; });
+		const judgedBefore = ((await (await fetch(srv.url + "/api/system")).json()) as any).shards[0].judged;
+		const r = await fetch(srv.url + "/api/sessions/exec1/exec", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: body.candidateId, call: "gcd(84, 36)" }) });
+		assert.equal(r.headers.get("content-type"), "application/x-ndjson; charset=utf-8");
+		const ev = await readRun(r);
+		assert.deepEqual(ev[0], { t: "start", fn: "gcd", cases: 6 });
+		assert.equal(ev.filter((e) => e.t === "case").length, 6);
+		assert.ok(ev.filter((e) => e.t === "case").every((e) => e.ok));
+		assert.ok(ev.some((e) => e.t === "log" && e.text === "gcd 84 36"));
+		assert.deepEqual(ev.find((e) => e.t === "value"), { t: "value", call: "gcd(84, 36)", text: "12" });
+		assert.equal(ev.at(-1).t, "end");
+		assert.equal(ev.at(-1).status, "ok");
+		assert.equal(((await (await fetch(srv.url + "/api/system")).json()) as any).shards[0].judged, judgedBefore); // a run is no verdict
+		assert.equal((await post(srv.url, "/api/sessions/exec1/exec", { candidateId: "nope" })).status, 404);
+		assert.equal((await post(srv.url, "/api/sessions/exec1/exec", { candidateId: "bad id!" })).status, 400);
+	} finally { await srv.close(); }
+});
+
+t("▶ Stop aborts a long run; a second run from the same client meanwhile is refused", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		await post(srv.url, "/api/sessions/exec2/task", { taskId: "gcd" });
+		const { body } = await post(srv.url, "/api/sessions/exec2/code", { author: "a", source: "function gcd(a){ for (let k = 0; ; k++) { const e = Date.now() + 100; while (Date.now() < e) {} console.log('tick', k) } }" });
+		const ac = new AbortController();
+		const r = await fetch(srv.url + "/api/sessions/exec2/exec", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: body.candidateId }), signal: ac.signal });
+		const reader = r.body!.getReader(), dec = new TextDecoder();
+		let seen = "";
+		assert.equal(r.status, 200); // also while the judge holds the candidate (it loops there too, for 5 s)
+		while (!seen.includes("tick 2")) { const x = await reader.read(); assert.ok(!x.done, seen); seen += dec.decode(x.value, { stream: true }); } // live output while it runs
+		assert.equal((await post(srv.url, "/api/sessions/exec2/exec", { candidateId: body.candidateId })).status, 429);
+		const t0 = Date.now();
+		ac.abort();
+		await until(async () => (await import("../server/runner.ts")).execRunning() === 0, 5_000);
+		assert.ok(Date.now() - t0 < 5_000);
+		// the client's slot is free again
+		const again = await fetch(srv.url + "/api/sessions/exec2/exec", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: body.candidateId }) });
+		assert.equal(again.status, 200);
+		await again.body!.cancel();
+	} finally { await srv.close(); }
+});
