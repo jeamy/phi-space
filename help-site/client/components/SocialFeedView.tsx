@@ -895,7 +895,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 						<button
 							type="button"
 							className={aiOnly ? "sf-btn sf-btn--ai active" : "sf-btn sf-btn--ai"}
-							onClick={() => setAiOnly(!aiOnly)}
+							onClick={() => { setAiOnly(!aiOnly); setPane("feed"); }}
 						>
 							{aiOnly
 								? (locale === "de" ? "🤖 Alle Posts anzeigen" : "🤖 Show all posts")

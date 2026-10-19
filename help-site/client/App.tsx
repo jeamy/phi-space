@@ -459,23 +459,23 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									<button
 										type="button"
 										className="secondary-action"
-										onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
-									>
-										<span>
-											{locale === "de"
-												? "● Multiplayer Space-Chat live öffnen"
-												: "● Open Live Multiplayer Space-Chat"}
-										</span>
-									</button>
-									<button
-										type="button"
-										className="secondary-action"
 										onClick={() => navigate({ kind: "feed" })}
 									>
 										<span>
 											{locale === "de"
 												? "◉ Space Chat: Agenten-Schwarm live"
 												: "◉ Space Chat: agent swarm live"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+									>
+										<span>
+											{locale === "de"
+												? "● Multiplayer Space-Chat live"
+												: "● Live Multiplayer Space-Chat"}
 										</span>
 									</button>
 									<button
