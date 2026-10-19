@@ -724,3 +724,65 @@ t("the note of a rejected contribution is not passed on (an agent recommending t
 		assert.equal(b.notes.find((n: any) => /Array.from/.test(n.text)).rejected, undefined);
 	} finally { await srv.close(); }
 });
+
+// ---- time limit per task, notes at their attempts ----
+
+t("a custom task may allow more time: a slow but right function passes, timed by its case pass", async () => {
+	const slowSrc = "function slow(x){ const e = Date.now() + 6000; while (Date.now() < e) {} return x }";
+	const short = customTask({ fn: "slow", prompt: "", cases: [{ args: [1], expect: 1 }] });
+	assert.equal((await judge(cm!, short, slowSrc)).ok, false); // the default 5 s are not enough
+	const long = customTask({ fn: "slow", prompt: "", cases: [{ args: [1], expect: 1 }], timeoutS: 9 });
+	const v = await judge(cm!, long, slowSrc);
+	assert.equal(v.ok, true, v.error ?? "");
+	assert.ok(v.ms >= 5900 && v.ms < 8000, `ms ${v.ms}`); // one pass, no second bench round that would not fit
+	assert.throws(() => customTask({ fn: "f", prompt: "", cases: [{ args: [], expect: 1 }], timeoutS: 600 }), /1 to 60 seconds/);
+	const { teamPrompt } = await import("../server/llm.ts");
+	assert.ok(teamPrompt({ task: long, lang: "en", agent: 0, gen: 0 }).user.includes("within 9 seconds"));
+});
+
+t("every agent note belongs to its attempt: shown with it, linked from the list (also older notes)", async () => {
+	const llm = { models: async () => ["fake/team"], contribute: async () => ({ source: "function f(x){ return x + 1 }", model: "fake/team", note: "adds one, nothing more" }) };
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/link1/task", { custom: { fn: "f", prompt: "x + 1", cases: [{ args: [1], expect: 2 }] } });
+		await post(srv.url, "/api/sessions/link1/run", { agents: 1, gens: 1, perAgent: 1, polish: 0, contenders: ["fake/team"] });
+		let b = (await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/link1")).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000)).blocks.at(-1);
+		const c = b.contributions[0];
+		assert.equal(c.note, "adds one, nothing more");
+		assert.equal(b.notes[0].candidateId, c.candidateId);
+		// a note from before the link existed is matched by agent, generation and model at the nearest time
+		await srv.hub.host.write({ type: "CodeNote", fields: { session: "link1", blockId: b.blockId, author: c.author, via: c.via, gen: c.gen, text: "an older note", ts: c.ts + 1000 } } as never, null, 3_600_000);
+		b = ((await (await fetch(srv.url + "/api/sessions/link1")).json()) as any).blocks.at(-1);
+		assert.equal(b.notes.find((n: any) => n.text === "an older note").candidateId, c.candidateId);
+	} finally { await srv.close(); }
+});
+
+test("notes are cut at a word, not in the middle of one", async () => {
+	const { clipWords, extractNote } = await import("../server/llm.ts");
+	assert.equal(clipWords("short note", 300), "short note");
+	const cut = clipWords("word ".repeat(100), 30);
+	assert.ok(cut.endsWith("word…") && cut.length <= 30, cut);
+	assert.equal(extractNote("```js\nx\n```\nNOTE: " + "a".repeat(400))!.length, 300);
+});
+
+t("the same custom task with another time limit changes the active block in place, its attempts and rule stay", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const spec = { fn: "f", prompt: "x + 1", cases: [{ args: [1], expect: 2 }], check: "(r, [x]) => r === x + 1" };
+		await post(srv.url, "/api/sessions/time1/task", { custom: spec });
+		await post(srv.url, "/api/sessions/time1/code", { author: "a", source: "function f(x){ return x + 1 }" });
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/time1")).json()) as any;
+		await until(async () => (await get()).blocks.at(-1).contributions[0]?.ok === true);
+		const before = (await get()).blocks.at(-1);
+		assert.equal(before.task.timeoutS, 5);
+		assert.equal((await post(srv.url, "/api/sessions/time1/task", { custom: { ...spec, check: undefined, timeoutS: 30 } })).status, 200);
+		const snap = await get(), b = snap.blocks.at(-1);
+		assert.equal(snap.blocks.length, 2); // the default first block and this one: no new block
+		assert.equal(b.blockId, before.blockId);
+		assert.equal(b.task.timeoutS, 30);
+		assert.equal(b.task.check, spec.check); // the rule stays
+		assert.equal(b.contributions.length, 1);
+		assert.ok(b.messages.some((m: any) => m.text === "Time limit per contribution: 30 s"));
+		assert.equal(snap.currentCustom.fn, "f");
+	} finally { await srv.close(); }
+});

@@ -106,6 +106,7 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 		`Task: ${t.prompt.en}`,
 		`Write a JavaScript function named \`${t.fn}\`. It is called exactly like in these test cases:\n${describeCases(t)}`,
 		...(t.check !== undefined ? [`A result passes when this check rule returns true for it (any result that satisfies the rule is right):\n\`\`\`js\n${t.check}\n\`\`\``] : []),
+		`Time limit: all test cases together must finish within ${(t.timeoutMs ?? 5000) / 1000} seconds in a QuickJS interpreter (much slower than V8), so the algorithm must be efficient.`,
 		"Rules: plain JavaScript (QuickJS), no imports, no I/O, no timers. Results must be plain JSON values. COMPUTE the result: never write an example result (or any expected answer) into the code as a literal, also when the function takes no arguments. Code that returns hard-coded answers is rejected.",
 	];
 	if (c.rejected?.length) parts.push("NOT like this. These attempts were rejected; do not repeat their approach:\n" + c.rejected.map((a) => `- ${a.author} (${a.via}, generation ${a.gen}), ${a.rejected}:\n\`\`\`js\n${clipText(a.source, 800)}\n\`\`\``).join("\n"));
@@ -116,7 +117,7 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it faster or simpler. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
 	else parts.push(`Your job: EXPLORE. Write a solution with an approach of your own${c.others?.length ? ", different from the attempts below where they fail" : ""}.`);
 	if (c.others?.length) parts.push("Other attempts of the team (for reference; reuse what helps):\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n"));
-	parts.push("Answer with exactly one ```js block holding the complete function (and its helpers). After the block you may add ONE line `NOTE: …` (at most 200 characters) with an insight the next teammates should know.");
+	parts.push("Answer with exactly one ```js block holding the complete function (and its helpers). After the block you may add ONE line `NOTE: …` (at most 300 characters) with an insight the next teammates should know.");
 	return {
 		system: `You are agent ${c.agent} in a team that solves a programming task together through a shared space (generation ${c.gen + 1}). Everyone sees every attempt, its test results and the team's notes; you build on each other's work. ${STYLES[c.agent % STYLES.length]}`,
 		user: parts.join("\n\n"),
@@ -129,11 +130,19 @@ export function extractCode(text: string): string {
 	return (m ? m[1]! : text).trim();
 }
 
-/** The `NOTE: …` line after the code block, if any. */
+/** A text cut to `max` characters at a word boundary, with "…" when something was cut. */
+export const clipWords = (t: string, max: number): string => {
+	const s = t.replace(/\s+/g, " ").trim();
+	if (s.length <= max) return s;
+	const cut = s.slice(0, max - 1), space = cut.lastIndexOf(" ");
+	return (space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:.]+$/, "") + "…";
+};
+
+/** The `NOTE: …` line after the code block, if any (at most 300 characters, cut at a word). */
 export function extractNote(text: string): string | undefined {
 	const after = text.slice(text.lastIndexOf("```") + 3);
 	const m = /^\s*NOTE:\s*(.+)$/im.exec(after);
-	return m ? m[1]!.trim().slice(0, 200) : undefined;
+	return m ? clipWords(m[1]!, 300) : undefined;
 }
 
 /** One guarded model call (whitelist, day budget, minute window, two in flight): the answer text and the model label.

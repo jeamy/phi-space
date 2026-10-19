@@ -2,7 +2,7 @@
 // explains the field in full.
 import type { Lang } from "./theme.ts";
 
-export type TipId = "task" | "fn" | "prompt" | "cases" | "verify" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
+export type TipId = "task" | "fn" | "prompt" | "cases" | "verify" | "timeout" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -40,6 +40,13 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "For tasks with more than one right answer. A verifier agent reads the description and the examples and writes a check rule from them; it must accept your examples and reject obviously wrong results, or the agent writes it again. Without the tick only the given results count (several with \"or\").",
 		},
 		article: "help.topic.tasks_and_blocks", anchor: "check",
+	},
+	timeout: {
+		text: {
+			de: "Wie lange ein Beitrag für alle Testfälle zusammen rechnen darf (1 bis 60 s, Standard 5). Schwere Aufgaben wie ein Golomb-Lineal der Ordnung 12 brauchen mehr. Die Agenten kennen das Limit; ein längeres Limit bewertet langsamer.",
+			en: "How long a contribution may compute for all test cases together (1 to 60 s, default 5). Hard tasks such as a Golomb ruler of order 12 need more. The agents know the limit; a longer limit judges more slowly.",
+		},
+		article: "help.topic.tasks_and_blocks", anchor: "custom",
 	},
 	agents: {
 		text: {
@@ -85,8 +92,8 @@ export const TIPS: Record<TipId, Tip> = {
 	},
 	code: {
 		text: {
-			de: "Reiche eigenen Code für den aktiven Block ein. Er muss die Funktion mit dem angezeigten Namen definieren und läuft in derselben Sandbox wie der Code der Agenten (5 s, 64 MiB, kein Netz).",
-			en: "Hand in your own code for the active block. It must define the function with the name shown and runs in the same sandbox as the agents' code (5 s, 64 MiB, no network).",
+			de: "Reiche eigenen Code für den aktiven Block ein. Er muss die Funktion mit dem angezeigten Namen definieren und läuft in derselben Sandbox wie der Code der Agenten (Zeitlimit der Aufgabe, 64 MiB, kein Netz).",
+			en: "Hand in your own code for the active block. It must define the function with the name shown and runs in the same sandbox as the agents' code (the task's time limit, 64 MiB, no network).",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "human",
 	},

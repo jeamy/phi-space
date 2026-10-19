@@ -2,7 +2,7 @@
 // function runs against the task's cases and, optionally, one call the person typed; every case result, console line
 // and the call's value stream out as they happen (a host global the sandbox calls, so a busy loop still reports live).
 // Stop is an abort signal. Bounded: 60 s, two runs per process, at most 1000 lines / 256 KiB of output.
-import type { Codemode } from "./judge.ts";
+import { limitOf, type Codemode } from "./judge.ts";
 import type { Task } from "./tasks.ts";
 
 export const EXEC_TIMEOUT_MS = 60_000;
@@ -101,12 +101,12 @@ export async function execute(cm: Codemode, task: Task, source: string, call: st
 	if (running >= EXEC_PARALLEL) throw new Error("All runners are busy; try again in a moment");
 	if (call.length > MAX_CALL_CHARS) throw new Error(`A call has at most ${MAX_CALL_CHARS} characters`);
 	running++;
-	const started = Date.now(), stop = new AbortController();
+	const started = Date.now(), stop = new AbortController(), timeoutMs = Math.max(EXEC_TIMEOUT_MS, limitOf(task)); // never less than the judge allows
 	let lines = 0, bytes = 0, limited = false;
 	const onAbort = () => stop.abort();
 	signal.addEventListener("abort", onAbort);
 	const sandbox = new (cm as unknown as RunCodemode).CodemodeSandbox({
-		timeoutMs: EXEC_TIMEOUT_MS, tools: [], memoryLimitBytes: 64 * 1024 * 1024,
+		timeoutMs, tools: [], memoryLimitBytes: 64 * 1024 * 1024,
 		globals: [{ name: "__out", execute: (raw) => {
 			const e = clean(raw);
 			if (!e || limited || stop.signal.aborted) return null;
@@ -118,7 +118,7 @@ export async function execute(cm: Codemode, task: Task, source: string, call: st
 	});
 	try {
 		emit({ t: "start", fn: task.fn, cases: task.cases.length });
-		const r = await sandbox.execute(execProgram(task, source, call), { signal: stop.signal, timeoutMs: EXEC_TIMEOUT_MS });
+		const r = await sandbox.execute(execProgram(task, source, call), { signal: stop.signal, timeoutMs });
 		const ms = Date.now() - started;
 		// what still went to the sandbox's own console (globalThis.console) comes after the run, within the same limits
 		for (const o of r.output ?? []) {

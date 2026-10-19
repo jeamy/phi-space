@@ -1,6 +1,6 @@
 // Task catalog: what the agents are asked to write, how a contribution is checked (cases) and timed (bench), and a few
 // hand-written variants that the scripted (model-free) agents hand in. All code here runs only in the sandbox.
-import { MAX_CHECK_CHARS } from "./judge.ts";
+import { MAX_CHECK_CHARS, maxTimeoutMs } from "./judge.ts";
 
 /** One test call. `expect` is the exact result, `expectAny` several results that are all right ("[0,1,4,9,11] oder
  *  [0,2,7,10,11]"); a task with a check rule may give neither (the rule decides). */
@@ -24,6 +24,8 @@ export type Task = {
 	check?: string;
 	/** Who wrote the check rule: the verifier agent (from the description and the examples) or the API caller. */
 	checkBy?: "verifier" | "user";
+	/** Custom tasks: the time a contribution has for its cases and the bench (default: the judge's 5 s). */
+	timeoutMs?: number;
 };
 
 const primes = (n: number) => { const p: number[] = []; for (let c = 2; p.length < n; c++) if (p.every((d) => d * d > c || c % d !== 0)) p.push(c); return p; };
@@ -104,7 +106,7 @@ export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id
 // Names a custom task cannot use as its function: reserved words, and the `__` prefix the judge keeps for itself.
 const RESERVED = new Set("arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof undefined var void while with yield NaN Infinity".split(" "));
 
-export function customTask(x: { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user" }): Task {
+export function customTask(x: { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user"; timeoutS?: unknown }): Task {
 	if (typeof x.fn !== "string" || !/^[A-Za-z_$][\w$]{0,40}$/.test(x.fn) || x.fn.startsWith("__") || RESERVED.has(x.fn)) throw new Error("Invalid function name");
 	if (!Array.isArray(x.cases) || x.cases.length < 1 || x.cases.length > 50) throw new Error("1 to 50 cases required");
 	const check = typeof x.check === "string" && x.check.trim() ? x.check.trim() : undefined;
@@ -115,7 +117,9 @@ export function customTask(x: { fn: string; prompt: string; cases: Case[]; check
 		if (check === undefined && !Object.hasOwn(c, "expect") && !Object.hasOwn(c, "expectAny")) throw new Error("Every case needs expect (or expectAny), or the task a check rule");
 	}
 	if (JSON.stringify(x.cases).length > 32_000) throw new Error("Cases too large");
-	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [], ...(check !== undefined ? { check, checkBy: x.checkBy === "verifier" ? "verifier" as const : "user" as const } : {}) };
+	const maxS = maxTimeoutMs() / 1000, timeoutS = x.timeoutS === undefined || x.timeoutS === null || x.timeoutS === "" ? undefined : Number(x.timeoutS);
+	if (timeoutS !== undefined && !(Number.isFinite(timeoutS) && timeoutS >= 1 && timeoutS <= maxS)) throw new Error(`The time limit is 1 to ${maxS} seconds`);
+	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [], ...(check !== undefined ? { check, checkBy: x.checkBy === "verifier" ? "verifier" as const : "user" as const } : {}), ...(timeoutS !== undefined ? { timeoutMs: Math.round(timeoutS * 1000) } : {}) };
 	// Rounds of all cases until 300 rounds or about a second, whichever comes first; the time is per round, so a slow
 	// function is timed, not timed out. Index loops and the judge's captured Reflect.apply: a contribution that patches
 	// iterators cannot empty the bench. Every call is checked (fixed results), or one random round is kept for the check
@@ -130,7 +134,7 @@ __rounds = __r;` };
 }
 
 /** The spec a custom task is stored as (CodeTask, CodeCandidate). */
-export const customSpec = (t: Task) => ({ fn: t.fn, prompt: t.prompt.en, cases: t.cases, ...(t.check !== undefined ? { check: t.check, checkBy: t.checkBy ?? "user" } : {}) });
+export const customSpec = (t: Task) => ({ fn: t.fn, prompt: t.prompt.en, cases: t.cases, ...(t.check !== undefined ? { check: t.check, checkBy: t.checkBy ?? "user" } : {}), ...(t.timeoutMs !== undefined ? { timeoutS: t.timeoutMs / 1000 } : {}) });
 
 /** The results a case accepts (empty: a check rule decides). */
 export const expectedOf = (c: Case): unknown[] => (Object.hasOwn(c, "expectAny") ? c.expectAny! : Object.hasOwn(c, "expect") ? [c.expect] : []);
@@ -138,7 +142,7 @@ export const expectedOf = (c: Case): unknown[] => (Object.hasOwn(c, "expectAny")
 /** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */
 export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
 	if (f.taskId === "custom") {
-		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user" };
+		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user"; timeoutS?: number };
 		try { return customTask(c); } catch { return null; }
 	}
 	return taskById(String(f.taskId)) ?? null;

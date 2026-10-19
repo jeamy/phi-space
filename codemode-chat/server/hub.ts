@@ -9,9 +9,9 @@
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
-import { judgeInSlot, MAX_SOURCE_CHARS, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { judgeInSlot, limitOf, MAX_SOURCE_CHARS, maxTimeoutMs, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { customSpec, customTask, expectedOf, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
-import { llmContribution, llmModels, llmVerifier, type Attempt, type Note, type Role } from "./llm.ts";
+import { clipWords, llmContribution, llmModels, llmVerifier, type Attempt, type Note, type Role } from "./llm.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
@@ -32,7 +32,7 @@ export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmCo
 export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; polish: number; solvedGen: number | null; note?: string };
 /** `source` is left out of a snapshot when its byte budget is spent (`sourceOmitted`); `details()` returns it with the
  *  case results. `passed`/`total`: cases passed; `role`/`basedOn`: what an agent did and whose attempt it built on. */
-export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
+export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; note?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
 type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
 	best: { candidateId: string; ms: number; source: string } | null; deleted: Set<string>; buckets: Map<string, number[]>; remotePending: Map<string, { at: number; blockId?: string }>; poller?: ReturnType<typeof setInterval>; polling: boolean;
@@ -234,7 +234,16 @@ export class CodeChatHub {
 			if (!task) return [];
 			const blockId = String(f.blockId ?? `t${f.ts}`);
 			known.add(blockId);
-			const contributions = all.filter((c) => c.blockId === blockId);
+			// every agent note belongs to its contribution: linked by id, or (older notes) by agent, generation and model
+			// at the nearest time; the contribution carries it as the description of its attempt
+			const own = notes.filter((n) => n.blockId === blockId && !n.human);
+			for (const n of own) {
+				if (n.candidateId) continue;
+				const match = all.filter((c) => c.blockId === blockId && c.author === n.author && c.gen === n.gen && c.via === n.via).sort((a, b) => Math.abs(a.ts - n.ts) - Math.abs(b.ts - n.ts))[0];
+				if (match && Math.abs(match.ts - n.ts) < 300_000) n.candidateId = match.candidateId;
+			}
+			const noteOf = new Map(own.filter((n) => n.candidateId).map((n) => [n.candidateId!, n.text]));
+			const contributions = all.filter((c) => c.blockId === blockId).map((c) => (noteOf.has(c.candidateId) ? { ...c, note: noteOf.get(c.candidateId)! } : c));
 			return [{ f, task, blockId, contributions, best: bestOf(contributions) }];
 		});
 		spend(raw.find((b) => b.blockId === s.blockId)?.best ?? null);
@@ -245,9 +254,9 @@ export class CodeChatHub {
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
 			const blocks = raw.map(({ f, task, blockId, contributions, best }) => ({
 				blockId, ts: f.ts as number, active: blockId === s.blockId,
-				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}) },
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
-				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
+				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));
 			return {
 				session: id, current: s.blockId, tasks: TASKS.map((t) => ({ id: t.id, title: t.title, fn: t.fn, prompt: t.prompt })),
@@ -342,12 +351,19 @@ export class CodeChatHub {
 
 	/** Every call opens a new task block, also when the same task is chosen again. A custom task with `verify` (the
 	 *  default) gets a check rule from the verifier agent, so other right results than the examples count too. */
-	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean } }): Promise<void> {
+	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean; timeoutS?: unknown } }): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "task", 30)) throw new Error("Too many tasks, slow down");
-		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
+		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
 		if (s.run?.active) throw new Error("A run is active; stop it first");
+		// the active custom task once more with only another time limit: change it in place, the attempts stay
+		const t = task;
+		if (o.custom && s.task.id === "custom" && t.fn === s.task.fn && t.prompt.en === s.task.prompt.en && JSON.stringify(t.cases) === JSON.stringify(s.task.cases)) {
+			if (limitOf(t) !== limitOf(s.task)) await this.#exclusive(s, () => this.#retime(s, limitOf(t)));
+			this.push(s);
+			return;
+		}
 		let verdict: string | null = null;
 		if (o.custom && task.check === undefined && o.custom.verify !== false) ({ task, verdict } = await this.#verify(task));
 		const chosen = task;
@@ -358,6 +374,18 @@ export class CodeChatHub {
 			if (verdict) await this.#write(s, "system", verdict, s.blockId);
 		});
 		this.push(s);
+	}
+
+	/** The active block's time limit changed: its CodeTask is rewritten (same block, same time, same rule); candidates
+	 *  from now on carry the new limit. */
+	async #retime(s: Session, timeoutMs: number): Promise<void> {
+		if (s.run?.active) throw new Error("A run is active; stop it first");
+		const old = await this.host.take({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId } }, NO_WAIT);
+		if (!old) throw new Error("Unknown task block");
+		const task = customTask({ ...customSpec(s.task), timeoutS: timeoutMs / 1000 });
+		await this.host.write({ type: "CodeTask", fields: { ...(old.fields as Record<string, unknown>), custom: customSpec(task) } as never }, null, this.#ttl);
+		s.task = task;
+		await this.#write(s, "system", `Time limit per contribution: ${timeoutMs / 1000} s`, s.blockId);
 	}
 
 	/** The verifier agent writes a check rule from the description and the examples; the rule must pass testRule (accept
@@ -372,7 +400,7 @@ export class CodeChatHub {
 			try {
 				const r = await verify({ task, ...(feedback ? { feedback } : {}) });
 				const why = await sandboxSlot(() => testRule(this.cm, task, r.check, expectedOf));
-				if (why === null) return { task: customTask({ fn: task.fn, prompt: task.prompt.en, cases: task.cases, check: r.check, checkBy: "verifier" }), verdict: `Check rule written by the verifier agent (${r.model}): other right results count too` };
+				if (why === null) return { task: customTask({ ...customSpec(task), check: r.check, checkBy: "verifier" }), verdict: `Check rule written by the verifier agent (${r.model}): other right results count too` };
 				feedback = why;
 			} catch (e) { feedback = plain((e as Error).message); if (/off|budget|not allowed/.test(feedback)) break; }
 		}
@@ -421,7 +449,7 @@ export class CodeChatHub {
 		const r = this.#role(roleId);
 		while (!this.#closed) {
 			const done = await sandboxSlot(async (): Promise<{ f: Contribution; v: Verdict } | null | "retry"> => {
-				const t = await r.createTransaction(TIMEOUT_MS + 30_000);
+				const t = await r.createTransaction(maxTimeoutMs() + 30_000); // the candidate's own limit is known only once it is taken
 				let c;
 				try { c = await r.take({ type: "CodeCandidate", fields: { session: s.id } }, NO_WAIT, { txn: t.id }); }
 				catch (e) { await r.abort(t.id).catch(() => {}); throw e; }
@@ -548,7 +576,7 @@ export class CodeChatHub {
 			const old = (await this.host.readAll(tmpl, { limit: LIMITS.notes + 5 })).sort((a, b) => Number((a.fields as { ts: number }).ts) - Number((b.fields as { ts: number }).ts));
 			for (const e of old.slice(0, old.length - LIMITS.notes + 1)) await this.host.take({ id: e.id }, NO_WAIT);
 		}
-		await this.host.write({ type: "CodeNote", fields: { session: s.id, blockId, author, via, gen, text: plain(text), ts: Date.now(), ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}) } }, null, this.#ttl);
+		await this.host.write({ type: "CodeNote", fields: { session: s.id, blockId, author, via, gen, text: clipWords(text.replace(/[\u0000-\u001f\u007f]/g, " "), 300), ts: Date.now(), ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}) } }, null, this.#ttl);
 	}
 
 	/** Generations of teamwork on the active block: each agent repairs, explores or improves with the whole board in

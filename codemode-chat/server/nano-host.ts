@@ -18,7 +18,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createSpace, FOREVER, NO_WAIT, PhiSpaces, serveSpace, SpaceService, spaces, StaticIdentity, startService, TransactionError } from "../../src/index.ts";
-import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { entryLeaseMs, hostFacts, JUDGE_ALIAS, parseTarget } from "./shard.ts";
 import { taskFromSpec } from "./tasks.ts";
 
@@ -52,7 +52,7 @@ export async function startJudgeHost(o: { listen?: string; dbPath?: string | nul
 		while (!stopping) {
 			try {
 				const judged = await sandboxSlot(async () => {
-					const t = await r.createTransaction(TIMEOUT_MS + 30_000);
+					const t = await r.createTransaction(maxTimeoutMs() + 30_000); // a custom task may allow up to the maximum
 					let c;
 					try { c = await r.take({ type: "CodeCandidate" }, NO_WAIT, { txn: t.id }); }
 					catch (e) { await r.abort(t.id).catch(() => {}); throw e; }

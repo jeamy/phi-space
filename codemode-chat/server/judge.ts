@@ -21,7 +21,12 @@ export type Verdict = { ok: boolean; ms: number; error?: string; passed: number;
 type Sandbox = { execute(code: string): Promise<{ ok: boolean; value?: unknown; error?: { message: string } }>; close(): Promise<void> };
 export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: []; memoryLimitBytes?: number }) => Sandbox };
 
+/** The default time a contribution has for all its cases and the bench; a custom task may set its own (timeoutMs). */
 export const TIMEOUT_MS = 5000;
+/** The most a custom task may allow per contribution: CODEMODE_MAX_TIMEOUT_S, default 60 s. */
+export const maxTimeoutMs = (): number => { const s = Number(process.env.CODEMODE_MAX_TIMEOUT_S ?? 60); return Number.isFinite(s) && s >= 1 ? Math.round(s * 1000) : 60_000; };
+/** The time limit of a task's contributions. */
+export const limitOf = (task: Task): number => task.timeoutMs ?? TIMEOUT_MS;
 export const MAX_SOURCE_CHARS = 16_000;
 export const MAX_CHECK_CHARS = 2000;
 const MAX_PARALLEL = 2;
@@ -90,6 +95,7 @@ const __fn = __eval(${JSON.stringify(script)});
 if (typeof __fn !== "function") return { phase: "cases", cases: [], error: "no function ${task.fn}" };
 const __res = [], __outs = [];
 let __passed = 0, __threw = false;
+const __tc = __now();
 for (let __i = 0; __i < __cases.length; __i++) {
 	const __c = __cases[__i], __call = "${task.fn}(" + __c.args.map(__show).join(", ") + ")";
 	try {
@@ -106,13 +112,18 @@ for (let __i = 0; __i < __cases.length; __i++) {
 ${check
 	? `if (__threw) return { phase: "cases", cases: __res, outs: __outs };`
 	: `if (__passed < __cases.length) return { phase: "cases", cases: __res };`}
+const __caseMs = __now() - __tc;
 const ${task.fn} = __fn;
-let __out;
-const __t = __now();
-{
+let __out, __ms;
+// a custom task whose cases already took a third of the time limit is timed by that pass: a second one would not fit
+if (${task.id === "custom"} && __caseMs * 3 > ${limitOf(task)}) { __ms = __caseMs;${check ? " __picked = __outs;" : ""} }
+else {
+	const __t = __now();
+	{
 ${task.bench}
+	}
+	__ms = (__now() - __t) / (__rounds || 1);
 }
-const __ms = (__now() - __t) / (__rounds || 1);
 if (__expect !== undefined && !__eq(__out, __expect)) return { phase: "bench", cases: __res, error: "wrong on the bench input" };
 return { phase: "done", cases: __res, ms: __ms${check ? ", outs: __outs, picked: __picked.length ? __picked : __last" : ""} };`;
 }
@@ -197,10 +208,11 @@ export function hardcodedLiteral(task: Task, source: string): string | null {
 /** Judges one contribution; the caller already holds a sandbox slot. */
 export async function judgeInSlot(cm: Codemode, task: Task, source: string): Promise<Verdict> {
 	const total = task.cases.length;
-	const fail = (error: string, cases: CaseResult[] = [], passed = 0): Verdict => ({ ok: false, ms: TIMEOUT_MS, error: plain(error), passed, total, cases });
+	const limit = limitOf(task);
+	const fail = (error: string, cases: CaseResult[] = [], passed = 0): Verdict => ({ ok: false, ms: limit, error: plain(error), passed, total, cases });
 	if (source.length > MAX_SOURCE_CHARS) return fail("source too long");
 	const run = async (program: string) => {
-		const sandbox = new cm.CodemodeSandbox({ timeoutMs: TIMEOUT_MS, tools: [], memoryLimitBytes: 64 * 1024 * 1024 });
+		const sandbox = new cm.CodemodeSandbox({ timeoutMs: limit, tools: [], memoryLimitBytes: 64 * 1024 * 1024 });
 		try { return await sandbox.execute(program); } finally { await sandbox.close().catch(() => {}); }
 	};
 	try {
