@@ -1,0 +1,37 @@
+# Codemode chat as its own Docker module (independent of the help system, which uses 3500/3600).
+name: phi-spaces-codemode
+
+services:
+  codemode-chat:
+    build:
+      context: ../..
+      dockerfile: codemode-chat/docker/Dockerfile
+      target: production
+    image: phi-spaces-codemode:prod
+    container_name: phi-spaces-codemode
+    init: true
+    restart: unless-stopped
+    user: "node"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: "3700"
+      CODEMODE_SQLITE: /data/codemode-chat.sqlite
+      CODEMODE_CHAT_LLM: "${CODEMODE_CHAT_LLM:-0}"
+    ports:
+      - "${CODEMODE_HOST_BIND:-127.0.0.1}:${CODEMODE_HOST_PORT:-3700}:3700"
+    volumes:
+      - codemode-chat-data:/data
+      # Optional: the host's pi CLI credentials, only used when CODEMODE_CHAT_LLM=1.
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+volumes:
+  codemode-chat-data:

@@ -1,0 +1,98 @@
+// Codemode chat: HTTP + WebSocket server. Run: node --experimental-strip-types codemode-chat/server/index.ts
+// Env: PORT (3700), CODEMODE_BIND (0.0.0.0), CODEMODE_SQLITE (durable store; unset = in memory), CODEMODE_CHAT_LLM=1 (model agents).
+import http from "node:http";
+import { mkdir, readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { spaces, startService } from "../../src/index.ts";
+import { loadCodemode } from "./judge.ts";
+import { CodeChatHub } from "./hub.ts";
+import { llmInfo, setLlm } from "./llm.ts";
+import { upgradeWebSocket } from "./ws.ts";
+import { TASKS } from "./tasks.ts";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const CLIENT = resolve(HERE, "../client");
+const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml" };
+const ID = /^[a-zA-Z0-9._-]{1,48}$/;
+
+export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null } = {}) {
+	const cm = await loadCodemode();
+	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
+	const registry = createRegistry();
+	registry.install(spaces);
+	const storage = o.sqlitePath ? await (async () => { await mkdir(dirname(o.sqlitePath!), { recursive: true }); return openNodeSqliteStorage(o.sqlitePath!); })() : new MemoryStorage();
+	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
+	const stopService = await startService(harness, ctx, { watchDebounceMs: 400 });
+	const hub = new CodeChatHub(harness, cm);
+
+	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+	const readBody = (req: http.IncomingMessage) => new Promise<Record<string, any>>((ok, fail) => {
+		let n = 0; const parts: Buffer[] = [];
+		req.on("data", (c: Buffer) => { n += c.length; if (n > 64_000) { fail(new Error("Body too large")); req.destroy(); } else parts.push(c); });
+		req.on("end", () => { try { ok(parts.length ? JSON.parse(Buffer.concat(parts).toString("utf8")) : {}); } catch { fail(new Error("Invalid JSON")); } });
+		req.on("error", fail);
+	});
+
+	const handle = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+		try {
+			const url = new URL(req.url ?? "/", "http://localhost");
+			const p = url.pathname;
+			if (p === "/healthz") return json(res, 200, { ok: true });
+			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt }) => ({ id, title, fn, prompt })));
+			if (p === "/api/llm") return json(res, 200, req.method === "POST" ? await setLlm(await readBody(req)) : await llmInfo());
+			const m = /^\/api\/sessions\/([^/]+)(?:\/(message|task|run|stop|code))?$/.exec(p);
+			if (m) {
+				const id = m[1]!, action = m[2];
+				if (!ID.test(id)) return json(res, 400, { error: "Invalid session id" });
+				if (!action && req.method === "GET") return json(res, 200, await hub.snapshot(id));
+				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
+				const b = await readBody(req);
+				if (action === "message") await hub.message(id, b.author, b.text);
+				else if (action === "task") await hub.setTask(id, b.custom ? { custom: b.custom } : { taskId: b.taskId });
+				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
+				else if (action === "run") await hub.startRun(id, b);
+				else if (action === "stop") await hub.stopRun(id);
+				return json(res, 200, { ok: true });
+			}
+			if (req.method !== "GET") return json(res, 405, { error: "Method not allowed" });
+			const file = p === "/" ? "index.html" : p.slice(1);
+			if (!/^[\w.-]+$/.test(file) || !TYPES[file.slice(file.lastIndexOf("."))]) { res.writeHead(404); return void res.end("Not found"); }
+			const data = await readFile(join(CLIENT, file)).catch(() => null);
+			if (!data) { res.writeHead(404); return void res.end("Not found"); }
+			res.writeHead(200, { "content-type": TYPES[file.slice(file.lastIndexOf("."))]!, "cache-control": "no-cache" });
+			res.end(data);
+		} catch (e) {
+			json(res, 400, { error: (e as Error).message });
+		}
+	};
+
+	const server = http.createServer((req, res) => void handle(req, res));
+	let sockets = 0;
+	server.on("upgrade", (req, socket, head) => {
+		const m = /^\/ws\/([a-zA-Z0-9._-]{1,48})$/.exec(new URL(req.url ?? "/", "http://localhost").pathname);
+		if (!m || sockets >= 256) return void socket.destroy();
+		const ws = upgradeWebSocket(req, socket, head);
+		if (!ws) return;
+		sockets++; ws.onClose(() => { sockets--; });
+		void hub.attach(m[1]!, ws).catch(() => ws.close());
+	});
+	const port = o.port ?? Number(process.env.PORT ?? 3700), bind = o.bind ?? process.env.CODEMODE_BIND ?? "0.0.0.0";
+	await new Promise<void>((ok, fail) => { server.once("error", fail); server.listen(port, bind, () => ok()); });
+	const addr = server.address();
+	const actual = typeof addr === "object" && addr ? addr.port : port;
+	return {
+		url: `http://127.0.0.1:${actual}`, port: actual, hub,
+		async close() { await hub.close(); await new Promise<void>((r) => { server.closeAllConnections?.(); server.close(() => r()); }); await stopService(); await harness.close(ctx); },
+	};
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? null });
+	console.log(`PHI-SPACES / CODEMODE CHAT listening on ${srv.url}`);
+	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => void srv.close().finally(() => process.exit(0)));
+}

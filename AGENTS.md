@@ -26,6 +26,8 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local JSONL state. Docs: `docs/tui.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
   `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background. Docs: `docs/dashboard.md`.
+- Codemode chat (own Docker module, `codemode-chat/`, docs in its README): `npm run codemode-chat` (port 3700), tests `npm run test:codemode-chat`,
+  `npm run codemode-chat:docker:up|down|logs` (changes a container on this machine; never on a shared server without asking).
 - Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
 - Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`
 

@@ -16,6 +16,8 @@
     "src",
     "examples",
     "test",
+    "codemode-chat/server",
+    "codemode-chat/tests",
     "scripts/bootstrap-spaces.ts"
   ]
 }
