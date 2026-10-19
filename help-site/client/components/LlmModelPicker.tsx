@@ -16,7 +16,11 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 
 	useEffect(() => {
 		let dead = false;
-		void fetch("/api/admin/session").then(r => r.json()).then(d => { if (!dead) setCanManage(Boolean(d.authenticated)); }).catch(() => {});
+		const checkSession = () => void fetch("/api/admin/session").then(r => r.json()).then(d => { if (!dead) setCanManage(Boolean(d.authenticated)); }).catch(() => {});
+		checkSession();
+		// An AdminSpaces login in another tab or after load must enable the picker without a page reload.
+		const timer = setInterval(checkSession, 15_000);
+		window.addEventListener("focus", checkSession);
 		void fetch("/api/llm/models")
 			.then((r) => r.json())
 			.then((d) => {
@@ -27,7 +31,7 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 				setModels(d.models ?? []);
 			})
 			.catch(() => {});
-		return () => { dead = true; };
+		return () => { dead = true; clearInterval(timer); window.removeEventListener("focus", checkSession); };
 	}, []);
 
 	const groups = useMemo(() => {
@@ -79,7 +83,9 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 				disabled={busy || !canManage}
 				onClick={() => void post({ on: !on })}
 				title={
-					on
+					!canManage
+						? (locale === "de" ? "AdminSpaces-Login erforderlich (Reiter ADMINSPACES)" : "AdminSpaces login required (ADMINSPACES tab)")
+					: on
 						? (locale === "de" ? "KI-Antworten ausschalten (Fallback: Templates)" : "Turn AI replies off (fallback: templates)")
 						: (locale === "de" ? "KI-Antworten einschalten" : "Turn AI replies on")
 				}
@@ -90,7 +96,7 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 				value={current ?? ""}
 				disabled={busy || !on || !canManage}
 				onChange={(e) => e.target.value && void post({ model: e.target.value })}
-				title={locale === "de" ? "Modell für Live-Antworten" : "Model for live replies"}
+				title={!canManage ? (locale === "de" ? "AdminSpaces-Login erforderlich (Reiter ADMINSPACES)" : "AdminSpaces login required (ADMINSPACES tab)") : locale === "de" ? "Modell für Live-Antworten" : "Model for live replies"}
 			>
 				{groups.map(([provider, list]) => (
 					<optgroup key={provider} label={provider}>

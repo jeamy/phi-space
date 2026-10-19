@@ -25,7 +25,7 @@ interface SwarmStats {
 		shards: Array<{ shard: string; up: boolean; entries: number | null; lastPurgeAt: number | null; lastRemoved: number; totalRemoved: number; host?: { name: string } | null }>;
 	};
 }
-const PURGE_BADGE_MS = 90_000;
+const PURGE_BADGE_MS = 5_000;
 interface LeaderRow { handle: string; name: string; hue: number; posts: number }
 
 function timeAgo(at: number, locale: "de" | "en"): string {
@@ -214,13 +214,27 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const [aiLoading, setAiLoading] = useState(false);
 	const [agentTotal, setAgentTotal] = useState(1000);
 	const [stats, setStats] = useState<SwarmStats | null>(null);
-	const purgeBadge = useMemo(() => {
+	// Yellow notice for PURGE_BADGE_MS after a shard reports a purge we have not seen yet (the first stats frame is the baseline).
+	const [purgeBadge, setPurgeBadge] = useState<{ cap: number; shards: Array<{ label: string; removed: number }> } | null>(null);
+	const purgeSeen = useRef<Map<string, number> | null>(null);
+	const purgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	useEffect(() => {
 		const r = stats?.retention;
-		if (!r || r.cap === null) return null;
-		const fresh = r.shards.filter((s) => s.lastPurgeAt !== null && r.now - s.lastPurgeAt < PURGE_BADGE_MS);
-		if (!fresh.length) return null;
-		return { cap: r.cap, shards: fresh.map((s) => ({ label: s.host?.name ?? s.shard, removed: s.lastRemoved })) };
+		if (!r || r.cap === null) return;
+		const first = purgeSeen.current === null;
+		const seen = (purgeSeen.current ??= new Map());
+		const fresh = r.shards.filter((s) => {
+			if (s.lastPurgeAt === null) return false;
+			const isNew = s.lastPurgeAt > (seen.get(s.shard) ?? 0) && (!first || r.now - s.lastPurgeAt < PURGE_BADGE_MS);
+			seen.set(s.shard, s.lastPurgeAt);
+			return isNew;
+		});
+		if (!fresh.length) return;
+		setPurgeBadge({ cap: r.cap, shards: fresh.map((s) => ({ label: s.host?.name ?? s.shard, removed: s.lastRemoved })) });
+		if (purgeTimer.current) clearTimeout(purgeTimer.current);
+		purgeTimer.current = setTimeout(() => setPurgeBadge(null), PURGE_BADGE_MS);
 	}, [stats]);
+	useEffect(() => () => { if (purgeTimer.current) clearTimeout(purgeTimer.current); }, []);
 	const [channel, setChannel] = useState<string>("home");
 	const [draft, setDraft] = useState("");
 	const [handle, setHandle] = useState("you");

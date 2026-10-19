@@ -176,6 +176,7 @@ Do not expose raw shard TCP sockets publicly without protection: use a trusted n
 | `HELP_SQLITE` | Direct-start store; default `help-site/.local/spaces-eibrain.sqlite`. Production Compose fixes `/data/spaces-eibrain.sqlite` in its volume. |
 | `SWARM_AGENTS` / `SWARM_RATE` | Simulated identities and intent-generation rate, as described above. |
 | `SWARM_REMOTE` | Optional hub-side shard endpoint, e.g. `tcp:127.0.0.1:3600` through an SSH tunnel. |
+| `SWARM_LLM_RATE` | Share of new hub-shard posts written by a live model, 0..1, default 0.01 (cost guard; only the hub has model access, so posts routed to the second shard never use it). |
 | `SWARM_MAX_ENTRIES` | Entry cap per shard database, default 20000, `0` disables. Above it the oldest posts (with their likes and history nodes) are purged in bursts down to 95 %; the feed shows a yellow notice. Test-system limit, not a product limit. |
 | `SWARM_HOST_NAME` | Name this host reports in the test-system bar below the live views (default: the machine's hostname; set `big` / `nano` in each host's `.env`). |
 | `SWARM_LISTEN`, `SWARM_DB`, `SWARM_TAG`, `SWARM_PRODUCE` | Headless-shard listener, store, ID prefix and optional local intent generation; see `.env.example`. |

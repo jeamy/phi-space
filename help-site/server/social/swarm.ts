@@ -27,6 +27,8 @@ import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts,
 export const SWARM_ALIAS = "social-swarm";
 export const SWARM_AGENT_COUNT = Math.max(10, Math.min(50_000, Number(process.env.SWARM_AGENTS ?? 100)));
 export const SWARM_AGENT_MAX = 50_000;
+/** Share of new posts that ask a live model for their text (default 1 %, `SWARM_LLM_RATE` 0..1). Only the hub shard has model access. */
+const LLM_POST_RATE = Math.max(0, Math.min(1, Number(process.env.SWARM_LLM_RATE ?? 0.01) || 0));
 /** A single dispatcher loop: one waiting take = one doc watch probe per commit; processing pipelines async. */
 const WORKER_COUNT = 1;
 
@@ -936,7 +938,7 @@ export class SocialSwarmHub {
 			}
 			const kind = roll >= 0.88 ? "like" : replyTo ? "reply" : "post";
 			const target = replyTo ? this.#shardSpaceFor(replyTo) : this.#pickShardForNew();
-			const fields = { taskId, kind, agentId: agent.agentId, channel, replyTo, llm: kind === "post" && this.#llmPost !== null && this.#rng() < 0.01, createdAt: Date.now() };
+			const fields = { taskId, kind, agentId: agent.agentId, channel, replyTo, llm: kind === "post" && target === this.space && this.#llmPost !== null && this.#rng() < LLM_POST_RATE, createdAt: Date.now() };
 			const list = perShard.get(target) ?? [];
 			list.push(fields);
 			perShard.set(target, list);
