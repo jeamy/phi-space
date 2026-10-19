@@ -287,6 +287,8 @@ export interface ShardReport {
 	lastRemoved: number;
 	totalRemoved: number;
 	host?: HostFacts | null;
+	/** This shard's own entry cap (from its HostInfo); null when unknown or purge is off. */
+	cap?: number | null;
 }
 
 export interface SwarmShardOptions {
@@ -664,7 +666,7 @@ export class SocialSwarmHub {
 			return {
 				shard, up: true, entries: entries ?? await call(space.count()),
 				lastPurgeAt: notice?.at ?? null, lastRemoved: notice?.removed ?? 0, totalRemoved: notice?.totalRemoved ?? 0,
-				...(host !== undefined ? { host } : {}),
+				...(host !== undefined ? { host, cap: (host as { cap?: number | null } | null)?.cap ?? null } : {}),
 			};
 		} catch {
 			return { shard, up: false, entries, lastPurgeAt: null, lastRemoved: 0, totalRemoved: 0, ...(withHost ? { host: null } : {}) };

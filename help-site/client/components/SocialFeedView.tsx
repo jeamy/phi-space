@@ -217,7 +217,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const [agentTotal, setAgentTotal] = useState(1000);
 	const [stats, setStats] = useState<SwarmStats | null>(null);
 	// Yellow notice for PURGE_BADGE_MS after a shard reports a purge we have not seen yet (the first stats frame is the baseline).
-	const [purgeBadge, setPurgeBadge] = useState<{ cap: number; shards: Array<{ label: string; removed: number }> } | null>(null);
+	const [purgeBadge, setPurgeBadge] = useState<{ cap: number; shards: Array<{ label: string; removed: number; cap?: number | null }> } | null>(null);
 	const purgeSeen = useRef<Map<string, number> | null>(null);
 	const purgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	useEffect(() => {
@@ -232,7 +232,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 			return isNew;
 		});
 		if (!fresh.length) return;
-		setPurgeBadge({ cap: r.cap, shards: fresh.map((s) => ({ label: s.host?.name ?? s.shard, removed: s.lastRemoved })) });
+		setPurgeBadge({ cap: r.cap, shards: fresh.map((s) => ({ label: s.host?.name ?? s.shard, removed: s.lastRemoved, cap: s.cap })) });
 		if (purgeTimer.current) clearTimeout(purgeTimer.current);
 		purgeTimer.current = setTimeout(() => setPurgeBadge(null), PURGE_BADGE_MS);
 	}, [stats]);
@@ -734,7 +734,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 					{" "}
 					<span className="sf-purge-badge__detail">
 						{locale === "de" ? "Gerade bereinigt: " : "Just purged: "}
-						{purgeBadge.shards.map((s) => `${s.label} −${s.removed.toLocaleString(locale === "de" ? "de-DE" : "en-US")}`).join(", ")}
+						{purgeBadge.shards.map((s) => `${s.label} −${s.removed.toLocaleString(locale === "de" ? "de-DE" : "en-US")}${s.cap != null ? ` (max ${s.cap.toLocaleString(locale === "de" ? "de-DE" : "en-US")})` : ""}`).join(", ")}
 					</span>
 				</div>
 			) : null}
