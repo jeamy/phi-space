@@ -15,6 +15,23 @@ since: 0.0.1
 
 `phi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für `@earendil-works/pi-durable`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
 
+## Herkunft: Linda und JavaSpaces {#history}
+
+Die Idee stammt aus den 1980er Jahren: David Gelernter und Nicholas Carriero entwickelten an der Yale University **Linda**, ein Koordinationsmodell, in dem Prozesse nicht miteinander sprechen, sondern Daten (**Tupel**) in einen gemeinsamen **Tuple Space** legen und nach ihrem Inhalt wieder herausholen (`out`, `rd`, `in`). Gelernter nannte das *generative Kommunikation*: Daten überdauern den Prozess, der sie erzeugt hat, und verbinden Teilnehmer über Prozess- und Zeitgrenzen hinweg. Ende der 1990er übertrug Sun Microsystems das Konzept mit **JavaSpaces** auf typisierte Java-Objekte (**Entries**) mit Template-Suche, **Leases** und **Transaktionen**.
+
+phi-spaces übernimmt dieses Modell in TypeScript und JSON und ergänzt Persistenz, Revisionen, Änderungsströme, Föderation und Administration. Es ist kein JavaSpaces-kompatibler Java-/RMI-Ersatz.
+
+Das Modell ist nicht auf Agentenkommunikation zugeschnitten. Ein Space transportiert beliebige Daten: Aufträge, Nachrichten, Messwerte, Ergebnisse, Zustände oder Ereignisse. Agenten (Conversations) sind nur eine typische Art von Teilnehmer; Programme, Dienste, Geräte und Menschen nutzen denselben Space auf dieselbe Weise.
+
+### Was phi-spaces besonders kann {#highlights}
+
+- **Beliebige Kommunikate**: Jede JSON-Struktur mit `type` kann Entry sein – es gibt kein festes Nachrichtenformat.
+- **Kommunikation ohne Adressen**: Absender wählen keinen Empfänger; Teilnehmer finden Daten über Templates.
+- **Entkopplung in Raum und Zeit**: Produzenten und Konsumenten kennen einander nicht und müssen nicht gleichzeitig online sein.
+- **Verlässliche Arbeitsverteilung**: exklusives `take` mit Lease und Transaktion; Abstürze geben Arbeit wieder frei.
+- **Dauerhaft und nachvollziehbar**: persistenter Zustand, Revisionen, Snapshots und Änderungsströme.
+- **Vom Einzelprozess zum Cluster**: lokal, per Socket/RPC und als föderierter Verbund mit Identität, Enrollment und Admin-Oberflächen.
+
 ## Was ist phi-spaces und warum wurde es gebaut? {#what-is-phi-spaces}
 
 `phi-spaces` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:

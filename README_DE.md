@@ -14,10 +14,11 @@
 
 phi-spaces ist eine TypeScript-Space-Bibliothek als Erweiterung für
 [`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable).
-Mehrere Agenten beziehungsweise Conversations koordinieren sich über gemeinsame Daten: Sie veröffentlichen
-Aufträge, reservieren passende Arbeit und schreiben Ergebnisse zurück.
+Sie ist ein Space für beliebige Daten, die ausgetauscht werden sollen: Aufträge, Nachrichten, Messwerte,
+Ergebnisse, Zustände, Dateien oder Ereignisse. Agenten (Conversations) sind ein typischer Teilnehmer, aber nicht
+der einzige; Programme, Dienste, Geräte und Menschen können ebenso in einen Space schreiben und daraus lesen.
 
-Das Modell baut auf Linda-Tuple-Spaces und JavaSpaces auf. Der lokale Client heißt `PhiSpaces`.
+Das Modell baut auf Linda-Tuple-Spaces und JavaSpaces auf. Es beschreibt entkoppelte Koordination über gemeinsame Daten, nicht speziell Agentenkommunikation. Der lokale Client heißt `PhiSpaces`.
 Die Implementierung verwendet TypeScript und JSON; sie ist kein kompatibler Java-/RMI-Laufzeitersatz für JavaSpaces.
 
 **Stand: 18. Oktober 2026.** Lokale und benannte Spaces, dauerhafte Request-Claims, Revisionen, RPC über Unix/TCP,

@@ -13,10 +13,13 @@
 > namespaces; an empty new namespace does not mean the previous data was deleted.
 
 phi-spaces is a TypeScript space library implemented as an extension for
-[`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). Many agents
-(conversations) share one space, take work from it, and talk to each other through it.
+[`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). It is a
+general-purpose space for any kind of data that needs to be exchanged: jobs, messages, sensor readings, results,
+state, files or events. Agents (conversations) are one typical kind of participant, but not the only one;
+programs, services, devices and people can write to and read from a space just as well.
 
-The coordination model comes from Linda tuple spaces and JavaSpaces. The local phi-spaces client is
+The model comes from Linda tuple spaces and JavaSpaces, which are about decoupled coordination through shared
+data rather than about agent communication. The local phi-spaces client is
 `PhiSpaces`; this is a TypeScript/JSON implementation, not a JavaSpaces-compatible Java or RMI runtime.
 
 **Status.** The library has a local durable space, named spaces, request claims, revisions and a single-host RPC

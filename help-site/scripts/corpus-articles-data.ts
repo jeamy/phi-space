@@ -44,6 +44,23 @@ export const TOPIC_AND_WORKFLOW_ARTICLES: ArticleSeed[] = [
 
 \`phi-spaces\` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für \`@earendil-works/pi-durable\`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
 
+## Herkunft: Linda und JavaSpaces {#history}
+
+Die Idee stammt aus den 1980er Jahren: David Gelernter und Nicholas Carriero entwickelten an der Yale University **Linda**, ein Koordinationsmodell, in dem Prozesse nicht miteinander sprechen, sondern Daten (**Tupel**) in einen gemeinsamen **Tuple Space** legen und nach ihrem Inhalt wieder herausholen (\`out\`, \`rd\`, \`in\`). Gelernter nannte das *generative Kommunikation*: Daten überdauern den Prozess, der sie erzeugt hat, und verbinden Teilnehmer über Prozess- und Zeitgrenzen hinweg. Ende der 1990er übertrug Sun Microsystems das Konzept mit **JavaSpaces** auf typisierte Java-Objekte (**Entries**) mit Template-Suche, **Leases** und **Transaktionen**.
+
+phi-spaces übernimmt dieses Modell in TypeScript und JSON und ergänzt Persistenz, Revisionen, Änderungsströme, Föderation und Administration. Es ist kein JavaSpaces-kompatibler Java-/RMI-Ersatz.
+
+Das Modell ist nicht auf Agentenkommunikation zugeschnitten. Ein Space transportiert beliebige Daten: Aufträge, Nachrichten, Messwerte, Ergebnisse, Zustände oder Ereignisse. Agenten (Conversations) sind nur eine typische Art von Teilnehmer; Programme, Dienste, Geräte und Menschen nutzen denselben Space auf dieselbe Weise.
+
+### Was phi-spaces besonders kann {#highlights}
+
+- **Beliebige Kommunikate**: Jede JSON-Struktur mit \`type\` kann Entry sein – es gibt kein festes Nachrichtenformat.
+- **Kommunikation ohne Adressen**: Absender wählen keinen Empfänger; Teilnehmer finden Daten über Templates.
+- **Entkopplung in Raum und Zeit**: Produzenten und Konsumenten kennen einander nicht und müssen nicht gleichzeitig online sein.
+- **Verlässliche Arbeitsverteilung**: exklusives \`take\` mit Lease und Transaktion; Abstürze geben Arbeit wieder frei.
+- **Dauerhaft und nachvollziehbar**: persistenter Zustand, Revisionen, Snapshots und Änderungsströme.
+- **Vom Einzelprozess zum Cluster**: lokal, per Socket/RPC und als föderierter Verbund mit Identität, Enrollment und Admin-Oberflächen.
+
 ## Was ist phi-spaces und warum wurde es gebaut? {#what-is-phi-spaces}
 
 \`phi-spaces\` löst vier fundamentale Probleme bei der Entwicklung robuster, langlaufender Systeme und autonomer KI-Agenten-Flotten:
@@ -111,6 +128,23 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSp
 			body: `## Overview {#overview}
 
 \`phi-spaces\` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) built on \`@earendil-works/pi-durable\`. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
+
+## Origins: Linda And JavaSpaces {#history}
+
+The idea dates back to the 1980s: David Gelernter and Nicholas Carriero developed **Linda** at Yale University, a coordination model in which processes do not talk to each other but put data (**tuples**) into a shared **tuple space** and retrieve it by content (\`out\`, \`rd\`, \`in\`). Gelernter called this *generative communication*: data outlives the process that created it and connects participants across process and time boundaries. In the late 1990s Sun Microsystems carried the concept over to typed Java objects (**entries**) with template lookup, **leases** and **transactions** as **JavaSpaces**.
+
+phi-spaces adopts this model in TypeScript and JSON and adds persistence, revisions, change streams, federation and administration. It is not a JavaSpaces-compatible Java/RMI runtime.
+
+**Important:** the model is not specific to agent communication. A space carries any kind of data: jobs, messages, sensor readings, results, state or events. Agents (conversations) are just one typical kind of participant; programs, services, devices and people use the same space in the same way.
+
+### What Makes phi-spaces Stand Out {#highlights}
+
+- **Any kind of communicate**: any JSON structure with a \`type\` can be an entry; there is no fixed message format.
+- **Communication without addresses**: senders do not pick a recipient; participants find data through templates.
+- **Decoupling in space and time**: producers and consumers do not know each other and need not be online at the same time.
+- **Reliable work distribution**: exclusive \`take\` with lease and transaction; crashes release the work again.
+- **Durable and traceable**: persistent state, revisions, snapshots and change streams.
+- **From a single process to a cluster**: local, over socket/RPC, and as a federated cluster with identity, enrollment and admin surfaces.
 
 ## What Is phi-spaces And Why Was It Built? {#what-is-phi-spaces}
 

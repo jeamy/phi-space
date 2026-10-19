@@ -15,6 +15,23 @@ since: 0.0.1
 
 `phi-spaces` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) built on `@earendil-works/pi-durable`. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
 
+## Origins: Linda And JavaSpaces {#history}
+
+The idea dates back to the 1980s: David Gelernter and Nicholas Carriero developed **Linda** at Yale University, a coordination model in which processes do not talk to each other but put data (**tuples**) into a shared **tuple space** and retrieve it by content (`out`, `rd`, `in`). Gelernter called this *generative communication*: data outlives the process that created it and connects participants across process and time boundaries. In the late 1990s Sun Microsystems carried the concept over to typed Java objects (**entries**) with template lookup, **leases** and **transactions** as **JavaSpaces**.
+
+phi-spaces adopts this model in TypeScript and JSON and adds persistence, revisions, change streams, federation and administration. It is not a JavaSpaces-compatible Java/RMI runtime.
+
+The model is not specific to agent communication. A space carries any kind of data: jobs, messages, sensor readings, results, state or events. Agents (conversations) are just one typical kind of participant; programs, services, devices and people use the same space in the same way.
+
+### What Makes phi-spaces Stand Out {#highlights}
+
+- **Any kind of communicate**: any JSON structure with a `type` can be an entry; there is no fixed message format.
+- **Communication without addresses**: senders do not pick a recipient; participants find data through templates.
+- **Decoupling in space and time**: producers and consumers do not know each other and need not be online at the same time.
+- **Reliable work distribution**: exclusive `take` with lease and transaction; crashes release the work again.
+- **Durable and traceable**: persistent state, revisions, snapshots and change streams.
+- **From a single process to a cluster**: local, over socket/RPC, and as a federated cluster with identity, enrollment and admin surfaces.
+
 ## What Is phi-spaces And Why Was It Built? {#what-is-phi-spaces}
 
 `phi-spaces` solves four fundamental problems in building robust, long-running systems and autonomous AI agent fleets:
