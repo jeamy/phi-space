@@ -84,7 +84,8 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .block { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .block--active { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .block--focus { box-shadow: 0 0 0 1px var(--accent); }
-.block__head { all: unset; box-sizing: border-box; width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; cursor: pointer; background: var(--raised); }
+.block__bar { display: flex; align-items: stretch; background: var(--raised); }
+.block__head { all: unset; box-sizing: border-box; flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; cursor: pointer; background: var(--raised); }
 .block__head:hover { background: color-mix(in srgb, var(--raised) 85%, var(--accent)); }
 .block__head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .block__caret { color: var(--accent); width: 1em; }
@@ -112,3 +113,15 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .codecard__head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 6px 10px; background: var(--raised); }
 .forblock { font-size: 12px; color: var(--muted); margin: -4px 0 8px; }
 .customtask { margin-top: 6px; }
+
+.block__del { all: unset; box-sizing: border-box; padding: 0 14px; cursor: pointer; color: var(--muted); display: flex; align-items: center; }
+.block__del:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.block__del:focus-visible { outline: 2px solid var(--danger); outline-offset: -2px; }
+.block__del:disabled { opacity: .35; cursor: not-allowed; }
+.btn--danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+.btn--danger:hover { filter: brightness(1.1); border-color: var(--danger); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, #000 55%, transparent); backdrop-filter: blur(2px); }
+.modal { width: min(440px, 100%); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; padding: 18px 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, .5); }
+.modal h2 { margin: 0 0 8px; font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--text-strong); }
+.modal p { margin: 0 0 16px; color: var(--text); }
+.modal__actions { display: flex; justify-content: flex-end; gap: 10px; }

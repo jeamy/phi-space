@@ -174,3 +174,67 @@ t("a custom task without a model has no scripted agents: the run is refused, han
 		assert.equal(snap.blocks.at(-1).best.ms >= 0, true);
 	} finally { await srv.close(); }
 });
+
+t("deleting a task block removes its entries; the active block moves on; a running block is protected", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/del1")).json()) as any;
+		const judged = async () => ((await (await fetch(srv.url + "/api/system")).json()) as any).shards[0].judged as number;
+		const gcd = taskById("gcd")!, primes = taskById("primes")!;
+		await post(srv.url, "/api/sessions/del1/code", { author: "a", source: primes.variants[3]! }); // default block (primes)
+		await until(async () => (await get()).blocks[0].contributions[0]?.ok !== undefined && (await get()).blocks[0].contributions[0]?.ok !== null);
+		await post(srv.url, "/api/sessions/del1/task", { taskId: "gcd" });
+		await post(srv.url, "/api/sessions/del1/code", { author: "b", source: gcd.variants[2]! });
+		const snap = await until(async () => { const s = await get(); return s.blocks.length === 2 && s.blocks[1].contributions[0]?.ok === true ? s : false; });
+		const [first, second] = snap.blocks.map((b: any) => b.blockId);
+		assert.equal(await judged(), 2);
+
+		// delete the older (not active) block: its score entry is gone, the active block stays
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: first })).status, 200);
+		const afterFirst = await get();
+		assert.deepEqual(afterFirst.blocks.map((b: any) => b.blockId), [second]);
+		assert.equal(afterFirst.current, second);
+		assert.equal(await judged(), 1);
+		assert.ok(afterFirst.messages.some((m: any) => m.text.startsWith("Task block deleted")));
+
+		// unknown block
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: "nope" })).status, 400);
+
+		// delete the active block: a fresh first task takes over
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: second })).status, 200);
+		const afterAll = await get();
+		assert.equal(afterAll.blocks.length, 1);
+		assert.equal(afterAll.blocks[0].task.id, "primes");
+		assert.equal(afterAll.blocks[0].contributions.length, 0);
+		assert.notEqual(afterAll.current, second);
+		assert.equal(await judged(), 0);
+
+		// a block with a running run cannot be deleted
+		await post(srv.url, "/api/sessions/del1/run", { agents: 2, gens: 3, perAgent: 1, contenders: ["scripted"] });
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: afterAll.current })).status, 400);
+		await post(srv.url, "/api/sessions/del1/stop", {});
+		await until(async () => { const s = await get(); return s.run && !s.run.active; });
+		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: afterAll.current })).status, 200);
+	} finally { await srv.close(); }
+});
+
+t("deleting a block also removes its verdicts on the nano shard", async () => {
+	const sock = `/tmp/codemode-del-${process.pid}.sock`;
+	process.env.CODEMODE_HOST_NAME = "nano";
+	const nano = await startJudgeHost({ listen: `unix:${sock}`, dbPath: null, judges: 2 });
+	process.env.CODEMODE_HOST_NAME = "big";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: `unix:${sock}` });
+	try {
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/del2")).json()) as any;
+		const sys = async () => (await (await fetch(srv.url + "/api/system")).json()) as any;
+		const good = taskById("primes")!.variants[2]!;
+		for (let i = 0; i < 4; i++) await post(srv.url, "/api/sessions/del2/code", { author: `p${i}`, source: good });
+		const snap = await until(async () => { const s = await get(); const b = s.blocks[0]; return b.contributions.length === 4 && b.contributions.every((c: any) => c.ok !== null) ? s : false; });
+		const before = await sys();
+		assert.equal(before.shards[0].judged + before.shards[1].judged, 4);
+		assert.ok(before.shards[1].judged >= 1);
+		assert.equal((await post(srv.url, "/api/sessions/del2/delete", { blockId: snap.blocks[0].blockId })).status, 200);
+		const after = await sys();
+		assert.equal(after.shards[0].judged + after.shards[1].judged, 0);
+	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
+});

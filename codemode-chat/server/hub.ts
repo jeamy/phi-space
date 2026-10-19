@@ -20,7 +20,7 @@ export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmCo
 export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; note?: string };
 export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; source: string; ts: number };
 type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
-	best: { candidateId: string; ms: number; source: string } | null; buckets: Map<string, number[]>; remotePending: Map<string, number>; seen: Set<string>; poller?: ReturnType<typeof setInterval>; pushTimer?: ReturnType<typeof setTimeout>; loaded: boolean;
+	best: { candidateId: string; ms: number; source: string } | null; deleted: Set<string>; buckets: Map<string, number[]>; remotePending: Map<string, number>; seen: Set<string>; poller?: ReturnType<typeof setInterval>; pushTimer?: ReturnType<typeof setTimeout>; loaded: boolean;
 };
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
@@ -82,7 +82,7 @@ export class CodeChatHub {
 		let s = this.#sessions.get(id);
 		if (!s) {
 			if (this.#sessions.size >= LIMITS.sessions) throw new Error("Too many sessions");
-			s = { id, task: TASKS[0]!, blockId: "", clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, buckets: new Map(), remotePending: new Map(), seen: new Set(), loaded: false };
+			s = { id, task: TASKS[0]!, blockId: "", clients: new Set(), run: null, abort: false, draining: 0, seq: 0, best: null, deleted: new Set(), buckets: new Map(), remotePending: new Map(), seen: new Set(), loaded: false };
 			this.#sessions.set(id, s);
 		}
 		if (!s.loaded) {
@@ -217,8 +217,9 @@ export class CodeChatHub {
 		return candidateId;
 	}
 
+	/** Starts up to two judge loops; after close() an in-flight verdict may find the space gone, which is not an error. */
 	#kick(s: Session): void {
-		while (s.draining < 2 && !this.#closed) { s.draining++; void this.#drain(s, 200 + s.draining).finally(() => { s.draining--; this.push(s); }); }
+		while (s.draining < 2 && !this.#closed) { s.draining++; void this.#drain(s, 200 + s.draining).catch((e) => { if (!this.#closed) console.error("[codemode] judge failed", e); }).finally(() => { s.draining--; this.push(s); }); }
 	}
 
 	/** Judge: take one candidate (transaction), run it in the sandbox, write the score and commit; repeat until none is left. */
@@ -229,6 +230,7 @@ export class CodeChatHub {
 			const c = await r.take({ type: "CodeCandidate", fields: { session: s.id } }, NO_WAIT, { txn: t.id });
 			if (!c) { await r.abort(t.id); return; }
 			const f = c.fields as unknown as Contribution & { taskId?: string; custom?: unknown };
+			if (f.blockId && s.deleted.has(f.blockId)) { await r.commit(t.id); continue; } // its block was deleted while it waited: consume it, write nothing
 const v = await judge(this.cm, taskFromSpec(f) ?? s.task, f.source); // the candidate names its own task: it may belong to an earlier block
 			try {
 				await r.write({ type: "CodeScore", fields: { session: s.id, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host: this.facts.name, gen: f.gen, ok: v.ok, ms: v.ms, ...(v.error ? { error: v.error } : {}), source: f.source, ts: f.ts } as never }, t.id, DAY);
@@ -328,6 +330,31 @@ const v = await judge(this.cm, taskFromSpec(f) ?? s.task, f.source); // the cand
 				this.push(s);
 			}
 		})();
+	}	/** Removes a task block with everything that belongs to it (here and on the shard). A running block cannot be deleted. */
+	async deleteBlock(id: string, blockId: string): Promise<void> {
+		const s = await this.session(id);
+		if (!this.allow(s, "delete", 20)) throw new Error("Too many deletions, slow down");
+		const entries = await this.#taskEntries(id);
+		const target = entries.find((f) => String(f.blockId ?? `t${f.ts}`) === blockId);
+		if (!target) throw new Error("Unknown task block");
+		if (s.run?.active && s.run.blockId === blockId) throw new Error("This block has a running run; stop it first");
+		s.deleted.add(blockId);
+		const tmplOf = (type: string) => ({ type, fields: { session: id, blockId } });
+		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "ChatMessage", "CodeTask"]) {
+			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
+			if (type !== "CodeTask" && type !== "ChatMessage" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
+		}
+		s.remotePending.delete(blockId);
+		if (s.blockId === blockId) { // the active block went away: the newest remaining one takes over, or a fresh first task
+			const left = (await this.#taskEntries(id)).at(-1);
+			const task = left ? taskFromSpec(left) : null;
+			if (left && task) {
+				s.task = task; s.blockId = String(left.blockId ?? `t${left.ts}`);
+				s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === s.blockId));
+			} else await this.#openBlock(s, TASKS[0]!, false);
+		}
+		await this.#write(s, "system", `Task block deleted: ${taskFromSpec(target)?.title.en ?? blockId}`);
+		this.push(s);
 	}
 
 	async stopRun(id: string): Promise<void> { const s = await this.session(id); s.abort = true; this.push(s); }
