@@ -660,8 +660,6 @@ Der Chat führt fremden Code aus. Deshalb gilt: **Code ist Daten**, und er läuf
 | WebSocket-Verbindungen | höchstens 256 |
 | Anfragekörper | höchstens 64 000 Byte |
 
-Der Name „system" ist für Protokollzeilen des Servers reserviert.
-
 ## Was nicht geschützt ist {#unprotected}
 
 - **Keine Anmeldung:** Eingereichter Code wird mit einem Gastnamen signiert, den der Browser sich merkt. Jeder im Raum kann Aufgaben anlegen, Läufe starten und Blöcke löschen.
@@ -695,8 +693,6 @@ The chat runs foreign code. So: **code is data**, and it only runs in the sandbo
 | Rooms | at most 50 in memory at a time |
 | WebSocket connections | at most 256 |
 | Request body | at most 64,000 bytes |
-
-The name "system" is reserved for the server's log lines.
 
 ## What is not protected {#unprotected}
 

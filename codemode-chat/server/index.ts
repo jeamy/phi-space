@@ -59,15 +59,14 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo());
 			if (p === "/api/tasks" && req.method === "GET") return json(res, 200, TASKS.map(({ id, title, fn, prompt }) => ({ id, title, fn, prompt })));
 			if (p === "/api/llm") return json(res, 200, req.method === "POST" ? await setLlm(await readBody(req)) : await llmInfo());
-			const m = /^\/api\/sessions\/([^/]+)(?:\/(message|task|run|stop|code|delete))?$/.exec(p);
+			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid session id" });
 				if (!action && req.method === "GET") return json(res, 200, await hub.snapshot(id));
 				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
 				const b = await readBody(req);
-				if (action === "message") await hub.message(id, b.author, b.text);
-				else if (action === "task") await hub.setTask(id, b.custom ? { custom: b.custom } : { taskId: b.taskId });
+				if (action === "task") await hub.setTask(id, b.custom ? { custom: b.custom } : { taskId: b.taskId });
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
 				else if (action === "run") await hub.startRun(id, b);
 				else if (action === "stop") await hub.stopRun(id);

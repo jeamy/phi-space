@@ -173,15 +173,6 @@ export class CodeChatHub {
 		this.push(s);
 	}
 
-	/** A person says something (the author name "system" is reserved for the server's own log lines). */
-	async message(id: string, author: string, text: string): Promise<void> {
-		const s = await this.session(id);
-		if (!this.allow(s, "message", 60)) throw new Error("Too many messages, slow down");
-		const t = clip(text, 2000).trim(), a = clip(author, 40).trim();
-		if (!t || !a || a.toLowerCase() === "system") throw new Error("Invalid message");
-		await this.#write(s, a, t);
-	}
-
 	/** Every call opens a new task block, also when the same task is chosen again. */
 	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any } }): Promise<void> {
 		const s = await this.session(id);

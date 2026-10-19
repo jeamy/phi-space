@@ -64,8 +64,7 @@ t("contribution -> score entry -> websocket frame, with limits", async () => {
 
 		assert.equal((await post(srv.url, "/api/sessions/room1/code", { author: "x", source: "" })).status, 400);
 		assert.equal((await post(srv.url, "/api/sessions/bad id/message", { author: "x", text: "y" })).status, 400);
-		assert.equal((await post(srv.url, "/api/sessions/room1/message", { author: "alice", text: "hello" })).status, 200);
-		await until(async () => frames.at(-1)?.messages.some((m: any) => m.text === "hello"));
+		assert.equal((await fetch(srv.url + "/api/sessions/room1/message", { method: "POST", body: "{}" })).status, 404); // there is no chat input any more
 		ws.close();
 	} finally { await srv.close(); }
 });
@@ -157,9 +156,8 @@ t("every task is its own block with its own contributions and best code", async 
 		assert.equal(snap.blocks[0].best, null);
 		assert.equal(snap.current, snap.blocks[2].blockId);
 		assert.equal(snap.blocks.filter((b: any) => b.active).length, 1);
-		// the log lines of a block belong to it, the reserved author name is refused
+		// the log lines of a block belong to it,
 		assert.ok(snap.blocks[1].messages.some((m: any) => m.text.startsWith("Task: ")));
-		assert.equal((await post(srv.url, "/api/sessions/blocks1/message", { author: "System", text: "x" })).status, 400);
 	} finally { await srv.close(); }
 });
 
