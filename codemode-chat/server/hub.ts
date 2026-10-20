@@ -42,6 +42,9 @@ export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contend
 	budget?: { tokens?: number; usd?: number };
 	/** Why the run ended (when not solved or stopped): the budget, the item cap, or no work left. */
 	ended?: "budget" | "items" | "idle" | "accepted" };
+/** One step in a block's trace: an agent researched, proposed, voted, wrote (a new approach, a revision, a merge, an
+ *  improvement), critiqued (`to`: the author it addressed) or judged an answer (`ok`: every criterion met). */
+export type TraceEvent = { t: number; agent: string; via: string; kind: "research" | "propose" | "vote" | "implement" | "revise" | "merge" | "improve" | "critique" | "judge"; ref?: string; to?: string; ok?: boolean | null };
 /** `source` is left out of a snapshot when its byte budget is spent (`sourceOmitted`); `details()` returns it with the
  *  case results. `passed`/`total`: cases passed; `role`/`basedOn`: what an agent did and whose attempt it built on. */
 export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; note?: string; usage?: Usage; partner?: string; judges?: number; acceptedBy?: "judges" | "human"; critiqueId?: string; critiques?: Array<{ author: string; via: string; text: string }>; critiqueBy?: string; proposalId?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
@@ -230,7 +233,7 @@ export class CodeChatHub {
 	async snapshot(id: string) {
 		const s = await this.session(id);
 		const cand = { type: "CodeCandidate", fields: { session: id } };
-		const [entries, msgs, scores, pendingLocal, pendingRemote, noteRows, critiqueRows, proposalRows, voteRows, findingRows] = await Promise.all([
+		const [entries, msgs, scores, pendingLocal, pendingRemote, noteRows, critiqueRows, proposalRows, voteRows, findingRows, judgementRows] = await Promise.all([
 			this.#taskEntries(id),
 			this.host.readAll({ type: "ChatMessage", fields: { session: id } }, { limit: LIMITS.messages + 5 }),
 			this.#scores(s),
@@ -241,6 +244,7 @@ export class CodeChatHub {
 			this.host.readAll({ type: "CodeProposal", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
 			this.host.readAll({ type: "CodeVote", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
 			this.host.readAll({ type: "CodeFinding", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
+			s.blockId ? this.host.readAll({ type: "TextJudgement", fields: { session: id, blockId: s.blockId } }, { limit: LIMITS.contributions * 2 }) : Promise.resolve([]),
 		]);
 		// the research of the runs: queries, sources and what the agents took from them (the text: active block only)
 		const findings = findingRows.map((e) => e.fields as { blockId: string; findingId: string; author: string; via: string; queries: string[]; sources: Array<{ title: string; url: string }>; text: string; ts: number; usage?: Usage }).sort((a, b) => a.ts - b.ts);
@@ -252,7 +256,7 @@ export class CodeChatHub {
 		});
 		const planAuthor = new Map(plans.map((p) => [p.proposalId, p.author]));
 		// who critiqued an attempt, and whose critique a revision followed (the texts come with details())
-		const critiques = critiqueRows.map((e) => e.fields as { target: string; critiqueId: string; author: string; via: string });
+		const critiques = critiqueRows.map((e) => e.fields as { blockId: string; target: string; critiqueId: string; author: string; via: string; addressedTo?: string; ts: number });
 		const critiquesOf = new Map<string, Array<{ author: string; via: string }>>();
 		for (const c of critiques) critiquesOf.set(c.target, [...(critiquesOf.get(c.target) ?? []), { author: c.author, via: c.via }]);
 		const critiqueAuthor = new Map(critiques.map((c) => [c.critiqueId, c.author]));
@@ -302,6 +306,18 @@ export class CodeChatHub {
 		spend(raw.find((b) => b.blockId === s.blockId)?.best ?? null);
 		for (const b of raw) spend(b.best);
 		for (const c of [...all].sort((a, b) => b.ts - a.ts)) spend(c);
+		/** The active block's trace: who did what when (research, plan, vote, write, critique, judge), the newest 300. */
+		const traceOf = (blockId: string, contributions: Contribution[]): TraceEvent[] => {
+			const ev: TraceEvent[] = [
+				...findings.filter((x) => x.blockId === blockId).map((x) => ({ t: x.ts, agent: x.author, via: x.via, kind: "research" as const, ref: x.findingId })),
+				...plans.filter((x) => x.blockId === blockId).map((x) => ({ t: x.ts, agent: x.author, via: x.via, kind: "propose" as const, ref: x.proposalId })),
+				...voteRows.map((e) => e.fields as { blockId: string; voter: string; via: string; ts: number }).filter((x) => x.blockId === blockId).map((x) => ({ t: x.ts, agent: x.voter, via: x.via, kind: "vote" as const })),
+				...critiques.filter((x) => x.blockId === blockId).map((x) => ({ t: x.ts, agent: x.author, via: x.via, kind: "critique" as const, ref: x.target, ...(x.addressedTo ? { to: x.addressedTo } : {}) })),
+				...judgementRows.map((e) => e.fields as { answerId: string; judge: string; via: string; ts: number; passed: number; total: number }).map((x) => ({ t: x.ts, agent: x.judge, via: x.via, kind: "judge" as const, ref: x.answerId, ok: x.passed === x.total })),
+				...contributions.filter((c) => c.author.startsWith("agent-")).map((c) => ({ t: c.ts, agent: c.author, via: c.via, kind: (c.role === "revise" || c.role === "merge" || c.role === "improve" ? c.role : "implement") as TraceEvent["kind"], ref: c.candidateId, ok: c.ok })),
+			];
+			return ev.filter((x) => Number.isFinite(x.t)).sort((a, b) => a.t - b.t).slice(-300);
+		};
 		const build = (withCode: boolean) => {
 			// case results never ride along (details() has them); code within the budget does
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
@@ -312,6 +328,7 @@ export class CodeChatHub {
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
 				// plan texts ride along for the active block only (and not in the code-less fallback); others come with plan()
 				...(plans.some((p) => p.blockId === blockId) ? { plans: plans.filter((p) => p.blockId === blockId).slice(-8).map(({ proposalId, author, via, text, score, votes, ts }) => ({ proposalId, author, via, score, votes, ts, used: contributions.filter((c) => c.proposalId === proposalId).length, ...(withCode && blockId === s.blockId ? { text } : { text: "", textOmitted: true }) })) } : {}),
+				...(blockId === s.blockId ? { trace: traceOf(blockId, contributions) } : {}),
 				...(findings.some((x) => x.blockId === blockId) ? { findings: findings.filter((x) => x.blockId === blockId).slice(-6).map(({ findingId, author, via, queries, sources, text, ts }) => ({ findingId, author, via, queries, sources, ts, ...(withCode && blockId === s.blockId ? { text } : { text: "", textOmitted: true }) })) } : {}),
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));

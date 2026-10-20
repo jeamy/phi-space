@@ -1138,6 +1138,10 @@ t("research: only an admin starts it; researchers search first, every later step
 		assert.ok(b.messages.some((m: any) => /with web research/.test(m.text)));
 		const one = (await (await fetch(`${srv.url}/api/sessions/res1/plan/${b.findings[0].findingId}`)).json()) as any;
 		assert.equal(one.text, "Paris is the capital [1].");
+		// the trace: who did what, in time order; research comes first
+		const kinds = b.trace.map((e: any) => e.kind);
+		assert.ok(kinds.indexOf("research") < kinds.indexOf("propose") && kinds.includes("vote") && kinds.includes("implement") && kinds.includes("judge"), kinds.join());
+		assert.ok(b.trace.every((e: any, i: number) => i === 0 || b.trace[i - 1].t <= e.t));
 	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
 });
 
@@ -1165,6 +1169,8 @@ test("research findings reach the prompts as untrusted data with their sources",
 		assert.match(p.user, /\[1\] https:\/\/e\.org\/x/);
 		assert.match(p.user, /searched "x facts"/);
 	}
+	assert.match(teamPrompt({ task, lang: "en", agent: 0, gen: 0, findings }).user, /one line `Sources:`/);
+	assert.doesNotMatch(teamPrompt({ task, lang: "en", agent: 0, gen: 0 }).user, /`Sources:`/);
 });
 
 test("three reviewers vote on the verifier's criteria; the majority keeps, corrects or drops each", async () => {

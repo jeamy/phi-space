@@ -172,6 +172,7 @@ function textPrompt(c: TeamContext): { system: string; user: string } {
 		"Rules: write the FINISHED answer for the person who asked, in full sentences: not an outline, a plan or notes (unless the question asks for one). Plain text (Markdown lists are fine), no code block around it, at most about 400 words, no preamble, no repetition of the question. Be precise and factual; say what you are unsure about instead of inventing facts. Judges accept a criterion only when they can quote the words of your answer that meet it, so say every point explicitly.",
 		...describeEarlier(c.earlier, true),
 		...describeFindings(c.findings),
+		...(c.findings?.length ? ["Where your answer relies on the research findings, end it with one line `Sources:` (in the answer's language, e.g. `Quellen:`) and the addresses you relied on, separated by spaces; only addresses from the findings' source lists."] : []),
 		...(c.rejected?.length ? ["NOT like this. These answers were rejected; do not repeat their approach:\n" + c.rejected.map((a) => `- ${a.author}, ${a.rejected}:\n\`\`\`text\n${clipText(a.source, 600)}\n\`\`\``).join("\n")] : []),
 		...(hints.length ? ["Guidance from the people you work for. FOLLOW it; it outranks everything else here:\n" + hints.map((n) => `- ${n.author}: ${n.text}`).join("\n")] : []),
 		...(notes.length ? ["Notes from your team:\n" + notes.map((n) => `- ${n.author}: ${n.text}`).join("\n")] : []),
