@@ -703,6 +703,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_HOST_NAME\` | Name in der Systemleiste, Standard der Hostname |
 | \`CODEMODE_CHAT_LLM\` | \`1\` schaltet Modell-Agenten ein |
 | \`CODEMODE_CHAT_MODEL\` | Teilname des Standardmodells |
+| \`CODEMODE_VERIFIER_MODEL\` | Teilname des Modells, mit dem der Prüfer-Agent Prüfregeln schreibt, Standard \`haiku\` |
 | \`CODEMODE_LLM_PER_MIN\` | Modellaufrufe pro Minute, Standard 20 |
 | \`CODEMODE_LLM_PER_DAY\` | Modellaufrufe pro Tag, Standard 500 (Kostendeckel) |
 | \`CODEMODE_REMOTE\` | Hub: Adresse des Shards (\`unix:…\` oder \`tcp:host:port\`) |
@@ -760,6 +761,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_HOST_NAME\` | name in the system bar, default the hostname |
 | \`CODEMODE_CHAT_LLM\` | \`1\` enables model agents |
 | \`CODEMODE_CHAT_MODEL\` | part of the default model name |
+| \`CODEMODE_VERIFIER_MODEL\` | part of the name of the model the verifier agent writes check rules with, default \`haiku\` |
 | \`CODEMODE_LLM_PER_MIN\` | model calls per minute, default 20 |
 | \`CODEMODE_LLM_PER_DAY\` | model calls per day, default 500 (cost cap) |
 | \`CODEMODE_REMOTE\` | hub: address of the shard (\`unix:…\` or \`tcp:host:port\`) |

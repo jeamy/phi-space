@@ -210,9 +210,19 @@ export function verifierPrompt(task: Task, feedback?: string): { system: string;
 	};
 }
 
-/** The verifier agent: a check rule for a custom task, written by the default model (or `model`). */
+/** The model the verifier agent uses: CODEMODE_VERIFIER_MODEL (part of the id, default "haiku": an oracle must be
+ *  exact, and in a live golomb run codestral only wrote rules too lax to pass the cross-check), else the default model. */
+export async function verifierModel(): Promise<string | undefined> {
+	const s = await sharedModel();
+	if (!s) return undefined;
+	const wanted = (process.env.CODEMODE_VERIFIER_MODEL || "haiku").toLowerCase();
+	const m = whitelist(await s.models.getAvailable()).find((x) => String(x.id).toLowerCase().includes(wanted));
+	return m ? `${m.provider}/${m.id}` : undefined;
+}
+
+/** The verifier agent: a check rule for a custom task, written by verifierModel() (or `model`). */
 export async function llmVerifier(c: { task: Task; feedback?: string; model?: string }): Promise<{ check: string; model: string; usage?: Usage }> {
 	const p = verifierPrompt(c.task, c.feedback);
-	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 800);
+	const { text, model, usage } = await guardedCall(c.model ?? (await verifierModel()), p.system, p.user, 800);
 	return { check: extractCode(text).replace(/;\s*$/, ""), model, usage };
 }
