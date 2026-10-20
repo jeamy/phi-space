@@ -22,22 +22,33 @@
 // only after a short wait. An agent hands in and takes the next item at once: the follow-ups of a contribution come
 // when its verdict does, so a slow verdict (a 600 s time limit) blocks nobody. The run ends when the task is solved and the improvement
 // rounds are used, when the budget or the item cap is reached, on Stop, or when no work is left.
+//
+// The board survives a restart of the hub: everything it knows lies in the space. Its state (phase, counters) is one
+// BoardState entry, replaced under a transaction together with the items a phase change creates. An agent claims an
+// item by taking it and writing it back as claimed, in one transaction; the claimed copy goes when the work is done.
+// A contribution's follow-ups are a `followup` item that waits for the verdict. After a restart (`resume`), claimed
+// items are open again and the board goes on where it was; only the model calls that were in flight are repeated.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import type { Attempt, CritiqueRef, Earlier, Finding, Note, PlanRef, Role, Usage } from "./llm.ts";
 import { isText, type Task } from "./tasks.ts";
 
-export type ItemKind = "research" | "propose" | "vote" | "implement" | "critique" | "revise" | "merge" | "judge";
+export type ItemKind = "research" | "propose" | "vote" | "implement" | "critique" | "revise" | "merge" | "judge" | "followup";
 /** `improve`: work on a solution (after the task is solved); other items lapse once it is solved. */
 export type WorkItem = { session: string; blockId: string; runId: string; itemId: string; kind: ItemKind; depth: number; ts: number; target?: string; partner?: string; critiqueId?: string; notBy?: string; improve?: boolean;
 	/** Planning round: the agent that must do it (every agent proposes and votes once); the plan an implement follows. */
 	onlyBy?: string; proposalId?: string;
 	/** judge: an agent that may not judge this answer (the first judge, for the second judgement); the author's model,
 	 *  which the first judge should not run (another model judges first where one is there). */
-	notByAlso?: string; crossOf?: string };
-/** How a board run ended. */
-export type BoardEnd = "solved" | "budget" | "stopped" | "items" | "idle";
+	notByAlso?: string; crossOf?: string;
+	/** Who works on it now (the claimed copy); not to be taken before this time (a follow-up waiting for its verdict);
+	 *  until when a follow-up waits for the verdict. */
+	claimedBy?: string; notBefore?: number; deadline?: number };
+/** How a board run ended; `shutdown`: the hub is closing, the board stays in the space to be resumed. */
+export type BoardEnd = "solved" | "budget" | "stopped" | "items" | "idle" | "shutdown";
 /** What the board shows while it runs. */
-export type BoardInfo = { open: number; done: number; critiques: number; proposals?: number; votes?: number; findings?: number };
+export type BoardInfo = { open: number; done: number; critiques: number; proposals?: number; votes?: number; findings?: number; judgements?: number };
+/** The board's state in the space (BoardState entry): where the run is and what it has done. */
+export type BoardState = { phase: "research" | "propose" | "vote" | "work"; created: number; done: number; critiques: number; proposals: number; votes: number; judgements: number; findings: number; improveLeft: number; merged: string[]; seq: number };
 
 /** What the board needs from the hub; replaceable in tests. */
 export type BoardDeps = {
@@ -63,14 +74,21 @@ export type BoardDeps = {
 	critique: (c: { task: Task; agent: number; target: Attempt; others?: Attempt[]; notes?: Note[]; findings?: Finding[]; model?: string }) => Promise<{ text: string; model: string; usage?: Usage }>;
 	/** Hands a contribution to the judges; resolves with its candidate id. */
 	enqueue: (author: string, via: string, gen: number, source: string, lineage: { role: Role; basedOn?: string; partner?: string; critiqueId?: string; proposalId?: string; usage?: Usage }) => Promise<string>;
-	/** Waits for a candidate's verdict (null when none came in time). */
-	verdict: (candidateId: string) => Promise<Attempt | null>;
+	/** A candidate's verdict if it is there (null while it is not; the hub nudges its judges then). */
+	peek: (candidateId: string) => Promise<Attempt | null>;
+	/** How long a follow-up waits for its verdict (ms). */
+	verdictWaitMs: number;
 	/** The block's attempts (closest first, with case results) and notes, as the agents see them. */
 	board: () => Promise<{ attempts: Attempt[]; notes: Note[] }>;
 	/** An agent's note, linked to its contribution. */
 	note: (author: string, via: string, gen: number, text: string, candidateId: string) => Promise<void>;
 	solved: () => boolean;
+	/** A person stopped the run (the board is cleared). */
 	stopped: () => boolean;
+	/** The hub is closing (the board stays in the space and is resumed after the restart). */
+	shutdown: () => boolean;
+	/** Continue a board this run left in the space (after a restart) instead of starting one. */
+	resume?: boolean;
 	/** Books a call's usage; false once the run's budget is used up. */
 	spend: (usage: Usage | undefined) => boolean;
 	progress: (info: BoardInfo) => void;
@@ -82,57 +100,44 @@ const passing = (a: Attempt) => new Set((a.cases ?? []).filter((c) => c.ok).map(
 
 export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	const itemsTmpl = { type: "WorkItem", fields: { session: d.session, runId: d.runId } };
-	let created = 0, done = 0, critiques = 0, busy = 0, pending = 0, seq = 0, capped = false, end: BoardEnd | null = null;
-	let proposals = 0, votes = 0, proposeLeft = 0, voteLeft = 0, judgements = 0, researchLeft = 0, findingsN = 0;
+	const stateTmpl = { type: "BoardState", fields: { session: d.session, runId: d.runId } };
+	let busy = 0, capped = false, end: BoardEnd | null = null;
 	const earlier = (await d.earlier?.().catch(() => [])) ?? [];
 	const criticAt = d.criticModel && d.contenders.includes(d.criticModel) ? d.criticModel : undefined;
-	let improveLeft = d.polish * d.agents; // improvement critiques once the task is solved
-	const merged = new Set<string>();
-	const report = async () => d.progress({ open: await d.space.count(itemsTmpl), done, critiques, ...(d.plan ? { proposals, votes } : {}), ...(isText(d.task()) ? { judgements } : {}), ...(d.research ? { findings: findingsN } : {}) });
+	const saved = d.resume ? ((await d.space.readIfExists(stateTmpl, NO_WAIT))?.fields as unknown as BoardState | undefined) : undefined;
+	const st: BoardState = saved ? { ...saved, merged: [...(saved.merged ?? [])] } : { phase: "work", created: 0, done: 0, critiques: 0, proposals: 0, votes: 0, judgements: 0, findings: 0, improveLeft: d.polish * d.agents, merged: [], seq: 0 };
+	const report = async () => d.progress({ open: await d.space.count(itemsTmpl), done: st.done, critiques: st.critiques, ...(d.plan ? { proposals: st.proposals, votes: st.votes } : {}), ...(isText(d.task()) ? { judgements: st.judgements } : {}), ...(d.research ? { findings: st.findings } : {}) });
 
+	/** Several writes as one: all of them, or (after a crash in between) none. */
+	const atomically = async <T>(fn: (txn: string) => Promise<T>): Promise<T> => {
+		const t = await d.space.createTransaction(30_000);
+		try { const v = await fn(t.id); await d.space.commit(t.id); return v; }
+		catch (e) { await d.space.abort(t.id).catch(() => {}); throw e; }
+	};
+	/** A new item (not yet written); null at the item cap or below the depth limit. */
+	const item = (kind: ItemKind, depth: number, more: Partial<WorkItem> = {}): WorkItem | null => {
+		if (st.created >= d.maxItems) { capped = true; return null; } // no new work; what is open still gets done
+		if (depth > d.maxDepth) return null;
+		st.created++;
+		return { session: d.session, blockId: d.blockId, runId: d.runId, itemId: `${d.runId}-${(st.seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, depth, ts: Date.now(), ...more };
+	};
+	const entry = (it: WorkItem) => ({ type: "WorkItem", fields: it as never });
 	const spawn = async (kind: ItemKind, depth: number, more: Partial<WorkItem> = {}): Promise<void> => {
-		if (created >= d.maxItems) { capped = true; return; } // no new work; what is open still gets done
-		if (depth > d.maxDepth) return;
-		created++;
-		const item: WorkItem = { session: d.session, blockId: d.blockId, runId: d.runId, itemId: `${d.runId}-${(seq++).toString(36)}`, kind, depth, ts: Date.now(), ...more };
-		await d.space.write({ type: "WorkItem", fields: item as never }, null, d.ttl);
+		const it = item(kind, depth, more);
+		if (it) await d.space.write(entry(it), null, d.ttl);
 	};
 
-	/** The next item this agent may do (FIFO; never a critique of its own attempt, never a revision of its own
-	 *  critique; a young critique waits for the critic model), taken out of the space. */
-	const claim = async (me: string, model: string): Promise<WorkItem | null> => {
-		const rows = (await d.space.readAll(itemsTmpl, { limit: 500 })).sort((a, b) => Number((a.fields as WorkItem).ts) - Number((b.fields as WorkItem).ts));
-		for (const e of rows) {
-			const it = e.fields as unknown as WorkItem;
-			if (it.notBy === me || it.notByAlso === me || (it.onlyBy && it.onlyBy !== me)) continue;
-			if (it.kind === "judge" && it.crossOf === model && d.contenders.some((m) => m !== model) && Date.now() - it.ts < (d.criticWaitMs ?? 20_000)) continue;
-			if (it.kind === "critique" && criticAt && model !== criticAt && Date.now() - it.ts < (d.criticWaitMs ?? 20_000)) continue;
-			if (await d.space.take({ id: e.id }, NO_WAIT)) return it;
-		}
-		return null;
-	};
-
-	/** What follows a verdict: a critique of the attempt (by someone else), and a merge when another failing attempt
-	 *  passes other cases; once the task is solved, only as many improvement critiques as the rounds allow. */
-	const followUp = async (a: Attempt | null, depth: number) => {
-		if (!a || end) return; // a verdict after the run ended starts nothing
-		if (a.ok || d.solved()) { // a correct verdict counts as solved at once (the hub's best may lag a moment)
-			if (a.ok && improveLeft > 0) { improveLeft--; await spawn("critique", depth + 1, { target: a.candidateId, notBy: a.author, improve: true }); }
-			return;
-		}
-		await spawn("critique", depth + 1, { target: a.candidateId, notBy: a.author });
-		if (a.ok) return;
-		const mine = passing(a);
-		const { attempts } = await d.board();
-		const partner = attempts.find((b) => !b.ok && !b.rejected && b.candidateId !== a.candidateId && [...passing(b)].some((call) => !mine.has(call)) && [...mine].some((call) => !passing(b).has(call)));
-		const key = partner ? [a.candidateId, partner.candidateId].sort().join("+") : "";
-		if (partner && !merged.has(key)) { merged.add(key); await spawn("merge", depth + 1, { target: a.candidateId, partner: partner.candidateId }); }
-	};
-
-	const find = (attempts: Attempt[], id?: string) => attempts.find((x) => x.candidateId === id) ?? null;
-	/** The block's research findings, newest first (earlier runs' findings on the same block count too). */
-	const findings = async (): Promise<Finding[]> => (await d.space.readAll({ type: "CodeFinding", fields: { session: d.session, blockId: d.blockId } }, { limit: 20 }))
-		.map((e) => e.fields as unknown as Finding & { ts: number }).sort((a, b) => b.ts - a.ts);
+	// the state and the phase changes go one after the other: a change sees the state the one before it left
+	let tail: Promise<unknown> = Promise.resolve();
+	const serial = <T>(fn: () => Promise<T>): Promise<T> => { const w = tail.catch(() => {}).then(fn); tail = w; return w; };
+	/** Replaces the BoardState entry, with the items of a phase change in the same transaction. */
+	const save = (items: WorkItem[] = []) => atomically(async (txn) => {
+		while (await d.space.take(stateTmpl, NO_WAIT, { txn }));
+		await d.space.write({ type: "BoardState", fields: { session: d.session, runId: d.runId, blockId: d.blockId, ...st, ts: Date.now() } as never }, txn, d.ttl);
+		for (const it of items) await d.space.write(entry(it), txn, d.ttl);
+	});
+	/** Items of a kind still to do (open or claimed). */
+	const left = async (kind: ItemKind) => (await d.space.readAll(itemsTmpl, { limit: 500 })).filter((e) => (e.fields as unknown as WorkItem).kind === kind).length;
 
 	/** The run's proposals with their average rating (null: no vote), best first. */
 	const ranked = async (): Promise<Array<{ proposalId: string; author: string; via: string; text: string; score: number | null }>> => {
@@ -141,35 +146,96 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		return ps.map((p) => { const got = vs.map((v) => v[p.proposalId]).filter((x): x is number => typeof x === "number"); return { ...p, score: got.length ? got.reduce((a, b) => a + b, 0) / got.length : null }; })
 			.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 	};
-	/** After the last proposal: every agent rates the others' (no vote with fewer than two). */
-	const startVoting = async () => {
-		const ps = await ranked();
-		if (ps.length < 2) return startBuilding();
-		voteLeft = d.agents;
-		for (let a = 0; a < d.agents; a++) await spawn("vote", 0, { onlyBy: `agent-${a}` });
-	};
-	/** After the last vote: the agents implement the best one or two plans (in turn), or their own ideas without plans. */
-	const startBuilding = async () => {
+	/** The items that open a phase: a proposal and a vote per agent, or the implementations (of the best plans). */
+	const opening = async (phase: BoardState["phase"]): Promise<WorkItem[]> => {
+		if (phase === "propose") return Array.from({ length: d.agents }, (_, a) => item("propose", 0, { onlyBy: `agent-${a}` })).filter((x): x is WorkItem => !!x);
+		if (phase === "vote") return Array.from({ length: d.agents }, (_, a) => item("vote", 0, { onlyBy: `agent-${a}` })).filter((x): x is WorkItem => !!x);
 		const top = (await ranked()).slice(0, 2);
-		for (let a = 0; a < d.agents; a++) await spawn("implement", 0, top.length ? { proposalId: top[a % top.length]!.proposalId } : {});
+		return Array.from({ length: d.agents }, (_, a) => item("implement", 0, top.length ? { proposalId: top[a % top.length]!.proposalId } : {})).filter((x): x is WorkItem => !!x);
+	};
+	/** What comes after a phase: research → planning (or work), proposals → votes (with two proposals or more) → work. */
+	const nextOf = async (phase: BoardState["phase"]): Promise<BoardState["phase"]> =>
+		phase === "research" ? (d.plan && d.propose && d.vote ? "propose" : "work") : phase === "propose" ? ((await ranked()).length >= 2 ? "vote" : "work") : "work";
+	/** When the last item of the current phase is done, the next phase begins: its items and the new state in one
+	 *  transaction, so a crash leaves either the old phase or the new one, never half of it. */
+	const advance = () => serial(async () => {
+		const kind = ({ research: "research", propose: "propose", vote: "vote" } as const)[st.phase as "research" | "propose" | "vote"];
+		if (!kind || (await left(kind)) > 0) return;
+		const before = { ...st };
+		st.phase = await nextOf(st.phase);
+		try { await save(await opening(st.phase)); } catch (e) { Object.assign(st, before); throw e; }
+	});
+
+	/** The next item this agent may do (FIFO; never a critique of its own attempt, never a revision of its own
+	 *  critique; a young critique waits for the critic model), claimed: taken and written back with the agent's name in
+	 *  one transaction, so a crash in between cannot lose it. */
+	const claim = async (me: string, model: string): Promise<WorkItem | null> => {
+		const rows = (await d.space.readAll(itemsTmpl, { limit: 500 })).sort((a, b) => Number((a.fields as WorkItem).ts) - Number((b.fields as WorkItem).ts));
+		const now = Date.now();
+		for (const e of rows) {
+			const it = e.fields as unknown as WorkItem;
+			if (it.claimedBy || (it.notBefore ?? 0) > now) continue;
+			if (it.notBy === me || it.notByAlso === me || (it.onlyBy && it.onlyBy !== me)) continue;
+			if (it.kind === "judge" && it.crossOf === model && d.contenders.some((m) => m !== model) && now - it.ts < (d.criticWaitMs ?? 20_000)) continue;
+			if (it.kind === "critique" && criticAt && model !== criticAt && now - it.ts < (d.criticWaitMs ?? 20_000)) continue;
+			const got = await atomically(async (txn) => {
+				if (!(await d.space.take({ id: e.id }, NO_WAIT, { txn }))) return false;
+				await d.space.write(entry({ ...it, claimedBy: me }), txn, d.ttl);
+				return true;
+			}).catch(() => false);
+			if (got) return it;
+		}
+		return null;
+	};
+	const claimedTmpl = (it: WorkItem, me: string) => ({ type: "WorkItem", fields: { session: d.session, runId: d.runId, itemId: it.itemId, claimedBy: me } });
+	/** The work on an item is done: its claimed copy goes. */
+	const release = async (it: WorkItem, me: string) => { await d.space.take(claimedTmpl(it, me), NO_WAIT); };
+	/** A follow-up whose verdict is not there yet goes back on the board, to be looked at again a little later. */
+	const putBack = (it: WorkItem, me: string) => atomically(async (txn) => {
+		if (!(await d.space.take(claimedTmpl(it, me), NO_WAIT, { txn }))) return;
+		const { claimedBy: _c, ...open } = it;
+		await d.space.write(entry({ ...open, notBefore: Date.now() + 1000 }), txn, d.ttl);
+	});
+
+	/** What follows a verdict: a critique of the attempt (by someone else), and a merge when another failing attempt
+	 *  passes other cases; once the task is solved, only as many improvement critiques as the rounds allow. */
+	const followUp = async (a: Attempt | null, depth: number) => {
+		if (!a || end) return; // no verdict in time, or one after the run ended: it starts nothing
+		if (a.ok || d.solved()) { // a correct verdict counts as solved at once (the hub's best may lag a moment)
+			if (a.ok && st.improveLeft > 0) { st.improveLeft--; await spawn("critique", depth + 1, { target: a.candidateId, notBy: a.author, improve: true }); }
+			return;
+		}
+		await spawn("critique", depth + 1, { target: a.candidateId, notBy: a.author });
+		const mine = passing(a);
+		const { attempts } = await d.board();
+		const partner = attempts.find((b) => !b.ok && !b.rejected && b.candidateId !== a.candidateId && [...passing(b)].some((call) => !mine.has(call)) && [...mine].some((call) => !passing(b).has(call)));
+		const key = partner ? [a.candidateId, partner.candidateId].sort().join("+") : "";
+		if (partner && !st.merged.includes(key)) { st.merged.push(key); await spawn("merge", depth + 1, { target: a.candidateId, partner: partner.candidateId }); }
 	};
 
-	/** The work after research: the planning round when wanted, else the implementation. */
-	const startWork = async () => {
-		if (d.plan && d.propose && d.vote) { proposeLeft = d.agents; for (let a = 0; a < d.agents; a++) await spawn("propose", 0, { onlyBy: `agent-${a}` }); }
-		else for (let i = 0; i < d.agents; i++) await spawn("implement", 0);
-	};
+	const find = (attempts: Attempt[], id?: string) => attempts.find((x) => x.candidateId === id) ?? null;
+	/** The block's research findings, newest first (earlier runs' findings on the same block count too). */
+	const findings = async (): Promise<Finding[]> => (await d.space.readAll({ type: "CodeFinding", fields: { session: d.session, blockId: d.blockId } }, { limit: 20 }))
+		.map((e) => e.fields as unknown as Finding & { ts: number }).sort((a, b) => b.ts - a.ts);
+	/** Whether an entry this item writes is there already (its work was done before a restart, the release was not). */
+	const already = async (type: string, key: string, id: string) => !!(await d.space.readIfExists({ type, fields: { session: d.session, [key]: id } }, NO_WAIT));
 
-	const execute = async (it: WorkItem, a: number): Promise<void> => {
+	/** Does one item; "kept": a follow-up whose verdict has not come yet (it goes back on the board). */
+	const execute = async (it: WorkItem, a: number): Promise<"kept" | void> => {
 		const me = `agent-${a}`, model = d.contenders[a % d.contenders.length]!, task = d.task(), gen = it.depth + 1;
+		if (it.kind === "followup") {
+			const v = await d.peek(it.target!);
+			if (!v && Date.now() < (it.deadline ?? 0)) return "kept";
+			await followUp(v, it.depth);
+			return;
+		}
 		const found = d.research ? await findings() : [];
 		if (it.kind === "research") {
-			try {
-				const r = await d.research!({ task, agent: a, model, findings: found });
-				if (!d.spend(r.usage)) return;
-				await d.space.write({ type: "CodeFinding", fields: { session: d.session, blockId: d.blockId, runId: d.runId, findingId: `${it.itemId}-f`, author: me, via: r.model, queries: r.queries, sources: r.sources, text: r.text, ts: Date.now(), ...(r.usage ? { usage: r.usage } : {}) } as never }, null, d.ttl);
-				findingsN++;
-			} finally { if (--researchLeft === 0) await startWork(); }
+			if (await already("CodeFinding", "findingId", `${it.itemId}-f`)) return;
+			const r = await d.research!({ task, agent: a, model, findings: found });
+			if (!d.spend(r.usage)) return;
+			await d.space.write({ type: "CodeFinding", fields: { session: d.session, blockId: d.blockId, runId: d.runId, findingId: `${it.itemId}-f`, author: me, via: r.model, queries: r.queries, sources: r.sources, text: r.text, ts: Date.now(), ...(r.usage ? { usage: r.usage } : {}) } as never }, null, d.ttl);
+			st.findings++;
 			return;
 		}
 		const { attempts, notes } = await d.board();
@@ -180,42 +246,40 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 			if (!d.spend(j.usage)) return;
 			const passed = j.results.filter((r) => r.pass).length;
 			await d.space.write({ type: "TextJudgement", fields: { session: d.session, blockId: d.blockId, runId: d.runId, answerId: answer.candidateId, judge: me, via: j.model, results: j.results, passed, total: j.results.length, ts: Date.now(), ...(j.usage ? { usage: j.usage } : {}) } as never }, null, d.ttl);
-			judgements++;
+			st.judgements++;
 			// the second judgement comes from yet another agent (never the author, never this judge)
 			if (!it.notByAlso) await spawn("judge", it.depth, { target: answer.candidateId, notBy: answer.author, notByAlso: me, ...(it.improve ? { improve: true } : {}) });
 			return;
 		}
 		if (it.kind === "propose") {
-			try {
-				const c = await d.propose!({ task, agent: a, notes, attempts: attempts.slice(0, 3), model, earlier, ...(found.length ? { findings: found } : {}) });
-				if (!d.spend(c.usage)) return;
-				await d.space.write({ type: "CodeProposal", fields: { session: d.session, blockId: d.blockId, runId: d.runId, proposalId: `${it.itemId}-p`, author: me, via: c.model, text: c.text, ts: Date.now(), ...(c.usage ? { usage: c.usage } : {}) } as never }, null, d.ttl);
-				proposals++;
-			} finally { if (--proposeLeft === 0) await startVoting(); }
+			if (await already("CodeProposal", "proposalId", `${it.itemId}-p`)) return;
+			const c = await d.propose!({ task, agent: a, notes, attempts: attempts.slice(0, 3), model, earlier, ...(found.length ? { findings: found } : {}) });
+			if (!d.spend(c.usage)) return;
+			await d.space.write({ type: "CodeProposal", fields: { session: d.session, blockId: d.blockId, runId: d.runId, proposalId: `${it.itemId}-p`, author: me, via: c.model, text: c.text, ts: Date.now(), ...(c.usage ? { usage: c.usage } : {}) } as never }, null, d.ttl);
+			st.proposals++;
 			return;
 		}
 		if (it.kind === "vote") {
-			try {
-				const others = (await ranked()).filter((p) => p.author !== me).sort((x, y) => x.proposalId.localeCompare(y.proposalId));
-				if (!others.length) return;
-				const keys = others.map((p, i) => ({ key: `P${i + 1}`, author: p.author, text: p.text, proposalId: p.proposalId }));
-				const v = await d.vote!({ task, agent: a, proposals: keys, notes, model });
-				if (!d.spend(v.usage)) return;
-				const scores = Object.fromEntries(keys.filter((k) => v.scores[k.key] !== undefined).map((k) => [k.proposalId, v.scores[k.key]!]));
-				await d.space.write({ type: "CodeVote", fields: { session: d.session, blockId: d.blockId, runId: d.runId, voter: me, via: v.model, scores, text: v.text, ts: Date.now(), ...(v.usage ? { usage: v.usage } : {}) } as never }, null, d.ttl);
-				votes++;
-			} finally { if (--voteLeft === 0) await startBuilding(); }
+			if (await already("CodeVote", "voteId", `${it.itemId}-v`)) return;
+			const others = (await ranked()).filter((p) => p.author !== me).sort((x, y) => x.proposalId.localeCompare(y.proposalId));
+			if (!others.length) return;
+			const keys = others.map((p, i) => ({ key: `P${i + 1}`, author: p.author, text: p.text, proposalId: p.proposalId }));
+			const v = await d.vote!({ task, agent: a, proposals: keys, notes, model });
+			if (!d.spend(v.usage)) return;
+			const scores = Object.fromEntries(keys.filter((k) => v.scores[k.key] !== undefined).map((k) => [k.proposalId, v.scores[k.key]!]));
+			await d.space.write({ type: "CodeVote", fields: { session: d.session, blockId: d.blockId, runId: d.runId, voteId: `${it.itemId}-v`, voter: me, via: v.model, scores, text: v.text, ts: Date.now(), ...(v.usage ? { usage: v.usage } : {}) } as never }, null, d.ttl);
+			st.votes++;
 			return;
 		}
 		const usable = attempts.filter((x) => !x.rejected), rejected = attempts.filter((x) => x.rejected).slice(0, 3);
 		if (it.kind === "critique") {
 			const target = find(attempts, it.target);
-			if (!target) return;
+			const critiqueId = `${it.itemId}-c`;
+			if (!target || (await already("CodeCritique", "critiqueId", critiqueId))) return;
 			const c = await d.critique({ task, agent: a, target, others: usable.filter((x) => x !== target).slice(0, 2), notes, model, ...(found.length ? { findings: found } : {}) });
 			if (!d.spend(c.usage)) return;
-			const critiqueId = `${it.itemId}-c`;
 			await d.space.write({ type: "CodeCritique", fields: { session: d.session, blockId: d.blockId, runId: d.runId, critiqueId, target: target.candidateId, addressedTo: target.author, author: me, via: c.model, text: c.text, ts: Date.now(), ...(c.usage ? { usage: c.usage } : {}) } as never }, null, d.ttl);
-			critiques++;
+			st.critiques++;
 			await spawn("revise", it.depth + 1, { target: target.candidateId, critiqueId, notBy: me, ...(it.improve ? { improve: true } : {}) });
 			return;
 		}
@@ -238,44 +302,80 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		if (c.note) await d.note(me, c.model, gen, c.note, candidateId);
 		// a text answer is judged on the board: the first judge from another model than the author where possible
 		if (isText(task)) await spawn("judge", it.depth, { target: candidateId, notBy: me, crossOf: c.model, ...(it.improve ? { improve: true } : {}) });
-		// the follow-ups come with the verdict; this agent goes on to the next item meanwhile
-		pending++;
-		void d.verdict(candidateId).then((v) => followUp(v, it.depth)).catch((e) => console.error("[board] follow-up failed", (e as Error).message)).finally(() => { pending--; void report(); });
+		// the follow-ups come with the verdict: an item on the board waits for it, this agent goes on meanwhile
+		await spawn("followup", it.depth, { target: candidateId, deadline: Date.now() + d.verdictWaitMs, ...(it.improve ? { improve: true } : {}) });
 	};
 
-	// the first items: critiques of the closest attempts the block already has, the rest new approaches
-	const { attempts } = await d.board();
-	const open = attempts.filter((x) => !x.rejected).slice(0, Math.ceil(d.agents / 2));
-	for (const x of d.solved() ? [] : open) await spawn("critique", 0, { target: x.candidateId, notBy: x.author });
-	if (d.solved()) for (const x of attempts.filter((y) => y.ok && !y.rejected).slice(0, Math.min(d.agents, improveLeft))) { improveLeft--; await spawn("critique", 0, { target: x.candidateId, notBy: x.author, improve: true }); }
-	else if (d.research && !open.length) { researchLeft = Math.max(1, Math.floor(d.agents / 2)); for (let a = 0; a < researchLeft; a++) await spawn("research", 0, { onlyBy: `agent-${a}` }); } // research first
-	else if (d.plan && d.propose && d.vote && !open.length) await startWork(); // plan first
-	else for (let i = open.length; i < d.agents; i++) await spawn("implement", 0);
+	if (saved) {
+		// after a restart: what was claimed is open again (its agent is gone), a follow-up waits anew for its verdict
+		for (const e of await d.space.readAll(itemsTmpl, { limit: 500 })) {
+			const it = e.fields as unknown as WorkItem;
+			if (!it.claimedBy && it.kind !== "followup") continue;
+			const { claimedBy: _c, notBefore: _n, ...open } = it;
+			await atomically(async (txn) => {
+				if (!(await d.space.take({ id: e.id }, NO_WAIT, { txn }))) return;
+				await d.space.write(entry(it.kind === "followup" ? { ...open, deadline: Date.now() + d.verdictWaitMs } : open), txn, d.ttl);
+			});
+		}
+		await advance(); // the last item of a phase may have been done just before the restart
+	} else {
+		// the first items: critiques of the closest attempts the block already has, the rest new approaches; on a fresh
+		// task research first, or the planning round
+		const { attempts } = await d.board();
+		const open = attempts.filter((x) => !x.rejected).slice(0, Math.ceil(d.agents / 2));
+		const first: WorkItem[] = [];
+		const add = (x: WorkItem | null) => { if (x) first.push(x); };
+		if (d.solved()) for (const x of attempts.filter((y) => y.ok && !y.rejected).slice(0, Math.min(d.agents, st.improveLeft))) { st.improveLeft--; add(item("critique", 0, { target: x.candidateId, notBy: x.author, improve: true })); }
+		else if (open.length) { for (const x of open) add(item("critique", 0, { target: x.candidateId, notBy: x.author })); for (let i = open.length; i < d.agents; i++) add(item("implement", 0)); }
+		else if (d.research) { st.phase = "research"; for (let a = 0; a < Math.max(1, Math.floor(d.agents / 2)); a++) add(item("research", 0, { onlyBy: `agent-${a}` })); }
+		else if (d.plan && d.propose && d.vote) { st.phase = "propose"; first.push(...(await opening("propose"))); }
+		else first.push(...(await opening("work")));
+		await serial(() => save(first));
+	}
 	await report();
 
 	const worker = async (a: number) => {
 		const me = `agent-${a}`;
 		while (!end) {
+			if (d.shutdown()) { end = "shutdown"; break; }
 			if (d.stopped()) { end = "stopped"; break; }
 			const it = await claim(me, d.contenders[a % d.contenders.length]!);
 			if (!it) {
-				if (busy === 0 && pending === 0 && (await d.space.count(itemsTmpl)) === 0) { end ??= d.solved() ? "solved" : capped ? "items" : "idle"; break; }
+				if (busy === 0 && (await d.space.count(itemsTmpl)) === 0) { end ??= d.solved() ? "solved" : capped ? "items" : "idle"; break; }
 				await pause(300);
 				continue;
 			}
-			if (d.solved() && !it.improve && it.kind !== "judge") { done++; continue; } // work towards a solution lapses once there is one (an answer in judging still gets its verdict)
+			// work towards a solution lapses once there is one (an answer in judging still gets its verdict, a contribution its follow-ups)
+			if (d.solved() && !it.improve && it.kind !== "judge" && it.kind !== "followup") { await release(it, me).catch(() => {}); st.done++; continue; }
 			busy++;
-			try { await execute(it, a); }
-			catch (e) { console.error("[board] item failed", it.kind, (e as Error).message); }
-			finally { busy--; done++; await report(); }
+			let kept = false;
+			try { kept = (await execute(it, a)) === "kept"; }
+			catch (e) { if (!d.shutdown()) console.error("[board] item failed", it.kind, (e as Error).message); }
+			finally {
+				// the agent counts as busy until the item is handed back and the next phase is on the board: otherwise the
+				// others could see an empty board in between and end the run
+				if (d.shutdown()) { busy--; break; } // the claimed copy stays: after the restart the item is open again
+				try {
+					if (kept) await putBack(it, me);
+					else {
+						await release(it, me);
+						if (it.kind !== "followup") st.done++;
+						if (it.kind === "research" || it.kind === "propose" || it.kind === "vote") await advance();
+						else await serial(() => save());
+					}
+				} catch (e) { console.error("[board] could not hand back an item", (e as Error).message); }
+				busy--;
+				await report().catch(() => {});
+			}
 			if (!d.spend(undefined)) end ??= "budget";
 		}
 	};
 	await Promise.all(Array.from({ length: d.agents }, (_, a) => worker(a)));
-	// verdicts still on their way (after a stop or at the budget): their follow-ups are not wanted any more
-	for (let i = 0; pending > 0 && i < 50; i++) await pause(100);
+	if (end === "shutdown" || d.shutdown()) return "shutdown"; // everything stays in the space for the restart
 	// what is left on the board belongs to no run any more
+	await tail.catch(() => {});
 	while (await d.space.take(itemsTmpl, NO_WAIT));
+	while (await d.space.take(stateTmpl, NO_WAIT));
 	await report();
 	return end ?? "idle";
 }

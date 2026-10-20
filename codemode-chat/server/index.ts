@@ -74,6 +74,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	const hub = new CodeChatHub(harness, cm, remoteSpec ? { remote: remoteJudgeSpace(remoteSpec), remoteLabel: process.env.CODEMODE_REMOTE_NAME ?? "nano", ...(o.llm ? { llm: o.llm } : {}) } : (o.llm ? { llm: o.llm } : {}));
 	if (remoteSpec) console.log(`[codemode] judge shard configured: ${remoteSpec}`);
 	await hub.restoreAdmin(); // the admin's choice of models from before
+	void hub.resumeRuns().catch((e) => console.error("[codemode] resuming runs failed", (e as Error).message)); // runs the last process left active
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
 	let nextUpgrade: ((req: http.IncomingMessage, socket: any, head: Buffer) => void) | null = null;

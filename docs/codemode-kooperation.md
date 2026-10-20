@@ -13,7 +13,8 @@ zusammen. Koordiniert wird nur über den Space, nach dem Linda-Prinzip, ohne Tak
   Übernahme fast neu.
 - Es fehlen Kritik zwischen Agenten, das Zusammenführen von Teillösungen, ein gemeinsamer Plan, Recherche und
   Aufgaben ohne Programmcode.
-- Der Laufzustand (`s.run`) liegt im Speicher: Ein Neustart des Hubs bricht einen Lauf ab.
+- Der Laufzustand lag im Speicher: Ein Neustart des Hubs brach einen Lauf ab. Seit 2026-10-20 überstehen Läufe einen
+  Neustart (Abschnitt „Dauerhafte Läufe“).
 
 ## Kern: Arbeitsaufträge im Space
 
@@ -104,3 +105,22 @@ oder Stop gedrückt wird. Die Abwertung durch einen Menschen bleibt das letzte W
 Die Websuche braucht keine Werkzeugaufrufe des Modells (pi-ai hat keine fertige Werkzeug-Schleife): Der Agent schreibt
 seine Suchanfragen als Text, der Hub führt sie aus und gibt die Ergebnisse im nächsten Aufruf zurück. Das funktioniert
 mit jedem Modell, auch ohne Unterstützung für Funktionswerkzeuge.
+
+## Dauerhafte Läufe (2026-10-20)
+
+Ein Lauf übersteht einen Neustart des Hubs und läuft danach weiter. Alles, was er weiß, liegt im Space:
+
+- `CodeRun` je aktivem Lauf: Startparameter, Verbrauch, Fortschritt (höchstens sekündlich, unter einer Transaktion
+  ersetzt). Beim Start setzt der Hub jeden Lauf mit `CodeRun` fort (`resumeRuns`). Ein Stopp durch einen Menschen
+  entfernt `CodeRun` sofort, ein Herunterfahren nicht.
+- `BoardState` je Lauf auf dem Auftragsbrett: Phase (Recherche, Planung, Bewertung, Arbeit) und Zähler. Ein
+  Phasenwechsel schreibt den neuen Zustand und die Aufträge der neuen Phase in einer Transaktion.
+- Übernommene Aufträge: Ein Agent nimmt einen Auftrag und schreibt ihn als übernommen zurück, in einer Transaktion.
+  Nach einem Neustart sind übernommene Aufträge wieder offen.
+- Folgeaufträge (`followup`): Ein Beitrag hinterlässt einen Auftrag, der auf sein Urteil wartet und dann Kritik oder
+  Zusammenführung anlegt. Fehlt das Urteil, stößt er die Bewerter an (nach einem Absturz kommt ein Beitrag erst
+  zurück, wenn die Transaktion des alten Bewerters abläuft).
+- Generationen: Die abgebrochene Generation läuft nach dem Neustart noch einmal.
+
+Grenze: Modellaufrufe, die beim Neustart gerade liefen, sind verloren und werden wiederholt; das kostet Tokens. Wer
+während eines Laufs Dateien in `server/` ändert, startet den Dev-Server neu und bezahlt diese Wiederholungen.

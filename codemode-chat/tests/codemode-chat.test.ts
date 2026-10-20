@@ -1158,6 +1158,85 @@ t("text task: a criteria reviewer whose model fails gives way to another model",
 	} finally { await srv.close(); }
 });
 
+// ---- durable runs: a restart of the hub does not end a run ----
+
+const usage5 = { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, total: 5, costUsd: 0.001 };
+/** A fake team whose implementations hang until `release()`: the hub can be closed while they are in flight. */
+const hangingTeam = () => {
+	let release!: () => void;
+	const gate = new Promise<void>((r) => { release = r; });
+	const calls: string[] = [];
+	return {
+		calls, release: () => release(),
+		llm: {
+			models: async () => ["fake/team"],
+			propose: async (c: any) => { calls.push(`propose-${c.agent}`); return { text: c.agent === 0 ? "Multiply by two." : "Add two.", model: "fake/team", usage: usage5 }; },
+			vote: async (c: any) => { calls.push(`vote-${c.agent}`); return { scores: Object.fromEntries(c.proposals.map((p: any) => [p.key, /Multiply/.test(p.text) ? 5 : 1])), text: "", model: "fake/team", usage: usage5 }; },
+			contribute: async (c: any) => { calls.push(`contribute-${c.agent}`); await gate; return { source: "function double(x){ return x * 2 }", model: "fake/team", usage: usage5 }; },
+			critique: async () => ({ text: "fine", model: "fake/team", usage: usage5 }),
+		},
+	};
+};
+const sqliteOf = async (name: string) => { const { rm } = await import("node:fs/promises"); const p = `/tmp/codemode-${name}-${process.pid}.sqlite`; await rm(p, { force: true }); return { path: p, rm: () => rm(p, { force: true }) }; };
+
+t("a board run survives a restart of the hub: claimed work is done again, the budget counts on, the run ends once", async () => {
+	const db = await sqliteOf("resume-board");
+	const a = hangingTeam();
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: a.llm as never });
+	const get = async () => (await (await fetch(srv.url + "/api/sessions/dur1")).json()) as any;
+	try {
+		await post(srv.url, "/api/sessions/dur1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
+		assert.equal((await post(srv.url, "/api/sessions/dur1/run", { agents: 2, gens: 3, polish: 0, contenders: ["fake/team"], board: true, plan: true, budgetTokens: 1000 })).status, 200);
+		// planned and rated (4 calls of 5 tokens), then both implementations hang: the hub goes down mid-run
+		await until(async () => a.calls.filter((c) => c.startsWith("contribute")).length === 2);
+		await until(async () => (await get()).run.usage.tokens === 20);
+		await new Promise((r) => setTimeout(r, 1200)); // the CodeRun entry is written within a second of a change
+		await srv.close();
+		a.release(); // the old process's calls come back after it closed: nothing of them may land
+		const b = hangingTeam(); b.release();
+		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: b.llm as never });
+		await until(async () => { const s = await get(); return s.run && !s.run.active ? s : false; }, 60_000);
+		const snap = await get(), blk = snap.blocks.at(-1);
+		assert.ok(blk.messages.some((m: any) => /Run resumed after a restart of the hub/.test(m.text)), blk.messages.map((m: any) => m.text).join(" | "));
+		assert.ok(blk.messages.some((m: any) => /^Run finished after .*solved/.test(m.text)));
+		assert.equal(blk.messages.filter((m: any) => /^Run (finished|stopped)/.test(m.text)).length, 1);
+		assert.deepEqual(b.calls.filter((c) => !c.startsWith("contribute")), []); // no second planning round: the plans were made
+		assert.ok(b.calls.length >= 2); // the claimed implementations were done again
+		assert.ok(snap.run.usage.tokens >= 30, String(snap.run.usage.tokens)); // 20 from before the restart, then on
+		assert.equal(blk.plans.length, 2);
+		assert.ok(blk.best);
+		// nothing of the run is left to resume: a third start does not bring it back
+		assert.equal(await srv.hub.host.count({ type: "CodeRun", fields: { session: "dur1" } }), 0);
+		assert.equal(await srv.hub.host.count({ type: "WorkItem", fields: { session: "dur1" } }), 0);
+		await srv.close();
+		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: b.llm as never });
+		await new Promise((r) => setTimeout(r, 300));
+		assert.equal((await get()).run, null);
+	} finally { await srv.close(); await db.rm(); }
+});
+
+t("a stopped run is not resumed after a restart; a generations run goes on with the generation that was cut off", async () => {
+	const db = await sqliteOf("resume-gens");
+	const a = hangingTeam();
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: a.llm as never });
+	const get = async (room: string) => (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any;
+	try {
+		for (const room of ["gen1", "stop1"]) await post(srv.url, `/api/sessions/${room}/task`, { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
+		await post(srv.url, "/api/sessions/gen1/run", { agents: 1, gens: 3, polish: 0, contenders: ["fake/team"] });
+		await post(srv.url, "/api/sessions/stop1/run", { agents: 1, gens: 3, polish: 0, contenders: ["fake/team"] });
+		await until(async () => a.calls.filter((c) => c.startsWith("contribute")).length === 2);
+		await post(srv.url, "/api/sessions/stop1/stop", { by: "lux" });
+		await srv.close();
+		a.release();
+		const b = hangingTeam(); b.release();
+		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: b.llm as never });
+		const g = await until(async () => { const s = await get("gen1"); return s.run && !s.run.active ? s : false; }, 30_000);
+		assert.ok(g.blocks.at(-1).messages.some((m: any) => /Run resumed after a restart of the hub \(generation 1/.test(m.text)));
+		assert.ok(g.blocks.at(-1).best);
+		assert.equal((await get("stop1")).run, null); // stopped before the restart: it stays stopped
+	} finally { await srv.close(); await db.rm(); }
+});
+
 test("research findings reach the prompts as untrusted data with their sources", async () => {
 	const { teamPrompt, critiquePrompt, proposePrompt } = await import("../server/llm.ts");
 	const { textTask } = await import("../server/tasks.ts");
