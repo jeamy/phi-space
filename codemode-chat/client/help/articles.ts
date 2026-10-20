@@ -283,6 +283,21 @@ Die Ziele wechseln reihum über die besten Versuche, damit nicht alle am selben 
 
 Der Lauf endet, sobald die Aufgabe **gelöst** ist und die **Verbesserungsrunden** vorbei sind, spätestens nach der höchsten Zahl Generationen.
 
+## Auftragsbrett {#board}
+
+Im Laufmodus **Auftragsbrett** gibt es keine Generationen. Aufträge liegen im Space, und jeder freie Agent nimmt sich den nächsten:
+
+| Auftrag | Was der Agent tut | Danach |
+|---|---|---|
+| Lösung schreiben | ein neuer Ansatz, nach der Lösung eine Verbesserung | Bewertung, dann Kritik |
+| Kritik | liest den Versuch eines **anderen** und schreibt ihm, was falsch ist und wie es zu beheben ist | Überarbeiten |
+| Überarbeiten | schreibt den Versuch mit dieser Kritik neu (✍️) | Bewertung, dann Kritik |
+| Zusammenführen | verbindet zwei Versuche, die verschiedene Testfälle bestehen (🔀) | Bewertung, dann Kritik |
+
+Aufgeklappt zeigt ein Beitrag die Kritiken der anderen und, bei einer Überarbeitung, die Kritik, nach der sie entstand. Der Lauf endet, wenn die Aufgabe gelöst ist und die Verbesserungsrunden verbraucht sind, wenn keine Arbeit mehr übrig ist, am Budget oder bei Stopp. Das Auftragsbrett braucht Modell-Agenten, denn Skript-Agenten können nicht kritisieren.
+
+**Budget** (beide Laufmodi): Obergrenze in Tokens und/oder Dollar (Listenpreis); was zuerst erreicht ist, beendet den Lauf.
+
 ## Teilnehmer {#contenders}
 
 Unter **Teilnehmer** kreuzt du an, wer mitarbeitet: die **Skript-Agenten** und jedes erlaubte Modell. Die Agenten eines Laufs werden den Teilnehmern **reihum** zugeteilt: Agent 0 dem ersten, Agent 1 dem zweiten, und so weiter. So arbeiten zum Beispiel \`mistral/codestral-latest\` und das neueste Haiku im selben Team und bauen auf den Versuchen des jeweils anderen auf.
@@ -351,6 +366,21 @@ Before every contribution a model agent gets:
 Targets rotate over the best attempts, so not everyone works on the same one. After its code an agent may leave a **note** for the team, e.g. "the function takes no arguments"; the next agents read it. Every tile shows whose attempt it builds on (↳).
 
 The run ends once the task is **solved** and the **improvement rounds** are over, at the latest after the maximum number of generations.
+
+## Work board {#board}
+
+The run mode **work board** has no generations. Work items lie in the space, and every free agent takes the next one:
+
+| Item | What the agent does | Then |
+|---|---|---|
+| write a solution | a new approach, after the solution an improvement | judging, then critique |
+| critique | reads **another** agent's attempt and tells its author what is wrong and how to fix it | revise |
+| revise | rewrites the attempt with that critique (✍️) | judging, then critique |
+| merge | combines two attempts that pass different test cases (🔀) | judging, then critique |
+
+Unfolded, a contribution shows the others' critiques and, for a revision, the critique it followed. The run ends once the task is solved and the improvement rounds are used, when no work is left, at the budget, or on Stop. The work board needs model agents, since scripted agents cannot critique.
+
+**Budget** (both run modes): an upper bound in tokens and/or dollars (list price); whichever is reached first ends the run.
 
 ## Contenders {#contenders}
 

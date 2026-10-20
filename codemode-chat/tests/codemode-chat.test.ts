@@ -861,3 +861,77 @@ t("the cross-check refuses a rule that misses what makes a result right (a lax g
 	const sort = customTask({ fn: "sortDesc", prompt: "", cases: [{ args: [[1, 3, 2, 5, 4]], expect: [5, 4, 3, 2, 1] }] });
 	assert.equal(await testRule(cm!, sort, "(r, [a]) => Array.isArray(r) && r.length === a.length && r.every((v, i) => i === 0 || r[i - 1] >= v) && [...a].sort().join() === [...r].sort().join()", expectedOf), null);
 });
+
+// ---- the work board: critique, revise, merge; the budget ----
+
+const boardRun = async (srv: { url: string }, room: string, body: Record<string, unknown>) => {
+	assert.equal((await post(srv.url, `/api/sessions/${room}/run`, { agents: 2, gens: 3, perAgent: 1, polish: 0, contenders: ["fake/team"], board: true, ...body })).status, 200);
+	return until(async () => { const s = (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
+};
+
+t("work board: a teammate critiques an attempt, another revises it with that critique, and the task gets solved", async () => {
+	const calls: any[] = [];
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async (c: any) => { calls.push({ role: c.role, critique: c.critique?.text, target: c.target?.author, agent: c.agent }); return c.role === "revise" ? { source: "function double(x){ return x * 2 }", model: "fake/team" } : { source: "function double(x){ return x + 2 }", model: "fake/team" }; },
+		critique: async (c: any) => { calls.push({ role: "critique", of: c.target.author, agent: c.agent }); return { text: "1. x + 2 is right only for 2.\n2. Multiply by two.", model: "fake/team" }; },
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/brd1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
+		const snap = await boardRun(srv, "brd1", {});
+		const b = snap.blocks.at(-1);
+		assert.ok(b.best, "solved");
+		for (const c of calls.filter((x) => x.role === "critique")) assert.notEqual(`agent-${c.agent}`, c.of, "nobody critiques their own attempt");
+		const revised = b.contributions.find((c: any) => c.role === "revise" && c.ok);
+		assert.ok(revised.critiqueBy && revised.basedOn, "a revision names the critique and the attempt it followed");
+		assert.ok(calls.some((x) => x.role === "revise" && /Multiply by two/.test(x.critique)), "the reviser got the critique");
+		assert.ok(b.contributions.find((c: any) => c.candidateId === revised.basedOn).critiques.length >= 1);
+		const d = (await (await fetch(`${srv.url}/api/sessions/brd1/source/${revised.candidateId}`)).json()) as any;
+		assert.match(d.followed.text, /Multiply by two/);
+		assert.ok(snap.run.board.critiques >= 1 && snap.run.board.done >= 3);
+		assert.ok(b.messages.some((m: any) => /Run finished after \d+ work items, \d+ critiques: solved/.test(m.text)));
+		assert.equal((await post(srv.url, "/api/sessions/brd1/run", { contenders: ["scripted"], board: true })).status, 400); // no critics among scripts
+	} finally { await srv.close(); }
+});
+
+t("work board: two attempts that pass different cases are merged", async () => {
+	let merges = 0;
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async (c: any) => {
+			if (c.role === "merge") { merges++; assert.ok(c.partner && c.target); return { source: "function f(x){ return x * 10 }", model: "fake/team" }; }
+			if (c.role === "revise") return { source: "function f(x){ return 0 }", model: "fake/team" }; // critiques do not help here
+			return { source: c.agent === 0 ? "function f(x){ return x === 1 ? 10 : 0 }" : "function f(x){ return x === 2 ? 20 : 0 }", model: "fake/team" };
+		},
+		critique: async () => ({ text: "try again", model: "fake/team" }),
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/brd2/task", { custom: { fn: "f", prompt: "ten times", cases: [{ args: [1], expect: 10 }, { args: [2], expect: 20 }] } });
+		const snap = await boardRun(srv, "brd2", {});
+		const merged = snap.blocks.at(-1).contributions.find((c: any) => c.role === "merge");
+		assert.ok(merges >= 1 && merged && merged.ok, "a merge of the two halves solved it");
+	} finally { await srv.close(); }
+});
+
+t("the budget ends a run: whichever of tokens or dollars is reached first", async () => {
+	const use = { input: 900, output: 100, cacheRead: 0, cacheWrite: 0, total: 1000, costUsd: 0.01 };
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async () => ({ source: "function f(x){ return 0 }", model: "fake/team", usage: use }), // never right: only the budget stops it
+		critique: async () => ({ text: "no", model: "fake/team", usage: use }),
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/bud1/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
+		const snap = await boardRun(srv, "bud1", { budgetTokens: 3000, budgetUsd: 5 });
+		assert.ok(snap.run.usage.tokens >= 3000 && snap.run.usage.tokens <= 5000, `tokens ${snap.run.usage.tokens}`); // stops right after the limit
+		assert.deepEqual(snap.run.budget, { tokens: 3000, usd: 5 });
+		assert.ok(snap.blocks.at(-1).messages.some((m: any) => /\(budget used up\)/.test(m.text)));
+		// generations stop at the budget too
+		await post(srv.url, "/api/sessions/bud2/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
+		const gens = await boardRun(srv, "bud2", { board: false, gens: 10, budgetUsd: 0.02 });
+		assert.ok(gens.run.usage.costUsd >= 0.02 && gens.run.gen < 10, `gen ${gens.run.gen}`);
+	} finally { await srv.close(); }
+});

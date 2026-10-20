@@ -72,13 +72,17 @@ const STYLES = [
 ];
 
 /** What a team member does this turn: repair a failing attempt, try a new approach, or improve a correct solution. */
-export type Role = "repair" | "explore" | "improve";
+export type Role = "repair" | "explore" | "improve" | "revise" | "merge";
+/** A teammate's critique of an attempt: who wrote it and what it says. */
+export type CritiqueRef = { author: string; via: string; text: string };
 /** An earlier contribution as the team sees it: who, how far it got, what went wrong, its code. */
 export type Attempt = { candidateId: string; author: string; via: string; gen: number; ok: boolean; ms: number | null; passed?: number; total?: number; error?: string; cases?: Array<{ call: string; ok: boolean; got?: string; expect?: string; error?: string }>; rejected?: string; source: string };
 /** `human`: a person's hint, which the agents follow before their own notes. */
 export type Note = { author: string; gen: number; text: string; human?: boolean };
 /** Everything an agent gets: the task with its cases, its role, the attempt to work on, others for reference, notes. */
-export type TeamContext = { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; best?: { source: string; ms: number } | null };
+export type TeamContext = { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; best?: { source: string; ms: number } | null;
+	/** revise: the critique to work with; merge: the second attempt to combine with `target`. */
+	critique?: CritiqueRef; partner?: Attempt };
 
 const clipText = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "\n// … (cut)" : s);
 const showValue = (v: unknown) => { const s = JSON.stringify(v); return s === undefined ? "undefined" : s.length > 200 ? s.slice(0, 200) + "…" : s; };
@@ -115,6 +119,8 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 	if (notes.length) parts.push("Notes from your team (insights so far):\n" + notes.map((n) => `- ${n.author} (gen ${n.gen}): ${n.text}`).join("\n"));
 	if (role === "repair" && c.target) parts.push(`Your job: REPAIR this attempt. Keep what works, fix what fails; the case results show where it goes wrong.\n${describeAttempt(c.target, true)}`);
 	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it faster or simpler. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
+	else if (role === "revise" && c.target && c.critique) parts.push(`Your job: REVISE this attempt using the critique a teammate wrote about it. Take the critique seriously, but check it: if a point is wrong, say so in your NOTE.\n${describeAttempt(c.target, true)}\nCritique by ${c.critique.author} (${c.critique.via}):\n${c.critique.text}`);
+	else if (role === "merge" && c.target && c.partner) parts.push(`Your job: MERGE these two attempts into one that keeps what each does right; together they pass more cases than either alone.\nAttempt A: ${describeAttempt(c.target, true)}\nAttempt B: ${describeAttempt(c.partner, true)}`);
 	else parts.push(`Your job: EXPLORE. Write a solution with an approach of your own${c.others?.length ? ", different from the attempts below where they fail" : ""}.`);
 	if (c.others?.length) parts.push("Other attempts of the team (for reference; reuse what helps):\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n"));
 	parts.push("Answer with exactly one ```js block holding the complete function (and its helpers). After the block you may add ONE line `NOTE: …` (at most 300 characters) with an insight the next teammates should know.");
@@ -122,6 +128,33 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 		system: `You are agent ${c.agent} in a team that solves a programming task together through a shared space (generation ${c.gen + 1}). Everyone sees every attempt, its test results and the team's notes; you build on each other's work. ${STYLES[c.agent % STYLES.length]}`,
 		user: parts.join("\n\n"),
 	};
+}
+
+/** The critic's prompt: a teammate's attempt, its results, and what to look for. Critique, no code. */
+export function critiquePrompt(c: { task: Task; agent: number; target: Attempt; others?: Attempt[]; notes?: Note[] }): { system: string; user: string } {
+	const t = c.task;
+	const hints = c.notes?.filter((n) => n.human) ?? [];
+	return {
+		system: `You are agent ${c.agent}, the critic in a team that solves a programming task together through a shared space. You do not write the solution; you tell its author precisely what is wrong and how to fix it, so the next teammate can repair it. ${STYLES[c.agent % STYLES.length]}`,
+		user: [
+			`Task: ${t.prompt.en}`,
+			`The function \`${t.fn}\` is called like in these test cases:\n${describeCases(t)}`,
+			...(t.check !== undefined ? [`A result passes when this check rule returns true:\n\`\`\`js\n${t.check}\n\`\`\``] : []),
+			`Time limit: ${(t.timeoutMs ?? 5000) / 1000} seconds in a slow QuickJS interpreter.`,
+			...(hints.length ? ["Guidance from the people you work for (it outranks everything):\n" + hints.map((n) => `- ${n.author}: ${n.text}`).join("\n")] : []),
+			`The attempt to critique, by ${c.target.author}:\n${describeAttempt(c.target, true)}`,
+			...(c.others?.length ? ["Other attempts of the team, for comparison:\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n")] : []),
+			`Write your critique to ${c.target.author}: the concrete bugs or wrong ideas (with the line or construct), why the failing cases fail, what is too slow and why, and a precise fix for each point. If it is correct, say what would make it faster or simpler. If the approach cannot work, say so and name a better one. At most 12 short points, no code blocks longer than 5 lines. Plain text.`,
+		].join("\n\n"),
+	};
+}
+
+/** One critique of a teammate's attempt (text) with the model label and the call's usage. */
+export async function llmCritique(c: { task: Task; agent: number; target: Attempt; others?: Attempt[]; notes?: Note[]; model?: string }): Promise<{ text: string; model: string; usage?: Usage }> {
+	const p = critiquePrompt(c);
+	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 900);
+	const clean = text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim(); // keeps line breaks: a critique is a list of points
+	return { text: clean.length > 2500 ? clean.slice(0, 2499) + "…" : clean, model, usage };
 }
 
 /** Pull the program out of a model answer: the first fenced block, else the whole text. */

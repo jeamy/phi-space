@@ -2,7 +2,7 @@
 // explains the field in full.
 import type { Lang } from "./theme.ts";
 
-export type TipId = "task" | "fn" | "prompt" | "cases" | "verify" | "timeout" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
+export type TipId = "task" | "fn" | "prompt" | "cases" | "verify" | "timeout" | "runmode" | "budget" | "agents" | "gens" | "per" | "polish" | "contenders" | "start" | "code" | "board" | "standings" | "best";
 type Tip = { text: Record<Lang, string>; article: string; anchor: string };
 
 export const TIPS: Record<TipId, Tip> = {
@@ -68,6 +68,20 @@ export const TIPS: Record<TipId, Tip> = {
 			en: "How many contributions each agent delivers per generation (1 to 3). More contributions cost model agents more calls.",
 		},
 		article: "help.topic.runs_and_contenders", anchor: "settings",
+	},
+	runmode: {
+		text: {
+			de: "Generationen: alle Agenten arbeiten gleichzeitig, dann sieht die nächste Runde die Ergebnisse. Auftragsbrett: Aufträge liegen im Space, jeder freie Agent nimmt den nächsten: Lösung schreiben, den Versuch eines anderen kritisieren, nach Kritik überarbeiten, zwei Teillösungen zusammenführen. Nur mit Modell-Agenten.",
+			en: "Generations: all agents work at once, then the next round sees the results. Work board: items lie in the space, every free agent takes the next one: write a solution, critique another's attempt, revise after critique, merge two partial solutions. Model agents only.",
+		},
+		article: "help.topic.runs_and_contenders", anchor: "board",
+	},
+	budget: {
+		text: {
+			de: "Obergrenze für die Modellaufrufe eines Laufs, in Tokens und/oder Dollar (Listenpreis). Was zuerst erreicht ist, beendet den Lauf. Leer: kein Limit (die übrigen Grenzen gelten weiter).",
+			en: "Upper bound for a run's model calls, in tokens and/or dollars (list price). Whichever is reached first ends the run. Empty: no limit (the other limits still apply).",
+		},
+		article: "help.topic.runs_and_contenders", anchor: "board",
 	},
 	polish: {
 		text: {
