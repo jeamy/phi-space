@@ -6,7 +6,10 @@
 //   revise     the attempt rewritten with that critique                                         -> verdict -> critique
 //   merge      two failing attempts that pass different cases, combined                        -> verdict -> critique
 //
-// A critique is never written by the attempt's own author. The run ends when the task is solved and the improvement
+// A critique is never written by the attempt's own author, and a revision never by the critic: three agents take part.
+// Critiques go to the critic model first (`criticModel`, e.g. haiku) when one of the agents runs it; others take them
+// only after a short wait. An agent hands in and takes the next item at once: the follow-ups of a contribution come
+// when its verdict does, so a slow verdict (a 600 s time limit) blocks nobody. The run ends when the task is solved and the improvement
 // rounds are used, when the budget or the item cap is reached, on Stop, or when no work is left.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import type { Attempt, CritiqueRef, Note, Role, Usage } from "./llm.ts";
@@ -24,6 +27,10 @@ export type BoardInfo = { open: number; done: number; critiques: number };
 export type BoardDeps = {
 	space: SpaceLike; session: string; blockId: string; runId: string; ttl: number;
 	task: () => Task; agents: number; contenders: string[]; lang: "de" | "en";
+	/** The model label critiques go to first (when an agent runs it); undefined: anyone. */
+	criticModel?: string;
+	/** How long a critique waits for the critic model before others may take it (ms). */
+	criticWaitMs?: number;
 	/** Improvement rounds after the first solution, per agent. */
 	polish: number; maxItems: number; maxDepth: number;
 	contribute: (c: { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; critique?: CritiqueRef; partner?: Attempt }) => Promise<{ source: string; model: string; note?: string; usage?: Usage }>;
@@ -49,7 +56,8 @@ const passing = (a: Attempt) => new Set((a.cases ?? []).filter((c) => c.ok).map(
 
 export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	const itemsTmpl = { type: "WorkItem", fields: { session: d.session, runId: d.runId } };
-	let created = 0, done = 0, critiques = 0, busy = 0, seq = 0, capped = false, end: BoardEnd | null = null;
+	let created = 0, done = 0, critiques = 0, busy = 0, pending = 0, seq = 0, capped = false, end: BoardEnd | null = null;
+	const criticAt = d.criticModel && d.contenders.includes(d.criticModel) ? d.criticModel : undefined;
 	let improveLeft = d.polish * d.agents; // improvement critiques once the task is solved
 	const merged = new Set<string>();
 	const report = async () => d.progress({ open: await d.space.count(itemsTmpl), done, critiques });
@@ -62,12 +70,14 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		await d.space.write({ type: "WorkItem", fields: item as never }, null, d.ttl);
 	};
 
-	/** The next item this agent may do (FIFO; never a critique of its own attempt), taken out of the space. */
-	const claim = async (me: string): Promise<WorkItem | null> => {
+	/** The next item this agent may do (FIFO; never a critique of its own attempt, never a revision of its own
+	 *  critique; a young critique waits for the critic model), taken out of the space. */
+	const claim = async (me: string, model: string): Promise<WorkItem | null> => {
 		const rows = (await d.space.readAll(itemsTmpl, { limit: 500 })).sort((a, b) => Number((a.fields as WorkItem).ts) - Number((b.fields as WorkItem).ts));
 		for (const e of rows) {
 			const it = e.fields as unknown as WorkItem;
 			if (it.notBy === me) continue;
+			if (it.kind === "critique" && criticAt && model !== criticAt && Date.now() - it.ts < (d.criticWaitMs ?? 20_000)) continue;
 			if (await d.space.take({ id: e.id }, NO_WAIT)) return it;
 		}
 		return null;
@@ -76,7 +86,7 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	/** What follows a verdict: a critique of the attempt (by someone else), and a merge when another failing attempt
 	 *  passes other cases; once the task is solved, only as many improvement critiques as the rounds allow. */
 	const followUp = async (a: Attempt | null, depth: number) => {
-		if (!a) return;
+		if (!a || end) return; // a verdict after the run ended starts nothing
 		if (a.ok || d.solved()) { // a correct verdict counts as solved at once (the hub's best may lag a moment)
 			if (a.ok && improveLeft > 0) { improveLeft--; await spawn("critique", depth + 1, { target: a.candidateId, notBy: a.author, improve: true }); }
 			return;
@@ -104,7 +114,7 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 			const critiqueId = `${it.itemId}-c`;
 			await d.space.write({ type: "CodeCritique", fields: { session: d.session, blockId: d.blockId, runId: d.runId, critiqueId, target: target.candidateId, addressedTo: target.author, author: me, via: c.model, text: c.text, ts: Date.now(), ...(c.usage ? { usage: c.usage } : {}) } as never }, null, d.ttl);
 			critiques++;
-			await spawn("revise", it.depth + 1, { target: target.candidateId, critiqueId, ...(it.improve ? { improve: true } : {}) });
+			await spawn("revise", it.depth + 1, { target: target.candidateId, critiqueId, notBy: me, ...(it.improve ? { improve: true } : {}) });
 			return;
 		}
 		let role: Role = "explore", target: Attempt | null = null, partner: Attempt | undefined, critique: CritiqueRef | undefined;
@@ -122,7 +132,9 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		if (!d.spend(c.usage)) return;
 		const candidateId = await d.enqueue(me, c.model, gen, c.source, { role, ...(target ? { basedOn: target.candidateId } : {}), ...(partner ? { partner: partner.candidateId } : {}), ...(it.critiqueId ? { critiqueId: it.critiqueId } : {}), ...(c.usage ? { usage: c.usage } : {}) });
 		if (c.note) await d.note(me, c.model, gen, c.note, candidateId);
-		await followUp(await d.verdict(candidateId), it.depth);
+		// the follow-ups come with the verdict; this agent goes on to the next item meanwhile
+		pending++;
+		void d.verdict(candidateId).then((v) => followUp(v, it.depth)).catch((e) => console.error("[board] follow-up failed", (e as Error).message)).finally(() => { pending--; void report(); });
 	};
 
 	// the first items: critiques of the closest attempts the block already has, the rest new approaches
@@ -137,9 +149,9 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		const me = `agent-${a}`;
 		while (!end) {
 			if (d.stopped()) { end = "stopped"; break; }
-			const it = await claim(me);
+			const it = await claim(me, d.contenders[a % d.contenders.length]!);
 			if (!it) {
-				if (busy === 0 && (await d.space.count(itemsTmpl)) === 0) { end ??= d.solved() ? "solved" : capped ? "items" : "idle"; break; }
+				if (busy === 0 && pending === 0 && (await d.space.count(itemsTmpl)) === 0) { end ??= d.solved() ? "solved" : capped ? "items" : "idle"; break; }
 				await pause(300);
 				continue;
 			}
@@ -152,6 +164,8 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		}
 	};
 	await Promise.all(Array.from({ length: d.agents }, (_, a) => worker(a)));
+	// verdicts still on their way (after a stop or at the budget): their follow-ups are not wanted any more
+	for (let i = 0; pending > 0 && i < 50; i++) await pause(100);
 	// what is left on the board belongs to no run any more
 	while (await d.space.take(itemsTmpl, NO_WAIT));
 	await report();

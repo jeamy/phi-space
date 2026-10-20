@@ -5,6 +5,7 @@
 // ranking and best code on the right follow the block that is open or clicked. All text is rendered as React text
 // nodes: agent code is untrusted data and never becomes markup.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AdminPanel } from "./AdminPanel.tsx";
 import { HelpTip } from "./HelpTip.tsx";
 import { ThemeControls } from "./ThemeControls.tsx";
 import { parseCases } from "./lib/cases.ts";
@@ -555,6 +556,7 @@ export function CodemodeChat() {
 						<textarea rows={7} spellCheck={false} placeholder={current ? `function ${current.task.fn}(...) { ... }` : ""} value={code} onChange={(e) => setCode(e.target.value)} />
 						<div className="row"><button className="btn btn--primary" disabled={!current} title={current ? undefined : t.noTaskYet} onClick={() => { const source = code; setCode(""); void act("/code", { author: name, source }); }}>{t.submit}</button></div>
 					</div>
+					<AdminPanel lang={lang} onChanged={() => { api<Llm>("/llm").then(setLlm).catch(() => {}); }} />
 				</aside>
 				<section>
 					<span className="eyebrow">{t.eyebrow}</span>

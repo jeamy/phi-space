@@ -18,11 +18,39 @@ const slotWaiters: Array<() => void> = [];
 
 export type LlmInfo = { enabled: boolean; on: boolean; current: string | null; models: { id: string; label: string }[] };
 
+/** The models an admin allowed (labels `provider/id`); null: the default choice below. */
+let allowedLabels: Set<string> | null = null;
+const labelOf = (m: any) => `${m.provider}/${m.id}`;
+
+/** The models that may take part: what an admin allowed, else codestral-latest and the newest haiku. */
 const whitelist = (avail: readonly any[]): any[] => {
+	if (allowedLabels) return avail.filter((m) => allowedLabels!.has(labelOf(m)));
 	const codestral = avail.filter((m) => String(m.id).toLowerCase() === "codestral-latest");
 	const haiku = avail.filter((m) => String(m.id).toLowerCase().includes("haiku")).sort((a, b) => String(b.id).localeCompare(String(a.id)));
 	return [...codestral, ...(haiku.length ? [haiku[0]] : [])];
 };
+
+/** Sets the allowed models (labels; null: back to the default choice). The default model follows when it left the set. */
+export async function setAllowedModels(labels: string[] | null): Promise<void> {
+	allowedLabels = labels ? new Set(labels) : null;
+	const s = await sharedModel();
+	if (s && !whitelist([s.model]).length) {
+		const first = whitelist(await s.models.getAvailable())[0];
+		if (first) { s.model = first; s.label = labelOf(first); }
+	}
+}
+
+/** Every model with credentials, for the admin's choice: label, provider, id, name; and what is allowed now. */
+export async function adminModels(): Promise<{ enabled: boolean; on: boolean; models: Array<{ label: string; provider: string; id: string; name: string }>; allowed: string[]; custom: boolean }> {
+	const s = await sharedModel();
+	if (!s) return { enabled: false, on: false, models: [], allowed: [], custom: false };
+	const avail: any[] = await s.models.getAvailable();
+	return {
+		enabled: true, on, custom: allowedLabels !== null,
+		models: avail.map((m) => ({ label: labelOf(m), provider: String(m.provider), id: String(m.id), name: String(m.name ?? m.id) })).sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id)),
+		allowed: whitelist(avail).map(labelOf),
+	};
+}
 
 function sharedModel(): Promise<Shared | null> {
 	shared ??= (async () => {
@@ -144,7 +172,10 @@ export function critiquePrompt(c: { task: Task; agent: number; target: Attempt; 
 			...(hints.length ? ["Guidance from the people you work for (it outranks everything):\n" + hints.map((n) => `- ${n.author}: ${n.text}`).join("\n")] : []),
 			`The attempt to critique, by ${c.target.author}:\n${describeAttempt(c.target, true)}`,
 			...(c.others?.length ? ["Other attempts of the team, for comparison:\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n")] : []),
-			`Write your critique to ${c.target.author}: the concrete bugs or wrong ideas (with the line or construct), why the failing cases fail, what is too slow and why, and a precise fix for each point. If it is correct, say what would make it faster or simpler. If the approach cannot work, say so and name a better one. At most 12 short points, no code blocks longer than 5 lines. Plain text.`,
+			c.target.ok
+				? `This attempt PASSED every test case${t.check !== undefined ? " and the check rule" : ""}: it is correct by the team's standard. Do not claim it is wrong. Critique only what would make it faster or simpler (it took ${c.target.ms} ms), with a precise change for each point.`
+				: `The test results above are the ground truth: base every claim of a bug on a failing case or an error shown there, and do not invent bugs the tests do not show.`,
+			`Write your critique to ${c.target.author}: the concrete bugs or wrong ideas (with the line or construct), why the failing cases fail, what is too slow and why, and a precise fix for each point. If the approach cannot work, say so and name a better one. At most 12 short points, no code blocks longer than 5 lines. Plain text.`,
 		].join("\n\n"),
 	};
 }
@@ -251,6 +282,13 @@ export async function verifierModel(): Promise<string | undefined> {
 	const wanted = (process.env.CODEMODE_VERIFIER_MODEL || "haiku").toLowerCase();
 	const m = whitelist(await s.models.getAvailable()).find((x) => String(x.id).toLowerCase().includes(wanted));
 	return m ? `${m.provider}/${m.id}` : undefined;
+}
+
+/** The model label critiques go to first on the work board: CODEMODE_CRITIC_MODEL (part of the id, default "haiku"),
+ *  if one of `contenders` runs it. A weak critic sends the revisions the wrong way (seen in a live golomb run). */
+export function criticModel(contenders: string[]): string | undefined {
+	const wanted = (process.env.CODEMODE_CRITIC_MODEL || "haiku").toLowerCase();
+	return contenders.find((c) => c.toLowerCase().includes(wanted));
 }
 
 /** The verifier agent: a check rule for a custom task, written by verifierModel() (or `model`). */

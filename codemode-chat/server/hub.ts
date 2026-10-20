@@ -10,10 +10,10 @@
 // carries how many cases passed and what each case returned, so agents can build on attempts that got close: a run is
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-import { NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, limitOf, MAX_SOURCE_CHARS, maxTimeoutMs, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { customSpec, customTask, expectedOf, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
-import { addUsage, clipWords, llmContribution, llmCritique, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
+import { addUsage, clipWords, criticModel, llmContribution, llmCritique, setAllowedModels, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
@@ -669,7 +669,7 @@ export class CodeChatHub {
 				if (board) {
 					const end: BoardEnd = await runBoard({
 						space: this.host, session: s.id, blockId, runId: `r${Date.now().toString(36)}`, ttl: this.#ttl,
-						task: () => s.task, agents, contenders, lang: o.lang ?? "en", polish, maxItems: Math.max(12, agents * gens * 4), maxDepth: LIMITS.boardDepth,
+						task: () => s.task, agents, contenders, lang: o.lang ?? "en", polish, criticModel: criticModel(contenders), maxItems: Math.max(12, agents * gens * 4), maxDepth: LIMITS.boardDepth,
 						contribute: (c) => this.#llm.contribute(c), critique: (c) => this.#llm.critique!(c),
 						enqueue: (author, via, gen, source, lineage) => this.#enqueue(s, author, via, gen, source, lineage),
 						verdict: (candidateId) => this.#verdict(s, candidateId),
@@ -800,6 +800,20 @@ export class CodeChatHub {
 		if (!(await this.#taskEntries(id)).some((f) => String(f.blockId ?? `t${f.ts}`) === blockId)) throw new Error("Unknown task block");
 		await this.#addNote(s, blockId, by, "human", s.run?.active && s.run.blockId === blockId ? s.run.gen : 0, text, true);
 		this.push(s);
+	}
+
+	/** The admin's choice of models, kept in the space (CodeAdmin) so it outlives a restart; null: the default choice. */
+	async saveAllowedModels(labels: string[] | null): Promise<void> {
+		while (await this.host.take({ type: "CodeAdmin", fields: { key: "models" } }, NO_WAIT));
+		if (labels) await this.host.write({ type: "CodeAdmin", fields: { key: "models", allowed: labels, ts: Date.now() } }, null, FOREVER);
+		await setAllowedModels(labels);
+	}
+
+	/** Applies the stored admin choices (at start). */
+	async restoreAdmin(): Promise<void> {
+		const e = await this.host.readIfExists({ type: "CodeAdmin", fields: { key: "models" } }, NO_WAIT);
+		const allowed = (e?.fields as { allowed?: unknown } | undefined)?.allowed;
+		await setAllowedModels(Array.isArray(allowed) ? allowed.map(String) : null);
 	}
 
 	async stopRun(id: string): Promise<void> { const s = await this.session(id); s.abort = true; this.push(s); }

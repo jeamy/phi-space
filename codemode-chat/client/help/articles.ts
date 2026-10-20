@@ -580,7 +580,7 @@ Setze \`CODEMODE_CHAT_LLM=1\` und sorge für Zugangsdaten: Umgebungsvariablen de
 
 ## Erlaubte Modelle {#models}
 
-Wählbar sind nur \`codestral-latest\` (Mistral) und das neueste Haiku, sofern verfügbar. In der Kopfzeile steht die Zahl der verfügbaren Modelle; ausgewählt wird im Lauf-Panel unter **Teilnehmer** (Mehrfachauswahl). \`CODEMODE_CHAT_MODEL\` wählt per Teilname das Standardmodell.
+Welche Modelle mitarbeiten dürfen, legt der Betreiber im **Admin-Panel** links unten fest: Anmeldung mit dem Admin-Token (\`CODEMODE_ADMIN_TOKEN\`), dann Modell-Agenten an/aus und alle Modelle mit Zugangsdaten, nach Anbieter gruppiert. Das Kästchen eines Anbieters wählt alle seine Modelle, darunter lassen sich einzelne an- und abwählen; **Speichern** übernimmt die Auswahl dauerhaft (sie liegt im Space und übersteht einen Neustart), **Standard** kehrt zur Grundeinstellung zurück: \`codestral-latest\` (Mistral) und das neueste Haiku. In der Kopfzeile steht die Zahl der erlaubten Modelle; ausgewählt wird im Lauf-Panel unter **Teilnehmer** (Mehrfachauswahl). \`CODEMODE_CHAT_MODEL\` wählt per Teilname das Standardmodell, \`CODEMODE_VERIFIER_MODEL\` das des Prüfer-Agenten und \`CODEMODE_CRITIC_MODEL\` das, das im Auftragsbrett zuerst kritisiert (beide Standard \`haiku\`).
 
 ## Grenzen {#limits}
 
@@ -614,7 +614,7 @@ Set \`CODEMODE_CHAT_LLM=1\` and provide credentials: the provider's environment 
 
 ## Allowed models {#models}
 
-Only \`codestral-latest\` (Mistral) and the newest Haiku can be chosen, where available. The header shows the number of available models; you pick in the run panel under **Contenders** (multi-select). \`CODEMODE_CHAT_MODEL\` selects the default model by a part of its name.
+Which models may work is set by the operator in the **admin panel** at the bottom left: sign in with the admin token (\`CODEMODE_ADMIN_TOKEN\`), then model agents on/off and every model with credentials, grouped by provider. A provider's box selects all of its models, below it single models can be ticked; **Save** keeps the choice (it lives in the space and survives a restart), **Default** returns to the basic setting: \`codestral-latest\` (Mistral) and the newest Haiku. The header shows the number of allowed models; you pick in the run panel under **Contenders** (multi-select). \`CODEMODE_CHAT_MODEL\` selects the default model by a part of its name, \`CODEMODE_VERIFIER_MODEL\` the verifier agent's and \`CODEMODE_CRITIC_MODEL\` the one that critiques first on the work board (both default \`haiku\`).
 
 ## Limits {#limits}
 
@@ -940,6 +940,8 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`POST /api/sessions/:id/code\` | Code einreichen: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | Block löschen: \`{blockId}\` |
 | \`POST /api/sessions/:id/veto\` | Beitrag abwerten: \`{candidateId, by, reason}\`; mit \`undo: true\` zurücknehmen |
+| \`GET /api/admin/session\` · \`POST /api/admin/login\` · \`POST /api/admin/logout\` | Admin-Anmeldung mit \`{token}\` (HttpOnly-Cookie; Änderungen brauchen zusätzlich den Header \`x-codemode-admin: 1\`) |
+| \`GET\`/\`POST /api/admin/models\` | alle Modelle mit Zugangsdaten und die erlaubten; \`{allowed: [labels] | null, on?}\` speichert die Auswahl |
 | \`POST /api/sessions/:id/hint\` | Hinweis ans Team eines Blocks: \`{blockId?, text, by}\` (Standard: aktiver Block) |
 
 ## WebSocket {#websocket}
@@ -989,6 +991,8 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`POST /api/sessions/:id/code\` | hand in code: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | delete a block: \`{blockId}\` |
 | \`POST /api/sessions/:id/veto\` | reject a contribution: \`{candidateId, by, reason}\`; \`undo: true\` withdraws it |
+| \`GET /api/admin/session\` · \`POST /api/admin/login\` · \`POST /api/admin/logout\` | admin sign-in with \`{token}\` (HttpOnly cookie; changes also need the header \`x-codemode-admin: 1\`) |
+| \`GET\`/\`POST /api/admin/models\` | every model with credentials and the allowed ones; \`{allowed: [labels] | null, on?}\` saves the choice |
 | \`POST /api/sessions/:id/hint\` | a hint to the team of a block: \`{blockId?, text, by}\` (default: the active block) |
 
 ## WebSocket {#websocket}

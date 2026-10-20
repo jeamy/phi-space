@@ -275,3 +275,10 @@ main > * { min-width: 0; }
   .check input { width: 18px; height: 18px; }
 }
 #rmode { min-width: 0; max-width: 100%; }
+
+/* admin panel: model choice grouped by provider */
+.admin__badge { font-size: 11px; color: var(--accent); margin-left: 6px; letter-spacing: 0; }
+.admin__models { max-height: 320px; overflow: auto; margin: 6px 0; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.admin__models details { padding: 2px 0; }
+.admin__models summary { cursor: pointer; display: flex; gap: 6px; align-items: center; padding: 4px 0; }
+.admin__model { padding-left: 22px; font-size: 13px; overflow-wrap: anywhere; }

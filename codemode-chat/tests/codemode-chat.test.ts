@@ -935,3 +935,51 @@ t("the budget ends a run: whichever of tokens or dollars is reached first", asyn
 		assert.ok(gens.run.usage.costUsd >= 0.02 && gens.run.gen < 10, `gen ${gens.run.gen}`);
 	} finally { await srv.close(); }
 });
+
+t("work board: critiques go to the critic model first, and the critic never revises its own critique", async () => {
+	const critics: string[] = [];
+	const llm = {
+		models: async () => ["fake/weak", "fake/haiku-strong"],
+		contribute: async (c: any) => ({ source: c.role === "revise" ? "function double(x){ return x * 2 }" : "function double(x){ return x + 2 }", model: c.model }),
+		critique: async (c: any) => { critics.push(c.model); return { text: "multiply", model: c.model }; },
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/brd3/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
+		const snap = await boardRun(srv, "brd3", { agents: 4, contenders: ["fake/weak", "fake/haiku-strong"] });
+		assert.ok(critics.length >= 1 && critics.every((m) => m === "fake/haiku-strong"), critics.join(","));
+		const cs = snap.blocks.at(-1).contributions;
+		for (const r of cs.filter((c: any) => c.role === "revise")) assert.notEqual(r.author, r.critiqueBy, "the reviser is not the critic");
+		assert.ok(snap.blocks.at(-1).best);
+	} finally { await srv.close(); }
+});
+
+// ---- admin panel: login with the token, the choice of models ----
+
+t("admin panel: login with the token sets an HttpOnly cookie; the model choice needs it (and the header) and is kept", async () => {
+	process.env.CODEMODE_ADMIN_TOKEN = "panel-secret";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const get = async (path: string, cookie = "") => fetch(srv.url + path, { headers: cookie ? { cookie } : {} });
+		assert.deepEqual(await (await get("/api/admin/session")).json(), { admin: false, available: true });
+		assert.equal((await post(srv.url, "/api/admin/login", { token: "wrong" })).status, 403);
+		const r = await fetch(srv.url + "/api/admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "panel-secret" }) });
+		const setCookie = r.headers.get("set-cookie") ?? "";
+		assert.match(setCookie, /^codemode_admin=[0-9a-f]{48}; Path=\/; HttpOnly; SameSite=Strict/);
+		const cookie = setCookie.split(";")[0]!;
+		assert.deepEqual(await (await get("/api/admin/session", cookie)).json(), { admin: true, available: true });
+		assert.equal((await get("/api/admin/models", cookie)).status, 200);
+		assert.equal((await get("/api/admin/models")).status, 403); // no cookie
+		const postAs = (body: unknown, headers: Record<string, string>) => fetch(srv.url + "/api/admin/models", { method: "POST", headers: { "content-type": "application/json", cookie, ...headers }, body: JSON.stringify(body) });
+		assert.equal((await postAs({ allowed: null }, {})).status, 403); // the cookie alone is not enough for a change
+		assert.equal((await postAs({ allowed: null }, { "x-codemode-admin": "1" })).status, 200);
+		assert.equal((await postAs({ allowed: ["nope/model"] }, { "x-codemode-admin": "1" })).status, 400);
+		// the choice outlives a restart: it is an entry in the space
+		await srv.hub.saveAllowedModels(["anthropic/claude-haiku-4-5"]);
+		assert.deepEqual(((await srv.hub.host.readIfExists({ type: "CodeAdmin", fields: { key: "models" } }, 0)) as any).fields.allowed, ["anthropic/claude-haiku-4-5"]);
+		await srv.hub.saveAllowedModels(null);
+		assert.equal(await srv.hub.host.readIfExists({ type: "CodeAdmin", fields: { key: "models" } }, 0), null);
+		await fetch(srv.url + "/api/admin/logout", { method: "POST", headers: { cookie } });
+		assert.deepEqual(await (await get("/api/admin/session", cookie)).json(), { admin: false, available: true });
+	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
+});

@@ -6,7 +6,7 @@
 //      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
 //      CODEMODE_TTL_HOURS (lifetime of a room's entries in hours, default 24; 0 = until the block is deleted).
 import http from "node:http";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -19,7 +19,7 @@ import { spaces, startService } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
 import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { CodeChatHub, type LlmApi } from "./hub.ts";
-import { llmInfo, setLlm } from "./llm.ts";
+import { adminModels, llmInfo, setLlm } from "./llm.ts";
 import { remoteJudgeSpace } from "./shard.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
@@ -47,13 +47,20 @@ function quota(perMin: number): (ip: string) => boolean {
 	};
 }
 
-/** Constant-time check of the admin token; without a configured token nobody is admin. */
-function isAdmin(req: http.IncomingMessage): boolean {
-	const want = process.env.CODEMODE_ADMIN_TOKEN, got = req.headers["x-admin-token"];
+/** Constant-time check of a presented admin token; without a configured token nobody is admin. */
+function tokenOk(got: unknown): boolean {
+	const want = process.env.CODEMODE_ADMIN_TOKEN;
 	if (!want || typeof got !== "string") return false;
 	const h = (v: string) => createHash("sha256").update(v).digest();
 	return timingSafeEqual(h(want), h(got));
 }
+
+const ADMIN_COOKIE = "codemode_admin";
+const ADMIN_TTL_MS = 12 * 3600_000;
+const cookieOf = (req: http.IncomingMessage, name: string): string | undefined => {
+	for (const part of String(req.headers.cookie ?? "").split(";")) { const i = part.indexOf("="); if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim(); }
+	return undefined;
+};
 
 export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean; llm?: LlmApi } = {}) {
 	const cm = await loadCodemode();
@@ -66,6 +73,7 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	const remoteSpec = o.remote === undefined ? process.env.CODEMODE_REMOTE : o.remote;
 	const hub = new CodeChatHub(harness, cm, remoteSpec ? { remote: remoteJudgeSpace(remoteSpec), remoteLabel: process.env.CODEMODE_REMOTE_NAME ?? "nano", ...(o.llm ? { llm: o.llm } : {}) } : (o.llm ? { llm: o.llm } : {}));
 	if (remoteSpec) console.log(`[codemode] judge shard configured: ${remoteSpec}`);
+	await hub.restoreAdmin(); // the admin's choice of models from before
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
 	let nextUpgrade: ((req: http.IncomingMessage, socket: any, head: Buffer) => void) | null = null;
@@ -79,6 +87,16 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 
 	const allowed = quota(Number(process.env.CODEMODE_REQ_PER_MIN ?? 120));
 	const runsByIp = new Map<string, number>(); // ▶ runs in flight per client: one at a time
+	// admin sessions after a login with the token (HttpOnly cookie); a POST with the cookie must also carry the header
+	// x-codemode-admin (a cross-site form cannot set it), or the token itself as x-admin-token (scripts, tests)
+	const adminSessions = new Map<string, number>();
+	const loginTries = quota(10);
+	const isAdmin = (req: http.IncomingMessage): boolean => {
+		if (tokenOk(req.headers["x-admin-token"])) return true;
+		const sid = cookieOf(req, ADMIN_COOKIE), until = sid ? adminSessions.get(sid) : undefined;
+		if (!sid || !until || until < Date.now()) { if (sid) adminSessions.delete(sid); return false; }
+		return req.method === "GET" || req.headers["x-codemode-admin"] === "1";
+	};
 	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
 	const readBody = (req: http.IncomingMessage) => new Promise<Record<string, any>>((ok, fail) => {
 		let n = 0; const parts: Buffer[] = [];
@@ -100,6 +118,38 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				// switching the model agents is an operator action, not a visitor's
 				if (!isAdmin(req)) return json(res, 403, { error: "Admin token required" });
 				return json(res, 200, await setLlm(await readBody(req)));
+			}
+			// ---- admin panel: login with the token, then the choice of models ----
+			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: isAdmin(req), available: !!process.env.CODEMODE_ADMIN_TOKEN });
+			if (p === "/api/admin/login" && req.method === "POST") {
+				if (!loginTries(clientIp(req))) return json(res, 429, { error: "Too many login attempts; retry in a minute" });
+				if (!tokenOk((await readBody(req)).token)) return json(res, 403, { error: "Wrong admin token" });
+				const sid = randomBytes(24).toString("hex");
+				adminSessions.set(sid, Date.now() + ADMIN_TTL_MS);
+				const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
+				res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "set-cookie": `${ADMIN_COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${ADMIN_TTL_MS / 1000}${secure}` });
+				return res.end(JSON.stringify({ admin: true }));
+			}
+			if (p === "/api/admin/logout" && req.method === "POST") {
+				const sid = cookieOf(req, ADMIN_COOKIE);
+				if (sid) adminSessions.delete(sid);
+				res.writeHead(200, { "content-type": "application/json; charset=utf-8", "set-cookie": `${ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` });
+				return res.end(JSON.stringify({ admin: false }));
+			}
+			if (p === "/api/admin/models") {
+				if (!isAdmin(req)) return json(res, 403, { error: "Admin login required" });
+				if (req.method === "POST") {
+					const b = await readBody(req);
+					if (b.allowed !== null && !Array.isArray(b.allowed)) return json(res, 400, { error: "allowed: a list of model labels, or null for the default" });
+					if (Array.isArray(b.allowed)) {
+						const known = new Set((await adminModels()).models.map((m) => m.label));
+						const unknown = (b.allowed as unknown[]).map(String).filter((l) => !known.has(l));
+						if (unknown.length) return json(res, 400, { error: `Unknown models: ${unknown.slice(0, 5).join(", ")}` });
+					}
+					await hub.saveAllowedModels(b.allowed === null ? null : (b.allowed as unknown[]).map(String));
+					if (typeof b.on === "boolean") await setLlm({ on: b.on });
+				}
+				return json(res, 200, await adminModels());
 			}
 			const src = /^\/api\/sessions\/([^/]+)\/source\/([^/]+)$/.exec(p);
 			if (src && req.method === "GET") {
