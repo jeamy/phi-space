@@ -1110,3 +1110,36 @@ test("text prompts mark the question and the answer as data, and the judge parse
 	assert.deepEqual(parseJudgement("garbage", ["mentions A"]).map((r) => [r.pass, r.reason]), [[false, "no verdict"]]);
 	assert.ok(teamPrompt({ task, lang: "en", agent: 0, gen: 0 }).user.includes("C1. mentions A"));
 });
+
+test("a judge's PASS counts only with a quote that is in the answer", async () => {
+	const { parseJudgement } = await import("../server/llm.ts");
+	const answer = "Die Luft besteht aus **kleinen Molekülen**, die das Licht streuen.\nBlaues Licht hat kürzere Wellen.";
+	const crit = ["scattering", "nitrogen", "wavelength", "both"];
+	const r = parseJudgement([
+		`C1: PASS - „Die Luft besteht aus kleinen Molekülen“ - explains scattering`,
+		`C2: PASS - "Stickstoff und Sauerstoff streuen" - names the gases`,
+		`C3: PASS - names the wavelength`,
+		`C4: PASS - "die das Licht streuen … kürzere Wellen" - both points`,
+	].join("\n"), crit, answer);
+	assert.deepEqual(r.map((x) => x.pass), [true, false, false, true]);
+	assert.match(r[1]!.reason, /^quote not in the answer/);
+	assert.match(r[2]!.reason, /^no quote/);
+	assert.equal(parseJudgement(`C1: PASS - "Blau" - too short`, ["x"], answer)[0]!.pass, false);
+	assert.equal(parseJudgement("C1: PASS - fine", ["x"])[0]!.pass, true); // without the answer: the verdict as written
+});
+
+test("a text answer loses a code fence around it all and keeps the NOTE apart", async () => {
+	const { extractAnswer } = await import("../server/llm.ts");
+	assert.equal(extractAnswer("```text\n# Titel\n\nText.\n```\nNOTE: hi"), "# Titel\n\nText.");
+	assert.equal(extractAnswer("```markdown\nText.\nNOTE: inside\n```"), "Text.");
+	assert.equal(extractAnswer("Before\n```js\nx\n```\nAfter"), "Before\n```js\nx\n```\nAfter");
+});
+
+test("text prompts ask for the finished answer, and judges for quotes", async () => {
+	const { judgePrompt, teamPrompt } = await import("../server/llm.ts");
+	const { textTask } = await import("../server/tasks.ts");
+	const task = textTask({ prompt: "Explain X.", criteria: ["mentions A"] });
+	const answer = { candidateId: "a1", author: "agent-0", via: "m", gen: 1, ok: false, ms: null, source: "A.", passed: 0, total: 1 };
+	assert.match(teamPrompt({ task, lang: "en", agent: 0, gen: 0 }).user, /FINISHED answer.*not an outline/);
+	assert.match(judgePrompt({ task, agent: 1, answer }).user, /A PASS needs a quote/);
+});

@@ -682,7 +682,7 @@ export function CodemodeChat() {
 							<div className="panel">
 								<h2>{t.acceptedAnswer}</h2>
 								{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
-								{(() => { const a = focusBlock.contributions.find((c) => c.ok && !c.vetoed); return a ? <AnswerBlock key={a.candidateId} sid={sid} c={a} t={t} /> : <div className="empty">{t.noAccepted}</div>; })()}
+								{(() => { const ok = focusBlock.contributions.filter((c) => c.ok && !c.vetoed), a = ok.find((c) => c.acceptedBy === "human") ?? [...ok].sort((x, y) => y.ts - x.ts)[0]; return a ? <AnswerBlock key={a.candidateId} sid={sid} c={a} t={t} /> : <div className="empty">{t.noAccepted}</div>; })()}
 							</div>
 						</>
 					) : (<>
