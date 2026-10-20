@@ -1010,3 +1010,27 @@ t("work board planning round: every agent proposes, everyone rates the others, t
 		assert.ok(b.messages.some((m: any) => /with a planning round/.test(m.text)));
 	} finally { await srv.close(); }
 });
+
+t("a room full of long plans stays below the frame limit: plan texts ride along for the active block only", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const H = 3_600_000, now = Date.now(), text = "plan ".repeat(300);
+		// written before the room is loaded: the newest block (bp58) becomes the active one
+		await srv.hub.host.write({ type: "CodeRoom", fields: { session: "plans1", ts: now } } as never, null, H);
+		for (let b = 0; b < 59; b++) {
+			await srv.hub.host.write({ type: "CodeTask", fields: { session: "plans1", blockId: `bp${b}`, taskId: "gcd", ts: now + b } } as never, null, H);
+			for (let i = 0; i < 8; i++) await srv.hub.host.write({ type: "CodeProposal", fields: { session: "plans1", blockId: `bp${b}`, runId: "r", proposalId: `p${b}-${i}`, author: `agent-${i}`, via: "m/x", text, ts: now + i } } as never, null, H);
+		}
+		const ws = new WebSocket(srv.url.replace("http", "ws") + "/ws/plans1");
+		const frame = await new Promise<string>((ok, no) => { ws.onmessage = (e) => ok(String(e.data)); ws.onclose = () => no(new Error("closed")); });
+		ws.close();
+		assert.ok(Buffer.byteLength(frame) < 1_000_000, `frame ${Buffer.byteLength(frame)} bytes`); // all texts: about 1.8 MB
+		const snap = JSON.parse(frame);
+		assert.equal(snap.current, "bp58");
+		assert.equal(snap.blocks.filter((b: any) => b.plans?.length === 8).length, 59); // every block shows its plans
+		assert.deepEqual(snap.blocks.filter((b: any) => b.plans.some((p: any) => p.text)).map((b: any) => b.blockId), ["bp58"]);
+		const omitted = snap.blocks.find((b: any) => b.blockId === "bp3").plans[0];
+		assert.equal(omitted.textOmitted, true);
+		assert.equal(((await (await fetch(`${srv.url}/api/sessions/plans1/plan/${omitted.proposalId}`)).json()) as any).text, text);
+	} finally { await srv.close(); }
+});

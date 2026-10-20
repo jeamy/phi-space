@@ -151,6 +151,12 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				}
 				return json(res, 200, await adminModels());
 			}
+			const plan = /^\/api\/sessions\/([^/]+)\/plan\/([^/]+)$/.exec(p);
+			if (plan && req.method === "GET") {
+				if (!ID.test(plan[1]!) || !/^[a-z0-9-]{1,80}$/.test(plan[2]!)) return json(res, 400, { error: "Invalid id" });
+				const got = await hub.plan(plan[1]!, plan[2]!);
+				return got ? json(res, 200, got) : json(res, 404, { error: "Unknown plan" });
+			}
 			const src = /^\/api\/sessions\/([^/]+)\/source\/([^/]+)$/.exec(p);
 			if (src && req.method === "GET") {
 				if (!ID.test(src[1]!) || !CANDIDATE.test(src[2]!)) return json(res, 400, { error: "Invalid id" });

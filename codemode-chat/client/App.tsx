@@ -31,7 +31,18 @@ type Message = { author: string; text: string; ts: number; blockId?: string };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
 type Block = { blockId: string; ts: number; active: boolean; task: { id: string; fn: string; title: L; prompt: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[] };
 /** A proposal of a planning round: who, the team's average rating (1 to 5), how often it was implemented. */
-type Plan = { proposalId: string; author: string; via: string; text: string; score: number | null; votes: number; used: number; ts: number };
+type Plan = { proposalId: string; author: string; via: string; text: string; textOmitted?: true; score: number | null; votes: number; used: number; ts: number };
+
+/** One plan of a planning round; its text is fetched when unfolded if the snapshot left it out. */
+function PlanItem({ sid, p, t }: { sid: string; p: Plan; t: Tr }) {
+	const [text, setText] = useState<string | null>(null);
+	return (
+		<details className={p.used ? "plan plan--used" : "plan"} onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && p.textOmitted && text === null) api<{ text: string }>(`/sessions/${sid}/plan/${encodeURIComponent(p.proposalId)}`).then((x) => setText(x.text)).catch(() => setText("")); }}>
+			<summary><b>{p.author}</b> <span className="muted">({shortVia(p.via)})</span> · {t.planScore(p.score, p.votes)} · <span className="muted">{t.planUsed(p.used)}</span></summary>
+			<div className="plan__text">{p.textOmitted ? (text ?? "…") : p.text}</div>
+		</details>
+	);
+}
 type Snapshot = {
 	session: string; current: string; tasks: { id: string; title: L; fn: string; prompt: L }[]; blocks: Block[]; messages: Message[];
 	currentCustom?: { fn: string; prompt: string; cases: unknown[] };
@@ -276,12 +287,7 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 					{b.plans?.length ? (
 						<div className="plans">
 							<div className="notes__title">{t.plans}</div>
-							{b.plans.map((p) => (
-								<details key={p.proposalId} className={p.used ? "plan plan--used" : "plan"}>
-									<summary><b>{p.author}</b> <span className="muted">({shortVia(p.via)})</span> · {t.planScore(p.score, p.votes)} · <span className="muted">{t.planUsed(p.used)}</span></summary>
-									<div className="plan__text">{p.text}</div>
-								</details>
-							))}
+							{b.plans.map((p) => <PlanItem key={p.proposalId} sid={sid} p={p} t={t} />)}
 						</div>
 					) : null}
 					{b.active ? (

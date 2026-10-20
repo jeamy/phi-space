@@ -75,6 +75,14 @@ oder Stop gedrückt wird. Die Abwertung durch einen Menschen bleibt das letzte W
 - **Budget:** je Lauf in Tokens **und** Dollar; was zuerst erreicht ist, beendet den Lauf. Dazu Obergrenzen für Zahl
   und Tiefe der Aufträge.
 
+- **Text-Aufgaben (Stufe 3):** Kriterien sind ein optionales Feld; bleibt es leer, schreibt der Prüfer-Agent sie aus
+  der Frage, sichtbar im Block. Eine Antwort ist angenommen, wenn mindestens zwei Prüfer (nie der Autor, mindestens
+  einer von einem anderen Modell) jedes Kriterium als erfüllt bewerten, oder wenn ein Mensch 👍 „Passt“ gibt.
+  Unterbrechen geht auf drei Wegen: 👍 (angenommen, der Lauf endet), 👎 (abgewertet) und ■ (abbrechen); jeweils mit
+  optionaler Begründung, die als Notiz an die Agenten geht.
+- **Wiederverwendung:** Angenommene Antworten bleiben im Space. Bei einer neuen, ähnlichen Aufgabe bekommen die
+  Agenten sie als Material („früher angenommen, prüfe, ob es hier passt“).
+
 ## Stufen (jede einzeln getestet, mit Test-Modellen, eigener Commit)
 
 1. **Auftragsbrett** als neuer Laufmodus neben den Generationen, für Code-Aufgaben: `implement`, `critique`, `revise`,

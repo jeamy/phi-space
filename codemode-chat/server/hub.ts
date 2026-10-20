@@ -18,7 +18,7 @@ import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
-const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
+const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
 const SNAPSHOT_SOURCE_BYTES = 384 * 1024;
@@ -229,8 +229,8 @@ export class CodeChatHub {
 			this.#rcall((r) => r.readAll(cand, { limit: LIMITS.contributions })),
 			this.host.readAll({ type: "CodeNote", fields: { session: id } }, { limit: LIMITS.notes + 5 }),
 			this.host.readAll({ type: "CodeCritique", fields: { session: id } }, { limit: LIMITS.contributions }),
-			this.host.readAll({ type: "CodeProposal", fields: { session: id } }, { limit: 200 }),
-			this.host.readAll({ type: "CodeVote", fields: { session: id } }, { limit: 200 }),
+			this.host.readAll({ type: "CodeProposal", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
+			this.host.readAll({ type: "CodeVote", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
 		]);
 		// the planning rounds: every proposal with its average rating; contributions name the plan they followed
 		const voteScores = voteRows.map((e) => (e.fields as { scores?: Record<string, number> }).scores ?? {});
@@ -295,7 +295,8 @@ export class CodeChatHub {
 				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
 				...(spent.tokens > 0 ? { usage: spent } : {}),
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
-				...(plans.some((p) => p.blockId === blockId) ? { plans: plans.filter((p) => p.blockId === blockId).slice(-8).map(({ proposalId, author, via, text, score, votes, ts }) => ({ proposalId, author, via, text, score, votes, ts, used: contributions.filter((c) => c.proposalId === proposalId).length })) } : {}),
+				// plan texts ride along for the active block only (and not in the code-less fallback); others come with plan()
+				...(plans.some((p) => p.blockId === blockId) ? { plans: plans.filter((p) => p.blockId === blockId).slice(-8).map(({ proposalId, author, via, text, score, votes, ts }) => ({ proposalId, author, via, score, votes, ts, used: contributions.filter((c) => c.proposalId === proposalId).length, ...(withCode && blockId === s.blockId ? { text } : { text: "", textOmitted: true }) })) } : {}),
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));
 			return {
@@ -321,6 +322,24 @@ export class CodeChatHub {
 			if (e) return e.fields as Record<string, unknown>;
 		}
 		return null;
+	}
+
+	/** Keeps the room's plans and votes below the cap (the snapshot reads them all): the oldest give way. */
+	async #trimPlans(s: Session): Promise<void> {
+		for (const type of ["CodeProposal", "CodeVote"]) {
+			const tmpl = { type, fields: { session: s.id } };
+			const n = await this.host.count(tmpl);
+			if (n <= LIMITS.plans - LIMITS.agents) continue;
+			const rows = (await this.host.readAll(tmpl, { limit: n })).sort((a, b) => Number((a.fields as { ts: number }).ts) - Number((b.fields as { ts: number }).ts));
+			for (const e of rows.slice(0, n - (LIMITS.plans - LIMITS.agents))) await this.host.take({ id: e.id }, NO_WAIT);
+		}
+	}
+
+	/** The text of one plan (the snapshot carries plan texts for the active block only); null when it is gone. */
+	async plan(id: string, proposalId: string): Promise<{ text: string } | null> {
+		const s = await this.session(id);
+		const e = (await this.host.readAll({ type: "CodeProposal", fields: { session: s.id, proposalId } }, { limit: 1 }))[0];
+		return e ? { text: String((e.fields as { text?: unknown }).text ?? "") } : null;
 	}
 
 	/** The code of one contribution; null when it is gone. */
@@ -678,6 +697,7 @@ export class CodeChatHub {
 		void (async () => {
 			try {
 				if (board) {
+					await this.#trimPlans(s); // a planning round adds up to one proposal and one vote per agent
 					const end: BoardEnd = await runBoard({
 						space: this.host, session: s.id, blockId, runId: `r${Date.now().toString(36)}`, ttl: this.#ttl,
 						task: () => s.task, agents, contenders, lang: o.lang ?? "en", polish, criticModel: criticModel(contenders), maxItems: Math.max(12, agents * gens * 4), maxDepth: LIMITS.boardDepth,
