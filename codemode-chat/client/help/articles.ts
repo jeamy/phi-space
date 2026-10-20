@@ -140,7 +140,7 @@ Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
   | \`Eingabe: 3 4\` und darunter \`Ergebnis: 12\` | ein Fall aus zwei Zeilen |
   | \`4 -> 2 oder -2\` | mehrere richtige Ergebnisse, eines davon genügt |
 
-  Mehrere Fälle schreibst du untereinander, eine Zeile je Fall.
+  Mehrere Fälle schreibst du untereinander, eine Zeile je Fall. Fehlen in JSON die Kommas zwischen Werten (\`[0 1 6 10]\`), werden sie ergänzt; was wie JSON beginnt, aber nicht lesbar ist, ist ein Fehler und wird nie zum Text-Ergebnis. Unter dem Feld zeigt **„Verstanden:“**, wie die Fälle gelesen wurden, bevor die Aufgabe angelegt wird.
 
 Die Testfälle sind das **Orakel**: Ein Beitrag ist korrekt, wenn er für jeden Fall eines der erwarteten Ergebnisse liefert (Vergleich als JSON), oder, mit Prüfregel, wenn die Regel jedes Ergebnis annimmt (siehe [Mehrere richtige Ergebnisse](#check)). Die Agenten sehen die Fälle, also genau die Aufrufe und Ergebnisse. Gemessen wird die Zeit je Durchgang über alle Fälle: höchstens 300 Durchgänge oder etwa eine Sekunde, so dass auch langsame Funktionen gemessen und nicht abgebrochen werden.
 
@@ -207,7 +207,7 @@ Choose **"Custom task …"** in the dropdown. Three fields appear:
   | \`Input: 3 4\` and below it \`Result: 12\` | one case from two lines |
   | \`4 -> 2 or -2\` | several right results, one of them is enough |
 
-  Write several cases one below the other, one line per case.
+  Write several cases one below the other, one line per case. Commas left out between JSON values (\`[0 1 6 10]\`) are added; what starts like JSON but cannot be read is an error and never becomes a text result. Below the field, **"Understood:"** shows how the cases were read before the task is created.
 
 The test cases are the **oracle**: a contribution is correct if it returns one of the expected results for every case (compared as JSON), or, with a check rule, if the rule accepts every result (see [Several right results](#check)). The agents see the cases, i.e. exactly the calls and results. The time measured is per pass over all cases: at most 300 passes or about a second, so slow functions are timed, not cut off.
 

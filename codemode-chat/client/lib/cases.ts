@@ -11,6 +11,10 @@
 //   Eingabe: 5 11                      an input line alone: a call without a fixed result (for a task with a check rule)
 //
 // Labels such as Ergebnis/Result/Erwartet/Expected/Ausgabe/Output/Eingabe/Input are ignored.
+//
+// JSON with the commas left out between values ("[0 1 6 10]", {"args": [] "expect": 4}) is read with them. What starts
+// like JSON ("[" or "{") but cannot be read even so is an error, never a text result: a test case typed as JSON must not
+// silently become the expected string.
 
 export type Case = { args: unknown[]; expect?: unknown; expectAny?: unknown[] };
 
@@ -19,7 +23,34 @@ const INPUT = "eingabe|input|args?";
 const label = (kind: string) => new RegExp(`^\\s*(?:${kind})\\s*[:=]\\s*`, "i");
 const ARROW = /\s*(?:->|=>|→|⇒)\s*/;
 
-const json = (s: string): { ok: true; value: unknown } | { ok: false } => { try { return { ok: true, value: JSON.parse(s) }; } catch { return { ok: false }; } };
+/** The commas a person left out between JSON values, put back (outside strings): "[0 1 6]" → "[0,1,6]". */
+export function addCommas(s: string): string {
+	let out = "", inString = false, escaped = false;
+	for (let i = 0; i < s.length; i++) {
+		const c = s[i]!;
+		if (inString) { out += c; if (escaped) escaped = false; else if (c === "\\") escaped = true; else if (c === '"') inString = false; continue; }
+		if (/\s/.test(c)) {
+			let j = i; while (j < s.length && /\s/.test(s[j]!)) j++;
+			const prev = out.trimEnd().at(-1) ?? "", next = s[j] ?? "";
+			out += /[\d"\]}a-z]/.test(prev) && /[-\d"[{tfn]/.test(next) ? "," : " ";
+			i = j - 1;
+			continue;
+		}
+		if (c === '"') inString = true;
+		out += c;
+	}
+	return out;
+}
+
+const parse = (s: string): { ok: true; value: unknown } | { ok: false } => { try { return { ok: true, value: JSON.parse(s) }; } catch { return { ok: false }; } };
+/** JSON as typed, or with the left-out commas put back when it starts like JSON. */
+const json = (s: string): { ok: true; value: unknown } | { ok: false } => {
+	const j = parse(s);
+	return j.ok || !/^\s*[[{]/.test(s) ? j : parse(addCommas(s));
+};
+/** JSON that cannot be read is an error, not a text value. */
+const startsLikeJson = (s: string) => /^\s*[[{]/.test(s);
+const unreadable = (s: string): never => { throw new Error(`not readable as JSON: ${s.trim().slice(0, 60)}`); };
 /** {args, expect} or, for a task with a check rule, {args} alone. */
 const isCase = (v: unknown): v is Case => !!v && typeof v === "object" && !Array.isArray(v) && Array.isArray((v as Case).args);
 const isNumber = (tok: string) => tok !== "" && Number.isFinite(Number(tok));
@@ -31,6 +62,7 @@ function parseValue(raw: string): unknown {
 	const s = raw.trim();
 	const j = json(s);
 	if (j.ok) return j.value;
+	if (startsLikeJson(s)) unreadable(s);
 	const ws = words(s);
 	if (ws.length === 1) return token(ws[0]!);
 	if (ws.length > 1 && ws.every(isNumber)) return ws.map(Number);
@@ -54,11 +86,16 @@ function parseArgs(raw: string): unknown[] {
 	if (!s) return [];
 	const j = json(s);
 	if (j.ok) return [j.value];
+	if (startsLikeJson(s)) unreadable(s);
 	return words(s).map(token);
 }
 
-/** The cases, or null when nothing could be read. */
+/** The cases, or null when nothing could be read (also when something that starts like JSON cannot be read). */
 export function parseCases(text: string): Case[] | null {
+	try { return readCases(text); } catch { return null; }
+}
+
+function readCases(text: string): Case[] | null {
 	const t = text.trim();
 	if (!t) return null;
 	const j = json(t);

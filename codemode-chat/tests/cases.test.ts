@@ -48,3 +48,14 @@ test("empty input and comment lines", () => {
 	assert.equal(parseCases("# nothing"), null);
 	assert.deepEqual(parseCases("# note\n7 -> 49"), [{ args: [7], expect: 49 }]);
 });
+
+test("JSON with the commas left out is read with them; what starts like JSON but cannot be read is an error, not a text result", () => {
+	assert.deepEqual(parseCases('[{"args":[],"expect":[0 1 6 10 23 26 34 41 53 55]}]'), [{ args: [], expect: [0, 1, 6, 10, 23, 26, 34, 41, 53, 55] }]);
+	assert.deepEqual(parseCases("Ergebnis: [0 1 6 10]"), [{ args: [], expect: [0, 1, 6, 10] }]);
+	assert.deepEqual(parseCases("[3 1 2] -> [1 2 3]"), [{ args: [[3, 1, 2]], expect: [1, 2, 3] }]);
+	assert.deepEqual(parseCases('{"args": [] "expect": 4}'), [{ args: [], expect: 4 }]);
+	assert.deepEqual(parseCases('["hello world" "x"]'), [{ args: [], expect: ["hello world", "x"] }]); // strings keep their spaces
+	assert.equal(parseCases('[{"args":[],"expect":[0 1 6 10}]'), null); // broken brackets: an error, never the text as result
+	assert.equal(parseCases("Ergebnis: [0 1 6"), null);
+	assert.deepEqual(parseCases("hallo -> hello world"), [{ args: ["hallo"], expect: "hello world" }]); // plain text stays text
+});

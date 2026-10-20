@@ -806,3 +806,12 @@ t("the same custom task with another time limit changes the active block in plac
 		assert.equal(snap.currentCustom.fn, "f");
 	} finally { await srv.close(); }
 });
+
+test("an expected result that is JSON typed as text (test cases, a number list) is refused when the task is created", () => {
+	const make = (expect: unknown) => customTask({ fn: "golomb", prompt: "", cases: [{ args: [], expect }] });
+	assert.throws(() => make('[{"args":[],"expect":[0 1 6 10 23 26 34 41 53 55]}]'), /looks like JSON/);
+	assert.throws(() => make("[0 1 6 10]"), /looks like JSON/);
+	assert.throws(() => customTask({ fn: "f", prompt: "", cases: [{ args: [], expectAny: [[1], "[1 2]"] }] }), /looks like JSON/);
+	assert.equal(make("[x] marks the spot").cases[0]!.expect, "[x] marks the spot"); // other text stays allowed
+	assert.deepEqual(make([0, 1, 6, 10]).cases[0]!.expect, [0, 1, 6, 10]);
+});

@@ -117,6 +117,10 @@ export function customTask(x: { fn: string; prompt: string; cases: Case[]; check
 		if (check === undefined && !Object.hasOwn(c, "expect") && !Object.hasOwn(c, "expectAny")) throw new Error("Every case needs expect (or expectAny), or the task a check rule");
 	}
 	if (JSON.stringify(x.cases).length > 32_000) throw new Error("Cases too large");
+	// an expected result that is text looking like test cases or a number list was almost certainly JSON that could not
+	// be read (e.g. commas left out): the agents would chase a string nobody meant
+	const typo = (v: unknown) => typeof v === "string" && /^\s*[[{]/.test(v) && (/"?\b(args|expect)\b"?\s*:/.test(v) || /^\s*\[[-\d.\s,]*\]\s*$/.test(v));
+	for (const c of x.cases) if ((Object.hasOwn(c, "expectAny") ? c.expectAny! : [c.expect]).some(typo)) throw new Error("An expected result is text that looks like JSON (test cases or a number list); check the JSON, e.g. commas between the numbers");
 	const maxS = maxTimeoutMs() / 1000, timeoutS = x.timeoutS === undefined || x.timeoutS === null || x.timeoutS === "" ? undefined : Number(x.timeoutS);
 	if (timeoutS !== undefined && !(Number.isFinite(timeoutS) && timeoutS >= 1 && timeoutS <= maxS)) throw new Error(`The time limit is 1 to ${maxS} seconds`);
 	const t = { id: "custom", fn: x.fn, title: { de: "Eigene Aufgabe", en: "Custom task" }, prompt: { de: x.prompt, en: x.prompt }, cases: x.cases, variants: [], ...(check !== undefined ? { check, checkBy: x.checkBy === "verifier" ? "verifier" as const : "user" as const } : {}), ...(timeoutS !== undefined ? { timeoutMs: Math.round(timeoutS * 1000) } : {}) };
