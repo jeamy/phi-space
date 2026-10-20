@@ -1125,6 +1125,10 @@ test("a judge's PASS counts only with a quote that is in the answer", async () =
 	assert.match(r[1]!.reason, /^quote not in the answer/);
 	assert.match(r[2]!.reason, /^no quote/);
 	assert.equal(parseJudgement(`C1: PASS - "Blau" - too short`, ["x"], answer)[0]!.pass, false);
+	// quote styles differ between answer and judge, and the quote may hold quotes of its own
+	const styled = `Blaues Licht wird stärker "abgelenkt" als rotes. Die Moleküle „ablenken" oder „zerstreuen" das Licht.`;
+	assert.equal(parseJudgement(`C1: PASS - "Blaues Licht wird stärker 'abgelenkt' als rotes" - ok`, ["x"], styled)[0]!.pass, true);
+	assert.equal(parseJudgement(`C1: PASS - „Die Moleküle „ablenken" oder „zerstreuen" das Licht" - ok`, ["x"], styled)[0]!.pass, true);
 	assert.equal(parseJudgement("C1: PASS - fine", ["x"])[0]!.pass, true); // without the answer: the verdict as written
 });
 
