@@ -92,9 +92,15 @@ oder Stop gedrückt wird. Die Abwertung durch einen Menschen bleibt das letzte W
    `merge`. Der bisherige Modus und seine Tests bleiben unverändert.
 2. **Planungsrunde:** `propose` und Bewertung der Vorschläge, bevor implementiert wird.
 3. **Text-Aufgaben:** `draft`, `critique`, `revise`, `judge` mit Kriterienliste.
-4. **Recherche:** `research` mit Websuche, hinter einem Schalter, mit den Schutzmaßnahmen oben.
+4. **Recherche:** `research` mit Websuche, hinter einem Schalter, mit den Schutzmaßnahmen oben. Umgesetzt (2026-10-20):
+   Bei einer neuen Aufgabe recherchiert die Hälfte der Agenten zuerst. Jeder schreibt bis zu drei Suchanfragen selbst,
+   der Hub sucht bei DuckDuckGo (`server/search.ts`, nur Suchergebnisse: Titel, URL, Auszug; keine Seite wird
+   abgerufen, also kein SSRF), der Agent hält mit Quellenangabe fest, was hilft (`CodeFinding`). Planung, Entwürfe und
+   Kritik bekommen die Fundstücke als nicht vertrauenswürdige Daten. Nur mit Admin-Login; Tageslimit
+   `CODEMODE_SEARCH_PER_DAY` (Standard 100). Der Abruf läuft über `node:https`: `fetch` sendet Kopfzeilen, auf die
+   DuckDuckGo mit einer Bot-Abfrage (HTTP 202) antwortet.
 5. **Oberfläche:** Spuren je Rolle, adressierte Kritik, Quellen an den Antworten, Budget-Anzeige.
 
-Werkzeuge (Websuche) laufen über die Funktionswerkzeuge von pi-ai (`tools` im Kontext). Eine fertige Werkzeug-Schleife
-hat pi-ai nicht, sie wird im Hub geschrieben. Ob codestral und haiku über den vorhandenen Zugang Werkzeugaufrufe
-liefern, klärt eine kurze Probe; die kostet Tokens und läuft nur nach Freigabe.
+Die Websuche braucht keine Werkzeugaufrufe des Modells (pi-ai hat keine fertige Werkzeug-Schleife): Der Agent schreibt
+seine Suchanfragen als Text, der Hub führt sie aus und gibt die Ergebnisse im nächsten Aufruf zurück. Das funktioniert
+mit jedem Modell, auch ohne Unterstützung für Funktionswerkzeuge.

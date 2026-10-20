@@ -288,6 +288,8 @@ main > * { min-width: 0; }
 .plan summary { cursor: pointer; }
 .plan--used summary b { color: var(--accent); }
 .plan__text { white-space: pre-wrap; overflow-wrap: anywhere; padding: 6px 8px; margin-top: 4px; background: var(--surface); border-radius: 6px; font-size: 12.5px; }
+.sources { margin: 4px 0 0; padding-left: 22px; font-size: 12px; overflow-wrap: anywhere; }
+.sources li { margin: 2px 0; }
 
 /* text tasks: the answer, its criteria, the reason field of a dialog */
 .answer { white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px 12px; background: var(--code-bg); font-size: 14px; line-height: 1.55; max-height: 420px; overflow: auto; }

@@ -316,6 +316,8 @@ Aufgeklappt zeigt ein Beitrag die Kritiken der anderen und, bei einer Überarbei
 
 **Budget** (beide Laufmodi): Obergrenze in Tokens und/oder Dollar (Listenpreis); was zuerst erreicht ist, beendet den Lauf.
 
+**Recherche** (🔎, nur nach dem Admin-Login): Bei einer neuen Aufgabe recherchiert zuerst die Hälfte der Agenten. Jeder formuliert selbst bis zu drei Suchanfragen aus der Aufgabe, der Hub sucht damit bei DuckDuckGo und gibt nur die Suchergebnisse zurück (Titel, Adresse, Auszug); keine Seite wird abgerufen. Der Agent hält fest, was davon hilft, jeden Punkt mit seiner Quelle. Danach folgen Planungsrunde und Arbeit; jeder Agent bekommt die **Recherche des Teams** als nicht vertrauenswürdiges Material, das er prüfen muss und das nie Anweisung ist. Im Block stehen die Suchanfragen, die Quellen und die Fundstücke. Es gibt keine Suche für Besucher: Suchanfragen schreiben nur die Agenten, um eine Aufgabe zu lösen, und eine Aufgabe „suche im Web nach …“ ist nicht der Sinn der Plattform. Die Suchanfragen enthalten Inhalte der Aufgabe und gehen an DuckDuckGo; ein Tageslimit (\`CODEMODE_SEARCH_PER_DAY\`, Standard 100) begrenzt sie.
+
 ## Teilnehmer {#contenders}
 
 Unter **Teilnehmer** kreuzt du an, wer mitarbeitet: die **Skript-Agenten** und jedes erlaubte Modell. Die Agenten eines Laufs werden den Teilnehmern **reihum** zugeteilt: Agent 0 dem ersten, Agent 1 dem zweiten, und so weiter. So arbeiten zum Beispiel \`mistral/codestral-latest\` und das neueste Haiku im selben Team und bauen auf den Versuchen des jeweils anderen auf.
@@ -401,6 +403,8 @@ The run mode **work board** has no generations. Work items lie in the space, and
 Unfolded, a contribution shows the others' critiques and, for a revision, the critique it followed. The run ends once the task is solved and the improvement rounds are used, when no work is left, at the budget, or on Stop. The work board needs model agents, since scripted agents cannot critique.
 
 **Budget** (both run modes): an upper bound in tokens and/or dollars (list price); whichever is reached first ends the run.
+
+**Research** (🔎, only after the admin login): for a new task, half of the agents research first. Each writes up to three search queries from the task itself; the hub runs them on DuckDuckGo and returns only the search results (title, address, snippet); no page is fetched. The agent notes what helps, each point with its source. Then the planning round and the work follow; every agent gets **the team's research** as untrusted material to check, never as instructions. The block shows the queries, the sources and the findings. There is no search for visitors: only agents write queries, to solve a task, and a task "search the web for …" is not what the platform is for. The queries carry content of the task and go to DuckDuckGo; a daily cap (\`CODEMODE_SEARCH_PER_DAY\`, default 100) limits them.
 
 ## Contenders {#contenders}
 

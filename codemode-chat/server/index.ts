@@ -206,7 +206,11 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				const b = await readBody(req);
 				if (action === "task") await hub.setTask(id, b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId });
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
-				else if (action === "run") await hub.startRun(id, b);
+				else if (action === "run") {
+					// web research sends task text to a search engine: only an admin may start it
+					if (b.research === true && !isAdmin(req)) return json(res, 403, { error: "Research needs the admin login" });
+					await hub.startRun(id, { ...b, research: b.research === true });
+				}
 				else if (action === "stop") await hub.stopRun(id, b); // {by, reason}: the reason goes to the agents
 				else if (action === "accept") { // a person's thumbs-up on a text answer ({candidateId, by, reason, undo})
 					if (!CANDIDATE.test(String(b.candidateId ?? ""))) return json(res, 400, { error: "Invalid id" });

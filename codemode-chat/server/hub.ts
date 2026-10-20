@@ -15,8 +15,9 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, limitOf, MAX_SOURCE_CHARS, maxTimeoutMs, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
-import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmReviewCriteria, tallyCriteria, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
+import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmResearch, llmReviewCriteria, tallyCriteria, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
+import { webSearch } from "./search.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
@@ -30,11 +31,11 @@ const SNAPSHOT_MAX_BYTES = 900 * 1024;
 const REMOTE_GRACE_MS = 90_000;
 export type RunMode = "scripted" | "llm";
 /** The model side of a run; replaceable in tests. */
-export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; reviewCriteria?: typeof llmReviewCriteria; judge?: typeof llmJudge };
+export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; reviewCriteria?: typeof llmReviewCriteria; judge?: typeof llmJudge; research?: typeof llmResearch };
 /** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
 /** `gens` is the most generations a run may take; it ends earlier once the task is solved and `polish` more
  *  generations improved the solution (`solvedGen`: the generation that solved it, 0 = solved before the run). */
-export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; polish: number; solvedGen: number | null; note?: string; usage: { tokens: number; costUsd: number };
+export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; polish: number; solvedGen: number | null; note?: string; usage: { tokens: number; costUsd: number }; research?: true;
 	/** The work board (instead of generations): open and done items, critiques written. */
 	board?: BoardInfo;
 	/** Limits of the run's model calls; whichever is reached first ends it. */
@@ -91,7 +92,7 @@ export class CodeChatHub {
 	readonly #llm: LlmApi;
 	/** Lease of every room entry (CODEMODE_TTL_HOURS). */
 	readonly #ttl: number;
-	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote, criteria: llmCriteria, reviewCriteria: llmReviewCriteria, judge: llmJudge }; }
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote, criteria: llmCriteria, reviewCriteria: llmReviewCriteria, judge: llmJudge, research: llmResearch }; }
 
 	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
 	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
@@ -229,7 +230,7 @@ export class CodeChatHub {
 	async snapshot(id: string) {
 		const s = await this.session(id);
 		const cand = { type: "CodeCandidate", fields: { session: id } };
-		const [entries, msgs, scores, pendingLocal, pendingRemote, noteRows, critiqueRows, proposalRows, voteRows] = await Promise.all([
+		const [entries, msgs, scores, pendingLocal, pendingRemote, noteRows, critiqueRows, proposalRows, voteRows, findingRows] = await Promise.all([
 			this.#taskEntries(id),
 			this.host.readAll({ type: "ChatMessage", fields: { session: id } }, { limit: LIMITS.messages + 5 }),
 			this.#scores(s),
@@ -239,7 +240,10 @@ export class CodeChatHub {
 			this.host.readAll({ type: "CodeCritique", fields: { session: id } }, { limit: LIMITS.contributions }),
 			this.host.readAll({ type: "CodeProposal", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
 			this.host.readAll({ type: "CodeVote", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
+			this.host.readAll({ type: "CodeFinding", fields: { session: id } }, { limit: LIMITS.plans + LIMITS.agents }),
 		]);
+		// the research of the runs: queries, sources and what the agents took from them (the text: active block only)
+		const findings = findingRows.map((e) => e.fields as { blockId: string; findingId: string; author: string; via: string; queries: string[]; sources: Array<{ title: string; url: string }>; text: string; ts: number; usage?: Usage }).sort((a, b) => a.ts - b.ts);
 		// the planning rounds: every proposal with its average rating; contributions name the plan they followed
 		const voteScores = voteRows.map((e) => (e.fields as { scores?: Record<string, number> }).scores ?? {});
 		const plans = proposalRows.map((e) => e.fields as { blockId: string; proposalId: string; author: string; via: string; text: string; ts: number }).sort((a, b) => a.ts - b.ts).map((p) => {
@@ -291,8 +295,8 @@ export class CodeChatHub {
 				...(c.critiqueId && critiqueAuthor.has(c.critiqueId) ? { critiqueBy: critiqueAuthor.get(c.critiqueId)! } : {}),
 				...(c.proposalId && planAuthor.has(c.proposalId) ? { planBy: planAuthor.get(c.proposalId)! } : {}),
 			}));
-			// what the block's model calls cost: every contribution plus the verifier agent's calls for its task
-			const spent = [...contributions.map((c) => c.usage), f.verifierUsage as Usage | undefined].reduce((a, u) => (u ? { tokens: a.tokens + (u.total ?? 0), costUsd: a.costUsd + (u.costUsd ?? 0) } : a), { tokens: 0, costUsd: 0 });
+			// what the block's model calls cost: every contribution, the research, plus the verifier agent's calls for its task
+			const spent = [...contributions.map((c) => c.usage), ...findings.filter((x) => x.blockId === blockId).map((x) => x.usage), f.verifierUsage as Usage | undefined].reduce((a, u) => (u ? { tokens: a.tokens + (u.total ?? 0), costUsd: a.costUsd + (u.costUsd ?? 0) } : a), { tokens: 0, costUsd: 0 });
 			return [{ f, task, blockId, contributions, best: isText(task) ? null : bestOf(contributions), spent }];
 		});
 		spend(raw.find((b) => b.blockId === s.blockId)?.best ?? null);
@@ -308,6 +312,7 @@ export class CodeChatHub {
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
 				// plan texts ride along for the active block only (and not in the code-less fallback); others come with plan()
 				...(plans.some((p) => p.blockId === blockId) ? { plans: plans.filter((p) => p.blockId === blockId).slice(-8).map(({ proposalId, author, via, text, score, votes, ts }) => ({ proposalId, author, via, score, votes, ts, used: contributions.filter((c) => c.proposalId === proposalId).length, ...(withCode && blockId === s.blockId ? { text } : { text: "", textOmitted: true }) })) } : {}),
+				...(findings.some((x) => x.blockId === blockId) ? { findings: findings.filter((x) => x.blockId === blockId).slice(-6).map(({ findingId, author, via, queries, sources, text, ts }) => ({ findingId, author, via, queries, sources, ts, ...(withCode && blockId === s.blockId ? { text } : { text: "", textOmitted: true }) })) } : {}),
 				notes: notes.filter((n) => n.blockId === blockId).slice(-20).map(({ author, via, gen, text, ts, human, candidateId }) => ({ author, via, gen, text, ts, ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}), ...(candidateId && rejectedIds.has(candidateId) ? { rejected: true } : {}) })),
 			}));
 			return {
@@ -339,7 +344,7 @@ export class CodeChatHub {
 
 	/** Keeps the room's plans and votes below the cap (the snapshot reads them all): the oldest give way. */
 	async #trimPlans(s: Session): Promise<void> {
-		for (const type of ["CodeProposal", "CodeVote"]) {
+		for (const type of ["CodeProposal", "CodeVote", "CodeFinding"]) {
 			const tmpl = { type, fields: { session: s.id } };
 			const n = await this.host.count(tmpl);
 			if (n <= LIMITS.plans - LIMITS.agents) continue;
@@ -348,10 +353,11 @@ export class CodeChatHub {
 		}
 	}
 
-	/** The text of one plan (the snapshot carries plan texts for the active block only); null when it is gone. */
+	/** The text of one plan or research finding (the snapshot carries them for the active block only); null when it is gone. */
 	async plan(id: string, proposalId: string): Promise<{ text: string } | null> {
 		const s = await this.session(id);
-		const e = (await this.host.readAll({ type: "CodeProposal", fields: { session: s.id, proposalId } }, { limit: 1 }))[0];
+		const e = (await this.host.readAll({ type: "CodeProposal", fields: { session: s.id, proposalId } }, { limit: 1 }))[0]
+			?? (await this.host.readAll({ type: "CodeFinding", fields: { session: s.id, findingId: proposalId } }, { limit: 1 }))[0];
 		return e ? { text: String((e.fields as { text?: unknown }).text ?? "") } : null;
 	}
 
@@ -799,7 +805,9 @@ export class CodeChatHub {
 	 *  are used up. Board (`board: true`, model agents only): work items in the space (implement, critique, revise,
 	 *  merge) that agents take as they are free; see board.ts. Both stop at the budget (`budgetTokens`, `budgetUsd`),
 	 *  whichever is reached first. Model agents fall back to scripted variants when a guard says no (generations only). */
-	async startRun(id: string, o: { agents?: number; gens?: number; perAgent?: number; polish?: number; mode?: RunMode; contenders?: string[]; models?: string[]; lang?: "de" | "en"; board?: boolean; plan?: boolean; budgetTokens?: unknown; budgetUsd?: unknown }): Promise<void> {
+	async startRun(id: string, o: { agents?: number; gens?: number; perAgent?: number; polish?: number; mode?: RunMode; contenders?: string[]; models?: string[]; lang?: "de" | "en"; board?: boolean; plan?: boolean; budgetTokens?: unknown; budgetUsd?: unknown;
+		/** Research with web search before the work (work board only); the server lets only an admin ask for it. */
+		research?: boolean }): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "run", 6)) throw new Error("Too many runs, slow down");
 		const int = (v: unknown, dflt: number, min: number, max: number) => Math.min(max, Math.max(min, Math.floor(Number(v ?? dflt)) || (min > 0 ? min : 0)));
@@ -815,6 +823,8 @@ export class CodeChatHub {
 		const board = o.board === true || isText(s.task); // a text task runs on the work board only
 		if (board && (contenders.includes("scripted") || !this.#llm.critique)) throw new Error("The work board needs model agents (scripted agents cannot critique)");
 		const mode: RunMode = contenders.some((c) => c !== "scripted") ? "llm" : "scripted";
+		const research = o.research === true;
+		if (research && (!board || !this.#llm.research)) throw new Error("Research runs on the work board with model agents only");
 		// check and claim under the room's lock: two requests cannot both start a run, and setTask cannot swap the block
 		// in between; the run is claimed only after its announcement is written, so a failing write leaves no stuck run
 		const run = await this.#exclusive(s, async () => {
@@ -822,10 +832,10 @@ export class CodeChatHub {
 			if (!s.blockId) throw new Error("No task yet: create a task block first");
 			if (isText(s.task) && agents < 3) throw new Error("A text task needs at least 3 agents: an author and two judges who are not the author");
 			if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
-			const claimed: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent, polish, solvedGen: s.best ? 0 : null, usage: { tokens: 0, costUsd: 0 }, ...(Object.keys(budget).length ? { budget } : {}), ...(board ? { board: { open: 0, done: 0, critiques: 0 } } : {}) };
+			const claimed: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent, polish, solvedGen: s.best ? 0 : null, usage: { tokens: 0, costUsd: 0 }, ...(Object.keys(budget).length ? { budget } : {}), ...(board ? { board: { open: 0, done: 0, critiques: 0 } } : {}), ...(research ? { research: true } : {}) };
 			const limits = [budget.tokens ? `${budget.tokens} tokens` : "", budget.usd ? `$${budget.usd}` : ""].filter(Boolean).join(" / ");
 			await this.#write(s, "system", board
-				? `Run started on the work board${o.plan !== false ? " with a planning round" : ""}: ${agents} agents, ${polish} improvement rounds after the solution${limits ? `, budget ${limits}` : ""} (${contenders.join(" + ")})`
+				? `Run started on the work board${research ? " with web research" : ""}${o.plan !== false ? `${research ? " and" : " with"} a planning round` : ""}: ${agents} agents, ${polish} improvement rounds after the solution${limits ? `, budget ${limits}` : ""} (${contenders.join(" + ")})`
 				: `Run started: ${agents} agents, up to ${gens} generations, ${polish} more after the solution${limits ? `, budget ${limits}` : ""} (${contenders.join(" + ")})`, claimed.blockId);
 			s.run = claimed; s.abort = false;
 			return claimed;
@@ -848,6 +858,8 @@ export class CodeChatHub {
 						contribute: (c) => this.#llm.contribute(c), critique: (c) => this.#llm.critique!(c),
 						// the planning round (on unless `plan: false`): propose, rate, implement the best plans first
 						plan: o.plan !== false && !!this.#llm.propose && !!this.#llm.vote,
+						// research (admin only): agents write their own queries, the hub searches DuckDuckGo (results only, no pages)
+						...(research ? { research: (c) => this.#llm.research!({ ...c, search: (q) => webSearch(q) }) } : {}),
 						...(this.#llm.propose ? { propose: (c) => this.#llm.propose!(c) } : {}), ...(this.#llm.vote ? { vote: (c) => this.#llm.vote!(c) } : {}),
 						enqueue: (author, via, gen, source, lineage) => (isText(s.task) ? this.#enqueueText(s, author, via, gen, source, lineage) : this.#enqueue(s, author, via, gen, source, lineage)),
 						verdict: (candidateId) => (isText(s.task) ? this.#verdictText(s, blockId, candidateId) : this.#verdict(s, candidateId)),
@@ -954,9 +966,9 @@ export class CodeChatHub {
 		// entries from before task blocks existed have no blockId: the block is then identified by the time of its CodeTask
 		const legacy = target.blockId === undefined;
 		const tmplOf = (type: string): { type: string; fields: Record<string, string | number> } => (type === "CodeTask" && legacy ? { type, fields: { session: id, ts: target.ts } } : { type, fields: { session: id, blockId } });
-		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "ChatMessage", "CodeTask"]) {
+		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "ChatMessage", "CodeTask"]) {
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
-			if (type !== "CodeTask" && type !== "ChatMessage" && type !== "CodeNote" && type !== "CodeVeto" && type !== "CodeCritique" && type !== "CodeProposal" && type !== "CodeVote" && !type.startsWith("Text") && type !== "CodeAccept" && type !== "WorkItem" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
+			if (type !== "CodeTask" && type !== "ChatMessage" && type !== "CodeNote" && type !== "CodeVeto" && type !== "CodeCritique" && type !== "CodeProposal" && type !== "CodeVote" && type !== "CodeFinding" && !type.startsWith("Text") && type !== "CodeAccept" && type !== "WorkItem" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
 		}
 		// the last old-style block is gone: the old entries that never belonged to a block go with it
 		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {

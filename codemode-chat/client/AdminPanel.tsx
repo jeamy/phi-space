@@ -27,7 +27,8 @@ function GroupBox({ all, some, onChange, label }: { all: boolean; some: boolean;
 	return <input ref={ref} type="checkbox" aria-label={label} checked={all} onChange={(e) => onChange(e.target.checked)} onClick={(e) => e.stopPropagation()} />;
 }
 
-export function AdminPanel({ lang, onChanged }: { lang: Lang; onChanged: () => void }) {
+/** `onSession`: whether this browser is signed in as admin (the run panel offers research then). */
+export function AdminPanel({ lang, onChanged, onSession }: { lang: Lang; onChanged: () => void; onSession?: (admin: boolean) => void }) {
 	const t = T[lang];
 	const [session, setSession] = useState<{ admin: boolean; available: boolean } | null>(null);
 	const [form, setForm] = useState(false);
@@ -37,6 +38,7 @@ export function AdminPanel({ lang, onChanged }: { lang: Lang; onChanged: () => v
 	const [on, setOn] = useState(true);
 	const [filter, setFilter] = useState("");
 	const [msg, setMsg] = useState("");
+	useEffect(() => { onSession?.(!!session?.admin); }, [session?.admin]);
 
 	const load = async () => { const s = await call<AdminState>("/models"); setState(s); setChosen(new Set(s.allowed)); setOn(s.on); };
 	useEffect(() => {

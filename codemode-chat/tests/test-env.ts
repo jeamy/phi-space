@@ -7,3 +7,4 @@ process.env.CODEMODE_ADMIN_TOKEN = "";
 process.env.CODEMODE_TTL_HOURS = "";
 process.env.CODEMODE_MAX_TIMEOUT_S = "";
 process.env.CODEMODE_REQ_PER_MIN = "100000"; // the tests poll snapshots in tight loops; the quota has its own test
+process.env.CODEMODE_SEARCH_PER_DAY = "";
