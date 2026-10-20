@@ -499,8 +499,14 @@ export class CodeChatHub {
 			// three agents review the criteria, the majority decides: a wrong fact in a criterion misleads every judge
 			if (this.#llm.reviewCriteria) {
 				const models = await this.#llm.models(), order = [...models.filter((m) => m !== c.model), ...models.filter((m) => m === c.model)];
-				const reviews = (await Promise.allSettled([0, 1, 2].map((i) => this.#llm.reviewCriteria!({ task, agent: i, model: order[i % order.length] }))))
-					.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+				// three reviews; a model that fails (a lapsed login, a guard) gives way to the next one, at most 6 tries
+				const reviews: Array<Awaited<ReturnType<typeof llmReviewCriteria>>> = [], failed = new Set<string>();
+				for (let tries = 0; reviews.length < 3 && tries < 6; ) {
+					const models = order.filter((m) => !failed.has(m));
+					if (!models.length) break;
+					const batch = await Promise.allSettled(Array.from({ length: 3 - reviews.length }, (_, i) => { tries++; const model = models[(reviews.length + i) % models.length]!; return this.#llm.reviewCriteria!({ task, agent: reviews.length + i, model }).catch((e) => { failed.add(model); throw e; }); }));
+					for (const r of batch) if (r.status === "fulfilled") reviews.push(r.value); else console.error("[criteria] review failed", (r.reason as Error).message);
+				}
 				for (const r of reviews) if (r.usage) usage = addUsage(usage, r.usage);
 				if (reviews.length === 3) {
 					const t = tallyCriteria(task.criteria ?? [], reviews.map((r) => r.votes));

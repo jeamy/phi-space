@@ -1141,6 +1141,19 @@ t("research: only an admin starts it; researchers search first, every later step
 	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
 });
 
+t("text task: a criteria reviewer whose model fails gives way to another model", async () => {
+	const calls: string[] = [];
+	const llm = { ...textLlm(), models: async () => ["fake/broken", "fake/plain", "fake/haiku-judge"],
+		reviewCriteria: async (c: any) => { calls.push(c.model); if (c.model === "fake/broken") throw new Error("OAuth refresh failed"); return { votes: [{ vote: "ok", reason: "" }, { vote: "ok", reason: "" }], model: c.model }; } };
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		assert.equal((await post(srv.url, "/api/sessions/crf/task", { text: { prompt: "What is the capital of France?" } })).status, 200);
+		const b = ((await (await fetch(srv.url + "/api/sessions/crf")).json()) as any).blocks.at(-1);
+		assert.ok(b.messages.some((m: any) => /reviewed by 3 agents \((fake\/plain|fake\/haiku-judge)(, (fake\/plain|fake\/haiku-judge)){2}\).*all kept/.test(m.text)), JSON.stringify(b.messages));
+		assert.equal(calls.filter((m) => m === "fake/broken").length, 1);
+	} finally { await srv.close(); }
+});
+
 test("research findings reach the prompts as untrusted data with their sources", async () => {
 	const { teamPrompt, critiquePrompt, proposePrompt } = await import("../server/llm.ts");
 	const { textTask } = await import("../server/tasks.ts");
