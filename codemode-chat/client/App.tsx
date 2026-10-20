@@ -12,7 +12,7 @@ import { parseCases } from "./lib/cases.ts";
 import { useTheme, type Lang } from "./lib/theme.ts";
 
 type L = { de: string; en: string };
-type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: string; basedOn?: string; hardcoded?: true; note?: string; usage?: Usage; critiques?: Array<{ author: string; via: string }>; critiqueBy?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
+type Contribution = { candidateId: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: string; basedOn?: string; hardcoded?: true; note?: string; usage?: Usage; critiques?: Array<{ author: string; via: string }>; critiqueBy?: string; planBy?: string; judges?: number; acceptedBy?: "judges" | "human"; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
 /** Tokens and list-price cost of one model call (the cost is the model catalog's price in US dollars). */
 type Usage = { input: number; output: number; cacheRead: number; cacheWrite: number; total: number; costUsd: number };
 type Spent = { tokens: number; costUsd: number };
@@ -24,12 +24,13 @@ const fmtSpent = (tokens: number, costUsd: number, lang: Lang) => `${fmtTok(toke
 const counts = (c: Contribution) => !!c.ok && !c.vetoed;
 type CaseResult = { call: string; ok: boolean; got?: string; expect?: string; error?: string };
 type CritiqueText = { author: string; via: string; text: string };
-type Details = { source: string; cases: CaseResult[]; passed?: number; total?: number; role?: string; basedOn?: string; critiques?: CritiqueText[]; followed?: CritiqueText };
+type Judgement = { judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> };
+type Details = { source: string; cases: CaseResult[]; passed?: number; total?: number; role?: string; basedOn?: string; critiques?: CritiqueText[]; followed?: CritiqueText; judgements?: Judgement[] };
 /** `rejected`: the note of a contribution that was rejected; the agents no longer get it. */
 type TeamNote = { author: string; via: string; gen: number; text: string; ts: number; human?: boolean; rejected?: boolean; candidateId?: string };
 type Message = { author: string; text: string; ts: number; blockId?: string };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
-type Block = { blockId: string; ts: number; active: boolean; task: { id: string; fn: string; title: L; prompt: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[] };
+type Block = { blockId: string; ts: number; active: boolean; task: { id: string; fn: string; title: L; prompt: L; cases?: number; check?: string; checkBy?: string; timeoutS?: number; kind?: "text"; criteria?: string[]; criteriaBy?: string }; contributions: Contribution[]; best: Best | null; messages: Message[]; notes?: TeamNote[]; usage?: Spent; plans?: Plan[] };
 /** A proposal of a planning round: who, the team's average rating (1 to 5), how often it was implemented. */
 type Plan = { proposalId: string; author: string; via: string; text: string; textOmitted?: true; score: number | null; votes: number; used: number; ts: number };
 
@@ -53,8 +54,8 @@ type Llm = { enabled: boolean; on: boolean; current: string | null; models: { id
 type Shard = { shard: string; up: boolean; host: { name: string; cpu: string; cores: number; memGiB: number } | null; judged: number | null };
 
 const T = {
-	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle: JSON [{\"args\":[2],\"expect\":4}] oder einfacher Text, z. B. „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“; mehrere richtige Ergebnisse mit „oder“: „4 -> 2 oder -2“", casesError: "Die Testfälle konnten nicht gelesen werden. Erlaubt: JSON oder einfacher Text wie „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“.", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen (max)", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", board: "Rangliste", best: "Bester Code", standings: "Beiträge je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "mit", correctN: "korrekt", helpLink: "Hilfe", contributions: "Beiträge", running: "läuft", block: "Aufgabe", del: "Block löschen", delRunning: "Der Lauf in diesem Block muss zuerst gestoppt werden", delTitle: "Aufgabenblock löschen?", delText: (title: string, n: number) => `Der Block „${title}“ mit ${n} Beiträgen, Rangliste und bestem Code wird dauerhaft gelöscht.`, yes: "Ja, löschen", no: "Nein", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe.", fnLabel: "Funktionsname", promptLabel: "Beschreibung", casesLabel: "Testfälle", startLabel: "Lauf starten / stoppen", runCode: "▶ Ausführen", runClose: "Konsole schließen", runAgain: "▶ Erneut", runStop: "■ Stop", callLabel: "Eigener Aufruf (optional)", callPh: (fn: string) => `z. B. ${fn}(10)`, expected: "erwartet", runOk: (ms: number) => `fertig in ${ms} ms`, runTimeout: "Zeitlimit erreicht (60 s)", runAborted: "gestoppt", runLimit: "Ausgabelimit erreicht, Lauf beendet", runError: "mit Fehler beendet", consoleLabel: "Konsole", runHint: "Läuft die Funktion gegen die Testfälle der Aufgabe und danach den eigenen Aufruf; nichts wird bewertet.", polish: "Verbesserungsrunden", roles: { repair: "🔧 repariert", explore: "🧭 neuer Ansatz", improve: "⚡ verbessert", revise: "✍️ überarbeitet", merge: "🔀 zusammengeführt" } as Record<string, string>, basedOn: "baut auf", notes: "Notizen des Teams", cont: "▶ Weiterarbeiten", contHint: "Neuer Lauf in diesem Block: die Agenten sehen alle bisherigen Versuche, Abwertungen und Hinweise und arbeiten daran weiter.", hintPh: "Hinweis ans Team, z. B. „mit Backtracking, keine feste Tabelle“", hintSend: "Senden", hintBy: "Hinweis", hints: "Hinweise ans Team", plans: "Pläne des Teams", planLabel: "Planungsrunde", planHint: "Vor dem ersten Code schlägt jeder Agent einen Ansatz vor, alle bewerten die Vorschläge der anderen (1 bis 5), umgesetzt werden die besten.", planScore: (s: number | null, v: number) => (s === null ? "unbewertet" : `★ ${s.toLocaleString("de-DE")} (${v} Stimmen)`), planUsed: (n: number) => (n ? `${n}× umgesetzt` : "nicht umgesetzt"), planBy: (a: string) => `nach Plan von ${a}`, boardPlan: (p: number, v: number) => `${p} Pläne · ${v} Bewertungen · `, runMode: "Laufmodus", modeGens: "Generationen", modeBoard: "Auftragsbrett", boardOnlyModels: "Das Auftragsbrett braucht Modell-Agenten", budgetTok: "Budget Tokens", budgetUsd: "Budget $", budgetPh: "kein Limit", boardInfo: (o: number, d: number, c: number) => `Aufträge ${o} offen · ${d} erledigt · ${c} Kritiken`, critiqueBy: (a: string) => `nach Kritik von ${a}`, critiquesTitle: "Kritik der anderen", followedTitle: (a: string, v: string) => `Überarbeitet nach dieser Kritik von ${a} (${v}):`, critiqueOf: (a: string, v: string) => `🗨 ${a} (${v}):`, usageHint: "Tokens und Kosten dieses Modellaufrufs (Listenpreis laut Modellkatalog; bei Abo-Zugang nur ein Richtwert)", usageBlockHint: "Tokens und Kosten aller Modellaufrufe dieses Blocks, inklusive Prüfer-Agent (Listenpreis)", usageDetail: (i: string, o: string, cr: string, cw: string) => `Eingabe ${i} · Ausgabe ${o} · Cache gelesen ${cr} · Cache geschrieben ${cw} (Listenpreis)`, understood: "Verstanden:", notUnderstood: "Nicht lesbar: prüfe das JSON (Kommas zwischen den Werten, Klammern) oder schreibe einfachen Text wie „5 -> 120“.", oneOf: "eines von", byRule: "von der Prüfregel geprüft", more: (n: number) => `… und ${n} weitere`, noTaskYet: "Erst eine Aufgabe anlegen (links „Lauf starten“ oder „Aufgabe anlegen“ mit 0 Agenten)", stopRun: "Lauf abbrechen", stopTitle: "Lauf abbrechen?", stopText: (title: string, gen: number, gens: number) => `Der Lauf in „${title}“ (Generation ${gen} von höchstens ${gens}) wird abgebrochen. Beiträge, die schon eingereicht sind, werden noch bewertet; alles Bisherige bleibt erhalten.`, stopYes: "Ja, abbrechen", timeLimit: "Zeitlimit je Beitrag (s)", timeLimitShort: (s: number) => `Zeitlimit ${s} s`, timeLimitMax: (s: number) => `1 bis ${s} s`, noteRejected: "Der Beitrag zu dieser Notiz wurde abgelehnt; die Agenten bekommen sie nicht mehr.", veto: "👎 So nicht", vetoReason: "Warum? (optional, die Agenten lesen es)", vetoDo: "Abwerten", vetoCancel: "Abbrechen", vetoUndo: "Zurücknehmen", vetoed: (by: string) => `👎 abgewertet von ${by}`, vetoedShort: "abgewertet", hardcoded: "✗ Ergebnis fest eingetragen", hardcodedShort: "fest eingetragen", verifyLabel: "Auch andere richtige Ergebnisse zulassen", verifyHint: "Ein Prüfer-Agent schreibt aus Beschreibung und Beispielen eine Prüfregel; ohne Haken zählen nur die angegebenen Ergebnisse.", verifyOff: "braucht Modell-Agenten", verifying: "Der Prüfer-Agent schreibt die Prüfregel …", rule: "Prüfregel", ruleBy: { verifier: "Prüfregel (vom Prüfer-Agenten)", user: "Prüfregel" } as Record<string, string>, passedN: "Fälle bestanden", caseRule: "von der Prüfregel geprüft" },
-	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases: JSON [{\"args\":[2],\"expect\":4}] or plain text, e.g. \"5 -> 120\" or \"Result: 0 1 4 9 11\"; several right results with \"or\": \"4 -> 2 or -2\"", casesError: "The test cases could not be read. Allowed: JSON or plain text like \"5 -> 120\" or \"Result: 0 1 4 9 11\".", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations (max)", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", board: "Leaderboard", best: "Best code", standings: "Contributions per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "with", correctN: "correct", helpLink: "Help", contributions: "contributions", running: "running", block: "Task", del: "Delete block", delRunning: "Stop the run in this block first", delTitle: "Delete task block?", delText: (title: string, n: number) => `The block "${title}" with ${n} contributions, its ranking and best code will be deleted permanently.`, yes: "Yes, delete", no: "No", forBlock: "for", hide: "Close", noBlocks: "No task yet.", fnLabel: "Function name", promptLabel: "Description", casesLabel: "Test cases", startLabel: "Start / stop the run", runCode: "▶ Run", runClose: "Close console", runAgain: "▶ Again", runStop: "■ Stop", callLabel: "Own call (optional)", callPh: (fn: string) => `e.g. ${fn}(10)`, expected: "expected", runOk: (ms: number) => `done in ${ms} ms`, runTimeout: "time limit reached (60 s)", runAborted: "stopped", runLimit: "output limit reached, run ended", runError: "ended with an error", consoleLabel: "Console", runHint: "Runs the function against the task's test cases, then the own call; nothing is scored.", polish: "Improvement rounds", roles: { repair: "🔧 repaired", explore: "🧭 new approach", improve: "⚡ improved", revise: "✍️ revised", merge: "🔀 merged" } as Record<string, string>, basedOn: "builds on", notes: "Team notes", cont: "▶ Keep working", contHint: "A new run in this block: the agents see every attempt so far, the rejections and the hints, and work on from there.", hintPh: "Hint to the team, e.g. \"use backtracking, no fixed table\"", hintSend: "Send", hintBy: "hint", hints: "Hints to the team", plans: "The team's plans", planLabel: "Planning round", planHint: "Before the first code every agent proposes an approach, everyone rates the others' proposals (1 to 5), the best are implemented.", planScore: (s: number | null, v: number) => (s === null ? "not rated" : `★ ${s} (${v} votes)`), planUsed: (n: number) => (n ? `implemented ${n}×` : "not implemented"), planBy: (a: string) => `after ${a}'s plan`, boardPlan: (p: number, v: number) => `${p} plans · ${v} ratings · `, runMode: "Run mode", modeGens: "Generations", modeBoard: "Work board", boardOnlyModels: "The work board needs model agents", budgetTok: "Budget tokens", budgetUsd: "Budget $", budgetPh: "no limit", boardInfo: (o: number, d: number, c: number) => `items ${o} open · ${d} done · ${c} critiques`, critiqueBy: (a: string) => `after ${a}'s critique`, critiquesTitle: "Critique by the others", followedTitle: (a: string, v: string) => `Revised after this critique by ${a} (${v}):`, critiqueOf: (a: string, v: string) => `🗨 ${a} (${v}):`, usageHint: "Tokens and cost of this model call (list price from the model catalog; only a guide with subscription access)", usageBlockHint: "Tokens and cost of all model calls of this block, the verifier agent included (list price)", usageDetail: (i: string, o: string, cr: string, cw: string) => `input ${i} · output ${o} · cache read ${cr} · cache written ${cw} (list price)`, understood: "Understood:", notUnderstood: "Not readable: check the JSON (commas between values, brackets) or write plain text like \"5 -> 120\".", oneOf: "one of", byRule: "checked by the rule", more: (n: number) => `… and ${n} more`, noTaskYet: "Create a task first (\"Start run\" on the left, or \"Create task\" with 0 agents)", stopRun: "Stop the run", stopTitle: "Stop the run?", stopText: (title: string, gen: number, gens: number) => `The run in "${title}" (generation ${gen} of at most ${gens}) will be stopped. Contributions already handed in are still judged; everything so far is kept.`, stopYes: "Yes, stop", timeLimit: "Time limit per contribution (s)", timeLimitShort: (s: number) => `time limit ${s} s`, timeLimitMax: (s: number) => `1 to ${s} s`, noteRejected: "The contribution of this note was rejected; the agents no longer get it.", veto: "👎 Not like this", vetoReason: "Why? (optional, the agents read it)", vetoDo: "Reject", vetoCancel: "Cancel", vetoUndo: "Withdraw", vetoed: (by: string) => `👎 rejected by ${by}`, vetoedShort: "rejected", hardcoded: "✗ result hard-coded", hardcodedShort: "hard-coded", verifyLabel: "Accept other right results too", verifyHint: "A verifier agent writes a check rule from the description and the examples; without the tick only the given results count.", verifyOff: "needs model agents", verifying: "The verifier agent is writing the check rule …", rule: "Check rule", ruleBy: { verifier: "Check rule (by the verifier agent)", user: "Check rule" } as Record<string, string>, passedN: "cases passed", caseRule: "checked by the rule" },
+	de: { title: "Codemode-Chat", eyebrow: "AGENTEN UND MENSCHEN SCHREIBEN CODE IN EINEN GEMEINSAMEN SPACE", lead: "Jede Aufgabe ist ein Block; jeder Beitrag ein Eintrag im Space, den die Codemode-Sandbox bewertet. Ein Klick auf eine Kachel zeigt den gelieferten Code.", task: "Aufgabe", custom: "Eigene Aufgabe …", fn: "Funktionsname", taskText: "Beschreibung der Aufgabe (was soll die Funktion tun?)", cases: "Testfälle: JSON [{\"args\":[2],\"expect\":4}] oder einfacher Text, z. B. „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“; mehrere richtige Ergebnisse mit „oder“: „4 -> 2 oder -2“", casesError: "Die Testfälle konnten nicht gelesen werden. Erlaubt: JSON oder einfacher Text wie „5 -> 120“ oder „Ergebnis: 0 1 4 9 11“.", newTask: "Aufgabe anlegen (ohne Agenten)", agentsZero: "0 Agenten: nur den Aufgabenblock anlegen, Code reichst du selbst ein", run: "Lauf", agents: "Agenten", gens: "Generationen (max)", per: "Beiträge je Agent", contenders: "Teilnehmer (Mehrfachauswahl)", scriptedAgents: "Skript-Agenten", noModels: "Modell-Agenten sind aus (CODEMODE_CHAT_LLM=1)", autoModel: "Eigene Aufgabe: Modell-Agenten automatisch gewählt (Skript-Agenten haben dafür keinen Code).", start: "Lauf starten", stop: "Stoppen", pick: "Mindestens ein Teilnehmer", fillCustom: "Funktionsname, Beschreibung und Testfälle ausfüllen", yours: "Eigener Code", submit: "Code einreichen", board: "Rangliste", best: "Bester Code", standings: "Beiträge je Teilnehmer", none: "Noch keine Beiträge.", wait: "wartet", ok: "korrekt", bad: "falsch", code: "Code", gen: "Gen.", live: "live", offline: "getrennt", session: "Raum", off: "Modell-Agenten aus", llm: "Modell", nobest: "keine korrekten Beiträge", test: "Testsystem", judged: "bewertet", down: "nicht erreichbar", versus: "mit", correctN: "korrekt", helpLink: "Hilfe", contributions: "Beiträge", running: "läuft", block: "Aufgabe", del: "Block löschen", delRunning: "Der Lauf in diesem Block muss zuerst gestoppt werden", delTitle: "Aufgabenblock löschen?", delText: (title: string, n: number) => `Der Block „${title}“ mit ${n} Beiträgen, Rangliste und bestem Code wird dauerhaft gelöscht.`, yes: "Ja, löschen", no: "Nein", forBlock: "für", hide: "Schließen", noBlocks: "Noch keine Aufgabe.", fnLabel: "Funktionsname", promptLabel: "Beschreibung", casesLabel: "Testfälle", startLabel: "Lauf starten / stoppen", runCode: "▶ Ausführen", runClose: "Konsole schließen", runAgain: "▶ Erneut", runStop: "■ Stop", callLabel: "Eigener Aufruf (optional)", callPh: (fn: string) => `z. B. ${fn}(10)`, expected: "erwartet", runOk: (ms: number) => `fertig in ${ms} ms`, runTimeout: "Zeitlimit erreicht (60 s)", runAborted: "gestoppt", runLimit: "Ausgabelimit erreicht, Lauf beendet", runError: "mit Fehler beendet", consoleLabel: "Konsole", runHint: "Läuft die Funktion gegen die Testfälle der Aufgabe und danach den eigenen Aufruf; nichts wird bewertet.", polish: "Verbesserungsrunden", roles: { repair: "🔧 repariert", explore: "🧭 neuer Ansatz", improve: "⚡ verbessert", revise: "✍️ überarbeitet", merge: "🔀 zusammengeführt" } as Record<string, string>, basedOn: "baut auf", notes: "Notizen des Teams", cont: "▶ Weiterarbeiten", contHint: "Neuer Lauf in diesem Block: die Agenten sehen alle bisherigen Versuche, Abwertungen und Hinweise und arbeiten daran weiter.", hintPh: "Hinweis ans Team, z. B. „mit Backtracking, keine feste Tabelle“", hintSend: "Senden", hintBy: "Hinweis", hints: "Hinweise ans Team", textTask: "Eigene Textaufgabe …", questionLabel: "Frage", questionPh: "Die Frage oder Aufgabe, deren Ergebnis ein Text ist", criteriaLabel: "Kriterien (optional)", criteriaPh: "Woran eine gute Antwort zu erkennen ist, eine Zeile je Kriterium. Leer: der Prüfer-Agent schreibt sie.", criteriaTitle: "Kriterien", criteriaByAgent: "vom Prüfer-Agenten", writingCriteria: "Der Prüfer-Agent schreibt die Kriterien …", accept: "👍 Passt", acceptReason: "Warum? (optional, die Agenten lesen es)", acceptDo: "Annehmen", acceptUndo: "Annahme zurücknehmen", acceptedBy: { judges: "✓ angenommen (Prüfer)", human: "✓ angenommen (Mensch)" } as Record<string, string>, judging: "wird geprüft", acceptedN: "angenommen", criteriaN: "Kriterien", judgesTitle: "Urteile der Prüfer", answerRanking: "Antworten nach Kriterien", acceptedAnswer: "Angenommene Antwort", noAccepted: "noch keine angenommene Antwort", stopReasonPh: "Warum? (optional, die Agenten lesen es)", textNoCode: "Bei einer Textaufgabe schreiben die Agenten die Antworten.", plans: "Pläne des Teams", planLabel: "Planungsrunde", planHint: "Vor dem ersten Code schlägt jeder Agent einen Ansatz vor, alle bewerten die Vorschläge der anderen (1 bis 5), umgesetzt werden die besten.", planScore: (s: number | null, v: number) => (s === null ? "unbewertet" : `★ ${s.toLocaleString("de-DE")} (${v} Stimmen)`), planUsed: (n: number) => (n ? `${n}× umgesetzt` : "nicht umgesetzt"), planBy: (a: string) => `nach Plan von ${a}`, boardPlan: (p: number, v: number) => `${p} Pläne · ${v} Bewertungen · `, runMode: "Laufmodus", modeGens: "Generationen", modeBoard: "Auftragsbrett", boardOnlyModels: "Das Auftragsbrett braucht Modell-Agenten", budgetTok: "Budget Tokens", budgetUsd: "Budget $", budgetPh: "kein Limit", boardInfo: (o: number, d: number, c: number) => `Aufträge ${o} offen · ${d} erledigt · ${c} Kritiken`, critiqueBy: (a: string) => `nach Kritik von ${a}`, critiquesTitle: "Kritik der anderen", followedTitle: (a: string, v: string) => `Überarbeitet nach dieser Kritik von ${a} (${v}):`, critiqueOf: (a: string, v: string) => `🗨 ${a} (${v}):`, usageHint: "Tokens und Kosten dieses Modellaufrufs (Listenpreis laut Modellkatalog; bei Abo-Zugang nur ein Richtwert)", usageBlockHint: "Tokens und Kosten aller Modellaufrufe dieses Blocks, inklusive Prüfer-Agent (Listenpreis)", usageDetail: (i: string, o: string, cr: string, cw: string) => `Eingabe ${i} · Ausgabe ${o} · Cache gelesen ${cr} · Cache geschrieben ${cw} (Listenpreis)`, understood: "Verstanden:", notUnderstood: "Nicht lesbar: prüfe das JSON (Kommas zwischen den Werten, Klammern) oder schreibe einfachen Text wie „5 -> 120“.", oneOf: "eines von", byRule: "von der Prüfregel geprüft", more: (n: number) => `… und ${n} weitere`, noTaskYet: "Erst eine Aufgabe anlegen (links „Lauf starten“ oder „Aufgabe anlegen“ mit 0 Agenten)", stopRun: "Lauf abbrechen", stopTitle: "Lauf abbrechen?", stopText: (title: string, gen: number, gens: number) => `Der Lauf in „${title}“ (Generation ${gen} von höchstens ${gens}) wird abgebrochen. Beiträge, die schon eingereicht sind, werden noch bewertet; alles Bisherige bleibt erhalten.`, stopYes: "Ja, abbrechen", timeLimit: "Zeitlimit je Beitrag (s)", timeLimitShort: (s: number) => `Zeitlimit ${s} s`, timeLimitMax: (s: number) => `1 bis ${s} s`, noteRejected: "Der Beitrag zu dieser Notiz wurde abgelehnt; die Agenten bekommen sie nicht mehr.", veto: "👎 So nicht", vetoReason: "Warum? (optional, die Agenten lesen es)", vetoDo: "Abwerten", vetoCancel: "Abbrechen", vetoUndo: "Zurücknehmen", vetoed: (by: string) => `👎 abgewertet von ${by}`, vetoedShort: "abgewertet", hardcoded: "✗ Ergebnis fest eingetragen", hardcodedShort: "fest eingetragen", verifyLabel: "Auch andere richtige Ergebnisse zulassen", verifyHint: "Ein Prüfer-Agent schreibt aus Beschreibung und Beispielen eine Prüfregel; ohne Haken zählen nur die angegebenen Ergebnisse.", verifyOff: "braucht Modell-Agenten", verifying: "Der Prüfer-Agent schreibt die Prüfregel …", rule: "Prüfregel", ruleBy: { verifier: "Prüfregel (vom Prüfer-Agenten)", user: "Prüfregel" } as Record<string, string>, passedN: "Fälle bestanden", caseRule: "von der Prüfregel geprüft" },
+	en: { title: "Codemode chat", eyebrow: "AGENTS AND PEOPLE WRITE CODE INTO A SHARED SPACE", lead: "Every task is a block; every contribution an entry in the space that the codemode sandbox judges. Click a tile to see the code it delivered.", task: "Task", custom: "Custom task …", fn: "Function name", taskText: "Task description (what should the function do?)", cases: "Test cases: JSON [{\"args\":[2],\"expect\":4}] or plain text, e.g. \"5 -> 120\" or \"Result: 0 1 4 9 11\"; several right results with \"or\": \"4 -> 2 or -2\"", casesError: "The test cases could not be read. Allowed: JSON or plain text like \"5 -> 120\" or \"Result: 0 1 4 9 11\".", newTask: "Create task (no agents)", agentsZero: "0 agents: only create the task block, you hand in the code yourself", run: "Run", agents: "Agents", gens: "Generations (max)", per: "Contributions per agent", contenders: "Contenders (multi-select)", scriptedAgents: "Scripted agents", noModels: "Model agents are off (CODEMODE_CHAT_LLM=1)", autoModel: "Custom task: model agents selected automatically (scripted agents have no code for it).", start: "Start run", stop: "Stop", pick: "Pick at least one contender", fillCustom: "Fill in function name, description and test cases", yours: "Your code", submit: "Submit code", board: "Leaderboard", best: "Best code", standings: "Contributions per contender", none: "No contributions yet.", wait: "waiting", ok: "correct", bad: "wrong", code: "code", gen: "gen", live: "live", offline: "disconnected", session: "Room", off: "model agents off", llm: "model", nobest: "no correct contribution", test: "Test system", judged: "judged", down: "unreachable", versus: "with", correctN: "correct", helpLink: "Help", contributions: "contributions", running: "running", block: "Task", del: "Delete block", delRunning: "Stop the run in this block first", delTitle: "Delete task block?", delText: (title: string, n: number) => `The block "${title}" with ${n} contributions, its ranking and best code will be deleted permanently.`, yes: "Yes, delete", no: "No", forBlock: "for", hide: "Close", noBlocks: "No task yet.", fnLabel: "Function name", promptLabel: "Description", casesLabel: "Test cases", startLabel: "Start / stop the run", runCode: "▶ Run", runClose: "Close console", runAgain: "▶ Again", runStop: "■ Stop", callLabel: "Own call (optional)", callPh: (fn: string) => `e.g. ${fn}(10)`, expected: "expected", runOk: (ms: number) => `done in ${ms} ms`, runTimeout: "time limit reached (60 s)", runAborted: "stopped", runLimit: "output limit reached, run ended", runError: "ended with an error", consoleLabel: "Console", runHint: "Runs the function against the task's test cases, then the own call; nothing is scored.", polish: "Improvement rounds", roles: { repair: "🔧 repaired", explore: "🧭 new approach", improve: "⚡ improved", revise: "✍️ revised", merge: "🔀 merged" } as Record<string, string>, basedOn: "builds on", notes: "Team notes", cont: "▶ Keep working", contHint: "A new run in this block: the agents see every attempt so far, the rejections and the hints, and work on from there.", hintPh: "Hint to the team, e.g. \"use backtracking, no fixed table\"", hintSend: "Send", hintBy: "hint", hints: "Hints to the team", textTask: "Custom text task …", questionLabel: "Question", questionPh: "The question or task whose result is a text", criteriaLabel: "Criteria (optional)", criteriaPh: "What makes a good answer, one line per criterion. Empty: the verifier agent writes them.", criteriaTitle: "Criteria", criteriaByAgent: "by the verifier agent", writingCriteria: "The verifier agent is writing the criteria …", accept: "👍 Fits", acceptReason: "Why? (optional, the agents read it)", acceptDo: "Accept", acceptUndo: "Withdraw acceptance", acceptedBy: { judges: "✓ accepted (judges)", human: "✓ accepted (person)" } as Record<string, string>, judging: "being judged", acceptedN: "accepted", criteriaN: "criteria", judgesTitle: "The judges' verdicts", answerRanking: "Answers by criteria", acceptedAnswer: "Accepted answer", noAccepted: "no accepted answer yet", stopReasonPh: "Why? (optional, the agents read it)", textNoCode: "In a text task the agents write the answers.", plans: "The team's plans", planLabel: "Planning round", planHint: "Before the first code every agent proposes an approach, everyone rates the others' proposals (1 to 5), the best are implemented.", planScore: (s: number | null, v: number) => (s === null ? "not rated" : `★ ${s} (${v} votes)`), planUsed: (n: number) => (n ? `implemented ${n}×` : "not implemented"), planBy: (a: string) => `after ${a}'s plan`, boardPlan: (p: number, v: number) => `${p} plans · ${v} ratings · `, runMode: "Run mode", modeGens: "Generations", modeBoard: "Work board", boardOnlyModels: "The work board needs model agents", budgetTok: "Budget tokens", budgetUsd: "Budget $", budgetPh: "no limit", boardInfo: (o: number, d: number, c: number) => `items ${o} open · ${d} done · ${c} critiques`, critiqueBy: (a: string) => `after ${a}'s critique`, critiquesTitle: "Critique by the others", followedTitle: (a: string, v: string) => `Revised after this critique by ${a} (${v}):`, critiqueOf: (a: string, v: string) => `🗨 ${a} (${v}):`, usageHint: "Tokens and cost of this model call (list price from the model catalog; only a guide with subscription access)", usageBlockHint: "Tokens and cost of all model calls of this block, the verifier agent included (list price)", usageDetail: (i: string, o: string, cr: string, cw: string) => `input ${i} · output ${o} · cache read ${cr} · cache written ${cw} (list price)`, understood: "Understood:", notUnderstood: "Not readable: check the JSON (commas between values, brackets) or write plain text like \"5 -> 120\".", oneOf: "one of", byRule: "checked by the rule", more: (n: number) => `… and ${n} more`, noTaskYet: "Create a task first (\"Start run\" on the left, or \"Create task\" with 0 agents)", stopRun: "Stop the run", stopTitle: "Stop the run?", stopText: (title: string, gen: number, gens: number) => `The run in "${title}" (generation ${gen} of at most ${gens}) will be stopped. Contributions already handed in are still judged; everything so far is kept.`, stopYes: "Yes, stop", timeLimit: "Time limit per contribution (s)", timeLimitShort: (s: number) => `time limit ${s} s`, timeLimitMax: (s: number) => `1 to ${s} s`, noteRejected: "The contribution of this note was rejected; the agents no longer get it.", veto: "👎 Not like this", vetoReason: "Why? (optional, the agents read it)", vetoDo: "Reject", vetoCancel: "Cancel", vetoUndo: "Withdraw", vetoed: (by: string) => `👎 rejected by ${by}`, vetoedShort: "rejected", hardcoded: "✗ result hard-coded", hardcodedShort: "hard-coded", verifyLabel: "Accept other right results too", verifyHint: "A verifier agent writes a check rule from the description and the examples; without the tick only the given results count.", verifyOff: "needs model agents", verifying: "The verifier agent is writing the check rule …", rule: "Check rule", ruleBy: { verifier: "Check rule (by the verifier agent)", user: "Check rule" } as Record<string, string>, passedN: "cases passed", caseRule: "checked by the rule" },
 } as const;
 type Tr = (typeof T)[Lang];
 
@@ -201,13 +202,47 @@ function CodeBlock({ sid, c, fn, t }: { sid: string; c: { candidateId: string; s
 	);
 }
 
+/** A text answer unfolded: the critique it followed, the answer, every judge's verdict per criterion, the critiques. */
+function AnswerBlock({ sid, c, t }: { sid: string; c: { candidateId: string; ok?: boolean | null }; t: Tr }) {
+	const d = useDetails(sid, c.candidateId, c.ok);
+	return (
+		<>
+			{d?.followed ? <div className="critique critique--followed"><b>{t.followedTitle(d.followed.author, shortVia(d.followed.via))}</b>{"\n"}{d.followed.text}</div> : null}
+			<div className="answer">{d ? d.source : "…"}</div>
+			{d?.judgements?.length ? (
+				<div className="critiques">
+					<div className="notes__title">{t.judgesTitle}</div>
+					{d.judgements.map((j, i) => (
+						<div key={i} className="critique">
+							<b>{j.judge} ({shortVia(j.via)})</b>
+							{j.results.map((r, k) => <div key={k} className={r.pass ? "ok" : "bad"}>{r.pass ? "✓" : "✗"} {r.criterion}{r.reason ? ` — ${r.reason}` : ""}</div>)}
+						</div>
+					))}
+				</div>
+			) : null}
+			{d?.critiques?.length ? (
+				<div className="critiques">
+					<div className="notes__title">{t.critiquesTitle}</div>
+					{d.critiques.map((k, i) => <div key={i} className="critique"><b>{t.critiqueOf(k.author, shortVia(k.via))}</b>{"\n"}{k.text}</div>)}
+				</div>
+			) : null}
+		</>
+	);
+}
+
+/** A block's name: the task and its function, or for a text task the start of the question. */
+const taskLabel = (task: Block["task"], lang: Lang) => (task.kind === "text" ? `${task.title[lang]}: ${task.prompt[lang].length > 60 ? task.prompt[lang].slice(0, 60) + "…" : task.prompt[lang]}` : `${task.title[lang]} (${task.fn})`);
+
+/** Is this contribution a text answer (judged against criteria)? */
+const isAnswer = (c: Contribution) => c.judges !== undefined;
+
 function Tile({ c, isBest, open, onClick, t, lang, basedOn }: { c: Contribution; isBest: boolean; open: boolean; onClick: () => void; t: Tr; lang: Lang; basedOn?: string }) {
 	const state = c.ok === null ? "wait" : counts(c) ? "ok" : c.vetoed || c.hardcoded ? "bad" : (c.passed ?? 0) > 0 ? "part" : "bad";
 	return (
 		<button type="button" className={`tile tile--${state}${isBest ? " tile--best" : ""}${open ? " tile--open" : ""}`} aria-expanded={open} onClick={onClick} title={c.note ?? c.error}>
 			<span className="tile__who">{c.author}</span>
 			<span className="tile__via">{shortVia(c.via)}</span>
-			<span className="tile__result" title={c.total ? `${c.passed ?? 0}/${c.total} ${t.passedN}` : undefined}>{c.ok === null ? "…" : c.vetoed ? "👎" : c.hardcoded ? "✗" : c.ok ? fmtMs(c.ms) : c.total ? `${c.passed ?? 0}/${c.total}` : "✗"}</span>
+			<span className="tile__result" title={c.total ? `${c.passed ?? 0}/${c.total} ${t.passedN}` : undefined}>{c.ok === null ? "…" : c.vetoed ? "👎" : c.hardcoded ? "✗" : c.ok ? (isAnswer(c) ? "✓" : fmtMs(c.ms)) : c.total ? `${c.passed ?? 0}/${c.total}` : "✗"}</span>
 			{c.vetoed || c.hardcoded ? <span className="tile__flag">{c.vetoed ? t.vetoedShort : t.hardcodedShort}</span> : null}
 			{c.role ? <span className="tile__lineage" title={`${t.roles[c.role] ?? c.role}${basedOn ? ` ↳ ${basedOn}` : ""}`}>{t.roles[c.role] ?? c.role}{basedOn ? ` ↳ ${basedOn}` : ""}{c.critiques?.length ? ` · 🗨${c.critiques.length}` : ""}</span> : null}
 			{c.usage ? <span className="tile__usage" title={t.usageHint}>{fmtSpent(c.usage.total, c.usage.costUsd, lang)}</span> : null}
@@ -218,7 +253,7 @@ function Tile({ c, isBest, open, onClick, t, lang, basedOn }: { c: Contribution;
 }
 
 /** Themed yes/no dialog (instead of window.confirm): focus starts on "No", Escape and a click outside answer "No". */
-function ConfirmDialog({ title, text, yes, no, onYes, onNo }: { title: string; text: string; yes: string; no: string; onYes: () => void; onNo: () => void }) {
+function ConfirmDialog({ title, text, yes, no, onYes, onNo, reason }: { title: string; text: string; yes: string; no: string; onYes: () => void; onNo: () => void; reason?: { placeholder: string; value: string; onChange: (v: string) => void } }) {
 	const noRef = useRef<HTMLButtonElement>(null), yesRef = useRef<HTMLButtonElement>(null);
 	useEffect(() => {
 		const before = document.activeElement as HTMLElement | null;
@@ -234,6 +269,7 @@ function ConfirmDialog({ title, text, yes, no, onYes, onNo }: { title: string; t
 				}}>
 				<h2 id="dlg-title">{title}</h2>
 				<p id="dlg-text">{text}</p>
+				{reason ? <textarea className="modal__reason" rows={3} maxLength={300} placeholder={reason.placeholder} value={reason.value} onChange={(e) => reason.onChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Tab") e.stopPropagation(); }} /> : null}
 				<div className="modal__actions">
 					<button ref={noRef} type="button" className="btn" onClick={onNo}>{no}</button>
 					<button ref={yesRef} type="button" className="btn btn--danger" onClick={onYes}>{yes}</button>
@@ -243,11 +279,12 @@ function ConfirmDialog({ title, text, yes, no, onYes, onNo }: { title: string; t
 	);
 }
 
-function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, onCode, onDelete, onStop, onVeto, onHint, onContinue, t, lang }: { sid: string; onStop: () => void; onVeto: (candidateId: string, reason: string, undo: boolean) => void; onHint: (blockId: string, text: string) => void; onContinue: () => void; b: Block; open: boolean; focused: boolean; run: Snapshot["run"]; openCode: Set<string>; onToggle: () => void; onFocus: () => void; onCode: (id: string) => void; onDelete: () => void; t: Tr; lang: Lang }) {
+function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, onCode, onDelete, onStop, onVeto, onAccept, onHint, onContinue, t, lang }: { sid: string; onStop: () => void; onAccept: (candidateId: string, reason: string, undo: boolean) => void; onVeto: (candidateId: string, reason: string, undo: boolean) => void; onHint: (blockId: string, text: string) => void; onContinue: () => void; b: Block; open: boolean; focused: boolean; run: Snapshot["run"]; openCode: Set<string>; onToggle: () => void; onFocus: () => void; onCode: (id: string) => void; onDelete: () => void; t: Tr; lang: Lang }) {
 	const done = b.contributions.filter((c) => c.ok !== null).length, ok = b.contributions.filter(counts).length;
 	const running = run?.active && run.blockId === b.blockId;
 	const opened = b.contributions.filter((c) => openCode.has(c.candidateId));
 	const [vetoing, setVetoing] = useState<{ id: string; reason: string } | null>(null);
+	const [accepting, setAccepting] = useState<{ id: string; reason: string } | null>(null);
 	const [hint, setHint] = useState("");
 	const sendHint = () => { if (hint.trim()) { onHint(b.blockId, hint.trim()); setHint(""); } };
 	const byId = new Map(b.contributions.map((c) => [c.candidateId, c]));
@@ -257,9 +294,9 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 			<div className="block__bar">
 			<button type="button" className="block__head" aria-expanded={open} onClick={() => { onToggle(); onFocus(); }}>
 				<span className="block__caret">{open ? "▾" : "▸"}</span>
-				<span className="block__title">{b.task.title[lang]} <code>{b.task.fn}</code></span>
+				<span className="block__title">{b.task.kind === "text" ? taskLabel(b.task, lang) : <>{b.task.title[lang]} <code>{b.task.fn}</code></>}</span>
 				<span className="chip">{b.contributions.length} {t.contributions}</span>
-				<span className="chip chip--ok">{ok}/{done} {t.correctN}</span>
+				<span className="chip chip--ok">{ok}/{done} {b.task.kind === "text" ? t.acceptedN : t.correctN}</span>
 				{b.best ? <span className="chip chip--best">★ {fmtMs(b.best.ms)}</span> : null}
 				{b.usage ? <span className="chip" title={t.usageBlockHint}>Σ {fmtSpent(b.usage.tokens, b.usage.costUsd, lang)}</span> : null}
 				{running ? <span className="chip chip--wait">{t.running} · {run!.gen}/{run!.gens}</span> : null}
@@ -270,6 +307,12 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 			{open ? (
 				<div className="block__body" onClick={onFocus}>
 					<p className="lead">{b.task.prompt[lang]}{b.task.timeoutS ? <span className="chip chip--time">{t.timeLimitShort(b.task.timeoutS)}</span> : null}</p>
+					{b.task.kind === "text" && b.task.criteria?.length ? (
+						<div className="rule">
+							<span>{t.criteriaTitle}{b.task.criteriaBy === "verifier" ? ` (${t.criteriaByAgent})` : ""}:</span>
+							<ol className="criteria">{b.task.criteria.map((c, i) => <li key={i}>{c}</li>)}</ol>
+						</div>
+					) : null}
 					{b.task.check ? <div className="rule"><span>{t.ruleBy[b.task.checkBy ?? "user"] ?? t.rule}:</span> <code>{b.task.check}</code></div> : null}
 					{b.messages.length ? <div className="block__log">{b.messages.map((m, i) => <div key={i}>{m.text}</div>)}</div> : null}
 					{/* agent notes stand with their attempts (below); up here only people's hints and notes without an attempt */}
@@ -306,12 +349,15 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 						<div key={c.candidateId} className="codecard">
 							<div className="codecard__head">
 								<b>{c.author}</b> <span className="chip">{c.via}</span>
-								{c.ok === null ? <span className="chip chip--wait">{t.wait}</span> : c.vetoed ? <span className="chip chip--bad">{t.vetoed(c.vetoed.by)}</span> : c.hardcoded ? <span className="chip chip--bad">{t.hardcoded}</span> : c.ok ? <span className="chip chip--ok">{t.ok} · {fmtMs(c.ms)}</span> : <span className="chip chip--bad">{t.bad}{c.total ? ` · ${c.passed ?? 0}/${c.total}` : ""}</span>}
+								{c.ok === null ? <span className="chip chip--wait">{isAnswer(c) ? t.judging : t.wait}</span> : c.vetoed ? <span className="chip chip--bad">{t.vetoed(c.vetoed.by)}</span> : c.hardcoded ? <span className="chip chip--bad">{t.hardcoded}</span> : c.ok && isAnswer(c) ? <span className="chip chip--ok">{t.acceptedBy[c.acceptedBy ?? "judges"]}</span> : c.ok ? <span className="chip chip--ok">{t.ok} · {fmtMs(c.ms)}</span> : <span className="chip chip--bad">{t.bad}{c.total ? ` · ${c.passed ?? 0}/${c.total}` : ""}</span>}
 								{c.role ? <span className="chip">{t.roles[c.role] ?? c.role}</span> : null}
 								{c.usage ? <span className="chip" title={t.usageDetail(fmtTok(c.usage.input, lang), fmtTok(c.usage.output, lang), fmtTok(c.usage.cacheRead, lang), fmtTok(c.usage.cacheWrite, lang))}>{fmtSpent(c.usage.total, c.usage.costUsd, lang)}</span> : null}
 								{origin(c) || c.planBy ? <span className="lineage">{[origin(c) ? `${t.basedOn} ${origin(c)}` : "", c.critiqueBy ? t.critiqueBy(c.critiqueBy) : "", c.planBy ? t.planBy(c.planBy) : ""].filter(Boolean).join(", ")}</span> : null}
 								<span className="spacer" />
-								{c.ok === null ? null : c.vetoed
+								{isAnswer(c) && !c.vetoed ? (c.acceptedBy === "human"
+									? <button type="button" className="btn" onClick={() => onAccept(c.candidateId, "", true)}>{t.acceptUndo}</button>
+									: <button type="button" className="btn btn--primary" onClick={() => setAccepting({ id: c.candidateId, reason: "" })}>{t.accept}</button>) : null}
+								{c.ok === null && !isAnswer(c) ? null : c.vetoed
 									? <button type="button" className="btn" onClick={() => onVeto(c.candidateId, "", true)}>{t.vetoUndo}</button>
 									: <button type="button" className="btn" onClick={() => setVetoing({ id: c.candidateId, reason: "" })}>{t.veto}</button>}
 								<button type="button" className="btn" onClick={() => onCode(c.candidateId)}>{t.hide}</button>
@@ -324,10 +370,18 @@ function BlockView({ sid, b, open, focused, run, openCode, onToggle, onFocus, on
 									<button type="button" className="btn" onClick={() => setVetoing(null)}>{t.vetoCancel}</button>
 								</div>
 							) : null}
+							{accepting?.id === c.candidateId ? (
+								<div className="vetobar">
+									<input className="wide" autoFocus maxLength={300} placeholder={t.acceptReason} value={accepting.reason} onChange={(e) => setAccepting({ ...accepting, reason: e.target.value })}
+										onKeyDown={(e) => { if (e.key === "Enter") { onAccept(c.candidateId, accepting.reason, false); setAccepting(null); } if (e.key === "Escape") setAccepting(null); }} />
+									<button type="button" className="btn btn--primary" onClick={() => { onAccept(c.candidateId, accepting.reason, false); setAccepting(null); }}>{t.acceptDo}</button>
+									<button type="button" className="btn" onClick={() => setAccepting(null)}>{t.vetoCancel}</button>
+								</div>
+							) : null}
 							{c.note ? <div className={`attempt-note${c.vetoed || c.hardcoded ? " note--rejected" : ""}`} title={c.vetoed || c.hardcoded ? t.noteRejected : undefined}>💡 {c.note}</div> : null}
 							{c.vetoed?.reason ? <div className="err">👎 {c.vetoed.reason}</div> : null}
 							{c.error ? <div className="err">{c.error}</div> : null}
-							<CodeBlock key={c.candidateId} sid={sid} c={c} fn={b.task.fn} t={t} />
+							{isAnswer(c) ? <AnswerBlock key={c.candidateId} sid={sid} c={c} t={t} /> : <CodeBlock key={c.candidateId} sid={sid} c={c} fn={b.task.fn} t={t} />}
 						</div>
 					))}
 				</div>
@@ -357,6 +411,8 @@ export function CodemodeChat() {
 	const [openCode, setOpenCode] = useState<Set<string>>(new Set());
 	const [confirmDel, setConfirmDel] = useState<Block | null>(null);
 	const [confirmStop, setConfirmStop] = useState<Block | null>(null);
+	const [stopReason, setStopReason] = useState("");
+	const [textForm, setTextForm] = useState({ prompt: "", criteria: "" });
 	const lastCurrent = useRef("");
 	const t = T[lang];
 	const sid = encodeURIComponent(session);
@@ -408,18 +464,19 @@ export function CodemodeChat() {
 		// an active custom task fills an empty form (e.g. after a reload), so it can be continued or changed
 		const cc = snap.currentCustom;
 		if (current.task.id === "custom" && cc) setCustom((c) => (c.fn || c.prompt || c.cases ? c : { ...c, fn: cc.fn, prompt: cc.prompt, cases: JSON.stringify(cc.cases), timeoutS: current.task.timeoutS ?? 5 }));
+		if (current.task.kind === "text") setTextForm((f) => (f.prompt ? f : { prompt: current.task.prompt.en, criteria: current.task.criteriaBy === "user" ? (current.task.criteria ?? []).join("\n") : "" }));
 	}, [snap, current]);
 
-	const customChosen = choice === "custom";
+	const customChosen = choice === "custom", textChosen = choice === "text";
 	const maxTimeoutS = snap?.limits?.maxTimeoutS ?? 60; // the server's upper bound (CODEMODE_MAX_TIMEOUT_S)
 	const modelLabels = (llm?.enabled && llm.on ? llm.models.map((m) => m.label) : []).join("|");
 	// A custom task has no scripted variants: as soon as it is chosen, switch the contenders to the available model(s).
 	useEffect(() => {
-		if (!customChosen) return;
+		if (!customChosen && !textChosen) return;
 		const models = modelLabels ? modelLabels.split("|") : [];
 		if (!models.length) return;
 		setContenders((cur) => { const keep = cur.filter((c) => c !== "scripted" && models.includes(c)); return keep.length ? keep : [models[0]!]; });
-	}, [customChosen, modelLabels]);
+	}, [customChosen, textChosen, modelLabels]);
 
 	const act = useCallback(async (path: string, body: unknown) => {
 		setError("");
@@ -430,6 +487,15 @@ export function CodemodeChat() {
 	const startRun = async () => {
 		setError("");
 		try {
+			if (textChosen) { // a text task: the same question continues its block; the board runs it (3 agents or more)
+				const same = current?.task.kind === "text" && current.task.prompt.en === textForm.prompt.trim();
+				if (!same) {
+					if (!textForm.criteria.trim()) setBusy(t.writingCriteria);
+					try { await api(`/sessions/${sid}/task`, { text: { prompt: textForm.prompt, criteria: textForm.criteria } }); } finally { setBusy(""); }
+				}
+				if (params.agents > 0) await api(`/sessions/${sid}/run`, runBody(true, true));
+				return;
+			}
 			// the same function and description continue the active block (with its attempts) instead of starting afresh
 			const sameCustom = current?.task.id === "custom" && current.task.fn === custom.fn.trim().slice(0, 41) && current.task.prompt.en === custom.prompt.slice(0, 600);
 			const retimed = sameCustom && (current!.task.timeoutS ?? 5) !== custom.timeoutS; // the server changes the limit in place
@@ -444,30 +510,31 @@ export function CodemodeChat() {
 				if (customChosen && !retimed && custom.verify && llm?.enabled && llm.on) setBusy(t.verifying); // the verifier takes a few seconds
 				try { await api(`/sessions/${sid}/task`, body); } finally { setBusy(""); }
 			}
-			if (params.agents > 0) await api(`/sessions/${sid}/run`, runBody(customChosen));
+			if (params.agents > 0) await api(`/sessions/${sid}/run`, runBody(customChosen, params.board));
 		} catch (e) { setError((e as Error).message); }
 	};
 	/** The run as the panel sets it; the board and custom tasks take model agents only. */
-	const runBody = (custom: boolean) => ({
+	const runBody = (modelsOnly: boolean, board: boolean) => ({
 		agents: Math.max(1, params.agents), gens: params.gens, perAgent: params.per, polish: params.polish, lang,
-		contenders: contenders.filter((c) => !(custom || params.board) || c !== "scripted"),
-		...(params.board ? { board: true, plan: params.plan } : {}),
+		contenders: contenders.filter((c) => !(modelsOnly || board) || c !== "scripted"),
+		...(board ? { board: true, plan: params.plan } : {}),
 		...(params.budgetTokens.trim() ? { budgetTokens: Number(params.budgetTokens) } : {}),
 		...(params.budgetUsd.trim() ? { budgetUsd: Number(params.budgetUsd.replace(",", ".")) } : {}),
 	});
 	// "Keep working": a new run in the active block as it is (no new block, the attempts stay)
 	const continueRun = async () => {
 		setError("");
-		const isCustom = current?.task.id === "custom";
-		try { await api(`/sessions/${sid}/run`, runBody(isCustom)); }
+		const isCustom = current?.task.id === "custom", isText = current?.task.kind === "text";
+		try { await api(`/sessions/${sid}/run`, runBody(isCustom || isText, params.board || isText)); }
 		catch (e) { setError((e as Error).message); }
 	};
 	const toggleSet = (set: Set<string>, id: string) => { const n = new Set(set); if (n.has(id)) n.delete(id); else n.add(id); return n; };
 
 	const catalog = snap?.tasks.find((x) => x.id === choice);
 	const run = snap?.run;
-	const customIncomplete = customChosen && (!custom.fn.trim() || !custom.prompt.trim() || !custom.cases.trim());
-	const needsContender = params.agents > 0 && contenders.filter((c) => !customChosen || c !== "scripted").length === 0;
+	const customIncomplete = (customChosen && (!custom.fn.trim() || !custom.prompt.trim() || !custom.cases.trim())) || (textChosen && !textForm.prompt.trim());
+	const needsContender = params.agents > 0 && contenders.filter((c) => !(customChosen || textChosen) || c !== "scripted").length === 0;
+	const textActive = current?.task.kind === "text";
 	type Item = { ts: number; key: string; m?: Message; b?: Block };
 	const timeline: Item[] = [
 		...(snap?.messages ?? []).map((m): Item => ({ ts: m.ts, key: `m${m.ts}${m.author}${m.text.length}`, m })),
@@ -476,7 +543,7 @@ export function CodemodeChat() {
 	const focusBlock = snap?.blocks.find((b) => b.blockId === focus) ?? current;
 	const board = (focusBlock?.contributions ?? []).filter(counts).sort((a, b) => a.ms! - b.ms!).slice(0, 8);
 	const standings = Object.values((focusBlock?.contributions ?? []).filter((c) => c.via !== "human").reduce<Record<string, { via: string; n: number; ok: number; best: number | null }>>((acc, c) => { const e = (acc[c.via] ??= { via: c.via, n: 0, ok: 0, best: null }); if (c.ok !== null) { e.n++; if (counts(c)) { e.ok++; e.best = e.best === null ? c.ms : Math.min(e.best, c.ms!); } } return acc; }, {})).sort((a, b) => (a.best ?? Infinity) - (b.best ?? Infinity));
-	const blockLabel = focusBlock ? `${focusBlock.task.title[lang]} (${focusBlock.task.fn})` : "";
+	const blockLabel = focusBlock ? taskLabel(focusBlock.task, lang) : "";
 
 	return (
 		<>
@@ -497,9 +564,18 @@ export function CodemodeChat() {
 							<select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={t.task}>
 								{(snap?.tasks ?? []).map((x) => <option key={x.id} value={x.id}>{x.title[lang]}</option>)}
 								<option value="custom">{t.custom}</option>
+								<option value="text">{t.textTask}</option>
 							</select>
 						</div>
 						{!customChosen && catalog ? <p className="lead">{catalog.prompt[lang]} <code>{catalog.fn}</code></p> : null}
+						{textChosen ? (
+							<div className="customtask">
+								<div className="fieldlabel"><label htmlFor="tq">{t.questionLabel}</label></div>
+								<textarea id="tq" className="task-field" rows={6} maxLength={2000} placeholder={t.questionPh} value={textForm.prompt} onChange={(e) => setTextForm({ ...textForm, prompt: e.target.value })} />
+								<div className="fieldlabel"><label htmlFor="tc">{t.criteriaLabel}</label></div>
+								<textarea id="tc" className="task-field" rows={5} placeholder={t.criteriaPh} value={textForm.criteria} onChange={(e) => setTextForm({ ...textForm, criteria: e.target.value })} />
+							</div>
+						) : null}
 						{customChosen ? (
 							<div className="customtask">
 								<div className="fieldlabel"><label htmlFor="cfn">{t.fnLabel}</label><HelpTip id="fn" lang={lang} label={t.fnLabel} /></div>
@@ -537,12 +613,12 @@ export function CodemodeChat() {
 						<div className="row">
 							<label htmlFor="rmode">{t.runMode}</label>
 							<HelpTip id="runmode" lang={lang} label={t.runMode} />
-							<select id="rmode" value={params.board ? "board" : "gens"} disabled={!!run?.active} onChange={(e) => setParams({ ...params, board: e.target.value === "board" })}>
+							<select id="rmode" value={params.board || textChosen ? "board" : "gens"} disabled={!!run?.active || textChosen} onChange={(e) => setParams({ ...params, board: e.target.value === "board" })}>
 								<option value="gens">{t.modeGens}</option>
 								<option value="board">{t.modeBoard}</option>
 							</select>
 						</div>
-						{params.board ? <label className="check" title={t.planHint}><input type="checkbox" checked={params.plan} disabled={!!run?.active} onChange={(e) => setParams({ ...params, plan: e.target.checked })} /> {t.planLabel}</label> : null}
+						{params.board || textChosen ? <label className="check" title={t.planHint}><input type="checkbox" checked={params.plan} disabled={!!run?.active} onChange={(e) => setParams({ ...params, plan: e.target.checked })} /> {t.planLabel}</label> : null}
 						<div className="row">
 							<label htmlFor="rbtok">{t.budgetTok}</label>
 							<HelpTip id="budget" lang={lang} label={t.budgetTok} />
@@ -554,7 +630,7 @@ export function CodemodeChat() {
 						</div>
 						<fieldset className="contenders">
 							<legend>{t.contenders} <HelpTip id="contenders" lang={lang} label={t.contenders} /></legend>
-							{[...(customChosen ? [] : [{ id: "scripted", label: t.scriptedAgents, off: false }]), ...(llm?.models ?? []).map((m) => ({ id: m.label, label: m.label, off: !llm?.enabled || !llm.on }))].map((c) => (
+							{[...(customChosen || textChosen ? [] : [{ id: "scripted", label: t.scriptedAgents, off: false }]), ...(llm?.models ?? []).map((m) => ({ id: m.label, label: m.label, off: !llm?.enabled || !llm.on }))].map((c) => (
 								<label key={c.id} className="check">
 									<input type="checkbox" disabled={c.off || !!run?.active} checked={contenders.includes(c.id)} onChange={(e) => setContenders((cur) => e.target.checked ? [...cur, c.id].slice(-4) : cur.filter((x) => x !== c.id))} />
 									{c.label}
@@ -571,11 +647,11 @@ export function CodemodeChat() {
 						{run ? <div className={"pill" + (run.active ? " pill--accent" : "")}>{(run.contenders ?? [run.mode]).join(` ${t.versus} `)} · {run.board ? `${run.board.proposals !== undefined ? t.boardPlan(run.board.proposals, run.board.votes ?? 0) : ""}${t.boardInfo(run.board.open, run.board.done, run.board.critiques)}` : `${run.gen}/${run.gens}`}{run.usage?.tokens ? ` · ${fmtSpent(run.usage.tokens, run.usage.costUsd, lang)}` : ""}{run.budget ? ` / ${[run.budget.tokens ? fmtTok(run.budget.tokens, lang) : "", run.budget.usd ? fmtUsd(run.budget.usd, lang) : ""].filter(Boolean).join(" · ")}` : ""}</div> : null}
 						{run?.note ? <div className="notice">{run.note}</div> : null}
 					</div>
-					<div className="panel">
+					{textActive ? null : <div className="panel">
 						<h2>{t.yours} <HelpTip id="code" lang={lang} label={t.yours} /></h2>
 						<textarea rows={7} spellCheck={false} placeholder={current ? `function ${current.task.fn}(...) { ... }` : ""} value={code} onChange={(e) => setCode(e.target.value)} />
 						<div className="row"><button className="btn btn--primary" disabled={!current} title={current ? undefined : t.noTaskYet} onClick={() => { const source = code; setCode(""); void act("/code", { author: name, source }); }}>{t.submit}</button></div>
-					</div>
+					</div>}
 					<AdminPanel lang={lang} onChanged={() => { api<Llm>("/llm").then(setLlm).catch(() => {}); }} />
 				</aside>
 				<section>
@@ -587,12 +663,29 @@ export function CodemodeChat() {
 					{timeline.length ? (
 						<div className="timeline">
 							{timeline.map((i) => i.b
-								? <BlockView key={i.key} sid={sid} b={i.b} t={t} lang={lang} run={run ?? null} open={open.has(i.b.blockId)} focused={focusBlock?.blockId === i.b.blockId} openCode={openCode} onToggle={() => setOpen((cur) => toggleSet(cur, i.b!.blockId))} onFocus={() => setFocus(i.b!.blockId)} onCode={(id) => setOpenCode((cur) => toggleSet(cur, id))} onDelete={() => setConfirmDel(i.b!)} onStop={() => setConfirmStop(i.b!)} onVeto={(candidateId, reason, undo) => void act("/veto", { candidateId, by: name, reason, undo })} onHint={(blockId, text) => void act("/hint", { blockId, text, by: name })} onContinue={() => void continueRun()} />
+								? <BlockView key={i.key} sid={sid} b={i.b} t={t} lang={lang} run={run ?? null} open={open.has(i.b.blockId)} focused={focusBlock?.blockId === i.b.blockId} openCode={openCode} onToggle={() => setOpen((cur) => toggleSet(cur, i.b!.blockId))} onFocus={() => setFocus(i.b!.blockId)} onCode={(id) => setOpenCode((cur) => toggleSet(cur, id))} onDelete={() => setConfirmDel(i.b!)} onStop={() => setConfirmStop(i.b!)} onVeto={(candidateId, reason, undo) => void act("/veto", { candidateId, by: name, reason, undo })} onAccept={(candidateId, reason, undo) => void act("/accept", { candidateId, by: name, reason, undo })} onHint={(blockId, text) => void act("/hint", { blockId, text, by: name })} onContinue={() => void continueRun()} />
 								: <div key={i.key} className={"msg" + (i.m!.author === "system" ? " msg--system" : "")}><b>{i.m!.author}</b>{i.m!.text}</div>)}
 						</div>
 					) : <div className="empty">{t.noBlocks}</div>}
 				</section>
 				<aside>
+					{focusBlock?.task.kind === "text" ? (
+						<>
+							<div className="panel">
+								<h2>{t.answerRanking}</h2>
+								{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
+								{(() => {
+									const rows = [...focusBlock.contributions].filter((c) => c.ok !== null && !c.vetoed).sort((a, b) => Number(!!b.ok) - Number(!!a.ok) || (b.passed ?? 0) - (a.passed ?? 0) || b.ts - a.ts).slice(0, 8);
+									return rows.length ? <table className="board"><tbody>{rows.map((c, i) => <tr key={c.candidateId}><td>{i + 1}. {c.author}</td><td>{c.ok ? "✓" : `${c.passed ?? 0}/${c.total ?? 0}`}</td></tr>)}</tbody></table> : <div className="empty">{t.noAccepted}</div>;
+								})()}
+							</div>
+							<div className="panel">
+								<h2>{t.acceptedAnswer}</h2>
+								{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
+								{(() => { const a = focusBlock.contributions.find((c) => c.ok && !c.vetoed); return a ? <AnswerBlock key={a.candidateId} sid={sid} c={a} t={t} /> : <div className="empty">{t.noAccepted}</div>; })()}
+							</div>
+						</>
+					) : (<>
 					<div className="panel">
 						<h2>{t.board} <HelpTip id="board" lang={lang} label={t.board} /></h2>
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
@@ -609,15 +702,17 @@ export function CodemodeChat() {
 						{blockLabel ? <div className="forblock">{t.forBlock} {blockLabel}</div> : null}
 						{focusBlock?.best ? <CodeBlock key={focusBlock.best.candidateId} sid={sid} c={focusBlock.best} fn={focusBlock.task.fn} t={t} /> : <div className="empty">{t.nobest}</div>}
 					</div>
+					</>)}
 				</aside>
 			</main>
 			{confirmStop ? (
-				<ConfirmDialog title={t.stopTitle} text={t.stopText(`${confirmStop.task.title[lang]} (${confirmStop.task.fn})`, run?.gen ?? 0, run?.gens ?? 0)} yes={t.stopYes} no={t.no}
-					onNo={() => setConfirmStop(null)}
-					onYes={() => { setConfirmStop(null); void act("/stop", {}); }} />
+				<ConfirmDialog title={t.stopTitle} text={t.stopText(taskLabel(confirmStop.task, lang), run?.gen ?? 0, run?.gens ?? 0)} yes={t.stopYes} no={t.no}
+					reason={{ placeholder: t.stopReasonPh, value: stopReason, onChange: setStopReason }}
+					onNo={() => { setConfirmStop(null); setStopReason(""); }}
+					onYes={() => { setConfirmStop(null); void act("/stop", { by: name, reason: stopReason }); setStopReason(""); }} />
 			) : null}
 			{confirmDel ? (
-				<ConfirmDialog title={t.delTitle} text={t.delText(`${confirmDel.task.title[lang]} (${confirmDel.task.fn})`, confirmDel.contributions.length)} yes={t.yes} no={t.no}
+				<ConfirmDialog title={t.delTitle} text={t.delText(taskLabel(confirmDel.task, lang), confirmDel.contributions.length)} yes={t.yes} no={t.no}
 					onNo={() => setConfirmDel(null)}
 					onYes={() => { const id = confirmDel.blockId; setConfirmDel(null); setOpen((cur) => { const n = new Set(cur); n.delete(id); return n; }); setFocus((cur) => (cur === id ? null : cur)); void act("/delete", { blockId: id }); }} />
 			) : null}

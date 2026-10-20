@@ -288,3 +288,10 @@ main > * { min-width: 0; }
 .plan summary { cursor: pointer; }
 .plan--used summary b { color: var(--accent); }
 .plan__text { white-space: pre-wrap; overflow-wrap: anywhere; padding: 6px 8px; margin-top: 4px; background: var(--surface); border-radius: 6px; font-size: 12.5px; }
+
+/* text tasks: the answer, its criteria, the reason field of a dialog */
+.answer { white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px 12px; background: var(--code-bg); font-size: 14px; line-height: 1.55; max-height: 420px; overflow: auto; }
+.criteria { margin: 4px 0 0; padding-left: 22px; color: var(--text); }
+.critique .ok { color: var(--success); }
+.critique .bad { color: var(--danger); }
+.modal__reason { width: 100%; margin: 4px 0 10px; box-sizing: border-box; }

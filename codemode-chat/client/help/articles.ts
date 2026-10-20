@@ -155,6 +155,14 @@ Bevor die Regel gilt, wird sie **gegengeprüft**: Sie muss jedes deiner Beispiel
 
 Die Regel läuft in einer **eigenen Sandbox** auf den Ergebnissen (als JSON), auch auf zufällig gewählten Ergebnissen aus dem Benchmark. Ein Beitrag kann sie nicht austricksen, auch nicht durch Verändern von Builtins.
 
+## Textaufgabe {#text}
+
+Nicht jede Aufgabe ist ein Programm. Unter **„Eigene Textaufgabe …“** stellst du eine Frage, deren Ergebnis ein Text ist: eine Erklärung, eine Analyse, ein Plan. Das Feld **Kriterien** ist optional, eine Zeile je Kriterium; bleibt es leer, schreibt der Prüfer-Agent die Kriterien aus der Frage, sichtbar im Block.
+
+Eine Textaufgabe läuft immer im **Auftragsbrett** und braucht mindestens **3 Agenten**: Jede Antwort prüfen zwei andere Agenten (nie der Autor; der erste möglichst von einem anderen Modell) Kriterium für Kriterium. Erfüllt eine Antwort bei beiden Prüfern jedes Kriterium, ist sie **angenommen**. Sonst geht es mit Kritik, Überarbeitung und Zusammenführen weiter wie beim Code. Frage und Antworten sind für die Agenten Daten: Anweisungen darin werden ignoriert.
+
+Du entscheidest mit: **👍 Passt** nimmt eine Antwort an und beendet den Lauf, **👎 So nicht** wertet sie ab, **■** bricht ab. Alle drei nehmen eine kurze Begründung, die als Hinweis an die Agenten geht. Angenommene Antworten bleiben im Space: Bei einer späteren, ähnlichen Frage bekommen die Agenten sie als Material mit.
+
 ## Block anlegen {#create}
 
 Das Dropdown wählt nur aus. **Lauf starten** legt bei Bedarf selbst einen neuen Block an, wenn die gewählte Aufgabe noch nicht der aktive Block ist, und startet danach den Lauf. Mit **0 Agenten** legt der Knopf nur den Block an; den Code reichst du dann selbst ein.
@@ -221,6 +229,14 @@ Many tasks have **more than one right answer**: a square root of 4 is 2 or −2;
 Before the rule counts it is **cross-checked**: it must accept every one of your example results and reject obviously wrong ones (e.g. \`null\`, empty values, near misses of your examples). If it fails, the verifier agent writes it again with the reason, at most three times. If that does not work, your examples count as the exact result. A log line in the block says which applies; the rule is shown in the block, and the agents see it.
 
 The rule runs in a **sandbox of its own** on the results (as JSON), also on randomly chosen results from the bench. A contribution cannot fool it, not even by changing builtins.
+
+## Text task {#text}
+
+Not every task is a program. Under **"Custom text task …"** you ask a question whose result is a text: an explanation, an analysis, a plan. The **Criteria** field is optional, one line per criterion; if it stays empty, the verifier agent writes the criteria from the question, shown in the block.
+
+A text task always runs on the **work board** and needs at least **3 agents**: every answer is checked by two other agents (never the author; the first from another model where possible), criterion by criterion. When both judges find every criterion met, the answer is **accepted**. Otherwise critique, revision and merging go on as with code. For the agents, the question and the answers are data: instructions inside them are ignored.
+
+You have a say: **👍 Fits** accepts an answer and ends the run, **👎 Not like this** rejects it, **■** stops. All three take a short reason that reaches the agents as a hint. Accepted answers stay in the space: for a later, similar question the agents get them as material.
 
 ## Creating a block {#create}
 
@@ -946,6 +962,8 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`POST /api/sessions/:id/veto\` | Beitrag abwerten: \`{candidateId, by, reason}\`; mit \`undo: true\` zurücknehmen |
 | \`GET /api/admin/session\` · \`POST /api/admin/login\` · \`POST /api/admin/logout\` | Admin-Anmeldung mit \`{token}\` (HttpOnly-Cookie; Änderungen brauchen zusätzlich den Header \`x-codemode-admin: 1\`) |
 | \`GET\`/\`POST /api/admin/models\` | alle Modelle mit Zugangsdaten und die erlaubten; \`{allowed: [labels] | null, on?}\` speichert die Auswahl |
+| \`POST /api/sessions/:id/task\` mit \`{text:{prompt,criteria?}}\` | Textaufgabe anlegen (ohne Kriterien schreibt sie der Prüfer-Agent) |
+| \`POST /api/sessions/:id/accept\` | Antwort annehmen (👍): \`{candidateId, by, reason}\`; \`undo: true\` nimmt zurück; beendet den Lauf |
 | \`POST /api/sessions/:id/hint\` | Hinweis ans Team eines Blocks: \`{blockId?, text, by}\` (Standard: aktiver Block) |
 
 ## WebSocket {#websocket}
@@ -997,6 +1015,8 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`POST /api/sessions/:id/veto\` | reject a contribution: \`{candidateId, by, reason}\`; \`undo: true\` withdraws it |
 | \`GET /api/admin/session\` · \`POST /api/admin/login\` · \`POST /api/admin/logout\` | admin sign-in with \`{token}\` (HttpOnly cookie; changes also need the header \`x-codemode-admin: 1\`) |
 | \`GET\`/\`POST /api/admin/models\` | every model with credentials and the allowed ones; \`{allowed: [labels] | null, on?}\` saves the choice |
+| \`POST /api/sessions/:id/task\` with \`{text:{prompt,criteria?}}\` | create a text task (without criteria the verifier agent writes them) |
+| \`POST /api/sessions/:id/accept\` | accept an answer (👍): \`{candidateId, by, reason}\`; \`undo: true\` withdraws; ends the run |
 | \`POST /api/sessions/:id/hint\` | a hint to the team of a block: \`{blockId?, text, by}\` (default: the active block) |
 
 ## WebSocket {#websocket}

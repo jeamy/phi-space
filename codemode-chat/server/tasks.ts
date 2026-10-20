@@ -26,7 +26,27 @@ export type Task = {
 	checkBy?: "verifier" | "user";
 	/** Custom tasks: the time a contribution has for its cases and the bench (default: the judge's 5 s). */
 	timeoutMs?: number;
+	/** "text": a question whose answer is a text, judged by agents against `criteria` (no code, no sandbox). */
+	kind?: "code" | "text";
+	criteria?: string[];
+	/** Who wrote the criteria: the person (the optional field) or the verifier agent (when it was empty). */
+	criteriaBy?: "user" | "verifier";
 };
+
+export const isText = (t: Task): boolean => t.kind === "text";
+
+/** A text task: a question (up to 2000 characters) and 0 to 12 criteria of a good answer (one line each). */
+export function textTask(x: { prompt: unknown; criteria?: unknown; criteriaBy?: unknown }): Task {
+	const prompt = typeof x.prompt === "string" ? x.prompt.trim() : "";
+	if (!prompt || prompt.length > 2000) throw new Error("A text task needs a question of 1 to 2000 characters");
+	const raw = Array.isArray(x.criteria) ? x.criteria : typeof x.criteria === "string" ? x.criteria.split(/\r?\n/) : [];
+	const criteria = raw.map((c) => String(c).replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+	if (criteria.length > 12 || criteria.some((c) => c.length > 200)) throw new Error("At most 12 criteria of up to 200 characters");
+	return { id: "text", kind: "text", fn: "answer", title: { de: "Textaufgabe", en: "Text task" }, prompt: { de: prompt, en: prompt }, cases: [], bench: "", variants: [], criteria, ...(criteria.length ? { criteriaBy: x.criteriaBy === "verifier" ? "verifier" as const : "user" as const } : {}) };
+}
+
+/** The spec a text task is stored as (CodeTask). */
+export const textSpec = (t: Task) => ({ prompt: t.prompt.en, criteria: t.criteria ?? [], ...(t.criteriaBy ? { criteriaBy: t.criteriaBy } : {}) });
 
 const primes = (n: number) => { const p: number[] = []; for (let c = 2; p.length < n; c++) if (p.every((d) => d * d > c || c % d !== 0)) p.push(c); return p; };
 const fibs = (n: number) => { let a = 0, b = 1; for (let i = 0; i < n; i++) [a, b] = [b, a + b]; return a; };
@@ -144,7 +164,8 @@ export const customSpec = (t: Task) => ({ fn: t.fn, prompt: t.prompt.en, cases: 
 export const expectedOf = (c: Case): unknown[] => (Object.hasOwn(c, "expectAny") ? c.expectAny! : Object.hasOwn(c, "expect") ? [c.expect] : []);
 
 /** The task a CodeTask / CodeCandidate entry stands for: a catalog id, or a custom spec (fn, prompt, cases). */
-export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
+export function taskFromSpec(f: { taskId?: unknown; custom?: unknown; text?: unknown; fn?: unknown; prompt?: unknown; cases?: unknown }): Task | null {
+	if (f.taskId === "text") { try { return textTask((f.text ?? {}) as { prompt: unknown }); } catch { return null; } }
 	if (f.taskId === "custom") {
 		const c = (f.custom ?? { fn: f.fn, prompt: f.prompt, cases: f.cases }) as { fn: string; prompt: string; cases: Case[]; check?: string; checkBy?: "verifier" | "user"; timeoutS?: number };
 		try { return customTask(c); } catch { return null; }

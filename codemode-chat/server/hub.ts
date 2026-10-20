@@ -4,6 +4,8 @@
 //   CodeBest     the best correct code of a block (one entry per block, replaced when beaten)
 //   CodeNote     an insight an agent leaves for the team, or a person's hint (`human`; agents follow it first)
 //   CodeVeto     a person's "not like this" on a contribution: it no longer counts as correct, and agents avoid it
+//   TextAnswer    an answer to a text task (no code, no sandbox); TextJudgement a judge's verdict per criterion
+//   CodeAccept    a person's thumbs-up on an answer: accepted, and the run on its block ends
 //   CodeRoom     marks a room that exists: only a new room starts with the first catalog task; one whose blocks were
 //                all deleted stays empty
 // Judges take a candidate under a transaction and write its score atomically, like the evolve example. Every score
@@ -12,8 +14,8 @@
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, limitOf, MAX_SOURCE_CHARS, maxTimeoutMs, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
-import { customSpec, customTask, expectedOf, taskById, taskFromSpec, TASKS, type Task } from "./tasks.ts";
-import { addUsage, clipWords, criticModel, llmContribution, llmCritique, llmPropose, llmVote, setAllowedModels, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
+import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
+import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
@@ -28,7 +30,7 @@ const SNAPSHOT_MAX_BYTES = 900 * 1024;
 const REMOTE_GRACE_MS = 90_000;
 export type RunMode = "scripted" | "llm";
 /** The model side of a run; replaceable in tests. */
-export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote };
+export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; judge?: typeof llmJudge };
 /** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
 /** `gens` is the most generations a run may take; it ends earlier once the task is solved and `polish` more
  *  generations improved the solution (`solvedGen`: the generation that solved it, 0 = solved before the run). */
@@ -38,10 +40,10 @@ export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contend
 	/** Limits of the run's model calls; whichever is reached first ends it. */
 	budget?: { tokens?: number; usd?: number };
 	/** Why the run ended (when not solved or stopped): the budget, the item cap, or no work left. */
-	ended?: "budget" | "items" | "idle" };
+	ended?: "budget" | "items" | "idle" | "accepted" };
 /** `source` is left out of a snapshot when its byte budget is spent (`sourceOmitted`); `details()` returns it with the
  *  case results. `passed`/`total`: cases passed; `role`/`basedOn`: what an agent did and whose attempt it built on. */
-export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; note?: string; usage?: Usage; partner?: string; critiqueId?: string; critiques?: Array<{ author: string; via: string; text: string }>; critiqueBy?: string; proposalId?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
+export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; note?: string; usage?: Usage; partner?: string; judges?: number; acceptedBy?: "judges" | "human"; critiqueId?: string; critiques?: Array<{ author: string; via: string; text: string }>; critiqueBy?: string; proposalId?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
 type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; draining: number; seq: number;
 	best: { candidateId: string; ms: number; source: string } | null; deleted: Set<string>; buckets: Map<string, number[]>; remotePending: Map<string, { at: number; blockId?: string }>; poller?: ReturnType<typeof setInterval>; polling: boolean;
@@ -52,6 +54,8 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 	judging: Map<string, Record<string, unknown>>;
 	/** Set by #kick: work may have arrived while the judges were finishing; they look once more before they stop. */
 	rekick?: boolean;
+	/** Text tasks: the accepted answer of the active block (by its judges or a person), if any. */
+	answer?: string | null;
 };
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
@@ -87,7 +91,7 @@ export class CodeChatHub {
 	readonly #llm: LlmApi;
 	/** Lease of every room entry (CODEMODE_TTL_HOURS). */
 	readonly #ttl: number;
-	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote }; }
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote, criteria: llmCriteria, judge: llmJudge }; }
 
 	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
 	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
@@ -160,7 +164,8 @@ export class CodeChatHub {
 		if (!known) await this.host.write({ type: "CodeRoom", fields: { session: s.id, ts: Date.now() } }, null, this.#ttl);
 		if (last && task) {
 			s.task = task; s.blockId = String(last.blockId ?? `t${last.ts}`);
-			s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === s.blockId));
+			if (isText(task)) s.answer = (await this.#answers(s.id, s.blockId)).find((a) => a.ok)?.candidateId ?? null;
+			else s.best = bestOf((await this.#scores(s)).filter((c) => c.blockId === s.blockId));
 		} else if (!known) await this.#openBlock(s, TASKS[0]!, false); // a new room starts with the first catalog task
 		this.#kick(s); // candidates left from before a restart are judged now, not when the next one arrives
 		while (await this.host.take({ type: "WorkItem", fields: { session: s.id } }, NO_WAIT)); // a board run did not survive the restart
@@ -193,7 +198,10 @@ export class CodeChatHub {
 		const tmpl = { type: "CodeVeto", fields: { session: s.id, candidateId } };
 		while (await this.host.take(tmpl, NO_WAIT));
 		if (o.undo !== true) await this.host.write({ type: "CodeVeto", fields: { session: s.id, ...(typeof f.blockId === "string" ? { blockId: f.blockId } : {}), candidateId, by, reason, ts: Date.now() } }, null, this.#ttl);
-		if (f.blockId === s.blockId) await this.#resetBest(s);
+		if (f.blockId === s.blockId) {
+			if (isText(s.task)) s.answer = (await this.#answers(s.id, s.blockId)).find((a) => a.ok)?.candidateId ?? null;
+			else await this.#resetBest(s);
+		}
 		await this.#write(s, "system", o.undo === true ? `${by} withdrew the veto on ${String(f.author)}'s contribution` : `${by} rejected ${String(f.author)}'s contribution${reason ? `: ${reason}` : ""}`, typeof f.blockId === "string" ? f.blockId : undefined);
 	}
 
@@ -212,8 +220,8 @@ export class CodeChatHub {
 	/** Opens a new task block: from now on candidates, scores and the best code belong to it. */
 	async #openBlock(s: Session, task: Task, announce: boolean, extra: Record<string, unknown> = {}): Promise<void> {
 		const blockId = `b${Date.now().toString(36)}${(s.seq++).toString(36)}`;
-		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { custom: customSpec(task) } : {}), ...extra } as never }, null, this.#ttl);
-		s.task = task; s.best = null; s.blockId = blockId; // only once the block exists
+		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { custom: customSpec(task) } : {}), ...(isText(task) ? { text: textSpec(task) } : {}), ...extra } as never }, null, this.#ttl);
+		s.task = task; s.best = null; s.answer = null; s.blockId = blockId; // only once the block exists
 		if (announce) await this.#write(s, "system", `Task: ${task.title.en} (${task.fn})`, s.blockId);
 	}
 
@@ -259,6 +267,9 @@ export class CodeChatHub {
 			const n = Buffer.byteLength(JSON.stringify(c.source ?? ""));
 			if (n <= budget) { budget -= n; keep.add(c.candidateId); }
 		};
+		// a text block's contributions are its answers (judged by agents, no code)
+		const textBlocks = new Map<string, Contribution[]>();
+		await Promise.all(entries.filter((f) => f.taskId === "text").map(async (f) => textBlocks.set(String(f.blockId ?? `t${f.ts}`), await this.#answers(id, String(f.blockId ?? `t${f.ts}`)))));
 		const known = new Set<string>();
 		const raw = entries.flatMap((f) => {
 			const task = taskFromSpec(f);
@@ -274,7 +285,7 @@ export class CodeChatHub {
 				if (match && Math.abs(match.ts - n.ts) < 300_000) n.candidateId = match.candidateId;
 			}
 			const noteOf = new Map(own.filter((n) => n.candidateId).map((n) => [n.candidateId!, n.text]));
-			const contributions = all.filter((c) => c.blockId === blockId).map((c) => ({
+			const contributions = (textBlocks.get(blockId) ?? all.filter((c) => c.blockId === blockId)).map((c) => ({
 				...c, ...(noteOf.has(c.candidateId) ? { note: noteOf.get(c.candidateId)! } : {}),
 				...(critiquesOf.has(c.candidateId) ? { critiques: critiquesOf.get(c.candidateId)!.map((x) => ({ ...x, text: "" })) } : {}),
 				...(c.critiqueId && critiqueAuthor.has(c.critiqueId) ? { critiqueBy: critiqueAuthor.get(c.critiqueId)! } : {}),
@@ -282,7 +293,7 @@ export class CodeChatHub {
 			}));
 			// what the block's model calls cost: every contribution plus the verifier agent's calls for its task
 			const spent = [...contributions.map((c) => c.usage), f.verifierUsage as Usage | undefined].reduce((a, u) => (u ? { tokens: a.tokens + (u.total ?? 0), costUsd: a.costUsd + (u.costUsd ?? 0) } : a), { tokens: 0, costUsd: 0 });
-			return [{ f, task, blockId, contributions, best: bestOf(contributions), spent }];
+			return [{ f, task, blockId, contributions, best: isText(task) ? null : bestOf(contributions), spent }];
 		});
 		spend(raw.find((b) => b.blockId === s.blockId)?.best ?? null);
 		for (const b of raw) spend(b.best);
@@ -292,7 +303,7 @@ export class CodeChatHub {
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
 			const blocks = raw.map(({ f, task, blockId, contributions, best, spent }) => ({
 				blockId, ts: f.ts as number, active: blockId === s.blockId,
-				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
+				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(isText(task) ? { kind: "text", criteria: task.criteria, criteriaBy: task.criteriaBy } : {}), ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
 				...(spent.tokens > 0 ? { usage: spent } : {}),
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
 				// plan texts ride along for the active block only (and not in the code-less fallback); others come with plan()
@@ -316,6 +327,8 @@ export class CodeChatHub {
 	async #contribution(s: Session, candidateId: string): Promise<Record<string, unknown> | null> {
 		const held = s.judging.get(candidateId);
 		if (held) return held;
+		const answer = (await this.host.readAll({ type: "TextAnswer", fields: { session: s.id, answerId: candidateId } }, { limit: 1 }))[0];
+		if (answer) { const f = answer.fields as Record<string, unknown>; return { ...f, candidateId, source: f.text }; }
 		for (const type of ["CodeScore", "CodeCandidate"]) {
 			const tmpl = { type, fields: { session: s.id, candidateId } };
 			const e = (await this.host.readAll(tmpl, { limit: 1 }))[0] ?? (await this.#rcall((r) => r.readAll(tmpl, { limit: 1 })))?.[0];
@@ -348,10 +361,16 @@ export class CodeChatHub {
 	}
 
 	/** Code, case results and lineage of one contribution (what the page shows when it is unfolded); null when gone. */
-	async details(id: string, candidateId: string): Promise<{ source: string; cases: Verdict["cases"]; passed?: number; total?: number; role?: Role; basedOn?: string; critiques?: Array<{ author: string; via: string; text: string }>; followed?: { author: string; via: string; text: string } } | null> {
+	async details(id: string, candidateId: string): Promise<{ source: string; cases: Verdict["cases"]; passed?: number; total?: number; role?: Role; basedOn?: string; critiques?: Array<{ author: string; via: string; text: string }>; followed?: { author: string; via: string; text: string }; judgements?: Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }> } | null> {
 		const s = await this.session(id);
 		const f = await this.#contribution(s, candidateId);
 		if (!f) return null;
+		// a text answer: the judges' findings per criterion are its "case results", every judgement comes along
+		const view = typeof f.answerId === "string" ? (await this.#answers(s.id, String(f.blockId))).find((a) => a.candidateId === candidateId) : undefined;
+		if (view) {
+			f.cases = view.cases; f.passed = view.passed; f.total = view.total;
+			f.judgements = (await this.host.readAll({ type: "TextJudgement", fields: { session: s.id, answerId: candidateId } }, { limit: 10 })).map((e) => { const j = e.fields as { judge: string; via: string; results: unknown }; return { judge: j.judge, via: j.via, results: j.results }; });
+		}
 		// the critiques of this attempt, and the one it was revised after
 		const crit = (await this.host.readAll({ type: "CodeCritique", fields: { session: s.id, target: candidateId } }, { limit: 50 })).map((e) => e.fields as { author: string; via: string; text: string; ts: number }).sort((a, b) => a.ts - b.ts);
 		const followed = typeof f.critiqueId === "string" ? (await this.host.readAll({ type: "CodeCritique", fields: { session: s.id, critiqueId: f.critiqueId } }, { limit: 1 }))[0]?.fields as { author: string; via: string; text: string } | undefined : undefined;
@@ -362,6 +381,7 @@ export class CodeChatHub {
 			...(typeof f.role === "string" ? { role: f.role as Role } : {}), ...(typeof f.basedOn === "string" ? { basedOn: f.basedOn } : {}),
 			...(crit.length ? { critiques: crit.map(({ author, via, text }) => ({ author, via, text })) } : {}),
 			...(followed ? { followed: { author: followed.author, via: followed.via, text: followed.text } } : {}),
+			...(Array.isArray(f.judgements) ? { judgements: f.judgements as Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }> } : {}),
 		};
 	}
 
@@ -373,6 +393,7 @@ export class CodeChatHub {
 		if (!f) return null;
 		const block = f.blockId === undefined ? undefined : (await this.#taskEntries(id)).find((t) => String(t.blockId ?? `t${t.ts}`) === f.blockId);
 		const task = (f.taskId !== undefined ? taskFromSpec(f) : null) ?? (block ? taskFromSpec(block) : null) ?? s.task;
+		if (isText(task) || typeof f.answerId === "string") throw new Error("A text answer cannot be run");
 		return { source: String(f.source ?? ""), task };
 	}
 
@@ -417,9 +438,10 @@ export class CodeChatHub {
 
 	/** Every call opens a new task block, also when the same task is chosen again. A custom task with `verify` (the
 	 *  default) gets a check rule from the verifier agent, so other right results than the examples count too. */
-	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean; timeoutS?: unknown } }): Promise<void> {
+	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean; timeoutS?: unknown }; text?: { prompt: unknown; criteria?: unknown } }): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "task", 30)) throw new Error("Too many tasks, slow down");
+		if (o.text) return this.#setTextTask(s, o.text);
 		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
 		if (s.run?.active) throw new Error("A run is active; stop it first");
@@ -455,6 +477,112 @@ export class CodeChatHub {
 		await this.#write(s, "system", `Time limit per contribution: ${timeoutMs / 1000} s`, s.blockId);
 	}
 
+	/** A text task: the question and the criteria; without criteria the verifier agent writes them (shown in the block). */
+	async #setTextTask(s: Session, spec: { prompt: unknown; criteria?: unknown }): Promise<void> {
+		let task = textTask(spec);
+		if (s.run?.active) throw new Error("A run is active; stop it first");
+		if (!this.#llm.critique || !(await this.#llm.models()).length) throw new Error("Text tasks need model agents");
+		let verdict: string | null = null, extra: Record<string, unknown> = {};
+		if (!task.criteria?.length) {
+			if (!this.#llm.criteria) throw new Error("Text tasks need criteria (no criteria agent)");
+			const c = await this.#llm.criteria({ task });
+			if (c.criteria.length < 1) throw new Error("The criteria agent wrote no criteria; please write some");
+			task = textTask({ prompt: task.prompt.en, criteria: c.criteria, criteriaBy: "verifier" });
+			verdict = `Criteria written by the verifier agent (${c.model})`;
+			if (c.usage) extra = { verifierUsage: c.usage };
+		}
+		await this.#exclusive(s, async () => {
+			if (s.run?.active) throw new Error("A run is active; stop it first");
+			if ((await this.#taskEntries(s.id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
+			await this.#openBlock(s, task, true, extra);
+			if (verdict) await this.#write(s, "system", verdict, s.blockId);
+		});
+		this.push(s);
+	}
+
+	/** The answers of a text block, as contributions: who, the judges' findings per criterion, accepted or not. An answer
+	 *  is accepted by a person's thumbs-up, or when two judges or more found every criterion met; a veto undoes both. */
+	async #answers(sessionId: string, blockId: string): Promise<Contribution[]> {
+		const [rows, judgements, vetoes, accepts] = await Promise.all([
+			this.host.readAll({ type: "TextAnswer", fields: { session: sessionId, blockId } }, { limit: LIMITS.contributions }),
+			this.host.readAll({ type: "TextJudgement", fields: { session: sessionId, blockId } }, { limit: LIMITS.contributions * 2 }),
+			this.host.readAll({ type: "CodeVeto", fields: { session: sessionId } }, { limit: LIMITS.contributions }),
+			this.host.readAll({ type: "CodeAccept", fields: { session: sessionId, blockId } }, { limit: LIMITS.contributions }),
+		]);
+		const vetoed = new Map(vetoes.map((e) => { const f = e.fields as { candidateId: string; by: string; reason: string }; return [f.candidateId, { by: f.by, reason: f.reason }]; }));
+		const accepted = new Set(accepts.map((e) => (e.fields as { answerId: string }).answerId));
+		const byAnswer = new Map<string, Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }>>();
+		for (const e of judgements) { const f = e.fields as { answerId: string; judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }; byAnswer.set(f.answerId, [...(byAnswer.get(f.answerId) ?? []), f]); }
+		return rows.map((e) => {
+			const f = e.fields as Record<string, any>, js = byAnswer.get(f.answerId) ?? [];
+			const criteria: string[] = js[0]?.results.map((r) => r.criterion) ?? [];
+			const cases = criteria.map((criterion, i) => ({ call: criterion, ok: js.every((j) => j.results[i]?.pass), got: js.map((j) => `${j.judge}: ${j.results[i]?.pass ? "met" : "not met"}${j.results[i]?.reason ? `, ${j.results[i]!.reason}` : ""}`).join("; ").slice(0, 600) }));
+			const byJudges = js.length >= 2 && js.every((j) => j.results.length > 0 && j.results.every((r) => r.pass));
+			const acceptedBy = accepted.has(f.answerId) ? "human" as const : byJudges ? "judges" as const : undefined;
+			const v = vetoed.get(f.answerId);
+			return {
+				candidateId: f.answerId, blockId, author: f.author, via: f.via, gen: f.gen ?? 1, ok: js.length < 2 && !acceptedBy ? null : !!acceptedBy && !v, ms: null,
+				passed: cases.filter((c) => c.ok).length, total: criteria.length, cases, judges: js.length, ...(acceptedBy ? { acceptedBy } : {}), ...(v ? { vetoed: v } : {}),
+				...(f.role ? { role: f.role } : {}), ...(f.basedOn ? { basedOn: f.basedOn } : {}), ...(f.critiqueId ? { critiqueId: f.critiqueId } : {}), ...(f.proposalId ? { proposalId: f.proposalId } : {}), ...(f.partner ? { partner: f.partner } : {}), ...(f.usage ? { usage: f.usage } : {}),
+				source: String(f.text ?? ""), ts: f.ts,
+			} as Contribution;
+		}).sort((a, b) => a.ts - b.ts);
+	}
+
+	/** Writes a text answer (the board judges it); its id. */
+	async #enqueueText(s: Session, author: string, via: string, gen: number, text: string, lineage: { role?: Role; basedOn?: string; partner?: string; critiqueId?: string; proposalId?: string; usage?: Usage }): Promise<string> {
+		if (!s.blockId || !isText(s.task)) throw new Error("No text task");
+		const answerId = `a${Date.now().toString(36)}-${s.seq++}`;
+		await this.host.write({ type: "TextAnswer", fields: { session: s.id, blockId: s.blockId, answerId, author, via, gen, text, ts: Date.now(), ...Object.fromEntries(Object.entries(lineage).filter(([, v]) => v !== undefined)) } as never }, null, this.#ttl);
+		this.push(s);
+		return answerId;
+	}
+
+	/** A person's thumbs-up on an answer (or its withdrawal): accepted, the run on its block ends; the reason goes to the
+	 *  agents as a hint. */
+	async accept(id: string, answerId: string, o: { by?: unknown; reason?: unknown; undo?: unknown }): Promise<void> {
+		const s = await this.session(id);
+		if (!this.allow(s, "accept", 30)) throw new Error("Too many accepts, slow down");
+		const f = await this.#contribution(s, answerId);
+		if (!f || typeof f.blockId !== "string" || !(await this.host.readIfExists({ type: "TextAnswer", fields: { session: s.id, answerId } }, NO_WAIT))) throw new Error("Unknown answer");
+		const by = plain(clip(o.by, 40)).trim() || "guest", reason = plain(clip(o.reason, 300)).trim();
+		while (await this.host.take({ type: "CodeAccept", fields: { session: s.id, answerId } }, NO_WAIT));
+		if (o.undo !== true) {
+			await this.host.write({ type: "CodeAccept", fields: { session: s.id, blockId: f.blockId, answerId, by, reason, ts: Date.now() } }, null, this.#ttl);
+			if (reason) await this.#addNote(s, f.blockId, by, "human", 0, `Accepted ${String(f.author)}'s answer: ${reason}`, true);
+			if (s.run?.active && s.run.blockId === f.blockId) { s.run.ended ??= "accepted"; s.abort = true; }
+		}
+		if (f.blockId === s.blockId) s.answer = (await this.#answers(s.id, s.blockId)).find((a) => a.ok)?.candidateId ?? null;
+		await this.#write(s, "system", o.undo === true ? `${by} withdrew the acceptance of ${String(f.author)}'s answer` : `${by} accepted ${String(f.author)}'s answer${reason ? `: ${reason}` : ""}`, f.blockId);
+	}
+
+	/** Accepted results of earlier tasks like this one, anywhere in the space: text answers for a similar question, the
+	 *  best code for the same function and a similar description. Material for the agents, never instructions. */
+	async #earlier(s: Session): Promise<Earlier[]> {
+		const words = (t: string) => new Set(t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4));
+		const mine = words(s.task.prompt.en);
+		const similar = (t: string) => { const w = words(t); let n = 0; for (const x of w) if (mine.has(x)) n++; return n / Math.max(1, new Set([...w, ...mine]).size); };
+		const text = isText(s.task);
+		const tasks = (await this.host.readAll({ type: "CodeTask", fields: text ? { taskId: "text" } : {} }, { limit: 600 })).map((e) => e.fields as Record<string, any>)
+			.filter((f) => f.blockId !== s.blockId)
+			.map((f) => ({ f, t: taskFromSpec(f) })).filter((x): x is { f: Record<string, any>; t: Task } => !!x.t && isText(x.t) === text && (text || x.t.fn === s.task.fn))
+			.map((x) => ({ ...x, sim: x.t.id === s.task.id && !text && x.t.id !== "custom" ? 1 : similar(x.t.prompt.en) }))
+			.filter((x) => x.sim >= 0.2).sort((a, b) => b.sim - a.sim).slice(0, 6);
+		const out: Earlier[] = [];
+		for (const { f, t } of tasks) {
+			if (out.length >= 2) break;
+			if (text) {
+				const a = (await this.#answers(String(f.session), String(f.blockId))).find((x) => x.ok);
+				if (a) out.push({ question: t.prompt.en, result: a.source ?? "", by: a.acceptedBy === "human" ? "accepted by a person" : "accepted by the judges" });
+			} else {
+				const best = await this.host.readIfExists({ type: "CodeBest", fields: { session: String(f.session), blockId: String(f.blockId) } }, NO_WAIT);
+				const b = best?.fields as { source?: string; ms?: number } | undefined;
+				if (b?.source) out.push({ question: t.prompt.en, result: b.source, by: `the best correct code there, ${b.ms} ms` });
+			}
+		}
+		return out;
+	}
+
 	/** The verifier agent writes a check rule from the description and the examples; the rule must pass testRule (accept
 	 *  every example result, reject obvious wrong ones) before it decides anything, else the agent tries again with the
 	 *  reason (three tries). Without models, or when no rule passes, the examples stay the exact oracle. */
@@ -479,6 +607,7 @@ export class CodeChatHub {
 	/** A person hands in code; it is judged by the same sandbox as the agents' code. */
 	async submitCode(id: string, author: string, source: string): Promise<string> {
 		const s = await this.session(id);
+		if (isText(s.task)) throw new Error("This block is a text task: answers come from the agents on the work board");
 		if (!this.allow(s, "code", 20)) throw new Error("Too many submissions, slow down");
 		const src = String(source ?? "");
 		if (!src.trim() || src.length > MAX_SOURCE_CHARS) throw new Error(`Code must be 1 to ${MAX_SOURCE_CHARS} characters`);
@@ -615,7 +744,8 @@ export class CodeChatHub {
 
 	/** What the team knows about a block: every judged attempt (with its case results) and the newest notes. */
 	async #board(s: Session, blockId: string): Promise<{ attempts: Attempt[]; notes: Note[] }> {
-		const scores = (await this.#scores(s)).filter((c) => c.blockId === blockId).sort(closeness);
+		// a text block's answers count from their first moment: judges look them up here too
+		const scores = (isText(s.task) ? await this.#answers(s.id, blockId) : (await this.#scores(s)).filter((c) => c.blockId === blockId)).sort(closeness);
 		// an agent's note whose contribution was rejected (hard-coded, or a person's veto) is advice not to pass on
 		const rejected = new Set(scores.filter((c) => c.vetoed || c.hardcoded).map((c) => c.candidateId));
 		const rows = (await this.host.readAll({ type: "CodeNote", fields: { session: s.id, blockId } }, { limit: LIMITS.notes + 5 }))
@@ -669,7 +799,7 @@ export class CodeChatHub {
 		contenders = [...new Set(contenders)];
 		if (!contenders.length || contenders.length > 4) throw new Error("Choose 1 to 4 contenders");
 		for (const c of contenders) if (c !== "scripted" && !allowed.includes(c)) throw new Error(`Model not available: ${c}`);
-		const board = o.board === true;
+		const board = o.board === true || isText(s.task); // a text task runs on the work board only
 		if (board && (contenders.includes("scripted") || !this.#llm.critique)) throw new Error("The work board needs model agents (scripted agents cannot critique)");
 		const mode: RunMode = contenders.some((c) => c !== "scripted") ? "llm" : "scripted";
 		// check and claim under the room's lock: two requests cannot both start a run, and setTask cannot swap the block
@@ -677,6 +807,7 @@ export class CodeChatHub {
 		const run = await this.#exclusive(s, async () => {
 			if (s.run?.active) throw new Error("A run is already active");
 			if (!s.blockId) throw new Error("No task yet: create a task block first");
+			if (isText(s.task) && agents < 3) throw new Error("A text task needs at least 3 agents: an author and two judges who are not the author");
 			if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
 			const claimed: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent, polish, solvedGen: s.best ? 0 : null, usage: { tokens: 0, costUsd: 0 }, ...(Object.keys(budget).length ? { budget } : {}), ...(board ? { board: { open: 0, done: 0, critiques: 0 } } : {}) };
 			const limits = [budget.tokens ? `${budget.tokens} tokens` : "", budget.usd ? `$${budget.usd}` : ""].filter(Boolean).join(" / ");
@@ -705,15 +836,18 @@ export class CodeChatHub {
 						// the planning round (on unless `plan: false`): propose, rate, implement the best plans first
 						plan: o.plan !== false && !!this.#llm.propose && !!this.#llm.vote,
 						...(this.#llm.propose ? { propose: (c) => this.#llm.propose!(c) } : {}), ...(this.#llm.vote ? { vote: (c) => this.#llm.vote!(c) } : {}),
-						enqueue: (author, via, gen, source, lineage) => this.#enqueue(s, author, via, gen, source, lineage),
-						verdict: (candidateId) => this.#verdict(s, candidateId),
+						enqueue: (author, via, gen, source, lineage) => (isText(s.task) ? this.#enqueueText(s, author, via, gen, source, lineage) : this.#enqueue(s, author, via, gen, source, lineage)),
+						verdict: (candidateId) => (isText(s.task) ? this.#verdictText(s, blockId, candidateId) : this.#verdict(s, candidateId)),
+						...(this.#llm.judge ? { judge: (c) => this.#llm.judge!(c) } : {}),
+						earlier: () => this.#earlier(s),
 						board: () => this.#board(s, blockId),
 						note: (author, via, gen, text, candidateId) => this.#addNote(s, blockId, author, via, gen, text, false, candidateId),
-						solved: () => !!s.best, stopped: () => s.abort || this.#closed, spend,
+						solved: () => (isText(s.task) ? !!s.answer : !!s.best), stopped: () => s.abort || this.#closed, spend,
 						progress: (info) => { run.board = info; run.gen = Math.max(run.gen, 1); this.push(s); },
 					});
 					if (end === "items" || end === "idle") run.ended ??= end;
-					if (s.best && run.solvedGen === null) run.solvedGen = 1;
+					if (isText(s.task)) s.answer = (await this.#answers(s.id, blockId)).find((a) => a.ok)?.candidateId ?? null;
+					if ((s.best || s.answer) && run.solvedGen === null) run.solvedGen = 1;
 					return;
 				}
 				for (let gen = 0; gen < gens && !s.abort && !this.#closed && !run.ended; gen++) {
@@ -748,14 +882,29 @@ export class CodeChatHub {
 				run.note = (e as Error).message;
 			} finally {
 				run.active = false;
-				const closest = s.best ? null : (await this.#board(s, blockId).catch(() => null))?.attempts[0];
-				const how = s.best ? `solved${run.solvedGen && !board ? ` in generation ${run.solvedGen}` : run.solvedGen === 0 ? " before the run" : ""}, best ${s.best.ms} ms` : `not solved yet${closest ? ` (closest: ${closest.author}, ${closest.passed ?? 0}/${closest.total ?? "?"} cases)` : ""}`;
+				const text = isText(s.task), done = text ? !!s.answer : !!s.best;
+				const closest = done ? null : (await this.#board(s, blockId).catch(() => null))?.attempts[0];
+				const accepted = text && s.answer ? (await this.#answers(s.id, blockId)).find((a) => a.candidateId === s.answer) : undefined;
+				const how = text
+					? (accepted ? `answered, ${accepted.author}'s answer accepted ${accepted.acceptedBy === "human" ? "by a person" : "by the judges"}` : `no accepted answer yet${closest ? ` (closest: ${closest.author}, ${closest.passed ?? 0}/${closest.total ?? "?"} criteria)` : ""}`)
+					: s.best ? `solved${run.solvedGen && !board ? ` in generation ${run.solvedGen}` : run.solvedGen === 0 ? " before the run" : ""}, best ${s.best.ms} ms` : `not solved yet${closest ? ` (closest: ${closest.author}, ${closest.passed ?? 0}/${closest.total ?? "?"} cases)` : ""}`;
 				const why = run.ended === "budget" ? " (budget used up)" : run.ended === "items" ? " (item limit reached)" : "";
 				const span = board ? `${run.board?.done ?? 0} work items, ${run.board?.critiques ?? 0} critiques` : `${run.gen} generation${run.gen === 1 ? "" : "s"}`;
-				await this.#write(s, "system", `Run ${s.abort ? "stopped" : "finished"} after ${span}${why}: ${how}`, blockId).catch(() => {});
+				await this.#write(s, "system", `Run ${run.ended === "accepted" ? "ended (an answer was accepted)" : s.abort ? "stopped" : "finished"} after ${span}${why}: ${how}`, blockId).catch(() => {});
 				this.push(s);
 			}
 		})();
+	}
+
+	/** Waits until an answer has its two judgements (null when they do not come in time). */
+	async #verdictText(s: Session, blockId: string, answerId: string): Promise<Attempt | null> {
+		const end = Date.now() + 10 * 60_000;
+		while (Date.now() < end && !this.#closed && !s.abort) {
+			const a = (await this.#answers(s.id, blockId)).find((x) => x.candidateId === answerId);
+			if (a && (a.judges ?? 0) >= 2) { if (a.ok && blockId === s.blockId) s.answer = answerId; return attemptOf(a); }
+			await new Promise((r) => setTimeout(r, 500));
+		}
+		return null;
 	}
 
 	/** Waits for a candidate's verdict, here or on the shard, as the agents see it (null when none comes in time). */
@@ -792,9 +941,9 @@ export class CodeChatHub {
 		// entries from before task blocks existed have no blockId: the block is then identified by the time of its CodeTask
 		const legacy = target.blockId === undefined;
 		const tmplOf = (type: string): { type: string; fields: Record<string, string | number> } => (type === "CodeTask" && legacy ? { type, fields: { session: id, ts: target.ts } } : { type, fields: { session: id, blockId } });
-		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "WorkItem", "ChatMessage", "CodeTask"]) {
+		for (const type of ["CodeScore", "CodeCandidate", "CodeBest", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "ChatMessage", "CodeTask"]) {
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
-			if (type !== "CodeTask" && type !== "ChatMessage" && type !== "CodeNote" && type !== "CodeVeto" && type !== "CodeCritique" && type !== "CodeProposal" && type !== "CodeVote" && type !== "WorkItem" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
+			if (type !== "CodeTask" && type !== "ChatMessage" && type !== "CodeNote" && type !== "CodeVeto" && type !== "CodeCritique" && type !== "CodeProposal" && type !== "CodeVote" && !type.startsWith("Text") && type !== "CodeAccept" && type !== "WorkItem" && this.#remote) await this.#rcall(async (r) => { for (let n = 0; n < 2000 && (await r.take(tmplOf(type), NO_WAIT)); n++); return true; });
 		}
 		// the last old-style block is gone: the old entries that never belonged to a block go with it
 		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {
@@ -850,5 +999,11 @@ export class CodeChatHub {
 		await setAllowedModels(Array.isArray(allowed) ? allowed.map(String) : null);
 	}
 
-	async stopRun(id: string): Promise<void> { const s = await this.session(id); s.abort = true; this.push(s); }
+	/** Stops the run; a reason goes to the agents as a person's hint (they learn what was not wanted). */
+	async stopRun(id: string, o: { by?: unknown; reason?: unknown } = {}): Promise<void> {
+		const s = await this.session(id);
+		const reason = plain(clip(o.reason, 300)).trim();
+		if (reason && s.run) await this.#addNote(s, s.run.blockId, plain(clip(o.by, 40)).trim() || "guest", "human", 0, `Run stopped: ${reason}`, true);
+		s.abort = true; this.push(s);
+	}
 }

@@ -197,17 +197,21 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				}
 				return;
 			}
-			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete|veto|hint))?$/.exec(p);
+			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete|veto|hint|accept))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid session id" });
 				if (!action && req.method === "GET") return json(res, 200, await hub.snapshot(id));
 				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
 				const b = await readBody(req);
-				if (action === "task") await hub.setTask(id, b.custom ? { custom: b.custom } : { taskId: b.taskId });
+				if (action === "task") await hub.setTask(id, b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId });
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
 				else if (action === "run") await hub.startRun(id, b);
-				else if (action === "stop") await hub.stopRun(id);
+				else if (action === "stop") await hub.stopRun(id, b); // {by, reason}: the reason goes to the agents
+				else if (action === "accept") { // a person's thumbs-up on a text answer ({candidateId, by, reason, undo})
+					if (!CANDIDATE.test(String(b.candidateId ?? ""))) return json(res, 400, { error: "Invalid id" });
+					await hub.accept(id, String(b.candidateId), b);
+				}
 				else if (action === "delete") await hub.deleteBlock(id, String(b.blockId ?? ""));
 				else if (action === "hint") await hub.hint(id, b); // a person's guidance for the agents ({blockId?, text, by})
 				else if (action === "veto") { // a person's "not like this" on a contribution ({candidateId, by, reason, undo})

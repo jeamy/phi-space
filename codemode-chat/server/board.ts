@@ -6,6 +6,10 @@
 //   revise     the attempt rewritten with that critique                                         -> verdict -> critique
 //   merge      two failing attempts that pass different cases, combined                        -> verdict -> critique
 //
+// A text task (no code) runs the same way with answers instead of code: a draft is checked by two judges against the
+// task's criteria (the first from another model than the author where possible, the second another agent again),
+// and the two verdicts are its "test result".
+//
 // With `plan`, a fresh task starts with a planning round: every agent proposes an approach (CodeProposal), then every
 // agent rates the others' proposals 1 to 5 (CodeVote), and the best one or two proposals are implemented first.
 //
@@ -15,14 +19,17 @@
 // when its verdict does, so a slow verdict (a 600 s time limit) blocks nobody. The run ends when the task is solved and the improvement
 // rounds are used, when the budget or the item cap is reached, on Stop, or when no work is left.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
-import type { Attempt, CritiqueRef, Note, PlanRef, Role, Usage } from "./llm.ts";
-import type { Task } from "./tasks.ts";
+import type { Attempt, CritiqueRef, Earlier, Note, PlanRef, Role, Usage } from "./llm.ts";
+import { isText, type Task } from "./tasks.ts";
 
-export type ItemKind = "propose" | "vote" | "implement" | "critique" | "revise" | "merge";
+export type ItemKind = "propose" | "vote" | "implement" | "critique" | "revise" | "merge" | "judge";
 /** `improve`: work on a solution (after the task is solved); other items lapse once it is solved. */
 export type WorkItem = { session: string; blockId: string; runId: string; itemId: string; kind: ItemKind; depth: number; ts: number; target?: string; partner?: string; critiqueId?: string; notBy?: string; improve?: boolean;
 	/** Planning round: the agent that must do it (every agent proposes and votes once); the plan an implement follows. */
-	onlyBy?: string; proposalId?: string };
+	onlyBy?: string; proposalId?: string;
+	/** judge: an agent that may not judge this answer (the first judge, for the second judgement); the author's model,
+	 *  which the first judge should not run (another model judges first where one is there). */
+	notByAlso?: string; crossOf?: string };
 /** How a board run ended. */
 export type BoardEnd = "solved" | "budget" | "stopped" | "items" | "idle";
 /** What the board shows while it runs. */
@@ -38,10 +45,14 @@ export type BoardDeps = {
 	criticWaitMs?: number;
 	/** Improvement rounds after the first solution, per agent. */
 	polish: number; maxItems: number; maxDepth: number;
-	contribute: (c: { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; critique?: CritiqueRef; partner?: Attempt; plan?: PlanRef }) => Promise<{ source: string; model: string; note?: string; usage?: Usage }>;
+	contribute: (c: { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; critique?: CritiqueRef; partner?: Attempt; plan?: PlanRef; earlier?: Earlier[] }) => Promise<{ source: string; model: string; note?: string; usage?: Usage }>;
+	/** Text tasks: a judge checks an answer against the criteria. */
+	judge?: (c: { task: Task; agent: number; answer: Attempt; model?: string }) => Promise<{ results: Array<{ criterion: string; pass: boolean; reason: string }>; model: string; usage?: Usage }>;
+	/** Accepted results of earlier, similar tasks, as material for drafts and plans. */
+	earlier?: () => Promise<Earlier[]>;
 	/** The planning round (both, or none): propose an approach, rate proposals. */
 	plan?: boolean;
-	propose?: (c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[]; model?: string }) => Promise<{ text: string; model: string; usage?: Usage }>;
+	propose?: (c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[]; model?: string; earlier?: Earlier[] }) => Promise<{ text: string; model: string; usage?: Usage }>;
 	vote?: (c: { task: Task; agent: number; proposals: Array<{ key: string; author: string; text: string }>; notes?: Note[]; model?: string }) => Promise<{ scores: Record<string, number>; text: string; model: string; usage?: Usage }>;
 	critique: (c: { task: Task; agent: number; target: Attempt; others?: Attempt[]; notes?: Note[]; model?: string }) => Promise<{ text: string; model: string; usage?: Usage }>;
 	/** Hands a contribution to the judges; resolves with its candidate id. */
@@ -66,11 +77,12 @@ const passing = (a: Attempt) => new Set((a.cases ?? []).filter((c) => c.ok).map(
 export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	const itemsTmpl = { type: "WorkItem", fields: { session: d.session, runId: d.runId } };
 	let created = 0, done = 0, critiques = 0, busy = 0, pending = 0, seq = 0, capped = false, end: BoardEnd | null = null;
-	let proposals = 0, votes = 0, proposeLeft = 0, voteLeft = 0;
+	let proposals = 0, votes = 0, proposeLeft = 0, voteLeft = 0, judgements = 0;
+	const earlier = (await d.earlier?.().catch(() => [])) ?? [];
 	const criticAt = d.criticModel && d.contenders.includes(d.criticModel) ? d.criticModel : undefined;
 	let improveLeft = d.polish * d.agents; // improvement critiques once the task is solved
 	const merged = new Set<string>();
-	const report = async () => d.progress({ open: await d.space.count(itemsTmpl), done, critiques, ...(d.plan ? { proposals, votes } : {}) });
+	const report = async () => d.progress({ open: await d.space.count(itemsTmpl), done, critiques, ...(d.plan ? { proposals, votes } : {}), ...(isText(d.task()) ? { judgements } : {}) });
 
 	const spawn = async (kind: ItemKind, depth: number, more: Partial<WorkItem> = {}): Promise<void> => {
 		if (created >= d.maxItems) { capped = true; return; } // no new work; what is open still gets done
@@ -86,7 +98,8 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		const rows = (await d.space.readAll(itemsTmpl, { limit: 500 })).sort((a, b) => Number((a.fields as WorkItem).ts) - Number((b.fields as WorkItem).ts));
 		for (const e of rows) {
 			const it = e.fields as unknown as WorkItem;
-			if (it.notBy === me || (it.onlyBy && it.onlyBy !== me)) continue;
+			if (it.notBy === me || it.notByAlso === me || (it.onlyBy && it.onlyBy !== me)) continue;
+			if (it.kind === "judge" && it.crossOf === model && d.contenders.some((m) => m !== model) && Date.now() - it.ts < (d.criticWaitMs ?? 20_000)) continue;
 			if (it.kind === "critique" && criticAt && model !== criticAt && Date.now() - it.ts < (d.criticWaitMs ?? 20_000)) continue;
 			if (await d.space.take({ id: e.id }, NO_WAIT)) return it;
 		}
@@ -135,9 +148,21 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	const execute = async (it: WorkItem, a: number): Promise<void> => {
 		const me = `agent-${a}`, model = d.contenders[a % d.contenders.length]!, task = d.task(), gen = it.depth + 1;
 		const { attempts, notes } = await d.board();
+		if (it.kind === "judge") {
+			const answer = find(attempts, it.target);
+			if (!answer || !d.judge) return;
+			const j = await d.judge({ task, agent: a, answer, model });
+			if (!d.spend(j.usage)) return;
+			const passed = j.results.filter((r) => r.pass).length;
+			await d.space.write({ type: "TextJudgement", fields: { session: d.session, blockId: d.blockId, runId: d.runId, answerId: answer.candidateId, judge: me, via: j.model, results: j.results, passed, total: j.results.length, ts: Date.now(), ...(j.usage ? { usage: j.usage } : {}) } as never }, null, d.ttl);
+			judgements++;
+			// the second judgement comes from yet another agent (never the author, never this judge)
+			if (!it.notByAlso) await spawn("judge", it.depth, { target: answer.candidateId, notBy: answer.author, notByAlso: me, ...(it.improve ? { improve: true } : {}) });
+			return;
+		}
 		if (it.kind === "propose") {
 			try {
-				const c = await d.propose!({ task, agent: a, notes, attempts: attempts.slice(0, 3), model });
+				const c = await d.propose!({ task, agent: a, notes, attempts: attempts.slice(0, 3), model, earlier });
 				if (!d.spend(c.usage)) return;
 				await d.space.write({ type: "CodeProposal", fields: { session: d.session, blockId: d.blockId, runId: d.runId, proposalId: `${it.itemId}-p`, author: me, via: c.model, text: c.text, ts: Date.now(), ...(c.usage ? { usage: c.usage } : {}) } as never }, null, d.ttl);
 				proposals++;
@@ -182,10 +207,12 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 		} else if (d.solved()) { role = "improve"; target = usable.find((x) => x.ok) ?? null; }
 		const chosen = it.proposalId ? (await ranked()).find((p) => p.proposalId === it.proposalId) : undefined;
 		const plan: PlanRef | undefined = chosen ? { author: chosen.author, via: chosen.via, score: chosen.score, text: chosen.text } : undefined;
-		const c = await d.contribute({ task, lang: d.lang, agent: a, gen: it.depth, model, role, target, others: usable.filter((x) => x !== target && x !== partner).slice(0, 3), rejected, notes, ...(critique ? { critique } : {}), ...(partner ? { partner } : {}), ...(plan ? { plan } : {}) });
+		const c = await d.contribute({ task, lang: d.lang, agent: a, gen: it.depth, model, role, target, others: usable.filter((x) => x !== target && x !== partner).slice(0, 3), rejected, notes, ...(critique ? { critique } : {}), ...(partner ? { partner } : {}), ...(plan ? { plan } : {}), ...(earlier.length && role === "explore" ? { earlier } : {}) });
 		if (!d.spend(c.usage)) return;
 		const candidateId = await d.enqueue(me, c.model, gen, c.source, { role, ...(target ? { basedOn: target.candidateId } : {}), ...(partner ? { partner: partner.candidateId } : {}), ...(it.critiqueId ? { critiqueId: it.critiqueId } : {}), ...(it.proposalId ? { proposalId: it.proposalId } : {}), ...(c.usage ? { usage: c.usage } : {}) });
 		if (c.note) await d.note(me, c.model, gen, c.note, candidateId);
+		// a text answer is judged on the board: the first judge from another model than the author where possible
+		if (isText(task)) await spawn("judge", it.depth, { target: candidateId, notBy: me, crossOf: c.model, ...(it.improve ? { improve: true } : {}) });
 		// the follow-ups come with the verdict; this agent goes on to the next item meanwhile
 		pending++;
 		void d.verdict(candidateId).then((v) => followUp(v, it.depth)).catch((e) => console.error("[board] follow-up failed", (e as Error).message)).finally(() => { pending--; void report(); });
@@ -210,7 +237,7 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 				await pause(300);
 				continue;
 			}
-			if (d.solved() && !it.improve) { done++; continue; } // work towards a solution lapses once there is one
+			if (d.solved() && !it.improve && it.kind !== "judge") { done++; continue; } // work towards a solution lapses once there is one (an answer in judging still gets its verdict)
 			busy++;
 			try { await execute(it, a); }
 			catch (e) { console.error("[board] item failed", it.kind, (e as Error).message); }
