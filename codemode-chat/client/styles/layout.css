@@ -282,3 +282,9 @@ main > * { min-width: 0; }
 .admin__models details { padding: 2px 0; }
 .admin__models summary { cursor: pointer; display: flex; gap: 6px; align-items: center; padding: 4px 0; }
 .admin__model { padding-left: 22px; font-size: 13px; overflow-wrap: anywhere; }
+
+/* the planning round: proposals with their rating; the implemented ones stand out */
+.plans { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--color-c); background: var(--raised); border-radius: 0 8px 8px 0; display: grid; gap: 4px; font-size: 13px; }
+.plan summary { cursor: pointer; }
+.plan--used summary b { color: var(--accent); }
+.plan__text { white-space: pre-wrap; overflow-wrap: anywhere; padding: 6px 8px; margin-top: 4px; background: var(--surface); border-radius: 6px; font-size: 12.5px; }

@@ -110,7 +110,11 @@ export type Note = { author: string; gen: number; text: string; human?: boolean 
 /** Everything an agent gets: the task with its cases, its role, the attempt to work on, others for reference, notes. */
 export type TeamContext = { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; best?: { source: string; ms: number } | null;
 	/** revise: the critique to work with; merge: the second attempt to combine with `target`. */
-	critique?: CritiqueRef; partner?: Attempt };
+	critique?: CritiqueRef; partner?: Attempt;
+	/** explore on the work board after the planning round: the plan the team chose to implement. */
+	plan?: PlanRef };
+/** A plan from the planning round: who proposed it, how the team rated it (1 to 5), what it says. */
+export type PlanRef = { author: string; via: string; score: number | null; text: string };
 
 const clipText = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "\n// … (cut)" : s);
 const showValue = (v: unknown) => { const s = JSON.stringify(v); return s === undefined ? "undefined" : s.length > 200 ? s.slice(0, 200) + "…" : s; };
@@ -149,6 +153,7 @@ export function teamPrompt(c: TeamContext): { system: string; user: string } {
 	else if (role === "improve" && c.target) parts.push(`Your job: IMPROVE this correct solution: make it faster or simpler. It must stay correct on every case.\n${describeAttempt(c.target, true)}`);
 	else if (role === "revise" && c.target && c.critique) parts.push(`Your job: REVISE this attempt using the critique a teammate wrote about it. Take the critique seriously, but check it: if a point is wrong, say so in your NOTE.\n${describeAttempt(c.target, true)}\nCritique by ${c.critique.author} (${c.critique.via}):\n${c.critique.text}`);
 	else if (role === "merge" && c.target && c.partner) parts.push(`Your job: MERGE these two attempts into one that keeps what each does right; together they pass more cases than either alone.\nAttempt A: ${describeAttempt(c.target, true)}\nAttempt B: ${describeAttempt(c.partner, true)}`);
+	else if (c.plan) parts.push(`Your job: IMPLEMENT the plan the team chose in its planning round (proposed by ${c.plan.author}, ${c.plan.via}${c.plan.score !== null ? `, rated ${c.plan.score.toFixed(1)} of 5` : ""}). Follow it; where it is wrong or vague, decide sensibly and say so in your NOTE.\nPlan:\n${c.plan.text}`);
 	else parts.push(`Your job: EXPLORE. Write a solution with an approach of your own${c.others?.length ? ", different from the attempts below where they fail" : ""}.`);
 	if (c.others?.length) parts.push("Other attempts of the team (for reference; reuse what helps):\n" + c.others.map((a) => describeAttempt(a, false)).join("\n\n"));
 	parts.push("Answer with exactly one ```js block holding the complete function (and its helpers). After the block you may add ONE line `NOTE: …` (at most 300 characters) with an insight the next teammates should know.");
@@ -178,6 +183,61 @@ export function critiquePrompt(c: { task: Task; agent: number; target: Attempt; 
 			`Write your critique to ${c.target.author}: the concrete bugs or wrong ideas (with the line or construct), why the failing cases fail, what is too slow and why, and a precise fix for each point. If the approach cannot work, say so and name a better one. At most 12 short points, no code blocks longer than 5 lines. Plain text.`,
 		].join("\n\n"),
 	};
+}
+
+/** What every planning prompt says about the task: the description, the calls, the rule, the time limit. */
+function taskBrief(t: Task): string[] {
+	return [
+		`Task: ${t.prompt.en}`,
+		`The function \`${t.fn}\` is called like in these test cases:\n${describeCases(t)}`,
+		...(t.check !== undefined ? [`A result passes when this check rule returns true:\n\`\`\`js\n${t.check}\n\`\`\``] : []),
+		`Time limit: ${(t.timeoutMs ?? 5000) / 1000} seconds for all cases in a slow QuickJS interpreter (no imports, no I/O); the answer must be computed, never written in as a literal.`,
+	];
+}
+const hintsOf = (notes?: Note[]) => { const h = notes?.filter((n) => n.human) ?? []; return h.length ? ["Guidance from the people you work for (it outranks everything):\n" + h.map((n) => `- ${n.author}: ${n.text}`).join("\n")] : []; };
+
+/** The planning round, step 1: an agent proposes an approach before anyone writes code. */
+export function proposePrompt(c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[] }): { system: string; user: string } {
+	return {
+		system: `You are agent ${c.agent} in a team that plans before it codes. Each teammate proposes an approach; the team rates the proposals and implements the best. ${STYLES[c.agent % STYLES.length]}`,
+		user: [
+			...taskBrief(c.task), ...hintsOf(c.notes),
+			...(c.attempts?.length ? ["What the team tried before:\n" + c.attempts.slice(0, 3).map((a) => `- ${a.author}: ${a.ok ? `correct, ${a.ms} ms` : `${a.passed ?? 0}/${a.total ?? "?"} cases${a.error ? `, ${a.error}` : ""}`}`).join("\n")] : []),
+			"Propose ONE approach, as a plan for whoever implements it: the algorithm and its key data structures, why it fits the time limit (estimate the work), the pitfalls, and how to check the result. At most 10 short lines, no code longer than 5 lines. Plain text.",
+		].join("\n\n"),
+	};
+}
+
+export async function llmPropose(c: { task: Task; agent: number; notes?: Note[]; attempts?: Attempt[]; model?: string }): Promise<{ text: string; model: string; usage?: Usage }> {
+	const p = proposePrompt(c);
+	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 700);
+	const clean = text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim();
+	return { text: clean.length > 1500 ? clean.slice(0, 1499) + "…" : clean, model, usage };
+}
+
+/** The planning round, step 2: an agent rates the others' proposals, 1 to 5, one line each. */
+export function votePrompt(c: { task: Task; agent: number; proposals: Array<{ key: string; author: string; text: string }>; notes?: Note[] }): { system: string; user: string } {
+	return {
+		system: `You are agent ${c.agent} in a team that plans before it codes. Rate your teammates' proposals honestly: which will most likely give a correct and fast solution within the time limit?`,
+		user: [
+			...taskBrief(c.task), ...hintsOf(c.notes),
+			"The proposals:\n" + c.proposals.map((p) => `${p.key} (by ${p.author}):\n${p.text}`).join("\n\n"),
+			`Rate every proposal from 1 (will not work) to 5 (best bet), one line each, exactly in this form:\n${c.proposals.map((p) => `${p.key}: <1-5> - <reason>`).join("\n")}`,
+		].join("\n\n"),
+	};
+}
+
+/** The ratings in a vote answer: `P1: 4 - …` lines; unreadable or missing ones are left out. */
+export function parseVotes(text: string, keys: string[]): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const k of keys) { const m = new RegExp(`\\b${k}\\s*[:=]\\s*([1-5])\\b`).exec(text); if (m) out[k] = Number(m[1]); }
+	return out;
+}
+
+export async function llmVote(c: { task: Task; agent: number; proposals: Array<{ key: string; author: string; text: string }>; notes?: Note[]; model?: string }): Promise<{ scores: Record<string, number>; text: string; model: string; usage?: Usage }> {
+	const p = votePrompt(c);
+	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 400);
+	return { scores: parseVotes(text, c.proposals.map((x) => x.key)), text: text.slice(0, 1200), model, usage };
 }
 
 /** One critique of a teammate's attempt (text) with the model label and the call's usage. */

@@ -983,3 +983,30 @@ t("admin panel: login with the token sets an HttpOnly cookie; the model choice n
 		assert.deepEqual(await (await get("/api/admin/session", cookie)).json(), { admin: false, available: true });
 	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
 });
+
+t("work board planning round: every agent proposes, everyone rates the others, the best plans are implemented", async () => {
+	const seen: any[] = [];
+	const llm = {
+		models: async () => ["fake/team"],
+		propose: async (c: any) => ({ text: c.agent === 1 ? "Multiply the input by two." : "Add two to the input.", model: "fake/team" }),
+		vote: async (c: any) => ({ scores: Object.fromEntries(c.proposals.map((p: any) => [p.key, /Multiply/.test(p.text) ? 5 : 2])), text: "rated", model: "fake/team" }),
+		contribute: async (c: any) => { seen.push(c.plan); return { source: c.plan && /Multiply/.test(c.plan.text) ? "function double(x){ return x * 2 }" : "function double(x){ return x + 2 }", model: "fake/team" }; },
+		critique: async () => ({ text: "multiply", model: "fake/team" }),
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/plan1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
+		const snap = await boardRun(srv, "plan1", { agents: 3, polish: 0 });
+		const b = snap.blocks.at(-1);
+		assert.equal(b.plans.length, 3); // one proposal per agent
+		const best = b.plans.find((p: any) => /Multiply/.test(p.text));
+		assert.deepEqual([best.author, best.score, best.votes], ["agent-1", 5, 2]); // rated by the two others, not by itself
+		assert.ok(best.used >= 1);
+		assert.ok(seen.slice(0, 3).every((p) => p && p.author), "every first implementation follows a chosen plan");
+		assert.ok(b.contributions.some((c: any) => c.planBy === "agent-1" && c.ok));
+		assert.ok(b.best);
+		assert.equal(snap.run.board.proposals, 3);
+		assert.equal(snap.run.board.votes, 3);
+		assert.ok(b.messages.some((m: any) => /with a planning round/.test(m.text)));
+	} finally { await srv.close(); }
+});

@@ -294,6 +294,8 @@ Im Laufmodus **Auftragsbrett** gibt es keine Generationen. Aufträge liegen im S
 | Überarbeiten | schreibt den Versuch mit dieser Kritik neu (✍️) | Bewertung, dann Kritik |
 | Zusammenführen | verbindet zwei Versuche, die verschiedene Testfälle bestehen (🔀) | Bewertung, dann Kritik |
 
+**Planungsrunde** (Häkchen, Standard an): Bei einer neuen Aufgabe schlägt zuerst jeder Agent einen Ansatz vor (Algorithmus, warum er ins Zeitlimit passt, Fallstricke). Dann bewertet jeder die Vorschläge der anderen von 1 bis 5. Die ein oder zwei bestbewerteten Pläne werden umgesetzt, danach geht es mit Kritik und Überarbeitung weiter. Im Block stehen die **Pläne des Teams** mit Bewertung und wie oft sie umgesetzt wurden; ein Beitrag zeigt, nach wessen Plan er entstand.
+
 Aufgeklappt zeigt ein Beitrag die Kritiken der anderen und, bei einer Überarbeitung, die Kritik, nach der sie entstand. Der Lauf endet, wenn die Aufgabe gelöst ist und die Verbesserungsrunden verbraucht sind, wenn keine Arbeit mehr übrig ist, am Budget oder bei Stopp. Das Auftragsbrett braucht Modell-Agenten, denn Skript-Agenten können nicht kritisieren.
 
 **Budget** (beide Laufmodi): Obergrenze in Tokens und/oder Dollar (Listenpreis); was zuerst erreicht ist, beendet den Lauf.
@@ -377,6 +379,8 @@ The run mode **work board** has no generations. Work items lie in the space, and
 | critique | reads **another** agent's attempt and tells its author what is wrong and how to fix it | revise |
 | revise | rewrites the attempt with that critique (✍️) | judging, then critique |
 | merge | combines two attempts that pass different test cases (🔀) | judging, then critique |
+
+**Planning round** (tick, on by default): for a new task every agent first proposes an approach (the algorithm, why it fits the time limit, the pitfalls). Then everyone rates the others' proposals from 1 to 5. The one or two best plans are implemented, then critique and revision go on. The block shows **the team's plans** with their rating and how often they were implemented; a contribution shows whose plan it followed.
 
 Unfolded, a contribution shows the others' critiques and, for a revision, the critique it followed. The run ends once the task is solved and the improvement rounds are used, when no work is left, at the budget, or on Stop. The work board needs model agents, since scripted agents cannot critique.
 
