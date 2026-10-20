@@ -890,6 +890,15 @@ t("work board: a teammate critiques an attempt, another revises it with that cri
 		const d = (await (await fetch(`${srv.url}/api/sessions/brd1/source/${revised.candidateId}`)).json()) as any;
 		assert.match(d.followed.text, /Multiply by two/);
 		assert.ok(snap.run.board.critiques >= 1 && snap.run.board.done >= 3);
+		// the lineage of the revision: it, then the attempt it built on, with the critique and the changed line
+		const lin = (await (await fetch(`${srv.url}/api/sessions/brd1/lineage/${revised.candidateId}`)).json()) as any;
+		assert.deepEqual(lin.steps.map((x: any) => [x.role, x.ok]), [["revise", true], ["explore", false]]);
+		assert.equal(lin.steps[0].from.candidateId, revised.basedOn);
+		assert.match(lin.steps[0].critique.text, /Multiply by two/);
+		assert.deepEqual([lin.steps[0].diff.added, lin.steps[0].diff.removed], [1, 1]);
+		assert.match(lin.steps[0].diff.hunks, /^- function double\(x\)\{ return x \+ 2 \}\n\+ function double\(x\)\{ return x \* 2 \}$/);
+		assert.equal(lin.steps[1].from, undefined);
+		assert.equal((await fetch(`${srv.url}/api/sessions/brd1/lineage/nope-1`)).status, 404);
 		assert.ok(b.messages.some((m: any) => /Run finished after \d+ work items, \d+ critiques: solved/.test(m.text)));
 		assert.equal((await post(srv.url, "/api/sessions/brd1/run", { contenders: ["scripted"], board: true })).status, 400); // no critics among scripts
 	} finally { await srv.close(); }
@@ -1235,6 +1244,19 @@ t("a stopped run is not resumed after a restart; a generations run goes on with 
 		assert.ok(g.blocks.at(-1).best);
 		assert.equal((await get("stop1")).run, null); // stopped before the restart: it stays stopped
 	} finally { await srv.close(); await db.rm(); }
+});
+
+test("a line diff keeps what stayed, shows what changed with context, and how much of a partner went into a merge", async () => {
+	const { lineDiff, shareOf } = await import("../server/lineage.ts");
+	const a = ["function f(x) {", "  let s = 0;", "  for (const v of x) s += v;", "  return s;", "}"].join("\n");
+	const b = ["function f(x) {", "    let s = 0;", "  for (let i = 0; i < x.length; i++) s += x[i];", "  return s;", "}"].join("\n");
+	const d = lineDiff(a, b);
+	assert.deepEqual([d.added, d.removed, d.kept], [1, 1, 0.8]); // the indentation change does not count
+	assert.equal(d.hunks.split("\n").filter((l) => l.startsWith("+") || l.startsWith("-")).length, 2);
+	assert.equal(lineDiff("x", "x").hunks, "");
+	const long = lineDiff(Array.from({ length: 300 }, (_, i) => `a${i}`).join("\n"), Array.from({ length: 300 }, (_, i) => `b${i}`).join("\n"), 20);
+	assert.equal(long.cut, true);
+	assert.equal(shareOf("a\nb\nc\nd", "a\nb\nx"), 0.5);
 });
 
 test("research findings reach the prompts as untrusted data with their sources", async () => {

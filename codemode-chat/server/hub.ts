@@ -18,6 +18,7 @@ import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TAS
 import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmResearch, llmReviewCriteria, tallyCriteria, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
 import { webSearch } from "./search.ts";
+import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
 
@@ -42,6 +43,10 @@ export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contend
 	budget?: { tokens?: number; usd?: number };
 	/** Why the run ended (when not solved or stopped): the budget, the item cap, or no work left. */
 	ended?: "budget" | "items" | "idle" | "accepted" };
+/** One step of a contribution's lineage (see lineage()). */
+export type LineageStep = { candidateId: string; author: string; via: string; gen: number; ts: number; role?: Role; ok: boolean | null; ms?: number; passed?: number; total?: number;
+	plan?: { author: string; via: string; text: string }; critique?: { author: string; via: string; text: string };
+	from?: { candidateId: string; author: string }; diff?: LineDiff; partner?: { candidateId: string; author: string; share: number } };
 /** One step in a block's trace: an agent researched, proposed, voted, wrote (a new approach, a revision, a merge, an
  *  improvement), critiqued (`to`: the author it addressed) or judged an answer (`ok`: every criterion met). */
 export type TraceEvent = { t: number; agent: string; via: string; kind: "research" | "propose" | "vote" | "implement" | "revise" | "merge" | "improve" | "critique" | "judge"; ref?: string; to?: string; ok?: boolean | null };
@@ -413,6 +418,46 @@ export class CodeChatHub {
 			...(followed ? { followed: { author: followed.author, via: followed.via, text: followed.text } } : {}),
 			...(Array.isArray(f.judgements) ? { judgements: f.judgements as Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }> } : {}),
 		};
+	}
+
+	/** How a contribution came about: it and the attempts it built on (`basedOn`, newest first, at most 8). Each step
+	 *  names its author, model, role and verdict, the plan it followed, the critique it worked in, its merge partner, and
+	 *  what it took from the step before (a line diff, the share of lines kept; for a merge also the partner's share). */
+	async lineage(id: string, candidateId: string): Promise<{ steps: LineageStep[] } | null> {
+		const s = await this.session(id);
+		const steps: LineageStep[] = [];
+		const answers = new Map<string, Contribution>();
+		const verdictOf = async (f: Record<string, unknown>) => {
+			if (typeof f.answerId !== "string") return f;
+			const blockId = String(f.blockId);
+			if (!answers.size) for (const a of await this.#answers(s.id, blockId)) answers.set(a.candidateId, a);
+			const a = answers.get(String(f.answerId));
+			return a ? { ...f, ok: a.ok, passed: a.passed, total: a.total } : f;
+		};
+		let f = await this.#contribution(s, candidateId);
+		if (!f) return null;
+		const seen = new Set<string>();
+		while (f && steps.length < 8 && !seen.has(String(f.candidateId))) {
+			seen.add(String(f.candidateId));
+			const v = await verdictOf(f);
+			const parent: Record<string, unknown> | null = typeof f.basedOn === "string" ? await this.#contribution(s, f.basedOn) : null;
+			const partner = typeof f.partner === "string" ? await this.#contribution(s, f.partner) : null;
+			const critique = typeof f.critiqueId === "string" ? (await this.host.readAll({ type: "CodeCritique", fields: { session: s.id, critiqueId: f.critiqueId } }, { limit: 1 }))[0]?.fields as { author: string; via: string; text: string } | undefined : undefined;
+			const plan = typeof f.proposalId === "string" ? (await this.host.readAll({ type: "CodeProposal", fields: { session: s.id, proposalId: f.proposalId } }, { limit: 1 }))[0]?.fields as { author: string; via: string; text: string } | undefined : undefined;
+			const source = String(f.source ?? "");
+			const num = (x: unknown) => (typeof x === "number" ? x : undefined);
+			steps.push({
+				candidateId: String(f.candidateId), author: String(f.author ?? ""), via: String(f.via ?? ""), gen: num(f.gen) ?? 0, ts: num(f.ts) ?? 0,
+				...(typeof f.role === "string" ? { role: f.role as Role } : {}),
+				ok: typeof v.ok === "boolean" ? v.ok : null, ...(num(v.ms) !== undefined ? { ms: num(v.ms) } : {}), ...(num(v.passed) !== undefined ? { passed: num(v.passed) } : {}), ...(num(v.total) !== undefined ? { total: num(v.total) } : {}),
+				...(plan ? { plan: { author: plan.author, via: plan.via, text: clipWords(plan.text, 600) } } : {}),
+				...(critique ? { critique: { author: critique.author, via: critique.via, text: clipWords(critique.text, 900) } } : {}),
+				...(parent ? { from: { candidateId: String(parent.candidateId), author: String(parent.author ?? "") }, diff: lineDiff(String(parent.source ?? ""), source) } : {}),
+				...(partner ? { partner: { candidateId: String(partner.candidateId), author: String(partner.author ?? ""), share: shareOf(String(partner.source ?? ""), source) } } : {}),
+			});
+			f = parent;
+		}
+		return { steps };
 	}
 
 	/** What the ▶ of a contribution runs: its code and the task it was written for (the candidate names it, a verdict

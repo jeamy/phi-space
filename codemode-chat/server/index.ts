@@ -158,6 +158,12 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				const got = await hub.plan(plan[1]!, plan[2]!);
 				return got ? json(res, 200, got) : json(res, 404, { error: "Unknown plan" });
 			}
+			const lin = /^\/api\/sessions\/([^/]+)\/lineage\/([^/]+)$/.exec(p);
+			if (lin && req.method === "GET") {
+				if (!ID.test(lin[1]!) || !CANDIDATE.test(lin[2]!)) return json(res, 400, { error: "Invalid id" });
+				const got = await hub.lineage(lin[1]!, lin[2]!); // the contribution and the attempts it built on
+				return got ? json(res, 200, got) : json(res, 404, { error: "Unknown contribution" });
+			}
 			const src = /^\/api\/sessions\/([^/]+)\/source\/([^/]+)$/.exec(p);
 			if (src && req.method === "GET") {
 				if (!ID.test(src[1]!) || !CANDIDATE.test(src[2]!)) return json(res, 400, { error: "Invalid id" });

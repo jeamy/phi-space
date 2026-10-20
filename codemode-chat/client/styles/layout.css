@@ -313,3 +313,15 @@ main > * { min-width: 0; }
 .critique .ok { color: var(--success); }
 .critique .bad { color: var(--danger); }
 .modal__reason { width: 100%; margin: 4px 0 10px; box-sizing: border-box; }
+
+/* a contribution's lineage: its steps back to the first attempt, with the changed lines */
+.chip--button { cursor: pointer; font: inherit; }
+.chip--on { border-color: var(--accent); }
+.lineagepanel { margin: 6px 0; padding-left: 20px; font-size: 13px; display: grid; gap: 8px; }
+.lineagepanel li { padding-left: 4px; min-width: 0; }
+.lineagepanel__head { margin-bottom: 2px; }
+.lineagepanel details { margin-top: 2px; }
+.diff { margin: 4px 0 0; padding: 6px 8px; background: var(--code-bg); border-radius: 6px; font-size: 12px; max-height: 320px; overflow: auto; white-space: pre; }
+.diff__add { color: var(--success); }
+.diff__del { color: var(--danger); }
+
