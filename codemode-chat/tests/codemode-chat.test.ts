@@ -848,3 +848,16 @@ test("the verifier is told that the parameters may stand in the description when
 	const p = verifierPrompt(customTask({ fn: "golomb", prompt: "Golomb ruler of order 12, length 85", cases: [{ args: [], expect: [0, 2, 6, 24, 29, 40, 43, 55, 68, 75, 76, 85] }] }));
 	assert.ok(p.user.includes("args is then []") && p.user.includes("Golomb ruler of order 12, length 85"));
 });
+
+t("the cross-check refuses a rule that misses what makes a result right (a lax golomb rule from a live run)", async () => {
+	const { testRule } = await import("../server/judge.ts");
+	const { expectedOf } = await import("../server/tasks.ts");
+	const golomb = customTask({ fn: "golomb", prompt: "", cases: [{ args: [], expect: [0, 1, 4, 13, 28, 33, 47, 54, 64, 70, 72] }] });
+	// what the verifier wrote: length, last mark and order, but not "all distances different"
+	const lax = "(r) => Array.isArray(r) && r.length === 11 && r[10] === 72 && r.every((v, i) => i === 0 || r[i - 1] < v)";
+	assert.match((await testRule(cm!, golomb, lax, expectedOf))!, /too many wrong results/);
+	const right = "(r) => Array.isArray(r) && r.length === 11 && r[0] === 0 && r[10] === 72 && new Set(r.flatMap((a, i) => r.slice(i + 1).map((b) => b - a))).size === 55";
+	assert.equal(await testRule(cm!, golomb, right, expectedOf), null);
+	const sort = customTask({ fn: "sortDesc", prompt: "", cases: [{ args: [[1, 3, 2, 5, 4]], expect: [5, 4, 3, 2, 1] }] });
+	assert.equal(await testRule(cm!, sort, "(r, [a]) => Array.isArray(r) && r.length === a.length && r.every((v, i) => i === 0 || r[i - 1] >= v) && [...a].sort().join() === [...r].sort().join()", expectedOf), null);
+});

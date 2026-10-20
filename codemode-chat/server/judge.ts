@@ -138,12 +138,19 @@ return __sets.map((vals) => vals.map((v, i) => { try { return __check(v, __args[
 
 /** Values that are wrong answers to almost any task, offered to a rule as counter-examples. */
 const JUNK: unknown[] = [null, [], {}, -1, 0, "", true, "wrong"];
-/** A nearby wrong answer for an example result: a changed last element, digit or character (often wrong, not always). */
+/** Near misses of an example result, usually wrong: a changed last element, digit or character, one element dropped,
+ *  and inside a list every element moved by ±1 and neighbours swapped. A rule that accepts many of them does not check
+ *  what makes the result right (a golomb rule that only looked at length, ends and order accepted [0,7,14,22,…]). */
 const nearby = (v: unknown): unknown[] => {
 	if (typeof v === "number") return [v + 1];
 	if (typeof v === "string") return [v + "x"];
-	if (Array.isArray(v) && v.length) { const last = v.at(-1); return [[...v.slice(0, -1), typeof last === "number" ? last + 1 : "x"], v.slice(0, -1)]; }
-	return [];
+	if (!Array.isArray(v) || !v.length) return [];
+	const last = v.at(-1), out: unknown[] = [[...v.slice(0, -1), typeof last === "number" ? last + 1 : "x"], v.slice(0, -1)];
+	for (let i = 1; i < v.length - 1 && out.length < 40; i++) {
+		if (typeof v[i] === "number") for (const d of [1, -1]) out.push(v.map((x, j) => (j === i ? (x as number) + d : x)));
+		if (JSON.stringify(v[i]) !== JSON.stringify(v[i + 1])) out.push(v.map((x, j) => (j === i ? v[i + 1] : j === i + 1 ? v[i] : x)));
+	}
+	return out;
 };
 
 /** Tries a check rule before it may decide anything: it must accept every example result, reject null, and reject most
