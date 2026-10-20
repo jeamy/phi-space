@@ -15,7 +15,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, limitOf, MAX_SOURCE_CHARS, maxTimeoutMs, plain, sandboxSlot, testRule, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
-import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
+import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmReviewCriteria, tallyCriteria, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
 import { entryLeaseMs, hostFacts, type HostFacts } from "./shard.ts";
 import type { WsConnection } from "./ws.ts";
@@ -30,7 +30,7 @@ const SNAPSHOT_MAX_BYTES = 900 * 1024;
 const REMOTE_GRACE_MS = 90_000;
 export type RunMode = "scripted" | "llm";
 /** The model side of a run; replaceable in tests. */
-export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; judge?: typeof llmJudge };
+export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; reviewCriteria?: typeof llmReviewCriteria; judge?: typeof llmJudge };
 /** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
 /** `gens` is the most generations a run may take; it ends earlier once the task is solved and `polish` more
  *  generations improved the solution (`solvedGen`: the generation that solved it, 0 = solved before the run). */
@@ -91,7 +91,7 @@ export class CodeChatHub {
 	readonly #llm: LlmApi;
 	/** Lease of every room entry (CODEMODE_TTL_HOURS). */
 	readonly #ttl: number;
-	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote, criteria: llmCriteria, judge: llmJudge }; }
+	constructor(h: SpaceHost, cm: Codemode, o: { remote?: SpaceLike | null; remoteLabel?: string | null; llm?: LlmApi; ttlMs?: number } = {}) { this.#ttl = o.ttlMs ?? entryLeaseMs(); this.h = h; this.cm = cm; this.host = new PhiSpaces(h, ctx); this.#remote = o.remote ?? null; this.#remoteLabel = o.remoteLabel ?? null; this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote, criteria: llmCriteria, reviewCriteria: llmReviewCriteria, judge: llmJudge }; }
 
 	/** A call to the shard: bounded in time, and a failure marks it down for 15 s so the UI never waits on it. */
 	async #rcall<T>(fn: (r: SpaceLike) => Promise<T>): Promise<T | null> {
@@ -489,7 +489,20 @@ export class CodeChatHub {
 			if (c.criteria.length < 1) throw new Error("The criteria agent wrote no criteria; please write some");
 			task = textTask({ prompt: task.prompt.en, criteria: c.criteria, criteriaBy: "verifier" });
 			verdict = `Criteria written by the verifier agent (${c.model})`;
-			if (c.usage) extra = { verifierUsage: c.usage };
+			let usage = c.usage ?? NO_USAGE;
+			// three agents review the criteria, the majority decides: a wrong fact in a criterion misleads every judge
+			if (this.#llm.reviewCriteria) {
+				const models = await this.#llm.models(), order = [...models.filter((m) => m !== c.model), ...models.filter((m) => m === c.model)];
+				const reviews = (await Promise.allSettled([0, 1, 2].map((i) => this.#llm.reviewCriteria!({ task, agent: i, model: order[i % order.length] }))))
+					.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+				for (const r of reviews) if (r.usage) usage = addUsage(usage, r.usage);
+				if (reviews.length === 3) {
+					const t = tallyCriteria(task.criteria ?? [], reviews.map((r) => r.votes));
+					if (t.changes.length) task = textTask({ prompt: task.prompt.en, criteria: t.criteria, criteriaBy: "verifier" });
+					verdict += `; reviewed by 3 agents (${reviews.map((r) => r.model).join(", ")}), the majority decides: ` + (t.changes.length ? t.changes.map((x) => `C${x.index + 1} ${x.to ? `corrected (${x.votes} of 3): "${clipWords(x.from, 160)}" → "${clipWords(x.to, 160)}"` : `dropped (${x.votes} of 3): "${clipWords(x.from, 160)}"`}`).join("; ") : "all kept");
+				} else verdict += "; the review by 3 agents failed, the criteria stay unreviewed";
+			}
+			if (usage.total) extra = { verifierUsage: usage };
 		}
 		await this.#exclusive(s, async () => {
 			if (s.run?.active) throw new Error("A run is active; stop it first");

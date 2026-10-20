@@ -76,8 +76,11 @@ oder Stop gedrückt wird. Die Abwertung durch einen Menschen bleibt das letzte W
   und Tiefe der Aufträge.
 
 - **Text-Aufgaben (Stufe 3):** Kriterien sind ein optionales Feld; bleibt es leer, schreibt der Prüfer-Agent sie aus
-  der Frage, sichtbar im Block. Eine Antwort ist angenommen, wenn mindestens zwei Prüfer (nie der Autor, mindestens
-  einer von einem anderen Modell) jedes Kriterium als erfüllt bewerten, oder wenn ein Mensch 👍 „Passt“ gibt.
+  der Frage, sichtbar im Block. Drei Agenten prüfen diese Kriterien und stimmen je Kriterium ab (behalten, berichtigen,
+  streichen); die Mehrheit entscheidet. Anlass: Im Lauf `#test-text-himmel2` enthielt ein Kriterium einen falschen Fakt.
+  Eine Antwort ist angenommen, wenn mindestens zwei Prüfer (nie der Autor, mindestens einer von einem anderen Modell)
+  jedes Kriterium als erfüllt bewerten und jedes mit einem wörtlichen Zitat aus der Antwort belegen, oder wenn ein
+  Mensch 👍 „Passt“ gibt.
   Unterbrechen geht auf drei Wegen: 👍 (angenommen, der Lauf endet), 👎 (abgewertet) und ■ (abbrechen); jeweils mit
   optionaler Begründung, die als Notiz an die Agenten geht.
 - **Wiederverwendung:** Angenommene Antworten bleiben im Space. Bei einer neuen, ähnlichen Aufgabe bekommen die

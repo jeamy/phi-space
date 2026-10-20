@@ -1111,6 +1111,40 @@ test("text prompts mark the question and the answer as data, and the judge parse
 	assert.ok(teamPrompt({ task, lang: "en", agent: 0, gen: 0 }).user.includes("C1. mentions A"));
 });
 
+test("three reviewers vote on the verifier's criteria; the majority keeps, corrects or drops each", async () => {
+	const { parseCriteriaReview, tallyCriteria } = await import("../server/llm.ts");
+	const v = (s: string) => parseCriteriaReview(s, 4);
+	assert.deepEqual(v("C1: OK - fine\nC2: FIX - Longer paths scatter more blue.\nC3: DROP - off topic\nC4: FIX -").map((x) => x.vote), ["ok", "fix", "drop", "ok"]);
+	const crit = ["right", "shorter paths scatter less", "off topic", "fine"];
+	const t = tallyCriteria(crit, [
+		v("C1: OK - a\nC2: FIX - A longer path through the air scatters out the blue.\nC3: DROP - x\nC4: OK - a"),
+		v("C1: OK - a\nC2: FIX - Longer paths scatter more.\nC3: DROP - x\nC4: DROP - x"),
+		v("C1: FIX - Something else.\nC2: OK - a\nC3: OK - a\nC4: OK - a"),
+	]);
+	assert.deepEqual(t.criteria, ["right", "A longer path through the air scatters out the blue.", "fine"]);
+	assert.deepEqual(t.changes.map((c) => [c.index, c.to, c.votes]), [[1, "A longer path through the air scatters out the blue.", 2], [2, null, 2]]);
+	// all dropped: the criteria stay as they were
+	assert.deepEqual(tallyCriteria(["a"], [v("C1: DROP - x"), v("C1: DROP - x"), v("C1: OK - y")]).criteria, ["a"]);
+});
+
+t("text task: the verifier's criteria are reviewed by three agents before the block opens", async () => {
+	const reviewers: string[] = [];
+	const llm = { ...textLlm(), criteria: async () => ({ criteria: ["names the capital", "shorter paths scatter less"], model: "fake/haiku-judge" }),
+		reviewCriteria: async (c: any) => { reviewers.push(c.model); return { votes: [{ vote: "ok", reason: "" }, c.agent < 2 ? { vote: "fix", fix: "is one sentence", reason: "" } : { vote: "ok", reason: "" }], model: c.model }; } };
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		assert.equal((await post(srv.url, "/api/sessions/crv/task", { text: { prompt: "What is the capital of France?" } })).status, 200);
+		const b = ((await (await fetch(srv.url + "/api/sessions/crv")).json()) as any).blocks.at(-1);
+		assert.deepEqual(b.task.criteria, ["names the capital", "is one sentence"]);
+		assert.equal(reviewers.length, 3);
+		assert.equal(reviewers[0], "fake/plain"); // another model than the one that wrote the criteria first
+		assert.ok(b.messages.some((m: any) => /reviewed by 3 agents.*C2 corrected \(2 of 3\)/.test(m.text)));
+		// criteria a person wrote are not reviewed
+		await post(srv.url, "/api/sessions/crv2/task", { text: { prompt: "Capital of France?", criteria: ["correct"] } });
+		assert.equal(reviewers.length, 3);
+	} finally { await srv.close(); }
+});
+
 test("a judge's PASS counts only with a quote that is in the answer", async () => {
 	const { parseJudgement } = await import("../server/llm.ts");
 	const answer = "Die Luft besteht aus **kleinen Molekülen**, die das Licht streuen.\nBlaues Licht hat kürzere Wellen.";

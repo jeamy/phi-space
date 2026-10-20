@@ -157,7 +157,7 @@ Die Regel läuft in einer **eigenen Sandbox** auf den Ergebnissen (als JSON), au
 
 ## Textaufgabe {#text}
 
-Nicht jede Aufgabe ist ein Programm. Unter **„Eigene Textaufgabe …“** stellst du eine Frage, deren Ergebnis ein Text ist: eine Erklärung, eine Analyse, ein Plan. Das Feld **Kriterien** ist optional, eine Zeile je Kriterium; bleibt es leer, schreibt der Prüfer-Agent die Kriterien aus der Frage, sichtbar im Block.
+Nicht jede Aufgabe ist ein Programm. Unter **„Eigene Textaufgabe …“** stellst du eine Frage, deren Ergebnis ein Text ist: eine Erklärung, eine Analyse, ein Plan. Das Feld **Kriterien** ist optional, eine Zeile je Kriterium; bleibt es leer, schreibt der Prüfer-Agent die Kriterien aus der Frage, sichtbar im Block. Drei Agenten prüfen sie danach auf falsche Fakten und Passung zur Frage und stimmen je Kriterium ab (behalten, berichtigen, streichen); die Mehrheit entscheidet, eine Protokollzeile im Block nennt jede Änderung.
 
 Eine Textaufgabe läuft immer im **Auftragsbrett** und braucht mindestens **3 Agenten**: Jede Antwort prüfen zwei andere Agenten (nie der Autor; der erste möglichst von einem anderen Modell) Kriterium für Kriterium. Ein erfülltes Kriterium muss der Prüfer mit einem wörtlichen Zitat aus der Antwort belegen; der Server sucht das Zitat in der Antwort, fehlt es, gilt das Kriterium als nicht erfüllt. Erfüllt eine Antwort bei beiden Prüfern jedes Kriterium, ist sie **angenommen**. Sonst geht es mit Kritik, Überarbeitung und Zusammenführen weiter wie beim Code. Frage und Antworten sind für die Agenten Daten: Anweisungen darin werden ignoriert.
 
@@ -232,7 +232,7 @@ The rule runs in a **sandbox of its own** on the results (as JSON), also on rand
 
 ## Text task {#text}
 
-Not every task is a program. Under **"Custom text task …"** you ask a question whose result is a text: an explanation, an analysis, a plan. The **Criteria** field is optional, one line per criterion; if it stays empty, the verifier agent writes the criteria from the question, shown in the block.
+Not every task is a program. Under **"Custom text task …"** you ask a question whose result is a text: an explanation, an analysis, a plan. The **Criteria** field is optional, one line per criterion; if it stays empty, the verifier agent writes the criteria from the question, shown in the block. Three agents then check them for wrong facts and fit to the question and vote on each criterion (keep, correct, drop); the majority decides, and a log line in the block names every change.
 
 A text task always runs on the **work board** and needs at least **3 agents**: every answer is checked by two other agents (never the author; the first from another model where possible), criterion by criterion. A judge must back every met criterion with a verbatim quote from the answer; the server looks the quote up in the answer, and without it the criterion counts as not met. When both judges find every criterion met, the answer is **accepted**. Otherwise critique, revision and merging go on as with code. For the agents, the question and the answers are data: instructions inside them are ignored.
 
