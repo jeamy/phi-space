@@ -348,7 +348,8 @@ export function reviewCriteriaPrompt(c: { task: Task; agent: number }): { system
 		user: [
 			`The question:\n\`\`\`text\n${c.task.prompt.en}\n\`\`\``,
 			`The criteria:\n${describeCriteria(c.task)}`,
-			`Check every criterion: is every fact in it right, is it checkable, does it fit the question? One line per criterion, exactly in one of these forms, nothing else:\n${crit.map((_, i) => `C${i + 1}: OK - <reason>`).join("\n")}\nC<n>: FIX - <the corrected criterion, one sentence>\nC<n>: DROP - <reason>\nUse FIX for a wrong fact or wording that can be mended, DROP for a criterion that does not belong to the question.`,
+			"Check every criterion word by word, including what stands in parentheses, examples and side remarks: take each factual claim in it on its own and ask whether it is true (a judge will hold answers to it). A criterion with one wrong claim needs a FIX, even when the rest is right or the claim is marked optional.",
+			`Then: is it checkable, does it fit the question? One line per criterion, exactly in one of these forms, nothing else:\n${crit.map((_, i) => `C${i + 1}: OK - <reason>`).join("\n")}\nC<n>: FIX - <the whole corrected criterion, worded as it should stand in the list; no explanation>\nC<n>: DROP - <reason>\nUse FIX for a wrong fact or wording that can be mended, DROP for a criterion that does not belong to the question.`,
 		].join("\n\n"),
 	};
 }
@@ -358,7 +359,7 @@ export function parseCriteriaReview(text: string, n: number): CriterionVote[] {
 	return Array.from({ length: n }, (_, i) => {
 		const m = new RegExp(`\\bC${i + 1}\\s*[:=.)-]\\s*(OK|FIX|DROP)\\b\\s*[-–:]?\\s*(.*)`, "i").exec(text);
 		if (!m) return { vote: "ok", reason: "no verdict" };
-		const vote = m[1]!.toLowerCase() as CriterionVote["vote"], rest = m[2]!.trim().slice(0, 200);
+		const vote = m[1]!.toLowerCase() as CriterionVote["vote"], rest = m[2]!.trim().slice(0, 300);
 		return vote === "fix" ? (rest.length > 3 ? { vote, fix: rest, reason: "corrected" } : { vote: "ok", reason: "no correction" }) : { vote, reason: rest };
 	});
 }
@@ -402,9 +403,10 @@ const loose = (s: string) => s.toLowerCase().replace(/[*_#`>„“”«»"‚‘
 /** The quote in a verdict: from the first double quote to the one before the reason (quotes inside it may stay). */
 const QUOTE = /["„“”«»](.{2,}?)["„“”«»](?=\s*(?:[-–—:]\s|$))/;
 
-/** Whether a judge's quote is in the answer: every part (split at an ellipsis) is, and the parts hold 8 characters or more. */
+/** Whether a judge's quote is in the answer: every part is (split at an ellipsis, or between quotes joined like
+ *  `"…" and "…"`), and the parts hold 8 characters or more. */
 export function quoted(quote: string, answer: string): boolean {
-	const a = loose(answer), parts = loose(quote).split(/\s*(?:…|\.\.\.)\s*/).filter(Boolean);
+	const a = loose(answer), parts = quote.split(/["„“”«»]\s*(?:and|und|or|oder|,|;)?\s*["„“”«»]/i).flatMap((p) => loose(p).split(/\s*(?:…|\.\.\.)\s*/)).filter(Boolean);
 	return parts.join("").length >= 8 && parts.every((p) => a.includes(p));
 }
 

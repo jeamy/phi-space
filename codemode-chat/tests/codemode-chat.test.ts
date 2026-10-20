@@ -1163,6 +1163,9 @@ test("a judge's PASS counts only with a quote that is in the answer", async () =
 	const styled = `Blaues Licht wird stärker "abgelenkt" als rotes. Die Moleküle „ablenken" oder „zerstreuen" das Licht.`;
 	assert.equal(parseJudgement(`C1: PASS - "Blaues Licht wird stärker 'abgelenkt' als rotes" - ok`, ["x"], styled)[0]!.pass, true);
 	assert.equal(parseJudgement(`C1: PASS - „Die Moleküle „ablenken" oder „zerstreuen" das Licht" - ok`, ["x"], styled)[0]!.pass, true);
+	// two quotes joined with "and" (seen in a live run); a paraphrase still fails
+	assert.equal(parseJudgement(`C1: PASS - "Blaues Licht wird stärker" and "als rotes. Die Moleküle" - ok`, ["x"], styled)[0]!.pass, true);
+	assert.equal(parseJudgement(`C1: PASS - "Blaues Licht wird stärker" and "Rotes Licht wird schwächer" - ok`, ["x"], styled)[0]!.pass, false);
 	assert.equal(parseJudgement("C1: PASS - fine", ["x"])[0]!.pass, true); // without the answer: the verdict as written
 });
 
