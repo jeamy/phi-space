@@ -110,6 +110,7 @@ details > summary { cursor: pointer; padding: 5px 10px; color: var(--muted); fon
 .tile--bad .tile__result { color: var(--danger); }
 .tile--part { border-color: color-mix(in srgb, var(--warning) 60%, var(--line-strong)); }
 .tile--part .tile__result { color: var(--warning); }
+.tile__usage { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tile__flag { font-size: 11px; color: var(--danger); text-align: center; }
 .preview { margin: 4px 0 8px; padding: 6px 8px; border-left: 3px solid var(--success); background: var(--code-bg); font: 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .preview__title { font-family: var(--font-sans); color: var(--muted); }

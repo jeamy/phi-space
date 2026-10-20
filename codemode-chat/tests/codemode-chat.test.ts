@@ -815,3 +815,36 @@ test("an expected result that is JSON typed as text (test cases, a number list) 
 	assert.equal(make("[x] marks the spot").cases[0]!.expect, "[x] marks the spot"); // other text stays allowed
 	assert.deepEqual(make([0, 1, 6, 10]).cases[0]!.expect, [0, 1, 6, 10]);
 });
+
+// ---- usage: tokens and cost of every model call ----
+
+test("pi-ai's usage of an answer becomes plain numbers (zeros when the provider reported none)", async () => {
+	const { usageOf } = await import("../server/llm.ts");
+	assert.deepEqual(usageOf({ usage: { input: 1200, output: 300, cacheRead: 50, cacheWrite: 0, totalTokens: 1550, cost: { total: 0.0042 } } }), { input: 1200, output: 300, cacheRead: 50, cacheWrite: 0, total: 1550, costUsd: 0.0042 });
+	assert.deepEqual(usageOf({}), { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, costUsd: 0 });
+});
+
+t("tokens and cost are kept with every contribution and summed per block (verifier included) and per run", async () => {
+	const use = (total: number, costUsd: number) => ({ input: total - 100, output: 100, cacheRead: 0, cacheWrite: 0, total, costUsd });
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async () => ({ source: "function f(x){ return x + 1 }", model: "fake/team", usage: use(1000, 0.002) }),
+		verify: async () => ({ check: "(r, [x]) => r === x + 1", model: "fake/team", usage: use(500, 0.001) }),
+	};
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/use1/task", { custom: { fn: "f", prompt: "x + 1", cases: [{ args: [1], expect: 2 }] } });
+		await post(srv.url, "/api/sessions/use1/run", { agents: 2, gens: 1, perAgent: 1, polish: 0, contenders: ["fake/team"] });
+		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/use1")).json()) as any; return s.run && !s.run.active && s.blocks.at(-1).contributions.every((c: any) => c.ok !== null) ? s : false; }, 60_000);
+		const b = snap.blocks.at(-1);
+		assert.deepEqual(b.contributions.map((c: any) => c.usage.total), [1000, 1000]);
+		assert.deepEqual(b.usage, { tokens: 2500, costUsd: 0.005 }); // two contributions and the verifier
+		assert.deepEqual(snap.run.usage, { tokens: 2000, costUsd: 0.004 });
+	} finally { await srv.close(); }
+});
+
+test("the verifier is told that the parameters may stand in the description when the call has no arguments", async () => {
+	const { verifierPrompt } = await import("../server/llm.ts");
+	const p = verifierPrompt(customTask({ fn: "golomb", prompt: "Golomb ruler of order 12, length 85", cases: [{ args: [], expect: [0, 2, 6, 24, 29, 40, 43, 55, 68, 75, 76, 85] }] }));
+	assert.ok(p.user.includes("args is then []") && p.user.includes("Golomb ruler of order 12, length 85"));
+});

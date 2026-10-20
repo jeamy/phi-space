@@ -568,6 +568,8 @@ Ist das Minutenlimit erreicht, **wartet** der Agent auf die nächste Minute. Ist
 
 Jeder Beitrag eines Modell-Agenten kostet Token: einige Tausend je Aufruf, denn der Agent liest die Versuche des Teams mit. Starte Läufe mit Modellen bewusst: Agenten × Generationen × Beiträge je Agent ist die höchste Zahl der Aufrufe; ein gelöster Lauf endet früher.
 
+**Verbrauch sehen:** Jede Kachel eines Modell-Agenten zeigt Tokens und Kosten ihres Aufrufs (z. B. „3,2k Tok · $0,0040“), der aufgeklappte Beitrag die Aufteilung in Eingabe, Ausgabe und Cache. Der Blockkopf zeigt die Summe des Blocks (Σ, inklusive Prüfer-Agent), das Lauf-Panel die Summe des laufenden Laufs. Die Zahlen meldet der Anbieter über pi-ai; die Kosten sind der **Listenpreis** laut Modellkatalog in US-Dollar. Bei Zugang über ein Abo (pi-CLI-Anmeldung) zahlst du nicht pro Token, dann sind sie nur ein Richtwert.
+
 ## Siehe auch {#see-also}
 
 - [Läufe und Teilnehmer](help.topic.runs_and_contenders#overview)
@@ -599,6 +601,8 @@ When the per-minute limit is reached the agent **waits** for the next minute. Wh
 ## Cost {#cost}
 
 Every contribution of a model agent costs tokens: a few thousand per call, since the agent reads the team's attempts. Start runs with models deliberately: agents × generations × contributions per agent is the most calls; a solved run ends earlier.
+
+**Seeing the usage:** every tile of a model agent shows the tokens and cost of its call (e.g. "3.2k Tok · $0.0040"), the unfolded contribution the split into input, output and cache. The block header shows the block's sum (Σ, the verifier agent included), the run panel the sum of the current run. The provider reports the numbers through pi-ai; the cost is the **list price** from the model catalog in US dollars. With subscription access (pi CLI login) you do not pay per token, so it is only a guide.
 
 ## See also {#see-also}
 

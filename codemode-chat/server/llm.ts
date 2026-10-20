@@ -145,9 +145,23 @@ export function extractNote(text: string): string | undefined {
 	return m ? clipWords(m[1]!, 300) : undefined;
 }
 
+/** Tokens and cost of one model call as pi-ai reports them; the cost is the model's catalog (list) price in US
+ *  dollars, a guide only when the access is a subscription. */
+export type Usage = { input: number; output: number; cacheRead: number; cacheWrite: number; total: number; costUsd: number };
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+/** pi-ai's usage of an answer, reduced to plain numbers (zeros when the provider reported none). */
+export function usageOf(res: any): Usage {
+	const u = res?.usage ?? {};
+	const input = num(u.input), output = num(u.output), cacheRead = num(u.cacheRead), cacheWrite = num(u.cacheWrite);
+	return { input, output, cacheRead, cacheWrite, total: num(u.totalTokens) || input + output + cacheRead + cacheWrite, costUsd: num(u.cost?.total) };
+}
+/** Usages added up. */
+export const addUsage = (a: Usage, b: Usage): Usage => ({ input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite, total: a.total + b.total, costUsd: a.costUsd + b.costUsd });
+export const NO_USAGE: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, costUsd: 0 };
+
 /** One guarded model call (whitelist, day budget, minute window, two in flight): the answer text and the model label.
  *  A full minute window waits for the next one (a run is teamwork, not a race against the limit). */
-async function guardedCall(modelLabel: string | undefined, system: string, user: string, maxTokens: number): Promise<{ text: string; model: string }> {
+async function guardedCall(modelLabel: string | undefined, system: string, user: string, maxTokens: number): Promise<{ text: string; model: string; usage: Usage }> {
 	const s = await sharedModel();
 	if (!s || !on) throw new Error("model agents are off");
 	const model = modelLabel ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === modelLabel) : s.model;
@@ -169,16 +183,16 @@ async function guardedCall(modelLabel: string | undefined, system: string, user:
 		}, { maxTokens, signal: AbortSignal.timeout(60_000) });
 		const text = (res?.content ?? []).filter((x: any) => x?.type === "text").map((x: any) => x.text).join("");
 		if (!text.trim()) throw new Error(res?.errorMessage ?? "empty answer");
-		return { text, model: `${model.provider}/${model.id}` };
+		return { text, model: `${model.provider}/${model.id}`, usage: usageOf(res) };
 	} finally { inFlight--; slotWaiters.shift()?.(); }
 }
 
 /** One model contribution: source, the model label and an optional note; throws when the guards or the model say no. */
-export async function llmContribution(c: TeamContext): Promise<{ source: string; model: string; note?: string }> {
+export async function llmContribution(c: TeamContext): Promise<{ source: string; model: string; note?: string; usage?: Usage }> {
 	const p = teamPrompt(c);
-	const { text, model } = await guardedCall(c.model, p.system, p.user, 1500);
+	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 1500);
 	const note = extractNote(text);
-	return { source: extractCode(text), model, ...(note ? { note } : {}) };
+	return { source: extractCode(text), model, usage, ...(note ? { note } : {}) };
 }
 
 /** The verifier agent's prompt: from the description and the example results, a rule that accepts every right answer
@@ -189,7 +203,7 @@ export function verifierPrompt(task: Task, feedback?: string): { system: string;
 		user: [
 			`A JavaScript function \`${task.fn}\` is specified as:\n${task.prompt.en}`,
 			`Example calls, each with a right result:\n${describeCases(task)}`,
-			`Write a JavaScript arrow function \`(result, args) => boolean\` that returns true exactly when \`result\` is a correct answer for the call with these \`args\` (the argument array), according to the specification. Several different answers may be right: check the properties the specification demands; do not just compare with the examples. It must accept every example result above, and return false (not throw) for results of a wrong type or shape. Plain JavaScript, no imports, no I/O; result and args are plain JSON values.`,
+			`Write a JavaScript arrow function \`(result, args) => boolean\` that returns true exactly when \`result\` is a correct answer for the call with these \`args\` (the argument array), according to the specification. The calls may pass no arguments (args is then []): the task's parameters (sizes, limits, counts) are then given in the description, so take them from there and write them into the rule as constants. Several different answers may be right: check the properties the specification demands; do not just compare with the examples. It must accept every example result above, and return false (not throw) for results of a wrong type or shape. Plain JavaScript, no imports, no I/O; result and args are plain JSON values.`,
 			...(feedback ? [`Your previous rule was refused: ${feedback}. Write a better one.`] : []),
 			"Answer with exactly one ```js block that holds only the arrow function expression.",
 		].join("\n\n"),
@@ -197,8 +211,8 @@ export function verifierPrompt(task: Task, feedback?: string): { system: string;
 }
 
 /** The verifier agent: a check rule for a custom task, written by the default model (or `model`). */
-export async function llmVerifier(c: { task: Task; feedback?: string; model?: string }): Promise<{ check: string; model: string }> {
+export async function llmVerifier(c: { task: Task; feedback?: string; model?: string }): Promise<{ check: string; model: string; usage?: Usage }> {
 	const p = verifierPrompt(c.task, c.feedback);
-	const { text, model } = await guardedCall(c.model, p.system, p.user, 800);
-	return { check: extractCode(text).replace(/;\s*$/, ""), model };
+	const { text, model, usage } = await guardedCall(c.model, p.system, p.user, 800);
+	return { check: extractCode(text).replace(/;\s*$/, ""), model, usage };
 }
