@@ -67,6 +67,11 @@ oder Stop gedrückt wird. Die Abwertung durch einen Menschen bleibt das letzte W
   (`html.duckduckgo.com`). Das ist inoffiziell: Bei vielen Anfragen kann DuckDuckGo blocken, und eine Layout-Änderung
   erfordert eine Anpassung. Dazu ein Tageslimit für Suchanfragen.
 - **Zugriff:** Läufe mit Websuche nur mit `CODEMODE_ADMIN_TOKEN`; normale Läufe bleiben für alle offen.
+- **Nur Agenten suchen.** Die Websuche ist ein Werkzeug der Recherche-Agenten: Sie formulieren ihre Suchanfragen
+  selbst, aus der Aufgabe heraus, um sie zu lösen. Es gibt kein Suchfeld für Besucher und keinen Auftrag, der eine
+  vorgegebene Suchanfrage ausführt; eine Aufgabe wie „suche im Web nach xyz“ widerspricht dem Sinn der Plattform. Die
+  Plattform ist kein Suchdienst: Fundstücke sind immer nur Zwischenschritt für Analyse und Antwort, nie selbst das
+  Ergebnis eines Laufs.
 - **Budget:** je Lauf in Tokens **und** Dollar; was zuerst erreicht ist, beendet den Lauf. Dazu Obergrenzen für Zahl
   und Tiefe der Aufträge.
 
