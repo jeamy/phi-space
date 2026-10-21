@@ -35,6 +35,11 @@ test("a search goes to DuckDuckGo only through the guards: a bot check is an err
 	await assert.rejects(webSearch("x", { post: async () => ({ status: 202, text: "<script src=\"/anomaly.js?x\">" }) }), /bot check/);
 	process.env.CODEMODE_SEARCH_PER_DAY = "1";
 	try { await assert.rejects(webSearch("y", { post: ok }), /used up/); } finally { delete process.env.CODEMODE_SEARCH_PER_DAY; }
+	// the model process's shared allowance decides instead of this process's count, before anything is sent
+	const sent = bodies.length;
+	await assert.rejects(webSearch("z", { post: ok, allowed: async () => false }), /used up/);
+	assert.equal(bodies.length, sent);
+	assert.equal((await webSearch("z", { post: ok, allowed: async () => true })).length, 1);
 });
 
 test("a research agent's queries: one per line, numbering and quotes off, at most three", () => {

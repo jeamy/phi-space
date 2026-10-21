@@ -1,7 +1,8 @@
 // Optional model agents for the codemode chat. Off unless CODEMODE_CHAT_LLM=1 and credentials exist (same resolution as
 // the --live examples: environment keys or ~/.pi/agent/auth.json). Guards: a model whitelist (codestral-latest and the
 // newest haiku), at most 2 calls in flight (more wait for a slot), CODEMODE_LLM_PER_MIN (default 20) per minute (a
-// full minute waits for the next) and CODEMODE_LLM_PER_DAY (default 500) per day, because any visitor can start a run
+// full minute waits for the next) and CODEMODE_LLM_PER_DAY (default 500) per UTC day, shared by every model process
+// through the space (setCallGate, quota.ts), because any visitor can start a run
 // with model agents; beyond the day budget the caller falls back to scripted agents. Several models can take part in
 // one run: the caller names the model. Agents are teammates: each sees the cases, the team's attempts with their test
 // results, and the notes, and repairs, explores or improves (teamPrompt).
@@ -11,7 +12,13 @@ import { isText, type Task } from "./tasks.ts";
 
 const CALLS_PER_MIN = Number(process.env.CODEMODE_LLM_PER_MIN ?? 20);
 const CALLS_PER_DAY = Number(process.env.CODEMODE_LLM_PER_DAY ?? 500);
+/** The calls per minute and per day every model process shares (the model process admits them through the space). */
+export const callLimits = () => ({ perMin: CALLS_PER_MIN, perDay: CALLS_PER_DAY });
 let dayStart = 0, dayCalls = 0;
+/** Admits a call against limits shared with other processes (set by the model process); without one, this process
+ *  counts its own calls. */
+let callGate: (() => Promise<void>) | null = null;
+export const setCallGate = (gate: (() => Promise<void>) | null) => { callGate = gate; };
 type Shared = { models: any; model: any; label: string };
 let shared: Promise<Shared | null> | null = null;
 let on = true, inFlight = 0, windowStart = 0, calls = 0;
@@ -546,7 +553,8 @@ async function guardedCall(modelLabel: string | undefined, system: string, user:
 	if (!s || !on) throw new Error("model agents are off");
 	const model = modelLabel ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === modelLabel) : s.model;
 	if (!model) throw new Error(`model ${modelLabel} is not allowed`);
-	for (;;) {
+	if (callGate) await callGate();
+	else for (;;) {
 		if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); calls = 0; }
 		if (Date.now() - dayStart >= 86_400_000) { dayStart = Date.now(); dayCalls = 0; }
 		if (dayCalls >= CALLS_PER_DAY) throw new Error("daily model budget used up");

@@ -15,6 +15,7 @@ import { loadCodemode } from "./judge.ts";
 import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { CodeChatHub } from "./hub.ts";
 import { announce, connectSpace } from "./space.ts";
+import { NO_WAIT } from "../../src/index.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
 
@@ -77,13 +78,16 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const allowed = quota(Number(process.env.CODEMODE_REQ_PER_MIN ?? 120));
 	const runsByIp = new Map<string, number>(); // ▶ runs in flight per client: one at a time
 	// admin sessions after a login with the token (HttpOnly cookie); a POST with the cookie must also carry the header
-	// x-codemode-admin (a cross-site form cannot set it), or the token itself as x-admin-token (scripts, tests)
-	const adminSessions = new Map<string, number>();
+	// x-codemode-admin (a cross-site form cannot set it), or the token itself as x-admin-token (scripts, tests). A session
+	// is an AdminSession entry in the space (leased for its lifetime), so every web process knows it and a restart keeps
+	// it; the entry holds the hash of the cookie, never the cookie itself
+	const sessionKey = (sid: string) => createHash("sha256").update(sid).digest("hex");
 	const loginTries = quota(10);
-	const isAdmin = (req: http.IncomingMessage): boolean => {
+	const isAdmin = async (req: http.IncomingMessage): Promise<boolean> => {
 		if (tokenOk(req.headers["x-admin-token"])) return true;
-		const sid = cookieOf(req, ADMIN_COOKIE), until = sid ? adminSessions.get(sid) : undefined;
-		if (!sid || !until || until < Date.now()) { if (sid) adminSessions.delete(sid); return false; }
+		const sid = cookieOf(req, ADMIN_COOKIE);
+		if (!sid || !/^[0-9a-f]{48}$/.test(sid)) return false;
+		if (!(await conn.space.readIfExists({ type: "AdminSession", fields: { key: sessionKey(sid) } }, NO_WAIT))) return false;
 		return req.method === "GET" || req.headers["x-codemode-admin"] === "1";
 	};
 	const json = (res: http.ServerResponse, status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
@@ -105,30 +109,30 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			if (p === "/api/llm") {
 				if (req.method !== "POST") return json(res, 200, (await hub.modelInfo()).info);
 				// switching the model agents is an operator action, not a visitor's; the model process follows it (within 10 s)
-				if (!isAdmin(req)) return json(res, 403, { error: "Admin token required" });
+				if (!(await isAdmin(req))) return json(res, 403, { error: "Admin token required" });
 				const b = await readBody(req);
 				await hub.saveLlmChoice({ on: b.on, model: b.model });
 				return json(res, 200, (await hub.modelInfo()).info);
 			}
 			// ---- admin panel: login with the token, then the choice of models ----
-			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: isAdmin(req), available: !!process.env.CODEMODE_ADMIN_TOKEN });
+			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req)), available: !!process.env.CODEMODE_ADMIN_TOKEN });
 			if (p === "/api/admin/login" && req.method === "POST") {
 				if (!loginTries(clientIp(req))) return json(res, 429, { error: "Too many login attempts; retry in a minute" });
 				if (!tokenOk((await readBody(req)).token)) return json(res, 403, { error: "Wrong admin token" });
 				const sid = randomBytes(24).toString("hex");
-				adminSessions.set(sid, Date.now() + ADMIN_TTL_MS);
+				await conn.space.write({ type: "AdminSession", fields: { key: sessionKey(sid), ts: Date.now() } }, null, ADMIN_TTL_MS);
 				const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
 				res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "set-cookie": `${ADMIN_COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${ADMIN_TTL_MS / 1000}${secure}` });
 				return res.end(JSON.stringify({ admin: true }));
 			}
 			if (p === "/api/admin/logout" && req.method === "POST") {
 				const sid = cookieOf(req, ADMIN_COOKIE);
-				if (sid) adminSessions.delete(sid);
+				if (sid) while (await conn.space.take({ type: "AdminSession", fields: { key: sessionKey(sid) } }, NO_WAIT));
 				res.writeHead(200, { "content-type": "application/json; charset=utf-8", "set-cookie": `${ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` });
 				return res.end(JSON.stringify({ admin: false }));
 			}
 			if (p === "/api/admin/models") {
-				if (!isAdmin(req)) return json(res, 403, { error: "Admin login required" });
+				if (!(await isAdmin(req))) return json(res, 403, { error: "Admin login required" });
 				if (req.method === "POST") {
 					const b = await readBody(req);
 					if (b.allowed !== null && !Array.isArray(b.allowed)) return json(res, 400, { error: "allowed: a list of model labels, or null for the default" });
@@ -204,11 +208,11 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
 				const b = await readBody(req);
 				// a new task's model calls (its check rule, its criteria) count against a visitor's day allowance too
-				if (action === "task") await hub.setTask(id, { ...(b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId }), client: { ip: clientIp(req), admin: isAdmin(req) } });
+				if (action === "task") await hub.setTask(id, { ...(b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId }), client: { ip: clientIp(req), admin: (await isAdmin(req)) } });
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
 				else if (action === "run") {
 					// web research sends task text to a search engine: only an admin may start it
-					const admin = isAdmin(req);
+					const admin = (await isAdmin(req));
 					if (b.research === true && !admin) return json(res, 403, { error: "Research needs the admin login" });
 					// a visitor's run: the default token budget at most, counted against the day's allowance of the address
 					await hub.startRun(id, { ...b, research: b.research === true, client: { ip: clientIp(req), admin } });

@@ -10,15 +10,16 @@ export type SearchResult = { title: string; url: string; snippet: string };
 const ENDPOINT = "https://html.duckduckgo.com/html/";
 const MAX_BYTES = 1_000_000, TIMEOUT_MS = 10_000, MAX_RESULTS = 5;
 
-/** Searches a day may run on this host: CODEMODE_SEARCH_PER_DAY (default 100). */
-const perDay = () => Math.max(0, Number(process.env.CODEMODE_SEARCH_PER_DAY ?? "") || 100);
+/** Searches a day may run: CODEMODE_SEARCH_PER_DAY (default 100); the model process counts them for every process
+ *  through the space (quota.ts), searchAllowed counts them in this process only. */
+export const searchesPerDay = () => Math.max(0, Number(process.env.CODEMODE_SEARCH_PER_DAY ?? "") || 100);
 let day = "", used = 0;
 
 /** Takes one search from the day's allowance; false when it is used up. */
 export function searchAllowed(): boolean {
 	const today = new Date().toISOString().slice(0, 10);
 	if (today !== day) { day = today; used = 0; }
-	if (used >= perDay()) return false;
+	if (used >= searchesPerDay()) return false;
 	used++;
 	return true;
 }
@@ -77,11 +78,12 @@ function post(body: string, signal?: AbortSignal): Promise<{ status: number; tex
 	});
 }
 
-/** One web search; throws when the day's allowance is used up or DuckDuckGo does not answer with results. */
-export async function webSearch(query: string, o: { signal?: AbortSignal; post?: typeof post } = {}): Promise<SearchResult[]> {
+/** One web search; throws when the day's allowance is used up or DuckDuckGo does not answer with results. `allowed`
+ *  takes one search from the allowance (default: this process's own count). */
+export async function webSearch(query: string, o: { signal?: AbortSignal; post?: typeof post; allowed?: () => Promise<boolean> } = {}): Promise<SearchResult[]> {
 	const q = query.replace(/\s+/g, " ").trim().slice(0, 200);
 	if (!q) return [];
-	if (!searchAllowed()) throw new Error("The web searches of the day are used up (CODEMODE_SEARCH_PER_DAY)");
+	if (!(await (o.allowed ?? (async () => searchAllowed()))())) throw new Error("The web searches of the day are used up (CODEMODE_SEARCH_PER_DAY)");
 	const res = await (o.post ?? post)(new URLSearchParams({ q, kl: "wt-wt" }).toString(), o.signal);
 	if (res.status !== 200 || /anomaly\.js/.test(res.text)) throw new Error(`Web search refused (HTTP ${res.status}${res.status === 202 ? ", bot check" : ""})`);
 	return parseResults(res.text);

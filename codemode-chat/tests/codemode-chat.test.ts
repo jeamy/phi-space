@@ -1585,3 +1585,39 @@ t("agents without a free slot are shown; an item whose model call took down two 
 		assert.equal((await fakeCalls(srv, "die2")).length, 0); // no model was asked again
 	} finally { await srv.close(); await stack.close(); }
 });
+
+// ---- stage 3: admin sessions, shared limits ----
+
+t("an admin session is an entry in the space: another web process knows it, a logout ends it everywhere, it holds no cookie", async () => {
+	process.env.CODEMODE_ADMIN_TOKEN = "shared-secret";
+	const stack = await startStack();
+	const a = await startServer({ port: 0, bind: "127.0.0.1", stack }), b = await startServer({ port: 0, bind: "127.0.0.1", stack });
+	try {
+		const r = await fetch(a.url + "/api/admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "shared-secret" }) });
+		const cookie = (r.headers.get("set-cookie") ?? "").split(";")[0]!, sid = cookie.split("=")[1]!;
+		const admin = async (srv: { url: string }) => ((await (await fetch(srv.url + "/api/admin/session", { headers: { cookie } })).json()) as any).admin;
+		assert.equal(await admin(b), true); // logged in at a, known at b
+		const rows = await stack.space.readAll({ type: "AdminSession" });
+		assert.equal(rows.length, 1);
+		assert.ok(!JSON.stringify(rows).includes(sid)); // the hash, not the cookie
+		await fetch(b.url + "/api/admin/logout", { method: "POST", headers: { cookie } });
+		assert.equal(await admin(a), false);
+	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await a.close(); await b.close(); await stack.close(); }
+});
+
+test("a shared limit admits exactly its uses, however many processes ask at once", async () => {
+	const { takeQuota } = await import("../server/quota.ts");
+	const { connectSpace } = await import("../server/space.ts");
+	const stack = await startStack({ judges: [], agents: false, model: false });
+	// three clients of the space stand for three model processes
+	const conns = [connectSpace(stack.spec), connectSpace(stack.spec), connectSpace(stack.spec)];
+	try {
+		const day = await Promise.all(Array.from({ length: 12 }, (_, i) => takeQuota(conns[i % 3]!.space, "test-day", { perDay: 5 })));
+		assert.equal(day.filter((a) => a.ok).length, 5);
+		assert.ok(day.filter((a) => !a.ok).every((a) => "day" in a));
+		const minute = await Promise.all(Array.from({ length: 6 }, (_, i) => takeQuota(conns[i % 3]!.space, "test-min", { perMin: 3, perDay: 100 })));
+		assert.equal(minute.filter((a) => a.ok).length, 3);
+		assert.ok(minute.filter((a) => !a.ok).every((a) => "retryMs" in a && a.retryMs > 0 && a.retryMs <= 60_000));
+		assert.equal(await stack.space.count({ type: "QuotaLock" }), 2); // one lock per limit
+	} finally { for (const c of conns) c.close(); await stack.close(); }
+});

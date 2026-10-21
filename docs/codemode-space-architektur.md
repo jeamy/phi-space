@@ -19,11 +19,10 @@ neu entstehen; was einen Neustart überstehen muss, steht im Space.
 
 Der web-Prozess ruft keine Modelle mehr auf und fährt keine Läufe. `server/board.ts` ist entfallen.
 
-**Offen (Stufe 3):**
+**Stufe 3, umgesetzt:** gemeinsame Zähler für Modellaufrufe und Websuchen (`server/quota.ts`), Admin-Sitzungen im Space.
+Die Anfragegrenzen bleiben bewusst je web-Prozess (siehe „Leistung und Deployment“).
 
-- Die Grenzen je Minute und Tag und der Zähler der Websuchen gelten je model-Prozess, nicht für die ganze Installation.
-- Admin-Sitzungen und Anfragegrenzen liegen im web-Prozess.
-- ▶ (interaktives Ausführen) läuft im web-Prozess.
+**Offen (Stufe 3):** ▶ (interaktives Ausführen) läuft im web-Prozess.
 
 **Offen (Stufe 4):** Docker beschreibt noch den alten Aufbau.
 
@@ -48,7 +47,6 @@ Prozesslokal sind:
 - Timer für Snapshots;
 - Sandbox-Plätze;
 - geladene Modellregister und Zugangsdaten;
-- die Admin-Sitzungen (noch, siehe Stufe 3).
 
 Ihr Verlust beim Neustart ist erwartet. Zugangsdaten kommen aus der Konfiguration des Deployments, nie aus dem Space.
 
@@ -62,7 +60,7 @@ Pfade sind relativ zu `codemode-chat/`, soweit nicht anders angegeben.
 | Prozess | Datei | Rolle |
 |---|---|---|
 | space | `server/space-host.ts` | Hält den Space auf SQLite und bietet ihn über `serveSpace` unter `CODEMODE_LISTEN` an. |
-| web | `server/index.ts`, `server/hub.ts` | Next.js, REST und WebSocket. Liest Räume, legt Blöcke an, startet und stoppt Läufe (CodeRun), schreibt TaskRequests; ▶ und Admin-Sitzungen (noch). |
+| web | `server/index.ts`, `server/hub.ts` | Next.js, REST und WebSocket. Liest Räume, legt Blöcke an, startet und stoppt Läufe (CodeRun), schreibt TaskRequests; ▶ (noch). |
 | judge | `server/judge-host.ts` | Nimmt `CodeCandidate` in einer Transaktion, schreibt `CodeScore`, den neuen besten Code und das Archiv in derselben. |
 | agents | `server/agent-host.ts`, `server/run.ts`, `server/task-agent.ts` | Nimmt die Slots der Läufe und arbeitet deren Aufträge ab; erledigt TaskRequests (Prüfregel, Kriterien und deren Prüfung). |
 | model | `server/model-host.ts`, `server/context.ts` | Der einzige Prozess, der Modelle aufruft und Zugangsdaten braucht. Baut den Kontext aus dem Space, veröffentlicht `ModelInfo`, wendet `CodeAdmin` an, schreibt `Spend`. |
@@ -259,10 +257,17 @@ Störungen.
   - weich. Der model-Prozess prüft die `Spend`-Summe vor dem Aufruf, ohne zu reservieren.
   - Überschreitung höchstens um die Aufrufe, die gleichzeitig laufen (`CODEMODE_MODEL_PARALLEL` × model-Prozesse).
   - Ein Tag ist der UTC-Kalendertag (`today()`).
-- *Aufrufe je Minute und Tag* (`CODEMODE_LLM_PER_MIN`, `CODEMODE_LLM_PER_DAY`): je model-Prozess, der Tag als 24-h-Fenster
-  ab dem Start des Prozesses.
-- *Websuchen je Tag:* je model-Prozess, im Speicher; ein Neustart setzt den Zähler zurück.
-- Die drei letzten gemeinsam zu machen (gemeinsame Zähler mit Reservierung wie beim Laufbudget) ist Stufe 3.
+- *Aufrufe je Minute und Tag* (`CODEMODE_LLM_PER_MIN`, `CODEMODE_LLM_PER_DAY`): hart und gemeinsam für alle
+  model-Prozesse.
+  - `takeQuota` (`server/quota.ts`) lässt je Grenze eine Nutzung nach der anderen zu, unter einem `QuotaLock`.
+  - Jede zugelassene Nutzung ist ein `QuotaUse`-Eintrag, gezählt je Minute und je UTC-Tag in derselben Transaktion.
+  - Eine volle Minute wartet auf die nächste, ein voller Tag ist ein Fehler („daily model budget used up“).
+  - Gezählt wird vor dem Aufruf; ein Aufruf, der dann scheitert, zählt mit.
+- *Websuchen je Tag* (`CODEMODE_SEARCH_PER_DAY`): ebenso, als gemeinsamer Zähler über alle model-Prozesse und Neustarts.
+- *Admin-Sitzungen:*
+  - Sie sind `AdminSession`-Einträge mit der Lebensdauer der Sitzung (12 h).
+  - Der Eintrag enthält den SHA-256 des Cookies, nicht das Cookie.
+  - Jeder web-Prozess erkennt sie, ein Neustart behält sie, ein Logout beendet sie überall.
 
 **Offen:**
 - Ungewisse Kosten nach einem Absturz: Stirbt der model-Prozess nach der Antwort des Anbieters und vor seinem Commit,
@@ -338,18 +343,22 @@ bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem A
 | Aufgabe anlegen | `TaskRequest`/`TaskReady` mit Frist und Daten des Aufrufers. | 2d ✓ |
 | Raumsperre | `RoomLock` im Space; `#exclusive` nimmt ihn. | 2d ✓ |
 | Modellwahl des Admins | `CodeAdmin`; der model-Prozess ist der einzige Aufrufer. | 2c ✓ |
-| Grenzen je Minute und Tag, Verbrauch der Besucher | Gemeinsame Reservierungen und Verbrauchseinträge; `Spend` existiert, ist aber keine strenge Zulassung. | 3 |
-| Tageszähler der Suche | Gemeinsamer Zähler statt Zähler je model-Prozess. | 3 |
-| Admin-Sitzungen | `AdminSession`-Einträge mit Lease. | 3 |
-| HTTP- und Raumgrenzen | Lokalen Verbindungsschutz von gemeinsamen Kontingenten trennen und dokumentieren. | 3 |
+| Grenzen je Minute und Tag | `QuotaLock`/`QuotaUse`, gemeinsam für alle model-Prozesse. | 3 ✓ |
+| Verbrauch der Besucher | `Spend`; weich (siehe „Grenzen, wie sie heute gelten“). | 3 ✓ (weich) |
+| Tageszähler der Suche | Gemeinsamer Zähler (`QuotaUse`, Schlüssel `search`). | 3 ✓ |
+| Admin-Sitzungen | `AdminSession`-Einträge mit Lease. | 3 ✓ |
+| HTTP- und Raumgrenzen | Bewusst je web-Prozess (Schutz der Verbindung, kein Kontingent). | 3 ✓ |
 | Interaktives Ausführen (▶) | Judge nimmt `ExecRequest`, schreibt geordnete `ExecEvent`s; web folgt, `ExecRun` verfolgt. | 3 |
 | WebSocket-Clients, Push-Timer | Bleiben prozesslokal. | — |
 | Docker | Ein Dienst je Rolle, Skripte, Hilfe, README; Platzierung auf big/nano. | 4 |
 
 ## Leistung und Deployment
 
-- **Lokale und globale Grenzen trennen.** Eine lokale HTTP-Grenze schützt einen web-Prozess; mehr web-Prozesse erhöhen die
-  Summe. Vor der Wahl einer globalen Darstellung die Commit-Kosten des Space messen.
+- **Lokale und globale Grenzen.**
+  - Die Anfragegrenzen bleiben bewusst je web-Prozess: die Anfragen je Minute und Adresse (`CODEMODE_REQ_PER_MIN`), die
+    Login-Versuche, die Grenzen je Raum (Läufe, Aufgaben, Hinweise und Ähnliches je Minute) und ein ▶ zur Zeit je Adresse.
+  - Sie schützen den Prozess und seine Verbindung, sie sind kein Kontingent. Mehr web-Prozesse erhöhen ihre Summe.
+  - Was Geld kostet, ist gemeinsam begrenzt: Modellaufrufe, Websuchen, Lauf- und Tagesbudget.
 - **Gleicher Peer.** Alle Prozesse verbinden sich als derselbe Peer. Der Host hebt dafür die Grenzen je Eigentümer
   (Transaktionen, Wartende, Registrierungen) an. Für den Produktivbetrieb Kapazität und Trennung der Rollen festlegen.
 - **Größengrenzen.** 64 KiB je Eintrag und 192 KiB je Commit gelten weiter. Quelltext ist zusätzlich auf 40 kB als JSON
@@ -379,7 +388,8 @@ Docker-Weg ist während der Migration eine bekannte Ausnahme.
      - Stop räumt Aufträge und wartende Aufrufe ab.
    - Raumsperre über den Space (`RoomLock`).
    - Offen bleiben die Korrekturen oben.
-3. **Grenzen, Sitzungen und interaktives Ausführen: offen.**
+3. **Grenzen, Sitzungen und interaktives Ausführen: teilweise umgesetzt.** Gemeinsame Zähler und Admin-Sitzungen im Space;
+   ▶ im judge-Prozess ist offen.
 4. **Betrieb: offen.**
 
 Hinweise aus der Migration:
@@ -411,7 +421,9 @@ Getestet sind:
 - eine Operation wartet, solange ein anderer Prozess den Lock des Raums hält;
 - ein Kandidat nach zwei toten Judges, ein Auftrag nach zwei toten agents-Prozessen (Marker vorgegeben);
 - der Prüf-Marker überdauert seine erste Lease;
-- Agenten ohne Slot werden angezeigt.
+- Agenten ohne Slot werden angezeigt;
+- ein gemeinsamer Zähler lässt bei gleichzeitigen Anfragen aus drei Clients genau seine Nutzungen zu;
+- eine Admin-Sitzung gilt in einem zweiten web-Prozess und endet dort mit dem Logout.
 
 Der frühere Fall „Busy-Marker läuft ab, während seine Transaktion lebt“ entfällt mit `pending`.
 

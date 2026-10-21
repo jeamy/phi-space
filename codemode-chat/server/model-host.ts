@@ -12,9 +12,10 @@ import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { sourceProblem } from "./judge.ts";
-import { adminModels, metered, llmContribution, llmCriteria, llmCritique, llmInfo, llmJudge, llmModels, llmPropose, llmResearch, llmReviewCriteria, llmVerifier, llmVote, setAllowedModels, setLlm, type Usage } from "./llm.ts";
+import { adminModels, callLimits, metered, setCallGate, llmContribution, llmCriteria, llmCritique, llmInfo, llmJudge, llmModels, llmPropose, llmResearch, llmReviewCriteria, llmVerifier, llmVote, setAllowedModels, setLlm, type Usage } from "./llm.ts";
 import { callArgs, voteScores, type CallKind, type LlmCall } from "./context.ts";
-import { webSearch } from "./search.ts";
+import { searchesPerDay, webSearch } from "./search.ts";
+import { awaitQuota, takeQuota } from "./quota.ts";
 import { isText, type Task } from "./tasks.ts";
 import { ipTokensPerDay, today } from "./limits.ts";
 import { announce, connectSpace, keepAlive, readExisting } from "./space.ts";
@@ -33,7 +34,7 @@ const WAIT_MS = 5_000;
 const real: ModelApi = { models: llmModels, contribute: llmContribution, critique: llmCritique, propose: llmPropose, vote: llmVote, judge: llmJudge, research: llmResearch, verify: llmVerifier, criteria: llmCriteria, reviewCriteria: llmReviewCriteria };
 
 /** One call of a kind: the llm.ts function with the arguments built from the space, its answer as plain data. */
-async function answer(api: ModelApi, kind: CallKind, args: Record<string, unknown>): Promise<{ value: Record<string, unknown>; usage?: Usage }> {
+async function answer(api: ModelApi, kind: CallKind, args: Record<string, unknown>, search: (q: string) => Promise<Array<{ title: string; url: string; snippet: string }>>): Promise<{ value: Record<string, unknown>; usage?: Usage }> {
 	const a = args as never;
 	switch (kind) {
 		case "contribute": {
@@ -45,7 +46,7 @@ async function answer(api: ModelApi, kind: CallKind, args: Record<string, unknow
 		case "critique": case "propose": { const v = await api[kind](a); return { value: { text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "vote": { const v = await api.vote(a); return { value: { scores: voteScores(args, v.scores), text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "judge": { const v = await api.judge(a); return { value: { results: v.results, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
-		case "research": { const v = await api.research({ ...(args as object), search: (q: string) => webSearch(q) } as never); return { value: { queries: v.queries, sources: v.sources, text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "research": { const v = await api.research({ ...(args as object), search } as never); return { value: { queries: v.queries, sources: v.sources, text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "verify": { const v = await api.verify(a); return { value: { check: v.check, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "criteria": { const v = await api.criteria(a); return { value: { criteria: v.criteria, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
 		case "reviewCriteria": { const v = await api.reviewCriteria(a); return { value: { votes: v.votes, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
@@ -83,6 +84,9 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	const apiFor = (session: string): ModelApi => (fakes ? { ...missing(session), models: fakes.models, ...fakes.llmFor(session, { space, log: log(session) }) } as ModelApi : real);
 	const open = new Set<string>();
 	let stopping = false;
+	// the limits every model process shares: calls per minute and per UTC day, web searches per day (quota.ts)
+	setCallGate(() => awaitQuota(space, "llm", callLimits(), "daily model budget used up"));
+	const search = (q: string) => webSearch(q, { allowed: async () => (await takeQuota(space, "search", { perDay: searchesPerDay() })).ok });
 
 	/** ModelInfo: what the page and the web process need to know about the models (renewed every 10 s). */
 	let infoLease: string | null = null, lastInfo = "";
@@ -121,7 +125,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				const args = await callArgs(space, call);
 				// every paid call counts, also when the work fails after it: the meter of the real models, else what the
 				// answer (or a fake's error) reports
-				const m = await metered(() => answer(apiFor(call.session), call.kind, args));
+				const m = await metered(() => answer(apiFor(call.session), call.kind, args, search));
 				const said = m.value?.usage ?? (m.error as { usage?: Usage } | undefined)?.usage;
 				usage = m.usage.total > 0 || m.usage.costUsd > 0 ? m.usage : said;
 				if (m.error !== undefined) throw m.error;
