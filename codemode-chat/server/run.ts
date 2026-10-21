@@ -16,6 +16,7 @@
 // An agent does an item inside one transaction: take the item, ask the model process (callModel), write the result,
 // update the CodeRun, write the follow-ups, commit. A crash rolls all of it back and the item is there again: every
 // item is done exactly once, and a model call that already ran is not paid twice (its answer waits for the retry).
+// A call's usage is booked on the run in the commit that takes its LlmResult (success or failure), so exactly once.
 // The CodeRun counts the items not done yet (`pending`) in the same commits that write and finish them: the run is over
 // when that count is 0, whatever another agent holds right now.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
@@ -83,8 +84,9 @@ class RunGone extends Error {}
 class NotOver extends Error {}
 /** Items done (-1 each) and written (+1 each), on a run that counts them. */
 const settle = (r: RunEntry, n: number) => { if (r.pending !== undefined) r.pending += n; };
-/** A model call that failed: the item is tried again (a new call), given up, or the run ends as over budget. */
-class ModelFailed extends Error {}
+/** A model call that failed: the item is tried again (a new call), given up, or the run ends as over budget. `usage`:
+ *  what the call used before it failed, booked with whatever this item does next. */
+class ModelFailed extends Error { usage?: Usage; constructor(message: string, usage?: Usage) { super(message); this.usage = usage; } }
 
 const itemEntry = (it: WorkItem) => ({ type: "WorkItem", fields: it as never });
 const newItem = (run: { session: string; runId: string; blockId: string }, kind: WorkItem["kind"], gen: number, more: Partial<WorkItem> = {}): WorkItem =>
@@ -243,7 +245,7 @@ async function workOnce(d: AgentDeps, slot: Slot, me: string, run: RunEntry): Pr
 				catch (e) {
 					if (!(e instanceof ModelFailed)) throw e;
 					// handled in this transaction: the failed answer is used up, the item goes back or counts as done
-					await failed(d, it, txn, e.message);
+					await failed(d, it, txn, e.message, e.usage);
 					return "done" as const;
 				}
 			});
@@ -264,11 +266,17 @@ async function workOnce(d: AgentDeps, slot: Slot, me: string, run: RunEntry): Pr
 
 /** A failed item, in `txn` (the item is already taken): after a fatal failure (the day's model calls used up) the run
  *  ends as over budget; a passing one is tried again later with a new call, at most MAX_TRIES times; otherwise the
- *  item counts as done with nothing handed in (its generation or phase must not wait for it forever). */
-async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string): Promise<void> {
+ *  item counts as done with nothing handed in (its generation or phase must not wait for it forever). What the failed
+ *  call used is booked on the run either way. */
+async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usage?: Usage): Promise<void> {
 	const { space } = d, tries = (it.tries ?? 0) + 1;
-	if (!FATAL_LLM.test(why) && !FINAL.test(why) && tries < MAX_TRIES) { await space.write(itemEntry({ ...it, tries, notBefore: Date.now() + 2000 * tries }), txn, d.ttl); return; }
+	if (!FATAL_LLM.test(why) && !FINAL.test(why) && tries < MAX_TRIES) {
+		await space.write(itemEntry({ ...it, tries, notBefore: Date.now() + 2000 * tries }), txn, d.ttl);
+		if (usage) await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => book(r, usage));
+		return;
+	}
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
+		book(r, usage);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
 		if (it.kind === "turn") { const p = r.progress[it.gen]; if (p) p.done++; settle(r, -1); }
 		else if (it.kind === "barrier") { settle(r, -1); r.info.note = `generation ${it.gen + 1} could not be closed (${why.slice(0, 120)}); the run ends`; }
@@ -286,7 +294,7 @@ async function execute(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: 
 /** A model call of an item; ModelFailed when it does not answer. The call id carries the item's try. */
 async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind, more: Partial<LlmCall>): Promise<Record<string, unknown>> {
 	const res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, blockId: it.blockId, runId: it.runId, kind, agent: slot.agent, gen: it.depth ?? it.gen, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more });
-	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed");
+	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed", res.usage);
 	return res.value;
 }
 
@@ -311,6 +319,7 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 			} catch (e) {
 				if (!(e instanceof ModelFailed)) throw e;
 				runNote = `${slot.model}: ${e.message}${task.variants.length ? "; scripted agent used" : ""}`;
+				usage = e.usage;
 				fatal = FATAL_LLM.test(e.message);
 			}
 		}

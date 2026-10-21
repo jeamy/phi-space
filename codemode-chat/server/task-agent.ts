@@ -32,6 +32,7 @@ export async function verifyTask(space: SpaceLike, txn: string, cm: Codemode, re
 	if (!task.cases.every((c) => expectedOf(c).length)) return { ok: true, task: req.task, verdict: "No check rule: the verifier needs an expected result in every case", usage };
 	for (let attempt = 0; attempt < 3; attempt++) {
 		const r = await callModel(space, txn, call(req, `v${attempt}`, "verify", task, feedback ? { feedback } : {}), deadlineOf(req));
+		if (r.usage) usage = addUsage(usage, r.usage); // a failed call was paid too
 		if (!r.ok || !r.value) { feedback = plain(r.error ?? "verifier failed"); if (/off|budget|not allowed|no time left|did not answer in time/.test(feedback)) break; continue; }
 		const v = r.value as { check: string; model: string; usage?: Usage };
 		if (v.usage) usage = addUsage(usage, v.usage);
@@ -50,7 +51,7 @@ export async function writeCriteria(space: SpaceLike, txn: string, req: TaskRequ
 	if (!task) return { ok: false, error: "Unknown task" };
 	const until = deadlineOf(req);
 	const c = await callModel(space, txn, call(req, "c", "criteria", task), until);
-	if (!c.ok || !c.value) return { ok: false, error: c.error ?? "the criteria agent failed" };
+	if (!c.ok || !c.value) return { ok: false, error: c.error ?? "the criteria agent failed", ...(c.usage ? { usage: c.usage } : {}) };
 	const cv = c.value as { criteria: string[]; model: string; usage?: Usage };
 	if (cv.criteria.length < 1) return { ok: false, error: "The criteria agent wrote no criteria; please write some" };
 	task = textTask({ prompt: task.prompt.en, criteria: cv.criteria, criteriaBy: "verifier" });
@@ -66,7 +67,10 @@ export async function writeCriteria(space: SpaceLike, txn: string, req: TaskRequ
 		}));
 		for (const { r, model } of batch) {
 			if (r.ok && r.value) { const v = r.value as { votes: CriterionVote[]; model: string; usage?: Usage }; reviews.push(v); if (v.usage) usage = addUsage(usage, v.usage); }
-			else if (Date.now() < until) { failed.add(model); console.error("[criteria] review failed", r.error); }
+			else {
+				if (r.usage) usage = addUsage(usage, r.usage);
+				if (Date.now() < until) { failed.add(model); console.error("[criteria] review failed", r.error); }
+			}
 		}
 	}
 	if (reviews.length === 3) {

@@ -1476,3 +1476,16 @@ t("a stop leaves nothing behind: items agents held come back and go, a queued mo
 		assert.equal(await space.count({ type: "CodeCandidate", fields: { session: "stop2" } }) + await space.count({ type: "CodeScore", fields: { session: "stop2" } }), 0); // nothing handed in after the stop
 	} finally { await srv.close(); }
 });
+
+t("a paid call whose work fails still counts: on the run and against a visitor's address", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "rej1": empty code, 1000 tokens a call
+	try {
+		await post(srv.url, "/api/sessions/rej1/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
+		const snap = await boardRun(srv, "rej1", { plan: false });
+		// two implementations, three tries each, every one refused after it was paid
+		assert.equal(snap.run.usage.tokens, 6000);
+		assert.equal(snap.blocks.at(-1).contributions.length, 0);
+		const spent = (await srv.stack.space.readAll({ type: "Spend" })).reduce((n: number, e: any) => n + e.fields.tokens, 0);
+		assert.equal(spent, 6000);
+	} finally { await srv.close(); }
+});

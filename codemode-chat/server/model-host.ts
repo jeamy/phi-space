@@ -12,7 +12,7 @@ import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { sourceProblem } from "./judge.ts";
-import { adminModels, llmContribution, llmCriteria, llmCritique, llmInfo, llmJudge, llmModels, llmPropose, llmResearch, llmReviewCriteria, llmVerifier, llmVote, setAllowedModels, setLlm, type Usage } from "./llm.ts";
+import { adminModels, metered, llmContribution, llmCriteria, llmCritique, llmInfo, llmJudge, llmModels, llmPropose, llmResearch, llmReviewCriteria, llmVerifier, llmVote, setAllowedModels, setLlm, type Usage } from "./llm.ts";
 import { callArgs, voteScores, type CallKind, type LlmCall } from "./context.ts";
 import { webSearch } from "./search.ts";
 import { isText, type Task } from "./tasks.ts";
@@ -38,7 +38,8 @@ async function answer(api: ModelApi, kind: CallKind, args: Record<string, unknow
 	switch (kind) {
 		case "contribute": {
 			const v = await api.contribute(a);
-			if (!isText((args as { task: Task }).task)) { const problem = sourceProblem(v.source); if (problem) throw new Error(`the model's code cannot be handed in: ${problem}`); }
+			// code that cannot be handed in was paid all the same: the error carries the usage
+			if (!isText((args as { task: Task }).task)) { const problem = sourceProblem(v.source); if (problem) throw Object.assign(new Error(`the model's code cannot be handed in: ${problem}`), { usage: v.usage }); }
 			return { value: { source: v.source, model: v.model, ...(v.note ? { note: v.note } : {}), ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) };
 		}
 		case "critique": case "propose": { const v = await api[kind](a); return { value: { text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
@@ -117,12 +118,18 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				if (call.runId && !(await readExisting(space, { type: "CodeRun", fields: { session: call.session, runId: call.runId } }).catch(() => true))) throw new Error("the run is over");
 				const visitor = call.client && !call.client.admin ? call.client.ip : null;
 				if (visitor && ipTokensPerDay() > 0 && (await spentToday(space, visitor)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (CODEMODE_TOKENS_PER_IP_DAY)");
-				const a = await answer(apiFor(call.session), call.kind, await callArgs(space, call));
-				usage = a.usage;
-				result = { ok: true, value: a.value };
+				const args = await callArgs(space, call);
+				// every paid call counts, also when the work fails after it: the meter of the real models, else what the
+				// answer (or a fake's error) reports
+				const m = await metered(() => answer(apiFor(call.session), call.kind, args));
+				const said = m.value?.usage ?? (m.error as { usage?: Usage } | undefined)?.usage;
+				usage = m.usage.total > 0 || m.usage.costUsd > 0 ? m.usage : said;
+				if (m.error !== undefined) throw m.error;
+				result = { ok: true, value: { ...m.value!.value, ...(usage ? { usage } : {}) } };
 			} catch (err) { result = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
-			await space.write({ type: "LlmResult", fields: { callId: call.callId, session: call.session, ...result, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
-			if (usage && call.client && !call.client.admin) await space.write({ type: "Spend", fields: { ip: call.client.ip, day: today(), tokens: usage.total, ts: Date.now() } }, t.id, SPEND_LEASE_MS);
+			// the usage rides along on a failure too: the agent books it when it takes the result
+			await space.write({ type: "LlmResult", fields: { callId: call.callId, session: call.session, ...result, ...(usage && !result.ok ? { usage } : {}), ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
+			if (usage && usage.total > 0 && call.client && !call.client.admin) await space.write({ type: "Spend", fields: { ip: call.client.ip, day: today(), tokens: usage.total, ts: Date.now() } }, t.id, SPEND_LEASE_MS);
 			await space.commit(t.id);
 			return true;
 		} catch (e) {

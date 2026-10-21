@@ -5,7 +5,7 @@
 // several times that). Calls about a task that has no block yet (its check rule, its criteria) carry the task's spec.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { HELD_WAIT_MS } from "./space.ts";
-import type { Attempt, CritiqueRef, Earlier, Finding, PlanRef, Role, TeamContext } from "./llm.ts";
+import type { Attempt, CritiqueRef, Earlier, Finding, PlanRef, Role, TeamContext, Usage } from "./llm.ts";
 import { blockTask, earlierFor, findingsOf, rankedProposals, teamView } from "./room.ts";
 import { isText, taskFromSpec, type Task } from "./tasks.ts";
 
@@ -27,7 +27,8 @@ export type LlmCall = {
 	ts: number;
 };
 /** The answer the model process writes for a call. */
-export type LlmResultEntry = { callId: string; session: string; ok: boolean; value?: Record<string, unknown>; error?: string; ts: number };
+/** `usage` on a failed call: what it used before it failed (a success has it in its value). */
+export type LlmResultEntry = { callId: string; session: string; ok: boolean; value?: Record<string, unknown>; error?: string; usage?: Usage; ts: number };
 
 /** The block's task and its team: attempts (answers for a text task), notes, and the attempt with a given id. */
 async function team(space: SpaceLike, call: LlmCall): Promise<{ task: Task; attempts: Attempt[]; notes: TeamContext["notes"]; find: (id?: string) => Attempt | undefined }> {

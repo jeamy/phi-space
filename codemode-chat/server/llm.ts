@@ -5,6 +5,7 @@
 // with model agents; beyond the day budget the caller falls back to scripted agents. Several models can take part in
 // one run: the caller names the model. Agents are teammates: each sees the cases, the team's attempts with their test
 // results, and the notes, and repairs, explores or improves (teamPrompt).
+import { AsyncLocalStorage } from "node:async_hooks";
 import { liveModels } from "../../examples/live-models.ts";
 import { isText, type Task } from "./tasks.ts";
 
@@ -529,6 +530,15 @@ export function usageOf(res: any): Usage {
 export const addUsage = (a: Usage, b: Usage): Usage => ({ input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite, total: a.total + b.total, costUsd: a.costUsd + b.costUsd });
 export const NO_USAGE: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, costUsd: 0 };
 
+/** What the model calls inside `metered` used, added up as they are answered: also the calls of work that fails
+ *  afterwards (an empty answer, code that cannot be handed in, research without results), which are paid all the same. */
+const meter = new AsyncLocalStorage<{ usage: Usage }>();
+export async function metered<T>(fn: () => Promise<T>): Promise<{ value?: T; error?: unknown; usage: Usage }> {
+	const m = { usage: NO_USAGE };
+	try { return { value: await meter.run(m, fn), usage: m.usage }; }
+	catch (error) { return { error, usage: m.usage }; }
+}
+
 /** One guarded model call (whitelist, day budget, minute window, two in flight): the answer text and the model label.
  *  A full minute window waits for the next one (a run is teamwork, not a race against the limit). */
 async function guardedCall(modelLabel: string | undefined, system: string, user: string, maxTokens: number): Promise<{ text: string; model: string; usage: Usage }> {
@@ -551,6 +561,8 @@ async function guardedCall(modelLabel: string | undefined, system: string, user:
 			systemPrompt: system,
 			messages: [{ role: "user", content: user, timestamp: Date.now() }],
 		}, { maxTokens, signal: AbortSignal.timeout(60_000) });
+		const m = meter.getStore();
+		if (m) m.usage = addUsage(m.usage, usageOf(res)); // paid, whatever happens with the answer
 		const text = (res?.content ?? []).filter((x: any) => x?.type === "text").map((x: any) => x.text).join("");
 		if (!text.trim()) throw new Error(res?.errorMessage ?? "empty answer");
 		return { text, model: `${model.provider}/${model.id}`, usage: usageOf(res) };

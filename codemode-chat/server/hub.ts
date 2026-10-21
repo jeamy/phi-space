@@ -366,8 +366,10 @@ export class CodeChatHub {
 				...(c.critiqueId && critiqueAuthor.has(c.critiqueId) ? { critiqueBy: critiqueAuthor.get(c.critiqueId)! } : {}),
 				...(c.proposalId && planAuthor.has(c.proposalId) ? { planBy: planAuthor.get(c.proposalId)! } : {}),
 			}));
-			// what the block's model calls cost: every contribution, the research, plus the verifier agent's calls for its task
-			const spent = [...contributions.map((c) => c.usage), ...findings.filter((x) => x.blockId === blockId).map((x) => x.usage), f.verifierUsage as Usage | undefined].reduce((a, u) => (u ? { tokens: a.tokens + (u.total ?? 0), costUsd: a.costUsd + (u.costUsd ?? 0) } : a), { tokens: 0, costUsd: 0 });
+			// what the block's model calls cost: every contribution, the research, critiques, plans, votes and judgements (the
+			// active block's), plus the verifier agent's calls for its task
+			const others = [critiqueRows, proposalRows, voteRows, judgementRows].flatMap((rows) => rows.map((e) => e.fields as { blockId?: string; usage?: Usage }).filter((x) => x.blockId === blockId).map((x) => x.usage));
+			const spent = [...contributions.map((c) => c.usage), ...findings.filter((x) => x.blockId === blockId).map((x) => x.usage), ...others, f.verifierUsage as Usage | undefined].reduce((a, u) => (u ? { tokens: a.tokens + (u.total ?? 0), costUsd: a.costUsd + (u.costUsd ?? 0) } : a), { tokens: 0, costUsd: 0 });
 			return [{ f, task, blockId, contributions, best: isText(task) ? null : bestOf(contributions), spent }];
 		});
 		spend(raw.find((b) => b.blockId === s.blockId)?.best ?? null);
