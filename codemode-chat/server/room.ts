@@ -4,10 +4,10 @@
 import { randomBytes } from "node:crypto";
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { sourceProblem, type Verdict } from "./judge.ts";
-import { clipWords, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
-import { validMs } from "./results.ts";
+import { clipWords, type Attempt, type Earlier, type Finding, type Note, type Role, type Usage } from "./llm.ts";
+import { EARLIER_CAP, validMs } from "./results.ts";
 import { HELD_WAIT_MS } from "./space.ts";
-import { taskFromSpec, type Task } from "./tasks.ts";
+import { isText, taskFromSpec, type Task } from "./tasks.ts";
 
 /** What a room may hold at most: every read of it stays complete (a read limit never cuts entries off). */
 export const ROOM_LIMITS = { contributions: 1000, notes: 300, blocks: 60, messages: 500 };
@@ -147,4 +147,51 @@ export async function systemLine(space: SpaceLike, txn: string | null, ttl: numb
 		for (const e of old.slice(0, old.length - ROOM_LIMITS.messages + 1)) await space.take({ id: e.id }, NO_WAIT);
 	}
 	await space.write({ type: "ChatMessage", fields: { session, author: "system", text, ts: Date.now(), ...(blockId ? { blockId } : {}) } }, txn, ttl);
+}
+
+/** Accepted results of earlier tasks like this one (CodeEarlier, kept beyond the rooms' own entries): text answers
+ *  for a similar question, the best code for the same function and a similar description; the most similar first,
+ *  then the newest. A result a person accepted counts in its own room only: anyone can give a thumbs-up, so it must
+ *  not reach the agents of other rooms. Material for the agents, never instructions. */
+export async function earlierFor(space: SpaceLike, session: string, blockId: string, task: Task): Promise<Earlier[]> {
+	const words = (t: string) => new Set(t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4));
+	const mine = words(task.prompt.en);
+	const similar = (t: string) => { const w = words(t); let n = 0; for (const x of w) if (mine.has(x)) n++; return n / Math.max(1, new Set([...w, ...mine]).size); };
+	const text = isText(task);
+	type Row = { session: string; blockId: string; taskId: string; question: string; result: string; by: string; human?: boolean; ts: number };
+	return (await space.readAll({ type: "CodeEarlier", fields: text ? { kind: "text" } : { kind: "code", fn: task.fn } }, { limit: EARLIER_CAP + 50 }))
+		.map((e) => e.fields as unknown as Row)
+		.filter((f) => f.blockId !== blockId && (!f.human || f.session === session))
+		.map((f) => ({ f, sim: !text && f.taskId === task.id && f.taskId !== "custom" ? 1 : similar(String(f.question)) }))
+		.filter((x) => x.sim >= 0.2).sort((a, b) => b.sim - a.sim || b.f.ts - a.f.ts).slice(0, 2)
+		.map(({ f }) => ({ question: String(f.question), result: String(f.result), by: String(f.by) }));
+}
+
+/** The block's research findings, the newest 20 first (earlier runs' findings on the same block count too). readAll
+ *  returns the oldest first, so they are read whole (the room keeps at most a few hundred) and cut after sorting. */
+export async function findingsOf(space: SpaceLike, session: string, blockId: string): Promise<Finding[]> {
+	return (await space.readAll({ type: "CodeFinding", fields: { session, blockId } }, { limit: 1000 }))
+		.map((e) => e.fields as unknown as Finding & { ts: number }).sort((a, b) => b.ts - a.ts).slice(0, 20);
+}
+
+/** A run's proposals with their average rating (null: no vote), best first. */
+export async function rankedProposals(space: SpaceLike, session: string, runId: string, txn: string | null = null): Promise<Array<{ proposalId: string; author: string; via: string; text: string; score: number | null; ts: number }>> {
+	const ps = (await space.readAll({ type: "CodeProposal", fields: { session, runId } }, { limit: 50, txn })).map((e) => e.fields as { proposalId: string; author: string; via: string; text: string; ts: number }).sort((a, b) => a.ts - b.ts);
+	const vs = (await space.readAll({ type: "CodeVote", fields: { session, runId } }, { limit: 50, txn })).map((e) => (e.fields as { scores: Record<string, number> }).scores);
+	return ps.map((p) => { const got = vs.map((v) => v[p.proposalId]).filter((x): x is number => typeof x === "number"); return { ...p, score: got.length ? got.reduce((a, b) => a + b, 0) / got.length : null }; })
+		.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+}
+
+/** Writes a text answer (the board's judges check it); its id. `crossNeeded`: the run has another model than the
+ *  author's, so one of the judges who accept the answer must run another model. */
+export async function enqueueAnswer(space: SpaceLike, txn: string | null, ttl: number, a: { session: string; blockId: string; author: string; via: string; gen: number; text: string; runId?: string; crossNeeded?: boolean; lineage?: { role?: Role; basedOn?: string; partner?: string; critiqueId?: string; proposalId?: string; usage?: Usage } }): Promise<string> {
+	const answerId = `a${Date.now().toString(36)}-${rid()}`;
+	await space.write({ type: "TextAnswer", fields: { session: a.session, blockId: a.blockId, answerId, author: a.author, via: a.via, gen: a.gen, text: a.text, ts: Date.now(), ...(a.runId ? { runId: a.runId } : {}), ...(a.crossNeeded ? { crossNeeded: true } : {}), ...Object.fromEntries(Object.entries(a.lineage ?? {}).filter(([, v]) => v !== undefined)) } as never }, txn, ttl);
+	return answerId;
+}
+
+/** Whether a block's task is solved: code has a best (CodeBest), a text task an accepted answer. */
+export async function isSolved(space: SpaceLike, session: string, blockId: string, text: boolean): Promise<boolean> {
+	if (text) return (await answersOf(space, session, blockId)).some((a) => a.ok);
+	return !!(await space.readIfExists({ type: "CodeBest", fields: { session, blockId } }, HELD_WAIT_MS));
 }

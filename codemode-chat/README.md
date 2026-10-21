@@ -57,8 +57,9 @@ leases lapse, and its work comes back for another process of the same role.
   writes the `CodeScore`, and the block's new best code, in that same transaction. Run as many as you like, on any host
   that reaches the space: they share the candidates by themselves.
 - **agents** (`server/agent-host.ts`): takes the agent slots of runs and works as those agents (`server/run.ts`): each
-  work item in its own transaction, together with the run's progress in its `CodeRun`. Runs in generations (scripted
-  and model agents) run here; the work board and text tasks still run in the web process.
+  work item in its own transaction, together with the run's progress in its `CodeRun`: generations and the work board
+  (research, plans, critiques, merges, text answers and their judges). It also does the agents' work when a task is
+  created (the verifier's check rule, the criteria of a text task and their review: `TaskRequest` / `TaskReady`).
 - **model** (`server/model-host.ts`): the only process that calls models (and holds the credentials). It takes an
   `LlmCall` (references only: kind, model, agent, room, block, run, role, target), builds the context from the space,
   and writes the `LlmResult` in the same transaction. It publishes the models (`ModelInfo`), follows the admin's choices

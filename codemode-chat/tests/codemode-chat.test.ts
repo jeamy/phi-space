@@ -158,7 +158,7 @@ t("every task is its own block with its own contributions and best code", async 
 });
 
 t("a custom task without a model has no scripted agents: the run is refused, hand-in code still works", async () => {
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: { models: async () => [], contribute: async () => { throw new Error("off"); } } as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" }); // no model agents: the model process runs the real models, switched off
 	try {
 		await post(srv.url, "/api/sessions/cust1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
 		assert.equal((await post(srv.url, "/api/sessions/cust1/run", { contenders: ["scripted"] })).status, 400);
@@ -564,19 +564,15 @@ t("the cross-check of a rule: it must accept the examples and reject obvious wro
 });
 
 t("the verifier agent writes the rule when the task is created; a refused rule is rewritten with the reason", async () => {
-	const feedback: Array<string | undefined> = [];
-	const llm = {
-		models: async () => ["fake/verifier"],
-		contribute: async () => { throw new Error("not used"); },
-		verify: async (c: { feedback?: string }) => { feedback.push(c.feedback); return { check: feedback.length === 1 ? "() => true" : GOLOMB_RULE, model: "fake/verifier" }; },
-	};
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/verifier"] }); // room "ver1" in tests/fakes.ts
+	const feedbacks = async () => (await fakeCalls(srv, "ver1")).map((c) => c.feedback);
 	try {
 		await post(srv.url, "/api/sessions/ver1/task", { custom: { fn: "golomb", prompt: "Golomb ruler: n marks from 0 to len, all distances different", cases: [{ args: [5, 11], expect: [0, 1, 4, 9, 11] }] } });
 		const snap = (await (await fetch(srv.url + "/api/sessions/ver1")).json()) as any;
 		const b = snap.blocks.at(-1);
 		assert.equal(b.task.check, GOLOMB_RULE);
 		assert.equal(b.task.checkBy, "verifier");
+		const feedback = await feedbacks();
 		assert.equal(feedback.length, 2);
 		assert.match(feedback[1]!, /accepts the wrong result null/); // the second try knew why the first was refused
 		assert.ok(b.messages.some((m: any) => /Check rule written by the verifier agent \(fake\/verifier\)/.test(m.text)));
@@ -586,13 +582,12 @@ t("the verifier agent writes the rule when the task is created; a refused rule i
 		// without the tick: no verifier, the example is exact
 		await post(srv.url, "/api/sessions/ver2/task", { custom: { fn: "golomb", prompt: "x", cases: [{ args: [5, 11], expect: [0, 1, 4, 9, 11] }], verify: false } });
 		assert.equal(((await (await fetch(srv.url + "/api/sessions/ver2")).json()) as any).blocks.at(-1).task.check, undefined);
-		assert.equal(feedback.length, 2);
+		assert.equal((await feedbacks()).length, 2);
 	} finally { await srv.close(); }
 });
 
 t("no rule passes the cross-check: the examples stay exact, and the block says why", async () => {
-	const llm = { models: async () => ["fake/verifier"], contribute: async () => { throw new Error("not used"); }, verify: async () => ({ check: "() => true", model: "fake/verifier" }) };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/verifier"] }); // room "ver3"
 	try {
 		await post(srv.url, "/api/sessions/ver3/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 2 }] } });
 		const b = ((await (await fetch(srv.url + "/api/sessions/ver3")).json()) as any).blocks.at(-1);
@@ -791,9 +786,7 @@ test("pi-ai's usage of an answer becomes plain numbers (zeros when the provider 
 });
 
 t("tokens and cost are kept with every contribution and summed per block (verifier included) and per run", async () => {
-	const use = (total: number, costUsd: number) => ({ input: total - 100, output: 100, cacheRead: 0, cacheWrite: 0, total, costUsd });
-	const llm = { models: async () => ["fake/team"], verify: async () => ({ check: "(r, [x]) => r === x + 1", model: "fake/team", usage: use(500, 0.001) }) };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never, fakes: true }); // contributions: room "use1" in tests/fakes.ts
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "use1" in tests/fakes.ts: the verifier and the team
 	try {
 		await post(srv.url, "/api/sessions/use1/task", { custom: { fn: "f", prompt: "x + 1", cases: [{ args: [1], expect: 2 }] } });
 		await post(srv.url, "/api/sessions/use1/run", { agents: 2, gens: 1, perAgent: 1, polish: 0, contenders: ["fake/team"] });
@@ -832,22 +825,17 @@ const boardRun = async (srv: { url: string }, room: string, body: Record<string,
 };
 
 t("work board: a teammate critiques an attempt, another revises it with that critique, and the task gets solved", async () => {
-	const calls: any[] = [];
-	const llm = {
-		models: async () => ["fake/team"],
-		contribute: async (c: any) => { calls.push({ role: c.role, critique: c.critique?.text, target: c.target?.author, agent: c.agent }); return c.role === "revise" ? { source: "function double(x){ return x * 2 }", model: "fake/team" } : { source: "function double(x){ return x + 2 }", model: "fake/team" }; },
-		critique: async (c: any) => { calls.push({ role: "critique", of: c.target.author, agent: c.agent }); return { text: "1. x + 2 is right only for 2.\n2. Multiply by two.", model: "fake/team" }; },
-	};
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "brd1" in tests/fakes.ts
 	try {
 		await post(srv.url, "/api/sessions/brd1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
 		const snap = await boardRun(srv, "brd1", {});
 		const b = snap.blocks.at(-1);
 		assert.ok(b.best, "solved");
-		for (const c of calls.filter((x) => x.role === "critique")) assert.notEqual(`agent-${c.agent}`, c.of, "nobody critiques their own attempt");
+		const calls = await fakeCalls(srv, "brd1");
+		for (const c of calls.filter((x) => x.kind === "critique")) assert.notEqual(`agent-${c.agent}`, c.of, "nobody critiques their own attempt");
 		const revised = b.contributions.find((c: any) => c.role === "revise" && c.ok);
 		assert.ok(revised.critiqueBy && revised.basedOn, "a revision names the critique and the attempt it followed");
-		assert.ok(calls.some((x) => x.role === "revise" && /Multiply by two/.test(x.critique)), "the reviser got the critique");
+		assert.ok(calls.some((x) => x.role === "revise" && /Multiply by two/.test(x.critique ?? "")), "the reviser got the critique");
 		assert.ok(b.contributions.find((c: any) => c.candidateId === revised.basedOn).critiques.length >= 1);
 		const d = (await (await fetch(`${srv.url}/api/sessions/brd1/source/${revised.candidateId}`)).json()) as any;
 		assert.match(d.followed.text, /Multiply by two/);
@@ -867,33 +855,18 @@ t("work board: a teammate critiques an attempt, another revises it with that cri
 });
 
 t("work board: two attempts that pass different cases are merged", async () => {
-	let merges = 0;
-	const llm = {
-		models: async () => ["fake/team"],
-		contribute: async (c: any) => {
-			if (c.role === "merge") { merges++; assert.ok(c.partner && c.target); return { source: "function f(x){ return x * 10 }", model: "fake/team" }; }
-			if (c.role === "revise") return { source: "function f(x){ return 0 }", model: "fake/team" }; // critiques do not help here
-			return { source: c.agent === 0 ? "function f(x){ return x === 1 ? 10 : 0 }" : "function f(x){ return x === 2 ? 20 : 0 }", model: "fake/team" };
-		},
-		critique: async () => ({ text: "try again", model: "fake/team" }),
-	};
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "brd2" in tests/fakes.ts
 	try {
 		await post(srv.url, "/api/sessions/brd2/task", { custom: { fn: "f", prompt: "ten times", cases: [{ args: [1], expect: 10 }, { args: [2], expect: 20 }] } });
 		const snap = await boardRun(srv, "brd2", {});
 		const merged = snap.blocks.at(-1).contributions.find((c: any) => c.role === "merge");
-		assert.ok(merges >= 1 && merged && merged.ok, "a merge of the two halves solved it");
+		const merges = (await fakeCalls(srv, "brd2")).filter((c) => c.kind === "merge");
+		assert.ok(merges.length >= 1 && merges.every((c) => c.partner && c.target) && merged && merged.ok, "a merge of the two halves solved it");
 	} finally { await srv.close(); }
 });
 
 t("the budget ends a run: whichever of tokens or dollars is reached first", async () => {
-	const use = { input: 900, output: 100, cacheRead: 0, cacheWrite: 0, total: 1000, costUsd: 0.01 };
-	const llm = {
-		models: async () => ["fake/team"],
-		contribute: async () => ({ source: "function f(x){ return 0 }", model: "fake/team", usage: use }), // never right: only the budget stops it
-		critique: async () => ({ text: "no", model: "fake/team", usage: use }),
-	};
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never, fakes: true }); // the generations part: room "bud2" in tests/fakes.ts
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // rooms "bud1" (board) and "bud2" (generations) in tests/fakes.ts
 	try {
 		await post(srv.url, "/api/sessions/bud1/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
 		const snap = await boardRun(srv, "bud1", { budgetTokens: 3000, budgetUsd: 5 });
@@ -908,16 +881,11 @@ t("the budget ends a run: whichever of tokens or dollars is reached first", asyn
 });
 
 t("work board: critiques go to the critic model first, and the critic never revises its own critique", async () => {
-	const critics: string[] = [];
-	const llm = {
-		models: async () => ["fake/weak", "fake/haiku-strong"],
-		contribute: async (c: any) => ({ source: c.role === "revise" ? "function double(x){ return x * 2 }" : "function double(x){ return x + 2 }", model: c.model }),
-		critique: async (c: any) => { critics.push(c.model); return { text: "multiply", model: c.model }; },
-	};
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/weak", "fake/haiku-strong"] }); // room "brd3"
 	try {
 		await post(srv.url, "/api/sessions/brd3/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
 		const snap = await boardRun(srv, "brd3", { agents: 4, contenders: ["fake/weak", "fake/haiku-strong"] });
+		const critics = (await fakeCalls(srv, "brd3")).filter((c) => c.kind === "critique").map((c) => c.model);
 		assert.ok(critics.length >= 1 && critics.every((m) => m === "fake/haiku-strong"), critics.join(","));
 		const cs = snap.blocks.at(-1).contributions;
 		for (const r of cs.filter((c: any) => c.role === "revise")) assert.notEqual(r.author, r.critiqueBy, "the reviser is not the critic");
@@ -956,15 +924,7 @@ t("admin panel: login with the token sets an HttpOnly cookie; the model choice n
 });
 
 t("work board planning round: every agent proposes, everyone rates the others, the best plans are implemented", async () => {
-	const seen: any[] = [];
-	const llm = {
-		models: async () => ["fake/team"],
-		propose: async (c: any) => ({ text: c.agent === 1 ? "Multiply the input by two." : "Add two to the input.", model: "fake/team" }),
-		vote: async (c: any) => ({ scores: Object.fromEntries(c.proposals.map((p: any) => [p.key, /Multiply/.test(p.text) ? 5 : 2])), text: "rated", model: "fake/team" }),
-		contribute: async (c: any) => { seen.push(c.plan); return { source: c.plan && /Multiply/.test(c.plan.text) ? "function double(x){ return x * 2 }" : "function double(x){ return x + 2 }", model: "fake/team" }; },
-		critique: async () => ({ text: "multiply", model: "fake/team" }),
-	};
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "plan1"
 	try {
 		await post(srv.url, "/api/sessions/plan1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
 		const snap = await boardRun(srv, "plan1", { agents: 3, polish: 0 });
@@ -973,7 +933,8 @@ t("work board planning round: every agent proposes, everyone rates the others, t
 		const best = b.plans.find((p: any) => /Multiply/.test(p.text));
 		assert.deepEqual([best.author, best.score, best.votes], ["agent-1", 5, 2]); // rated by the two others, not by itself
 		assert.ok(best.used >= 1);
-		assert.ok(seen.slice(0, 3).every((p) => p && p.author), "every first implementation follows a chosen plan");
+		const seen = (await fakeCalls(srv, "plan1")).filter((c) => c.kind === "contribute").map((c) => c.plan);
+		assert.ok(seen.slice(0, 3).every((p) => p), "every first implementation follows a chosen plan");
 		assert.ok(b.contributions.some((c: any) => c.planBy === "agent-1" && c.ok));
 		assert.ok(b.best);
 		assert.equal(snap.run.board.proposals, 3);
@@ -1008,17 +969,8 @@ t("a room full of long plans stays below the frame limit: plan texts ride along 
 
 // ---- text tasks: answers judged by agents against criteria ----
 
-const textLlm = (log: any[] = []) => ({
-	models: async () => ["fake/plain", "fake/haiku-judge"],
-	criteria: async () => ({ criteria: ["names the capital correctly", "is one sentence"], model: "fake/haiku-judge" }),
-	contribute: async (c: any) => { log.push(c); return { source: c.role === "revise" || c.earlier?.length ? "Paris is the capital of France." : "Lyon is the capital of France.", model: c.model }; },
-	critique: async (c: any) => ({ text: "1. The capital is Paris, not Lyon.", model: c.model }),
-	judge: async (c: any) => ({ results: c.task.criteria.map((criterion: string, i: number) => ({ criterion, pass: i === 1 || /Paris/.test(c.answer.source), reason: /Paris/.test(c.answer.source) ? "right" : "wrong city" })), model: c.model }),
-});
-
 t("text task: criteria by the verifier, two judges per answer, a critique turns a wrong answer into an accepted one", async () => {
-	const log: any[] = [];
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: textLlm(log) as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // rooms "txt1", "txt2" in tests/fakes.ts
 	try {
 		assert.equal((await post(srv.url, "/api/sessions/txt1/task", { text: { prompt: "What is the capital of France?" } })).status, 200);
 		let snap = (await (await fetch(srv.url + "/api/sessions/txt1")).json()) as any;
@@ -1040,17 +992,15 @@ t("text task: criteria by the verifier, two judges per answer, a critique turns 
 		assert.equal((await post(srv.url, "/api/sessions/txt1/exec", { candidateId: accepted.candidateId })).status, 400); // a text cannot be run
 		// another room, a similar question: the accepted answer is offered as earlier material
 		await post(srv.url, "/api/sessions/txt2/task", { text: { prompt: "Which city is the capital of France?", criteria: "names the capital correctly\nis one sentence" } });
-		const before = log.length;
 		assert.equal((await post(srv.url, "/api/sessions/txt2/run", { agents: 2, board: true, contenders: ["fake/plain"] })).status, 400); // no second judge
 		await boardRun(srv, "txt2", { agents: 3, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"] });
-		const drafts = log.slice(before).filter((c) => c.role === "explore");
-		assert.ok(drafts.some((c) => c.earlier?.[0]?.result === "Paris is the capital of France."), "the earlier accepted answer reached the drafts");
+		const drafts = (await fakeCalls(srv, "txt2")).filter((c) => c.kind === "contribute" && c.role === "explore");
+		assert.ok(drafts.some((c) => c.earlier === "Paris is the capital of France."), "the earlier accepted answer reached the drafts");
 	} finally { await srv.close(); }
 });
 
 t("text task: a person's thumbs-up accepts an answer and ends the run; stop and accept reasons reach the agents", async () => {
-	const slow = { ...textLlm(), judge: async (c: any) => ({ results: c.task.criteria.map((criterion: string) => ({ criterion, pass: false, reason: "never good enough" })), model: c.model }) };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: slow as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // room "txt3": judges that never accept
 	try {
 		await post(srv.url, "/api/sessions/txt3/task", { text: { prompt: "Capital of France?", criteria: ["correct"] } });
 		assert.equal((await post(srv.url, "/api/sessions/txt3/run", { agents: 3, gens: 10, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"], board: true })).status, 200);
@@ -1083,13 +1033,7 @@ test("text prompts mark the question and the answer as data, and the judge parse
 });
 
 t("research: only an admin starts it; researchers search first, every later step gets their findings", async () => {
-	const seen: any[] = [];
-	const llm = { ...textLlm(),
-		contribute: async (c: any) => { seen.push({ kind: "draft", findings: c.findings?.length ?? 0 }); return { source: "Paris is the capital of France.", model: c.model }; },
-		propose: async (c: any) => { seen.push({ kind: "propose", findings: c.findings?.length ?? 0 }); return { text: "Name Paris.", model: c.model }; },
-		vote: async (c: any) => ({ scores: Object.fromEntries(c.proposals.map((p: any) => [p.key, 4])), text: "", model: c.model }),
-		research: async (c: any) => { seen.push({ kind: "research", agent: c.agent }); return { queries: ["capital of France"], sources: [{ title: "France", url: "https://en.wikipedia.org/wiki/France" }], text: "Paris is the capital [1].", model: c.model, usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, total: 15, costUsd: 0.001 } }; } };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // room "res1"
 	process.env.CODEMODE_ADMIN_TOKEN = "research-secret";
 	try {
 		await post(srv.url, "/api/sessions/res1/task", { text: { prompt: "What is the capital of France?", criteria: ["names the capital"] } });
@@ -1098,10 +1042,10 @@ t("research: only an admin starts it; researchers search first, every later step
 		const r = await fetch(srv.url + "/api/sessions/res1/run", { method: "POST", headers: { "content-type": "application/json", "x-admin-token": "research-secret" }, body: JSON.stringify(body) });
 		assert.equal(r.status, 200);
 		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/res1")).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
-		const b = snap.blocks.at(-1);
+		const b = snap.blocks.at(-1), seen = await fakeCalls(srv, "res1");
 		assert.equal(seen.filter((x) => x.kind === "research").length, 2); // half the agents research
 		assert.ok(seen.findIndex((x) => x.kind === "propose") > seen.findLastIndex((x) => x.kind === "research")); // research first
-		assert.ok(seen.filter((x) => x.kind !== "research").every((x) => x.findings === 2));
+		assert.ok(seen.filter((x) => x.kind === "draft" || x.kind === "propose").every((x) => x.findings === 2));
 		assert.deepEqual(b.findings.map((f: any) => [f.queries, f.sources[0].url, f.text]), [[["capital of France"], "https://en.wikipedia.org/wiki/France", "Paris is the capital [1]."], [["capital of France"], "https://en.wikipedia.org/wiki/France", "Paris is the capital [1]."]]);
 		assert.equal(snap.run.research, true);
 		assert.equal(snap.run.board.findings, 2);
@@ -1117,72 +1061,49 @@ t("research: only an admin starts it; researchers search first, every later step
 });
 
 t("text task: a criteria reviewer whose model fails gives way to another model", async () => {
-	const calls: string[] = [];
-	const llm = { ...textLlm(), models: async () => ["fake/broken", "fake/plain", "fake/haiku-judge"],
-		reviewCriteria: async (c: any) => { calls.push(c.model); if (c.model === "fake/broken") throw new Error("OAuth refresh failed"); return { votes: [{ vote: "ok", reason: "" }, { vote: "ok", reason: "" }], model: c.model }; } };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/broken", "fake/plain", "fake/haiku-judge"] }); // room "crf"
 	try {
 		assert.equal((await post(srv.url, "/api/sessions/crf/task", { text: { prompt: "What is the capital of France?" } })).status, 200);
 		const b = ((await (await fetch(srv.url + "/api/sessions/crf")).json()) as any).blocks.at(-1);
 		assert.ok(b.messages.some((m: any) => /reviewed by 3 agents \((fake\/plain|fake\/haiku-judge)(, (fake\/plain|fake\/haiku-judge)){2}\).*all kept/.test(m.text)), JSON.stringify(b.messages));
-		assert.equal(calls.filter((m) => m === "fake/broken").length, 1);
+		assert.equal((await fakeCalls(srv, "crf")).filter((c) => c.model === "fake/broken").length, 1);
 	} finally { await srv.close(); }
 });
 
 // ---- durable runs: a restart of the hub does not end a run ----
 
-const usage5 = { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, total: 5, costUsd: 0.001 };
-/** A fake team whose implementations hang until `release()`: the hub can be closed while they are in flight. */
-const hangingTeam = () => {
-	let release!: () => void;
-	const gate = new Promise<void>((r) => { release = r; });
-	const calls: string[] = [];
-	return {
-		calls, release: () => release(),
-		llm: {
-			models: async () => ["fake/team"],
-			propose: async (c: any) => { calls.push(`propose-${c.agent}`); return { text: c.agent === 0 ? "Multiply by two." : "Add two.", model: "fake/team", usage: usage5 }; },
-			vote: async (c: any) => { calls.push(`vote-${c.agent}`); return { scores: Object.fromEntries(c.proposals.map((p: any) => [p.key, /Multiply/.test(p.text) ? 5 : 1])), text: "", model: "fake/team", usage: usage5 }; },
-			contribute: async (c: any) => { calls.push(`contribute-${c.agent}`); await gate; return { source: "function double(x){ return x * 2 }", model: "fake/team", usage: usage5 }; },
-			critique: async () => ({ text: "fine", model: "fake/team", usage: usage5 }),
-		},
-	};
-};
 const sqliteOf = async (name: string) => { const { rm } = await import("node:fs/promises"); const p = `/tmp/codemode-${name}-${process.pid}.sqlite`; await rm(p, { force: true }); return { path: p, rm: () => rm(p, { force: true }) }; };
 
-t("a board run survives a restart of the hub: claimed work is done again, the budget counts on, the run ends once", async () => {
+t("a board run survives a restart of every process: the work in progress is done again, the budget counts on, the run ends once", async () => {
 	const db = await sqliteOf("resume-board");
-	const a = hangingTeam();
-	let srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: a.llm as never });
+	// room "dur1" (tests/fakes.ts): plans and votes, then implementations that hang until the test writes the FakeGate
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, fakes: ["fake/team"] });
 	const get = async () => (await (await fetch(srv.url + "/api/sessions/dur1")).json()) as any;
+	const calls = async (prefix: string) => (await fakeCalls(srv, "dur1")).filter((c) => String(c.kind).startsWith(prefix)).length;
 	try {
 		await post(srv.url, "/api/sessions/dur1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
 		assert.equal((await post(srv.url, "/api/sessions/dur1/run", { agents: 2, gens: 3, polish: 0, contenders: ["fake/team"], board: true, plan: true, budgetTokens: 1000 })).status, 200);
-		// planned and rated (4 calls of 5 tokens), then both implementations hang: the hub goes down mid-run
-		await until(async () => a.calls.filter((c) => c.startsWith("contribute")).length === 2);
+		// planned and rated (4 calls of 5 tokens), then both implementations hang: every process goes down mid-run
+		await until(async () => (await calls("contribute")) === 2);
 		await until(async () => (await get()).run.usage.tokens === 20);
-		await new Promise((r) => setTimeout(r, 1200)); // the CodeRun entry is written within a second of a change
 		await srv.close();
-		a.release(); // the old process's calls come back after it closed: nothing of them may land
-		const b = hangingTeam(); b.release();
-		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: b.llm as never });
+		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, fakes: ["fake/team"] });
+		await srv.stack.space.write({ type: "FakeGate", fields: { session: "dur1" } }, null, 600_000);
 		await until(async () => { const s = await get(); return s.run && !s.run.active ? s : false; }, 60_000);
 		const snap = await get(), blk = snap.blocks.at(-1);
-		assert.ok(blk.messages.some((m: any) => /Run resumed after a restart of the hub/.test(m.text)), blk.messages.map((m: any) => m.text).join(" | "));
-		assert.ok(blk.messages.some((m: any) => /^Run finished after .*solved/.test(m.text)));
+		assert.ok(blk.messages.some((m: any) => /^Run finished after .*solved/.test(m.text)), blk.messages.map((m: any) => m.text).join(" | "));
 		assert.equal(blk.messages.filter((m: any) => /^Run (finished|stopped)/.test(m.text)).length, 1);
-		assert.deepEqual(b.calls.filter((c) => !c.startsWith("contribute")), []); // no second planning round: the plans were made
-		assert.ok(b.calls.length >= 2); // the claimed implementations were done again
+		assert.deepEqual([await calls("propose"), await calls("vote")], [2, 2]); // no second planning round: the plans were made
+		assert.ok((await calls("contribute")) >= 4); // the implementations in progress were done again
 		assert.ok(snap.run.usage.tokens >= 30, String(snap.run.usage.tokens)); // 20 from before the restart, then on
 		assert.equal(blk.plans.length, 2);
 		assert.ok(blk.best);
-		// nothing of the run is left to resume: a third start does not bring it back
+		// nothing of the run is left: a third start does not bring it back
 		assert.equal(await srv.hub.host.count({ type: "CodeRun", fields: { session: "dur1" } }), 0);
 		assert.equal(await srv.hub.host.count({ type: "WorkItem", fields: { session: "dur1" } }), 0);
 		await srv.close();
-		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: b.llm as never });
-		await new Promise((r) => setTimeout(r, 300));
-		assert.equal((await get()).run, null);
+		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path });
+		assert.ok(!(await get()).run?.active);
 	} finally { await srv.close(); await db.rm(); }
 });
 
@@ -1256,20 +1177,18 @@ test("three reviewers vote on the verifier's criteria; the majority keeps, corre
 });
 
 t("text task: the verifier's criteria are reviewed by three agents before the block opens", async () => {
-	const reviewers: string[] = [];
-	const llm = { ...textLlm(), criteria: async () => ({ criteria: ["names the capital", "shorter paths scatter less"], model: "fake/haiku-judge" }),
-		reviewCriteria: async (c: any) => { reviewers.push(c.model); return { votes: [{ vote: "ok", reason: "" }, c.agent < 2 ? { vote: "fix", fix: "is one sentence", reason: "" } : { vote: "ok", reason: "" }], model: c.model }; } };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // rooms "crv", "crv2"
+	const reviewers = async () => (await fakeCalls(srv, "crv")).map((c) => c.model);
 	try {
 		assert.equal((await post(srv.url, "/api/sessions/crv/task", { text: { prompt: "What is the capital of France?" } })).status, 200);
 		const b = ((await (await fetch(srv.url + "/api/sessions/crv")).json()) as any).blocks.at(-1);
 		assert.deepEqual(b.task.criteria, ["names the capital", "is one sentence"]);
-		assert.equal(reviewers.length, 3);
-		assert.equal(reviewers[0], "fake/plain"); // another model than the one that wrote the criteria first
+		// the three reviews: another model than the one that wrote the criteria first, then that one (they run in parallel)
+		assert.deepEqual((await reviewers()).sort(), ["fake/haiku-judge", "fake/plain", "fake/plain"]);
 		assert.ok(b.messages.some((m: any) => /reviewed by 3 agents.*C2 corrected \(2 of 3\)/.test(m.text)));
 		// criteria a person wrote are not reviewed
 		await post(srv.url, "/api/sessions/crv2/task", { text: { prompt: "Capital of France?", criteria: ["correct"] } });
-		assert.equal(reviewers.length, 3);
+		assert.equal((await fakeCalls(srv, "crv2")).length, 0);
 	} finally { await srv.close(); }
 });
 
@@ -1316,14 +1235,8 @@ test("text prompts ask for the finished answer, and judges for quotes", async ()
 // ---- review fixes (2026-10-21): verdicts come home from nano, budgets per visitor, the archive of results, failures ----
 
 t("a visitor's run gets the default token budget at most, and an address's day allowance ends its runs; an admin's does not count", async () => {
-	const use = { input: 900, output: 100, cacheRead: 0, cacheWrite: 0, total: 1000, costUsd: 0.001 };
-	const llm = {
-		models: async () => ["fake/team"],
-		contribute: async () => ({ source: "function f(x){ return 0 }", model: "fake/team", usage: use }), // never right
-		critique: async () => ({ text: "no", model: "fake/team", usage: use }),
-	};
 	process.env.CODEMODE_RUN_BUDGET_TOKENS = "2000"; process.env.CODEMODE_TOKENS_PER_IP_DAY = "3500"; process.env.CODEMODE_ADMIN_TOKEN = "budget-secret";
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "vb1": never right, 1000 tokens a call
 	try {
 		await post(srv.url, "/api/sessions/vb1/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
 		const first = await boardRun(srv, "vb1", {});
@@ -1344,9 +1257,7 @@ t("a visitor's run gets the default token budget at most, and an address's day a
 });
 
 t("a person's thumbs-up counts as earlier material in its own room only; the judges' acceptance everywhere", async () => {
-	const log: any[] = [];
-	const never = { ...textLlm(log), judge: async (c: any) => ({ results: c.task.criteria.map((criterion: string) => ({ criterion, pass: false, reason: "no" })), model: c.model }) };
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: never as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // rooms "hum1", "hum2": judges that never accept
 	try {
 		const get = async (room: string) => (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any;
 		await post(srv.url, "/api/sessions/hum1/task", { text: { prompt: "What is the capital city of France?", criteria: ["correct"] } });
@@ -1358,14 +1269,13 @@ t("a person's thumbs-up counts as earlier material in its own room only; the jud
 		assert.deepEqual(archived.map((f) => [f.kind, f.human, f.by]), [["text", true, "accepted by a person"]]);
 		// another room with a similar question: the agents do not get it
 		await post(srv.url, "/api/sessions/hum2/task", { text: { prompt: "Which is the capital city of France?", criteria: ["correct"] } });
-		let before = log.length;
 		await boardRun(srv, "hum2", { agents: 3, gens: 1, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"] });
-		assert.ok(log.slice(before).every((c) => !c.earlier?.length), "nothing from the other room's thumbs-up");
+		assert.ok((await fakeCalls(srv, "hum2")).filter((c) => c.kind === "contribute").every((c) => !c.earlier), "nothing from the other room's thumbs-up");
 		// the same room, a new block: they do
 		await post(srv.url, "/api/sessions/hum1/task", { text: { prompt: "Name the capital city of France.", criteria: ["correct"] } });
-		before = log.length;
+		const before = (await fakeCalls(srv, "hum1")).length;
 		await boardRun(srv, "hum1", { agents: 3, gens: 1, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"] });
-		assert.ok(log.slice(before).some((c) => c.earlier?.[0]?.by === "accepted by a person"));
+		assert.ok((await fakeCalls(srv, "hum1")).slice(before).some((c) => c.earlierBy === "accepted by a person"));
 	} finally { await srv.close(); }
 });
 
@@ -1384,7 +1294,7 @@ test("defaults of the new limits: archive 30 days, visitor budget, address allow
 });
 
 t("text answers: the judges accept only with a judge of another model than the author's, when the run had one", async () => {
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: textLlm() as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] });
 	try {
 		await post(srv.url, "/api/sessions/cross1/task", { text: { prompt: "Capital of France?", criteria: ["correct"] } });
 		const blockId = ((await (await fetch(srv.url + "/api/sessions/cross1")).json()) as any).current;
@@ -1400,24 +1310,13 @@ t("text answers: the judges accept only with a judge of another model than the a
 });
 
 t("work board: a failed model call is tried again later; when the day's model calls are used up the run ends as over budget", async () => {
-	const failures = new Map<number, number>();
-	const flaky = {
-		models: async () => ["fake/team"],
-		contribute: async (c: any) => {
-			const n = failures.get(c.agent) ?? 0;
-			if (n < 1) { failures.set(c.agent, n + 1); throw new Error("request timed out"); } // each agent's first call fails
-			return { source: "function double(x){ return x * 2 }", model: "fake/team" };
-		},
-		critique: async () => ({ text: "fine", model: "fake/team" }),
-	};
-	let srv = await startServer({ port: 0, bind: "127.0.0.1", llm: flaky as never });
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "fl1": each agent's first call fails
 	try {
 		await post(srv.url, "/api/sessions/fl1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
 		const snap = await boardRun(srv, "fl1", { plan: false });
 		assert.ok(snap.blocks.at(-1).best, "solved after the retries");
 	} finally { await srv.close(); }
-	const spent = { models: async () => ["fake/team"], contribute: async () => { throw new Error("daily model budget used up"); }, critique: async () => ({ text: "x", model: "fake/team" }) };
-	srv = await startServer({ port: 0, bind: "127.0.0.1", llm: spent as never });
+	srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "fl2": the day's calls are used up
 	try {
 		await post(srv.url, "/api/sessions/fl2/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
 		const snap = await boardRun(srv, "fl2", { plan: false });
@@ -1427,12 +1326,8 @@ t("work board: a failed model call is tried again later; when the day's model ca
 });
 
 t("research: the newest findings of a block reach the agents, also when the block holds more than 20", async () => {
-	const seen: any[] = [];
-	const llm = { ...textLlm(),
-		contribute: async (c: any) => { seen.push(c.findings?.map((f: any) => f.text) ?? []); return { source: "Paris is the capital of France.", model: c.model }; },
-		research: async (c: any) => ({ queries: ["q"], sources: [{ title: "t", url: "https://example.org/" }], text: "new finding", model: c.model }) };
 	process.env.CODEMODE_ADMIN_TOKEN = "find-secret";
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // room "fnd1"
 	try {
 		await post(srv.url, "/api/sessions/fnd1/task", { text: { prompt: "What is the capital of France?", criteria: ["names the capital"] } });
 		const blockId = ((await (await fetch(srv.url + "/api/sessions/fnd1")).json()) as any).current;
@@ -1441,6 +1336,7 @@ t("research: the newest findings of a block reach the agents, also when the bloc
 		const r = await fetch(srv.url + "/api/sessions/fnd1/run", { method: "POST", headers: { "content-type": "application/json", "x-admin-token": "find-secret" }, body: JSON.stringify({ agents: 3, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"], board: true, research: true }) });
 		assert.equal(r.status, 200);
 		await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/fnd1")).json()) as any; return s.run && !s.run.active; }, 60_000);
+		const seen = (await fakeCalls(srv, "fnd1")).filter((c) => c.findings).map((c) => c.findings as string[]);
 		assert.ok(seen.length > 0);
 		for (const texts of seen) {
 			assert.equal(texts[0], "new finding"); // the newest first

@@ -1,5 +1,5 @@
 // The agents process: takes the agent slots of runs from the shared space and works as those agents until their runs
-// are over (run.ts). Nothing it knows lives only in memory: a slot is held under a transaction it renews, so a process
+// are over (run.ts), and does the agents' work when a task is created (task-agent.ts: a check rule, criteria). Nothing it knows lives only in memory: a slot is held under a transaction it renews, so a process
 // that dies lets it lapse and another agents process takes the slot over, with the run's work items where they were.
 //
 //   CODEMODE_SPACE=unix:/tmp/codemode-space.sock   (default) or tcp:nano:3800
@@ -7,7 +7,10 @@
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { announce, connectSpace, entryLeaseMs, keepAlive } from "./space.ts";
+import { NO_WAIT } from "../../src/index.ts";
+import { loadCodemode } from "./judge.ts";
 import { agentLoop, ITEM_LEASE_MS, type Slot } from "./run.ts";
+import { verifyTask, writeCriteria, type TaskRequest } from "./task-agent.ts";
 
 /** How long one blocking take waits for a free slot (below the client's call timeout). */
 const WAIT_MS = 5_000;
@@ -46,6 +49,36 @@ export async function startAgentHost(o: { space?: string; slots?: number } = {})
 			return true;
 		} catch (err) { await release(false); throw err; }
 	};
+	/** A task request (a check rule, criteria): taken, done and answered with a TaskReady in one transaction. */
+	const cm = await loadCodemode();
+	const takeTask = async (): Promise<boolean> => {
+		const t = await space.createTransaction(ITEM_LEASE_MS);
+		open.add(t.id);
+		const stop = keepAlive(space, t.id, ITEM_LEASE_MS);
+		try {
+			const e = await space.take({ type: "TaskRequest" }, WAIT_MS, { txn: t.id });
+			if (!e) { await space.abort(t.id); return false; }
+			const req = e.fields as unknown as TaskRequest;
+			let ready;
+			try {
+				if (req.kind === "verify") { if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded"); ready = await verifyTask(space, t.id, cm, req); }
+				else {
+					const info = (await space.readIfExists({ type: "ModelInfo" }, NO_WAIT))?.fields as { info?: { models?: Array<{ label: string }> } } | undefined;
+					ready = await writeCriteria(space, t.id, req, (info?.info?.models ?? []).map((m) => m.label));
+				}
+			} catch (err) { ready = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
+			await space.write({ type: "TaskReady", fields: { requestId: req.requestId, session: req.session, ...ready, ts: Date.now() } as never }, t.id, 15 * 60_000);
+			await space.commit(t.id);
+			return true;
+		} catch (err) { await space.abort(t.id).catch(() => {}); throw err; }
+		finally { stop(); open.delete(t.id); }
+	};
+	const tasks = (async () => {
+		while (!stopping) {
+			try { await takeTask(); }
+			catch (e) { if (!stopping) { console.error("[agents] task request failed", (e as Error).message); await new Promise((r) => setTimeout(r, 1000)); } }
+		}
+	})();
 	const loop = (async () => {
 		while (!stopping) {
 			if (active >= max) { await new Promise((r) => setTimeout(r, 500)); continue; }
@@ -57,7 +90,7 @@ export async function startAgentHost(o: { space?: string; slots?: number } = {})
 		async close() {
 			stopping = true;
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
-			await Promise.race([Promise.allSettled([loop, ...agents]), new Promise((r) => setTimeout(r, 3000))]);
+			await Promise.race([Promise.allSettled([loop, tasks, ...agents]), new Promise((r) => setTimeout(r, 3000))]);
 			await presence.stop(); conn.close();
 		},
 	};

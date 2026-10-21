@@ -12,13 +12,15 @@ import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { sourceProblem } from "./judge.ts";
-import { adminModels, llmContribution, llmInfo, llmModels, setAllowedModels, setLlm, type Usage } from "./llm.ts";
-import { contributeContext, type LlmCall } from "./context.ts";
+import { adminModels, llmContribution, llmCriteria, llmCritique, llmInfo, llmJudge, llmModels, llmPropose, llmResearch, llmReviewCriteria, llmVerifier, llmVote, setAllowedModels, setLlm, type Usage } from "./llm.ts";
+import { callArgs, voteScores, type CallKind, type LlmCall } from "./context.ts";
+import { webSearch } from "./search.ts";
+import { isText, type Task } from "./tasks.ts";
 import { ipTokensPerDay, today } from "./limits.ts";
 import { announce, connectSpace, keepAlive } from "./space.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. */
-export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution };
+export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; critique: typeof llmCritique; propose: typeof llmPropose; vote: typeof llmVote; judge: typeof llmJudge; research: typeof llmResearch; verify: typeof llmVerifier; criteria: typeof llmCriteria; reviewCriteria: typeof llmReviewCriteria };
 /** A fake model team of the tests: picked per room, with a log that writes FakeCall entries. */
 type FakeModule = { models: () => Promise<string[]>; llmFor: (session: string, o: { space: SpaceLike; log: (e: Record<string, unknown>) => Promise<void> }) => Partial<ModelApi> };
 
@@ -28,7 +30,26 @@ const RESULT_LEASE_MS = 10 * 60_000;
 const SPEND_LEASE_MS = 26 * 3600_000;
 const WAIT_MS = 5_000;
 
-const real: ModelApi = { models: llmModels, contribute: llmContribution };
+const real: ModelApi = { models: llmModels, contribute: llmContribution, critique: llmCritique, propose: llmPropose, vote: llmVote, judge: llmJudge, research: llmResearch, verify: llmVerifier, criteria: llmCriteria, reviewCriteria: llmReviewCriteria };
+
+/** One call of a kind: the llm.ts function with the arguments built from the space, its answer as plain data. */
+async function answer(api: ModelApi, kind: CallKind, args: Record<string, unknown>): Promise<{ value: Record<string, unknown>; usage?: Usage }> {
+	const a = args as never;
+	switch (kind) {
+		case "contribute": {
+			const v = await api.contribute(a);
+			if (!isText((args as { task: Task }).task)) { const problem = sourceProblem(v.source); if (problem) throw new Error(`the model's code cannot be handed in: ${problem}`); }
+			return { value: { source: v.source, model: v.model, ...(v.note ? { note: v.note } : {}), ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) };
+		}
+		case "critique": case "propose": { const v = await api[kind](a); return { value: { text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "vote": { const v = await api.vote(a); return { value: { scores: voteScores(args, v.scores), text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "judge": { const v = await api.judge(a); return { value: { results: v.results, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "research": { const v = await api.research({ ...(args as object), search: (q: string) => webSearch(q) } as never); return { value: { queries: v.queries, sources: v.sources, text: v.text, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "verify": { const v = await api.verify(a); return { value: { check: v.check, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "criteria": { const v = await api.criteria(a); return { value: { criteria: v.criteria, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+		case "reviewCriteria": { const v = await api.reviewCriteria(a); return { value: { votes: v.votes, model: v.model, ...(v.usage ? { usage: v.usage } : {}) }, ...(v.usage ? { usage: v.usage } : {}) }; }
+	}
+}
 
 async function loadFakes(): Promise<FakeModule | null> {
 	const path = process.env.CODEMODE_LLM_MODULE;
@@ -56,7 +77,9 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	const presence = announce(space, "model");
 	const fakes = await loadFakes();
 	const log = (session: string) => async (e: Record<string, unknown>) => { await space.write({ type: "FakeCall", fields: { session, seq: Date.now() + Math.random(), ...e } as never }, null, 600_000); };
-	const apiFor = (session: string): ModelApi => (fakes ? { ...real, models: fakes.models, ...fakes.llmFor(session, { space, log: log(session) }) } as ModelApi : real);
+	// a fake team answers only what it defines: anything else is an error, not a call to the real models
+	const missing = (session: string) => Object.fromEntries((Object.keys(real) as Array<keyof ModelApi>).filter((k) => k !== "models").map((k) => [k, async () => { throw new Error(`the fake team of room ${session} has no ${k}`); }]));
+	const apiFor = (session: string): ModelApi => (fakes ? { ...missing(session), models: fakes.models, ...fakes.llmFor(session, { space, log: log(session) }) } as ModelApi : real);
 	const open = new Set<string>();
 	let stopping = false;
 
@@ -92,13 +115,9 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				if (!fakes) await applyAdmin(space);
 				const visitor = call.client && !call.client.admin ? call.client.ip : null;
 				if (visitor && ipTokensPerDay() > 0 && (await spentToday(space, visitor)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (CODEMODE_TOKENS_PER_IP_DAY)");
-				const ctx = await contributeContext(space, call);
-				if (!ctx) throw new Error("the task block is gone");
-				const v = await apiFor(call.session).contribute(ctx);
-				const problem = sourceProblem(v.source);
-				if (problem) throw new Error(`the model's code cannot be handed in: ${problem}`);
-				usage = v.usage;
-				result = { ok: true, value: { source: v.source, model: v.model, ...(v.note ? { note: v.note } : {}), ...(v.usage ? { usage: v.usage } : {}) } };
+				const a = await answer(apiFor(call.session), call.kind, await callArgs(space, call));
+				usage = a.usage;
+				result = { ok: true, value: a.value };
 			} catch (err) { result = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
 			await space.write({ type: "LlmResult", fields: { callId: call.callId, session: call.session, ...result, ts: Date.now() } as never }, t.id, RESULT_LEASE_MS);
 			if (usage && call.client && !call.client.admin) await space.write({ type: "Spend", fields: { ip: call.client.ip, day: today(), tokens: usage.total, ts: Date.now() } }, t.id, SPEND_LEASE_MS);

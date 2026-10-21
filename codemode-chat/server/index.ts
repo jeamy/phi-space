@@ -13,8 +13,7 @@ import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
 import { loadCodemode } from "./judge.ts";
 import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
-import { CodeChatHub, type LlmApi } from "./hub.ts";
-import { setLlm } from "./llm.ts";
+import { CodeChatHub } from "./hub.ts";
 import { announce, connectSpace } from "./space.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
@@ -58,14 +57,12 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 };
 
 /** `space`: the shared space (default CODEMODE_SPACE, else unix:/tmp/codemode-space.sock). */
-export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; llm?: LlmApi } = {}) {
+export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean } = {}) {
 	const cm = await loadCodemode();
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
 	const conn = connectSpace(o.space);
-	const hub = new CodeChatHub(conn.space, cm, o.llm ? { llm: o.llm } : {});
+	const hub = new CodeChatHub(conn.space, cm);
 	const presence = announce(conn.space, "web");
-	await hub.restoreAdmin(); // the admin's choice of models from before
-	void hub.resumeRuns().catch((e) => console.error("[codemode] resuming runs failed", (e as Error).message)); // runs the last process left active
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
 	let nextUpgrade: ((req: http.IncomingMessage, socket: any, head: Buffer) => void) | null = null;
@@ -111,7 +108,6 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!isAdmin(req)) return json(res, 403, { error: "Admin token required" });
 				const b = await readBody(req);
 				await hub.saveLlmChoice({ on: b.on, model: b.model });
-				await setLlm(b); // runs that still run in this process
 				return json(res, 200, (await hub.modelInfo()).info);
 			}
 			// ---- admin panel: login with the token, then the choice of models ----
@@ -142,7 +138,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 						if (unknown.length) return json(res, 400, { error: `Unknown models: ${unknown.slice(0, 5).join(", ")}` });
 					}
 					await hub.saveAllowedModels(b.allowed === null ? null : (b.allowed as unknown[]).map(String));
-					if (typeof b.on === "boolean") { await hub.saveLlmChoice({ on: b.on }); await setLlm({ on: b.on }); }
+					if (typeof b.on === "boolean") await hub.saveLlmChoice({ on: b.on });
 				}
 				// what the model process published, with the choice just saved (it takes it over within 10 s)
 				const admin = (await hub.modelInfo()).admin;

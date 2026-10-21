@@ -1,176 +1,286 @@
-# Codemode-Chat: alles im Space (Architektur, 2026-10-21)
+# Codemode Chat: shared-space architecture (2026-10-21)
 
-Grundsatz: **Alles ist Space.** Prozesse reden nur über einen Space miteinander. Kein Prozess hält Zustand, den ein
-anderer braucht oder der einen Neustart überleben muss; jeder Prozess kapselt eine Rolle und kennt nur einen
-`SpaceLike` (lokal über den Unix-Socket, in Produktion über TCP). Fällt ein Prozess aus, laufen seine Transaktionen und
-Leases ab, die Arbeit erscheint wieder im Space, und ein anderer Prozess derselben Rolle übernimmt.
+## Purpose and current status
 
-## Was als Zustand gilt und was nicht
+The target architecture keeps all shared application state in one phi-spaces Space. Each process owns a role and
+communicates with the other roles through `SpaceLike`, over a Unix socket locally or TCP between hosts. Process-local
+resources may be recreated; decisions that must survive a restart belong in the Space.
 
-Zustand ist alles, was eine Entscheidung trägt oder einen Neustart überleben muss: Aufgaben, Beiträge, Urteile, der
-beste Code, Läufe, Aufträge, Verbrauch, Grenzen, Anmeldungen. Das liegt im Space.
+**Implemented through stage 2c:** separate space, web, judge, agent and model processes; transactional judging;
+Space-backed generation runs with scripted or model agents; model requests and results; visitor usage records for
+those model requests; model discovery and admin selection through the Space.
 
-**Kein Zustand** sind Betriebsmittel eines Prozesses, die mit ihm entstehen und vergehen: offene Sockets und
-WebSocket-Clients, Entprell-Timer für das Senden von Snapshots, Sandbox-Plätze eines Prozesses, die geladene
-Modell-Registry samt Zugangsdaten. Sie bleiben im Prozess.
+**Still being migrated:** the web process retains its session table, work-board runs, text tasks, research, and task
+creation with generated check rules and criteria. Model limits per minute and day remain local to each model process.
+Admin sessions, HTTP request limits and interactive execution (▶) are not yet fully moved to the target architecture.
+The model process is therefore not yet the exclusive caller of models or the only process needing model credentials.
+Docker still describes the earlier server layout and requires stage 4 adaptation.
 
-## Prozesse
+This status describes the completed stage 2c migration. Stage 2d is being developed concurrently: request/context
+support for additional model operations is appearing in the working tree. That support alone does not establish
+that the corresponding web workflows have migrated or that the open correctness issues below are resolved.
 
-| Prozess | Datei | Rolle |
+The guarantees below distinguish current behavior from required corrections. Moving data into the Space alone does
+not provide exactly-once external execution, a consistent snapshot, or atomic budget enforcement.
+
+## State and process-local resources
+
+Shared state includes tasks, contributions, verdicts, best-result references, runs, work items, usage, budgets and
+admin sessions. Process-local caches of that state must be reconstructible and must not independently authorize work.
+
+Open sockets, WebSocket clients, snapshot debounce timers, local sandbox slots, and loaded model registries and
+credentials are process-local resources. Their loss is expected on restart. Credentials are supplied by deployment
+configuration; they are not stored as ordinary Space entries.
+
+A local concurrency or request limit applies **per process**. A limit intended to apply across the installation needs
+shared coordination. Calling a counter a resource does not change the scope of the limit.
+
+## Processes and connections
+
+Paths in this document are relative to `codemode-chat/` unless stated otherwise.
+
+| Process | File | Current role and target |
 |---|---|---|
-| space | `server/space-host.ts` | trägt den einen Space (SQLite), stellt ihn über `serveSpace` bereit (`CODEMODE_LISTEN`) |
-| web | `server/index.ts` | Next.js, REST, WebSocket; liest Räume aus dem Space, schreibt Befehle hinein |
-| judge | `server/judge-host.ts` | nimmt `CodeCandidate` in einer Transaktion, schreibt `CodeScore` (und `CodeBest`) in derselben |
-| agents | `server/agent-host.ts` | übernimmt Agentenplätze eines Laufs, arbeitet Aufträge ab, schreibt Aufgaben-Prüfregeln und Kriterien |
-| model | `server/model-host.ts` | führt jeden Modellaufruf aus (einziger Prozess mit Zugangsdaten), hält die Grenzen im Space |
+| space | `server/space-host.ts` | Hosts the SQLite-backed Space and exposes it through `serveSpace` at `CODEMODE_LISTEN`. |
+| web | `server/index.ts` | Serves Next.js, REST and WebSocket; reads rooms and submits work. Still owns the unmigrated workflows listed above. |
+| judge | `server/judge-host.ts` | Takes `CodeCandidate` transactionally and publishes `CodeScore`, best-result and archive changes in the same transaction. Interactive execution is planned for stage 3. |
+| agents | `server/agent-host.ts` | Claims agent slots and processes generation work. Work-board and task-creation workflows are planned next. |
+| model | `server/model-host.ts` | Handles generation contribution requests, publishes model information, reads admin choices and records visitor usage. Eventually handles all model calls. |
 
-Alle anderen Prozesse verbinden sich über `CODEMODE_SPACE` (`unix:/tmp/codemode-space.sock` oder `tcp:host:3800`).
-Jeder Prozess meldet sich mit einem `Process`-Eintrag (Rolle, Host, CPU, Speicher), dessen Lease er alle 10 s
-verlängert; die Systemleiste zeigt, was läuft. Lokal startet `npm run dev` / `npm start` alle Prozesse (wie
-`swarm-shards.sh` im help-site). Wo welcher Prozess in Produktion läuft (big, nano), ist nur Konfiguration und wird in
-Stufe 4 mit dir festgelegt.
+Clients connect through `CODEMODE_SPACE`, for example `unix:/tmp/codemode-space.sock` or `tcp:host:3800`.
+`server/launch.ts` starts all five roles by default; `CODEMODE_ROLES` selects the roles on a host. From `codemode-chat/`,
+`npm run dev` starts development processes and `npm start` starts production processes. The launcher starts the Space
+first and restarts children that exit unexpectedly.
 
-## Muster
+Each process publishes a `Process` entry with its role, process identity and host facts (CPU and total memory, not
+live process utilization). Its 30-second lease is renewed every 10 seconds. The system bar uses these entries for
+presence. Placement on big/nano remains a stage 4 deployment decision.
 
-- **Arbeit nehmen:** `take` in einer Transaktion. Lange Arbeit (ein Modellaufruf, eine Bewertung) verlängert die
-  Lease der Transaktion; das Ergebnis wird in derselben Transaktion geschrieben, dann `commit`. Ein Absturz rollt alles
-  zurück, der Auftrag erscheint wieder: genau einmal, ohne „schon erledigt?“-Prüfungen.
-- **Warten:** blockierendes `take`/`read` mit Timeout, oder `changes(rev, {waitMs})` als Long-Poll. Wartezeiten
-  bleiben unter dem Aufruf-Timeout des Clients (gemessen: ein Warten länger als `callTimeoutMs` scheitert als
-  „outcome unknown“).
-- **Sperren:** ein Eintrag als Mutex: `take` in einer Transaktion, prüfen, schreiben, zurückschreiben, `commit`
-  (z. B. `CodeRoom` für Aufgabe, Lauf und Löschen eines Raums).
-- **Genau einer:** `unique` beim Schreiben (z. B. höchstens ein `CodeRun` je Raum), wirkt auch gegen offene
-  Transaktionen.
-- **Zähler mit Ablauf:** je Ereignis ein Eintrag mit Lease (Modellaufrufe je Minute und Tag, Websuchen); gezählt wird
-  mit `count`.
-- **Ids:** zufällig (Kollisionen zwischen Prozessen), passend zu den Mustern der API.
+## Transaction and coordination patterns
 
-## Bestandsaufnahme: Zustand im Speicher heute
+- **Claim and publish:** take a work entry in a transaction, perform the work, write its result and follow-up entries,
+  then commit. Long work renews the transaction lease. If the transaction aborts or expires, its uncommitted changes
+  are rolled back and the claimed entry becomes available again, provided its own lifetime has not ended.
+- **External execution:** the transaction makes Space changes atomic; it cannot roll back an HTTP request, model
+  charge or other external side effect. Work may execute again after a crash. Stable request IDs and retained results
+  reduce repetition but do not guarantee exactly-once execution at an external provider.
+- **Wait:** use blocking `take`/`read` or `changes(rev, {waitMs})`. Server wait periods must remain below the client's
+  call timeout, with room for transport overhead. A client timeout may leave the outcome unknown; it is not proof
+  that a mutation failed.
+- **Held entries:** normal reads and counts cannot see entries taken by another transaction. `readIfExists` and
+  `takeIfExists` with `HELD_WAIT_MS` wait for a held match, but also return `null` when the wait expires. A `null`
+  result is therefore not sufficient evidence of deletion. Current callers still need correction for this case.
+- **Mutex entries:** a shared lock can be implemented by taking an entry transactionally and writing it back with the
+  protected updates. All writers must follow the same protocol and lock order. `CodeRun` currently serves this purpose
+  for run updates. A shared `CodeRoom` lock is a migration target: the hub's `#exclusive` still uses a local promise
+  chain and does not serialize different web processes.
+- **Uniqueness:** `unique`, for example on `CodeRun.session`, prevents conflicting writes including those in open
+  transactions. It protects entry uniqueness, not arbitrary multi-step business invariants or provider side effects.
+- **Usage:** retain separate usage events for completed calls and separate reservations for admitted work. A request
+  entry that is consumed on completion cannot also serve as a historical usage counter. Checking a count and then
+  starting work is not atomic admission control.
+- **Identifiers:** use collision-resistant IDs across processes and stable logical request IDs across retries.
 
-| Ort | Zustand | wird zu | Stufe |
-|---|---|---|---|
-| hub `Session` | `task`, `blockId` | neuester `CodeTask` des Raums | 2 |
-| | `best` | `CodeBest`, vom Bewerter in seiner Transaktion gepflegt | 1 |
-| | `answer` | aus `TextAnswer`, `TextJudgement`, `CodeAccept` abgeleitet | 2 |
-| | `run`, `abort`, `runParams`, `runTail`, `runSave` | `CodeRun`, `BoardState`; Stopp nimmt `CodeRun` | 2 |
-| | `deleted` | Bewerter prüft `CodeTask` in seiner Transaktion | 1 |
-| | `buckets` (Grenzen je Minute) | offen, siehe unten | 3 |
-| | `remotePending`, `poller`, `polling`, `judging` | entfällt: ein Space, Bewerter nehmen direkt | 1 |
-| | `seq` | zufällige Ids | 1 |
-| | `tail`, `bestTail` | Sperre über `CodeRoom`, Transaktion des Bewerters | 1–2 |
-| | `loading`, `lastUsed`, Sitzungstabelle | entfällt: Räume werden bei Bedarf gelesen | 2 |
-| | `clients`, `pushTimer`, `pushing` | Betriebsmittel von web, bleiben | – |
-| hub | `#rr`, `#remoteDownUntil`, `#importing`, `#importTimer` | entfällt (ein Space) | 1 |
-| | `#ipSpend` | `Spend`-Einträge je Adresse und Tag | 3 |
-| board.ts | Kopie von `BoardState`, `busy`, `end`, `capped`, `tail` | `BoardState` (in der Transaktion des Auftrags), `AgentBusy` mit Lease, Ende durch Entfernen von `CodeRun` | 2 |
-| hub (Generationen) | Schleife je Generation, `#idle` | Aufträge je Zug, eine Schranke je Generation wartet auf die Urteile | 2 |
-| llm.ts | `on`, `allowedLabels` | `CodeAdmin`, bei jedem Aufruf gelesen | 3 |
-| | Zähler je Minute und Tag | `LlmCall`-Einträge mit Lease | 3 |
-| | Aufrufe in Arbeit und Warteschlange | Anzahl Schleifen je model-Prozess (Betriebsmittel) | 3 |
-| search.ts | Tageszähler | `SearchCall`-Einträge mit Lease | 3 |
-| index.ts | `adminSessions` | `AdminSession`-Einträge mit Lease | 3 |
-| | Anfragegrenzen je IP | offen, siehe unten | 3 |
-| | `runsByIp` (▶) | `ExecRun`-Einträge | 3 |
-| runner.ts | ▶ läuft im web-Prozess | judge nimmt `ExecRequest`, schreibt `ExecEvent` der Reihe nach, web liest mit | 3 |
-| hub `setTask` | Prüfregel, Kriterien, drei Kriterien-Prüfer, `testRule` laufen im web-Prozess | `TaskRequest`, von agents erledigt; web wartet blockierend auf den `CodeTask` | 2 |
+A waiting take can persist in the Space across client disconnection and a Space restart, until its deadline or
+transaction lifetime ends. Graceful shutdown aborts outstanding transactions so abandoned waits do not claim later
+work. After a hard crash, recovery depends on lease expiry.
 
-## Offene Punkte
+## Generation runs
 
-- **Anfragegrenzen je IP:** Ein Eintrag je HTTP-Anfrage hieße ein Commit je Anfrage (jeder Commit kostet O(Einträge),
-  siehe help-site). Vorschlag: als Schutz der Verbindung behandeln, wie die Grenze offener Sockets (Betriebsmittel von
-  web), nicht als Zustand. Entscheidung in Stufe 3.
-- **Snapshotgröße über das Netz:** Ein Snapshot liest alle Einträge eines Raums (ein `readAll` ohne Typ). Liegt der
-  Space auf einem anderen Rechner, geht das über den Socket. Messen in Stufe 4, dann entscheiden (z. B. Code nur auf
-  Abruf).
-- **Platzierung in Produktion:** Space auf nano, Hauptteil auf big wie im help-site; die Bewerter auf nano oder big.
-  Festlegen in Stufe 4.
+`server/run.ts` and `server/agent-host.ts` implement generation runs using these entries:
 
-## Stufen
+| Entry | Purpose |
+|---|---|
+| `CodeRun` | Unique active run per room, parameters, displayed information and generation progress; also the run-update mutex. |
+| `AgentSlot` | One slot per agent, held in a renewable transaction while an agent process serves that run. |
+| `WorkItem` | A contribution turn or a generation barrier, including scheduling and retry fields. |
+| `AgentBusy` | Separately leased marker published before taking work. Currently also used in completion detection. |
+| `CodeRunDone` | Retained information about the last ended run in a room. |
 
-Jede Stufe hält die App lauffähig, wird getestet und einzeln committet; gepusht wird nach Rückfrage.
+A work transaction consumes its item, publishes a contribution, updates `CodeRun` and writes any follow-up work.
+A barrier waits for the generation's turns and required verdicts before opening another generation. In the current
+implementation, barrier rechecks are delayed by 2, 4, 8, then 10 seconds repeatedly; each recheck commits a change.
 
-1. **Ein Space, eigene Prozesse für space, judge, web.** `space-host.ts` trägt den Space; die Bewerter laufen in
-   `judge-host.ts` und pflegen `CodeBest`; nano-Import, Zurückholen und Wartezeiten entfallen; web verbindet sich über
-   `CODEMODE_SPACE`. Ein Starter für alle Prozesse (`npm run dev`, `npm start`) und ein Test-Harness, das die Prozesse
-   startet. *Bleibt im Speicher:* die Raumdaten des Hubs, Läufe und Modell-Grenzen (Stufen 2–3). *Docker* läuft erst
-   wieder mit Stufe 4.
-2. **Läufe und Agenten im Space.** `agent-host.ts` und `model-host.ts`; Auftragsbrett und Generationen ohne
-   Koordinator; Aufgaben mit Prüfregel und Kriterien über `TaskRequest`; der Hub verliert seine Sitzungstabelle.
-3. **Grenzen, Anmeldungen, ▶.** Modell- und Suchgrenzen, Budget je Adresse, Admin-Sitzungen, ▶ über den judge-Prozess.
-4. **Betrieb.** Docker (Images und Dienste je Rolle), Skripte, Hilfe, README; Platzierung big/nano.
+The defaults are 60 seconds for slot and item transaction leases (`CODEMODE_AGENT_LEASE_MS`) and 16 active slots per
+agent process (`CODEMODE_AGENT_SLOTS`). These are configurable defaults, not installation-wide concurrency limits.
 
-## Stand nach Stufe 1 (2026-10-21)
+Caught work failures allow **three total attempts**, not three retries after an initial attempt. After exhaustion,
+a turn advances the generation's done count without handing in a contribution. Hard process crashes do not currently
+increment this retry count. Exhausted barrier failures also lack an explicit failed-run outcome.
 
-Umgesetzt: `space-host.ts`, `judge-host.ts`, `launch.ts` (`npm run dev` / `npm start`), `space.ts` (Verbindung,
-`Process`-Einträge, Lease-Verlängerung) und `results.ts` (bester Code und Archiv in der Transaktion dessen, der sie
-ändert). Der nano-Shard, sein Import und das Zurückholen sind entfallen; jeder Bewerter-Prozess nimmt direkt aus dem
-einen Space. Ein Bewerter hinterlässt während der Bewertung einen `CodeJudging`-Merker, damit die Kachel sichtbar
-bleibt, solange der Kandidat in seiner Transaktion steckt. Der web-Prozess folgt dem Änderungsstrom
-(`changes` als Long-Poll) und schickt neue Snapshots, auch wenn ein anderer Prozess geschrieben hat. Die Tests starten
-Space und Bewerter als echte Prozesse (`tests/stack.ts`); der web-Teil läuft im Testprozess, bis Stufe 2 die
-Modell-Agenten in eigene Prozesse holt.
+The current idle-completion path checks for visible `WorkItem` and `AgentBusy` entries, then consumes `CodeRun` and
+writes `CodeRunDone` and a closing line. Stop also consumes `CodeRun`. This does not cancel an already-started external
+model call. Idle completion needs a stronger invariant: a busy marker and its work transaction expire independently,
+so an invisible held item may outlive its visible busy marker.
 
-Erkenntnisse aus der Umsetzung:
+**Required correction:** decide completion from durable progress under the run lock: all scheduled work has reached a
+terminal state, required verdicts are accounted for, and no next generation remains. Keep `AgentBusy` for display and
+observability. Persist attempt starts and terminal failure reasons so repeated crashes and failed barriers are visible
+and bounded. Define cleanup of outstanding model requests and late results when stopping a run.
 
-- **Ein wartendes `take` eines Clients liegt dauerhaft im Space**, samt Transaktion, und übersteht sogar einen
-  Neustart des Space. Ein Prozess, der beendet wird, muss seine offenen Transaktionen abbrechen, sonst fängt sein
-  verwaister Warteaufruf den nächsten Kandidaten und hält ihn bis zum Ablauf der Lease fest.
-- **Grenzen gelten je Besitzer.** Alle Prozesse verbinden sich als derselbe Peer; der Space-Host hebt deshalb die
-  Obergrenzen für Transaktionen, Warteaufrufe und Registrierungen je Besitzer an. Die Größengrenzen bleiben: ein Eintrag
-  höchstens 64 KiB, ein Commit höchstens 192 KiB. Code wird darum auch nach seiner JSON-Größe begrenzt (40 kB), damit
-  Urteil, bester Code und Archiv in einen Commit passen.
-- Über den Socket nennt der Fehler „ahead of this stream“ keine Revision; die aktuelle Revision liefert jede
-  erfolgreiche Leseanfrage auf den Änderungsstrom.
+## Model requests, context and budgets
 
-**Bleibt im Speicher (Stufen 2 und 3):** die Sitzungstabelle des Hubs mit `task`, `blockId`, `best` (jetzt nur ein
-Abbild von `CodeBest`), `answer`, Lauf und Abbruch; die Läufe selbst (Auftragsbrett und Generationen im web-Prozess);
-Modell-Grenzen, Suchzähler, Budget je Adresse, Admin-Sitzungen, Anfragegrenzen; ▶ läuft noch im web-Prozess.
-**Docker** startet noch den einzelnen Server von vorher und funktioniert erst mit Stufe 4 wieder.
+An agent writes `LlmCall` outside its work transaction, using a stable `callId` derived from the work item and
+`unique` on that ID. It takes the corresponding `LlmResult` inside its work transaction, waiting in chunks of up to
+20 seconds, for at most `CODEMODE_MODEL_WAIT_S` (default 600 seconds). Aborting the work transaction makes a taken
+result available for another attempt while that result remains retained.
 
-## Stand nach Stufe 2a und 2b (2026-10-21)
+The model process takes `LlmCall` in a transaction, builds context through `server/context.ts`, calls the model and
+publishes `LlmResult`. When usage is recorded for a visitor, the corresponding `Spend` entry is in the same commit.
+The call transaction lease is 120 seconds and is renewed; results are retained for 10 minutes, and `Spend` entries
+for 26 hours with an explicit day key. Request retention is the configured model wait plus 60 seconds.
 
-**2a:** Ein Kandidat trägt die eigene Aufgabe nicht mehr mit; der Bewerter liest sie aus dem `CodeTask` (Fälle und Code
-zusammen sprengten sonst die Eintragsgrenze). `CodeBest` nennt nur noch das Urteil (Beitrag, Zeit); den Code hat das
-Urteil (sonst passte ein Commit des Bewerters bei großem Code nicht mehr). Ein Commit über den Grenzen gilt nicht mehr
-als abgelaufene Transaktion. Prüfungen auf Einträge, die eine andere Transaktion halten kann, warten (`HELD_WAIT_MS`):
-ein gehaltener Eintrag ist für `NO_WAIT` und `count` unsichtbar.
+This prevents many duplicate calls when a request or retained result can be reused. It does **not** guarantee that a
+retry costs nothing: a provider may finish and charge for a call before the model process crashes without committing
+its result. Provider-supported idempotency or an explicit policy for uncertain outcomes is needed to address that
+window. Result expiry also bounds the deduplication period.
 
-**2b:** `server/run.ts` und `server/agent-host.ts`. Läufe mit Skript-Agenten im Generationen-Modus leben ganz im Space:
-`CodeRun` (je Raum `unique`, zugleich Sperre des Laufs), `AgentSlot` je Agent (ein Agenten-Prozess hält ihn in einer
-erneuerten Transaktion), `WorkItem` (`turn` je Zug, `barrier` je Generation), `AgentBusy` (vor dem Nehmen geschrieben),
-`CodeRunDone` (wie er endete). Jeder Auftrag ist eine Transaktion: Auftrag nehmen, Beitrag schreiben, `CodeRun`
-fortschreiben, Folgeaufträge schreiben, Commit. Wer keine Aufträge und keine beschäftigten Agenten mehr sieht, nimmt
-`CodeRun` und schreibt die Schlusszeile; Stopp im web-Prozess tut dasselbe. Ein Auftrag, der scheitert, kommt bis zu
-dreimal wieder, danach zählt er als erledigt (sonst wartete seine Generation ewig). Die Schranke einer Generation sieht
-nach 1, 2, 4, 8, dann alle 10 s wieder nach (jeder Blick ist ein Commit). Ein Snapshot liest den Lauf zuerst, damit ein
-als beendet gezeigter Lauf seine Schlusszeile mitbringt.
+Role and target are selected when a generation opens. The rest of the model context (attempts, notes, rejected
+contributions and best result) is read when the model process handles the request. Agents in the same generation can
+therefore see different context. If identical starting context is required, persist an immutable generation context
+or versioned references; fixing role and target alone does not provide it.
 
-Werte: Lease von Platz und Auftrag 60 s (`CODEMODE_AGENT_LEASE_MS`), höchstens 16 Agenten je Prozess
-(`CODEMODE_AGENT_SLOTS`), drei Versuche je Auftrag.
+`ModelInfo` publishes available models. `CodeAdmin` supplies model selection and on/off settings. The model process
+refreshes this information every 10 seconds and applies admin settings before real calls. This is not a hard
+10-second propagation guarantee during failures.
 
-**Bleibt bis 2c/2d im web-Prozess:** Läufe mit Modell-Agenten (Generationen und Auftragsbrett), Text-Aufgaben, das
-Schreiben von Prüfregeln und Kriterien beim Anlegen einer Aufgabe, die Modell-Grenzen.
+**Budget enforcement remains incomplete:** multiple workers can pass the same usage check before any of them records
+new usage. Run budgets likewise do not reserve the cost of outstanding calls. Moreover, the current model path
+assigns returned usage only after validating the generated source, so a rejected source can leave paid usage
+unrecorded. Minute/day model counters are still local to each model process.
 
-## Stand nach Stufe 2c (2026-10-21)
+**Required correction:** atomically reserve an allowance before an external call, then reconcile it with actual usage,
+including failed or rejected outputs. Specify how uncertain charges are handled after a crash. Use separate entries
+for requests, reservations and usage; do not count consumed `LlmCall` entries as completed calls. Define whether each
+limit is per process or global, whether it is hard or soft, and whether a day means a calendar day (including timezone)
+or a rolling 24-hour window.
 
-`server/model-host.ts` macht jeden Modellaufruf. Ein Agent schreibt einen `LlmCall` mit Verweisen (Art, Modell, Agent,
-Raum, Block, Lauf, Rolle, Ziel) außerhalb seiner Transaktion und wartet in seiner Auftrags-Transaktion auf das
-`LlmResult` (in Abschnitten von 20 s, höchstens `CODEMODE_MODEL_WAIT_S`, Standard 600 s). Die Kennung des Aufrufs gehört
-zum Auftrag, und der Aufruf wird `unique` geschrieben: Wird ein Auftrag nach einem Absturz wiederholt, findet er die
-Antwort von vorher oder den noch laufenden Aufruf und zahlt nicht zweimal. Der Model-Prozess baut den Kontext selbst aus
-dem Space (`server/context.ts`), so bleibt ein Aufruf klein. Antwort und `Spend`-Eintrag (Tagesbudget je Adresse)
-kommen in einen Commit. Er veröffentlicht `ModelInfo` und übernimmt die Admin-Auswahl aus `CodeAdmin` (Modelle, an/aus,
-Standardmodell) binnen 10 s.
+## Snapshots, retention and recovery
 
-Generationen-Läufe mit Modell-Agenten laufen jetzt in den Agenten-Prozessen. Rolle und Ziel jedes Zugs legt fest, wer
-die Generation öffnet (Start oder Schranke), aus dem Stand dieses Augenblicks: Alle Agenten einer Generation bauen auf
-denselben Stand, wer auch immer zuerst arbeitet. Nach einem Neustart aller Prozesse läuft ein Lauf einfach weiter; eine
-eigene Zeile „Run resumed“ gibt es dafür nicht mehr.
+The web process follows `changes` using long polling and pushes debounced snapshots. A snapshot currently uses
+multiple typed, bounded reads, not a single untyped `readAll`. It already limits included source code and supports
+fetching code separately. These reads do not form one atomic snapshot: a concurrent commit can produce a mixed view.
+Reading the run before messages helps the normal end-of-run display, but does not establish general snapshot
+consistency, especially when reads time out or retained entries expire.
 
-Die Tests geben dem Model-Prozess Fake-Teams über `tests/fakes.ts` (`CODEMODE_LLM_MODULE`, nur mit `CODEMODE_TEST=1`),
-gewählt nach Raum; was ein Fake sah, steht als `FakeCall` im Space, ein Fake, der hängen soll, wartet auf ein
-`FakeGate`.
+For the UI, explicitly choose eventual consistency with another refresh, or implement a read protocol that pins a
+revision. Measure bytes, query count and latency over TCP before further optimization. Preserve the distinction
+between display consistency and the stronger invariants needed for work admission and completion.
 
-**Bleibt bis 2d im web-Prozess:** Auftragsbrett, Text-Aufgaben, Recherche, Prüfregeln und Kriterien beim Anlegen
-einer Aufgabe; die Modellgrenzen je Minute und Tag zählt noch jeder Model-Prozess für sich (Stufe 3).
+Room entries default to a 24-hour lifetime (`CODEMODE_TTL_HOURS`); zero keeps them until deletion. Individual entry
+expiry is not the same as room inactivity expiry. Related tasks, scores, best-result references and run work can
+have different expiration times. Recovery must account for those dependencies.
+
+| Failure | Current recovery boundary |
+|---|---|
+| Worker process crash | Uncommitted claims can return after transaction expiry; another worker can continue while the required entries still exist. External work may repeat. |
+| Space process restart with intact SQLite store | Persisted state can be reopened; clients reconnect and leases/deadlines still govern what remains available. |
+| Space host unavailable | All roles depend on the same Space and cannot continue shared-state operations. Worker replication does not remove this dependency. |
+| Store loss or outage beyond retention | Worker transactions alone cannot recover lost or expired application state. Backup/restore and retention policy are required. |
+
+Before production, define the supported interruption duration and retain active-run dependencies and deduplication
+records accordingly. Define handling of references whose targets have expired and cleanup of abandoned requests.
+High availability of the Space itself is not implemented by this application's multi-process layout.
+
+## Remaining migration map
+
+This table describes targets, not claims that every listed transition is complete.
+
+| Area | Target / remaining work | Stage |
+|---|---|---|
+| Hub `Session.task`, `blockId` | Read the selected/latest task from Space state; remove authoritative local copies. | 2d |
+| Hub `best` | Reconstruct from `CodeBest` and its referenced `CodeScore`; currently still cached locally. | 1–2d |
+| Hub `answer` | Derive from `TextAnswer`, `TextJudgement` and `CodeAccept`. | 2d |
+| Hub run, abort, parameters, save/queue state | Generation runs migrated; move remaining board/text runs and control into the Space. | 2c–2d |
+| Hub local serialization and session table | Shared room mutation protocol; reconstructible room reads instead of authoritative sessions. | 2d |
+| Hub generations and idle loop | Work items and barriers implemented; strengthen completion and failure handling as described above. | 2b–2c |
+| `board.ts` state, busy/end/cap tracking | Transactional `BoardState` and explicit durable work progress. | 2d |
+| Task creation | `TaskRequest` handled by agents, with explicit success/failure results and bounded waits. | 2d |
+| Admin model settings | `CodeAdmin` implemented for the model process; migrate remaining direct model paths. | 2c–3 |
+| Model minute/day limits and visitor usage | Shared reservations and usage records; generation-path `Spend` exists but is not strict admission control. | 3 |
+| Search daily limits | Separate retained search usage and admission state. | 3 |
+| Admin sessions | `AdminSession` entries with leases. | 3 |
+| HTTP and room request limits | Decide and document local connection protection versus shared quotas. | 3 |
+| Interactive execution (▶) | Judge consumes `ExecRequest`, writes ordered `ExecEvent` entries; web follows results, with `ExecRun` tracking. | 3 |
+| WebSocket clients and push timers | Remain process-local resources. | — |
+
+The old nano shard, remote import/retrieval state, remote pending/polling state and related hub coordination were
+removed in stage 1. Judges take work directly from the shared Space. Random IDs replace process-local sequencing
+where cross-process uniqueness is needed.
+
+## Performance and deployment decisions
+
+- Reduce idle writes: agents currently create/cancel busy markers even when no due item is available. Combine change
+  notifications with the next due time to avoid repeated scans and commits. Keep any replacement consistent with the
+  completion protocol.
+- Separate local protection from global quotas. A local HTTP limiter is suitable for protecting one web process;
+  adding web processes increases its aggregate allowance. Measure Space commit cost before selecting a global quota
+  representation; no universal commit-complexity claim is assumed here.
+- All application processes currently connect as the same peer. The host raises per-owner transaction, waiter and
+  registration limits accordingly. Define capacity and role isolation for production rather than relying only on
+  larger shared limits.
+- Retain the entry and commit size constraints: 64 KiB per entry, 192 KiB per commit. Source is also bounded by encoded
+  JSON size (40 kB). Budget the complete transaction, including verdict and archive metadata, not source alone.
+- Space on nano and most compute on big remains a proposal. Choose judge placement, role-specific services, restart
+  policy, persistent storage and recovery procedures in stage 4.
+
+## Delivery stages and implementation history
+
+Each stage should keep the application runnable, be tested and be committed separately. Pushes require confirmation.
+The existing Docker path is a known exception during migration and must be repaired before production rollout.
+
+1. **One Space; separate space, judge and web processes — implemented.** Added `space-host.ts`, `judge-host.ts`,
+   `launch.ts`, `space.ts` and transactional result/archive handling in `results.ts`. `CodeJudging` keeps a contribution
+   visible while its candidate is taken. The web process follows changes from other processes.
+2. **Space-backed runs and agents — partially implemented.** Stage 2a moved task data out of candidates and source out
+   of `CodeBest`, which now references a verdict; commit-size failures are distinguished from expired transactions.
+   Stage 2b added generation work, agent slots and barriers. Stage 2c added generation model calls through the model
+   process. Stage 2d still needs board/text/research and task-creation workflows, shared room coordination and removal
+   of authoritative hub sessions. The correctness corrections in this document remain open work.
+3. **Limits, sessions and interactive execution — incomplete.** Finish shared admission and usage accounting, search
+   limits, admin sessions and ▶ through the judge process.
+4. **Operations — pending.** Adapt Docker images/services, scripts, help and README; settle big/nano placement and
+   recovery requirements.
+
+Implementation notes retained from the migration:
+
+- Graceful shutdown must abort open transactions, including waiting takes; disconnecting a socket is insufficient.
+- The socket error “ahead of this stream” does not include a revision. Successful change-stream reads supply the
+  current revision for resynchronization.
+- Tests use `tests/stack.ts` to start worker/Space processes. Fake model teams are supplied through `tests/fakes.ts`
+  using `CODEMODE_LLM_MODULE`, permitted only with `CODEMODE_TEST=1`. `FakeCall` records observed context; `FakeGate`
+  can hold a fake call. These tests do not establish exactly-once behavior at a real external provider.
+
+## Validation priorities for the remaining corrections
+
+Add focused failure/concurrency coverage as the corresponding fixes are implemented:
+
+- A held `CodeRun` remains held beyond `HELD_WAIT_MS`; an agent must not treat the timeout as confirmed deletion.
+- A busy marker expires while its work transaction remains active; the run must not finish prematurely.
+- A provider succeeds before the worker dies without committing; retry/uncertain-charge behavior matches the stated policy.
+- Concurrent workers approach a shared budget, and rejected model outputs still account for their returned usage.
+- Repeated hard crashes and barrier failures produce bounded attempts and an explicit terminal outcome.
+- A stopped run has queued or running model requests, and recovery occurs near retention deadlines.
+- Multiple web processes mutate the same room; shared locking and task/run selection preserve their invariants.
+
+Standard checks are `npm run typecheck` and `npm test` at the repository root, plus
+`npm --prefix codemode-chat run typecheck` and `npm run test:codemode-chat` for the application.
+
+## Stand nach Stufe 2d (2026-10-21)
+
+Der web-Prozess ruft keine Modelle mehr auf und fährt keine Läufe mehr. Das Auftragsbrett läuft in `server/run.ts` als
+Aufträge der Agenten (Recherche, Vorschlag, Abstimmung, Umsetzung, Kritik, Überarbeitung, Zusammenführung, Prüfung,
+Folgeauftrag); sein Zustand (Phase, offene Aufträge der Phase, Zähler, Verbesserungsrunden, zusammengeführte Paare,
+Obergrenze erreicht) steht in `CodeRun.board`. Den Phasenwechsel macht, wer den letzten Auftrag einer Phase erledigt, in
+seiner Transaktion. Ein Modellfehler wird in der Transaktion des Auftrags behandelt: neuer Versuch mit neuer
+Aufruf-Kennung (höchstens drei), aufgeben, oder bei verbrauchtem Tagesbudget Laufende als „Budget verbraucht“. Jeder
+Agent beginnt auf dem Brett mit einer eigenen ersten Umsetzung. Eine von den Prüfern angenommene Antwort archiviert der
+Agent, der ihr Urteil sieht; ein 👍 archiviert der web-Prozess.
+
+Das Anlegen einer Aufgabe mit Modellen (Prüfregel, Kriterien und ihre Prüfung durch drei Agenten) schreibt der
+web-Prozess als `TaskRequest`; ein Agenten-Prozess erledigt ihn (Modellaufrufe, Gegenprüfung der Regel in seiner
+Sandbox) und antwortet mit `TaskReady`, auf das der web-Prozess wartet. Die Sitzung des web-Prozesses liest den aktiven
+Block bei jedem Zugriff aus dem Space. `server/board.ts` ist entfallen.
+
+**Bleibt (Stufe 3):** Modellgrenzen je Minute und Tag und der Suchzähler je model-Prozess, Admin-Sitzungen und
+Anfragegrenzen im web-Prozess, ▶ im web-Prozess. **Stufe 4:** Docker je Rolle.
