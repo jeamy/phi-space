@@ -15,9 +15,10 @@ const post = async (base: string, path: string, body: unknown) => {
 };
 /** What the fake model team of a room saw, in order (FakeCall entries the model process wrote; tests/fakes.ts). */
 const fakeCalls = async (srv: { stack: { space: any } }, room: string): Promise<any[]> => (await srv.stack.space.readAll({ type: "FakeCall", fields: { session: room } })).map((e: any) => e.fields).sort((a: any, b: any) => a.seq - b.seq);
-const until = async <T>(fn: () => Promise<T | null | false>, ms = 20_000): Promise<T> => {
+/** Polls `fn` until it gives a value; on a timeout the error carries what `state` says (the state to look at). */
+const until = async <T>(fn: () => Promise<T | null | false>, ms = 20_000, state?: () => Promise<unknown>): Promise<T> => {
 	const end = Date.now() + ms;
-	for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error("timeout"); await new Promise((r) => setTimeout(r, 50)); }
+	for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error(`timeout${state ? `: ${JSON.stringify(await state().catch((e) => String(e)))}` : ""}`); await new Promise((r) => setTimeout(r, 50)); }
 };
 
 t("every catalog task: its scripted variants are either correct or rejected, and at least one is correct", async () => {
@@ -75,7 +76,13 @@ t("a scripted run produces graded contributions and a best", async () => {
 	try {
 		await post(srv.url, "/api/sessions/run1/task", { taskId: "gcd" });
 		assert.equal((await post(srv.url, "/api/sessions/run1/run", { agents: 3, gens: 2, perAgent: 1, mode: "scripted" })).status, 200);
-		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/run1")).json()); return s.run && !s.run.active && s.contributions.length === 6 ? s : false; });
+		// what the run looks like when it does not get there in time (a timeout seen once in a full suite)
+		const state = async () => {
+			const s = view(await (await fetch(srv.url + "/api/sessions/run1")).json()), sp = srv.stack.space;
+			const rows = async (type: string) => (await sp.readAll({ type, fields: { session: "run1" } })).map((e: any) => e.fields);
+			return { run: s.run, contributions: s.contributions.map((c: any) => [c.author, c.gen, c.ok]), messages: s.messages.map((m: any) => m.text), codeRun: (await rows("CodeRun")).map((r: any) => ({ pending: r.pending, progress: r.progress, info: r.info })), items: (await rows("WorkItem")).map((i: any) => [i.kind, i.gen, i.onlyBy, i.waits, i.deadline]), candidates: (await rows("CodeCandidate")).length, judging: (await rows("CodeJudging")).length, slots: (await rows("AgentSlot")).length };
+		};
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/run1")).json()); return s.run && !s.run.active && s.contributions.length === 6 ? s : false; }, 20_000, state);
 		assert.equal(snap.contributions.filter((c: any) => c.ok !== null).length, 6);
 		assert.ok(snap.best);
 		assert.equal((await post(srv.url, "/api/sessions/run1/task", { taskId: "nope" })).status, 400);
@@ -1499,5 +1506,26 @@ t("calls are admitted against the run's budget before they are made: overlapping
 		// four agents start at once; without admission each would make its call (4000)
 		assert.ok(snap.run.usage.tokens >= 3000 && snap.run.usage.tokens <= 3000, `tokens ${snap.run.usage.tokens}`);
 		assert.equal(await srv.stack.space.count({ type: "WorkItem", fields: { session: "adm1" } }), 0);
+	} finally { await srv.close(); }
+});
+
+t("the room lock is in the space: an operation of another web process waits while one holds it", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	const space = srv.stack.space;
+	try {
+		await post(srv.url, "/api/sessions/lock1/task", { taskId: "gcd" });
+		await post(srv.url, "/api/sessions/lock1/task", { taskId: "primes" });
+		const blocks = async () => ((await (await fetch(srv.url + "/api/sessions/lock1")).json()) as any).blocks.map((b: any) => b.blockId);
+		const before = await blocks(), first = before[0];
+		// another web process holds the room's lock in the middle of its work
+		const t = await space.createTransaction(30_000);
+		assert.ok(await space.take({ type: "RoomLock", fields: { session: "lock1" } }, 5_000, { txn: t.id }));
+		const deleting = post(srv.url, "/api/sessions/lock1/delete", { blockId: first });
+		await new Promise((r) => setTimeout(r, 1500));
+		assert.equal((await blocks()).length, before.length); // waits for the lock
+		await space.abort(t.id);
+		assert.equal((await deleting).status, 200);
+		assert.deepEqual((await blocks()).includes(first), false);
+		assert.equal(await space.count({ type: "RoomLock", fields: { session: "lock1" } }), 1); // written back, one per room
 	} finally { await srv.close(); }
 });

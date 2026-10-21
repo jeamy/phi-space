@@ -24,7 +24,6 @@ Der web-Prozess ruft keine Modelle mehr auf und fährt keine Läufe. `server/boa
 - Die Grenzen je Minute und Tag und der Zähler der Websuchen gelten je model-Prozess, nicht für die ganze Installation.
 - Admin-Sitzungen und Anfragegrenzen liegen im web-Prozess.
 - ▶ (interaktives Ausführen) läuft im web-Prozess.
-- Die Raumsperre (`#exclusive` im Hub) ist eine lokale Promise-Kette.
 
 **Offen (Stufe 4):** Docker beschreibt noch den alten Aufbau.
 
@@ -100,6 +99,9 @@ Es darf derzeit nur **einen** model-Prozess geben: jeder ersetzt beim Veröffent
 
 **Gesperrte Einträge**
 - Normale Lese- und Zählaufrufe sehen keine Einträge, die eine andere Transaktion genommen hat.
+- Auch ein Lesen in einer Transaktion hält den Eintrag bis zu deren Ende fest: ein `take` ohne Warten geht daran vorbei.
+  Der Judge liest die CodeTask seines Kandidaten so; das Löschen eines Blocks wartet deshalb auf sie (`takeExisting`),
+  statt sie zu übergehen.
 - `readIfExists`/`takeIfExists` mit `HELD_WAIT_MS` (10 s) warten auf einen gesperrten Treffer, liefern aber auch `null`,
   wenn die Wartezeit abläuft.
 - `readExisting` (`server/space.ts`) unterscheidet die beiden Fälle: `null` heißt dann wirklich weg, eine Sperre über die
@@ -114,7 +116,11 @@ Es darf derzeit nur **einen** model-Prozess geben: jeder ersetzt beim Veröffent
 - Ein gemeinsamer Lock entsteht, wenn ein Eintrag in einer Transaktion genommen und mit den geschützten Änderungen
   zurückgeschrieben wird. Alle Schreiber müssen dasselbe Protokoll und dieselbe Reihenfolge einhalten.
 - `CodeRun` ist der Lock eines Laufs, `CodeBest` der des besten Codes eines Blocks.
-- Ein gemeinsamer Raum-Lock (`CodeRoom`) fehlt noch: `#exclusive` serialisiert nur innerhalb eines web-Prozesses.
+- `RoomLock` (`unique` je Raum) ist der Lock der Blöcke eines Raums und des Laufstarts.
+  - `#exclusive` im Hub nimmt ihn in einer erneuerten Transaktion, führt die Operation aus und schreibt ihn zurück.
+  - Ein anderer web-Prozess wartet bis zu 60 s darauf.
+  - Die Schreibvorgänge der Operation liegen außerhalb der Transaktion des Locks: er serialisiert, macht die Operation
+    aber nicht atomar.
 
 **Eindeutigkeit**
 - `unique`, etwa auf `CodeRun.session` oder `LlmCall.callId`, verhindert widersprüchliche Schreibvorgänge, auch in offenen
@@ -325,7 +331,7 @@ bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem A
 | Läufe, Stop, Parameter | `CodeRun`; Generationen und Brett im agents-Prozess. | 2b–2d ✓ |
 | Laufende und Fehler | Fristen für Urteile; Ende aus `pending` unter dem Lock des Laufs; Stop räumt auf. | 2d ✓ |
 | Aufgabe anlegen | `TaskRequest`/`TaskReady` mit Frist und Daten des Aufrufers. | 2d ✓ |
-| Raumsperre | Gemeinsamer Lock statt `#exclusive`. | 2d offen |
+| Raumsperre | `RoomLock` im Space; `#exclusive` nimmt ihn. | 2d ✓ |
 | Modellwahl des Admins | `CodeAdmin`; der model-Prozess ist der einzige Aufrufer. | 2c ✓ |
 | Grenzen je Minute und Tag, Verbrauch der Besucher | Gemeinsame Reservierungen und Verbrauchseinträge; `Spend` existiert, ist aber keine strenge Zulassung. | 3 |
 | Tageszähler der Suche | Gemeinsamer Zähler statt Zähler je model-Prozess. | 3 |
@@ -366,7 +372,8 @@ Docker-Weg ist während der Migration eine bekannte Ausnahme.
      - Laufende aus `pending`;
      - Sperren über die Wartezeit hinaus gelten nicht als Löschung;
      - Stop räumt Aufträge und wartende Aufrufe ab.
-   - Offen bleiben die Raumsperre und die Korrekturen oben.
+   - Raumsperre über den Space (`RoomLock`).
+   - Offen bleiben die Korrekturen oben.
 3. **Grenzen, Sitzungen und interaktives Ausführen: offen.**
 4. **Betrieb: offen.**
 
@@ -395,7 +402,8 @@ Getestet sind:
 - ein `CodeRun`, das länger als `HELD_WAIT_MS` gesperrt bleibt: alle Agenten bleiben, der Lauf endet einmal;
 - Stop, während Aufrufe laufen und warten: keine Aufträge bleiben zurück, der wartende Aufruf wird nicht gemacht;
 - abgelehnte Ausgaben buchen ihren Verbrauch auf den Lauf und auf die Adresse;
-- überlappende Agenten überschreiten das Laufbudget nicht.
+- überlappende Agenten überschreiten das Laufbudget nicht;
+- eine Operation wartet, solange ein anderer Prozess den Lock des Raums hält.
 
 Der frühere Fall „Busy-Marker läuft ab, während seine Transaktion lebt“ entfällt mit `pending`.
 
@@ -405,7 +413,7 @@ Noch ohne Test, jeweils mit der zugehörigen Korrektur einzuführen:
   Regel.
 - Wiederholte harte Abstürze ergeben begrenzte Versuche und ein ausdrückliches Ende.
 - Wiederherstellung nahe an den Aufbewahrungsfristen.
-- Mehrere web-Prozesse ändern denselben Raum; gemeinsame Sperre und Wahl von Aufgabe und Lauf halten ihre Regeln ein.
+- Mehrere web-Prozesse ändern denselben Raum gleichzeitig mit echten Operationen (der Test hält den Lock nur von außen).
 
 Standardprüfungen: im Wurzelverzeichnis `npm run typecheck` und `npm test`, für die Anwendung zusätzlich
 `npm --prefix codemode-chat run typecheck` und `npm run test:codemode-chat`.

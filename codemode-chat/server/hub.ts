@@ -8,6 +8,7 @@
 //   CodeAccept    a person's thumbs-up on an answer: accepted, and the run on its block ends
 //   CodeRoom     marks a room that exists: only a new room starts with the first catalog task; one whose blocks were
 //                all deleted stays empty
+//   RoomLock     the lock of a room's blocks and run start, held by the web process that changes them right now
 //   CodeEarlier  an accepted result kept as material for later, similar tasks (one per block, CODEMODE_EARLIER_DAYS):
 //                the best code of a block, or its accepted answer; a person's acceptance counts in its own room only
 // The space is the shared one of all processes (space-host.ts); this hub is the web process's view of it. Judges run in
@@ -27,7 +28,7 @@ import { taskWaitMs } from "./limits.ts";
 import { spentToday } from "./model-host.ts";
 import type { TaskReady } from "./task-agent.ts";
 import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
-import { entryLeaseMs, HELD_WAIT_MS, readExisting, type ProcessInfo } from "./space.ts";
+import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeExisting, type ProcessInfo } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
 
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
@@ -57,6 +58,9 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 	/** Serializes the operations that change the room's blocks or run (setTask, startRun, deleteBlock) and CodeBest. */
 	tail: Promise<unknown>; bestTail: Promise<unknown>;
 };
+
+/** The room lock's transaction lease (renewed while the operation runs), and how long an operation waits for it. */
+const ROOM_LOCK_LEASE_MS = 30_000, ROOM_LOCK_WAIT_MS = 60_000;
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
 
@@ -129,11 +133,37 @@ export class CodeChatHub {
 		list.push(now); s.buckets.set(key, list); return true;
 	}
 
-	/** Runs `fn` after every earlier exclusive operation of the room: checks and the state they guard cannot interleave. */
+	/** Runs `fn` after every earlier exclusive operation of the room, in this process and in every other web process:
+	 *  checks and the state they guard cannot interleave. */
 	#exclusive<T>(s: Session, fn: () => Promise<T>): Promise<T> {
-		const work = s.tail.catch(() => {}).then(fn);
+		const work = s.tail.catch(() => {}).then(() => this.#roomLock(s, fn));
 		s.tail = work;
 		return work;
+	}
+
+	/** The room's lock in the space (RoomLock, `unique` per room): taken under a transaction while `fn` runs and written
+	 *  back after it, so another web process waits for it. A process that dies lets the transaction lapse and the lock
+	 *  comes back. `fn` writes outside the lock's transaction: the lock serializes, it does not make `fn` atomic. */
+	async #roomLock<T>(s: Session, fn: () => Promise<T>): Promise<T> {
+		const t = await this.host.createTransaction(ROOM_LOCK_LEASE_MS);
+		const stop = keepAlive(this.host, t.id, ROOM_LOCK_LEASE_MS);
+		const lock = { type: "RoomLock", fields: { session: s.id } };
+		try {
+			let took = false;
+			for (const end = Date.now() + ROOM_LOCK_WAIT_MS; ; ) {
+				try { took = !!(await takeExisting(this.host, lock, { txn: t.id })); }
+				catch (e) { if (!(e instanceof StillHeld)) throw e; if (Date.now() > end) throw new Error("The room is busy; try again"); continue; } // another process holds it
+				if (took) break;
+				// no lock yet: this transaction makes it (a second process that does the same at once is refused, and waits)
+				try { await this.host.write({ type: "RoomLock", fields: { session: s.id, ts: Date.now() } }, t.id, this.#ttl, { unique: ["session"] }); break; }
+				catch (e) { if (!/unique/i.test((e as Error).message)) throw e; }
+			}
+			const v = await fn();
+			if (took) await this.host.write({ type: "RoomLock", fields: { session: s.id, ts: Date.now() } }, t.id, this.#ttl);
+			await this.host.commit(t.id);
+			return v;
+		} catch (e) { await this.host.abort(t.id).catch(() => {}); throw e; }
+		finally { stop(); }
 	}
 
 	/** Drops the least recently used room that nobody watches and nothing runs in; its entries stay in the space. */
@@ -801,8 +831,10 @@ export class CodeChatHub {
 		// entries from before task blocks existed have no blockId: the block is then identified by the time of its CodeTask
 		const legacy = target.blockId === undefined;
 		const tmplOf = (type: string): { type: string; fields: Record<string, string | number> } => (type === "CodeTask" && legacy ? { type, fields: { session: id, ts: target.ts } } : { type, fields: { session: id, blockId } });
-		// the task first: a judge checks it before it writes a verdict, so nothing new comes for this block meanwhile
-		for (const type of ["CodeTask", "CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "ChatMessage"])
+		// the task first: a judge checks it before it writes a verdict, so nothing new comes for this block meanwhile. A judge
+		// at work reads it under its transaction, which keeps it from being taken: that one is waited for, not skipped
+		while (await takeExisting(this.host, tmplOf("CodeTask")));
+		for (const type of ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "ChatMessage"])
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
 		// the last old-style block is gone: the old entries that never belonged to a block go with it
 		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {
