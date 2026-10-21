@@ -21,7 +21,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, type Codemode, type Verdict } from "./judge.ts";
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
-import { addNote, answersOf, bestOf, enqueueCandidate, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
+import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
 import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
 import { clipWords, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { taskWaitMs } from "./limits.ts";
@@ -555,15 +555,8 @@ export class CodeChatHub {
 	/** What the ▶ of a contribution runs: its code and the task it was written for (the candidate names it, a verdict
 	 *  through its block; an entry from before task blocks falls back to the room's task). Null when it is gone. */
 	async execTarget(id: string, candidateId: string): Promise<{ source: string; task: Task } | null> {
-		const s = await this.session(id);
-		// a judge that just took the candidate writes its marker a moment later: look again for a little while
-		let f = await this.#contribution(s, candidateId);
-		for (let i = 0; !f && i < 10; i++) { await new Promise((r) => setTimeout(r, 150)); f = await this.#contribution(s, candidateId); }
-		if (!f) return null;
-		const block = f.blockId === undefined ? undefined : (await this.#taskEntries(id)).find((t) => String(t.blockId ?? `t${t.ts}`) === f.blockId);
-		const task = (f.taskId !== undefined ? taskFromSpec(f) : null) ?? (block ? taskFromSpec(block) : null) ?? s.task;
-		if (isText(task) || typeof f.answerId === "string") throw new Error("A text answer cannot be run");
-		return { source: String(f.source ?? ""), task };
+		await this.session(id);
+		return execTarget(this.host, id, candidateId);
 	}
 
 	/** Push a fresh snapshot to every client of the session (debounced, so a burst of writes sends one frame). One

@@ -191,6 +191,29 @@ export async function enqueueAnswer(space: SpaceLike, txn: string | null, ttl: n
 	return answerId;
 }
 
+/** What the ▶ of a contribution runs: its code and the task it was written for (the candidate names it, a verdict
+ *  through its block; an entry from before task blocks falls back to the room's newest task). Null when it is gone;
+ *  throws for a text answer. Read by the web process (to answer at once) and by the judge that runs it. */
+export async function execTarget(space: SpaceLike, session: string, candidateId: string): Promise<{ source: string; task: Task } | null> {
+	const find = async (): Promise<Record<string, unknown> | null> => {
+		if ((await space.readAll({ type: "TextAnswer", fields: { session, answerId: candidateId } }, { limit: 1 }))[0]) throw new Error("A text answer cannot be run");
+		for (const type of ["CodeScore", "CodeCandidate", "CodeJudging"]) {
+			const e = (await space.readAll({ type, fields: { session, candidateId } }, { limit: 1 }))[0];
+			if (e) return e.fields as Record<string, unknown>;
+		}
+		return null;
+	};
+	// a judge that just took the candidate writes its marker a moment later: look again for a little while
+	let f = await find();
+	for (let i = 0; !f && i < 10; i++) { await new Promise((r) => setTimeout(r, 150)); f = await find(); }
+	if (!f) return null;
+	const blocks = await taskEntries(space, session);
+	const block = f.blockId === undefined ? undefined : blocks.find((t) => String(t.blockId ?? `t${t.ts}`) === f.blockId);
+	const task = (f.taskId !== undefined ? taskFromSpec(f) : null) ?? (block ? taskFromSpec(block) : null) ?? (blocks.at(-1) ? taskFromSpec(blocks.at(-1)!) : null);
+	if (!task || isText(task)) throw new Error(task ? "A text answer cannot be run" : "Unknown task");
+	return { source: String(f.source ?? ""), task };
+}
+
 /** Whether a block's task is solved: code has a best (CodeBest), a text task an accepted answer. */
 export async function isSolved(space: SpaceLike, session: string, blockId: string, text: boolean): Promise<boolean> {
 	if (text) return (await answersOf(space, session, blockId)).some((a) => a.ok);

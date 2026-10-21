@@ -12,7 +12,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
 import { loadCodemode } from "./judge.ts";
-import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
+import { MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
+import { requestExec } from "./exec.ts";
 import { CodeChatHub } from "./hub.ts";
 import { announce, connectSpace } from "./space.ts";
 import { NO_WAIT } from "../../src/index.ts";
@@ -168,8 +169,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			}
 			const ex = /^\/api\/sessions\/([^/]+)\/exec$/.exec(p);
 			if (ex && req.method === "POST") {
-				// ▶ of a contribution: its function against the task's cases plus an optional call, streamed as NDJSON;
-				// closing the request (the page's Stop) aborts the sandbox
+				// ▶ of a contribution: its function against the task's cases plus an optional call, run by a judge process
+				// (exec.ts) and streamed as NDJSON; closing the request (the page's Stop) stops the run there
 				const b = await readBody(req);
 				const candidateId = String(b.candidateId ?? ""), call = typeof b.call === "string" ? b.call.trim() : "";
 				if (!ID.test(ex[1]!) || !CANDIDATE.test(candidateId)) return json(res, 400, { error: "Invalid id" });
@@ -188,11 +189,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 						if (!started) { started = true; res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" }); }
 						if (!res.destroyed) res.write(JSON.stringify(e) + "\n");
 					};
-					const end = await execute(cm, target.task, target.source, call, line, stop.signal);
-					line(end);
+					for await (const e of requestExec(conn.space, ex[1]!, candidateId, call, stop.signal)) line(e);
 					res.end();
 				} catch (e) {
-					if (!res.headersSent) return json(res, 429, { error: (e as Error).message });
+					if (!res.headersSent) return json(res, 503, { error: (e as Error).message });
 					res.end();
 				} finally {
 					const n = (runsByIp.get(ip) ?? 1) - 1;

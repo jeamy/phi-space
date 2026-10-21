@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
+import { serveExec } from "./exec.ts";
 import { announce, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld } from "./space.ts";
 import { taskFromSpec } from "./tasks.ts";
 
@@ -129,12 +130,15 @@ export async function startJudgeHost(o: { space?: string; judges?: number; cm?: 
 		}
 	};
 	const loops = Array.from({ length: Math.max(1, o.judges ?? Number(process.env.CODEMODE_JUDGES ?? 2)) }, () => worker());
+	// ▶ of the page: runs of contributions, apart from the judging (exec.ts)
+	const runs = serveExec(space, cm, host);
 	return {
 		/** Stops the judges: their transactions are aborted (a candidate in judgement comes back at once, a waiting take
 		 *  ends), then the process leaves the space. */
 		async close() {
 			stopping = true;
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
+			await runs.close();
 			await Promise.race([Promise.allSettled(loops), new Promise((r) => setTimeout(r, 2000))]);
 			await presence.stop(); conn.close();
 		},

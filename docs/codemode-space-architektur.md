@@ -19,10 +19,12 @@ neu entstehen; was einen Neustart überstehen muss, steht im Space.
 
 Der web-Prozess ruft keine Modelle mehr auf und fährt keine Läufe. `server/board.ts` ist entfallen.
 
-**Stufe 3, umgesetzt:** gemeinsame Zähler für Modellaufrufe und Websuchen (`server/quota.ts`), Admin-Sitzungen im Space.
-Die Anfragegrenzen bleiben bewusst je web-Prozess (siehe „Leistung und Deployment“).
+**Stufe 3, umgesetzt:**
+- gemeinsame Zähler für Modellaufrufe und Websuchen (`server/quota.ts`);
+- Admin-Sitzungen im Space;
+- ▶ im judge-Prozess (`server/exec.ts`).
 
-**Offen (Stufe 3):** ▶ (interaktives Ausführen) läuft im web-Prozess.
+Die Anfragegrenzen bleiben bewusst je web-Prozess (siehe „Leistung und Deployment“).
 
 **Offen (Stufe 4):** Docker beschreibt noch den alten Aufbau.
 
@@ -60,8 +62,8 @@ Pfade sind relativ zu `codemode-chat/`, soweit nicht anders angegeben.
 | Prozess | Datei | Rolle |
 |---|---|---|
 | space | `server/space-host.ts` | Hält den Space auf SQLite und bietet ihn über `serveSpace` unter `CODEMODE_LISTEN` an. |
-| web | `server/index.ts`, `server/hub.ts` | Next.js, REST und WebSocket. Liest Räume, legt Blöcke an, startet und stoppt Läufe (CodeRun), schreibt TaskRequests; ▶ (noch). |
-| judge | `server/judge-host.ts` | Nimmt `CodeCandidate` in einer Transaktion, schreibt `CodeScore`, den neuen besten Code und das Archiv in derselben. |
+| web | `server/index.ts`, `server/hub.ts` | Next.js, REST und WebSocket. Liest Räume, legt Blöcke an, startet und stoppt Läufe (CodeRun), schreibt TaskRequests und ExecRequests und streamt deren Ereignisse. |
+| judge | `server/judge-host.ts`, `server/exec.ts` | Nimmt `CodeCandidate` in einer Transaktion, schreibt `CodeScore`, den neuen besten Code und das Archiv in derselben. Führt ▶ aus (`ExecRequest`). |
 | agents | `server/agent-host.ts`, `server/run.ts`, `server/task-agent.ts` | Nimmt die Slots der Läufe und arbeitet deren Aufträge ab; erledigt TaskRequests (Prüfregel, Kriterien und deren Prüfung). |
 | model | `server/model-host.ts`, `server/context.ts` | Der einzige Prozess, der Modelle aufruft und Zugangsdaten braucht. Baut den Kontext aus dem Space, veröffentlicht `ModelInfo`, wendet `CodeAdmin` an, schreibt `Spend`. |
 
@@ -273,6 +275,25 @@ Störungen.
 - Ungewisse Kosten nach einem Absturz: Stirbt der model-Prozess nach der Antwort des Anbieters und vor seinem Commit,
   wird der Aufruf wiederholt und doppelt bezahlt, aber nur einmal gebucht. Dafür bräuchte es Idempotenz beim Anbieter.
 
+## Interaktives Ausführen (▶)
+
+- **web-Prozess:**
+  - Er schreibt eine `ExecRequest` (Raum, Beitrag, optionaler Aufruf).
+  - Er nimmt die `ExecEvent`-Einträge des Laufs in der Reihenfolge ihrer Nummer und streamt sie als NDJSON.
+  - Schließt die Seite die Anfrage (Stop), schreibt er `ExecStop`.
+  - Ein ▶ zur Zeit je Adresse zählt er lokal.
+- **judge-Prozess:**
+  - Er nimmt Anfragen in einer eigenen Schleife, wenn einer seiner zwei Runner frei ist; die Prüfungen laufen getrennt
+    davon.
+  - Code und Aufgabe liest er selbst aus dem Space (`execTarget` in `room.ts`): Quelltext und große Fälle passen zusammen
+    nicht in einen Eintrag.
+  - Die Ereignisse schreibt er gebündelt alle 100 ms, oder früher ab 32 KiB.
+  - `ExecStop` bricht den Lauf ab. Solange er läuft, hält er einen `ExecRun`-Eintrag.
+- **Kein Judge:** Nimmt keiner die Anfrage in 10 s, zieht der web-Prozess sie zurück und antwortet mit 503.
+- **Judge verstummt:** Bleiben die Ereignisse aus, endet der Stream nach der Höchstdauer eines Laufs plus 30 s mit einem
+  Fehler.
+- **Kein Wiederanlauf:** Ein Lauf, dessen Judge stirbt, wird nicht wiederholt; er ist interaktiv und bewertet nichts.
+
 ## Snapshots, Aufbewahrung und Wiederherstellung
 
 Der web-Prozess folgt `changes` per Long-Poll und schickt entprellte Snapshots.
@@ -348,7 +369,7 @@ bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem A
 | Tageszähler der Suche | Gemeinsamer Zähler (`QuotaUse`, Schlüssel `search`). | 3 ✓ |
 | Admin-Sitzungen | `AdminSession`-Einträge mit Lease. | 3 ✓ |
 | HTTP- und Raumgrenzen | Bewusst je web-Prozess (Schutz der Verbindung, kein Kontingent). | 3 ✓ |
-| Interaktives Ausführen (▶) | Judge nimmt `ExecRequest`, schreibt geordnete `ExecEvent`s; web folgt, `ExecRun` verfolgt. | 3 |
+| Interaktives Ausführen (▶) | Judge nimmt `ExecRequest`, schreibt geordnete `ExecEvent`s; web folgt, `ExecRun` verfolgt. | 3 ✓ |
 | WebSocket-Clients, Push-Timer | Bleiben prozesslokal. | — |
 | Docker | Ein Dienst je Rolle, Skripte, Hilfe, README; Platzierung auf big/nano. | 4 |
 
@@ -388,8 +409,8 @@ Docker-Weg ist während der Migration eine bekannte Ausnahme.
      - Stop räumt Aufträge und wartende Aufrufe ab.
    - Raumsperre über den Space (`RoomLock`).
    - Offen bleiben die Korrekturen oben.
-3. **Grenzen, Sitzungen und interaktives Ausführen: teilweise umgesetzt.** Gemeinsame Zähler und Admin-Sitzungen im Space;
-   ▶ im judge-Prozess ist offen.
+3. **Grenzen, Sitzungen und interaktives Ausführen: umgesetzt.** Gemeinsame Zähler, Admin-Sitzungen und ▶ im
+   judge-Prozess.
 4. **Betrieb: offen.**
 
 Hinweise aus der Migration:
@@ -423,7 +444,8 @@ Getestet sind:
 - der Prüf-Marker überdauert seine erste Lease;
 - Agenten ohne Slot werden angezeigt;
 - ein gemeinsamer Zähler lässt bei gleichzeitigen Anfragen aus drei Clients genau seine Nutzungen zu;
-- eine Admin-Sitzung gilt in einem zweiten web-Prozess und endet dort mit dem Logout.
+- eine Admin-Sitzung gilt in einem zweiten web-Prozess und endet dort mit dem Logout;
+- ▶ läuft im judge-Prozess, Stop beendet ihn dort, ohne Judge kommt 503.
 
 Der frühere Fall „Busy-Marker läuft ab, während seine Transaktion lebt“ entfällt mit `pending`.
 

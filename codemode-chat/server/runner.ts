@@ -1,4 +1,5 @@
-// Run a contribution on request (the ▶ in the chat): the same QuickJS sandbox as the judge, but nothing is scored. The
+// Run a contribution on request (the ▶ in the chat, in a judge process: exec.ts): the same QuickJS sandbox as the
+// judgement, but nothing is scored. The
 // function runs against the task's cases and, optionally, one call the person typed; every case result, console line
 // and the call's value stream out as they happen (a host global the sandbox calls, so a busy loop still reports live).
 // Stop is an abort signal. Bounded: 60 s, two runs per process, at most 1000 lines / 256 KiB of output.

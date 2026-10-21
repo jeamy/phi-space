@@ -455,7 +455,7 @@ t("▶ Stop aborts a long run; a second run from the same client meanwhile is re
 		assert.equal((await post(srv.url, "/api/sessions/exec2/exec", { candidateId: body.candidateId })).status, 429);
 		const t0 = Date.now();
 		ac.abort();
-		await until(async () => (await import("../server/runner.ts")).execRunning() === 0, 5_000);
+		await until(async () => (await srv.stack.space.count({ type: "ExecRun", fields: { session: "exec2" } })) === 0, 5_000); // the judge stopped it
 		assert.ok(Date.now() - t0 < 5_000);
 		// the client's slot is free again
 		const again = await fetch(srv.url + "/api/sessions/exec2/exec", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: body.candidateId }) });
@@ -1620,4 +1620,22 @@ test("a shared limit admits exactly its uses, however many processes ask at once
 		assert.ok(minute.filter((a) => !a.ok).every((a) => "retryMs" in a && a.retryMs > 0 && a.retryMs <= 60_000));
 		assert.equal(await stack.space.count({ type: "QuotaLock" }), 2); // one lock per limit
 	} finally { for (const c of conns) c.close(); await stack.close(); }
+});
+
+t("▶ runs in a judge process: without one the page hears so and the request is withdrawn", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [] });
+	try {
+		await post(srv.url, "/api/sessions/exec3/task", { taskId: "gcd" });
+		const { body } = await post(srv.url, "/api/sessions/exec3/code", { author: "a", source: "function gcd(a,b){ while (b) [a, b] = [b, a % b]; return a }" });
+		const refused = await post(srv.url, "/api/sessions/exec3/exec", { candidateId: body.candidateId });
+		assert.equal(refused.status, 503);
+		assert.match(refused.body.error, /No judge process takes runs/);
+		assert.equal(await srv.stack.space.count({ type: "ExecRequest" }), 0);
+		// a judge comes: the run goes there
+		await srv.stack.judge({ host: "runner" });
+		const r = await fetch(srv.url + "/api/sessions/exec3/exec", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: body.candidateId, call: "gcd(9, 6)" }) });
+		const ev = await readRun(r);
+		assert.deepEqual(ev.find((e) => e.t === "value"), { t: "value", call: "gcd(9, 6)", text: "3" });
+		assert.equal(ev.at(-1).status, "ok");
+	} finally { await srv.close(); }
 });
