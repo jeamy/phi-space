@@ -203,7 +203,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (!action && req.method === "GET") return json(res, 200, await hub.snapshot(id));
 				if (req.method !== "POST") return json(res, 405, { error: "POST expected" });
 				const b = await readBody(req);
-				if (action === "task") await hub.setTask(id, b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId });
+				// a new task's model calls (its check rule, its criteria) count against a visitor's day allowance too
+				if (action === "task") await hub.setTask(id, { ...(b.text ? { text: b.text } : b.custom ? { custom: b.custom } : { taskId: b.taskId }), client: { ip: clientIp(req), admin: isAdmin(req) } });
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
 				else if (action === "run") {
 					// web research sends task text to a search engine: only an admin may start it

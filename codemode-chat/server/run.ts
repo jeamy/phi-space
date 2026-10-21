@@ -20,7 +20,7 @@ import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { limitOf, maxTimeoutMs } from "./judge.ts";
 import { criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
 import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
-import { crossWaitMs, FATAL_LLM, modelWaitMs } from "./limits.ts";
+import { crossWaitMs, FATAL_LLM, modelWaitMs, verdictWaitOr } from "./limits.ts";
 import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandidate, isSolved, rankedProposals, rid, scoresOf, systemLine, teamView, planTurn } from "./room.ts";
 import { archive } from "./results.ts";
 import { HELD_WAIT_MS, keepAlive } from "./space.ts";
@@ -69,7 +69,7 @@ const FINAL = /is not allowed|searches of the day|No search results|Web search r
 const CRITIC_WAIT_MS = 20_000;
 /** The work board's limits: the item cap is max(12, agents × gens × 4), the depth of follow-ups at most 12. */
 const MAX_DEPTH = 12;
-/** A waiting item (a barrier, a follow-up) looks again after 1, 2, 4, 8, then every 10 s: each look is a commit. */
+/** A waiting item (a barrier, a follow-up) looks again after 2, 4, 8, then every 10 s: each look is a commit. */
 const backoff = (waits: number) => Math.min(10_000, 1000 * 2 ** waits);
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -166,15 +166,18 @@ async function inTxn<T>(space: SpaceLike, open: Set<string>, fn: (txn: string) =
 /** Asks the model process for a call and waits for its answer, in `txn`: the answer is taken in the item's
  *  transaction, so if the item is cut off it stays for the next try. The call's id belongs to the item (and its try),
  *  so a repeated item finds the answer from before (or the call still waiting: written `unique`) instead of paying for
- *  a second call. */
-export async function callModel(space: SpaceLike, txn: string, call: LlmCall): Promise<LlmResultEntry> {
+ *  a second call. `until`: a deadline of the caller's own; a call is not asked for once it has passed. */
+export async function callModel(space: SpaceLike, txn: string, call: LlmCall, until = Infinity): Promise<LlmResultEntry> {
 	const tmpl = { type: "LlmResult", fields: { callId: call.callId } };
 	let r = await space.take(tmpl, NO_WAIT, { txn });
 	if (!r) {
+		if (Date.now() >= until) return { callId: call.callId, session: call.session, ok: false, error: "no time left for this model call", ts: Date.now() };
 		try { await space.write({ type: "LlmCall", fields: call as never }, null, modelWaitMs() + 60_000, { unique: ["callId"] }); }
 		catch (e) { if (!/unique/i.test((e as Error).message)) throw e; } // asked before, the answer is still coming
-		const end = Date.now() + modelWaitMs();
+		const end = Math.min(until, Date.now() + modelWaitMs());
 		while (!r && Date.now() < end) r = await space.take(tmpl, Math.min(20_000, Math.max(1, end - Date.now())), { txn });
+		// given up: a call no model process has taken yet is withdrawn, so nobody pays for an answer nobody fetches
+		if (!r) await space.take({ type: "LlmCall", fields: { callId: call.callId } }, NO_WAIT).catch(() => null);
 	}
 	return (r?.fields as unknown as LlmResultEntry | undefined) ?? { callId: call.callId, session: call.session, ok: false, error: "the model process did not answer in time", ts: Date.now() };
 }
@@ -316,18 +319,20 @@ function scriptedSource(task: Task): string | undefined {
 	return task.variants.length ? task.variants[Math.floor(Math.random() * task.variants.length)] : undefined;
 }
 
-/** The end of a generation: once every turn is done and every contribution judged, the next generation begins, unless
+/** The end of a generation: once every turn is done and every contribution judged (or its verdict's time is up), the next generation begins, unless
  *  the task is solved and improved enough, the generations are used up, or the run ended otherwise. */
 async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" | "waiting"> {
 	const { space } = d;
 	const r = await readRun(space, it.session, it.runId);
 	if (!r) throw new RunGone();
 	const p = r.progress[it.gen] ?? { total: 0, done: 0, handedIn: 0 };
-	const alive = !!(await blockTask(space, it.session, it.blockId));
-	const judged = await space.count({ type: "CodeScore", fields: { session: it.session, runId: it.runId, gen: it.gen + 1 } });
-	if (alive && (p.done < p.total || judged < p.handedIn)) {
+	const task = await blockTask(space, it.session, it.blockId), alive = !!task;
+	const unjudged = p.handedIn - (await space.count({ type: "CodeScore", fields: { session: it.session, runId: it.runId, gen: it.gen + 1 } }));
+	// once every turn is done, the verdicts are waited for until a deadline: no judge may run, a verdict may be lost
+	const deadline = it.deadline ?? (task && p.done >= p.total ? Date.now() + verdictWaitMs(task) : undefined);
+	if (alive && (p.done < p.total || (unjudged > 0 && Date.now() < deadline!))) {
 		const waits = (it.waits ?? 0) + 1;
-		await space.write(itemEntry({ ...it, waits, notBefore: Date.now() + backoff(waits) }), txn, d.ttl);
+		await space.write(itemEntry({ ...it, waits, notBefore: Date.now() + backoff(waits), ...(deadline ? { deadline } : {}) }), txn, d.ttl);
 		return "waiting";
 	}
 	const solved = !!(await space.readIfExists({ type: "CodeBest", fields: { session: it.session, blockId: it.blockId } }, HELD_WAIT_MS));
@@ -336,6 +341,7 @@ async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" 
 		const info = run.info, next = it.gen + 1;
 		if (info.solvedGen !== null && !solved) info.solvedGen = null; // the solution was rejected by a person: not solved
 		if (info.solvedGen === null && solved) info.solvedGen = next;
+		if (alive && unjudged > 0) info.note = `${unjudged} contribution${unjudged === 1 ? "" : "s"} of generation ${next} got no verdict in time; the run goes on without ${unjudged === 1 ? "it" : "them"} (is a judge process running?)`;
 		const enough = info.solvedGen !== null && next >= info.solvedGen + info.polish;
 		if (!alive || info.ended || next >= info.gens || enough) return; // no next generation: the run ends when its agents find nothing left
 		const g = generationItems(run, run.params, next, attempts);
@@ -355,7 +361,7 @@ const isOpening = (k: WorkItem["kind"]) => k === "research" || k === "propose" |
 const maxItems = (p: RunParams) => Math.max(12, p.agents * p.gens * 4);
 /** How long a follow-up waits for its contribution's verdict: a judge may hold a candidate up to its time limit, and
  *  after a crash its transaction keeps it that long; text answers wait for their two judges. */
-const verdictWaitMs = (task: Task) => (isText(task) ? 10 * 60_000 : maxTimeoutMs() + limitOf(task) + 150_000);
+const verdictWaitMs = (task: Task) => verdictWaitOr(isText(task) ? 10 * 60_000 : maxTimeoutMs() + limitOf(task) + 150_000);
 
 /** A board item. Work towards a solution lapses once there is one (an answer in judging still gets its verdict, a
  *  contribution its follow-ups); a run that ended (budget) only drains its items. */
@@ -487,14 +493,23 @@ async function followUp(space: SpaceLike, it: WorkItem, a: Attempt, solved: bool
 	if (partner) spawns.push({ kind: "merge", depth: depth + 1, more: { targetId: a.candidateId, partner: partner.candidateId } });
 }
 
+/** Whether the board takes a new item: not beyond the depth limit, and no new work once the item cap is reached (what is
+ *  open still gets done). A contribution handed in is always judged and followed up: its judges and its follow-up are
+ *  bounded by it (two judges, one follow-up) and come in beyond the cap. */
+export function admits(b: BoardState, p: RunParams, s: { kind: BoardKind; depth: number }): boolean {
+	if (s.depth > MAX_DEPTH) return false;
+	if (s.kind === "judge" || s.kind === "followup") return true;
+	if (b.created >= maxItems(p)) { b.capped = true; return false; }
+	return true;
+}
+
 /** An item of the board is done (in the run's update): it counts, its spawns are written (within the item cap and the
  *  depth limit), and when it was the last item of its phase, the next phase begins in this same transaction. */
 async function boardDone(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spawns: Spawn[]): Promise<void> {
 	const b = r.board!;
 	b.done++;
 	for (const s of spawns) {
-		if (s.depth > MAX_DEPTH) continue;
-		if (b.created >= maxItems(r.params)) { b.capped = true; continue; } // no new work; what is open still gets done
+		if (!admits(b, r.params, s)) continue;
 		b.created++;
 		const { roundsLeft: _r, ...more } = (s.more ?? {}) as Partial<WorkItem> & { roundsLeft?: true };
 		await d.space.write(itemEntry(newItem(r, s.kind, 0, { depth: s.depth, ...more })), txn, d.ttl);
@@ -506,7 +521,8 @@ async function boardDone(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, s
 /** The next phase of the board: research → planning (or work), proposals → votes (with two proposals or more) → work. */
 async function advance(d: AgentDeps, txn: string, r: RunEntry): Promise<void> {
 	const b = r.board!, p = r.params;
-	const ranked = await rankedProposals(d.space, r.session, r.runId, txn);
+	if (r.info.ended) { b.phase = "work"; b.phaseLeft = 0; return; } // over budget: no more phases, the run drains
+	const ranked =await rankedProposals(d.space, r.session, r.runId, txn);
 	b.phase = b.phase === "research" ? (p.plan ? "propose" : "work") : b.phase === "propose" ? (ranked.length >= 2 ? "vote" : "work") : "work";
 	const items = boardOpening(r, b.phase, ranked.slice(0, 2).map((x) => x.proposalId));
 	b.created += items.length; b.phaseLeft = b.phase === "work" ? 0 : items.length;

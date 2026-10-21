@@ -1382,3 +1382,62 @@ t("a scripted run lives in the space: when its agents process dies, another one 
 		assert.equal(await stack.space.count({ type: "AgentSlot", fields: { session: "ag1" } }), 0);
 	} finally { await srv.close(); await stack.close(); }
 });
+
+// ---- analysis fixes (2026-10-21): a barrier without verdicts, task creation by visitors, its deadline, the item cap ----
+
+t("a generation whose contributions get no verdict (no judge runs) goes on after the verdicts' deadline and the run ends", async () => {
+	process.env.CODEMODE_VERDICT_WAIT_S = "2";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [] }); // no judge process at all
+	try {
+		await post(srv.url, "/api/sessions/nv1/task", { taskId: "primes" });
+		assert.equal((await post(srv.url, "/api/sessions/nv1/run", { agents: 1, gens: 2, perAgent: 1, polish: 0, contenders: ["scripted"] })).status, 200);
+		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/nv1")).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
+		assert.equal(snap.run.gen, 2); // the second generation was opened although the first had no verdict
+		assert.match(snap.run.note, /1 contribution of generation 2 got no verdict in time/);
+		assert.equal(await srv.stack.space.count({ type: "WorkItem", fields: { session: "nv1" } }), 0);
+	} finally { process.env.CODEMODE_VERDICT_WAIT_S = ""; await srv.close(); }
+});
+
+test("the board's item cap stops new work, never the judges and the follow-up of a contribution handed in", async () => {
+	const { admits } = await import("../server/run.ts");
+	const params = { agents: 3, gens: 1 } as any; // cap max(12, 3 · 1 · 4) = 12
+	const b = { created: 12 } as any;
+	assert.equal(admits(b, params, { kind: "judge", depth: 1 }), true);
+	assert.equal(admits(b, params, { kind: "followup", depth: 1 }), true);
+	assert.equal(b.capped, undefined);
+	assert.equal(admits(b, params, { kind: "critique", depth: 1 }), false);
+	assert.equal(b.capped, true);
+	assert.equal(admits({ created: 0 } as any, params, { kind: "judge", depth: 13 }), false); // the depth limit holds for all
+});
+
+t("a visitor's new task: the criteria calls count against the address, and a used-up allowance refuses the next one", async () => {
+	process.env.CODEMODE_TOKENS_PER_IP_DAY = "1500"; process.env.CODEMODE_ADMIN_TOKEN = "tv-secret";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // room "tv1"
+	try {
+		assert.equal((await post(srv.url, "/api/sessions/tv1/task", { text: { prompt: "What is the capital of France?" } })).status, 200);
+		const spent = (await srv.stack.space.readAll({ type: "Spend" })).reduce((n: number, e: any) => n + e.fields.tokens, 0);
+		assert.ok(spent >= 2000, `spent ${spent}`);
+		const refused = await post(srv.url, "/api/sessions/tv1/task", { text: { prompt: "What is the capital of Spain?" } });
+		assert.equal(refused.status, 400);
+		assert.match(refused.body.error, /used up/);
+		// an admin's task does not count against the address and is not refused
+		const r = await fetch(srv.url + "/api/sessions/tv1/task", { method: "POST", headers: { "content-type": "application/json", "x-admin-token": "tv-secret" }, body: JSON.stringify({ text: { prompt: "What is the capital of Italy?" } }) });
+		assert.equal(r.status, 200);
+	} finally { delete process.env.CODEMODE_TOKENS_PER_IP_DAY; process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
+});
+
+t("task creation keeps its deadline: reviewers that never answer leave the criteria unreviewed, and calls nobody took are withdrawn", async () => {
+	process.env.CODEMODE_MODEL_WAIT_S = "3";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/plain", "fake/haiku-judge"] }); // room "tw1"
+	try {
+		const t0 = Date.now();
+		const r = await post(srv.url, "/api/sessions/tw1/task", { text: { prompt: "What is the capital of France?" } });
+		assert.equal(r.status, 200, JSON.stringify(r.body));
+		assert.ok(Date.now() - t0 < 10_000, `took ${Date.now() - t0} ms`);
+		const b = ((await (await fetch(srv.url + "/api/sessions/tw1")).json()) as any).blocks.at(-1);
+		assert.deepEqual(b.task.criteria, ["names the capital correctly", "is one sentence"]);
+		assert.ok(b.messages.some((m: any) => /no time was left for the review by 3 agents/.test(m.text)));
+		// two reviews hang in the model process; the third, never taken, is no longer waiting there
+		assert.equal(await srv.stack.space.count({ type: "LlmCall", fields: { session: "tw1" } }), 0);
+	} finally { process.env.CODEMODE_MODEL_WAIT_S = ""; await srv.close(); }
+});

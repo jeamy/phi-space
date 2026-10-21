@@ -129,6 +129,13 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 		reviewCriteria: async (c) => { await log({ model: c.model }); return { votes: [{ vote: "ok", reason: "" }, c.agent < 2 ? { vote: "fix", fix: "is one sentence", reason: "" } : { vote: "ok", reason: "" }], model: c.model! }; },
 	}),
 	crv2: (_s, _space, log) => textTeam(log),
+	// task creation by a visitor: the criteria cost tokens that count against the address
+	tv1: (_s, _space, log) => ({ ...textTeam(log),
+		criteria: async () => ({ criteria: ["names the capital"], model: "fake/haiku-judge", usage: use(2000, 0.01) }),
+		reviewCriteria: async (c) => ({ votes: [{ vote: "ok", reason: "" }], model: c.model! }),
+	}),
+	// the reviewers never answer: the agent answers by the request's deadline with the criteria unreviewed
+	tw1: (s, space, log) => ({ ...textTeam(log), reviewCriteria: async () => { await log({ kind: "review" }); await gate(space, s); return { votes: [], model: "fake/plain" }; } }),
 };
 
 /** The text team: criteria, a draft that names the wrong city unless it revises or has an earlier answer, a critique,

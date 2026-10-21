@@ -23,7 +23,7 @@ import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMo
 import { addNote, answersOf, bestOf, enqueueCandidate, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
 import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
 import { clipWords, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
-import { modelWaitMs } from "./limits.ts";
+import { taskWaitMs } from "./limits.ts";
 import { spentToday } from "./model-host.ts";
 import type { TaskReady } from "./task-agent.ts";
 import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
@@ -173,10 +173,10 @@ export class CodeChatHub {
 		if (!known) await this.host.write({ type: "CodeRoom", fields: { session: s.id, ts: Date.now() } }, null, this.#ttl);
 		if (last && task) { s.task = task; s.blockId = String(last.blockId ?? `t${last.ts}`); }
 		else if (!known) await this.#openBlock(s, TASKS[0]!, false); // a new room starts with the first catalog task
-		// work items and board states of runs that are gone (no CodeRun: stopped, or from before runs were durable)
+		// work items of runs that are gone (no CodeRun: an item an agent held while the run was stopped comes back later)
 		const runs = new Set((await this.host.readAll({ type: "CodeRun", fields: { session: s.id } }, { limit: 20 })).map((e) => String((e.fields as { runId?: unknown }).runId)));
 		const gone = new Map<string, boolean>();
-		for (const type of ["WorkItem", "BoardState"]) for (const e of await this.host.readAll({ type, fields: { session: s.id } }, { limit: 2000 })) {
+		for (const type of ["WorkItem"]) for (const e of await this.host.readAll({ type, fields: { session: s.id } }, { limit: 2000 })) {
 			const runId = String((e.fields as { runId?: unknown }).runId);
 			if (runs.has(runId)) continue;
 			if (!gone.has(runId)) gone.set(runId, !(await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id, runId } }, HELD_WAIT_MS)));
@@ -567,10 +567,12 @@ export class CodeChatHub {
 
 	/** Every call opens a new task block, also when the same task is chosen again. A custom task with `verify` (the
 	 *  default) gets a check rule from the verifier agent, so other right results than the examples count too. */
-	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean; timeoutS?: unknown }; text?: { prompt: unknown; criteria?: unknown } }): Promise<void> {
+	async setTask(id: string, o: { taskId?: string; custom?: { fn: string; prompt: string; cases: any; check?: string; verify?: boolean; timeoutS?: unknown }; text?: { prompt: unknown; criteria?: unknown };
+		/** Who asks (set by the server): a visitor's calls for the rule or the criteria count against their address. */
+		client?: { ip: string; admin: boolean } }): Promise<void> {
 		const s = await this.session(id);
 		if (!this.allow(s, "task", 30)) throw new Error("Too many tasks, slow down");
-		if (o.text) return this.#setTextTask(s, o.text);
+		if (o.text) return this.#setTextTask(s, o.text, o.client);
 		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
 		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
@@ -583,7 +585,7 @@ export class CodeChatHub {
 		}
 		let verdict: string | null = null, usage = NO_USAGE;
 		if (o.custom && task.check === undefined && o.custom.verify !== false && (await this.#models()).length) {
-			const r = await this.#taskRequest(s, "verify", { taskId: "custom", custom: customSpec(task) });
+			const r = await this.#taskRequest(s, "verify", { taskId: "custom", custom: customSpec(task) }, o.client);
 			task = (r.task ? taskFromSpec(r.task) : null) ?? task; verdict = r.verdict ?? null; usage = r.usage ?? NO_USAGE;
 		}
 		const verifierUsage = usage.total > 0 ? { verifierUsage: usage } : {};
@@ -616,13 +618,13 @@ export class CodeChatHub {
 
 	/** A text task: the question and the criteria; without criteria the verifier agent writes them and three agents
 	 *  review them (an agents process does it; shown in the block). */
-	async #setTextTask(s: Session, spec: { prompt: unknown; criteria?: unknown }): Promise<void> {
+	async #setTextTask(s: Session, spec: { prompt: unknown; criteria?: unknown }, client?: { ip: string; admin: boolean }): Promise<void> {
 		let task = textTask(spec);
 		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 		if (!(await this.#models()).length) throw new Error("Text tasks need model agents");
 		let verdict: string | null = null, extra: Record<string, unknown> = {};
 		if (!task.criteria?.length) {
-			const r = await this.#taskRequest(s, "criteria", { taskId: "text", text: textSpec(task) });
+			const r = await this.#taskRequest(s, "criteria", { taskId: "text", text: textSpec(task) }, client);
 			const t = r.task ? taskFromSpec(r.task) : null;
 			if (!r.ok || !t) throw new Error(r.error ?? "The criteria agent failed");
 			task = t; verdict = r.verdict ?? null;
@@ -637,11 +639,14 @@ export class CodeChatHub {
 		this.push(s);
 	}
 
-	/** Asks the agents for their work on a new task (a check rule, criteria) and waits for the answer (TaskReady). */
-	async #taskRequest(s: Session, kind: "verify" | "criteria", task: Record<string, unknown>): Promise<TaskReady> {
-		const requestId = `q${Date.now().toString(36)}${rid()}`;
-		await this.host.write({ type: "TaskRequest", fields: { requestId, session: s.id, kind, task, ts: Date.now() } as never }, null, modelWaitMs() + 120_000);
-		const end = Date.now() + modelWaitMs() + 60_000;
+	/** Asks the agents for their work on a new task (a check rule, criteria) and waits for the answer (TaskReady). The
+	 *  request carries its deadline: the agent answers with what it has by then, so this wait outlasts its work. A
+	 *  visitor whose day allowance is used up is refused before any call; their calls count against their address. */
+	async #taskRequest(s: Session, kind: "verify" | "criteria", task: Record<string, unknown>, client?: { ip: string; admin: boolean }): Promise<TaskReady> {
+		if (client && !client.admin && ipTokensPerDay() && (await spentToday(this.host, client.ip)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (CODEMODE_TOKENS_PER_IP_DAY); try again tomorrow");
+		const requestId = `q${Date.now().toString(36)}${rid()}`, deadline = Date.now() + taskWaitMs();
+		await this.host.write({ type: "TaskRequest", fields: { requestId, session: s.id, kind, task, deadline, ...(client ? { client: { ip: client.ip, admin: client.admin } } : {}), ts: Date.now() } as never }, null, taskWaitMs() + 120_000);
+		const end = deadline + 60_000;
 		for (let r = null as Awaited<ReturnType<SpaceLike["take"]>>; Date.now() < end; ) {
 			r = await this.host.take({ type: "TaskReady", fields: { requestId } }, Math.min(20_000, Math.max(1, end - Date.now())));
 			if (r) return r.fields as unknown as TaskReady;
@@ -794,7 +799,7 @@ export class CodeChatHub {
 		const legacy = target.blockId === undefined;
 		const tmplOf = (type: string): { type: string; fields: Record<string, string | number> } => (type === "CodeTask" && legacy ? { type, fields: { session: id, ts: target.ts } } : { type, fields: { session: id, blockId } });
 		// the task first: a judge checks it before it writes a verdict, so nothing new comes for this block meanwhile
-		for (const type of ["CodeTask", "CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "BoardState", "CodeRunDone", "ChatMessage"])
+		for (const type of ["CodeTask", "CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "ChatMessage"])
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
 		// the last old-style block is gone: the old entries that never belonged to a block go with it
 		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {

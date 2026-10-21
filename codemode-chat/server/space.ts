@@ -2,7 +2,7 @@
 // to it, how long a room's entries live, and the Process entry each process keeps there while it runs.
 import os from "node:os";
 import { randomBytes } from "node:crypto";
-import { FOREVER, RemoteSpace, socketTransport, type ListenTarget, type SpaceLike } from "../../src/index.ts";
+import { FOREVER, RemoteSpace, socketTransport, type ListenTarget, type SpaceLike, type Taken, type Template } from "../../src/index.ts";
 
 /** Where the space host listens and every other process connects, unless CODEMODE_LISTEN / CODEMODE_SPACE say else. */
 export const DEFAULT_SPACE = "unix:/tmp/codemode-space.sock";
@@ -78,6 +78,18 @@ export function announce(space: SpaceLike, role: ProcessRole): { stop: () => Pro
  *  (it may come back), so whether something still exists is asked with readIfExists and this timeout: it answers at
  *  once when there is none, and waits while one is held. Only a definite null means gone. */
 export const HELD_WAIT_MS = 10_000;
+
+/** An entry another transaction held for longer than the wait: it may still be there. */
+export class StillHeld extends Error {}
+
+/** readIfExists that tells a missing entry from a held one: null means gone. A null that came only when the wait ran
+ *  out (a match stayed held all along) throws StillHeld instead; a holder that removes the entry ends the wait early. */
+export async function readExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
+	const t0 = Date.now();
+	const e = await space.readIfExists(tmpl, waitMs, o);
+	if (!e && Date.now() - t0 >= waitMs * 0.9) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
+	return e;
+}
 
 /** Renews a transaction's lease while long work runs in it (a model call, a judgement), so a process that dies lets
  *  it lapse within `leaseMs`. */

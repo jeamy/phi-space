@@ -12,6 +12,13 @@ export const crossWaitMs = () => Math.round(envNumber("CODEMODE_CROSS_WAIT_S", 3
 /** How long an agent waits for the answer of a model call (CODEMODE_MODEL_WAIT_S, default 600 s): longer than the
  *  model process's worst case (a full minute window, the queue of calls, the 60 s call itself). */
 export const modelWaitMs = () => Math.round(envNumber("CODEMODE_MODEL_WAIT_S", 600) * 1000);
+/** How long the agents' work on a new task (a check rule, criteria and their review) may take, all its model calls
+ *  together: the same as one call may wait. By then the agent answers with what it has. */
+export const taskWaitMs = () => modelWaitMs();
+/** How long a run waits for the verdict of a contribution before it goes on without one (CODEMODE_VERDICT_WAIT_S;
+ *  unset: `dflt`, the most a judge may need for it). A contribution with no verdict by then (no judge process runs, or
+ *  its verdict was lost) no longer holds up its generation or its follow-up. */
+export const verdictWaitOr = (dflt: number) => { const raw = process.env.CODEMODE_VERDICT_WAIT_S; return raw === undefined || raw.trim() === "" ? dflt : Math.round(envNumber("CODEMODE_VERDICT_WAIT_S", dflt / 1000) * 1000); };
 /** Errors of a model call after which no call of the run can succeed: the run ends as over budget. */
 export const FATAL_LLM = /daily model budget used up|model agents are off|model budget of today for your address/i;
 /** Today, as the key of the per-address allowance. */

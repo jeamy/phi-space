@@ -10,7 +10,7 @@ import { announce, connectSpace, entryLeaseMs, keepAlive } from "./space.ts";
 import { NO_WAIT } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
 import { agentLoop, ITEM_LEASE_MS, type Slot } from "./run.ts";
-import { verifyTask, writeCriteria, type TaskRequest } from "./task-agent.ts";
+import { deadlineOf, verifyTask, writeCriteria, type TaskRequest } from "./task-agent.ts";
 
 /** How long one blocking take waits for a free slot (below the client's call timeout). */
 const WAIT_MS = 5_000;
@@ -61,7 +61,9 @@ export async function startAgentHost(o: { space?: string; slots?: number } = {})
 			const req = e.fields as unknown as TaskRequest;
 			let ready;
 			try {
-				if (req.kind === "verify") { if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded"); ready = await verifyTask(space, t.id, cm, req); }
+				// the web process stopped waiting for it: nothing is asked of the models any more
+				if (Date.now() >= deadlineOf(req)) ready = { ok: false, error: "the request waited too long for an agent" };
+				else if (req.kind === "verify") { if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded"); ready = await verifyTask(space, t.id, cm, req); }
 				else {
 					const info = (await space.readIfExists({ type: "ModelInfo" }, NO_WAIT))?.fields as { info?: { models?: Array<{ label: string }> } } | undefined;
 					ready = await writeCriteria(space, t.id, req, (info?.info?.models ?? []).map((m) => m.label));
@@ -73,12 +75,13 @@ export async function startAgentHost(o: { space?: string; slots?: number } = {})
 		} catch (err) { await space.abort(t.id).catch(() => {}); throw err; }
 		finally { stop(); open.delete(t.id); }
 	};
-	const tasks = (async () => {
+	// two requests at once: one long task creation (criteria and their review) does not hold up the next room's
+	const tasks = Promise.all([0, 1].map(async () => {
 		while (!stopping) {
 			try { await takeTask(); }
 			catch (e) { if (!stopping) { console.error("[agents] task request failed", (e as Error).message); await new Promise((r) => setTimeout(r, 1000)); } }
 		}
-	})();
+	}));
 	const loop = (async () => {
 		while (!stopping) {
 			if (active >= max) { await new Promise((r) => setTimeout(r, 500)); continue; }
