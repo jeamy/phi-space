@@ -4,6 +4,7 @@ process.env.CODEMODE_SPACE = ""; // tests/stack.ts starts a space of its own for
 process.env.CODEMODE_LISTEN = "";
 process.env.CODEMODE_SQLITE = "";
 process.env.CODEMODE_JUDGE_LEASE_MS = "";
+process.env.CODEMODE_AGENT_LEASE_MS = "";
 process.env.CODEMODE_RUN_BUDGET_TOKENS = "";
 process.env.CODEMODE_TOKENS_PER_IP_DAY = "";
 process.env.CODEMODE_EARLIER_DAYS = "";

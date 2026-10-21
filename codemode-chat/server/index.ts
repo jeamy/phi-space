@@ -244,7 +244,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		const ws = upgradeWebSocket(req, socket, head);
 		if (!ws) return;
 		sockets++; ws.onClose(() => { sockets--; });
-		void hub.attach(m[1]!, ws).catch(() => ws.close());
+		void hub.attach(m[1]!, ws).catch((e) => { console.error("[codemode] websocket attach failed", (e as Error).message); ws.close(); });
 	});
 	const port = o.port ?? Number(process.env.PORT ?? 3700), bind = o.bind ?? process.env.CODEMODE_BIND ?? "127.0.0.1";
 	await new Promise<void>((ok, fail) => { server.once("error", fail); server.listen(port, bind, () => ok()); });

@@ -680,6 +680,7 @@ Im Codemode-Chat ist **alles Space**: Jede Rolle läuft als eigener Prozess, und
 |---|---|---|
 | space | \`server/space-host.ts\` | trägt den Space (SQLite) und stellt ihn über den phi-spaces-Socket bereit (\`CODEMODE_LISTEN\`) |
 | judge | \`server/judge-host.ts\` | nimmt einen Beitrag in einer Transaktion, bewertet ihn in der Sandbox dieses Rechners und schreibt Urteil und besten Code in derselben Transaktion |
+| agents | \`server/agent-host.ts\` | übernimmt die Agentenplätze eines Laufs und arbeitet dessen Aufträge ab, jeden in einer eigenen Transaktion; stirbt der Prozess, übernimmt ein anderer die Plätze |
 | web | \`server/index.ts\` | Oberfläche (Next.js), REST-API, WebSocket; folgt dem Änderungsstrom des Space und schickt neue Snapshots |
 
 Lokal startet \`npm run dev\` (oder \`npm start\`) alle Prozesse; \`CODEMODE_ROLES\` wählt, welche auf diesem Rechner laufen.
@@ -716,6 +717,7 @@ In the codemode chat **everything is space**: every role runs as its own process
 |---|---|---|
 | space | \`server/space-host.ts\` | owns the space (SQLite) and serves it over the phi-spaces socket (\`CODEMODE_LISTEN\`) |
 | judge | \`server/judge-host.ts\` | takes a contribution under a transaction, judges it in this machine's sandbox and writes the verdict and the best code in that same transaction |
+| agents | \`server/agent-host.ts\` | takes the agent slots of a run and does its work items, each in a transaction of its own; when the process dies, another one takes the slots over |
 | web | \`server/index.ts\` | interface (Next.js), REST API, WebSocket; follows the space's change stream and pushes fresh snapshots |
 
 Locally \`npm run dev\` (or \`npm start\`) starts all of them; \`CODEMODE_ROLES\` picks the ones that run on this machine.

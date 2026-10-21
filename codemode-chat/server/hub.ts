@@ -19,6 +19,8 @@ import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, type Codemode, type Verdict } from "./judge.ts";
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
+import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
+import { addNote, answersOf, attemptOf, bestOf, blockTask, closeness, contributionCount, enqueueCandidate, planTurn, rid, scoresOf, systemLine, taskEntries, teamView, vetoesOf, type Contribution } from "./room.ts";
 import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
 import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCritique, llmResearch, llmReviewCriteria, tallyCriteria, llmJudge, llmPropose, llmVote, setAllowedModels, type Earlier, llmModels, llmVerifier, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
@@ -41,27 +43,15 @@ export const runBudgetTokens = () => Math.floor(envNumber("CODEMODE_RUN_BUDGET_T
  *  0 = no limit), so one visitor cannot use up the day's model calls of everyone. Admin runs do not count. */
 export const ipTokensPerDay = () => Math.floor(envNumber("CODEMODE_TOKENS_PER_IP_DAY", 1_000_000));
 export { earlierLeaseMs };
-/** A random id part: ids are made by several processes at once. */
-const rid = () => randomBytes(4).toString("hex");
 /** How long a text answer's judgement waits for an agent of another model than the author's before the author's model
  *  may judge it (CODEMODE_CROSS_WAIT_S, default 300 s; 0 = no wait). Such an answer is accepted only with a judge of
  *  another model, so a longer wait makes acceptance by the judges likelier. */
 export const crossWaitMs = () => Math.round(envNumber("CODEMODE_CROSS_WAIT_S", 300) * 1000);
 /** Errors of a model call after which no call of this run can succeed: the run ends as over budget. */
 const FATAL_LLM = /daily model budget used up|model agents are off/i;
-export type RunMode = "scripted" | "llm";
+export type { RunInfo, RunMode };
 /** The model side of a run; replaceable in tests. */
 export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; reviewCriteria?: typeof llmReviewCriteria; judge?: typeof llmJudge; research?: typeof llmResearch };
-/** `contenders`: "scripted" and/or model labels (`provider/id`); the agents are assigned to them in turn. */
-/** `gens` is the most generations a run may take; it ends earlier once the task is solved and `polish` more
- *  generations improved the solution (`solvedGen`: the generation that solved it, 0 = solved before the run). */
-export type RunInfo = { active: boolean; blockId: string; mode: RunMode; contenders: string[]; gen: number; gens: number; agents: number; perAgent: number; polish: number; solvedGen: number | null; note?: string; usage: { tokens: number; costUsd: number }; research?: true;
-	/** The work board (instead of generations): open and done items, critiques written. */
-	board?: BoardInfo;
-	/** Limits of the run's model calls; whichever is reached first ends it. */
-	budget?: { tokens?: number; usd?: number };
-	/** Why the run ended (when not solved or stopped): the budget, the item cap, or no work left. */
-	ended?: "budget" | "items" | "idle" | "accepted" };
 /** One step of a contribution's lineage (see lineage()). */
 export type LineageStep = { candidateId: string; author: string; via: string; gen: number; ts: number; role?: Role; ok: boolean | null; ms?: number; passed?: number; total?: number;
 	plan?: { author: string; via: string; text: string }; critique?: { author: string; via: string; text: string };
@@ -69,14 +59,8 @@ export type LineageStep = { candidateId: string; author: string; via: string; ge
 /** One step in a block's trace: an agent researched, proposed, voted, wrote (a new approach, a revision, a merge, an
  *  improvement), critiqued (`to`: the author it addressed) or judged an answer (`ok`: every criterion met). */
 export type TraceEvent = { t: number; agent: string; via: string; kind: "research" | "propose" | "vote" | "implement" | "revise" | "merge" | "improve" | "critique" | "judge"; ref?: string; to?: string; ok?: boolean | null };
-/** `source` is left out of a snapshot when its byte budget is spent (`sourceOmitted`); `details()` returns it with the
- *  case results. `passed`/`total`: cases passed; `role`/`basedOn`: what an agent did and whose attempt it built on. */
-export type Contribution = { candidateId: string; blockId?: string; author: string; via: string; host?: string; gen: number; ok: boolean | null; ms: number | null; error?: string; passed?: number; total?: number; role?: Role; basedOn?: string; cases?: Verdict["cases"]; hardcoded?: true; note?: string; usage?: Usage; partner?: string; judges?: number; acceptedBy?: "judges" | "human"; critiqueId?: string; critiques?: Array<{ author: string; via: string; text: string }>; critiqueBy?: string; proposalId?: string; planBy?: string; vetoed?: { by: string; reason: string }; source?: string; sourceOmitted?: true; ts: number };
+export type { Contribution };
 type Best = { candidateId: string; ms: number; source?: string; sourceOmitted?: true };
-/** What a run was started with: kept in its CodeRun entry, so the run can go on after a restart of the hub. */
-type RunParams = { runId: string; agents: number; gens: number; perAgent: number; polish: number; contenders: string[]; lang: "de" | "en"; board: boolean; plan: boolean; research: boolean; budget: { tokens?: number; usd?: number };
-	/** Who started it: a visitor's usage counts against the day's allowance of their address; an admin's does not. */
-	client?: { ip: string; admin: boolean } };
 type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnection>; run: RunInfo | null; abort: boolean; seq: number;
 	best: { candidateId: string; ms: number; source: string } | null; deleted: Set<string>; buckets: Map<string, number[]>;
 	pushTimer?: ReturnType<typeof setTimeout>; pushing: boolean; pushAgain: boolean; loading: Promise<void>; lastUsed: number;
@@ -89,19 +73,7 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 };
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
-/** Correct and not rejected by a person. */
-const counts = (c: Contribution) => !!c.ok && !c.vetoed;
-/** A contribution as the agents see it. */
-const attemptOf = (c: Contribution): Attempt => ({ candidateId: c.candidateId, author: c.author, via: c.via, gen: c.gen, ok: counts(c), ms: c.ms, ...(c.vetoed ? { rejected: `rejected by ${c.vetoed.by}${c.vetoed.reason ? `: ${c.vetoed.reason}` : ""}` } : c.hardcoded ? { rejected: "rejected: it hard-codes the expected result instead of computing it" } : {}), passed: c.passed, total: c.total, error: c.error, cases: c.cases, source: c.source ?? "" });
-/** The fastest contribution that counts (ties: the earlier one). */
-const bestOf = (cs: Contribution[]): { candidateId: string; ms: number; source: string } | null => {
-	const ok = cs.filter((c) => counts(c) && validMs(c.ms)).sort((a, b) => a.ms! - b.ms! || a.ts - b.ts)[0];
-	return ok ? { candidateId: ok.candidateId, ms: ok.ms!, source: ok.source ?? "" } : null;
-};
 const rnd = () => Math.random();
-/** How close an attempt got: correct first (fastest), then most cases passed, then the newest. */
-const rejectedRank = (c: Contribution) => Number(!!c.vetoed || !!c.hardcoded);
-const closeness = (a: Contribution, b: Contribution) => rejectedRank(a) - rejectedRank(b) || Number(counts(b)) - Number(counts(a)) || (counts(a) && counts(b) ? a.ms! - b.ms! : 0) || (b.passed ?? 0) / (b.total || 1) - (a.passed ?? 0) / (a.total || 1) || b.ts - a.ts;
 
 export class CodeChatHub {
 	/** The shared space of all processes (a RemoteSpace on the space host's socket). */
@@ -220,17 +192,35 @@ export class CodeChatHub {
 		} else if (!known) await this.#openBlock(s, TASKS[0]!, false); // a new room starts with the first catalog task
 		// work items and board states of runs that are gone (no CodeRun: stopped, or from before runs were durable)
 		const runs = new Set((await this.host.readAll({ type: "CodeRun", fields: { session: s.id } }, { limit: 20 })).map((e) => String((e.fields as { runId?: unknown }).runId)));
-		for (const type of ["WorkItem", "BoardState"]) for (const e of await this.host.readAll({ type, fields: { session: s.id } }, { limit: 2000 })) if (!runs.has(String((e.fields as { runId?: unknown }).runId))) await this.host.take({ id: e.id }, NO_WAIT);
+		const gone = new Map<string, boolean>();
+		for (const type of ["WorkItem", "BoardState"]) for (const e of await this.host.readAll({ type, fields: { session: s.id } }, { limit: 2000 })) {
+			const runId = String((e.fields as { runId?: unknown }).runId);
+			if (runs.has(runId)) continue;
+			if (!gone.has(runId)) gone.set(runId, !(await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id, runId } }, HELD_WAIT_MS)));
+			if (gone.get(runId)) await this.host.take({ id: e.id }, NO_WAIT);
+		}
 	}
 
-	async #taskEntries(id: string): Promise<Array<Record<string, any>>> {
-		return (await this.host.readAll({ type: "CodeTask", fields: { session: id } }, { limit: LIMITS.blocks + 5 })).map((e) => e.fields as Record<string, any>).sort((a, b) => a.ts - b.ts);
-	}
+	#taskEntries(id: string): Promise<Array<Record<string, any>>> { return taskEntries(this.host, id); }
 
 	/** All verdicts of a room, oldest first, with the people's vetoes merged in. */
-	async #scores(s: Session): Promise<Contribution[]> {
-		const [rows, vetoes] = await Promise.all([this.host.readAll({ type: "CodeScore", fields: { session: s.id } }, { limit: LIMITS.contributions }), this.#vetoes(s)]);
-		return rows.map((e) => { const c = e.fields as unknown as Contribution, v = vetoes.get(c.candidateId); return v ? { ...c, vetoed: v } : c; }).sort((a, b) => a.ts - b.ts);
+	#scores(s: Session): Promise<Contribution[]> { return scoresOf(this.host, s.id); }
+
+	/** The room's active run: the web process's own (runs with model agents, until they move to the agent processes),
+	 *  or the CodeRun the agent processes carry out (a CodeRun an agent holds for a moment is waited for). */
+	async #runNow(s: Session): Promise<RunInfo | null> {
+		if (s.run?.active) return s.run;
+		const e = await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id } }, HELD_WAIT_MS);
+		const r = e?.fields as unknown as RunEntry | undefined;
+		return r?.params?.engine === "space" ? { ...r.info, active: true } : null;
+	}
+
+	/** What the page shows as the room's run: the active one, else how the last one ended. */
+	async #runShown(s: Session): Promise<RunInfo | null> {
+		const now = await this.#runNow(s);
+		if (now || s.run) return now ?? s.run;
+		const done = (await this.host.readAll({ type: "CodeRunDone", fields: { session: s.id } }, { limit: 5 })).map((e) => e.fields as { info: RunInfo; ts: number }).sort((a, b) => b.ts - a.ts)[0];
+		return done?.info ?? null;
 	}
 
 	/** The active block's best code as the judges keep it (CodeBest). */
@@ -242,10 +232,7 @@ export class CodeChatHub {
 		if (blockId === s.blockId) s.best = b ? { candidateId: b.candidateId, ms: b.ms, source } : null;
 	}
 
-	async #vetoes(s: Session): Promise<Map<string, { by: string; reason: string }>> {
-		const rows = await this.host.readAll({ type: "CodeVeto", fields: { session: s.id } }, { limit: LIMITS.contributions });
-		return new Map(rows.map((e) => { const f = e.fields as { candidateId: string; by: string; reason: string }; return [f.candidateId, { by: f.by, reason: f.reason }]; }));
-	}
+	#vetoes(s: Session): Promise<Map<string, { by: string; reason: string }>> { return vetoesOf(this.host, s.id); }
 
 	/** A person's "not like this" (or its withdrawal) on a contribution: it no longer counts as correct or as the best
 	 *  code, and agents see it as a rejected approach with the reason. */
@@ -313,6 +300,9 @@ export class CodeChatHub {
 	/** The room as the page shows it: the task blocks (each with its own contributions, best code and log) and free chat. */
 	async snapshot(id: string) {
 		const s = await this.session(id);
+		// the run first: a run shown as ended was ended by a commit that also wrote its closing line, which the reads
+		// below then see
+		const shownRun = await this.#runShown(s);
 		const cand = { type: "CodeCandidate", fields: { session: id } };
 		const [entries, msgs, scores, pendingLocal, pendingRemote, noteRows, critiqueRows, proposalRows, voteRows, findingRows, judgementRows] = await Promise.all([
 			this.#taskEntries(id),
@@ -419,7 +409,7 @@ export class CodeChatHub {
 				limits: { maxTimeoutS: maxTimeoutMs() / 1000, ...(runBudgetTokens() ? { runBudgetTokens: runBudgetTokens() } : {}) },
 				// the active custom task in full, so the page can fill its form again (after a reload) and continue it
 				...(s.task.id === "custom" ? { currentCustom: { fn: s.task.fn, prompt: s.task.prompt.en, cases: s.task.cases } } : {}),
-				blocks, messages: messages.filter((m) => !m.blockId || !known.has(m.blockId)), run: s.run,
+				blocks, messages: messages.filter((m) => !m.blockId || !known.has(m.blockId)), run: shownRun,
 			};
 		};
 		// the budget bounds the code; the last word is the size of the frame as it is sent
@@ -588,7 +578,7 @@ export class CodeChatHub {
 		if (o.text) return this.#setTextTask(s, o.text);
 		let task = o.custom ? customTask({ fn: clip(o.custom.fn, 41), prompt: clip(o.custom.prompt, 600), cases: o.custom.cases, timeoutS: o.custom.timeoutS, ...(typeof o.custom.check === "string" ? { check: o.custom.check } : {}) }) : taskById(String(o.taskId));
 		if (!task) throw new Error("Unknown task");
-		if (s.run?.active) throw new Error("A run is active; stop it first");
+		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 		// the active custom task once more with only another time limit: change it in place, the attempts stay
 		const t = task;
 		if (o.custom && s.task.id === "custom" && t.fn === s.task.fn && t.prompt.en === s.task.prompt.en && JSON.stringify(t.cases) === JSON.stringify(s.task.cases)) {
@@ -601,7 +591,7 @@ export class CodeChatHub {
 		const verifierUsage = usage.total > 0 ? { verifierUsage: usage } : {};
 		const chosen = task;
 		await this.#exclusive(s, async () => {
-			if (s.run?.active) throw new Error("A run is active; stop it first");
+			if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 			if ((await this.#taskEntries(id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
 			await this.#openBlock(s, chosen, true, verifierUsage);
 			if (verdict) await this.#write(s, "system", verdict, s.blockId);
@@ -612,7 +602,7 @@ export class CodeChatHub {
 	/** The active block's time limit changed: its CodeTask is rewritten (same block, same time, same rule); candidates
 	 *  from now on carry the new limit. */
 	async #retime(s: Session, timeoutMs: number): Promise<void> {
-		if (s.run?.active) throw new Error("A run is active; stop it first");
+		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 		const task = customTask({ ...customSpec(s.task), timeoutS: timeoutMs / 1000 });
 		// taken and written back in one transaction: a judge that checks the block meanwhile waits instead of finding it gone
 		const t = await this.host.createTransaction(30_000);
@@ -629,7 +619,7 @@ export class CodeChatHub {
 	/** A text task: the question and the criteria; without criteria the verifier agent writes them (shown in the block). */
 	async #setTextTask(s: Session, spec: { prompt: unknown; criteria?: unknown }): Promise<void> {
 		let task = textTask(spec);
-		if (s.run?.active) throw new Error("A run is active; stop it first");
+		if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 		if (!this.#llm.critique || !(await this.#llm.models()).length) throw new Error("Text tasks need model agents");
 		let verdict: string | null = null, extra: Record<string, unknown> = {};
 		if (!task.criteria?.length) {
@@ -660,7 +650,7 @@ export class CodeChatHub {
 			if (usage.total) extra = { verifierUsage: usage };
 		}
 		await this.#exclusive(s, async () => {
-			if (s.run?.active) throw new Error("A run is active; stop it first");
+			if (await this.#runNow(s)) throw new Error("A run is active; stop it first");
 			if ((await this.#taskEntries(s.id)).length >= LIMITS.blocks) throw new Error("This room holds the maximum number of tasks");
 			await this.#openBlock(s, task, true, extra);
 			if (verdict) await this.#write(s, "system", verdict, s.blockId);
@@ -668,36 +658,7 @@ export class CodeChatHub {
 		this.push(s);
 	}
 
-	/** The answers of a text block, as contributions: who, the judges' findings per criterion, accepted or not. An answer
-	 *  is accepted by a person's thumbs-up, or when two judges or more found every criterion met; a veto undoes both. */
-	async #answers(sessionId: string, blockId: string): Promise<Contribution[]> {
-		const [rows, judgements, vetoes, accepts] = await Promise.all([
-			this.host.readAll({ type: "TextAnswer", fields: { session: sessionId, blockId } }, { limit: LIMITS.contributions }),
-			this.host.readAll({ type: "TextJudgement", fields: { session: sessionId, blockId } }, { limit: LIMITS.contributions * 2 }),
-			this.host.readAll({ type: "CodeVeto", fields: { session: sessionId } }, { limit: LIMITS.contributions }),
-			this.host.readAll({ type: "CodeAccept", fields: { session: sessionId, blockId } }, { limit: LIMITS.contributions }),
-		]);
-		const vetoed = new Map(vetoes.map((e) => { const f = e.fields as { candidateId: string; by: string; reason: string }; return [f.candidateId, { by: f.by, reason: f.reason }]; }));
-		const accepted = new Set(accepts.map((e) => (e.fields as { answerId: string }).answerId));
-		const byAnswer = new Map<string, Array<{ judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }>>();
-		for (const e of judgements) { const f = e.fields as { answerId: string; judge: string; via: string; results: Array<{ criterion: string; pass: boolean; reason: string }> }; byAnswer.set(f.answerId, [...(byAnswer.get(f.answerId) ?? []), f]); }
-		return rows.map((e) => {
-			const f = e.fields as Record<string, any>, js = byAnswer.get(f.answerId) ?? [];
-			const criteria: string[] = js[0]?.results.map((r) => r.criterion) ?? [];
-			const cases = criteria.map((criterion, i) => ({ call: criterion, ok: js.every((j) => j.results[i]?.pass), got: js.map((j) => `${j.judge}: ${j.results[i]?.pass ? "met" : "not met"}${j.results[i]?.reason ? `, ${j.results[i]!.reason}` : ""}`).join("; ").slice(0, 600) }));
-			// two judges or more found every criterion met, and when the run had another model than the author's, at least
-			// one of them ran it (`crossNeeded`): a model does not get the last word on its own answers
-			const byJudges = js.length >= 2 && js.every((j) => j.results.length > 0 && j.results.every((r) => r.pass)) && (!f.crossNeeded || js.some((j) => j.via !== f.via));
-			const acceptedBy = accepted.has(f.answerId) ? "human" as const : byJudges ? "judges" as const : undefined;
-			const v = vetoed.get(f.answerId);
-			return {
-				candidateId: f.answerId, blockId, author: f.author, via: f.via, gen: f.gen ?? 1, ok: js.length < 2 && !acceptedBy ? null : !!acceptedBy && !v, ms: null,
-				passed: cases.filter((c) => c.ok).length, total: criteria.length, cases, judges: js.length, ...(acceptedBy ? { acceptedBy } : {}), ...(v ? { vetoed: v } : {}),
-				...(f.role ? { role: f.role } : {}), ...(f.basedOn ? { basedOn: f.basedOn } : {}), ...(f.critiqueId ? { critiqueId: f.critiqueId } : {}), ...(f.proposalId ? { proposalId: f.proposalId } : {}), ...(f.partner ? { partner: f.partner } : {}), ...(f.usage ? { usage: f.usage } : {}),
-				source: String(f.text ?? ""), ts: f.ts,
-			} as Contribution;
-		}).sort((a, b) => a.ts - b.ts);
-	}
+	#answers(sessionId: string, blockId: string): Promise<Contribution[]> { return answersOf(this.host, sessionId, blockId); }
 
 	/** Writes a text answer (the board judges it); its id. */
 	async #enqueueText(s: Session, author: string, via: string, gen: number, text: string, lineage: { role?: Role; basedOn?: string; partner?: string; critiqueId?: string; proposalId?: string; usage?: Usage }): Promise<string> {
@@ -777,24 +738,10 @@ export class CodeChatHub {
 		return this.#enqueue(s, plain(clip(author, 40)).trim() || "guest", "human", 0, src);
 	}
 
-	/** Contributions a room holds (verdicts, waiting candidates, and those a judge holds right now). */
-	async #contributionCount(s: Session): Promise<number> {
-		const n = (type: string) => this.host.count({ type, fields: { session: s.id } });
-		return (await n("CodeScore")) + (await n("CodeCandidate")) + (await n("CodeJudging"));
-	}
-
 	async #enqueue(s: Session, author: string, via: string, gen: number, source: string, lineage: { role?: Role; basedOn?: string; partner?: string; critiqueId?: string; proposalId?: string; usage?: Usage } = {}): Promise<string> {
 		if (!s.blockId) throw new Error("No task yet: create a task block first");
-		const problem = sourceProblem(source); // an agent's code too: it must fit the space's commits
-		if (problem) throw new Error(problem);
-		// the cap keeps every read of the room (snapshot, ranking) complete: a read limit never cuts contributions off
-		if ((await this.#contributionCount(s)) >= LIMITS.contributions) throw new Error("This room holds the maximum number of contributions; delete a task block");
-		const candidateId = `${Date.now().toString(36)}-${rid()}`;
-		// the candidate names its task by the block (judges read the CodeTask): a custom task's cases next to the source
-		// would push the entry past the space's limit
-		const entry = { type: "CodeCandidate", fields: { session: s.id, blockId: s.blockId, taskId: s.task.id, candidateId, author, via, gen, ...(lineage.role ? { role: lineage.role } : {}), ...(lineage.basedOn ? { basedOn: lineage.basedOn } : {}), ...(lineage.partner ? { partner: lineage.partner } : {}), ...(lineage.critiqueId ? { critiqueId: lineage.critiqueId } : {}), ...(lineage.proposalId ? { proposalId: lineage.proposalId } : {}), ...(lineage.usage ? { usage: lineage.usage } : {}), source, ts: Date.now() } } as never;
 		// into the shared space: a judge process (here, on nano, anywhere) takes it
-		await this.host.write(entry, null, this.#ttl);
+		const candidateId = await enqueueCandidate(this.host, null, this.#ttl, { session: s.id, blockId: s.blockId, taskId: s.task.id, author, via, gen, source, lineage });
 		this.push(s);
 		return candidateId;
 	}
@@ -825,42 +772,14 @@ export class CodeChatHub {
 	}
 
 	/** What the team knows about a block: every judged attempt (with its case results) and the newest notes. */
-	async #board(s: Session, blockId: string): Promise<{ attempts: Attempt[]; notes: Note[] }> {
-		// a text block's answers count from their first moment: judges look them up here too
-		const scores = (isText(s.task) ? await this.#answers(s.id, blockId) : (await this.#scores(s)).filter((c) => c.blockId === blockId)).sort(closeness);
-		// an agent's note whose contribution was rejected (hard-coded, or a person's veto) is advice not to pass on
-		const rejected = new Set(scores.filter((c) => c.vetoed || c.hardcoded).map((c) => c.candidateId));
-		const rows = (await this.host.readAll({ type: "CodeNote", fields: { session: s.id, blockId } }, { limit: LIMITS.notes + 5 }))
-			.map((e) => e.fields as { author: string; gen: number; text: string; ts: number; human?: boolean; candidateId?: string })
-			.filter((n) => !n.candidateId || !rejected.has(n.candidateId)).sort((a, b) => a.ts - b.ts);
-		// people's hints all count (the newest five), then the agents' newest eight notes
-		const notes = [...rows.filter((n) => n.human).slice(-5), ...rows.filter((n) => !n.human).slice(-8)];
-		return {
-			attempts: scores.map(attemptOf),
-			notes: notes.map(({ author, gen, text, human }) => ({ author, gen, text, ...(human ? { human: true } : {}) })),
-		};
-	}
+	#board(s: Session, blockId: string): Promise<{ attempts: Attempt[]; notes: Note[] }> { return teamView(this.host, s.id, blockId, isText(s.task)); }
 
-	/** Turn `k` of a generation: improve a correct solution, repair a close attempt, or explore (every third turn, and
-	 *  whenever there is nothing to build on). Targets rotate over the best few, so the team does not pile onto one. */
-	static plan(all: Attempt[], k: number): { role: Role; target: Attempt | null; others: Attempt[]; rejected: Attempt[] } {
-		// rejected attempts (a person's veto, hard-coded results) are nothing to build on: they are shown as "not like this"
-		const rejected = all.filter((a) => a.rejected).slice(0, 3), attempts = all.filter((a) => !a.rejected);
-		const correct = attempts.filter((a) => a.ok), failing = attempts.filter((a) => !a.ok);
-		let role: Role = "explore", target: Attempt | null = null;
-		if (k % 3 !== 2 && correct.length) { role = "improve"; target = correct[k % Math.min(2, correct.length)]!; }
-		else if (k % 3 !== 2 && failing.length) { role = "repair"; target = failing[k % Math.min(3, failing.length)]!; }
-		return { role, target, others: attempts.filter((a) => a !== target).slice(0, 3), rejected };
-	}
+	/** Turn `k` of a generation (see planTurn in room.ts). */
+	static plan(all: Attempt[], k: number) { return planTurn(all, k); }
 
-	/** A note an agent left for the team; beyond the room's cap the oldest notes give way. */
-	async #addNote(s: Session, blockId: string, author: string, via: string, gen: number, text: string, human = false, candidateId?: string): Promise<void> {
-		const tmpl = { type: "CodeNote", fields: { session: s.id } };
-		if ((await this.host.count(tmpl)) >= LIMITS.notes) {
-			const old = (await this.host.readAll(tmpl, { limit: LIMITS.notes + 5 })).sort((a, b) => Number((a.fields as { ts: number }).ts) - Number((b.fields as { ts: number }).ts));
-			for (const e of old.slice(0, old.length - LIMITS.notes + 1)) await this.host.take({ id: e.id }, NO_WAIT);
-		}
-		await this.host.write({ type: "CodeNote", fields: { session: s.id, blockId, author, via, gen, text: clipWords(text.replace(/[\u0000-\u001f\u007f]/g, " "), 300), ts: Date.now(), ...(human ? { human: true } : {}), ...(candidateId ? { candidateId } : {}) } }, null, this.#ttl);
+	/** A note for the team of a block (an agent's insight, or a person's hint). */
+	#addNote(s: Session, blockId: string, author: string, via: string, gen: number, text: string, human = false, candidateId?: string): Promise<void> {
+		return addNote(this.host, null, this.#ttl, { session: s.id, blockId, author, via, gen, text, human, ...(candidateId ? { candidateId } : {}) });
 	}
 
 	/** A run on the active block, in one of two modes. Generations: each agent repairs, explores or improves with the
@@ -899,8 +818,31 @@ export class CodeChatHub {
 		if (research && (!board || !this.#llm.research)) throw new Error("Research runs on the work board with model agents only");
 		// check and claim under the room's lock: two requests cannot both start a run, and setTask cannot swap the block
 		// in between; the run is claimed only after its announcement is written, so a failing write leaves no stuck run
+		// scripted agents in generations: carried out by the agent processes, the run lives in the space (run.ts)
+		if (mode === "scripted" && !board) {
+			await this.#syncBest(s);
+			const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, agents, gens, perAgent, polish, contenders, lang: o.lang === "de" ? "de" : "en", board: false, plan: false, research: false, budget, engine: "space", ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
+			await this.#exclusive(s, async () => {
+				if (await this.#runNow(s)) throw new Error("A run is already active");
+				if (!s.blockId) throw new Error("No task yet: create a task block first");
+				if (s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
+				const info: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent, polish, solvedGen: s.best ? 0 : null, usage: { tokens: 0, costUsd: 0 }, ...(Object.keys(budget).length ? { budget } : {}) };
+				const t = await this.host.createTransaction(30_000);
+				try {
+					await startSpaceRun(this.host, t.id, this.#ttl, { session: s.id, runId: params.runId, blockId: s.blockId, params, info });
+					await systemLine(this.host, t.id, this.#ttl, s.id, `Run started: ${agents} agents, up to ${gens} generations, ${polish} more after the solution (${contenders.join(" + ")})`, s.blockId);
+					await this.host.commit(t.id);
+				} catch (e) {
+					await this.host.abort(t.id).catch(() => {});
+					throw /unique/i.test((e as Error).message) ? new Error("A run is already active") : e;
+				}
+				s.run = null; s.abort = false;
+			});
+			this.push(s);
+			return;
+		}
 		const run = await this.#exclusive(s, async () => {
-			if (s.run?.active) throw new Error("A run is already active");
+			if (await this.#runNow(s)) throw new Error("A run is already active");
 			if (!s.blockId) throw new Error("No task yet: create a task block first");
 			if (isText(s.task) && agents < 3) throw new Error("A text task needs at least 3 agents: an author and two judges who are not the author");
 			if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
@@ -960,6 +902,7 @@ export class CodeChatHub {
 	async resumeRuns(): Promise<void> {
 		for (const e of await this.host.readAll({ type: "CodeRun" }, { limit: 200 })) {
 			const f = e.fields as { session: string; runId: string; blockId: string; params: RunParams; info: RunInfo };
+			if (f.params?.engine === "space") continue; // the agent processes carry it out
 			try {
 				const s = await this.session(f.session);
 				if (s.run?.active) continue;
@@ -1117,7 +1060,7 @@ export class CodeChatHub {
 		const entries = await this.#taskEntries(id);
 		const target = entries.find((f) => String(f.blockId ?? `t${f.ts}`) === blockId);
 		if (!target) throw new Error("Unknown task block");
-		if (s.run?.active && s.run.blockId === blockId) throw new Error("This block has a running run; stop it first");
+		if ((await this.#runNow(s))?.blockId === blockId) throw new Error("This block has a running run; stop it first");
 		s.deleted.add(blockId);
 		// entries from before task blocks existed have no blockId: the block is then identified by the time of its CodeTask
 		const legacy = target.blockId === undefined;
@@ -1155,7 +1098,8 @@ export class CodeChatHub {
 		if (!text) throw new Error("A hint needs some text");
 		const blockId = typeof o.blockId === "string" && o.blockId ? o.blockId : s.blockId;
 		if (!(await this.#taskEntries(id)).some((f) => String(f.blockId ?? `t${f.ts}`) === blockId)) throw new Error("Unknown task block");
-		await this.#addNote(s, blockId, by, "human", s.run?.active && s.run.blockId === blockId ? s.run.gen : 0, text, true);
+		const run = await this.#runNow(s);
+		await this.#addNote(s, blockId, by, "human", run?.blockId === blockId ? run.gen : 0, text, true);
 		this.push(s);
 	}
 
@@ -1177,7 +1121,20 @@ export class CodeChatHub {
 	async stopRun(id: string, o: { by?: unknown; reason?: unknown } = {}): Promise<void> {
 		const s = await this.session(id);
 		const reason = plain(clip(o.reason, 300)).trim();
-		if (reason && s.run) await this.#addNote(s, s.run.blockId, plain(clip(o.by, 40)).trim() || "guest", "human", 0, `Run stopped: ${reason}`, true);
+		const run = await this.#runNow(s);
+		if (reason && run) await this.#addNote(s, run.blockId, plain(clip(o.by, 40)).trim() || "guest", "human", 0, `Run stopped: ${reason}`, true);
+		if (run && !s.run?.active) {
+			// the agent processes' run: whoever takes its CodeRun ends it, with its closing line, exactly once
+			const e = await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id } }, HELD_WAIT_MS);
+			const runId = (e?.fields as { runId?: string } | undefined)?.runId;
+			if (runId) {
+				const t = await this.host.createTransaction(30_000);
+				try { await endRun(this.host, t.id, this.#ttl, s.id, runId, "stopped"); await this.host.commit(t.id); }
+				catch (err) { await this.host.abort(t.id).catch(() => {}); throw err; }
+			}
+			this.push(s);
+			return;
+		}
 		s.abort = true;
 		// at once, not when the run has wound down: a restart in between must not bring the stopped run back
 		if (s.run?.active && s.runParams) await this.#dropRun(s, s.runParams.runId);

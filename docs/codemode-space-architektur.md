@@ -127,3 +127,27 @@ Erkenntnisse aus der Umsetzung:
 Abbild von `CodeBest`), `answer`, Lauf und Abbruch; die Läufe selbst (Auftragsbrett und Generationen im web-Prozess);
 Modell-Grenzen, Suchzähler, Budget je Adresse, Admin-Sitzungen, Anfragegrenzen; ▶ läuft noch im web-Prozess.
 **Docker** startet noch den einzelnen Server von vorher und funktioniert erst mit Stufe 4 wieder.
+
+## Stand nach Stufe 2a und 2b (2026-10-21)
+
+**2a:** Ein Kandidat trägt die eigene Aufgabe nicht mehr mit; der Bewerter liest sie aus dem `CodeTask` (Fälle und Code
+zusammen sprengten sonst die Eintragsgrenze). `CodeBest` nennt nur noch das Urteil (Beitrag, Zeit); den Code hat das
+Urteil (sonst passte ein Commit des Bewerters bei großem Code nicht mehr). Ein Commit über den Grenzen gilt nicht mehr
+als abgelaufene Transaktion. Prüfungen auf Einträge, die eine andere Transaktion halten kann, warten (`HELD_WAIT_MS`):
+ein gehaltener Eintrag ist für `NO_WAIT` und `count` unsichtbar.
+
+**2b:** `server/run.ts` und `server/agent-host.ts`. Läufe mit Skript-Agenten im Generationen-Modus leben ganz im Space:
+`CodeRun` (je Raum `unique`, zugleich Sperre des Laufs), `AgentSlot` je Agent (ein Agenten-Prozess hält ihn in einer
+erneuerten Transaktion), `WorkItem` (`turn` je Zug, `barrier` je Generation), `AgentBusy` (vor dem Nehmen geschrieben),
+`CodeRunDone` (wie er endete). Jeder Auftrag ist eine Transaktion: Auftrag nehmen, Beitrag schreiben, `CodeRun`
+fortschreiben, Folgeaufträge schreiben, Commit. Wer keine Aufträge und keine beschäftigten Agenten mehr sieht, nimmt
+`CodeRun` und schreibt die Schlusszeile; Stopp im web-Prozess tut dasselbe. Ein Auftrag, der scheitert, kommt bis zu
+dreimal wieder, danach zählt er als erledigt (sonst wartete seine Generation ewig). Die Schranke einer Generation sieht
+nach 1, 2, 4, 8, dann alle 10 s wieder nach (jeder Blick ist ein Commit). Ein Snapshot liest den Lauf zuerst, damit ein
+als beendet gezeigter Lauf seine Schlusszeile mitbringt.
+
+Werte: Lease von Platz und Auftrag 60 s (`CODEMODE_AGENT_LEASE_MS`), höchstens 16 Agenten je Prozess
+(`CODEMODE_AGENT_SLOTS`), drei Versuche je Auftrag.
+
+**Bleibt bis 2c/2d im web-Prozess:** Läufe mit Modell-Agenten (Generationen und Auftragsbrett), Text-Aufgaben, das
+Schreiben von Prüfregeln und Kriterien beim Anlegen einer Aufgabe, die Modell-Grenzen.

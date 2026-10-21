@@ -83,7 +83,7 @@ t("a scripted run produces graded contributions and a best", async () => {
 t("judge processes on two hosts share the candidates of the one space; the system bar shows every host with its roles", async () => {
 	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "big", workers: 1 }, { host: "nano", workers: 1 }] });
 	try {
-		const slow = taskById("primes")!.variants[0]!, bad = taskById("primes")!.variants[4]!; // the first is right but slow: both judges get work
+		const slow = taskById("primes")!.variants[1]!, bad = taskById("primes")!.variants[4]!; // right, and slow enough that both judges get work
 		for (let i = 0; i < 6; i++) await post(srv.url, "/api/sessions/shard1/code", { author: `p${i}`, source: i % 3 === 2 ? bad : slow });
 		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/shard1")).json()); return s.contributions.length === 6 && s.contributions.every((c: any) => c.ok !== null) ? s : false; }, 60_000);
 		assert.deepEqual([...new Set(snap.contributions.map((c: any) => c.host))].sort(), ["big", "nano"]);
@@ -1491,4 +1491,27 @@ t("a custom task with large cases and a large source is judged: the candidate na
 		const c = await until(async () => { const s = view(await (await fetch(srv.url + "/api/sessions/big1")).json()); return s.contributions[0]?.ok === true ? s.contributions[0] : false; }, 30_000);
 		assert.equal(c.passed, 50);
 	} finally { await srv.close(); }
+});
+
+t("a scripted run lives in the space: when its agents process dies, another one takes the slots and the run ends once", async () => {
+	const stack = await startStack({ agents: false });
+	const first = await stack.agents({ leaseMs: 3000 });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", stack });
+	try {
+		const get = async () => (await (await fetch(srv.url + "/api/sessions/ag1")).json()) as any;
+		await post(srv.url, "/api/sessions/ag1/task", { taskId: "primes" });
+		assert.equal((await post(srv.url, "/api/sessions/ag1/run", { agents: 2, gens: 6, perAgent: 1, polish: 3, contenders: ["scripted"] })).status, 200);
+		// the run, its slots and work items are entries; the web process holds none of it
+		assert.equal(await stack.space.count({ type: "CodeRun", fields: { session: "ag1" } }), 1);
+		await until(async () => (await get()).blocks.at(-1).contributions.length >= 1);
+		await stack.kill(first, "SIGKILL"); // dies with its slots and an item in progress: their transactions lapse
+		await stack.agents();
+		const snap = await until(async () => { const s = await get(); return s.run && !s.run.active ? s : false; }, 120_000);
+		const b = snap.blocks.at(-1);
+		assert.equal(b.messages.filter((m: any) => /^Run (finished|stopped)/.test(m.text)).length, 1);
+		assert.ok(b.contributions.length >= 4);
+		assert.equal(await stack.space.count({ type: "CodeRun", fields: { session: "ag1" } }), 0);
+		assert.equal(await stack.space.count({ type: "WorkItem", fields: { session: "ag1" } }), 0);
+		assert.equal(await stack.space.count({ type: "AgentSlot", fields: { session: "ag1" } }), 0);
+	} finally { await srv.close(); await stack.close(); }
 });

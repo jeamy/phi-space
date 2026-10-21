@@ -28,17 +28,19 @@ export type Stack = {
 	spec: string; space: SpaceLike;
 	/** Starts one more judge process (its host name shows on the tiles and in the system bar). */
 	judge(o?: { host?: string; workers?: number; leaseMs?: number }): Promise<ChildProcess>;
+	/** Starts one more agents process. */
+	agents(o?: { leaseMs?: number }): Promise<ChildProcess>;
 	/** Stops a judge process: SIGTERM, or SIGKILL to make it die in the middle of its work. */
 	kill(c: ChildProcess, sig?: NodeJS.Signals): Promise<void>;
 	close(): Promise<void>;
 };
 
-/** A space process (SQLite at `dbPath`, else in memory) and `judges` judge processes. */
-export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: string; workers?: number; leaseMs?: number }> } = {}): Promise<Stack> {
+/** A space process (SQLite at `dbPath`, else in memory), `judges` judge processes and an agents process. */
+export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: string; workers?: number; leaseMs?: number }>; agents?: boolean } = {}): Promise<Stack> {
 	const sock = `/tmp/cm-test-${process.pid}-${seq++}.sock`, spec = `unix:${sock}`;
 	const space = await run("server/space-host.ts", { CODEMODE_LISTEN: spec, ...(o.dbPath ? { CODEMODE_SQLITE: o.dbPath, CODEMODE_MEM: "" } : { CODEMODE_MEM: "1" }) }, (l) => l.startsWith("[space] ready"));
 	const conn = connectSpace(spec);
-	const judges: ChildProcess[] = [];
+	const judges: ChildProcess[] = [], others: ChildProcess[] = [];
 	const stack: Stack = {
 		spec, space: conn.space,
 		async judge(j = {}) {
@@ -46,10 +48,16 @@ export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: s
 			judges.push(c);
 			return c;
 		},
+		async agents(a = {}) {
+			const c = await run("server/agent-host.ts", { CODEMODE_SPACE: spec, CODEMODE_HOST_NAME: "", ...(a.leaseMs ? { CODEMODE_AGENT_LEASE_MS: String(a.leaseMs) } : {}) }, (l) => l.startsWith("[agents]"));
+			others.push(c);
+			return c;
+		},
 		kill: (c, sig) => stop(c, sig),
-		async close() { await Promise.all(judges.map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); },
+		async close() { await Promise.all([...judges, ...others].map((c) => stop(c))); conn.close(); await stop(space); await rm(sock, { force: true }); },
 	};
 	for (const j of o.judges ?? [{}]) await stack.judge(j);
+	if (o.agents !== false) await stack.agents();
 	return stack;
 }
 

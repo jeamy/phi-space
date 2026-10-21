@@ -2,7 +2,7 @@
 
 A chat where **agents and people contribute code to a shared phi-space** and a **codemode sandbox judges every
 contribution**. It is the Space-Chat of the help system rebuilt for codemode, with the same stack and operations:
-Next.js 16 + React 19 behind a custom Node server; every role (space, judge, web) is its own process around one
+Next.js 16 + React 19 behind a custom Node server; every role (space, judge, agents, web) is its own process around one
 phi-space, started together locally like the help system's shards. It does not import anything from `help-site/` (palette and layout are copied).
 
 ## What happens
@@ -56,6 +56,9 @@ leases lapse, and its work comes back for another process of the same role.
 - **judge** (`server/judge-host.ts`): takes a `CodeCandidate` under a transaction, runs it in this machine's sandbox and
   writes the `CodeScore`, and the block's new best code, in that same transaction. Run as many as you like, on any host
   that reaches the space: they share the candidates by themselves.
+- **agents** (`server/agent-host.ts`): takes the agent slots of runs and works as those agents (`server/run.ts`): each
+  work item in its own transaction, together with the run's progress in its `CodeRun`. Runs with scripted agents run
+  here already; runs with model agents still run in the web process until the model process exists.
 - **web** (`server/index.ts`): Next.js pages, REST API, WebSocket. It follows the space's change stream and pushes a
   fresh snapshot when a room changes (also when a judge on another host wrote the verdict).
 
@@ -69,10 +72,10 @@ Review `codemode-chat/.env.example` and create a private `codemode-chat/.env` (t
 environment variables win).
 
 ```bash
-npm --prefix codemode-chat run dev             # space, judge and web (Next.js dev mode), http://localhost:3700
+npm --prefix codemode-chat run dev             # space, judge, agents and web (Next.js dev mode), http://localhost:3700
 npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # the same with the production build
 CODEMODE_ROLES=judge CODEMODE_SPACE=tcp:<host>:3800 npm --prefix codemode-chat start   # only judges, on another host
-npm --prefix codemode-chat run space           # or one process: space | judge | web
+npm --prefix codemode-chat run space           # or one process: space | judge | agents | web
 npm run test:codemode-chat                     # tests (they start the processes themselves)
 ```
 
