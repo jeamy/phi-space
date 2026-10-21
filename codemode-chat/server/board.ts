@@ -42,7 +42,9 @@ export type WorkItem = { session: string; blockId: string; runId: string; itemId
 	notByAlso?: string; crossOf?: string;
 	/** Who works on it now (the claimed copy); not to be taken before this time (a follow-up waiting for its verdict);
 	 *  until when a follow-up waits for the verdict. */
-	claimedBy?: string; notBefore?: number; deadline?: number };
+	claimedBy?: string; notBefore?: number; deadline?: number;
+	/** How often its work failed (a model call that threw): it is tried again a little later, at most MAX_TRIES times. */
+	tries?: number };
 /** How a board run ended; `shutdown`: the hub is closing, the board stays in the space to be resumed. */
 export type BoardEnd = "solved" | "budget" | "stopped" | "items" | "idle" | "shutdown";
 /** What the board shows while it runs. */
@@ -58,6 +60,10 @@ export type BoardDeps = {
 	criticModel?: string;
 	/** How long a critique waits for the critic model before others may take it (ms). */
 	criticWaitMs?: number;
+	/** How long a text answer's judgement waits for an agent of another model than the author's (ms, default 5 min;
+	 *  the hub passes CODEMODE_CROSS_WAIT_S).
+	 *  Only then may the author's model judge it; the hub accepts such an answer only with a judge of another model. */
+	crossWaitMs?: number;
 	/** Improvement rounds after the first solution, per agent. */
 	polish: number; maxItems: number; maxDepth: number;
 	contribute: (c: { task: Task; lang: "de" | "en"; agent: number; gen: number; model?: string; role?: Role; target?: Attempt | null; others?: Attempt[]; rejected?: Attempt[]; notes?: Note[]; critique?: CritiqueRef; partner?: Attempt; plan?: PlanRef; earlier?: Earlier[]; findings?: Finding[] }) => Promise<{ source: string; model: string; note?: string; usage?: Usage }>;
@@ -95,6 +101,12 @@ export type BoardDeps = {
 };
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Failed tries of an item before it is given up. */
+const MAX_TRIES = 3;
+/** A failure after which no model call of the run can succeed: the run ends as over budget. */
+const FATAL = /daily model budget used up|model agents are off/i;
+/** A failure that trying again will not mend (a model no longer allowed, the day's web searches used up, no results). */
+const FINAL = /is not allowed|searches of the day|No search results|Web search refused/i;
 /** The case calls an attempt passes. */
 const passing = (a: Attempt) => new Set((a.cases ?? []).filter((c) => c.ok).map((c) => c.call));
 
@@ -176,7 +188,7 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 			const it = e.fields as unknown as WorkItem;
 			if (it.claimedBy || (it.notBefore ?? 0) > now) continue;
 			if (it.notBy === me || it.notByAlso === me || (it.onlyBy && it.onlyBy !== me)) continue;
-			if (it.kind === "judge" && it.crossOf === model && d.contenders.some((m) => m !== model) && now - it.ts < (d.criticWaitMs ?? 20_000)) continue;
+			if (it.kind === "judge" && it.crossOf === model && d.contenders.some((m) => m !== model) && now - it.ts < (d.crossWaitMs ?? 300_000)) continue;
 			if (it.kind === "critique" && criticAt && model !== criticAt && now - it.ts < (d.criticWaitMs ?? 20_000)) continue;
 			const got = await atomically(async (txn) => {
 				if (!(await d.space.take({ id: e.id }, NO_WAIT, { txn }))) return false;
@@ -190,11 +202,12 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	const claimedTmpl = (it: WorkItem, me: string) => ({ type: "WorkItem", fields: { session: d.session, runId: d.runId, itemId: it.itemId, claimedBy: me } });
 	/** The work on an item is done: its claimed copy goes. */
 	const release = async (it: WorkItem, me: string) => { await d.space.take(claimedTmpl(it, me), NO_WAIT); };
-	/** A follow-up whose verdict is not there yet goes back on the board, to be looked at again a little later. */
-	const putBack = (it: WorkItem, me: string) => atomically(async (txn) => {
+	/** An item goes back on the board, to be taken again a little later: a follow-up whose verdict is not there yet, or
+	 *  work that failed (`more`: its try count and a longer wait). */
+	const putBack = (it: WorkItem, me: string, more: Partial<WorkItem> = {}) => atomically(async (txn) => {
 		if (!(await d.space.take(claimedTmpl(it, me), NO_WAIT, { txn }))) return;
 		const { claimedBy: _c, ...open } = it;
-		await d.space.write(entry({ ...open, notBefore: Date.now() + 1000 }), txn, d.ttl);
+		await d.space.write(entry({ ...open, notBefore: Date.now() + 1000, ...more }), txn, d.ttl);
 	});
 
 	/** What follows a verdict: a critique of the attempt (by someone else), and a merge when another failing attempt
@@ -214,9 +227,11 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 	};
 
 	const find = (attempts: Attempt[], id?: string) => attempts.find((x) => x.candidateId === id) ?? null;
-	/** The block's research findings, newest first (earlier runs' findings on the same block count too). */
-	const findings = async (): Promise<Finding[]> => (await d.space.readAll({ type: "CodeFinding", fields: { session: d.session, blockId: d.blockId } }, { limit: 20 }))
-		.map((e) => e.fields as unknown as Finding & { ts: number }).sort((a, b) => b.ts - a.ts);
+	/** The block's research findings, the newest 20 first (earlier runs' findings on the same block count too). readAll
+	 *  returns the oldest first, so the block's findings are read whole (the room keeps at most a few hundred) and cut
+	 *  only after sorting. */
+	const findings = async (): Promise<Finding[]> => (await d.space.readAll({ type: "CodeFinding", fields: { session: d.session, blockId: d.blockId } }, { limit: 1000 }))
+		.map((e) => e.fields as unknown as Finding & { ts: number }).sort((a, b) => b.ts - a.ts).slice(0, 20);
 	/** Whether an entry this item writes is there already (its work was done before a restart, the release was not). */
 	const already = async (type: string, key: string, id: string) => !!(await d.space.readIfExists({ type, fields: { session: d.session, [key]: id } }, NO_WAIT));
 
@@ -247,8 +262,9 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 			const passed = j.results.filter((r) => r.pass).length;
 			await d.space.write({ type: "TextJudgement", fields: { session: d.session, blockId: d.blockId, runId: d.runId, answerId: answer.candidateId, judge: me, via: j.model, results: j.results, passed, total: j.results.length, ts: Date.now(), ...(j.usage ? { usage: j.usage } : {}) } as never }, null, d.ttl);
 			st.judgements++;
-			// the second judgement comes from yet another agent (never the author, never this judge)
-			if (!it.notByAlso) await spawn("judge", it.depth, { target: answer.candidateId, notBy: answer.author, notByAlso: me, ...(it.improve ? { improve: true } : {}) });
+			// the second judgement comes from yet another agent (never the author, never this judge); when this judge ran
+			// the author's model (none of another model came in time), the second one waits for another model too
+			if (!it.notByAlso) await spawn("judge", it.depth, { target: answer.candidateId, notBy: answer.author, notByAlso: me, ...(j.model === answer.via ? { crossOf: answer.via } : {}), ...(it.improve ? { improve: true } : {}) });
 			return;
 		}
 		if (it.kind === "propose") {
@@ -348,15 +364,21 @@ export async function runBoard(d: BoardDeps): Promise<BoardEnd> {
 			// work towards a solution lapses once there is one (an answer in judging still gets its verdict, a contribution its follow-ups)
 			if (d.solved() && !it.improve && it.kind !== "judge" && it.kind !== "followup") { await release(it, me).catch(() => {}); st.done++; continue; }
 			busy++;
-			let kept = false;
+			let kept = false, failed: Error | null = null;
 			try { kept = (await execute(it, a)) === "kept"; }
-			catch (e) { if (!d.shutdown()) console.error("[board] item failed", it.kind, (e as Error).message); }
+			catch (e) { failed = e as Error; if (!d.shutdown()) console.error("[board] item failed", it.kind, failed.message); }
 			finally {
 				// the agent counts as busy until the item is handed back and the next phase is on the board: otherwise the
 				// others could see an empty board in between and end the run
 				if (d.shutdown()) { busy--; break; } // the claimed copy stays: after the restart the item is open again
+				const tries = (it.tries ?? 0) + 1;
+				// a failed item is not done: after a fatal failure (the day's model calls used up) the run ends as over
+				// budget; a passing one (a timeout, a refused call) is tried again later, at most MAX_TRIES times
+				if (failed && FATAL.test(failed.message)) end ??= "budget";
+				const retry = !!failed && !end && !FINAL.test(failed.message) && tries < MAX_TRIES;
 				try {
 					if (kept) await putBack(it, me);
+					else if (retry) await putBack(it, me, { tries, notBefore: Date.now() + 2000 * tries });
 					else {
 						await release(it, me);
 						if (it.kind !== "followup") st.done++;

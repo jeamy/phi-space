@@ -74,18 +74,24 @@ oder Stop gedrückt wird. Die Abwertung durch einen Menschen bleibt das letzte W
   Plattform ist kein Suchdienst: Fundstücke sind immer nur Zwischenschritt für Analyse und Antwort, nie selbst das
   Ergebnis eines Laufs.
 - **Budget:** je Lauf in Tokens **und** Dollar; was zuerst erreicht ist, beendet den Lauf. Dazu Obergrenzen für Zahl
-  und Tiefe der Aufträge.
+  und Tiefe der Aufträge. Läufe von Besuchern (ohne Admin-Login) haben immer ein Token-Budget, höchstens
+  `CODEMODE_RUN_BUDGET_TOKENS` (Standard 300 000); alle Besucher-Läufe einer Adresse zusammen höchstens
+  `CODEMODE_TOKENS_PER_IP_DAY` Tokens am Tag (Standard 1 000 000, im Speicher des Hubs gezählt).
 
 - **Text-Aufgaben (Stufe 3):** Kriterien sind ein optionales Feld; bleibt es leer, schreibt der Prüfer-Agent sie aus
   der Frage, sichtbar im Block. Drei Agenten prüfen diese Kriterien und stimmen je Kriterium ab (behalten, berichtigen,
   streichen); die Mehrheit entscheidet. Anlass: Im Lauf `#test-text-himmel2` enthielt ein Kriterium einen falschen Fakt.
-  Eine Antwort ist angenommen, wenn mindestens zwei Prüfer (nie der Autor, mindestens einer von einem anderen Modell)
-  jedes Kriterium als erfüllt bewerten und jedes mit einem wörtlichen Zitat aus der Antwort belegen, oder wenn ein
-  Mensch 👍 „Passt“ gibt.
+  Eine Antwort ist angenommen, wenn mindestens zwei Prüfer (nie der Autor) jedes Kriterium als erfüllt bewerten und
+  jedes mit einem wörtlichen Zitat aus der Antwort belegen, oder wenn ein Mensch 👍 „Passt“ gibt. Ist im Lauf ein
+  anderes Modell als das des Autors, muss mindestens ein zustimmender Prüfer es nutzen (`crossNeeded` an der Antwort);
+  ein Prüfauftrag wartet bis zu `CODEMODE_CROSS_WAIT_S` Sekunden (Standard 300) auf einen solchen Agenten.
   Unterbrechen geht auf drei Wegen: 👍 (angenommen, der Lauf endet), 👎 (abgewertet) und ■ (abbrechen); jeweils mit
   optionaler Begründung, die als Notiz an die Agenten geht.
-- **Wiederverwendung:** Angenommene Antworten bleiben im Space. Bei einer neuen, ähnlichen Aufgabe bekommen die
-  Agenten sie als Material („früher angenommen, prüfe, ob es hier passt“).
+- **Wiederverwendung:** Angenommene Antworten und der beste Code eines Blocks bleiben als `CodeEarlier` im Space,
+  länger als die Einträge der Räume (`CODEMODE_EARLIER_DAYS`, Standard 30 Tage, höchstens 1000). Bei einer neuen,
+  ähnlichen Aufgabe bekommen die Agenten sie als Material („früher angenommen, prüfe, ob es hier passt“). Eine Annahme
+  durch einen Menschen gilt nur im eigenen Raum: Ein 👍 kann jeder geben, es darf die Agenten anderer Räume nicht
+  erreichen.
 
 ## Stufen (jede einzeln getestet, mit Test-Modellen, eigener Commit)
 
@@ -124,3 +130,16 @@ Ein Lauf übersteht einen Neustart des Hubs und läuft danach weiter. Alles, was
 
 Grenze: Modellaufrufe, die beim Neustart gerade liefen, sind verloren und werden wiederholt; das kostet Tokens. Wer
 während eines Laufs Dateien in `server/` ändert, startet den Dev-Server neu und bezahlt diese Wiederholungen.
+
+## Korrekturen nach dem Review (2026-10-21)
+
+- **Urteile von nano:** Der Hub holt jedes `CodeScore` von nano sofort in seinen eigenen Space (`imported`), auch
+  eines, das nach der Wartezeit von 90 s oder nach einem Neustart des Hubs kommt. Vorher lagen sie nur auf nano: Ein
+  spätes Urteil erreichte den besten Code nicht, und jeder Snapshot las bis zu 1000 Urteile samt Code über den Socket.
+  Ein Kandidat, den ein Bewerter auf nano gerade hält, wird nicht mehr aufgegeben.
+- **Fehlgeschlagene Aufträge:** Ein Auftrag, dessen Modellaufruf scheitert, kommt später noch einmal dran (höchstens
+  dreimal). Sind die Modellaufrufe des Tages verbraucht, endet der Lauf als „Budget verbraucht“ statt als „idle“.
+- **Lesereihenfolge:** `readAll` liefert die ältesten Einträge zuerst. Fundstücke werden deshalb ganz gelesen und erst
+  nach dem Sortieren gekürzt, damit die neuesten die Agenten erreichen.
+- **Grenze der Umsetzung:** Phase, Zähler und die Agenten selbst leben weiter im Speicher eines Hub-Prozesses; der
+  Space ist Journal und Warteschlange. Nur die Bewerter auf nano arbeiten entkoppelt über den Space.

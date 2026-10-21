@@ -1347,3 +1347,173 @@ test("text prompts ask for the finished answer, and judges for quotes", async ()
 	assert.match(teamPrompt({ task, lang: "en", agent: 0, gen: 0 }).user, /FINISHED answer.*not an outline/);
 	assert.match(judgePrompt({ task, agent: 1, answer }).user, /A PASS needs a quote/);
 });
+
+// ---- review fixes (2026-10-21): verdicts come home from nano, budgets per visitor, the archive of results, failures ----
+
+t("verdicts from nano move into the hub's space; one that arrives late still becomes the block's best; one of a deleted block is dropped", async () => {
+	const { remoteJudgeSpace } = await import("../server/shard.ts");
+	const sock = `/tmp/codemode-imp-${process.pid}.sock`;
+	process.env.CODEMODE_HOST_NAME = "nano";
+	const nano = await startJudgeHost({ listen: `unix:${sock}`, dbPath: null, judges: 2 });
+	process.env.CODEMODE_HOST_NAME = "big";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: `unix:${sock}` });
+	const remote = remoteJudgeSpace(`unix:${sock}`);
+	try {
+		const get = async () => view(await (await fetch(srv.url + "/api/sessions/imp1")).json());
+		const task = taskById("gcd")!;
+		await post(srv.url, "/api/sessions/imp1/task", { taskId: "gcd" });
+		for (let i = 0; i < 2; i++) await post(srv.url, "/api/sessions/imp1/code", { author: `p${i}`, source: task.variants[0]! });
+		const snap = await until(async () => { const s = await get(); return s.contributions.length === 2 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
+		assert.deepEqual(snap.contributions.map((c: any) => c.host).sort(), ["big", "nano"]);
+		// the shard's verdict lives in the hub's space now, marked as imported; the shard keeps none
+		const scores = async () => (await srv.hub.host.readAll({ type: "CodeScore", fields: { session: "imp1" } })).map((e) => e.fields as any);
+		await until(async () => (await scores()).some((f) => f.host === "nano" && f.imported === true) && (await remote.count({ type: "CodeScore" })) === 0);
+		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
+		assert.deepEqual(sys.shards.map((x: any) => x.judged), [1, 1]);
+		// a verdict the hub no longer waits for (it gave the candidate up) still reaches the best: CodeBest and the archive
+		const late = { session: "imp1", blockId: snap.current, candidateId: "late-1", author: "late", via: "human", host: "nano", gen: 0, ok: true, ms: 0.001, passed: 6, total: 6, cases: [], source: task.variants[3]!, ts: Date.now() };
+		await remote.write({ type: "CodeScore", fields: late as never }, null, 60_000);
+		await until(async () => ((await srv.hub.host.readIfExists({ type: "CodeBest", fields: { session: "imp1", blockId: snap.current } }, 0))?.fields as any)?.candidateId === "late-1");
+		assert.equal((await get()).best.candidateId, "late-1");
+		const archived = (await srv.hub.host.readIfExists({ type: "CodeEarlier", fields: { session: "imp1", blockId: snap.current } }, 0))?.fields as any;
+		assert.equal(archived.result, task.variants[3]);
+		// a verdict whose block was deleted is dropped on the way
+		await remote.write({ type: "CodeScore", fields: { ...late, blockId: "bgone", candidateId: "gone-1" } as never }, null, 60_000);
+		await until(async () => (await remote.count({ type: "CodeScore" })) === 0);
+		assert.equal((await scores()).some((f) => f.candidateId === "gone-1"), false);
+	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
+});
+
+t("a visitor's run gets the default token budget at most, and an address's day allowance ends its runs; an admin's does not count", async () => {
+	const use = { input: 900, output: 100, cacheRead: 0, cacheWrite: 0, total: 1000, costUsd: 0.001 };
+	const llm = {
+		models: async () => ["fake/team"],
+		contribute: async () => ({ source: "function f(x){ return 0 }", model: "fake/team", usage: use }), // never right
+		critique: async () => ({ text: "no", model: "fake/team", usage: use }),
+	};
+	process.env.CODEMODE_RUN_BUDGET_TOKENS = "2000"; process.env.CODEMODE_TOKENS_PER_IP_DAY = "3500"; process.env.CODEMODE_ADMIN_TOKEN = "budget-secret";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/vb1/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
+		const first = await boardRun(srv, "vb1", {});
+		assert.deepEqual(first.run.budget, { tokens: 2000 }); // no budget asked for: the default
+		assert.equal(first.limits.runBudgetTokens, 2000);
+		const second = await boardRun(srv, "vb1", { budgetTokens: 999_999 });
+		assert.deepEqual(second.run.budget, { tokens: 2000 }); // a visitor cannot ask for more
+		assert.ok(first.run.usage.tokens + second.run.usage.tokens >= 3500 || /budget/.test(JSON.stringify(second.blocks.at(-1).messages)));
+		const refused = await post(srv.url, "/api/sessions/vb1/run", { agents: 2, contenders: ["fake/team"], board: true });
+		assert.equal(refused.status, 400);
+		assert.match(refused.body.error, /used up/);
+		// the admin's run: no default budget, not counted against the address
+		const r = await fetch(srv.url + "/api/sessions/vb1/run", { method: "POST", headers: { "content-type": "application/json", "x-admin-token": "budget-secret" }, body: JSON.stringify({ agents: 2, gens: 1, polish: 0, contenders: ["fake/team"], board: true, budgetTokens: 5000 }) });
+		assert.equal(r.status, 200);
+		const admin = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/vb1")).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
+		assert.deepEqual(admin.run.budget, { tokens: 5000 });
+	} finally { delete process.env.CODEMODE_RUN_BUDGET_TOKENS; delete process.env.CODEMODE_TOKENS_PER_IP_DAY; process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
+});
+
+t("a person's thumbs-up counts as earlier material in its own room only; the judges' acceptance everywhere", async () => {
+	const log: any[] = [];
+	const never = { ...textLlm(log), judge: async (c: any) => ({ results: c.task.criteria.map((criterion: string) => ({ criterion, pass: false, reason: "no" })), model: c.model }) };
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: never as never });
+	try {
+		const get = async (room: string) => (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any;
+		await post(srv.url, "/api/sessions/hum1/task", { text: { prompt: "What is the capital city of France?", criteria: ["correct"] } });
+		await post(srv.url, "/api/sessions/hum1/run", { agents: 3, gens: 10, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"], board: true });
+		const answer = await until(async () => (await get("hum1")).blocks.at(-1).contributions[0] ?? false);
+		assert.equal((await post(srv.url, "/api/sessions/hum1/accept", { candidateId: answer.candidateId, by: "lux" })).status, 200);
+		await until(async () => { const s = await get("hum1"); return s.run && !s.run.active; }, 30_000);
+		const archived = (await srv.hub.host.readAll({ type: "CodeEarlier", fields: { session: "hum1" } })).map((e) => e.fields as any);
+		assert.deepEqual(archived.map((f) => [f.kind, f.human, f.by]), [["text", true, "accepted by a person"]]);
+		// another room with a similar question: the agents do not get it
+		await post(srv.url, "/api/sessions/hum2/task", { text: { prompt: "Which is the capital city of France?", criteria: ["correct"] } });
+		let before = log.length;
+		await boardRun(srv, "hum2", { agents: 3, gens: 1, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"] });
+		assert.ok(log.slice(before).every((c) => !c.earlier?.length), "nothing from the other room's thumbs-up");
+		// the same room, a new block: they do
+		await post(srv.url, "/api/sessions/hum1/task", { text: { prompt: "Name the capital city of France.", criteria: ["correct"] } });
+		before = log.length;
+		await boardRun(srv, "hum1", { agents: 3, gens: 1, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"] });
+		assert.ok(log.slice(before).some((c) => c.earlier?.[0]?.by === "accepted by a person"));
+	} finally { await srv.close(); }
+});
+
+test("defaults of the new limits: archive 30 days, visitor budget, address allowance, wait for a judge of another model", async () => {
+	const { earlierLeaseMs, runBudgetTokens, ipTokensPerDay, crossWaitMs } = await import("../server/hub.ts");
+	const { FOREVER } = await import("../../src/index.ts");
+	assert.equal(earlierLeaseMs(), 30 * 86_400_000);
+	process.env.CODEMODE_EARLIER_DAYS = "0"; assert.equal(earlierLeaseMs(), FOREVER);
+	process.env.CODEMODE_EARLIER_DAYS = "2"; assert.equal(earlierLeaseMs(), 2 * 86_400_000);
+	delete process.env.CODEMODE_EARLIER_DAYS;
+	assert.equal(runBudgetTokens(), 300_000);
+	assert.equal(ipTokensPerDay(), 1_000_000);
+	process.env.CODEMODE_RUN_BUDGET_TOKENS = "0"; assert.equal(runBudgetTokens(), 0); delete process.env.CODEMODE_RUN_BUDGET_TOKENS;
+	assert.equal(crossWaitMs(), 300_000);
+	process.env.CODEMODE_CROSS_WAIT_S = "0"; assert.equal(crossWaitMs(), 0); delete process.env.CODEMODE_CROSS_WAIT_S;
+});
+
+t("text answers: the judges accept only with a judge of another model than the author's, when the run had one", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: textLlm() as never });
+	try {
+		await post(srv.url, "/api/sessions/cross1/task", { text: { prompt: "Capital of France?", criteria: ["correct"] } });
+		const blockId = ((await (await fetch(srv.url + "/api/sessions/cross1")).json()) as any).current;
+		const h = srv.hub.host, ttl = 600_000;
+		await h.write({ type: "TextAnswer", fields: { session: "cross1", blockId, answerId: "a-x1", author: "agent-0", via: "m/a", gen: 1, text: "Paris.", ts: Date.now(), crossNeeded: true } }, null, ttl);
+		const judgement = (judge: string, via: string) => h.write({ type: "TextJudgement", fields: { session: "cross1", blockId, answerId: "a-x1", judge, via, results: [{ criterion: "correct", pass: true, reason: "ok" }], passed: 1, total: 1, ts: Date.now() } as never }, null, ttl);
+		await judgement("agent-1", "m/a"); await judgement("agent-2", "m/a");
+		const answer = async () => ((await (await fetch(srv.url + "/api/sessions/cross1")).json()) as any).blocks.at(-1).contributions.find((c: any) => c.candidateId === "a-x1");
+		assert.deepEqual([(await answer()).ok, (await answer()).judges], [false, 2]); // two judges of the author's own model
+		await judgement("agent-3", "m/b");
+		assert.deepEqual([(await answer()).ok, (await answer()).acceptedBy], [true, "judges"]);
+	} finally { await srv.close(); }
+});
+
+t("work board: a failed model call is tried again later; when the day's model calls are used up the run ends as over budget", async () => {
+	const failures = new Map<number, number>();
+	const flaky = {
+		models: async () => ["fake/team"],
+		contribute: async (c: any) => {
+			const n = failures.get(c.agent) ?? 0;
+			if (n < 1) { failures.set(c.agent, n + 1); throw new Error("request timed out"); } // each agent's first call fails
+			return { source: "function double(x){ return x * 2 }", model: "fake/team" };
+		},
+		critique: async () => ({ text: "fine", model: "fake/team" }),
+	};
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", llm: flaky as never });
+	try {
+		await post(srv.url, "/api/sessions/fl1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
+		const snap = await boardRun(srv, "fl1", { plan: false });
+		assert.ok(snap.blocks.at(-1).best, "solved after the retries");
+	} finally { await srv.close(); }
+	const spent = { models: async () => ["fake/team"], contribute: async () => { throw new Error("daily model budget used up"); }, critique: async () => ({ text: "x", model: "fake/team" }) };
+	srv = await startServer({ port: 0, bind: "127.0.0.1", llm: spent as never });
+	try {
+		await post(srv.url, "/api/sessions/fl2/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
+		const snap = await boardRun(srv, "fl2", { plan: false });
+		assert.equal(snap.run.ended, "budget");
+		assert.ok(snap.blocks.at(-1).messages.some((m: any) => /\(budget used up\)/.test(m.text)));
+	} finally { await srv.close(); }
+});
+
+t("research: the newest findings of a block reach the agents, also when the block holds more than 20", async () => {
+	const seen: any[] = [];
+	const llm = { ...textLlm(),
+		contribute: async (c: any) => { seen.push(c.findings?.map((f: any) => f.text) ?? []); return { source: "Paris is the capital of France.", model: c.model }; },
+		research: async (c: any) => ({ queries: ["q"], sources: [{ title: "t", url: "https://example.org/" }], text: "new finding", model: c.model }) };
+	process.env.CODEMODE_ADMIN_TOKEN = "find-secret";
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", llm: llm as never });
+	try {
+		await post(srv.url, "/api/sessions/fnd1/task", { text: { prompt: "What is the capital of France?", criteria: ["names the capital"] } });
+		const blockId = ((await (await fetch(srv.url + "/api/sessions/fnd1")).json()) as any).current;
+		const t0 = Date.now() - 100_000;
+		for (let i = 0; i < 25; i++) await srv.hub.host.write({ type: "CodeFinding", fields: { session: "fnd1", blockId, runId: "old", findingId: `old-${i}`, author: "agent-0", via: "fake/plain", queries: ["q"], sources: [], text: `F${i}`, ts: t0 + i } as never }, null, 600_000);
+		const r = await fetch(srv.url + "/api/sessions/fnd1/run", { method: "POST", headers: { "content-type": "application/json", "x-admin-token": "find-secret" }, body: JSON.stringify({ agents: 3, polish: 0, plan: false, contenders: ["fake/plain", "fake/haiku-judge"], board: true, research: true }) });
+		assert.equal(r.status, 200);
+		await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/fnd1")).json()) as any; return s.run && !s.run.active; }, 60_000);
+		assert.ok(seen.length > 0);
+		for (const texts of seen) {
+			assert.equal(texts[0], "new finding"); // the newest first
+			assert.ok(texts.includes("F24") && !texts.includes("F0"), texts.join(","));
+		}
+	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
+});

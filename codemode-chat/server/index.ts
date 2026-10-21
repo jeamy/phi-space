@@ -215,8 +215,10 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 				else if (action === "code") return json(res, 200, { candidateId: await hub.submitCode(id, b.author, b.source) });
 				else if (action === "run") {
 					// web research sends task text to a search engine: only an admin may start it
-					if (b.research === true && !isAdmin(req)) return json(res, 403, { error: "Research needs the admin login" });
-					await hub.startRun(id, { ...b, research: b.research === true });
+					const admin = isAdmin(req);
+					if (b.research === true && !admin) return json(res, 403, { error: "Research needs the admin login" });
+					// a visitor's run: the default token budget at most, counted against the day's allowance of the address
+					await hub.startRun(id, { ...b, research: b.research === true, client: { ip: clientIp(req), admin } });
 				}
 				else if (action === "stop") await hub.stopRun(id, b); // {by, reason}: the reason goes to the agents
 				else if (action === "accept") { // a person's thumbs-up on a text answer ({candidateId, by, reason, undo})

@@ -53,7 +53,10 @@ Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`,
   phi-spaces socket (`CODEMODE_LISTEN`). Its judge workers run in nano's sandbox, so judging costs nano's CPU.
 
 With `CODEMODE_REMOTE` set on the hub, every second candidate is written into nano's space and comes back as a
-`CodeScore` entry there; the hub merges both lists, and the system bar shows both hosts (CPU, memory, judged count).
+`CodeScore` entry there. The hub moves each verdict into its own space as soon as it is there (marked `imported`, also
+one that comes late or after a restart of the hub), so every read of a room is local; the system bar shows both hosts
+(CPU, memory, judged count). A candidate without a verdict after 90 s is taken back and judged on big, unless a judge
+on nano holds it right now.
 If nano is unreachable (calls are bounded to 8 s, then it counts as down for 15 s) candidates are judged on big.
 This is a demo wiring, not a replicated cluster; the socket has no TLS (bind it to an internal address or tunnel it).
 
@@ -124,6 +127,15 @@ variants: as soon as one is active, the page switches the contenders to the avai
 Off by default. `CODEMODE_CHAT_LLM=1` plus credentials (environment keys or `~/.pi/agent/auth.json`) turns them on;
 only `codestral-latest` and the newest haiku can be chosen. Guards: 2 calls in flight (further agents wait for a slot),
 `CODEMODE_LLM_PER_MIN` calls per minute (default 20), 700 output tokens per call; when a guard or the model fails, the agent falls back to a scripted variant. Model calls cost tokens.
+
+A visitor's run (no admin login) gets a token budget of at most `CODEMODE_RUN_BUDGET_TOKENS` (default 300 000, also
+the default when none is given), and all visitor runs of one address together at most `CODEMODE_TOKENS_PER_IP_DAY`
+tokens a day (default 1 000 000), so one visitor cannot use up the day's model calls of everyone. On the work board a
+failed model call puts its item back (at most three tries); when the day's calls are used up the run ends as over
+budget. Accepted results (a block's best code, an accepted answer) are kept as `CodeEarlier` for
+`CODEMODE_EARLIER_DAYS` (default 30) as material for later, similar tasks; a person's thumbs-up counts in its own room
+only. A text answer is accepted by the judges only when one of them ran another model than its author (where the run
+had one); a judgement waits up to `CODEMODE_CROSS_WAIT_S` (default 300) for such a judge.
 
 ## Safety notes
 

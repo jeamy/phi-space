@@ -5,7 +5,7 @@
  *  the changed lines with a little context (`+`/`-`/` ` prefixes, at most `maxLines`; `…` marks skipped lines). */
 export type LineDiff = { kept: number; added: number; removed: number; hunks: string; cut?: true };
 
-const MAX_LINES = 800; // longer sources are compared in their first lines only (the sandbox caps code at 20 000 chars)
+const MAX_LINES = 800; // longer sources are compared in their first lines only (the judge caps code at 16 000 chars)
 
 export function lineDiff(before: string, after: string, maxLines = 80): LineDiff {
 	const a = before.split("\n").slice(0, MAX_LINES), b = after.split("\n").slice(0, MAX_LINES);
