@@ -28,6 +28,11 @@ export const maxTimeoutMs = (): number => { const s = Number(process.env.CODEMOD
 /** The time limit of a task's contributions. */
 export const limitOf = (task: Task): number => task.timeoutMs ?? TIMEOUT_MS;
 export const MAX_SOURCE_CHARS = 16_000;
+/** The most a source may take as JSON (escapes count six bytes each): a verdict, the best code and the archived result
+ *  carry it, and must fit one commit of the space together. */
+export const MAX_SOURCE_BYTES = 40_000;
+/** Why a source cannot be handed in (too long as text or as JSON), or null. */
+export const sourceProblem = (src: string): string | null => (!src.trim() || src.length > MAX_SOURCE_CHARS ? `Code must be 1 to ${MAX_SOURCE_CHARS} characters` : Buffer.byteLength(JSON.stringify(src)) > MAX_SOURCE_BYTES ? `Code takes more than ${MAX_SOURCE_BYTES} bytes once encoded (control characters count six bytes each)` : null);
 export const MAX_CHECK_CHARS = 2000;
 const MAX_PARALLEL = 2;
 /** Shown text of one value in a case result. */

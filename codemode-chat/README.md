@@ -2,8 +2,8 @@
 
 A chat where **agents and people contribute code to a shared phi-space** and a **codemode sandbox judges every
 contribution**. It is the Space-Chat of the help system rebuilt for codemode, with the same stack and operations:
-Next.js 16 + React 19 behind a custom Node server, a Docker module with `dev`/`test`/`production`/`nano` targets, a
-big/nano two-host setup and run scripts. It does not import anything from `help-site/` (palette and layout are copied).
+Next.js 16 + React 19 behind a custom Node server; every role (space, judge, web) is its own process around one
+phi-space, started together locally like the help system's shards. It does not import anything from `help-site/` (palette and layout are copied).
 
 ## What happens
 
@@ -30,7 +30,7 @@ big/nano two-host setup and run scripts. It does not import anything from `help-
   results before it counts, and runs in a fresh sandbox of its own.
 - You can **hand in code yourself**; it goes through exactly the same path.
 - A task block can be **deleted** with the bin icon in its header, after a yes/no dialog. This removes everything that
-  belongs to it (task, contributions, verdicts on this host and on nano, best code, log lines). A block with a running
+  belongs to it (task, contributions, verdicts of every judge, best code, log lines). A block with a running
   run cannot be deleted; deleting the active block makes the newest remaining one active; deleting the last one leaves the room empty.
 - Every contribution is a `CodeCandidate` entry. A judge takes it under a transaction, runs it in a QuickJS sandbox
   (`@earendil-works/pi-codemode`: no tools, 5 s timeout (custom tasks choose their own, up to `CODEMODE_MAX_TIMEOUT_S`, default 60 s), 64 MiB heap, at most 2 sandboxes at a time per process) and
@@ -45,62 +45,45 @@ are shown them as approaches not to repeat.
 Entries (`ChatMessage`, `CodeTask` = a task block, `CodeCandidate`, `CodeScore`, `CodeBest`, `CodeNote`, `CodeVeto`, `HostInfo`) carry the `blockId` of their task block and live in a durable space
 (SQLite); the session name in the URL hash (`#room`) separates rooms.
 
-## big and nano
+## Processes and the one space
 
-- **big** (the hub, `server/index.ts`): Next.js pages, REST API, WebSocket, the chat and the task state, and local
-  judge workers.
-- **nano** (`server/nano-host.ts`, optional): a headless host with its own space and SQLite, served over the
-  phi-spaces socket (`CODEMODE_LISTEN`). Its judge workers run in nano's sandbox, so judging costs nano's CPU.
+Everything is space (docs/codemode-space-architektur.md): every role is its own process, and the processes talk only
+through one phi-space. Nothing a process knows lives only in its memory; a process that dies lets its transactions and
+leases lapse, and its work comes back for another process of the same role.
 
-With `CODEMODE_REMOTE` set on the hub, every second candidate is written into nano's space and comes back as a
-`CodeScore` entry there. The hub moves each verdict into its own space as soon as it is there (marked `imported`, also
-one that comes late or after a restart of the hub), so every read of a room is local; the system bar shows both hosts
-(CPU, memory, judged count). A candidate without a verdict after 90 s is taken back and judged on big, unless a judge
-on nano holds it right now.
-If nano is unreachable (calls are bounded to 8 s, then it counts as down for 15 s) candidates are judged on big.
-This is a demo wiring, not a replicated cluster; the socket has no TLS (bind it to an internal address or tunnel it).
+- **space** (`server/space-host.ts`): owns the space (SQLite) and serves it over the phi-spaces socket
+  (`CODEMODE_LISTEN`, default `unix:/tmp/codemode-space.sock`).
+- **judge** (`server/judge-host.ts`): takes a `CodeCandidate` under a transaction, runs it in this machine's sandbox and
+  writes the `CodeScore`, and the block's new best code, in that same transaction. Run as many as you like, on any host
+  that reaches the space: they share the candidates by themselves.
+- **web** (`server/index.ts`): Next.js pages, REST API, WebSocket. It follows the space's change stream and pushes a
+  fresh snapshot when a room changes (also when a judge on another host wrote the verdict).
+
+Every process keeps a `Process` entry in the space (renewed every 10 s); the system bar shows each host with its roles,
+CPU, memory and how many contributions its judges judged. The rest of the plan (agents and models as processes,
+limits and logins in the space, Docker per role) is staged in the architecture document.
 
 ## Run it (same as the help system, with `CODEMODE_*` variables)
 
-Review `codemode-chat/.env.example` and create a private `codemode-chat/.env` (the servers read it themselves; real
-environment variables win). Local development keeps the shard on a unix socket:
+Review `codemode-chat/.env.example` and create a private `codemode-chat/.env` (the processes read it themselves; real
+environment variables win).
 
 ```bash
-# .env: PORT=3700  CODEMODE_BIND=0.0.0.0  HOST_BIND=  CODEMODE_REMOTE=unix:/tmp/codemode-b.sock
-
-npm --prefix codemode-chat run shards:start    # hub (Next.js dev mode) + nano over the socket; also stop|status|logs
-DEV=0 npm --prefix codemode-chat run shards:start   # the production build instead (built when stale)
-
-# or one server only (CODEMODE_REMOTE unset or the shard not running: judging stays on this host)
-npm --prefix codemode-chat run dev             # Next.js dev mode, http://localhost:3700
-npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # production server
-npm run test:codemode-chat                     # tests (API, sandbox, big+nano, dead shard)
+npm --prefix codemode-chat run dev             # space, judge and web (Next.js dev mode), http://localhost:3700
+npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # the same with the production build
+CODEMODE_ROLES=judge CODEMODE_SPACE=tcp:<host>:3800 npm --prefix codemode-chat start   # only judges, on another host
+npm --prefix codemode-chat run space           # or one process: space | judge | web
+npm run test:codemode-chat                     # tests (they start the processes themselves)
 ```
 
 Development reloads itself: Next.js recompiles `app/` and `client/` on every save (Fast Refresh), and `node --watch-path`
-restarts the server when `server/` or the phi-spaces sources in `../src` change (clients reconnect on their own, the
-SQLite state stays). In the Docker dev container these directories are mounted from the checkout. Open the dev page
+restarts each process when `server/` or the phi-spaces sources in `../src` change (clients reconnect on their own, the
+space's SQLite state stays). In the Docker dev container these directories are mounted from the checkout. Open the dev page
 as `http://localhost:3700` — Next.js 16 does not hydrate dev pages that are requested through `127.0.0.1`.
 
-Docker (build context: the repository root). **Production and nano are two separate servers**, each started from its
-own `codemode-chat/.env`; the commands change containers on the machine they run on, so use them on a shared server
-only after agreement:
-
-```bash
-# big (hub): host networking, HOST_BIND=127.0.0.1 for the reverse proxy
-npm --prefix codemode-chat run docker:prod:up        # down | logs | build
-# nano (judge shard): publishes :3800 on 127.0.0.1 (SSH tunnel); CODEMODE_SHARD_BIND=<internal ip> for a private route.
-# Never a public interface: the socket has no TLS and every connection acts as the hub.
-npm --prefix codemode-chat run docker:nano:up        # down | logs | build
-# on one machine
-npm --prefix codemode-chat run docker:dev:up         # Next.js dev server in a container (ports from PORT/HOST_BIND)
-npm --prefix codemode-chat run docker:test           # tests in a container
-```
-
-On big, `CODEMODE_REMOTE=tcp:<nano-internal-ip>:3800` (or `tcp:127.0.0.1:3800` through an SSH tunnel, because the hub
-container uses the host network). Deployment examples (host names are placeholders): `deploy/Caddyfile`,
-`deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`. Ports 3700/3800 do not collide with the help
-system (3500/3600).
+Docker (build context: the repository root) still starts the single server from before the process layout; it is
+adapted per role in stage 4 of the architecture document. Deployment examples (host names are placeholders):
+`deploy/Caddyfile`, `deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`.
 
 ## Help pages and themes
 

@@ -1,8 +1,7 @@
 // Flow: task -> contribution -> score entry -> WebSocket frame, plus the sandbox verdicts and limits.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "../server/index.ts";
-import { startJudgeHost } from "../server/nano-host.ts";
+import { startServer, startStack } from "./stack.ts";
 import { judge, loadCodemode } from "../server/judge.ts";
 import { customTask, taskById, TASKS } from "../server/tasks.ts";
 
@@ -81,38 +80,39 @@ t("a scripted run produces graded contributions and a best", async () => {
 	} finally { await srv.close(); }
 });
 
-t("big and nano: candidates are judged on both hosts and come back as one list", async () => {
-	const sock = `/tmp/codemode-test-${process.pid}.sock`;
-	process.env.CODEMODE_HOST_NAME = "nano";
-	const nano = await startJudgeHost({ listen: `unix:${sock}`, dbPath: null, judges: 2 });
-	process.env.CODEMODE_HOST_NAME = "big";
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: `unix:${sock}` });
+t("judge processes on two hosts share the candidates of the one space; the system bar shows every host with its roles", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "big", workers: 1 }, { host: "nano", workers: 1 }] });
 	try {
-		const good = taskById("primes")!.variants[2]!, bad = taskById("primes")!.variants[4]!;
-		for (let i = 0; i < 4; i++) await post(srv.url, "/api/sessions/shard1/code", { author: `p${i}`, source: i % 2 ? bad : good });
-		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/shard1")).json()); return s.contributions.length === 4 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
-		const hosts = new Set(snap.contributions.map((c: any) => c.host));
-		assert.deepEqual([...hosts].sort(), ["big", "nano"]);
-		assert.equal(snap.contributions.filter((c: any) => c.ok).length, 2);
-		assert.equal(snap.best.source, good);
+		const slow = taskById("primes")!.variants[0]!, bad = taskById("primes")!.variants[4]!; // the first is right but slow: both judges get work
+		for (let i = 0; i < 6; i++) await post(srv.url, "/api/sessions/shard1/code", { author: `p${i}`, source: i % 3 === 2 ? bad : slow });
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/shard1")).json()); return s.contributions.length === 6 && s.contributions.every((c: any) => c.ok !== null) ? s : false; }, 60_000);
+		assert.deepEqual([...new Set(snap.contributions.map((c: any) => c.host))].sort(), ["big", "nano"]);
+		assert.equal(snap.contributions.filter((c: any) => c.ok).length, 4);
+		assert.equal(snap.best.source, slow);
 		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
-		assert.deepEqual(sys.shards.map((x: any) => [x.shard, x.up]), [["hub", true], ["nano", true]]);
-		assert.equal(sys.shards[1].host.name, "nano");
-		assert.ok(sys.shards[1].judged >= 1);
-	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
+		const by = Object.fromEntries(sys.shards.map((x: any) => [x.shard, x]));
+		assert.deepEqual([by.big.roles, by.nano.roles], [["judge"], ["judge"]]);
+		assert.equal(by.big.judged + by.nano.judged, 6);
+		assert.ok(sys.shards.some((x: any) => x.roles.includes("space") && x.roles.includes("web")));
+	} finally { await srv.close(); }
 });
 
-t("a dead shard falls back to the local judge", async () => {
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: "unix:/tmp/codemode-nonexistent.sock" });
+t("a judge process that dies while judging: its transaction lapses and another judge takes the candidate", async () => {
+	const stack = await startStack({ judges: [{ host: "first", workers: 1, leaseMs: 2000 }] });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", stack });
 	try {
-		const good = taskById("gcd")!.variants[2]!;
-		await post(srv.url, "/api/sessions/dead1/task", { taskId: "gcd" });
-		for (let i = 0; i < 3; i++) await post(srv.url, "/api/sessions/dead1/code", { author: `p${i}`, source: good });
-		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/dead1")).json()); return s.contributions.length === 3 && s.contributions.every((c: any) => c.ok) ? s : false; }, 60_000);
-		assert.equal(snap.best.source, good);
-		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
-		assert.equal(sys.shards[1].up, false);
-	} finally { await srv.close(); }
+		const get = async () => view(await (await fetch(srv.url + "/api/sessions/dead1")).json());
+		await post(srv.url, "/api/sessions/dead1/task", { custom: { fn: "slowDouble", prompt: "double it, slowly", cases: [{ args: [2], expect: 4 }], timeoutS: 30 } });
+		await post(srv.url, "/api/sessions/dead1/code", { author: "p", source: "function slowDouble(x){ const t = Date.now(); while (Date.now() - t < 3000) {} return x * 2 }" });
+		// the first judge holds it (its marker keeps the tile on the page), then dies without a word
+		await until(async () => (await stack.space.count({ type: "CodeJudging", fields: { session: "dead1" } })) === 1);
+		assert.equal((await get()).contributions.length, 1);
+		const first = (await stack.space.readAll({ type: "Process", fields: { role: "judge" } }))[0]!;
+		process.kill((first.fields as any).pid, "SIGKILL");
+		await stack.judge({ host: "second", workers: 1 });
+		const snap = await until(async () => { const s = await get(); return s.contributions[0]?.ok !== null && s.contributions[0]?.ok !== undefined ? s : false; }, 30_000);
+		assert.deepEqual([snap.contributions.length, snap.contributions[0].ok, snap.contributions[0].host], [1, true, "second"]);
+	} finally { await srv.close(); await stack.close(); }
 });
 
 t("several models compete in one run, assigned to the agents in turn", async () => {
@@ -177,7 +177,7 @@ t("deleting the last block leaves the room empty, also after a restart; old dele
 	const sqlite = `/tmp/codemode-empty-${process.pid}.sqlite`;
 	const { rm } = await import("node:fs/promises");
 	await rm(sqlite, { force: true });
-	let srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: sqlite });
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: sqlite });
 	try {
 		const get = async () => (await (await fetch(srv.url + "/api/sessions/empty1")).json()) as any;
 		const first = await get();
@@ -187,7 +187,7 @@ t("deleting the last block leaves the room empty, also after a restart; old dele
 		const after = await get();
 		assert.deepEqual([after.blocks.length, after.messages.length], [0, 0]);
 		await srv.close();
-		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: sqlite });
+		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: sqlite });
 		assert.equal((await get()).blocks.length, 0); // no replacement block after a restart either
 	} finally { await srv.close(); await rm(sqlite, { force: true }); }
 });
@@ -196,7 +196,7 @@ t("deleting a task block removes its entries; the active block moves on; a runni
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
 	try {
 		const get = async () => (await (await fetch(srv.url + "/api/sessions/del1")).json()) as any;
-		const judged = async () => ((await (await fetch(srv.url + "/api/system")).json()) as any).shards[0].judged as number;
+		const judged = async () => ((await (await fetch(srv.url + "/api/system")).json()) as any).shards.reduce((n: number, x: any) => n + x.judged, 0) as number;
 		const gcd = taskById("gcd")!, primes = taskById("primes")!;
 		await post(srv.url, "/api/sessions/del1/code", { author: "a", source: primes.variants[3]! }); // default block (primes)
 		await until(async () => (await get()).blocks[0].contributions[0]?.ok !== undefined && (await get()).blocks[0].contributions[0]?.ok !== null);
@@ -238,25 +238,19 @@ t("deleting a task block removes its entries; the active block moves on; a runni
 	} finally { await srv.close(); }
 });
 
-t("deleting a block also removes its verdicts on the nano shard", async () => {
-	const sock = `/tmp/codemode-del-${process.pid}.sock`;
-	process.env.CODEMODE_HOST_NAME = "nano";
-	const nano = await startJudgeHost({ listen: `unix:${sock}`, dbPath: null, judges: 2 });
-	process.env.CODEMODE_HOST_NAME = "big";
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: `unix:${sock}` });
+t("deleting a block removes its verdicts from the shared space, whichever host judged them", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "big" }, { host: "nano" }] });
 	try {
 		const get = async () => (await (await fetch(srv.url + "/api/sessions/del2")).json()) as any;
-		const sys = async () => (await (await fetch(srv.url + "/api/system")).json()) as any;
+		const judged = async () => ((await (await fetch(srv.url + "/api/system")).json()) as any).shards.reduce((n: number, x: any) => n + x.judged, 0);
 		const good = taskById("primes")!.variants[2]!;
 		for (let i = 0; i < 4; i++) await post(srv.url, "/api/sessions/del2/code", { author: `p${i}`, source: good });
 		const snap = await until(async () => { const s = await get(); const b = s.blocks[0]; return b.contributions.length === 4 && b.contributions.every((c: any) => c.ok !== null) ? s : false; });
-		const before = await sys();
-		assert.equal(before.shards[0].judged + before.shards[1].judged, 4);
-		assert.ok(before.shards[1].judged >= 1);
+		assert.equal(await judged(), 4);
 		assert.equal((await post(srv.url, "/api/sessions/del2/delete", { blockId: snap.blocks[0].blockId })).status, 200);
-		const after = await sys();
-		assert.equal(after.shards[0].judged + after.shards[1].judged, 0);
-	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
+		assert.equal(await judged(), 0);
+		assert.equal(await srv.stack.space.count({ type: "CodeBest", fields: { session: "del2" } }), 0);
+	} finally { await srv.close(); }
 });
 
 t("a task block from before blockIds existed can be deleted, with its orphaned entries", async () => {
@@ -383,7 +377,7 @@ t("code full of control characters does not blow the frame up (JSON escapes coun
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
 	try {
 		const first = (await (await fetch(srv.url + "/api/sessions/esc1")).json()) as any;
-		const src = "\u0001".repeat(15_000);
+		const src = "\u0001".repeat(6_500); // 39 kB as JSON: as much as a source may take
 		for (let i = 0; i < 60; i++) await srv.hub.host.write({ type: "CodeScore", fields: { session: "esc1", blockId: first.current, candidateId: `e${i}`, author: "\u0002".repeat(40), via: "human", gen: 0, ok: false, ms: 5000, error: "\u0003".repeat(200), source: src, ts: Date.now() + i } } as never, null, 3_600_000);
 		const ws = new WebSocket(srv.url.replace("http", "ws") + "/ws/esc1");
 		const frame = await new Promise<any>((ok, no) => { ws.onmessage = (e) => ok(e.data); ws.onclose = () => no(new Error("closed")); });
@@ -398,7 +392,7 @@ t("code full of control characters does not blow the frame up (JSON escapes coun
 });
 
 test("CODEMODE_TTL_HOURS: hours to a lease, 0 = no expiry, garbage refused", async () => {
-	const { entryLeaseMs } = await import("../server/shard.ts");
+	const { entryLeaseMs } = await import("../server/space.ts");
 	const { FOREVER } = await import("../../src/index.ts");
 	assert.equal(entryLeaseMs(undefined), 24 * 3600_000);
 	assert.equal(entryLeaseMs(""), 24 * 3600_000);
@@ -1191,7 +1185,7 @@ const sqliteOf = async (name: string) => { const { rm } = await import("node:fs/
 t("a board run survives a restart of the hub: claimed work is done again, the budget counts on, the run ends once", async () => {
 	const db = await sqliteOf("resume-board");
 	const a = hangingTeam();
-	let srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: a.llm as never });
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: a.llm as never });
 	const get = async () => (await (await fetch(srv.url + "/api/sessions/dur1")).json()) as any;
 	try {
 		await post(srv.url, "/api/sessions/dur1/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }, { args: [5], expect: 10 }] } });
@@ -1203,7 +1197,7 @@ t("a board run survives a restart of the hub: claimed work is done again, the bu
 		await srv.close();
 		a.release(); // the old process's calls come back after it closed: nothing of them may land
 		const b = hangingTeam(); b.release();
-		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: b.llm as never });
+		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: b.llm as never });
 		await until(async () => { const s = await get(); return s.run && !s.run.active ? s : false; }, 60_000);
 		const snap = await get(), blk = snap.blocks.at(-1);
 		assert.ok(blk.messages.some((m: any) => /Run resumed after a restart of the hub/.test(m.text)), blk.messages.map((m: any) => m.text).join(" | "));
@@ -1218,7 +1212,7 @@ t("a board run survives a restart of the hub: claimed work is done again, the bu
 		assert.equal(await srv.hub.host.count({ type: "CodeRun", fields: { session: "dur1" } }), 0);
 		assert.equal(await srv.hub.host.count({ type: "WorkItem", fields: { session: "dur1" } }), 0);
 		await srv.close();
-		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: b.llm as never });
+		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: b.llm as never });
 		await new Promise((r) => setTimeout(r, 300));
 		assert.equal((await get()).run, null);
 	} finally { await srv.close(); await db.rm(); }
@@ -1227,7 +1221,7 @@ t("a board run survives a restart of the hub: claimed work is done again, the bu
 t("a stopped run is not resumed after a restart; a generations run goes on with the generation that was cut off", async () => {
 	const db = await sqliteOf("resume-gens");
 	const a = hangingTeam();
-	let srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: a.llm as never });
+	let srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: a.llm as never });
 	const get = async (room: string) => (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any;
 	try {
 		for (const room of ["gen1", "stop1"]) await post(srv.url, `/api/sessions/${room}/task`, { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
@@ -1238,7 +1232,7 @@ t("a stopped run is not resumed after a restart; a generations run goes on with 
 		await srv.close();
 		a.release();
 		const b = hangingTeam(); b.release();
-		srv = await startServer({ port: 0, bind: "127.0.0.1", sqlitePath: db.path, llm: b.llm as never });
+		srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: db.path, llm: b.llm as never });
 		const g = await until(async () => { const s = await get("gen1"); return s.run && !s.run.active ? s : false; }, 30_000);
 		assert.ok(g.blocks.at(-1).messages.some((m: any) => /Run resumed after a restart of the hub \(generation 1/.test(m.text)));
 		assert.ok(g.blocks.at(-1).best);
@@ -1349,40 +1343,6 @@ test("text prompts ask for the finished answer, and judges for quotes", async ()
 });
 
 // ---- review fixes (2026-10-21): verdicts come home from nano, budgets per visitor, the archive of results, failures ----
-
-t("verdicts from nano move into the hub's space; one that arrives late still becomes the block's best; one of a deleted block is dropped", async () => {
-	const { remoteJudgeSpace } = await import("../server/shard.ts");
-	const sock = `/tmp/codemode-imp-${process.pid}.sock`;
-	process.env.CODEMODE_HOST_NAME = "nano";
-	const nano = await startJudgeHost({ listen: `unix:${sock}`, dbPath: null, judges: 2 });
-	process.env.CODEMODE_HOST_NAME = "big";
-	const srv = await startServer({ port: 0, bind: "127.0.0.1", remote: `unix:${sock}` });
-	const remote = remoteJudgeSpace(`unix:${sock}`);
-	try {
-		const get = async () => view(await (await fetch(srv.url + "/api/sessions/imp1")).json());
-		const task = taskById("gcd")!;
-		await post(srv.url, "/api/sessions/imp1/task", { taskId: "gcd" });
-		for (let i = 0; i < 2; i++) await post(srv.url, "/api/sessions/imp1/code", { author: `p${i}`, source: task.variants[0]! });
-		const snap = await until(async () => { const s = await get(); return s.contributions.length === 2 && s.contributions.every((c: any) => c.ok !== null) ? s : false; });
-		assert.deepEqual(snap.contributions.map((c: any) => c.host).sort(), ["big", "nano"]);
-		// the shard's verdict lives in the hub's space now, marked as imported; the shard keeps none
-		const scores = async () => (await srv.hub.host.readAll({ type: "CodeScore", fields: { session: "imp1" } })).map((e) => e.fields as any);
-		await until(async () => (await scores()).some((f) => f.host === "nano" && f.imported === true) && (await remote.count({ type: "CodeScore" })) === 0);
-		const sys = await (await fetch(srv.url + "/api/system")).json() as any;
-		assert.deepEqual(sys.shards.map((x: any) => x.judged), [1, 1]);
-		// a verdict the hub no longer waits for (it gave the candidate up) still reaches the best: CodeBest and the archive
-		const late = { session: "imp1", blockId: snap.current, candidateId: "late-1", author: "late", via: "human", host: "nano", gen: 0, ok: true, ms: 0.001, passed: 6, total: 6, cases: [], source: task.variants[3]!, ts: Date.now() };
-		await remote.write({ type: "CodeScore", fields: late as never }, null, 60_000);
-		await until(async () => ((await srv.hub.host.readIfExists({ type: "CodeBest", fields: { session: "imp1", blockId: snap.current } }, 0))?.fields as any)?.candidateId === "late-1");
-		assert.equal((await get()).best.candidateId, "late-1");
-		const archived = (await srv.hub.host.readIfExists({ type: "CodeEarlier", fields: { session: "imp1", blockId: snap.current } }, 0))?.fields as any;
-		assert.equal(archived.result, task.variants[3]);
-		// a verdict whose block was deleted is dropped on the way
-		await remote.write({ type: "CodeScore", fields: { ...late, blockId: "bgone", candidateId: "gone-1" } as never }, null, 60_000);
-		await until(async () => (await remote.count({ type: "CodeScore" })) === 0);
-		assert.equal((await scores()).some((f) => f.candidateId === "gone-1"), false);
-	} finally { await srv.close(); await nano.close(); delete process.env.CODEMODE_HOST_NAME; }
-});
 
 t("a visitor's run gets the default token budget at most, and an address's day allowance ends its runs; an admin's does not count", async () => {
 	const use = { input: 900, output: 100, cacheRead: 0, cacheWrite: 0, total: 1000, costUsd: 0.001 };

@@ -26,10 +26,11 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local JSONL state. Docs: `docs/tui.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
   `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background. Docs: `docs/dashboard.md`.
-- Codemode chat (`codemode-chat/`: Next.js, Docker dev/test/prod/nano, big/nano shards; docs in its README):
-  `npm run codemode-chat` (port 3700, after `npm --prefix codemode-chat run build`), tests `npm run test:codemode-chat`,
-  typecheck `npm --prefix codemode-chat run typecheck` (own tsconfig, not part of the root `tsc`),
-  local two-host run `npm --prefix codemode-chat run shards:start`, Docker `npm --prefix codemode-chat run docker:*`
+- Codemode chat (`codemode-chat/`: Next.js; every role its own process around one space, see
+  `docs/codemode-space-architektur.md` and its README): `npm --prefix codemode-chat run dev` (space, judge, web; port 3700),
+  `npm run codemode-chat` (after `npm --prefix codemode-chat run build`), tests `npm run test:codemode-chat` (they start
+  the processes), typecheck `npm --prefix codemode-chat run typecheck` (own tsconfig, not part of the root `tsc`),
+  Docker `npm --prefix codemode-chat run docker:*` (not yet adapted to the processes)
   (changes containers on this machine; never on a shared server without asking).
 - Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
 - Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`

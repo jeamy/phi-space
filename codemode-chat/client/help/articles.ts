@@ -667,36 +667,40 @@ Every contribution of a model agent costs tokens: a few thousand per call, since
 	{
 		id: "help.topic.big_and_nano",
 		section: "operate",
-		title: { de: "big und nano", en: "big and nano" },
-		short: { de: "Zwei getrennte Server: der Hub (big) und der Bewertungs-Shard (nano).", en: "Two separate servers: the hub (big) and the judging shard (nano)." },
+		title: { de: "Prozesse, big und nano", en: "Processes, big and nano" },
+		short: { de: "Jede Rolle ein eigener Prozess, alle reden nur über einen Space; welcher Prozess auf welchem Host läuft, ist Konfiguration.", en: "Every role its own process, all of them talk only through one space; which process runs on which host is configuration." },
 		body: {
 			de: `## Überblick {#overview}
 
-Wie das phi-spaces-Hilfesystem läuft der Codemode-Chat auf zwei Hosts: **big** ist der Hub, **nano** ein optionaler Shard, der Beiträge auf seiner CPU bewertet. Beide sind getrennte Server mit eigener \`.env\`.
+Im Codemode-Chat ist **alles Space**: Jede Rolle läuft als eigener Prozess, und die Prozesse reden nur über einen gemeinsamen phi-space miteinander. Kein Prozess hält Zustand nur in seinem Speicher. Stirbt ein Prozess, laufen seine Transaktionen und Leases ab, und seine Arbeit erscheint wieder für einen anderen Prozess derselben Rolle.
 
-## big (Hub) {#hub}
+## Die Prozesse {#hub}
 
-Der Hub (\`server/index.ts\`) bedient die Oberfläche (Next.js), die REST-API, die WebSocket-Verbindungen, den Chat und die Aufgabenzustände. Er hat eigene Richter, die lokal bewerten.
+| Prozess | Datei | Aufgabe |
+|---|---|---|
+| space | \`server/space-host.ts\` | trägt den Space (SQLite) und stellt ihn über den phi-spaces-Socket bereit (\`CODEMODE_LISTEN\`) |
+| judge | \`server/judge-host.ts\` | nimmt einen Beitrag in einer Transaktion, bewertet ihn in der Sandbox dieses Rechners und schreibt Urteil und besten Code in derselben Transaktion |
+| web | \`server/index.ts\` | Oberfläche (Next.js), REST-API, WebSocket; folgt dem Änderungsstrom des Space und schickt neue Snapshots |
 
-## nano (Shard) {#shard}
+Lokal startet \`npm run dev\` (oder \`npm start\`) alle Prozesse; \`CODEMODE_ROLES\` wählt, welche auf diesem Rechner laufen.
 
-nano (\`server/nano-host.ts\`) ist ein Host ohne Oberfläche: eigener Space mit eigener SQLite-Datei, über den phi-spaces-Socket erreichbar (\`CODEMODE_LISTEN\`). Seine Richter (\`CODEMODE_JUDGES\`, Standard 2) laufen in **nanos** Sandbox. So fällt die Rechenlast der Bewertung auf nano.
+## Mehrere Bewerter {#shard}
+
+Bewerter-Prozesse können auf jedem Rechner laufen, der den Space erreicht (\`CODEMODE_SPACE\`), auch mehrere. Sie teilen sich die Beiträge von selbst: Wer frei ist, nimmt den nächsten. Die Kachel nennt den Host, der bewertet hat (\`CODEMODE_HOST_NAME\`).
 
 ## Zusammenspiel {#interplay}
 
-Ist auf dem Hub \`CODEMODE_REMOTE\` gesetzt, geht **jeder zweite Beitrag** in nanos Space und kommt dort als \`CodeScore\` zurück. Der Hub holt jedes Urteil sofort in seinen eigenen Space (auch eines, das spät kommt oder nach einem Neustart des Hubs); die Kachel nennt den Host, der bewertet hat. So liest der Hub für einen Raum nur seinen eigenen Space. Die **Systemleiste** unten zeigt beide Hosts mit CPU, Speicher und Zahl der bewerteten Beiträge.
-
-Ist nano nicht erreichbar (Aufrufe sind auf 8 Sekunden begrenzt, danach gilt nano 15 Sekunden als ausgefallen), bewertet der Hub alles selbst. Beim **Löschen eines Blocks** werden auch nanos Urteile entfernt.
+Jeder Prozess hält einen \`Process\`-Eintrag im Space und verlängert ihn alle 10 Sekunden. Die **Systemleiste** unten zeigt daraus jeden Host mit seinen Rollen, CPU, Speicher und der Zahl der Beiträge, die seine Bewerter bewertet haben. Ein Bewerter, der mitten in der Bewertung stirbt, lässt seine Transaktion ablaufen (\`CODEMODE_JUDGE_LEASE_MS\`, Standard 60 s); dann nimmt ein anderer den Beitrag. Beim **Löschen eines Blocks** gehen alle seine Urteile mit.
 
 ## Verbindung {#connection}
 
-| Weg | \`CODEMODE_REMOTE\` auf big |
+| Weg | \`CODEMODE_LISTEN\` (space) / \`CODEMODE_SPACE\` (die anderen) |
 |---|---|
-| lokal, ein Rechner | \`unix:/tmp/codemode-b.sock\` |
-| zwei Server | \`tcp:<nano-ip>:3800\` |
-| SSH-Tunnel | \`tcp:127.0.0.1:3800\` (der Hub-Container nutzt das Host-Netz) |
+| lokal, ein Rechner | \`unix:/tmp/codemode-space.sock\` (Standard) |
+| zwei Rechner | \`tcp:0.0.0.0:3800\` / \`tcp:<host>:3800\` |
+| SSH-Tunnel | \`tcp:127.0.0.1:3800\` auf beiden Seiten |
 
-Der Socket hat **kein TLS**: binde ihn an eine interne Adresse (\`CODEMODE_SHARD_BIND\`) oder nutze einen Tunnel. Das ist eine Demo-Verdrahtung, kein replizierter Cluster.
+Der Socket hat **kein TLS**: binde ihn an eine interne Adresse oder nutze einen Tunnel. In Produktion trägt nano den Space und big den Hauptteil, wie im phi-spaces-Hilfesystem; die Docker-Dateien dafür folgen.
 
 ## Siehe auch {#see-also}
 
@@ -704,31 +708,35 @@ Der Socket hat **kein TLS**: binde ihn an eine interne Adresse (\`CODEMODE_SHARD
 - [Bewertung und Sandbox](help.topic.judging_and_sandbox#overview)`,
 			en: `## Overview {#overview}
 
-Like the phi-spaces help system, the codemode chat runs on two hosts: **big** is the hub, **nano** an optional shard that judges contributions on its CPU. They are separate servers, each with its own \`.env\`.
+In the codemode chat **everything is space**: every role runs as its own process, and the processes talk to each other only through one shared phi-space. No process keeps state only in its memory. When a process dies, its transactions and leases lapse, and its work comes back for another process of the same role.
 
-## big (hub) {#hub}
+## The processes {#hub}
 
-The hub (\`server/index.ts\`) serves the interface (Next.js), the REST API, the WebSocket connections, the chat and the task state. It has its own judges that work locally.
+| Process | File | Job |
+|---|---|---|
+| space | \`server/space-host.ts\` | owns the space (SQLite) and serves it over the phi-spaces socket (\`CODEMODE_LISTEN\`) |
+| judge | \`server/judge-host.ts\` | takes a contribution under a transaction, judges it in this machine's sandbox and writes the verdict and the best code in that same transaction |
+| web | \`server/index.ts\` | interface (Next.js), REST API, WebSocket; follows the space's change stream and pushes fresh snapshots |
 
-## nano (shard) {#shard}
+Locally \`npm run dev\` (or \`npm start\`) starts all of them; \`CODEMODE_ROLES\` picks the ones that run on this machine.
 
-nano (\`server/nano-host.ts\`) is a host without an interface: its own space with its own SQLite file, reachable over the phi-spaces socket (\`CODEMODE_LISTEN\`). Its judges (\`CODEMODE_JUDGES\`, default 2) run in **nano's** sandbox. So the judging load lands on nano.
+## Several judges {#shard}
+
+Judge processes can run on any machine that reaches the space (\`CODEMODE_SPACE\`), as many as you like. They share the contributions by themselves: whoever is free takes the next one. The tile names the host that judged (\`CODEMODE_HOST_NAME\`).
 
 ## How they work together {#interplay}
 
-With \`CODEMODE_REMOTE\` set on the hub, **every second contribution** goes into nano's space and comes back there as a \`CodeScore\`. The hub moves every verdict into its own space at once (also one that comes late or after a restart of the hub); the tile names the host that judged. So the hub reads only its own space for a room. The **system bar** at the bottom shows both hosts with CPU, memory and the number of judged contributions.
-
-If nano is unreachable (calls are bounded to 8 seconds, then nano counts as down for 15 seconds) the hub judges everything itself. **Deleting a block** also removes nano's verdicts.
+Every process keeps a \`Process\` entry in the space and renews it every 10 seconds. From these the **system bar** at the bottom shows every host with its roles, CPU, memory and the number of contributions its judges judged. A judge that dies in the middle of a judgement lets its transaction lapse (\`CODEMODE_JUDGE_LEASE_MS\`, default 60 s); then another one takes the contribution. **Deleting a block** takes all its verdicts along.
 
 ## Connection {#connection}
 
-| Way | \`CODEMODE_REMOTE\` on big |
+| Way | \`CODEMODE_LISTEN\` (space) / \`CODEMODE_SPACE\` (the others) |
 |---|---|
-| local, one machine | \`unix:/tmp/codemode-b.sock\` |
-| two servers | \`tcp:<nano-ip>:3800\` |
-| SSH tunnel | \`tcp:127.0.0.1:3800\` (the hub container uses the host network) |
+| local, one machine | \`unix:/tmp/codemode-space.sock\` (default) |
+| two machines | \`tcp:0.0.0.0:3800\` / \`tcp:<host>:3800\` |
+| SSH tunnel | \`tcp:127.0.0.1:3800\` on both sides |
 
-The socket has **no TLS**: bind it to an internal address (\`CODEMODE_SHARD_BIND\`) or use a tunnel. This is a demo wiring, not a replicated cluster.
+The socket has **no TLS**: bind it to an internal address or use a tunnel. In production nano carries the space and big the main part, like the phi-spaces help system; the Docker files for that follow.
 
 ## See also {#see-also}
 
@@ -753,21 +761,21 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`PORT\` | Port des Hubs, Standard 3700 |
 | \`CODEMODE_BIND\` | Bind-Adresse des Servers, Standard \`127.0.0.1\` |
 | \`HOST_BIND\` | Docker: veröffentlichte Adresse; leer = alle, \`127.0.0.1\` = nur lokal |
-| \`CODEMODE_SQLITE\` | Speicher des Hubs, Standard \`.local/codemode-chat.sqlite\` |
+| \`CODEMODE_SQLITE\` | space: Speicher, Standard \`.local/codemode-chat.sqlite\`; \`CODEMODE_MEM=1\` = nur im Speicher |
+| \`CODEMODE_LISTEN\` | space: Adresse, an der der Space bereitsteht, Standard \`unix:/tmp/codemode-space.sock\` |
+| \`CODEMODE_SPACE\` | alle anderen Prozesse: Adresse des Space (\`unix:…\` oder \`tcp:host:port\`) |
+| \`CODEMODE_ROLES\` | \`npm run dev\` / \`npm start\`: welche Prozesse auf diesem Rechner laufen, Standard \`space,judge,web\` |
 | \`CODEMODE_HOST_NAME\` | Name in der Systemleiste, Standard der Hostname |
 | \`CODEMODE_CHAT_LLM\` | \`1\` schaltet Modell-Agenten ein |
 | \`CODEMODE_CHAT_MODEL\` | Teilname des Standardmodells |
 | \`CODEMODE_VERIFIER_MODEL\` | Teilname des Modells, mit dem der Prüfer-Agent Prüfregeln schreibt, Standard \`haiku\` |
 | \`CODEMODE_LLM_PER_MIN\` | Modellaufrufe pro Minute, Standard 20 |
 | \`CODEMODE_LLM_PER_DAY\` | Modellaufrufe pro Tag, Standard 500 (Kostendeckel) |
-| \`CODEMODE_REMOTE\` | Hub: Adresse des Shards (\`unix:…\` oder \`tcp:host:port\`) |
-| \`CODEMODE_LISTEN\` | nano: Adresse, an der der Shard lauscht |
-| \`CODEMODE_DB\` | nano: Speicher; \`CODEMODE_MEM=1\` = nur im Speicher |
-| \`CODEMODE_JUDGES\` | nano: parallele Richter, Standard 2 |
-| \`CODEMODE_TTL_HOURS\` | Hub und nano: Lebensdauer der Einträge eines Raums in Stunden, Standard 24; \`0\` = bis der Block gelöscht wird |
-| \`CODEMODE_SHARD_BIND\` | Docker nano: Bindung des Shard-Ports, Standard \`127.0.0.1\` (Tunnel); sonst eine interne IP, nie eine öffentliche |
+| \`CODEMODE_JUDGES\` | judge: parallele Bewerter je Prozess, Standard 2 |
+| \`CODEMODE_JUDGE_LEASE_MS\` | judge: Lease der Transaktion eines Bewerters; stirbt er, ist sein Beitrag danach wieder frei, Standard 60 000 |
+| \`CODEMODE_TTL_HOURS\` | Lebensdauer der Einträge eines Raums in Stunden, Standard 24; \`0\` = bis der Block gelöscht wird |
 | \`CODEMODE_ADMIN_TOKEN\` | Hub: Token für \`POST /api/llm\` (Header \`x-admin-token\`); leer = Umschalten aus |
-| \`CODEMODE_MAX_TIMEOUT_S\` | Hub und nano (gleicher Wert): höchstes Zeitlimit je Beitrag, das eine eigene Aufgabe wählen darf, Standard 60; das Formularfeld richtet sich danach. Ein langes Limit belegt einen der zwei Bewertungsplätze je Prozess entsprechend lange |
+| \`CODEMODE_MAX_TIMEOUT_S\` | höchstes Zeitlimit je Beitrag, das eine eigene Aufgabe wählen darf, Standard 60; das Formularfeld richtet sich danach. Ein langes Limit belegt einen Bewerter entsprechend lange |
 | \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
 | \`PI_AUTH_DIR\` | Pfad der pi-Zugangsdaten für den Container |
 | \`CODEMODE_DEV_ORIGINS\` | nur Dev-Modus: weitere Hosts, unter denen die Seite geöffnet wird (z. B. eine LAN-IP); \`localhost\` und \`127.0.0.1\` gehen immer |
@@ -775,17 +783,17 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 ## Lokal entwickeln {#local}
 
 \`\`\`bash
-npm --prefix codemode-chat run dev            # Next.js Dev-Modus, http://localhost:3700
-npm --prefix codemode-chat run shards:start   # Hub + nano über einen Unix-Socket
+npm --prefix codemode-chat run dev            # space, judge und web (Next.js Dev-Modus), http://localhost:3700
+npm --prefix codemode-chat run space          # oder ein einzelner Prozess: space | judge | web
 npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # Produktion
 npm run test:codemode-chat                    # Tests
 \`\`\`
 
-Im Dev-Modus lädt Next.js \`app/\` und \`client/\` bei jeder Änderung neu, und \`node --watch-path\` startet den Server neu, wenn sich \`server/\` oder die phi-spaces-Quellen ändern. Öffne die Dev-Seite über \`http://localhost:3700\`: Next.js 16 hydratisiert Dev-Seiten über \`127.0.0.1\` nicht.
+Im Dev-Modus lädt Next.js \`app/\` und \`client/\` bei jeder Änderung neu, und \`node --watch-path\` startet jeden Prozess neu, wenn sich \`server/\` oder die phi-spaces-Quellen ändern. Öffne die Dev-Seite über \`http://localhost:3700\`: Next.js 16 hydratisiert Dev-Seiten über \`127.0.0.1\` nicht.
 
 ## Docker {#docker}
 
-Der Build-Kontext ist das Repository. **Produktion und nano sind zwei getrennte Server**, jeder mit eigener \`.env\`.
+Der Build-Kontext ist das Repository. Die Docker-Dateien starten noch den einzelnen Server von vor der Aufteilung in Prozesse; sie werden je Rolle umgestellt (siehe [Prozesse, big und nano](help.topic.big_and_nano#overview)).
 
 \`\`\`bash
 npm --prefix codemode-chat run docker:prod:up   # big: Host-Netz, HOST_BIND für den Reverse-Proxy
@@ -794,7 +802,7 @@ npm --prefix codemode-chat run docker:dev:up    # Entwicklung im Container (Quel
 npm --prefix codemode-chat run docker:test      # Tests im Container
 \`\`\`
 
-Die Ports 3700 (Hub) und 3800 (Shard) kollidieren nicht mit dem Hilfesystem (3500/3600). Beispiele für Caddy, nginx und systemd liegen in \`deploy/\`.
+Die Ports 3700 (web) und 3800 (Space über TCP) kollidieren nicht mit dem Hilfesystem (3500/3600). Beispiele für Caddy, nginx und systemd liegen in \`deploy/\`.
 
 ## Siehe auch {#see-also}
 
@@ -811,21 +819,21 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`PORT\` | hub port, default 3700 |
 | \`CODEMODE_BIND\` | bind address of the server, default \`127.0.0.1\` |
 | \`HOST_BIND\` | Docker: published address; empty = all, \`127.0.0.1\` = local only |
-| \`CODEMODE_SQLITE\` | hub storage, default \`.local/codemode-chat.sqlite\` |
+| \`CODEMODE_SQLITE\` | space: storage, default \`.local/codemode-chat.sqlite\`; \`CODEMODE_MEM=1\` = in memory only |
+| \`CODEMODE_LISTEN\` | space: address the space is served on, default \`unix:/tmp/codemode-space.sock\` |
+| \`CODEMODE_SPACE\` | every other process: address of the space (\`unix:…\` or \`tcp:host:port\`) |
+| \`CODEMODE_ROLES\` | \`npm run dev\` / \`npm start\`: which processes run on this machine, default \`space,judge,web\` |
 | \`CODEMODE_HOST_NAME\` | name in the system bar, default the hostname |
 | \`CODEMODE_CHAT_LLM\` | \`1\` enables model agents |
 | \`CODEMODE_CHAT_MODEL\` | part of the default model name |
 | \`CODEMODE_VERIFIER_MODEL\` | part of the name of the model the verifier agent writes check rules with, default \`haiku\` |
 | \`CODEMODE_LLM_PER_MIN\` | model calls per minute, default 20 |
 | \`CODEMODE_LLM_PER_DAY\` | model calls per day, default 500 (cost cap) |
-| \`CODEMODE_REMOTE\` | hub: address of the shard (\`unix:…\` or \`tcp:host:port\`) |
-| \`CODEMODE_LISTEN\` | nano: address the shard listens on |
-| \`CODEMODE_DB\` | nano: storage; \`CODEMODE_MEM=1\` = in memory only |
-| \`CODEMODE_JUDGES\` | nano: parallel judges, default 2 |
-| \`CODEMODE_TTL_HOURS\` | hub and nano: lifetime of a room's entries in hours, default 24; \`0\` = until the block is deleted |
-| \`CODEMODE_SHARD_BIND\` | Docker nano: bind address of the shard port, default \`127.0.0.1\` (tunnel); else an internal IP, never a public one |
+| \`CODEMODE_JUDGES\` | judge: parallel judges per process, default 2 |
+| \`CODEMODE_JUDGE_LEASE_MS\` | judge: lease of a judge's transaction; when it dies, its contribution is free again after it, default 60,000 |
+| \`CODEMODE_TTL_HOURS\` | lifetime of a room's entries in hours, default 24; \`0\` = until the block is deleted |
 | \`CODEMODE_ADMIN_TOKEN\` | hub: token for \`POST /api/llm\` (header \`x-admin-token\`); empty = switching off |
-| \`CODEMODE_MAX_TIMEOUT_S\` | hub and nano (same value): the longest time limit per contribution a custom task may choose, default 60; the form's field follows it. A long limit keeps one of the two judge slots per process busy that long |
+| \`CODEMODE_MAX_TIMEOUT_S\` | the longest time limit per contribution a custom task may choose, default 60; the form's field follows it. A long limit keeps one judge busy that long |
 | \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |
 | \`PI_AUTH_DIR\` | path of the pi credentials for the container |
 | \`CODEMODE_DEV_ORIGINS\` | dev mode only: further hosts the page is opened from (e.g. a LAN IP); \`localhost\` and \`127.0.0.1\` always work |
@@ -833,17 +841,17 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 ## Developing locally {#local}
 
 \`\`\`bash
-npm --prefix codemode-chat run dev            # Next.js dev mode, http://localhost:3700
-npm --prefix codemode-chat run shards:start   # hub + nano over a unix socket
+npm --prefix codemode-chat run dev            # space, judge and web (Next.js dev mode), http://localhost:3700
+npm --prefix codemode-chat run space          # or one process: space | judge | web
 npm --prefix codemode-chat run build && npm --prefix codemode-chat start   # production
 npm run test:codemode-chat                    # tests
 \`\`\`
 
-In dev mode Next.js reloads \`app/\` and \`client/\` on every change, and \`node --watch-path\` restarts the server when \`server/\` or the phi-spaces sources change. Open the dev page as \`http://localhost:3700\`: Next.js 16 does not hydrate dev pages requested through \`127.0.0.1\`.
+In dev mode Next.js reloads \`app/\` and \`client/\` on every change, and \`node --watch-path\` restarts each process when \`server/\` or the phi-spaces sources change. Open the dev page as \`http://localhost:3700\`: Next.js 16 does not hydrate dev pages requested through \`127.0.0.1\`.
 
 ## Docker {#docker}
 
-The build context is the repository. **Production and nano are two separate servers**, each with its own \`.env\`.
+The build context is the repository. The Docker files still start the single server from before the split into processes; they are being moved to one service per role (see [Processes, big and nano](help.topic.big_and_nano#overview)).
 
 \`\`\`bash
 npm --prefix codemode-chat run docker:prod:up   # big: host network, HOST_BIND for the reverse proxy
@@ -852,7 +860,7 @@ npm --prefix codemode-chat run docker:dev:up    # development in a container (so
 npm --prefix codemode-chat run docker:test      # tests in a container
 \`\`\`
 
-Ports 3700 (hub) and 3800 (shard) do not collide with the help system (3500/3600). Examples for Caddy, nginx and systemd are in \`deploy/\`.
+Ports 3700 (web) and 3800 (the space over TCP) do not collide with the help system (3500/3600). Examples for Caddy, nginx and systemd are in \`deploy/\`.
 
 ## See also {#see-also}
 
@@ -888,7 +896,7 @@ Der Chat führt fremden Code aus. Deshalb gilt: **Code ist Daten**, und er läuf
 
 - **Keine Anmeldung:** Eingereichter Code wird mit einem Gastnamen signiert, den der Browser sich merkt. Jeder im Raum kann Aufgaben anlegen, Läufe starten und Blöcke löschen.
 - **Offene Räume:** Wer die Adresse kennt, ist im Raum.
-- **Kein TLS am Shard-Socket:** siehe [big und nano](help.topic.big_and_nano#connection).
+- **Kein TLS am Space-Socket:** siehe [Prozesse, big und nano](help.topic.big_and_nano#connection).
 
 Stelle die App deshalb nicht ohne Reverse-Proxy (und gegebenenfalls Zugriffsschutz) öffentlich zur Verfügung.
 
@@ -922,7 +930,7 @@ The chat runs foreign code. So: **code is data**, and it only runs in the sandbo
 
 - **No sign-in:** handed-in code is signed with a guest name that the browser remembers. Anyone in a room can create tasks, start runs and delete blocks.
 - **Open rooms:** whoever knows the address is in the room.
-- **No TLS on the shard socket:** see [big and nano](help.topic.big_and_nano#connection).
+- **No TLS on the space socket:** see [Processes, big and nano](help.topic.big_and_nano#connection).
 
 So do not make the app public without a reverse proxy (and access protection where needed).
 

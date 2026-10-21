@@ -1,26 +1,21 @@
-// Codemode chat: HTTP + WebSocket server around the Next.js 16 app (the API and /ws are served here, pages by Next).
+// Codemode chat, the web process: HTTP + WebSocket server around the Next.js 16 app (the API and /ws are served here,
+// pages by Next). It holds no data of its own: rooms, contributions and verdicts live in the shared space (space-host.ts),
+// which it reaches over CODEMODE_SPACE; judges run in their own processes (judge-host.ts). `npm run dev` starts them all.
 // Run: node --experimental-strip-types codemode-chat/server/index.ts [--dev]
-// Env (also read from codemode-chat/.env): PORT (3700), CODEMODE_BIND (127.0.0.1), CODEMODE_SQLITE (default .local/codemode-chat.sqlite), CODEMODE_CHAT_LLM=1,
-//      CODEMODE_REMOTE (judge shard on nano: tcp:host:port or unix:/path), CODEMODE_HOST_NAME (name in the system bar),
+// Env (also read from codemode-chat/.env): PORT (3700), CODEMODE_BIND (127.0.0.1), CODEMODE_SPACE (unix:/tmp/codemode-space.sock), CODEMODE_CHAT_LLM=1,
+//      CODEMODE_HOST_NAME (name in the system bar),
 //      CODEMODE_ADMIN_TOKEN (switches the model agents via POST /api/llm with the header x-admin-token; unset: switching is off),
 //      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
 //      CODEMODE_TTL_HOURS (lifetime of a room's entries in hours, default 24; 0 = until the block is deleted).
 import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ROOT } from "./env.ts";
-import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { spaces, startService } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
 import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { CodeChatHub, type LlmApi } from "./hub.ts";
 import { adminModels, llmInfo, setLlm } from "./llm.ts";
-import { remoteJudgeSpace } from "./shard.ts";
+import { announce, connectSpace } from "./space.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
 
@@ -62,17 +57,13 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 	return undefined;
 };
 
-export async function startServer(o: { port?: number; bind?: string; sqlitePath?: string | null; remote?: string | null; useNext?: boolean; dev?: boolean; llm?: LlmApi } = {}) {
+/** `space`: the shared space (default CODEMODE_SPACE, else unix:/tmp/codemode-space.sock). */
+export async function startServer(o: { port?: number; bind?: string; space?: string; useNext?: boolean; dev?: boolean; llm?: LlmApi } = {}) {
 	const cm = await loadCodemode();
 	if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded");
-	const registry = createRegistry();
-	registry.install(spaces);
-	const storage = o.sqlitePath ? await (async () => { await mkdir(dirname(o.sqlitePath!), { recursive: true }); return openNodeSqliteStorage(o.sqlitePath!); })() : new MemoryStorage();
-	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
-	const stopService = await startService(harness, ctx, { watchDebounceMs: 400 });
-	const remoteSpec = o.remote === undefined ? process.env.CODEMODE_REMOTE : o.remote;
-	const hub = new CodeChatHub(harness, cm, remoteSpec ? { remote: remoteJudgeSpace(remoteSpec), remoteLabel: process.env.CODEMODE_REMOTE_NAME ?? "nano", ...(o.llm ? { llm: o.llm } : {}) } : (o.llm ? { llm: o.llm } : {}));
-	if (remoteSpec) console.log(`[codemode] judge shard configured: ${remoteSpec}`);
+	const conn = connectSpace(o.space);
+	const hub = new CodeChatHub(conn.space, cm, o.llm ? { llm: o.llm } : {});
+	const presence = announce(conn.space, "web");
 	await hub.restoreAdmin(); // the admin's choice of models from before
 	void hub.resumeRuns().catch((e) => console.error("[codemode] resuming runs failed", (e as Error).message)); // runs the last process left active
 
@@ -261,12 +252,12 @@ export async function startServer(o: { port?: number; bind?: string; sqlitePath?
 	const actual = typeof addr === "object" && addr ? addr.port : port;
 	return {
 		url: `http://127.0.0.1:${actual}`, port: actual, hub,
-		async close() { await hub.close(); await new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections?.(); for (const s of conns) s.destroy(); }); await stopService(); await harness.close(ctx); },
+		async close() { await hub.close(); await new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections?.(); for (const s of conns) s.destroy(); }); await presence.stop(); conn.close(); },
 	};
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-	const srv = await startServer({ sqlitePath: process.env.CODEMODE_SQLITE ?? join(ROOT, ".local", "codemode-chat.sqlite"), useNext: true, dev: process.argv.includes("--dev") });
+	const srv = await startServer({ useNext: true, dev: process.argv.includes("--dev") });
 	console.log(`PHI-SPACES / CODEMODE CHAT (Next.js 16) listening on ${srv.url}`);
 	const dev = process.argv.includes("--dev");
 	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => {
