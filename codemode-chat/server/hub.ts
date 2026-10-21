@@ -59,6 +59,8 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 	tail: Promise<unknown>; bestTail: Promise<unknown>;
 };
 
+/** How long the slots of a new run may wait for an agents process before the page says so. */
+const SLOT_GRACE_MS = 15_000;
 /** The room lock's transaction lease (renewed while the operation runs), and how long an operation waits for it. */
 const ROOM_LOCK_LEASE_MS = 30_000, ROOM_LOCK_WAIT_MS = 60_000;
 
@@ -249,7 +251,12 @@ export class CodeChatHub {
 	 *  one held for longer throws StillHeld rather than pass for no run). */
 	async #runNow(s: Session): Promise<RunInfo | null> {
 		const r = (await readExisting(this.host, { type: "CodeRun", fields: { session: s.id } }))?.fields as unknown as RunEntry | undefined;
-		return r ? { ...r.info, active: true } : null;
+		if (!r) return null;
+		// slots no agents process took up (all of their slots are in use): those agents' work waits, which the page says
+		const waiting = await this.host.count({ type: "AgentSlot", fields: { session: s.id, runId: r.runId } });
+		const started = parseInt(r.runId.slice(1, -8), 36);
+		const late = waiting > 0 && (!Number.isFinite(started) || Date.now() - started > SLOT_GRACE_MS);
+		return { ...r.info, active: true, ...(late ? { note: `${waiting} of ${r.params.agents} agents wait for a free slot in an agents process (CODEMODE_AGENT_SLOTS); their work waits meanwhile` } : {}) };
 	}
 
 	/** What the page shows as the room's run: the active one, else how the last one ended. */

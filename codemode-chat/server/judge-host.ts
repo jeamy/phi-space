@@ -9,16 +9,23 @@
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
-import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
+import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { announce, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld } from "./space.ts";
 import { taskFromSpec } from "./tasks.ts";
 
 /** A judge's transaction lease, renewed while it judges: a dead judge's candidate is back within this time
- *  (CODEMODE_JUDGE_LEASE_MS, default 60 s). */
-const TXN_LEASE_MS = Math.max(1000, Number(process.env.CODEMODE_JUDGE_LEASE_MS || 60_000));
+ *  (CODEMODE_JUDGE_LEASE_MS). The sandbox holds the judge's thread while the code runs, so no renewal comes during a
+ *  case: by default the lease outlasts the longest time limit a task may set (CODEMODE_MAX_TIMEOUT_S) by 30 s. */
+const TXN_LEASE_MS = process.env.CODEMODE_JUDGE_LEASE_MS ? Math.max(1000, Number(process.env.CODEMODE_JUDGE_LEASE_MS)) : maxTimeoutMs() + 30_000;
 /** How long one blocking take waits for a candidate (below the client's call timeout). */
 const WAIT_MS = 5_000;
+
+/** A judge that dies hard while judging (its process killed, the sandbox taking it down) leaves its JudgeStart marker
+ *  behind; a candidate with this many of them gets a failed verdict instead of taking down the next judge too. */
+const MAX_DEATHS = 2;
+/** How long a JudgeStart marker counts. */
+const START_LEASE_MS = 3600_000;
 
 /** What a verdict carries over from its candidate besides the verdict: the run, the lineage, the usage. */
 const lineageOf = (f: Record<string, any>) => Object.fromEntries(["role", "basedOn", "partner", "critiqueId", "proposalId", "usage", "runId"].filter((k) => f[k]).map((k) => [k, f[k]]));
@@ -30,19 +37,30 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 	const t = await space.createTransaction(TXN_LEASE_MS);
 	open.add(t.id);
 	const stop = keepAlive(space, t.id, TXN_LEASE_MS);
-	let marker: string | null = null, f: Record<string, any> | null = null;
+	let marker: string | null = null, stopMarker = () => {}, start: string | null = null, f: Record<string, any> | null = null;
 	try {
 		const c = await space.take({ type: "CodeCandidate" }, WAIT_MS, { txn: t.id });
 		if (!c) { await space.abort(t.id); return false; }
 		f = c.fields as Record<string, any>;
 		const { session, blockId, candidateId } = f as { session: string; blockId?: string; candidateId: string };
 		// the candidate is invisible while this transaction holds it: a marker keeps its tile on the page meanwhile
+		// (renewed like the transaction, so a long time limit does not let it lapse while the judge is still at work)
 		marker = (await space.write({ type: "CodeJudging", fields: { ...f, host } as never }, null, TXN_LEASE_MS * 2)).id;
+		stopMarker = keepAlive(space, marker, TXN_LEASE_MS * 2);
 		// a block that was deleted takes its candidates along: consumed, nothing written (a CodeTask another transaction
 		// holds for a moment, a changed time limit, is waited for; one held beyond the wait is not taken for gone: the
 		// candidate goes back)
 		const taskEntry = async () => typeof blockId !== "string" ? null : (await readExisting(space, { type: "CodeTask", fields: { session, blockId } }, { txn: t.id }))?.fields as Record<string, unknown> | undefined ?? false;
 		const alive = async () => (await taskEntry()) !== false;
+		const deaths = await space.count({ type: "JudgeStart", fields: { session, candidateId } });
+		if (deaths >= MAX_DEATHS) {
+			if (await alive()) await space.write({ type: "CodeScore", fields: failedVerdict(f, host, `the judge stopped ${deaths} times while judging it`) as never }, t.id, ttl);
+			await space.commit(t.id);
+			while (await space.take({ type: "JudgeStart", fields: { session, candidateId } }, NO_WAIT));
+			return true;
+		}
+		// cancelled when this round ends in any way but a hard death of this process
+		start = (await space.write({ type: "JudgeStart", fields: { session, candidateId } }, null, START_LEASE_MS)).id;
 		// the task: its block's CodeTask (a candidate from before carries its own spec; one without a block names a catalog task)
 		const spec = f.custom !== undefined || typeof blockId !== "string" ? f : await taskEntry();
 		const task = spec ? taskFromSpec(spec) : null;
@@ -68,17 +86,22 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		return true;
 	} finally {
 		stop(); open.delete(t.id);
+		stopMarker();
 		if (marker) await space.cancel(marker).catch(() => {});
+		if (start) await space.cancel(start).catch(() => {});
 	}
 }
+
+/** A failed verdict without code for a candidate that could not be judged; the run's barrier counts it (runId), lineage
+ *  and usage stay with it. */
+const failedVerdict = (f: Record<string, any>, host: string, error: string) => ({ session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ok: false, ms: TIMEOUT_MS, passed: 0, total: 0, cases: [], error, source: "", ts: f.ts });
 
 /** Consumes a candidate whose verdict could not be stored, with a failed verdict that carries no code. */
 async function failed(space: SpaceLike, f: Record<string, any>, host: string, ttl: number, why: string): Promise<void> {
 	const t = await space.createTransaction(30_000);
 	try {
-		// the run's barrier counts this verdict (runId); lineage and usage stay with it
 		if (await space.take({ type: "CodeCandidate", fields: { session: f.session, candidateId: f.candidateId } }, NO_WAIT, { txn: t.id }))
-			await space.write({ type: "CodeScore", fields: { session: f.session, blockId: f.blockId, candidateId: f.candidateId, author: f.author, via: f.via, host, gen: f.gen, ...lineageOf(f), ok: false, ms: TIMEOUT_MS, passed: 0, total: 0, cases: [], error: `the verdict could not be stored: ${String(why).slice(0, 150)}`, source: "", ts: f.ts } as never }, t.id, ttl);
+			await space.write({ type: "CodeScore", fields: failedVerdict(f, host, `the verdict could not be stored: ${String(why).slice(0, 150)}`) as never }, t.id, ttl);
 		await space.commit(t.id);
 	} catch (e) { await space.abort(t.id).catch(() => {}); throw e; }
 }

@@ -167,7 +167,7 @@ offenen Aufträge laufen leer aus.
 
 **Barriere.** Sie wartet, bis alle Züge ihrer Generation erledigt und alle abgegebenen Beiträge beurteilt sind, und öffnet
 dann die nächste Generation.
-- Sie schaut nach 2, 4, 8 und dann alle 10 s wieder nach; jedes Nachsehen ist ein Commit.
+- Sie schaut nach 2 und dann alle 4 s wieder nach; jedes Nachsehen ist ein Commit.
 - Sind alle Züge erledigt, wartet sie auf die Urteile höchstens `CODEMODE_VERDICT_WAIT_S`. Ohne diese Variable ist das
   die Höchstzeit eines Judges plus 150 s, bei Textantworten 10 min.
 - Danach geht sie ohne die fehlenden Urteile weiter und vermerkt das in der Info des Laufs, etwa wenn kein judge-Prozess
@@ -178,17 +178,21 @@ dann die nächste Generation.
 Ebenen tief. Prüfer und Folgeauftrag eines abgegebenen Beitrags sind von der Obergrenze ausgenommen: sie sind durch den
 Beitrag begrenzt (zwei Prüfer, ein Folgeauftrag), und ohne sie bliebe eine bezahlte Antwort unbeurteilt.
 
+**Judge und Sandbox.** Die Sandbox hält den Thread des Judges, solange ein Fall läuft; in dieser Zeit erneuert er nichts.
+Seine Lease ist deshalb standardmäßig die höchste Zeitgrenze einer Aufgabe (`CODEMODE_MAX_TIMEOUT_S`) plus 30 s.
+
 **Leases und Slots.** Die Leases von Slot und Auftrag betragen standardmäßig 60 s (`CODEMODE_AGENT_LEASE_MS`). Ein
 agents-Prozess hat bis zu 16 aktive Slots (`CODEMODE_AGENT_SLOTS`). Das ist eine Grenze je Prozess.
 
 Aufträge mit `onlyBy` (Züge, die Eröffnungsaufträge des Bretts) warten auf den Slot ihres Agenten. Übersteigen die Agenten
-aller Läufe die Slots aller agents-Prozesse, bleiben solche Aufträge liegen, ohne dass der Lauf das anzeigt.
+aller Läufe die Slots aller agents-Prozesse, bleiben solche Aufträge liegen. Die Seite sagt nach 15 s im Vermerk des Laufs,
+wie viele Agenten auf einen Slot warten.
 
 **Fehler eines Auftrags.**
 - Ein abgefangener Fehler erlaubt **drei Versuche insgesamt**, jeweils mit einer neuen Aufrufkennung.
 - Danach zählt der Auftrag als erledigt, ohne abzugeben.
 - Ist das Tagesbudget der Modelle verbraucht, endet der Lauf als „Budget verbraucht“.
-- Harte Abstürze erhöhen den Versuchszähler nicht.
+- Harte Abstürze während eines Modellaufrufs zählen über `ItemStart`: nach zwei wird der Auftrag aufgegeben.
 
 ## Modellaufrufe, Kontext und Budgets
 
@@ -263,9 +267,6 @@ Störungen.
 **Offen:**
 - Ungewisse Kosten nach einem Absturz: Stirbt der model-Prozess nach der Antwort des Anbieters und vor seinem Commit,
   wird der Aufruf wiederholt und doppelt bezahlt, aber nur einmal gebucht. Dafür bräuchte es Idempotenz beim Anbieter.
-- Scheitert ein Auftrag nach einem erfolgreichen Aufruf an etwas anderem (etwa der Obergrenze der Beiträge eines Raums),
-  bricht seine Transaktion ab. Der nächste Versuch fragt mit neuer Kennung, und der Verbrauch des ersten Aufrufs bleibt
-  ungebucht.
 
 ## Snapshots, Aufbewahrung und Wiederherstellung
 
@@ -304,16 +305,20 @@ Hochverfügbarkeit des Space selbst ergibt sich nicht aus der Aufteilung in Proz
 
 **1. Budgets:** siehe „Grenzen, wie sie heute gelten“ und „Offen“ oben.
 
-**2. Versuche:** Harte Abstürze sollten als Versuch zählen, damit ein Auftrag, der jeden Prozess abstürzen lässt, begrenzt
-bleibt.
-
-**3. Anzeige während des Prüfens.** Der `CodeJudging`-Marker (2 × Judge-Lease) wird nicht erneuert. Prüft ein Judge eine
-eigene Aufgabe mit langer Zeitgrenze, verschwindet ihre Kachel zwischenzeitlich.
-
-**4. Laufende Modellaufrufe bei Stop.** Ein Aufruf, den der model-Prozess beim Stop schon ausführt, läuft zu Ende und wird
+**2. Laufende Modellaufrufe bei Stop.** Ein Aufruf, den der model-Prozess beim Stop schon ausführt, läuft zu Ende und wird
 bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem Abbruchsignal an den Anbieter.
 
+**3. Mehrere model-Prozesse** ersetzen sich gegenseitig den `ModelInfo`-Eintrag; mehr als einer geht derzeit nicht.
+
 **Erledigt am 2026-10-21:**
+- Harte Abstürze zählen:
+  - Ein Judge hinterlässt beim Sterben während der Prüfung einen `JudgeStart`-Marker. Nach zwei solchen bekommt der
+    Kandidat ein gescheitertes Urteil.
+  - Ein Agent hinterlässt `ItemStart` während eines Modellaufrufs. Nach zwei solchen wird der Auftrag aufgegeben.
+  - Ein geordnetes Ende entfernt die Marker.
+- Der `CodeJudging`-Marker wird erneuert, solange der Judge prüft.
+- Agenten ohne freien Slot zeigt die Seite nach 15 s im Vermerk des Laufs an.
+- Verbrauch eines erfolgreichen Aufrufs, dessen Auftrag danach an etwas anderem scheitert, wird mit dem Fehlschlag gebucht.
 - Laufende aus dauerhaftem Fortschritt (`pending`).
 - Abgelaufenes Warten gilt nicht mehr als „weg“ (`readExisting`/`takeExisting`).
 - Aufräumen beim Stop:
@@ -403,7 +408,10 @@ Getestet sind:
 - Stop, während Aufrufe laufen und warten: keine Aufträge bleiben zurück, der wartende Aufruf wird nicht gemacht;
 - abgelehnte Ausgaben buchen ihren Verbrauch auf den Lauf und auf die Adresse;
 - überlappende Agenten überschreiten das Laufbudget nicht;
-- eine Operation wartet, solange ein anderer Prozess den Lock des Raums hält.
+- eine Operation wartet, solange ein anderer Prozess den Lock des Raums hält;
+- ein Kandidat nach zwei toten Judges, ein Auftrag nach zwei toten agents-Prozessen (Marker vorgegeben);
+- der Prüf-Marker überdauert seine erste Lease;
+- Agenten ohne Slot werden angezeigt.
 
 Der frühere Fall „Busy-Marker läuft ab, während seine Transaktion lebt“ entfällt mit `pending`.
 
@@ -411,7 +419,6 @@ Noch ohne Test, jeweils mit der zugehörigen Korrektur einzuführen:
 
 - Ein Anbieter antwortet, bevor der Prozess ohne Commit stirbt; Wiederholung und ungewisse Kosten folgen der festgelegten
   Regel.
-- Wiederholte harte Abstürze ergeben begrenzte Versuche und ein ausdrückliches Ende.
 - Wiederherstellung nahe an den Aufbewahrungsfristen.
 - Mehrere web-Prozesse ändern denselben Raum gleichzeitig mit echten Operationen (der Test hält den Lock nur von außen).
 

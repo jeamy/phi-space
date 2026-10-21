@@ -72,13 +72,19 @@ const BUSY_LEASE_MS = ITEM_LEASE_MS;
 /** Failed tries of an item before it is given up (it then counts as done, with nothing handed in). */
 const MAX_TRIES = 3;
 /** A failure that trying again will not mend (a model no longer allowed, the day's web searches used up, no results). */
-const FINAL = /is not allowed|searches of the day|No search results|Web search refused|has no |the run's budget is used up/i;
+const FINAL = /is not allowed|searches of the day|No search results|Web search refused|has no |the run's budget is used up|stopped \d+ times while/i;
+/** Hard deaths of an agents process during an item's model call after which the item is given up. */
+const MAX_DEATHS = 2;
+/** What an item's model call used, for a failure after it (the call's result goes back with the item's aborted
+ *  transaction, and the next try asks anew: this usage is booked with the failure). */
+const paid = new WeakMap<WorkItem, Usage | undefined>();
 /** How long a critique waits for the critic model before others may take it. */
 const CRITIC_WAIT_MS = 20_000;
 /** The work board's limits: the item cap is max(12, agents × gens × 4), the depth of follow-ups at most 12. */
 const MAX_DEPTH = 12;
-/** A waiting item (a barrier, a follow-up) looks again after 2, 4, 8, then every 10 s: each look is a commit. */
-const backoff = (waits: number) => Math.min(10_000, 1000 * 2 ** waits);
+/** A waiting item (a barrier, a follow-up) looks again after 2, then every 4 s: each look is a commit, and the next
+ *  generation or follow-up starts at most this long after the verdict it waits for. */
+const backoff = (waits: number) => Math.min(4000, 1000 * 2 ** waits);
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The run is gone (stopped, or ended by another agent): the work in progress is dropped. */
@@ -291,7 +297,7 @@ async function workOnce(d: AgentDeps, slot: Slot, me: string, run: RunEntry): Pr
 			if (e instanceof RunGone) { await space.take({ id }, NO_WAIT).catch(() => null); return false; }
 			if (d.stopping()) return false;
 			console.error("[agents] item failed", it.kind, (e as Error).message);
-			await inTxn(space, d.open, async (txn) => { if (await space.take({ id }, NO_WAIT, { txn })) await failed(d, it, txn, (e as Error).message); }).catch(() => {});
+			await inTxn(space, d.open, async (txn) => { if (await space.take({ id }, NO_WAIT, { txn })) await failed(d, it, txn, (e as Error).message, paid.get(it)); }).catch(() => {});
 			return true;
 		}
 	}
@@ -328,8 +334,17 @@ async function execute(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: 
 /** A model call of an item; ModelFailed when it does not answer. The call id carries the item's try. */
 async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind, more: Partial<LlmCall>): Promise<Record<string, unknown>> {
 	if (run.info.budget) await admit(d, it);
-	const res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, blockId: it.blockId, runId: it.runId, kind, agent: slot.agent, gen: it.depth ?? it.gen, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more });
+	// an agents process that dies hard during the call leaves its ItemStart behind: an item that took down MAX_DEATHS
+	// processes is given up instead of taking down the next one (a graceful stop cancels the marker)
+	const k = { session: it.session, runId: it.runId, itemId: it.itemId };
+	const deaths = await d.space.count({ type: "ItemStart", fields: k });
+	if (deaths >= MAX_DEATHS) throw new ModelFailed(`the agents process stopped ${deaths} times while working on this item`);
+	const start = await d.space.write({ type: "ItemStart", fields: k }, null, modelWaitMs() + 120_000);
+	let res: LlmResultEntry;
+	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, blockId: it.blockId, runId: it.runId, kind, agent: slot.agent, gen: it.depth ?? it.gen, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more }); }
+	finally { await d.space.cancel(start.id).catch(() => {}); }
 	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed", res.usage);
+	paid.set(it, res.usage ?? (res.value.usage as Usage | undefined));
 	return res.value;
 }
 

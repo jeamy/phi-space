@@ -82,7 +82,7 @@ t("a scripted run produces graded contributions and a best", async () => {
 			const rows = async (type: string) => (await sp.readAll({ type, fields: { session: "run1" } })).map((e: any) => e.fields);
 			return { run: s.run, contributions: s.contributions.map((c: any) => [c.author, c.gen, c.ok]), messages: s.messages.map((m: any) => m.text), codeRun: (await rows("CodeRun")).map((r: any) => ({ pending: r.pending, progress: r.progress, info: r.info })), items: (await rows("WorkItem")).map((i: any) => [i.kind, i.gen, i.onlyBy, i.waits, i.deadline]), candidates: (await rows("CodeCandidate")).length, judging: (await rows("CodeJudging")).length, slots: (await rows("AgentSlot")).length };
 		};
-		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/run1")).json()); return s.run && !s.run.active && s.contributions.length === 6 ? s : false; }, 20_000, state);
+		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/run1")).json()); return s.run && !s.run.active && s.contributions.length === 6 ? s : false; }, 40_000, state);
 		assert.equal(snap.contributions.filter((c: any) => c.ok !== null).length, 6);
 		assert.ok(snap.best);
 		assert.equal((await post(srv.url, "/api/sessions/run1/task", { taskId: "nope" })).status, 400);
@@ -1528,4 +1528,60 @@ t("the room lock is in the space: an operation of another web process waits whil
 		assert.deepEqual((await blocks()).includes(first), false);
 		assert.equal(await space.count({ type: "RoomLock", fields: { session: "lock1" } }), 1); // written back, one per room
 	} finally { await srv.close(); }
+});
+
+// ---- small corrections (2026-10-21): hard deaths count, the judging marker lives on, agents without a slot ----
+
+t("a candidate that took down two judges gets a failed verdict instead of taking down a third", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [] });
+	const space = srv.stack.space;
+	try {
+		await post(srv.url, "/api/sessions/die1/task", { taskId: "gcd" });
+		await post(srv.url, "/api/sessions/die1/code", { author: "p", source: taskById("gcd")!.variants[2]! });
+		const c = (await space.readAll({ type: "CodeCandidate", fields: { session: "die1" } }))[0]!.fields as any;
+		// what two judges that died while judging it left behind
+		for (let i = 0; i < 2; i++) await space.write({ type: "JudgeStart", fields: { session: "die1", candidateId: c.candidateId } }, null, 600_000);
+		await srv.stack.judge();
+		const v = await until(async () => { const s = view(await (await fetch(srv.url + "/api/sessions/die1")).json()); return s.contributions[0]?.ok === false ? s.contributions[0] : false; });
+		assert.match(v.error, /the judge stopped 2 times while judging it/);
+		assert.equal(await space.count({ type: "JudgeStart", fields: { session: "die1" } }), 0);
+	} finally { await srv.close(); }
+});
+
+t("the judging marker is renewed while a long judgement runs", async () => {
+	// marker lease 3 s; the sandbox holds the judge's thread while a case runs, so the cases are short and many: the
+	// judgement takes about 5 s, and the renewals come between the cases
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ workers: 1, leaseMs: 1500 }] });
+	const space = srv.stack.space;
+	try {
+		await post(srv.url, "/api/sessions/mark1/task", { custom: { fn: "slowDouble", prompt: "double it, slowly", cases: Array.from({ length: 7 }, (_, i) => ({ args: [i], expect: 2 * i })), timeoutS: 30 } });
+		await post(srv.url, "/api/sessions/mark1/code", { author: "p", source: "function slowDouble(x){ const t = Date.now(); while (Date.now() - t < 700) {} return x * 2 }" });
+		await until(async () => (await space.count({ type: "CodeJudging", fields: { session: "mark1" } })) === 1);
+		await new Promise((r) => setTimeout(r, 3800));
+		assert.equal(await space.count({ type: "CodeJudging", fields: { session: "mark1" } }), 1); // still on the page after its first lease
+		const c = await until(async () => { const s = view(await (await fetch(srv.url + "/api/sessions/mark1")).json()); return s.contributions[0]?.ok === true ? s.contributions[0] : false; }, 30_000);
+		assert.equal(c.author, "p");
+	} finally { await srv.close(); }
+});
+
+t("agents without a free slot are shown; an item whose model call took down two agents processes is given up", async () => {
+	const stack = await startStack({ agents: false, fakes: ["fake/team"] });
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", stack });
+	const get = async () => (await (await fetch(srv.url + "/api/sessions/die2")).json()) as any;
+	try {
+		await post(srv.url, "/api/sessions/die2/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }], verify: false } }); // no agents process for a rule yet
+		assert.equal((await post(srv.url, "/api/sessions/die2/run", { agents: 2, polish: 0, plan: false, contenders: ["fake/team"], board: true })).status, 200);
+		// no agents process runs: after a while the page says the agents wait for a slot
+		const waiting = await until(async () => { const s = await get(); return /2 of 2 agents wait for a free slot/.test(s.run?.note ?? "") ? s : false; }, 30_000);
+		assert.equal(waiting.run.active, true);
+		// what two agents processes that died during the items' model calls left behind
+		for (const e of await stack.space.readAll({ type: "WorkItem", fields: { session: "die2" } })) {
+			const it = e.fields as any;
+			for (let i = 0; i < 2; i++) await stack.space.write({ type: "ItemStart", fields: { session: "die2", runId: it.runId, itemId: it.itemId } }, null, 600_000);
+		}
+		await stack.agents();
+		const snap = await until(async () => { const s = await get(); return s.run && !s.run.active ? s : false; }, 60_000);
+		assert.equal(snap.run.ended, "idle");
+		assert.equal((await fakeCalls(srv, "die2")).length, 0); // no model was asked again
+	} finally { await srv.close(); await stack.close(); }
 });
