@@ -12,6 +12,7 @@
     "space": "node --no-warnings --experimental-strip-types server/space-host.ts",
     "judge": "node --no-warnings --experimental-strip-types server/judge-host.ts",
     "agents": "node --no-warnings --experimental-strip-types server/agent-host.ts",
+    "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
     "docker:test": "docker compose --env-file .env -f docker/docker-compose.yml --profile test run --rm --build codemode-chat-test",

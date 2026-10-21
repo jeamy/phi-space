@@ -35,20 +35,9 @@ const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, pl
 const SNAPSHOT_SOURCE_BYTES = 384 * 1024;
 /** A snapshot above this size (counted as sent) goes out without any code at all. */
 const SNAPSHOT_MAX_BYTES = 900 * 1024;
-const envNumber = (name: string, dflt: number) => { const raw = process.env[name]; const n = raw === undefined || raw.trim() === "" ? dflt : Number(raw); return Number.isFinite(n) && n >= 0 ? n : dflt; };
-/** A visitor's run budget in tokens (CODEMODE_RUN_BUDGET_TOKENS, default 300 000; 0 = none): the default when the run
- *  names none, and the most a visitor may ask for. An admin's run has no default and no cap. */
-export const runBudgetTokens = () => Math.floor(envNumber("CODEMODE_RUN_BUDGET_TOKENS", 300_000));
-/** Tokens the runs one client (IP) starts may use per day together (CODEMODE_TOKENS_PER_IP_DAY, default 1 000 000;
- *  0 = no limit), so one visitor cannot use up the day's model calls of everyone. Admin runs do not count. */
-export const ipTokensPerDay = () => Math.floor(envNumber("CODEMODE_TOKENS_PER_IP_DAY", 1_000_000));
+import { crossWaitMs, FATAL_LLM, ipTokensPerDay, runBudgetTokens } from "./limits.ts";
+export { crossWaitMs, ipTokensPerDay, runBudgetTokens };
 export { earlierLeaseMs };
-/** How long a text answer's judgement waits for an agent of another model than the author's before the author's model
- *  may judge it (CODEMODE_CROSS_WAIT_S, default 300 s; 0 = no wait). Such an answer is accepted only with a judge of
- *  another model, so a longer wait makes acceptance by the judges likelier. */
-export const crossWaitMs = () => Math.round(envNumber("CODEMODE_CROSS_WAIT_S", 300) * 1000);
-/** Errors of a model call after which no call of this run can succeed: the run ends as over budget. */
-const FATAL_LLM = /daily model budget used up|model agents are off/i;
 export type { RunInfo, RunMode };
 /** The model side of a run; replaceable in tests. */
 export type LlmApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; verify?: typeof llmVerifier; critique?: typeof llmCritique; propose?: typeof llmPropose; vote?: typeof llmVote; criteria?: typeof llmCriteria; reviewCriteria?: typeof llmReviewCriteria; judge?: typeof llmJudge; research?: typeof llmResearch };
@@ -82,12 +71,14 @@ export class CodeChatHub {
 	#sessions = new Map<string, Session>();
 	#closed = false;
 	readonly #llm: LlmApi;
+	/** A model team handed in (tests): its list of models counts instead of the model process's ModelInfo. */
+	readonly #injected: boolean;
 	/** Lease of every room entry (CODEMODE_TTL_HOURS). */
 	readonly #ttl: number;
 	/** Tokens the runs of each client address used today (visitors only; kept in memory, a restart starts afresh). */
 	#ipSpend = new Map<string, { day: string; tokens: number }>();
 	constructor(space: SpaceLike, cm: Codemode, o: { llm?: LlmApi; ttlMs?: number } = {}) {
-		this.#ttl = o.ttlMs ?? entryLeaseMs(); this.cm = cm; this.host = space;
+		this.#ttl = o.ttlMs ?? entryLeaseMs(); this.cm = cm; this.host = space; this.#injected = !!o.llm;
 		this.#llm = o.llm ?? { models: llmModels, contribute: llmContribution, verify: llmVerifier, critique: llmCritique, propose: llmPropose, vote: llmVote, criteria: llmCriteria, reviewCriteria: llmReviewCriteria, judge: llmJudge, research: llmResearch };
 		void this.#watch();
 	}
@@ -205,6 +196,33 @@ export class CodeChatHub {
 
 	/** All verdicts of a room, oldest first, with the people's vetoes merged in. */
 	#scores(s: Session): Promise<Contribution[]> { return scoresOf(this.host, s.id); }
+
+	/** What the model process says about the models (ModelInfo; renewed every 10 s while it runs). */
+	async modelInfo(): Promise<{ info: { enabled: boolean; on: boolean; current: string | null; models: Array<{ id: string; label: string }> }; admin: { enabled: boolean; on: boolean; models: Array<{ label: string; provider: string; id: string; name: string }>; allowed: string[]; custom: boolean } }> {
+		const f = (await this.host.readIfExists({ type: "ModelInfo" }, NO_WAIT))?.fields as { info?: unknown; admin?: unknown } | undefined;
+		return f?.info && f.admin ? (f as never) : { info: { enabled: false, on: false, current: null, models: [] }, admin: { enabled: false, on: false, models: [], allowed: [], custom: false } };
+	}
+
+	/** The labels of the models a run may use: from the model process, or from a model team handed in (tests). */
+	async #models(): Promise<string[]> {
+		if (this.#injected) return this.#llm.models();
+		const { info } = await this.modelInfo();
+		return info.enabled && info.on ? info.models.map((m) => m.label) : [];
+	}
+
+	/** The admin's choices as saved in the space (what the model process takes over within 10 s). */
+	async adminChoice(): Promise<{ allowed?: string[]; custom?: boolean; on?: boolean }> {
+		const m = (await this.host.readIfExists({ type: "CodeAdmin", fields: { key: "models" } }, NO_WAIT))?.fields as { allowed?: unknown } | undefined;
+		const l = (await this.host.readIfExists({ type: "CodeAdmin", fields: { key: "llm" } }, NO_WAIT))?.fields as { on?: unknown } | undefined;
+		return { ...(Array.isArray(m?.allowed) ? { allowed: m!.allowed.map(String), custom: true } : {}), ...(typeof l?.on === "boolean" ? { on: l.on } : {}) };
+	}
+
+	/** The admin's switch and default model, kept in the space for the model process (CodeAdmin "llm"). */
+	async saveLlmChoice(o: { on?: unknown; model?: unknown }): Promise<void> {
+		const cur = (await this.host.readIfExists({ type: "CodeAdmin", fields: { key: "llm" } }, NO_WAIT))?.fields as Record<string, unknown> | undefined;
+		while (await this.host.take({ type: "CodeAdmin", fields: { key: "llm" } }, NO_WAIT));
+		await this.host.write({ type: "CodeAdmin", fields: { key: "llm", ...(typeof (o.on ?? cur?.on) === "boolean" ? { on: (o.on ?? cur?.on) as boolean } : {}), ...(typeof (o.model ?? cur?.model) === "string" ? { model: (o.model ?? cur?.model) as string } : {}), ts: Date.now() } }, null, FOREVER);
+	}
 
 	/** The room's active run: the web process's own (runs with model agents, until they move to the agent processes),
 	 *  or the CodeRun the agent processes carry out (a CodeRun an agent holds for a moment is waited for). */
@@ -806,7 +824,7 @@ export class CodeChatHub {
 		const budget = { ...(budgetTokens ? { tokens: budgetTokens } : {}), ...(positive(o.budgetUsd) ? { usd: positive(o.budgetUsd)! } : {}) };
 		if (visitor && ipTokensPerDay() && this.#ipUsed(visitor.ip) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (CODEMODE_TOKENS_PER_IP_DAY); try again tomorrow");
 		// contenders: "scripted" and/or allowed model labels; the older {mode, models} form still works
-		const allowed = await this.#llm.models();
+		const allowed = await this.#models();
 		let contenders = Array.isArray(o.contenders) ? o.contenders.map(String) : o.mode === "llm" ? (Array.isArray(o.models) && o.models.length ? o.models.map(String) : allowed.slice(0, 1)) : ["scripted"];
 		contenders = [...new Set(contenders)];
 		if (!contenders.length || contenders.length > 4) throw new Error("Choose 1 to 4 contenders");
@@ -818,14 +836,14 @@ export class CodeChatHub {
 		if (research && (!board || !this.#llm.research)) throw new Error("Research runs on the work board with model agents only");
 		// check and claim under the room's lock: two requests cannot both start a run, and setTask cannot swap the block
 		// in between; the run is claimed only after its announcement is written, so a failing write leaves no stuck run
-		// scripted agents in generations: carried out by the agent processes, the run lives in the space (run.ts)
-		if (mode === "scripted" && !board) {
+		// generations: carried out by the agent processes (model calls by the model process), the run lives in the space
+		if (!board) {
 			await this.#syncBest(s);
 			const params: RunParams = { runId: `r${Date.now().toString(36)}${rid()}`, agents, gens, perAgent, polish, contenders, lang: o.lang === "de" ? "de" : "en", board: false, plan: false, research: false, budget, engine: "space", ...(o.client ? { client: { ip: o.client.ip, admin: o.client.admin } } : {}) };
 			await this.#exclusive(s, async () => {
 				if (await this.#runNow(s)) throw new Error("A run is already active");
 				if (!s.blockId) throw new Error("No task yet: create a task block first");
-				if (s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
+				if (contenders.includes("scripted") && s.task.variants.length === 0) throw new Error("This task has no scripted agents; use model agents or hand in code yourself");
 				const info: RunInfo = { active: true, blockId: s.blockId, mode, contenders, gen: 0, gens, agents, perAgent, polish, solvedGen: s.best ? 0 : null, usage: { tokens: 0, costUsd: 0 }, ...(Object.keys(budget).length ? { budget } : {}) };
 				const t = await this.host.createTransaction(30_000);
 				try {

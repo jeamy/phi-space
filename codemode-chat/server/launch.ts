@@ -3,13 +3,13 @@
 // others connect to it over CODEMODE_SPACE. A process that ends on its own is started again after a second.
 //
 //   node --experimental-strip-types server/launch.ts [--dev]
-//   CODEMODE_ROLES=space,judge,agents,web   which roles to start here (default all of them)
+//   CODEMODE_ROLES=space,judge,agents,model,web   which roles to start here (default all of them)
 //   --dev                            every process restarts when its sources change (node --watch-path), web in dev mode
 import { ROOT } from "./env.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { DEFAULT_SPACE } from "./space.ts";
 
-const ROLES = { space: "server/space-host.ts", judge: "server/judge-host.ts", agents: "server/agent-host.ts", web: "server/index.ts" } as const;
+const ROLES = { space: "server/space-host.ts", judge: "server/judge-host.ts", agents: "server/agent-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
 type Role = keyof typeof ROLES;
 const dev = process.argv.includes("--dev");
 const wanted = (process.env.CODEMODE_ROLES || Object.keys(ROLES).join(",")).split(",").map((r) => r.trim()).filter(Boolean);
@@ -46,7 +46,7 @@ function start(role: Role): Promise<void> {
 	});
 }
 
-const order = (["space", "judge", "agents", "web"] as Role[]).filter((r) => wanted.includes(r));
+const order = (["space", "judge", "agents", "model", "web"] as Role[]).filter((r) => wanted.includes(r));
 for (const role of order) await start(role);
 console.log(`[launch] ${order.join(", ")} running${dev ? " (dev)" : ""}; space ${env.CODEMODE_SPACE}`);
 

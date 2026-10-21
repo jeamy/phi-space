@@ -28,6 +28,8 @@ export type Stack = {
 	spec: string; space: SpaceLike;
 	/** Starts one more judge process (its host name shows on the tiles and in the system bar). */
 	judge(o?: { host?: string; workers?: number; leaseMs?: number }): Promise<ChildProcess>;
+	/** Starts one more model process (`fakes`: the fake model teams of tests/fakes.ts, picked by room). */
+	model(o?: { fakes?: boolean }): Promise<ChildProcess>;
 	/** Starts one more agents process. */
 	agents(o?: { leaseMs?: number }): Promise<ChildProcess>;
 	/** Stops a judge process: SIGTERM, or SIGKILL to make it die in the middle of its work. */
@@ -35,8 +37,9 @@ export type Stack = {
 	close(): Promise<void>;
 };
 
-/** A space process (SQLite at `dbPath`, else in memory), `judges` judge processes and an agents process. */
-export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: string; workers?: number; leaseMs?: number }>; agents?: boolean } = {}): Promise<Stack> {
+/** A space process (SQLite at `dbPath`, else in memory), `judges` judge processes, an agents process and a model
+ *  process (real models, off in the tests, or with `fakes` the fake teams of tests/fakes.ts). */
+export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: string; workers?: number; leaseMs?: number }>; agents?: boolean; model?: boolean; fakes?: boolean } = {}): Promise<Stack> {
 	const sock = `/tmp/cm-test-${process.pid}-${seq++}.sock`, spec = `unix:${sock}`;
 	const space = await run("server/space-host.ts", { CODEMODE_LISTEN: spec, ...(o.dbPath ? { CODEMODE_SQLITE: o.dbPath, CODEMODE_MEM: "" } : { CODEMODE_MEM: "1" }) }, (l) => l.startsWith("[space] ready"));
 	const conn = connectSpace(spec);
@@ -46,6 +49,11 @@ export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: s
 		async judge(j = {}) {
 			const c = await run("server/judge-host.ts", { CODEMODE_SPACE: spec, CODEMODE_HOST_NAME: j.host ?? "test", CODEMODE_JUDGES: String(j.workers ?? 2), ...(j.leaseMs ? { CODEMODE_JUDGE_LEASE_MS: String(j.leaseMs) } : {}) }, (l) => l.startsWith("[judge]"));
 			judges.push(c);
+			return c;
+		},
+		async model(m = {}) {
+			const c = await run("server/model-host.ts", { CODEMODE_SPACE: spec, CODEMODE_HOST_NAME: "", ...(m.fakes ? { CODEMODE_TEST: "1", CODEMODE_LLM_MODULE: "tests/fakes.ts" } : {}) }, (l) => l.startsWith("[model]"));
+			others.push(c);
 			return c;
 		},
 		async agents(a = {}) {
@@ -58,13 +66,14 @@ export async function startStack(o: { dbPath?: string; judges?: Array<{ host?: s
 	};
 	for (const j of o.judges ?? [{}]) await stack.judge(j);
 	if (o.agents !== false) await stack.agents();
+	if (o.model !== false) await stack.model({ fakes: !!o.fakes });
 	return stack;
 }
 
 /** The web part on a stack: a stack of its own (closed with it) unless `stack` is given. */
-export async function startServer(o: Parameters<typeof startWeb>[0] & { stack?: Stack; dbPath?: string; judges?: Array<{ host?: string; workers?: number; leaseMs?: number }> } = {}) {
-	const { stack: given, dbPath, judges, ...web } = o;
-	const stack = given ?? (await startStack({ ...(dbPath ? { dbPath } : {}), ...(judges ? { judges } : {}) }));
+export async function startServer(o: Parameters<typeof startWeb>[0] & { stack?: Stack; dbPath?: string; judges?: Array<{ host?: string; workers?: number; leaseMs?: number }>; fakes?: boolean } = {}) {
+	const { stack: given, dbPath, judges, fakes, ...web } = o;
+	const stack = given ?? (await startStack({ ...(dbPath ? { dbPath } : {}), ...(judges ? { judges } : {}), ...(fakes ? { fakes } : {}) }));
 	const srv = await startWeb({ ...web, space: stack.spec });
 	return { ...srv, stack, async close() { await srv.close(); if (!given) await stack.close(); } };
 }

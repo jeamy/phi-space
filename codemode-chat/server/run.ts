@@ -14,8 +14,10 @@
 // follow-ups, commit. A crash rolls all of it back and the item is there again: every item is done exactly once.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import type { BoardInfo } from "./board.ts";
-import type { Role } from "./llm.ts";
-import { blockTask, enqueueCandidate, rid, systemLine, teamView, planTurn } from "./room.ts";
+import type { Attempt, Role, Usage } from "./llm.ts";
+import type { LlmCall, LlmResultEntry } from "./context.ts";
+import { FATAL_LLM, modelWaitMs } from "./limits.ts";
+import { addNote, blockTask, enqueueCandidate, rid, systemLine, teamView, planTurn } from "./room.ts";
 import { HELD_WAIT_MS, keepAlive } from "./space.ts";
 import { isText, type Task } from "./tasks.ts";
 
@@ -37,7 +39,9 @@ export type RunParams = { runId: string; agents: number; gens: number; perAgent:
 /** A generation's progress: turns in it, turns done, contributions handed in. */
 export type GenProgress = { total: number; done: number; handedIn: number };
 export type RunEntry = { session: string; runId: string; blockId: string; params: RunParams; info: RunInfo; progress: Record<string, GenProgress>; ts: number };
-export type WorkItem = { session: string; runId: string; blockId: string; itemId: string; kind: "turn" | "barrier"; gen: number; ts: number; k?: number; onlyBy?: string; notBefore?: number; waits?: number; tries?: number };
+/** A turn carries its role and the attempt it works on, chosen when its generation began: every agent of a generation
+ *  builds on the same state, whoever of them gets to work first. */
+export type WorkItem = { session: string; runId: string; blockId: string; itemId: string; kind: "turn" | "barrier"; gen: number; ts: number; k?: number; onlyBy?: string; role?: Role; targetId?: string; notBefore?: number; waits?: number; tries?: number };
 export type Slot = { session: string; runId: string; agent: number; model: string };
 
 /** An item's and a slot's transaction lease (renewed while they are worked on), and an AgentBusy marker's: a dead
@@ -57,10 +61,14 @@ const itemEntry = (it: WorkItem) => ({ type: "WorkItem", fields: it as never });
 const newItem = (run: { session: string; runId: string; blockId: string }, kind: WorkItem["kind"], gen: number, more: Partial<WorkItem> = {}): WorkItem =>
 	({ session: run.session, runId: run.runId, blockId: run.blockId, itemId: `${run.runId}-${Date.now().toString(36)}${rid()}`, kind, gen, ts: Date.now(), ...more });
 
-/** The items of a generation: a turn per agent and contribution, and the barrier that closes it. */
-export function generationItems(run: { session: string; runId: string; blockId: string }, params: RunParams, gen: number): { items: WorkItem[]; progress: GenProgress } {
+/** The items of a generation: a turn per agent and contribution (its role and target from the team's attempts as they
+ *  are now), and the barrier that closes it. */
+export function generationItems(run: { session: string; runId: string; blockId: string }, params: RunParams, gen: number, attempts: Attempt[]): { items: WorkItem[]; progress: GenProgress } {
 	const items: WorkItem[] = [];
-	for (let a = 0; a < params.agents; a++) for (let j = 0; j < params.perAgent; j++) items.push(newItem(run, "turn", gen, { k: a * params.perAgent + j, onlyBy: `agent-${a}` }));
+	for (let a = 0; a < params.agents; a++) for (let j = 0; j < params.perAgent; j++) {
+		const k = a * params.perAgent + j, plan = planTurn(attempts, k);
+		items.push(newItem(run, "turn", gen, { k, onlyBy: `agent-${a}`, role: plan.role, ...(plan.target ? { targetId: plan.target.candidateId } : {}) }));
+	}
 	items.push(newItem(run, "barrier", gen));
 	return { items, progress: { total: items.length - 1, done: 0, handedIn: 0 } };
 }
@@ -179,19 +187,61 @@ async function execute(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: 
 	return barrier(d, it, txn);
 }
 
-/** A turn: one contribution of this agent, built on what the team has (repair, explore, improve). */
+/** Asks the model process for a call and waits for its answer, in `txn`: the answer is taken in the item's
+ *  transaction, so if the item is cut off it stays for the next try. The call's id belongs to the item, so a retry
+ *  finds the answer from before (or the call still waiting: written `unique`) instead of paying for a second call. */
+export async function callModel(space: SpaceLike, txn: string, call: LlmCall): Promise<LlmResultEntry> {
+	const tmpl = { type: "LlmResult", fields: { callId: call.callId } };
+	let r = await space.take(tmpl, NO_WAIT, { txn });
+	if (!r) {
+		try { await space.write({ type: "LlmCall", fields: call as never }, null, modelWaitMs() + 60_000, { unique: ["callId"] }); }
+		catch (e) { if (!/unique/i.test((e as Error).message)) throw e; } // asked before, the answer is still coming
+		const end = Date.now() + modelWaitMs();
+		while (!r && Date.now() < end) r = await space.take(tmpl, Math.min(20_000, Math.max(1, end - Date.now())), { txn });
+	}
+	return (r?.fields as unknown as LlmResultEntry | undefined) ?? { callId: call.callId, session: call.session, ok: false, error: "the model process did not answer in time", ts: Date.now() };
+}
+
+/** Whether a run's model calls have used up its budget (tokens or dollars, whichever comes first). */
+const overBudget = (r: RunEntry) => { const b = r.info.budget, u = r.info.usage; return !!b && ((b.tokens !== undefined && u.tokens >= b.tokens) || (b.usd !== undefined && u.costUsd >= b.usd)); };
+
+/** A turn: one contribution of this agent, built on what the team has (repair, explore, improve). A model agent asks
+ *  the model process; when that fails (or the budget is used up) a scripted variant stands in where the task has one. */
 async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: string): Promise<void> {
 	const { space } = d;
+	const run = await readRun(space, it.session, it.runId);
+	if (!run) throw new RunGone();
 	const task = await blockTask(space, it.session, it.blockId);
-	let handedIn = 0;
-	if (task) {
-		const source = scriptedSource(task); // model agents follow in the next stage
+	let handedIn = 0, usage: Usage | undefined, note: string | undefined, runNote: string | undefined, fatal = false;
+	if (task && !run.info.ended) {
+		let source: string | undefined, via = "scripted", lineage: { role?: Role; basedOn?: string; usage?: Usage } = {};
+		if (slot.model !== "scripted" && !overBudget(run)) {
+			const plan = it.role ? { role: it.role, target: it.targetId ? { candidateId: it.targetId } : null } : planTurn((await teamView(space, it.session, it.blockId, false)).attempts, it.k ?? 0);
+			const res = await callModel(space, txn, { callId: `${it.itemId}-c0`, session: it.session, blockId: it.blockId, runId: it.runId, kind: "contribute", agent: slot.agent, gen: it.gen, model: slot.model, lang: run.params.lang, role: plan.role, ...(plan.target ? { targetId: plan.target.candidateId } : {}), ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now() });
+			if (res.ok && res.value) {
+				const v = res.value as { source: string; model: string; note?: string; usage?: Usage };
+				source = v.source; via = v.model; usage = v.usage; note = v.note;
+				lineage = { role: plan.role, ...(plan.target ? { basedOn: plan.target.candidateId } : {}), ...(v.usage ? { usage: v.usage } : {}) };
+			} else {
+				runNote = `${slot.model}: ${res.error ?? "failed"}${task.variants.length ? "; scripted agent used" : ""}`;
+				fatal = FATAL_LLM.test(res.error ?? "");
+			}
+		}
+		if (source === undefined) source = scriptedSource(task);
 		if (source !== undefined) {
-			await enqueueCandidate(space, txn, d.ttl, { session: it.session, blockId: it.blockId, taskId: task.id, author: me, via: slot.model, gen: it.gen + 1, source, runId: it.runId });
+			const candidateId = await enqueueCandidate(space, txn, d.ttl, { session: it.session, blockId: it.blockId, taskId: task.id, author: me, via, gen: it.gen + 1, source, runId: it.runId, lineage });
 			handedIn = 1;
+			// the note belongs to this contribution: if it gets rejected, its advice is dropped too
+			if (note) await addNote(space, txn, d.ttl, { session: it.session, blockId: it.blockId, author: me, via, gen: it.gen + 1, text: note, candidateId });
 		}
 	}
-	await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => { const p = r.progress[it.gen]; if (p) { p.done++; p.handedIn += handedIn; } });
+	await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => {
+		const p = r.progress[it.gen];
+		if (p) { p.done++; p.handedIn += handedIn; }
+		if (usage) r.info.usage = { tokens: r.info.usage.tokens + usage.total, costUsd: r.info.usage.costUsd + usage.costUsd };
+		if (runNote) r.info.note = runNote;
+		if (fatal || overBudget(r)) r.info.ended ??= "budget"; // no next generation; the run ends once its items are done
+	});
 }
 
 /** A scripted agent's contribution: one of the task's hand-written variants (a custom task has none). */
@@ -214,13 +264,14 @@ async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" 
 		return "waiting";
 	}
 	const solved = !!(await space.readIfExists({ type: "CodeBest", fields: { session: it.session, blockId: it.blockId } }, HELD_WAIT_MS));
+	const attempts = (await teamView(space, it.session, it.blockId, false)).attempts;
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (run) => {
 		const info = run.info, next = it.gen + 1;
 		if (info.solvedGen !== null && !solved) info.solvedGen = null; // the solution was rejected by a person: not solved
 		if (info.solvedGen === null && solved) info.solvedGen = next;
 		const enough = info.solvedGen !== null && next >= info.solvedGen + info.polish;
 		if (!alive || info.ended || next >= info.gens || enough) return; // no next generation: the run ends when its agents find nothing left
-		const g = generationItems(run, run.params, next);
+		const g = generationItems(run, run.params, next, attempts);
 		run.progress[next] = g.progress;
 		info.gen = next + 1;
 		for (const x of g.items) await space.write(itemEntry(x), txn, d.ttl);
@@ -244,7 +295,8 @@ async function maybeEnd(d: AgentDeps, slot: Slot): Promise<boolean> {
  *  (none when the task was solved before the run and needs no more improvement). */
 export async function startSpaceRun(space: SpaceLike, txn: string, ttl: number, run: { session: string; runId: string; blockId: string; params: RunParams; info: RunInfo }): Promise<void> {
 	const progress: Record<string, GenProgress> = {};
-	const opening = run.info.solvedGen !== null && 0 >= run.info.solvedGen + run.params.polish ? null : generationItems(run, run.params, 0);
+	const attempts = (await teamView(space, run.session, run.blockId, false)).attempts;
+	const opening = run.info.solvedGen !== null && 0 >= run.info.solvedGen + run.params.polish ? null : generationItems(run, run.params, 0, attempts);
 	if (opening) progress[0] = opening.progress;
 	await space.write({ type: "CodeRun", fields: { session: run.session, runId: run.runId, blockId: run.blockId, params: run.params, info: { ...run.info, gen: opening ? 1 : 0 }, progress, ts: Date.now() } as never }, txn, ttl, { unique: ["session"] });
 	for (let a = 0; a < run.params.agents; a++) await space.write({ type: "AgentSlot", fields: { session: run.session, runId: run.runId, agent: a, model: run.params.contenders[a % run.params.contenders.length]! } }, txn, ttl);

@@ -14,7 +14,7 @@ import { pathToFileURL } from "node:url";
 import { loadCodemode } from "./judge.ts";
 import { execute, MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { CodeChatHub, type LlmApi } from "./hub.ts";
-import { adminModels, llmInfo, setLlm } from "./llm.ts";
+import { setLlm } from "./llm.ts";
 import { announce, connectSpace } from "./space.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
@@ -106,10 +106,13 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			if (p.startsWith("/api/") && !allowed(clientIp(req))) return json(res, 429, { error: "Too many requests; retry in a minute" });
 			if (p === "/api/system") return json(res, 200, await hub.systemInfo()); // a shard call each time: under the quota
 			if (p === "/api/llm") {
-				if (req.method !== "POST") return json(res, 200, await llmInfo());
-				// switching the model agents is an operator action, not a visitor's
+				if (req.method !== "POST") return json(res, 200, (await hub.modelInfo()).info);
+				// switching the model agents is an operator action, not a visitor's; the model process follows it (within 10 s)
 				if (!isAdmin(req)) return json(res, 403, { error: "Admin token required" });
-				return json(res, 200, await setLlm(await readBody(req)));
+				const b = await readBody(req);
+				await hub.saveLlmChoice({ on: b.on, model: b.model });
+				await setLlm(b); // runs that still run in this process
+				return json(res, 200, (await hub.modelInfo()).info);
 			}
 			// ---- admin panel: login with the token, then the choice of models ----
 			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: isAdmin(req), available: !!process.env.CODEMODE_ADMIN_TOKEN });
@@ -134,14 +137,16 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 					const b = await readBody(req);
 					if (b.allowed !== null && !Array.isArray(b.allowed)) return json(res, 400, { error: "allowed: a list of model labels, or null for the default" });
 					if (Array.isArray(b.allowed)) {
-						const known = new Set((await adminModels()).models.map((m) => m.label));
+						const known = new Set((await hub.modelInfo()).admin.models.map((m) => m.label));
 						const unknown = (b.allowed as unknown[]).map(String).filter((l) => !known.has(l));
 						if (unknown.length) return json(res, 400, { error: `Unknown models: ${unknown.slice(0, 5).join(", ")}` });
 					}
 					await hub.saveAllowedModels(b.allowed === null ? null : (b.allowed as unknown[]).map(String));
-					if (typeof b.on === "boolean") await setLlm({ on: b.on });
+					if (typeof b.on === "boolean") { await hub.saveLlmChoice({ on: b.on }); await setLlm({ on: b.on }); }
 				}
-				return json(res, 200, await adminModels());
+				// what the model process published, with the choice just saved (it takes it over within 10 s)
+				const admin = (await hub.modelInfo()).admin;
+				return json(res, 200, req.method === "POST" ? { ...admin, ...(await hub.adminChoice()) } : admin);
 			}
 			const plan = /^\/api\/sessions\/([^/]+)\/plan\/([^/]+)$/.exec(p);
 			if (plan && req.method === "GET") {

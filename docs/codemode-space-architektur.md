@@ -151,3 +151,26 @@ Werte: Lease von Platz und Auftrag 60 s (`CODEMODE_AGENT_LEASE_MS`), höchstens 
 
 **Bleibt bis 2c/2d im web-Prozess:** Läufe mit Modell-Agenten (Generationen und Auftragsbrett), Text-Aufgaben, das
 Schreiben von Prüfregeln und Kriterien beim Anlegen einer Aufgabe, die Modell-Grenzen.
+
+## Stand nach Stufe 2c (2026-10-21)
+
+`server/model-host.ts` macht jeden Modellaufruf. Ein Agent schreibt einen `LlmCall` mit Verweisen (Art, Modell, Agent,
+Raum, Block, Lauf, Rolle, Ziel) außerhalb seiner Transaktion und wartet in seiner Auftrags-Transaktion auf das
+`LlmResult` (in Abschnitten von 20 s, höchstens `CODEMODE_MODEL_WAIT_S`, Standard 600 s). Die Kennung des Aufrufs gehört
+zum Auftrag, und der Aufruf wird `unique` geschrieben: Wird ein Auftrag nach einem Absturz wiederholt, findet er die
+Antwort von vorher oder den noch laufenden Aufruf und zahlt nicht zweimal. Der Model-Prozess baut den Kontext selbst aus
+dem Space (`server/context.ts`), so bleibt ein Aufruf klein. Antwort und `Spend`-Eintrag (Tagesbudget je Adresse)
+kommen in einen Commit. Er veröffentlicht `ModelInfo` und übernimmt die Admin-Auswahl aus `CodeAdmin` (Modelle, an/aus,
+Standardmodell) binnen 10 s.
+
+Generationen-Läufe mit Modell-Agenten laufen jetzt in den Agenten-Prozessen. Rolle und Ziel jedes Zugs legt fest, wer
+die Generation öffnet (Start oder Schranke), aus dem Stand dieses Augenblicks: Alle Agenten einer Generation bauen auf
+denselben Stand, wer auch immer zuerst arbeitet. Nach einem Neustart aller Prozesse läuft ein Lauf einfach weiter; eine
+eigene Zeile „Run resumed“ gibt es dafür nicht mehr.
+
+Die Tests geben dem Model-Prozess Fake-Teams über `tests/fakes.ts` (`CODEMODE_LLM_MODULE`, nur mit `CODEMODE_TEST=1`),
+gewählt nach Raum; was ein Fake sah, steht als `FakeCall` im Space, ein Fake, der hängen soll, wartet auf ein
+`FakeGate`.
+
+**Bleibt bis 2d im web-Prozess:** Auftragsbrett, Text-Aufgaben, Recherche, Prüfregeln und Kriterien beim Anlegen
+einer Aufgabe; die Modellgrenzen je Minute und Tag zählt noch jeder Model-Prozess für sich (Stufe 3).
