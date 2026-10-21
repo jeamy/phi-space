@@ -74,6 +74,11 @@ export function announce(space: SpaceLike, role: ProcessRole): { stop: () => Pro
 	};
 }
 
+/** How long a check waits on an entry another transaction holds right now. A held entry is invisible to a plain read
+ *  (it may come back), so whether something still exists is asked with readIfExists and this timeout: it answers at
+ *  once when there is none, and waits while one is held. Only a definite null means gone. */
+export const HELD_WAIT_MS = 10_000;
+
 /** Renews a transaction's lease while long work runs in it (a model call, a judgement), so a process that dies lets
  *  it lapse within `leaseMs`. */
 export function keepAlive(space: SpaceLike, txn: string, leaseMs: number): () => void {

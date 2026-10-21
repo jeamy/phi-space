@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, loadCodemode, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
-import { announce, connectSpace, entryLeaseMs, hostFacts, keepAlive } from "./space.ts";
+import { announce, connectSpace, entryLeaseMs, HELD_WAIT_MS, hostFacts, keepAlive } from "./space.ts";
 import { taskFromSpec } from "./tasks.ts";
 
 /** A judge's transaction lease, renewed while it judges: a dead judge's candidate is back within this time
@@ -35,10 +35,14 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		const { session, blockId, candidateId } = f as { session: string; blockId?: string; candidateId: string };
 		// the candidate is invisible while this transaction holds it: a marker keeps its tile on the page meanwhile
 		marker = (await space.write({ type: "CodeJudging", fields: { ...f, host } as never }, null, TXN_LEASE_MS * 2)).id;
-		// a block that was deleted takes its candidates along: consumed, nothing written
-		const alive = async () => typeof blockId !== "string" || !!(await space.readIfExists({ type: "CodeTask", fields: { session, blockId } }, NO_WAIT, { txn: t.id }));
-		const task = taskFromSpec(f);
-		const v: Verdict | null = !(await alive()) ? null : task ? await judgeInSlot(cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
+		// a block that was deleted takes its candidates along: consumed, nothing written (a CodeTask another transaction
+		// holds for a moment, a changed time limit, is waited for, not taken for gone)
+		const taskEntry = async () => typeof blockId !== "string" ? null : (await space.readIfExists({ type: "CodeTask", fields: { session, blockId } }, HELD_WAIT_MS, { txn: t.id }))?.fields as Record<string, unknown> | undefined ?? false;
+		const alive = async () => (await taskEntry()) !== false;
+		// the task: its block's CodeTask (a candidate from before carries its own spec; one without a block names a catalog task)
+		const spec = f.custom !== undefined || typeof blockId !== "string" ? f : await taskEntry();
+		const task = spec ? taskFromSpec(spec) : null;
+		const v: Verdict | null = spec === false ? null : task ? await judgeInSlot(cm, task, String(f.source ?? "")) : { ok: false, ms: TIMEOUT_MS, error: "unknown task", passed: 0, total: 0, cases: [] };
 		if (v && (await alive())) {
 			await space.write({ type: "CodeScore", fields: { session, blockId, candidateId, author: f.author, via: f.via, host, gen: f.gen, ...(f.role ? { role: f.role } : {}), ...(f.basedOn ? { basedOn: f.basedOn } : {}), ...(f.partner ? { partner: f.partner } : {}), ...(f.critiqueId ? { critiqueId: f.critiqueId } : {}), ...(f.proposalId ? { proposalId: f.proposalId } : {}), ...(f.usage ? { usage: f.usage } : {}), ...(f.runId ? { runId: f.runId } : {}), ...verdictFields(v), source: f.source, ts: f.ts } as never }, t.id, ttl);
 			// a correct verdict that beats the block's best (and no person rejected it) becomes the new best
@@ -49,7 +53,9 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		return true;
 	} catch (e) {
 		await space.abort(t.id).catch(() => {});
-		if (e instanceof TransactionError) return true; // the transaction lapsed: the candidate is back for another try
+		// the transaction lapsed: the candidate is back for another try. A commit over the space's limits fails the same
+		// way but would fail every time: that one goes to the failed verdict below
+		if (e instanceof TransactionError && !/could write|the limit is/i.test((e as Error).message)) return true;
 		// the verdict could not be stored (a limit of the space): the candidate is consumed with a short failed verdict,
 		// or it would come back to every judge forever
 		if (f) await failed(space, f, host, ttl, (e as Error).message).catch(() => { throw e; });

@@ -1477,3 +1477,18 @@ t("research: the newest findings of a block reach the agents, also when the bloc
 		}
 	} finally { process.env.CODEMODE_ADMIN_TOKEN = ""; await srv.close(); }
 });
+
+t("a custom task with large cases and a large source is judged: the candidate names its task by the block", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		const big = "x".repeat(500);
+		const cases = Array.from({ length: 50 }, (_, i) => ({ args: [`${big}${i}`], expect: `${big}${i}`.length })); // ~26 kB of cases
+		const created = await post(srv.url, "/api/sessions/big1/task", { custom: { fn: "len", prompt: "length of the text", cases } });
+		assert.equal(created.status, 200, JSON.stringify(created.body));
+		const source = `// ${"\u0007".repeat(6400)}\nfunction len(s){ return s.length }`; // ~38 kB as JSON (control characters count six bytes)
+		const sent = await post(srv.url, "/api/sessions/big1/code", { author: "a", source });
+		assert.equal(sent.status, 200, JSON.stringify(sent.body));
+		const c = await until(async () => { const s = view(await (await fetch(srv.url + "/api/sessions/big1")).json()); return s.contributions[0]?.ok === true ? s.contributions[0] : false; }, 30_000);
+		assert.equal(c.passed, 50);
+	} finally { await srv.close(); }
+});

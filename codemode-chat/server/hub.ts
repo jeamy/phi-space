@@ -1,7 +1,7 @@
 // Chat sessions on one durable space. Everything that happens is an entry:
 //   ChatMessage  people talking          CodeTask       one task block of a room (everything below belongs to a block)
 //   CodeCandidate a contribution waiting CodeScore      the sandbox verdict, with the code (the visible contribution)
-//   CodeBest     the best correct code of a block (one entry per block, replaced when beaten)
+//   CodeBest     which verdict is a block's best code (one entry per block, replaced when beaten; the code is in the verdict)
 //   CodeNote     an insight an agent leaves for the team, or a person's hint (`human`; agents follow it first)
 //   CodeVeto     a person's "not like this" on a contribution: it no longer counts as correct, and agents avoid it
 //   TextAnswer    an answer to a text task (no code, no sandbox); TextJudgement a judge's verdict per criterion
@@ -24,7 +24,7 @@ import { addUsage, clipWords, criticModel, llmContribution, llmCriteria, llmCrit
 import { runBoard, type BoardEnd, type BoardInfo } from "./board.ts";
 import { webSearch } from "./search.ts";
 import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
-import { entryLeaseMs, type ProcessInfo } from "./space.ts";
+import { entryLeaseMs, HELD_WAIT_MS, type ProcessInfo } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
 
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
@@ -236,8 +236,10 @@ export class CodeChatHub {
 	/** The active block's best code as the judges keep it (CodeBest). */
 	async #syncBest(s: Session): Promise<void> {
 		const blockId = s.blockId;
-		const b = (await this.host.readIfExists({ type: "CodeBest", fields: { session: s.id, blockId } }, NO_WAIT))?.fields as { candidateId: string; ms: number; source: string } | undefined;
-		if (blockId === s.blockId) s.best = b ? { candidateId: b.candidateId, ms: b.ms, source: b.source } : null;
+		const b = (await this.host.readIfExists({ type: "CodeBest", fields: { session: s.id, blockId } }, HELD_WAIT_MS))?.fields as { candidateId: string; ms: number } | undefined;
+		// the code comes from the verdict it names
+		const source = b ? String(((await this.host.readAll({ type: "CodeScore", fields: { session: s.id, candidateId: b.candidateId } }, { limit: 1 }))[0]?.fields as { source?: unknown } | undefined)?.source ?? "") : "";
+		if (blockId === s.blockId) s.best = b ? { candidateId: b.candidateId, ms: b.ms, source } : null;
 	}
 
 	async #vetoes(s: Session): Promise<Map<string, { by: string; reason: string }>> {
@@ -611,10 +613,15 @@ export class CodeChatHub {
 	 *  from now on carry the new limit. */
 	async #retime(s: Session, timeoutMs: number): Promise<void> {
 		if (s.run?.active) throw new Error("A run is active; stop it first");
-		const old = await this.host.take({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId } }, NO_WAIT);
-		if (!old) throw new Error("Unknown task block");
 		const task = customTask({ ...customSpec(s.task), timeoutS: timeoutMs / 1000 });
-		await this.host.write({ type: "CodeTask", fields: { ...(old.fields as Record<string, unknown>), custom: customSpec(task) } as never }, null, this.#ttl);
+		// taken and written back in one transaction: a judge that checks the block meanwhile waits instead of finding it gone
+		const t = await this.host.createTransaction(30_000);
+		try {
+			const old = await this.host.takeIfExists({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId } }, HELD_WAIT_MS, { txn: t.id });
+			if (!old) throw new Error("Unknown task block");
+			await this.host.write({ type: "CodeTask", fields: { ...(old.fields as Record<string, unknown>), custom: customSpec(task) } as never }, t.id, this.#ttl);
+			await this.host.commit(t.id);
+		} catch (e) { await this.host.abort(t.id).catch(() => {}); throw e; }
 		s.task = task;
 		await this.#write(s, "system", `Time limit per contribution: ${timeoutMs / 1000} s`, s.blockId);
 	}
@@ -783,7 +790,9 @@ export class CodeChatHub {
 		// the cap keeps every read of the room (snapshot, ranking) complete: a read limit never cuts contributions off
 		if ((await this.#contributionCount(s)) >= LIMITS.contributions) throw new Error("This room holds the maximum number of contributions; delete a task block");
 		const candidateId = `${Date.now().toString(36)}-${rid()}`;
-		const entry = { type: "CodeCandidate", fields: { session: s.id, blockId: s.blockId, taskId: s.task.id, ...(s.task.id === "custom" ? { custom: customSpec(s.task) } : {}), candidateId, author, via, gen, ...(lineage.role ? { role: lineage.role } : {}), ...(lineage.basedOn ? { basedOn: lineage.basedOn } : {}), ...(lineage.partner ? { partner: lineage.partner } : {}), ...(lineage.critiqueId ? { critiqueId: lineage.critiqueId } : {}), ...(lineage.proposalId ? { proposalId: lineage.proposalId } : {}), ...(lineage.usage ? { usage: lineage.usage } : {}), source, ts: Date.now() } } as never;
+		// the candidate names its task by the block (judges read the CodeTask): a custom task's cases next to the source
+		// would push the entry past the space's limit
+		const entry = { type: "CodeCandidate", fields: { session: s.id, blockId: s.blockId, taskId: s.task.id, candidateId, author, via, gen, ...(lineage.role ? { role: lineage.role } : {}), ...(lineage.basedOn ? { basedOn: lineage.basedOn } : {}), ...(lineage.partner ? { partner: lineage.partner } : {}), ...(lineage.critiqueId ? { critiqueId: lineage.critiqueId } : {}), ...(lineage.proposalId ? { proposalId: lineage.proposalId } : {}), ...(lineage.usage ? { usage: lineage.usage } : {}), source, ts: Date.now() } } as never;
 		// into the shared space: a judge process (here, on nano, anywhere) takes it
 		await this.host.write(entry, null, this.#ttl);
 		this.push(s);
@@ -809,7 +818,7 @@ export class CodeChatHub {
 		const open = new Set(ids);
 		while (open.size && !this.#closed && !s.abort) {
 			for (const e of await this.host.readAll({ type: "CodeScore", fields: { session: s.id, blockId: s.blockId } }, { limit: LIMITS.contributions })) open.delete(String((e.fields as { candidateId?: unknown }).candidateId));
-			if (!open.size || !(await this.host.readIfExists({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId } }, NO_WAIT))) break;
+			if (!open.size || !(await this.host.readIfExists({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId } }, HELD_WAIT_MS))) break;
 			await new Promise((r) => setTimeout(r, 150));
 		}
 		await this.#syncBest(s);

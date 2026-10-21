@@ -2,6 +2,8 @@
 // tasks get as material. Whoever changes them does so inside its own transaction, so a crash in between leaves both as
 // they were. CodeBest is the lock: a writer takes it (takeIfExists waits while another transaction holds it), and the
 // first CodeBest of a block is written `unique`, so of two judges that both find none, the second tries again.
+// CodeBest names the verdict (candidate and time) and carries no code: the code is in the CodeScore and the archive,
+// and a judge's commit (verdict, best, archive) has to fit the space's commit limit.
 import { FOREVER, NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { isText, type Task } from "./tasks.ts";
 
@@ -44,7 +46,7 @@ export async function setBest(space: SpaceLike, txn: string, session: string, bl
 		if ("offer" in change && !next) { await space.write({ type: "CodeBest", fields: cur as never }, txn, ttl); return false; } // not faster: put it back
 		if (!next) { await archive(space, txn, session, blockId, task, null); return !!held; }
 		try {
-			await space.write({ type: "CodeBest", fields: { session, blockId, candidateId: next.candidateId, ms: next.ms, source: next.source } }, txn, ttl, held ? {} : { unique: ["session", "blockId"] });
+			await space.write({ type: "CodeBest", fields: { session, blockId, candidateId: next.candidateId, ms: next.ms } }, txn, ttl, held ? {} : { unique: ["session", "blockId"] });
 		} catch (e) {
 			if (!held && isUnique(e)) continue; // another writer made the first one meanwhile: take that one now
 			throw e;
