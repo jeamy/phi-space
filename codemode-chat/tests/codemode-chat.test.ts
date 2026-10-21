@@ -1489,3 +1489,15 @@ t("a paid call whose work fails still counts: on the run and against a visitor's
 		assert.equal(spent, 6000);
 	} finally { await srv.close(); }
 });
+
+t("calls are admitted against the run's budget before they are made: overlapping agents do not overshoot it", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "adm1": 1000 tokens a call, 0.8 s each
+	try {
+		await post(srv.url, "/api/sessions/adm1/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }] } });
+		const snap = await boardRun(srv, "adm1", { agents: 4, plan: false, budgetTokens: 3000 });
+		assert.equal(snap.run.ended, "budget");
+		// four agents start at once; without admission each would make its call (4000)
+		assert.ok(snap.run.usage.tokens >= 3000 && snap.run.usage.tokens <= 3000, `tokens ${snap.run.usage.tokens}`);
+		assert.equal(await srv.stack.space.count({ type: "WorkItem", fields: { session: "adm1" } }), 0);
+	} finally { await srv.close(); }
+});

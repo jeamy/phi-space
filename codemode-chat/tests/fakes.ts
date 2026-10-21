@@ -50,6 +50,11 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	bud2: () => ({ contribute: async () => ({ source: "function f(x){ return 0 }", model: "fake/team", usage: { input: 900, output: 100, cacheRead: 0, cacheWrite: 0, total: 1000, costUsd: 0.01 } }) }),
 	// implementations that hang until the test opens the gate (the hub restarts meanwhile)
 	gen1: (s, space, log) => ({ contribute: async () => { await log({ kind: "contribute" }); await gate(space, s); return { source: "function double(x){ return x * 2 }", model: "fake/team", usage: use(5, 0.001) }; } }),
+	// slow calls that overlap, never right: only the run's budget stops them
+	adm1: () => ({
+		contribute: async () => { await new Promise((r) => setTimeout(r, 800)); return { source: "function f(x){ return 0 }", model: "fake/team", usage: use(1000, 0.001) }; },
+		critique: async () => { await new Promise((r) => setTimeout(r, 800)); return { text: "no", model: "fake/team", usage: use(1000, 0.001) }; },
+	}),
 	// code that cannot be handed in (empty): paid all the same
 	rej1: () => ({ contribute: async () => ({ source: "  ", model: "fake/team", usage: use(1000, 0.01) }) }),
 	// a stop while two calls hang and a third waits in the queue

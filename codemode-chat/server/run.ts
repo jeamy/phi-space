@@ -52,7 +52,10 @@ export type GenProgress = { total: number; done: number; handedIn: number };
 export type BoardState = { phase: "research" | "propose" | "vote" | "work"; phaseLeft: number; created: number; done: number; critiques: number; proposals: number; votes: number; judgements: number; findings: number; improveLeft: number; merged: string[]; capped?: boolean };
 export type RunEntry = { session: string; runId: string; blockId: string; params: RunParams; info: RunInfo; progress: Record<string, GenProgress>; board?: BoardState;
 	/** Work items written and not done yet (a waiting item that goes back stays counted). Missing on runs from before. */
-	pending?: number; ts: number };
+	pending?: number;
+	/** The budget held by model calls in flight, per item (released when the item books its call), and the calls
+	 *  booked so far (their average is what the next call is expected to cost). */
+	reserved?: Record<string, { tokens: number; usd: number }>; booked?: number; ts: number };
 type BoardKind = "research" | "propose" | "vote" | "implement" | "critique" | "revise" | "merge" | "judge" | "followup";
 /** A turn carries its role and the attempt it works on, chosen when its generation began: every agent of a generation
  *  builds on the same state, whoever of them gets to work first. Board items name what they work on (target, partner,
@@ -69,7 +72,7 @@ const BUSY_LEASE_MS = ITEM_LEASE_MS;
 /** Failed tries of an item before it is given up (it then counts as done, with nothing handed in). */
 const MAX_TRIES = 3;
 /** A failure that trying again will not mend (a model no longer allowed, the day's web searches used up, no results). */
-const FINAL = /is not allowed|searches of the day|No search results|Web search refused|has no /i;
+const FINAL = /is not allowed|searches of the day|No search results|Web search refused|has no |the run's budget is used up/i;
 /** How long a critique waits for the critic model before others may take it. */
 const CRITIC_WAIT_MS = 20_000;
 /** The work board's limits: the item cap is max(12, agents × gens × 4), the depth of follow-ups at most 12. */
@@ -122,11 +125,40 @@ async function updateRun(space: SpaceLike, txn: string, ttl: number, session: st
 
 /** Whether a run's model calls have used up its budget (tokens or dollars, whichever comes first). */
 const overBudget = (r: RunEntry) => { const b = r.info.budget, u = r.info.usage; return !!b && ((b.tokens !== undefined && u.tokens >= b.tokens) || (b.usd !== undefined && u.costUsd >= b.usd)); };
-/** Books a call's usage on the run; over the budget the run ends once its open items are done. */
-const book = (r: RunEntry, usage?: Usage) => {
-	if (usage) r.info.usage = { tokens: r.info.usage.tokens + usage.total, costUsd: r.info.usage.costUsd + usage.costUsd };
+/** Books a call's usage on the run and releases the budget the item held for it; over the budget the run ends once
+ *  its open items are done. */
+const book = (r: RunEntry, usage: Usage | undefined, itemId: string) => {
+	if (usage) { r.info.usage = { tokens: r.info.usage.tokens + usage.total, costUsd: r.info.usage.costUsd + usage.costUsd }; r.booked = (r.booked ?? 0) + 1; }
+	if (r.reserved?.[itemId]) { const { [itemId]: _held, ...rest } = r.reserved; r.reserved = rest; }
 	if (overBudget(r)) r.info.ended ??= "budget";
 };
+
+/** A call that must wait: the run's budget is taken up by the calls in flight. Not a failed try. */
+class Wait extends Error {}
+/** What a call is expected to cost before the run has booked any (tokens; dollars stay unknown until then). */
+const FIRST_CALL_TOKENS = 4000;
+/** What the next call is expected to cost: the run's average per booked call. */
+const estimate = (r: RunEntry) => (r.booked ? { tokens: Math.ceil(r.info.usage.tokens / r.booked), usd: r.info.usage.costUsd / r.booked } : { tokens: FIRST_CALL_TOKENS, usd: 0 });
+
+/** Admits a model call of an item against the run's budget, under the run's lock and committed before the call: the
+ *  call may go when what was booked plus what the calls in flight hold stays below the budget, and then holds its
+ *  estimate itself. Otherwise it waits (Wait) for those calls to book; once the booked usage alone reaches the budget
+ *  the run is over (ModelFailed). An item that comes back after a crash finds its own reservation and goes. So the
+ *  run ends at most one call's estimate (plus the estimates' error) beyond its budget. */
+async function admit(d: AgentDeps, it: WorkItem): Promise<void> {
+	let verdict = "go" as "go" | "wait" | "over";
+	await inTxn(d.space, d.open, (t) => updateRun(d.space, t, d.ttl, it.session, it.runId, (r) => {
+		const b = r.info.budget;
+		if (!b || r.reserved?.[it.itemId]) return;
+		if (r.info.ended || overBudget(r)) { verdict = "over"; return; }
+		const held = Object.values(r.reserved ?? {});
+		const tokens = r.info.usage.tokens + held.reduce((n, x) => n + x.tokens, 0), usd = r.info.usage.costUsd + held.reduce((n, x) => n + x.usd, 0);
+		if ((b.tokens !== undefined && tokens >= b.tokens) || (b.usd !== undefined && usd >= b.usd)) { verdict = "wait"; return; }
+		r.reserved = { ...r.reserved, [it.itemId]: estimate(r) };
+	}));
+	if (verdict === "wait") throw new Wait();
+	if (verdict === "over") throw new ModelFailed("the run's budget is used up");
+}
 
 /** The closing line of a run (how it ended, how far it got). */
 export async function closingLine(space: SpaceLike, r: RunEntry, how: "finished" | "stopped" | "accepted"): Promise<string> {
@@ -243,6 +275,8 @@ async function workOnce(d: AgentDeps, slot: Slot, me: string, run: RunEntry): Pr
 				if (!(await space.take({ id }, NO_WAIT, { txn }))) return null; // another agent took it first
 				try { return await execute(d, slot, me, it, txn); }
 				catch (e) {
+					// the budget is held by calls in flight: the item goes back for a little while, not as a failed try
+					if (e instanceof Wait) { await space.write(itemEntry({ ...it, notBefore: Date.now() + 2000 }), txn, d.ttl); return "waiting" as const; }
 					if (!(e instanceof ModelFailed)) throw e;
 					// handled in this transaction: the failed answer is used up, the item goes back or counts as done
 					await failed(d, it, txn, e.message, e.usage);
@@ -272,11 +306,11 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string, usag
 	const { space } = d, tries = (it.tries ?? 0) + 1;
 	if (!FATAL_LLM.test(why) && !FINAL.test(why) && tries < MAX_TRIES) {
 		await space.write(itemEntry({ ...it, tries, notBefore: Date.now() + 2000 * tries }), txn, d.ttl);
-		if (usage) await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => book(r, usage));
+		if (usage) await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => book(r, usage, it.itemId));
 		return;
 	}
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
-		book(r, usage);
+		book(r, usage, it.itemId);
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
 		if (it.kind === "turn") { const p = r.progress[it.gen]; if (p) p.done++; settle(r, -1); }
 		else if (it.kind === "barrier") { settle(r, -1); r.info.note = `generation ${it.gen + 1} could not be closed (${why.slice(0, 120)}); the run ends`; }
@@ -293,6 +327,7 @@ async function execute(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: 
 
 /** A model call of an item; ModelFailed when it does not answer. The call id carries the item's try. */
 async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: RunEntry, n: number, kind: CallKind, more: Partial<LlmCall>): Promise<Record<string, unknown>> {
+	if (run.info.budget) await admit(d, it);
 	const res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, blockId: it.blockId, runId: it.runId, kind, agent: slot.agent, gen: it.depth ?? it.gen, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more });
 	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed", res.usage);
 	return res.value;
@@ -335,7 +370,7 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 		const p = r.progress[it.gen];
 		if (p) { p.done++; p.handedIn += handedIn; }
 		settle(r, -1);
-		book(r, usage);
+		book(r, usage, it.itemId);
 		if (runNote) r.info.note = runNote;
 		if (fatal) r.info.ended ??= "budget"; // no next generation; the run ends once its items are done
 	});
@@ -483,7 +518,7 @@ async function boardItem(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn
 		}
 	}
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
-		book(r, usage);
+		book(r, usage, it.itemId);
 		const b = r.board!;
 		for (const [k, n] of Object.entries(counted)) (b as unknown as Record<string, number>)[k] += n!;
 		// a correct verdict (or one on a solved task) starts an improvement critique while improvement rounds are left

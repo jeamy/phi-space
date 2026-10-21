@@ -220,23 +220,46 @@ Störungen.
 - Die Aufrufe eines Besuchers zählen gegen sein Tagesbudget. Ist es verbraucht, lehnt der web-Prozess die Aufgabe vor dem
   ersten Aufruf ab.
 
-**Budgets sind noch nicht streng durchgesetzt:**
-- Mehrere Agenten können dieselbe Prüfung bestehen, bevor einer von ihnen Verbrauch bucht.
-- Laufbudgets reservieren keine Kosten für laufende Aufrufe.
-- Lehnt der model-Prozess Code nach dem Aufruf ab (`sourceProblem`), wird der bezahlte Verbrauch weder als Spend noch beim
-  Lauf gebucht.
-- Fehlgeschlagene Versuche bucht der Lauf nicht.
-- Die Grenzen je Minute und Tag zählen je model-Prozess.
-- Die Kostenanzeige eines Blocks im Snapshot enthält Kritiken, Vorschläge, Stimmen und Urteile nicht und weicht daher vom
-  Verbrauch des Laufs ab.
+**Verbrauch buchen.**
+- `metered` (`server/llm.ts`) zählt im model-Prozess jeden bezahlten Aufruf, auch wenn die Arbeit danach scheitert: eine
+  leere Antwort, Code, den `sourceProblem` ablehnt, eine Recherche ohne Treffer nach der ersten Anfrage.
+- Ein `LlmResult` trägt diesen Verbrauch auch bei einem Fehler.
+- Der Agent bucht ihn auf den Lauf im Commit, der das `LlmResult` nimmt, ob erfolgreich oder nicht. So wird jeder Aufruf
+  genau einmal gebucht, auch über Abbrüche und Wiederholungen.
+- Für einen Besucher schreibt der model-Prozess `Spend`, sobald Verbrauch anfiel; Anlegen einer Aufgabe eingeschlossen.
+- Die Kostenanzeige eines Blocks enthält Beiträge, Recherche, Kritiken, Vorschläge, Stimmen, Urteile (aktiver Block) und
+  die Arbeit des Prüfer-Agenten.
 
-**Nötige Korrektur:**
-- vor einem externen Aufruf ein Kontingent atomar reservieren und danach mit dem tatsächlichen Verbrauch abgleichen, auch
-  bei fehlgeschlagenen oder abgelehnten Ausgaben;
-- festlegen, wie ungewisse Kosten nach einem Absturz behandelt werden;
-- getrennte Einträge für Anfrage, Reservierung und Verbrauch;
-- für jede Grenze festlegen, ob sie je Prozess oder global gilt, ob sie hart oder weich ist und ob ein Tag ein
-  Kalendertag (mit Zeitzone) oder ein gleitendes 24-h-Fenster ist.
+**Laufbudget: Zulassung vor dem Aufruf.**
+- Vor jedem Modellaufruf eines Auftrags (`ask` in `run.ts`) prüft eine eigene, sofort committete Transaktion unter dem
+  Lock des Laufs: gebuchter Verbrauch plus die Reservierungen der laufenden Aufrufe muss unter dem Budget liegen (Tokens
+  und Dollar).
+- Dann reserviert der Aufruf seine Schätzung in `CodeRun.reserved`, geführt je Auftrag. Die Schätzung ist der
+  Durchschnitt der bisher gebuchten Aufrufe des Laufs, vor dem ersten 4000 Tokens und keine Dollar.
+- Jede Buchung des Auftrags gibt seine Reservierung frei. Ein Auftrag, der nach einem Absturz zurückkommt, findet seine
+  Reservierung wieder und geht ohne neue.
+- Reicht das Budget nicht, weil andere Aufrufe laufen, wartet der Auftrag 2 s; das zählt nicht als Fehlversuch. Erreicht
+  der gebuchte Verbrauch allein das Budget, endet der Lauf als „Budget verbraucht“.
+- Überschreitung: höchstens die Schätzung eines Aufrufs plus deren Fehler. Ohne Budget (Admin ohne Grenze) entfällt die
+  Zulassung.
+
+**Grenzen, wie sie heute gelten (festgelegt am 2026-10-21):**
+- *Laufbudget:* hart bis auf die genannte Überschreitung, für den ganzen Lauf über alle Prozesse.
+- *Tagesbudget einer Adresse* (`CODEMODE_TOKENS_PER_IP_DAY`):
+  - weich. Der model-Prozess prüft die `Spend`-Summe vor dem Aufruf, ohne zu reservieren.
+  - Überschreitung höchstens um die Aufrufe, die gleichzeitig laufen (`CODEMODE_MODEL_PARALLEL` × model-Prozesse).
+  - Ein Tag ist der UTC-Kalendertag (`today()`).
+- *Aufrufe je Minute und Tag* (`CODEMODE_LLM_PER_MIN`, `CODEMODE_LLM_PER_DAY`): je model-Prozess, der Tag als 24-h-Fenster
+  ab dem Start des Prozesses.
+- *Websuchen je Tag:* je model-Prozess, im Speicher; ein Neustart setzt den Zähler zurück.
+- Die drei letzten gemeinsam zu machen (gemeinsame Zähler mit Reservierung wie beim Laufbudget) ist Stufe 3.
+
+**Offen:**
+- Ungewisse Kosten nach einem Absturz: Stirbt der model-Prozess nach der Antwort des Anbieters und vor seinem Commit,
+  wird der Aufruf wiederholt und doppelt bezahlt, aber nur einmal gebucht. Dafür bräuchte es Idempotenz beim Anbieter.
+- Scheitert ein Auftrag nach einem erfolgreichen Aufruf an etwas anderem (etwa der Obergrenze der Beiträge eines Raums),
+  bricht seine Transaktion ab. Der nächste Versuch fragt mit neuer Kennung, und der Verbrauch des ersten Aufrufs bleibt
+  ungebucht.
 
 ## Snapshots, Aufbewahrung und Wiederherstellung
 
@@ -273,7 +296,7 @@ Hochverfügbarkeit des Space selbst ergibt sich nicht aus der Aufteilung in Proz
 
 ## Offene Korrekturen
 
-**1. Budgets:** siehe oben.
+**1. Budgets:** siehe „Grenzen, wie sie heute gelten“ und „Offen“ oben.
 
 **2. Versuche:** Harte Abstürze sollten als Versuch zählen, damit ein Auftrag, der jeden Prozess abstürzen lässt, begrenzt
 bleibt.
@@ -370,7 +393,9 @@ Getestet sind:
 - Obergrenze des Bretts;
 - Budget und Frist beim Anlegen einer Aufgabe;
 - ein `CodeRun`, das länger als `HELD_WAIT_MS` gesperrt bleibt: alle Agenten bleiben, der Lauf endet einmal;
-- Stop, während Aufrufe laufen und warten: keine Aufträge bleiben zurück, der wartende Aufruf wird nicht gemacht.
+- Stop, während Aufrufe laufen und warten: keine Aufträge bleiben zurück, der wartende Aufruf wird nicht gemacht;
+- abgelehnte Ausgaben buchen ihren Verbrauch auf den Lauf und auf die Adresse;
+- überlappende Agenten überschreiten das Laufbudget nicht.
 
 Der frühere Fall „Busy-Marker läuft ab, während seine Transaktion lebt“ entfällt mit `pending`.
 
@@ -378,7 +403,6 @@ Noch ohne Test, jeweils mit der zugehörigen Korrektur einzuführen:
 
 - Ein Anbieter antwortet, bevor der Prozess ohne Commit stirbt; Wiederholung und ungewisse Kosten folgen der festgelegten
   Regel.
-- Gleichzeitige Agenten nähern sich einem gemeinsamen Budget; abgelehnte Ausgaben buchen ihren Verbrauch.
 - Wiederholte harte Abstürze ergeben begrenzte Versuche und ein ausdrückliches Ende.
 - Wiederherstellung nahe an den Aufbewahrungsfristen.
 - Mehrere web-Prozesse ändern denselben Raum; gemeinsame Sperre und Wahl von Aufgabe und Lauf halten ihre Regeln ein.
