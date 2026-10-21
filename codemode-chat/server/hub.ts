@@ -27,7 +27,7 @@ import { taskWaitMs } from "./limits.ts";
 import { spentToday } from "./model-host.ts";
 import type { TaskReady } from "./task-agent.ts";
 import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
-import { entryLeaseMs, HELD_WAIT_MS, type ProcessInfo } from "./space.ts";
+import { entryLeaseMs, HELD_WAIT_MS, readExisting, type ProcessInfo } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
 
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
@@ -179,7 +179,7 @@ export class CodeChatHub {
 		for (const type of ["WorkItem"]) for (const e of await this.host.readAll({ type, fields: { session: s.id } }, { limit: 2000 })) {
 			const runId = String((e.fields as { runId?: unknown }).runId);
 			if (runs.has(runId)) continue;
-			if (!gone.has(runId)) gone.set(runId, !(await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id, runId } }, HELD_WAIT_MS)));
+			if (!gone.has(runId)) gone.set(runId, !(await readExisting(this.host, { type: "CodeRun", fields: { session: s.id, runId } }).catch(() => true))); // held for long: not gone
 			if (gone.get(runId)) await this.host.take({ id: e.id }, NO_WAIT);
 		}
 	}
@@ -215,9 +215,10 @@ export class CodeChatHub {
 		await this.host.write({ type: "CodeAdmin", fields: { key: "llm", ...(typeof (o.on ?? cur?.on) === "boolean" ? { on: (o.on ?? cur?.on) as boolean } : {}), ...(typeof (o.model ?? cur?.model) === "string" ? { model: (o.model ?? cur?.model) as string } : {}), ts: Date.now() } }, null, FOREVER);
 	}
 
-	/** The room's active run: the CodeRun the agent processes carry out (one an agent holds for a moment is waited for). */
+	/** The room's active run: the CodeRun the agent processes carry out (one an agent holds for a moment is waited for;
+	 *  one held for longer throws StillHeld rather than pass for no run). */
 	async #runNow(s: Session): Promise<RunInfo | null> {
-		const r = (await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id } }, HELD_WAIT_MS))?.fields as unknown as RunEntry | undefined;
+		const r = (await readExisting(this.host, { type: "CodeRun", fields: { session: s.id } }))?.fields as unknown as RunEntry | undefined;
 		return r ? { ...r.info, active: true } : null;
 	}
 
@@ -669,7 +670,7 @@ export class CodeChatHub {
 		if (o.undo !== true) {
 			await this.host.write({ type: "CodeAccept", fields: { session: s.id, blockId: f.blockId, answerId, by, reason, ts: Date.now() } }, null, this.#ttl);
 			if (reason) await this.#addNote(s, f.blockId, by, "human", 0, `Accepted ${String(f.author)}'s answer: ${reason}`, true);
-			const run = (await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id } }, HELD_WAIT_MS))?.fields as unknown as RunEntry | undefined;
+			const run = (await readExisting(this.host, { type: "CodeRun", fields: { session: s.id } }))?.fields as unknown as RunEntry | undefined;
 			if (run && run.blockId === f.blockId) {
 				const t = await this.host.createTransaction(30_000);
 				try { await endRun(this.host, t.id, this.#ttl, s.id, run.runId, "accepted", { ended: "accepted" }); await this.host.commit(t.id); }
@@ -847,7 +848,7 @@ export class CodeChatHub {
 		const run = await this.#runNow(s);
 		if (reason && run) await this.#addNote(s, run.blockId, plain(clip(o.by, 40)).trim() || "guest", "human", 0, `Run stopped: ${reason}`, true);
 		// whoever takes the run's CodeRun ends it, with its closing line, exactly once
-		const e = await this.host.readIfExists({ type: "CodeRun", fields: { session: s.id } }, HELD_WAIT_MS);
+		const e = await readExisting(this.host, { type: "CodeRun", fields: { session: s.id } });
 		const runId = (e?.fields as { runId?: string } | undefined)?.runId;
 		if (runId) {
 			const t = await this.host.createTransaction(30_000);

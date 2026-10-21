@@ -9,13 +9,15 @@
 //               generation: it waits until every turn is done and every contribution judged, then opens the next).
 //               Work board: research, propose, vote, implement, critique, revise, merge, judge, and a `followup` that
 //               waits for a contribution's verdict and then sets the next work (a critique, a merge).
-//   AgentBusy   an agent working on an item (written before it takes one, lease renewed while it works): the run is
-//               over when no work item is left and no agent is busy.
+//   AgentBusy   an agent working on an item (written before it takes one, lease renewed while it works), for runs from
+//               before `pending`: such a run is over when no work item is left and no agent is busy.
 //   CodeRunDone how a run ended (its info), for the page after the CodeRun is gone.
 //
 // An agent does an item inside one transaction: take the item, ask the model process (callModel), write the result,
 // update the CodeRun, write the follow-ups, commit. A crash rolls all of it back and the item is there again: every
 // item is done exactly once, and a model call that already ran is not paid twice (its answer waits for the retry).
+// The CodeRun counts the items not done yet (`pending`) in the same commits that write and finish them: the run is over
+// when that count is 0, whatever another agent holds right now.
 import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { limitOf, maxTimeoutMs } from "./judge.ts";
 import { criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
@@ -23,7 +25,7 @@ import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
 import { crossWaitMs, FATAL_LLM, modelWaitMs, verdictWaitOr } from "./limits.ts";
 import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandidate, isSolved, rankedProposals, rid, scoresOf, systemLine, teamView, planTurn } from "./room.ts";
 import { archive } from "./results.ts";
-import { HELD_WAIT_MS, keepAlive } from "./space.ts";
+import { HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeExisting } from "./space.ts";
 import { isText, type Task } from "./tasks.ts";
 
 export type RunMode = "scripted" | "llm";
@@ -47,7 +49,9 @@ export type GenProgress = { total: number; done: number; handedIn: number };
 /** The work board's state: its phase and how many items of it are left, its counters, the improvement rounds left,
  *  the pairs already merged, and whether the item cap was reached. */
 export type BoardState = { phase: "research" | "propose" | "vote" | "work"; phaseLeft: number; created: number; done: number; critiques: number; proposals: number; votes: number; judgements: number; findings: number; improveLeft: number; merged: string[]; capped?: boolean };
-export type RunEntry = { session: string; runId: string; blockId: string; params: RunParams; info: RunInfo; progress: Record<string, GenProgress>; board?: BoardState; ts: number };
+export type RunEntry = { session: string; runId: string; blockId: string; params: RunParams; info: RunInfo; progress: Record<string, GenProgress>; board?: BoardState;
+	/** Work items written and not done yet (a waiting item that goes back stays counted). Missing on runs from before. */
+	pending?: number; ts: number };
 type BoardKind = "research" | "propose" | "vote" | "implement" | "critique" | "revise" | "merge" | "judge" | "followup";
 /** A turn carries its role and the attempt it works on, chosen when its generation began: every agent of a generation
  *  builds on the same state, whoever of them gets to work first. Board items name what they work on (target, partner,
@@ -75,6 +79,10 @@ const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The run is gone (stopped, or ended by another agent): the work in progress is dropped. */
 class RunGone extends Error {}
+/** The run still has work: it is not ended. */
+class NotOver extends Error {}
+/** Items done (-1 each) and written (+1 each), on a run that counts them. */
+const settle = (r: RunEntry, n: number) => { if (r.pending !== undefined) r.pending += n; };
 /** A model call that failed: the item is tried again (a new call), given up, or the run ends as over budget. */
 class ModelFailed extends Error {}
 
@@ -94,14 +102,15 @@ export function generationItems(run: { session: string; runId: string; blockId: 
 	return { items, progress: { total: items.length - 1, done: 0, handedIn: 0 } };
 }
 
-/** The run's CodeRun as it is now (null: gone). A CodeRun another agent holds for a moment is waited for. */
+/** The run's CodeRun as it is now (null: gone). A CodeRun another agent holds for a moment is waited for; one held
+ *  for longer throws StillHeld (it is not gone). */
 export async function readRun(space: SpaceLike, session: string, runId: string): Promise<RunEntry | null> {
-	return ((await space.readIfExists({ type: "CodeRun", fields: { session, runId } }, HELD_WAIT_MS))?.fields as unknown as RunEntry | undefined) ?? null;
+	return ((await readExisting(space, { type: "CodeRun", fields: { session, runId } }))?.fields as unknown as RunEntry | undefined) ?? null;
 }
 
 /** Changes the CodeRun in `txn` (taken and written back: the lock of the run). RunGone when it is not there. */
 async function updateRun(space: SpaceLike, txn: string, ttl: number, session: string, runId: string, fn: (r: RunEntry) => void | Promise<void>): Promise<RunEntry> {
-	const e = await space.takeIfExists({ type: "CodeRun", fields: { session, runId } }, HELD_WAIT_MS, { txn });
+	const e = await takeExisting(space, { type: "CodeRun", fields: { session, runId } }, { txn });
 	if (!e) throw new RunGone();
 	const r = structuredClone(e.fields as unknown as RunEntry);
 	await fn(r);
@@ -137,11 +146,13 @@ export async function closingLine(space: SpaceLike, r: RunEntry, how: "finished"
 }
 
 /** Ends a run in `txn`: its CodeRun goes (taken: only one ender succeeds), its left-over items go, a CodeRunDone keeps
- *  how it ended, and the closing line is written. False when the run was already gone. */
-export async function endRun(space: SpaceLike, txn: string, ttl: number, session: string, runId: string, how: "finished" | "stopped" | "accepted", extra: Partial<RunInfo> = {}): Promise<boolean> {
-	const e = await space.takeIfExists({ type: "CodeRun", fields: { session, runId } }, HELD_WAIT_MS, { txn });
+ *  how it ended, and the closing line is written. False when the run was already gone; StillHeld when another
+ *  transaction holds it for long; NotOver (abort the transaction) when `over` says it still has work. */
+export async function endRun(space: SpaceLike, txn: string, ttl: number, session: string, runId: string, how: "finished" | "stopped" | "accepted", extra: Partial<RunInfo> = {}, over?: (r: RunEntry) => Promise<boolean>): Promise<boolean> {
+	const e = await takeExisting(space, { type: "CodeRun", fields: { session, runId } }, { txn });
 	if (!e) return false;
 	const r = e.fields as unknown as RunEntry;
+	if (over && !(await over(r))) throw new NotOver();
 	Object.assign(r.info, extra);
 	if (r.board) r.info.board = { ...(r.info.board ?? { open: 0, done: 0, critiques: 0 }), open: 0 };
 	for (let n = 0; n < 2000 && (await space.take({ type: "WorkItem", fields: { session, runId } }, NO_WAIT, { txn })); n++);
@@ -188,14 +199,16 @@ export type AgentDeps = { space: SpaceLike; ttl: number; open: Set<string>; stop
 export async function agentLoop(d: AgentDeps, slot: Slot): Promise<void> {
 	const { space } = d, me = `agent-${slot.agent}`;
 	while (!d.stopping()) {
-		const run = await readRun(space, slot.session, slot.runId);
+		let run: RunEntry | null;
+		try { run = await readRun(space, slot.session, slot.runId); }
+		catch (e) { if (e instanceof StillHeld) { await pause(300); continue; } throw e; } // held for long: not gone
 		if (!run) return;
-		// busy before taking anything: whoever looks for the end of the run meanwhile sees this agent still at work
-		const busy = await space.write({ type: "AgentBusy", fields: { session: slot.session, runId: slot.runId, agent: slot.agent } }, null, BUSY_LEASE_MS);
-		const stopBusy = keepAlive(space, busy.id, BUSY_LEASE_MS);
+		// a run from before `pending`: busy before taking anything, so whoever looks for its end sees this agent at work
+		const busy = run.pending === undefined ? await space.write({ type: "AgentBusy", fields: { session: slot.session, runId: slot.runId, agent: slot.agent } }, null, BUSY_LEASE_MS) : null;
+		const stopBusy = busy ? keepAlive(space, busy.id, BUSY_LEASE_MS) : () => {};
 		let did: boolean;
 		try { did = await workOnce(d, slot, me, run); }
-		finally { stopBusy(); await space.cancel(busy.id).catch(() => {}); }
+		finally { stopBusy(); if (busy) await space.cancel(busy.id).catch(() => {}); }
 		if (did) continue;
 		if (await maybeEnd(d, slot)) return;
 		await pause(300);
@@ -237,7 +250,10 @@ async function workOnce(d: AgentDeps, slot: Slot, me: string, run: RunEntry): Pr
 			if (done === null) continue;
 			return done !== "waiting";
 		} catch (e) {
-			if (e instanceof RunGone || d.stopping()) return false;
+			if (e instanceof StillHeld) return true; // the run or its task stayed held: the item is back, try again
+			// the run is gone (stopped, ended): the item it came back with goes too, it would only wait for its TTL
+			if (e instanceof RunGone) { await space.take({ id }, NO_WAIT).catch(() => null); return false; }
+			if (d.stopping()) return false;
 			console.error("[agents] item failed", it.kind, (e as Error).message);
 			await inTxn(space, d.open, async (txn) => { if (await space.take({ id }, NO_WAIT, { txn })) await failed(d, it, txn, (e as Error).message); }).catch(() => {});
 			return true;
@@ -254,7 +270,8 @@ async function failed(d: AgentDeps, it: WorkItem, txn: string, why: string): Pro
 	if (!FATAL_LLM.test(why) && !FINAL.test(why) && tries < MAX_TRIES) { await space.write(itemEntry({ ...it, tries, notBefore: Date.now() + 2000 * tries }), txn, d.ttl); return; }
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (r) => {
 		if (FATAL_LLM.test(why)) r.info.ended ??= "budget";
-		if (it.kind === "turn") { const p = r.progress[it.gen]; if (p) p.done++; }
+		if (it.kind === "turn") { const p = r.progress[it.gen]; if (p) p.done++; settle(r, -1); }
+		else if (it.kind === "barrier") { settle(r, -1); r.info.note = `generation ${it.gen + 1} could not be closed (${why.slice(0, 120)}); the run ends`; }
 		else if (r.board) await boardDone(d, txn, r, it, []);
 	});
 }
@@ -308,6 +325,7 @@ async function turn(d: AgentDeps, slot: Slot, me: string, it: WorkItem, txn: str
 	await updateRun(space, txn, d.ttl, it.session, it.runId, (r) => {
 		const p = r.progress[it.gen];
 		if (p) { p.done++; p.handedIn += handedIn; }
+		settle(r, -1);
 		book(r, usage);
 		if (runNote) r.info.note = runNote;
 		if (fatal) r.info.ended ??= "budget"; // no next generation; the run ends once its items are done
@@ -339,6 +357,7 @@ async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" 
 	const attempts = (await teamView(space, it.session, it.blockId, false)).attempts;
 	await updateRun(space, txn, d.ttl, it.session, it.runId, async (run) => {
 		const info = run.info, next = it.gen + 1;
+		settle(run, -1);
 		if (info.solvedGen !== null && !solved) info.solvedGen = null; // the solution was rejected by a person: not solved
 		if (info.solvedGen === null && solved) info.solvedGen = next;
 		if (alive && unjudged > 0) info.note = `${unjudged} contribution${unjudged === 1 ? "" : "s"} of generation ${next} got no verdict in time; the run goes on without ${unjudged === 1 ? "it" : "them"} (is a judge process running?)`;
@@ -347,6 +366,7 @@ async function barrier(d: AgentDeps, it: WorkItem, txn: string): Promise<"done" 
 		const g = generationItems(run, run.params, next, attempts);
 		run.progress[next] = g.progress;
 		info.gen = next + 1;
+		settle(run, g.items.length);
 		for (const x of g.items) await space.write(itemEntry(x), txn, d.ttl);
 	});
 	return "done";
@@ -508,9 +528,11 @@ export function admits(b: BoardState, p: RunParams, s: { kind: BoardKind; depth:
 async function boardDone(d: AgentDeps, txn: string, r: RunEntry, it: WorkItem, spawns: Spawn[]): Promise<void> {
 	const b = r.board!;
 	b.done++;
+	settle(r, -1);
 	for (const s of spawns) {
 		if (!admits(b, r.params, s)) continue;
 		b.created++;
+		settle(r, 1);
 		const { roundsLeft: _r, ...more } = (s.more ?? {}) as Partial<WorkItem> & { roundsLeft?: true };
 		await d.space.write(itemEntry(newItem(r, s.kind, 0, { depth: s.depth, ...more })), txn, d.ttl);
 	}
@@ -526,6 +548,7 @@ async function advance(d: AgentDeps, txn: string, r: RunEntry): Promise<void> {
 	b.phase = b.phase === "research" ? (p.plan ? "propose" : "work") : b.phase === "propose" ? (ranked.length >= 2 ? "vote" : "work") : "work";
 	const items = boardOpening(r, b.phase, ranked.slice(0, 2).map((x) => x.proposalId));
 	b.created += items.length; b.phaseLeft = b.phase === "work" ? 0 : items.length;
+	settle(r, items.length);
 	for (const x of items) await d.space.write(itemEntry(x), txn, d.ttl);
 }
 
@@ -538,24 +561,27 @@ function boardOpening(r: { session: string; runId: string; blockId: string; para
 	return Array.from({ length: n }, (_, a) => newItem(r, "implement", 0, { depth: 0, onlyBy: `agent-${a}`, ...(top.length ? { proposalId: top[a % top.length] } : {}) }));
 }
 
-/** No item left and no agent busy: the run is over, and this agent ends it (only one succeeds: the CodeRun is taken). */
+/** No work left: the run is over, and this agent ends it (only one succeeds: the CodeRun is taken). A run counts its
+ *  open items (`pending`), so whether it is over is decided under its lock from what was committed: an item another
+ *  agent holds right now is still counted. A run from before that counter is over when no item is left and no agent
+ *  is busy. True when the run is gone. */
 async function maybeEnd(d: AgentDeps, slot: Slot): Promise<boolean> {
 	const { space } = d, k = { session: slot.session, runId: slot.runId };
-	if ((await space.count({ type: "WorkItem", fields: k })) > 0 || (await space.count({ type: "AgentBusy", fields: k })) > 0) return false;
-	await inTxn(space, d.open, async (txn) => {
-		// still empty now that this transaction looks: a busy agent writes its marker before it takes anything
-		if ((await space.count({ type: "WorkItem", fields: k }, txn)) > 0 || (await space.count({ type: "AgentBusy", fields: k }, txn)) > 0) return;
-		const r = await readRun(space, slot.session, slot.runId);
-		if (!r) return;
-		// a board that ran out of work without a solution: the item cap, or simply no work left
-		const extra: Partial<RunInfo> = {};
-		if (r.board && !r.info.ended) {
-			const task = await blockTask(space, r.session, r.blockId);
-			if (!task || !(await isSolved(space, r.session, r.blockId, isText(task)))) extra.ended = r.board.capped ? "items" : "idle";
-		}
-		await endRun(space, txn, d.ttl, slot.session, slot.runId, "finished", extra);
-	}).catch((e) => { if (!(e instanceof RunGone)) throw e; });
-	return !(await readRun(space, slot.session, slot.runId));
+	const r = await readRun(space, slot.session, slot.runId);
+	if (!r) return true;
+	const empty = async (txn: string | null) => (await space.count({ type: "WorkItem", fields: k }, txn)) === 0 && (r.pending !== undefined || (await space.count({ type: "AgentBusy", fields: k }, txn)) === 0);
+	if ((r.pending ?? 0) > 0 || !(await empty(null))) return false;
+	// a board that ran out of work without a solution: the item cap, or simply no work left
+	const extra: Partial<RunInfo> = {};
+	if (r.board && !r.info.ended) {
+		const task = await blockTask(space, r.session, r.blockId);
+		if (!task || !(await isSolved(space, r.session, r.blockId, isText(task)))) extra.ended = r.board.capped ? "items" : "idle";
+	}
+	// still nothing to do under the lock: the counter as committed, and no item in sight
+	await inTxn(space, d.open, (txn) => endRun(space, txn, d.ttl, slot.session, slot.runId, "finished", extra, async (now) => (now.pending ?? 0) <= 0 && (await empty(txn))))
+		.catch((e) => { if (!(e instanceof RunGone || e instanceof NotOver || e instanceof StillHeld)) throw e; });
+	try { return !(await readRun(space, slot.session, slot.runId)); }
+	catch (e) { if (e instanceof StillHeld) return false; throw e; }
 }
 
 /** The work of starting a run in `txn`: the CodeRun (one per room), a slot per agent, and the first items. Generations:
@@ -582,7 +608,7 @@ export async function startSpaceRun(space: SpaceLike, txn: string, ttl: number, 
 		board.created = items.length;
 	}
 	const info: RunInfo = { ...run.info, gen, ...(board ? { board: { open: items.length, done: 0, critiques: 0, ...(run.params.plan ? { proposals: 0, votes: 0 } : {}), ...(run.params.research ? { findings: 0 } : {}) } } : {}) };
-	await space.write({ type: "CodeRun", fields: { session: run.session, runId: run.runId, blockId: run.blockId, params: run.params, info, progress, ...(board ? { board } : {}), ts: Date.now() } as never }, txn, ttl, { unique: ["session"] });
+	await space.write({ type: "CodeRun", fields: { session: run.session, runId: run.runId, blockId: run.blockId, params: run.params, info, progress, ...(board ? { board } : {}), pending: items.length, ts: Date.now() } as never }, txn, ttl, { unique: ["session"] });
 	for (let a = 0; a < run.params.agents; a++) await space.write({ type: "AgentSlot", fields: { session: run.session, runId: run.runId, agent: a, model: run.params.contenders[a % run.params.contenders.length]! } }, txn, ttl);
 	for (const x of items) await space.write(itemEntry(x), txn, ttl);
 }

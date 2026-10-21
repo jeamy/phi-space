@@ -105,7 +105,10 @@ Es darf derzeit nur **einen** model-Prozess geben: jeder ersetzt beim Veröffent
 - `readExisting` (`server/space.ts`) unterscheidet die beiden Fälle: `null` heißt dann wirklich weg, eine Sperre über die
   Wartezeit hinaus wirft `StillHeld`.
 - Der Judge nutzt das für die CodeTask seines Kandidaten: der Kandidat geht zurück, statt ohne Urteil zu verschwinden.
-- `readRun` in `run.ts` und `#runNow` im Hub werten ein `null` nach Ablauf noch als „weg“ (siehe offene Korrekturen).
+- `readRun` und `blockTask` nutzen es auch.
+  - Ein Agent, dessen Lauf länger gesperrt ist, wartet weiter, statt seinen Slot aufzugeben.
+  - Ein Auftrag, der daran hängt, geht ohne Fehlversuch zurück.
+- Im Hub nutzen `#runNow`, Stop und 👍 es ebenfalls.
 
 **Sperreinträge**
 - Ein gemeinsamer Lock entsteht, wenn ein Eintrag in einer Transaktion genommen und mit den geschützten Änderungen
@@ -136,16 +139,25 @@ keine spätere Arbeit nehmen. Nach einem harten Absturz hilft nur der Ablauf der
 
 | Eintrag | Zweck |
 |---|---|
-| `CodeRun` | Der aktive Lauf eines Raums (`unique` je Raum): Parameter, angezeigte Info, Fortschritt je Generation oder Zustand des Bretts (`board`: Phase, offene Aufträge der Phase, Zähler, Verbesserungsrunden, zusammengeführte Paare, Obergrenze erreicht). Zugleich der Lock des Laufs. |
+| `CodeRun` | Der aktive Lauf eines Raums (`unique` je Raum): Parameter, angezeigte Info, Fortschritt je Generation oder Zustand des Bretts (`board`: Phase, offene Aufträge der Phase, Zähler, Verbesserungsrunden, zusammengeführte Paare, Obergrenze erreicht) und die Zahl der offenen Aufträge (`pending`). Zugleich der Lock des Laufs. |
 | `AgentSlot` | Ein Slot je Agent; ein agents-Prozess hält ihn in einer erneuerten Transaktion, solange er als dieser Agent arbeitet. |
 | `WorkItem` | Ein Auftrag: Zug (`turn`) und Barriere (`barrier`) bei Generationen; Recherche, Vorschlag, Abstimmung, Umsetzung, Kritik, Überarbeitung, Zusammenführung, Prüfung und Folgeauftrag auf dem Brett. Mit Fälligkeit, Versuchen und Frist. |
-| `AgentBusy` | Getrennt geleaster Marker, geschrieben bevor ein Agent einen Auftrag nimmt. Dient derzeit auch der Erkennung des Laufendes. |
+| `AgentBusy` | Nur noch für Läufe von vor `pending`: ein getrennt geleaster Marker, geschrieben bevor ein Agent einen Auftrag nimmt. |
 | `CodeRunDone` | Wie der letzte Lauf eines Raums endete. |
 
 **Ablauf eines Auftrags.** Eine Transaktion nimmt den Auftrag, fragt den model-Prozess, schreibt das Ergebnis, ändert
 `CodeRun` und schreibt die Folgeaufträge. Den Phasenwechsel des Bretts macht, wer den letzten Auftrag einer Phase
 erledigt, in derselben Transaktion. Hat der Lauf sein Budget verbraucht, öffnet das Brett keine neue Phase mehr, und die
 offenen Aufträge laufen leer aus.
+
+**Laufende.**
+- `pending` zählt die geschriebenen, noch nicht erledigten Aufträge. Es ändert sich in denselben Commits, die Aufträge
+  schreiben und abschließen; ein wartender Auftrag, der zurückgeht, bleibt gezählt.
+- Ein Agent, der nichts mehr findet, beendet den Lauf unter dessen Lock, wenn `pending` 0 ist und kein Auftrag sichtbar
+  ist. Ein Auftrag, den ein anderer Agent gerade hält, zählt also mit.
+- Busy-Marker braucht es dafür nicht; ein wartender Agent schreibt keine mehr.
+- Läufe von vor `pending` enden wie bisher: kein sichtbarer Auftrag, kein Busy-Marker.
+- Scheitert eine Barriere dreimal, endet der Lauf mit einem Vermerk in seiner Info.
 
 **Barriere.** Sie wartet, bis alle Züge ihrer Generation erledigt und alle abgegebenen Beiträge beurteilt sind, und öffnet
 dann die nächste Generation.
@@ -261,36 +273,24 @@ Hochverfügbarkeit des Space selbst ergibt sich nicht aus der Aufteilung in Proz
 
 ## Offene Korrekturen
 
-**1. Laufende aus dauerhaftem Fortschritt.**
-- `maybeEnd` (`run.ts`) beendet den Lauf, wenn kein sichtbares `WorkItem` und kein `AgentBusy` mehr da ist.
-- Marker und Transaktion des Auftrags laufen aber unabhängig ab: scheitert die Erneuerung des Markers, endet der Lauf zu
-  früh, obwohl ein gesperrter Auftrag noch lebt.
-- Richtig wäre, das Ende unter dem Lock des Laufs aus dem Fortschritt zu entscheiden: alle Aufträge in einem Endzustand,
-  nötige Urteile erfasst, keine nächste Generation. `AgentBusy` bliebe dann nur Anzeige.
+**1. Budgets:** siehe oben.
 
-**2. Abgelaufenes Warten ist nicht „weg“.**
-- `readRun` liefert nach 10 s Warten auf ein gesperrtes `CodeRun` `null`.
-- `agentLoop` beendet sich dann, und `agent-host.ts` committet die Übernahme des Slots. Der Agent fehlt dem Lauf für
-  immer, seine `onlyBy`-Aufträge bleiben liegen.
-- `#runNow` im Hub hat dieselbe Schwäche.
-- Abhilfe: `readExisting` verwenden; bei `StillHeld` den Slot zurückgeben, statt ihn zu verbrauchen.
-
-**3. Stop räumt nicht vollständig auf.**
-- `endRun` entfernt Aufträge nur ohne Warten. Ein Auftrag, den ein Agent gerade hält, kommt nach dessen Abbruch ohne
-  `CodeRun` zurück und verschwindet erst durch die TTL oder beim ersten Laden des Raums in einem web-Prozess.
-- `LlmCall`s eines gestoppten Laufs, die schon warten, führt der model-Prozess trotzdem aus und bezahlt sie. Er sollte vor
-  dem Aufruf prüfen, ob der Lauf noch besteht.
-
-**4. Budgets:** siehe oben.
-
-**5. Versuche:** Harte Abstürze sollten als Versuch zählen, damit ein Auftrag, der jeden Prozess abstürzen lässt, begrenzt
+**2. Versuche:** Harte Abstürze sollten als Versuch zählen, damit ein Auftrag, der jeden Prozess abstürzen lässt, begrenzt
 bleibt.
 
-**6. Leerlauf-Schreibvorgänge.** Ein wartender Agent schreibt und löscht alle 300 ms seinen `AgentBusy`-Marker. Besser
-wären Änderungsmeldungen zusammen mit der nächsten Fälligkeit; jeder Ersatz muss zum Protokoll des Laufendes passen.
-
-**7. Anzeige während des Prüfens.** Der `CodeJudging`-Marker (2 × Judge-Lease) wird nicht erneuert. Prüft ein Judge eine
+**3. Anzeige während des Prüfens.** Der `CodeJudging`-Marker (2 × Judge-Lease) wird nicht erneuert. Prüft ein Judge eine
 eigene Aufgabe mit langer Zeitgrenze, verschwindet ihre Kachel zwischenzeitlich.
+
+**4. Laufende Modellaufrufe bei Stop.** Ein Aufruf, den der model-Prozess beim Stop schon ausführt, läuft zu Ende und wird
+bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem Abbruchsignal an den Anbieter.
+
+**Erledigt am 2026-10-21:**
+- Laufende aus dauerhaftem Fortschritt (`pending`).
+- Abgelaufenes Warten gilt nicht mehr als „weg“ (`readExisting`/`takeExisting`).
+- Aufräumen beim Stop:
+  - Ein Auftrag, der nach dem Ende seines Laufs zurückkommt, wird entfernt.
+  - Der model-Prozess führt keinen Aufruf eines beendeten Laufs mehr aus.
+- Keine Busy-Marker im Leerlauf.
 
 ## Migrationskarte
 
@@ -300,7 +300,7 @@ eigene Aufgabe mit langer Zeitgrenze, verschwindet ihre Kachel zwischenzeitlich.
 | Bester Code | `CodeBest` verweist auf ein Urteil; Neuberechnung nach Veto unter dem `CodeBest`-Lock. | 2a ✓ |
 | Antwort einer Textaufgabe | Abgeleitet aus `TextAnswer`, `TextJudgement` und `CodeAccept`. | 2d ✓ |
 | Läufe, Stop, Parameter | `CodeRun`; Generationen und Brett im agents-Prozess. | 2b–2d ✓ |
-| Laufende und Fehler | Fristen für Urteile umgesetzt; Ende aus dauerhaftem Fortschritt offen (siehe oben). | offen |
+| Laufende und Fehler | Fristen für Urteile; Ende aus `pending` unter dem Lock des Laufs; Stop räumt auf. | 2d ✓ |
 | Aufgabe anlegen | `TaskRequest`/`TaskReady` mit Frist und Daten des Aufrufers. | 2d ✓ |
 | Raumsperre | Gemeinsamer Lock statt `#exclusive`. | 2d offen |
 | Modellwahl des Admins | `CodeAdmin`; der model-Prozess ist der einzige Aufrufer. | 2c ✓ |
@@ -339,6 +339,10 @@ Docker-Weg ist während der Migration eine bekannte Ausnahme.
    - Korrekturen vom 2026-10-21: Frist der Barriere, Urteile ohne gespeichertes Ergebnis zählen für den Lauf, gesperrte
      CodeTask beim Judge, Prüfer jenseits der Obergrenze, Budget und Frist beim Anlegen einer Aufgabe, Rücknahme
      aufgegebener Aufrufe.
+   - Weitere Korrekturen vom 2026-10-21:
+     - Laufende aus `pending`;
+     - Sperren über die Wartezeit hinaus gelten nicht als Löschung;
+     - Stop räumt Aufträge und wartende Aufrufe ab.
    - Offen bleiben die Raumsperre und die Korrekturen oben.
 3. **Grenzen, Sitzungen und interaktives Ausführen: offen.**
 4. **Betrieb: offen.**
@@ -364,17 +368,19 @@ Getestet sind:
 - Fehlversuche und verbrauchtes Tagesbudget;
 - Barriere ohne Urteile;
 - Obergrenze des Bretts;
-- Budget und Frist beim Anlegen einer Aufgabe.
+- Budget und Frist beim Anlegen einer Aufgabe;
+- ein `CodeRun`, das länger als `HELD_WAIT_MS` gesperrt bleibt: alle Agenten bleiben, der Lauf endet einmal;
+- Stop, während Aufrufe laufen und warten: keine Aufträge bleiben zurück, der wartende Aufruf wird nicht gemacht.
+
+Der frühere Fall „Busy-Marker läuft ab, während seine Transaktion lebt“ entfällt mit `pending`.
 
 Noch ohne Test, jeweils mit der zugehörigen Korrektur einzuführen:
 
-- Ein gesperrtes `CodeRun` bleibt länger als `HELD_WAIT_MS` gesperrt; kein Agent darf das als Löschung werten.
-- Ein Busy-Marker läuft ab, während seine Transaktion noch lebt; der Lauf darf nicht zu früh enden.
 - Ein Anbieter antwortet, bevor der Prozess ohne Commit stirbt; Wiederholung und ungewisse Kosten folgen der festgelegten
   Regel.
 - Gleichzeitige Agenten nähern sich einem gemeinsamen Budget; abgelehnte Ausgaben buchen ihren Verbrauch.
 - Wiederholte harte Abstürze ergeben begrenzte Versuche und ein ausdrückliches Ende.
-- Ein gestoppter Lauf hat wartende oder laufende Modellaufrufe; Wiederherstellung nahe an den Aufbewahrungsfristen.
+- Wiederherstellung nahe an den Aufbewahrungsfristen.
 - Mehrere web-Prozesse ändern denselben Raum; gemeinsame Sperre und Wahl von Aufgabe und Lauf halten ihre Regeln ein.
 
 Standardprüfungen: im Wurzelverzeichnis `npm run typecheck` und `npm test`, für die Anwendung zusätzlich

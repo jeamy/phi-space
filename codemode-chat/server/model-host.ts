@@ -17,7 +17,7 @@ import { callArgs, voteScores, type CallKind, type LlmCall } from "./context.ts"
 import { webSearch } from "./search.ts";
 import { isText, type Task } from "./tasks.ts";
 import { ipTokensPerDay, today } from "./limits.ts";
-import { announce, connectSpace, keepAlive } from "./space.ts";
+import { announce, connectSpace, keepAlive, readExisting } from "./space.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. */
 export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; critique: typeof llmCritique; propose: typeof llmPropose; vote: typeof llmVote; judge: typeof llmJudge; research: typeof llmResearch; verify: typeof llmVerifier; criteria: typeof llmCriteria; reviewCriteria: typeof llmReviewCriteria };
@@ -113,6 +113,8 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 			let result: { ok: boolean; value?: Record<string, unknown>; error?: string }, usage: Usage | undefined;
 			try {
 				if (!fakes) await applyAdmin(space);
+				// a call of a run that is over (stopped, ended) is not made: nobody waits for its answer
+				if (call.runId && !(await readExisting(space, { type: "CodeRun", fields: { session: call.session, runId: call.runId } }).catch(() => true))) throw new Error("the run is over");
 				const visitor = call.client && !call.client.admin ? call.client.ip : null;
 				if (visitor && ipTokensPerDay() > 0 && (await spentToday(space, visitor)) >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up (CODEMODE_TOKENS_PER_IP_DAY)");
 				const a = await answer(apiFor(call.session), call.kind, await callArgs(space, call));

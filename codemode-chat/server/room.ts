@@ -6,7 +6,7 @@ import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { sourceProblem, type Verdict } from "./judge.ts";
 import { clipWords, type Attempt, type Earlier, type Finding, type Note, type Role, type Usage } from "./llm.ts";
 import { EARLIER_CAP, validMs } from "./results.ts";
-import { HELD_WAIT_MS } from "./space.ts";
+import { HELD_WAIT_MS, readExisting } from "./space.ts";
 import { isText, taskFromSpec, type Task } from "./tasks.ts";
 
 /** What a room may hold at most: every read of it stays complete (a read limit never cuts entries off). */
@@ -35,9 +35,10 @@ export const closeness = (a: Contribution, b: Contribution) => rejectedRank(a) -
 export async function taskEntries(space: SpaceLike, session: string): Promise<Array<Record<string, any>>> {
 	return (await space.readAll({ type: "CodeTask", fields: { session } }, { limit: ROOM_LIMITS.blocks + 5 })).map((e) => e.fields as Record<string, any>).sort((a, b) => a.ts - b.ts);
 }
-/** The task of a block (null when the block is gone; a CodeTask held for a moment is waited for). */
+/** The task of a block (null when the block is gone; a CodeTask held for a moment is waited for, one held for longer
+ *  throws StillHeld: it is not gone). */
 export async function blockTask(space: SpaceLike, session: string, blockId: string): Promise<Task | null> {
-	const e = await space.readIfExists({ type: "CodeTask", fields: { session, blockId } }, HELD_WAIT_MS);
+	const e = await readExisting(space, { type: "CodeTask", fields: { session, blockId } });
 	if (e) return taskFromSpec(e.fields as Record<string, unknown>);
 	const legacy = (await taskEntries(space, session)).find((f) => f.blockId === undefined && `t${f.ts}` === blockId); // a block from before blockIds
 	return legacy ? taskFromSpec(legacy) : null;

@@ -84,9 +84,16 @@ export class StillHeld extends Error {}
 
 /** readIfExists that tells a missing entry from a held one: null means gone. A null that came only when the wait ran
  *  out (a match stayed held all along) throws StillHeld instead; a holder that removes the entry ends the wait early. */
-export async function readExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
+export function readExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
+	return existing(space, tmpl, o, waitMs, false);
+}
+/** takeIfExists with the same distinction (see readExisting). */
+export function takeExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
+	return existing(space, tmpl, o, waitMs, true);
+}
+async function existing(space: SpaceLike, tmpl: Template, o: { txn?: string | null }, waitMs: number, take: boolean): Promise<Taken | null> {
 	const t0 = Date.now();
-	const e = await space.readIfExists(tmpl, waitMs, o);
+	const e = await (take ? space.takeIfExists(tmpl, waitMs, o) : space.readIfExists(tmpl, waitMs, o));
 	if (!e && Date.now() - t0 >= waitMs * 0.9) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
 	return e;
 }

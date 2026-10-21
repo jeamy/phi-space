@@ -1441,3 +1441,38 @@ t("task creation keeps its deadline: reviewers that never answer leave the crite
 		assert.equal(await srv.stack.space.count({ type: "LlmCall", fields: { session: "tw1" } }), 0);
 	} finally { process.env.CODEMODE_MODEL_WAIT_S = ""; await srv.close(); }
 });
+
+t("a CodeRun held longer than the wait for held entries is not taken for gone: every agent stays and the run ends once", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	const space = srv.stack.space;
+	try {
+		await post(srv.url, "/api/sessions/held1/task", { taskId: "primes" });
+		assert.equal((await post(srv.url, "/api/sessions/held1/run", { agents: 2, gens: 4, perAgent: 1, polish: 3, contenders: ["scripted"] })).status, 200);
+		// hold the run's lock for 13 s (an agent's read waits 10 s at most) while its agents look for work
+		const t = await space.createTransaction(30_000);
+		assert.ok(await space.take({ type: "CodeRun", fields: { session: "held1" } }, 10_000, { txn: t.id }));
+		await new Promise((r) => setTimeout(r, 13_000));
+		await space.abort(t.id);
+		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/held1")).json()) as any; return s.run && !s.run.active ? s : false; }, 90_000);
+		assert.equal(snap.blocks.at(-1).messages.filter((m: any) => /^Run finished/.test(m.text)).length, 1);
+		for (const type of ["CodeRun", "WorkItem", "AgentSlot", "AgentBusy"]) assert.equal(await space.count({ type, fields: { session: "held1" } }), 0, type);
+	} finally { await srv.close(); }
+});
+
+t("a stop leaves nothing behind: items agents held come back and go, a queued model call of the stopped run is not made", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "stop2": calls hang until the gate opens
+	const space = srv.stack.space;
+	try {
+		await post(srv.url, "/api/sessions/stop2/task", { custom: { fn: "double", prompt: "double it", cases: [{ args: [2], expect: 4 }] } });
+		assert.equal((await post(srv.url, "/api/sessions/stop2/run", { agents: 3, gens: 2, polish: 0, contenders: ["fake/team"] })).status, 200);
+		// the model process makes two calls at once: two hang, the third waits in the queue
+		await until(async () => (await fakeCalls(srv, "stop2")).length >= 2 && (await space.count({ type: "LlmCall", fields: { session: "stop2" } })) >= 1);
+		assert.equal((await post(srv.url, "/api/sessions/stop2/stop", {})).status, 200);
+		await space.write({ type: "FakeGate", fields: { session: "stop2" } }, null, 600_000);
+		await until(async () => (await space.count({ type: "WorkItem", fields: { session: "stop2" } })) === 0 && (await space.count({ type: "LlmCall", fields: { session: "stop2" } })) === 0, 30_000);
+		await new Promise((r) => setTimeout(r, 1000));
+		assert.equal((await fakeCalls(srv, "stop2")).length, 2); // the queued call never reached the model
+		assert.equal(await space.count({ type: "WorkItem", fields: { session: "stop2" } }), 0);
+		assert.equal(await space.count({ type: "CodeCandidate", fields: { session: "stop2" } }) + await space.count({ type: "CodeScore", fields: { session: "stop2" } }), 0); // nothing handed in after the stop
+	} finally { await srv.close(); }
+});
