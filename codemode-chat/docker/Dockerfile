@@ -1,9 +1,9 @@
 # Multi-stage Dockerfile for PHI-SPACES / CODEMODE CHAT (Next.js 16 + React 19 + phi-spaces + pi-codemode)
 # Build context: repository root.
 # Targets:
-#   - dev-test:   development server / test runner in Docker
-#   - production: the hub ("big"): Next.js server + API + WebSocket + SQLite in /data
-#   - nano:       headless judge shard ("nano"): its own space + sandbox judges, served over the phi-spaces socket
+#   - dev-test:   development processes / test runner in Docker
+#   - production: every role of the chat (space, web, judge, agents, model) from one image: by default all of them in
+#                 one container (server/launch.ts); docker/docker-compose.yml runs one container per role instead
 # The servers are not bundled: pi-codemode needs its QuickJS wasm and worker file on disk.
 
 ARG NODE_IMAGE=node:22-bookworm-slim
@@ -34,7 +34,7 @@ USER node
 WORKDIR /opt/phi-spaces
 CMD ["npm", "--prefix", "codemode-chat", "test"]
 
-# ---- Stage 4: production hub (`production`) ----
+# ---- Stage 4: production (`production`): every role; the command picks one ----
 FROM ${NODE_IMAGE} AS production
 ENV NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
@@ -55,19 +55,8 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/client ./cod
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/server ./codemode-chat/server
 RUN mkdir -p /data && chown -R node:node /data
 USER node
-EXPOSE 3700
-HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3700) + '/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+EXPOSE 3700 3800
 WORKDIR /opt/phi-spaces/codemode-chat
-CMD ["node", "--no-warnings", "--experimental-strip-types", "server/index.ts"]
-
-# ---- Stage 5: headless judge shard (`nano`) for the big/nano two-host setup ----
-# Same sources and node_modules as production, but only the shard: space + judge workers over the phi-spaces socket
-# (no Next.js, no HTTP layer).
-FROM production AS nano
-ENV CODEMODE_LISTEN=tcp:0.0.0.0:3800 \
-    CODEMODE_DB=/data/codemode-b.sqlite
-EXPOSE 3800
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["node", "-e", "const s=require('net').connect(3800,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
-CMD ["node", "--no-warnings", "--experimental-strip-types", "server/nano-host.ts"]
+# all roles in this one container; a role container runs its own server/<role>-host.ts (health checks: per service in
+# docker-compose.yml, since a role container has no web page)
+CMD ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts"]

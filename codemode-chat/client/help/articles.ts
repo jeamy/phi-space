@@ -702,7 +702,7 @@ Jeder Prozess hält einen \`Process\`-Eintrag im Space und verlängert ihn alle 
 | zwei Rechner | \`tcp:0.0.0.0:3800\` / \`tcp:<host>:3800\` |
 | SSH-Tunnel | \`tcp:127.0.0.1:3800\` auf beiden Seiten |
 
-Der Socket hat **kein TLS**: binde ihn an eine interne Adresse oder nutze einen Tunnel. In Produktion trägt nano den Space und big den Hauptteil, wie im phi-spaces-Hilfesystem; die Docker-Dateien dafür folgen.
+Der Socket hat **kein TLS**: binde ihn an eine interne Adresse oder nutze einen Tunnel. In Produktion trägt nano den Space und big den Hauptteil, wie im phi-spaces-Hilfesystem: \`docker:nano:up\` auf nano (Space und ein Judge), \`docker:big:up\` auf big (web, Judge, Agenten, Modelle) mit \`CODEMODE_SPACE=tcp:<nano>:3800\`. \`docker:local:up\` startet beide auf einem Rechner als Testumgebung (Port 3710).
 
 ## Siehe auch {#see-also}
 
@@ -740,7 +740,7 @@ Every process keeps a \`Process\` entry in the space and renews it every 10 seco
 | two machines | \`tcp:0.0.0.0:3800\` / \`tcp:<host>:3800\` |
 | SSH tunnel | \`tcp:127.0.0.1:3800\` on both sides |
 
-The socket has **no TLS**: bind it to an internal address or use a tunnel. In production nano carries the space and big the main part, like the phi-spaces help system; the Docker files for that follow.
+The socket has **no TLS**: bind it to an internal address or use a tunnel. In production nano carries the space and big the main part, like the phi-spaces help system: \`docker:nano:up\` on nano (space and a judge), \`docker:big:up\` on big (web, judge, agents, models) with \`CODEMODE_SPACE=tcp:<nano>:3800\`. \`docker:local:up\` starts both on one machine as a test bed (port 3710).
 
 ## See also {#see-also}
 

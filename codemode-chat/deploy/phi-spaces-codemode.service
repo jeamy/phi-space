@@ -9,7 +9,8 @@ Environment=NODE_ENV=production
 Environment=CODEMODE_BIND=127.0.0.1
 Environment=PORT=3700
 Environment=CODEMODE_SQLITE=/var/lib/phi-spaces/codemode-chat.sqlite
-ExecStart=/usr/bin/node --no-warnings --experimental-strip-types server/index.ts
+# every role (space, judge, agents, model, web) as its own process; CODEMODE_ROLES picks some of them
+ExecStart=/usr/bin/node --no-warnings --experimental-strip-types server/launch.ts
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

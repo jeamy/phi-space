@@ -26,7 +26,9 @@ Der web-Prozess ruft keine Modelle mehr auf und fährt keine Läufe. `server/boa
 
 Die Anfragegrenzen bleiben bewusst je web-Prozess (siehe „Leistung und Deployment“).
 
-**Offen (Stufe 4):** Docker beschreibt noch den alten Aufbau.
+**Stufe 4, umgesetzt:** Docker mit einem Container je Rolle, die Profile `nano` und `big` und beide zusammen als lokale
+Testumgebung (siehe „Betrieb mit Docker“). Offen sind die Entscheidungen zum Produktivbetrieb (Wiederherstellung,
+Aufbewahrung, Kapazität).
 
 Die Garantien unten trennen das heutige Verhalten von nötigen Korrekturen. Daten in den Space zu legen ergibt allein
 weder eine genau einmalige Ausführung bei einem externen Anbieter noch einen konsistenten Snapshot noch eine atomare
@@ -371,7 +373,7 @@ bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem A
 | HTTP- und Raumgrenzen | Bewusst je web-Prozess (Schutz der Verbindung, kein Kontingent). | 3 ✓ |
 | Interaktives Ausführen (▶) | Judge nimmt `ExecRequest`, schreibt geordnete `ExecEvent`s; web folgt, `ExecRun` verfolgt. | 3 ✓ |
 | WebSocket-Clients, Push-Timer | Bleiben prozesslokal. | — |
-| Docker | Ein Dienst je Rolle, Skripte, Hilfe, README; Platzierung auf big/nano. | 4 |
+| Docker | Ein Dienst je Rolle, Skripte, Hilfe, README; Profile `nano`/`big`, lokale Testumgebung. | 4 ✓ |
 
 ## Leistung und Deployment
 
@@ -387,10 +389,41 @@ bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem A
 - **Platzierung.** Space auf nano und die meiste Rechenarbeit auf big ist ein Vorschlag. Judge-Platzierung, Dienste je
   Rolle, Neustartregeln, Speicher und Wiederherstellung werden in Stufe 4 entschieden.
 
+## Betrieb mit Docker
+
+Ein Image (`codemode-chat/docker/Dockerfile`, Ziel `production`) enthält alle Rollen; ohne Befehl startet es alle in einem
+Container (`server/launch.ts`). `docker/docker-compose.yml` startet stattdessen einen Container je Rolle.
+
+| Profil | Container | Rechner |
+|---|---|---|
+| `nano` | `space` (SQLite im Volume `codemode-space-data`, TCP 3800), `judge-nano` | nano: hält den Zustand |
+| `big` | `web` (3700), `judge-big`, `agents`, `model` (als einziger mit Zugangsdaten) | big: macht die meiste Arbeit |
+| `dev` | `codemode-chat-dev`: alle Rollen in einem Container, Quellen eingebunden, Neustart bei Änderungen | Entwicklung |
+| `test` | `codemode-chat-test`: die Testsuite | — |
+
+Die Rollen sprechen nur über den Space miteinander, per TCP. Auf zwei Rechnern setzt big `CODEMODE_SPACE=tcp:<nano>:3800`,
+und nano veröffentlicht den Space auf seiner internen Adresse (`CODEMODE_SPACE_BIND`). Der Socket hat kein TLS und behandelt
+jede Verbindung als Prozess des Chats: nie auf einer öffentlichen Schnittstelle.
+
+Skripte in `codemode-chat/package.json`: `docker:nano:*`, `docker:big:*`, `docker:prod:*` (beide Profile auf einem
+Rechner), `docker:local:*`, `docker:dev:*`, `docker:test`.
+
+**Lokale Testumgebung big/nano auf einem Rechner:**
+- `npm --prefix codemode-chat run docker:local:up` startet beide Profile unter dem Projektnamen
+  `phi-spaces-codemode-local`: web auf Port 3710, Space nur auf 127.0.0.1:3810.
+- Alle Rollen sprechen über TCP im Docker-Netz mit dem Space, genau wie zwischen den echten Rechnern.
+- Die Systemleiste zeigt die Rechner „big“ und „nano“; die Container von nano bekommen 2 CPUs (`NANO_CPUS`).
+- Damit lassen sich Ausfälle durchspielen: `docker restart` des Space (der Zustand von nano), `docker kill` eines Judges oder
+  des agents-Prozesses.
+- Netzlatenz zwischen den beiden simuliert sie nicht.
+- Geprüft am 2026-10-21:
+  - Ein Skript-Lauf mit 3 Agenten wurde von Judges beider Seiten beurteilt (4 Urteile von big, 2 von nano).
+  - Nach einem Neustart des Space-Containers waren alle Beiträge noch da, die Prozesse verbanden sich selbst wieder, und
+    ein neuer Beitrag wurde beurteilt.
+
 ## Stufen und Verlauf
 
-Jede Stufe soll die Anwendung lauffähig halten, getestet und einzeln committet sein. Pushes nur nach Rückfrage. Der alte
-Docker-Weg ist während der Migration eine bekannte Ausnahme.
+Jede Stufe soll die Anwendung lauffähig halten, getestet und einzeln committet sein. Pushes nur nach Rückfrage.
 
 1. **Ein Space, eigene Prozesse für space, judge und web: umgesetzt.**
    - `space-host.ts`, `judge-host.ts`, `launch.ts`, `space.ts` und das transaktionale Ergebnis/Archiv in `results.ts`.
@@ -411,7 +444,9 @@ Docker-Weg ist während der Migration eine bekannte Ausnahme.
    - Offen bleiben die Korrekturen oben.
 3. **Grenzen, Sitzungen und interaktives Ausführen: umgesetzt.** Gemeinsame Zähler, Admin-Sitzungen und ▶ im
    judge-Prozess.
-4. **Betrieb: offen.**
+4. **Betrieb: teilweise umgesetzt.** Docker je Rolle, Profile `nano`/`big`, lokale Testumgebung, systemd-Beispiel mit
+   `launch.ts`. Offen: Neustartregeln über `restart: unless-stopped` hinaus, Backup und Restore des Volumes,
+   Aufbewahrungsfristen, Kapazität je Rolle.
 
 Hinweise aus der Migration:
 

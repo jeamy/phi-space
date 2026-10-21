@@ -55,7 +55,8 @@ leases lapse, and its work comes back for another process of the same role.
   (`CODEMODE_LISTEN`, default `unix:/tmp/codemode-space.sock`).
 - **judge** (`server/judge-host.ts`): takes a `CodeCandidate` under a transaction, runs it in this machine's sandbox and
   writes the `CodeScore`, and the block's new best code, in that same transaction. Run as many as you like, on any host
-  that reaches the space: they share the candidates by themselves.
+  that reaches the space: they share the candidates by themselves. A judge process also runs the page's ▶
+  (`server/exec.ts`: `ExecRequest` in, numbered `ExecEvent`s out).
 - **agents** (`server/agent-host.ts`): takes the agent slots of runs and works as those agents (`server/run.ts`): each
   work item in its own transaction, together with the run's progress in its `CodeRun`: generations and the work board
   (research, plans, critiques, merges, text answers and their judges). It also does the agents' work when a task is
@@ -68,8 +69,7 @@ leases lapse, and its work comes back for another process of the same role.
   fresh snapshot when a room changes (also when a judge on another host wrote the verdict).
 
 Every process keeps a `Process` entry in the space (renewed every 10 s); the system bar shows each host with its roles,
-CPU, memory and how many contributions its judges judged. The rest of the plan (agents and models as processes,
-limits and logins in the space, Docker per role) is staged in the architecture document.
+CPU, memory and how many contributions its judges judged.
 
 ## Run it (same as the help system, with `CODEMODE_*` variables)
 
@@ -89,9 +89,21 @@ restarts each process when `server/` or the phi-spaces sources in `../src` chang
 space's SQLite state stays). In the Docker dev container these directories are mounted from the checkout. Open the dev page
 as `http://localhost:3700` — Next.js 16 does not hydrate dev pages that are requested through `127.0.0.1`.
 
-Docker (build context: the repository root) still starts the single server from before the process layout; it is
-adapted per role in stage 4 of the architecture document. Deployment examples (host names are placeholders):
-`deploy/Caddyfile`, `deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`.
+Docker (build context: the repository root) runs one container per role from one image
+(`docker/docker-compose.yml`):
+
+```bash
+npm --prefix codemode-chat run docker:nano:up    # on nano: space (SQLite in a volume) and a judge
+npm --prefix codemode-chat run docker:big:up     # on big: web, a judge, agents, the model process (CODEMODE_SPACE=tcp:<nano>:3800)
+npm --prefix codemode-chat run docker:prod:up    # both on one host
+npm --prefix codemode-chat run docker:local:up   # both on one machine as a test bed: http://localhost:3710
+npm --prefix codemode-chat run docker:dev:up     # every role in one container, the checkout mounted
+```
+
+The test bed runs big and nano as on two hosts: every role talks to the space over TCP, the system bar shows the hosts
+"big" and "nano", and nano's containers get 2 CPUs (`NANO_CPUS`). Only the model container gets the model credentials.
+The space socket has no TLS: publish it only on an internal address (`CODEMODE_SPACE_BIND`). Deployment examples (host
+names are placeholders): `deploy/Caddyfile`, `deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`.
 
 ## Help pages and themes
 

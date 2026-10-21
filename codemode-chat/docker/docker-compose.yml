@@ -1,58 +1,147 @@
-# Docker Compose for PHI-SPACES / CODEMODE CHAT
-#   1. `codemode-chat-prod`: hardened production hub ("big": Next.js 16 + WebSocket + SQLite in /data)
-#   2. `codemode-chat-test`: test run in Docker (profile: test)
-#   3. `codemode-chat-dev`:  interactive Next.js dev server in Docker (profile: dev)
-#   4. `codemode-nano`:      headless judge shard for the big/nano two-host setup (profile: nano)
-# Like the help system: prod and nano are two separate servers (big and nano), started from their own .env.
-# Ports: 3700 (hub), 3800 (shard) — the help system uses 3500/3600.
+# Docker Compose for PHI-SPACES / CODEMODE CHAT: one container per role, all from the one `production` image, talking
+# only through the space over TCP (docs/codemode-space-architektur.md).
+#
+#   profile nano:  space (SQLite in a volume) and a judge            — the host that keeps the state
+#   profile big:   web, a judge, agents and the model process        — the host that does most of the work
+#   both at once:  the big/nano pair on one machine (local test bed): the same TCP connections as between two hosts,
+#                  host names "nano" and "big" in the system bar, NANO_CPUS caps nano's CPUs like the smaller machine
+#   profile dev:   all roles in one container with the checkout mounted, restarted on every change
+#   profile test:  the test suite
+#
+# On two real hosts, big reaches nano's space at CODEMODE_SPACE=tcp:<nano's internal address>:3800 (its .env), and nano
+# publishes the space on CODEMODE_SPACE_BIND (its internal LAN/NetBird address). The space socket has no TLS and treats
+# every connection as a process of the chat: never publish it on a public interface.
+# Ports: 3700 (web), 3800 (space) — the help system uses 3500/3600.
 
 name: phi-spaces-codemode
 
+x-role: &role
+  # every role container is built from the same image (built once, the others reuse it)
+  build:
+    context: ../..
+    dockerfile: codemode-chat/docker/Dockerfile
+    target: production
+  image: phi-spaces-codemode:prod
+  init: true
+  restart: unless-stopped
+  user: "node"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp
+  env_file:
+    - path: ../.env
+      required: false
+  networks:
+    - chat
+
+x-big: &big
+  <<: *role
+  depends_on:
+    space:
+      condition: service_healthy
+      required: false
+
 services:
-  # ---- 1. Production hub ("big") ----
-  codemode-chat-prod:
-    build:
-      context: ../..
-      dockerfile: codemode-chat/docker/Dockerfile
-      target: production
-    image: phi-spaces-codemode:prod
-    container_name: phi-spaces-codemode-prod
-    init: true
-    restart: unless-stopped
-    user: "node"
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    env_file:
-      - path: ../.env
-        required: false
+  # ---- nano: the space and a judge ----
+  space:
+    <<: *role
+    profiles: [nano]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/space-host.ts"]
     environment:
       NODE_ENV: production
-      # Host networking: the app binds the host interface directly, so HOST_BIND=127.0.0.1 keeps it loopback-only for
-      # the reverse proxy, and CODEMODE_REMOTE can reach host-local sockets (e.g. an SSH tunnel on 127.0.0.1:<port>)
-      # as tcp:127.0.0.1:<port>.
-      CODEMODE_BIND: "${HOST_BIND:-0.0.0.0}"
-      PORT: "${PORT:-3700}"
+      CODEMODE_LISTEN: tcp:0.0.0.0:3800
       CODEMODE_SQLITE: /data/codemode-chat.sqlite
-      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
-    network_mode: host
+      CODEMODE_HOST_NAME: "${NANO_HOST_NAME:-nano}"
+    cpus: "${NANO_CPUS:-0}"
+    ports:
+      # loopback by default; on the nano host set CODEMODE_SPACE_BIND to its internal address for big
+      - "${CODEMODE_SPACE_BIND:-127.0.0.1}:${CODEMODE_SPACE_PORT:-3800}:3800"
     volumes:
-      - codemode-chat-data:/data
-      # Optional: mount the host's pi CLI credentials so model agents work (or set API keys in .env). PI_AUTH_DIR= skips.
+      - codemode-space-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3800,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  judge-nano:
+    <<: *role
+    profiles: [nano]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/judge-host.ts"]
+    environment:
+      NODE_ENV: production
+      CODEMODE_SPACE: tcp:space:3800
+      CODEMODE_HOST_NAME: "${NANO_HOST_NAME:-nano}"
+      CODEMODE_JUDGES: "${NANO_JUDGES:-1}"
+    cpus: "${NANO_CPUS:-0}"
+    depends_on:
+      space:
+        condition: service_healthy
+
+  # ---- big: web, a judge, agents, the model process ----
+  web:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/index.ts"]
+    environment:
+      NODE_ENV: production
+      CODEMODE_SPACE: "${CODEMODE_SPACE:-tcp:space:3800}"
+      CODEMODE_HOST_NAME: "${BIG_HOST_NAME:-big}"
+      CODEMODE_BIND: 0.0.0.0
+      PORT: "3700"
+    ports:
+      # loopback by default, for the reverse proxy in front (deploy/Caddyfile, deploy/nginx-codemode.conf)
+      - "${HOST_BIND:-127.0.0.1}:${PORT:-3700}:3700"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3700/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  judge-big:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/judge-host.ts"]
+    environment:
+      NODE_ENV: production
+      CODEMODE_SPACE: "${CODEMODE_SPACE:-tcp:space:3800}"
+      CODEMODE_HOST_NAME: "${BIG_HOST_NAME:-big}"
+      CODEMODE_JUDGES: "${BIG_JUDGES:-2}"
+
+  agents:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/agent-host.ts"]
+    environment:
+      NODE_ENV: production
+      CODEMODE_SPACE: "${CODEMODE_SPACE:-tcp:space:3800}"
+      CODEMODE_HOST_NAME: "${BIG_HOST_NAME:-big}"
+
+  model:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      CODEMODE_SPACE: "${CODEMODE_SPACE:-tcp:space:3800}"
+      CODEMODE_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    volumes:
+      # the only process with model credentials: the host's pi CLI login (or API keys in .env); PI_AUTH_DIR= skips it
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
-  # ---- 2. Tests in Docker ----
+  # ---- tests in Docker ----
   codemode-chat-test:
     build:
       context: ../..
       dockerfile: codemode-chat/docker/Dockerfile
       target: dev-test
     image: phi-spaces-codemode:dev-test
-    profiles:
-      - test
+    profiles: [test]
     init: true
     user: "node"
     cap_drop:
@@ -69,15 +158,14 @@ services:
       CODEMODE_CHAT_LLM: "0"
     command: ["npm", "--prefix", "codemode-chat", "test"]
 
-  # ---- 3. Local development server in Docker ----
+  # ---- development: every role in one container, the checkout mounted ----
   codemode-chat-dev:
     build:
       context: ../..
       dockerfile: codemode-chat/docker/Dockerfile
       target: dev-test
     image: phi-spaces-codemode:dev-test
-    profiles:
-      - dev
+    profiles: [dev]
     init: true
     user: "node"
     env_file:
@@ -99,47 +187,13 @@ services:
       # Optional: mount the host's pi CLI credentials so model agents work in dev (PI_AUTH_DIR= to skip).
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
     working_dir: /opt/phi-spaces/codemode-chat
-    # The sources are mounted from the checkout: Next.js recompiles app/ and client/ on change (Fast Refresh), and
-    # --watch-path restarts the server when server/ or the phi-spaces sources change.
-    command: ["node", "--watch-path=server", "--watch-path=../src", "--no-warnings", "--experimental-strip-types", "server/index.ts", "--dev"]
+    # space, judge, agents, model and web (Next.js dev mode) as processes of their own: Next.js recompiles app/ and
+    # client/ on change (Fast Refresh), and each process restarts when server/ or the phi-spaces sources change
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts", "--dev"]
 
-  # ---- 4. Headless judge shard (profile: nano — deploy on the `nano` host) ----
-  codemode-nano:
-    build:
-      context: ../..
-      dockerfile: codemode-chat/docker/Dockerfile
-      target: nano
-    image: phi-spaces-codemode:nano
-    container_name: phi-spaces-codemode-nano
-    profiles:
-      - nano
-    init: true
-    restart: unless-stopped
-    user: "node"
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    tmpfs:
-      - /tmp
-    env_file:
-      - path: ../.env
-        required: false
-    environment:
-      NODE_ENV: production
-      CODEMODE_LISTEN: "${CODEMODE_LISTEN:-tcp:0.0.0.0:3800}"
-      CODEMODE_DB: /data/codemode-b.sqlite
-      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-}"
-      CODEMODE_JUDGES: "${CODEMODE_JUDGES:-2}"
-    ports:
-      # Loopback by default: the shard socket has no TLS and treats every connection as the hub, and docker's port
-      # publishing bypasses the host firewall. Reach it through an SSH tunnel, or set CODEMODE_SHARD_BIND to the
-      # host's internal (LAN/NetBird) IP. Never 0.0.0.0 on a host with a public interface.
-      - "${CODEMODE_SHARD_BIND:-127.0.0.1}:3800:3800"
-    volumes:
-      - codemode-nano-data:/data
+networks:
+  chat: {}
 
 volumes:
-  codemode-chat-data: {}
+  codemode-space-data: {}
   codemode-chat-dev-data: {}
-  codemode-nano-data: {}
