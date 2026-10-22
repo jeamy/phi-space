@@ -3,7 +3,7 @@
 // <dir>/codemode-space-<UTC time>.sqlite; beyond CODEMODE_BACKUP_KEEP (default 7) the oldest are removed.
 //
 //   node --experimental-strip-types server/backup.ts [--db FILE] [--dir DIR]
-//   default --db: CODEMODE_SQLITE (codemode-chat/.local/codemode-chat.sqlite); default --dir: <the db's directory>/backups
+//   default --db: CODEMODE_SQLITE (codemode-chat/.local/codemode-space.sqlite); default --dir: <the db's directory>/backups
 //   docker: npm --prefix codemode-chat run docker:backup   (in the space container, into its volume)
 import { ROOT } from "./env.ts";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** The store a space process of this host opens (the same default as space-host.ts). */
-export const defaultDb = () => process.env.CODEMODE_SQLITE || join(ROOT, ".local", "codemode-chat.sqlite");
+export const defaultDb = () => process.env.CODEMODE_SQLITE || join(ROOT, ".local", "codemode-space.sqlite");
 const PREFIX = "codemode-space-";
 
 /** Writes one backup of `db` into `dir` and keeps the newest `keep`; returns its path. */

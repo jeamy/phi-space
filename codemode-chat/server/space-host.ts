@@ -1,22 +1,25 @@
-// The space process: owns the one phi-space of the codemode chat (SQLite) and serves it over the phi-spaces socket
+// The space process: owns the one phi-space of the codemode chat (phi-spaces' own SQLite store) and serves it over the phi-spaces socket
 // transport. It holds no logic of the chat; every other process (web, judges, agents, models) connects to it and talks
 // to the others only through it.
 //
 //   CODEMODE_LISTEN=unix:/tmp/codemode-space.sock   (default) or tcp:0.0.0.0:3800
-//   CODEMODE_SQLITE=…/codemode-chat.sqlite          (default: codemode-chat/.local/codemode-chat.sqlite)
+//   CODEMODE_SQLITE=…/codemode-space.sqlite          (default: codemode-chat/.local/codemode-space.sqlite)
 //   CODEMODE_MEM=1                                  in memory, throwaway (tests)
+// A store file of the earlier pi-durable format is refused, not taken over (its import is step U5 of
+// docs/umstellung-ohne-pi-durable.md); the default file name changed with the format for that reason.
 import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { openMemoryStore, openSqliteStore } from "../../src/store/legacy.ts";
+import { openOwnMemoryHost } from "../../src/store/host.ts";
+import { openSqliteHost } from "../../src/store/sqlite.ts";
 import { PhiSpaces, serveSpace, SpaceService, StaticIdentity, startService } from "../../src/index.ts";
 import { announce, DEFAULT_SPACE, parseTarget } from "./space.ts";
 
 export async function startSpaceHost(o: { listen?: string; dbPath?: string | null } = {}) {
 	// the store of the space (no agent tools: every process reaches the space over the socket)
-	const harness = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openSqliteStore(o.dbPath!, ctx); })() : await openMemoryStore(ctx);
+	const harness = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openSqliteHost(o.dbPath!); })() : openOwnMemoryHost();
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 50 });
 	// every client is the same peer: the socket is internal (a unix socket, or TCP bound to an internal address)
 	const identity = new StaticIdentity({ "peer-codemode": { principal: { peerId: "peer-codemode" }, roles: ["member"] } });
@@ -35,7 +38,7 @@ export async function startSpaceHost(o: { listen?: string; dbPath?: string | nul
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const mem = process.env.CODEMODE_MEM === "1";
-	const dbPath = process.env.CODEMODE_SQLITE || join(ROOT, ".local", "codemode-chat.sqlite");
+	const dbPath = process.env.CODEMODE_SQLITE || join(ROOT, ".local", "codemode-space.sqlite");
 	const host = await startSpaceHost({ listen: process.env.CODEMODE_LISTEN || DEFAULT_SPACE, dbPath: mem ? null : dbPath });
 	// the starter and the tests wait for this line
 	console.log(`[space] ready on ${host.listen} (db ${mem ? "memory" : dbPath})`);

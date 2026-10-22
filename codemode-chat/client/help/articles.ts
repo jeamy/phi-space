@@ -765,7 +765,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`PORT\` | Port des Hubs, Standard 3700 |
 | \`CODEMODE_BIND\` | Bind-Adresse des Servers, Standard \`127.0.0.1\` |
 | \`HOST_BIND\` | Docker: veröffentlichte Adresse; leer = alle, \`127.0.0.1\` = nur lokal |
-| \`CODEMODE_SQLITE\` | space: Speicher, Standard \`.local/codemode-chat.sqlite\`; \`CODEMODE_MEM=1\` = nur im Speicher |
+| \`CODEMODE_SQLITE\` | space: Speicher, Standard \`.local/codemode-space.sqlite\`; \`CODEMODE_MEM=1\` = nur im Speicher |
 | \`CODEMODE_LISTEN\` | space: Adresse, an der der Space bereitsteht, Standard \`unix:/tmp/codemode-space.sock\` |
 | \`CODEMODE_SPACE\` | alle anderen Prozesse: Adresse des Space (\`unix:…\` oder \`tcp:host:port\`) |
 | \`CODEMODE_ROLES\` | \`npm run dev\` / \`npm start\`: welche Prozesse auf diesem Rechner laufen, Standard \`space,judge,web\` |
@@ -823,7 +823,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`PORT\` | hub port, default 3700 |
 | \`CODEMODE_BIND\` | bind address of the server, default \`127.0.0.1\` |
 | \`HOST_BIND\` | Docker: published address; empty = all, \`127.0.0.1\` = local only |
-| \`CODEMODE_SQLITE\` | space: storage, default \`.local/codemode-chat.sqlite\`; \`CODEMODE_MEM=1\` = in memory only |
+| \`CODEMODE_SQLITE\` | space: storage, default \`.local/codemode-space.sqlite\`; \`CODEMODE_MEM=1\` = in memory only |
 | \`CODEMODE_LISTEN\` | space: address the space is served on, default \`unix:/tmp/codemode-space.sock\` |
 | \`CODEMODE_SPACE\` | every other process: address of the space (\`unix:…\` or \`tcp:host:port\`) |
 | \`CODEMODE_ROLES\` | \`npm run dev\` / \`npm start\`: which processes run on this machine, default \`space,judge,web\` |

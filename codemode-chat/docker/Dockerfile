@@ -40,7 +40,7 @@ ENV NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false NEXT_TELEMETRY_DISABLED=1 \
     CODEMODE_BIND=0.0.0.0 \
     PORT=3700 \
-    CODEMODE_SQLITE=/data/codemode-chat.sqlite
+    CODEMODE_SQLITE=/data/codemode-space.sqlite
 WORKDIR /opt/phi-spaces
 COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
 COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
