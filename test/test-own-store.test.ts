@@ -68,3 +68,77 @@ test("commits that arrive while one is written go to the disk together, and each
 	assert.equal(rows, 60);
 	assert.ok(seq < 60, `${seq} transactions for 60 commits`); // batched: fewer disk transactions than commits
 });
+
+// ---- crashes (plan 9: "Echte Prozessabbrüche", "Commit/Antwort-Lücke"): a child commits until it is killed hard ----
+
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const CHILD = fileURLToPath(new URL("./support/store-crash-child.ts", import.meta.url));
+
+/** Runs the child on `file` until `when()` says kill (SIGKILL), and returns the commits it acknowledged. */
+async function crashRun(file: string, when: (acks: number) => Promise<void>, env: Record<string, string> = {}, from = 0): Promise<Set<number>> {
+	const child = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", CHILD, file, String(from)], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+	const acks = new Set<number>();
+	let out = "", err = "", opened!: () => void;
+	const open = new Promise<void>((r) => { opened = r; });
+	child.stdout.on("data", (d: Buffer) => {
+		out += d.toString();
+		const lines = out.split("\n"); out = lines.pop()!;
+		for (const l of lines) { if (l === "OPEN") opened(); else if (l.startsWith("ACK ")) acks.add(Number(l.slice(4))); }
+	});
+	child.stderr.on("data", (d: Buffer) => { err += d.toString(); });
+	const exited = new Promise<void>((r) => child.once("exit", () => r()));
+	await Promise.race([open, exited]);
+	assert.ok(child.exitCode === null, `the child ended early: ${err}`);
+	await when(acks.size);
+	child.kill("SIGKILL");
+	await exited;
+	return new Set(acks); // what it printed before it died: acknowledged commits
+}
+
+/** The pairs on disk after a crash: every acknowledged commit must be there, and never only half of one. */
+async function survivors(file: string): Promise<Set<number>> {
+	const h = await openSqliteHost(file); // the dead owner's lock is free again
+	const s = await h.snapshot(Space, ctx); // none yet when the child died before its first commit
+	await h.close(ctx);
+	const halves = new Map<number, number>();
+	for (const e of s?.entries ?? []) if (e.type === "Pair") { const i = (e.fields as { i: number }).i; halves.set(i, (halves.get(i) ?? 0) + 1); }
+	for (const [i, n] of halves) assert.equal(n, 2, `commit ${i} is there only in part`);
+	return new Set(halves.keys());
+}
+
+test("killed at any moment, a store keeps every acknowledged commit and no half of one", async () => {
+	const file = fresh();
+	const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+	for (const [run, delay] of [0, 20, 60, 150, 300, 500].entries()) {
+		const acked = await crashRun(file, () => wait(delay), {}, run * 1_000_000); // each run its own numbers, on the same file
+		const there = await survivors(file);
+		for (const i of acked) assert.ok(there.has(i), `acknowledged commit ${i} is lost (killed after ${delay} ms)`);
+	}
+});
+
+test("killed right before the disk transaction commits: what was not acknowledged is not there", async () => {
+	const file = fresh(), marker = `${file}.paused`;
+	const acked = await crashRun(file, async () => { while (!existsSync(marker)) await new Promise((r) => setTimeout(r, 5)); }, { PHI_SPACES_WRITER_PAUSE: `before-commit:3:${marker}` });
+	const there = await survivors(file);
+	assert.ok(acked.size > 0);
+	assert.deepEqual([...there].sort((a, b) => a - b), [...acked].sort((a, b) => a - b)); // exactly the acknowledged ones
+});
+
+test("killed after the disk transaction committed but before the answer: the commits are there, unacknowledged", async () => {
+	const file = fresh(), marker = `${file}.paused`;
+	const acked = await crashRun(file, async () => { while (!existsSync(marker)) await new Promise((r) => setTimeout(r, 5)); }, { PHI_SPACES_WRITER_PAUSE: `after-commit:3:${marker}` });
+	const there = await survivors(file);
+	for (const i of acked) assert.ok(there.has(i));
+	assert.ok(there.size > acked.size, `${there.size} commits on disk, ${acked.size} acknowledged`); // the third batch is durable without an answer
+});
+
+test("a file of another program (a pi-durable store) is refused, not taken over", async () => {
+	const file = fresh();
+	const db = new DatabaseSync(file);
+	db.exec("CREATE TABLE documents (id INTEGER PRIMARY KEY, kind TEXT, record TEXT)");
+	db.close();
+	await assert.rejects(openSqliteHost(file), /is not a phi-spaces store/);
+});

@@ -174,6 +174,9 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 	try {
 		read = new DatabaseSync(path, { timeout: 10_000 });
 		read.exec("PRAGMA journal_mode = WAL;");
+		// a file of another program (pi-durable has a `documents` table of its own) is refused, never taken over
+		const tables = (read.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((t) => t.name);
+		if (tables.length && !tables.includes("store_meta")) throw new StoreUnavailable(`${path} is not a phi-spaces store (tables: ${tables.slice(0, 6).join(", ")}); move it aside or import it (docs/umstellung-ohne-pi-durable.md, U5)`);
 		read.exec(SCHEMA);
 		const meta = new Map((read.prepare("SELECT key, value FROM store_meta").all() as Array<{ key: string; value: string }>).map((r) => [r.key, r.value]));
 		if (!meta.has("format_version")) {

@@ -4,6 +4,16 @@
 // transaction; the main thread acknowledges those commits only when the batch is written.
 import { parentPort } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
+import { writeFileSync } from "node:fs";
+
+// Tests only (crash tests, test/test-own-store.test.ts): PHI_SPACES_WRITER_PAUSE=<before-commit|after-commit>:<batch>:<file>
+// stops this thread at that point of that batch for good, after writing <file>, so a test can kill the process there.
+const pause = (() => { const [at, batch, file] = (process.env.PHI_SPACES_WRITER_PAUSE ?? "").split(":"); return at && file ? { at, batch: Number(batch), file } : null; })();
+const hold = (at: string, batch: number) => {
+	if (!pause || pause.at !== at || pause.batch !== batch) return;
+	writeFileSync(pause.file, at);
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); // until the process is killed
+};
 
 /** A row change of a batch: a document (whole value or head), a retired document, a part row, a deleted part row. */
 export type WriteOp =
@@ -46,7 +56,9 @@ parentPort!.on("message", (m: WriterRequest) => {
 			else stmts.partDel.run(op.kind, op.key, op.part, op.id);
 		}
 		stmts.seq.run();
+		hold("before-commit", m.batch);
 		db.exec("COMMIT");
+		hold("after-commit", m.batch);
 		reply({ type: "written", batch: m.batch });
 	} catch (e) {
 		try { db.exec("ROLLBACK"); } catch { /* the transaction may already be gone */ }
