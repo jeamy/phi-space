@@ -1639,3 +1639,50 @@ t("▶ runs in a judge process: without one the page hears so and the request is
 		assert.equal(ev.at(-1).status, "ok");
 	} finally { await srv.close(); }
 });
+
+t("two model processes: each keeps its own model info, the page sees the models once, and one stands in when the other dies", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "link1": f(x) = x + 1
+	const space = srv.stack.space;
+	try {
+		await srv.stack.model({ fakes: ["fake/team"] });
+		await until(async () => (await space.count({ type: "ModelInfo" })) === 2);
+		const models = async () => ((await (await fetch(srv.url + "/api/llm")).json()) as any).models.map((m: any) => m.label);
+		assert.deepEqual(await models(), ["fake/team"]);
+		// one of them dies hard: its entry lapses, the other one answers the calls
+		const [first] = (await space.readAll({ type: "Process", fields: { role: "model" } })).map((e: any) => e.fields.pid);
+		process.kill(first, "SIGKILL");
+		await post(srv.url, "/api/sessions/link1/task", { custom: { fn: "f", prompt: "add one", cases: [{ args: [1], expect: 2 }], verify: false } });
+		assert.equal((await post(srv.url, "/api/sessions/link1/run", { agents: 1, gens: 1, polish: 0, contenders: ["fake/team"] })).status, 200);
+		// a call the dead one held comes back when its transaction lapses (30 s)
+		const snap = await until(async () => { const s = (await (await fetch(srv.url + "/api/sessions/link1")).json()) as any; return s.run && !s.run.active ? s : false; }, 90_000);
+		assert.equal(snap.blocks.at(-1).contributions[0]?.ok, true);
+		await until(async () => (await space.count({ type: "ModelInfo" })) === 1, 45_000);
+		assert.deepEqual(await models(), ["fake/team"]);
+	} finally { await srv.close(); }
+});
+
+test("a backup of the running space comes back with restore, only while no space serves the store", async () => {
+	const { backup } = await import("../server/backup.ts");
+	const { restore } = await import("../server/restore.ts");
+	const { mkdtemp, readdir, rm } = await import("node:fs/promises");
+	const dir = await mkdtemp("/tmp/codemode-backup-"), db = `${dir}/space.sqlite`;
+	let stack = await startStack({ dbPath: db, judges: [], agents: false, model: false });
+	try {
+		await stack.space.write({ type: "Kept", fields: { n: 1 } }, null, 600_000);
+		const b = await backup({ db, dir: `${dir}/backups`, keep: 2 });
+		await stack.space.write({ type: "Later", fields: { n: 2 } }, null, 600_000); // after the backup
+		await assert.rejects(restore({ from: b.file, db, yes: true, listen: stack.spec }), /stop it first/);
+		// also where its socket cannot be seen (a space in another container): the open store gives it away
+		await assert.rejects(restore({ from: b.file, db, yes: true, listen: "tcp:127.0.0.1:9" }), /stop it first/);
+		await stack.close();
+		assert.match(await restore({ from: b.file, db, listen: stack.spec }), /^would put/); // without --yes nothing happens
+		assert.match(await restore({ from: b.file, db, yes: true, listen: stack.spec }), /^restored/);
+		stack = await startStack({ dbPath: db, judges: [], agents: false, model: false });
+		assert.equal(await stack.space.count({ type: "Kept" }), 1);
+		assert.equal(await stack.space.count({ type: "Later" }), 0);
+		assert.ok((await readdir(dir)).some((f) => f.startsWith("space.sqlite.before-restore-"))); // the store before is kept
+		// only the newest backups stay
+		for (let i = 0; i < 3; i++) await backup({ db, dir: `${dir}/backups`, keep: 2 });
+		assert.equal((await readdir(`${dir}/backups`)).length, 2);
+	} finally { await stack.close(); await rm(dir, { recursive: true, force: true }); }
+});

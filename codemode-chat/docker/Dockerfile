@@ -10,7 +10,7 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 
 # ---- Stage 1: dependencies (root phi-spaces + codemode-chat Next.js/React) ----
 FROM ${NODE_IMAGE} AS deps
-ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false NEXT_TELEMETRY_DISABLED=1
 WORKDIR /opt/phi-spaces
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
@@ -37,7 +37,7 @@ CMD ["npm", "--prefix", "codemode-chat", "test"]
 # ---- Stage 4: production (`production`): every role; the command picks one ----
 FROM ${NODE_IMAGE} AS production
 ENV NODE_ENV=production \
-    NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false NEXT_TELEMETRY_DISABLED=1 \
     CODEMODE_BIND=0.0.0.0 \
     PORT=3700 \
     CODEMODE_SQLITE=/data/codemode-chat.sqlite

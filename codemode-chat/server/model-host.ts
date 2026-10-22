@@ -9,6 +9,7 @@
 //   CODEMODE_LLM_MODULE=tests/fakes.ts            tests only (CODEMODE_TEST=1): fake model teams instead of real models
 import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { sourceProblem } from "./judge.ts";
@@ -25,7 +26,8 @@ export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llm
 /** A fake model team of the tests: picked per room, with a log that writes FakeCall entries. */
 type FakeModule = { models: () => Promise<string[]>; llmFor: (session: string, o: { space: SpaceLike; log: (e: Record<string, unknown>) => Promise<void> }) => Partial<ModelApi> };
 
-const CALL_LEASE_MS = 120_000;
+/** A call's transaction lease, renewed while the model answers: a model process that dies holds its call this long. */
+const CALL_LEASE_MS = 30_000;
 /** How long an answer waits to be fetched (an agent that died leaves it behind). */
 const RESULT_LEASE_MS = 10 * 60_000;
 const SPEND_LEASE_MS = 26 * 3600_000;
@@ -88,7 +90,8 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	setCallGate(() => awaitQuota(space, "llm", callLimits(), "daily model budget used up"));
 	const search = (q: string) => webSearch(q, { allowed: async () => (await takeQuota(space, "search", { perDay: searchesPerDay() })).ok });
 
-	/** ModelInfo: what the page and the web process need to know about the models (renewed every 10 s). */
+	/** ModelInfo: what the page and the web process need to know about this process's models (renewed every 10 s). */
+	const procId = randomBytes(6).toString("hex");
 	let infoLease: string | null = null, lastInfo = "";
 	const publish = async () => {
 		try {
@@ -98,8 +101,9 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				: { info: await llmInfo(), admin: await adminModels() };
 			const text = JSON.stringify(info);
 			if (text === lastInfo && infoLease) { try { await space.renew(infoLease, 30_000); return; } catch { infoLease = null; } }
-			while (await space.take({ type: "ModelInfo" }, NO_WAIT));
-			infoLease = (await space.write({ type: "ModelInfo", fields: { ...info, ts: Date.now() } as never }, null, 30_000)).id;
+			// this process's own entry (the web process merges those of every model process): replaced when it changes
+			if (infoLease) await space.cancel(infoLease).catch(() => {});
+			infoLease = (await space.write({ type: "ModelInfo", fields: { procId, ...info, ts: Date.now() } as never }, null, 30_000)).id;
 			lastInfo = text;
 		} catch (e) { if (!stopping) console.error("[model] publishing the models failed", (e as Error).message); }
 	};

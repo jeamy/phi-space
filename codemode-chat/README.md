@@ -100,6 +100,12 @@ npm --prefix codemode-chat run docker:local:up   # both on one machine as a test
 npm --prefix codemode-chat run docker:dev:up     # every role in one container, the checkout mounted
 ```
 
+Backups of the space: `npm --prefix codemode-chat run docker:backup` writes a consistent copy of the running store into
+the space's volume (`/data/backups`, the newest `CODEMODE_BACKUP_KEEP`, default 7; `server/backup.ts`); copy them off
+the host with `docker compose cp space:/data/backups <dir>`. `server/restore.ts` puts one back while the space is
+stopped (it refuses while any process has the store open):
+`docker compose -f docker/docker-compose.yml --profile nano run --rm --no-deps space node --experimental-strip-types server/restore.ts --from /data/backups/<file> --yes`.
+
 The test bed runs big and nano as on two hosts: every role talks to the space over TCP, the system bar shows the hosts
 "big" and "nano", and nano's containers get 2 CPUs (`NANO_CPUS`). Only the model container gets the model credentials.
 The space socket has no TLS: publish it only on an internal address (`CODEMODE_SPACE_BIND`). Deployment examples (host

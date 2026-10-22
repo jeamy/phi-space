@@ -21,7 +21,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, type Codemode, type Verdict } from "./judge.ts";
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
-import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
+import { addNote, answersOf, bestOf, enqueueCandidate, execTarget, modelInfoOf, isSolved, planTurn, rid, scoresOf, systemLine, taskEntries, vetoesOf, type Contribution } from "./room.ts";
 import { customSpec, customTask, expectedOf, isText, taskById, taskFromSpec, TASKS, textSpec, textTask, type Task } from "./tasks.ts";
 import { clipWords, NO_USAGE, type Attempt, type Note, type Role, type Usage } from "./llm.ts";
 import { taskWaitMs } from "./limits.ts";
@@ -221,10 +221,9 @@ export class CodeChatHub {
 	/** All verdicts of a room, oldest first, with the people's vetoes merged in. */
 	#scores(s: Session): Promise<Contribution[]> { return scoresOf(this.host, s.id); }
 
-	/** What the model process says about the models (ModelInfo; renewed every 10 s while it runs). */
+	/** What the model processes say about the models (their ModelInfo entries, merged; renewed every 10 s while they run). */
 	async modelInfo(): Promise<{ info: { enabled: boolean; on: boolean; current: string | null; models: Array<{ id: string; label: string }> }; admin: { enabled: boolean; on: boolean; models: Array<{ label: string; provider: string; id: string; name: string }>; allowed: string[]; custom: boolean } }> {
-		const f = (await this.host.readIfExists({ type: "ModelInfo" }, NO_WAIT))?.fields as { info?: unknown; admin?: unknown } | undefined;
-		return f?.info && f.admin ? (f as never) : { info: { enabled: false, on: false, current: null, models: [] }, admin: { enabled: false, on: false, models: [], allowed: [], custom: false } };
+		return modelInfoOf(this.host);
 	}
 
 	/** The labels of the models a run may use (from the model process). */

@@ -173,6 +173,7 @@ services:
         required: false
     environment:
       NODE_ENV: development
+      CODEMODE_HOST_NAME: "${CODEMODE_HOST_NAME:-dev}"
       CODEMODE_BIND: 0.0.0.0
       PORT: "${PORT:-3700}"
       CODEMODE_SQLITE: /data/dev-codemode-chat.sqlite

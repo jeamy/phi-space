@@ -10,6 +10,7 @@ import { announce, connectSpace, entryLeaseMs, keepAlive } from "./space.ts";
 import { NO_WAIT } from "../../src/index.ts";
 import { loadCodemode } from "./judge.ts";
 import { agentLoop, ITEM_LEASE_MS, type Slot } from "./run.ts";
+import { modelInfoOf } from "./room.ts";
 import { deadlineOf, verifyTask, writeCriteria, type TaskRequest } from "./task-agent.ts";
 
 /** How long one blocking take waits for a free slot (below the client's call timeout). */
@@ -65,8 +66,7 @@ export async function startAgentHost(o: { space?: string; slots?: number } = {})
 				if (Date.now() >= deadlineOf(req)) ready = { ok: false, error: "the request waited too long for an agent" };
 				else if (req.kind === "verify") { if (!cm) throw new Error("@earendil-works/pi-codemode could not be loaded"); ready = await verifyTask(space, t.id, cm, req); }
 				else {
-					const info = (await space.readIfExists({ type: "ModelInfo" }, NO_WAIT))?.fields as { info?: { models?: Array<{ label: string }> } } | undefined;
-					ready = await writeCriteria(space, t.id, req, (info?.info?.models ?? []).map((m) => m.label));
+					ready = await writeCriteria(space, t.id, req, (await modelInfoOf(space)).info.models.map((m) => m.label));
 				}
 			} catch (err) { ready = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
 			await space.write({ type: "TaskReady", fields: { requestId: req.requestId, session: req.session, ...ready, ts: Date.now() } as never }, t.id, 15 * 60_000);

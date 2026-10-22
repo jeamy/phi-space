@@ -28,7 +28,7 @@ Die Anfragegrenzen bleiben bewusst je web-Prozess (siehe „Leistung und Deploym
 
 **Stufe 4, umgesetzt:** Docker mit einem Container je Rolle, die Profile `nano` und `big` und beide zusammen als lokale
 Testumgebung (siehe „Betrieb mit Docker“). Offen sind die Entscheidungen zum Produktivbetrieb (Wiederherstellung,
-Aufbewahrung, Kapazität).
+Aufbewahrung, Kapazität, Zeitplan der Backups).
 
 Die Garantien unten trennen das heutige Verhalten von nötigen Korrekturen. Daten in den Space zu legen ergibt allein
 weder eine genau einmalige Ausführung bei einem externen Anbieter noch einen konsistenten Snapshot noch eine atomare
@@ -78,7 +78,11 @@ startet den Space zuerst und startet unerwartet beendete Kinder neu.
 Jeder Prozess hält einen `Process`-Eintrag mit Rolle, Prozesskennung und Hostdaten (CPU, Speicher; keine Auslastung).
 Die Lease beträgt 30 s und wird alle 10 s erneuert; die Systemleiste zeigt daraus die Anwesenheit.
 
-Es darf derzeit nur **einen** model-Prozess geben: jeder ersetzt beim Veröffentlichen den `ModelInfo`-Eintrag des anderen.
+Mehrere model-Prozesse sind möglich:
+- Jeder führt seinen eigenen `ModelInfo`-Eintrag; web und agents führen sie zusammen (`modelInfoOf` in `room.ts`).
+- Jeder nimmt jeden Aufruf. Sie brauchen deshalb dieselben Zugangsdaten: mehr Prozesse verteilen die Last und springen
+  füreinander ein, sie teilen die Anbieter nicht auf.
+- Stirbt einer, kommt ein Aufruf, den er hielt, nach höchstens 30 s zurück.
 
 ## Muster für Transaktionen und Koordination
 
@@ -205,7 +209,7 @@ nächsten Versuch liegen. Gibt der Agent das Warten auf, nimmt er seinen noch ni
 niemand eine Antwort bezahlt, die keiner abholt.
 
 **Ausführung im model-Prozess.**
-- Er nimmt `LlmCall` in einer Transaktion (Lease 120 s, erneuert), baut den Kontext mit `server/context.ts`, ruft das
+- Er nimmt `LlmCall` in einer Transaktion (Lease 30 s, alle 10 s erneuert), baut den Kontext mit `server/context.ts`, ruft das
   Modell und schreibt `LlmResult` (aufbewahrt 10 min).
 - Für einen Besucher schreibt er im selben Commit einen `Spend`-Eintrag mit Tageskennung (aufbewahrt 26 h).
 - Anfragen leben so lange wie die Wartezeit plus 60 s.
@@ -336,9 +340,9 @@ Hochverfügbarkeit des Space selbst ergibt sich nicht aus der Aufteilung in Proz
 **2. Laufende Modellaufrufe bei Stop.** Ein Aufruf, den der model-Prozess beim Stop schon ausführt, läuft zu Ende und wird
 bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem Abbruchsignal an den Anbieter.
 
-**3. Mehrere model-Prozesse** ersetzen sich gegenseitig den `ModelInfo`-Eintrag; mehr als einer geht derzeit nicht.
-
 **Erledigt am 2026-10-21:**
+- Mehrere model-Prozesse: ein `ModelInfo` je Prozess, zusammengeführt; ein gehaltener Aufruf kommt nach höchstens 30 s
+  zurück.
 - Harte Abstürze zählen:
   - Ein Judge hinterlässt beim Sterben während der Prüfung einen `JudgeStart`-Marker. Nach zwei solchen bekommt der
     Kandidat ein gescheitertes Urteil.
@@ -408,6 +412,27 @@ jede Verbindung als Prozess des Chats: nie auf einer öffentlichen Schnittstelle
 Skripte in `codemode-chat/package.json`: `docker:nano:*`, `docker:big:*`, `docker:prod:*` (beide Profile auf einem
 Rechner), `docker:local:*`, `docker:dev:*`, `docker:test`.
 
+**Backup und Restore des Space:**
+- `server/backup.ts` schreibt im laufenden Betrieb eine konsistente Kopie des SQLite-Speichers (`VACUUM INTO`, eine
+  Lesetransaktion; der Speicher ist im WAL-Modus, der Space schreibt weiter).
+  - In Docker: `npm --prefix codemode-chat run docker:backup` schreibt nach `/data/backups` im Volume.
+  - Behalten werden die neuesten `CODEMODE_BACKUP_KEEP` (Standard 7).
+  - Vom Rechner holen mit `docker compose cp space:/data/backups <Verzeichnis>`.
+- `server/restore.ts --from <Datei> --yes` setzt eine Kopie an die Stelle des Speichers.
+  - Nur bei gestopptem Space. Es verweigert sich, wenn der Space-Socket antwortet oder ein anderer Prozess den Speicher
+    offen hat; Letzteres erkennt es auch über Container-Grenzen, wo es den Socket nicht sieht.
+  - Ohne `--yes` sagt es nur, was es täte.
+  - Der bisherige Speicher bleibt mit seinen WAL-Dateien als `<Speicher>.before-restore-<Zeit>` liegen.
+  - In Docker: `docker compose … --profile nano stop space`, dann
+    `docker compose … --profile nano run --rm --no-deps space node --experimental-strip-types server/restore.ts --from /data/backups/<Datei> --yes`,
+    dann `start space`.
+- Nicht automatisch: wann gesichert wird (cron oder Timer auf nano) und wohin die Kopien den Rechner verlassen, ist eine
+  Entscheidung des Betriebs.
+- Geprüft am 2026-10-21 in der lokalen Testumgebung:
+  - Backup im laufenden Betrieb.
+  - Restore bei gestopptem Space; danach waren alle Beiträge wieder da.
+  - Ein Restore bei laufendem Space wurde abgelehnt.
+
 **Lokale Testumgebung big/nano auf einem Rechner:**
 - `npm --prefix codemode-chat run docker:local:up` startet beide Profile unter dem Projektnamen
   `phi-spaces-codemode-local`: web auf Port 3710, Space nur auf 127.0.0.1:3810.
@@ -445,8 +470,8 @@ Jede Stufe soll die Anwendung lauffähig halten, getestet und einzeln committet 
 3. **Grenzen, Sitzungen und interaktives Ausführen: umgesetzt.** Gemeinsame Zähler, Admin-Sitzungen und ▶ im
    judge-Prozess.
 4. **Betrieb: teilweise umgesetzt.** Docker je Rolle, Profile `nano`/`big`, lokale Testumgebung, systemd-Beispiel mit
-   `launch.ts`. Offen: Neustartregeln über `restart: unless-stopped` hinaus, Backup und Restore des Volumes,
-   Aufbewahrungsfristen, Kapazität je Rolle.
+   `launch.ts`, Backup und Restore des Space. Offen: Zeitplan und Ziel der Backups, Aufbewahrungsfristen, Kapazität je
+   Rolle.
 
 Hinweise aus der Migration:
 
@@ -478,6 +503,7 @@ Getestet sind:
 - ein Kandidat nach zwei toten Judges, ein Auftrag nach zwei toten agents-Prozessen (Marker vorgegeben);
 - der Prüf-Marker überdauert seine erste Lease;
 - Agenten ohne Slot werden angezeigt;
+- zwei model-Prozesse: die Seite sieht ihre Modelle einmal, stirbt einer, beantwortet der andere die Aufrufe;
 - ein gemeinsamer Zähler lässt bei gleichzeitigen Anfragen aus drei Clients genau seine Nutzungen zu;
 - eine Admin-Sitzung gilt in einem zweiten web-Prozess und endet dort mit dem Logout;
 - ▶ läuft im judge-Prozess, Stop beendet ihn dort, ohne Judge kommt 503.

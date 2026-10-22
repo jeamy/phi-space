@@ -28,6 +28,8 @@
     "docker:local:up": "NANO_CPUS=${NANO_CPUS:-2} PORT=${PORT:-3710} CODEMODE_SPACE_BIND=127.0.0.1 CODEMODE_SPACE_PORT=3810 docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-codemode-local --profile nano --profile big up -d --build",
     "docker:local:down": "docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-codemode-local --profile nano --profile big down",
     "docker:local:logs": "docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-codemode-local --profile nano --profile big logs -f",
+    "docker:backup": "docker compose --env-file .env -f docker/docker-compose.yml --profile nano exec space node --no-warnings --experimental-strip-types server/backup.ts",
+    "docker:local:backup": "docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-codemode-local --profile nano exec space node --no-warnings --experimental-strip-types server/backup.ts",
     "docker:dev:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev up -d --build codemode-chat-dev",
     "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
     "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f codemode-chat-dev"

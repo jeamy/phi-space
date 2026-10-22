@@ -214,6 +214,21 @@ export async function execTarget(space: SpaceLike, session: string, candidateId:
 	return { source: String(f.source ?? ""), task };
 }
 
+/** What the model processes say about the models: each keeps its own ModelInfo (renewed every 10 s), and they are
+ *  merged here (the models of all of them, the newest one's current model and admin view). Model processes take any
+ *  call, so they are meant to have the same credentials: more of them share the load and stand in for each other. */
+export type ModelInfoView = { info: { enabled: boolean; on: boolean; current: string | null; models: Array<{ id: string; label: string }> }; admin: { enabled: boolean; on: boolean; models: Array<{ label: string; provider: string; id: string; name: string }>; allowed: string[]; custom: boolean } };
+export async function modelInfoOf(space: SpaceLike): Promise<ModelInfoView> {
+	const rows = (await space.readAll({ type: "ModelInfo" }, { limit: 50 })).map((e) => e.fields as Partial<ModelInfoView> & { ts?: number }).filter((f) => f.info && f.admin).sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
+	if (!rows.length) return { info: { enabled: false, on: false, current: null, models: [] }, admin: { enabled: false, on: false, models: [], allowed: [], custom: false } };
+	const union = <T>(lists: T[][], key: (x: T) => string) => { const seen = new Set<string>(); return lists.flat().filter((x) => !seen.has(key(x)) && !!seen.add(key(x))); };
+	const [newest] = rows as Array<ModelInfoView>;
+	return {
+		info: { enabled: rows.some((r) => r.info!.enabled), on: rows.some((r) => r.info!.on), current: newest!.info.current, models: union(rows.map((r) => r.info!.models), (m) => m.label) },
+		admin: { ...newest!.admin, enabled: rows.some((r) => r.admin!.enabled), on: rows.some((r) => r.admin!.on), models: union(rows.map((r) => r.admin!.models), (m) => m.label), allowed: union(rows.map((r) => r.admin!.allowed), (l) => l) },
+	};
+}
+
 /** Whether a block's task is solved: code has a best (CodeBest), a text task an accepted answer. */
 export async function isSolved(space: SpaceLike, session: string, blockId: string, text: boolean): Promise<boolean> {
 	if (text) return (await answersOf(space, session, blockId)).some((a) => a.ok);
