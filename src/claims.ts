@@ -145,13 +145,12 @@ export function decide(s: SpaceState, now: number, key: string, outcome: { state
 	const resultBytes = bytesOf(outcome.state === "done" ? outcome.result : null);
 	if (c.reservedResultBytes !== undefined && resultBytes > c.reservedResultBytes) throw new LimitError("the result exceeds its admission reservation");
 	st.reservedBytes = Math.max(0, (st.reservedBytes ?? 0) - (c.reservedResultBytes ?? 0));
-	delete c.reservedResultBytes;
-	c.state = outcome.state;
-	c.result = outcome.state === "done" ? outcome.result : null;
-	c.decidedAt = now;
+	// claims are values (a store may share and freeze them between commits): the decision replaces the record
+	const { reservedResultBytes: _reserved, ...rest } = c;
+	const next: ClaimRec = { ...rest, state: outcome.state, result: outcome.state === "done" ? outcome.result : null, decidedAt: now, ...(outcome.state === "done" && outcome.error ? { error: outcome.error } : {}) };
+	st.claims[key] = next;
 	dueAt(st, now + limitsOf(s).claimResultMs);
-	if (outcome.state === "done" && outcome.error) c.error = outcome.error;
-	st.bytes! += bytesOf(c) - before;
+	st.bytes! += bytesOf(next) - before;
 	touch(s, now);
 }
 
@@ -204,9 +203,9 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	for (const k of eligible.slice(0, maxRecords)) {
 		if (!maintenanceStep(s, 128, now, `claim:${k}`)) { complete = false; break; }
 		const c = st.claims[k]!;
-		if (!c.resultExpired) { const before = bytesOf(c); delete c.result; c.resultExpired = true; st.bytes = (st.bytes ?? 0) + bytesOf(c) - before; }
+		if (!c.resultExpired) { const before = bytesOf(c), { result: _result, ...rest } = c, next: ClaimRec = { ...rest, resultExpired: true }; st.claims[k] = next; st.bytes = (st.bytes ?? 0) + bytesOf(next) - before; }
 		const g = st.generations[c.generation];
-		if (!g || g.admitUntil < now) { st.bytes = (st.bytes ?? 0) - bytesOf(c) - bytesOf(k) - 2; delete st.claims[k]; }
+		if (!g || g.admitUntil < now) { st.bytes = (st.bytes ?? 0) - bytesOf(st.claims[k]) - bytesOf(k) - 2; delete st.claims[k]; }
 		changed = true;
 	}
 	delete st.sweepCursor; // a field of earlier versions; no cursor is kept

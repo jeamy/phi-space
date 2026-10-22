@@ -4,6 +4,15 @@ import { defineDoc } from "./store/documents.ts";
 import * as core from "./core.ts";
 import type { SpaceState } from "./core.ts";
 
+/** The big collections of a Space, whose records are values (replaced, never changed in place): the own store drafts
+ *  them without copying and keeps them as rows of their own. */
+export const SPACE_PARTS = [
+	{ path: ["entries"], kind: "array" },
+	{ path: ["rpc", "claims"], kind: "map" },
+	{ path: ["rpc", "generations"], kind: "map" },
+	{ path: ["stream", "log"], kind: "array" },
+] as const;
+
 export const Space = defineDoc<SpaceState & Record<string, any>>({
 	kind: "phi-spaces.space",
 	version: 5, // 5: spaceId and incarnation (named spaces, see spaces.ts)
@@ -13,6 +22,7 @@ export const Space = defineDoc<SpaceState & Record<string, any>>({
 	// Compact the delta tail periodically: without a base every read replays the
 	// whole journal, so unbounded spaces degrade to O(history) per read.
 	checkpointWhen: (v, _ops, info) => checkpointDue(v, info),
+	parts: SPACE_PARTS,
 });
 
 let checkpointLimit = Infinity;

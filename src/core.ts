@@ -712,9 +712,20 @@ function apply(s: SpaceState, now: number, e: EntryRec, txn: string | null, take
 		if (e.writtenUnder === null) logDel(s, now, e.id); // it stops being visible (taken, or locked by a transaction)
 		touch(s, now);
 		if (txn === null || e.writtenUnder === txn) s.entries.splice(s.entries.indexOf(e), 1); // gone, or never visible outside
-		else e.takenBy = txn;
-	} else if (txn !== null && !e.readBy.includes(txn)) { e.readBy.push(txn); touch(s, now); }
+		else setEntry(s, e, { takenBy: txn });
+	} else if (txn !== null && !e.readBy.includes(txn)) { setEntry(s, e, { readBy: [...e.readBy, txn] }); touch(s, now); }
 	return copy;
+}
+
+/** Changes an entry. Entries are values (a store may share and freeze them between commits): a change replaces the
+ *  record in `s.entries` with a changed copy and returns that copy; the old record stays as it was. */
+function setEntry(s: SpaceState, e: EntryRec, change: Partial<EntryRec>, drop: readonly (keyof EntryRec)[] = []): EntryRec {
+	const i = s.entries.indexOf(e);
+	if (i < 0) throw new Error(`entry ${e.id} is not in the space`);
+	const next = { ...e, ...change } as EntryRec;
+	for (const k of drop) delete next[k];
+	s.entries[i] = next;
+	return next;
 }
 
 export function createTxn(s: SpaceState, now: number, lease: number, as?: Target): Lease {
@@ -890,14 +901,14 @@ function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 	prune(s.regs, (r) => r.txn === id); // registrations under a txn are dropped when it completes
 	const published: EntryRec[] = [];
 	for (let i = s.entries.length - 1; i >= 0; i--) { // backwards: removals do not shift what is still to visit
-		const e = s.entries[i]!;
-		if (e.readBy.includes(id)) prune(e.readBy, (t) => t === id);
+		let e = s.entries[i]!;
+		if (e.readBy.includes(id)) e = setEntry(s, e, { readBy: e.readBy.filter((t) => t !== id) });
 		if (commit) {
 			if (e.takenBy === id) { s.entries.splice(i, 1); continue; } // removal commits (also covers written-and-taken)
-			if (e.writtenUnder === id) { e.writtenUnder = null; published.push(e); }
+			if (e.writtenUnder === id) published.push(setEntry(s, e, { writtenUnder: null }));
 		} else {
 			if (e.writtenUnder === id) { s.entries.splice(i, 1); continue; } // aborted writes are discarded
-			if (e.takenBy === id) { e.takenBy = null; s.returned = (s.returned ?? 0) + 1; if (e.writtenUnder === null) logPut(s, now, e); } // takes are undone: the entry is back
+			if (e.takenBy === id) { e = setEntry(s, e, { takenBy: null }); s.returned = (s.returned ?? 0) + 1; if (e.writtenUnder === null) logPut(s, now, e); } // takes are undone: the entry is back
 		}
 	}
 	published.reverse(); // announced in write order
@@ -936,7 +947,7 @@ function leased(s: SpaceState, id: string, as: Target | undefined): { set(v: num
 	const t = s.txns[id] as TxnRec | undefined;
 	const r = s.regs.find((x) => x.id === id);
 	const l = w ? { owner: w.target, set: (v: number) => { w.deadline = v; }, waiter: true }
-		: e ? { owner: e.owner, set: (v: number) => { e.expires = v; noteExpiry(s, v); }, waiter: false }
+		: e ? { owner: e.owner, set: (v: number) => { const cur = s.entries.find((x) => x.id === id); if (cur) setEntry(s, cur, { expires: v }); noteExpiry(s, v); }, waiter: false }
 		: t ? { owner: t.owner, set: (v: number) => { t.expires = v; }, waiter: false }
 		: r ? { owner: r.target, set: (v: number) => { r.expires = v; }, waiter: false }
 		: undefined;
@@ -1092,7 +1103,7 @@ export function releaseRestoredEntry(s: SpaceState, now: number, e: EntryRec): b
 	if (publication + update + COMMIT_FIXED > lim.maxCommitBytes) throw new ResourceExhausted("restored release and fanout cannot fit the commit budget");
 	if (!canCharge(s, publication + update)) { deferMaintenance(s, now, `release:${e.id}`); return false; }
 	reserve(s, null, publication, lim); charge(s, update);
-	delete e.restoredUnverified; logPut(s, now, e); notifyWrite(s, e, null, now, true); return true;
+	const released = setEntry(s, e, {}, ["restoredUnverified"]); logPut(s, now, released); notifyWrite(s, released, null, now, true); return true;
 }
 
 function logDel(s: SpaceState, now: number, id: string): void { record(s, now, { op: "del", id }, limitsOf(s).maxLogBytes); }

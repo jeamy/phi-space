@@ -6,6 +6,7 @@
 // the commit; a draft is revoked when its commit ends, so a late write throws; a commit's result is detached from its
 // drafts; snapshots are committed values; watches are woken only after a commit is published, never inline, and
 // coalesce what happened while their listener ran.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { awaitWithContext, type Context } from "../context.ts";
 import { detach, draftOf, isDraft, type Draft } from "./draft.ts";
 import type { ClosableStoreHost, DocDef, DocFamilyDef, DocWatch, StoreTx, WatchEnd } from "./types.ts";
@@ -22,6 +23,9 @@ export interface Ledger {
 	persist(set: CommitSet): void | Promise<void>;
 	close(): void | Promise<void>;
 }
+
+/** Set while a commit callback runs: a snapshot from inside a commit must not wait for that commit. */
+const inCommit = new AsyncLocalStorage<true>();
 
 /** The message a closed host refuses work with (callers recognise it, as they did pi-durable's). */
 export const HOST_CLOSED = "Session is closed";
@@ -121,7 +125,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 				retired.delete(a);
 				const cur = this.#current(def, k);
 				const base = cur !== undefined ? cur : def.family ? (def as DocFamilyDef<any, any>).initial(seed) : (def as DocDef<any>).initial();
-				const draft = draftOf(base);
+				const draft = draftOf(base, def.parts);
 				drafts.set(a, { def, key: k, draft });
 				return draft.value;
 			}) as StoreTx["doc"],
@@ -134,22 +138,26 @@ export class OwnStoreHost implements ClosableStoreHost {
 			}) as StoreTx["retireDoc"],
 		};
 		let result: T;
-		try { result = await change(tx); }
+		try { result = await inCommit.run(true, () => change(tx)); }
 		catch (e) { open = false; for (const d of drafts.values()) d.draft.discard(); throw e; }
 		open = false;
 		// the result leaves the commit detached from its drafts (a draft is revoked below)
 		const out = holdsDraft(result) ? detach(result) : result;
 		const set: CommitSet = { put: [], retired: [] };
 		const changed: Array<[string, unknown]> = [];
+		const records: unknown[] = [];
 		for (const [a, { def, key, draft }] of drafts) {
 			const before = this.#docs.get(a)?.value, value = draft.finish();
 			const fresh = this.#docs.get(a) == null, migrated = (this.#docs.get(a)?.version ?? def.version) !== def.version;
-			if (value === before && !fresh && !migrated) continue; // only read
+			if (value === before && !fresh && !migrated && draft.changes.size === 0) continue; // only read
+			records.push(...draft.fresh);
 			set.put.push({ kind: def.kind, key, version: def.version, value });
 			changed.push([a, value]);
 		}
 		for (const [a, r] of retired) if (this.#committed(r.kind, r.key)) { set.retired.push(r); changed.push([a, null]); }
 		if (set.put.length || set.retired.length) {
+			// a record of a part is a value from now on: whoever still changes one in place gets an error, not a silent change
+			for (const r of records) deepFreeze(r);
 			await this.#ledger.persist(set);
 			for (const d of set.put) this.#docs.set(addr(d.kind, d.key), d);
 			for (const r of set.retired) this.#docs.set(addr(r.kind, r.key), null);
@@ -162,6 +170,8 @@ export class OwnStoreHost implements ClosableStoreHost {
 	snapshot<T, I>(def: DocFamilyDef<T, I>, key: string, context: Context): Promise<Readonly<T> | undefined>;
 	async snapshot(def: AnyDef, keyOrContext: string | Context): Promise<any> {
 		if (this.#closed) throw new Error(HOST_CLOSED);
+		// a map part changes in place while a commit runs: a snapshot from outside waits for the commits in progress
+		if (!inCommit.getStore()) await this.#tail.catch(() => {});
 		const key = def.family ? (keyOrContext as string) : null;
 		return this.#current(def, key);
 	}
@@ -188,6 +198,12 @@ export class OwnStoreHost implements ClosableStoreHost {
 		this.#watches.clear();
 		await this.#ledger.close();
 	}
+}
+
+function deepFreeze(v: unknown): void {
+	if (typeof v !== "object" || v === null || Object.isFrozen(v)) return;
+	Object.freeze(v);
+	for (const x of Object.values(v)) deepFreeze(x);
 }
 
 /** Whether a value holds a draft somewhere (results are usually plain data made in the commit). */

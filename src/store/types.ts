@@ -13,6 +13,9 @@ type DocCommon<T> = {
 	readonly version: number;
 	readonly migrate?: (value: T & Record<string, any>, fromVersion: number) => T & Record<string, any>;
 	readonly checkpointWhen?: (value: Readonly<T>, ops: readonly unknown[], info: { deltasSinceBase: number }) => boolean;
+	/** The big collections of the document whose records are immutable values (replaced, never changed): an array by
+	 *  its records' `id`, or a map by key. The own store drafts them cheaply and stores them as rows of their own. */
+	readonly parts?: readonly { readonly path: readonly string[]; readonly kind: "array" | "map" }[];
 };
 
 /** The same definition in the shape the transitional pi-durable host reads (session scope). It goes once the own

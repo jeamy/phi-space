@@ -6,7 +6,7 @@ import type { Context } from "./context.ts";
 import type { StoreHost, StoreTx } from "./store/types.ts";
 import { defineDoc, defineDocFamily } from "./store/documents.ts";
 import * as core from "./core.ts";
-import { Space, checkpointDue } from "./doc.ts";
+import { Space, SPACE_PARTS, checkpointDue } from "./doc.ts";
 
 export const DEFAULT_ALIAS = "default";
 const ALIAS = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -38,6 +38,7 @@ export const NamedSpace = defineDocFamily<core.SpaceState & Record<string, any>,
 	migrate: (v, from) => core.migrate(v, from) as core.SpaceState & Record<string, any>,
 	// Same rule as doc.ts Space (every 500 deltas, only while the base fits one commit).
 	checkpointWhen: (v, _ops, info) => checkpointDue(v, info),
+	parts: SPACE_PARTS,
 });
 
 export class UnknownSpaceError extends Error {}
