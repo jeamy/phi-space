@@ -70,6 +70,7 @@ export function partChanges(before: unknown, after: unknown, parts: readonly Par
 		const a = (now ?? []) as unknown[], b = (was ?? []) as unknown[];
 		if (!ords.has(name)) ords.set(name, new Map());
 		const ord = ords.get(name)!;
+		if (alongside(name, a, b, ord, put, del)) continue;
 		const old = new Map(b.map((v) => [idOf(v), v]));
 		const ids = a.map(idOf), kept = (id: string) => old.has(id) && ord.has(id);
 		const present = new Set(ids);
@@ -85,16 +86,55 @@ export function partChanges(before: unknown, after: unknown, parts: readonly Par
 		if (!holds) { // renumber the whole part
 			ord.clear();
 			a.forEach((v, i) => { ord.set(ids[i]!, i); put.push({ part: name, id: ids[i]!, ord: i, value: v }); });
+			maxOrds.set(ord, a.length - 1);
 			continue;
 		}
-		let max = -1;
-		for (const o of ord.values()) if (o > max) max = o;
+		let max = maxOrd(ord);
 		a.forEach((v, i) => {
 			const id = ids[i]!;
 			if (kept(id)) { if (old.get(id) !== v) put.push({ part: name, id, ord: ord.get(id)!, value: v }); return; }
 			ord.set(id, ++max);
 			put.push({ part: name, id, ord: max, value: v });
 		});
+		maxOrds.set(ord, max);
 	}
 	return { put, del };
+}
+
+/** The highest order of a part's records, kept beside its order map so an append does not scan them all. */
+const maxOrds = new WeakMap<Map<string, number>, number>();
+const maxOrd = (ord: Map<string, number>): number => {
+	let max = maxOrds.get(ord);
+	if (max === undefined) { max = -1; for (const o of ord.values()) if (o > max) max = o; maxOrds.set(ord, max); }
+	return max;
+};
+
+/** The usual change of an array part without ids for every record: walking both arrays side by side (records are
+ *  values, so the same object is the same record), records were only removed, replaced in their place, or appended
+ *  (a log that grows at its end and is cut at its start; a take from the middle of the entries). Anything else (false,
+ *  nothing pushed) goes to the full comparison. */
+function alongside(name: string, a: readonly unknown[], b: readonly unknown[], ord: Map<string, number>, put: PartRow[], del: Array<{ part: string; id: string }>): boolean {
+	const gone: string[] = [], changed: Array<{ id: string; v: unknown }> = [];
+	let i = 0, j = 0;
+	for (; i < b.length && j < a.length; i++) {
+		if (a[j] === b[i]) { j++; continue; }
+		const was = idOf(b[i]);
+		if (!ord.has(was)) return false;
+		if (idOf(a[j]) === was) { changed.push({ id: was, v: a[j] }); j++; } // replaced in its place
+		else gone.push(was);
+	}
+	for (; i < b.length; i++) { const was = idOf(b[i]); if (!ord.has(was)) return false; gone.push(was); }
+	// what follows the last kept record is new; a record of the part that only moved goes to the full comparison
+	const added = a.slice(j).map((v) => ({ id: idOf(v), v }));
+	if (added.length) {
+		const ids = new Set(added.map((x) => x.id));
+		if (ids.size !== added.length) return false;
+		for (const x of added) if (ord.has(x.id)) return false; // a removed record came back elsewhere: it moved
+	}
+	let max = maxOrd(ord);
+	for (const id of gone) { del.push({ part: name, id }); ord.delete(id); }
+	for (const x of changed) put.push({ part: name, id: x.id, ord: ord.get(x.id)!, value: x.v });
+	for (const x of added) { ord.set(x.id, ++max); put.push({ part: name, id: x.id, ord: max, value: x.v }); }
+	maxOrds.set(ord, max);
+	return true;
 }

@@ -999,12 +999,19 @@ export function nextExpiry(s: Readonly<SpaceState>): number {
 	for (const w of s.waiters) if (w.deadline < min) min = w.deadline;
 	for (const b of Object.values(s.mailboxes?.boxes ?? {})) if (b.events.length) min = Math.min(min, b.events[0]!.seq <= b.acked ? 0 : b.events[0]!.at + limitsOf(s).mailboxTtlMs);
 	for (const j of s.jobs ?? []) min = Math.min(min, j.retryAt ?? 0);
-	for (const c of Object.values(s.rpc?.claims ?? {})) if (c.state !== "pending" && c.decidedAt !== undefined) {
-		const at = c.decidedAt + limitsOf(s).claimResultMs;
-		min = Math.min(min, c.resultExpired ? Math.max(at, (s.rpc?.generations[c.generation]?.admitUntil ?? 0) + 1) : at);
+	// claims and generations: the last sweep left when the next one is due (claims.ts lowers it as records come), so
+	// only a space that was not swept completely yet scans them; with 24 h of claims the scan cost ~60 ms per operation
+	const sweepAt = s.rpc?.sweepAt;
+	if (sweepAt !== undefined) min = Math.min(min, sweepAt);
+	else if (s.rpc) {
+		const keep = limitsOf(s).claimResultMs;
+		for (const c of Object.values(s.rpc.claims)) if (c.state !== "pending" && c.decidedAt !== undefined) {
+			const at = c.decidedAt + keep;
+			min = Math.min(min, c.resultExpired ? Math.max(at, (s.rpc.generations[c.generation]?.admitUntil ?? 0) + 1) : at);
+		}
+		const usedGenerations = new Set(Object.values(s.rpc.claims).map(c => c.generation));
+		for (const [id, g] of Object.entries(s.rpc.generations)) if (!usedGenerations.has(id)) min = Math.min(min, g.admitUntil + 1);
 	}
-	const usedGenerations = new Set(Object.values(s.rpc?.claims ?? {}).map(c => c.generation));
-	for (const [id, g] of Object.entries(s.rpc?.generations ?? {})) if (!usedGenerations.has(id)) min = Math.min(min, g.admitUntil + 1);
 	if (s.releaseQueue?.length) min = 0;
 	if (s.maintenance) min = Math.min(min, s.maintenance.at);
 	return min;

@@ -68,8 +68,50 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
 - **Offen in U2:**
   - weitere Tests auf die Fixture umstellen;
   - die persistenten Tests (`test/support/persistent.ts`) für den eigenen Speicher nachbilden;
-  - echte Absturztests mit Kindprozess (U2c);
-  - Zähler statt Vollscan für offene Claims je Absender (`client.ts`).
+  - Zähler statt Vollscan für offene Claims je Absender (`client.ts`);
+  - Grenzen für Claims neu festlegen (D5) und Claims nicht mehr ganz im Speicher halten (siehe Stand U2c).
+
+**Stand U2c (2026-10-22):**
+
+- **Absturztests** (`test/test-own-store.test.ts`): Ein Kindprozess schreibt Paare von Einträgen und wird hart beendet
+  (SIGKILL):
+  - zu sechs verschiedenen Zeitpunkten nacheinander auf derselben Datei: jeder bestätigte Commit ist danach da, nie nur
+    ein halber;
+  - unmittelbar vor dem SQL-`COMMIT` eines Bündels: auf der Platte steht genau das Bestätigte;
+  - unmittelbar nach dem `COMMIT`, vor der Antwort: die Commits sind da, aber unbestätigt.
+
+  Die Haltepunkte setzt nur ein Testschalter des Schreib-Threads (`PHI_SPACES_WRITER_PAUSE`).
+- **Fremde Dateien:** Eine SQLite-Datei ohne `store_meta` (etwa ein pi-durable-Speicher) wird abgewiesen, nicht
+  übernommen. Ihr Import ist U5.
+- **Chat auf dem eigenen Speicher:** `codemode-chat/server/space-host.ts` öffnet `openSqliteHost` (Tests:
+  `openOwnMemoryHost`). Die Datei heißt jetzt `codemode-space.sqlite`, damit eine alte pi-durable-Datei nicht im Weg
+  liegt. Die Sicherung mit `VACUUM INTO` läuft unverändert, auch während der Space schreibt.
+- **Lastprobe** in der lokalen Testumgebung (big und nano in Docker, ohne Modell):
+  - 200 Einreichungen über 5 Räume, im Takt der Web-Kontingente: alle angenommen (p50 30 ms, p95 206 ms) und alle
+    bewertet (big 134, nano 66).
+  - Danach im Leerlauf: 23.800 Claims pro Stunde (`txn.begin`, `take`, `txn.abort` je rund 1,9 pro Sekunde, dazu
+    `lease.renew`). Das sind etwa zehn wartende Schleifen der Rollen mit je 5 s Wartezeit, rund fünfmal so viel wie bei
+    der Erhebung in U0 (4.750 pro Stunde).
+- **Gefunden und behoben** (gemessen auf einer Kopie des Live-Speichers, 11.700 Claims, 13.600 Verlaufs-Batches):
+
+  | Ursache | vorher | nachher |
+  |---|---|---|
+  | `nextExpiry` (vor jeder Operation) ging alle Claims durch und kopierte je Claim die Grenzwerte; jetzt gilt `rpc.sweepAt` | 116 ms je Schreiben + Nehmen | 17,6 ms |
+  | `partChanges` verglich jeden Array-Teil ganz über Ids (13.600 Batches für einen angehängten); jetzt Vergleich über Objektidentität nebeneinander, der volle Vergleich nur bei Verschiebungen und Einfügungen | 17,6 ms | 2,1 ms (p95 3,7 ms) |
+
+  Vorher kostete der Leerlauf den Space-Prozess 28–78 % einer CPU, und Lesezugriffe wurden von 3 ms auf bis zu 360 ms
+  langsamer. Ein Zufallstest prüft, dass die Zeilen eines Array-Teils das Array nach jeder Art von Änderung genau
+  wiedergeben.
+- **Offen, Entscheidung nötig:** Bei 23.800 Claims pro Stunde und 24 h Aufbewahrung (D4) wären es rund 570.000 Claims
+  mit etwa 240 MB:
+  - Die Grenze `maxClaimBytes` (32 MiB) wäre nach etwa drei Stunden erreicht, danach lehnt der Space neue Anfragen ab.
+  - Der Kapazitätswert aus D2 (150.000 Claims) wäre um das Vierfache überschritten.
+  - Der eigene Speicher hält alle Claims im Arbeitsspeicher; das widerspricht dem Ziel von höchstens 300 MB RSS.
+
+  Möglich sind:
+  - Claims nur auf der Platte halten, nach Schlüssel nachgeladen, und die Grenzen nach D5 neu setzen;
+  - weniger Leerlauf-Claims im Chat, etwa längere Wartezeiten oder Warten ohne eigene Transaktion;
+  - beides.
 
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare

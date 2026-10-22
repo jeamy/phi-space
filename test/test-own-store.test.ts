@@ -142,3 +142,32 @@ test("a file of another program (a pi-durable store) is refused, not taken over"
 	db.close();
 	await assert.rejects(openSqliteHost(file), /is not a phi-spaces store/);
 });
+
+// ---- the rows of an array part follow every kind of change (store/parts.ts: the side-by-side path and the full one) ----
+
+import { partChanges } from "../src/store/parts.ts";
+
+test("an array part's rows rebuild the array after removals, replacements, appends, inserts and moves", () => {
+	let seed = 7;
+	const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed % n; };
+	const parts = [{ path: ["log"], kind: "array" as const }];
+	const rows = new Map<string, { ord: number; value: unknown }>(), ords = new Map<string, Map<string, number>>();
+	let next = 0, before: { log: Array<{ id: number; v: number }> } = { log: [] };
+	for (let step = 0; step < 3000; step++) {
+		const log = [...before.log];
+		const kind = rnd(10);
+		if (kind < 3 || !log.length) for (let k = rnd(3) + 1; k > 0; k--) log.push({ id: next++, v: 0 }); // append
+		else if (kind < 5) log.splice(rnd(log.length), 1); // remove one
+		else if (kind < 6) log.splice(0, rnd(Math.min(4, log.length)) + 1); // cut the start
+		else if (kind < 8) { const i = rnd(log.length); log[i] = { ...log[i]!, v: log[i]!.v + 1 }; } // replace in place
+		else if (kind < 9) log.splice(rnd(log.length + 1), 0, { id: next++, v: 0 }); // insert anywhere
+		else if (log.length > 1) { const [m] = log.splice(rnd(log.length), 1); log.splice(rnd(log.length + 1), 0, m!); } // move
+		const after = { log };
+		const c = partChanges(before, after, parts, new Map(), ords);
+		for (const d of c.del) rows.delete(d.id);
+		for (const p of c.put) rows.set(p.id, { ord: p.ord, value: p.value });
+		const rebuilt = [...rows.values()].sort((x, y) => x.ord - y.ord).map((r) => r.value);
+		assert.deepEqual(rebuilt, log, `step ${step} (change ${kind})`);
+		before = after;
+	}
+});
