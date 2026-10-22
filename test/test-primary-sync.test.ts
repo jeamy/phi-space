@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,type PrimarySyncPeer,type PrimaryCommitIntent,type PrimarySyncConfig} from '../src/index.ts';
 import {canonicalJson} from '../src/canonical.ts';
 import {SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport} from '../src/index.ts';
-import {SyncBudgetExceeded} from '../src/commit-sealed.ts';
+import {SyncBudgetExceeded} from '../src/store/legacy.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const digest=(v:unknown)=>createHash('sha256').update(canonicalJson(v as any)).digest('hex');

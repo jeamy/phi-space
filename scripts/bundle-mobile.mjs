@@ -23,7 +23,7 @@ try { available = !localOnly && (await stat(resolve(mobileRoot, 'runtime/package
 catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (!available && !localOnly && process.env.PHI_SPACES_MOBILE_ROOT) throw new Error(`Mobile runtime not found: ${mobileRoot}`);
 
-await build({ absWorkingDir: root, entryPoints: ['src/index.ts'], outfile: output,
+await build({ absWorkingDir: root, entryPoints: ['src/with-agent.ts'], outfile: output,
   bundle: true, format: 'esm', platform: 'node', target: 'node22',
   external: ['@earendil-works/*'], legalComments: 'none' });
 if (!available) {

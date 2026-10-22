@@ -1,7 +1,7 @@
 // Tests für workers.ts – Master-Worker-Pattern
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "./compat.ts";
-import { spaces } from "../../src/index.ts";
+import { spaces } from "../../src/agent.ts";
 import { createTestHarness, runWithHarness } from "./utils/harness.ts";
 import { 
   assertEntryType, 

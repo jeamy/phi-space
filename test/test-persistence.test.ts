@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { createRegistry, defineDoc, type Tx } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { PhiSpaces, FOREVER, Space, spaces, type Once } from "../src/index.ts";
+import { PhiSpaces, FOREVER, Space, type Once } from "../src/index.ts";
+import { spaces } from "../src/agent.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 
 test("persistent home: committed writes survive close and crash", async () => {

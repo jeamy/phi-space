@@ -2,11 +2,12 @@
 // place in src that opens a pi-durable host; the rest sees a StoreHost. It goes with the own store (U2/U3); the
 // storage-level replication (primary-sync, replica-control) keeps `LegacyStorage` until U4.
 import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage, type Storage } from "@earendil-works/pi-durable";
+import { createRegistry, Harness, MemoryStorage, StorageRejected, type Storage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import type { Context } from "../context.ts";
 import type { ClosableStoreHost } from "./types.ts";
+import { markSyncBudgetExceeded } from "../commit-sealed.ts";
 
 /** pi-durable's storage, for the storage-level replication only (U4 replaces it). */
 export type LegacyStorage = Storage;
@@ -24,6 +25,10 @@ export async function openSqliteStore(path: string, ctx: Context): Promise<Closa
 
 /** A host over a JSONL directory (the older format; read by the migration in U5). */
 export async function openJsonlStore(dir: string, ctx: Context): Promise<ClosableStoreHost> { return openLegacyHost(await openNodeJsonlStorage(dir, ctx), ctx); }
+
+/** A primary/sync commit refused because the sync journal's budget is used up. pi-durable keeps a session usable after
+ *  a StorageRejected, so the refusal is one; the space service recognises it by its mark (isSyncBudgetExceeded). */
+export class SyncBudgetExceeded extends StorageRejected { constructor(message: string, options?: ErrorOptions) { super(message, options); markSyncBudgetExceeded(this); } }
 
 /** pi-durable SQLite storage for the primary/sync Spaces (their journal replicates its writes until U4). */
 export function openLegacySqliteStorage(path: string): Promise<LegacyStorage> { return openNodeSqliteStorage(path); }

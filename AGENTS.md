@@ -41,7 +41,9 @@ Run typecheck and tests after every change.
 ## Layout
 
 - `src/core.ts` pure semantics, `src/doc.ts` the default Space document, `src/spaces.ts` registry and named spaces,
-  `src/claims.ts` request claims/generations, `src/client.ts` `PhiSpaces`, `src/index.ts` tools, delivery, reaper,
+  `src/claims.ts` request claims/generations, `src/client.ts` `PhiSpaces`, `src/index.ts` exports, delivery, reaper,
+  `src/agent.ts` the agent tools (pi-durable), `src/context.ts` the invocation context, `src/store/` the storage boundary
+  (`legacy.ts`: the pi-durable host during docs/umstellung-ohne-pi-durable.md),
   `src/meter.ts` metrics; `src/stream.ts`, `src/snapshot.ts`, `src/paging.ts` changes/snapshots/byte pages,
   `src/mailbox.ts` durable mailboxes, `src/pi-server.ts` the structural pi-server adapter.
   `src/service.ts` the transport-independent `space` service, `src/remote.ts` `RemoteSpace`, `src/socket.ts` its unix-socket/TCP transport and server,

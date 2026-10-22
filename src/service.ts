@@ -9,7 +9,7 @@ import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semanti
 import { awaitWithContext } from "./context.ts";
 import { ReplicationConflict } from "./entry-replication.ts";
 import { ReplicationClockError } from "./replication-clock.ts";
-import { CommitSealed, SyncBudgetExceeded } from "./commit-sealed.ts";
+import { CommitSealed, isSyncBudgetExceeded } from "./commit-sealed.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import type { Context } from "./context.ts";
 import * as core from "./core.ts";
@@ -544,7 +544,7 @@ export class SpaceService {
 		if (e instanceof claims.OperationCancelled) return fail("OperationCancelled", e.message);
 		if (e instanceof core.ResponseBudgetTooSmall) return fail("ResponseBudgetTooSmall", e.message, { requiredBytes: e.requiredBytes });
 		if (e instanceof core.LimitError) return fail("ResourceExhausted", e.message); // includes ResourceExhausted itself
-		if (e instanceof SyncBudgetExceeded) return fail("ResourceExhausted", "primary/sync journal: " + e.message);
+		if (isSyncBudgetExceeded(e)) return fail("ResourceExhausted", "primary/sync journal: " + e.message);
 		if (e instanceof core.SnapshotExpired) return fail("SnapshotExpired", e.message);
 		if (e instanceof core.RevisionAhead) return fail("RevisionAhead", e.message);
 		if (e instanceof core.CompletionViolation) return fail("CompletionViolation", e.message);

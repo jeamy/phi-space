@@ -3,7 +3,8 @@ import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, spaces } from "../src/index.ts";
+import { FOREVER, PhiSpaces } from "../src/index.ts";
+import { spaces } from "../src/agent.ts";
 
 const faux = fauxProvider();
 const models = createModels();

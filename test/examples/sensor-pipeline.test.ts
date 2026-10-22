@@ -5,7 +5,8 @@ import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, NO_WAIT, spaces, startService } from "../../src/index.ts";
+import { FOREVER, PhiSpaces, NO_WAIT, startService } from "../../src/index.ts";
+import { spaces } from "../../src/agent.ts";
 import { 
   openWindow, 
   collect, 

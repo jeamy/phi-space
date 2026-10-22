@@ -18,12 +18,8 @@ import {
   Harness, 
   MemoryStorage 
 } from "@earendil-works/pi-durable";
-import { 
-  FOREVER, 
-  PhiSpaces,
-  spaces, 
-  type EntryDraft
-} from "../../../src/index.ts";
+import { FOREVER, PhiSpaces, type EntryDraft } from "../../../src/index.ts";
+import { spaces } from "../../../src/agent.ts";
 
 /**
  * Test-Harness-Konfiguration

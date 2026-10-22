@@ -20,10 +20,11 @@ const bindings: Record<string, string[]> = {
 };
 
 export function apiSignatures(): Map<string, string> {
-	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts");
-	const program = ts.createProgram([path], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strictNullChecks:true,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
+	// the public module and the agent module (the agent tools are not exported by the public one: they need pi-durable)
+	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts"), agentPath = resolve(root, "src/agent.ts");
+	const program = ts.createProgram([path, agentPath], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strictNullChecks:true,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
 	const checker = program.getTypeChecker(), source = program.getSourceFile(path)!;
-	const exports = new Map(checker.getExportsOfModule(checker.getSymbolAtLocation(source)!).map(s => [s.name,s]));
+	const exports = new Map([source, program.getSourceFile(agentPath)!].flatMap(f => checker.getExportsOfModule(checker.getSymbolAtLocation(f)!)).map(s => [s.name,s]));
 	const output = new Map<string,string>();
 	for(const [id, names] of Object.entries(bindings)) {
 		const signatures = names.map(binding => {

@@ -2,7 +2,8 @@
 import { mkdirSync, readdirSync, openSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import { defineExtension, defineDoc } from "@earendil-works/pi-durable";
-import { spaces, Space } from "../src/index.ts";
+import { Space } from "../src/index.ts";
+import { spaces } from "../src/agent.ts";
 import type { liveModels } from "./live-models.ts";
 
 export type ModelBundle = Awaited<ReturnType<typeof liveModels>>;

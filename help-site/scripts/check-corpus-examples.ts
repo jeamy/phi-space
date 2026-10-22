@@ -27,7 +27,7 @@ const fixture = `
  const createRegistry = durable.createRegistry, createSpace = api.createSpace;
  const startService = api.startService, SpaceService = api.SpaceService;
  const serveSpace = api.serveSpace, socketTransport = api.socketTransport;
- const spaces = api.spaces;
+ const spaces = agent.spaces;
  type Json = core.Json;
  const handleEvent: (event: core.SpaceEvent) => Promise<void> = async () => {};
  const page: core.Page = undefined!;
@@ -61,7 +61,7 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 			const imports = ast.statements.filter(ts.isImportDeclaration);
 			let body = code;
 			for (const declaration of [...imports].reverse()) body = body.slice(0, declaration.getFullStart()) + body.slice(declaration.end);
-			virtual.set(file, `import * as api from "../../src/index.ts";\nimport * as core from "../../src/core.ts";\nimport * as durable from "@earendil-works/pi-durable";\nimport * as ai from "@earendil-works/pi-ai/models";\n${imports.map(d => d.getText(ast)).join("\n")}\nasync function documentationExample() {\n${fixture}\n{\n${body}\n}\n}\n`);
+			virtual.set(file, `import * as api from "../../src/index.ts";\nimport * as agent from "../../src/agent.ts";\nimport * as core from "../../src/core.ts";\nimport * as durable from "@earendil-works/pi-durable";\nimport * as ai from "@earendil-works/pi-ai/models";\n${imports.map(d => d.getText(ast)).join("\n")}\nasync function documentationExample() {\n${fixture}\n{\n${body}\n}\n}\n`);
 		}
 	}
 	const options: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, skipLibCheck: true, noEmit: true, allowImportingTsExtensions: true, types: ["node"] };
@@ -73,6 +73,7 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 	};
 	host.resolveModuleNames = (names, containingFile) => names.map(name => {
 		if (name === "phi-spaces") return { resolvedFileName: resolve(ROOT, "src/index.ts"), extension: ts.Extension.Ts };
+		if (name === "phi-spaces/agent") return { resolvedFileName: resolve(ROOT, "src/agent.ts"), extension: ts.Extension.Ts };
 		if (name.startsWith("./help-site/")) return { resolvedFileName: resolve(ROOT, name), extension: ts.Extension.Ts };
 		return ts.resolveModuleName(name, containingFile, options, host).resolvedModule;
 	});

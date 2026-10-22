@@ -128,10 +128,10 @@ Run this from the repository root with the already available dependencies: save 
 then use `node --experimental-strip-types tuple-demo.ts`. No model calls or server are needed.
 
 ```ts
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, NO_WAIT, PhiSpaces, spaces } from "./src/index.ts";
+import { BACKGROUND_CONTEXT as ctx, FOREVER, NO_WAIT, PhiSpaces } from "./src/index.ts";
+import { spaces } from "./src/agent.ts";
 
 const registry = createRegistry();
 registry.install(spaces);
@@ -177,7 +177,10 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `src/spaces.ts` | named spaces: registry (host id, alias → space id), `createSpace`, `listSpaces`, `snapshotSpace` |
 | `src/claims.ts` | durable request claims and request generations (idempotent mutations, `pollOperation`, `cancelOperation`) |
 | `src/client.ts` | `PhiSpaces`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
-| `src/index.ts` | the `spaces` extension (tools `space_write/read/take/wait/notify/txn/lease`, prompt section), notify delivery, reaper |
+| `src/index.ts` | the public exports; the background service of a space: notify delivery, reaper (`startService`) |
+| `src/agent.ts` | the `spaces` extension of a pi-durable agent (tools `space_write/read/take/wait/notify/txn/lease`, prompt section); not exported by `src/index.ts`, it needs pi-durable |
+| `src/context.ts` | the invocation context (abort signal, values) |
+| `src/store/` | storage boundary: `types.ts` (StoreHost, StoreTx, documents), `documents.ts` (`defineDoc`), `legacy.ts` (the pi-durable host during the move, docs/umstellung-ohne-pi-durable.md) |
 | `src/meter.ts` | process-local counters and rates |
 | `src/canonical.ts` | canonical JSON (RFC 8785) for field comparison and hashes |
 | `src/stream.ts` | bounded revision log and visible-entry change batches |

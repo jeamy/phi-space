@@ -18,7 +18,8 @@ import type { AddressInfo } from "node:net";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { Meter, spaces, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport } from "../../src/index.ts";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport } from "../../src/index.ts";
+import { spaces } from "../../src/agent.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "../server/social/swarm.ts";
 import { ALL_ARTICLES } from "../scripts/corpus.ts";
 

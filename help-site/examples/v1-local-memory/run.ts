@@ -10,7 +10,8 @@
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createSpace, Meter, PhiSpaces, spaces, startService } from "../../../src/index.ts";
+import { createSpace, Meter, PhiSpaces, startService } from "../../../src/index.ts";
+import { spaces } from "../../../src/agent.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 import { pathToFileURL } from "node:url";
 

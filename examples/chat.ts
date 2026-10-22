@@ -9,7 +9,8 @@ import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, spaces, startService } from "../src/index.ts";
+import { FOREVER, PhiSpaces, startService } from "../src/index.ts";
+import { spaces } from "../src/agent.ts";
 import { liveModels } from "./live-models.ts";
 import { pathToFileURL } from "node:url";
 

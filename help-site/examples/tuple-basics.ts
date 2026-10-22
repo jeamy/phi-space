@@ -3,7 +3,8 @@ import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, NO_WAIT, PhiSpaces, spaces, startService } from "../../src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, startService } from "../../src/index.ts";
+import { spaces } from "../../src/agent.ts";
 
 export async function runTupleBasics() {
 	const registry = createRegistry(); registry.install(spaces);

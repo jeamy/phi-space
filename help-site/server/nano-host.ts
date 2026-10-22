@@ -20,7 +20,8 @@ import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { Meter, spaces, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget } from "../../src/index.ts";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget } from "../../src/index.ts";
+import { spaces } from "../../src/agent.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
 import { swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
 

@@ -14,20 +14,8 @@ import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import {
-	createSpace,
-	DEFAULT_POLICY,
-	FOREVER,
-	GateIdentity,
-	Meter,
-	PhiSpaces,
-	RemoteSpace,
-	serveSpace,
-	socketTransport,
-	spaces,
-	SpaceService,
-	startService,
-} from "../../../src/index.ts";
+import { createSpace, DEFAULT_POLICY, FOREVER, GateIdentity, Meter, PhiSpaces, RemoteSpace, serveSpace, socketTransport, SpaceService, startService } from "../../../src/index.ts";
+import { spaces } from "../../../src/agent.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV3() {

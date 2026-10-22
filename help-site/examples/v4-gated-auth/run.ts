@@ -15,28 +15,8 @@ import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import {
-	bootstrapEnroll,
-	CONTROL_SPACE,
-	createSpace,
-	GateIdentity,
-	generateKey,
-	GrantAuthority,
-	GrantVerifier,
-	hashToken,
-	listSpaces,
-	newEnrollToken,
-	PhiSpaces,
-	RemoteSpace,
-	socketTransport,
-	spaceDoc,
-	SpaceKeyDirectory,
-	spaces,
-	SqliteRecoveryRegister,
-	startFederationHost,
-	startService,
-	type Signer,
-} from "../../../src/index.ts";
+import { bootstrapEnroll, CONTROL_SPACE, createSpace, GateIdentity, generateKey, GrantAuthority, GrantVerifier, hashToken, listSpaces, newEnrollToken, PhiSpaces, RemoteSpace, socketTransport, spaceDoc, SpaceKeyDirectory, SqliteRecoveryRegister, startFederationHost, startService, type Signer } from "../../../src/index.ts";
+import { spaces } from "../../../src/agent.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 const until = async (fn: () => Promise<boolean>, ms = 5_000) => {

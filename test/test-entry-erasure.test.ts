@@ -7,7 +7,8 @@ import {join} from 'node:path';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {EntryReplicationController,EntryReplicas,compactErasedSqlite} from '../src/index.ts';
+import {EntryReplicationController,EntryReplicas} from '../src/index.ts';
+import {compactErasedSqlite} from '../src/erasure-sqlite.ts';
 import {ctx} from './support/persistent.ts';
 
 const P={peerId:'peer-p'},Q={peerId:'peer-q'},ADMIN={peerId:'admin'},SECRET='secret-of-p';

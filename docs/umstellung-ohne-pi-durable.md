@@ -4,6 +4,26 @@ Stand: 2026-10-12. **Detaillierter Ziel- und Arbeitsplan; noch nicht implementie
 (2026-10-22): [umstellung-u0-bestand.md](umstellung-u0-bestand.md), mit Lastprofil, vorgeschlagenen Grenzwerten und
 offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente (Abschnitt 5.1) für U2 von Beginn an nötig.
 
+**Stand U1 (2026-10-22):**
+
+- **Eigener Kontext:** `src/context.ts` statt `@earendil-works/chord` (Entscheidung D1).
+- **Eigene Speichertypen:** `src/store/types.ts` (`StoreHost`, `StoreTx`, `DocDef`, `DocWatch`) und
+  `src/store/documents.ts` (`defineDoc`/`defineDocFamily`). `src` definiert damit alle Dokumente und nutzt nur noch
+  diese Typen.
+- **Übergangsadapter:** Eine pi-durable-Session erfüllt `StoreHost` strukturell. Die Dokumentdefinitionen tragen
+  zusätzlich die Form, die pi-durable liest.
+- **Ein Öffnungsort:** `src/store/legacy.ts` öffnet als einzige Stelle in `src` einen pi-durable-Host.
+- **Agent-Teile getrennt:** Sie liegen in `src/agent.ts`; `src/with-agent.ts` gibt Space und Agent zusammen aus (für
+  das Mobil-Bundle und pi-serverd).
+- **Ergebnis:**
+  - `src/index.ts` lädt ohne pi-durable und chord, geprüft mit einem Hook, der diese Importe sperrt.
+  - Übrig sind nur Typen der Primary/Sync-Replikation (`LegacyStorage` in `replica-control`, `configured-runtime`,
+    `sync-spaces`), dazu ein dynamischer Import in `primary-sync.ts`, der nur bei erschöpftem Sync-Budget lädt. Beides
+    ist die dokumentierte Ausnahme bis U4.
+  - `compactErasedSqlite` (Wartung des pi-durable-Formats) ist nicht mehr über `src/index.ts` exportiert.
+- **Offen in U1:** Tests und Beispiele öffnen ihre Hosts noch direkt mit `Harness.open`. Sie wechseln auf eine
+  gemeinsame Fixture, sobald es den eigenen Speicher gibt (U2/U3), damit sie gegen beide Speicher laufen können.
+
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
 Speicherung, Wiederaufnahme nach Ausfällen und kontrollierte Übernahme vorhandener Daten.

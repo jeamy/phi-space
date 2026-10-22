@@ -8,7 +8,8 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { PhiSpaces, NO_WAIT, FOREVER, Space, deliverEvents, spaces, core, startMaintenance, startService, startDelivery } from "../src/index.ts";
+import { PhiSpaces, NO_WAIT, FOREVER, Space, deliverEvents, core, startMaintenance, startService, startDelivery } from "../src/index.ts";
+import { spaces } from "../src/agent.ts";
 
 const open = (storage: any, models = createModels()) => Harness.open(storage, { models, registry: createRegistry() }, ctx);
 const job = (n: number) => ({ type: "Job", fields: { n } });
@@ -488,7 +489,7 @@ test("debounce: a burst of writes wakes blocked takers and each gets a distinct 
 
 test("createSpaces counts tool traffic into the meter you give it, not the global one", async () => {
 	const { Meter } = await import("../src/meter.ts");
-	const { createSpaces } = await import("../src/index.ts");
+	const { createSpaces } = await import("../src/agent.ts");
 	const mine = new Meter(); const global = (await import("../src/meter.ts")).meter; global.reset();
 	const ext = createSpaces(mine);
 	const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);

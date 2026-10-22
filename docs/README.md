@@ -5,7 +5,7 @@
 | [implementierungsstand.md](implementierungsstand.md) | implementierter Umfang, Nachweise und Grenzen | **aktuell** |
 | [api.md](api.md) | TypeScript-, Dienst- und Remote-API | **aktuell** |
 | [Vollständige Namensumstellung](namensumstellung-2026-10-18.md) | einheitliche Namen, Speicher-/Bundle-Formatbruch, Prüfnachweise und Betriebsgrenzen | lokal umgesetzt; bestehende Stores/externes Deployment separat |
-| [umstellung-ohne-pi-durable.md](umstellung-ohne-pi-durable.md) | eigenständiger Space-Host, Haltbarkeit, Datenmigration und Abnahme ohne pi-durable | detaillierter Ziel- und Arbeitsplan; U0 erhoben, ab U1 offen |
+| [umstellung-ohne-pi-durable.md](umstellung-ohne-pi-durable.md) | eigenständiger Space-Host, Haltbarkeit, Datenmigration und Abnahme ohne pi-durable | detaillierter Ziel- und Arbeitsplan; U0 erhoben, U1 weitgehend umgesetzt |
 | [umstellung-u0-bestand.md](umstellung-u0-bestand.md) | U0: Importgraph, Dokumentkatalog, Ausgangstests, Lastprofil, Grenzwerte | Bestand vom 2026-10-22; Entscheidungen D1–D4 offen |
 | [UI-Mockups](ui-mockups/UI-MOCKUPS.md) | Galerie der Dashboard-Entwürfe | UI-Konzept |
 | [spaces-v1.md](_attic/spaces-v1.md) | lokaler Stand vom 2026-10-07 | historisch |

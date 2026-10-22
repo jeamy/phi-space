@@ -8,7 +8,7 @@ import {dirname} from 'node:path';
 import type {Context} from './context.ts';
 import type {Storage,StorageWrite,DocumentId,DocumentRecord,Seq} from '@earendil-works/pi-durable';
 import {canonicalJson,digestJson} from './canonical.ts';
-import {CommitSealed,SyncBudgetExceeded} from './commit-sealed.ts';
+import {CommitSealed} from './commit-sealed.ts';
 import {limitCheckpointBytes} from './doc.ts';
 import type {Json} from './core.ts';
 import { canonicalCopy } from './json.ts';
@@ -362,7 +362,8 @@ export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,pe
     await o.assertPrimary();const seq=await apply(storage,journal,sealed,ctx);if(seq===null)throw new PrimarySyncBlocked('unexpected already-applied candidate');return seq;
    }catch(e){if(sealed){poisoned=true;try{o.onPoisoned?.({revision:sealed.revision,hash:sealed.hash});}catch{}throw new CommitSealed(sealed,e);}
     // Refused before sealing for lack of journal budget: no storage effect, so the session stays usable.
-    if(e instanceof SyncJournalFull)throw new SyncBudgetExceeded(e.message,{cause:e});throw e;}finally{busy=false;}
+    // (pi-durable's own refusal type, loaded only here: the journal wraps pi-durable storage until U4)
+    if(e instanceof SyncJournalFull){const {SyncBudgetExceeded}=await import('./store/legacy.ts');throw new SyncBudgetExceeded(e.message,{cause:e});}throw e;}finally{busy=false;}
   };
  }});
 }
