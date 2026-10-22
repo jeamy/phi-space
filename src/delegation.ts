@@ -1,6 +1,7 @@
 // AP 2.2: supervisor-issued leases and double-signed, principal-bound delegation.
 import type {Context} from "./context.ts";
-import {defineDocFamily, type Tx} from "@earendil-works/pi-durable";
+import type { StoreTx } from "./store/types.ts";
+import { defineDocFamily } from "./store/documents.ts";
 import {randomUUID} from "node:crypto";
 
 import type {Algorithm, AuthState, KeyDirectory, Signer} from "./auth.ts";
@@ -89,7 +90,7 @@ export const ControlReplicaMarker =
 /** Maximum clock uncertainty between control and router hosts for a router change. */
 export const ROUTER_CHANGE_SKEW_MS = 5_000;
 const epochKey = (authority: string, space: string) => canonicalJson([ authority, space ]);
-async function fencePending(tx: Tx, space: string, now: number,
+async function fencePending(tx: StoreTx, space: string, now: number,
                             e: {routerEpoch: number; controlPrimaryEpoch : number}) {
     const s = await spaceDoc(tx, space, now), claims = Object.values(s.rpc?.claims ?? {});
     for (const w of s.waiters) {
@@ -439,7 +440,7 @@ export class DelegationVerifier {
                 if (this.now() >= until)
                     throw new DelegationDenied("delegation expired before decision");
             },
-            checkTx : async (tx: Tx) => {
+            checkTx : async (tx: StoreTx) => {
                 const e = await tx.doc(DelegationEpochs, key, null);
                 if (e.routerEpoch > l.routerEpoch ||
                     e.controlPrimaryEpoch > l.controlPrimaryEpoch ||

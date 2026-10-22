@@ -21,7 +21,7 @@
 // is still open. After that only `createEnroll` of an admin exists (hosts and members, never admins).
 import { createHash, randomBytes } from "node:crypto";
 import type { Context } from "./context.ts";
-import type { Session } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import { canonicalJson } from "./canonical.ts";
@@ -49,7 +49,7 @@ export type EnrollRec = {
 	bootstrap: boolean;
 	state: "open" | "consumed" | "invalid";
 };
-type Host = Pick<Session, "commit" | "snapshot">;
+type Host = Pick<StoreHost, "commit" | "snapshot">;
 
 export class BootstrapClosed extends Error {}
 export class EnrollError extends Error {}

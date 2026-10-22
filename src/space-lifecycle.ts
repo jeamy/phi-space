@@ -4,7 +4,7 @@
 // federation Member and retains no claims or mailbox results; its spaceId stays reserved as a tombstone.
 // The control host sends signed instructions; each host verifies them against the pinned control key.
 import type { Context } from "./context.ts";
-import { defineDoc } from "@earendil-works/pi-durable";
+import { defineDoc } from "./store/documents.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost } from "./client.ts";

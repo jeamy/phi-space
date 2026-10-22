@@ -1,7 +1,8 @@
 import {ProfileTransitions} from './profile-transition-doc.ts';
 // Authoritative policy persistence and supervisor signature; pure routing is separate.
 import type {Context} from './context.ts';
-import {defineDocFamily, type Tx} from '@earendil-works/pi-durable';
+import type { StoreTx } from './store/types.ts';
+import { defineDocFamily } from './store/documents.ts';
 
 import type {Algorithm, Signer} from './auth.ts';
 import {canonicalJson} from './canonical.ts';
@@ -47,7 +48,7 @@ export class FederationPolicyAuthority {
             await this.o.host.snapshot(FederationRouting, this.o.controlSpaceId, this.o.ctx) ??
             {policy : null, members : {}});
     }
-    async applyIn(tx: Tx, p: FederationPolicy, expectedVersion: number): Promise<FederationPolicy> {
+    async applyIn(tx: StoreTx, p: FederationPolicy, expectedVersion: number): Promise<FederationPolicy> {
         return applyFederationPolicyIn(tx, this.o.controlSpaceId, this.o.authorityId, p,
                                        expectedVersion);
     }
@@ -87,7 +88,7 @@ export function verifyFederationPolicy(
     return copy(t.policy);
 }
 
-export async function applyFederationPolicyIn(tx: Tx, controlSpaceId: string, authorityId: string,
+export async function applyFederationPolicyIn(tx: StoreTx, controlSpaceId: string, authorityId: string,
                                               p: FederationPolicy, expectedVersion: number,
                                               allowedRemoval: ReadonlySet < string >=
                                                   new Set()): Promise<FederationPolicy> {
@@ -112,7 +113,7 @@ export async function applyFederationPolicyIn(tx: Tx, controlSpaceId: string, au
  * an installed routing policy in the same commit. Idempotent per transition ID; a crash in between is finished on the
  * next start.
  */
-export async function alignControlReplicaIn(tx: Tx, controlSpaceId: string, authorityId: string,
+export async function alignControlReplicaIn(tx: StoreTx, controlSpaceId: string, authorityId: string,
                                             t: {transitionId: string; primaryEpoch: number; replicaConfigVersion: number; primaryReplica: string},
                                             before: {primaryEpoch: number; primaryReplica: string}): Promise<{aligned: boolean; policyVersion: number | null}> {
     const m = await tx.doc(ControlReplicaMarker, controlSpaceId, null);

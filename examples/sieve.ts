@@ -2,7 +2,8 @@
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { defineDoc } from "../src/store/documents.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createHash } from "node:crypto";
 import { core, FOREVER, PhiSpaces, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";

@@ -1,7 +1,7 @@
 import {RootErasures} from './root-erasure-doc.ts';
 import {ResultExpired} from './claims.ts';
 import type {Context} from './context.ts';
-import {defineDocFamily} from '@earendil-works/pi-durable';
+import { defineDocFamily } from './store/documents.ts';
 // Composite operations bind their complete routing plan before sending any effect.
 
 import {canonicalJson,digestJson} from './canonical.ts';
@@ -107,7 +107,7 @@ export class FederatedSpace {
             throw new TypeError('distinct fixed partition routers required');
     }
     private router(id:string):RouterController {return this.routers[operationPartition(id,this.partitions)]!;}
-    private async layoutIn(tx:import('@earendil-works/pi-durable').Tx) {
+    private async layoutIn(tx:import('./store/types.ts').StoreTx) {
         const layout=await tx.doc(FederationJournalLayout,this.o.id,null),ids=this.routers.map(r=>r.journalId);
         if(layout.partitions===null) {
             // An existing legacy journal cannot silently become invisible in another topology.
@@ -135,7 +135,7 @@ export class FederatedSpace {
         return r;
     }
     private async change<T>(id: string | number, f: (d: {operations: Record<string, Operation>; reservedBytes : number},
-                                tx: import("@earendil-works/pi-durable").Tx) => T | Promise<T>, allowReconciliation=false):
+                                tx: import("./store/types.ts").StoreTx) => T | Promise<T>, allowReconciliation=false):
         Promise<T> {
         await this.o.assertAuthority();
         return this.o.host.commit(async tx => {
@@ -297,7 +297,7 @@ export class FederatedSpace {
             throw new RoutingConflict('operation result/event budget exceeded');
         await this.change(op.id,d => {if(d.operations[op.id]?.hash!==op.hash)throw new RoutingConflict('missing or conflicting parent history');d.operations[op.id] = copy(op);});
     }
-    private async storeParentIn(tx:import('@earendil-works/pi-durable').Tx,op:Operation){
+    private async storeParentIn(tx:import('./store/types.ts').StoreTx,op:Operation){
         if(Buffer.byteLength(JSON.stringify(op))>128*1024)throw new RoutingConflict('operation result/event budget exceeded');
         await this.layoutIn(tx);const layout=await tx.doc(FederationJournalLayout,this.o.id,null);if(layout.reconciliation)throw new RoutingConflict('restore reconciliation blocks Parent completion');
         const partition=operationPartition(op.id,this.partitions),d=await tx.doc(FederationOperations,parentJournalKey(this.o.id,this.partitions,partition),null);if(d.operations[op.id]?.hash!==op.hash)throw new RoutingConflict('missing or conflicting parent history');d.operations[op.id]=copy(op);

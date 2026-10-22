@@ -1,7 +1,8 @@
 // Trusted entry-replication substrate. Not the full-state primary/sync commit protocol.
 import { randomBytes } from 'node:crypto';
 import type { Context } from './context.ts';
-import { defineDocFamily, type Tx } from '@earendil-works/pi-durable';
+import type { StoreTx } from './store/types.ts';
+import { defineDocFamily } from './store/documents.ts';
 import { canonicalJson, digestJson } from './canonical.ts';
 import type { SpaceHost } from './client.ts';
 import type { Principal } from './claims.ts';
@@ -242,7 +243,7 @@ export class EntryReplicationController {
    await this.check('local');return copy(event);
   },this.o.ctx);
  }
- private async importIn(tx:Tx,events:ReplicatedEntryChange[]):Promise<{added:number;revision:number}>{
+ private async importIn(tx:StoreTx,events:ReplicatedEntryChange[]):Promise<{added:number;revision:number}>{
   const s=await tx.doc(EntryReplicas,this.documentKey,null);this.bind(s);const now=this.now();
   s.config??=copy(this.config);s.configHash=this.configHash;const logical=await this.materializeIn(tx,s),previous=logical.events.length;
   const added=this.append(logical,events,now);this.persistOverlay(s,logical,previous);return {added,revision:headOf(logical)};
@@ -271,7 +272,7 @@ export class EntryReplicationController {
   }
   add(base.events.slice(through));if(!raw)this.applyErasures(events);result.events=events;return result;
  }
- private materializeIn(tx: Tx, base: Readonly<EntryReplicationState>) { return this.materialize(base,key=>tx.doc(EntrySnapshotChunks,key,null)); }
+ private materializeIn(tx: StoreTx, base: Readonly<EntryReplicationState>) { return this.materialize(base,key=>tx.doc(EntrySnapshotChunks,key,null)); }
  private persistOverlay(base: EntryReplicationState, logical: EntryReplicationState, previous: number) {
   // The overlay holds its changes in their current (possibly redacted) form; nothing erased stays in it.
   const current=new Map(logical.events.map(e=>[entryChangeId(e),e]));

@@ -1,4 +1,4 @@
-import {defineDocFamily} from "@earendil-works/pi-durable";
+import { defineDocFamily } from "./store/documents.ts";
 import {canonicalJson} from "./canonical.ts";
 // The supervisor of the control space (federation-plan-v3.md 5 and 5.1, AP 1b.5): the only writer of everything in the
 // control space except the `Command` entries of admins. This is its first part, the commands that need no router:
@@ -12,14 +12,14 @@ import {canonicalJson} from "./canonical.ts";
 // reads of `Command`, `Result` and `PeerKey`; `Enroll` (token hashes) and `Bootstrap` never leave the host.
 import { rotateKeyIn, type RotationChallenge } from "./rotation.ts";
 import type { Context } from "./context.ts";
-import type { Session } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
 import * as core from "./core.ts";
 import { NamedSpace, listSpaces, spaceDoc, createSpace } from "./spaces.ts";
 import { CONTROL_SPACE, createEnrollIn, hasAdminKey, revokePeerKeysIn } from "./enroll.ts";
 import type { Connection, IdentityAdapter, Reply } from "./service.ts";
 import type { Json } from "./core.ts";
 
-type Host = Pick<Session, "commit" | "snapshot" | "watchDoc">;
+type Host = Pick<StoreHost, "commit" | "snapshot" | "watchDoc">;
 
 export const COMMAND_KINDS = ["createEnroll", "revokePeer", "rotateKey"] as const;
 export type CommandKind = (typeof COMMAND_KINDS)[number];
@@ -31,7 +31,7 @@ export type SupervisorOptions = {
 	/** Durable remote handlers execute outside Control commits and retain unknown outcomes. */
 	asyncCommands?: Record<string,(commandId:string,args:Record<string,Json>,requestedBy:string)=>Promise<Json>>;
 	/** Trusted synchronous control-only handlers; remote effects must use the router journal. */
-	commands?: Record<string,(tx:import("@earendil-works/pi-durable").Tx,args:Record<string,Json>,requestedBy:string)=>Promise<Json>>;
+	commands?: Record<string,(tx:import("./store/types.ts").StoreTx,args:Record<string,Json>,requestedBy:string)=>Promise<Json>>;
 	/** Called after each processed command (audit): never carries tokens, only ids, kinds and states. */
 	onEvent?: (e: { commandId: string; kind: string; state: string; requestedBy: string; error?: string }) => void;
 	onError?: (e: unknown) => void;
@@ -141,7 +141,7 @@ export class Supervisor {
 export type ControlAccessOptions = {
 	/** The same identity adapter the service uses: its roles decide who is an admin right now (layer B included). */
 	identity: IdentityAdapter;
-	host: Pick<Session, "snapshot">;
+	host: Pick<StoreHost, "snapshot">;
 	ctx: Context;
 };
 const READABLE = ["Command", "Result", "PeerKey"];

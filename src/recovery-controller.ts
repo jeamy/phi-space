@@ -1,5 +1,6 @@
 // A durable single-space recovery state machine. Only the private recovery service receives this capability.
-import { defineDoc, type Session } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
+import { defineDoc } from "./store/documents.ts";
 import type { Context } from "./context.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import { Registry, spaceDoc, snapshotSpace } from "./spaces.ts";
@@ -13,7 +14,7 @@ import * as core from "./core.ts";
 export type DataRestoreRequest = { recoveryId: string; space: string; snapshotRef: string; targetHostId: string; expectedDataIncarnation: string; expectedPrimaryEpoch: number };
 export type RecoveryJob = { request: DataRestoreRequest; sourceHostId: string; argsHash: string; snapshotHash: string; state: "blocked" | "importing" | "waiting" | "installing" | "completed"; priorPermit: SpaceBootPermit; incarnation?: string; primaryEpoch?: number; error?: string };
 export const RecoveryJobs = defineDoc<{ jobs: Record<string, RecoveryJob>; releases: Record<string, { hash: string; count: number; completed: boolean }> }>({ kind: "phi-spaces.recovery-jobs", version: 1, scope: "session", initial: () => ({ jobs: {}, releases: {} }) });
-type RawHost = Pick<Session, "commit" | "snapshot">;
+type RawHost = Pick<StoreHost, "commit" | "snapshot">;
 export type RecoveryControllerOptions = {
 	host: RawHost; ctx: Context; hostId: string; authorityId: string;
 	/** Writable operator capability. Never handed to the normal space service. */

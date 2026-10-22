@@ -1,5 +1,5 @@
 // Persistent transfer metadata and immutable page storage. No public RPC or implicit authorization.
-import { defineDocFamily } from '@earendil-works/pi-durable';
+import { defineDocFamily } from './store/documents.ts';
 import type { ReplicatedEntryChange } from './entry-replication.ts';
 export type EntrySnapshotManifest = {
  version: 1; id: string; spaceId: string; authorityId: string; configHash: string;

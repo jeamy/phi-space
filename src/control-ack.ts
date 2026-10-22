@@ -1,6 +1,7 @@
 import {FederationRouting} from "./federation-policy.ts";
 // Durable control-primary receipt for an independently registered data transition, behind signed private RPC.
-import { defineDoc, type Session } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
+import { defineDoc } from "./store/documents.ts";
 import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { RegisterConflict } from "./recovery-register.ts";
@@ -13,7 +14,7 @@ import type { Algorithm } from "./auth.ts";
 export type ControlAck = { recoveryId: string; space: string; incarnation: string; primaryEpoch: number; authorityId: string; targetHostId: string; argsHash: string };
 export const RecoveryReceipts = defineDoc<{ receipts: Record<string, ControlAck> }>({ kind: "phi-spaces.control-recovery-receipts", version: 1, scope: "session", initial: () => ({ receipts: {} }) });
 export class ControlAckService {
- private o: { host: Pick<Session, "commit" | "snapshot">; ctx: Context; register: RecoveryRegister; hostId: string; authorityId: string; controlSpaceId: string; reconcileDataRestore?:(o:{hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string})=>Promise<unknown>; now?: () => number };
+ private o: { host: Pick<StoreHost, "commit" | "snapshot">; ctx: Context; register: RecoveryRegister; hostId: string; authorityId: string; controlSpaceId: string; reconcileDataRestore?:(o:{hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string})=>Promise<unknown>; now?: () => number };
  constructor(o: ControlAckService["o"]) { this.o = o; }
  async hostKey(call: import("./recovery-service.ts").RecoveryCall): Promise<{ algorithm: Algorithm; publicKey: string } | null> {
   const args = call.args as unknown as ControlAck;

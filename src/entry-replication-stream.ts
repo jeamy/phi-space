@@ -1,5 +1,5 @@
 // Durable per-source receive positions and an explicitly started, cancellable pull worker.
-import { defineDocFamily } from '@earendil-works/pi-durable';
+import { defineDocFamily } from './store/documents.ts';
 import { canonicalJson } from './canonical.ts';
 import type { Json } from './core.ts';
 import type { EntryReplicationController, ReplicatedEntryChange } from './entry-replication.ts';

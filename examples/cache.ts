@@ -1,7 +1,8 @@
 // Atomic key/value operations over a local durable Space. This is not a replicated LWW cache.
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { defineDoc } from "../src/store/documents.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { core, Space, FOREVER, canonicalJson, type SpaceHost } from "../src/index.ts";
 import type { Json, SpaceState } from "../src/core.ts";

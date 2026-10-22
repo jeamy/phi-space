@@ -1,10 +1,10 @@
 import {assertMemberAdmission,permitRoutedWrite} from "./member-admission.ts";
-// The local phi-spaces client over the Session-scoped Space document. Host code, tasks and tools all use this.
+// The local phi-spaces client over the session-scoped Space document. Host code, tasks and tools all use this.
 // Everything here runs against one harness: the harness process is the "space service".
 import type { DecisionAuthorization } from "./service.ts";
 import { readChain as chainPage, type ChainOptions, type ChainPage } from "./read-chain.ts";
 export type { ChainOptions, ChainPage } from "./read-chain.ts";
-import type { Session, Tx } from "@earendil-works/pi-durable";
+import type { StoreHost, StoreTx } from "./store/types.ts";
 import { awaitWithContext } from "./context.ts";
 import type { Context } from "./context.ts";
 import * as core from "./core.ts";
@@ -22,10 +22,10 @@ export type { EntryDraft, Fields, Json, Lease, Limits, Template } from "./core.t
 export { Space };
 
 /** What the client needs; both `Harness` and a tool's `api` provide it. */
-export type SpaceHost = Pick<Session, "commit" | "watchDoc" | "snapshot">;
+export type SpaceHost = Pick<StoreHost, "commit" | "watchDoc" | "snapshot">;
 /** `space`: alias or spaceId of a named space (see `createSpace`); omitted: the default space. */
 export type PhiSpacesOptions = { space?: string; authorityId?: string; maxPending?: number; maxPendingPeer?: number; consumer?: Principal; authorization?: DecisionAuthorization };
-export type Once = { get(tx: Tx): Promise<Json | undefined>; set(tx: Tx, v: Json): Promise<void> };
+export type Once = { get(tx: StoreTx): Promise<Json | undefined>; set(tx: StoreTx, v: Json): Promise<void> };
 export type Snapshot = { readonly entry: Readonly<EntryDraft> };
 export type OpOptions = {
 	txn?: string | null;
@@ -94,7 +94,7 @@ export class PhiSpaces implements SpaceLike {
 	}
 
 	/** This client's space document inside a commit (registers the default space on first use). */
-	private async doc(tx: Tx): Promise<core.SpaceState> { const s=await spaceDoc(tx, this.space, this.now()); await this.options.authorization?.checkTx?.(tx); permitRoutedWrite(s,!!this.options.authorization?.routerEpoch); return s; }
+	private async doc(tx: StoreTx): Promise<core.SpaceState> { const s=await spaceDoc(tx, this.space, this.now()); await this.options.authorization?.checkTx?.(tx); permitRoutedWrite(s,!!this.options.authorization?.routerEpoch); return s; }
 	/** Committed state for snapshot reads. The default space reads its document directly, even before registration. */
 	private async snap(): Promise<Readonly<core.SpaceState> | undefined> {
 		if (this.space === undefined) return this.host.snapshot(Space, this.ctx);

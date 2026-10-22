@@ -1,5 +1,5 @@
 // Check every implemented Root journal in the same Control transaction as removal.
-import type {Tx} from '@earendil-works/pi-durable';
+import type { StoreTx } from './store/types.ts';
 
 import {canonicalJson,digestJson} from './canonical.ts';
 import {FederationJournalLayout,parentJournalKey,validateJournalPartitions} from './federation-journals.ts';
@@ -8,7 +8,7 @@ import {RouterCommands, RouterJournal} from './router.ts';
 import {spaceDoc} from './spaces.ts';
 
 export async function memberReferencesIn(
-    tx: Tx, o: {controlSpaceId: string; routerId : string; federationId : string}, memberId: string,
+    tx: StoreTx, o: {controlSpaceId: string; routerId : string; federationId : string}, memberId: string,
     spaceId: string): Promise<boolean> {
     const layout=await tx.doc(FederationJournalLayout,o.federationId,null),partitions=layout.partitions??1;
     validateJournalPartitions(partitions);

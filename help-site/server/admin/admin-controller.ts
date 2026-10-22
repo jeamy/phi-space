@@ -11,7 +11,7 @@
 //   - Live alerts (`collectAlerts`) and audit log (`auditLog`)
 
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, generateKeyPairSync, randomBytes, scryptSync, sign, timingSafeEqual } from "node:crypto";
-import { defineDoc } from "@earendil-works/pi-durable";
+import { defineDoc } from "../../../src/store/documents.ts";
 import { availableParallelism, freemem, totalmem } from "node:os";
 import type { Context } from "../../../src/context.ts";
 import {

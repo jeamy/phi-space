@@ -1,5 +1,5 @@
 // Single-mode member installation: stopped normal runtime, blocked admission, bounded local reconciliation and outside-snapshot ACK.
-import type { Session } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
@@ -9,7 +9,7 @@ import type { HostBootState, SpaceBootPermit } from "./boot.ts";
 import { listSpaces, spaceDoc, snapshotSpace } from "./spaces.ts";
 import * as core from "./core.ts";
 export type MemberAuthorityAck = { hostId: string; recoveryId: string; authorityId: string; bootDigest: string; spaces: Record<string,{ incarnation: string; primaryEpoch: number }> };
-export type MemberTransitionOptions = { host: Pick<Session,"commit" | "snapshot">; ctx: Context; hostId: string; external: RecoveryRegister; installed: RecoveryRegister; pinned: { algorithm: Algorithm; publicKey: string }; assertQuiesced: () => Promise<{ hostId: string; normalStopped: boolean; restartLocked: boolean }>; now?: () => number };
+export type MemberTransitionOptions = { host: Pick<StoreHost,"commit" | "snapshot">; ctx: Context; hostId: string; external: RecoveryRegister; installed: RecoveryRegister; pinned: { algorithm: Algorithm; publicKey: string }; assertQuiesced: () => Promise<{ hostId: string; normalStopped: boolean; restartLocked: boolean }>; now?: () => number };
 const digest = digestJson;
 export class MemberTransitionInstaller {
  private o: MemberTransitionOptions;

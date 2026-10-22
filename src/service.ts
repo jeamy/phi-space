@@ -71,7 +71,7 @@ export type ErrorCode =
 export type ClaimReceipt={protocol:'phi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PhiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
-export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("@earendil-works/pi-durable").Tx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
+export type DecisionAuthorization = { principal?: Principal; transportPeerId?: string; renewalWaiterId?: string | null; allowClosedWaiter?:boolean; routerEpoch?: number; controlPrimaryEpoch?: number; policyVersion?: number; knownRequest?: boolean; checkTx?: (tx: import("./store/types.ts").StoreTx) => Promise<void>; validUntil: number; roles: string[]; canExecutePending(method: string, template: core.Template): boolean; check(): void };
 /** lww/set types of a Space served by its entry replication controller (docs/abnahme/ap3-replikation.md, step 1). */
 export type MergeAdapter = { controller: import("./entry-replication.ts").EntryReplicationController; rules: readonly import("./entry-replication.ts").EntryReplicationRule[] };
 /** v3 7.2: merge types know no exclusive allocation (take, transactions, waits, lease changes). */

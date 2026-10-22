@@ -3,7 +3,7 @@
 // complete only when every Member confirmed it with a matching ACK. A crash or a lost reply resends the same
 // command (same revision and command ID), which the gate answers with its stored confirmation.
 import type { Context } from "./context.ts";
-import { defineDoc } from "@earendil-works/pi-durable";
+import { defineDoc } from "./store/documents.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost, SpaceLike } from "./client.ts";
 import { spaceDoc } from "./spaces.ts";

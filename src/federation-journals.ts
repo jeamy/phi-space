@@ -1,5 +1,5 @@
 // Fixed journal topology. IDs are retained; partitions are never reassigned or resized.
-import {defineDocFamily} from '@earendil-works/pi-durable';
+import { defineDocFamily } from './store/documents.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 
 export const FederationJournalLayout = defineDocFamily<{

@@ -1,5 +1,6 @@
 // Operator-only control restoration. Runs under an exclusive recovery harness owner, with no normal gate or agents.
-import { defineDoc, type Session } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
+import { defineDoc } from "./store/documents.ts";
 import type { Context } from "./context.ts";
 import type { Signer, Algorithm } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
@@ -15,7 +16,7 @@ export type ControlRestoreRequest = { recoveryId:string; controlSpaceId:string; 
 export type ControlRestoreJob = { request:ControlRestoreRequest; argsHash:string; snapshotHash:string; proof:SignedAuthorityTransition; sourceHostId:string; state:"importing"|"members"|"waiting"|"completed" };
 export const ControlRecoveryJobs=defineDoc<{jobs:Record<string,ControlRestoreJob>}>({kind:"phi-spaces.control-recovery-jobs",version:1,scope:"session",initial:()=>({jobs:{}})});
 export type ReauthorizeKey={peerId:string;publicKey:string;algorithm:Algorithm;roles:string[];scope:string[]};
-export type ControlRecoveryOptions={host:Pick<Session,"commit"|"snapshot">;ctx:Context;hostId:string;external:RecoveryRegister;installed:RecoveryRegister;operator:Signer;supervisor:Signer;loadSnapshot:(ref:string)=>Promise<core.SpaceState>;verifyFence:(hostId:string)=>Promise<{hostId:string;restartLocked:boolean}>;assertQuiesced:()=>Promise<{hostId:string;normalStopped:boolean;restartLocked:boolean}>;now?:()=>number};
+export type ControlRecoveryOptions={host:Pick<StoreHost,"commit"|"snapshot">;ctx:Context;hostId:string;external:RecoveryRegister;installed:RecoveryRegister;operator:Signer;supervisor:Signer;loadSnapshot:(ref:string)=>Promise<core.SpaceState>;verifyFence:(hostId:string)=>Promise<{hostId:string;restartLocked:boolean}>;assertQuiesced:()=>Promise<{hostId:string;normalStopped:boolean;restartLocked:boolean}>;now?:()=>number};
 const digest=digestJson;
 export class ControlRecoveryController {
  private o:ControlRecoveryOptions;

@@ -2,7 +2,7 @@ import {ProfileTransitions} from './profile-transition-doc.ts';
 // Durable membership transitions; remote calls run outside Control commits.
 import {validateProfileOnlyChange} from './profile-policy.ts';
 import type {Context} from './context.ts';
-import {defineDocFamily} from '@earendil-works/pi-durable';
+import { defineDocFamily } from './store/documents.ts';
 
 import type {Algorithm, Signer} from './auth.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
@@ -331,7 +331,7 @@ export class MembershipController {
         assertAuthority : () => Promise<void>;
         authorize : () => Promise<void>;
         hasReferences : (memberId: string) => Promise<boolean>;
-        hasReferencesIn : (tx: import("@earendil-works/pi-durable").Tx, memberId: string,
+        hasReferencesIn : (tx: import("./store/types.ts").StoreTx, memberId: string,
                            spaceId: string) => Promise<boolean>
     };
     constructor(o: MembershipController['o']) { this.o = o; }

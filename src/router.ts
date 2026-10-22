@@ -1,5 +1,6 @@
 // AP 2.1: durable command orchestration. Boot/RouterLease/delegation wiring is AP 2.2.
-import {defineDocFamily, type Session} from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
+import { defineDocFamily } from "./store/documents.ts";
 import type {Context} from "./context.ts";
 import {canonicalJson,digestJson} from "./canonical.ts";
 import {argHash, ResultExpired, type Principal} from "./claims.ts";
@@ -117,9 +118,9 @@ const specOf = (c: RouterCommand) => ({
         ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest,generationAdmitUntil}) =>
             ({target, principal, generation, method, args, resultBudgetBytes,policyVersion,targetRequest,generationAdmitUntil}))
 });
-export type RouterCommitHook=(command:Readonly<RouterCommand>,tx:import('@earendil-works/pi-durable').Tx,context:{roomBytes:number;releaseFuture:(id:string)=>void})=>Promise<void>;
+export type RouterCommitHook=(command:Readonly<RouterCommand>,tx:import('./store/types.ts').StoreTx,context:{roomBytes:number;releaseFuture:(id:string)=>void})=>Promise<void>;
 export type RouterOptions = {
-    host: Pick<Session, "commit"|"snapshot">; ctx: Context; routerId: string; authorityId: string;
+    host: Pick<StoreHost, "commit"|"snapshot">; ctx: Context; routerId: string; authorityId: string;
     target: RouterTarget;
     assertAuthority: () => Promise<void>;
     now?: () => number;
@@ -244,7 +245,7 @@ export class RouterController {
         if(bytes(i)>this.limits.maxIndexBytes)throw new RouterBudgetExceeded('router index exceeds budget');
     }
     /** Only inside a caller-owned transaction with fresh authority guards before/after commit. */
-    async reserveFutureIn(tx:import('@earendil-works/pi-durable').Tx,id:string,slots:number,bytesPerSlot=this.limits.maxCommandBytes){
+    async reserveFutureIn(tx:import('./store/types.ts').StoreTx,id:string,slots:number,bytesPerSlot=this.limits.maxCommandBytes){
         if(!this.ready)throw new RouterBlocked('router is recovering');const i=await tx.doc(RouterJournal,this.o.routerId,null);
         if(i.mode!=='ready'||i.authorityId!==this.o.authorityId||hash(i.limits)!==hash(this.limits))throw new RouterBlocked('reservation owner or budget changed');
         this.reserveFutureValue(i,id,slots,bytesPerSlot);
@@ -301,7 +302,7 @@ export class RouterController {
         await ack();
         return c;
     }
-    private async update(id: string, f: (c: RouterCommand,tx:import("@earendil-works/pi-durable").Tx,i:Index) => void|Promise<void>): Promise<RouterCommand> {
+    private async update(id: string, f: (c: RouterCommand,tx:import("./store/types.ts").StoreTx,i:Index) => void|Promise<void>): Promise<RouterCommand> {
         return this.change(async (i, tx) => {
             const d = await tx.doc(RouterCommands, commandKey(this.o.routerId, id), null);
             if (!d.command || !i.refs[id]) throw new RouterBlocked("missing command history");
