@@ -1686,3 +1686,14 @@ test("a backup of the running space comes back with restore, only while no space
 		assert.equal((await readdir(`${dir}/backups`)).length, 2);
 	} finally { await stack.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+t("a stop aborts the model call in progress: the model process sees the run gone and stops the call", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1", fakes: ["fake/team"] }); // room "stop3": a call runs until stopped
+	try {
+		await post(srv.url, "/api/sessions/stop3/task", { custom: { fn: "f", prompt: "x", cases: [{ args: [1], expect: 1 }], verify: false } });
+		assert.equal((await post(srv.url, "/api/sessions/stop3/run", { agents: 1, gens: 1, polish: 0, contenders: ["fake/team"] })).status, 200);
+		await until(async () => (await fakeCalls(srv, "stop3")).some((c) => c.kind === "contribute"));
+		assert.equal((await post(srv.url, "/api/sessions/stop3/stop", {})).status, 200);
+		await until(async () => (await fakeCalls(srv, "stop3")).some((c) => c.kind === "aborted"), 10_000);
+	} finally { await srv.close(); }
+});

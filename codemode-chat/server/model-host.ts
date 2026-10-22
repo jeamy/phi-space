@@ -28,6 +28,8 @@ type FakeModule = { models: () => Promise<string[]>; llmFor: (session: string, o
 
 /** A call's transaction lease, renewed while the model answers: a model process that dies holds its call this long. */
 const CALL_LEASE_MS = 30_000;
+/** How often a call in progress looks whether its run is still there. */
+const RUN_WATCH_MS = 2_000;
 /** How long an answer waits to be fetched (an agent that died leaves it behind). */
 const RESULT_LEASE_MS = 10 * 60_000;
 const SPEND_LEASE_MS = 26 * 3600_000;
@@ -129,10 +131,13 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				const args = await callArgs(space, call);
 				// every paid call counts, also when the work fails after it: the meter of the real models, else what the
 				// answer (or a fake's error) reports
-				const m = await metered(() => answer(apiFor(call.session), call.kind, args, search));
+				// a call of a run is stopped with it: while the model works, the run is looked for every 2 s
+				const stop = new AbortController();
+				const watch = call.runId ? setInterval(() => { void readExisting(space, { type: "CodeRun", fields: { session: call.session, runId: call.runId! } }).then((r) => { if (!r) stop.abort(); }, () => {}); }, RUN_WATCH_MS) : undefined;
+				const m = await metered(() => answer(apiFor(call.session), call.kind, args, search), stop.signal).finally(() => clearInterval(watch));
 				const said = m.value?.usage ?? (m.error as { usage?: Usage } | undefined)?.usage;
 				usage = m.usage.total > 0 || m.usage.costUsd > 0 ? m.usage : said;
-				if (m.error !== undefined) throw m.error;
+				if (m.error !== undefined) throw stop.signal.aborted ? new Error("the run is over") : m.error;
 				result = { ok: true, value: { ...m.value!.value, ...(usage ? { usage } : {}) } };
 			} catch (err) { result = { ok: false, error: String((err as Error).message ?? err).slice(0, 300) }; }
 			// the usage rides along on a failure too: the agent books it when it takes the result

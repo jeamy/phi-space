@@ -537,11 +537,16 @@ export function usageOf(res: any): Usage {
 export const addUsage = (a: Usage, b: Usage): Usage => ({ input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite, total: a.total + b.total, costUsd: a.costUsd + b.costUsd });
 export const NO_USAGE: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, costUsd: 0 };
 
+/** The stop signal of the work in progress (`metered`), for a model team that is not the real models (tests). */
+export const callSignal = (): AbortSignal | undefined => meter.getStore()?.signal;
+
 /** What the model calls inside `metered` used, added up as they are answered: also the calls of work that fails
  *  afterwards (an empty answer, code that cannot be handed in, research without results), which are paid all the same. */
-const meter = new AsyncLocalStorage<{ usage: Usage }>();
-export async function metered<T>(fn: () => Promise<T>): Promise<{ value?: T; error?: unknown; usage: Usage }> {
-	const m = { usage: NO_USAGE };
+const meter = new AsyncLocalStorage<{ usage: Usage; signal?: AbortSignal }>();
+/** `signal`: the work is no longer wanted (its run was stopped): a call waiting to start does not start, a call in
+ *  progress is aborted at the provider. */
+export async function metered<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<{ value?: T; error?: unknown; usage: Usage }> {
+	const m = { usage: NO_USAGE, ...(signal ? { signal } : {}) };
 	try { return { value: await meter.run(m, fn), usage: m.usage }; }
 	catch (error) { return { error, usage: m.usage }; }
 }
@@ -553,6 +558,7 @@ async function guardedCall(modelLabel: string | undefined, system: string, user:
 	if (!s || !on) throw new Error("model agents are off");
 	const model = modelLabel ? whitelist(await s.models.getAvailable()).find((m) => `${m.provider}/${m.id}` === modelLabel) : s.model;
 	if (!model) throw new Error(`model ${modelLabel} is not allowed`);
+	const stopSignal = meter.getStore()?.signal;
 	if (callGate) await callGate();
 	else for (;;) {
 		if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); calls = 0; }
@@ -563,12 +569,13 @@ async function guardedCall(modelLabel: string | undefined, system: string, user:
 	}
 	calls++; dayCalls++;
 	if (inFlight >= 2) await new Promise<void>((ok) => slotWaiters.push(ok)); // wait for a free slot instead of failing
+	if (stopSignal?.aborted) { slotWaiters.shift()?.(); throw new Error("the run is over"); } // not started: nothing paid
 	inFlight++;
 	try {
 		const res: any = await s.models.completeSimple(model, {
 			systemPrompt: system,
 			messages: [{ role: "user", content: user, timestamp: Date.now() }],
-		}, { maxTokens, signal: AbortSignal.timeout(60_000) });
+		}, { maxTokens, signal: stopSignal ? AbortSignal.any([AbortSignal.timeout(60_000), stopSignal]) : AbortSignal.timeout(60_000) });
 		const m = meter.getStore();
 		if (m) m.usage = addUsage(m.usage, usageOf(res)); // paid, whatever happens with the answer
 		const text = (res?.content ?? []).filter((x: any) => x?.type === "text").map((x: any) => x.text).join("");

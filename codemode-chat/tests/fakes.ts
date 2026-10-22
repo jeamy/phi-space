@@ -3,6 +3,7 @@
 // FakeCall entries (`log`), and a team that must hang until the test says so waits for a FakeGate entry.
 import type { SpaceLike } from "../../src/index.ts";
 import { taskById } from "../server/tasks.ts";
+import { callSignal } from "../server/llm.ts";
 
 type Log = (e: Record<string, unknown>) => Promise<void>;
 /** A fake team: any of the model process's call kinds (the arguments are what llm.ts would get). */
@@ -57,6 +58,14 @@ const scenarios: Record<string, (session: string, space: SpaceLike, log: Log) =>
 	}),
 	// code that cannot be handed in (empty): paid all the same
 	rej1: () => ({ contribute: async () => ({ source: "  ", model: "fake/team", usage: use(1000, 0.01) }) }),
+	// a call that runs until it is stopped (the stop signal the real models get as the provider's abort)
+	stop3: (_s, _space, log) => ({ contribute: async () => {
+		await log({ kind: "contribute" });
+		const signal = callSignal(), end = Date.now() + 60_000;
+		while (!signal?.aborted && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+		await log({ kind: signal?.aborted ? "aborted" : "ran out" });
+		throw new Error("aborted");
+	} }),
 	// a stop while two calls hang and a third waits in the queue
 	stop2: (s, space, log) => ({ contribute: async (c) => { await log({ kind: "contribute", agent: c.agent }); await gate(space, s); return { source: "function double(x){ return x * 2 }", model: "fake/team" }; } }),
 	stop1: (s, space, log) => ({ contribute: async () => { await log({ kind: "contribute" }); await gate(space, s); return { source: "function double(x){ return x * 2 }", model: "fake/team", usage: use(5, 0.001) }; } }),
