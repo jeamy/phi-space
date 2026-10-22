@@ -79,6 +79,22 @@ export function announce(space: SpaceLike, role: ProcessRole): { stop: () => Pro
  *  once when there is none, and waits while one is held. Only a definite null means gone. */
 export const HELD_WAIT_MS = 10_000;
 
+/** How long an idle role waits for work in one request. The client polls a blocking call, so this is not bounded by
+ *  the call timeout (CODEMODE_IDLE_WAIT_MS). */
+export const IDLE_WAIT_MS = Math.max(1000, Number(process.env.CODEMODE_IDLE_WAIT_MS ?? 60_000));
+
+/** Waits until an entry of `tmpl` is there, holding nothing: a read without a transaction. An idle role so costs one
+ *  request (one claim, kept for a day) per wait, not a transaction begun, a take and an abort every few seconds
+ *  (docs/umstellung-ohne-pi-durable.md, U2d). True when one is there to take; false when the wait ran out or `halt`
+ *  ended it (a role that stops does not wait for the read; the space drops it at its deadline). */
+export async function awaitWork(space: SpaceLike, tmpl: Template, halt?: AbortSignal, waitMs = IDLE_WAIT_MS): Promise<boolean> {
+	if (halt?.aborted) return false;
+	const read = space.read(tmpl, waitMs).then((e) => e !== null);
+	if (!halt) return read;
+	read.catch(() => {}); // after a halt nobody waits for it
+	return Promise.race([read, new Promise<boolean>((r) => halt.addEventListener("abort", () => r(false), { once: true }))]);
+}
+
 /** An entry another transaction held for longer than the wait: it may still be there. */
 export class StillHeld extends Error {}
 

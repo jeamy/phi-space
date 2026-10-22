@@ -19,7 +19,7 @@ import { searchesPerDay, webSearch } from "./search.ts";
 import { awaitQuota, takeQuota } from "./quota.ts";
 import { isText, type Task } from "./tasks.ts";
 import { ipTokensPerDay, today } from "./limits.ts";
-import { announce, connectSpace, keepAlive, readExisting } from "./space.ts";
+import { announce, awaitWork, connectSpace, keepAlive, readExisting } from "./space.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. */
 export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; critique: typeof llmCritique; propose: typeof llmPropose; vote: typeof llmVote; judge: typeof llmJudge; research: typeof llmResearch; verify: typeof llmVerifier; criteria: typeof llmCriteria; reviewCriteria: typeof llmReviewCriteria };
@@ -33,7 +33,6 @@ const RUN_WATCH_MS = 2_000;
 /** How long an answer waits to be fetched (an agent that died leaves it behind). */
 const RESULT_LEASE_MS = 10 * 60_000;
 const SPEND_LEASE_MS = 26 * 3600_000;
-const WAIT_MS = 5_000;
 
 const real: ModelApi = { models: llmModels, contribute: llmContribution, critique: llmCritique, propose: llmPropose, vote: llmVote, judge: llmJudge, research: llmResearch, verify: llmVerifier, criteria: llmCriteria, reviewCriteria: llmReviewCriteria };
 
@@ -88,6 +87,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	const apiFor = (session: string): ModelApi => (fakes ? { ...missing(session), models: fakes.models, ...fakes.llmFor(session, { space, log: log(session) }) } as ModelApi : real);
 	const open = new Set<string>();
 	let stopping = false;
+	const halt = new AbortController();
 	// the limits every model process shares: calls per minute and per UTC day, web searches per day (quota.ts)
 	setCallGate(() => awaitQuota(space, "llm", callLimits(), "daily model budget used up"));
 	const search = (q: string) => webSearch(q, { allowed: async () => (await takeQuota(space, "search", { perDay: searchesPerDay() })).ok });
@@ -114,11 +114,12 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 
 	/** One call: taken, answered and the answer written in one transaction. */
 	const answerOne = async (): Promise<boolean> => {
+		if (!(await awaitWork(space, { type: "LlmCall" }, halt.signal))) return false; // idle: waiting holds nothing
 		const t = await space.createTransaction(CALL_LEASE_MS);
 		open.add(t.id);
 		const stop = keepAlive(space, t.id, CALL_LEASE_MS);
 		try {
-			const e = await space.take({ type: "LlmCall" }, WAIT_MS, { txn: t.id });
+			const e = await space.take({ type: "LlmCall" }, NO_WAIT, { txn: t.id });
 			if (!e) { await space.abort(t.id); return false; }
 			const call = e.fields as unknown as LlmCall;
 			let result: { ok: boolean; value?: Record<string, unknown>; error?: string }, usage: Usage | undefined;
@@ -160,7 +161,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	const loops = Array.from({ length: Math.max(1, o.parallel ?? Number(process.env.CODEMODE_MODEL_PARALLEL ?? 2)) }, () => worker());
 	return {
 		async close() {
-			stopping = true; clearInterval(beat);
+			stopping = true; halt.abort(); clearInterval(beat);
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
 			await Promise.race([Promise.allSettled(loops), new Promise((r) => setTimeout(r, 3000))]);
 			if (infoLease) await space.cancel(infoLease).catch(() => {});

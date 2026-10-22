@@ -828,7 +828,9 @@ t("the cross-check refuses a rule that misses what makes a result right (a lax g
 
 const boardRun = async (srv: { url: string }, room: string, body: Record<string, unknown>) => {
 	assert.equal((await post(srv.url, `/api/sessions/${room}/run`, { agents: 2, gens: 3, perAgent: 1, polish: 0, contenders: ["fake/team"], board: true, ...body })).status, 200);
-	return until(async () => { const s = (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any; return s.run && !s.run.active ? s : false; }, 60_000);
+	const look = async () => (await (await fetch(`${srv.url}/api/sessions/${room}`)).json()) as any;
+	// on a timeout the run as the page sees it (its counters say which items are still open)
+	return until(async () => { const s = await look(); return s.run && !s.run.active ? s : false; }, 60_000, async () => (await look()).run);
 };
 
 t("work board: a teammate critiques an attempt, another revises it with that critique, and the task gets solved", async () => {

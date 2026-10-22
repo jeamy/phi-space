@@ -12,7 +12,7 @@ import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
 import type { Codemode } from "./judge.ts";
 import { execTarget } from "./room.ts";
 import { EXEC_TIMEOUT_MS, execRunning, execute, type ExecEvent } from "./runner.ts";
-import { keepAlive } from "./space.ts";
+import { awaitWork, keepAlive } from "./space.ts";
 
 export type ExecRequest = { execId: string; session: string; candidateId: string; call: string; ts: number };
 
@@ -30,15 +30,16 @@ export const EXEC_PICKUP_MS = 10_000;
 /** Takes requests while this process has a free runner and runs each; `close()` stops taking and aborts the runs. */
 export function serveExec(space: SpaceLike, cm: Codemode, host: string): { close: () => Promise<void> } {
 	let stopping = false, txn: string | null = null;
-	const runs = new Set<AbortController>();
+	const runs = new Set<AbortController>(), halt = new AbortController();
 	const loop = (async () => {
 		while (!stopping) {
 			if (execRunning() >= PARALLEL) { await new Promise((r) => setTimeout(r, 200)); continue; }
 			try {
-				// the waiting take under a transaction: a shutdown aborts it, so it does not catch a request for a process that is gone
+				// idle, it waits holding nothing (awaitWork); the take is under a transaction a shutdown aborts
+				if (!(await awaitWork(space, { type: "ExecRequest" }, halt.signal))) continue;
 				const t = await space.createTransaction(30_000);
 				txn = t.id;
-				const e = await space.take({ type: "ExecRequest" }, 5_000, { txn: t.id }).finally(() => { txn = null; });
+				const e = await space.take({ type: "ExecRequest" }, NO_WAIT, { txn: t.id }).finally(() => { txn = null; });
 				if (!e) { await space.abort(t.id).catch(() => {}); continue; }
 				await space.commit(t.id);
 				const ac = new AbortController();
@@ -49,7 +50,7 @@ export function serveExec(space: SpaceLike, cm: Codemode, host: string): { close
 	})();
 	return {
 		async close() {
-			stopping = true;
+			stopping = true; halt.abort();
 			if (txn) await space.abort(txn).catch(() => {});
 			for (const ac of runs) ac.abort();
 			await Promise.race([loop, new Promise((r) => setTimeout(r, 2000))]);

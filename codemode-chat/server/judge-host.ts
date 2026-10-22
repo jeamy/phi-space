@@ -12,15 +12,13 @@ import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
-import { announce, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld } from "./space.ts";
+import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld } from "./space.ts";
 import { taskFromSpec } from "./tasks.ts";
 
 /** A judge's transaction lease, renewed while it judges: a dead judge's candidate is back within this time
  *  (CODEMODE_JUDGE_LEASE_MS). The sandbox holds the judge's thread while the code runs, so no renewal comes during a
  *  case: by default the lease outlasts the longest time limit a task may set (CODEMODE_MAX_TIMEOUT_S) by 30 s. */
 const TXN_LEASE_MS = process.env.CODEMODE_JUDGE_LEASE_MS ? Math.max(1000, Number(process.env.CODEMODE_JUDGE_LEASE_MS)) : maxTimeoutMs() + 30_000;
-/** How long one blocking take waits for a candidate (below the client's call timeout). */
-const WAIT_MS = 5_000;
 
 /** A judge that dies hard while judging (its process killed, the sandbox taking it down) leaves its JudgeStart marker
  *  behind; a candidate with this many of them gets a failed verdict instead of taking down the next judge too. */
@@ -34,13 +32,15 @@ const lineageOf = (f: Record<string, any>) => Object.fromEntries(["role", "based
 /** One round: wait for a candidate, judge it, write the verdict. False when none came. `open` holds the transactions
  *  in progress, so a judge that is shut down can abort them: a waiting take is kept in the space (it outlives the
  *  process, even a restart of the space) and would otherwise catch the next candidate for a judge that is gone. */
-export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl: number, open = new Set<string>()): Promise<boolean> {
+export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl: number, open = new Set<string>(), halt?: AbortSignal): Promise<boolean> {
+	// idle, the judge waits holding nothing; the transaction begins when there is a candidate (another judge may be first)
+	if (!(await awaitWork(space, { type: "CodeCandidate" }, halt))) return false;
 	const t = await space.createTransaction(TXN_LEASE_MS);
 	open.add(t.id);
 	const stop = keepAlive(space, t.id, TXN_LEASE_MS);
 	let marker: string | null = null, stopMarker = () => {}, start: string | null = null, f: Record<string, any> | null = null;
 	try {
-		const c = await space.take({ type: "CodeCandidate" }, WAIT_MS, { txn: t.id });
+		const c = await space.take({ type: "CodeCandidate" }, NO_WAIT, { txn: t.id });
 		if (!c) { await space.abort(t.id); return false; }
 		f = c.fields as Record<string, any>;
 		const { session, blockId, candidateId } = f as { session: string; blockId?: string; candidateId: string };
@@ -114,13 +114,13 @@ export async function startJudgeHost(o: { space?: string; judges?: number; cm?: 
 	const space = conn.space, host = hostFacts().name, ttl = entryLeaseMs();
 	const presence = announce(space, "judge");
 	let stopping = false, rounds = 0;
-	const open = new Set<string>();
+	const open = new Set<string>(), halt = new AbortController();
 	const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 	/** A judge: the sandbox slot first, then the transaction. A failing round is logged and retried after a pause. */
 	const worker = async () => {
 		while (!stopping) {
 			try {
-				await sandboxSlot(() => judgeOne(space, cm, host, ttl, open));
+				await sandboxSlot(() => judgeOne(space, cm, host, ttl, open, halt.signal));
 				if (++rounds % 50 === 0) await trimArchive(space).catch(() => {});
 			} catch (e) {
 				if (stopping) return;
@@ -136,7 +136,7 @@ export async function startJudgeHost(o: { space?: string; judges?: number; cm?: 
 		/** Stops the judges: their transactions are aborted (a candidate in judgement comes back at once, a waiting take
 		 *  ends), then the process leaves the space. */
 		async close() {
-			stopping = true;
+			stopping = true; halt.abort();
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
 			await runs.close();
 			await Promise.race([Promise.allSettled(loops), new Promise((r) => setTimeout(r, 2000))]);

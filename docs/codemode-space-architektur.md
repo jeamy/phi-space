@@ -357,6 +357,15 @@ bezahlt; sein Ergebnis holt niemand ab. Abbrechen ließe er sich nur mit einem A
   - Ein Auftrag, der nach dem Ende seines Laufs zurückkommt, wird entfernt.
   - Der model-Prozess führt keinen Aufruf eines beendeten Laufs mehr aus.
 - Keine Busy-Marker im Leerlauf.
+- Warten ohne Transaktion im Leerlauf (`awaitWork` in `server/space.ts`, 2026-10-22):
+  - Judge, agents, model und die ▶-Ausführung warten mit einem `read` ohne Transaktion, bis Arbeit da ist (bis zu
+    60 s, `CODEMODE_IDLE_WAIT_MS`). Erst dann beginnen sie die Transaktion und nehmen ohne Warten; war ein anderer
+    Prozess schneller, beginnt die Runde neu.
+  - Vorher kostete jede Runde alle 5 s drei Claims (Transaktion, wartendes `take`, Abbruch). Gemessen mit dem Stack
+    der lokalen Testumgebung: 23.800 Claims pro Stunde im Leerlauf, jetzt 3.480. Davon sind rund 2.100 die
+    Lebenszeichen der sechs Prozesse.
+  - Ein beendeter Prozess wartet nicht auf sein `read`; der Space verwirft es bei seiner Frist. Ein `read` hält
+    nichts fest, kann also keine Arbeit für einen Prozess fangen, den es nicht mehr gibt.
 
 ## Migrationskarte
 

@@ -69,7 +69,7 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   - weitere Tests auf die Fixture umstellen;
   - die persistenten Tests (`test/support/persistent.ts`) für den eigenen Speicher nachbilden;
   - Zähler statt Vollscan für offene Claims je Absender (`client.ts`);
-  - Leerlauf-Claims im Chat verringern (siehe Stand U2d).
+  - die Leerlaufmessung in der Docker-Testumgebung wiederholen (Docker hing am 2026-10-22).
 
 **Stand U2c (2026-10-22):**
 
@@ -146,6 +146,15 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   | RSS nach Öffnen / nach der Last | 161 MB / 220 MB | ≤ 300 MB |
   | je Operation p50 / p95 / p99 | 1,5 / 3,1 / 4,6 ms | p95 ≤ 5 ms |
   | Rückstand | in Schritten abgeräumt | |
+
+- **Weniger Leerlauf-Claims im Chat:** Die Rollen warten ohne Transaktion auf Arbeit (`awaitWork`, siehe
+  [codemode-space-architektur.md](codemode-space-architektur.md)). Gemessen mit dem Stack der Testumgebung als
+  lokale Prozesse (Space auf SQLite, Web, Judges big und nano, agents, model), 5 Minuten Leerlauf: 3.480 statt 23.800
+  Claims pro Stunde, also rund 84.000 je Tag (Kapazitätswert D2: 150.000).
+- **Beobachtung offen:** Der Chat-Test „a person's thumbs-up counts as earlier material …“ lief nach der Umstellung in
+  zwei von acht vollen Läufen in die 60-s-Frist des zweiten Board-Laufs, allein (auch unter voller CPU-Last) nie. Ein
+  Zusammenhang mit dem Warten ohne Transaktion ist nicht belegt; `boardRun` gibt bei einem Zeitablauf jetzt den Stand
+  des Laufs aus, damit der nächste Fehlschlag die Ursache zeigt.
 
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
