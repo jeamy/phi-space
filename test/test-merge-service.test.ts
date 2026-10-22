@@ -5,13 +5,14 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { createModels } from "@earendil-works/pi-ai/models";
 import { SpaceService, StaticIdentity, DEFAULT_POLICY, EntryReplicationController, listSpaces, type Reply, type Call } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-b": { principal: { peerId: "peer-b" }, roles: ["member"] } });
 const ok = (r: Reply): any => { assert.ok(r.ok, JSON.stringify(r)); return (r as { ok: true; result: unknown }).result; };
 const err = (r: Reply, code: string) => assert.ok(!r.ok && r.error.code === code, JSON.stringify(r));
 
 test("merge types write, read, count, renew and delete through the entry replication controller; exclusive operations are refused", async () => {
-	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const h = await openTestHost(ctx);
 	const s0 = new SpaceService({ host: h, ctx, identity: ids, policy: DEFAULT_POLICY });
 	const g0 = ok(await s0.handle({ method: "generation" }, { peerId: "peer-a" }));void g0;
 	const spaceId = (await listSpaces(h, ctx)).find(i => i.alias === "default")!.spaceId;

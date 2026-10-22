@@ -7,6 +7,7 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { createModels } from "@earendil-works/pi-ai/models";
 import { SpaceService, RemoteSpace, socketTransport, startGate, NetbirdDirectory, GateIdentity, FOREVER, core, type Gate, type GateOptions } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
@@ -36,7 +37,7 @@ class Management {
 		return this;
 	}
 }
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+const memory = () => openTestHost(ctx);
 class Clock { t = 1_000_000; now = () => this.t; }
 
 async function setup(tc: TestContext, o: Partial<GateOptions> = {}, dirOpts: { cacheMs?: number } = {}) {

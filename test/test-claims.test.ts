@@ -8,11 +8,13 @@ import {
 	type Principal, type RequestRef,
 } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
+import type { StoreHost } from "../src/store/types.ts";
 
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+const memory = () => openTestHost(ctx);
 const alice: Principal = { peerId: "peer-a", agentId: "worker-1" };
 class Clock { t = 1_000_000; now = () => this.t; }
-const client = (h: Harness, c: Clock) => new PhiSpaces(h, ctx, c.now);
+const client = (h: StoreHost, c: Clock) => new PhiSpaces(h, ctx, c.now);
 const req = (generation: string, requestId: string, principal = alice): RequestRef => ({ principal, generation, requestId });
 const tick = () => new Promise((r) => setTimeout(r, 30));
 

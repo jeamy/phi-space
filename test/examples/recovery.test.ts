@@ -17,9 +17,10 @@ import { researchSpaces, claimFreshDirectory } from "../../examples/research-sup
 import { parseFeed } from "../../examples/arxiv-tool.ts";
 import { runChat } from "../../examples/chat.ts";
 import { spawn } from "node:child_process";
+import { openTestHost } from "../support/host.ts";
 
 async function memory() {
-  const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+  const h = await openTestHost(ctx);
   return { h, s: new PhiSpaces(h, ctx) };
 }
 const task = { runId: "golomb-4-6", taskId: "golomb-4-task-0", order: 4, maxLength: 6, startPos: 1, endPos: 4, status: "pending" as const };

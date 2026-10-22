@@ -9,9 +9,10 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { createModels } from "@earendil-works/pi-ai/models";
 import { SpaceService, StaticIdentity, RemoteSpace, serveSpace, socketTransport, PhiSpaces, FOREVER, core, type Connection } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-obs": { principal: { peerId: "peer-obs" }, roles: ["observer"] } });
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+const memory = () => openTestHost(ctx);
 const sock = () => { const dir = mkdtempSync(join(tmpdir(), "phi-spaces-sock-")); return { dir, path: join(dir, "space.sock"), done: () => rmSync(dir, { recursive: true, force: true }) }; };
 // A failing assertion must not leave a listening server behind (the run would hang instead of failing).
 const serve = async (t: TestContext, ...a: Parameters<typeof serveSpace>) => { const s = await serveSpace(...a); t.after(() => s.close().catch(() => {})); return s; };

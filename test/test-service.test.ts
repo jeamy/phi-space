@@ -7,6 +7,8 @@ import { PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, t
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 import { RemoteSpace, core } from "../src/index.ts";
 import { readChain } from "../src/read-chain.ts";
+import { openTestHost } from "./support/host.ts";
+import type { StoreHost } from "../src/store/types.ts";
 
 test("linked pages: one RPC, byte bounds, cursors, permissions and malformed chains", async () => {
 	const h = await memory();
@@ -42,7 +44,7 @@ test("linked pages: one RPC, byte bounds, cursors, permissions and malformed cha
 	} finally { await h.close(ctx); }
 });
 
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+const memory = () => openTestHost(ctx);
 const ids = new StaticIdentity({
 	"peer-admin": { principal: { peerId: "peer-admin" }, roles: ["admin"] },
 	"peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] },
@@ -51,7 +53,7 @@ const ids = new StaticIdentity({
 	"peer-jobs": { principal: { peerId: "peer-jobs" }, roles: ["jobs-only"] },
 });
 const policy: Policy = { roles: { ...DEFAULT_POLICY.roles, "jobs-only": { methods: ["hello", "generation", "write", "read", "take", "readAll", "count", "changes"], types: ["Job"] } } };
-const svc = (h: Harness, extra: Record<string, unknown> = {}) => new SpaceService({ host: h, ctx, identity: ids, policy, ...extra });
+const svc = (h: StoreHost, extra: Record<string, unknown> = {}) => new SpaceService({ host: h, ctx, identity: ids, policy, ...extra });
 const as = (peerId: string) => ({ peerId });
 const ok = (r: Reply): any => { assert.ok(r.ok, JSON.stringify(r)); return (r as { ok: true; result: unknown }).result; };
 const err = (r: Reply, code: string): any => { assert.ok(!r.ok && r.error.code === code, JSON.stringify(r)); return (r as { ok: false; error: any }).error; };

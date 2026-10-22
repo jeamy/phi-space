@@ -249,8 +249,12 @@ Gegenüber der Standardimplementierung von pi-durable ändert sich damit:
   mit zusammengesetztem Namespace-/Art-/Familienschlüssel und `migration_runs`;
   Spaces sind keine Scopes unterhalb einer Session mehr.
 - Revisionsablage: pi-durable hält Dokumente als Append-only-Kette aus `base`- und
-  `delta`-Revisionen und setzt sie beim Lesen zusammen. Stufe 1 speichert
-  vollständige Dokumentwerte; Teilablage bleibt dem Messgate in U2 vorbehalten.
+  `delta`-Revisionen und setzt sie beim Lesen zusammen. Der eigene Speicher legt die
+  beiden wachsenden Dokumentarten `phi-spaces.space` und `phi-spaces.named-space` von
+  Anfang an in Teilen ab (je eine Zeile pro Eintrag, Claim, Generation und
+  Verlaufs-Batch, dazu eine Kopfzeile); das Messgate ist mit dem Lastprofil aus
+  [U0](umstellung-u0-bestand.md) bereits überschritten (31 MB je Space nach 9,5 h,
+  entschieden 2026-10-22). Alle übrigen Dokumentarten speichern vollständige Werte.
 - Dateiformat: keine Kompatibilität. Bestände werden über den versionierten
   Export/Import übernommen, nicht durch Lesen vorhandener pi-durable-Dateien.
 - Betrieb: pi-durable öffnet mit festen PRAGMA-Werten und `busy_timeout`. Der eigene

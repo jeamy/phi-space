@@ -10,6 +10,7 @@ import {
 	bootstrapEnroll, newEnrollToken, hashToken, CONTROL_SPACE, FOREVER, core, PhiSpaces, createSpace, listSpaces, snapshotSpace, spaceDoc, DEFAULT_POLICY, type Signer,
 } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
@@ -23,7 +24,7 @@ async function setup(tc: TestContext) {
 	tc.after(() => { server.closeAllConnections(); server.close(); });
 	const clock = new Clock();
 	const directory = new NetbirdDirectory({ url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, token: "t", now: clock.now });
-	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const host = await openTestHost(ctx);
 	const keys = new SpaceKeyDirectory(host, ctx, clock.now);
 	const identity = new GateIdentity();
 	const service = new SpaceService({ host, ctx, identity, policy: DEFAULT_POLICY, hostId: "host-1", now: clock.now });
@@ -185,7 +186,7 @@ test('persistent remote admin command runs outside Control commit and resumes af
 });
 
 test("stopping the supervisor waits for a pass in flight, so it never runs on against a closing store", async () => {
-	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const host = await openTestHost(ctx);
 	await host.commit((tx) => createSpace(tx, CONTROL_SPACE, 1_000), ctx);
 	let gate: (() => void) | undefined, committing = false, armed = false;
 	const slow = new Proxy(host, { get(t, k) { const v = Reflect.get(t, k, t); if (k !== "commit") return typeof v === "function" ? v.bind(t) : v;

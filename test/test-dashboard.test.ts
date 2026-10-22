@@ -8,8 +8,9 @@ import { PhiSpaces } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
 import { startDashboard } from "../src/dashboard.ts";
 import { ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
 
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+const memory = () => openTestHost(ctx);
 
 test("dashboard: spaces, detail, entries and metrics over HTTP; GET only", async () => {
 	const h = await memory();

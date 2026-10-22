@@ -9,9 +9,10 @@ import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/n
 import { createModels } from "@earendil-works/pi-ai/models";
 import { FOREVER, PhiSpaces } from "../../src/index.ts";
 import { SpaceCache, runCacheDemo } from "../../examples/cache.ts";
+import { openTestHost } from "../support/host.ts";
 
 async function memory() {
-  const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+  const h = await openTestHost(ctx);
   return { h, cache: new SpaceCache(h), space: new PhiSpaces(h, ctx) };
 }
 

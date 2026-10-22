@@ -8,10 +8,12 @@ import {
 	type Transport,
 } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
+import type { StoreHost } from "../src/store/types.ts";
 
 const ids = new StaticIdentity({ "peer-a": { principal: { peerId: "peer-a", agentId: "w1" }, roles: ["member"] }, "peer-obs": { principal: { peerId: "peer-obs" }, roles: ["observer"] } });
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-const service = (h: Harness) => new SpaceService({ host: h, ctx, identity: ids });
+const memory = () => openTestHost(ctx);
+const service = (h: StoreHost) => new SpaceService({ host: h, ctx, identity: ids });
 const sleep0 = () => Promise.resolve();
 const fast = { sleep: sleep0, backoffMs: 1 };
 

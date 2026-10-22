@@ -10,6 +10,7 @@ import {
 	type Policy, type Signer, type Transport,
 } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
@@ -29,7 +30,7 @@ async function setup(tc: TestContext) {
 	const clock = new Clock();
 	const keys = new MemoryKeyDirectory();
 	const directory = new NetbirdDirectory({ url: `http://127.0.0.1:${(server.address() as net.AddressInfo).port}`, token: "t", now: clock.now });
-	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const host = await openTestHost(ctx);
 	const service = new SpaceService({ host, ctx, identity: new GateIdentity(), policy });
 	const proving = new ProvingService(service, { gateHostId: "host-1", keys, now: clock.now });
 	const events: Array<{ event: string; reason?: string }> = [];

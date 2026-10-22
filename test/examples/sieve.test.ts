@@ -9,10 +9,11 @@ import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/n
 import { createModels } from "@earendil-works/pi-ai/models";
 import { PhiSpaces, FOREVER } from "../../src/index.ts";
 import { segmentedSieve, prepareSieveRun, processSieveTask, collectSieveResults, runSieve, type SieveConfig } from "../../examples/sieve.ts";
+import { openTestHost } from "../support/host.ts";
 
 const config: SieveConfig = { runId: "test-sieve", start: 1, end: 1001, blockSize: 128 };
 async function memory() {
-  const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+  const h = await openTestHost(ctx);
   return { h, space: new PhiSpaces(h, ctx) };
 }
 // Independent reference: trial division, deliberately not a second copy of the sieve.

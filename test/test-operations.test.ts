@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { provisionFileSigner, loadFileSigner, serveRegister, SocketRecoveryRegister, SqliteRecoveryRegister, RecoveryClient, serveRecovery, generateKey, RecoveryBlocked, RecoveryController, RegisterConflict, PhiSpaces, core, Space, startConfiguredFederation, bootstrapEnroll, newEnrollToken, hashToken, listSpaces, spaceDoc, Registry, beginRestore, restoreBatch, completeRestore, snapshotHash, dataRecoveryHandler, startMemberRecoveryOnly, signControlHostChange } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 import { socketTransport } from "../src/socket.ts";
+import { openTestHost } from "./support/host.ts";
 
 test("provisioned keys survive reopen and fail closed on missing, public or symlinked files", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "phi-spaces-keys-"));
@@ -188,7 +189,7 @@ test("two lww/set Members replicate their entry streams over proven, pinned host
   const ports = [17651, 17652], names = ["a", "b"], signers = names.map(n => provisionFileSigner(join(dir, `signer-${n}.json`)));
   for (const [i, n] of names.entries()) {
    const { createRegistry, Harness, MemoryStorage } = await import("@earendil-works/pi-durable"), { createModels } = await import("@earendil-works/pi-ai/models");
-   const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);hosts.push(h);
+   const h = await openTestHost(ctx);hosts.push(h);
    await bootstrapEnroll(h, ctx, { tokenHash: hashToken(newEnrollToken()), allowedPeerId: "admin" }); await h.commit(tx => spaceDoc(tx, undefined, Date.now()), ctx);
    const controlSpaceId = (await h.snapshot(Registry, ctx))!.aliases.control!, installedFile = join(dir, `installed-${n}.sqlite`), installed = new SqliteRecoveryRegister(installedFile), spaces: Record<string, any> = {};
    for (const info of await listSpaces(h, ctx)) { const permit = { state: "active", authorityId: "authority", dataIncarnation: info.incarnation, role: "local", transitionId: "initial" }; spaces[info.spaceId] = permit; await installed.compareAndSet(`installed:host-${n}:${info.spaceId}`, null, permit); }

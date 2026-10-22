@@ -4,6 +4,7 @@ import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { evaluate, evolve, firstPrimes, genomeToSource, loadCodemode, type Genome } from "../../examples/codemode-evolve.ts";
+import { openTestHost } from "../support/host.ts";
 
 const cm = await loadCodemode();
 const t: typeof test = cm ? test : (() => {}) as never;
@@ -24,7 +25,7 @@ describe("codemode-evolve", () => {
 		expect((await evaluate(cm!, "function firstPrimes(n){ return typeof process === 'undefined' ? [] : [1] }", 100)).ok).toBe(false);
 	});
 	t("a run in the space finds a correct, evaluated best", async () => {
-		const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+		const h = await openTestHost(ctx);
 		const r = await evolve(h, cm!, { agents: 4, gens: 2, perAgent: 2, seed: 7 });
 		expect(r.history.length).toBe(2);
 		expect(r.best).not.toBeNull();

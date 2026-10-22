@@ -5,9 +5,11 @@ import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durab
 import { createModels } from "@earendil-works/pi-ai/models";
 import { PhiSpaces, FOREVER, Space, createSpace, listSpaces, UnknownSpaceError, startService, core, DEFAULT_ALIAS } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
+import { openTestHost } from "./support/host.ts";
+import type { StoreHost } from "../src/store/types.ts";
 
-const memory = () => Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-const named = (h: Harness, space: string) => new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space });
+const memory = () => openTestHost(ctx);
+const named = (h: StoreHost, space: string) => new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space });
 
 test("default space is registered on first use: spaceId, incarnation, gid", async () => {
 	const h = await memory();
