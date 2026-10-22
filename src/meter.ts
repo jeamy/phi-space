@@ -1,6 +1,6 @@
 // Process-local counters and sliding-window rates. Not stored in the space document on purpose: a read does not
 // change the space, and counting it there would turn every read into a document change that wakes every waiter.
-import type { Harness } from "@earendil-works/pi-durable";
+import type { ClosableStoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import { Space } from "./doc.ts";
 import * as core from "./core.ts";
@@ -94,7 +94,7 @@ export function formatWidget(l: Live): string[] {
  * One sample at a time (a slow snapshot skips ticks instead of overlapping, so an older state never follows a newer
  * one), nothing is reported after stop(), and an error thrown by `cb` goes to `onError` instead of vanishing.
  */
-export function watchLive(harness: Harness, ctx: Context, cb: (l: Live) => void, o: { intervalMs?: number; windowSec?: number; meter?: Meter; now?: () => number; onError?: (e: unknown) => void } = {}): () => void {
+export function watchLive(harness: ClosableStoreHost, ctx: Context, cb: (l: Live) => void, o: { intervalMs?: number; windowSec?: number; meter?: Meter; now?: () => number; onError?: (e: unknown) => void } = {}): () => void {
 	const m = o.meter ?? meter;
 	const now = o.now ?? Date.now;
 	const onError = o.onError ?? ((e) => console.error("phi-spaces live:", e));

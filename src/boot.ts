@@ -2,7 +2,7 @@ import {readRegisterRecords} from './recovery-register.ts';
 import {checkErasureBarrier,validateErasureBarrier} from './erasure-barrier.ts';
 // Boot fencing for every touched space. The external record and local installation are never restored with a space snapshot.
 import { canonicalJson } from "./canonical.ts";
-import type { Harness } from "@earendil-works/pi-durable";
+import type { ClosableStoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { Space } from "./doc.ts";
@@ -25,7 +25,7 @@ function replicaMismatch(hostId: string, permit: SpaceBootPermit, config: Primar
 	return null;
 }
 /** Guard a host once, after explicitly initializing/registering its spaces and installing their permits. */
-export function installBootGuard(host: Harness, ctx: Context, o: { hostId: string; authorityId: string; external: RecoveryRegister; installed: RecoveryRegister;now?:()=>number; /** current replica configuration of a primary/sync Space (its journal), null for other Spaces */ replicaConfig?: (spaceId: string) => PrimarySyncConfig | null }) {
+export function installBootGuard(host: ClosableStoreHost, ctx: Context, o: { hostId: string; authorityId: string; external: RecoveryRegister; installed: RecoveryRegister;now?:()=>number; /** current replica configuration of a primary/sync Space (its journal), null for other Spaces */ replicaConfig?: (spaceId: string) => PrimarySyncConfig | null }) {
 	const original = host.commit.bind(host), originalSnapshot = host.snapshot.bind(host); let installed = true;
 	const guarded: typeof host.commit = async (fn, context) => {
 		const checkedLocal = new Map<string, number>(),checkedErasure=new Map<string,number|null>();

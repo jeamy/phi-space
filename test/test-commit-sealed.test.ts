@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
+import type {ClosableStoreHost} from '../src/store/types.ts';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
 import {openSyncSpace,provisionFileSigner,SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport,OutcomeUnknown,PhiSpaces,core,type SyncSpace,type PrimarySyncConfig,type Reply,type Connection} from '../src/index.ts';
@@ -36,10 +37,10 @@ async function fixture(fn:(o:{open:(h:'p'|'s')=>Promise<SyncSpace>;reg:SqliteRec
 /** What the federation host does: the served service of the Space, swapped by the resolver. */
 function host(p:()=>SyncSpace){
  let current:Svc;
- const resolver=sealedResolver<{host:Harness}>({retryMs:30,maxRetryMs:120,log:()=>{},serve:sp=>({host:sp.harness!}),
+ const resolver=sealedResolver<{host:ClosableStoreHost}>({retryMs:30,maxRetryMs:120,log:()=>{},serve:sp=>({host:sp.harness!}),
   set:async next=>{current='sealed' in next?sealed(next):served(next.host);}});
  const sealed=(u:SealedSyncSpace):Svc=>({handleText:async(_t,conn)=>JSON.stringify(await ids.authenticate(conn)?sealedReply(u.sealed):{ok:false,error:{code:'Unauthenticated',message:''}} as Reply)});
- const served=(h:Harness):Svc=>new SpaceService({host:h,ctx,identity:ids,policy:DEFAULT_POLICY,onSealed:()=>void resolver.resolve(p()),sealedCandidate:()=>sealedCandidateOf(p())});
+ const served=(h:ClosableStoreHost):Svc=>new SpaceService({host:h,ctx,identity:ids,policy:DEFAULT_POLICY,onSealed:()=>void resolver.resolve(p()),sealedCandidate:()=>sealedCandidateOf(p())});
  current=served(p().harness!);
  const remote=new RemoteSpace(inProcessTransport({handleText:(t,c)=>current.handleText(t,c)},{peerId:'peer-a'}),{space:'jobs-sync',attempts:1,backoffMs:1,sleep:ms=>new Promise(r=>setTimeout(r,Math.min(ms,30)))});
  return {remote,resolver};

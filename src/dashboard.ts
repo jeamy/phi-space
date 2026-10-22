@@ -13,10 +13,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT } from "./context.ts";
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { openJsonlStore, openSqliteStore } from "./store/legacy.ts";
 import type { Context } from "./context.ts";
 import type { SpaceHost } from "./client.ts";
 import { meter as processMeter, type Meter, type MeterSnapshot } from "./meter.ts";
@@ -240,8 +237,7 @@ async function main(argv: string[]): Promise<void> {
 	const dir = a.get("--dir"), sqlite = a.get("--sqlite");
 	if ((dir ? 1 : 0) + (sqlite ? 1 : 0) !== 1) throw new Error(`exactly one of --dir/--sqlite is required\n\n${usage}`);
 	const ctx = BACKGROUND_CONTEXT;
-	const storage = dir ? await openNodeJsonlStorage(dir, ctx) : await openNodeSqliteStorage(sqlite!);
-	const harness = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
+	const harness = dir ? await openJsonlStore(dir, ctx) : await openSqliteStore(sqlite!, ctx);
 	const store = dir ?? sqlite!;
 	const dashboard = await startDashboard({
 		host: harness, ctx,

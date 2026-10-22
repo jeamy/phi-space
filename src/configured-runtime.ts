@@ -4,7 +4,8 @@ import {ReplicaNoticeBoard} from "./replica-notice.ts";
 import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
-import type { Harness, Storage } from "@earendil-works/pi-durable";
+import type { ClosableStoreHost } from "./store/types.ts";
+import type { LegacyStorage } from "./store/legacy.ts";
 import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 import { promotionEvidence } from "./primary-sync.ts";
 import type { Context } from "./context.ts";
@@ -58,7 +59,7 @@ export type FederationConfig = {
 	syncSpaces?: SyncSpaceConfig[];
 };
 /** Factories for the dedicated stores of primary/sync Spaces; supplied by the daemon, which owns the storage backend. */
-export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<Storage>; openSyncHarness: (storage: Storage) => Promise<Harness>;
+export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<LegacyStorage>; openSyncHarness: (storage: LegacyStorage) => Promise<ClosableStoreHost>;
 	/** The main store runs on primary/sync (3.8): its current replica configuration, for every Space in it. */
 	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
 	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */
@@ -67,7 +68,7 @@ export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<St
 	mainPromotionProof?: (requestEpoch: number) => { hash: string } | null;
 	/** How often a running host checks the register for a control host change (default 15 s). */
 	followIntervalMs?: number };
-export async function startConfiguredFederation(host: Harness, ctx: Context, configFile: string, factories?: SyncSpaceFactories) {
+export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Context, configFile: string, factories?: SyncSpaceFactories) {
 	const raw = { commit: host.commit.bind(host), snapshot: host.snapshot.bind(host) };
 	let config = JSON.parse(privateFile(configFile).toString("utf8")) as FederationConfig;
 	if (!config.hostId || !config.peerId || !config.authorityId || !config.controlHostId || !config.controlSpaceId || !["control", "member"].includes(config.mode)) throw new Error("incomplete federation provisioning");
@@ -99,7 +100,7 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		if (!authority || authority.value.state !== "active" || authority.value.authorityId !== authorityId || authority.value.hostId !== config.controlHostId || authority.value.supervisorKey !== controlPublicKey) throw new BootBlocked("independent authority is not active or disagrees with installed control identity");
 		if (installedAuthority?.value.targetHostId && installedAuthority.value.targetHostId !== config.controlHostId) throw new Error("control endpoint must be reprovisioned for the installed authority successor");
 		const identity = new GateIdentity();
-		let keys: import("./auth.ts").KeyDirectory, control: { host: Harness; authority: GrantAuthority; leases?:RouterLeaseAuthority; routing?:FederationPolicyAuthority;directory?:CapabilityDirectory;replicaNotices?:ReplicaNoticeBoard;membership?:import("./membership.ts").MembershipController;profiles?:import("./profile-transition.ts").ProfileTransitionController;withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> } | undefined;
+		let keys: import("./auth.ts").KeyDirectory, control: { host: ClosableStoreHost; authority: GrantAuthority; leases?:RouterLeaseAuthority; routing?:FederationPolicyAuthority;directory?:CapabilityDirectory;replicaNotices?:ReplicaNoticeBoard;membership?:import("./membership.ts").MembershipController;profiles?:import("./profile-transition.ts").ProfileTransitionController;withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> } | undefined;
 		let controlRemote:RemoteSpace|undefined;
 		if (config.mode === "control") {
 			if (config.hostId !== config.controlHostId || (await host.snapshot(Registry, ctx))?.aliases.control !== config.controlSpaceId) throw new Error("configured control host or space identity disagrees with provisioned state");
@@ -121,14 +122,14 @@ export async function startConfiguredFederation(host: Harness, ctx: Context, con
 		const controlPeer=config.mode==="control"?ownPeer:await directory.lookup(config.control.address.host);if(!controlPeer)throw new BootBlocked("control peer unavailable in provisioned directory");
 		if(control){control.directory=new CapabilityDirectory({host,ctx,spaceId:config.controlSpaceId,assertAuthority:assertControl,hostForPeer:p=>config.capabilities?.hostBindings?.[p]});control.replicaNotices=new ReplicaNoticeBoard({host,ctx,controlSpaceId:config.controlSpaceId,assertAuthority:assertControl,hostForPeer:p=>config.capabilities?.hostBindings?.[p]});control.leases=new RouterLeaseAuthority({host,ctx,controlSpaceId:config.controlSpaceId,authorityId,peerId:controlPeer.id,signer,keys,assertAuthority:assertControl,...(factories?.mainReplica?{controlEpoch:()=>factories.mainReplica!().primaryEpoch}:{})});control.routing=new FederationPolicyAuthority({host,ctx,controlSpaceId:config.controlSpaceId,authorityId,peerId:controlPeer.id,signer,assertAuthority:assertControl});}
 		const grantVerifier=new GrantVerifier({authorityId,issuerHostId:config.controlHostId,algorithm:config.control.algorithm,publicKey:controlPublicKey});
-		const verifierFor=(h:Harness,replicaConfig?:(spaceId:string)=>{replicaConfigVersion:number}|null)=>new DelegationVerifier({host:h,replicaConfig,ctx,authorityId,controlSpaceId:config.controlSpaceId,supervisorPeerId:controlPeer.id,supervisorKey:{algorithm:config.control.algorithm,publicKey:controlPublicKey},keys,grants:grantVerifier,policy:async()=>{if(control){const p=(await control.routing!.state()).policy;if(!p)throw new Error("no federation policy installed");return p;}return verifyFederationPolicy(await controlRemote!.requestRoutingPolicy(),{authorityId,peerId:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey});}});const delegation=verifierFor(host,factories?.mainReplica?()=>factories.mainReplica!():undefined);
+		const verifierFor=(h:ClosableStoreHost,replicaConfig?:(spaceId:string)=>{replicaConfigVersion:number}|null)=>new DelegationVerifier({host:h,replicaConfig,ctx,authorityId,controlSpaceId:config.controlSpaceId,supervisorPeerId:controlPeer.id,supervisorKey:{algorithm:config.control.algorithm,publicKey:controlPublicKey},keys,grants:grantVerifier,policy:async()=>{if(control){const p=(await control.routing!.state()).policy;if(!p)throw new Error("no federation policy installed");return p;}return verifyFederationPolicy(await controlRemote!.requestRoutingPolicy(),{authorityId,peerId:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey});}});const delegation=verifierFor(host,factories?.mainReplica?()=>factories.mainReplica!():undefined);
 
 		const membership=config.membership?new MemberLifecycle({host,ctx,memberId:config.membership.memberId,spaceId:config.membership.spaceId,authorityId,peerId:config.peerId,signer,controlPin:{issuer:controlPeer.id,algorithm:config.control.algorithm,publicKey:controlPublicKey},assertAuthority:async()=>{const b=await external.get<any>(`boot:${config.hostId}`);if(b?.value.state!=="active"||b.value.spaces?.[config.membership!.spaceId]?.authorityId!==authorityId)throw new BootBlocked("Member boot authority changed");}}):undefined;
         let root:Awaited<ReturnType<typeof createConfiguredRoot>>|undefined;
         if(config.root){try{root=await createConfiguredRoot({...(factories?.mainReplica?{controlEpoch:()=>factories.mainReplica!().primaryEpoch}:{}),host,ctx,hostId:config.hostId,peerId:config.peerId,ownAddress:config.listen.host,authorityId,controlSpaceId:config.controlSpaceId,controlSigner:signer,keys,directory,groupRoles,external,installed,grants:control!.authority,leases:control!.leases!,root:config.root,assertControl,checkControlAuthority});control!.membership=root.membership;control!.profiles=root.profiles;control!.withAdmin=root.withAdmin;}catch(e){await root?.close();throw e;}}
 		const syncSpaces:SyncSpace[]=[];
 		if(config.syncSpaces?.length){
-			if(!factories)throw new Error("primary/sync Spaces need storage and Harness factories from the daemon");
+			if(!factories)throw new Error("primary/sync Spaces need storage and ClosableStoreHost factories from the daemon");
 			const r=await openSyncSpaces(config.syncSpaces,c=>openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,openStorage:factories.openSyncStorage,openHarness:factories.openSyncHarness}));
 			syncSpaces.push(...r.opened);for(const f of r.failed)console.error(`primary/sync Space ${f.alias} stays unserved:`,f.error);
 		}

@@ -1,5 +1,5 @@
 // Private endpoint on the same harness as the normal runtime; raw capabilities never enter the space-service chain.
-import type { Harness } from "@earendil-works/pi-durable";
+import type { ClosableStoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import type { Algorithm, Signer } from "./auth.ts";
@@ -15,7 +15,7 @@ import { sshRecoveryTransport } from "./ssh-recovery.ts";
 import { verifySshFence } from "./fencing.ts";
 import { RecoveryBlocked } from "./recovery.ts";
 export type PrivateRecoveryConfig = { path: string; operator: { algorithm: Algorithm; publicKey: string }; writerTls?: RegisterTlsClient; writerSshTarget?: string; writerSocket?: string; snapshotDirectory?: string; fenceTargets?: Record<string, string>; controlEndpoint?: { path?: string; sshTarget?: string } };
-export async function startConfiguredRecovery(host: Harness, raw: Pick<Harness,"commit" | "snapshot">, ctx: Context, o: { hostId: string; authorityId: string; controlHostId: string; controlSpaceId: string; mode: "control" | "member"; signer: Signer; controlKey: { algorithm: Algorithm; publicKey: string }; reconcileDataRestore?:(o:{hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string})=>Promise<unknown>; config: PrivateRecoveryConfig; external: RecoveryRegister; installed: RecoveryRegister }) {
+export async function startConfiguredRecovery(host: ClosableStoreHost, raw: Pick<ClosableStoreHost,"commit" | "snapshot">, ctx: Context, o: { hostId: string; authorityId: string; controlHostId: string; controlSpaceId: string; mode: "control" | "member"; signer: Signer; controlKey: { algorithm: Algorithm; publicKey: string }; reconcileDataRestore?:(o:{hostId:string;spaceId:string;oldIncarnation:string;recoveryId:string})=>Promise<unknown>; config: PrivateRecoveryConfig; external: RecoveryRegister; installed: RecoveryRegister }) {
  const c = o.config;
  if ([c.writerSocket,c.writerSshTarget,c.writerTls].filter(Boolean).length > 1) throw new Error("configure one operator register endpoint");
  const writer = c.writerTls ? new TlsRecoveryRegister(c.writerTls) : c.writerSshTarget ? new SshRecoveryRegister(c.writerSshTarget, 10000, { operator: true }) : c.writerSocket ? new SocketRecoveryRegister(c.writerSocket, { writable: true }) : undefined;

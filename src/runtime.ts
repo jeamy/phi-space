@@ -14,7 +14,7 @@ import {auditLog,collectAlerts} from "./alerts.ts";
 import type {FederationPolicyAuthority} from "./federation-policy.ts";
 import type {DelegationVerifier,RouterLeaseAuthority} from "./delegation.ts";
 import { RotationService } from "./rotation.ts";
-import type { Harness } from "@earendil-works/pi-durable";
+import type { ClosableStoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import type { Json } from "./core.ts";
 import { SpaceService, sealedReply, type Call, type Reply, type Connection } from "./service.ts";
@@ -36,10 +36,10 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	boot?: { external: RecoveryRegister; installed: RecoveryRegister; /** main store on primary/sync: its journal configuration for every Space in it */ replicaConfig?: (spaceId: string) => import("./primary-sync.ts").PrimarySyncConfig | null };
 	/**
 	 * primary/sync Spaces, each in its own dedicated store (one commit history per Space, v3 7.2): calls naming the
-	 * Space go to a service over that Harness, with its own delegation verifier; boot guard and replica wiring are the
+	 * Space go to a service over that host, with its own delegation verifier; boot guard and replica wiring are the
 	 * caller's (configured-runtime).
 	 */
-	syncSpaces?: Array<{ spaceId: string; alias: string; host: Harness; delegation?: import("./delegation.ts").DelegationVerifier; primaryEpoch: () => number;
+	syncSpaces?: Array<{ spaceId: string; alias: string; host: ClosableStoreHost; delegation?: import("./delegation.ts").DelegationVerifier; primaryEpoch: () => number;
 		/** Member lifecycle of this Space in its own store; membership instructions naming the Space go here. */
 		membership?: import("./membership.ts").MemberLifecycle; refreshPolicy?: () => Promise<void>;
 		/** A commit of this Space was sealed but not confirmed; the caller resolves it and serves the Space anew (setSyncSpace). */
@@ -66,7 +66,7 @@ export type FederationHostOptions = Omit<GateOptions, "keys"> & {
 	entryExport?: { peers: ReadonlySet<string>; describe: () => Promise<Json>; changes: (after: number, maxBytes: number) => Promise<Json> };
 	control?: { host: SpaceHost; authority: GrantAuthority; leases?: RouterLeaseAuthority; routing?: FederationPolicyAuthority; directory?: CapabilityDirectory; replicaNotices?: import("./replica-notice.ts").ReplicaNoticeBoard; dataAdmin?:DataAdminController; membership?: MembershipController; profiles?:ProfileTransitionController; runs?: RunController; runAdvanceMs?: number; workers?: WorkerAssignments; spaces?: ReturnType<typeof spaceCommands>; deployment?: DeploymentController; withAdmin?:<T>(peerId:string,run:()=>Promise<T>)=>Promise<T> };
 };
-export async function startFederationHost(host: Harness, ctx: Context, o: FederationHostOptions) {
+export async function startFederationHost(host: ClosableStoreHost, ctx: Context, o: FederationHostOptions) {
 	if (o.control && o.control.host !== host) throw new Error("the authoritative control runtime must use its own harness");
 	if (!o.boot && !o.unsafeSkipBootGuardForTests) throw new Error("a federation host requires independent boot authorization and local installation");
 	const stopBoot = o.boot ? installBootGuard(host, ctx, { ...o.boot, hostId: o.hostId, authorityId: o.authorityId }) : undefined;
@@ -196,7 +196,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 		}
 		const mainService = await startService(host, ctx, { now: o.now });
 		stopMaintenance = async () => { for (const stop of [...syncStops.values()]) await stop(); syncStops.clear(); await mainService(); };
-		// Reaper and delivery of every served primary/sync Space run on its own Harness.
+		// Reaper and delivery of every served primary/sync Space run on its own host.
 		for (const sp of o.syncSpaces ?? []) {
 			try { syncStops.set(sp.spaceId, await startService(sp.host, ctx, { now: o.now, space: sp.alias })); }
 			catch (e) { syncServices.delete(sp.spaceId); syncServices.delete(sp.alias); console.error(`primary/sync Space ${sp.alias} stays unserved:`, e instanceof Error ? e.message : String(e)); }
@@ -210,7 +210,7 @@ export async function startFederationHost(host: Harness, ctx: Context, o: Federa
 		let closed = false;
 		/**
 		 * Swaps a primary/sync Space while running: unresolved after a sealed commit (its reaper stops, calls get
-		 * `CommitSealed`), or served again over the reopened Harness with a new service and reaper.
+		 * `CommitSealed`), or served again over the reopened host with a new service and reaper.
 		 */
 		const setSyncSpace = async (next: SyncEntry | UnresolvedSyncSpace) => {
 			const i = syncEntries.findIndex(sp => sp.spaceId === next.spaceId);

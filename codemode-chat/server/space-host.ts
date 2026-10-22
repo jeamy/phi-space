@@ -10,17 +10,13 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { PhiSpaces, serveSpace, SpaceService, spaces, StaticIdentity, startService } from "../../src/index.ts";
+import { openMemoryStore, openSqliteStore } from "../../src/store/legacy.ts";
+import { PhiSpaces, serveSpace, SpaceService, StaticIdentity, startService } from "../../src/index.ts";
 import { announce, DEFAULT_SPACE, parseTarget } from "./space.ts";
 
 export async function startSpaceHost(o: { listen?: string; dbPath?: string | null } = {}) {
-	const registry = createRegistry();
-	registry.install(spaces);
-	const storage = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openNodeSqliteStorage(o.dbPath!); })() : new MemoryStorage();
-	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
+	// the store of the space (no agent tools: every process reaches the space over the socket)
+	const harness = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openSqliteStore(o.dbPath!, ctx); })() : await openMemoryStore(ctx);
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 50 });
 	// every client is the same peer: the socket is internal (a unix socket, or TCP bound to an internal address)
 	const identity = new StaticIdentity({ "peer-codemode": { principal: { peerId: "peer-codemode" }, roles: ["member"] } });

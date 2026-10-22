@@ -1,11 +1,12 @@
 // A primary/sync Space on a federation host (plan 3.2/3.5): its own dedicated store (one commit history per Space,
-// docs/abnahme/ap3-primary-sync.md), the signed replica listener, and on the primary a Harness over primarySyncStorage with
+// docs/abnahme/ap3-primary-sync.md), the signed replica listener, and on the primary a host over primarySyncStorage with
 // the boot guard bound to the journal configuration. A standby serves no business calls. Transitions (promote,
 // degradeToSingle, setStandby) run with the host's service for this Space stopped; on the next start the host
 // follows the journal: as primary it serves the Space and offers the ReplicaConfigNotice of its last transition.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Harness, Storage } from "@earendil-works/pi-durable";
+import type { ClosableStoreHost } from "./store/types.ts";
+import type { LegacyStorage } from "./store/legacy.ts";
 import type { Context } from "./context.ts";
 import type { Signer } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
@@ -29,9 +30,9 @@ export type SyncSpaceConfig = {
 };
 export type SyncSpace = {
 	config: SyncSpaceConfig; journal: PrimarySyncJournal; role: () => "primary" | "standby" | "excluded";
-	/** The served Harness of a primary; absent on a standby and while a sealed candidate is unresolved. */
-	readonly harness?: Harness; notice: () => Promise<SignedReplicaConfigNotice | null>; close: () => Promise<void>;
-	/** Primary: stops serving after a sealed, unconfirmed commit (its Harness refuses all work until reopened). */
+	/** The served host of a primary; absent on a standby and while a sealed candidate is unresolved. */
+	readonly harness?: ClosableStoreHost; notice: () => Promise<SignedReplicaConfigNotice | null>; close: () => Promise<void>;
+	/** Primary: stops serving after a sealed, unconfirmed commit (its host refuses all work until reopened). */
 	unserve: () => Promise<void>;
 	/**
 	 * Primary: one attempt to resolve the sealed candidate with the standby and serve again (docs/abnahme/ap3-primary-sync.md).
@@ -40,7 +41,7 @@ export type SyncSpace = {
 	 */
 	resolve: () => Promise<{ state: "served" | "pending" | "excluded"; error?: string }>;
 	/**
-	 * The unresolved sealed candidate: the served store was poisoned by an unconfirmed commit, or (no Harness) the
+	 * The unresolved sealed candidate: the served store was poisoned by an unconfirmed commit, or (no host) the
 	 * journal holds a candidate beyond the applied revision. Not the short window of a commit in flight.
 	 */
 	sealed: () => { revision: number; hash: string } | null;
@@ -52,14 +53,14 @@ export type SyncSpace = {
  * (CommitSealed) and the resolver takes over, instead of every write hanging for the life of a cut connection.
  */
 const STANDBY_ANSWER_MS = 15_000;
-/** How long a poisoned Harness may take to close before it is abandoned. */
+/** How long a poisoned host may take to close before it is abandoned. */
 const CLOSE_BOUND_MS = 5000;
 
 export async function openSyncSpace(o: {
 	config: SyncSpaceConfig; hostId: string; authorityId: string; bindIp: string; signer: Signer;
 	external: RecoveryRegister; installed: RecoveryRegister; ctx: Context;
-	openStorage: (path: string) => Promise<Storage>; openHarness: (storage: Storage) => Promise<Harness>; now?: () => number;
-	/** Quarantine: only the journal and the replica listener (catch-up for setStandby), never a served Harness. */
+	openStorage: (path: string) => Promise<LegacyStorage>; openHarness: (storage: LegacyStorage) => Promise<ClosableStoreHost>; now?: () => number;
+	/** Quarantine: only the journal and the replica listener (catch-up for setStandby), never a served host. */
 	listenOnly?: boolean;
 }): Promise<SyncSpace> {
 	const c = o.config, now = o.now ?? Date.now;
@@ -71,7 +72,7 @@ export async function openSyncSpace(o: {
 	const ips = new Set(c.peers.map(p => p.ip)), transports: Array<ReturnType<typeof socketTransport>> = [];
 	const listener = await serveSpace({ handleText: replicaSyncHandler({ journal: () => journal, signer: o.signer, self: o.hostId, remotes: c.peers, assertQuarantine: assertQuarantine(o.external, o.hostId, c.spaceId), now }) },
 		{ listen: { host: o.bindIp, port: c.port }, connection: s => ips.has(String(s.remoteAddress).replace(/^::ffff:/, "")) ? {} : null, maxConnections: 4, maxFrameBytes: 1 << 20 });
-	let harness: Harness | undefined, stopGuard: (() => void) | undefined, poisoned: { revision: number; hash: string } | null = null, sealedListener: (() => void) | undefined;
+	let harness: ClosableStoreHost | undefined, stopGuard: (() => void) | undefined, poisoned: { revision: number; hash: string } | null = null, sealedListener: (() => void) | undefined;
 	const assert = assertSyncPrimary(o.external, o.hostId, journal), harnessPath = join(c.dir, "harness.sqlite");
 	let peer: ReturnType<typeof signedReplicaPeer> | null | undefined;
 	const peerFor = () => {
@@ -87,7 +88,7 @@ export async function openSyncSpace(o: {
 		// transition the next open copies it); without an active permit the Space is not served.
 		await installAdmittedPermit({ external: o.external, installed: o.installed, hostId: o.hostId, spaceId: c.spaceId, localDataIncarnation: c.incarnation });
 		const p = peerFor(), raw = await o.openStorage(harnessPath);
-		let h: Harness | undefined;
+		let h: ClosableStoreHost | undefined;
 		try {
 			await recoverPrimarySync(raw, journal, p, o.ctx, assert);
 			h = await o.openHarness(primarySyncStorage(raw, journal, p, { assertPrimary: assert, now, onPoisoned: s => { if (!poisoned) { poisoned = s; queueMicrotask(() => sealedListener?.()); } } }));
@@ -150,7 +151,7 @@ export type SealedSyncSpace = { spaceId: string; alias: string; sealed: { revisi
 export const sealedCandidateOf = (sp: SyncSpace): { revision: number; hash: string } | null => sp.sealed();
 /**
  * Resolves sealed, unconfirmed commits while the host runs (docs/abnahme/ap3-primary-sync.md): the Space is set unresolved
- * (answered with CommitSealed), its Harness closed, and `resolve()` retried with backoff until the standby confirms
+ * (answered with CommitSealed), its host closed, and `resolve()` retried with backoff until the standby confirms
  * or rejects the candidate; then the Space is served anew. A host that lost its primary permit stops trying.
  */
 export function sealedResolver<E>(o: { set: (next: E | SealedSyncSpace) => Promise<void>; serve: (sp: SyncSpace) => E; retryMs?: number; maxRetryMs?: number; log?: (message: string) => void }) {

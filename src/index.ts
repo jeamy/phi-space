@@ -4,7 +4,8 @@
 //   index.ts   LLM tools, prompt section, event delivery
 import { Type } from "@earendil-works/pi-ai";
 import type { Context } from "./context.ts";
-import { defineDoc, defineExtension, defineTool, section, type ConversationId, type Harness, type Tx } from "@earendil-works/pi-durable";
+import { defineDoc, defineExtension, defineTool, section, type Tx } from "@earendil-works/pi-durable";
+import type { StoreHost } from "./store/types.ts";
 import { PhiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
 import { listSpaces, NamedSpace, Registry, spaceDoc } from "./spaces.ts";
 import * as core from "./core.ts";
@@ -249,7 +250,7 @@ const MAX_TRIES = 5; // a poisoned event is dropped after this many failed deliv
  * harmless. Delivered and given-up events leave the outbox in one commit. When a served take cannot be delivered
  * (dropped or given up), its transaction is aborted in that commit, so the entry is back in the space at once.
  */
-export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<number> {
+export async function deliverEvents(harness: ServiceHost, ctx: Context, o: ServiceOptions = {}): Promise<number> {
 	const now = o.now ?? Date.now;
 	const retryMs = o.retryMs ?? 1000;
 	const snap = await snapshotOf(harness, o.space, ctx);
@@ -262,7 +263,7 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
 	const served: Counter[] = []; // waiter ops the space performed on someone's behalf; counted once delivered
 	const deliver = async (e: core.SpaceEvent) => {
 		try {
-			const conv = typeof e.target === "number" ? await harness.conversation(e.target as ConversationId, ctx) : undefined;
+			const conv = typeof e.target === "number" && harness.conversation ? await harness.conversation(e.target, ctx) : undefined;
 			if (!conv) dropped.add(key(e));
 			else {
 				// Namespaced: request ids dedupe per conversation forever, so a bare "n3:1" could swallow or collide with
@@ -317,17 +318,22 @@ export async function deliverEvents(harness: Harness, ctx: Context, o: ServiceOp
  * Reaper: removes expired entries/leases, aborts expired transactions and times out waiters at the moment they lapse
  * instead of at the next operation. Stateless (`settle` is idempotent), so after a restart just start it again.
  */
+/** Where space events go: the conversations of an agent host. A host without them has nowhere to deliver to, which
+ *  counts like a conversation that no longer exists. */
+export type EventSink = { conversation(id: number, ctx: Context): Promise<{ submit(input: { type: "input"; requestId: string; content: string }, ctx: Context): Promise<unknown> } | undefined> };
+/** A host the background service runs on: the store, and an agent host's conversations where there are any. */
+export type ServiceHost = StoreHost & Partial<EventSink>;
 export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number; meter?: Meter; /** alias or spaceId; omitted: the default space */ space?: string; /** Collapse watch-triggered maintenance runs to at most one per this window. 0 (default) keeps the old every-commit behaviour. Under sustained writes each commit would otherwise cost a full settle+nextExpiry scan. */ watchDebounceMs?: number };
 
 /** Committed state of a space for the background services (the default space even before it is registered). */
-async function snapshotOf(harness: Harness, space: string | undefined, ctx: Context): Promise<Readonly<core.SpaceState> | undefined> {
+async function snapshotOf(harness: ServiceHost, space: string | undefined, ctx: Context): Promise<Readonly<core.SpaceState> | undefined> {
 	if (space === undefined) return harness.snapshot(Space, ctx);
 	const r = await harness.snapshot(Registry, ctx);
 	const id = r?.aliases[space] ?? (r?.spaces[space] ? space : undefined);
 	if (id === undefined) return undefined;
 	return id === r?.defaultSpaceId ? harness.snapshot(Space, ctx) : harness.snapshot(NamedSpace, id, ctx);
 }
-async function watchOf(harness: Harness, space: string | undefined, ctx: Context) {
+async function watchOf(harness: ServiceHost, space: string | undefined, ctx: Context) {
 	if (space === undefined) return harness.watchDoc(Space, ctx);
 	const r = await harness.snapshot(Registry, ctx);
 	const id = r?.aliases[space] ?? (r?.spaces[space] ? space : undefined);
@@ -352,7 +358,7 @@ function serialized(fn: () => Promise<void>): () => Promise<void> {
 	};
 }
 
-export async function startMaintenance(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
+export async function startMaintenance(harness: ServiceHost, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
 	const now = o.now ?? Date.now;
 	const onError = o.onError ?? ((e) => console.error("phi-spaces reaper:", e));
 	const retryMs = o.retryMs ?? 1000;
@@ -405,7 +411,7 @@ export async function startMaintenance(harness: Harness, ctx: Context, o: Servic
  * Delivery plus reaper: everything a space needs to run in the background. With `o.space` for that space only;
  * without, for the default space and every named space, including ones created later (the registry is watched).
  */
-export async function startService(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
+export async function startService(harness: ServiceHost, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
 	const stops: (() => Promise<void>)[] = [];
 	const one = async (space: string | undefined) => { stops.push(await startMaintenance(harness, ctx, { ...o, space }), await startDelivery(harness, ctx, { ...o, space })); };
 	if (o.space !== undefined) { await one(o.space); return async () => { for (const stop of stops) await stop(); }; }
@@ -434,7 +440,7 @@ export async function startService(harness: Harness, ctx: Context, o: ServiceOpt
 }
 
 /** Deliver whenever the space changes, and retry failed events on a timer. Returns a stop function. */
-export async function startDelivery(harness: Harness, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
+export async function startDelivery(harness: ServiceHost, ctx: Context, o: ServiceOptions = {}): Promise<() => Promise<void>> {
 	const onError = o.onError ?? ((e) => console.error("phi-spaces delivery:", e));
 	const retryMs = o.retryMs ?? 1000;
 	let timer: ReturnType<typeof setTimeout> | undefined;
