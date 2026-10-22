@@ -4,7 +4,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {hasAdminKey,SpaceKeyDirectory} from './enroll.ts';
 // Native hosted-agent Root, co-located with its authoritative Control store.
 import {existsSync,writeFileSync,renameSync} from 'node:fs';
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import type {SpaceHost} from './client.ts';
 import type {KeyDirectory,Signer} from './auth.ts';
 import type {RecoveryRegister} from './recovery-register.ts';

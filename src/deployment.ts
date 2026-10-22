@@ -3,7 +3,7 @@
 // applies it idempotently through the existing building blocks: Space lifecycle (B7) and worker assignments (B6).
 // Host installation, NetBird join and enrollment are prerequisites, not steps here: an alias must be bound to an
 // enrolled host whose Capability heartbeat is fresh. Workers are registered with count 0; `startWorkers` starts them.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { defineDoc } from "@earendil-works/pi-durable";
 import { digestJson } from "./canonical.ts";
 import type { SpaceHost } from "./client.ts";

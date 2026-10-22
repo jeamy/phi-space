@@ -20,7 +20,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { FOREVER, PhiSpaces, spaces, startService } from "../src/index.ts";

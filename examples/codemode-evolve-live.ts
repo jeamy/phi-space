@@ -6,7 +6,7 @@
 // PI_PROVIDER / PI_MODEL pick another model; the default is the first Mistral model (codestral-latest if present).
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { evolve, loadCodemode, TIME_N, type Contributor } from "./codemode-evolve.ts";

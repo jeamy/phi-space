@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
+import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {core,claims,canonicalJson,principalId,RouterJournal,RouterController,FederationOperations,partitionRouterId,parentJournalKey,snapshotSpace,type RouterStep,type FederationOperation,type MailboxState} from '../../../src/index.ts';
 import {rpcDomain} from '../../../src/rpc-domain.ts';
 const fixture=process.argv[2]!,output=process.argv[3]!;

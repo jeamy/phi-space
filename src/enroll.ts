@@ -20,7 +20,7 @@
 // (`bootstrapEnroll`). Consuming it closes that power for good; a lost token is replaced (the old hash becomes invalid) while it
 // is still open. After that only `createEnroll` of an admin exists (hosts and members, never admins).
 import { createHash, randomBytes } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { Session } from "@earendil-works/pi-durable";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";

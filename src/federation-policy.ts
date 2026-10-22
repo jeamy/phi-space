@@ -1,6 +1,6 @@
 import {ProfileTransitions} from './profile-transition-doc.ts';
 // Authoritative policy persistence and supervisor signature; pure routing is separate.
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import {defineDocFamily, type Tx} from '@earendil-works/pi-durable';
 
 import type {Algorithm, Signer} from './auth.ts';

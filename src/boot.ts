@@ -3,7 +3,7 @@ import {checkErasureBarrier,validateErasureBarrier} from './erasure-barrier.ts';
 // Boot fencing for every touched space. The external record and local installation are never restored with a space snapshot.
 import { canonicalJson } from "./canonical.ts";
 import type { Harness } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { Space } from "./doc.ts";
 import { NamedSpace } from "./spaces.ts";

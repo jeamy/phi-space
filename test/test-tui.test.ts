@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm, appendFile, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";

@@ -14,7 +14,7 @@ import { startIndexLoad } from "../client/lib/index-load.ts";
 import { runTupleBasics } from "../examples/tuple-basics.ts";
 import { refreshMirror, type LiveMirror } from "../examples/shared/live-mirror.ts";
 import { SnapshotExpired, type Changes, type Page } from "../../src/core.ts";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { FOREVER, Meter, PhiSpaces, spaces } from "../../src/index.ts";

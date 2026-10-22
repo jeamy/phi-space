@@ -1,5 +1,5 @@
 // AP 2.2: supervisor-issued leases and double-signed, principal-bound delegation.
-import type {Context} from "@earendil-works/chord";
+import type {Context} from "./context.ts";
 import {defineDocFamily, type Tx} from "@earendil-works/pi-durable";
 import {randomUUID} from "node:crypto";
 

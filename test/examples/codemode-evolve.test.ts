@@ -1,6 +1,6 @@
 // Evolving primes code in a codemode sandbox. Skips when pi-codemode is not installed (nothing is installed here).
 import { describe, test, expect } from "./compat.ts";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { evaluate, evolve, firstPrimes, genomeToSource, loadCodemode, type Genome } from "../../examples/codemode-evolve.ts";

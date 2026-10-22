@@ -9,7 +9,7 @@ import {Harness,createRegistry,type Storage,type StorageWrite} from '@earendil-w
 import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
+import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {PhiSpaces,argHash,rpcDomain,core,Registry,spaceDoc,SpaceService,StaticIdentity,FederatedSpace,FederationPending,
  RouterController,RouterJournal,partitionRouterId,type RouterStep,type RouterReceipt,type RouterTarget,
  type FederationIO,type RoutingState} from '../../../src/index.ts';

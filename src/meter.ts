@@ -1,7 +1,7 @@
 // Process-local counters and sliding-window rates. Not stored in the space document on purpose: a read does not
 // change the space, and counting it there would turn every read into a document change that wakes every waiter.
 import type { Harness } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { Space } from "./doc.ts";
 import * as core from "./core.ts";
 

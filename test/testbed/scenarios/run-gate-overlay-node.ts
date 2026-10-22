@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { Harness, createRegistry } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { GrantVerifier, RemoteSpace, RunController, RunGateService, core, createSpace, listSpaces, loadFileSigner, localRunMember, provisionFileSigner, remoteRunMember, signRun, snapshotSpace, socketTransport, spaceDoc, startFederationHost, type RunGateInstruction, type RunMember, type RunSpec } from "../../../src/index.ts";
 
 const PORT = 17432;

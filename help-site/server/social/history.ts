@@ -1,5 +1,5 @@
 // Durable newest-first linked index. Nodes are committed with their Post; cursors visit bounded nodes.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "../../../src/context.ts";
 import { core, FOREVER, ResourceExhausted, spaceDoc, type SpaceHost, type SpaceLike } from "../../../src/index.ts";
 import type { SwarmPost } from "./swarm.ts";
 import { UnsupportedOperation } from "../../../src/remote.ts";

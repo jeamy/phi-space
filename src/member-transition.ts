@@ -1,6 +1,6 @@
 // Single-mode member installation: stopped normal runtime, blocked admission, bounded local reconciliation and outside-snapshot ACK.
 import type { Session } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import { RecoveryBlocked, verifyAuthorityTransition, installAuthorityTransition, type SignedAuthorityTransition } from "./recovery.ts";

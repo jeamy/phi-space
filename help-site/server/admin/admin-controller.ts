@@ -13,7 +13,7 @@
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, generateKeyPairSync, randomBytes, scryptSync, sign, timingSafeEqual } from "node:crypto";
 import { defineDoc } from "@earendil-works/pi-durable";
 import { availableParallelism, freemem, totalmem } from "node:os";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "../../../src/context.ts";
 import {
 	auditLog,
 	CapabilityDirectory,

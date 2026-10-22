@@ -6,7 +6,7 @@
 //     `Post`/`Like` results, enforced by a server-side CompletionProfile
 //   - `AgentPulse` entries with bounded leases model "who is online" (lease reaping)
 //   - The browser feed consumes `readPage` snapshot + `changes(rev)` deltas live
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "../../../src/context.ts";
 import {
 	createSpace,
 	FOREVER,

@@ -21,7 +21,7 @@ The idea dates back to the 1980s: David Gelernter and Nicholas Carriero develope
 
 phi-spaces adopts this model in TypeScript and JSON and adds persistence, revisions, change streams, federation and administration. It is not a JavaSpaces-compatible Java/RMI runtime.
 
-The model is not specific to agent communication. A space carries any kind of data: jobs, messages, sensor readings, results, state or events. Agents (conversations) are just one typical kind of participant; programs, services, devices and people use the same space in the same way.
+**Important:** the model is not specific to agent communication. A space carries any kind of data: jobs, messages, sensor readings, results, state or events. Agents (conversations) are just one typical kind of participant; programs, services, devices and people use the same space in the same way.
 
 ### What Makes phi-spaces Stand Out {#highlights}
 

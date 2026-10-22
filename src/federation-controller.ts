@@ -2,7 +2,7 @@ import {ProfileTransitionController} from './profile-transition.ts';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {MemberStatusDirectory} from "./capability-directory.ts";
 // Complete server-side Phase-2 composition; guards and original grants stay external inputs.
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 
 import type {Algorithm, Signer} from './auth.ts';
 import {canonicalJson} from './canonical.ts';

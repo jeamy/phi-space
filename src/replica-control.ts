@@ -4,7 +4,7 @@
 // configuration as an entry of the sync chain and then align the external boot permits; until local and external
 // state match, `assertSyncPrimary` keeps writes blocked. A simulator adapter is refused unless a test allows it.
 import type { Storage } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { canonicalJson } from "./canonical.ts";
 import { RegisterConflict, type RecoveryRegister } from "./recovery-register.ts";
 import type { HostBootState, SpaceBootPermit } from "./boot.ts";

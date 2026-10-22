@@ -3,7 +3,7 @@
 // locally (`WorkerSupervisor`). The last accepted list is persisted, so local workers keep running while the
 // coordinator is unreachable (v3 5.2). Workers are in-process loops of registered code: they coordinate work, they
 // do not add CPU parallelism. Status travels back as `metrics.workers` of the host's Capability heartbeat.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { defineDoc } from "@earendil-works/pi-durable";
 import type { Algorithm, Signer } from "./auth.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";

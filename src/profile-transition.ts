@@ -1,5 +1,5 @@
 // Durable, fail-closed profile replacement. Remote effects never run inside Control commits.
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import {FederationRouting} from './federation-policy.ts';

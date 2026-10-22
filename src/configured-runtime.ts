@@ -7,7 +7,7 @@ import {MemberLifecycle} from "./membership.ts";
 import type { Harness, Storage } from "@earendil-works/pi-durable";
 import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 import { promotionEvidence } from "./primary-sync.ts";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { privateFile, loadFileSigner } from "./keys.ts";
 import { NetbirdDirectory, GateIdentity, type GroupRoles } from "./gate.ts";
 import { GrantAuthority, GrantVerifier } from "./grants.ts";

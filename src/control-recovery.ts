@@ -1,6 +1,6 @@
 // Operator-only control restoration. Runs under an exclusive recovery harness owner, with no normal gate or agents.
 import { defineDoc, type Session } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { Signer, Algorithm } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { RegisterConflict } from "./recovery-register.ts";

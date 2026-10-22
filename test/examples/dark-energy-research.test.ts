@@ -2,7 +2,7 @@
 // Tests: Crawling, Klassifizierung, Zusammenfassung, Analyse, Präsentation, Chat, Monitoring
 
 import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";

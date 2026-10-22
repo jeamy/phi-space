@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -80,7 +80,7 @@ test("Killed Golomb process leaves a recoverable reservation on JSONL", { timeou
     import { createRegistry, Harness } from "@earendil-works/pi-durable";
     import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
     import { createModels } from "@earendil-works/pi-ai/models";
-    import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+    import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
     import { PhiSpaces, FOREVER } from "./src/index.ts";
     const h=await Harness.open(await openNodeJsonlStorage(process.argv[1],ctx),{models:createModels(),registry:createRegistry()},ctx);
     const s=new PhiSpaces(h,ctx);

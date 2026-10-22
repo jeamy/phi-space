@@ -2,7 +2,7 @@
 // the Member host verifies it against the pinned controller key, applies it to its own Space and signs the ACK.
 // The signature authorizes the effect, not the transport: a relayed or replayed instruction changes nothing new,
 // because the gate answers a repeated command with its stored confirmation.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { canonicalJson } from "./canonical.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import type { SpaceHost } from "./client.ts";

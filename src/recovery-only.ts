@@ -1,6 +1,6 @@
 // Recovery console composition. The caller holds exclusive harness ownership and starts neither agents nor a normal gate.
 import type { Session } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { privateFile, loadFileSigner } from "./keys.ts";
 import { TlsRecoveryRegister, type RegisterTlsClient } from "./tls-register.ts";
 import { SshRecoveryRegister } from "./ssh-register.ts";

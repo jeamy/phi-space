@@ -1,7 +1,7 @@
 import {ProfileTransitions} from './profile-transition-doc.ts';
 // Durable membership transitions; remote calls run outside Control commits.
 import {validateProfileOnlyChange} from './profile-policy.ts';
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import {defineDocFamily} from '@earendil-works/pi-durable';
 
 import type {Algorithm, Signer} from './auth.ts';

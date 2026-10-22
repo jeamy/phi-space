@@ -5,7 +5,7 @@
 //
 // Run scripted (no model, no network):  node --experimental-strip-types examples/chat.ts
 // Run with a real model:                node --experimental-strip-types examples/chat.ts --live ["topic"]
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";

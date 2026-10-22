@@ -1,5 +1,5 @@
 // Trusted, local worker path: Space semantics inside actual Durable commit boundaries.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "../../../src/context.ts";
 import { core, FOREVER, NamedSpace, spaceDoc, type SpaceHost } from "../../../src/index.ts";
 import type { SwarmPost } from "./swarm.ts";
 

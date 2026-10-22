@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
+import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {EntryReplicationController,EntryReplicationPump,EntryReplicationUnavailable,serveSpace,socketTransport,type EntryMutation,type EntryStreamIdentity} from '../../../src/index.ts';
 const [home,replicaId,bindIp,allowedIp,token]=process.argv.slice(2);
 if(!home||!['a','b'].includes(replicaId!)||!/^100\.[0-9.]+$/.test(bindIp!)||!/^100\.[0-9.]+$/.test(allowedIp!)||!/^\w{48,128}$/.test(token!))throw Error('private fixture arguments required');

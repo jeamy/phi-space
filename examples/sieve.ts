@@ -1,7 +1,7 @@
 // A bounded segmented sieve, coordinated by one local durable space.
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createRegistry, defineDoc, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createHash } from "node:crypto";

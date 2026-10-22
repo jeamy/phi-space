@@ -11,7 +11,7 @@ import {canonicalJson} from "./canonical.ts";
 // `ControlAccess` is the network side of that rule: on the control space the wire may carry only `Command` writes of admins and
 // reads of `Command`, `Result` and `PeerKey`; `Enroll` (token hashes) and `Bootstrap` never leave the host.
 import { rotateKeyIn, type RotationChallenge } from "./rotation.ts";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { Session } from "@earendil-works/pi-durable";
 import * as core from "./core.ts";
 import { NamedSpace, listSpaces, spaceDoc, createSpace } from "./spaces.ts";

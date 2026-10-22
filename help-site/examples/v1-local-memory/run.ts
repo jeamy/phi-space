@@ -7,7 +7,7 @@
 //   - Transactional ChatTask worker enforced by CompletionProfile
 //   - Conversation forking up to a selected message sequence number
 
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createSpace, Meter, PhiSpaces, spaces, startService } from "../../../src/index.ts";

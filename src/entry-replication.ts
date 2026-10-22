@@ -1,6 +1,6 @@
 // Trusted entry-replication substrate. Not the full-state primary/sync commit protocol.
 import { randomBytes } from 'node:crypto';
-import type { Context } from '@earendil-works/chord';
+import type { Context } from './context.ts';
 import { defineDocFamily, type Tx } from '@earendil-works/pi-durable';
 import { canonicalJson, digestJson } from './canonical.ts';
 import type { SpaceHost } from './client.ts';

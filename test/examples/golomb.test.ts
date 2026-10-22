@@ -2,7 +2,7 @@
 // Tests: Verteilte Suche, Branch-and-Bound, BitSet, Checkpointing, Validierung
 
 import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";

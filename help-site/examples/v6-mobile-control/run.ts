@@ -8,7 +8,7 @@
 //   5. Monitoring alerts (`collectAlerts`) and audit logs (`auditLog`)
 
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import {

@@ -3,7 +3,7 @@
 //   client.ts  local PhiSpaces API over a Session document, with blocking read/take
 //   index.ts   LLM tools, prompt section, event delivery
 import { Type } from "@earendil-works/pi-ai";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { defineDoc, defineExtension, defineTool, section, type ConversationId, type Harness, type Tx } from "@earendil-works/pi-durable";
 import { PhiSpaces, Space, type Once, type SpaceHost, type SpaceLike } from "./client.ts";
 import { listSpaces, NamedSpace, Registry, spaceDoc } from "./spaces.ts";
@@ -11,6 +11,7 @@ import * as core from "./core.ts";
 import { meter as defaultMeter, type Counter, type Meter } from "./meter.ts";
 
 export * from "./client.ts";
+export * from "./context.ts";
 export { privateFile, provisionFileSigner, loadFileSigner } from "./keys.ts";
 export { serveRegister, SocketRecoveryRegister } from "./register-service.ts";
 export { serveRecovery, RecoveryClient, recoveryBytes, type RecoveryCall, type SignedRecoveryCall } from "./recovery-service.ts";

@@ -1,5 +1,5 @@
 // Exclusive, fenced history maintenance. It does not erase backend history or authorize live Data effects.
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import type {Principal} from './claims.ts';

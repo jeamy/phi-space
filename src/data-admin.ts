@@ -1,5 +1,5 @@
 // Trusted local admin effects. Successful batches and their progress commit atomically.
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import {defineDocFamily} from '@earendil-works/pi-durable';
 import {createHash} from 'node:crypto';
 import type {SpaceHost} from './client.ts';

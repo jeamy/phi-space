@@ -1,6 +1,6 @@
 // AP 2.1: durable command orchestration. Boot/RouterLease/delegation wiring is AP 2.2.
 import {defineDocFamily, type Session} from "@earendil-works/pi-durable";
-import type {Context} from "@earendil-works/chord";
+import type {Context} from "./context.ts";
 import {canonicalJson,digestJson} from "./canonical.ts";
 import {argHash, ResultExpired, type Principal} from "./claims.ts";
 import type {Json} from "./core.ts";

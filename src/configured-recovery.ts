@@ -1,6 +1,6 @@
 // Private endpoint on the same harness as the normal runtime; raw capabilities never enter the space-service chain.
 import type { Harness } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import { privateFile } from "./keys.ts";

@@ -1,5 +1,5 @@
 // Protected directory entries are published by proven hosts; routing status by the lease owner.
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import type {SpaceHost} from './client.ts';
 import * as core from './core.ts';
 import {spaceDoc} from './spaces.ts';

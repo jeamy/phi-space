@@ -6,12 +6,12 @@ import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semanti
 //
 // Placeholders until the federation stages: `authorityId` and `primaryEpoch` are checked against the configured values
 // (a single host is its own authority, epoch 0). Overlay authentication and grants belong to phase 1b.
-import { awaitWithContext } from "@earendil-works/chord/context";
+import { awaitWithContext } from "./context.ts";
 import { ReplicationConflict } from "./entry-replication.ts";
 import { ReplicationClockError } from "./replication-clock.ts";
 import { CommitSealed, SyncBudgetExceeded } from "./commit-sealed.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import {rpcDomain} from "./rpc-domain.ts";

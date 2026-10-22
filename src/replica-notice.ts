@@ -3,7 +3,7 @@
 // separate control commit that changes only that Member's replication and target binding and raises policyVersion.
 // The signature only identifies the sender. The authority is the independent register: the router adopts a notice
 // only if the named primary is active there with exactly this permit, which only a fenced transition can produce.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { canonicalJson } from "./canonical.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import type { SpaceHost } from "./client.ts";

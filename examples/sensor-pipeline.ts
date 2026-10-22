@@ -6,7 +6,7 @@
 //
 // Run: node --experimental-strip-types examples/sensor-pipeline.ts
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { FOREVER, PhiSpaces, NO_WAIT, TransactionError, type SpaceHost } from "../src/index.ts";

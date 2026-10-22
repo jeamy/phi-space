@@ -1,6 +1,6 @@
 // App-key rotation: a persisted, one-use challenge and proofs of both keys; privileges are copied, never supplied by clients.
 import { randomBytes } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { SpaceHost } from "./client.ts";
 import { PhiSpaces } from "./client.ts";
 import type { Algorithm } from "./auth.ts";

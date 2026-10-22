@@ -15,7 +15,7 @@ import { runStageV5 } from "../examples/v5-federated-cluster/run.ts";
 import { runStageV6 } from "../examples/v6-mobile-control/run.ts";
 import { startHelpServer } from "../server/index.ts";
 import type { AddressInfo } from "node:net";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { Meter, spaces, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport } from "../../src/index.ts";

@@ -5,7 +5,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {mkdirSync,lstatSync,chmodSync} from 'node:fs';
 import {dirname} from 'node:path';
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import type {Storage,StorageWrite,DocumentId,DocumentRecord,Seq} from '@earendil-works/pi-durable';
 import {canonicalJson,digestJson} from './canonical.ts';
 import {CommitSealed,SyncBudgetExceeded} from './commit-sealed.ts';

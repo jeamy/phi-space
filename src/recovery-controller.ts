@@ -1,6 +1,6 @@
 // A durable single-space recovery state machine. Only the private recovery service receives this capability.
 import { defineDoc, type Session } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import { Registry, spaceDoc, snapshotSpace } from "./spaces.ts";
 import { beginRestore, restoreBatch, completeRestore, releaseRestored, snapshotHash } from "./restore.ts";

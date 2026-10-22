@@ -2,7 +2,7 @@
 // state of runs, worker assignments and host reports; they are never a proof of a state. The monitor publishes only
 // changes (new and resolved alerts), e.g. to a webhook such as ntfy. The audit view lists command results of the
 // control Space without their payloads.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { SpaceHost } from "./client.ts";
 import { CAPABILITY_LEASE_MS } from "./capability-directory.ts";
 import type { RunController } from "./run-controller.ts";

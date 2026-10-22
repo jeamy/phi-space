@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
+import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {core,claims,canonicalJson,principalId,FederationOperations,operationPartition,parentJournalKey,searchMembers,createSpace,spaceDoc,snapshotSpace,provisionFileSigner,loadFileSigner,privateFile,MemoryKeyDirectory,
  NetbirdDirectory,GateIdentity,SpaceService,ProvingService,startGate,GrantVerifier,GrantAuthority,DelegationVerifier,
  RouterLeaseAuthority,createFederationController,FederationRouting,socketTransport,RemoteSpace,

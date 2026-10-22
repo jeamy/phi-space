@@ -1,6 +1,6 @@
 import {RootErasures} from './root-erasure-doc.ts';
 import {ResultExpired} from './claims.ts';
-import type {Context} from '@earendil-works/chord';
+import type {Context} from './context.ts';
 import {defineDocFamily} from '@earendil-works/pi-durable';
 // Composite operations bind their complete routing plan before sending any effect.
 

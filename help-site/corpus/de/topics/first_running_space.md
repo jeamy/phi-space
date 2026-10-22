@@ -31,7 +31,7 @@ Dies ist der Inhalt von help-site/examples/tuple-basics.ts; relative Imports gel
 ```ts
 // Complete, model-free tutorial. Run from the repository root with node --experimental-strip-types.
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { FOREVER, NO_WAIT, PhiSpaces, spaces, startService } from "../../src/index.ts";

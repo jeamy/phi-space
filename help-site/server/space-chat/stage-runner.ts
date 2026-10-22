@@ -1,5 +1,5 @@
 // Persistent chat queues and immutable stage reports share the same snapshot interface.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "../../../src/context.ts";
 import { core, createSpace, FOREVER, listSpaces, Meter, PhiSpaces, spaceDoc, type SpaceHost } from "../../../src/index.ts";
 import { SpaceChatEngine, type ReplyGenerator, type SpaceChatSnapshot } from "../../examples/shared/chat-core.ts";
 import { runStageV1 } from "../../examples/v1-local-memory/run.ts";

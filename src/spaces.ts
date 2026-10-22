@@ -2,7 +2,7 @@
 // working; further spaces are members of a session document family keyed by their immutable spaceId. The registry
 // maps aliases to ids and holds this host's identity. Ids are generated here, never taken from callers.
 import { randomBytes, randomUUID } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { defineDoc, defineDocFamily, type Session, type Tx } from "@earendil-works/pi-durable";
 import * as core from "./core.ts";
 import { Space, checkpointDue } from "./doc.ts";

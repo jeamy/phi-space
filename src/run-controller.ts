@@ -2,7 +2,7 @@
 // monotone control revisions. Every Member of a run's manifest applies the command to its RunGate; a transition is
 // complete only when every Member confirmed it with a matching ACK. A crash or a lost reply resends the same
 // command (same revision and command ID), which the gate answers with its stored confirmation.
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import { defineDoc } from "@earendil-works/pi-durable";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost, SpaceLike } from "./client.ts";

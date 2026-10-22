@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {createModels} from '@earendil-works/pi-ai/models';
-import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
+import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {PrimarySyncJournal,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,SqliteRecoveryRegister,TlsRecoveryRegister,SimulatorFencing,TlsFencing,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,serveSpace,socketTransport,loadFileSigner,signedReplicaPeer,replicaSyncHandler,canonicalJson,type PrimarySyncConfig,type FencingAdapter,type FenceProof,type ReplicaPin,type RecoveryRegister} from '../../../src/index.ts';
 
 type Remote=ReplicaPin&{ip:string};

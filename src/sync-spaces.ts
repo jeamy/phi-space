@@ -6,7 +6,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Harness, Storage } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { Signer } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { installBootGuard } from "./boot.ts";

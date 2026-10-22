@@ -1,7 +1,7 @@
 import {FederationRouting} from "./federation-policy.ts";
 // Durable control-primary receipt for an independently registered data transition, behind signed private RPC.
 import { defineDoc, type Session } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { RegisterConflict } from "./recovery-register.ts";
 import { RecoveryBlocked } from "./recovery.ts";

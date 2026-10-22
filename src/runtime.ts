@@ -15,7 +15,7 @@ import type {FederationPolicyAuthority} from "./federation-policy.ts";
 import type {DelegationVerifier,RouterLeaseAuthority} from "./delegation.ts";
 import { RotationService } from "./rotation.ts";
 import type { Harness } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "./context.ts";
 import type { Json } from "./core.ts";
 import { SpaceService, sealedReply, type Call, type Reply, type Connection } from "./service.ts";
 import { GateIdentity, startGate, type GateOptions } from "./gate.ts";
