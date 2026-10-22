@@ -236,6 +236,8 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 		if (meta > merged.maxEventBytes || s.entries.some(e => matches(x.template, e) && jsonBytes(view(e, s.spaceId)) + meta > merged.maxEventBytes)) throw new ResourceExhausted("the new event limit would make an existing subscription's or wait's events fail");
 	}
 	s.limits = { ...(s.limits ?? {}), ...l };
+	// another retention moves every claim's due time: the next sweep scans them all
+	if (l.claimResultMs !== undefined && s.rpc) delete s.rpc.sweepAt;
 	touch(s, now);
 	return limitsOf(s);
 }

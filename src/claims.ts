@@ -38,7 +38,10 @@ export type ClaimRec = {
 	notCommitted?: { proofHash: string; requestEpoch: number; primaryEpoch: number };
 };
 export type GenerationRec = { primaryEpoch?: number; principal: Principal; incarnation: string | null; issuedAt: number; admitUntil: number; spaceId?: string | null; authorityId?: string };
-export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number; reservedBytes?: number; signingKey?: string; authorityId?: string; sweepCursor?: string };
+export type RpcState = { generations: Record<string, GenerationRec>; claims: Record<string, ClaimRec>; bytes?: number; reservedBytes?: number; signingKey?: string; authorityId?: string; sweepCursor?: string;
+	/** The earliest time a sweep can find a claim or generation to drop: before it, sweeping looks at nothing. Every
+	 *  change that can make something due earlier lowers it; absent, the next sweep scans everything. */
+	sweepAt?: number };
 export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"]; restoredHistory?: true; unknownOutcome?: true; orphanedAfterRestore?: ClaimRec["orphanedAfterRestore"] };
 
 /**
@@ -87,6 +90,7 @@ export function issueGeneration(s: SpaceState, now: number, principal: Principal
 	const added = bytesOf(rec) + bytesOf(generation) + 2;
 	if (claimBytes(s) + added > limitsOf(s).maxClaimBytes) throw new LimitError("the generation exceeds maxClaimBytes");
 	st.generations[generation] = rec;
+	dueAt(st, admitUntil + 1);
 	touch(s, now);
 	st.bytes! += added;
 	return { generation, admitUntil };
@@ -145,6 +149,7 @@ export function decide(s: SpaceState, now: number, key: string, outcome: { state
 	c.state = outcome.state;
 	c.result = outcome.state === "done" ? outcome.result : null;
 	c.decidedAt = now;
+	dueAt(st, now + limitsOf(s).claimResultMs);
 	if (outcome.state === "done" && outcome.error) c.error = outcome.error;
 	st.bytes! += bytesOf(c) - before;
 	touch(s, now);
@@ -181,16 +186,23 @@ export function cancelRequest(s: SpaceState, now: number, target: RequestRef): C
 export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	const st = (s as SpaceState & { rpc?: RpcState }).rpc;
 	if (!st) return;
+	// nothing can be due yet: every operation settles the space, so a full scan here would cost O(claims) each time
+	if (st.sweepAt !== undefined && now < st.sweepAt) return;
 	const keep = limitsOf(s).claimResultMs;
 	// Select only expired records. Advancing a scan cursor over live claims would write on every watch tick.
-	// Filter first: only the (usually few) expired keys need the deterministic order.
+	// Filter first: only the (usually few) expired keys need the deterministic order. The same pass finds when the
+	// next claim that stays becomes due (its result expires, or its generation stops admitting).
+	let next = Number.MAX_SAFE_INTEGER;
 	const eligible = Object.keys(st.claims).filter(k => {
 		const c = st.claims[k]!, g = st.generations[c.generation];
-		return c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + keep <= now && (!c.resultExpired || !g || g.admitUntil < now);
+		if (c.state === "pending" || c.decidedAt === undefined) return false;
+		const due = c.resultExpired ? (g ? g.admitUntil + 1 : now) : c.decidedAt + keep;
+		if (due > now) { next = Math.min(next, due); return false; }
+		return c.decidedAt + keep <= now && (!c.resultExpired || !g || g.admitUntil < now);
 	}).sort();
-	let changed = false;
+	let changed = false, complete = eligible.length <= maxRecords;
 	for (const k of eligible.slice(0, maxRecords)) {
-		if (!maintenanceStep(s, 128, now, `claim:${k}`)) break;
+		if (!maintenanceStep(s, 128, now, `claim:${k}`)) { complete = false; break; }
 		const c = st.claims[k]!;
 		if (!c.resultExpired) { const before = bytesOf(c); delete c.result; c.resultExpired = true; st.bytes = (st.bytes ?? 0) + bytesOf(c) - before; }
 		const g = st.generations[c.generation];
@@ -200,12 +212,19 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	delete st.sweepCursor; // a field of earlier versions; no cursor is kept
 	const used = new Set(Object.values(st.claims).map(c => c.generation));
 	let removed = 0;
-	for (const [id, g] of Object.entries(st.generations)) if (removed < maxRecords && g.admitUntil < now && !used.has(id)) {
-		if (!maintenanceStep(s, 128, now, `generation:${id}`)) break;
+	let stopped = false;
+	for (const [id, g] of Object.entries(st.generations)) {
+		if (g.admitUntil >= now || used.has(id)) { next = Math.min(next, g.admitUntil + 1); continue; }
+		if (stopped || removed >= maxRecords || !maintenanceStep(s, 128, now, `generation:${id}`)) { stopped = true; complete = false; continue; }
 		st.bytes = (st.bytes ?? 0) - bytesOf(g) - bytesOf(id) - 2; delete st.generations[id]; removed++; changed = true;
 	}
+	// a claim kept after its result expired stays due with its generation (counted above); a cut-short sweep scans again
+	if (complete) st.sweepAt = Math.max(now + 1, next); else delete st.sweepAt;
 	if (changed) touch(s, now);
 }
+
+/** Something becomes due for sweeping at `at`: the next sweep must not skip it. */
+const dueAt = (st: RpcState, at: number) => { if (st.sweepAt !== undefined && at < st.sweepAt) st.sweepAt = at; };
 
 /** Bounded authenticated metadata is counted in the same admission/decision commit. */
 export function setMetadata(s:SpaceState,key:string,meta:{policyVersion?:number;transportPeerId?:string;routerEpoch?:number;controlPrimaryEpoch?:number}):void {
@@ -261,6 +280,6 @@ export function decideNotCommitted(s: SpaceState, now: number, r: RequestRef, me
 		error: { code: "NotCommitted", message: `request ${r.requestId} was not committed before the promotion to epoch ${primaryEpoch}` }, notCommitted: { proofHash, requestEpoch, primaryEpoch } };
 	const added = bytesOf(rec) + bytesOf(key) + 2;
 	if (claimBytes(s) + added > limitsOf(s).maxClaimBytes) throw new LimitError("the negative claim exceeds maxClaimBytes");
-	st.claims[key] = rec; touch(s, now); st.bytes! += added;
+	st.claims[key] = rec; dueAt(st, now + limitsOf(s).claimResultMs); touch(s, now); st.bytes! += added;
 	return lookup(s, r, now);
 }

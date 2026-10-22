@@ -216,3 +216,30 @@ test('legacy signed generations still replay known claims but never prove a miss
  assert.equal((await s.resolveOperation(r,'write',hash,1)).state,'done');home.crash(h);const reopened=await home.open(),again=client(reopened,c);await again.write(entry,null,FOREVER,{request:r});assert.equal(await again.count(),1);
  });
 });
+
+test("the sweep looks at the claims only when one can be due, and still drops each one on time", () => {
+	const s = core.initialState(), t0 = 1_000_000, keep = core.limitsOf(s).claimResultMs;
+	const { generation } = claims.issueGeneration(s, t0, alice);
+	const done = (requestId: string, at: number) => { const a = claims.admit(s, at, { generation, requestId, principal: alice }, "write", {}, at + 60_000); claims.decide(s, at, a.key, { state: "done", result: { ok: true } }); return a.key; };
+	const first = done("r1", t0);
+	claims.sweep(s, t0 + 1);
+	const at = s.rpc!.sweepAt!;
+	assert.equal(at, Math.min(t0 + keep, t0 + core.limitsOf(s).generationAdmitMs + 1)); // the first claim's result, or its generation
+	// nothing can be due before then: a sweep in between changes nothing (and scans nothing)
+	claims.sweep(s, at - 1);
+	assert.equal(s.rpc!.claims[first]!.resultExpired, undefined);
+	// a decision that comes due earlier lowers the mark; a shorter retention makes the next sweep scan everything
+	core.setLimits(s, { claimResultMs: 1000 }, t0 + 2);
+	assert.equal(s.rpc!.sweepAt, undefined);
+	const second = done("r2", t0 + 3);
+	claims.sweep(s, t0 + 1003);
+	assert.equal(s.rpc!.claims[first]!.resultExpired, true); // both are now past the shorter retention
+	assert.equal(s.rpc!.claims[second]!.resultExpired, true);
+	assert.equal(claims.lookup(s, { generation, requestId: "r1", principal: alice }, t0 + 1003).resultExpired, true);
+	// once their generation stops admitting, the claims and the generation go
+	const end = t0 + core.limitsOf(s).generationAdmitMs + 2;
+	claims.sweep(s, end);
+	assert.equal(Object.keys(s.rpc!.claims).length, 0);
+	assert.equal(Object.keys(s.rpc!.generations).length, 0);
+	assert.equal(s.rpc!.sweepAt, Number.MAX_SAFE_INTEGER); // nothing left that could become due
+});

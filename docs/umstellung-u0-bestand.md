@@ -220,14 +220,14 @@ einer SQL-Transaktion mit einem `fsync`, Bestätigung aller erst danach).
 - **D1 – chord: entschieden (2026-10-22): eigener Kontext.** Ein eigener Kontext (Abbruchsignal und Frist) ersetzt
   `Context`/`BACKGROUND_CONTEXT` von `@earendil-works/chord` in U1; das Anwenden von Deltas (`apply`) bekommt eine eigene
   Implementierung. Das Paket wird damit frei von `@earendil-works/*`.
-- **D2 – Grenzwerte:** Freigabe oder Änderung der Vorschläge in Abschnitt 6.
-- **D3 – Standardprofil:** FULL (Plan) mit Bündelung als Standard, NORMAL nur ausdrücklich gewählt.
+- **D2 – Grenzwerte: entschieden (2026-10-22):** die Vorschläge in Abschnitt 6 gelten.
+- **D3 – Standardprofil: entschieden (2026-10-22):** FULL mit gebündeltem Commit ist Standard; NORMAL nur ausdrücklich
+  gewählt.
 - **D5 – Byte-Budgets:** Die 32 MiB für Claims sind ein Teilbudget des Gesamtdokuments (128 MiB), das heute ganz im
   Speicher liegt und als Basis ganz geschrieben wird (`DEFAULT_LIMITS`, [ap2-gate4](abnahme/ap2-gate4.md): „keine
   24-Stunden-Dauermessung“). Mit Teilablage liegen Claims als Zeilen auf der Platte; ihre Grenzen werden in U2 neu
   festgelegt (Anzahl und Bytes auf der Platte statt Anteil eines Dokuments im Speicher).
-- **D4 – Claims im Chat:** Aufbewahrung bleibt 24 h (Vertrag); mit Zeilenablage tragbar. Ob der Chat kürzer aufbewahrt,
-  ist eine eigene Entscheidung, keine Speicherfrage.
+- **D4 – Claims im Chat: entschieden (2026-10-22):** Aufbewahrung bleibt 24 h (Vertrag); die Zeilenablage trägt sie.
 
 ## 9. Nächster Schritt
 
