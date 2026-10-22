@@ -51,7 +51,43 @@ Insgesamt 348 Dateien, 140 direkt, 124 nur transitiv.
 | Speicher | `MemoryStorage` 41, `openNodeSqliteStorage` 26, `openNodeJsonlStorage` 18, `Storage` 8, `StorageWrite` 4, `StorageRejected` 1, `DocumentId`/`DocumentRecord`/`Seq` je 1 | Backends; Speicherebene wird teils direkt benutzt (3.2) |
 | dynamisch | `import("@earendil-works/pi-durable")` 14, Speicher-Subpfade 2 | in Laufzeit-/Konfigurationscode und Tests |
 
-### 3.2 Kopplungen unterhalb der Dokumentschnittstelle
+### 3.2 `Once`
+
+`Once` (`src/client.ts`) hat genau einen Nutzer: die Agent-Werkzeuge in `src/index.ts` (`onceFor`). Sie schreiben das
+task-gebundene Dokument `phi-spaces.claim` im selben Commit wie die Änderung am Space. Das ist der in Plan-Abschnitt 6
+genannte Bruch: Sobald Space und Agent in getrennten Speichern liegen, ist das nicht mehr atomar. Er betrifft nur das
+künftige Agent-Paket; der eigenständige Dienst braucht `Once` nicht.
+
+### 3.3 Transaktionen über mehrere Dokumentarten
+
+Dateien, deren Transaktionen mehr als eine Dokumentart berühren (statisch erhoben über `tx.doc(…)`, `spaceDoc(…)`,
+`registry(tx)`/`hostKey(tx)`; je Datei, nicht je Commit). Mit Teilablage müssen diese Änderungen in **einer**
+SQL-Transaktion landen; die Liste ist Eingabe für den Commit-Vertrag von U2, wo je Commit bestätigt wird:
+
+| Datei | Dokumentarten |
+|---|---|
+| `src/client.ts`, `src/spaces.ts` | Registry, Space/NamedSpace |
+| `src/index.ts` | Claim (Task), Registry, Space |
+| `src/run-controller.ts` | RunJournal, Space |
+| `src/recovery-controller.ts`, `src/control-recovery.ts` | Recovery-/Control-Jobs, Registry, Space |
+| `src/control-ack.ts` | RecoveryReceipts, Space |
+| `src/space-lifecycle.ts` | SpaceLifecycleJournal, Registry, Space |
+| `src/data-admin.ts` | DataAdminJournal, Space |
+| `src/supervisor.ts` | SupervisorJobs, Space |
+| `src/workers.ts` | WorkerJournal, WorkerState |
+| `src/router.ts` | RouterJournal, RouterCommands |
+| `src/federation-references.ts` | FederationJournalLayout, FederationOperations, RouterCommands, RouterJournal, Space |
+| `src/federated-space.ts` | FederationJournalLayout, FederationOperations, FederationRouting, MembershipJournal, ProfileTransitions |
+| `src/membership.ts` | FederationRouting, MembershipJournal, MemberTransitions, ProfileTransitions, Space |
+| `src/profile-transition.ts` | FederationOperations, FederationRouting, MembershipJournal, ProfileTransitions, Space |
+| `src/federation-policy.ts` | ControlReplicaMarker, FederationRouting, ProfileTransitions, Space |
+| `src/replica-notice.ts` | FederationRouting, ProfileTransitions, Space |
+| `src/capability-directory.ts` | FederationRouting, Space |
+| `src/delegation.ts` | ControlReplicaMarker, DelegationEpochs, Space |
+| `src/root-erasure.ts` | ErasedEntryDigests, FederationJournalLayout, FederationOperations, RootErasures, RouterCommands, RouterJournal |
+| `src/entry-replication.ts` | EntryReplicaPeers, EntryReplicas, EntrySnapshotChunks, EntrySnapshotMaintenance, EntrySnapshotTransfers, EntryStreamCheckpoints |
+
+### 3.4 Kopplungen unterhalb der Dokumentschnittstelle
 
 Diese Stellen hängen nicht nur an `tx.doc`, sondern am Speicherformat oder an Speicher-Interna von pi-durable:
 
@@ -121,8 +157,12 @@ Lokale Docker-Testumgebung (big/nano, alle Rollen über TCP), 9,5 Stunden überw
 
 - Claims nach Methode: `txn.begin` 9 793, `lease.renew` 10 533, `take` 8 461, `txn.abort` 8 288, `readIfExists` 4 123,
   `write` 3 821. Fast alles Leerlauf: Warteschleifen (Transaktion, wartendes `take`, Abbruch alle 5 s) und
-  Lease-Erneuerungen. Rate rund 4 750 Claims pro Stunde, bei 24 h Aufbewahrung (`claimResultMs`) rund 114 000 Claims.
-- Folge: Der Space erreicht im Leerlauf nach etwa 16 h die Grenze `maxClaimBytes` (32 MB) und lehnt danach neue Anfragen ab.
+  Lease-Erneuerungen. Im Mittel rund 600 Bytes je Claim (`rpc.bytes` 27 118 868, der Wert der Grenzprüfung).
+- Rate: in den Stunden reinen Leerlaufs (23 bis 4 Uhr) rund 2 500 Claims pro Stunde, also etwa 1,5 MB pro Stunde; mit
+  den Läufen und Neustarts am Abend bis 12 000 pro Stunde.
+- Folge: Bei 24 h Aufbewahrung (`claimResultMs`) erreicht reiner Leerlauf die Grenze `maxClaimBytes` (32 MB) nach etwa
+  21 h (Gleichgewicht ≈ 36 MB), mit etwas Last früher (in dieser Umgebung nach etwa 12 h). Danach lehnt der Space neue
+  Anfragen ab.
   Unter Last (rund 140 Einsendungen) lief der Space-Prozess dauerhaft bei 100 % CPU (Basis schreiben, lineare Suche),
   Clients liefen in Zeitüberschreitungen.
 - Ursache ist das Speichermodell (ein Dokument je Space, vollständige Basis, lineare Suche im Speicher), nicht SQLite.
@@ -171,7 +211,9 @@ einer SQL-Transaktion mit einem `fsync`, Bestätigung aller erst danach).
 | `StorageWrite`-Replikation (`primary-sync.ts`) | eigenes Deltaformat aus der Teilablage (U4) |
 | `erasure-sqlite.ts` | Wartung des eigenen Speichers (U2) |
 | chord `Context` / `BACKGROUND_CONTEXT` | Entscheidung D1 |
-| Agent-Teile von `src/index.ts` | separates Paket (U1 trennen, U6 paketieren) |
+| Agent-Teile von `src/index.ts`, `Once` | separates Paket (U1 trennen, U6 paketieren); `Once` dort nur auf eigenen Dokumenten |
+| `examples/` (13 direkte Importe) | auf den eigenen Host umstellen (U3), Agent-Beispiele ins Agent-Paket (U6) |
+| `help-site` (15 direkt pi-durable, 5 nur chord) | eigene Anwendung mit eigenem Speicher und Admin-Dokument: Umstellung in U6 |
 
 ## 8. Offene Entscheidungen
 
