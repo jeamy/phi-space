@@ -237,6 +237,29 @@ an großen Dokumenten gemessen. Überschreitet dies das in U0 festgelegte Budget
 U2 um atomare Teilablage oder eine begrenzte Delta-/Checkpoint-Strategie zu erweitern.
 Eine ungemessene Vollserialisierung von bis zu 128 MiB ist keine akzeptierte Lösung.
 
+Gegenüber der Standardimplementierung von pi-durable ändert sich damit:
+
+- Haltbarkeit: pi-durable setzt fest `synchronous=NORMAL`; im WAL-Modus wird dabei
+  nur beim Checkpoint synchronisiert, bestätigte Commits können bei Systemausfall
+  verloren gehen. Der installierte JSONL-Adapter läuft zudem standardmäßig mit
+  `fsync=false`. Hier gilt `synchronous=FULL` als verbindliches Profil.
+- Schema: pi-durable speichert ein agentenzentriertes Modell (`conversations`,
+  `entries`, `tasks`, `submissions`, `documents` mit den Scopes `session`,
+  `conversation`, `task`). Der eigene Speicher kennt nur `store_meta`, `documents`
+  mit zusammengesetztem Namespace-/Art-/Familienschlüssel und `migration_runs`;
+  Spaces sind keine Scopes unterhalb einer Session mehr.
+- Revisionsablage: pi-durable hält Dokumente als Append-only-Kette aus `base`- und
+  `delta`-Revisionen und setzt sie beim Lesen zusammen. Stufe 1 speichert
+  vollständige Dokumentwerte; Teilablage bleibt dem Messgate in U2 vorbehalten.
+- Dateiformat: keine Kompatibilität. Bestände werden über den versionierten
+  Export/Import übernommen, nicht durch Lesen vorhandener pi-durable-Dateien.
+- Betrieb: pi-durable öffnet mit festen PRAGMA-Werten und `busy_timeout`. Der eigene
+  Store prüft beim Öffnen Versionen, PRAGMAs, Schreibrechte und Schema, verlangt
+  einen eigenen Owner-Lock (5.2) und einen nachgewiesenen Backup-Pfad (5.3).
+
+Gleich bleiben der Unterbau (`node:sqlite`/`DatabaseSync`, WAL, serialisierte
+Operationsqueue, `BEGIN IMMEDIATE`-Transaktionen) und das Dokumentmodell selbst.
+
 ### 5.2 Owner, Dateien und Wartung
 
 - Ein aktiver Owner pro Store, lokale Dateisysteme im freigegebenen Betriebsprofil.
