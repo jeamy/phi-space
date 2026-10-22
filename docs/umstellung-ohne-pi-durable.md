@@ -1,6 +1,8 @@
 # Umstellung von phi-spaces auf eine eigenständige persistente Laufzeit
 
-Stand: 2026-10-12. **Detaillierter Ziel- und Arbeitsplan; noch nicht implementiert.**
+Stand: 2026-10-12. **Detaillierter Ziel- und Arbeitsplan; noch nicht implementiert.** U0 ist erhoben
+(2026-10-22): [umstellung-u0-bestand.md](umstellung-u0-bestand.md), mit Lastprofil, vorgeschlagenen Grenzwerten und
+offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente (Abschnitt 5.1) für U2 von Beginn an nötig.
 
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
