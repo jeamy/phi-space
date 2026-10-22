@@ -8,21 +8,28 @@
 // coalesce what happened while their listener ran.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { awaitWithContext, type Context } from "../context.ts";
-import { detach, draftOf, isDraft, type Draft } from "./draft.ts";
+import { detach, draftOf, isDraft, type Draft, type PartChanges } from "./draft.ts";
 import type { ClosableStoreHost, DocDef, DocFamilyDef, DocWatch, StoreTx, WatchEnd } from "./types.ts";
 
 type AnyDef = DocDef<any> | DocFamilyDef<any, any>;
 /** A committed document: its value and the schema version it was stored with. */
 export type StoredDoc = { kind: string; key: string | null; version: number; value: unknown };
+/** A document a commit changed. For one with parts: the parts, its value before, and the keys its map parts changed
+ *  (store/parts.ts finds the rows from these). */
+export type PutDoc = StoredDoc & { parts?: DocDef<unknown>["parts"]; before?: unknown; changes?: PartChanges };
 /** One commit's effect on the documents: the new or changed ones, and the retired ones. */
-export type CommitSet = { put: StoredDoc[]; retired: Array<{ kind: string; key: string | null }> };
+export type CommitSet = { put: PutDoc[]; retired: Array<{ kind: string; key: string | null }> };
 
-/** Where committed documents live. `load` reads one (null: none); `persist` stores a commit's effect durably. */
+/** Where committed documents live. `load` reads one (null: none); `persist` stores a commit's effect durably and settles
+ *  when it is (in the order commits were handed over). */
 export interface Ledger {
-	load(kind: string, key: string | null): StoredDoc | null;
+	load(kind: string, key: string | null, parts?: DocDef<unknown>["parts"]): StoredDoc | null;
 	persist(set: CommitSet): void | Promise<void>;
 	close(): void | Promise<void>;
+	/** How writing goes (plan 5.2: queue, sync latency): batches written, commits in them, time spent writing. */
+	stats?(): StoreStats;
 }
+export type StoreStats = { batches: number; commits: number; rows: number; writeMs: number; maxBatch: number; queued: number };
 
 /** Set while a commit callback runs: a snapshot from inside a commit must not wait for that commit. */
 const inCommit = new AsyncLocalStorage<true>();
@@ -88,30 +95,40 @@ export class OwnStoreHost implements ClosableStoreHost {
 	readonly #watches = new Map<string, Set<Watch<any>>>();
 	#tail: Promise<unknown> = Promise.resolve();
 	#closed = false;
+	/** Settles when everything handed to the ledger so far is durable. */
+	#durable: Promise<void> = Promise.resolve();
+	/** A write failed: the host takes no more work (plan 4.1: its memory may hold what never reached the disk). */
+	#failure: Error | null = null;
 
 	constructor(ledger: Ledger) { this.#ledger = ledger; }
 
-	#committed(kind: string, key: string | null): StoredDoc | null {
+	#usable(): void {
+		if (this.#closed) throw new Error(HOST_CLOSED);
+		if (this.#failure) throw new Error(`the store failed and must be reopened: ${this.#failure.message}`);
+	}
+	#committed(kind: string, key: string | null, parts?: AnyDef["parts"]): StoredDoc | null {
 		const a = addr(kind, key);
-		if (!this.#docs.has(a)) this.#docs.set(a, this.#ledger.load(kind, key));
+		if (!this.#docs.has(a)) this.#docs.set(a, this.#ledger.load(kind, key, parts));
 		return this.#docs.get(a)!;
 	}
 	/** The committed value of a definition, brought up to its version (a migration is not stored until a commit). */
 	#current(def: AnyDef, key: string | null): unknown | undefined {
-		const d = this.#committed(def.kind, key);
+		const d = this.#committed(def.kind, key, def.parts);
 		if (!d) return undefined;
 		return d.version < def.version && def.migrate ? def.migrate(d.value as never, d.version) : d.value;
 	}
 
+	/** Commits run one after the other; the next one may start while the previous one is still being written (its
+	 *  callback sees that state). A commit is acknowledged, and its watches woken, once it is durable. */
 	commit<T>(change: (tx: StoreTx) => T | Promise<T>, context: Context): Promise<T> {
-		if (this.#closed) return Promise.reject(new Error(HOST_CLOSED));
-		const run = this.#tail.catch(() => {}).then(() => this.#run(change, context));
-		this.#tail = run;
-		return awaitWithContext(run, context);
+		try { this.#usable(); } catch (e) { return Promise.reject(e); }
+		const phase = this.#tail.catch(() => {}).then(() => this.#run(change, context));
+		this.#tail = phase;
+		return awaitWithContext(phase.then(async (r) => { await r.durable; return r.out; }), context);
 	}
 
-	async #run<T>(change: (tx: StoreTx) => T | Promise<T>, context: Context): Promise<T> {
-		if (this.#closed) throw new Error(HOST_CLOSED);
+	async #run<T>(change: (tx: StoreTx) => T | Promise<T>, context: Context): Promise<{ out: T; durable: Promise<void> }> {
+		this.#usable();
 		context.abortSignal?.throwIfAborted();
 		const drafts = new Map<string, { def: AnyDef; key: string | null; draft: Draft<unknown> }>();
 		const retired = new Map<string, { kind: string; key: string | null }>();
@@ -151,27 +168,32 @@ export class OwnStoreHost implements ClosableStoreHost {
 			const fresh = this.#docs.get(a) == null, migrated = (this.#docs.get(a)?.version ?? def.version) !== def.version;
 			if (value === before && !fresh && !migrated && draft.changes.size === 0) continue; // only read
 			records.push(...draft.fresh);
-			set.put.push({ kind: def.kind, key, version: def.version, value });
+			set.put.push({ kind: def.kind, key, version: def.version, value, ...(def.parts?.length ? { parts: def.parts, before, changes: draft.changes } : {}) });
 			changed.push([a, value]);
 		}
 		for (const [a, r] of retired) if (this.#committed(r.kind, r.key)) { set.retired.push(r); changed.push([a, null]); }
-		if (set.put.length || set.retired.length) {
-			// a record of a part is a value from now on: whoever still changes one in place gets an error, not a silent change
-			for (const r of records) deepFreeze(r);
-			await this.#ledger.persist(set);
-			for (const d of set.put) this.#docs.set(addr(d.kind, d.key), d);
-			for (const r of set.retired) this.#docs.set(addr(r.kind, r.key), null);
-			for (const [a, value] of changed) for (const w of this.#watches.get(a) ?? []) value === null ? w.finish({ reason: "retired" }) : w.offer(value as never);
-		}
-		return out;
+		// a commit that only read may still depend on earlier commits that are not yet durable: it waits for them too
+		if (!set.put.length && !set.retired.length) return { out, durable: this.#durable };
+		// a record of a part is a value from now on: whoever still changes one in place gets an error, not a silent change
+		for (const r of records) deepFreeze(r);
+		// the next commit builds on this one at once; readers and watches see it once it is durable
+		for (const d of set.put) this.#docs.set(addr(d.kind, d.key), { kind: d.kind, key: d.key, version: d.version, value: d.value });
+		for (const r of set.retired) this.#docs.set(addr(r.kind, r.key), null);
+		const durable = Promise.resolve(this.#ledger.persist(set)).then(
+			() => { for (const [a, value] of changed) for (const w of this.#watches.get(a) ?? []) value === null ? w.finish({ reason: "retired" }) : w.offer(value as never); },
+			(e: unknown) => { this.#failure ??= e instanceof Error ? e : new Error(String(e)); throw e; },
+		);
+		this.#durable = durable.catch(() => {});
+		return { out, durable };
 	}
 
 	snapshot<T>(def: DocDef<T>, context: Context): Promise<Readonly<T> | undefined>;
 	snapshot<T, I>(def: DocFamilyDef<T, I>, key: string, context: Context): Promise<Readonly<T> | undefined>;
 	async snapshot(def: AnyDef, keyOrContext: string | Context): Promise<any> {
-		if (this.#closed) throw new Error(HOST_CLOSED);
-		// a map part changes in place while a commit runs: a snapshot from outside waits for the commits in progress
-		if (!inCommit.getStore()) await this.#tail.catch(() => {});
+		this.#usable();
+		// a map part changes in place while a commit runs, and what a commit wrote is not durable at once: a snapshot from
+		// outside waits for the commits in progress and their writing
+		if (!inCommit.getStore()) { await this.#tail.catch(() => {}); await this.#durable; this.#usable(); }
 		const key = def.family ? (keyOrContext as string) : null;
 		return this.#current(def, key);
 	}
@@ -179,8 +201,9 @@ export class OwnStoreHost implements ClosableStoreHost {
 	watchDoc<T>(def: DocDef<T>, context: Context): Promise<DocWatch<T> | undefined>;
 	watchDoc<T, I>(def: DocFamilyDef<T, I>, key: string, context: Context): Promise<DocWatch<T> | undefined>;
 	async watchDoc(def: AnyDef, keyOrContext: string | Context, context?: Context): Promise<any> {
-		if (this.#closed) throw new Error(HOST_CLOSED);
+		this.#usable();
 		const key = def.family ? (keyOrContext as string) : null, ctx = (def.family ? context : keyOrContext) as Context;
+		if (!inCommit.getStore()) { await this.#tail.catch(() => {}); await this.#durable; this.#usable(); }
 		const value = this.#current(def, key);
 		if (value === undefined) return undefined; // a watch does not create its document
 		const a = addr(def.kind, key);
@@ -190,10 +213,14 @@ export class OwnStoreHost implements ClosableStoreHost {
 		return w;
 	}
 
+	/** How the ledger writes (absent for one that keeps nothing). */
+	stats(): StoreStats | undefined { return this.#ledger.stats?.(); }
+
 	async close(_context: Context): Promise<void> {
 		if (this.#closed) return;
 		this.#closed = true;
 		await this.#tail.catch(() => {});
+		await this.#durable;
 		for (const set of this.#watches.values()) for (const w of [...set]) w.finish({ reason: "session_closed" });
 		this.#watches.clear();
 		await this.#ledger.close();

@@ -24,6 +24,53 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
 - **Offen in U1:** Tests und Beispiele öffnen ihre Hosts noch direkt mit `Harness.open`. Sie wechseln auf eine
   gemeinsame Fixture, sobald es den eigenen Speicher gibt (U2/U3), damit sie gegen beide Speicher laufen können.
 
+**Stand U2 (2026-10-22):**
+
+- **Eigener Host** `src/store/host.ts`:
+  - Commits laufen nacheinander auf Entwürfen mit Kopieren beim Schreiben (`src/store/draft.ts`).
+  - Der nächste Commit darf beginnen, während der vorige noch geschrieben wird. Bestätigt wird er erst, wenn er
+    dauerhaft ist; Snapshots und Watches sehen nur dauerhafte Stände.
+  - Scheitert ein Schreiben, sperrt sich der Host.
+- **Teile** der beiden Space-Dokumente (`SPACE_PARTS`: Einträge, Claims, Generationen, Verlaufs-Batches):
+  - Ihre Datensätze sind Werte. Der Host friert neue beim Veröffentlichen ein, und der Kern ersetzt sie statt sie zu
+    ändern (`setEntry`, `decide`, `sweep`, Markierung verwaister Claims).
+  - Array-Teile werden beim ersten Schreiben flach kopiert, und ihre Methoden laufen ohne Proxy.
+  - Tabellen-Teile werden in place mit Rückgängig-Protokoll geändert.
+- **SQLite-Speicher** `src/store/sqlite.ts`:
+  - Tabellen `store_meta`, `documents` (ganzer Wert bzw. Kopf), `parts` (eine Zeile je Datensatz, mit Ordnung) und
+    `migration_runs`.
+  - Ein Schreib-Thread (`src/store/sqlite-writer.ts`) schreibt gebündelt, Standard `synchronous=FULL`.
+  - Owner-Lock über eine gehaltene exklusive Sperre auf `<Datei>.owner`.
+  - Eine neuere Formatversion wird abgewiesen; Kennzahlen über `stats()`.
+- **Claims-Bereinigung:** Sie sucht nur, wenn etwas fällig sein kann (`rpc.sweepAt`). Das wirkt auch mit pi-durable.
+- **Tests:** `PHI_SPACES_STORE=own|own-sqlite` lässt die Root-Suite auf dem eigenen Speicher laufen; bisher nutzen 16
+  Testdateien die Fixture. Dazu kommt `test/test-own-store.test.ts`: Wiederöffnen, Owner-Lock, Formatprüfung,
+  Bündelung.
+- **Messungen** (10.000 Einträge, 150.000 Claims, voller Verlauf):
+
+  | Messung | Ergebnis |
+  |---|---|
+  | Kernoperation, vorher (jede Operation durchsuchte alle Claims) | 542 ms je Commit |
+  | Kernoperation, jetzt | 0,2 ms je Commit |
+  | Commit über den Entwurf | p50 1,2 ms, p95 3,7 ms (Ziel p95 ≤ 5 ms erfüllt); Speicher 237 MB |
+  | pi-durable zum Vergleich, nur 10.000 Einträge | 51 ms je Commit |
+
+- **Durchsatz mit FULL** (1.000 Commits, 32 gleichzeitige Schreiber):
+
+  | Datenträger | Commits/s | p50 | p95 | Ziel (≥ 300/s, p95 ≤ 50 ms) |
+  |---|---|---|---|---|
+  | NVMe-SSD | 1.131 | 27,6 ms | 35,8 ms | erfüllt |
+  | RAID1 aus 5.400-U/min-Festplatten (SMR) | 249 | 119 ms | 203 ms | nicht erfüllt |
+  | NVMe-SSD, NORMAL zum Vergleich | 1.624 | 18,7 ms | 32,0 ms | |
+
+  Auf drehenden Platten kostet ein `fsync` 30–40 ms. Das Ziel ist dort mit FULL nicht erreichbar, unabhängig von der
+  Software; für den Betrieb gehört der Speicher auf eine SSD.
+- **Offen in U2:**
+  - weitere Tests auf die Fixture umstellen;
+  - die persistenten Tests (`test/support/persistent.ts`) für den eigenen Speicher nachbilden;
+  - echte Absturztests mit Kindprozess (U2c);
+  - Zähler statt Vollscan für offene Claims je Absender (`client.ts`).
+
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
 Speicherung, Wiederaufnahme nach Ausfällen und kontrollierte Übernahme vorhandener Daten.
