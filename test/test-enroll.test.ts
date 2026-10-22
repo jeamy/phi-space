@@ -11,7 +11,7 @@ import {
 	type Policy, type Signer,
 } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
-import { openTestHost } from "./support/host.ts";
+import { openTestHost, plainDoc } from "./support/host.ts";
 
 type Peer = { id: string; name: string; ip: string; connected: boolean; groups: Array<{ id: string; name: string }> };
 const peer = (id: string, ip: string, groups: string[]): Peer => ({ id, name: id, ip, connected: true, groups: groups.map((g) => ({ id: `g-${g}`, name: g })) });
@@ -113,10 +113,10 @@ test("the token is never stored, logged or shared: only its hash is in the contr
 	await createEnroll(g.host, ctx, { tokenHash: hashToken(token), role: "host", allowedPeerId: "p-host", now: g.clock.now });
 	const dev = g.device("127.0.0.2", "p-host", generateKey("ed25519", "k").signer);
 	await dev.enroll(token);
-	const everything = JSON.stringify([await g.control(), g.events]) + JSON.stringify(await snapshotSpace(g.host, (await listSpaces(g.host, ctx)).find((i) => i.alias === CONTROL_SPACE)!.spaceId, ctx));
+	const everything = JSON.stringify(plainDoc([await g.control(), g.events])) + JSON.stringify(plainDoc(await snapshotSpace(g.host, (await listSpaces(g.host, ctx)).find((i) => i.alias === CONTROL_SPACE)!.spaceId, ctx)));
 	assert.ok(!everything.includes(token), "the plain token is nowhere");
 	assert.ok(everything.includes(hashToken(token)), "its hash is");
-	const claims = JSON.stringify((await g.control()).rpc?.claims ?? {});
+	const claims = JSON.stringify(plainDoc((await g.control()).rpc?.claims ?? {}));
 	assert.ok(!claims.includes(token) && !claims.includes("signature"), "the claim keeps hashes, not the request");
 });
 

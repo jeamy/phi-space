@@ -9,6 +9,8 @@
 // record changes by being replaced. An array part is copied on its first write; a map part is changed in place with an
 // undo log (copying a map of 150 000 claims per commit is what made drafts slow), and reports the keys it changed.
 
+import { diskMapOf } from "./types.ts";
+
 type Obj = Record<string | symbol, unknown> | unknown[];
 
 /** A big collection of a document: an array of records, or a map of records by key. */
@@ -185,6 +187,7 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		if (!isObject(v)) return v;
 		if (seen.has(v)) return seen.get(v);
 		const s = stateOf(v);
+		if (!s && diskMapOf(v)) return v; // a map part on the disk (store/disk-map.ts) holds no drafts and is not enumerated
 		if (s?.kind === "map") {
 			// the map itself is the committed one; only the records written in this commit can hold drafts
 			seen.set(v, s.base);
@@ -212,6 +215,7 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 			const c = (o as Record<string, unknown>)[k];
 			if (!isObject(c)) continue;
 			if (stateOf(c)) return true;
+			if (diskMapOf(c)) continue;
 			if (hasDraftInside(c, depth + 1)) return true;
 		}
 		return false;

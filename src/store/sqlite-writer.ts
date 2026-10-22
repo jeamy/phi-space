@@ -19,7 +19,7 @@ const hold = (at: string, batch: number) => {
 export type WriteOp =
 	| { t: "doc"; kind: string; key: string; version: number; value: string }
 	| { t: "retire"; kind: string; key: string }
-	| { t: "part"; kind: string; key: string; part: string; id: string; ord: number; value: string }
+	| { t: "part"; kind: string; key: string; part: string; id: string; ord: number; value: string; at: number | null; grp: string | null; flag: number | null }
 	| { t: "partDel"; kind: string; key: string; part: string; id: string };
 export type WriterRequest = { type: "open"; path: string; synchronous: "FULL" | "NORMAL" } | { type: "write"; batch: number; ops: WriteOp[] } | { type: "close" };
 export type WriterReply = { type: "opened" } | { type: "written"; batch: number } | { type: "failed"; batch: number | null; error: string } | { type: "closed" };
@@ -37,7 +37,7 @@ parentPort!.on("message", (m: WriterRequest) => {
 				doc: db.prepare("INSERT INTO documents (kind, key, version, value) VALUES (?, ?, ?, ?) ON CONFLICT (kind, key) DO UPDATE SET version = excluded.version, value = excluded.value"),
 				retire: db.prepare("DELETE FROM documents WHERE kind = ? AND key = ?"),
 				retireParts: db.prepare("DELETE FROM parts WHERE kind = ? AND key = ?"),
-				part: db.prepare("INSERT INTO parts (kind, key, part, id, ord, value) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (kind, key, part, id) DO UPDATE SET ord = excluded.ord, value = excluded.value"),
+				part: db.prepare("INSERT INTO parts (kind, key, part, id, ord, value, at, grp, flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (kind, key, part, id) DO UPDATE SET ord = excluded.ord, value = excluded.value, at = excluded.at, grp = excluded.grp, flag = excluded.flag"),
 				partDel: db.prepare("DELETE FROM parts WHERE kind = ? AND key = ? AND part = ? AND id = ?"),
 				seq: db.prepare("UPDATE store_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'commit_seq'"),
 			};
@@ -52,7 +52,7 @@ parentPort!.on("message", (m: WriterRequest) => {
 		for (const op of m.ops) {
 			if (op.t === "doc") stmts.doc.run(op.kind, op.key, op.version, op.value);
 			else if (op.t === "retire") { stmts.retire.run(op.kind, op.key); stmts.retireParts.run(op.kind, op.key); }
-			else if (op.t === "part") stmts.part.run(op.kind, op.key, op.part, op.id, op.ord, op.value);
+			else if (op.t === "part") stmts.part.run(op.kind, op.key, op.part, op.id, op.ord, op.value, op.at, op.grp, op.flag);
 			else stmts.partDel.run(op.kind, op.key, op.part, op.id);
 		}
 		stmts.seq.run();

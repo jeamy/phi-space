@@ -17,6 +17,8 @@ import { openSqliteHost } from "../../src/store/sqlite.ts";
 import { PhiSpaces, serveSpace, SpaceService, StaticIdentity, startService } from "../../src/index.ts";
 import { announce, DEFAULT_SPACE, parseTarget } from "./space.ts";
 
+const MiB = 1024 * 1024;
+
 export async function startSpaceHost(o: { listen?: string; dbPath?: string | null } = {}) {
 	// the store of the space (no agent tools: every process reaches the space over the socket)
 	const harness = o.dbPath ? await (async () => { await mkdir(dirname(o.dbPath!), { recursive: true }); return openSqliteHost(o.dbPath!); })() : openOwnMemoryHost();
@@ -27,8 +29,9 @@ export async function startSpaceHost(o: { listen?: string; dbPath?: string | nul
 	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity }), { listen: parseTarget(listen), connection: () => ({ peerId: "peer-codemode" }) });
 	const local = new PhiSpaces(harness, ctx);
 	// every process connects as the same peer: the per-owner caps must cover all of them together (judges and agents
-	// each hold a transaction and a waiting take); the size caps stay as they are
-	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000 });
+	// each hold a transaction and a waiting take). On the disk the claims of a day (24 h are kept) live there, not in
+	// memory (docs/umstellung-ohne-pi-durable.md, D5): measured 23 800 per idle hour, about 240 MB a day, so twice that
+	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, ...(o.dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
 	const presence = announce(local, "space");
 	return {
 		listen,

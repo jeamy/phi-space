@@ -377,9 +377,10 @@ export class PhiSpaces implements SpaceLike {
 			const existing = s.rpc?.claims[claims.keyOf(s, o.request)];
 			if (!existing) {
 				assertMemberAdmission(s,method);
-				const n = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && canonicalPrincipal(c.principal) === canonicalPrincipal(o.request.principal)).length;
+				const open = claims.pendingClaims(s).map(([, c]) => c);
+				const n = open.filter(c => canonicalPrincipal(c.principal) === canonicalPrincipal(o.request.principal)).length;
 				if (n >= (this.options.maxPending ?? 32)) throw new core.ResourceExhausted("too many pending operations for this principal");
-				const peerCount = Object.values(s.rpc?.claims ?? {}).filter(c => c.state === "pending" && (c.principal.peerId === o.request.principal.peerId || (!!this.options.authorization?.transportPeerId && c.transportPeerId===this.options.authorization.transportPeerId))).length;
+				const peerCount = open.filter(c => (c.principal.peerId === o.request.principal.peerId || (!!this.options.authorization?.transportPeerId && c.transportPeerId===this.options.authorization.transportPeerId))).length;
 				if (peerCount >= (this.options.maxPendingPeer ?? 128)) throw new core.ResourceExhausted("too many pending operations for this peer");
 			}
 			const lim = core.limitsOf(s);
@@ -444,4 +445,5 @@ export class PhiSpaces implements SpaceLike {
 }
 
 const canonicalPrincipal = (p: Principal): string => JSON.stringify([p.peerId, p.agentId ?? null]);
-const maintenanceSignature = (s: Readonly<core.SpaceState>): string => JSON.stringify([s.entries.length, Object.keys(s.txns).length, s.regs.length, s.waiters.length, core.revision(s), s.jobs?.map(j => [j.id, j.cursor, j.retryAt ?? 0]), s.releaseQueue, Object.values(s.mailboxes?.boxes ?? {}).map(b => [b.epoch, b.next, b.acked])]);
+// claims count by their tally: a sweep that drops 256 of thousands of due claims (after a pause) is progress
+const maintenanceSignature = (s: Readonly<core.SpaceState>): string => JSON.stringify([s.rpc?.bytes ?? 0, s.entries.length, Object.keys(s.txns).length, s.regs.length, s.waiters.length, core.revision(s), s.jobs?.map(j => [j.id, j.cursor, j.retryAt ?? 0]), s.releaseQueue, Object.values(s.mailboxes?.boxes ?? {}).map(b => [b.epoch, b.next, b.acked])]);

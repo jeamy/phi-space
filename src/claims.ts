@@ -9,6 +9,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import { LimitError, assertAdminIdle, maintenanceStep, claimBytes, limitsOf, touch, type Json, type SpaceState } from "./core.ts";
 import { jsonBytes } from "./json.ts";
+import { diskMapOf } from "./store/types.ts";
 
 const bytesOf = jsonBytes;
 
@@ -192,7 +193,19 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	// Filter first: only the (usually few) expired keys need the deterministic order. The same pass finds when the
 	// next claim that stays becomes due (its result expires, or its generation stops admitting).
 	let next = Number.MAX_SAFE_INTEGER;
-	const eligible = Object.keys(st.claims).filter(k => {
+	const disk = diskMapOf<ClaimRec>(st.claims);
+	let eligible: string[];
+	if (disk) {
+		// claims on the disk (store/cold.ts): the store finds the due ones by its index; a claim whose result is gone
+		// waits for its generation, which the loop over generations below accounts for
+		const gens = Object.keys(st.generations), closed = gens.filter(id => st.generations[id]!.admitUntil < now);
+		eligible = disk.due(now - keep, maxRecords + 1, { in: closed, known: gens }, c => {
+			const g = st.generations[c.generation];
+			return c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + keep <= now && (!c.resultExpired || !g || g.admitUntil < now);
+		});
+		const at = disk.nextAt(now - keep);
+		if (at !== undefined) next = Math.min(next, at + keep);
+	} else eligible = Object.keys(st.claims).filter(k => {
 		const c = st.claims[k]!, g = st.generations[c.generation];
 		if (c.state === "pending" || c.decidedAt === undefined) return false;
 		const due = c.resultExpired ? (g ? g.admitUntil + 1 : now) : c.decidedAt + keep;
@@ -209,17 +222,31 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 		changed = true;
 	}
 	delete st.sweepCursor; // a field of earlier versions; no cursor is kept
-	const used = new Set(Object.values(st.claims).map(c => c.generation));
+	const usedSet = disk ? null : new Set(Object.values(st.claims).map(c => c.generation));
+	const used = { has: (id: string) => (disk ? disk.hasGroup(id) : usedSet!.has(id)) };
 	let removed = 0;
 	let stopped = false;
 	for (const [id, g] of Object.entries(st.generations)) {
-		if (g.admitUntil >= now || used.has(id)) { next = Math.min(next, g.admitUntil + 1); continue; }
+		if (g.admitUntil >= now) { next = Math.min(next, g.admitUntil + 1); continue; }
+		// a closed generation goes with its last claim, whose own due time is counted above: it adds no due time (its
+		// past admitUntil would make every operation sweep for nothing)
+		if (used.has(id)) continue;
 		if (stopped || removed >= maxRecords || !maintenanceStep(s, 128, now, `generation:${id}`)) { stopped = true; complete = false; continue; }
 		st.bytes = (st.bytes ?? 0) - bytesOf(g) - bytesOf(id) - 2; delete st.generations[id]; removed++; changed = true;
 	}
-	// a claim kept after its result expired stays due with its generation (counted above); a cut-short sweep scans again
-	if (complete) st.sweepAt = Math.max(now + 1, next); else delete st.sweepAt;
+	// a claim kept after its result expired stays due with its generation (counted above). A cut-short sweep stays due:
+	// the next operation sweeps on in bounded steps (without sweepAt every operation would scan all claims again)
+	st.sweepAt = complete ? Math.max(now + 1, next) : now;
 	if (changed) touch(s, now);
+}
+
+/** The open (pending) requests, by key. A store that keeps the claims on its disk keeps these in memory, so asking
+ *  for them never reads a day of decided claims. */
+export function pendingClaims(s: Readonly<SpaceState>): Array<[string, ClaimRec]> {
+	const claims = s.rpc?.claims;
+	if (!claims) return [];
+	const disk = diskMapOf<ClaimRec>(claims);
+	return (disk ? disk.unindexed() : Object.entries(claims)).filter(([, c]) => c.state === "pending");
 }
 
 /** Something becomes due for sweeping at `at`: the next sweep must not skip it. */

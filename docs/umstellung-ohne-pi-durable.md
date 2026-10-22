@@ -69,7 +69,7 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   - weitere Tests auf die Fixture umstellen;
   - die persistenten Tests (`test/support/persistent.ts`) für den eigenen Speicher nachbilden;
   - Zähler statt Vollscan für offene Claims je Absender (`client.ts`);
-  - Grenzen für Claims neu festlegen (D5) und Claims nicht mehr ganz im Speicher halten (siehe Stand U2c).
+  - Leerlauf-Claims im Chat verringern (siehe Stand U2d).
 
 **Stand U2c (2026-10-22):**
 
@@ -102,16 +102,50 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   Vorher kostete der Leerlauf den Space-Prozess 28–78 % einer CPU, und Lesezugriffe wurden von 3 ms auf bis zu 360 ms
   langsamer. Ein Zufallstest prüft, dass die Zeilen eines Array-Teils das Array nach jeder Art von Änderung genau
   wiedergeben.
-- **Offen, Entscheidung nötig:** Bei 23.800 Claims pro Stunde und 24 h Aufbewahrung (D4) wären es rund 570.000 Claims
-  mit etwa 240 MB:
-  - Die Grenze `maxClaimBytes` (32 MiB) wäre nach etwa drei Stunden erreicht, danach lehnt der Space neue Anfragen ab.
-  - Der Kapazitätswert aus D2 (150.000 Claims) wäre um das Vierfache überschritten.
-  - Der eigene Speicher hält alle Claims im Arbeitsspeicher; das widerspricht dem Ziel von höchstens 300 MB RSS.
+- **Entscheidung (2026-10-22):** beides, zuerst die Claims auf der Platte. Ausgangslage: Bei 23.800 Claims pro Stunde
+  und 24 h Aufbewahrung (D4) wären es rund 570.000 Claims mit etwa 240 MB. Die Grenze von 32 MiB wäre nach etwa drei
+  Stunden erreicht, und alle Claims lägen im Arbeitsspeicher.
 
-  Möglich sind:
-  - Claims nur auf der Platte halten, nach Schlüssel nachgeladen, und die Grenzen nach D5 neu setzen;
-  - weniger Leerlauf-Claims im Chat, etwa längere Wartezeiten oder Warten ohne eigene Transaktion;
-  - beides.
+**Stand U2d: Claims auf der Platte (2026-10-22)**
+
+- **Teil auf der Platte:** `rpc.claims` ist in `SPACE_PARTS` als `disk` erklärt (`src/store/disk-map.ts`).
+  - Für den Kern bleibt es ein Objekt mit Claims nach Schlüssel; ein Claim wird erst gelesen, wenn er gefragt ist.
+  - Im Speicher liegen nur die offenen Claims (ohne `decidedAt`) und, bis ihr Commit dauerhaft ist, was Commits
+    geschrieben oder gelöscht haben. So sehen überlappende Commits einander, und ein gescheiterter Commit nimmt seine
+    Änderungen über dieselbe Ablage zurück.
+  - Ein Space, der in diesem Prozess neu entsteht, legt seine Claims mit dem ersten Commit auf die Platte.
+- **Fragen ohne Scan** (`DISK_MAP`, `src/store/types.ts`), beantwortet über Indexspalten `at`, `grp`, `flag` der
+  Tabelle `parts`:
+  - fällige Claims für den Sweep, in Schlüsselreihenfolge und begrenzt;
+  - nächster Fälligkeitszeitpunkt;
+  - ob eine Generation noch Claims hat;
+  - die offenen Claims (`pendingClaims` in `src/claims.ts`, auch für die Grenzen je Absender in `client.ts`, die
+    bisher alle Claims durchsuchten).
+
+  Ein Map-Teil im Speicher (pi-durable, eigener Host im Speicher) beantwortet dieselben Fragen weiter durch Scannen.
+- **Strenger Modus:** In den Tests wirft das Aufzählen der Claims auf der Platte (`strictDiskMaps`), so dass ein
+  versehentlicher Vollscan auffällt. Das fand den Abschluss eines Entwurfs, die Statistik und einen Test, der absichtlich
+  alles liest (jetzt über `entries()`).
+- **Format 2** der SQLite-Datei: die Indexspalten; eine Datei im Format 1 wird beim Öffnen umgestellt und je Teil
+  einmal nachindiziert (getestet).
+- **Zwei ältere Fehler im Sweep**, die bei allen Speichern auftraten:
+  - Eine Generation, die nicht mehr zulässt, aber noch Claims hat, setzte den nächsten Sweep auf ihren vergangenen
+    `admitUntil`. Dann war bei jeder Operation ein Sweep fällig, der nichts fand. Im Chat trifft das jede Generation
+    nach einer Stunde.
+  - Ein abgebrochener Sweep (mehr als 256 fällige Claims, etwa nach einer Pause) löschte `sweepAt`, so dass jede
+    folgende Operation alle Claims durchsuchte; jetzt bleibt er fällig und arbeitet in Schritten weiter. Die Wartung
+    erkennt Fortschritt jetzt auch an den Bytes der Claims.
+- **Grenzen (D5):** Der Chat setzt für seinen Speicher auf der Platte `maxClaimBytes` 512 MiB und `maxDocBytes`
+  640 MiB, das Doppelte eines gemessenen Tages. Die Standardwerte bleiben für Spaces im Speicher.
+- **Messung** mit 600.000 entschiedenen Claims über 24 h verteilt, 10 Minuten davon (4.264 Claims) sofort fällig, dann
+  2.000-mal Claim plus Schreiben plus Nehmen:
+
+  | Messung | Ergebnis | Ziel (D2) |
+  |---|---|---|
+  | Öffnen bis bereit | 376 ms | ≤ 2 s |
+  | RSS nach Öffnen / nach der Last | 161 MB / 220 MB | ≤ 300 MB |
+  | je Operation p50 / p95 / p99 | 1,5 / 3,1 / 4,6 ms | p95 ≤ 5 ms |
+  | Rückstand | in Schritten abgeräumt | |
 
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare

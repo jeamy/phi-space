@@ -3,7 +3,8 @@
 //
 //   store_meta      format version, store id, commit counter
 //   documents       one row per document: its whole value, or for a document with parts its head
-//   parts           one row per record of a part (a Space's entries, claims, generations, stream batches)
+//   parts           one row per record of a part (a Space's entries, claims, generations, stream batches); a map part
+//                   kept on the disk (PartDef.disk, store/disk-map.ts) fills the index columns at, grp, flag
 //   migration_runs  imports of older stores (U5)
 //
 // Writes go to a writer thread (store/sqlite-writer.ts) in batches: whatever commits arrive while one batch is written
@@ -16,15 +17,18 @@ import { dirname } from "node:path";
 import { Worker } from "node:worker_threads";
 import { headOf, joinParts, partChanges, type PartRow, type PartSpec } from "./parts.ts";
 import { OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
+import { DiskMap, isDiskMap, type DiskMapSource } from "./disk-map.ts";
 import type { WriteOp, WriterReply, WriterRequest } from "./sqlite-writer.ts";
 
-/** The format of the file; a newer one is refused, an older one is migrated (none yet). */
-export const FORMAT_VERSION = 1;
+/** The format of the file; a newer one is refused, an older one is migrated (1 to 2: the index columns of parts). */
+export const FORMAT_VERSION = 2;
 
 export type SqliteStoreOptions = {
 	/** FULL (default): a commit is acknowledged once it is on the disk. NORMAL: faster, the last commits can be lost when
 	 *  the system (not the process) fails. */
 	synchronous?: "FULL" | "NORMAL";
+	/** Enumerating a map part on the disk throws instead of reading every key (tests: such a scan is a defect). */
+	strictDiskMaps?: boolean;
 };
 
 /** Refused: another process owns the store, or the file is of an unknown format. */
@@ -33,9 +37,15 @@ export class StoreUnavailable extends Error {}
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS documents (kind TEXT NOT NULL, key TEXT NOT NULL, version INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (kind, key)) STRICT;
-CREATE TABLE IF NOT EXISTS parts (kind TEXT NOT NULL, key TEXT NOT NULL, part TEXT NOT NULL, id TEXT NOT NULL, ord INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (kind, key, part, id)) STRICT;
+CREATE TABLE IF NOT EXISTS parts (kind TEXT NOT NULL, key TEXT NOT NULL, part TEXT NOT NULL, id TEXT NOT NULL, ord INTEGER NOT NULL, value TEXT NOT NULL, at INTEGER, grp TEXT, flag INTEGER, PRIMARY KEY (kind, key, part, id)) STRICT;
 CREATE INDEX IF NOT EXISTS parts_order ON parts (kind, key, part, ord);
 CREATE TABLE IF NOT EXISTS migration_runs (export_id TEXT PRIMARY KEY, manifest_hash TEXT NOT NULL, progress TEXT NOT NULL, state TEXT NOT NULL) STRICT;
+`;
+// after a format 1 file got its index columns
+const INDEXES = `
+CREATE INDEX IF NOT EXISTS parts_at ON parts (kind, key, part, at) WHERE at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS parts_grp ON parts (kind, key, part, grp) WHERE grp IS NOT NULL;
+CREATE INDEX IF NOT EXISTS parts_open ON parts (kind, key, part) WHERE at IS NULL;
 `;
 
 const docKey = (key: string | null) => key ?? "";
@@ -51,8 +61,17 @@ class SqliteLedger implements Ledger {
 	readonly #worker: Worker;
 	/** Per document with parts: the order of each array part's records (store/parts.ts). */
 	readonly #ords = new Map<string, Map<string, Map<string, number>>>();
+	/** Per document: its map parts on the disk, by part name. */
+	readonly #diskMaps = new Map<string, Map<string, DiskMap>>();
+	readonly #strict: boolean;
+	/** Commits handed over (`persist`) and commits durable, counted alike: what a commit writes into a map part on the
+	 *  disk is held in memory until the commit is durable. */
+	#handed = 0;
+	#durableCount = 0;
 	#batch = 0;
 	#writing: { batch: number; done: Array<{ resolve: () => void; reject: (e: Error) => void }> } | null = null;
+	readonly #stmt = new Map<string, ReturnType<DatabaseSync["prepare"]>>();
+	#prep(sql: string): ReturnType<DatabaseSync["prepare"]> { let p = this.#stmt.get(sql); if (!p) this.#stmt.set(sql, (p = this.#read.prepare(sql))); return p; }
 	#queued: { ops: WriteOp[]; done: Array<{ resolve: () => void; reject: (e: Error) => void }> } = { ops: [], done: [] };
 	#failure: Error | null = null;
 	#closing: (() => void) | null = null;
@@ -61,8 +80,8 @@ class SqliteLedger implements Ledger {
 
 	stats(): StoreStats { return { ...this.#stats, queued: this.#queued.done.length }; }
 
-	constructor(read: DatabaseSync, lock: DatabaseSync, worker: Worker) {
-		this.#read = read; this.#lock = lock; this.#worker = worker;
+	constructor(read: DatabaseSync, lock: DatabaseSync, worker: Worker, strict: boolean) {
+		this.#read = read; this.#lock = lock; this.#worker = worker; this.#strict = strict;
 		worker.on("message", (r: WriterReply) => this.#reply(r));
 		worker.on("error", (e) => this.#fail(e instanceof Error ? e : new Error(String(e))));
 	}
@@ -73,7 +92,8 @@ class SqliteLedger implements Ledger {
 		let value = JSON.parse(row.value) as unknown;
 		if (parts?.length) {
 			const rows = new Map<string, PartRow[]>(), ords = new Map<string, Map<string, number>>();
-			for (const r of this.#read.prepare("SELECT part, id, ord, value FROM parts WHERE kind = ? AND key = ? ORDER BY part, ord").iterate(kind, docKey(key)) as Iterable<{ part: string; id: string; ord: number; value: string }>) {
+			const onDisk = parts.filter((p) => p.disk && p.kind === "map");
+			for (const r of this.#read.prepare(`SELECT part, id, ord, value FROM parts WHERE kind = ? AND key = ? AND part NOT IN (${onDisk.map(() => "?").join(", ")}) ORDER BY part, ord`).iterate(kind, docKey(key), ...onDisk.map((p) => p.path.join("."))) as Iterable<{ part: string; id: string; ord: number; value: string }>) {
 				const v = JSON.parse(r.value);
 				deepFreeze(v); // records of parts are values (the host freezes the ones commits write; these come from the file)
 				if (!rows.has(r.part)) rows.set(r.part, []);
@@ -81,14 +101,57 @@ class SqliteLedger implements Ledger {
 				if (!ords.has(r.part)) ords.set(r.part, new Map());
 				ords.get(r.part)!.set(r.id, r.ord);
 			}
-			value = joinParts(value, parts, rows);
+			value = joinParts(value, parts.filter((p) => !onDisk.includes(p)), rows);
 			this.#ords.set(`${kind}\u0000${docKey(key)}`, ords);
+			// a map part on the disk stays there: the document holds a DiskMap in its place
+			for (const p of onDisk) {
+				const parent = p.path.slice(0, -1).reduce<unknown>((o, k) => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), value);
+				if (parent === null || typeof parent !== "object" || !(p.path.at(-1)! in parent)) continue;
+				this.#index(kind, docKey(key), p);
+				const m = new DiskMap(this.#source(kind, docKey(key), p.path.join(".")), p.disk!, () => this.#handed + 1, this.#strict);
+				(parent as Record<string, unknown>)[p.path.at(-1)!] = m.proxy;
+				this.#diskMapsOf(kind, docKey(key)).set(p.path.join("."), m);
+			}
 		}
 		return { kind, key, version: row.version, value };
 	}
 
+	#diskMapsOf(kind: string, key: string): Map<string, DiskMap> {
+		const id = `${kind}\u0000${key}`;
+		if (!this.#diskMaps.has(id)) this.#diskMaps.set(id, new Map());
+		return this.#diskMaps.get(id)!;
+	}
+
+	/** Rows of a format 1 file have no index columns yet: filled once per part from their values. */
+	#index(kind: string, key: string, p: PartSpec): void {
+		const mark = `indexed\u0000${kind}\u0000${key}\u0000${p.path.join(".")}`;
+		if (this.#prep("SELECT 1 FROM store_meta WHERE key = ?").get(mark)) return;
+		const path = (f: string) => `$.${f}`;
+		this.#read.prepare(`UPDATE parts SET at = json_extract(value, ?), grp = json_extract(value, ?), flag = CASE WHEN json_extract(value, ?) THEN 1 ELSE 0 END WHERE kind = ? AND key = ? AND part = ? AND grp IS NULL`)
+			.run(path(p.disk!.at), path(p.disk!.group), path(p.disk!.flag), kind, key, p.path.join("."));
+		this.#read.prepare("INSERT INTO store_meta (key, value) VALUES (?, '1')").run(mark);
+	}
+
+	/** The rows of one map part on the disk, as DiskMap asks for them (read connection: what is durable). */
+	#source(kind: string, key: string, part: string): DiskMapSource {
+		const base = "FROM parts WHERE kind = ? AND key = ? AND part = ?";
+		const list = (n: number) => Array.from({ length: n }, () => "?").join(", ");
+		return {
+			get: (id) => (this.#prep(`SELECT value ${base} AND id = ?`).get(kind, key, part, id) as { value: string } | undefined)?.value,
+			ids: () => (this.#prep(`SELECT id ${base}`).all(kind, key, part) as Array<{ id: string }>).map((r) => r.id),
+			due: (t, limit, inGroups, known) => {
+				const sql = `SELECT id, value ${base} AND at IS NOT NULL AND at <= ? AND (flag = 0${inGroups.length ? ` OR grp IN (${list(inGroups.length)})` : ""} OR grp NOT IN (${list(known.length)})) ORDER BY id LIMIT ?`;
+				return (this.#read.prepare(sql).all(kind, key, part, t, ...inGroups, ...known, limit) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]);
+			},
+			nextAt: (t) => (this.#prep(`SELECT min(at) AS at ${base} AND at IS NOT NULL AND at > ? AND flag = 0`).get(kind, key, part, t) as { at: number | null }).at ?? undefined,
+			group: (g, limit) => (this.#prep(`SELECT id ${base} AND grp = ? LIMIT ?`).all(kind, key, part, g, limit) as Array<{ id: string }>).map((r) => r.id),
+			unindexed: () => (this.#prep(`SELECT id, value ${base} AND at IS NULL`).all(kind, key, part) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]),
+		};
+	}
+
 	persist(set: CommitSet): Promise<void> {
 		if (this.#failure) return Promise.reject(this.#failure);
+		const written = ++this.#handed;
 		const ops: WriteOp[] = [];
 		for (const d of set.put) {
 			const k = docKey(d.key);
@@ -97,10 +160,25 @@ class SqliteLedger implements Ledger {
 			const id = `${d.kind}\u0000${k}`;
 			if (!this.#ords.has(id)) this.#ords.set(id, new Map());
 			const c = partChanges(d.before, d.value, d.parts, d.changes ?? new Map(), this.#ords.get(id)!);
-			for (const r of c.put) ops.push({ t: "part", kind: d.kind, key: k, part: r.part, id: r.id, ord: r.ord, value: JSON.stringify(r.value) });
+			const indexOf = new Map(d.parts.filter((p) => p.disk).map((p) => [p.path.join("."), p.disk!]));
+			for (const r of c.put) {
+				const ix = indexOf.get(r.part), v = r.value as Record<string, unknown> | null;
+				const at = ix && typeof v?.[ix.at] === "number" ? (v[ix.at] as number) : null, grp = ix && typeof v?.[ix.group] === "string" ? (v[ix.group] as string) : null;
+				ops.push({ t: "part", kind: d.kind, key: k, part: r.part, id: r.id, ord: r.ord, value: JSON.stringify(r.value), at, grp, flag: ix ? (v?.[ix.flag] ? 1 : 0) : null });
+			}
 			for (const r of c.del) ops.push({ t: "partDel", kind: d.kind, key: k, part: r.part, id: r.id });
+			// a map part still in memory (its document is new in this process) goes on the disk from now on
+			for (const p of d.parts) {
+				if (!p.disk || p.kind !== "map") continue;
+				const parent = p.path.slice(0, -1).reduce<unknown>((o, x) => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[x] : undefined), d.value);
+				const last = p.path.at(-1)!, m = parent !== null && typeof parent === "object" ? (parent as Record<string, unknown>)[last] : undefined;
+				if (m === null || typeof m !== "object" || isDiskMap(m)) continue;
+				const disk = DiskMap.adopt(this.#source(d.kind, k, p.path.join(".")), p.disk, () => this.#handed + 1, this.#strict, m as Record<string, unknown>, written);
+				(parent as Record<string, unknown>)[last] = disk.proxy;
+				this.#diskMapsOf(d.kind, k).set(p.path.join("."), disk);
+			}
 		}
-		for (const r of set.retired) { ops.push({ t: "retire", kind: r.kind, key: docKey(r.key) }); this.#ords.delete(`${r.kind}\u0000${docKey(r.key)}`); }
+		for (const r of set.retired) { ops.push({ t: "retire", kind: r.kind, key: docKey(r.key) }); this.#ords.delete(`${r.kind}\u0000${docKey(r.key)}`); this.#diskMaps.delete(`${r.kind}\u0000${docKey(r.key)}`); }
 		return new Promise((resolve, reject) => {
 			this.#queued.ops.push(...ops);
 			this.#queued.done.push({ resolve, reject });
@@ -126,6 +204,9 @@ class SqliteLedger implements Ledger {
 			this.#stats.writeMs += performance.now() - this.#sentAt;
 			const done = this.#writing.done;
 			this.#writing = null;
+			// what these commits wrote into map parts on the disk is read from there from now on
+			this.#durableCount += done.length;
+			for (const maps of this.#diskMaps.values()) for (const m of maps.values()) m.settle(this.#durableCount);
 			for (const d of done) d.resolve();
 			this.#send();
 			if (!this.#writing) this.#worker.unref(); // idle: the store does not keep the process alive
@@ -178,18 +259,29 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 		const tables = (read.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((t) => t.name);
 		if (tables.length && !tables.includes("store_meta")) throw new StoreUnavailable(`${path} is not a phi-spaces store (tables: ${tables.slice(0, 6).join(", ")}); move it aside or import it (docs/umstellung-ohne-pi-durable.md, U5)`);
 		read.exec(SCHEMA);
-		const meta = new Map((read.prepare("SELECT key, value FROM store_meta").all() as Array<{ key: string; value: string }>).map((r) => [r.key, r.value]));
+		const meta = new Map((read.prepare("SELECT key, value FROM store_meta WHERE key IN ('format_version', 'store_id', 'commit_seq')").all() as Array<{ key: string; value: string }>).map((r) => [r.key, r.value]));
 		if (!meta.has("format_version")) {
 			const put = read.prepare("INSERT INTO store_meta (key, value) VALUES (?, ?)");
 			put.run("format_version", String(FORMAT_VERSION)); put.run("store_id", randomUUID()); put.run("commit_seq", "0");
 		} else if (Number(meta.get("format_version")) > FORMAT_VERSION) throw new StoreUnavailable(`the store ${path} has format ${meta.get("format_version")}; this version reads up to ${FORMAT_VERSION}`);
+		else if (Number(meta.get("format_version")) < 2) {
+			// format 1 to 2: the index columns of parts (filled per part when its document is first read, #index)
+			read.exec("BEGIN IMMEDIATE");
+			try {
+				const cols = (read.prepare("PRAGMA table_info(parts)").all() as Array<{ name: string }>).map((c) => c.name);
+				for (const [c, t] of [["at", "INTEGER"], ["grp", "TEXT"], ["flag", "INTEGER"]] as const) if (!cols.includes(c)) read.exec(`ALTER TABLE parts ADD COLUMN ${c} ${t}`);
+				read.prepare("UPDATE store_meta SET value = '2' WHERE key = 'format_version'").run();
+				read.exec("COMMIT");
+			} catch (e) { read.exec("ROLLBACK"); throw e; }
+		}
+		read.exec(INDEXES);
 		const mode = (read.prepare("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode;
 		if (mode !== "wal") throw new StoreUnavailable(`the store ${path} is not in WAL mode (${mode})`);
 	} catch (e) { read?.close(); lock.close(); throw e; }
 	const worker = new Worker(new URL("./sqlite-writer.ts", import.meta.url));
 	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL" } satisfies WriterRequest); });
 	if (opened.type !== "opened") { await worker.terminate(); read.close(); lock.close(); throw new StoreUnavailable(`the store writer could not open ${path}: ${(opened as { error?: string }).error}`); }
-	const host = new OwnStoreHost(new SqliteLedger(read, lock, worker));
+	const host = new OwnStoreHost(new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1"));
 	// an idle writer does not keep the process alive (unref after its listeners: a listener refs it again)
 	worker.unref();
 	return host;

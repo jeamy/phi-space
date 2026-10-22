@@ -245,3 +245,29 @@ test("the sweep looks at the claims only when one can be due, and still drops ea
 	assert.equal(Object.keys(s.rpc!.generations).length, 0);
 	assert.equal(s.rpc!.sweepAt, Number.MAX_SAFE_INTEGER); // nothing left that could become due
 });
+
+test("a generation that stopped admitting but still has claims makes no sweep due (it goes with its last claim)", () => {
+	const s = core.initialState(), t0 = 1_000_000, keep = core.limitsOf(s).claimResultMs, admit = core.limitsOf(s).generationAdmitMs;
+	const { generation } = claims.issueGeneration(s, t0, alice);
+	const a = claims.admit(s, t0 + 10, { generation, requestId: "r1", principal: alice }, "write", {}, t0 + 60_000);
+	claims.decide(s, t0 + 10, a.key, { state: "done", result: null });
+	claims.sweep(s, t0 + admit + 5); // the generation is closed, the result is kept for a day
+	assert.equal(s.rpc!.sweepAt, t0 + 10 + keep, "the next sweep is when the claim's result expires, not at every operation");
+	claims.sweep(s, t0 + 10 + keep);
+	assert.equal(Object.keys(s.rpc!.claims).length, 0);
+	assert.equal(Object.keys(s.rpc!.generations).length, 0, "the generation went with its last claim");
+});
+
+test("after a pause, more due claims than one sweep takes are dropped in steps while the client keeps working", async () => {
+	const h = await memory();
+	try {
+		const c = new Clock(), s = client(h, c);
+		await s.setLimits({ claimResultMs: 1000, generationAdmitMs: 500 });
+		const { generation } = await s.issueGeneration(alice);
+		for (let i = 0; i < 600; i++) await s.write({ type: "Job", fields: { i } }, null, FOREVER, { request: req(generation, `w${i}`) });
+		c.t += 10_000; // all 600 are due at once; a sweep takes 256
+		await s.write({ type: "Job", fields: { i: -1 } }, null, FOREVER); // maintenance goes on until done, it does not give up
+		for (const i of [0, 299, 599]) await assert.rejects(s.pollOperation(req(generation, `w${i}`)), RequestExpired);
+		assert.equal(await s.count({ type: "Job" }), 601);
+	} finally { await h.close(ctx); }
+});

@@ -1,12 +1,12 @@
 // AP 2.2: supervisor-issued leases and double-signed, principal-bound delegation.
 import type {Context} from "./context.ts";
-import type { StoreTx } from "./store/types.ts";
+import { diskMapOf, type StoreTx } from "./store/types.ts";
 import { defineDocFamily } from "./store/documents.ts";
 import {randomUUID} from "node:crypto";
 
 import type {Algorithm, AuthState, KeyDirectory, Signer} from "./auth.ts";
 import {canonicalJson} from "./canonical.ts";
-import {argHash, keyOf, resolveAdmission, validateGeneration, type Principal, type RequestRef} from "./claims.ts";
+import {argHash, keyOf, resolveAdmission, validateGeneration, type ClaimRec, type Principal, type RequestRef} from "./claims.ts";
 import type {SpaceHost} from "./client.ts";
 import * as core from "./core.ts";
 import {GrantVerifier, type SignedGrant, verifyDetached} from "./grants.ts";
@@ -92,7 +92,11 @@ export const ROUTER_CHANGE_SKEW_MS = 5_000;
 const epochKey = (authority: string, space: string) => canonicalJson([ authority, space ]);
 async function fencePending(tx: StoreTx, space: string, now: number,
                             e: {routerEpoch: number; controlPrimaryEpoch : number}) {
-    const s = await spaceDoc(tx, space, now), claims = Object.values(s.rpc?.claims ?? {});
+    const s = await spaceDoc(tx, space, now);
+    // waiters of requests carry their claim's key; the search by result is for states from before that (claims on the
+    // disk are newer), and only when such a waiter is there
+    let all: ClaimRec[] | undefined;
+    const claims = { find: (f: (c: ClaimRec) => boolean) => diskMapOf(s.rpc?.claims) ? undefined : (all ??= Object.values(s.rpc?.claims ?? {})).find(f) };
     for (const w of s.waiters) {
         const c = w.claimKey ? s.rpc?.claims[w.claimKey]
                              : claims.find(c => c.method === "wait" && c.result === w.id);

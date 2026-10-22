@@ -2,7 +2,7 @@
 // each part. Arrays keep their order through an `ord` per row; maps are keyed. Shared by the SQLite ledger and its tests.
 import type { PartChanges } from "./draft.ts";
 
-export type PartSpec = { readonly path: readonly string[]; readonly kind: "array" | "map" };
+export type PartSpec = import("./types.ts").PartDef;
 /** One stored record of a part: its part (dotted path), its id (array: the record's `id`, else its position's key;
  *  map: the key), its order (arrays), its value. */
 export type PartRow = { part: string; id: string; ord: number; value: unknown };

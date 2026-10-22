@@ -8,6 +8,7 @@ import { bytePage } from "./paging.ts";
 import { appendMail, assertMailboxCapacity, assertMailboxBatch, sweepMailboxes, type MailboxState } from "./mailbox.ts";
 import type { Principal } from "./claims.ts";
 import { jsonBytes, jsonCopy } from "./json.ts";
+import { diskMapOf } from "./store/types.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 export type Fields = { [k: string]: Json };
@@ -877,7 +878,8 @@ function serve(s: SpaceState, now: number): void {
 		if (!w.take) { queueEvent(s, now, event, w.consumer); continue; }
 		const t: TxnRec = { id: newId(s, "t"), expires: until(now, w.txnLeaseMs), owner: w.target }; // the receiver commits it
 		initializeMemberTxn(s,t,now);
-	const originRequestKey=w.originRequestKey ?? Object.entries(s.rpc?.claims??{}).find(([,c])=>c.method==="wait"&&c.result===w.id)?.[0];if(originRequestKey!==undefined)t.originRequestKey=originRequestKey;
+	// waiters of requests carry their key; the search is for states from before that (claims on the disk are newer)
+	const originRequestKey=w.originRequestKey ?? (diskMapOf(s.rpc?.claims) ? undefined : Object.entries(s.rpc?.claims??{}).find(([,c])=>c.method==="wait"&&c.result===w.id)?.[0]);if(originRequestKey!==undefined)t.originRequestKey=originRequestKey;
 	s.txns[t.id] = t;
 		assertMemberTake(s,f.rec,t.id,now);
 		reserve(s, t.id, publishCost(s, f.rec), limitsOf(s));
@@ -1003,6 +1005,7 @@ export function nextExpiry(s: Readonly<SpaceState>): number {
 	// only a space that was not swept completely yet scans them; with 24 h of claims the scan cost ~60 ms per operation
 	const sweepAt = s.rpc?.sweepAt;
 	if (sweepAt !== undefined) min = Math.min(min, sweepAt);
+	else if (s.rpc && diskMapOf(s.rpc.claims)) min = 0; // claims on the disk are never scanned: a sweep now sets sweepAt
 	else if (s.rpc) {
 		const keep = limitsOf(s).claimResultMs;
 		for (const c of Object.values(s.rpc.claims)) if (c.state !== "pending" && c.decidedAt !== undefined) {
@@ -1174,7 +1177,8 @@ export function stats(s: Readonly<SpaceState>, now: number): SpaceStats {
 	for (const t of Object.values(s.txns)) if (t.expires > now) r.txns++;
 	for (const w of s.waiters) if (w.deadline > now) r.waiters++;
 	for (const g of s.regs) if (g.expires > now) r.registrations++;
-	r.bytes!.total = jsonBytes(s); // the whole document as stored
+	// the whole document as stored; claims on the disk by their running tally (they are not read for this)
+	r.bytes!.total = s.rpc && diskMapOf(s.rpc.claims) ? jsonBytes({ ...s, rpc: { ...s.rpc, claims: {} } }) + Math.max(0, (s.rpc.bytes ?? 0) - jsonBytes(s.rpc.generations)) : jsonBytes(s);
 	return r;
 }
 

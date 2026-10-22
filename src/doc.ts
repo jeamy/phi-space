@@ -8,7 +8,9 @@ import type { SpaceState } from "./core.ts";
  *  them without copying and keeps them as rows of their own. */
 export const SPACE_PARTS = [
 	{ path: ["entries"], kind: "array" },
-	{ path: ["rpc", "claims"], kind: "map" },
+	// a day of claims is far more than memory should hold (docs/umstellung-ohne-pi-durable.md, U2c): on the disk, by key;
+	// indexed by decision time, generation and dropped result for the sweep (claims.ts)
+	{ path: ["rpc", "claims"], kind: "map", disk: { at: "decidedAt", group: "generation", flag: "resultExpired" } },
 	{ path: ["rpc", "generations"], kind: "map" },
 	{ path: ["stream", "log"], kind: "array" },
 ] as const;

@@ -15,8 +15,32 @@ type DocCommon<T> = {
 	readonly checkpointWhen?: (value: Readonly<T>, ops: readonly unknown[], info: { deltasSinceBase: number }) => boolean;
 	/** The big collections of the document whose records are immutable values (replaced, never changed): an array by
 	 *  its records' `id`, or a map by key. The own store drafts them cheaply and stores them as rows of their own. */
-	readonly parts?: readonly { readonly path: readonly string[]; readonly kind: "array" | "map" }[];
+	readonly parts?: readonly PartDef[];
 };
+
+/** A big collection of a document (DocCommon.parts). A map part with `disk` is kept on the disk by a store that can
+ *  (store/cold.ts): its records are read by key when asked for, and only the records without an `at` value (open
+ *  requests) stay in memory. Its fields `at` (a number), `group` (a string) and `flag` (true or absent) are indexed,
+ *  so the questions of DiskMapQuery need no scan. */
+export type PartDef = { readonly path: readonly string[]; readonly kind: "array" | "map"; readonly disk?: { readonly at: string; readonly group: string; readonly flag: string } };
+
+/** Where a map part on the disk answers questions that would otherwise scan it (`map[DISK_MAP]`; absent on a map in
+ *  memory). Every answer includes what commits wrote that is not yet on the disk. */
+export const DISK_MAP = Symbol.for("phi-spaces.disk-map");
+export interface DiskMapQuery<V> {
+	/** The records without an `at` value (they are kept in memory), by key. */
+	unindexed(): Array<[string, V]>;
+	/** Keys of records with `at <= t` that `pick` accepts, in key order, at most `limit`. `groups` narrows the records
+	 *  with `flag` set to those whose group is one of `groups.in` or none of `groups.known`. */
+	due(t: number, limit: number, groups: { in: readonly string[]; known: readonly string[] }, pick: (v: V) => boolean): string[];
+	/** The smallest `at` among records without `flag` above `t`, if any. */
+	nextAt(t: number): number | undefined;
+	/** Whether a record of group `g` exists. */
+	hasGroup(g: string): boolean;
+	/** Every record: reads the whole map (audits and tests ask for it on purpose; enumerating the map may throw). */
+	entries(): Array<[string, V]>;
+}
+export const diskMapOf = <V>(m: unknown): DiskMapQuery<V> | undefined => (typeof m === "object" && m !== null ? (m as Record<symbol, DiskMapQuery<V> | undefined>)[DISK_MAP] : undefined);
 
 /** The same definition in the shape the transitional pi-durable host reads (session scope). It goes once the own
  *  store serves every host (U2/U3). */

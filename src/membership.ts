@@ -8,6 +8,7 @@ import type {Algorithm, Signer} from './auth.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import type {SpaceHost} from './client.ts';
 import * as core from './core.ts';
+import {pendingClaims} from './claims.ts';
 import type {Json} from './core.ts';
 import {
     applyFederationPolicyIn,
@@ -164,7 +165,7 @@ export class MemberLifecycle {
                 if (a && a.state !== 'detached')
                     throw new RoutingConflict('Member is already managed or frozen');
                 if (Object.keys(s.txns).length || s.waiters.length ||
-                    Object.values(s.rpc?.claims ?? {}).some(c => c.state === 'pending') ||
+                    pendingClaims(s).length > 0 ||
                     (s.jobs ?? []).length)
                     throw new RoutingConflict('local work must settle before adding');
                 s.membership = {
@@ -201,7 +202,7 @@ export class MemberLifecycle {
                 if(base.authorityId!==a.authorityId||base.policyVersion<a.policy.policyVersion||base.policyVersion===a.policy.policyVersion&&hash(base)!==hash(a.policy))throw new RoutingConflict('profile predecessor disagrees with installed policy');
                 assertOrdinaryProfiles(a.policy,base);
                 const affected=validateProfileOnlyChange(base,q.policy);
-                if(Object.keys(s.txns).length||s.waiters.length||s.regs.length||(s.jobs??[]).length||(s.releaseQueue??[]).length||Object.values(s.rpc?.claims??{}).some(c=>c.state==='pending')||s.entries.some(e=>affected.some(type=>e.types.includes(type))))throw new RoutingConflict('profile transition requires no affected Tasks or open work');
+                if(Object.keys(s.txns).length||s.waiters.length||s.regs.length||(s.jobs??[]).length||(s.releaseQueue??[]).length||pendingClaims(s).length>0||s.entries.some(e=>affected.some(type=>e.types.includes(type))))throw new RoutingConflict('profile transition requires no affected Tasks or open work');
                 a.policy=copy(base);a.state='profileFrozen';a.profileTransition={id:q.id,hash:hash(q.policy)};a.admissionVersion++;
             } else if (q.action === 'profileInstall') {
                 if(!a||a.state!=='profileFrozen'||!a.policy||!q.policy||a.profileTransition?.id!==q.id||a.profileTransition.hash!==hash(q.policy))throw new RoutingConflict('profile install requires matching frozen transition');
@@ -246,7 +247,7 @@ export class MemberLifecycle {
                     throw new RoutingConflict('freeze requires drained Member');
                 for(const e of [...s.entries]) if(e.type==="Capability") core.probe(s,now,{id:e.id,type:e.type},null,true);
                 if (s.entries.length || Object.keys(s.txns).length || s.waiters.length ||
-                    Object.values(s.rpc?.claims ?? {}).some(c => c.state === 'pending') ||
+                    pendingClaims(s).length > 0 ||
                     (s.jobs ?? []).length || (s.releaseQueue ?? []).length)
                     throw new RoutingConflict('Member still has physical entries or open work');
                 core.closeRegistrationsForRemoval(s, now);
@@ -261,7 +262,7 @@ export class MemberLifecycle {
                     throw new RoutingConflict('detach requires matching removal');
                 if (s.entries.length || Object.keys(s.txns).length || s.waiters.length ||
                     s.regs.length || (s.jobs ?? []).length ||
-                    Object.values(s.rpc?.claims ?? {}).some(c => c.state === 'pending'))
+                    pendingClaims(s).length > 0)
                     throw new RoutingConflict('EmptyProof no longer holds');
                 a.state = 'detached';
                 a.admissionVersion++;
@@ -288,7 +289,7 @@ export class MemberLifecycle {
                         : [],
                 empty : !s.entries.length && !Object.keys(s.txns).length && !s.waiters.length &&
                             !s.regs.length && !(s.jobs ?? []).length &&
-                            !Object.values(s.rpc?.claims ?? {}).some(c => c.state === 'pending'),
+                            pendingClaims(s).length === 0,
                 state : s.membership?.state ?? "local"
             };
             if (Buffer.byteLength(JSON.stringify(proof.stock)) > 65536)

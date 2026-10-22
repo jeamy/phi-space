@@ -3,7 +3,7 @@ import type {Context} from './context.ts';
 import { defineDocFamily } from './store/documents.ts';
 import {createHash} from 'node:crypto';
 import type {SpaceHost} from './client.ts';
-import type {Principal} from './claims.ts';
+import {pendingClaims,type Principal} from './claims.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import {principalId} from './mailbox.ts';
 import {spaceDoc} from './spaces.ts';
@@ -33,7 +33,7 @@ function assertTuple(c:Command,s:core.SpaceState) {
 }
 function stableSpace(s:core.SpaceState,id:string) {if(s.spaceId!==id)throw new core.IllegalArgumentError('admin commands require the immutable Space ID');}
 function quiescent(s:core.SpaceState) {
- if(Object.keys(s.txns).length||s.waiters.length||(s.jobs??[]).length||(s.releaseQueue??[]).length||Object.values(s.rpc?.claims??{}).some(c=>c.state==='pending'))throw new core.TransactionError('principal deletion requires a quiescent Space');
+ if(Object.keys(s.txns).length||s.waiters.length||(s.jobs??[]).length||(s.releaseQueue??[]).length||pendingClaims(s).length>0)throw new core.TransactionError('principal deletion requires a quiescent Space');
 }
 function reserveHeader(s:core.SpaceState,now:number,id:string) {
  if(!core.maintenanceStep(s,1024,now,'delete-principal:'+id))throw new core.ResourceExhausted('admin metadata exceeds maxCommitBytes');

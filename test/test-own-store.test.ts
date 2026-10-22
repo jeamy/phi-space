@@ -171,3 +171,106 @@ test("an array part's rows rebuild the array after removals, replacements, appen
 		before = after;
 	}
 });
+
+// ---- claims on the disk (store/disk-map.ts): memory holds only what is not yet durable and the open requests ----
+
+import { diskMapOf } from "../src/store/types.ts";
+
+const ref = (gen: string, j: number | string) => ({ generation: gen, requestId: `r${j}`, principal: { peerId: "p" } });
+const claimsOf = (s: core.SpaceState | undefined) => diskMapOf<claims.ClaimRec>(s?.rpc?.claims);
+
+test("claims on the disk: overlapping commits see what the ones before wrote and deleted, before it is durable", async () => {
+	const file = fresh();
+	let h = await openSqliteHost(file, { strictDiskMaps: true });
+	let gen = "";
+	await h.commit(async (tx) => { const s = await tx.doc(Space) as core.SpaceState; gen = claims.issueGeneration(s, Date.now(), { peerId: "p" }).generation; }, ctx);
+	assert.ok(claimsOf(await h.snapshot(Space, ctx)), "a space new in this process moves its claims to the disk with its first commit");
+	const N = 300;
+	await Promise.all(Array.from({ length: N }, (_, i) => h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState, now = Date.now(), key = (j: number) => claims.keyOf(s, ref(gen, j));
+		if (i > 0) assert.equal(s.rpc!.claims[key(i - 1)]?.state, "done", `commit ${i} sees the claim of commit ${i - 1}`);
+		if (i > 1) { assert.ok(s.rpc!.claims[key(i - 2)]); delete s.rpc!.claims[key(i - 2)]; }
+		if (i > 2) assert.equal(s.rpc!.claims[key(i - 3)], undefined, `commit ${i} does not see what commit ${i - 1} deleted`);
+		const a = claims.admit(s, now, ref(gen, i), "write", { i }, now + 60_000);
+		claims.decide(s, now, a.key, { state: "done", result: { i } });
+	}, ctx)));
+	assert.ok(h.stats()!.batches < N, "the commits overlapped (fewer batches than commits)");
+	const keys = (s: core.SpaceState | undefined) => claimsOf(s)!.entries().map(([, c]) => c.requestId).sort();
+	assert.deepEqual(keys(await h.snapshot(Space, ctx)), [`r${N - 2}`, `r${N - 1}`]);
+	await h.close(ctx);
+	h = await openSqliteHost(file, { strictDiskMaps: true });
+	assert.deepEqual(keys(await h.snapshot(Space, ctx)), [`r${N - 2}`, `r${N - 1}`]);
+	await h.close(ctx);
+});
+
+test("claims on the disk: a failed commit leaves no claim it wrote and brings back the ones it deleted", async () => {
+	const h = await openSqliteHost(fresh(), { strictDiskMaps: true });
+	let gen = "", kept = "";
+	await h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState, now = Date.now();
+		gen = claims.issueGeneration(s, now, { peerId: "p" }).generation;
+		kept = claims.admit(s, now, ref(gen, "kept"), "write", {}, now + 60_000).key;
+	}, ctx);
+	// the next commit runs while the first may still be written: both the write and the deletion are taken back
+	await assert.rejects(h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState, now = Date.now();
+		claims.admit(s, now, ref(gen, "lost"), "write", {}, now + 60_000);
+		delete s.rpc!.claims[kept];
+		throw new Error("refused");
+	}, ctx), /refused/);
+	await h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState;
+		assert.equal(s.rpc!.claims[claims.keyOf(s, ref(gen, "lost"))], undefined);
+		assert.equal(s.rpc!.claims[kept]?.state, "pending");
+		assert.deepEqual(claims.pendingClaims(s).map(([k]) => k), [kept], "the open request is still known as open");
+	}, ctx);
+	await h.close(ctx);
+});
+
+test("claims on the disk: a sweep drops expired results and claims by the index, the same as in memory", async () => {
+	const file = fresh();
+	let h = await openSqliteHost(file, { strictDiskMaps: true });
+	const t0 = Date.now(), day = 24 * 3600_000;
+	let gen = "";
+	await h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState;
+		gen = claims.issueGeneration(s, t0, { peerId: "p" }).generation;
+		for (let i = 0; i < 600; i++) { const a = claims.admit(s, t0, ref(gen, i), "write", { i }, t0 + 60_000); claims.decide(s, t0 + i, a.key, { state: "done", result: { i } }); }
+		claims.admit(s, t0, ref(gen, "open"), "write", {}, t0 + 60_000);
+	}, ctx);
+	await h.close(ctx);
+	h = await openSqliteHost(file, { strictDiskMaps: true });
+	// after a day, sweeps (256 at a time) drop the 600 decided claims; the open one stays, and so does its generation
+	for (let round = 0; round < 4; round++) await h.commit(async (tx) => { claims.sweep(await tx.doc(Space) as core.SpaceState, t0 + day + 1000); }, ctx);
+	const s = (await h.snapshot(Space, ctx))!;
+	assert.deepEqual(claimsOf(s)!.entries().map(([, c]) => c.requestId), ["ropen"]);
+	assert.ok(s.rpc!.generations[gen]);
+	await h.close(ctx);
+});
+
+test("a format 1 store is migrated when opened: its claims get their index and go on the disk", async () => {
+	const file = fresh();
+	let h = await openSqliteHost(file);
+	const t0 = Date.now();
+	let gen = "";
+	await h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState;
+		gen = claims.issueGeneration(s, t0, { peerId: "p" }).generation;
+		for (let i = 0; i < 10; i++) { const a = claims.admit(s, t0, ref(gen, i), "write", { i }, t0 + 60_000); claims.decide(s, t0, a.key, { state: "done", result: { i } }); }
+	}, ctx);
+	await h.close(ctx);
+	// make it a format 1 file: no index columns, no marks
+	const db = new DatabaseSync(file);
+	db.exec("DROP INDEX parts_at; DROP INDEX parts_grp; DROP INDEX parts_open; ALTER TABLE parts DROP COLUMN at; ALTER TABLE parts DROP COLUMN grp; ALTER TABLE parts DROP COLUMN flag;");
+	db.exec("UPDATE store_meta SET value = '1' WHERE key = 'format_version'; DELETE FROM store_meta WHERE key LIKE 'indexed%';");
+	db.close();
+	h = await openSqliteHost(file, { strictDiskMaps: true });
+	const s = (await h.snapshot(Space, ctx))!;
+	assert.equal(s.rpc!.claims[claims.keyOf(s, ref(gen, 3))]?.result && (s.rpc!.claims[claims.keyOf(s, ref(gen, 3))]!.result as { i: number }).i, 3);
+	await h.commit(async (tx) => { claims.sweep(await tx.doc(Space) as core.SpaceState, t0 + 24 * 3600_000 + 1); }, ctx);
+	assert.equal(claimsOf((await h.snapshot(Space, ctx))!)!.entries().length, 0, "the index found every expired claim");
+	await h.close(ctx);
+	const check = new DatabaseSync(file, { readOnly: true });
+	assert.equal((check.prepare("SELECT value FROM store_meta WHERE key = 'format_version'").get() as { value: string }).value, "2");
+	check.close();
+});
