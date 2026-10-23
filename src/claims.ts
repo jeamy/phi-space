@@ -241,6 +241,33 @@ export function sweep(s: SpaceState, now: number, maxRecords = 256): void {
 	if (changed) touch(s, now);
 }
 
+/** Claims of a map in key order after `after` (null: from the start), at most `limit`: the disk map's page, or a map
+ *  in memory sorted. A cursor through a day of claims for admin steps that go on where the previous one stopped. */
+export function claimPage(map: Record<string, ClaimRec> | undefined, after: string | null, limit: number): Array<[string, ClaimRec]> {
+	if (!map) return [];
+	const disk = diskMapOf<ClaimRec>(map);
+	if (disk) return disk.page(after, limit);
+	return Object.keys(map).filter((k) => after === null || k > after).sort().slice(0, limit).map((k) => [k, map[k]!]);
+}
+
+/** Bytes of the historical claims (restoredClaims) counted against maxClaimBytes: a running tally when they are on the
+ *  disk (counting them would read them all), their JSON size when they are in memory. */
+export function restoredBytes(s: Readonly<SpaceState>): number {
+	const r = s.restoredClaims;
+	if (!r) return 0;
+	const disk = diskMapOf<ClaimRec>(r);
+	if (!disk) return bytesOf(r);
+	return s.restoredBytes ?? disk.entries().reduce((n, [k, c]) => n + bytesOf(c) + bytesOf(k) + 2, 2); // from before the tally: once
+}
+/** Sets (or deletes, `next` undefined) a historical claim and keeps the tally. */
+export function setRestored(s: SpaceState, key: string, next: ClaimRec | undefined): void {
+	s.restoredClaims ??= {};
+	if (s.restoredBytes === undefined) s.restoredBytes = restoredBytes(s);
+	const before = s.restoredClaims[key];
+	s.restoredBytes += (next ? bytesOf(next) + bytesOf(key) + 2 : 0) - (before ? bytesOf(before) + bytesOf(key) + 2 : 0);
+	if (next) s.restoredClaims[key] = next; else delete s.restoredClaims[key];
+}
+
 /** The open (pending) requests, by key. A store that keeps the claims on its disk keeps these in memory, so asking
  *  for them never reads a day of decided claims. */
 export function pendingClaims(s: Readonly<SpaceState>): Array<[string, ClaimRec]> {

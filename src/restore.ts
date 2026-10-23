@@ -2,12 +2,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import * as core from "./core.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
-import type { ClaimRec } from "./claims.ts";
+import { claimPage, setRestored, type ClaimRec } from "./claims.ts";
 import { diskMapOf } from "./store/types.ts";
 
 export type RestoreState = { recoveryId: string; argumentHash: string; snapshotHash: string; incarnation: string; primaryEpoch: number; startedAt: number; waitUntil: number; stage: "entries" | "claims" | "generations" | "gates" | "waiting" | "completed"; cursor: number; kind: "data" | "control";
-	/** Claims of the source on the disk: the key restored last (they are walked in key order after its other claims). */
-	claimKey?: string };
+	/** The claim stage's cursor: which of the source's claim maps (its historical ones first) and the key restored last. */
+	claimSource?: "restored" | "rpc"; claimKey?: string };
 /** The recovery ID that fences run gates of a restore: the restore ID itself if it is a valid gate ID, else a stable hash. */
 export const runRecoveryIdOf = (recoveryId: string): string => /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/.test(recoveryId) ? recoveryId : "restore-" + createHash("sha256").update(recoveryId).digest("hex").slice(0, 32);
 export const snapshotHash = (s: core.SpaceState): string => digestJson(s);
@@ -20,7 +20,7 @@ export function beginRestore(s: core.SpaceState, now: number, o: RestoreArgs): R
 	const restoration: RestoreState = { recoveryId: o.recoveryId, argumentHash: hash, snapshotHash: o.snapshotHash, incarnation: randomBytes(4).toString("hex"), primaryEpoch: o.kind === "control" ? 1 : o.expectedPrimaryEpoch + 1, startedAt: now, waitUntil: now + 62000, stage: "entries", cursor: 0, kind: o.kind };
 	// Clearing a collection records one empty assignment, not a rewrite of the old values.
 	s.entries = []; s.txns = {}; s.regs = []; s.waiters = []; s.outbox = []; s.jobs = []; s.releaseQueue = []; s.mailboxes = { boxes: {} };
-	s.rpc = { generations: {}, claims: {}, bytes: 0, reservedBytes: 0 }; s.restoredClaims = {}; s.invalidGenerations = {}; s.nextId = 1;
+	s.rpc = { generations: {}, claims: {}, bytes: 0, reservedBytes: 0 }; s.restoredClaims = {}; delete s.restoredBytes; s.invalidGenerations = {}; s.nextId = 1;
 	s.stream = { rev: 0, floor: 0, bytes: 0, log: [] }; s.incarnation = restoration.incarnation; s.primaryEpoch = restoration.primaryEpoch; s.restore = restoration;
 	core.fenceGatesForRestore(s, now, runRecoveryIdOf(o.recoveryId)); // local run gates become historical evidence until the run is reconciled
 	core.touch(s, now); return core.plain(s.restore);
@@ -50,27 +50,31 @@ export function restoreBatch(s: core.SpaceState, now: number, source: core.Space
 		r.stage = "claims"; r.cursor = 0;
 	}
 	if (r.stage === "claims") {
-		// claims of the source on the disk are not listed whole: its historical claims (in memory) go first by index,
-		// then its claims in key order from the key restored last; a key in both counts once, as its current claim
-		const disk = diskMapOf<ClaimRec>(source.rpc?.claims);
-		const claims = disk ? Object.entries(source.restoredClaims ?? {}).filter(([k]) => source.rpc!.claims[k] === undefined) : Object.entries({ ...source.restoredClaims, ...source.rpc?.claims });
-		const next = (): [string, ClaimRec] | undefined => {
-			if (r.cursor < claims.length) return claims[r.cursor];
-			return disk?.page(r.claimKey ?? null, 1)[0];
+		// the source's historical claims, then its current ones (a key in both counts once, as its current claim), each in
+		// key order from the key restored last: claims on the disk are never listed whole, a map in memory is sorted
+		// once per call
+		const pager = (map: Record<string, ClaimRec> | undefined) => {
+			if (diskMapOf(map)) return (after: string | null) => claimPage(map, after, 64);
+			const keys = Object.keys(map ?? {}).sort();
+			return (after: string | null) => { let lo = 0, hi = keys.length; while (lo < hi) { const m = (lo + hi) >> 1; if (after !== null && keys[m]! <= after) lo = m + 1; else hi = m; } return keys.slice(lo, lo + 64).map((k) => [k, map![k]!] as [string, ClaimRec]); };
 		};
-		for (let item = next(); item; item = next()) {
-			const [key, c] = item;
-			const advance = () => { if (r.cursor < claims.length) r.cursor++; else r.claimKey = key; };
-			const cost = Buffer.byteLength(JSON.stringify(c)) + Buffer.byteLength(JSON.stringify(key)) + 256;
-			const historyBytes = core.claimBytes(s) + cost;
-			if (historyBytes > core.limitsOf(s).maxClaimBytes || core.overheadBytes(s) + cost + s.entries.reduce((n, e) => n + (e.size ?? Buffer.byteLength(JSON.stringify(e.fields))), 0) > core.limitsOf(s).maxDocBytes) throw new core.ResourceExhausted("restored history violates current space limits");
-			if (cost + 1024 > core.limitsOf(s).maxCommitBytes) throw new core.ResourceExhausted("historical claim does not fit the restore budget");
-			if (!core.maintenanceStep(s, cost, now, `restore-claim:${r.claimKey ?? r.cursor}`)) return core.plain(r);
-			const copy = core.plain(c); delete copy.reservedResultBytes;
-			s.restoredClaims![key] = copy; core.touch(s, now);
-			advance();
+		const sources = { restored: pager(source.restoredClaims), rpc: pager(source.rpc?.claims) };
+		for (;;) {
+			const from = r.claimSource ?? "restored", page = sources[from](r.claimKey ?? null);
+			if (!page.length) { if (from === "rpc") break; r.claimSource = "rpc"; delete r.claimKey; continue; }
+			for (const [key, c] of page) {
+				if (from === "restored" && source.rpc?.claims[key] !== undefined) { r.claimKey = key; continue; }
+				const cost = Buffer.byteLength(JSON.stringify(c)) + Buffer.byteLength(JSON.stringify(key)) + 256;
+				const historyBytes = core.claimBytes(s) + cost;
+				if (historyBytes > core.limitsOf(s).maxClaimBytes || core.overheadBytes(s) + cost + s.entries.reduce((n, e) => n + (e.size ?? Buffer.byteLength(JSON.stringify(e.fields))), 0) > core.limitsOf(s).maxDocBytes) throw new core.ResourceExhausted("restored history violates current space limits");
+				if (cost + 1024 > core.limitsOf(s).maxCommitBytes) throw new core.ResourceExhausted("historical claim does not fit the restore budget");
+				if (!core.maintenanceStep(s, cost, now, `restore-claim:${from}:${key}`)) return core.plain(r);
+				const copy = core.plain(c); delete copy.reservedResultBytes;
+				setRestored(s, key, copy); core.touch(s, now);
+				r.claimKey = key;
+			}
 		}
-		r.stage = "generations"; r.cursor = 0; delete r.claimKey; core.touch(s, now);
+		r.stage = "generations"; r.cursor = 0; delete r.claimKey; delete r.claimSource; core.touch(s, now);
 	}
 	if (r.stage === "generations") {
 		const generations = [...new Set([...Object.keys(source.invalidGenerations ?? {}), ...Object.keys(source.rpc?.generations ?? {})])];

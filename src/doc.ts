@@ -11,6 +11,8 @@ export const SPACE_PARTS = [
 	// a day of claims is far more than memory should hold (docs/umstellung-ohne-pi-durable.md, U2c): on the disk, by key;
 	// indexed by decision time, generation and dropped result for the sweep (claims.ts)
 	{ path: ["rpc", "claims"], kind: "map", disk: { at: "decidedAt", group: "generation", flag: "resultExpired" } },
+	// the historical claims after a restore: as many, on the disk as well (counted by restoredBytes, walked by key)
+	{ path: ["restoredClaims"], kind: "map", disk: { at: "decidedAt", group: "generation", flag: "resultExpired" } },
 	{ path: ["rpc", "generations"], kind: "map" },
 	{ path: ["stream", "log"], kind: "array" },
 ] as const;

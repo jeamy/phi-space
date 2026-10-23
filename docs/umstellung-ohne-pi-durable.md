@@ -256,8 +256,11 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
     statt von vorn zu suchen. Ein Test läuft seitenweise durch eine Claim-Map, während überlappende Commits Claims
     löschen und hinzufügen. Ein Zustand aus der Zeit vor der Byte-Bilanz (`rpc.bytes` fehlt) wird weiterhin einmal
     komplett nachgezählt.
-  - `restoredClaims` (die historischen Claims nach einem Restore) ist ein gewöhnliches Feld im Kopf des Space-Dokuments,
-    kein Teil auf der Platte: Nach dem Restore eines großen Space läge ein Tag Claims im Kopf (U7).
+  - ~~`restoredClaims` im Kopf des Space-Dokuments~~ (erledigt, 2026-10-23): Die historischen Claims nach einem Restore
+    sind ein Teil auf der Platte wie `rpc.claims`.
+    - Ihre Bytes führt die Bilanz `restoredBytes`; `claimBytes` zählt sie also nicht bei jeder Zulassung neu.
+    - Restore, Mitgliederwechsel und Löschen gehen mit Schlüssel-Cursor durch sie (`claimPage`).
+    - Ein markierter Claim wird ersetzt statt geändert.
   - Strenger Lauf der ganzen Root-Suite (`PHI_SPACES_STRICT_DISK_MAPS=1 npm test`): Außer den genannten Wegen zählt
     nur Testcode Claims auf, der Snapshots absichtlich ganz serialisiert oder vergleicht. Behoben wurden dabei:
     - die Vorprüfung einer Schlüsselrotation, die den ganzen Control-Space kopierte (`core.previewOf`);

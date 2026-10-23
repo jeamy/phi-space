@@ -3,7 +3,7 @@ import {assertMemberAdmission,initializeMemberTxn,assertMemberWrite,chargeMember
 // Functions mutate `state` in place (it is a document draft inside a commit) and take `now` explicitly.
 import { collect, record, touch as touchStream, revisionOf, seal as sealStream, type Batch, type Op, type StreamState } from "./stream.ts";
 import { canonicalJson } from "./canonical.ts";
-import { sweep as sweepClaims, decide as decideClaim, type ClaimRec } from "./claims.ts";
+import { sweep as sweepClaims, decide as decideClaim, restoredBytes as restoredClaimBytes, type ClaimRec } from "./claims.ts";
 import { bytePage } from "./paging.ts";
 import { appendMail, assertMailboxCapacity, assertMailboxBatch, sweepMailboxes, type MailboxState } from "./mailbox.ts";
 import type { Principal } from "./claims.ts";
@@ -153,7 +153,7 @@ export type SpaceEvent = {
  * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
  * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
  */
-export type SpaceState = { erasureEpoch?:number; adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed"; /** claims on the disk: the key the history stage marked last */ claimCursor?: string }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; invalidGenerations?: Record<string, true>; runGates?: Record<string, RunGateRec>; archived?: { at: number; commandId: string } };
+export type SpaceState = { erasureEpoch?:number; adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed"; /** claims on the disk: the key the history stage marked last */ claimCursor?: string; /** historical claims: likewise */ historyCursor?: string }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; /** the tally of restoredClaims when they are on the disk (claims.ts restoredBytes) */ restoredBytes?: number; invalidGenerations?: Record<string, true>; runGates?: Record<string, RunGateRec>; archived?: { at: number; commandId: string } };
 
 export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
@@ -185,6 +185,7 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		...(v.authorityCounters ? { authorityCounters: v.authorityCounters } : {}),
 		...(v.restore ? { restore: v.restore } : {}),
 		...(v.restoredClaims ? { restoredClaims: v.restoredClaims } : {}),
+		...(v.restoredBytes !== undefined ? { restoredBytes: v.restoredBytes } : {}),
 		...(v.invalidGenerations ? { invalidGenerations: v.invalidGenerations } : {}),
 		...(v.runGates ? { runGates: v.runGates } : {}),
 		...(v.archived ? { archived: v.archived } : {}),
@@ -273,7 +274,7 @@ function mailboxesBytes(s: Readonly<SpaceState>): number {
 /** Claim and generation bytes: a running tally kept by claims.ts, computed once for states that predate it. */
 export function claimBytes(s: Readonly<SpaceState>): number {
 	const r = s.rpc;
-	const history = (s.restoredClaims ? jsonBytes(s.restoredClaims) : 0) + (s.invalidGenerations ? jsonBytes(s.invalidGenerations) : 0);
+	const history = restoredClaimBytes(s) + (s.invalidGenerations ? jsonBytes(s.invalidGenerations) : 0);
 	if (!r) return history;
 	if (r.bytes === undefined) return history + jsonBytes(r.claims) + jsonBytes(r.generations);
 	return history + r.bytes + (r.reservedBytes ?? 0);
