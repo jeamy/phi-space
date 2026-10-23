@@ -72,6 +72,7 @@ export class PersistentHome {
 	readonly dir: string;
 	readonly faults = new FaultSwitch();
 	#open = new Set<Harness>();
+	#raw: OwnSyncStore[] = [];
 	constructor(backend: Backend) {
 		this.backend = backend;
 		this.dir = mkdtempSync(join(tmpdir(), `phi-spaces-${backend}-`));
@@ -79,7 +80,16 @@ export class PersistentHome {
 	/** The raw store. For own-sqlite an OwnSyncStore (typed as pi-durable's Storage for the tests that pass it on to
 	 *  the replication functions, which take either). */
 	async storage(): Promise<Storage> {
-		if (this.backend === "own-sqlite") return new OwnSyncStore(join(this.dir, "store.sqlite"), { faults: this.faults.own }) as unknown as Storage;
+		if (this.backend === "own-sqlite") {
+			// a raw store left open (its recovery threw before a host took it) is gone as its process would be: its owner
+			// lock must not keep the next one out (pi-durable's storage has no owner lock)
+			for (const r of this.#raw) if (r.open) await r.close();
+			// so is a host of this home a test left open (one whose writes were refused): the next opener takes over
+			for (const h of [...this.#open]) if ((h as unknown) instanceof OwnStoreHost) { (h as unknown as OwnStoreHost).abandon(); this.#open.delete(h); }
+			const r = new OwnSyncStore(join(this.dir, "store.sqlite"), { faults: this.faults.own });
+			this.#raw = [r];
+			return r as unknown as Storage;
+		}
 		const s = this.backend === "jsonl" ? await openNodeJsonlStorage(this.dir, ctx) : await openNodeSqliteStorage(join(this.dir, "harness.sqlite"));
 		return this.faults.wrap(s);
 	}
@@ -111,10 +121,20 @@ export class PersistentHome {
 	/** Close what is still open (abandoned harnesses too, best effort, so file handles are released) and delete. */
 	async dispose(): Promise<void> {
 		for (const h of [...this.#open, ...this.abandoned]) await h.close(ctx).catch(() => {});
+		for (const r of this.#raw) if (r.open) await r.close();
 		this.#open.clear();
 		this.abandoned.length = 0;
 		rmSync(this.dir, { recursive: true, force: true });
 	}
+}
+
+/** The host over a raw store or a primary's store as tests get them (home.storage(), primarySyncStorage): pi-durable's
+ *  Harness, or the own store's host (typed as a Harness for the tests). */
+export async function openHost(storage: Storage): Promise<Harness> {
+	const s = storage as unknown;
+	if (s instanceof ReplicatedOwnStore) return (await s.open()) as unknown as Harness;
+	if (s instanceof OwnSyncStore) return (await s.openHost()) as unknown as Harness;
+	return Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
 }
 
 /** Run `f` once per persistent backend with a fresh home, disposing it afterwards. */

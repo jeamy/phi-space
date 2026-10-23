@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {PrimarySyncJournal,PrimarySyncBlocked,bootstrapPrimarySync,captureStore,materializeSyncHistory,primarySyncStorage,recoverPrimarySync,PhiSpaces,Space,core,createSpace,listSpaces,snapshotSpace,canonicalJson,type PrimarySyncConfig} from '../src/index.ts';
 import {BACKENDS,freePort,PersistentHome,ctx} from './support/persistent.ts';
+import {plainDoc} from './support/host.ts';
 
 const single:PrimarySyncConfig={spaceId:'bootstrapped',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:null,durability:'single'};
 
@@ -18,6 +19,7 @@ async function existingStore(home:PersistentHome){
  await local.write({type:'Claimed',fields:{}},null,core.FOREVER,{request});
  await new PhiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'jobs'}).write({type:'Named',fields:{}},null,core.FOREVER);
  await home.close(h);
+ if(home.backend==='own-sqlite')return; // the own store keeps no agent records (conversations, entries)
  const st=await home.storage(),conv=await st.mintId<any>(),child=await st.mintId<any>(),e1=await st.mintId<any>(),e2=await st.mintId<any>(),doc=await st.mintId<any>();
  await st.commit([{type:'conversation',value:{id:conv}},{type:'entry',value:{id:e1,conversationId:conv,kind:'note',data:{n:1}}},{type:'entry',value:{id:e2,conversationId:conv,kind:'note',data:{n:2}}},
   {type:'conversation',value:{id:child,parent:{conversationId:conv,at:e1}}},
@@ -32,8 +34,8 @@ for(const backend of BACKENDS){
    await existingStore(home);
    const journal=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),single);let st=await home.storage();
    const before=await captureStore(st,ctx);
-   assert.ok(before.writes.some(w=>w.type==='conversation')&&before.writes.some(w=>w.type==='entry')&&before.writes.some(w=>w.type==='document.create'&&(w.record.scope as any).kind==='conversation'),'every record kind of the fixture is captured');
-   const r=await bootstrapPrimarySync(st,journal,ctx,{chunkBytes:16000});
+   assert.ok(backend==='own-sqlite'?before.writes.some(w=>w.t==='doc')&&before.writes.some(w=>w.t==='part'):before.writes.some(w=>w.type==='conversation')&&before.writes.some(w=>w.type==='entry')&&before.writes.some(w=>w.type==='document.create'&&(w.record.scope as any).kind==='conversation'),'every record kind of the fixture is captured');
+   const r=await bootstrapPrimarySync(st,journal,ctx,{chunkBytes:backend==='own-sqlite'?2000:16000}); // the own store has no agent records: smaller
    assert.ok(r.revisions>2,'small chunks split the store');assert.equal(journal.appliedRevision,r.revisions);assert.equal(r.storeHash,before.digest);
    assert.equal((await captureStore(st,ctx)).digest,before.digest,'the primary keeps its data unchanged; only the marker was added');
    // A second call is a no-op; the store is now tracked and opens normally.
@@ -43,7 +45,8 @@ for(const backend of BACKENDS){
    for(let n=1;n<=journal.head().revision;n++)await target.catchUp(journal.intent(n)!,async()=>{});
    const rs=await replica.storage();await materializeSyncHistory(rs,target,ctx);assert.equal((await captureStore(rs,ctx)).digest,before.digest);await rs.close(ctx);
    const rh=await replica.open();assert.equal(await new PhiSpaces(rh,ctx,()=>1000).count({type:'Job'}),12);assert.equal(await new PhiSpaces(rh,ctx,()=>1000,undefined,undefined,{space:'jobs'}).count({type:'Named'}),1);
-   assert.deepEqual(await rh.snapshot(Space,ctx),await (async()=>{const h=await home.open();try{return await h.snapshot(Space,ctx);}finally{await home.close(h);}})());
+   // compared as plain JSON while each host is open (the own store reads its claims from the disk)
+   assert.deepEqual(plainDoc(await rh.snapshot(Space,ctx)),await (async()=>{const h=await home.open();try{return plainDoc(await h.snapshot(Space,ctx));}finally{await home.close(h);}})());
    // New IDs minted after the bootstrap do not collide with captured ones (the counter follows the largest ID).
    await new PhiSpaces(rh,ctx,()=>1000).write({type:'After',fields:{}},null,core.FOREVER);await replica.close(rh);
    // The primary continues under primary/sync storage after the bootstrap.

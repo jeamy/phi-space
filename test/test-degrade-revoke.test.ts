@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {PhiSpaces,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,SimulatorFencing,core,type PrimarySyncConfig,type PrimarySyncPeer} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {revokeSpacePermit} from '../src/replica-control.ts';
-import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
+import {BACKENDS,PersistentHome,ctx,openHost} from './support/persistent.ts';
 
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(role:'primary'|'standby'|'local')=>({state:'active',authorityId:config.authorityId,dataIncarnation:'inc',role,...(role==='local'?{}:{primaryEpoch:1,replicaConfigVersion:1,durability:'sync'}),transitionId:'genesis'});
@@ -19,9 +19,9 @@ for(const backend of BACKENDS)test(`${backend}: degradeToSingle without a fencin
  let sJournal=new PrimarySyncJournal(join(sHome.dir,'journal.sqlite'),config,{self:'s',assertStandby:assertSyncStandby(register,'s')});
  let partitioned=false;const peer:PrimarySyncPeer={accept:async i=>{if(partitioned)throw Error('standby unreachable');return sJournal.accept(i);}};
  try{
+  let h=await pHome.open();await h.close(ctx);// (default Space exists; nothing written)
   let raw=await pHome.storage();await recoverPrimarySync(raw,pJournal,peer,ctx,assertSyncPrimary(register,'p',pJournal));
-  let h=await pHome.open();await h.close(ctx);// (default Space exists)
-  const ph=await (await import('@earendil-works/pi-durable')).Harness.open(primarySyncStorage(raw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}),{models:(await import('@earendil-works/pi-ai/models')).createModels(),registry:(await import('@earendil-works/pi-durable')).createRegistry()},ctx);
+  const ph=await openHost(primarySyncStorage(raw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}));
   await new PhiSpaces(ph,ctx).write({type:'Work',fields:{n:1}},null,core.FOREVER);
   partitioned=true;await assert.rejects(new PhiSpaces(ph,ctx).write({type:'Work',fields:{n:2}},null,core.FOREVER),/sealed/);
   await ph.close(ctx).catch(()=>{});
@@ -47,7 +47,7 @@ for(const backend of BACKENDS)test(`${backend}: degradeToSingle without a fencin
   await sStore.close(ctx);
   // The work goes on as single.
   raw=await pHome.storage();await recoverPrimarySync(raw,pJournal,null,ctx,assertSyncPrimary(register,'p',pJournal));
-  const single=await (await import('@earendil-works/pi-durable')).Harness.open(primarySyncStorage(raw,pJournal,null,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}),{models:(await import('@earendil-works/pi-ai/models')).createModels(),registry:(await import('@earendil-works/pi-durable')).createRegistry()},ctx);
+  const single=await openHost(primarySyncStorage(raw,pJournal,null,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}));
   await new PhiSpaces(single,ctx).write({type:'Work',fields:{n:3}},null,core.FOREVER);
   assert.equal(await new PhiSpaces(single,ctx).count({type:'Work'}),3);
   await single.close(ctx);

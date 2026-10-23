@@ -40,8 +40,12 @@ const own = (o: object, k: string | symbol) => Object.prototype.hasOwnProperty.c
 
 export type Draft<T> = {
 	readonly value: T;
-	/** The new value. `changes`: the keys written in each map part (by its dotted path), which no identity shows. */
+	/** The new value. `changes`: the keys written in each map part (by its dotted path), which no identity shows. The
+	 *  draft's proxies stay usable until `revoke`: another draft of the same commit may hold one of them (a value moved
+	 *  from one document to another) and is finished after this one. */
 	finish(): T;
+	/** Ends the draft once every draft of the commit is finished: a late write through it throws. */
+	revoke(): void;
 	readonly changes: PartChanges;
 	/** After finish: the records written into parts by this commit (the store freezes them when it publishes). */
 	readonly fresh: unknown[];
@@ -58,6 +62,8 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 	const states: State[] = [];
 	const changes: PartChanges = new Map();
 	const fresh: unknown[] = [];
+	/** Plain objects this commit assigned (not drafts): a draft made over one later holds no committed value. */
+	const assignedHere = new WeakSet<object>();
 	let done = false;
 	const live = () => { if (done) throw new TypeError("this commit's draft is finished"); };
 
@@ -123,6 +129,7 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 			(s.copy as Record<string | symbol, unknown>)[k] = v;
 			s.children.delete(k);
 			if (stateOf(v)) s.children.set(k, v);
+			else if (isObject(v)) assignedHere.add(v);
 			if (s.kind === "array" && isObject(v)) s.assigned.add(v);
 			return true;
 		},
@@ -197,8 +204,10 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 			for (const k of changes.get(s.path) ?? []) { const r = (s.base as Record<string, unknown>)[k]; if (isObject(r) && s.assigned.has(r)) { const f = finalize(r); (s.base as Record<string, unknown>)[k] = f; fresh.push(f); } }
 			return s.base;
 		}
-		if (s && !s.copy) { seen.set(v, s.base); return s.base; } // read only: the committed object itself
-		const obj = s ? (s.copy as Obj) : v;
+		// read only: the committed object itself; but an object assigned in this commit and read back through the draft
+		// (`d.x = {...d.x, y}; use(d.x)`) may hold drafts of what it was built from: it is searched like any assigned one
+		if (s && !s.copy && !assignedHere.has(s.base)) { seen.set(v, s.base); return s.base; }
+		const obj = s ? ((s.copy ?? s.base) as Obj) : v;
 		seen.set(v, obj);
 		if (s?.kind === "array") {
 			// unchanged records are committed values without drafts: only the ones written now are looked into
@@ -237,10 +246,9 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		fresh,
 		finish() {
 			live();
-			const out = finalize(root) as T;
-			end();
-			return out;
+			return finalize(root) as T;
 		},
+		revoke() { done = true; for (const s of states) s.revoke(); },
 		discard() {
 			if (done) return;
 			undo();

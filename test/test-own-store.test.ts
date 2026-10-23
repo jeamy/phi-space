@@ -317,3 +317,17 @@ test("a commit the store refuses before publishing leaves no trace: entries, cla
 	assert.deepEqual(live.entries.map((e: { fields: { i: number } }) => e.fields.i), [0, 1, 2, 4, 5, 6]);
 	await h.close(ctx);
 });
+
+test("a value rebuilt from its draft and read back in the same commit holds no draft afterwards (structuredClone works)", async () => {
+	const h = await openSqliteHost(fresh());
+	const Doc = (await import("../src/store/documents.ts")).defineDoc<{ policy?: { v: number; def: { x: number }; rules: Array<{ m: number }> }; seen?: number[] }>({ kind: "test.rebuilt", version: 1, scope: "session", initial: () => ({}) });
+	await h.commit(async (tx) => { (await tx.doc(Doc)).policy = { v: 1, def: { x: 1 }, rules: [{ m: 1 }, { m: 2 }] }; }, ctx);
+	await h.commit(async (tx) => {
+		const d = await tx.doc(Doc);
+		d.policy = { ...d.policy!, rules: d.policy!.rules.map((r) => (r.m === 1 ? { ...r, m: 9 } : r)), v: 2 };
+		d.seen = [d.policy.v]; // read back: the draft wraps the new object, which holds drafts of the old one
+	}, ctx);
+	const v = (await h.snapshot(Doc, ctx))!;
+	assert.deepEqual(structuredClone(v), { policy: { v: 2, def: { x: 1 }, rules: [{ m: 9 }, { m: 2 }] }, seen: [2] });
+	await h.close(ctx);
+});

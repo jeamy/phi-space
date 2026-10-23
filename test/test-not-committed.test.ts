@@ -10,14 +10,14 @@ import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {promotionEvidence} from '../src/primary-sync.ts';
 import * as claims from '../src/claims.ts';
 import {createSpace} from '../src/spaces.ts';
-import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
+import {BACKENDS,PersistentHome,ctx,openHost} from './support/persistent.ts';
 
 const INC='0a1b2c3d',config:PrimarySyncConfig={spaceId:'sp-0d7e6f1a-1111-4222-8333-944445555888',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(role:'primary'|'standby')=>({state:'active',authorityId:config.authorityId,dataIncarnation:INC,role,primaryEpoch:1,replicaConfigVersion:1,durability:'sync',transitionId:'genesis'});
 const A={peerId:'peer-a'},ids=new StaticIdentity({'peer-a':{principal:A,roles:['member']}});
 const ok=(r:Reply):any=>{assert.ok(r.ok,JSON.stringify(r));return (r as {ok:true;result:unknown}).result;};
 const code=(r:Reply)=>r.ok?'ok':r.error.code;
-const open=async(st:Storage)=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx);
+const open=async(st:Storage)=>openHost(st);
 const writeHash=(n:number)=>claims.argHash('write',{entry:{type:'Work',fields:{n}},txn:null,lease:core.FOREVER} as any);
 
 for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}${created?', created sync Space':''}: a request sealed only on the fenced old primary is NotCommitted on the promoted one; confirmed ones keep their result`,async()=>{

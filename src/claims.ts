@@ -63,7 +63,8 @@ export class OperationCancelled extends Error {}
 
 const rpc = (s: SpaceState): RpcState => {
 	const x = s as SpaceState & { rpc?: RpcState };
-	if (!x.rpc) x.rpc = { generations: {}, claims: {}, bytes: 0 };
+	// nothing in it can be due yet: what is added lowers sweepAt (dueAt), so no sweep runs for nothing
+	if (!x.rpc) x.rpc = { generations: {}, claims: {}, bytes: 0, sweepAt: Number.MAX_SAFE_INTEGER };
 	else if (x.rpc.bytes === undefined) x.rpc.bytes = bytesOf(x.rpc.claims) + bytesOf(x.rpc.generations); // state from before the tally
 	return x.rpc;
 };

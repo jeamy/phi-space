@@ -41,6 +41,8 @@ export class OwnSyncStore implements SyncStore<WriteOp> {
 		if (o.faults) this.faults = o.faults;
 	}
 	get path(): string { return this.#db().path; }
+	/** Neither closed nor handed to a host. */
+	get open(): boolean { return this.#files !== null && !this.#host; }
 	#db(): StoreFiles { if (!this.#files) throw new Error("this store was closed"); return this.#files; }
 	#writable(): StoreFiles { if (this.#host) throw new Error("this store was handed to its host, which writes it"); return this.#db(); }
 

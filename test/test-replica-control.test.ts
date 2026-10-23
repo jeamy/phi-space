@@ -8,7 +8,8 @@ import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/n
 import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
 import {createModels} from '@earendil-works/pi-ai/models';
 import {startService,startQuarantineReplicas,serveRegister,signedReplicaPeer,socketTransport,openSyncSpace,type SyncSpace,validateFederationPolicy,FederationRouting,provisionFileSigner,replicaConfigNotice,signReplicaConfigNotice,adoptReplicaConfigNotice,startMaintenance,createSpace,installBootGuard,BootBlocked,readmitSpace,installAdmittedPermit,type SpaceBootPermit,PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,SqliteRecoveryRegister,SimulatorFencing,ReplicaTransitionBlocked,unconfiguredFencing,releaseHostToQuarantine,fenceHostBoot,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,type PrimarySyncConfig,type PrimarySyncPeer,type RecoveryRegister,type StandbyTarget} from '../src/index.ts';
-import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
+import {BACKENDS,PersistentHome,ctx,openHost} from './support/persistent.ts';
+import {OwnSyncStore} from '../src/store/sync-sqlite.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const permit=(c:PrimarySyncConfig,role:'primary'|'standby',inc:string)=>({state:'active',authorityId:c.authorityId,dataIncarnation:inc,role,primaryEpoch:c.primaryEpoch,replicaConfigVersion:c.replicaConfigVersion,durability:c.durability??'sync',transitionId:'genesis'});
 /** Register wrapper that fails the next boot CAS for one host: the crash between a local transition and the external permit. */
@@ -343,7 +344,7 @@ for(const backend of BACKENDS)test(`${backend}: openSyncSpace serves a primary/s
  const homes={p:new PersistentHome(backend),s:new PersistentHome(backend)};
  const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(homes[h].dir,'sync'),genesis,port,peers:[{hostId:h==='p'?'s':'p',algorithm:'ed25519',publicKey:keys[h==='p'?'s':'p'].publicKey,ip:ip[h==='p'?'s':'p']}]},
   hostId:h,authorityId:config.authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
-  openStorage:async path=>backend==='sqlite'?openNodeSqliteStorage(path):openNodeJsonlStorage(path+'.d',ctx),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+  openStorage:async path=>backend==='own-sqlite'?new OwnSyncStore(path) as any:backend==='sqlite'?openNodeSqliteStorage(path):openNodeJsonlStorage(path+'.d',ctx),openHarness:async st=>openHost(st)});
  let s:SyncSpace|undefined,p:SyncSpace|undefined;
  try{
   s=await open('s');assert.equal(s.role(),'standby');assert.equal(s.harness,undefined,'a standby serves no business calls');

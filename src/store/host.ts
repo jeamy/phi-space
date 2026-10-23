@@ -171,8 +171,12 @@ export class OwnStoreHost implements ClosableStoreHost {
 		const set: CommitSet = { put: [], retired: [] };
 		const changed: Array<[string, unknown]> = [];
 		const records: unknown[] = [];
+		// every draft is finished before any is revoked: a value of one document may have been put into another
+		const finished = new Map<string, unknown>();
+		for (const [a, { draft }] of drafts) finished.set(a, draft.finish());
+		const revoke = () => { for (const d of drafts.values()) d.draft.revoke(); };
 		for (const [a, { def, key, draft }] of drafts) {
-			const before = this.#docs.get(a)?.value, value = draft.finish();
+			const before = this.#docs.get(a)?.value, value = finished.get(a);
 			const fresh = this.#docs.get(a) == null, migrated = (this.#docs.get(a)?.version ?? def.version) !== def.version;
 			if (value === before && !fresh && !migrated && draft.changes.size === 0) continue; // only read
 			records.push(...draft.fresh);
@@ -181,12 +185,13 @@ export class OwnStoreHost implements ClosableStoreHost {
 		}
 		for (const [a, r] of retired) if (this.#committed(r.kind, r.key)) { set.retired.push(r); changed.push([a, null]); }
 		// a commit that only read may still depend on earlier commits that are not yet durable: it waits for them too
-		if (!set.put.length && !set.retired.length) return { out, durable: this.#durable };
+		if (!set.put.length && !set.retired.length) { revoke(); return { out, durable: this.#durable }; }
 		// the store may refuse the commit before anything of it is published (a replicated store whose journal is full):
 		// what the commit changed in place goes back, and the host goes on
 		let prepared: unknown;
 		try { prepared = this.#ledger.prepare?.(set); }
-		catch (e) { for (const d of drafts.values()) d.draft.rollback(); throw e; }
+		catch (e) { for (const d of drafts.values()) d.draft.rollback(); revoke(); throw e; }
+		revoke();
 		// a record of a part is a value from now on: whoever still changes one in place gets an error, not a silent change
 		for (const r of records) deepFreeze(r);
 		// the next commit builds on this one at once; readers and watches see it once it is durable
