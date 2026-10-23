@@ -69,7 +69,6 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   - weitere Tests auf die Fixture umstellen;
   - die persistenten Tests (`test/support/persistent.ts`) für den eigenen Speicher nachbilden;
   - Zähler statt Vollscan für offene Claims je Absender (`client.ts`);
-  - die Leerlaufmessung in der Docker-Testumgebung wiederholen (Docker hing am 2026-10-22).
 
 **Stand U2c (2026-10-22):**
 
@@ -157,7 +156,9 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   entschieden, der seinen Eintrag sichtbar macht; eine Abfrage braucht nur dann einen Commit, wenn etwas zeitlich fällig
   ist (`needsMaintenance`) oder die Berechtigung seines Warters verlängert würde. Sonst liest sie nur. Nachbau der
   Testumgebung auf einer Kopie ihres Speichers, 90 s Leerlauf: Space-Prozess vorher
-  52 %, nachher 2,8 % beschäftigt. Der Fehler bestand schon vor der Umstellung.
+  52 %, nachher 2,8 % beschäftigt. Der Fehler bestand schon vor der Umstellung. In der Docker-Testumgebung (neu
+  gebaut, mit 53.000 Claims aus der Nacht): Space-Prozess im Leerlauf 1–6 % CPU, 110 MB Speicher, 296 neue Claims in
+  5 Minuten (rund 3.550 pro Stunde).
 - **Beobachtung offen:** Der Chat-Test „a person's thumbs-up counts as earlier material …“ lief nach der Umstellung in
   zwei von acht vollen Läufen in die 60-s-Frist des zweiten Board-Laufs, allein (auch unter voller CPU-Last) nie. Ein
   Zusammenhang mit dem Warten ohne Transaktion ist nicht belegt; `boardRun` gibt bei einem Zeitablauf jetzt den Stand
