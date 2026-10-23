@@ -144,3 +144,21 @@ test("on a real storage the log is bounded and keeps counting after a restart", 
 		await assert.rejects(s.changes(0), core.SnapshotExpired, "the floor survived the restart");
 	});
 });
+
+test("a snapshot being paged through is not pushed out by more snapshots made and read meanwhile", async () => {
+	await forEachBackend(async (home) => {
+		const h = await home.open();
+		try {
+			const s = new PhiSpaces(h, ctx);
+			await s.setLimits({ maxSnapshots: 4 });
+			for (let n = 0; n < 40; n++) await s.write({ type: "Job", fields: { n, pad: "x".repeat(100) } }, null, FOREVER);
+			const first = await s.readPage({ type: "Job" }, { maxBytes: 1_500 });
+			assert.ok(first.next, "more than one page");
+			// watchers rebuilding their view meanwhile: each makes a snapshot and reads it to its end
+			for (let k = 0; k < 10; k++) { let p = await s.readPage({ type: "Job" }, { maxBytes: 64_000 }); while (p.next) p = await s.readPage({ type: "Job" }, { maxBytes: 64_000, after: p.next }); }
+			let p = first, count = first.items.length;
+			while (p.next) { p = await s.readPage({ type: "Job" }, { maxBytes: 1_500, after: p.next }); count += p.items.length; }
+			assert.equal(count, 40);
+		} finally { await home.close(h); }
+	});
+});

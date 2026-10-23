@@ -224,6 +224,12 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   degradeToSingle, setStandby), Bootstrap, CommitSealed, NotCommitted, Degrade/Revoke, Configured Root, Router,
   Delegation, föderierter Space, Restore, Erasure, Deployment, Run-Recovery. Root-Suite: 996 von 997 (einer
   übersprungen wie bisher).
+- **Snapshot-Verdrängung (behoben, 2026-10-23):** Der Chat-Test „code full of control characters …“ scheiterte in etwa
+  einem von fünf Läufen, schon vor U4. Der Web-Teil liest einen Raum über ein seitenweises Snapshot; laufende
+  Beobachter erzeugten währenddessen neue, und der Space verdrängte bei mehr als 16 den ältesten, also den gerade
+  gelesenen. Jetzt gehen zuerst Snapshots, die bis zum Ende gelesen sind, dann der am längsten nicht benutzte (jede
+  Seite zählt als Benutzung). Ein Test liest einen Snapshot seitenweise, während zehn andere entstehen und gelesen
+  werden; der Chat-Test lief danach 8 von 8.
 - **Prüfung nach der Prüfung:**
   - Ein abgewiesener Eintrag bindet ein leeres Standby-Journal nicht mehr; die Bindung wird in derselben Transaktion
     wie der erste angenommene Eintrag geschrieben.
@@ -259,9 +265,6 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
     - das Ersetzen einer ganzen Claim-Map auf der Platte, jetzt ein Vorgang `partClear`.
   - Wartung eines gestoppten Speichers (`compactErasedSqlite` gibt es nur für pi-durable): ein Gegenstück für den
     eigenen Speicher (U7).
-  - Chat-Test „code full of control characters …“ (etwa einer von fünf Läufen, schon vor U4): Der Web-Teil liest einen
-    Raum über ein seitenweises Snapshot; laufende Beobachter erzeugen währenddessen neue, der Space hält höchstens 16
-    und verdrängt den gelesenen („the entry snapshot expired“), und `attach` schließt den Socket.
   - Statische Importe von pi-durable in `src`: `agent.ts` (U6), `store/legacy.ts` und `store/legacy-sync.ts` (bis
     U5/U8), Typ-Importe in `primary-sync.ts` und `replica-control.ts` für den pi-durable-Pfad.
 
