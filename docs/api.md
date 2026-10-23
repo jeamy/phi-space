@@ -94,6 +94,23 @@ je Space, nicht über voneinander unabhängige Federation-Members hinweg.
 `startService(harness, ctx, { space? })` startet Reaper und lokale Event-
 Zustellung. Ohne `space` überwacht es auch später erzeugte benannte Spaces.
 
+## Eigener Speicher
+
+phi-spaces hält seine Dokumente selbst ([umstellung-ohne-pi-durable.md](umstellung-ohne-pi-durable.md)). Alte
+pi-durable-Speicher werden nicht übernommen (Entscheidung D6).
+
+- `openSqliteHost(path, options?)` öffnet einen Host auf einer SQLite-Datei:
+  - WAL-Modus, ein Schreib-Thread;
+  - eine Besitzersperre in `path.owner`: ein zweiter Prozess erhält `StoreUnavailable`;
+  - eine Datei, die kein phi-spaces-Speicher ist, wird ebenfalls mit `StoreUnavailable` abgewiesen.
+- `openOwnMemoryHost()` hält alles im Speicher (Tests, Wegwerf-Spaces).
+- `OwnSyncStore(path)` ist derselbe Speicher ohne Host. Ihn brauchen die Werkzeuge der
+  primary/sync-Replikation. `primarySyncStorage(store, journal, peer, options)` macht daraus einen
+  `ReplicatedOwnStore`, dessen `open()` den replizierten Host liefert.
+- `OWN_SYNC_FACTORIES` sind die Fabriken dieser Spaces für `openSyncSpace` und `startConfiguredFederation`.
+
+Ein Journal eines pi-durable-Speichers wird mit `PrimarySyncBlocked` abgewiesen.
+
 ## Revisionen und Seiten
 
 `Page` enthält `{ items, next, token?, rev, streamId }`. Der opake Cursor `next` wird in
@@ -502,14 +519,21 @@ Die CLI [run-distributed-erasure.ts](../test/testbed/run-distributed-erasure.ts)
 bindet dies für den eigenen Testverbund an echte Prozesse, lokale Löschbelege,
 Archivdateien und die unabhängigen mTLS-Registereinträge.
 
-`compactErasedSqlite(path, assertExclusiveFenced)` bereinigt alte Revisionen
-der sessionweiten phi-spaces-Dokumente in einem gestoppten SQLite-Store mit
-pi-durable-Schema 1. Es bewahrt aktuelle Dokumentwerte und die letzte Sequenz
-und Version, entfernt überholte Revisionen, führt Secure-Delete, Checkpoints,
-VACUUM und Integrity-Check aus. Symlink-Dateien und andere Schema-Versionen
-werden abgewiesen. Der Aufrufer muss die logische Principal-Löschung bereits
-abgeschlossen haben und den exklusiven unabhängigen Fence während des
-gesamten Aufrufs halten. Es ersetzt keine Löschregel für externe Kopien.
+`compactErasedSqlite(path, assertExclusiveFenced)` bereinigt einen gestoppten
+eigenen SQLite-Speicher nach einer Löschung. Der Speicher hält keine
+Revisionshistorie. Bytes gelöschter Zeilen können aber in freien Seiten und im
+WAL bleiben. Der Aufruf nimmt die Besitzersperre, schreibt die Datei mit
+Secure-Delete und VACUUM neu, leert das WAL und prüft die Integrität.
+Abgewiesen werden:
+
+- Symlink-Dateien;
+- ein laufender Host (er hält die Sperre);
+- jede Datei, die kein phi-spaces-Speicher ist. Das gilt auch für alte
+  pi-durable-Speicher (Entscheidung D6).
+
+Der Aufrufer muss die logische Principal-Löschung bereits abgeschlossen haben
+und den exklusiven unabhängigen Fence während des gesamten Aufrufs halten. Es
+ersetzt keine Löschregel für externe Kopien.
 
 
 ## Entry-Replikation: administrativer Phase-3-Baustein
@@ -612,9 +636,10 @@ der native Root übernimmt sie im Heartbeat (`adoptReplicaNotices`) und adressie
 
 `openSyncSpace` öffnet einen primary/sync-Space mit eigenem Store, Replikat-Listener, Boot-Guard und Notice.
 `startFederationHost({ syncSpaces })` und `startConfiguredFederation(host, ctx, file, { openSyncStorage,
-openSyncHarness })` binden solche Spaces in den Federation-Host ein. `SyncSpaceConfig.journal` setzt die Journal-Grenzen
-(`maxIntentBytes`, `maxHistoryBytes`); ein erschöpftes Budget lehnt den Commit mit `SyncBudgetExceeded` ab, ohne die
-Session zu sperren. `createSpace(tx, alias, now, { spaceId,
+openSyncHarness })` binden solche Spaces in den Federation-Host ein. Ohne die beiden Fabriken liegt jeder Space im
+eigenen Speicher (`OWN_SYNC_FACTORIES`). `SyncSpaceConfig.journal` setzt die Journal-Grenzen
+(`maxIntentBytes`, `maxHistoryBytes`). Ein erschöpftes Budget lehnt den Commit mit `SyncJournalFull` ab (im Dienst
+`ResourceExhausted`), ohne den Host zu sperren. `createSpace(tx, alias, now, { spaceId,
 incarnation })` legt einen Space mit vorgegebener Identität an.
 
 

@@ -1,6 +1,7 @@
 // phi-spaces' own storage boundary (docs/umstellung-ohne-pi-durable.md, U1): document definitions, the transaction a
 // commit callback gets, and the host that runs commits, reads committed documents and watches them. Nothing here
-// names pi-durable; during the move the host behind it is still pi-durable (store/legacy.ts), later the own store.
+// names pi-durable; the host behind it is the own store (store/host.ts). pi-durable's Harness still serves the same
+// definitions for the agent side (src/agent.ts) until it moves to its own package (U6).
 import type { Context } from "../context.ts";
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };

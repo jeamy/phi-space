@@ -7,9 +7,7 @@
 // Run: node --experimental-strip-types examples/sensor-pipeline.ts
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, PhiSpaces, NO_WAIT, TransactionError, type SpaceHost } from "../src/index.ts";
+import { FOREVER, PhiSpaces, NO_WAIT, TransactionError, openOwnMemoryHost, type SpaceHost } from "../src/index.ts";
 
 export const SOURCES = ["station", "forecast", "cloud"] as const;
 export type Sample = { ts: number; kind: string; value: unknown };
@@ -100,7 +98,7 @@ export async function present(s: PhiSpaces, timeoutMs = 5000): Promise<string | 
 }
 
 async function main() {
-	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const h = openOwnMemoryHost();
 	const host = new PhiSpaces(h, ctx);
 	const [station, forecast, cloud] = [1, 2, 3].map((id) => role(h, id));
 	const analysts = [10, 11].map((id) => role(h, id));

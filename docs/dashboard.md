@@ -11,8 +11,8 @@ Farbschema, Live-Indikatoren).
 Im Vordergrund (eigenes Terminal, endet mit Strg+C):
 
 ```bash
-npm run dashboard -- --dir /pfad/zum/jsonl-store        # JSONL-Store (Verzeichnis)
-npm run dashboard -- --sqlite /pfad/harness.sqlite      # SQLite-Store (Datei)
+npm run dashboard -- --dir /pfad/zum/store              # Verzeichnis mit store.sqlite (wird angelegt)
+npm run dashboard -- --sqlite /pfad/store.sqlite        # Speicherdatei
 ```
 
 Im Hintergrund mit dem Lifecycle-Skript ([scripts/dashboard.sh](../scripts/dashboard.sh)):
@@ -24,8 +24,11 @@ npm run dashboard:stop           # sauberer Stopp per SIGTERM
 bash scripts/dashboard.sh logs   # Log live verfolgen
 ```
 
-Das Skript konfiguriert sich über Umgebungsvariablen: `DASHBOARD_DIR` (JSONL-Store, Standard
-`~/.local/share/phi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (SQLite-Datei stattdessen), `DASHBOARD_PORT`
+Das Dashboard öffnet den eigenen SQLite-Speicher und hält dessen Besitzersperre, denn es bedient auch den
+Space-Socket. Alte JSONL- oder pi-durable-Bestände im Verzeichnis liest es nicht (Entscheidung D6).
+
+Das Skript konfiguriert sich über Umgebungsvariablen: `DASHBOARD_DIR` (Verzeichnis mit `store.sqlite`, Standard
+`~/.local/share/phi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (Speicherdatei stattdessen), `DASHBOARD_PORT`
 (Standard 8787), `DASHBOARD_BIND` (Standard 127.0.0.1). Weitere Flags nach dem Kommando werden an
 `src/dashboard.ts` durchgereicht, z.B. `bash scripts/dashboard.sh start --no-socket`. PID- und Log-Datei
 liegen unter `$XDG_RUNTIME_DIR/phi-spaces-dashboard-<uid>/` (Fallback `/tmp`); ein zweiter `start` meldet

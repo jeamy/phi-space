@@ -29,16 +29,5 @@ export const Space = defineDoc<SpaceState & Record<string, any>>({
 	parts: SPACE_PARTS,
 });
 
-let checkpointLimit = Infinity;
-/**
- * Caps the size of a base written for a Space (process-wide, only ever lowered). A base is one write of the whole
- * value, and a primary/sync journal takes a bounded commit (docs/abnahme/ap3-primary-sync.md): a larger base would refuse
- * every later commit of that Space. primarySyncStorage sets it from its journal; without it nothing changes.
- */
-export function limitCheckpointBytes(bytes: number): void { checkpointLimit = Math.min(checkpointLimit, bytes); }
-/** A base every 500 deltas; under a cap only if the value fits, tried again every 50 deltas (else the tail stays). */
-export function checkpointDue(value: unknown, info: { deltasSinceBase: number }): boolean {
-	if (info.deltasSinceBase < 500) return false;
-	if (checkpointLimit === Infinity) return true;
-	return info.deltasSinceBase % 50 === 0 && Buffer.byteLength(JSON.stringify(value)) <= checkpointLimit;
-}
+/** pi-durable's Harness (the agent side until U6): a base every 500 deltas. The own store keeps no deltas. */
+export function checkpointDue(_value: unknown, info: { deltasSinceBase: number }): boolean { return info.deltasSinceBase >= 500; }

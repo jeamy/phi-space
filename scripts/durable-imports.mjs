@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Which files depend on @earendil-works/pi-durable (and @earendil-works/chord, which comes with it): directly, with the
-// names they import, and transitively through the files they import. The inventory of work package U0 in
-// docs/umstellung-ohne-pi-durable.md; read-only, no dependencies.
+// Which files depend on @earendil-works/pi-durable (and @earendil-works/chord, which comes with it, and pi-ai, which
+// only agents need): directly, with the names they import, and transitively through the files they import. The
+// inventory of work package U0 in docs/umstellung-ohne-pi-durable.md, now also its guard; read-only, no dependencies.
 //
 //   node scripts/durable-imports.mjs            a markdown report
 //   node scripts/durable-imports.mjs --json     the same as JSON
+//   node scripts/durable-imports.mjs --check    exit 1 when a file outside ALLOWED depends on them
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +14,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIRS = ["src", "examples", "test", "scripts", "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site"];
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
 const SKIP = /(^|\/)(node_modules|\.next|dist|\.local|evidence)(\/|$)/;
-const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord"];
+const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earendil-works/pi-ai"];
+/** Where these packages may still be used, directly or not (U6–U8 shrink this list to the agent package). */
+const ALLOWED = [
+	"src/agent.ts", "src/with-agent.ts", "test/agent-integration.test.ts", // the agent package (U6)
+	"examples/", "test/examples/", "test/testbed/", "help-site/", "scripts/spike-durable.ts", // tools and examples (U8)
+];
+/** pi-ai alone (models, no durable store) is also allowed here: the chat calls models itself. */
+const ALLOWED_PI_AI = ["codemode-chat/"];
 
 /** Every source file under the scanned directories. */
 function files(dir, out = []) {
@@ -100,7 +108,32 @@ for (const d of direct) for (const i of d.imports) for (const n of i.names) { co
 const area = (f) => f.split("/").slice(0, f.startsWith("codemode-chat/") ? 2 : 1).join("/");
 const count = (list) => Object.entries(list.reduce((a, x) => ((a[area(x.file)] = (a[area(x.file)] ?? 0) + 1), a), {})).sort();
 
-if (process.argv.includes("--json")) {
+if (process.argv.includes("--check")) {
+	// the packages each file reaches, directly or through the files it imports
+	const reached = new Map();
+	const packagesOf = (f, stack = new Set()) => {
+		if (reached.has(f)) return reached.get(f);
+		const out = new Set();
+		if (stack.has(f)) return out; // a cycle: the rest of the walk decides
+		stack.add(f);
+		const g = graph.get(f);
+		for (const spec of g.direct.keys()) out.add(PACKAGES.find((p) => spec === p || spec.startsWith(`${p}/`)));
+		for (const l of g.local) if (graph.has(l)) for (const p of packagesOf(l, stack)) out.add(p);
+		stack.delete(f);
+		reached.set(f, out);
+		return out;
+	};
+	const within = (f, list) => list.some((a) => (a.endsWith("/") ? f.startsWith(a) : f === a));
+	const outside = [];
+	for (const f of all) {
+		const file = rel(f), pkgs = [...packagesOf(f)];
+		if (!pkgs.length || within(file, ALLOWED)) continue;
+		const durable = pkgs.filter((p) => !p.endsWith("/pi-ai"));
+		if (durable.length || !within(file, ALLOWED_PI_AI)) outside.push(`${file}: ${pkgs.join(", ")}`);
+	}
+	if (outside.length) { console.error(`pi-durable, chord or pi-ai outside the allowed files:\n${outside.map((f) => `  ${f}`).join("\n")}`); process.exit(1); }
+	console.log(`no pi-durable, chord or pi-ai outside the allowed paths (${direct.length + transitive.length} files inside them)`);
+} else if (process.argv.includes("--json")) {
 	console.log(JSON.stringify({ scanned: all.length, direct, transitive, symbols: Object.fromEntries([...symbols].sort()) }, null, 2));
 } else {
 	const out = [];

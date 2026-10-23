@@ -17,9 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { openSqliteHost, type OwnStoreHost } from "../../../src/index.ts";
 import { createSpace, FOREVER, listSpaces, PhiSpaces, snapshotSpace, type Principal, type RequestRef } from "../../../src/index.ts";
 import { collectSieveResults, segmentedSieve, type SieveConfig, type SieveResult, type SieveTask } from "../../../examples/sieve.ts";
 
@@ -89,11 +87,11 @@ const blocksOf = (c: SieveConfig) => Math.ceil((c.end - c.start) / c.blockSize);
 // ---------------------------------------------------------------------------------------------------------- host side
 const ALIAS = "sieve-a";
 class Host {
-	h: Harness;
-	constructor(h: Harness) { this.h = h; }
+	h: OwnStoreHost;
+	constructor(h: OwnStoreHost) { this.h = h; }
 	static async open(dir: string): Promise<Host> {
 		mkdirSync(join(dir, "storage"), { recursive: true });
-		const h = await Harness.open(await openNodeJsonlStorage(join(dir, "storage"), ctx), { models: createModels(), registry: createRegistry() }, ctx);
+		const h = await openSqliteHost(join(dir, "storage", "store.sqlite"));
 		await h.commit((tx) => createSpace(tx, ALIAS, Date.now()), ctx); // idempotent per alias
 		return new Host(h);
 	}
@@ -238,7 +236,8 @@ async function run(o: Opts): Promise<void> {
 		let release!: () => void;
 		state.ready = new Promise<void>((r) => { release = r; });
 		await Promise.all(workers);
-		retired.push(state.host); // abandoned like a killed process, closed at the very end
+		state.host.h.abandon(); // as a killed process leaves it: nothing flushed, the owner lock free
+		retired.push(state.host); // closed at the very end (a no-op once abandoned)
 		state.host = await Host.open(o.dir);
 		state.restarts++;
 		state.hostGen++;

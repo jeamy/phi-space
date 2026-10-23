@@ -5,9 +5,7 @@ import {createInterface} from 'node:readline';
 import {existsSync,mkdirSync,renameSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
+import {OwnSyncStore,type OwnStoreHost} from '../../../src/index.ts';
 import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {PrimarySyncJournal,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,SqliteRecoveryRegister,TlsRecoveryRegister,SimulatorFencing,TlsFencing,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,serveSpace,socketTransport,loadFileSigner,signedReplicaPeer,replicaSyncHandler,canonicalJson,type PrimarySyncConfig,type FencingAdapter,type FenceProof,type ReplicaPin,type RecoveryRegister} from '../../../src/index.ts';
 
@@ -21,8 +19,8 @@ const signer=loadFileSigner(cfg.signerFile),register:RecoveryRegister='sqlite' i
 const adapter:FencingAdapter|null=!cfg.fencing?null:'simulator' in cfg.fencing?new SimulatorFencing():new TlsFencing(cfg.fencing.tls);
 const sync=()=>join(home,'sync');
 const openJournal=()=>{mkdirSync(sync(),{recursive:true,mode:0o700});return new PrimarySyncJournal(join(sync(),'journal.sqlite'),cfg.genesis,{self:cfg.self,assertStandby:assertSyncStandby(register,cfg.self)});};
-const rawStorage=()=>openNodeSqliteStorage(join(sync(),'harness.sqlite'));
-let journal=openJournal(),host:Harness|undefined,server:Awaited<ReturnType<typeof serveSpace>>|undefined,proof:FenceProof|null=null;
+const rawStorage=async()=>new OwnSyncStore(join(sync(),'harness.sqlite'));
+let journal=openJournal(),host:OwnStoreHost|undefined,server:Awaited<ReturnType<typeof serveSpace>>|undefined,proof:FenceProof|null=null;
 const transports:ReturnType<typeof socketTransport>[]=[];
 const peerFor=(hostId:string|null)=>{if(!hostId)return null;const r=cfg.remotes.find(x=>x.hostId===hostId);if(!r)throw Error('unpinned replica '+hostId);const t=socketTransport({host:r.ip,port:cfg.port},{localAddress:cfg.bindIp==='127.0.0.1'?undefined:cfg.bindIp,connectTimeoutMs:8000,maxFrameBytes:1<<20});transports.push(t);return signedReplicaPeer({transport:t,signer,self:cfg.self,remote:r});};
 const closeHost=async()=>{if(host){await host.close(ctx);host=undefined;}for(const t of transports.splice(0))t.close();};
@@ -38,7 +36,7 @@ async function handle(q:any):Promise<unknown>{
    server=await serveSpace({handleText:handler},{listen:{host:cfg.bindIp,port:cfg.port},connection:s=>ips.has(String(s.remoteAddress).replace(/^::ffff:/,''))?{}:null,maxConnections:4,maxFrameBytes:1<<20});return {listening:true};}
   case 'unlisten':{await server?.close();server=undefined;return {listening:false,at:Date.now()};}
   case 'open-primary':{await closeHost();const peer=journal.config.durability==='single'?null:peerFor(journal.config.standbyReplica),assert=assertSyncPrimary(register,cfg.self,journal),s=await rawStorage();
-   await recoverPrimarySync(s,journal,peer,ctx,assert);host=await Harness.open(primarySyncStorage(s,journal,peer,{assertPrimary:assert}),{models:createModels(),registry:createRegistry()},ctx);return status();}
+   await recoverPrimarySync(s,journal,peer,ctx,assert);host=await primarySyncStorage(s,journal,peer,{assertPrimary:assert}).open();return status();}
   case 'write':{if(!host)throw Error('open-primary first');const out:unknown[]=[];
    for(let n=0;n<(q.count??1);n++){try{const e=await new PhiSpaces(host,ctx).write({type:'SyncProbe',fields:{writer:cfg.self,label:q.label,n}},null,core.FOREVER);out.push({n,ok:true,id:(e as any).id??null});}
     catch(e){out.push({n,ok:false,sealed:e instanceof CommitSealed?{revision:e.revision,hash:e.hash}:null,error:(e as Error).message.slice(0,200)});if(q.stopOnError!==false)break;}}
@@ -47,7 +45,7 @@ async function handle(q:any):Promise<unknown>{
   case 'status':return status();
   case 'state':{const h=host;if(h)return {...status(),entries:await new PhiSpaces(h,ctx).count({type:'SyncProbe'}),snapshot:digest(await h.snapshot(Space,ctx))};
    await closeHost();const s=await rawStorage();await materializeSyncHistory(s,journal,ctx);await s.close(ctx);
-   const v=await Harness.open(await rawStorage(),{models:createModels(),registry:createRegistry()},ctx);try{return {...status(),entries:await new PhiSpaces(v,ctx).count({type:'SyncProbe'}),snapshot:digest(await v.snapshot(Space,ctx))};}finally{await v.close(ctx);}}
+   const v=await (await rawStorage()).openHost();try{return {...status(),entries:await new PhiSpaces(v,ctx).count({type:'SyncProbe'}),snapshot:digest(await v.snapshot(Space,ctx))};}finally{await v.close(ctx);}}
   case 'fence':{if(!adapter)throw Error('no fencing adapter on this host');proof=await adapter.fence(q.target,q.reason);writeFileSync(join(home,'proof.json'),JSON.stringify(proof),{mode:0o600});return proof;}
   case 'verify':return proof&&adapter?await adapter.verify(proof):null;
   case 'promote':{if(!adapter||!proof)throw Error('fence first');return withRaw(s=>promote({...common(s),recoveryId:q.tid,expectedPrimaryEpoch:q.epoch,expectedReplicaConfigVersion:q.version,adapter:adapter!,proof:proof!}));}

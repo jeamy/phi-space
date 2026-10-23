@@ -3,7 +3,6 @@
 // register. Promotion, degradeToSingle and setStandby are journaled by transition ID, change the replica
 // configuration as an entry of the sync chain and then align the external boot permits; until local and external
 // state match, `assertSyncPrimary` keeps writes blocked. A simulator adapter is refused unless a test allows it.
-import type { Storage } from "@earendil-works/pi-durable";
 import type { SyncStore } from "./store/sync-store.ts";
 import type { Context } from "./context.ts";
 import { canonicalJson } from "./canonical.ts";
@@ -138,7 +137,7 @@ function begin(journal: PrimarySyncJournal, id: string, kind: string, args: Json
 	if (rec.phase === "abandoned") throw new ReplicaTransitionBlocked("transition was abandoned; use a new ID");
 	return rec;
 }
-type Common = { storage: Storage | SyncStore; journal: PrimarySyncJournal; register: RecoveryRegister; installed?: RecoveryRegister; hostId: string; dataIncarnation: string; ctx: Context; now?: () => number; allowSimulator?: boolean;
+type Common = { storage: SyncStore; journal: PrimarySyncJournal; register: RecoveryRegister; installed?: RecoveryRegister; hostId: string; dataIncarnation: string; ctx: Context; now?: () => number; allowSimulator?: boolean;
 	/** Other Spaces in the same replicated store (a host's main store): their permits follow on this host. */
 	siblingSpaces?: string[] };
 /**

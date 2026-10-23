@@ -6,9 +6,9 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,type PrimarySyncPeer,type PrimaryCommitIntent,type PrimarySyncConfig} from '../src/index.ts';
 import {canonicalJson} from '../src/canonical.ts';
-import {syncStoreOf} from '../src/primary-sync.ts';
-/** A data write of a sealed batch (not the marker), in either store kind's shape. */
-const dataWrite=(w:any)=>w.t?w.t==='doc'||w.t==='part':String(w.type).startsWith('document.');
+
+/** A data write of a sealed batch (not the marker). */
+const dataWrite=(w:any)=>w.t==='doc'||w.t==='part';
 import {SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport} from '../src/index.ts';
 import {isSyncBudgetExceeded} from '../src/commit-sealed.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
@@ -80,9 +80,9 @@ for(const backend of BACKENDS){
    // Reopening with an empty journal must not turn existing application state into an unexplained base.
    const empty=new PrimarySyncJournal(join(home.dir,'empty-journal.sqlite'),config),storage=await raw();
    await assert.rejects(recoverPrimarySync(storage,empty,s,ctx,async()=>{}),/untracked/);empty.close();
-   // the store's own marker, changed behind the journal's back (either store kind)
-   const st=syncStoreOf(storage),marker=await st.marker(config.spaceId,ctx);assert.ok(marker);
-   await st.commit([st.codec.markerWrite(config.spaceId,{...marker.value,revision:9999},marker.ref,null)],ctx);
+   // the store's own marker, changed behind the journal's back
+   const st=storage,marker=await st.marker(config.spaceId);assert.ok(marker);
+   await st.commit([st.codec.markerWrite(config.spaceId,{...marker.value,revision:9999},marker.ref,null)]);
    await assert.rejects(recoverPrimarySync(storage,p,s,ctx,async()=>{}),/does not match/);await storage.close(ctx);assert.equal(p.head().revision,revision);
    const original=p.intent(1)!,large=structuredClone(original);large.deltas.push(...Array.from({length:30000},()=>original.deltas[0]!));
    await assert.rejects(s.accept(large),/oversized/);assert.equal(s.head().revision,revision);
@@ -134,4 +134,19 @@ test('an empty standby journal binds to a store kind only with an entry it store
   await s.accept(first);assert.equal(s.format,'own');
   s.close();assert.equal(new PrimarySyncJournal(join(standbyDir.dir,'journal.sqlite'),config,{self:'s'}).format,'own','the binding is stored with the entry');
  }finally{p.close();try{s.close();}catch{}await home.dispose();await standbyDir.dispose();}
+});
+
+test('a journal of a pi-durable store is refused (decision D6): stored format or entries from before it was stored',async()=>{
+ const home=new PersistentHome();
+ try{
+  for(const [name,setup] of [['stored',(db:DatabaseSync)=>db.prepare("INSERT INTO sync_meta (key,value) VALUES ('format','pi-durable') ON CONFLICT (key) DO UPDATE SET value=excluded.value").run()],
+   ['implicit',(db:DatabaseSync)=>{db.prepare("DELETE FROM sync_meta WHERE key='format'").run();db.prepare("INSERT INTO sync_intents (revision,hash,intent) VALUES (1,'h','{}')").run();}]] as const){
+   const path=join(home.dir,`${name}-journal.sqlite`);new PrimarySyncJournal(path,config).close();
+   const db=new DatabaseSync(path);try{setup(db);}finally{db.close();}
+   assert.throws(()=>new PrimarySyncJournal(path,config),(e:any)=>e instanceof PrimarySyncBlocked&&/pi-durable stores are discarded.*D6/.test(e.message),name);
+  }
+  // an empty journal cannot be bound to one either
+  const j=new PrimarySyncJournal(join(home.dir,'empty-journal.sqlite'),config);
+  try{assert.throws(()=>j.bindFormat('pi-durable'),/D6/);}finally{j.close();}
+ }finally{await home.dispose();}
 });

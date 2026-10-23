@@ -6,8 +6,8 @@
 #         scripts/dashboard.sh start --no-socket        # example: extra flags are passed through
 #
 # Config via environment:
-#   DASHBOARD_DIR     JSONL store directory (default: ~/.local/share/phi-spaces/dashboard-store)
-#   DASHBOARD_SQLITE  SQLite store file; set this instead of DASHBOARD_DIR
+#   DASHBOARD_DIR     store directory, holds store.sqlite (default: ~/.local/share/phi-spaces/dashboard-store)
+#   DASHBOARD_SQLITE  store file; set this instead of DASHBOARD_DIR
 #   DASHBOARD_PORT    HTTP port (default 8787)
 #   DASHBOARD_BIND    bind address (default 127.0.0.1; loopback only by design)
 set -euo pipefail

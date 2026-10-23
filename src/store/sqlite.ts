@@ -5,7 +5,6 @@
 //   documents       one row per document: its whole value, or for a document with parts its head
 //   parts           one row per record of a part (a Space's entries, claims, generations, stream batches); a map part
 //                   kept on the disk (PartDef.disk, store/disk-map.ts) fills the index columns at, grp, flag
-//   migration_runs  imports of older stores (U5)
 //
 // Writes go to a writer thread (store/sqlite-writer.ts) in batches: whatever commits arrive while one batch is written
 // go together into the next, one transaction and one sync for all of them. A store has one owner process: a lock file
@@ -18,7 +17,7 @@ import { Worker } from "node:worker_threads";
 import { headOf, joinParts, partAt, partChanges, type PartRow, type PartSpec } from "./parts.ts";
 import { OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
 import { DiskMap, isDiskMap, type DiskMapSource } from "./disk-map.ts";
-import type { WriteOp, WriterReply, WriterRequest } from "./sqlite-writer.ts";
+import { writerSource, type WriteOp, type WriterReply, type WriterRequest } from "./sqlite-writer.ts";
 
 /** The format of the file; a newer one is refused, an older one is migrated (1 to 2: the index columns of parts). */
 export const FORMAT_VERSION = 2;
@@ -50,7 +49,6 @@ CREATE TABLE IF NOT EXISTS store_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS documents (kind TEXT NOT NULL, key TEXT NOT NULL, version INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (kind, key)) STRICT;
 CREATE TABLE IF NOT EXISTS parts (kind TEXT NOT NULL, key TEXT NOT NULL, part TEXT NOT NULL, id TEXT NOT NULL, ord INTEGER NOT NULL, value TEXT NOT NULL, at INTEGER, grp TEXT, flag INTEGER, PRIMARY KEY (kind, key, part, id)) STRICT;
 CREATE INDEX IF NOT EXISTS parts_order ON parts (kind, key, part, ord);
-CREATE TABLE IF NOT EXISTS migration_runs (export_id TEXT PRIMARY KEY, manifest_hash TEXT NOT NULL, progress TEXT NOT NULL, state TEXT NOT NULL) STRICT;
 `;
 // after a format 1 file got its index columns
 const INDEXES = `
@@ -366,7 +364,7 @@ export function openFiles(path: string): StoreFiles {
 		read.exec("PRAGMA journal_mode = WAL;");
 		// a file of another program (pi-durable has a `documents` table of its own) is refused, never taken over
 		const tables = (read.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((t) => t.name);
-		if (tables.length && !tables.includes("store_meta")) throw new StoreUnavailable(`${path} is not a phi-spaces store (tables: ${tables.slice(0, 6).join(", ")}); move it aside or import it (docs/umstellung-ohne-pi-durable.md, U5)`);
+		if (tables.length && !tables.includes("store_meta")) throw new StoreUnavailable(`${path} is not a phi-spaces store (tables: ${tables.slice(0, 6).join(", ")}); move it aside: pi-durable stores are discarded, not taken over (decision D6, docs/umstellung-u0-bestand.md)`);
 		read.exec(SCHEMA);
 		const meta = new Map((read.prepare("SELECT key, value FROM store_meta WHERE key IN ('format_version', 'store_id', 'commit_seq')").all() as Array<{ key: string; value: string }>).map((r) => [r.key, r.value]));
 		if (!meta.has("format_version")) {
@@ -399,7 +397,7 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 /** The host over opened store files (they belong to it from now on). */
 export async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnStoreHost> {
 	const { path, read, lock } = files;
-	const worker = new Worker(new URL("./sqlite-writer.ts", import.meta.url));
+	const worker = new Worker(writerSource(), { eval: true });
 	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL" } satisfies WriterRequest); });
 	if (opened.type !== "opened") { await worker.terminate(); read.close(); lock.close(); throw new StoreUnavailable(`the store writer could not open ${path}: ${(opened as { error?: string }).error}`); }
 	const ledger = new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1");

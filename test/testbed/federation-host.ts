@@ -1,7 +1,5 @@
 // Operator-provisioned, persistent testbed daemon. Uses real NetBird management and independent boot records.
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { OwnSyncStore, OWN_SYNC_FACTORIES, openSqliteHost } from "../../src/index.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, openSync, closeSync, unlinkSync, lstatSync, readdirSync, fsyncSync } from "node:fs";
 import { join } from "node:path";
@@ -71,7 +69,7 @@ if(mode==="replica-listen"){
  // A replica of another host's main store (control standby): journal and signed listener only, no Harness, no gate.
  try{
   const rc=JSON.parse(privateFile(join(home,"replica.json")).toString()),external=new SyncRegister(rc.registerTls);
-  const sp=await openSyncSpace({config:rc.replica,hostId:rc.hostId,authorityId:rc.replica.genesis.authorityId,bindIp:rc.listen.host,signer:loadFileSigner(rc.keyFile),external,installed,ctx,openStorage:p=>openNodeSqliteStorage(p),openHarness:async()=>{throw new Error("no Harness on a replica listener");},listenOnly:true});
+  const sp=await openSyncSpace({config:rc.replica,hostId:rc.hostId,authorityId:rc.replica.genesis.authorityId,bindIp:rc.listen.host,signer:loadFileSigner(rc.keyFile),external,installed,ctx,openStorage:async p=>new OwnSyncStore(p),openHarness:async()=>{throw new Error("no Harness on a replica listener");},listenOnly:true});
   console.log(JSON.stringify({replicaListening:true,alias:rc.replica.alias,head:sp.journal.head()}));
   await terminate;
   await sp.close();external.close();
@@ -85,7 +83,7 @@ if(mode==="main-sync"){
   if(!mainCfg)throw new Error("no mainSync provisioning");
   let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>65536)throw new Error("main-sync input exceeds budget");}
   const q=JSON.parse(text),cfg=JSON.parse(privateFile(configFile).toString()),reader=new SyncRegister(cfg.registerTls);
-  const journal=new PrimarySyncJournal(join(mainCfg.dir,"journal.sqlite"),mainCfg.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)}),st=await openNodeSqliteStorage(join(home,"harness.sqlite"));
+  const journal=new PrimarySyncJournal(join(mainCfg.dir,"journal.sqlite"),mainCfg.genesis,{self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)}),st=new OwnSyncStore(join(home,"harness.sqlite"));
   try{
    const status=()=>({head:journal.head(),applied:journal.appliedRevision,config:journal.config,open:journal.openTransitionIds()});
    if(q.op==="status")result={...status(),...(q.digest?{storeHash:(await captureStore(st,ctx)).digest}:{})};
@@ -99,7 +97,7 @@ if(mode==="main-sync"){
    }
    else if(["degrade","set-standby","promote"].includes(q.op)){
     // Step 6 (v3 5.3.1): the next start aligns the routing policy before serving; nothing may block that afterwards.
-    const profiles=await st.findDocument({kind:"phi-spaces.profile-transitions",key:cfg.controlSpaceId,scope:{kind:"session"}},"current",ctx),open=profiles&&Object.values((await st.document(profiles.id,"current",ctx))?.value?.operations??{}).some((op:any)=>op.phase!=="completed");
+    const profiles=st.head("phi-spaces.profile-transitions",cfg.controlSpaceId) as {operations?:Record<string,{phase:string}>}|undefined,open=Object.values(profiles?.operations??{}).some(op=>op.phase!=="completed");
     if(open)throw new Error("an open profile transition blocks the policy step of a control transition");
     const register=new SyncRegister(q.controlRegister),siblings:string[]=q.siblings??[];
     try{
@@ -129,7 +127,7 @@ if(mainCfg&&mode==="run"){
  if(primary!==cfg.hostId||boot?.state==="quarantine"){
   try{
    if(!mainCfg.incarnation)throw new Error("a main store replica needs mainSync.incarnation (data incarnation of the control Space)");
-   const sp=await openSyncSpace({config:{alias:"control-main",spaceId:mainCfg.genesis.spaceId,incarnation:mainCfg.incarnation,dir:mainCfg.dir,genesis:mainCfg.genesis,port:mainCfg.port,peers:mainCfg.peers},hostId:cfg.hostId,authorityId:mainCfg.genesis.authorityId,bindIp:cfg.listen.host,signer:loadFileSigner(cfg.keyFile),external,installed,ctx,openStorage:p=>openNodeSqliteStorage(p),openHarness:async()=>{throw new Error("no Harness on a main store replica");},listenOnly:true});
+   const sp=await openSyncSpace({config:{alias:"control-main",spaceId:mainCfg.genesis.spaceId,incarnation:mainCfg.incarnation,dir:mainCfg.dir,genesis:mainCfg.genesis,port:mainCfg.port,peers:mainCfg.peers},hostId:cfg.hostId,authorityId:mainCfg.genesis.authorityId,bindIp:cfg.listen.host,signer:loadFileSigner(cfg.keyFile),external,installed,ctx,openStorage:async p=>new OwnSyncStore(p),openHarness:async()=>{throw new Error("no Harness on a main store replica");},listenOnly:true});
    console.log(JSON.stringify({mainReplicaListening:true,boot:boot?.state??null,head:sp.journal.head(),config:sp.journal.config}));
    await terminate;await sp.close();
   }finally{external.close();installed.close();releaseLock();}
@@ -152,11 +150,11 @@ const openMain=async()=>{
  const transport=standby?socketTransport({host:standby.ip,port:mainCfg.port},{localAddress:cfg.listen.host,connectTimeoutMs:8000,maxFrameBytes:1<<20}):undefined;
  if(transport)mainHandles.push(()=>transport.close());
  const peer=transport?signedReplicaPeer({transport,signer:loadFileSigner(cfg.keyFile),self:cfg.hostId,remote:standby}):null;
- const raw=await openNodeSqliteStorage(join(home,"harness.sqlite")),assert=assertSyncPrimary(external,cfg.hostId,mainJournal);
+ const raw=new OwnSyncStore(join(home,"harness.sqlite")),assert=assertSyncPrimary(external,cfg.hostId,mainJournal);
  await recoverPrimarySync(raw,mainJournal,peer,ctx,assert);
- return Harness.open(primarySyncStorage(raw,mainJournal,peer,{assertPrimary:assert}),{models:createModels(),registry:createRegistry()},ctx);
+ return primarySyncStorage(raw,mainJournal,peer,{assertPrimary:assert}).open();
 };
-const h=mainCfg?await openMain():await Harness.open(await openNodeSqliteStorage(join(home,"harness.sqlite")),{models:createModels(),registry:createRegistry()},ctx);
+const h=mainCfg?await openMain():await openSqliteHost(join(home,"harness.sqlite"));
 let runtime:Awaited<ReturnType<typeof startConfiguredFederation>>|undefined;
 let recovery:Awaited<ReturnType<typeof startRecoveryOnly>>|undefined;
 const cleanup=async()=>{await recovery?.close();await runtime?.close();await h.close(ctx);for(const close of mainHandles.splice(0).reverse()){try{close();}catch{}}installed.close();unlinkSync(lock);};
@@ -217,7 +215,7 @@ try{
   }
 
 
-  const syncFactories={openSyncStorage:(path:string)=>openNodeSqliteStorage(path),openSyncHarness:(storage:any)=>Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx),...(mainJournal?{mainReplica:()=>mainJournal!.config,mainTransition:()=>lastConfigTransition(mainJournal!),mainPromotionProof:(e:number)=>promotionEvidence(mainJournal!,e,JSON.parse(privateFile(configFile).toString()).hostId)}:{})};
+  const syncFactories={openSyncStorage:OWN_SYNC_FACTORIES.openStorage,openSyncHarness:OWN_SYNC_FACTORIES.openHarness,...(mainJournal?{mainReplica:()=>mainJournal!.config,mainTransition:()=>lastConfigTransition(mainJournal!),mainPromotionProof:(e:number)=>promotionEvidence(mainJournal!,e,JSON.parse(privateFile(configFile).toString()).hostId)}:{})};
   let quarantine:Awaited<ReturnType<typeof startQuarantineReplicas>>|undefined;
   if(JSON.parse(privateFile(configFile).toString()).syncSpaces?.length){try{quarantine=await startQuarantineReplicas(ctx,configFile,syncFactories);}catch(e){if(!(e instanceof BootBlocked)||!/not in quarantine/.test(e.message))throw e;}}
   if(quarantine){
@@ -296,12 +294,12 @@ try{
   let text="";for await(const part of process.stdin){text+=part.toString();if(Buffer.byteLength(text)>65536)throw new Error("sync input exceeds budget");}
   const q=JSON.parse(text),cfg=JSON.parse(privateFile(configFile).toString()),c=(cfg.syncSpaces??[]).find((x:any)=>x.alias===q.alias);if(!c)throw new Error("unknown primary/sync Space");
   const reader=new SyncRegister(cfg.registerTls),journal=new PrimarySyncJournal(join(c.dir,"journal.sqlite"),c.genesis,{...c.journal,self:cfg.hostId,assertStandby:assertSyncStandby(reader,cfg.hostId)});
-  const signer=loadFileSigner(cfg.keyFile),raw=async()=>openNodeSqliteStorage(join(c.dir,"harness.sqlite"));let result:any;
+  const signer=loadFileSigner(cfg.keyFile),raw=async()=>new OwnSyncStore(join(c.dir,"harness.sqlite"));let result:any;
   try{
    const status=()=>({alias:c.alias,head:journal.head(),applied:journal.appliedRevision,config:journal.config,open:journal.openTransitionIds(),recoveredCommitted:journal.recoveredCommitted});
    if(q.op==="status"){
     result=status();
-    if(q.materialize){const st=await raw();await materializeSyncHistory(st,journal,ctx);await st.close(ctx);const v=await Harness.open(await raw(),{models:createModels(),registry:createRegistry()},ctx);
+    if(q.materialize){const st=await raw();await materializeSyncHistory(st,journal,ctx);await st.close(ctx);const v=await (await raw()).openHost();
      try{const sp=await snapshotSpace(v,c.spaceId,ctx);result.entries=sp?.entries.filter((e:any)=>e.type===q.countType).length??0;result.snapshot=createHash("sha256").update(syncCanonical(sp as any)).digest("hex");}finally{await v.close(ctx);}}
    }else if(["promote","degrade","set-standby"].includes(q.op)){
     const register=new SyncRegister(q.controlRegister),st=await raw();

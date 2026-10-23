@@ -5,7 +5,6 @@ import {totalmem,freemem,availableParallelism} from "node:os";
 import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
 import type { ClosableStoreHost } from "./store/types.ts";
-import type { LegacyStorage } from "./store/legacy.ts";
 import { OWN_SYNC_FACTORIES } from "./store/sync-sqlite.ts";
 import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 import { promotionEvidence } from "./primary-sync.ts";
@@ -59,11 +58,11 @@ export type FederationConfig = {
 	/** primary/sync Spaces, each in its own store with its replica listener on `listen.host` (sync-spaces.ts). */
 	syncSpaces?: SyncSpaceConfig[];
 };
-/** The stores of primary/sync Spaces: the daemon's (pi-durable until U5), else the own store. */
+/** The stores of primary/sync Spaces: the daemon's, else the own store. */
 export const syncStores = (f?: SyncSpaceFactories) => (f?.openSyncStorage && f.openSyncHarness ? { openStorage: f.openSyncStorage, openHarness: f.openSyncHarness } : OWN_SYNC_FACTORIES);
 /** Factories for the dedicated stores of primary/sync Spaces; supplied by the daemon, which owns the storage backend. */
 /** Absent store factories: the own store (OWN_SYNC_FACTORIES). */
-export type SyncSpaceFactories = { openSyncStorage?: (path: string) => Promise<LegacyStorage | import("./store/sync-store.ts").SyncStore>; openSyncHarness?: (storage: any) => Promise<ClosableStoreHost>;
+export type SyncSpaceFactories = { openSyncStorage?: (path: string) => Promise<import("./store/sync-store.ts").SyncStore>; openSyncHarness?: (storage: any) => Promise<ClosableStoreHost>;
 	/** The main store runs on primary/sync (3.8): its current replica configuration, for every Space in it. */
 	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
 	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */

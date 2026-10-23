@@ -221,6 +221,40 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
 - **Lesen während eines versiegelten Commits:** Ein Lesezugriff zeigt nie einen Commit, den der Standby noch nicht
   bestätigt hat. Der Test prüft genau diese Eigenschaft statt eines festen Zählerstands.
 
+**Stand U8, Schritt 2 (2026-10-23): pi-durable aus `src`, außer der Agentenseite.**
+
+- **Primary/Sync:** nur noch der eigene Speicher.
+  - `primarySyncStorage`, `captureStore`, `bootstrapPrimarySync` und die Werkzeuge nehmen einen `SyncStore`.
+  - Der Proxy um pi-durables Storage, `store/legacy-sync.ts` und die Basis-Obergrenze für pi-durable sind entfernt.
+  - Ein Journal eines pi-durable-Speichers wird mit `PrimarySyncBlocked` abgewiesen. Das gilt für ein gespeichertes
+    Format `pi-durable` und für Einträge aus der Zeit, bevor das Format gespeichert wurde (Test in
+    test-primary-sync).
+- **`openSyncSpace`:** Ohne Fabriken öffnet es den eigenen Speicher.
+- **Weitere Entfernungen:**
+  - `store/legacy.ts`; das Dashboard öffnet den eigenen Speicher;
+  - die pi-durable-Hälfte von `compactErasedSqlite`;
+  - `scripts/migrate-namespace.mjs` mit seinem Test;
+  - die ungenutzte Tabelle `migration_runs`.
+- **`src/index.ts`** exportiert den eigenen Speicher:
+  - `openSqliteHost`, `openOwnMemoryHost`, `OwnStoreHost`, `StoreUnavailable`;
+  - `OwnSyncStore`, `ReplicatedOwnStore`, `OWN_SYNC_FACTORIES`.
+- **Schreib-Thread als Eval-Worker:** Er entsteht aus dem Quelltext seiner Funktionen. So läuft der eigene Speicher
+  auch aus einem Bundle (mobile Laufzeit, Testbed-Artefakte). Vorher verwies das Bundle auf eine
+  `sqlite-writer.ts`, die nicht mitgeliefert wurde.
+- **Testbed:** Der Daemon (`federation-host.ts`) und die Szenarien `phase3-sync-node` und `sieve-mobile` laufen auf
+  dem eigenen Speicher.
+- **Wächter:** `npm run check:durable` (`scripts/durable-imports.mjs --check`) läuft vor `npm test`. Er schlägt fehl,
+  wenn eine Datei außerhalb der Erlaubnisliste pi-durable, chord oder pi-ai erreicht, direkt oder über ihre Importe.
+  - pi-ai allein ist in `codemode-chat/` erlaubt.
+  - Die Liste schrumpft mit U6 und den Werkzeugen.
+- **Nachweis:** Die Root-Suite ohne `agent-integration` läuft mit `NODE_OPTIONS=--import=./test/support/no-durable.mjs`.
+  - Bis auf die zwei Tests der nativen pi-server-Abnahme (`test-pi-server`) ist sie grün.
+  - Diese zwei Tests prüfen die mobile Agentenlaufzeit; sie folgen mit U6.
+- **Bleibt bis U6:**
+  - `src/agent.ts` und `src/with-agent.ts`;
+  - die `definition`-Brücke in `store/documents.ts`, über die pi-durables Harness dieselben Dokumente bedient.
+  - Auf dem Telefon bedient `pi-serverd` seinen Space weiter über den Harness der Agentensitzungen.
+
 **Stand U4 (2026-10-23):**
 
 - **Primary/Sync auf dem eigenen Speicher:**

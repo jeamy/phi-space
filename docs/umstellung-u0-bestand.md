@@ -95,7 +95,7 @@ Diese Stellen hängen nicht nur an `tx.doc`, sondern am Speicherformat oder an S
 |---|---|---|
 | `src/primary-sync.ts` | repliziert `StorageWrite`-Batches (Speicherdeltas von pi-durable) als Primary/Sync-Journal | U4: eigenes Deltaformat des neuen Speichers |
 | `src/erasure-sqlite.ts` | SQL direkt auf Schema v1 von pi-durable (`documents`, `document_revisions`), wendet Deltas mit chord an | U2: Wartung des eigenen Speichers; alter Pfad nur noch im Legacy-Werkzeug (U5) |
-| `scripts/migrate-namespace.mjs` | Offline-Kopie eines pi-durable-SQLite v1 | U5: Legacy-Werkzeug |
+| `scripts/migrate-namespace.mjs` | Offline-Kopie eines pi-durable-SQLite v1 | entfernt (D6) |
 | `src/commit-sealed.ts` | `StorageRejected` als Fehlersignal des Speichers | U2: eigener Fehlertyp |
 | `src/dashboard.ts`, TUI | öffnen JSONL-/SQLite-Speicher selbst | U6 |
 | `src/index.ts` | Agent-Tools, Task-Dokument `phi-spaces.claim`, Zustellung an Conversations | U1: Trennung; U6: separates Agent-Paket |

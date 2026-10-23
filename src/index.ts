@@ -354,7 +354,7 @@ export {checkErasureBarrier,type ErasureBarrier} from './erasure-barrier.ts';
 
 export {DistributedPrincipalErasure,type DistributedErasurePlan,type ErasureParticipant,type DistributedErasureDriver} from "./distributed-erasure.ts";
 
-// compactErasedSqlite (src/erasure-sqlite.ts) maintains a stopped pi-durable SQLite store: imported from there, not from here
+// compactErasedSqlite (src/erasure-sqlite.ts) maintains a stopped own SQLite store: imported from there, not from here
 
 export { EntryReplicationController, EntryReplicas, ReplicationConflict, entryChangeId, type EntryReplicationConfig, type EntryReplicationRule, type EntryMutation, type ReplicatedEntryChange, type ReplicatedEntryView, type EntryReplicationSnapshot, type EntryReplicationOptions } from './entry-replication.ts';
 export { advanceHybridClock, compareHybridClock, validateHybridClock, ReplicationClockError, type HybridClock } from './replication-clock.ts';
@@ -365,6 +365,11 @@ export { EntryStreamCheckpoints, EntryStreamCursorConflict, EntryReplicationUnav
 
 export { EntrySnapshotMaintenance } from "./entry-replication-transfer.ts";
 export type { EntrySnapshotMaintenanceJob } from "./entry-replication-transfer.ts";
+// The own store: a SQLite file (one writer process, the owner lock) or memory; under primary/sync, OwnSyncStore and its
+// factories (docs/umstellung-ohne-pi-durable.md).
+export { openSqliteHost, StoreUnavailable, type SqliteStoreOptions } from "./store/sqlite.ts";
+export { OwnStoreHost, openOwnMemoryHost } from "./store/host.ts";
+export { OwnSyncStore, ReplicatedOwnStore, OWN_SYNC_FACTORIES } from "./store/sync-sqlite.ts";
 export { PrimarySyncJournal, PrimarySyncBlocked, CommitSealed, promotionEvidence, type PromotionEvidence, primarySyncStorage, recoverPrimarySync, materializeSyncHistory, bootstrapPrimarySync, captureStore } from './primary-sync.ts';
 export { applyConfigTransition, recoverSealedWithoutStandby, durabilityOf, lastConfigTransition } from './primary-sync.ts';
 export type { PrimarySyncConfig, PrimaryCommitIntent, PrimaryConfigIntent, PrimaryBootstrapIntent, PrimaryIntent, PrimarySyncAck, PrimarySyncPeer } from './primary-sync.ts';

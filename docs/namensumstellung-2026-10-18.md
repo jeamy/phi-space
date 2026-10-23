@@ -32,6 +32,11 @@ migriert keine Dokumenttypen. Eine bisherige Datenbank darf nicht unverändert a
 dieser Version gestartet werden: Dokumente im bisherigen Namespace werden nicht automatisch gefunden;
 ein neuer leerer Namespace ist kein Nachweis, dass frühere Daten gelöscht wären.
 
+> **Nachtrag 2026-10-23:** Das Werkzeug `scripts/migrate-namespace.mjs` und sein Test sind entfernt. Es
+> migrierte pi-durable-Speicher, und diese werden nicht mehr übernommen (Entscheidung D6,
+> [umstellung-u0-bestand.md](umstellung-u0-bestand.md)). Der folgende Abschnitt beschreibt den Stand vom
+> 2026-10-18; das Werkzeug liegt in der Git-Historie.
+
 Eine automatische In-place-Umstellung findet nicht statt. Im anschließenden Migrationslauf wurde
 [`scripts/migrate-namespace.mjs`](../scripts/migrate-namespace.mjs) ergänzt: Dry-run als Standard,
 SQLite-Backup in eine neue Datei, ausschließliche Änderung von Dokumenttyp und zugehörigem Metadatenindex,

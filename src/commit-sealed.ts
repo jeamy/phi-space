@@ -6,6 +6,6 @@ export class CommitSealed extends Error{
 }
 const SYNC_BUDGET = Symbol.for('phi-spaces.sync-budget-exceeded');
 /** Marks a commit refused before sealing because the sync journal's budget is used up: nothing was written, the host
- *  stays usable. The storage layer's error carries the mark (SyncBudgetExceeded in store/legacy.ts). */
+ *  stays usable. The store's error carries the mark (SyncJournalFull in store/sync-sqlite.ts). */
 export const markSyncBudgetExceeded = <E extends Error>(e: E): E => Object.assign(e, { [SYNC_BUDGET]: true });
 export const isSyncBudgetExceeded = (e: unknown): e is Error => e instanceof Error && (e as unknown as Record<symbol, unknown>)[SYNC_BUDGET] === true;

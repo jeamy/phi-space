@@ -10,17 +10,14 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
   `PHI_SPACES_MOBILE_ROOT` selects another mobile checkout)
 - Tests: `npm test` (node test runner, all suites in `test/`: `test/test-core.test.ts`, `test/test-meter.test.ts`, `test/integration.test.ts`,
   `test/test-persistence.test.ts`, `test/test-spaces.test.ts`, `test/test-claims.test.ts`, `test/test-budgets.test.ts`, `test/test-stream.test.ts`, `test/test-service.test.ts`, `test/test-remote.test.ts`, `test/test-socket.test.ts`, `test/test-gate.test.ts`, `test/test-auth.test.ts`, `test/test-enroll.test.ts`, `test/test-supervisor.test.ts`,
-  `test/test-scenario.test.ts`, `test/test-tui.test.ts`, `test/test-ap1.test.ts`, `test/test-pi-server.test.ts`, `test/test-federation-runtime.test.ts`, `test/test-grants.test.ts`, `test/test-recovery.test.ts`, `test/test-operations.test.ts`, `test/test-recovery-boundaries.test.ts`, `test/test-router.test.ts`, `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts`, `test/test-workers.test.ts`, `test/test-space-lifecycle.test.ts`, `test/test-deployment.test.ts`, `test/test-alerts.test.ts`, `test/test-run-export.test.ts`, `test/test-primary-sync.test.ts`, `test/test-replica-control.test.ts`, `test/test-netcup-fencing.test.ts`, `test/test-replica-transport.test.ts`, `test/test-bootstrap.test.ts`, `test/test-container-fencing.test.ts`, `test/test-control-host-change.test.ts`, `test/test-merge-service.test.ts`, `test/test-entry-erasure.test.ts`, `test/test-entry-compaction.test.ts`, `test/test-commit-sealed.test.ts`, `test/test-not-committed.test.ts`, `test/test-degrade-revoke.test.ts`, `test/test-own-store.test.ts`, `test/test-standalone.test.ts`); `PHI_SPACES_STORE=own|own-sqlite` runs the suite on the own store; `test/support/persistent.ts` BACKENDS include own-sqlite
-  (docs/umstellung-ohne-pi-durable.md) crash/reopen helpers for JSONL and SQLite
+  `test/test-scenario.test.ts`, `test/test-tui.test.ts`, `test/test-ap1.test.ts`, `test/test-pi-server.test.ts`, `test/test-federation-runtime.test.ts`, `test/test-grants.test.ts`, `test/test-recovery.test.ts`, `test/test-operations.test.ts`, `test/test-recovery-boundaries.test.ts`, `test/test-router.test.ts`, `test/test-run-gate.test.ts`, `test/test-run-member.test.ts`, `test/test-run-recovery.test.ts`, `test/test-workers.test.ts`, `test/test-space-lifecycle.test.ts`, `test/test-deployment.test.ts`, `test/test-alerts.test.ts`, `test/test-run-export.test.ts`, `test/test-primary-sync.test.ts`, `test/test-replica-control.test.ts`, `test/test-netcup-fencing.test.ts`, `test/test-replica-transport.test.ts`, `test/test-bootstrap.test.ts`, `test/test-container-fencing.test.ts`, `test/test-control-host-change.test.ts`, `test/test-merge-service.test.ts`, `test/test-entry-erasure.test.ts`, `test/test-entry-compaction.test.ts`, `test/test-commit-sealed.test.ts`, `test/test-not-committed.test.ts`, `test/test-degrade-revoke.test.ts`, `test/test-own-store.test.ts`, `test/test-standalone.test.ts`, `test/agent-integration.test.ts`); the suite runs on the own store (SQLite, strict about disk maps), `PHI_SPACES_STORE=own` keeps it in memory; pi-durable stores are discarded (decision D6, docs/umstellung-u0-bestand.md); `npm test` first runs `npm run check:durable` (`scripts/durable-imports.mjs --check`: no pi-durable, chord or pi-ai outside its allowlist); `NODE_OPTIONS=--import=./test/support/no-durable.mjs` blocks them at runtime
+  (docs/umstellung-ohne-pi-durable.md) crash/reopen helpers for the own SQLite store
   in `test/support/persistent.ts`
 - Native pi-server acceptance: `npm run test:pi-server`; uses packages from the sibling mobile runtime
   (`PI_SERVER_RUNTIME_DIR` overrides the path); skips if not installed, never installs dependencies.
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> test/integration.test.ts`
 - Branding: `npm run check:branding` (read-only; rejects obsolete project names in tracked text, generated output
   and local `.env` keys).
-- Namespace migration of an old store (offline copy, unreplicated SQLite v1 only, never in place):
-  `node scripts/migrate-namespace.mjs --input FILE --from NAMESPACE` (dry run), then `--output NEW_FILE --apply`;
-  test: `npm run test:migration` (also part of `npm test`). Docs: `docs/namensumstellung-2026-10-18.md`.
 - Remote test bed (docker on the server `big`; verifies the BUILT artifacts, no source goes to the server;
   `npm run testbed -- check|up|test|status|down`, `--dry-run` first): `test/testbed/`,
   docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
@@ -47,9 +44,9 @@ Run typecheck and tests after every change.
 - `src/core.ts` pure semantics, `src/doc.ts` the default Space document, `src/spaces.ts` registry and named spaces,
   `src/claims.ts` request claims/generations, `src/client.ts` `PhiSpaces`, `src/index.ts` exports, delivery, reaper,
   `src/agent.ts` the agent tools (pi-durable), `src/context.ts` the invocation context, `src/store/` the storage boundary
-  (`legacy.ts`: the pi-durable host during docs/umstellung-ohne-pi-durable.md; `host.ts`/`sqlite.ts` the own store;
+  (`host.ts`/`sqlite.ts` the own store, `sqlite-writer.ts` its writer thread, an eval worker so bundles need no second file;
   `disk-map.ts` the claims kept on the disk, asked through `DISK_MAP` instead of enumerated: tests on own-sqlite throw
-  on such an enumeration; `sync-store.ts` what the primary/sync journal needs of a store, `legacy-sync.ts` pi-durable's,
+  on such an enumeration; `sync-store.ts` what the primary/sync journal needs of a store,
   `sync-sqlite.ts` the own store's side (OwnSyncStore, the replicated primary), `sqlite-ops.ts` the shared row writes),
   `src/meter.ts` metrics; `src/stream.ts`, `src/snapshot.ts`, `src/paging.ts` changes/snapshots/byte pages,
   `src/mailbox.ts` durable mailboxes, `src/pi-server.ts` the structural pi-server adapter.

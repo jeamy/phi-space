@@ -10,10 +10,10 @@
 // event replay is needed and no update can be lost silently.
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join, resolve, sep } from "node:path";
+import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT } from "./context.ts";
-import { openJsonlStore, openSqliteStore } from "./store/legacy.ts";
+import { openSqliteHost } from "./store/sqlite.ts";
 import type { Context } from "./context.ts";
 import type { SpaceHost } from "./client.ts";
 import { meter as processMeter, type Meter, type MeterSnapshot } from "./meter.ts";
@@ -213,11 +213,11 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	};
 }
 
-// ---- standalone start: `npm run dashboard -- --dir <jsonl-dir>` or `--sqlite <file>` (docs/dashboard.md).
+// ---- standalone start: `npm run dashboard -- --dir <dir>` or `--sqlite <file>` (docs/dashboard.md).
 
 const usage = `phi-spaces dashboard (read-only Phase 1)
-  --dir <path>      open a JSONL store directory
-  --sqlite <file>   open a SQLite store file (exactly one of --dir/--sqlite is required)
+  --dir <path>      open the store in a directory (<path>/store.sqlite, created if absent)
+  --sqlite <file>   open a store file (exactly one of --dir/--sqlite is required)
   --port <n>        HTTP port (default 8787)
   --bind <addr>     bind address (default 127.0.0.1; loopback only by design)
   --socket <path>   unix socket for the space service (default: <store>/space.sock)
@@ -237,8 +237,9 @@ async function main(argv: string[]): Promise<void> {
 	const dir = a.get("--dir"), sqlite = a.get("--sqlite");
 	if ((dir ? 1 : 0) + (sqlite ? 1 : 0) !== 1) throw new Error(`exactly one of --dir/--sqlite is required\n\n${usage}`);
 	const ctx = BACKGROUND_CONTEXT;
-	const harness = dir ? await openJsonlStore(dir, ctx) : await openSqliteStore(sqlite!, ctx);
-	const store = dir ?? sqlite!;
+	// the dashboard process owns the store (its owner lock): it also serves the space socket below
+	const harness = await openSqliteHost(dir ? join(dir, "store.sqlite") : sqlite!);
+	const store = dir ?? dirname(resolve(sqlite!));
 	const dashboard = await startDashboard({
 		host: harness, ctx,
 		bind: a.get("--bind") ?? "127.0.0.1",
