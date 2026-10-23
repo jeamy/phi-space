@@ -51,7 +51,7 @@ const idOf = (v: unknown): string => {
  *  records' identity (a changed record is a new object); maps use the keys their draft reported. `ords` keeps each
  *  array record's order between commits (per part): a record appended gets the next one; if the order cannot be kept
  *  (a record moved, or one inserted in the middle), every record of the part is written with a fresh order. */
-export function partChanges(before: unknown, after: unknown, parts: readonly PartSpec[], mapChanges: PartChanges, ords: Map<string, Map<string, number>>): { put: PartRow[]; del: Array<{ part: string; id: string }> } {
+export function partChanges(before: unknown, after: unknown, parts: readonly PartSpec[], mapChanges: PartChanges, ords: Map<string, Map<string, number>>, undo?: Array<() => void>): { put: PartRow[]; del: Array<{ part: string; id: string }> } {
 	const put: PartRow[] = [], del: Array<{ part: string; id: string }> = [];
 	for (const p of parts) {
 		const name = p.path.join("."), now = at(after, p.path), was = at(before, p.path);
@@ -68,13 +68,13 @@ export function partChanges(before: unknown, after: unknown, parts: readonly Par
 		}
 		if (was === now) continue;
 		const a = (now ?? []) as unknown[], b = (was ?? []) as unknown[];
-		if (!ords.has(name)) ords.set(name, new Map());
-		const ord = ords.get(name)!;
-		if (alongside(name, a, b, ord, put, del)) continue;
+		if (!ords.has(name)) { ords.set(name, new Map()); undo?.push(() => ords.delete(name)); }
+		const ord = ords.get(name)!, o = track(ord, undo);
+		if (alongside(name, a, b, ord, o, put, del)) continue;
 		const old = new Map(b.map((v) => [idOf(v), v]));
 		const ids = a.map(idOf), kept = (id: string) => old.has(id) && ord.has(id);
 		const present = new Set(ids);
-		for (const id of old.keys()) if (!present.has(id)) { del.push({ part: name, id }); ord.delete(id); }
+		for (const id of old.keys()) if (!present.has(id)) { del.push({ part: name, id }); o.del(id); }
 		// the order holds while kept records stay in their order and new ones only follow them
 		let last = -Infinity, fresh = false, holds = true;
 		for (const id of ids) {
@@ -84,19 +84,19 @@ export function partChanges(before: unknown, after: unknown, parts: readonly Par
 			last = o;
 		}
 		if (!holds) { // renumber the whole part
-			ord.clear();
-			a.forEach((v, i) => { ord.set(ids[i]!, i); put.push({ part: name, id: ids[i]!, ord: i, value: v }); });
-			maxOrds.set(ord, a.length - 1);
+			o.clear();
+			a.forEach((v, i) => { o.set(ids[i]!, i); put.push({ part: name, id: ids[i]!, ord: i, value: v }); });
+			o.max(a.length - 1);
 			continue;
 		}
 		let max = maxOrd(ord);
 		a.forEach((v, i) => {
 			const id = ids[i]!;
 			if (kept(id)) { if (old.get(id) !== v) put.push({ part: name, id, ord: ord.get(id)!, value: v }); return; }
-			ord.set(id, ++max);
+			o.set(id, ++max);
 			put.push({ part: name, id, ord: max, value: v });
 		});
-		maxOrds.set(ord, max);
+		o.max(max);
 	}
 	return { put, del };
 }
@@ -109,11 +109,25 @@ const maxOrd = (ord: Map<string, number>): number => {
 	return max;
 };
 
+/** Changes of an order map, each with its inverse in `undo` (when the store refuses the commit, Ledger.prepare). */
+type OrdWrites = { set(k: string, v: number): void; del(k: string): void; clear(): void; max(m: number): void };
+function track(ord: Map<string, number>, undo?: Array<() => void>): OrdWrites {
+	if (!undo) return { set: (k, v) => void ord.set(k, v), del: (k) => void ord.delete(k), clear: () => ord.clear(), max: (m) => void maxOrds.set(ord, m) };
+	const prevMax = maxOrds.get(ord);
+	undo.push(() => (prevMax === undefined ? maxOrds.delete(ord) : maxOrds.set(ord, prevMax)));
+	return {
+		set: (k, v) => { const had = ord.has(k), was = ord.get(k); undo.push(() => (had ? ord.set(k, was!) : ord.delete(k))); ord.set(k, v); },
+		del: (k) => { if (!ord.has(k)) return; const was = ord.get(k)!; undo.push(() => ord.set(k, was)); ord.delete(k); },
+		clear: () => { const copy = new Map(ord); undo.push(() => { ord.clear(); for (const [k, v] of copy) ord.set(k, v); }); ord.clear(); },
+		max: (m) => void maxOrds.set(ord, m),
+	};
+}
+
 /** The usual change of an array part without ids for every record: walking both arrays side by side (records are
  *  values, so the same object is the same record), records were only removed, replaced in their place, or appended
  *  (a log that grows at its end and is cut at its start; a take from the middle of the entries). Anything else (false,
  *  nothing pushed) goes to the full comparison. */
-function alongside(name: string, a: readonly unknown[], b: readonly unknown[], ord: Map<string, number>, put: PartRow[], del: Array<{ part: string; id: string }>): boolean {
+function alongside(name: string, a: readonly unknown[], b: readonly unknown[], ord: Map<string, number>, o: OrdWrites, put: PartRow[], del: Array<{ part: string; id: string }>): boolean {
 	const gone: string[] = [], changed: Array<{ id: string; v: unknown }> = [];
 	let i = 0, j = 0;
 	for (; i < b.length && j < a.length; i++) {
@@ -132,9 +146,9 @@ function alongside(name: string, a: readonly unknown[], b: readonly unknown[], o
 		for (const x of added) if (ord.has(x.id)) return false; // a removed record came back elsewhere: it moved
 	}
 	let max = maxOrd(ord);
-	for (const id of gone) { del.push({ part: name, id }); ord.delete(id); }
+	for (const id of gone) { del.push({ part: name, id }); o.del(id); }
 	for (const x of changed) put.push({ part: name, id: x.id, ord: ord.get(x.id)!, value: x.v });
-	for (const x of added) { ord.set(x.id, ++max); put.push({ part: name, id: x.id, ord: max, value: x.v }); }
-	maxOrds.set(ord, max);
+	for (const x of added) { o.set(x.id, ++max); put.push({ part: name, id: x.id, ord: max, value: x.v }); }
+	o.max(max);
 	return true;
 }

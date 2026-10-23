@@ -46,6 +46,9 @@ export type Draft<T> = {
 	/** After finish: the records written into parts by this commit (the store freezes them when it publishes). */
 	readonly fresh: unknown[];
 	discard(): void;
+	/** After finish: puts back what the commit changed in place (its map parts), when the store refuses the commit
+	 *  before publishing it (OwnStoreHost, Ledger.prepare). The finished value is not used then. */
+	rollback(): void;
 };
 
 /** A draft of `base` (a JSON value: plain objects, arrays, primitives) with the given parts. */
@@ -221,6 +224,11 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		return false;
 	};
 
+	// map parts were changed in place: put back what they held
+	const undo = () => {
+		for (const s of states) if (s.kind === "map") for (const [k, u] of [...s.undo].reverse()) { const m = s.base as Record<string, unknown>; if (u.had) m[k] = u.old; else delete m[k]; }
+		changes.clear();
+	};
 	const root = create(base, null, null);
 	const end = () => { done = true; for (const s of states) s.revoke(); };
 	return {
@@ -235,11 +243,10 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		},
 		discard() {
 			if (done) return;
-			// map parts were changed in place: put back what they held
-			for (const s of states) if (s.kind === "map") for (const [k, u] of [...s.undo].reverse()) { const m = s.base as Record<string, unknown>; if (u.had) m[k] = u.old; else delete m[k]; }
-			changes.clear();
+			undo();
 			end();
 		},
+		rollback() { undo(); },
 	};
 }
 

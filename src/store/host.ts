@@ -24,8 +24,14 @@ export type CommitSet = { put: PutDoc[]; retired: Array<{ kind: string; key: str
  *  when it is (in the order commits were handed over). */
 export interface Ledger {
 	load(kind: string, key: string | null, parts?: DocDef<unknown>["parts"]): StoredDoc | null;
-	persist(set: CommitSet): void | Promise<void>;
+	/** Before a commit is published: may refuse it (throw), and nothing of it happened then (the host puts back what the
+	 *  commit changed in place). What it returns goes to persist. */
+	prepare?(set: CommitSet): unknown;
+	persist(set: CommitSet, prepared?: unknown): void | Promise<void>;
 	close(): void | Promise<void>;
+	/** Why the ledger takes no more work, when that differs from the error of the commit that failed (a primary whose
+	 *  sealed candidate failed refuses everything after it until it is reopened and resolved). */
+	readonly failure?: Error | null;
 	/** How writing goes (plan 5.2: queue, sync latency): batches written, commits in them, time spent writing. */
 	stats?(): StoreStats;
 }
@@ -174,14 +180,19 @@ export class OwnStoreHost implements ClosableStoreHost {
 		for (const [a, r] of retired) if (this.#committed(r.kind, r.key)) { set.retired.push(r); changed.push([a, null]); }
 		// a commit that only read may still depend on earlier commits that are not yet durable: it waits for them too
 		if (!set.put.length && !set.retired.length) return { out, durable: this.#durable };
+		// the store may refuse the commit before anything of it is published (a replicated store whose journal is full):
+		// what the commit changed in place goes back, and the host goes on
+		let prepared: unknown;
+		try { prepared = this.#ledger.prepare?.(set); }
+		catch (e) { for (const d of drafts.values()) d.draft.rollback(); throw e; }
 		// a record of a part is a value from now on: whoever still changes one in place gets an error, not a silent change
 		for (const r of records) deepFreeze(r);
 		// the next commit builds on this one at once; readers and watches see it once it is durable
 		for (const d of set.put) this.#docs.set(addr(d.kind, d.key), { kind: d.kind, key: d.key, version: d.version, value: d.value });
 		for (const r of set.retired) this.#docs.set(addr(r.kind, r.key), null);
-		const durable = Promise.resolve(this.#ledger.persist(set)).then(
+		const durable = Promise.resolve(this.#ledger.persist(set, prepared)).then(
 			() => { for (const [a, value] of changed) for (const w of this.#watches.get(a) ?? []) value === null ? w.finish({ reason: "retired" }) : w.offer(value as never); },
-			(e: unknown) => { this.#failure ??= e instanceof Error ? e : new Error(String(e)); throw e; },
+			(e: unknown) => { this.#failure ??= this.#ledger.failure ?? (e instanceof Error ? e : new Error(String(e))); throw e; },
 		);
 		this.#durable = durable.catch(() => {});
 		return { out, durable };

@@ -29,7 +29,14 @@ export type SqliteStoreOptions = {
 	synchronous?: "FULL" | "NORMAL";
 	/** Enumerating a map part on the disk throws instead of reading every key (tests: such a scan is a defect). */
 	strictDiskMaps?: boolean;
+	/** Checks every commit's rows before the commit is published; throwing refuses that commit, which then leaves no
+	 *  trace and the store usable (the replicated store's journal budget). */
+	gate?: (ops: readonly WriteOp[]) => void;
+	/** Tests: what the next write of a batch does (test/support/persistent.ts) — fail before the data is written, or write
+	 *  it and lose the answer. */
+	faults?: StoreFaults;
 };
+export type StoreFaults = { take(ops: readonly WriteOp[]): { fault: "failBeforeCommit" | "loseAnswer"; error: Error } | undefined };
 
 /** Refused: another process owns the store, or the file is of an unknown format. */
 export class StoreUnavailable extends Error {}
@@ -69,16 +76,24 @@ class SqliteLedger implements Ledger {
 	#handed = 0;
 	#durableCount = 0;
 	#batch = 0;
-	#writing: { batch: number; done: Array<{ resolve: () => void; reject: (e: Error) => void }> } | null = null;
+	#writing: { batch: number; done: Waiting[]; lost: Error | null } | null = null;
 	readonly #stmt = new Map<string, ReturnType<DatabaseSync["prepare"]>>();
 	#prep(sql: string): ReturnType<DatabaseSync["prepare"]> { let p = this.#stmt.get(sql); if (!p) this.#stmt.set(sql, (p = this.#read.prepare(sql))); return p; }
-	#queued: { ops: WriteOp[]; done: Array<{ resolve: () => void; reject: (e: Error) => void }> } = { ops: [], done: [] };
+	/** Commits handed over and not yet sent, each with its rows. */
+	#queued: Waiting[] = [];
 	#failure: Error | null = null;
+	/** Why the store takes no more work (absent: it does). After a sealed candidate failed this is not the candidate's
+	 *  own error but the refusal of everything after it. */
+	get failure(): Error | null { return this.#failure; }
+	/** Tests: what the next write does (SqliteStoreOptions.faults). */
+	faults?: StoreFaults;
+	/** Primary/sync (store/sync-sqlite.ts): seals a batch, and waits for its standby, before it is written. */
+	replication?: LedgerReplication;
 	#closing: (() => void) | null = null;
 	readonly #stats = { batches: 0, commits: 0, rows: 0, writeMs: 0, maxBatch: 0 };
 	#sentAt = 0;
 
-	stats(): StoreStats { return { ...this.#stats, queued: this.#queued.done.length }; }
+	stats(): StoreStats { return { ...this.#stats, queued: this.#queued.length }; }
 
 	constructor(read: DatabaseSync, lock: DatabaseSync, worker: Worker, strict: boolean) {
 		this.#read = read; this.#lock = lock; this.#worker = worker; this.#strict = strict;
@@ -149,17 +164,27 @@ class SqliteLedger implements Ledger {
 		};
 	}
 
-	persist(set: CommitSet): Promise<void> {
-		if (this.#failure) return Promise.reject(this.#failure);
-		const written = ++this.#handed;
+	/** The row changes of a commit, before anything of it is published (OwnStoreHost). A store with a gate (a replicated
+	 *  one: its journal's budget) may refuse them here; then the order bookkeeping is put back and nothing happened. */
+	prepare(set: CommitSet): WriteOp[] {
+		if (this.#failure) throw this.#failure;
+		const undo: Array<() => void> = [];
+		try { const ops = this.#ops(set, undo); this.gate?.(ops); return ops; }
+		catch (e) { for (const u of undo.reverse()) u(); throw e; }
+	}
+
+	/** Checks a commit's rows before it is published; throwing refuses the commit (prepare). */
+	gate?: (ops: readonly WriteOp[]) => void;
+
+	#ops(set: CommitSet, undo?: Array<() => void>): WriteOp[] {
 		const ops: WriteOp[] = [];
 		for (const d of set.put) {
 			const k = docKey(d.key);
 			if (!d.parts?.length) { ops.push({ t: "doc", kind: d.kind, key: k, version: d.version, value: JSON.stringify(d.value) }); continue; }
 			ops.push({ t: "doc", kind: d.kind, key: k, version: d.version, value: JSON.stringify(headOf(d.value, d.parts)) });
 			const id = `${d.kind}\u0000${k}`;
-			if (!this.#ords.has(id)) this.#ords.set(id, new Map());
-			const c = partChanges(d.before, d.value, d.parts, d.changes ?? new Map(), this.#ords.get(id)!);
+			if (!this.#ords.has(id)) { this.#ords.set(id, new Map()); undo?.push(() => this.#ords.delete(id)); }
+			const c = partChanges(d.before, d.value, d.parts, d.changes ?? new Map(), this.#ords.get(id)!, undo);
 			const indexOf = new Map(d.parts.filter((p) => p.disk).map((p) => [p.path.join("."), p.disk!]));
 			for (const r of c.put) {
 				const ix = indexOf.get(r.part), v = r.value as Record<string, unknown> | null;
@@ -167,9 +192,20 @@ class SqliteLedger implements Ledger {
 				ops.push({ t: "part", kind: d.kind, key: k, part: r.part, id: r.id, ord: r.ord, value: JSON.stringify(r.value), at, grp, flag: ix ? (v?.[ix.flag] ? 1 : 0) : null });
 			}
 			for (const r of c.del) ops.push({ t: "partDel", kind: d.kind, key: k, part: r.part, id: r.id });
+		}
+		for (const r of set.retired) ops.push({ t: "retire", kind: r.kind, key: docKey(r.key) });
+		return ops;
+	}
+
+	persist(set: CommitSet, prepared?: unknown): Promise<void> {
+		if (this.#failure) return Promise.reject(this.#failure);
+		const written = ++this.#handed;
+		const ops = (prepared as WriteOp[] | undefined) ?? this.#ops(set);
+		for (const d of set.put) {
 			// a map part still in memory (its document is new in this process) goes on the disk from now on
-			for (const p of d.parts) {
+			for (const p of d.parts ?? []) {
 				if (!p.disk || p.kind !== "map") continue;
+				const k = docKey(d.key);
 				const parent = p.path.slice(0, -1).reduce<unknown>((o, x) => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[x] : undefined), d.value);
 				const last = p.path.at(-1)!, m = parent !== null && typeof parent === "object" ? (parent as Record<string, unknown>)[last] : undefined;
 				if (m === null || typeof m !== "object" || isDiskMap(m)) continue;
@@ -178,55 +214,75 @@ class SqliteLedger implements Ledger {
 				this.#diskMapsOf(d.kind, k).set(p.path.join("."), disk);
 			}
 		}
-		for (const r of set.retired) { ops.push({ t: "retire", kind: r.kind, key: docKey(r.key) }); this.#ords.delete(`${r.kind}\u0000${docKey(r.key)}`); this.#diskMaps.delete(`${r.kind}\u0000${docKey(r.key)}`); }
+		for (const r of set.retired) { this.#ords.delete(`${r.kind}\u0000${docKey(r.key)}`); this.#diskMaps.delete(`${r.kind}\u0000${docKey(r.key)}`); }
 		return new Promise((resolve, reject) => {
-			this.#queued.ops.push(...ops);
-			this.#queued.done.push({ resolve, reject });
+			this.#queued.push({ ops, bytes: rowBytes(ops), resolve, reject });
 			if (!this.#writing) this.#send();
 		});
 	}
 
-	/** Sends what is queued as one batch. */
+	/** Sends what is queued as one batch: whatever came while the previous one was written, cut where a replicated
+	 *  batch would outgrow its journal entry. One batch at a time (a primary has at most one unresolved candidate). */
 	#send(): void {
-		if (!this.#queued.done.length) return;
-		const next = this.#queued;
-		this.#queued = { ops: [], done: [] };
-		this.#writing = { batch: ++this.#batch, done: next.done };
+		if (!this.#queued.length || this.#failure) return;
+		const limit = this.replication?.maxBatchBytes ?? Infinity;
+		let n = 0, bytes = 0;
+		while (n < this.#queued.length && (n === 0 || bytes + this.#queued[n]!.bytes <= limit)) bytes += this.#queued[n++]!.bytes;
+		const done = this.#queued.splice(0, n), batch = ++this.#batch;
+		this.#writing = { batch, done, lost: null };
 		this.#worker.ref(); // a write in flight keeps the process alive until it is durable
-		this.#stats.batches++; this.#stats.commits += next.done.length; this.#stats.rows += next.ops.length; this.#stats.maxBatch = Math.max(this.#stats.maxBatch, next.done.length);
+		this.#stats.batches++; this.#stats.commits += done.length; this.#stats.maxBatch = Math.max(this.#stats.maxBatch, done.length);
+		void this.#write(batch, done.flatMap((d) => d.ops));
+	}
+
+	async #write(batch: number, rows: WriteOp[]): Promise<void> {
+		let ops = rows;
+		try {
+			// sealed (and confirmed by the standby) before the data is written; a failure after sealing poisons the store
+			if (this.replication) ops = await this.replication.seal(rows);
+			const f = this.faults?.take(ops);
+			if (f?.fault === "failBeforeCommit") throw f.error;
+			if (f && this.#writing?.batch === batch) this.#writing.lost = f.error;
+		} catch (e) { this.#fail(e instanceof Error ? e : new Error(String(e)), this.replication?.poison(e)); return; }
+		if (this.#writing?.batch !== batch) return;
+		this.#stats.rows += ops.length;
 		this.#sentAt = performance.now();
-		this.#worker.postMessage({ type: "write", batch: this.#batch, ops: next.ops } satisfies WriterRequest);
+		this.#worker.postMessage({ type: "write", batch, ops } satisfies WriterRequest);
 	}
 
 	#reply(r: WriterReply): void {
 		if (r.type === "closed") { this.#closing?.(); return; }
 		if (r.type === "written" && this.#writing?.batch === r.batch) {
 			this.#stats.writeMs += performance.now() - this.#sentAt;
-			const done = this.#writing.done;
+			const { done, lost } = this.#writing;
 			this.#writing = null;
+			try { this.replication?.applied(); } catch (e) { this.#fail(e as Error); return; }
 			// what these commits wrote into map parts on the disk is read from there from now on
 			this.#durableCount += done.length;
 			for (const maps of this.#diskMaps.values()) for (const m of maps.values()) m.settle(this.#durableCount);
+			if (lost) { this.#fail(lost); return; } // durable, but the answer is lost (a test's fault)
 			for (const d of done) d.resolve();
 			this.#send();
 			if (!this.#writing) this.#worker.unref(); // idle: the store does not keep the process alive
 			return;
 		}
-		if (r.type === "failed") this.#fail(new Error(`the store could not write: ${r.error}`));
+		if (r.type === "failed") this.#fail(new Error(`the store could not write: ${r.error}`), this.replication?.poison(new Error(r.error)));
 	}
 
-	/** A write failed: this batch and everything after it fails; the store takes no more (plan 4.1: reopen it). */
-	#fail(e: Error): void {
+	/** A write failed: this batch and everything after it fails (with `later`, if given); the store takes no more (plan
+	 *  4.1: reopen it). */
+	#fail(e: Error, later?: Error): void {
 		if (this.#failure) return;
-		this.#failure = e;
-		for (const d of [...(this.#writing?.done ?? []), ...this.#queued.done]) d.reject(e);
+		this.#failure = later ?? e;
+		for (const d of this.#writing?.done ?? []) d.reject(e);
+		for (const d of this.#queued) d.reject(later ?? e);
 		this.#writing = null;
-		this.#queued = { ops: [], done: [] };
+		this.#queued = [];
 	}
 
 	/** Waits for everything queued to be written. */
 	async drain(): Promise<void> {
-		while (this.#writing || this.#queued.done.length) {
+		while (this.#writing || this.#queued.length) {
 			if (this.#failure) return;
 			await new Promise<void>((r) => setTimeout(r, 1));
 		}
@@ -243,9 +299,28 @@ class SqliteLedger implements Ledger {
 	}
 }
 
-/** Opens (or creates) the store at `path` and the host over it. Refuses when another process owns the store or the
- *  file is of a newer format. */
-export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): Promise<OwnStoreHost> {
+type Waiting = { ops: WriteOp[]; bytes: number; resolve: () => void; reject: (e: Error) => void };
+const rowBytes = (ops: readonly WriteOp[]) => ops.reduce((n, op) => n + ("value" in op ? op.value.length : 0) + 64, 0);
+
+/** What a primary/sync replication does to the batches of a store (store/sync-sqlite.ts). */
+export interface LedgerReplication {
+	/** Rows one batch may carry (a journal entry's budget). */
+	readonly maxBatchBytes: number;
+	/** Seals a batch, waits for its standby, and returns the rows to write (the marker last). Throws CommitSealed when it
+	 *  fails after sealing. */
+	seal(rows: WriteOp[]): Promise<WriteOp[]>;
+	/** The sealed batch is on the disk. */
+	applied(): void;
+	/** The refusal of everything after a failed batch, or undefined (the batch's own error then). */
+	poison(cause: unknown): Error | undefined;
+}
+
+/** A store file opened by its owner: the read connection and the held owner lock. */
+type StoreFiles = { path: string; read: DatabaseSync; lock: DatabaseSync };
+
+/** Opens (or creates) the store file at `path` for its owner. Refuses when another process owns the store or the file
+ *  is of a newer format or of another program. */
+function openFiles(path: string): StoreFiles {
 	mkdirSync(dirname(path), { recursive: true });
 	// the owner lock: an exclusive lock on a file next to the store, held while it is open
 	const lock = new DatabaseSync(`${path}.owner`, { timeout: 0 });
@@ -278,10 +353,25 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 		const mode = (read.prepare("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode;
 		if (mode !== "wal") throw new StoreUnavailable(`the store ${path} is not in WAL mode (${mode})`);
 	} catch (e) { read?.close(); lock.close(); throw e; }
+	return { path, read, lock };
+}
+
+/** Opens (or creates) the store at `path` and the host over it. Refuses when another process owns the store or the
+ *  file is of a newer format. */
+export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): Promise<OwnStoreHost> {
+	return hostOver(openFiles(path), o);
+}
+
+/** The host over opened store files (they belong to it from now on). */
+async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnStoreHost> {
+	const { path, read, lock } = files;
 	const worker = new Worker(new URL("./sqlite-writer.ts", import.meta.url));
 	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL" } satisfies WriterRequest); });
 	if (opened.type !== "opened") { await worker.terminate(); read.close(); lock.close(); throw new StoreUnavailable(`the store writer could not open ${path}: ${(opened as { error?: string }).error}`); }
-	const host = new OwnStoreHost(new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1"));
+	const ledger = new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1");
+	if (o.gate) ledger.gate = o.gate;
+	if (o.faults) ledger.faults = o.faults;
+	const host = new OwnStoreHost(ledger);
 	// an idle writer does not keep the process alive (unref after its listeners: a listener refs it again)
 	worker.unref();
 	return host;

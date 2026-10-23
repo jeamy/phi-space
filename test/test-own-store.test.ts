@@ -276,3 +276,44 @@ test("a format 1 store is migrated when opened: its claims get their index and g
 	assert.equal((check.prepare("SELECT value FROM store_meta WHERE key = 'format_version'").get() as { value: string }).value, "2");
 	check.close();
 });
+
+import { plainDoc } from "./support/host.ts";
+
+// ---- a commit the store refuses before publishing it (Ledger.prepare: a replicated store's full journal) ----
+
+test("a commit the store refuses before publishing leaves no trace: entries, claims, log and orders are as before, and the store goes on", async () => {
+	const file = fresh();
+	let refuse = false;
+	let h = await openSqliteHost(file, { strictDiskMaps: true, gate: () => { if (refuse) throw new Error("journal full"); } });
+	const s = new PhiSpaces(h, ctx);
+	for (let i = 0; i < 5; i++) await s.write({ type: "Job", fields: { i } }, null, FOREVER);
+	let gen = "";
+	await h.commit(async (tx) => { const st = await tx.doc(Space) as core.SpaceState; gen = claims.issueGeneration(st, Date.now(), { peerId: "p" }).generation; }, ctx);
+	const before = (plainDoc(await h.snapshot(Space, ctx)) as any);
+	// refused while an earlier commit may still be written: a take from the middle, a new claim, an appended entry
+	const earlier = s.write({ type: "Job", fields: { i: 5 } }, null, FOREVER);
+	refuse = true;
+	const refused = h.commit(async (tx) => {
+		const st = await tx.doc(Space) as core.SpaceState, now = Date.now();
+		core.probe(st, now, { type: "Job", fields: { i: 2 } }, null, true);
+		claims.admit(st, now, ref(gen, "refused"), "write", {}, now + 60_000);
+		core.write(st, now, { type: "Job", fields: { i: 99 } }, null, FOREVER);
+	}, ctx);
+	await assert.rejects(refused, /journal full/);
+	refuse = false;
+	await earlier;
+	const after = (plainDoc(await h.snapshot(Space, ctx)) as any);
+	assert.deepEqual(after.entries.map((e: { fields: { i: number } }) => e.fields.i), [0, 1, 2, 3, 4, 5], "nothing of the refused commit, the earlier one is there");
+	assert.equal(after.rpc.claims[claims.keyOf(after, ref(gen, "refused"))], undefined);
+	assert.equal(claimsOf(await h.snapshot(Space, ctx))!.entries().length, 0);
+	assert.equal(after.stream.log.length, before.stream.log.length + 1, "one batch more: the earlier write's");
+	// the store goes on, and the rows on the disk give the same state (orders kept right)
+	assert.ok(await s.take({ type: "Job", fields: { i: 3 } }, 0));
+	await s.write({ type: "Job", fields: { i: 6 } }, null, FOREVER);
+	const live = (plainDoc(await h.snapshot(Space, ctx)) as any);
+	await h.close(ctx);
+	h = await openSqliteHost(file, { strictDiskMaps: true });
+	assert.deepEqual((plainDoc(await h.snapshot(Space, ctx)) as any), live);
+	assert.deepEqual(live.entries.map((e: { fields: { i: number } }) => e.fields.i), [0, 1, 2, 4, 5, 6]);
+	await h.close(ctx);
+});
