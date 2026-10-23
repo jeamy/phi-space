@@ -258,6 +258,32 @@ test("a generation that stopped admitting but still has claims makes no sweep du
 	assert.equal(Object.keys(s.rpc!.generations).length, 0, "the generation went with its last claim");
 });
 
+test("polling a waiting call reads unless something is due: no commit per poll, the deadline still decides it", async () => {
+	const h = await memory();
+	try {
+		let commits = 0;
+		const counted = new Proxy(h, { get: (t, k) => { const v = Reflect.get(t, k); return k === "commit" ? (...a: Parameters<typeof h.commit>) => { commits++; return t.commit(...a); } : typeof v === "function" ? v.bind(t) : v; } }) as typeof h;
+		const c = new Clock(), s = client(counted, c);
+		const { generation } = await s.issueGeneration(alice);
+		const r = req(generation, "wait-1");
+		const view = await s.beginOperation({ type: "Job" }, 10_000, { request: r }, false, false);
+		assert.equal(view.state, "pending");
+		const before = commits;
+		for (let i = 0; i < 20; i++) assert.equal((await s.pollOperation(r)).state, "pending");
+		assert.equal(commits, before, "twenty polls of a waiting call, no commit");
+		// an entry written decides it in the write's own commit; a poll then sees the result
+		await s.write({ type: "Job", fields: { n: 1 } }, null, FOREVER);
+		assert.equal(((await s.pollOperation(r)).result as { fields: { n: number } }).fields.n, 1);
+		// a call whose deadline passed is decided by the poll (time is the one thing no other commit brings)
+		const r2 = req(generation, "wait-2");
+		await s.beginOperation({ type: "Nothing" }, 1000, { request: r2 }, false, false);
+		c.t += 1001;
+		const v2 = await s.pollOperation(r2);
+		assert.equal(v2.state, "done");
+		assert.equal(v2.result, null);
+	} finally { await h.close(ctx); }
+});
+
 test("after a pause, more due claims than one sweep takes are dropped in steps while the client keeps working", async () => {
 	const h = await memory();
 	try {

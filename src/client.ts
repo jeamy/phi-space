@@ -183,6 +183,12 @@ export class PhiSpaces implements SpaceLike {
 		if (!s) throw new claims.RequestExpired(`request ${target.requestId} is unknown`);
 		const v = claims.lookup(s, target, this.now());
 		if (v.state !== "pending" || v.restoredHistory) return v;
+		// A waiting call is decided in the commit that makes its entry visible (a write, a commit or abort, a gate change);
+		// only time (a deadline, a lease: nextExpiry) or a renewal of its waiter's authorization needs a commit of the
+		// poll. Otherwise a poll reads: the service polls every waiting call every 50 ms, and a settle per poll matched
+		// every waiter against every entry (half a CPU for ten idle roles, docs/umstellung-ohne-pi-durable.md U2d).
+		const a = this.options.authorization;
+		if (!core.needsMaintenance(s, this.now()) && !(a && this.renewsPending(s, target, a))) { a?.check(); return v; }
 		return this.host.commit(async tx => { const d = await this.doc(tx); this.options.authorization?.check(); this.authorizePending(d, target); core.settle(d, this.now()); return core.plain(claims.lookup(d, target, this.now())); }, this.ctx);
 	}
 	/** Cancel a pending request (a blocked call then ends with OperationCancelled); a decided one is returned as is. */
@@ -402,6 +408,12 @@ export class PhiSpaces implements SpaceLike {
 		}, this.ctx);
 	}
 	private claimMetadata(s:core.SpaceState,key:string):void { const a=this.options.authorization;if(a)claims.setMetadata(s,key,{policyVersion:a.policyVersion,transportPeerId:a.transportPeerId,routerEpoch:a.routerEpoch,controlPrimaryEpoch:a.controlPrimaryEpoch}); }
+
+	/** Whether authorizePending would give a waiter of `request` a new authorization time. */
+	private renewsPending(s: Readonly<core.SpaceState>, request: RequestRef, a: NonNullable<PhiSpacesOptions["authorization"]>): boolean {
+		const key = claims.keyOf(s, request);
+		return s.waiters.some((w) => w.claimKey === key && w.authorizedUntil !== a.validUntil && a.canExecutePending(w.take ? "take" : "read", w.template));
+	}
 
 	private authorizePending(s: core.SpaceState, request: RequestRef): void {
 		const a = this.options.authorization;

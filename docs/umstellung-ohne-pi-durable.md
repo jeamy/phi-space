@@ -151,6 +151,13 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   [codemode-space-architektur.md](codemode-space-architektur.md)). Gemessen mit dem Stack der Testumgebung als
   lokale Prozesse (Space auf SQLite, Web, Judges big und nano, agents, model), 5 Minuten Leerlauf: 3.480 statt 23.800
   Claims pro Stunde, also rund 84.000 je Tag (Kapazitätswert D2: 150.000).
+- **Abfragen ohne Commit (2026-10-23):** In der Docker-Testumgebung brauchte der Space-Prozess im Leerlauf weiter
+  40–46 % CPU. Ursache: Der Dienst fragt jeden wartenden Aufruf alle 50 ms ab, und jede Abfrage eines offenen Aufrufs
+  lief als Commit mit vollem Settle, das jeden Warter mit jedem Eintrag abglich. Ein offener Aufruf wird aber im Commit
+  entschieden, der seinen Eintrag sichtbar macht; eine Abfrage braucht nur dann einen Commit, wenn etwas zeitlich fällig
+  ist (`needsMaintenance`) oder die Berechtigung seines Warters verlängert würde. Sonst liest sie nur. Nachbau der
+  Testumgebung auf einer Kopie ihres Speichers, 90 s Leerlauf: Space-Prozess vorher
+  52 %, nachher 2,8 % beschäftigt. Der Fehler bestand schon vor der Umstellung.
 - **Beobachtung offen:** Der Chat-Test „a person's thumbs-up counts as earlier material …“ lief nach der Umstellung in
   zwei von acht vollen Läufen in die 60-s-Frist des zweiten Board-Laufs, allein (auch unter voller CPU-Last) nie. Ein
   Zusammenhang mit dem Warten ohne Transaktion ist nicht belegt; `boardRun` gibt bei einem Zeitablauf jetzt den Stand
