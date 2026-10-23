@@ -77,6 +77,8 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 		if (name === "phi-spaces") return { resolvedFileName: resolve(ROOT, "src/index.ts"), extension: ts.Extension.Ts };
 		if (name === "phi-spaces/agent") return { resolvedFileName: resolve(ROOT, "agent/src/agent.ts"), extension: ts.Extension.Ts };
 		if (name.startsWith("./help-site/")) return { resolvedFileName: resolve(ROOT, name), extension: ts.Extension.Ts };
+		// pi-durable and pi-ai are the agent package's dependencies (the root has none)
+		if (name.startsWith("@earendil-works/")) return ts.resolveModuleName(name, resolve(ROOT, "agent/src/agent.ts"), options, host).resolvedModule;
 		return ts.resolveModuleName(name, containingFile, options, host).resolvedModule;
 	});
 	const program = ts.createProgram([...virtual.keys()], options, host);

@@ -287,6 +287,12 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
 - **Werkzeuge und Testbed** laufen auf dem eigenen Speicher: Beispiele, Hilfeseite (Server, Beispiele, Tests,
   Korpus), `federation-host`, Szenarien, Audits (`test/testbed/read-store.ts`). Die Testbed-Szenarien mit
   `SIGKILL` (`phase2-process-crashes`) laufen lokal: 10 von 10 Fällen.
+- **U8, Paketgrenze:** Die Wurzel hängt nur noch von `pi-codemode` ab (Beispiel `codemode-evolve`). pi-durable, chord
+  und pi-ai sind aus `package.json` und Lockfile der Wurzel raus; `codemode-chat` nennt `pi-codemode` selbst.
+  - Die Docker-Images von Chat und Hilfeseite installieren die Abhängigkeiten des Agent-Pakets mit (für
+    `agent/src/live-models.ts`, also pi-ai). **Nicht gebaut/geprüft:** die Image-Builds laufen nicht lokal.
+  - Alle Suiten nach dem Entfernen: Wurzel 572/573 (1 übersprungen), Beispiele 84, Agent 89, Chat 112,
+    Hilfeseite 52/53 (1 übersprungen).
 - **Bleibt:** Neuaufbau des Testbeds auf `big` (Freigabe liegt vor, `--dry-run` zuerst), U7 und die
   `package.json`-Bereinigung (U8).
 

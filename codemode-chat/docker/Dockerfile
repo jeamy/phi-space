@@ -16,6 +16,9 @@ COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY codemode-chat/package.json codemode-chat/package-lock.json ./codemode-chat/
 RUN --mount=type=cache,target=/root/.npm npm --prefix codemode-chat ci --no-audit --no-fund
+# agent/src/live-models.ts (model access) needs the agent package's pi-ai
+COPY agent/package.json agent/package-lock.json ./agent/
+RUN --mount=type=cache,target=/root/.npm npm --prefix agent ci --no-audit --no-fund
 
 # ---- Stage 2: builder (typecheck + Next.js production build) ----
 FROM deps AS builder
@@ -45,6 +48,8 @@ WORKDIR /opt/phi-spaces
 COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
 COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
+COPY --from=builder --chown=node:node /opt/phi-spaces/agent/package.json /opt/phi-spaces/agent/package-lock.json ./agent/
+COPY --from=builder --chown=node:node /opt/phi-spaces/agent/node_modules ./agent/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/package.json /opt/phi-spaces/codemode-chat/package-lock.json ./codemode-chat/
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/node_modules ./codemode-chat/node_modules

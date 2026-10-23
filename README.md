@@ -12,8 +12,10 @@
 > verified offline migration before using this version. Document version 5 does not migrate document-kind
 > namespaces; an empty new namespace does not mean the previous data was deleted.
 
-phi-spaces is a TypeScript space library implemented as an extension for
-[`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable). It is a
+phi-spaces is a TypeScript space library with a storage of its own (SQLite, owned by one process, or memory).
+It needs no agent framework; the optional `agent/` package gives
+[`@earendil-works/pi-durable`](https://github.com/earendil-works/pi/tree/main/packages/durable) agents the space
+tools. Stores written by older versions through pi-durable are discarded, not taken over. It is a
 general-purpose space for any kind of data that needs to be exchanged: jobs, messages, sensor readings, results,
 state, files or events. Agents (conversations) are one typical kind of participant, but not the only one;
 programs, services, devices and people can write to and read from a space just as well.
@@ -128,14 +130,9 @@ Run this from the repository root with the already available dependencies: save 
 then use `node --experimental-strip-types tuple-demo.ts`. No model calls or server are needed.
 
 ```ts
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { BACKGROUND_CONTEXT as ctx, FOREVER, NO_WAIT, PhiSpaces } from "./src/index.ts";
-import { spaces } from "./src/agent.ts";
+import { BACKGROUND_CONTEXT as ctx, FOREVER, NO_WAIT, PhiSpaces, openOwnMemoryHost } from "./src/index.ts";
 
-const registry = createRegistry();
-registry.install(spaces);
-const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+const harness = openOwnMemoryHost(); // or openSqliteHost("space.sqlite") to keep it
 try {
   const producer = new PhiSpaces(harness, ctx);
   await producer.write({ type: "Job", fields: { jobId: "square-7", value: 7 } }, null, FOREVER);
@@ -178,9 +175,9 @@ survival and `RemoteSpace` for a separate worker process; see [examples](docs/ex
 | `src/claims.ts` | durable request claims and request generations (idempotent mutations, `pollOperation`, `cancelOperation`) |
 | `src/client.ts` | `PhiSpaces`: `write`, `read`, `readIfExists`, `take`, `takeIfExists`, `notify`, `snapshot`, transactions, lease `renew`/`cancel` |
 | `src/index.ts` | the public exports; the background service of a space: notify delivery, reaper (`startService`) |
-| `src/agent.ts` | the `spaces` extension of a pi-durable agent (tools `space_write/read/take/wait/notify/txn/lease`, prompt section); not exported by `src/index.ts`, it needs pi-durable |
+| `agent/` | the optional agent package (own dependencies): the `spaces` extension of a pi-durable agent (tools `space_write/read/take/wait/notify/txn/lease`, prompt section) over a separate space host, the mobile bundle entry, agent examples and tests |
 | `src/context.ts` | the invocation context (abort signal, values) |
-| `src/store/` | storage boundary: `types.ts` (StoreHost, StoreTx, documents), `documents.ts` (`defineDoc`), `legacy.ts` (the pi-durable host during the move, docs/umstellung-ohne-pi-durable.md) |
+| `src/store/` | storage boundary: `types.ts` (StoreHost, StoreTx, documents), `documents.ts` (`defineDoc`), `host.ts` / `sqlite.ts` (the own store, docs/umstellung-ohne-pi-durable.md) |
 | `src/meter.ts` | process-local counters and rates |
 | `src/canonical.ts` | canonical JSON (RFC 8785) for field comparison and hashes |
 | `src/stream.ts` | bounded revision log and visible-entry change batches |

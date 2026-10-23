@@ -40,6 +40,10 @@ RUN --mount=type=cache,target=/root/.npm \
     done; \
     echo "npm ci failed after retries"; exit 1
 
+# the agent package's dependencies: live-models.ts (model access) and the documentation snippet check use them
+COPY agent/package.json agent/package-lock.json ./agent/
+RUN --mount=type=cache,target=/root/.npm npm --prefix agent ci --no-audit --no-fund
+
 COPY help-site/package.json help-site/package-lock.json ./help-site/
 RUN --mount=type=cache,target=/root/.npm \
     set -eux; \
@@ -98,6 +102,8 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spac
 COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
 COPY --from=builder --chown=node:node /opt/phi-spaces/examples ./examples
+COPY --from=builder --chown=node:node /opt/phi-spaces/agent/package.json /opt/phi-spaces/agent/package-lock.json ./agent/
+COPY --from=builder --chown=node:node /opt/phi-spaces/agent/node_modules ./agent/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/package.json /opt/phi-spaces/help-site/package-lock.json ./help-site/
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/node_modules ./help-site/node_modules
