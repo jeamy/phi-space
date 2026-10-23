@@ -293,8 +293,16 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
     `agent/src/live-models.ts`, also pi-ai). **Nicht gebaut/geprüft:** die Image-Builds laufen nicht lokal.
   - Alle Suiten nach dem Entfernen: Wurzel 572/573 (1 übersprungen), Beispiele 84, Agent 89, Chat 112,
     Hilfeseite 52/53 (1 übersprungen).
-- **Bleibt:** Neuaufbau des Testbeds auf `big` (Freigabe liegt vor, `--dry-run` zuerst), U7 und die
-  `package.json`-Bereinigung (U8).
+- **Testbed auf `big` (2026-10-23, mit Freigabe):** Die Artefakte (kein pi-durable darin) wurden gebaut, verschickt und der
+  `runner` neu erzeugt. `test all` ist grün:
+  - Smoke: 0 TypeScript-Dateien im Image und auf dem Server;
+  - Beispiele `sensor-pipeline`, `cache`, `sieve`, `golomb`;
+  - `sieve-mobile` und `sieve-remote --kill-host` mit echtem SIGKILL.
+  - Die Liste in `testbed.sh` folgt den verschobenen Beispielen.
+  - **Nicht angefasst:** die Föderations- und Overlay-Container (`host-a/b`, `member-1/2`, `nb-*`, seit 5 Tagen mit dem
+    alten Image). `destroy` würde auch die NetBird-Peer-Anmeldungen der `nb-*`-Volumes löschen. Ihre alten Stores
+    werden vom neuen Code abgewiesen (D6). Neuaufbau (`destroy --yes`, `up federation`, `netbird setup`): eigene Freigabe.
+- **Bleibt:** U7 und die Betriebsprobe der Föderation auf `big`.
 
 **Stand U4 (2026-10-23):**
 

@@ -339,7 +339,7 @@ cmd_status() {
 SMOKE_JS="$(cat <<'JS'
 import * as m from '/opt/app/phi-spaces.mjs';
 import { readFileSync } from 'node:fs';
-const need = ['PhiSpaces', 'createSpace', 'listSpaces', 'claims', 'startService', 'spaces', 'FOREVER'];
+const need = ['PhiSpaces', 'createSpace', 'listSpaces', 'claims', 'startService', 'openSqliteHost', 'openOwnMemoryHost', 'FOREVER'];
 const missing = need.filter((k) => !(k in m));
 const man = JSON.parse(readFileSync('/opt/app/MANIFEST.json', 'utf8'));
 console.log(`node ${process.version}, NODE_ENV=${process.env.NODE_ENV}, uid ${process.getuid()}, artifact ${man.commit}${man.dirty ? ' (uncommitted changes)' : ''} built ${man.builtAt}`);
@@ -365,7 +365,7 @@ test_smoke() {
 }
 test_examples() {
 	local out bad=0 spec name
-	for spec in "workers" "sensor-pipeline" "chat" "cache" "sieve 1001 2"; do
+	for spec in "sensor-pipeline" "cache" "sieve 1001 2" "golomb 5"; do
 		# shellcheck disable=SC2086 # deliberate splitting: name and arguments
 		set -- $spec
 		name=$1
