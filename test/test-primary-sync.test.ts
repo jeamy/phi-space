@@ -100,7 +100,8 @@ for(const backend of BACKENDS){
    assert.ok(refused instanceof core.ResourceExhausted&&/journal: sync history is full/.test(refused.message),`ResourceExhausted, not Internal: ${refused}`);
    assert.deepEqual(s.head(),p.head(),'nothing sealed: no candidate, both replicas equal');assert.equal(p.appliedRevision,p.head().revision);
    // refused before sealing, marked as such by either store kind (pi-durable's SyncBudgetExceeded, the own store's SyncJournalFull)
-   await assert.rejects(new PhiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(2000)}},null,core.FOREVER),isSyncBudgetExceeded);
+   // larger than the refused one (this write has no request claim; the own store's rows are smaller than pi-durable's deltas)
+   await assert.rejects(new PhiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(4000)}},null,core.FOREVER),isSyncBudgetExceeded);
    assert.equal(await r.count({type:'Job'}),n-1,'reads still served');
    await r.write({type:'Small',fields:{}},null,core.FOREVER);assert.deepEqual(s.head(),p.head(),'a write that fits is still confirmed');
   }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}

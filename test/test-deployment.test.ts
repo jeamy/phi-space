@@ -49,16 +49,18 @@ async function fixture(backend: Backend) {
 	const hosts = { a: await homes.a.open(), b: await homes.b.open() };
 	const keys = { control: generateKey("ed25519", "control"), a: generateKey("ed25519", "a"), b: generateKey("ed25519", "b") };
 	const pin = (k: ReturnType<typeof generateKey>, issuer: string) => ({ issuer, algorithm: k.signer.algorithm, publicKey: k.publicKey });
-	const services: Record<string, SpaceLifecycleService> = {
+	// built over the current hosts (again after a crash: a crashed host is gone, as its process would be)
+	const service = (id: "id-a" | "id-b") => ({
 		"id-a": new SpaceLifecycleService({ lifecycle: new SpaceLifecycle({ host: hosts.a, ctx }), hostId: "id-a", authorityId: "authority", peerId: "id-a", signer: keys.a.signer, controlPin: pin(keys.control, "control"), assertAuthority: async () => {} }),
 		"id-b": new SpaceLifecycleService({ lifecycle: new SpaceLifecycle({ host: hosts.b, ctx }), hostId: "id-b", authorityId: "authority", peerId: "id-b", signer: keys.b.signer, controlPin: pin(keys.control, "control"), assertAuthority: async () => {} }),
-	};
+	});
 	const down = new Set<string>(), fresh = new Set(["id-a", "id-b"]);
-	const commands = spaceCommands({ authorityId: "authority", peerId: "control", signer: keys.control.signer, hostPin: async id => pin(id === "id-a" ? keys.a : keys.b, id), send: async (id, t) => { if (down.has(id)) throw new Error("connect ECONNREFUSED"); return services[id]!.apply(t); } });
+	const commands = spaceCommands({ authorityId: "authority", peerId: "control", signer: keys.control.signer, hostPin: async id => pin(id === "id-a" ? keys.a : keys.b, id), send: async (id, t) => { if (down.has(id)) throw new Error("connect ECONNREFUSED"); return service(id as "id-a" | "id-b")[id as "id-a" | "id-b"].apply(t); } });
 	const controlSpaceId = (await hosts.a.commit(tx => createSpace(tx, CONTROL_SPACE, Date.now()), ctx)).spaceId;
-	const workers = new WorkerAssignments({ host: hosts.a, ctx, authorityId: "authority", peerId: "control", signer: keys.control.signer });
+	const assignments = () => new WorkerAssignments({ host: hosts.a, ctx, authorityId: "authority", peerId: "control", signer: keys.control.signer });
+	let workers = assignments();
 	const make = () => new DeploymentController({ host: hosts.a, ctx, ports: { hostStatus: async id => ({ fresh: fresh.has(id) }), createSpace: commands.createSpace, workers, controlSpaceId } });
-	return { homes, hosts, down, fresh, make, workers, controlSpaceId, crashA: async () => { homes.a.crash(hosts.a); hosts.a = await homes.a.open(); },
+	return { homes, hosts, down, fresh, make, get workers() { return workers; }, controlSpaceId, crashA: async () => { homes.a.crash(hosts.a); hosts.a = await homes.a.open(); workers = assignments(); },
 		dispose: async () => { await homes.a.dispose(); await homes.b.dispose(); } };
 }
 

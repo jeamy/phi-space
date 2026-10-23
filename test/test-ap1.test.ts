@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { defineDoc } from "@earendil-works/pi-durable";
+import { defineDoc } from "../src/store/documents.ts";
 import { PhiSpaces, SpaceService, StaticIdentity, RemoteSpace, OutcomeUnknown, ResultExpired, CompletionViolation, core, claims, spaceDoc, createSpace, serveSpace, inProcessTransport, type Reply } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 import { mailboxPage, ackMailbox, appendMail, MailboxEpochMismatch, InvalidAck } from "../src/mailbox.ts";

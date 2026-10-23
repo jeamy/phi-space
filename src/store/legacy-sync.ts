@@ -81,6 +81,7 @@ export function legacySyncStore(storage: Storage): SyncStore<StorageWrite> {
 			return !docs.items.length && !conversations.items.length && !tasks.items.length && !submissions.items.length;
 		},
 		mintId: () => storage.mintId<DocumentId>(),
+		close: (ctx) => storage.close(ctx!),
 	};
 	wrapped.set(storage, s);
 	return s;

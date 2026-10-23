@@ -10,6 +10,7 @@ import {canonicalJson} from "../../src/canonical.ts";
 import {FOREVER, type Json, type SpaceState} from "../../src/core.ts";
 import type {RouterTarget, RouterStep, RouterReceipt, RouterStepSpec, TargetBinding} from "../../src/router.ts";
 import {PersistentHome, ctx, type Backend} from "./persistent.ts";
+import {plainDoc} from "./host.ts";
 import type {Harness} from "@earendil-works/pi-durable";
 
 export class VirtualClock {
@@ -350,7 +351,8 @@ export class FederationSimulator implements RouterTarget {
                 view.result, view.error?.code);
         } catch (e) {
             if (!(e instanceof RequestExpired)) throw e;
-            const snapshot = structuredClone(await n.host.snapshot(Space, ctx)) as SpaceState;
+            // a plain copy; claims the own store keeps on the disk are read whole for it
+            const snapshot = plainDoc(await n.host.snapshot(Space, ctx)) as SpaceState;
             try {
                 const domain = this.domain(s);
                 const proof = admit(

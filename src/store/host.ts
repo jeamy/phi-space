@@ -231,6 +231,9 @@ export class OwnStoreHost implements ClosableStoreHost {
 		return w;
 	}
 
+	/** Whether a write failed: the host takes no more work until its store is reopened. */
+	get failed(): boolean { return this.#failure !== null; }
+
 	/** Tests: drops the host as a killed process would (no close, no flush; the store's owner lock is free again). */
 	abandon(): void {
 		this.#closed = true;

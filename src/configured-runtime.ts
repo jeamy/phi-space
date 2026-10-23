@@ -6,6 +6,7 @@ import {MemberLifecycle} from "./membership.ts";
 // Deployed composition from explicitly provisioned identities, pinned keys and independently supplied boot records.
 import type { ClosableStoreHost } from "./store/types.ts";
 import type { LegacyStorage } from "./store/legacy.ts";
+import { OWN_SYNC_FACTORIES } from "./store/sync-sqlite.ts";
 import { openSyncSpace, openSyncSpaces, sealedCandidateOf, sealedResolver, type SyncSpace, type SyncSpaceConfig } from "./sync-spaces.ts";
 import { promotionEvidence } from "./primary-sync.ts";
 import type { Context } from "./context.ts";
@@ -58,8 +59,11 @@ export type FederationConfig = {
 	/** primary/sync Spaces, each in its own store with its replica listener on `listen.host` (sync-spaces.ts). */
 	syncSpaces?: SyncSpaceConfig[];
 };
+/** The stores of primary/sync Spaces: the daemon's (pi-durable until U5), else the own store. */
+const syncStores = (f?: SyncSpaceFactories) => (f?.openSyncStorage && f.openSyncHarness ? { openStorage: f.openSyncStorage, openHarness: f.openSyncHarness } : OWN_SYNC_FACTORIES);
 /** Factories for the dedicated stores of primary/sync Spaces; supplied by the daemon, which owns the storage backend. */
-export type SyncSpaceFactories = { openSyncStorage: (path: string) => Promise<LegacyStorage>; openSyncHarness: (storage: LegacyStorage) => Promise<ClosableStoreHost>;
+/** Absent store factories: the own store (OWN_SYNC_FACTORIES). */
+export type SyncSpaceFactories = { openSyncStorage?: (path: string) => Promise<LegacyStorage | import("./store/sync-store.ts").SyncStore>; openSyncHarness?: (storage: any) => Promise<ClosableStoreHost>;
 	/** The main store runs on primary/sync (3.8): its current replica configuration, for every Space in it. */
 	mainReplica?: () => import("./primary-sync.ts").PrimarySyncConfig;
 	/** The last configuration transition of the main store's journal (v3 5.3.1 step 6). */
@@ -129,8 +133,7 @@ export async function startConfiguredFederation(host: ClosableStoreHost, ctx: Co
         if(config.root){try{root=await createConfiguredRoot({...(factories?.mainReplica?{controlEpoch:()=>factories.mainReplica!().primaryEpoch}:{}),host,ctx,hostId:config.hostId,peerId:config.peerId,ownAddress:config.listen.host,authorityId,controlSpaceId:config.controlSpaceId,controlSigner:signer,keys,directory,groupRoles,external,installed,grants:control!.authority,leases:control!.leases!,root:config.root,assertControl,checkControlAuthority});control!.membership=root.membership;control!.profiles=root.profiles;control!.withAdmin=root.withAdmin;}catch(e){await root?.close();throw e;}}
 		const syncSpaces:SyncSpace[]=[];
 		if(config.syncSpaces?.length){
-			if(!factories)throw new Error("primary/sync Spaces need storage and ClosableStoreHost factories from the daemon");
-			const r=await openSyncSpaces(config.syncSpaces,c=>openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,openStorage:factories.openSyncStorage,openHarness:factories.openSyncHarness}));
+			const r=await openSyncSpaces(config.syncSpaces,c=>openSyncSpace({config:c,hostId:config.hostId,authorityId,bindIp:config.listen.host,signer,external,installed,ctx,...syncStores(factories)}));
 			syncSpaces.push(...r.opened);for(const f of r.failed)console.error(`primary/sync Space ${f.alias} stays unserved:`,f.error);
 		}
 		const optionFor=(sp:SyncSpace)=>{
@@ -237,7 +240,7 @@ export async function startQuarantineReplicas(ctx: Context, configFile: string, 
 	const state = async () => (await external.get<HostBootState & Record<string, Json>>(`boot:${config.hostId}`))?.value.state;
 	if (await state() !== "quarantine") { external.close(); installed.close(); throw new BootBlocked("host is not in quarantine"); }
 	const signer = loadFileSigner(config.keyFile);
-	const r = await openSyncSpaces(config.syncSpaces, c => openSyncSpace({ config: c, hostId: config.hostId, authorityId: config.authorityId, bindIp: config.listen.host, signer, external, installed, ctx, openStorage: factories.openSyncStorage, openHarness: factories.openSyncHarness, listenOnly: true }));
+	const r = await openSyncSpaces(config.syncSpaces, c => openSyncSpace({ config: c, hostId: config.hostId, authorityId: config.authorityId, bindIp: config.listen.host, signer, external, installed, ctx, ...syncStores(factories), listenOnly: true }));
 	for (const f of r.failed) console.error(`primary/sync Space ${f.alias} has no quarantine listener:`, f.error);
 	let stopped = false;
 	const untilActive = async () => { while (!stopped) { try { if (await state() === "active") return true; } catch (e) { console.error("quarantine boot check:", e instanceof Error ? e.message : String(e)); } await new Promise(res => setTimeout(res, o.pollMs ?? 5000)); } return false; };

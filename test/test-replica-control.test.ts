@@ -79,6 +79,7 @@ for(const backend of BACKENDS){
    h=await t.pHome.open();assert.equal(await client().count({type:'Work'}),2,'the recovered candidate is visible exactly once');
    await client().write({type:'Work',fields:{n:3}},null,core.FOREVER);
    assert.equal(t.pJournal.recoveredCommitted.length,1,'repeating the same recovery ID does not recover again');
+   if(backend==='own-sqlite')await t.pHome.close(h); // the own store has one owner: the host goes before the raw store is opened
    const again=await t.raw();await degradeToSingle({...o,storage:again});await again.close(ctx);assert.equal(t.pJournal.config.replicaConfigVersion,2);
 
    // A released standby with stale history must not promote itself: quarantine is no standby permit.

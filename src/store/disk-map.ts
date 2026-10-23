@@ -22,6 +22,8 @@ export interface DiskMapSource {
 	group(g: string, limit: number): string[];
 	/** Rows without `at`. */
 	unindexed(): Array<[string, string]>;
+	/** The first ids in id order, at most `limit`. */
+	firstIds(limit: number): string[];
 }
 
 const GONE = Symbol("gone");
@@ -104,6 +106,11 @@ export class DiskMap {
 		const f = this.#fields;
 		return {
 			entries: () => this.keys().map((k) => [k, this.read(k)] as [string, unknown]),
+			any: () => {
+				for (const h of this.#held.values()) if (h.v !== GONE) return true;
+				// a row of the disk counts unless memory holds that record (deleted, or changed: then counted above)
+				return this.#src.firstIds(this.#held.size + 1).some((k) => !this.#held.has(k));
+			},
 			unindexed: () => {
 				const out: Array<[string, unknown]> = [];
 				for (const [k, h] of this.#held) if (h.v !== GONE && this.#at(h.v) === undefined) out.push([k, h.v]);

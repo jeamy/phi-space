@@ -7,6 +7,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ClosableStoreHost } from "./store/types.ts";
 import type { LegacyStorage } from "./store/legacy.ts";
+import { isSyncStore, type SyncStore } from "./store/sync-store.ts";
 import type { Context } from "./context.ts";
 import type { Signer } from "./auth.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
@@ -59,7 +60,9 @@ const CLOSE_BOUND_MS = 5000;
 export async function openSyncSpace(o: {
 	config: SyncSpaceConfig; hostId: string; authorityId: string; bindIp: string; signer: Signer;
 	external: RecoveryRegister; installed: RecoveryRegister; ctx: Context;
-	openStorage: (path: string) => Promise<LegacyStorage>; openHarness: (storage: LegacyStorage) => Promise<ClosableStoreHost>; now?: () => number;
+	/** The Space's store and its host: pi-durable's storage (the daemon's choice until U5 moves those deployments) or
+	 *  the own store (OWN_SYNC_FACTORIES, the default when the daemon supplies none). */
+	openStorage: (path: string) => Promise<LegacyStorage | SyncStore>; openHarness: (storage: any) => Promise<ClosableStoreHost>; now?: () => number;
 	/** Quarantine: only the journal and the replica listener (catch-up for setStandby), never a served host. */
 	listenOnly?: boolean;
 }): Promise<SyncSpace> {
@@ -91,7 +94,8 @@ export async function openSyncSpace(o: {
 		let h: ClosableStoreHost | undefined;
 		try {
 			await recoverPrimarySync(raw, journal, p, o.ctx, assert);
-			h = await o.openHarness(primarySyncStorage(raw, journal, p, { assertPrimary: assert, now, onPoisoned: s => { if (!poisoned) { poisoned = s; queueMicrotask(() => sealedListener?.()); } } }));
+			const po = { assertPrimary: assert, now, onPoisoned: (s: { revision: number; hash: string }) => { if (!poisoned) { poisoned = s; queueMicrotask(() => sealedListener?.()); } } };
+			h = await o.openHarness(isSyncStore(raw) ? primarySyncStorage(raw, journal, p, po) : primarySyncStorage(raw, journal, p, po));
 			if (!(await listSpaces(h, o.ctx)).some(i => i.spaceId === c.spaceId)) await h.commit(tx => createSpace(tx, c.alias, now(), { spaceId: c.spaceId, incarnation: c.incarnation }), o.ctx);
 		} catch (e) { if (h) await bounded(h.close(o.ctx)); else await bounded(raw.close(o.ctx)); throw e; }
 		stopGuard = installBootGuard(h, o.ctx, { hostId: o.hostId, authorityId: o.authorityId, external: o.external, installed: o.installed, replicaConfig: id => id === c.spaceId ? journal.config : null });

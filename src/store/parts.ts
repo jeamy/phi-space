@@ -7,7 +7,7 @@ export type PartSpec = import("./types.ts").PartDef;
  *  map: the key), its order (arrays), its value. */
 export type PartRow = { part: string; id: string; ord: number; value: unknown };
 
-const at = (o: unknown, path: readonly string[]): unknown => path.reduce<unknown>((x, k) => (x !== null && typeof x === "object" ? (x as Record<string, unknown>)[k] : undefined), o);
+export const partAt = (o: unknown, path: readonly string[]): unknown => path.reduce<unknown>((x, k) => (x !== null && typeof x === "object" ? (x as Record<string, unknown>)[k] : undefined), o);
 
 /** The head of a document: the value with each part replaced by an empty one (copied only along the parts' paths). */
 export function headOf(value: unknown, parts: readonly PartSpec[]): unknown {
@@ -35,7 +35,9 @@ export function joinParts(head: unknown, parts: readonly PartSpec[], rows: Map<s
 		for (let i = 0; i < p.path.length - 1; i++) { const n = o[p.path[i]!]; if (n === null || typeof n !== "object") { o = null as never; break; } o = n as Record<string, unknown>; }
 		if (!o) continue;
 		const last = p.path.at(-1)!, list = rows.get(p.path.join(".")) ?? [];
-		if (!(last in o) && !list.length) continue;
+		// no rows: the head's own value stays (empty as the store writes heads, or inline in a document written before its
+		// definition had parts)
+		if (!list.length) continue;
 		o[last] = p.kind === "array" ? [...list].sort((a, b) => a.ord - b.ord).map((r) => r.value) : Object.fromEntries(list.map((r) => [r.id, r.value]));
 	}
 	return head;
@@ -54,7 +56,7 @@ const idOf = (v: unknown): string => {
 export function partChanges(before: unknown, after: unknown, parts: readonly PartSpec[], mapChanges: PartChanges, ords: Map<string, Map<string, number>>, undo?: Array<() => void>): { put: PartRow[]; del: Array<{ part: string; id: string }> } {
 	const put: PartRow[] = [], del: Array<{ part: string; id: string }> = [];
 	for (const p of parts) {
-		const name = p.path.join("."), now = at(after, p.path), was = at(before, p.path);
+		const name = p.path.join("."), now = partAt(after, p.path), was = partAt(before, p.path);
 		if (p.kind === "map") {
 			const m = (now ?? {}) as Record<string, unknown>;
 			// a map part that appeared or was replaced as a whole (not through its draft): every key is compared

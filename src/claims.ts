@@ -256,8 +256,9 @@ const dueAt = (st: RpcState, at: number) => { if (st.sweepAt !== undefined && at
 /** Bounded authenticated metadata is counted in the same admission/decision commit. */
 export function setMetadata(s:SpaceState,key:string,meta:{policyVersion?:number;transportPeerId?:string;routerEpoch?:number;controlPrimaryEpoch?:number}):void {
  const st=rpc(s),c=st.claims[key];if(!c)throw new RequestExpired("metadata requires known claim");const before=bytesOf(c);
- for(const [k,v] of Object.entries(meta))if(v!==undefined)(c as any)[k]=v;
- const delta=bytesOf(c)-before;if(claimBytes(s)+delta>limitsOf(s).maxClaimBytes)throw new LimitError("authenticated claim metadata exceeds budget");st.bytes!+=delta;
+ // claims are values (a store may share and freeze them): the record is replaced, not changed
+ const next:ClaimRec={...c};for(const [k,v] of Object.entries(meta))if(v!==undefined)(next as any)[k]=v;
+ const delta=bytesOf(next)-before;if(claimBytes(s)+delta>limitsOf(s).maxClaimBytes)throw new LimitError("authenticated claim metadata exceeds budget");st.claims[key]=next;st.bytes!+=delta;
 }
 
 /** Validates an extant admission generation without admitting or changing a request. */

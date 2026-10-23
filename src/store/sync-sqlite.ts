@@ -99,6 +99,16 @@ export class OwnSyncStore implements SyncStore<WriteOp> {
 	}
 }
 
+/** The stores of primary/sync Spaces (sync-spaces.ts) when the daemon supplies none: the own store. */
+export const OWN_SYNC_FACTORIES = {
+	openStorage: async (path: string): Promise<OwnSyncStore> => new OwnSyncStore(path),
+	openHarness: async (storage: unknown): Promise<OwnStoreHost> => {
+		if (storage instanceof ReplicatedOwnStore) return storage.open();
+		if (storage instanceof OwnSyncStore) return storage.openHost();
+		throw new Error("the own store's factories open only own stores");
+	},
+};
+
 /** A primary's store, before its host is opened (`open`). */
 export class ReplicatedOwnStore {
 	readonly store: OwnSyncStore;

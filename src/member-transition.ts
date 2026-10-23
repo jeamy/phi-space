@@ -3,6 +3,7 @@ import type { StoreHost } from "./store/types.ts";
 import type { Context } from "./context.ts";
 import type { RecoveryRegister } from "./recovery-register.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
+import { pendingClaims } from "./claims.ts";
 import { RecoveryBlocked, verifyAuthorityTransition, installAuthorityTransition, type SignedAuthorityTransition } from "./recovery.ts";
 import type { Algorithm } from "./auth.ts";
 import type { HostBootState, SpaceBootPermit } from "./boot.ts";
@@ -46,7 +47,7 @@ export class MemberTransitionInstaller {
      step.stage="history";
     }
     if (step.stage === "history") {
-     const pending=Object.entries(s.rpc?.claims??{}).find(([,c])=>c.state==="pending");
+     const pending=pendingClaims(s)[0];
      if (pending) { const [id,c]=pending,copy=core.plain(c);delete copy.reservedResultBytes;const bytes=Buffer.byteLength(JSON.stringify(copy))+Buffer.byteLength(JSON.stringify(id))+256;if (core.overheadBytes(s)+bytes+s.entries.reduce((n,e)=>n+(e.size??Buffer.byteLength(JSON.stringify(e.fields))),0)>core.limitsOf(s).maxDocBytes || !core.maintenanceStep(s,bytes,now,"member-pending-history")) throw new core.ResourceExhausted("pending history cannot fit the transition budget");
       s.restoredClaims??={};s.restoredClaims[id]=copy;delete s.rpc!.claims[id];s.rpc!.bytes=Math.max(0,(s.rpc!.bytes??0)-Buffer.byteLength(JSON.stringify(c))-Buffer.byteLength(JSON.stringify(id))-2);s.rpc!.reservedBytes=Math.max(0,(s.rpc!.reservedBytes??0)-(c.reservedResultBytes??0));core.touch(s,now);return;
      }

@@ -1,12 +1,16 @@
 // AP 0.1: the persistent test harness itself, and the first recovery regression on top of it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, defineDoc, type Tx } from "@earendil-works/pi-durable";
+import { createRegistry, type Tx } from "@earendil-works/pi-durable";
+import { defineDoc } from "../src/store/documents.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { PhiSpaces, FOREVER, Space, type Once } from "../src/index.ts";
 import { spaces } from "../src/agent.ts";
-import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
+import { forEachBackend, InjectedFault, ctx, PI_DURABLE_BACKENDS, type PersistentHome } from "./support/persistent.ts";
+
+/** Tests of pi-durable itself (its agent tools, its base checkpoints): not the own store. */
+const forEachPiDurable = (f: (home: PersistentHome) => Promise<void>) => forEachBackend(f, PI_DURABLE_BACKENDS);
 
 test("persistent home: committed writes survive close and crash", async () => {
 	await forEachBackend(async (home) => {
@@ -66,7 +70,7 @@ test("take with lost answer: after reopen the retry returns the same entry, no s
 // its claim. It used to return the claim's draft from the commit, unreadable afterwards ("settled overlay"), so the
 // model got a tool error instead of the transaction it had begun.
 test("tool replay after a crash returns the stored result, not an error, and begins no second transaction", async () => {
-	await forEachBackend(async (home) => {
+	await forEachPiDurable(async (home) => {
 		const faux = fauxProvider(); const models = createModels(); models.setProvider(faux.provider);
 		const registry = createRegistry(); registry.install(spaces);
 		const agent = { model: { provider: "faux", modelId: "faux-1" }, extensions: [spaces] };
@@ -93,7 +97,7 @@ test("tool replay after a crash returns the stored result, not an error, and beg
 
 // Without a primary/sync storage in the process, Space bases are written every 500 deltas, whatever their size.
 test("a Space gets a base every 500 deltas", async () => {
-	await forEachBackend(async (home) => {
+	await forEachPiDurable(async (home) => {
 		let h = await home.open();
 		for (let n = 0; n < 510; n++) await new PhiSpaces(h, ctx).write({ type: "Small", fields: { n } }, null, FOREVER);
 		await home.close(h);

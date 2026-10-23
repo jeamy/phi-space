@@ -5,6 +5,7 @@
 // The control host sends signed instructions; each host verifies them against the pinned control key.
 import type { Context } from "./context.ts";
 import { defineDoc } from "./store/documents.ts";
+import { diskMapOf } from "./store/types.ts";
 import type { Algorithm, Signer } from "./auth.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
 import type { SpaceHost } from "./client.ts";
@@ -29,7 +30,8 @@ function why(s: Readonly<core.SpaceState>, now: number): string | undefined {
 	if (s.membership && s.membership.state !== "detached") return `it is a federation Member (${s.membership.state}); removeMember first`;
 	if (s.entries.length) return `it still holds ${s.entries.length} entries; export and purge them first`;
 	if (Object.keys(s.txns).length || s.waiters.length || s.regs.length || (s.jobs ?? []).length || (s.releaseQueue ?? []).length) return "it still has open transactions, waits, registrations or follow-up work";
-	if (Object.keys(s.rpc?.claims ?? {}).length || Object.keys(s.restoredClaims ?? {}).length) return "it retains request claims until their results expire";
+	const disk = diskMapOf(s.rpc?.claims);
+	if ((disk ? disk.any() : Object.keys(s.rpc?.claims ?? {}).length) || Object.keys(s.restoredClaims ?? {}).length) return "it retains request claims until their results expire";
 	if (Object.values(s.mailboxes?.boxes ?? {}).some(b => b.events.length)) return "mailboxes still hold undelivered results";
 	if (Object.values(s.runGates ?? {}).some(g => g.state !== "stopped" || g.recovery)) return "a run on it is not stopped";
 	if (s.restore && s.restore.stage !== "completed") return "a restore is in progress";

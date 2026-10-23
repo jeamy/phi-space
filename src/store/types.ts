@@ -37,6 +37,8 @@ export interface DiskMapQuery<V> {
 	nextAt(t: number): number | undefined;
 	/** Whether a record of group `g` exists. */
 	hasGroup(g: string): boolean;
+	/** Whether the map holds any record. */
+	any(): boolean;
 	/** Every record: reads the whole map (audits and tests ask for it on purpose; enumerating the map may throw). */
 	entries(): Array<[string, V]>;
 }

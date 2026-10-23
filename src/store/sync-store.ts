@@ -34,6 +34,8 @@ export interface SyncStore<W = unknown> {
 	isEmpty(ctx: Context): Promise<boolean>;
 	/** A fresh id for a new marker. */
 	mintId(): Promise<unknown>;
+	/** Releases the store (its owner lock). */
+	close(ctx?: Context): Promise<void>;
 	/** The store as a primary under a journal (primarySyncStorage); absent where the caller wraps the store itself. */
 	replicated?(journal: any, peer: any, o: any): unknown;
 }

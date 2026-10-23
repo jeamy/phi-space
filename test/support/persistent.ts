@@ -13,9 +13,11 @@ import { OwnSyncStore, ReplicatedOwnStore } from "../../src/store/sync-sqlite.ts
 import type { StoreFaults } from "../../src/store/sqlite.ts";
 import { OwnStoreHost } from "../../src/store/host.ts";
 
-/** pi-durable's JSONL and SQLite storage, and phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.md). */
+/** pi-durable's JSONL and SQLite storage, and phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.md).
+ *  PI_DURABLE_BACKENDS: for tests of pi-durable itself (its agent tools, its base checkpoints). */
 export type Backend = "jsonl" | "sqlite" | "own-sqlite";
 export const BACKENDS: readonly Backend[] = ["jsonl", "sqlite", "own-sqlite"];
+export const PI_DURABLE_BACKENDS: readonly Backend[] = ["jsonl", "sqlite"];
 
 /**
  * What the next matching storage commit does:
@@ -24,6 +26,20 @@ export const BACKENDS: readonly Backend[] = ["jsonl", "sqlite", "own-sqlite"];
  */
 export type Fault = "failBeforeCommit" | "loseAnswer";
 export class InjectedFault extends Error {}
+
+/** The own store's rows as the tests' fault predicates read pi-durable writes: a written document or record is a
+ *  `document.change` whose content holds its new value (as `ops` and `value`), a deleted one a `document.retire`. */
+function asWrites(ops: readonly import("../../src/store/sqlite-ops.ts").WriteOp[]): StorageWrite[] {
+	return ops.map((op) => {
+		if (op.t === "doc" || op.t === "part") {
+			const value = JSON.parse(op.value), content = { kind: "delta", version: op.t === "doc" ? op.version : 1, ops: value };
+			Object.defineProperty(content, "value", { value, enumerable: false }); // once in a stringified write, as on the disk
+			return { type: "document.change", id: `${op.kind}/${op.key}${op.t === "part" ? `/${op.part}/${op.id}` : ""}`, content };
+		}
+		if (op.t === "meta") return { type: "meta", key: op.key };
+		return { type: "document.retire", id: `${op.kind}/${op.key}${op.t === "partDel" ? `/${op.part}/${op.id}` : ""}` };
+	}) as unknown as StorageWrite[];
+}
 
 /** Arms faults on a storage. `when` picks the commit (default: the next one); each armed fault fires once. */
 export class FaultSwitch {
@@ -34,7 +50,7 @@ export class FaultSwitch {
 	readonly own: StoreFaults = {
 		take: (ops) => {
 			const a = this.#armed;
-			if (!a || !a.when(ops as never)) return undefined;
+			if (!a || !a.when(asWrites(ops))) return undefined;
 			this.#armed = undefined;
 			this.fired++;
 			return { fault: a.fault, error: new InjectedFault(a.fault === "failBeforeCommit" ? "injected: crash before commit" : "injected: commit durable, answer lost") };
@@ -84,8 +100,8 @@ export class PersistentHome {
 			// a raw store left open (its recovery threw before a host took it) is gone as its process would be: its owner
 			// lock must not keep the next one out (pi-durable's storage has no owner lock)
 			for (const r of this.#raw) if (r.open) await r.close();
-			// so is a host of this home a test left open (one whose writes were refused): the next opener takes over
-			for (const h of [...this.#open]) if ((h as unknown) instanceof OwnStoreHost) { (h as unknown as OwnStoreHost).abandon(); this.#open.delete(h); }
+			// so is a host of this home whose store failed and that a test left open: it takes no more work anyway
+			for (const h of [...this.#open]) if ((h as unknown) instanceof OwnStoreHost && (h as unknown as OwnStoreHost).failed) { (h as unknown as OwnStoreHost).abandon(); this.#open.delete(h); }
 			const r = new OwnSyncStore(join(this.dir, "store.sqlite"), { faults: this.faults.own });
 			this.#raw = [r];
 			return r as unknown as Storage;
@@ -138,8 +154,8 @@ export async function openHost(storage: Storage): Promise<Harness> {
 }
 
 /** Run `f` once per persistent backend with a fresh home, disposing it afterwards. */
-export async function forEachBackend(f: (home: PersistentHome) => Promise<void>): Promise<void> {
-	for (const b of BACKENDS) {
+export async function forEachBackend(f: (home: PersistentHome) => Promise<void>, backends: readonly Backend[] = BACKENDS): Promise<void> {
+	for (const b of backends) {
 		const home = new PersistentHome(b);
 		try { await f(home); }
 		catch (e) { throw new Error(`[${b}] ${(e as Error).message}`, { cause: e }); }

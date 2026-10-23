@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defineDocFamily } from '@earendil-works/pi-durable';
+import { defineDocFamily } from '../src/store/documents.ts';
 import { createHash } from 'node:crypto';
 import { EntryReplicationController,EntryReplicas,EntrySnapshotTransfers,ReplicationConflict,core,type EntryReplicationConfig,type EntryMutation,type EntrySnapshotManifest,type EntrySnapshotPage } from '../src/index.ts';
 import { BACKENDS,PersistentHome,InjectedFault,ctx } from './support/persistent.ts';

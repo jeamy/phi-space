@@ -30,6 +30,8 @@ type State = {
 	undo: Map<string, { had: boolean; old: unknown }>; // map parts: what to restore when the commit fails
 	proxy: Obj;
 	revoke: () => void;
+	/** What the proxy is over: the base, or a stand-in for a frozen base. */
+	target: object;
 };
 
 const STATE = Symbol("phi-spaces.draft");
@@ -81,7 +83,11 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		const kind = partKind.get(path) === "map" && !Array.isArray(value) ? "map" : partKind.get(path) === "array" && Array.isArray(value) ? "array" : "object";
 		const s = { kind, path, base: value, copy: null, parent, children: new Map(), assigned: new Set(), undo: new Map() } as unknown as State;
 		const handler: ProxyHandler<object> = kind === "map" ? mapHandler(s) : objectHandler(s);
-		const { proxy, revoke } = Proxy.revocable(value as object, handler);
+		// a frozen value (a part's record or a claim, put into another document) cannot be the target: its properties are
+		// fixed, and the draft hands out its children as drafts. An empty stand-in is the target then; reads go to base
+		// or copy anyway.
+		s.target = kind !== "map" && Object.isFrozen(value) ? (Array.isArray(value) ? [] : {}) : (value as object);
+		const { proxy, revoke } = Proxy.revocable(s.target, handler);
 		s.proxy = proxy as Obj;
 		s.revoke = revoke;
 		states.push(s);
@@ -146,10 +152,11 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		getOwnPropertyDescriptor(_t, k) {
 			const d = Reflect.getOwnPropertyDescriptor(latest(s), k);
 			if (!d) return d;
-			// the target is the base: a property it has as non-configurable (an array's length) must be reported so;
-			// any other one, also one only the copy has, as configurable
-			const t = Reflect.getOwnPropertyDescriptor(s.base, k);
-			return { ...d, configurable: t ? t.configurable !== false : true };
+			// a property the target has as non-configurable (an array's length) must be reported so; any other one, also
+			// one only the copy has, as configurable (and for a frozen base's stand-in as writable, as the stand-in's is)
+			const t = Reflect.getOwnPropertyDescriptor(s.target, k);
+			if (t && t.configurable === false) return { ...d, configurable: false, ...(s.target !== s.base ? { writable: true } : {}) };
+			return { ...d, configurable: true };
 		},
 		defineProperty(_t, k, d) {
 			live();

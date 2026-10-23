@@ -15,7 +15,7 @@ import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { Worker } from "node:worker_threads";
-import { headOf, joinParts, partChanges, type PartRow, type PartSpec } from "./parts.ts";
+import { headOf, joinParts, partAt, partChanges, type PartRow, type PartSpec } from "./parts.ts";
 import { OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
 import { DiskMap, isDiskMap, type DiskMapSource } from "./disk-map.ts";
 import type { WriteOp, WriterReply, WriterRequest } from "./sqlite-writer.ts";
@@ -70,6 +70,8 @@ class SqliteLedger implements Ledger {
 	readonly #worker: Worker;
 	/** Per document with parts: the order of each array part's records (store/parts.ts). */
 	readonly #ords = new Map<string, Map<string, Map<string, number>>>();
+	/** Parts kept inline in a document's head (written before its definition had parts): the next commit writes them whole. */
+	readonly #inline = new Set<string>();
 	/** Per document: its map parts on the disk, by part name. */
 	readonly #diskMaps = new Map<string, Map<string, DiskMap>>();
 	readonly #strict: boolean;
@@ -120,10 +122,14 @@ class SqliteLedger implements Ledger {
 			}
 			value = joinParts(value, parts.filter((p) => !onDisk.includes(p)), rows);
 			this.#ords.set(`${kind}\u0000${docKey(key)}`, ords);
+			// a part kept inline in the head (written before the definition had parts) is written as rows by the next commit
+			const inline = (p: PartSpec) => { const v = partAt(value, p.path); return Array.isArray(v) ? v.length > 0 : v !== null && typeof v === "object" && Object.keys(v).length > 0; };
+			for (const p of parts) if (!rows.has(p.path.join(".")) && inline(p) && (!onDisk.includes(p) || !this.#prep("SELECT 1 FROM parts WHERE kind = ? AND key = ? AND part = ? LIMIT 1").get(kind, docKey(key), p.path.join(".")))) this.#inline.add(`${kind}\u0000${docKey(key)}\u0000${p.path.join(".")}`);
 			// a map part on the disk stays there: the document holds a DiskMap in its place
 			for (const p of onDisk) {
 				const parent = p.path.slice(0, -1).reduce<unknown>((o, k) => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), value);
 				if (parent === null || typeof parent !== "object" || !(p.path.at(-1)! in parent)) continue;
+				if (this.#inline.has(`${kind}\u0000${docKey(key)}\u0000${p.path.join(".")}`)) continue; // a plain map until it is written as rows
 				this.#index(kind, docKey(key), p);
 				const m = new DiskMap(this.#source(kind, docKey(key), p.path.join(".")), p.disk!, () => this.#handed + 1, this.#strict);
 				(parent as Record<string, unknown>)[p.path.at(-1)!] = m.proxy;
@@ -163,6 +169,7 @@ class SqliteLedger implements Ledger {
 			nextAt: (t) => (this.#prep(`SELECT min(at) AS at ${base} AND at IS NOT NULL AND at > ? AND flag = 0`).get(kind, key, part, t) as { at: number | null }).at ?? undefined,
 			group: (g, limit) => (this.#prep(`SELECT id ${base} AND grp = ? LIMIT ?`).all(kind, key, part, g, limit) as Array<{ id: string }>).map((r) => r.id),
 			unindexed: () => (this.#prep(`SELECT id, value ${base} AND at IS NULL`).all(kind, key, part) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]),
+			firstIds: (limit) => (this.#prep(`SELECT id ${base} ORDER BY id LIMIT ?`).all(kind, key, part, limit) as Array<{ id: string }>).map((r) => r.id),
 		};
 	}
 
@@ -186,7 +193,8 @@ class SqliteLedger implements Ledger {
 			ops.push({ t: "doc", kind: d.kind, key: k, version: d.version, value: JSON.stringify(headOf(d.value, d.parts)) });
 			const id = `${d.kind}\u0000${k}`;
 			if (!this.#ords.has(id)) { this.#ords.set(id, new Map()); undo?.push(() => this.#ords.delete(id)); }
-			const c = partChanges(d.before, d.value, d.parts, d.changes ?? new Map(), this.#ords.get(id)!, undo);
+			const inline = d.parts.filter((p) => this.#inline.has(`${id}\u0000${p.path.join(".")}`));
+			const c = partChanges(inline.length ? headOf(d.before, inline) : d.before, d.value, d.parts, d.changes ?? new Map(), this.#ords.get(id)!, undo);
 			const indexOf = new Map(d.parts.filter((p) => p.disk).map((p) => [p.path.join("."), p.disk!]));
 			for (const r of c.put) {
 				const ix = indexOf.get(r.part), v = r.value as Record<string, unknown> | null;
@@ -217,6 +225,7 @@ class SqliteLedger implements Ledger {
 			}
 		}
 		for (const r of set.retired) { this.#ords.delete(`${r.kind}\u0000${docKey(r.key)}`); this.#diskMaps.delete(`${r.kind}\u0000${docKey(r.key)}`); }
+		for (const d of set.put) for (const p of d.parts ?? []) this.#inline.delete(`${d.kind}\u0000${docKey(d.key)}\u0000${p.path.join(".")}`);
 		return new Promise((resolve, reject) => {
 			this.#queued.push({ ops, bytes: this.replication ? Buffer.byteLength(JSON.stringify(ops)) : rowBytes(ops), resolve, reject });
 			if (!this.#writing) this.#send();

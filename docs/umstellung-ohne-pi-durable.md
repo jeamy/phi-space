@@ -191,6 +191,63 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   `primary-sync.ts` und die Typen der Primary/Sync-Replikation an pi-durable (siehe U1). Zur Laufzeit lädt der Dienst es
   nicht. Direkte Importe in den Beispielen: 11 statt 13 (`scripts/durable-imports.mjs`).
 
+**Stand U4 (2026-10-23):**
+
+- **Primary/Sync auf dem eigenen Speicher:**
+  - **Journal hinter einer Speicher-Schnittstelle** (`src/store/sync-store.ts`): Hash-Kette, Konfigurationsschritte,
+    Fencing und der eine offene Kandidat bleiben ein Code-Pfad (`src/primary-sync.ts`). Ein Speicher bringt die Form
+    seiner Schreibvorgänge (Codec), die Marke, atomares Anwenden, `capture` und die Leerprüfung mit.
+  - **pi-durable** ist ein solcher Speicher (`src/store/legacy-sync.ts`), der eigene SQLite-Speicher der andere
+    (`src/store/sync-sqlite.ts`, Codec `src/store/own-sync-codec.ts`).
+  - **Formatbindung:** Ein leeres Journal bindet sich beim ersten Gebrauch an eine Speicherart, an den Speicher, den es
+    antreibt, oder an die Marke des ersten angenommenen Eintrags. Ein Journal mit älteren Einträgen gilt als
+    pi-durable. Ein Journal der anderen Art wird abgewiesen; replizierte Bestände zieht U5 um.
+- **Der eigene Primary:**
+  - Ablauf je Bündel: versiegeln, bei `sync` auf den Standby warten, Zeilen und Marke (`store_meta`) in einer
+    SQL-Transaktion schreiben, erst dann bestätigen. Es ist immer nur ein Bündel unterwegs, geschnitten an der Größe
+    eines Journaleintrags.
+  - Ein Fehler nach dem Versiegeln ist `CommitSealed`. Danach nimmt der Speicher nichts mehr an, bis er wieder
+    geöffnet und der Kandidat aufgelöst ist.
+  - Das Budget des Journals prüft `Ledger.prepare` vor der Veröffentlichung. Eine Ablehnung hinterlässt keine Spur
+    (Entwurf, Reihenfolgen und Claim-Überlagerung werden zurückgenommen), und der Host bleibt nutzbar.
+  - Das Anwenden auf eine gestoppte Datei (Standby, Wiederherstellung, Bootstrap) und der Schreib-Thread nutzen
+    dieselben Zeilen (`src/store/sqlite-ops.ts`).
+- **Fabriken:** `sync-spaces` und `configured-runtime` nehmen beide Speicherarten; ohne Fabriken des Daemons gilt der
+  eigene Speicher (`OWN_SYNC_FACTORIES`). Der Testbed-Daemon auf `big` bleibt ausdrücklich bei pi-durable, bis U5 seine
+  replizierten Bestände umzieht.
+- **Nachweis:** `test/support/persistent.ts` hat own-sqlite als drittes Backend.
+  - Mit eigener Fehlerinjektion: „vor dem Commit“ und „Antwort verloren“.
+  - Die Prädikate der Tests sehen die Zeilen des eigenen Speichers als geänderte Dokumente.
+  - Ein abgestürzter Host gibt seinen Owner-Lock frei.
+
+  Damit laufen auf dem eigenen Speicher dieselben Tests wie auf pi-durable: Primary/Sync, Replica-Control (Promotion,
+  degradeToSingle, setStandby), Bootstrap, CommitSealed, NotCommitted, Degrade/Revoke, Configured Root, Router,
+  Delegation, föderierter Space, Restore, Erasure, Deployment, Run-Recovery. Root-Suite: 996 von 997 (einer
+  übersprungen wie bisher).
+- **Was der eigene Speicher dabei gezeigt hat** (behoben, mit Tests):
+  - Entwürfe wurden einzeln abgeschlossen und sofort widerrufen; ein Wert, der von einem Dokument in ein anderes
+    wanderte, traf einen widerrufenen Proxy.
+  - Ein in diesem Commit zugewiesenes Objekt, das über den Entwurf wieder gelesen wurde, kam mit Entwürfen darin
+    zurück.
+  - Ein Entwurf über einem eingefrorenen Wert (ein Datensatz eines Teils in einem anderen Dokument) verletzte eine
+    Proxy-Invariante; er nutzt jetzt ein leeres Stellvertreter-Ziel.
+  - `setMetadata` änderte einen Claim in place, statt ihn zu ersetzen.
+  - Ein frischer `rpc`-Zustand hatte kein `sweepAt` und löste einen unnötigen Wartungs-Commit aus.
+  - Ein Teil, der im Kopf eines Dokuments stand (geschrieben, bevor die Definition Teile hatte), ging beim Laden
+    verloren; jetzt bleibt er erhalten und wird mit dem nächsten Commit als Zeilen geschrieben.
+  - Bei einer verlorenen Antwort wurden die Commits des Bündels nie abgeschlossen.
+- **Offen:**
+  - Zwei seltene Verwaltungswege lesen auf dem eigenen Speicher je Schritt alle Claims: die Claim-Phase eines
+    Restores und das Markieren entschiedener Claims bei einem Mitgliederwechsel. Sie sind korrekt, brauchen aber einen
+    Schlüssel-Cursor statt eines Scans (U7, Dauerlast).
+  - Wartung eines gestoppten Speichers (`compactErasedSqlite` gibt es nur für pi-durable): ein Gegenstück für den
+    eigenen Speicher (U7).
+  - Chat-Test „code full of control characters …“ (etwa einer von fünf Läufen, schon vor U4): Der Web-Teil liest einen
+    Raum über ein seitenweises Snapshot; laufende Beobachter erzeugen währenddessen neue, der Space hält höchstens 16
+    und verdrängt den gelesenen („the entry snapshot expired“), und `attach` schließt den Socket.
+  - Statische Importe von pi-durable in `src`: `agent.ts` (U6), `store/legacy.ts` und `store/legacy-sync.ts` (bis
+    U5/U8), Typ-Importe in `primary-sync.ts` und `replica-control.ts` für den pi-durable-Pfad.
+
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
 Speicherung, Wiederaufnahme nach Ausfällen und kontrollierte Übernahme vorhandener Daten.
