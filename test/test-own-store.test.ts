@@ -121,7 +121,9 @@ test("killed at any moment, a store keeps every acknowledged commit and no half 
 
 test("killed right before the disk transaction commits: what was not acknowledged is not there", async () => {
 	const file = fresh(), marker = `${file}.paused`;
-	const acked = await crashRun(file, async () => { while (!existsSync(marker)) await new Promise((r) => setTimeout(r, 5)); }, { PHI_SPACES_WRITER_PAUSE: `before-commit:3:${marker}` });
+	// the writer thread stops before the third batch's COMMIT; the main thread is free and prints the acknowledgements of
+	// the first two batches (killed at once, some of those would be durable but not yet printed: allowed, not checked here)
+	const acked = await crashRun(file, async () => { while (!existsSync(marker)) await new Promise((r) => setTimeout(r, 5)); await new Promise((r) => setTimeout(r, 300)); }, { PHI_SPACES_WRITER_PAUSE: `before-commit:3:${marker}` });
 	const there = await survivors(file);
 	assert.ok(acked.size > 0);
 	assert.deepEqual([...there].sort((a, b) => a - b), [...acked].sort((a, b) => a - b)); // exactly the acknowledged ones

@@ -50,6 +50,18 @@ npm run example:space-chat
 npm run help
 ```
 
+Sieb und Cache laufen ohne pi-durable auf dem eigenen Speicher. Mit `--remote` arbeiten sie über einen eigenständigen
+Space-Dienst (`src/standalone.ts`), per Unix-Socket oder TCP:
+
+```bash
+npm run space-server -- --store /tmp/space.sqlite --listen unix:/tmp/space.sock
+npm run example:sieve -- 1001 4 --remote unix:/tmp/space.sock
+npm run example:cache -- --remote unix:/tmp/space.sock
+```
+
+Über den Dienst legt das Sieb alle Aufgaben eines Laufs in einer Transaktion an. Der Cache vergibt Versionen aus einem
+Zähler je Namensraum. Neue Schlüssel schreibt er `unique`, damit zwei gleichzeitige erste `set` nicht beide gelingen.
+
 `examples/codemode-evolve.ts` ist ein Experiment nach Art der Monte-Carlo-Methode: Viele zufällige Agentenbeiträge
 (`CodeCandidate`, JavaScript-Quelltext) lösen eine Aufgabe (`CodeTask`: die ersten n Primzahlen). Evaluatoren nehmen
 Kandidaten unter einer Transaktion, führen sie in einer QuickJS-Sandbox von `@earendil-works/pi-codemode` ohne Tools

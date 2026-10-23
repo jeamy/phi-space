@@ -2,11 +2,11 @@
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { defineDoc } from "../src/store/documents.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { openOwnMemoryHost } from "../src/store/host.ts";
+import { parseListen } from "../src/standalone.ts";
 import { createHash } from "node:crypto";
-import { core, FOREVER, PhiSpaces, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
+import { core, FOREVER, PhiSpaces, RemoteSpace, socketTransport, canonicalJson, type RunExporter, type SpaceHost, type SpaceLike, type WorkerKind, spaceDoc } from "../src/index.ts";
 
 export type SieveConfig = { runId: string; start: number; end: number; blockSize: number };
 export type SieveTask = SieveConfig & { taskId: string; rangeStart: number; rangeEnd: number };
@@ -87,6 +87,27 @@ export async function prepareSieveRun(host: SpaceHost, config: SieveConfig, opti
       return seed.next === count;
     }, ctx);
     if (done) return Array.from({ length: count }, (_, i) => `${config.runId}:${i}`);
+  }
+}
+
+/** The same tasks over the RPC (a standalone service, src/standalone.ts), where no host commit is at hand: every task
+ *  of the run and a SieveRun marker in one transaction, so an interrupted seeding leaves all or none, and a repeated one
+ *  finds the marker and writes nothing (tasks a worker holds are invisible; the marker is never taken). */
+export async function seedSieveRemote(space: SpaceLike, config: SieveConfig): Promise<void> {
+  validate(config);
+  const count = Math.ceil((config.end - config.start) / config.blockSize);
+  if (count > 400) throw new Error("a remote sieve run is seeded in one transaction (maxCommitBytes): at most 400 blocks");
+  const txn = await space.createTransaction(30_000);
+  try {
+    if (!(await space.readIfExists({ type: "SieveRun", fields: { runId: config.runId } }, 0, { txn: txn.id }))) {
+      await space.write({ type: "SieveRun", fields: { ...config } }, txn.id, FOREVER);
+      for (let i = 0, start = config.start; i < count; i++, start += config.blockSize)
+        await space.write({ type: "SieveTask", fields: { ...config, taskId: `${config.runId}:${i}`, rangeStart: start, rangeEnd: Math.min(start + config.blockSize, config.end) } }, txn.id, FOREVER);
+    }
+    await space.commit(txn.id);
+  } catch (error) {
+    await space.abort(txn.id).catch(() => {});
+    throw error;
   }
 }
 
@@ -173,12 +194,24 @@ export async function collectSieveResults(space: SpaceLike, config: SieveConfig)
   return primes;
 }
 
-export async function runSieve(options: { start?: number; end?: number; blockSize?: number; workers?: number } = {}) {
+/** `remote`: the address of a standalone service (unix:/path or tcp:host:port); every worker is a client of its own,
+ *  as separate processes would be. Without it the space lives in this process, in memory. */
+export async function runSieve(options: { start?: number; end?: number; blockSize?: number; workers?: number; remote?: string } = {}) {
   const config = { runId: randomUUID(), start: options.start ?? 1, end: options.end ?? 1001, blockSize: options.blockSize ?? 128 };
   validate(config);
   const workers = options.workers ?? 4;
   if (!Number.isSafeInteger(workers) || workers < 1 || workers > 32) throw new Error("workers must be 1..32");
-  const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+  if (options.remote) {
+    const target = parseListen(options.remote);
+    const transports = Array.from({ length: workers + 1 }, () => socketTransport(target, { requestTimeoutMs: 40_000 }));
+    try {
+      const [main, ...rest] = transports.map((t) => new RemoteSpace(t));
+      await seedSieveRemote(main!, config);
+      await Promise.all(rest.map(async (worker) => { while (await processSieveTask(worker, config.runId)) { /* next task */ } }));
+      return { config, primes: await collectSieveResults(main!, config) };
+    } finally { for (const t of transports) t.close(); }
+  }
+  const h = openOwnMemoryHost();
   const host = new PhiSpaces(h, ctx);
   try {
     await prepareSieveRun(h, config);
@@ -193,7 +226,8 @@ export async function runSieve(options: { start?: number; end?: number; blockSiz
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const args = process.argv.slice(2);
-  const result = await runSieve({ end: args[0] === undefined ? 1001 : Number(args[0]), workers: args[1] === undefined ? 4 : Number(args[1]) });
+  const remote = args.indexOf("--remote") >= 0 ? args.splice(args.indexOf("--remote"), 2)[1] : undefined;
+  const result = await runSieve({ end: args[0] === undefined ? 1001 : Number(args[0]), workers: args[1] === undefined ? 4 : Number(args[1]), ...(remote ? { remote } : {}) });
   console.log(`${result.primes.length} primes in [${result.config.start}, ${result.config.end})`);
   console.log(result.primes.join(" "));
 }

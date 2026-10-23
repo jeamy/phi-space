@@ -164,6 +164,33 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   Zusammenhang mit dem Warten ohne Transaktion ist nicht belegt; `boardRun` gibt bei einem Zeitablauf jetzt den Stand
   des Laufs aus, damit der nächste Fehlschlag die Ursache zeigt.
 
+**Stand U3 (2026-10-23):**
+
+- **Eigenständiger Dienst** `src/standalone.ts` (`npm run space-server -- --store FILE|memory --listen unix:…|tcp:…`):
+  eigener Speicher (SQLite oder Arbeitsspeicher), `SpaceService` über Unix-Socket oder TCP, Hintergrundarbeit
+  (`startService`: Fristen, Leases, Zustellung); jede Verbindung ist ein Peer mit der Rolle `member`.
+- **Beispiele:** Sieb und Cache laufen ohne `Harness`/pi-durable auf dem eigenen Speicher. Mit `--remote` laufen sie
+  über den Dienst:
+  - Das Sieb legt dann alle Aufgaben samt `SieveRun`-Marke in einer Transaktion an: ganz oder gar nicht, und eine
+    Wiederholung schreibt nichts.
+  - Der Cache (`RemoteCache`) unterscheidet einen gehaltenen Schlüssel von einem fehlenden über `takeIfExists` mit
+    Wartezeit. Versionen vergibt er aus einem Zähler je Namensraum. Neue Schlüssel und den ersten Zähler schreibt er
+    `unique`.
+- **Nachweis** `test/test-standalone.test.ts`: Dienst und Beispiele laufen als Prozesse unter `test/support/no-durable.mjs`,
+  einem Loader-Hook, der pi-durable, chord und pi-ai verweigert (eine Gegenprobe zeigt, dass er greift).
+  - Sieb und Cache über Unix-Socket (SQLite) und TCP (Arbeitsspeicher) liefern dasselbe wie im Prozess.
+  - Harter Neustart (SIGKILL) des Dienstes auf SQLite:
+    - ein wartendes `take` bekommt den Eintrag, der nach dem Neustart geschrieben wird, genau einmal;
+    - ein `take`, dessen Frist während des Ausfalls abläuft, endet mit `null`, ohne zu hängen;
+    - ein entschiedenes `write` liefert bei Wiederholung dasselbe Ergebnis ohne zweiten Eintrag.
+  - Ein Worker, der mit einer Siebaufgabe stirbt: Seine Transaktion läuft auf dem Dienst ab, ein anderer Worker
+    erledigt die Aufgabe.
+- **Meter, Reaper, Mailboxen, Fanout/Release** laufen im selben `startService`; die Root-Suite deckt sie auf
+  `PHI_SPACES_STORE=own-sqlite` ab.
+- **Rest bis U4:** Statisch hängen `src/index.ts` und damit die Beispiele noch über den dynamischen Import in
+  `primary-sync.ts` und die Typen der Primary/Sync-Replikation an pi-durable (siehe U1). Zur Laufzeit lädt der Dienst es
+  nicht. Direkte Importe in den Beispielen: 11 statt 13 (`scripts/durable-imports.mjs`).
+
 Ziel ist ein phi-spaces, das ohne Installation, Import oder laufenden Prozess von
 `@earendil-works/pi-durable` langlebige Spaces bereitstellt. Schwerpunkt sind atomare
 Speicherung, Wiederaufnahme nach Ausfällen und kontrollierte Übernahme vorhandener Daten.
