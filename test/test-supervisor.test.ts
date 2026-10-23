@@ -3,8 +3,6 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	SpaceService, RemoteSpace, socketTransport, startGate, NetbirdDirectory, GateIdentity, ProvingService, EnrollmentService, ControlAccess, Supervisor, SpaceKeyDirectory, generateKey,
 	bootstrapEnroll, newEnrollToken, hashToken, CONTROL_SPACE, FOREVER, core, PhiSpaces, createSpace, listSpaces, snapshotSpace, spaceDoc, DEFAULT_POLICY, type Signer,

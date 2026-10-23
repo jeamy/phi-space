@@ -11,7 +11,7 @@ import {FOREVER, type Json, type SpaceState} from "../../src/core.ts";
 import type {RouterTarget, RouterStep, RouterReceipt, RouterStepSpec, TargetBinding} from "../../src/router.ts";
 import {PersistentHome, ctx, type Backend} from "./persistent.ts";
 import {plainDoc} from "./host.ts";
-import type {Harness} from "@earendil-works/pi-durable";
+import type {OwnStoreHost} from "../../src/store/host.ts";
 
 export class VirtualClock {
     tick = 0;
@@ -147,7 +147,7 @@ export type NetworkFault = {
     dropReply?: boolean
 };
 type Node = {
-    home: PersistentHome; host: Harness; service: SpaceService; alive: boolean;
+    home: PersistentHome; host: OwnStoreHost; service: SpaceService; alive: boolean;
     binding: TargetBinding
 };
 const principal = {

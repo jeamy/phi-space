@@ -3,8 +3,6 @@ import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { SpaceService, RemoteSpace, socketTransport, startGate, NetbirdDirectory, GateIdentity, FOREVER, core, type Gate, type GateOptions } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";

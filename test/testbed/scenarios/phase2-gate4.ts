@@ -23,7 +23,7 @@ async function bounded<T>(p: Promise<T>, ms = 10000): Promise<T> {
  try { return await Promise.race([p, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('request timed out')), ms); })]); }
  finally { clearTimeout(timer); }
 }
-const home = new PersistentHome('sqlite');
+const home = new PersistentHome();
 try {
  const host = await home.open();
  const id = (await host.commit(tx => createSpace(tx, 'gate4', Date.now()), ctx)).spaceId;

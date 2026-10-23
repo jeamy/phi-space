@@ -38,7 +38,9 @@ export type SqliteStoreOptions = {
 	/** Primary/sync: the replication of every batch (store/sync-sqlite.ts). */
 	replication?: LedgerReplication;
 };
-export type StoreFaults = { take(ops: readonly WriteOp[]): { fault: "failBeforeCommit" | "loseAnswer"; error: Error } | undefined };
+export type StoreFaults = { take(ops: readonly WriteOp[]): { fault: "failBeforeCommit" | "loseAnswer"; error: Error } | undefined;
+	/** Every commit's rows as it is handed over (tests measure commit sizes). */
+	observe?(ops: readonly WriteOp[]): void };
 
 /** Refused: another process owns the store, or the file is of an unknown format. */
 export class StoreUnavailable extends Error {}
@@ -213,6 +215,7 @@ class SqliteLedger implements Ledger {
 		if (this.#failure) return Promise.reject(this.#failure);
 		const written = ++this.#handed;
 		const ops = (prepared as WriteOp[] | undefined) ?? this.#ops(set);
+		this.faults?.observe?.(ops);
 		for (const d of set.put) {
 			// a map part still in memory (its document is new in this process) goes on the disk from now on
 			for (const p of d.parts ?? []) {
@@ -312,6 +315,15 @@ class SqliteLedger implements Ledger {
 
 	async close(): Promise<void> {
 		await this.drain();
+		// a failed store is reopened before more work: its writer may still wait in a batch that will never be answered
+		// (a sealed candidate), so it is stopped as a killed process would be; what it wrote is atomic in the WAL
+		if (this.#failure) {
+			await this.#worker.terminate();
+			try { this.#read.close(); } catch { /* already closed */ }
+			try { this.#lock.exec("ROLLBACK"); } catch { /* the lock transaction ends with the connection */ }
+			try { this.#lock.close(); } catch { /* already closed */ }
+			return;
+		}
 		this.#worker.ref(); // waiting for the writer to close keeps the process alive
 		await new Promise<void>((resolve) => { this.#closing = resolve; this.#worker.postMessage({ type: "close" } satisfies WriterRequest); });
 		await this.#worker.terminate();

@@ -1,8 +1,6 @@
 // AP 1.1/1.2: named spaces, registry, identities and global ids (docs/implementierungsplan-v3.md).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { PhiSpaces, FOREVER, Space, createSpace, listSpaces, UnknownSpaceError, startService, core, DEFAULT_ALIAS } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";

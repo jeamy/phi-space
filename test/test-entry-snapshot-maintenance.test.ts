@@ -9,7 +9,7 @@ const fact=(n:number,pad=0):EntryMutation=>({kind:'add',type:'Fact',fields:{n,pa
 for(const backend of BACKENDS){
  for(const fault of ['failBeforeCommit','loseAnswer'] as const)test(`${backend}: maintenance ${fault} at copy/publication/retirement resumes with unchanged history, cursor and requests`,async()=>{
   const homes=[new PersistentHome(backend),new PersistentHome(backend)];let hosts=await Promise.all(homes.map(h=>h.open()));let now=1000,largest=0,armed=false;
-  const storage=homes[1]!.storage.bind(homes[1]!);homes[1]!.storage=async()=>{const s=await storage();return new Proxy(s,{get(t,k,r){const v=Reflect.get(t,k,r);if(k==='commit')return async(w:readonly import('@earendil-works/pi-durable').StorageWrite[],c:typeof ctx)=>{if(armed)largest=Math.max(largest,Buffer.byteLength(JSON.stringify(w)));return t.commit(w,c);};return typeof v==='function'?v.bind(t):v;}});};
+  const storage=homes[1]!.storage.bind(homes[1]!);homes[1]!.faults.observe(w=>{if(armed)largest=Math.max(largest,Buffer.byteLength(JSON.stringify(w)));});
   const node=(i:number)=>new EntryReplicationController({host:hosts[i]!,ctx,config:config(i?'b':'a'),authorize:async()=>{},assertActive:async()=>{},now:()=>now,clockUncertaintyMs:()=>0,maxBatchBytes:32768});
   const reopen=async()=>{await homes[1]!.close(hosts[1]!);hosts[1]=await homes[1]!.open();};
   try{
@@ -48,7 +48,7 @@ for(const backend of BACKENDS){
  });
  test(`${backend}: maintenance replaces a large overlay without a large commit, repeated generations release capacity and preserve stream ordering`,async()=>{
   const home=new PersistentHome(backend);let largest=0,measure=false,now=1000;const storage=home.storage.bind(home);
-  home.storage=async()=>{const s=await storage();return new Proxy(s,{get(t,k,r){const v=Reflect.get(t,k,r);if(k==='commit')return async(w:readonly import('@earendil-works/pi-durable').StorageWrite[],c:typeof ctx)=>{if(measure)largest=Math.max(largest,Buffer.byteLength(JSON.stringify(w)));return t.commit(w,c);};return typeof v==='function'?v.bind(t):v;}});};
+  home.faults.observe(w=>{if(measure)largest=Math.max(largest,Buffer.byteLength(JSON.stringify(w)));});
   const host=await home.open(),node=new EntryReplicationController({host,ctx,config:config('a'),authorize:async()=>{},assertActive:async()=>{},now:()=>now,clockUncertaintyMs:()=>0,maxHistoryBytes:512*1024,maxBatchBytes:32768});
   try{
    for(let n=0;n<72;n++)await node.mutate('large-'+n,fact(n,4096));const history=(await node.describeStream()).revision;const events=[];

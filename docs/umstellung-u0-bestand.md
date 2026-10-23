@@ -228,6 +228,9 @@ einer SQL-Transaktion mit einem `fsync`, Bestätigung aller erst danach).
   24-Stunden-Dauermessung“). Mit Teilablage liegen Claims als Zeilen auf der Platte; ihre Grenzen werden in U2 neu
   festgelegt (Anzahl und Bytes auf der Platte statt Anteil eines Dokuments im Speicher).
 - **D4 – Claims im Chat: entschieden (2026-10-22):** Aufbewahrung bleibt 24 h (Vertrag); die Zeilenablage trägt sie.
+- **D6 – Alte pi-durable-Bestände: entschieden (2026-10-23):** Sie werden verworfen, nicht übernommen. U5 (Export/Import)
+  entfällt. Auch das Testbed auf `big` wird mit leeren Stores auf dem eigenen Speicher neu aufgesetzt. Ein Journal oder
+  eine Datei im pi-durable-Format wird mit klarer Meldung abgewiesen.
 
 ## 9. Nächster Schritt
 

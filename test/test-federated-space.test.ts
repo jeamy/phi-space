@@ -18,7 +18,12 @@ import {FederationOperations} from '../src/federated-space.ts';
 import {RouterController,RouterJournal,type RouterLimits} from '../src/router.ts';
 import {RoutingConflict, type RoutingState} from '../src/routing-semantics.ts';
 import {FederationSimulator} from './support/federation-simulator.ts';
-import {BACKENDS, ctx, PersistentHome} from './support/persistent.ts';
+import {BACKENDS, ctx, PersistentHome, type FaultBatch} from './support/persistent.ts';
+/** What a batch changed in one top-level field of a document kind (the field's new value as JSON). */
+const changed = (b: FaultBatch, kind: string, field: string) => b.changes.filter(c => c.kind === kind && field in c.fields).map(c => JSON.stringify(c.fields[field]));
+const operations = (b: FaultBatch) => changed(b, 'phi-spaces.federation-operations', 'operations');
+const commands = (b: FaultBatch) => changed(b, 'phi-spaces.router-command', 'command');
+const futures = (b: FaultBatch) => changed(b, 'phi-spaces.router-journal', 'future');
 
 const principal = {
     peerId : 'client',
@@ -354,7 +359,7 @@ for(const b of BACKENDS) {
   for(let n=0;n<20;n++)await o.f.write({type:'Job',fields:{n}},{id:'restore-partition-'+n,principal:o.p});
   const target=o.state.members.a.target;
   const restore={hostId:target.hostId,spaceId:target.spaceId,oldIncarnation:target.dataIncarnation,recoveryId:'restore-partitions'};
-  let count=0;o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>w.type==='document.change' && w.content.kind==='delta' && JSON.stringify(w.content.ops).includes('"operations"'))&&++count===2);
+  let count=0;o.home.faults.arm(fault,(b:FaultBatch)=>operations(b).length>0&&++count===2);
   await assert.rejects(o.f.reconcileDataRestore(restore));assert.equal(o.home.faults.fired,1);
   await o.reopen();
   await assert.rejects(o.f.write({type:'Job',fields:{n:0}},{id:'restore-partition-0',principal:o.p}),/reconciliation is incomplete/);
@@ -381,7 +386,7 @@ for(const b of BACKENDS)for(const boundary of ['candidate','winner','completed',
   for(const member of ['a','b'])await new PhiSpaces(o.sim.nodes.get(member).host,ctx,()=>o.sim.clock.now(member)).write({type:'Job',fields:{member}});
   let fired=false;const ack=o.io.ack;
   if(boundary==='ack')o.io.ack=async(...args:any[])=>{if(!fired&&fault==='failBeforeCommit'){fired=true;throw new Error('injected before ACK');}await ack(...args);if(!fired){fired=true;throw new Error('injected lost ACK reply');}};
-  else o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>w.type==='document.change'&&w.content.kind==='delta'&&JSON.stringify(w.content.ops).includes('"operations"')&&(boundary==='candidate'?JSON.stringify(w.content.ops).includes('"candidates"')&&JSON.stringify(w.content.ops).includes('"event"')&&!JSON.stringify(w.content.ops).includes('"winner"'):boundary==='winner'?JSON.stringify(w.content.ops).includes('"winner"')&&!JSON.stringify(w.content.ops).includes('"done"'):JSON.stringify(w.content.ops).includes('"phase":"done"'))));
+  else o.home.faults.arm(fault,(b:FaultBatch)=>operations(b).some(t=>boundary==='candidate'?t.includes('"candidates"')&&t.includes('"event"')&&!t.includes('"winner"'):boundary==='winner'?t.includes('"winner"')&&!t.includes('"done"'):t.includes('"phase":"done"')));
   await assert.rejects(o.f.resume(id));assert.ok(fired||o.home.faults.fired===1,'the selected boundary must be interrupted');
   o.io.ack=ack;await o.reopen();const result=await o.f.resume(id);assert.equal(result.fields.member,'a');
   await o.reopen();assert.deepEqual(await o.f.resume(id),result);
@@ -427,7 +432,7 @@ for(const b of BACKENDS)for(const kind of ['write','read','take','race'] as cons
 for(const b of BACKENDS)for(const boundary of ['admission','completion'] as const)for(const fault of ['failBeforeCommit','loseAnswer'] as const)
 test(`${b}: atomic Parent/Child ${boundary} ${fault} preserves one original effect`,()=>fixture(b,async o=>{
  const request={id:'atomic-'+boundary+'-'+fault,principal:o.p},entry={type:'Job',fields:{n:1}};
- const matches=(writes:any[])=>writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"operations"')&&JSON.stringify(w.content).includes(boundary==='admission'?'"ready"':'"done"'))&&writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"command"')&&JSON.stringify(w.content).includes('"steps"'));
+ const matches=(b:FaultBatch)=>operations(b).some(t=>t.includes(boundary==='admission'?'"ready"':'"done"'))&&commands(b).some(t=>t.includes('"steps"'));
  o.home.faults.arm(fault,matches);await assert.rejects(o.f.write(entry,request));assert.equal(o.home.faults.fired,1,'the paired multi-document commit must be interrupted');
  const key=parentJournalKey('federation',8,operationPartition(request.id,8));let durablePhase:string|undefined;await o.reopen(async(host:any)=>{durablePhase=(await host.snapshot(FederationOperations,key,ctx)).operations[request.id].phase;});
  assert.equal(durablePhase,boundary==='admission'?(fault==='loseAnswer'?'ready':'admitting'):(fault==='loseAnswer'?'done':'ready'));
@@ -440,7 +445,7 @@ test(`${b}: atomic Parent/Child ${boundary} ${fault} preserves one original effe
 for(const b of BACKENDS)for(const fault of ['failBeforeCommit','loseAnswer'] as const)
 test(`${b}: Parent admission and child budget ${fault} commit or roll back together`,()=>fixture(b,async o=>{
  const request={id:'atomic-budget-'+fault,principal:o.p},entry={type:'Job',fields:{n:1}};
- o.home.faults.arm(fault,(writes:any[])=>writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"operations"')&&JSON.stringify(w.content).includes('"admitting"'))&&writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"future"')&&JSON.stringify(w.content).includes('"slots"')));
+ o.home.faults.arm(fault,(b:FaultBatch)=>operations(b).some(t=>t.includes('"admitting"'))&&futures(b).some(t=>t.includes('"slots"')));
  await assert.rejects(o.f.write(entry,request));assert.equal(o.home.faults.fired,1);let parent:any,slots=0;
  await o.reopen(async(host:any)=>{parent=(await host.snapshot(FederationOperations,parentJournalKey('federation',8,operationPartition(request.id,8)),ctx))?.operations[request.id];for(const r of o.partitionRouters){const j=await host.snapshot(RouterJournal,r.journalId,ctx);slots+=Object.values(j?.future??{}).reduce((n:number,x:any)=>n+x.slots,0);}});
  assert.equal(!!parent,fault==='loseAnswer');assert.equal(slots,fault==='loseAnswer'?1:0);assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),0);
@@ -448,7 +453,7 @@ test(`${b}: Parent admission and child budget ${fault} commit or roll back toget
 },8));
 
 for(const b of BACKENDS)test(`${b}: large Parent stays on bounded separate commits when atomic room is insufficient`,()=>fixture(b,async o=>{
- let paired=0;o.home.faults.arm('failBeforeCommit',(writes:any[])=>{if(writes.some(w=>w.type==='document.change'&&JSON.stringify(w.content).includes('"operations"')&&/"ready"|"done"/.test(JSON.stringify(w.content)))&&writes.some(w=>['document.create','document.change'].includes(w.type)&&JSON.stringify(w.content).includes('"command"')&&JSON.stringify(w.content).includes('"steps"')))paired++;return false;});
+ let paired=0;o.home.faults.arm('failBeforeCommit',(b:FaultBatch)=>{if(operations(b).some(t=>/"ready"|"done"/.test(t))&&commands(b).some(t=>t.includes('"steps"')))paired++;return false;});
  const request={id:'bounded-fallback',principal:o.p},entry={type:'Job',fields:{blob:'x'.repeat(27000)}};const result=await o.f.write(entry,request);assert.equal(paired,0);await o.reopen();assert.deepEqual(await o.f.write(entry,request),result);assert.equal(await new PhiSpaces(o.sim.nodes.get('a').host,ctx,()=>o.sim.clock.now('a')).count(),1);
  for(const r of o.partitionRouters)assert.deepEqual((await o.host.snapshot(RouterJournal,r.journalId,ctx)).future??{},{});
 },8,{maxCommitBytes:60000,maxIndexBytes:1024,defaultResultBytes:64}));

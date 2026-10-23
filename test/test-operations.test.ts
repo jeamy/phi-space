@@ -188,7 +188,6 @@ test("two lww/set Members replicate their entry streams over proven, pinned host
  try {
   const ports = [17651, 17652], names = ["a", "b"], signers = names.map(n => provisionFileSigner(join(dir, `signer-${n}.json`)));
   for (const [i, n] of names.entries()) {
-   const { createRegistry, Harness, MemoryStorage } = await import("@earendil-works/pi-durable"), { createModels } = await import("@earendil-works/pi-ai/models");
    const h = await openTestHost(ctx);hosts.push(h);
    await bootstrapEnroll(h, ctx, { tokenHash: hashToken(newEnrollToken()), allowedPeerId: "admin" }); await h.commit(tx => spaceDoc(tx, undefined, Date.now()), ctx);
    const controlSpaceId = (await h.snapshot(Registry, ctx))!.aliases.control!, installedFile = join(dir, `installed-${n}.sqlite`), installed = new SqliteRecoveryRegister(installedFile), spaces: Record<string, any> = {};

@@ -7,7 +7,7 @@ import {core,claims,principalId,hrw,createSpace,spaceDoc,snapshotSpace,type Fede
 import {PersistentHome,ctx} from '../../support/persistent.ts';
 
 const output=process.argv[2]??'/tmp/pi-phase2-load';mkdirSync(output,{recursive:true});
-const homes=[0,1,2].map(()=>new PersistentHome('sqlite')),hosts=await Promise.all(homes.map(h=>h.open()));
+const homes=[0,1,2].map(()=>new PersistentHome()),hosts=await Promise.all(homes.map(h=>h.open()));
 const members=['a','b','c'],spaces:string[]=[],gens:Array<Record<string,string>>=[],latencies:number[]=[];
 const now=()=>Date.now(),started=performance.now();let peakRss=process.memoryUsage().rss,requestSeq=0;
 const policy:FederationPolicy={authorityId:'load-authority',policyVersion:1,default:{mode:'local',member:'a'},rules:['Load','SieveTask','SieveResult'].map(type=>({type,mode:'expand',by:{field:'taskId'},members})),completionProfiles:[{taskType:'SieveTask',resultTypes:['SieveResult'],equalFields:['taskId','rangeStart','rangeEnd'],maxResultCount:1,maxResultBytes:32768,maxLeaseMs:60000}]};

@@ -1,6 +1,7 @@
 // degradeToSingle against a standby without a fencing adapter (v3 5.3.1 step 2, decided 2026-10-17): only the
 // standby permit of this Space is revoked; the host and its other Spaces stay; setStandby can bring it back.
 import test from 'node:test';
+import {OWN_SYNC_FACTORIES,OwnSyncStore} from '../src/store/sync-sqlite.ts';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {PhiSpaces,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,assertQuarantine,degradeToSingle,promote,setStandby,SimulatorFencing,core,type PrimarySyncConfig,type PrimarySyncPeer} from '../src/index.ts';
@@ -72,7 +73,6 @@ for(const backend of BACKENDS)test(`${backend}: degradeToSingle without a fencin
 
 test('the daemon path: an active standby with a revoked permit keeps serving its listener; after a wipe setStandby catches it up over the signed transport',async()=>{
  const {mkdtempSync,rmSync,renameSync}=await import('node:fs'),{tmpdir}=await import('node:os');
- const {Harness,createRegistry}=await import('@earendil-works/pi-durable'),{openNodeSqliteStorage}=await import('@earendil-works/pi-durable/storage/sqlite/node'),{createModels}=await import('@earendil-works/pi-ai/models');
  const {openSyncSpace,provisionFileSigner,signedReplicaPeer,socketTransport}=await import('../src/index.ts');
  const dir=mkdtempSync(join(tmpdir(),'degrade-revoke-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),port=17571;
  const keys={p:provisionFileSigner(join(dir,'p.json')),s:provisionFileSigner(join(dir,'s.json'))},ip={p:'127.0.0.2',s:'127.0.0.3'};
@@ -86,10 +86,10 @@ test('the daemon path: an active standby with a revoked permit keeps serving its
  const peerOf=(h:'p'|'s')=>({hostId:h,algorithm:'ed25519' as const,publicKey:keys[h].publicKey,ip:ip[h]});
  const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:syncDir(h),genesis,port,peers:[peerOf(other(h))]},
   hostId:h,authorityId,bindIp:ip[h],signer:keys[h],external:reg,installed:installed[h],ctx,
-  openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+  ...OWN_SYNC_FACTORIES});
  const jobs=(h:any)=>new PhiSpaces(h,ctx,Date.now,undefined,undefined,{space:'jobs-sync'});
  // Tool steps run with the daemon stopped, on the store files.
- const offline=async<T>(h:'p'|'s',f:(o:{storage:any;journal:PrimarySyncJournal})=>Promise<T>)=>{const journal=new PrimarySyncJournal(join(syncDir(h),'journal.sqlite'),genesis,{self:h,assertStandby:assertSyncStandby(reg,h)}),storage=await openNodeSqliteStorage(join(syncDir(h),'harness.sqlite'));try{return await f({storage,journal});}finally{await storage.close(ctx);journal.close();}};
+ const offline=async<T>(h:'p'|'s',f:(o:{storage:any;journal:PrimarySyncJournal})=>Promise<T>)=>{const journal=new PrimarySyncJournal(join(syncDir(h),'journal.sqlite'),genesis,{self:h,assertStandby:assertSyncStandby(reg,h)}),storage=new OwnSyncStore(join(syncDir(h),'harness.sqlite'));try{return await f({storage,journal});}finally{await storage.close(ctx);journal.close();}};
  let p:any,s:any;
  try{
   s=await open('s');p=await open('p');
@@ -117,7 +117,6 @@ test('the daemon path: an active standby with a revoked permit keeps serving its
 
 test('an emptied replica that its genesis names primary, but whose permit is revoked, opens only its listener',async()=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
- const {Harness,createRegistry}=await import('@earendil-works/pi-durable'),{openNodeSqliteStorage}=await import('@earendil-works/pi-durable/storage/sqlite/node'),{createModels}=await import('@earendil-works/pi-ai/models');
  const {openSyncSpace,provisionFileSigner}=await import('../src/index.ts');
  const dir=mkdtempSync(join(tmpdir(),'degrade-revoke-genesis-')),reg=new SqliteRecoveryRegister(join(dir,'external.sqlite')),installed=new SqliteRecoveryRegister(join(dir,'installed.sqlite'));
  const spaceId='sp-0c7e6f1a-1111-4222-8333-944445555aab',incarnation='0a1b2c41',authorityId='authority';
@@ -128,7 +127,7 @@ test('an emptied replica that its genesis names primary, but whose permit is rev
  try{
   sp=await openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(dir,'p'),genesis,port:17573,peers:[{hostId:'s',algorithm:'ed25519',publicKey:provisionFileSigner(join(dir,'s.json')).publicKey,ip:'127.0.0.3'}]},
    hostId:'p',authorityId,bindIp:'127.0.0.2',signer:provisionFileSigner(join(dir,'p.json')),external:reg,installed,ctx,
-   openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+   ...OWN_SYNC_FACTORIES});
   assert.equal(sp.harness,undefined,'not served');assert.equal(sp.journal.head().revision,0);
   const {connect}=await import('node:net');
   await new Promise<void>((ok,fail)=>{const c=connect({host:'127.0.0.2',port:17573},()=>{c.end();ok();});c.on('error',fail);});

@@ -101,7 +101,7 @@ for(const backend of BACKENDS){
  });
  test(`${backend}: actual staging/head/overlay commits stay bounded; completed imports enforce retained-generation backpressure`,async()=>{
   const sourceHome=new PersistentHome(backend),targetHome=new PersistentHome(backend);const storage=targetHome.storage.bind(targetHome);let largest=0,publication=0,capture=false;
-  targetHome.storage=async()=>{const s=await storage();return new Proxy(s,{get(t,k,r){const v=Reflect.get(t,k,r);if(k==='commit')return async(w:readonly import('@earendil-works/pi-durable').StorageWrite[],c:typeof ctx)=>{const n=Buffer.byteLength(JSON.stringify(w));largest=Math.max(largest,n);if(capture)publication=n;return t.commit(w,c);};return typeof v==='function'?v.bind(t):v;}});};
+  targetHome.faults.observe(w=>{const n=Buffer.byteLength(JSON.stringify(w));largest=Math.max(largest,n);if(capture)publication=n;});
   const hosts=await Promise.all([sourceHome.open(),targetHome.open()]);const nodes=hosts.map((host,i)=>new EntryReplicationController({host,ctx,config:cfg(i?'b':'a'),authorize:async()=>{},assertActive:async()=>{},now:()=>1000,clockUncertaintyMs:()=>0,maxHistoryBytes:128*1024,maxBatchBytes:32768}));const [a,b]=nodes as [EntryReplicationController,EntryReplicationController];
   try{
    for(let n=0;n<32;n++)await a.mutate('e-'+n,fact(n,1000));

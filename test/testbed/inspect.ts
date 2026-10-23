@@ -1,14 +1,13 @@
-// Read-only test-bed inspection. Recovery runs on a private copy, never on a live harness directory.
-import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+// Read-only test-bed inspection. A store is read from a private copy (SQLite backup), never opened live: its owner lock
+// stays with the daemon.
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { DatabaseSync, backup } from "node:sqlite";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { openSqliteHost } from "../../src/store/sqlite.ts";
+import { diskMapOf } from "../../src/store/types.ts";
 import { core, listSpaces, snapshotSpace, type SpaceInfo } from "../../src/index.ts";
 
 export type InspectedItem = { kind: string; id: string; type: string; state: string; value: unknown };
@@ -22,8 +21,7 @@ async function discover(root: string): Promise<{ stores: string[]; reports: stri
 	const stores: string[] = [], reports: string[] = [];
 	async function walk(dir: string, depth: number): Promise<void> {
 		for (const e of await readdir(dir, { withFileTypes: true })) {
-			if (e.isFile() && e.name === "main.jsonl") stores.push(dir);
-			if (e.isFile() && e.name === "harness.sqlite") stores.push(join(dir,e.name));
+			if (e.isFile() && e.name.endsWith(".sqlite") && isOwnStore(join(dir, e.name))) stores.push(join(dir, e.name));
 			if (e.isFile() && e.name === "report.json") reports.push(join(dir, e.name));
 			if (e.isDirectory() && depth < 4 && !["node_modules", ".git"].includes(e.name)) await walk(join(dir, e.name), depth + 1);
 		}
@@ -32,25 +30,27 @@ async function discover(root: string): Promise<{ stores: string[]; reports: stri
 	return { stores: stores.sort(), reports: reports.sort() };
 }
 
-async function copiedSpaces(dir: string): Promise<InspectedSpace[]> {
+/** A phi-spaces store (store/sqlite.ts): a SQLite file with its `store_meta` table. Journals and registers are not. */
+function isOwnStore(path: string): boolean {
+	let db: DatabaseSync | undefined;
+	try { db = new DatabaseSync(path, { readOnly: true }); return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'store_meta'").get(); }
+	catch { return false; }
+	finally { db?.close(); }
+}
+
+/** A map part as entries, whether held in memory or on the disk (store/disk-map.ts). */
+const entriesOf = <T>(m: Record<string, T> | undefined): [string, T][] => { const d = diskMapOf(m); return d ? [...d.entries()] as [string, T][] : Object.entries(m ?? {}); };
+
+async function copiedSpaces(path: string): Promise<InspectedSpace[]> {
 	let last: unknown;
 	for (let attempt = 0; attempt < 3; attempt++) {
 		const copy = await mkdtemp(join(tmpdir(), "phi-spaces-inspect-"));
-		let h: Harness | undefined;
+		let h: Awaited<ReturnType<typeof openSqliteHost>> | undefined;
 		try {
-			let storage;
-			if (dir.endsWith("/harness.sqlite")) {
-				const database=new DatabaseSync(dir,{readOnly:true});
-				try { await backup(database,join(copy,"harness.sqlite")); } finally { database.close(); }
-				storage=await openNodeSqliteStorage(join(copy,"harness.sqlite"));
-			} else {
-				const before=await readFile(join(dir,"main.jsonl"));
-				await writeFile(join(copy,"main.jsonl"),before);
-				for(const e of await readdir(dir,{withFileTypes:true}))if(e.isFile()&&/^(doc|task)-\d+\.jsonl$/.test(e.name))await cp(join(dir,e.name),join(copy,e.name));
-				if(!before.equals(await readFile(join(dir,"main.jsonl"))))throw new Error("storage changed during inspection; retrying");
-				storage=await openNodeJsonlStorage(copy,ctx);
-			}
-			h=await Harness.open(storage,{models:createModels(),registry:createRegistry()},ctx);
+			// the backup is a consistent snapshot of the live file, WAL included
+			const database = new DatabaseSync(path, { readOnly: true });
+			try { await backup(database, join(copy, "store.sqlite")); } finally { database.close(); }
+			h = await openSqliteHost(join(copy, "store.sqlite"));
 			const result: InspectedSpace[] = [];
 			const now = Date.now();
 			for (const info of await listSpaces(h, ctx)) {
@@ -65,12 +65,12 @@ async function copiedSpaces(dir: string): Promise<InspectedSpace[]> {
 				for (const [kind, records] of [
 					["txn", Object.values(s.txns)], ["notify", s.regs], ["waiter", s.waiters], ["outbox", s.outbox],
 				] as const) for (const r of records) items.push({ kind, id: "id" in r ? String(r.id) : String(r.eventId), type: kind, state: "stored", value: r });
-				for (const [id, c] of Object.entries(s.rpc?.claims ?? {})) items.push({ kind: "claim", id, type: c.method, state: c.state, value: c });
-				for(const[id,c]of Object.entries(s.restoredClaims??{}))items.push({kind:"historical-claim",id,type:c.method,state:c.state==="pending"?"unknownOutcome":c.state,value:c});
+				for (const [id, c] of entriesOf(s.rpc?.claims)) items.push({ kind: "claim", id, type: c.method, state: c.state, value: c });
+				for(const[id,c]of entriesOf(s.restoredClaims))items.push({kind:"historical-claim",id,type:c.method,state:c.state==="pending"?"unknownOutcome":c.state,value:c});
 				for(const id of Object.keys(s.invalidGenerations??{}))items.push({kind:"generation",id,type:"generation",state:"invalidated",value:{generation:id}});
 				if(s.restore)items.push({kind:"restore",id:s.restore.recoveryId,type:s.restore.kind,state:s.restore.stage,value:s.restore});
 				if(s.authorityTransition)items.push({kind:"authority-transition",id:s.authorityTransition.recoveryId,type:"authority",state:s.authorityTransition.stage,value:s.authorityTransition});
-				result.push({ ...info, storage: dir, stats: core.stats(s, now), items: items.slice(0, 20_000), truncated: Math.max(0, items.length - 20_000) });
+				result.push({ ...info, storage: path, stats: core.stats(s, now), items: items.slice(0, 20_000), truncated: Math.max(0, items.length - 20_000) });
 			}
 			return result;
 		} catch (e) { last = e; }

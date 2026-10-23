@@ -1,8 +1,6 @@
 // AP 1.5: RPC claims and request generations (federation-plan-v3.md 6.2, 11 stage 1, 12.1 rows "1").
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	PhiSpaces, FOREVER, Space, core, claims, RequestConflict, RequestExpired, ResultExpired, IncarnationChanged, OperationCancelled,
 	type Principal, type RequestRef,

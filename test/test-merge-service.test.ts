@@ -1,8 +1,6 @@
 // lww/set step 1 (docs/abnahme/ap3-replikation.md): merge types of a Space go to its entry replication controller.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { SpaceService, StaticIdentity, DEFAULT_POLICY, EntryReplicationController, listSpaces, type Reply, type Call } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";

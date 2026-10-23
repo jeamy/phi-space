@@ -3,8 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
-import {Harness,createRegistry,type Storage} from '@earendil-works/pi-durable';
-import {createModels} from '@earendil-works/pi-ai/models';
+import {openOwnMemoryHost} from '../src/store/host.ts';
 import {PhiSpaces,SpaceService,StaticIdentity,DEFAULT_POLICY,SimulatorFencing,promote,degradeToSingle,PrimarySyncJournal,primarySyncStorage,recoverPrimarySync,assertSyncPrimary,assertSyncStandby,core,type PrimarySyncConfig,type PrimarySyncPeer,type Reply} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {promotionEvidence} from '../src/primary-sync.ts';
@@ -17,7 +16,6 @@ const permit=(role:'primary'|'standby')=>({state:'active',authorityId:config.aut
 const A={peerId:'peer-a'},ids=new StaticIdentity({'peer-a':{principal:A,roles:['member']}});
 const ok=(r:Reply):any=>{assert.ok(r.ok,JSON.stringify(r));return (r as {ok:true;result:unknown}).result;};
 const code=(r:Reply)=>r.ok?'ok':r.error.code;
-const open=async(st:Storage)=>openHost(st);
 const writeHash=(n:number)=>claims.argHash('write',{entry:{type:'Work',fields:{n}},txn:null,lease:core.FOREVER} as any);
 
 for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}${created?', created sync Space':''}: a request sealed only on the fenced old primary is NotCommitted on the promoted one; confirmed ones keep their result`,async()=>{
@@ -29,7 +27,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
  try{
   // Epoch 1 on p: r1 is confirmed by the standby, r2 is sealed only on p (the standby is away), then p is lost.
   const pRaw=await pHome.storage();await recoverPrimarySync(pRaw,pJournal,peer,ctx,assertSyncPrimary(register,'p',pJournal));
-  const ph=await open(primarySyncStorage(pRaw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}));
+  const ph=await openHost(primarySyncStorage(pRaw,pJournal,peer,{assertPrimary:assertSyncPrimary(register,'p',pJournal)}));
   // A Space created like a real primary/sync Space keeps the epoch of its creation in its document.
   if(created)await ph.commit(tx=>createSpace(tx,'jobs',1,{spaceId:config.spaceId,incarnation:INC}),ctx);
   const so=created?{space:'jobs'}:undefined,pc=new PhiSpaces(ph,ctx,clock,undefined,undefined,so),{generation}=await pc.issueGeneration(A,{primaryEpoch:1}),req=(requestId:string)=>({principal:A,generation,requestId});
@@ -46,7 +44,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   st=await sHome.storage();await degradeToSingle({...base,storage:st,recoveryId:'degrade-s',expectedPrimaryEpoch:2,expectedReplicaConfigVersion:2,proof:await sim.fence('p','standby gone')});await st.close(ctx);
   assert.equal(sJournal.config.primaryEpoch,3);
   const sRaw=await sHome.storage(),assert_=assertSyncPrimary(register,'s',sJournal);await recoverPrimarySync(sRaw,sJournal,null,ctx,assert_);
-  const sh=await open(primarySyncStorage(sRaw,sJournal,null,{assertPrimary:assert_}));
+  const sh=await openHost(primarySyncStorage(sRaw,sJournal,null,{assertPrimary:assert_}));
   let evidence=true;
   const service=new SpaceService({host:sh,ctx,identity:ids,policy:DEFAULT_POLICY,now:clock,epochForSpace:async()=>sJournal.config.primaryEpoch,
    promotionProof:async(_space,epoch)=>evidence?promotionEvidence(sJournal,epoch,'s'):null});
@@ -87,7 +85,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
   // The negative claim survives a restart: the late original still has no effect.
   await sHome.close(sh);
   const sRaw2=await sHome.storage();await recoverPrimarySync(sRaw2,sJournal,null,ctx,assert_);
-  const sh2=await open(primarySyncStorage(sRaw2,sJournal,null,{assertPrimary:assert_}));
+  const sh2=await openHost(primarySyncStorage(sRaw2,sJournal,null,{assertPrimary:assert_}));
   const service2=new SpaceService({host:sh2,ctx,identity:ids,policy:DEFAULT_POLICY,now:clock,epochForSpace:async()=>sJournal.config.primaryEpoch,promotionProof:async(_space,epoch)=>promotionEvidence(sJournal,epoch,'s')});
   const resolve2=(requestId:string,n:number)=>service2.handle({method:'resolveOperation',...(so??{}),args:{targetRequest:{generation,requestId},method:'write',argumentHash:writeHash(n),primaryEpoch:1}} as any,{peerId:'peer-a'});
   const sc2=new PhiSpaces(sh2,ctx,clock,undefined,undefined,so);
@@ -105,7 +103,7 @@ for(const backend of BACKENDS)for(const created of [false,true])test(`${backend}
 });
 
 test('a negative claim needs an admitting generation and uninterrupted history',async()=>{
- const {MemoryStorage}=await import('@earendil-works/pi-durable');const h=await open(new MemoryStorage());let now=1000;
+ const h=openOwnMemoryHost();let now=1000;
  const c=new PhiSpaces(h,ctx,()=>now),proof='a'.repeat(64);
  try{
   const {generation,admitUntil}=await c.issueGeneration(A,{primaryEpoch:1}),r=(requestId:string)=>({principal:A,generation,requestId});

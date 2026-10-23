@@ -1,8 +1,6 @@
 // AP 1.8: the transport-independent `space` service (federation-plan-v3.md 6.2).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { PhiSpaces, SpaceService, StaticIdentity, createSpace, DEFAULT_POLICY, type Reply, type Call, type Policy } from "../src/index.ts";
 import { forEachBackend, InjectedFault, ctx } from "./support/persistent.ts";
 import { RemoteSpace, core } from "../src/index.ts";

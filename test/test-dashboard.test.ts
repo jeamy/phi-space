@@ -2,8 +2,6 @@
 // listSpaces/snapshotSpace/core.stats and the process meter — no mutation endpoint exists.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { PhiSpaces } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
 import { startDashboard } from "../src/dashboard.ts";

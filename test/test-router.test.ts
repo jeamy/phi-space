@@ -310,7 +310,7 @@ test(
     async () => {
         const traces: any[] = [];
         for (let n = 0; n < 2; n++)
-            await fixture("jsonl", async (s, home, o) => {
+            await fixture("own-sqlite", async (s, home, o) => {
                 const r = new RouterController(o);
                 await r.recover();
                 s.clock.jump("a", -5000);

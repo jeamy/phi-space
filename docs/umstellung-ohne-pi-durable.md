@@ -191,6 +191,36 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   `primary-sync.ts` und die Typen der Primary/Sync-Replikation an pi-durable (siehe U1). Zur Laufzeit lädt der Dienst es
   nicht. Direkte Importe in den Beispielen: 11 statt 13 (`scripts/durable-imports.mjs`).
 
+**Entscheidung D6 (2026-10-23):** Alte pi-durable-Bestände werden verworfen ([umstellung-u0-bestand.md](umstellung-u0-bestand.md)).
+U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Tests, Betriebsabnahme.
+
+**Stand U8, Schritt 1 (2026-10-23): Tests nur noch auf dem eigenen Speicher.**
+
+- **Testhilfen:**
+  - `test/support/persistent.ts` kennt nur noch `own-sqlite`. Fehlerprädikate sehen eine `FaultBatch`:
+    - `ops`: die Zeilen des Stapels;
+    - `changes`: je Dokument die geänderten Felder auf oberster Ebene, je Teil der Datensatz.
+  - `faults.observe` zeigt die Zeilen jedes Commits; die Messungen der Commit-Größe nutzen es.
+  - `test/support/host.ts`: `own-sqlite` (streng) ist der Standard, `PHI_SPACES_STORE=own` hält den Speicher im
+    Speicher.
+- **Entfernte Tests:** Tests, die nur pi-durable selbst prüften, sind entfernt:
+  - Basis alle 500 Deltas;
+  - Revisionshistorie in `document_revisions`;
+  - das Agenten-Replay in test-persistence.
+- **Integrationstests geteilt:**
+  - `test/integration.test.ts`: Space-Tests auf dem eigenen Speicher.
+  - `test/agent-integration.test.ts`: Agenten-, Werkzeug- und Zustelltests. Sie laufen bis U6 auf pi-durable und
+    ziehen dann ins Agent-Paket.
+- **Inspektor:** Der Testbed-Inspektor (TUI) liest eigene SQLite-Speicher aus einer privaten Sicherungskopie. Die
+  Besitzersperre bleibt beim Daemon.
+- **Zwei Fehler im eigenen Speicher gefunden** (bisher liefen die Tests dafür auf pi-durable):
+  - **Geschlossener, fehlgeschlagener Speicher:** Er wartete auf seinen Schreiber und hielt so die Besitzersperre. Jetzt
+    beendet `close` den Schreiber sofort, wie ein beendeter Prozess.
+  - **`SyncSpace`-Schließen:** `close` und ein neues `serve` warteten nicht auf ein laufendes `unserve` des
+    Sealed-Resolvers. Das neue Öffnen fand deshalb den Speicher noch gesperrt.
+- **Lesen während eines versiegelten Commits:** Ein Lesezugriff zeigt nie einen Commit, den der Standby noch nicht
+  bestätigt hat. Der Test prüft genau diese Eigenschaft statt eines festen Zählerstands.
+
 **Stand U4 (2026-10-23):**
 
 - **Primary/Sync auf dem eigenen Speicher:**

@@ -109,9 +109,16 @@ export const OWN_SYNC_FACTORIES = {
 	},
 };
 
-/** A primary's store, before its host is opened (`open`). */
-export class ReplicatedOwnStore {
+/** A primary's store, before its host is opened (`open`). Until then it is its store (the SyncStore operations go to it). */
+export class ReplicatedOwnStore implements SyncStore<WriteOp> {
+	readonly codec = OWN_CODEC;
 	readonly store: OwnSyncStore;
+	marker(spaceId: string) { return this.store.marker(spaceId); }
+	commit(writes: readonly WriteOp[]) { return this.store.commit(writes); }
+	capture() { return this.store.capture(); }
+	isEmpty() { return this.store.isEmpty(); }
+	mintId() { return this.store.mintId(); }
+	close(ctx?: Context) { return this.store.close(ctx); }
 	readonly #journal: PrimarySyncJournal;
 	readonly #peer: PrimarySyncPeer | null;
 	readonly #o: PrimaryOptions;

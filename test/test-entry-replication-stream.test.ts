@@ -46,7 +46,7 @@ for(const backend of BACKENDS){
  });
  test(`${backend}: malformed ranges, changed source/content and mid-commit revocation advance neither data nor cursor`,async()=>{
   const homes=[new PersistentHome(backend),new PersistentHome(backend)];const originalStorage=homes[1]!.storage.bind(homes[1]!);let largestCommit=0;
-  homes[1]!.storage=async()=>{const storage=await originalStorage();return new Proxy(storage,{get(t,k,r){const v=Reflect.get(t,k,r);if(k==='commit')return async(w:readonly import('@earendil-works/pi-durable').StorageWrite[],c:typeof ctx)=>{largestCommit=Math.max(largestCommit,Buffer.byteLength(JSON.stringify(w)));return t.commit(w,c);};return typeof v==='function'?v.bind(t):v;}});};
+  homes[1]!.faults.observe(w=>{largestCommit=Math.max(largestCommit,Buffer.byteLength(JSON.stringify(w)));});
   const hosts=await Promise.all(homes.map(h=>h.open()));let allowed=true,revoke=0;
   const node=(i:number)=>new EntryReplicationController({host:hosts[i]!,ctx,config:config(i?'b':'a'),authorize:async()=>{if(i&&revoke>0&&--revoke===0)allowed=false;if(i&&!allowed)throw Error('revoked');},assertActive:async()=>{},now:()=>1000,clockUncertaintyMs:()=>0,maxBatchBytes:i?32768:196608});
   try{
@@ -102,7 +102,7 @@ for(const backend of BACKENDS){
  });
 }
 test('pull worker bounds source waits, aborts stalled reads and stops on permanent errors',async()=>{
- const home=new PersistentHome('sqlite'),host=await home.open();const target=new EntryReplicationController({host,ctx,config:config('a'),authorize:async()=>{},assertActive:async()=>{},clockUncertaintyMs:()=>0});const identity=(await target.describeStream()).source;
+ const home=new PersistentHome(),host=await home.open();const target=new EntryReplicationController({host,ctx,config:config('a'),authorize:async()=>{},assertActive:async()=>{},clockUncertaintyMs:()=>0});const identity=(await target.describeStream()).source;
  try{
   const hung:EntryReplicationSource={describe:()=>new Promise(()=>{}),changes:()=>new Promise(()=>{})};
   const wrong:EntryReplicationSource={describe:async()=>({source:{...identity,replicaId:'other'},revision:0}),changes:()=>new Promise(()=>{})};

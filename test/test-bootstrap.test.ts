@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {existsSync,copyFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
+import {OwnSyncStore} from '../src/store/sync-sqlite.ts';
 import {PrimarySyncJournal,PrimarySyncBlocked,bootstrapPrimarySync,captureStore,materializeSyncHistory,primarySyncStorage,recoverPrimarySync,PhiSpaces,Space,core,createSpace,listSpaces,snapshotSpace,canonicalJson,type PrimarySyncConfig} from '../src/index.ts';
 import {BACKENDS,freePort,PersistentHome,ctx} from './support/persistent.ts';
 import {plainDoc} from './support/host.ts';
 
 const single:PrimarySyncConfig={spaceId:'bootstrapped',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:null,durability:'single'};
 
-/** An existing store with phi-spaces activity plus synthetic conversation records and a conversation document. */
+/** An existing store with phi-spaces activity in the default and a named Space. */
 async function existingStore(home:PersistentHome){
  const h=await home.open(),local=new PhiSpaces(h,ctx,()=>1000);
  await h.commit(tx=>createSpace(tx,'jobs',1000),ctx);
@@ -19,12 +19,6 @@ async function existingStore(home:PersistentHome){
  await local.write({type:'Claimed',fields:{}},null,core.FOREVER,{request});
  await new PhiSpaces(h,ctx,()=>1000,undefined,undefined,{space:'jobs'}).write({type:'Named',fields:{}},null,core.FOREVER);
  await home.close(h);
- if(home.backend==='own-sqlite')return; // the own store keeps no agent records (conversations, entries)
- const st=await home.storage(),conv=await st.mintId<any>(),child=await st.mintId<any>(),e1=await st.mintId<any>(),e2=await st.mintId<any>(),doc=await st.mintId<any>();
- await st.commit([{type:'conversation',value:{id:conv}},{type:'entry',value:{id:e1,conversationId:conv,kind:'note',data:{n:1}}},{type:'entry',value:{id:e2,conversationId:conv,kind:'note',data:{n:2}}},
-  {type:'conversation',value:{id:child,parent:{conversationId:conv,at:e1}}},
-  {type:'document.create',record:{id:doc,kind:'fixture.conversation-doc',scope:{kind:'conversation',conversationId:conv},history:'latest',fork:'current'} as any,content:{version:1,kind:'base',value:{note:'kept'}}}],ctx);
- await st.close(ctx);
 }
 
 for(const backend of BACKENDS){
@@ -34,8 +28,8 @@ for(const backend of BACKENDS){
    await existingStore(home);
    const journal=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),single);let st=await home.storage();
    const before=await captureStore(st,ctx);
-   assert.ok(backend==='own-sqlite'?before.writes.some(w=>w.t==='doc')&&before.writes.some(w=>w.t==='part'):before.writes.some(w=>w.type==='conversation')&&before.writes.some(w=>w.type==='entry')&&before.writes.some(w=>w.type==='document.create'&&(w.record.scope as any).kind==='conversation'),'every record kind of the fixture is captured');
-   const r=await bootstrapPrimarySync(st,journal,ctx,{chunkBytes:backend==='own-sqlite'?2000:16000}); // the own store has no agent records: smaller
+   assert.ok(before.writes.some(w=>w.t==='doc')&&before.writes.some(w=>w.t==='part'),'every record kind of the fixture is captured');
+   const r=await bootstrapPrimarySync(st,journal,ctx,{chunkBytes:2000});
    assert.ok(r.revisions>2,'small chunks split the store');assert.equal(journal.appliedRevision,r.revisions);assert.equal(r.storeHash,before.digest);
    assert.equal((await captureStore(st,ctx)).digest,before.digest,'the primary keeps its data unchanged; only the marker was added');
    // A second call is a no-op; the store is now tracked and opens normally.
@@ -90,16 +84,15 @@ for(const backend of BACKENDS){
 }
 
 const hostACopy=process.env.PHI_SPACES_BOOTSTRAP_COPY;
-test('a read-only copy of a real control store bootstraps and replays with identical content',{skip:!hostACopy||!existsSync(hostACopy)?'set PHI_SPACES_BOOTSTRAP_COPY to a store copy':false},async()=>{
+test('a copy of a real own control store bootstraps and replays with identical content',{skip:!hostACopy||!existsSync(hostACopy)?'set PHI_SPACES_BOOTSTRAP_COPY to an own store copy':false},async()=>{
  const dir=mkdtempSync(join(tmpdir(),'bootstrap-copy-'));
  try{
   copyFileSync(hostACopy!,join(dir,'primary.sqlite'));
-  const journal=new PrimarySyncJournal(join(dir,'journal.sqlite'),single),st=await openNodeSqliteStorage(join(dir,'primary.sqlite'));
+  const journal=new PrimarySyncJournal(join(dir,'journal.sqlite'),single),st=new OwnSyncStore(join(dir,'primary.sqlite'));
   const r=await bootstrapPrimarySync(st,journal,ctx);await st.close(ctx);
   const target=new PrimarySyncJournal(join(dir,'target-journal.sqlite'),single);for(let n=1;n<=journal.head().revision;n++)await target.catchUp(journal.intent(n)!,async()=>{});
-  const ts=await openNodeSqliteStorage(join(dir,'replica.sqlite'));await materializeSyncHistory(ts,target,ctx);assert.equal((await captureStore(ts,ctx)).digest,r.storeHash);await ts.close(ctx);
-  const {Harness,createRegistry}=await import('@earendil-works/pi-durable'),{createModels}=await import('@earendil-works/pi-ai/models');
-  const open=async(f:string)=>Harness.open(await openNodeSqliteStorage(join(dir,f)),{models:createModels(),registry:createRegistry()},ctx);
+  const ts=new OwnSyncStore(join(dir,'replica.sqlite'));await materializeSyncHistory(ts,target,ctx);assert.equal((await captureStore(ts,ctx)).digest,r.storeHash);await ts.close(ctx);
+  const open=async(f:string)=>new OwnSyncStore(join(dir,f)).openHost();
   const a=await open('primary.sqlite'),b=await open('replica.sqlite');
   try{const spaces=await listSpaces(a,ctx);assert.deepEqual(await listSpaces(b,ctx),spaces);for(const i of spaces)assert.equal(canonicalJson(await snapshotSpace(b,i.spaceId,ctx) as any),canonicalJson(await snapshotSpace(a,i.spaceId,ctx) as any),`Space ${i.alias} identical`);}
   finally{await a.close(ctx);await b.close(ctx);journal.close();target.close();}

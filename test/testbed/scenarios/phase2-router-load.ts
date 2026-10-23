@@ -15,7 +15,7 @@ const entries=Number(process.env.PI_LOAD_ENTRIES??10000),jobs=Number(process.env
 assert.ok(Number.isSafeInteger(entries)&&Number.isSafeInteger(jobs)&&jobs>=6&&entries>=jobs&&entries<=10000);
 const lossEvery=Math.min(137,Math.max(7,Math.floor(jobs*5/30)));
 const members=['a','b','c'],principals=[{peerId:'producer'},...Array.from({length:6},(_,n)=>({peerId:'worker-'+n}))];
-const homes=[0,1,2,3].map(()=>new PersistentHome('sqlite'));let hosts=await Promise.all(homes.map(h=>h.open()));
+const homes=[0,1,2,3].map(()=>new PersistentHome());let hosts=await Promise.all(homes.map(h=>h.open()));
 const now=()=>Date.now(),started=performance.now();let peakRss=process.memoryUsage().rss,invokes=0,lostReplies=0,retries=0;
 const policy:FederationPolicy={authorityId:'load-authority',policyVersion:1,default:{mode:'local',member:'a'},rules:['Load','SieveTask','SieveResult'].map(type=>({type,mode:'expand',by:{field:'taskId'},members})),completionProfiles:[{taskType:'SieveTask',resultTypes:['SieveResult'],equalFields:['taskId','rangeStart','rangeEnd'],maxResultCount:1,maxResultBytes:32768,maxLeaseMs:60000}]};
 const state:RoutingState={policy,members:{}},generations=new Map<string,string>(),spaces:string[]=[];

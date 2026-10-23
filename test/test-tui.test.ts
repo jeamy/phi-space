@@ -1,22 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, appendFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { openSqliteHost } from "../src/store/sqlite.ts";
 import { createSpace, FOREVER, PhiSpaces } from "../src/index.ts";
 import { inspect } from "./testbed/inspect.ts";
 import { actions } from "./tui/actions.ts";
 import { Backend, clean, outcome, tapCounts } from "./tui/backend.ts";
 import { render, type ScreenState } from "./tui/view.ts";
 
-test("inspector reads named spaces, reservations, uncommitted entries and claims without touching live JSONL", async () => {
+test("inspector reads named spaces, reservations, uncommitted entries and claims from a live store without touching it", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "spaces-inspect-test-"));
-	const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
+	const h = await openSqliteHost(join(dir, "store.sqlite"));
 	try {
 		await h.commit(tx => createSpace(tx, "demo", Date.now()), ctx);
 		const space = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: "demo" });
@@ -25,9 +23,8 @@ test("inspector reads named spaces, reservations, uncommitted entries and claims
 		const txn = await space.createTransaction(FOREVER);
 		await space.take({ type: "Task" }, 0, { txn: txn.id });
 		await space.write({ type: "Result", fields: { n: 7 } }, txn.id, FOREVER);
-		// A crashed writer's incomplete main line must be repaired only in the private inspection copy.
-		await appendFile(join(dir, "main.jsonl"), '{"unfinished":');
-		const files = (await readdir(dir)).filter(n => n.endsWith(".jsonl"));
+		// The host stays open (it holds the owner lock): the inspector reads a backup and leaves the files as they are.
+		const files = (await readdir(dir)).filter(n => n === "store.sqlite" || n === "store.sqlite-wal"); // -shm: every reader writes its index
 		const before = await Promise.all(files.map(n => readFile(join(dir, n))));
 		const result = await inspect(dir);
 		assert.deepEqual(result.errors, []);
@@ -97,5 +94,5 @@ test("terminal control sequences are stripped from object content and rendering 
 
 test("inspector sees live SQLite spaces through a consistent private backup",async()=>{
  const {PersistentHome,ctx}=await import("./support/persistent.ts"),{PhiSpaces}=await import("../src/index.ts"),{inspect}=await import("./testbed/inspect.ts");
- const home=new PersistentHome("sqlite"),h=await home.open();try{const local=new PhiSpaces(h,ctx);await local.write({type:"LiveSQLite",fields:{n:1}});const before=await local.stats();const result=await inspect(home.dir);assert.equal(result.errors.length,0);assert.equal(result.spaces.length,1);assert.ok(result.spaces[0]!.items.some(i=>i.type==="LiveSQLite"));assert.deepEqual(await local.stats(),before);}finally{await home.dispose();}
+ const home=new PersistentHome(),h=await home.open();try{const local=new PhiSpaces(h,ctx);await local.write({type:"LiveSQLite",fields:{n:1}});const before=await local.stats();const result=await inspect(home.dir);assert.equal(result.errors.length,0);assert.equal(result.spaces.length,1);assert.ok(result.spaces[0]!.items.some(i=>i.type==="LiveSQLite"));assert.deepEqual(await local.stats(),before);}finally{await home.dispose();}
 });

@@ -4,9 +4,8 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
+import {openSqliteHost} from '../src/store/sqlite.ts';
+import type {OwnStoreHost} from '../src/store/host.ts';
 import {EntryReplicationController,EntryReplicas,EntryReplicationPump,type EntryMutation,type EntryReplicationSource} from '../src/index.ts';
 import {positionsOf} from '../src/entry-replication.ts';
 import {ctx} from './support/persistent.ts';
@@ -16,9 +15,9 @@ const rules=[{type:'Sensor',variant:'lww' as const,keyFields:['sensorId']},{type
 const members=['a','b','c'].map(r=>({replicaId:r,incarnation:'i-'+r}));
 const fact=(n:number):EntryMutation=>({kind:'add',type:'Fact',fields:{n,pad:'x'.repeat(300)},owner:P,expiresAt:null});
 
-async function fixture(fn:(o:{host:Harness;node:(r:string)=>EntryReplicationController;tick:(ms?:number)=>void;now:()=>number})=>Promise<void>){
+async function fixture(fn:(o:{host:OwnStoreHost;node:(r:string)=>EntryReplicationController;tick:(ms?:number)=>void;now:()=>number})=>Promise<void>){
  const dir=mkdtempSync(join(tmpdir(),'entry-compaction-'));
- const host=await Harness.open(await openNodeSqliteStorage(join(dir,'replicas.sqlite')),{models:createModels(),registry:createRegistry()},ctx);let clock=1_700_000_000_000;
+ const host=await openSqliteHost(join(dir,'replicas.sqlite'));let clock=1_700_000_000_000;
  const nodes=new Map<string,EntryReplicationController>();
  const node=(r:string)=>{let n=nodes.get(r);if(!n){n=new EntryReplicationController({host,ctx,config:{spaceId:'sp-merge',authorityId:'authority',replicaId:r,incarnation:'i-'+r,members,rules},authorize:async()=>{},assertActive:async()=>{},now:()=>clock,clockUncertaintyMs:()=>0});nodes.set(r,n);}return n;};
  try{await fn({host,node,tick:(ms=10)=>{clock+=ms;},now:()=>clock});}finally{try{await host.close(ctx);}catch{}rmSync(dir,{recursive:true,force:true});}
@@ -77,9 +76,9 @@ async function sync(from:Node,to:Node,shadow?:Node){
 async function settle(nodes:Node[],shadows:Array<Node|undefined>=[]){for(let round=0;round<3;round++)for(const from of nodes)for(const [i,to] of nodes.entries())if(from!==to)await sync(from,to,shadows[i]);}
 function rng(seed:number){let x=seed>>>0||1;return ()=>{x^=x<<13;x>>>=0;x^=x>>>17;x^=x<<5;x>>>=0;return x/4294967296;};}
 
-async function compactionFixture(fn:(o:{host:Harness;node:(r:string,retainMs?:number)=>Node;reference:(name?:string)=>Node;tick:(ms?:number)=>void;now:()=>number})=>Promise<void>){
+async function compactionFixture(fn:(o:{host:OwnStoreHost;node:(r:string,retainMs?:number)=>Node;reference:(name?:string)=>Node;tick:(ms?:number)=>void;now:()=>number})=>Promise<void>){
  const dir=mkdtempSync(join(tmpdir(),'entry-compaction-'));
- const host=await Harness.open(await openNodeSqliteStorage(join(dir,'replicas.sqlite')),{models:createModels(),registry:createRegistry()},ctx);let clock=1_700_000_000_000;
+ const host=await openSqliteHost(join(dir,'replicas.sqlite'));let clock=1_700_000_000_000;
  const nodes=new Map<string,Node>(),now=()=>clock;
  const make=(replicaId:string,ms:typeof members,retainMs?:number)=>new EntryReplicationController({host,ctx,config:{spaceId:'sp-merge',authorityId:'authority',replicaId,incarnation:'i-'+replicaId,members:ms,rules},authorize:async()=>{},assertActive:async()=>{},now,clockUncertaintyMs:()=>0,...(retainMs===undefined?{}:{requestRetentionMs:retainMs})});
  const node=(r:string,retainMs?:number)=>{let n=nodes.get(r);if(!n){n=make(r,members,retainMs);nodes.set(r,n);}return n;};
@@ -87,7 +86,7 @@ async function compactionFixture(fn:(o:{host:Harness;node:(r:string,retainMs?:nu
  const refs=new Map<string,Node>(),reference=(name='ref')=>{let r=refs.get(name);if(!r){r=make(name,[...members,{replicaId:name,incarnation:'i-'+name}]);refs.set(name,r);}return r;};
  try{await fn({host,node,reference,tick:(ms=10)=>{clock+=ms;},now});}finally{try{await host.close(ctx);}catch{}rmSync(dir,{recursive:true,force:true});}
 }
-const historyOf=async(host:Harness,c:Node)=>(await host.snapshot(EntryReplicas,c.documentKey,ctx));
+const historyOf=async(host:OwnStoreHost,c:Node)=>(await host.snapshot(EntryReplicas,c.documentKey,ctx));
 
 for(const [seed,all] of [[1,false],[7,false],[42,false],[3,true],[11,true],[1234,true],[98765,true],[31337,true]] as const)test(`random operations and deliveries (seed ${seed}, ${all?'every replica compacts':'c never compacts'}): replicas converge to the non-compacting reference`,()=>compactionFixture(async o=>{
  const rand=rng(seed),pick=<T,>(xs:T[])=>xs[Math.floor(rand()*xs.length)]!;

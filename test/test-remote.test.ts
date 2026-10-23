@@ -1,8 +1,6 @@
 // AP 1.9: RemoteSpace over an abstract transport (federation-plan-v3.md 6.3).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	PhiSpaces, SpaceService, StaticIdentity, RemoteSpace, inProcessTransport, OutcomeUnknown, UnsupportedOperation, FOREVER, core, RequestConflict, OperationCancelled,
 	type Transport,

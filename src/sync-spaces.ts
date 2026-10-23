@@ -90,6 +90,7 @@ export async function openSyncSpace(o: {
 		// The local installation follows the active external permit of this replica configuration (after every
 		// transition the next open copies it); without an active permit the Space is not served.
 		await installAdmittedPermit({ external: o.external, installed: o.installed, hostId: o.hostId, spaceId: c.spaceId, localDataIncarnation: c.incarnation });
+		await closing;
 		const p = peerFor(), raw = await o.openStorage(harnessPath);
 		let h: ClosableStoreHost | undefined;
 		try {
@@ -101,7 +102,9 @@ export async function openSyncSpace(o: {
 		stopGuard = installBootGuard(h, o.ctx, { hostId: o.hostId, authorityId: o.authorityId, external: o.external, installed: o.installed, replicaConfig: id => id === c.spaceId ? journal.config : null });
 		poisoned = null; harness = h;
 	};
-	const unserve = async () => { const h = harness; harness = undefined; stopGuard?.(); stopGuard = undefined; if (h) await bounded(h.close(o.ctx)); };
+	// A host being closed (by the sealed resolver, say) still holds its store: closing and serving again wait for it.
+	let closing: Promise<void> = Promise.resolve();
+	const unserve = async () => { const h = harness; harness = undefined; stopGuard?.(); stopGuard = undefined; if (h) closing = closing.then(() => bounded(h.close(o.ctx))); await closing; };
 	try {
 		if (!o.listenOnly && role() === "primary") {
 			try { await serve(); }

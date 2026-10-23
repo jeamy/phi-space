@@ -115,7 +115,7 @@ for(const backend of BACKENDS){
  });
  test(`${backend}: retained history and atomic batch caps backpressure instead of discarding deletion metadata`,async()=>{
   const home=new PersistentHome(backend),originalStorage=home.storage.bind(home);let largestCommit=0;
-  home.storage=async()=>{const storage=await originalStorage();return new Proxy(storage,{get(target,key,receiver){const value=Reflect.get(target,key,receiver);if(key==='commit')return async(w:readonly import('@earendil-works/pi-durable').StorageWrite[],c:typeof ctx)=>{largestCommit=Math.max(largestCommit,Buffer.byteLength(JSON.stringify(w)));return target.commit(w,c);};return typeof value==='function'?value.bind(target):value;}});};
+  home.faults.observe(w=>{largestCommit=Math.max(largestCommit,Buffer.byteLength(JSON.stringify(w)));});
   const host=await home.open();
   const node=new EntryReplicationController({host,ctx,config:config('a'),authorize:async()=>{},assertActive:async()=>{},now:()=>1000,clockUncertaintyMs:()=>0,maxHistoryBytes:16384,maxBatchBytes:32768});
   try{

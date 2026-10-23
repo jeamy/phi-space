@@ -1,12 +1,11 @@
 // lww/set step 3 (docs/abnahme/ap3-replikation.md): erasing a principal from replicated entry histories.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import {copyFileSync,mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
+import {openSqliteHost} from '../src/store/sqlite.ts';
+import type {OwnStoreHost} from '../src/store/host.ts';
 import {EntryReplicationController,EntryReplicas} from '../src/index.ts';
 import {compactErasedSqlite} from '../src/erasure-sqlite.ts';
 import {ctx} from './support/persistent.ts';
@@ -15,9 +14,9 @@ const P={peerId:'peer-p'},Q={peerId:'peer-q'},ADMIN={peerId:'admin'},SECRET='sec
 const rules=[{type:'Sensor',variant:'lww' as const,keyFields:['sensorId']},{type:'Fact',variant:'set' as const}];
 const members=['a','b','c'].map(r=>({replicaId:r,incarnation:'i-'+r}));
 
-async function fixture(fn:(o:{dir:string;file:string;host:Harness;node:(r:string)=>EntryReplicationController;tick:()=>void})=>Promise<void>){
+async function fixture(fn:(o:{dir:string;file:string;host:OwnStoreHost;node:(r:string)=>EntryReplicationController;tick:()=>void})=>Promise<void>){
  const dir=mkdtempSync(join(tmpdir(),'entry-erasure-')),file=join(dir,'replicas.sqlite');
- const host=await Harness.open(await openNodeSqliteStorage(file),{models:createModels(),registry:createRegistry()},ctx);let clock=1_700_000_000_000;
+ const host=await openSqliteHost(file);let clock=1_700_000_000_000;
  const nodes=new Map<string,EntryReplicationController>();
  const node=(r:string)=>{let n=nodes.get(r);if(!n){n=new EntryReplicationController({host,ctx,config:{spaceId:'sp-merge',authorityId:'authority',replicaId:r,incarnation:'i-'+r,members,rules},authorize:async()=>{},assertActive:async()=>{},now:()=>clock,clockUncertaintyMs:()=>0});nodes.set(r,n);}return n;};
  try{await fn({dir,file,host,node,tick:()=>{clock+=10;}});}finally{try{await host.close(ctx);}catch{}rmSync(dir,{recursive:true,force:true});}
@@ -28,7 +27,7 @@ async function pull(from:EntryReplicationController,to:EntryReplicationControlle
  if(onePerImport)for(const e of events)await to.importChanges([e]);else await to.importChanges(events);
 }
 const view=async(c:EntryReplicationController)=>(await c.read()).map(v=>({type:v.type,fields:v.fields,owner:v.owner.peerId})).sort((x,y)=>JSON.stringify(x)<JSON.stringify(y)?-1:1);
-const stored=async(host:Harness,r:string)=>JSON.stringify(await host.snapshot(EntryReplicas,JSON.stringify(['sp-merge',r,'i-'+r]),ctx));
+const stored=async(host:OwnStoreHost,r:string)=>JSON.stringify(await host.snapshot(EntryReplicas,JSON.stringify(['sp-merge',r,'i-'+r]),ctx));
 
 test('an erased principal disappears from every replica view and stored overlay, without resurrecting older versions',()=>fixture(async o=>{
  const a=o.node('a'),b=o.node('b'),c=o.node('c');
@@ -75,9 +74,12 @@ test('snapshot segments are rebuilt from the redacted view and the compacted SQL
  assert.deepEqual(await view(a),[{type:'Sensor',fields:{sensorId:'s2',v:'q'},owner:'peer-q'}],'the logical view is redacted at once');
  assert.ok(!JSON.stringify((await a.changes(0,256*1024)).events).includes(SECRET),'exports are redacted at once');
  const after=await a.completeErasure('erase-p-local');assert.deepEqual(after,{erases:1,overlayPending:0,segmentsPending:0,transfersPending:0,complete:true});
+ // deleted rows are overwritten in the file (secure_delete), and a clean close empties the WAL; a killed process leaves
+ // older page images in the WAL: the files are copied as they are while the host runs
+ const killed=join(o.dir,'killed.sqlite');for(const x of ['','-wal','-shm'])try{copyFileSync(o.file+x,killed+x);}catch{}
  await o.host.close(ctx);
- const raw=()=>readFileSync(o.file).toString('latin1')+(()=>{try{return readFileSync(o.file+'-wal').toString('latin1');}catch{return '';}})();
- assert.ok(raw().includes(SECRET),'before compaction older revisions still hold the content (this is what compaction is for)');
- await compactErasedSqlite(o.file,async()=>{});
+ const raw=()=>readFileSync(killed).toString('latin1')+(()=>{try{return readFileSync(killed+'-wal').toString('latin1');}catch{return '';}})();
+ assert.ok(raw().includes(SECRET),'before compaction the WAL still holds the content (this is what compaction is for)');
+ await compactErasedSqlite(killed,async()=>{});
  assert.ok(!raw().includes(SECRET),'after the durable history compaction no byte of the erased content remains');
 }));

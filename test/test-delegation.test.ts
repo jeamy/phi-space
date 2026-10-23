@@ -425,7 +425,7 @@ for (const backend of BACKENDS) {
              assert.ok(ar.ok, JSON.stringify(ar));
              assert.ok(br.ok, JSON.stringify(br));
              const snap = async () => await o.data.commit(
-                 async (tx: import("@earendil-works/pi-durable").Tx) =>
+                 async (tx: import("../src/store/types.ts").StoreTx) =>
                      JSON.parse(JSON.stringify(await spaceDoc(tx, o.info.spaceId, o.now))),
                  ctx);
              const initial = await snap();

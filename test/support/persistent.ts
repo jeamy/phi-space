@@ -1,181 +1,134 @@
-// Persistent harnesses for crash/reopen tests (AP 0.1, docs/implementierungsplan-v3.md). MemoryStorage proves
-// nothing about durability; every recovery acceptance case runs on JSONL and SQLite through these helpers.
+// Persistent stores for crash/reopen tests (AP 0.1, docs/implementierungsplan-v3.md): phi-spaces' own SQLite store
+// (store/sqlite.ts) in a directory that outlives its hosts. A store in memory proves nothing about durability; every
+// recovery acceptance case runs through these helpers. pi-durable's storage is gone (decision D6,
+// docs/umstellung-u0-bestand.md).
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness, type Storage, type StorageWrite } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { OwnSyncStore, ReplicatedOwnStore } from "../../src/store/sync-sqlite.ts";
 import type { StoreFaults } from "../../src/store/sqlite.ts";
+import type { WriteOp } from "../../src/store/sqlite-ops.ts";
 import { OwnStoreHost } from "../../src/store/host.ts";
 
-/** pi-durable's JSONL and SQLite storage, and phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.md).
- *  PI_DURABLE_BACKENDS: for tests of pi-durable itself (its agent tools, its base checkpoints). */
-export type Backend = "jsonl" | "sqlite" | "own-sqlite";
-export const BACKENDS: readonly Backend[] = ["jsonl", "sqlite", "own-sqlite"];
-export const PI_DURABLE_BACKENDS: readonly Backend[] = ["jsonl", "sqlite"];
+/** The persistent store kind the suites run on (one now; the name stays in the test titles). */
+export type Backend = "own-sqlite";
+export const BACKENDS: readonly Backend[] = ["own-sqlite"];
 
 /**
- * What the next matching storage commit does:
- * - `failBeforeCommit`: nothing is written and the commit throws (a crash before the commit point).
- * - `loseAnswer`: the writes are durable, but the caller sees an error (a crash after the commit, before the reply).
+ * What the next matching batch write does:
+ * - `failBeforeCommit`: nothing is written and the write throws (a crash before the commit point).
+ * - `loseAnswer`: the rows are durable, but the caller sees an error (a crash after the commit, before the reply).
  */
 export type Fault = "failBeforeCommit" | "loseAnswer";
 export class InjectedFault extends Error {}
 
-/** The own store's rows as the tests' fault predicates read pi-durable writes, as pi-durable would write them: a
- *  document's head as a `document.change` whose `ops` hold only the top-level fields that changed since the head this
- *  switch saw last (all of them for a new one), a part's record as one with the record, a deleted one as a
- *  `document.retire`. `heads` keeps the last head per document across commits and reopenings. */
-function asWrites(ops: readonly import("../../src/store/sqlite-ops.ts").WriteOp[], heads: Map<string, Record<string, unknown>>): StorageWrite[] {
-	return ops.map((op) => {
+/** What a batch changed, as fault predicates ask it: per document (`kind`, `key`) its head's top-level fields that
+ *  changed since the head this switch saw last (all of them for a new document), per part record (`part`, `id`) the
+ *  record; `deleted` for a removed document or record. `text` is the JSON of `fields`, for `includes` tests. */
+export type Change = { kind: string; key: string; part?: string; id?: string; deleted?: true; fields: Record<string, unknown>; text: string };
+export type FaultBatch = { ops: readonly WriteOp[]; changes: readonly Change[] };
+
+function changesOf(ops: readonly WriteOp[], heads: Map<string, Record<string, unknown>>): Change[] {
+	const out: Change[] = [];
+	for (const op of ops) {
 		if (op.t === "doc") {
-			const id = `${op.kind}/${op.key}`, value = JSON.parse(op.value) as Record<string, unknown>, prev = heads.get(id);
+			const id = `${op.kind}\u0000${op.key}`, value = JSON.parse(op.value) as Record<string, unknown>, prev = heads.get(id);
 			heads.set(id, value);
-			const changed: Record<string, unknown> = {};
-			for (const k of new Set([...Object.keys(value), ...Object.keys(prev ?? {})])) if (!prev || JSON.stringify(prev[k]) !== JSON.stringify(value[k])) changed[k] = value[k] ?? null;
-			const content = { kind: "delta", version: op.version, ops: changed };
-			Object.defineProperty(content, "value", { value, enumerable: false });
-			return { type: "document.change", id, content };
-		}
-		if (op.t === "part") {
-			const value = JSON.parse(op.value), content = { kind: "delta", version: 1, ops: value };
-			Object.defineProperty(content, "value", { value, enumerable: false }); // once in a stringified write, as on the disk
-			return { type: "document.change", id: `${op.kind}/${op.key}/${op.part}/${op.id}`, content };
-		}
-		if (op.t === "meta") return { type: "meta", key: op.key };
-		return { type: "document.retire", id: `${op.kind}/${op.key}${op.t === "partDel" ? `/${op.part}/${op.id}` : ""}` };
-	}) as unknown as StorageWrite[];
+			const fields: Record<string, unknown> = {};
+			for (const k of new Set([...Object.keys(value), ...Object.keys(prev ?? {})])) if (!prev || JSON.stringify(prev[k]) !== JSON.stringify(value[k])) fields[k] = value[k] ?? null;
+			out.push({ kind: op.kind, key: op.key, fields, text: JSON.stringify(fields) });
+		} else if (op.t === "part") {
+			const fields = JSON.parse(op.value) as Record<string, unknown>;
+			out.push({ kind: op.kind, key: op.key, part: op.part, id: op.id, fields, text: op.value });
+		} else if (op.t === "partDel") out.push({ kind: op.kind, key: op.key, part: op.part, id: op.id, deleted: true, fields: {}, text: "{}" });
+		else if (op.t === "retire") out.push({ kind: op.kind, key: op.key, deleted: true, fields: {}, text: "{}" });
+	}
+	return out;
 }
 
-/** FAULT_LOG=1: what the commit a fault fires at changed (documents and their changed fields), to compare stores. */
-const logFired = (writes: readonly StorageWrite[]) => {
+/** FAULT_LOG=1: what the batch a fault fires at changed (documents and their changed fields). */
+const logFired = (changes: readonly Change[]) => {
 	if (process.env.FAULT_LOG !== "1") return;
-	const what = writes.filter((w) => w.type === "document.change" || w.type === "document.create").map((w) => {
-		const c = (w as unknown as { content: { ops?: unknown; value?: unknown } }).content, ops = c.ops ?? c.value;
-		const kind = w.type === "document.create" ? (w as unknown as { record: { kind: string } }).record.kind : String((w as unknown as { id: unknown }).id).split("/")[0];
-		return `${kind}:${ops && typeof ops === "object" && !Array.isArray(ops) ? Object.keys(ops).slice(0, 8).join("|") : typeof ops}`;
-	});
+	const what = changes.filter((c) => !c.deleted).map((c) => `${c.kind}${c.part ? `.${c.part}` : ""}:${Object.keys(c.fields).slice(0, 8).join("|")}`);
 	console.error(`FAULT fired at: ${[...new Set(what)].join(" ; ")}`);
 };
 
-/** Arms faults on a storage. `when` picks the commit (default: the next one); each armed fault fires once. */
+/** Arms faults on a store. `when` picks the batch (default: the next one); each armed fault fires once. */
 export class FaultSwitch {
-	#armed: { fault: Fault; when: (writes: readonly StorageWrite[]) => boolean } | undefined;
-	fired = 0;
-	arm(fault: Fault, when: (writes: readonly StorageWrite[]) => boolean = () => true): void { this.#armed = { fault, when }; }
-	/** The same switch for the own store (its batches' rows go to `when`). */
+	#armed: { fault: Fault; when: (batch: FaultBatch) => boolean } | undefined;
 	#heads = new Map<string, Record<string, unknown>>();
-	readonly own: StoreFaults = {
+	fired = 0;
+	arm(fault: Fault, when: (batch: FaultBatch) => boolean = () => true): void { this.#armed = { fault, when }; }
+	#observer: ((ops: readonly WriteOp[]) => void) | undefined;
+	/** Sees every commit's rows as the host hands it over (a batch may hold several commits); null stops it. */
+	observe(f: ((ops: readonly WriteOp[]) => void) | null): void { this.#observer = f ?? undefined; }
+	disarm(): void { this.#armed = undefined; }
+	/** The switch as the store asks it, for every batch (so the heads stay current). */
+	readonly store: StoreFaults = {
 		take: (ops) => {
-			const a = this.#armed, writes = asWrites(ops, this.#heads); // every batch, so the heads stay current
-			if (!a || !a.when(writes)) return undefined;
-			logFired(writes);
+			const a = this.#armed, changes = changesOf(ops, this.#heads);
+			if (!a || !a.when({ ops, changes })) return undefined;
+			logFired(changes);
 			this.#armed = undefined;
 			this.fired++;
 			return { fault: a.fault, error: new InjectedFault(a.fault === "failBeforeCommit" ? "injected: crash before commit" : "injected: commit durable, answer lost") };
 		},
+		observe: (ops) => this.#observer?.(ops),
 	};
-	disarm(): void { this.#armed = undefined; }
-	/** A storage whose `commit` obeys this switch; every other method is the original. */
-	wrap(storage: Storage): Storage {
-		return new Proxy(storage, {
-			get: (target, prop, receiver) => {
-				if (prop !== "commit") {
-					const v = Reflect.get(target, prop, receiver);
-					return typeof v === "function" ? v.bind(target) : v;
-				}
-				return async (writes: readonly StorageWrite[], context: typeof ctx) => {
-					const a = this.#armed;
-					if (!a || !a.when(writes)) return target.commit(writes, context);
-					logFired(writes);
-					this.#armed = undefined;
-					this.fired++;
-					if (a.fault === "failBeforeCommit") throw new InjectedFault("injected: crash before commit");
-					await target.commit(writes, context);
-					throw new InjectedFault("injected: commit durable, answer lost");
-				};
-			},
-		});
-	}
 }
 
 /**
- * A storage location that outlives harness instances. `open()` gives a new harness on the same files; `crash(h)`
- * abandons one without an orderly close (what a killed process leaves behind), `close(h)` shuts it down cleanly.
+ * A store location that outlives its hosts. `open()` gives a new host on the same files; `crash(h)` drops one as a
+ * killed process would (no close, no flush, the owner lock free), `close(h)` shuts it down cleanly.
  */
 export class PersistentHome {
 	readonly backend: Backend;
 	readonly dir: string;
 	readonly faults = new FaultSwitch();
-	#open = new Set<Harness>();
+	#open = new Set<OwnStoreHost>();
 	#raw: OwnSyncStore[] = [];
-	constructor(backend: Backend) {
+	constructor(backend: Backend = "own-sqlite") {
 		this.backend = backend;
 		this.dir = mkdtempSync(join(tmpdir(), `phi-spaces-${backend}-`));
 	}
-	/** The raw store. For own-sqlite an OwnSyncStore (typed as pi-durable's Storage for the tests that pass it on to
-	 *  the replication functions, which take either). */
-	async storage(): Promise<Storage> {
-		if (this.backend === "own-sqlite") {
-			// a raw store left open (its recovery threw before a host took it) is gone as its process would be: its owner
-			// lock must not keep the next one out (pi-durable's storage has no owner lock)
-			for (const r of this.#raw) if (r.open) await r.close();
-			// so is a host of this home whose store failed and that a test left open: it takes no more work anyway
-			for (const h of [...this.#open]) if ((h as unknown) instanceof OwnStoreHost && (h as unknown as OwnStoreHost).failed) { (h as unknown as OwnStoreHost).abandon(); this.#open.delete(h); }
-			const r = new OwnSyncStore(join(this.dir, "store.sqlite"), { faults: this.faults.own });
-			this.#raw = [r];
-			return r as unknown as Storage;
-		}
-		const s = this.backend === "jsonl" ? await openNodeJsonlStorage(this.dir, ctx) : await openNodeSqliteStorage(join(this.dir, "harness.sqlite"));
-		return this.faults.wrap(s);
+	/** The store without a host (a stopped daemon): the replication applies, recovers and checks it there. */
+	async storage(): Promise<OwnSyncStore | ReplicatedOwnStore> {
+		// a raw store left open (its recovery threw before a host took it) is gone as its process would be: its owner lock
+		// must not keep the next one out; so is a host whose store failed and that a test left open
+		for (const r of this.#raw) if (r.open) await r.close();
+		for (const h of [...this.#open]) if (h.failed) { h.abandon(); this.#open.delete(h); }
+		const r = new OwnSyncStore(join(this.dir, "store.sqlite"), { faults: this.faults.store });
+		this.#raw = [r];
+		return r;
 	}
-	/** `o`: models and registry for agent tests (a faux provider, installed extensions); defaults are empty. */
-	async open(o: { models?: ReturnType<typeof createModels>; registry?: ReturnType<typeof createRegistry> } = {}): Promise<Harness> {
-		const s = await this.storage() as unknown;
-		// the own store's host is a StoreHost, not a Harness: typed as one for the tests, which use what both have
-		if (s instanceof OwnSyncStore || s instanceof ReplicatedOwnStore) {
-			if (o.models || o.registry) throw new Error("agent tests need pi-durable's Harness, not the own store");
-			const h = (await (s instanceof ReplicatedOwnStore ? s.open() : s.openHost())) as unknown as Harness;
-			this.#open.add(h);
-			return h;
-		}
-		const h = await Harness.open(s as Storage, { models: o.models ?? createModels(), registry: o.registry ?? createRegistry() }, ctx);
+	async open(): Promise<OwnStoreHost> {
+		const h = await openHost(await this.storage());
 		this.#open.add(h);
 		return h;
 	}
-	async close(h: Harness): Promise<void> {
+	async close(h: OwnStoreHost): Promise<void> {
 		this.#open.delete(h);
 		await h.close(ctx);
 	}
-	/** Abandon `h` as a crash would: no close, no flush beyond what was committed. The caller must not use it again. */
-	crash(h: Harness): void {
+	/** Abandon `h` as a crash would. The caller must not use it again. */
+	crash(h: OwnStoreHost): void {
 		this.#open.delete(h);
-		// a killed process leaves its store unlocked; pi-durable's storage has no owner lock to free
-		if ((h as unknown) instanceof OwnStoreHost) (h as unknown as OwnStoreHost).abandon(); else this.abandoned.push(h);
+		h.abandon();
 	}
-	readonly abandoned: Harness[] = [];
-	/** Close what is still open (abandoned harnesses too, best effort, so file handles are released) and delete. */
+	/** Close what is still open and delete. */
 	async dispose(): Promise<void> {
-		for (const h of [...this.#open, ...this.abandoned]) await h.close(ctx).catch(() => {});
+		for (const h of this.#open) await h.close(ctx).catch(() => {});
 		for (const r of this.#raw) if (r.open) await r.close();
 		this.#open.clear();
-		this.abandoned.length = 0;
 		rmSync(this.dir, { recursive: true, force: true });
 	}
 }
 
-/** The host over a raw store or a primary's store as tests get them (home.storage(), primarySyncStorage): pi-durable's
- *  Harness, or the own store's host (typed as a Harness for the tests). */
-export async function openHost(storage: Storage): Promise<Harness> {
-	const s = storage as unknown;
-	if (s instanceof ReplicatedOwnStore) return (await s.open()) as unknown as Harness;
-	if (s instanceof OwnSyncStore) return (await s.openHost()) as unknown as Harness;
-	return Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
+/** The host over a raw store or a primary's store as tests get them (home.storage(), primarySyncStorage). */
+export async function openHost(storage: OwnSyncStore | ReplicatedOwnStore): Promise<OwnStoreHost> {
+	return storage instanceof ReplicatedOwnStore ? storage.open() : storage.openHost();
 }
 
 /** Run `f` once per persistent backend with a fresh home, disposing it afterwards. */

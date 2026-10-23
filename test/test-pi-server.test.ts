@@ -16,7 +16,7 @@ test("native pi-server Unix RPC preserves sessions and routes RemoteSpace throug
 	const { createUnixServer } = await import(pathToFileURL(serverPath).href);
 	const { Client } = await import(pathToFileURL(join(runtime, "node_modules/@earendil-works/pi-client/dist/index.js")).href);
 	const { createUnixTransportFactory } = await import(pathToFileURL(join(runtime, "node_modules/@earendil-works/pi-client/dist/unix.js")).href);
-	const home = new PersistentHome("sqlite"), dir = mkdtempSync("/tmp/phi-spaces-native-server-");
+	const home = new PersistentHome(), dir = mkdtempSync("/tmp/phi-spaces-native-server-");
 	let server: any, client: any;
 	try {
 		const h = await home.open();

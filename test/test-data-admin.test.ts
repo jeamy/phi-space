@@ -47,11 +47,11 @@ for(const backend of BACKENDS)test(`${backend}: large deletion resumes bounded c
  assert.throws(()=>claims.issueGeneration(core.plain(state),1001,p),core.PermissionError);
  assert.throws(()=>core.list(state,1001),core.PermissionError);
  const sizes:number[]=[];
- home.faults.arm('loseAnswer',writes=>{const deltas=writes.filter(w=>w.type==='document.change'&&w.content.kind==='delta');if(deltas.length)sizes.push(Buffer.byteLength(JSON.stringify(deltas)));return false;});
+ home.faults.arm('loseAnswer',b=>{const changed=b.changes.filter(c=>!c.deleted);if(changed.length)sizes.push(changed.reduce((n,c)=>n+Buffer.byteLength(c.text),0));return false;});
  let result=await admin.advanceDeletion('bulk-delete',sid,'admin',p);
  assert.notEqual(result.phase,'completed');allowed=false;await assert.rejects(admin.advanceDeletion('bulk-delete',sid,'admin',p),core.PermissionError);allowed=true;
  home.faults.disarm();home.crash(host);host=await home.open();admin=make();
- home.faults.arm('loseAnswer',writes=>{const deltas=writes.filter(w=>w.type==='document.change'&&w.content.kind==='delta');if(deltas.length)sizes.push(Buffer.byteLength(JSON.stringify(deltas)));return false;});
+ home.faults.arm('loseAnswer',b=>{const changed=b.changes.filter(c=>!c.deleted);if(changed.length)sizes.push(changed.reduce((n,c)=>n+Buffer.byteLength(c.text),0));return false;});
  while(result.phase!=='completed')result=await admin.advanceDeletion('bulk-delete',sid,'admin',p);
  home.faults.disarm();assert.equal(result.count,240);assert.ok(result.batches>30);assert.ok(sizes.length>30);assert.ok(Math.max(...sizes)<=4096,'persisted mutation deltas exceed the configured budget');t.diagnostic(`batches=${result.batches}; maxPersistedMutationDeltaBytes=${Math.max(...sizes)}; budget=4096`);
  state=(await snapshotSpace(host,sid,ctx))!;assert.equal(state.adminMaintenance,undefined);assert.equal(core.list(state,1001).length,1);assert.equal(core.list(state,1001)[0]!.type,'Keep');assert.equal(JSON.stringify(state).includes('erase-me'),false);

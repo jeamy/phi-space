@@ -89,7 +89,7 @@ for (const backend of BACKENDS) test(`${backend}: case 3: an unreachable remote 
 });
 
 test("signed instructions bind authority, Space, run kind and both keys", async () => {
-	const home = new PersistentHome("jsonl");
+	const home = new PersistentHome();
 	try {
 		const h = await home.open(), key = generateKey("ed25519", "b"), sid = await jobsSpace(h, "jobs");
 		const service = memberService(h, "b", key);

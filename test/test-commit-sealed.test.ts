@@ -1,14 +1,12 @@
 // A sealed, unconfirmed primary/sync commit (docs/abnahme/ap3-primary-sync.md, v3 6.2/7.2): clients see CommitSealed and keep
 // asking about the same request; the host resolves the candidate with the standby and serves the Space again.
 import test from 'node:test';
+import {OWN_SYNC_FACTORIES,OwnSyncStore} from '../src/store/sync-sqlite.ts';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
 import type {ClosableStoreHost} from '../src/store/types.ts';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
 import {openSyncSpace,provisionFileSigner,SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport,OutcomeUnknown,PhiSpaces,core,type SyncSpace,type PrimarySyncConfig,type Reply,type Connection} from '../src/index.ts';
 import {SqliteRecoveryRegister} from '../src/recovery-register.ts';
 import {CommitSealedPending} from '../src/remote.ts';
@@ -31,7 +29,7 @@ async function fixture(fn:(o:{open:(h:'p'|'s')=>Promise<SyncSpace>;reg:SqliteRec
  const installed={p:new SqliteRecoveryRegister(join(dir,'installed-p.sqlite')),s:new SqliteRecoveryRegister(join(dir,'installed-s.sqlite'))};
  const open=(h:'p'|'s')=>openSyncSpace({config:{alias:'jobs-sync',spaceId,incarnation,dir:join(dir,h,'sync'),genesis,port,peers:[{hostId:h==='p'?'s':'p',algorithm:'ed25519',publicKey:keys[h==='p'?'s':'p'].publicKey,ip:ip[h==='p'?'s':'p']}]},
   hostId:h,authorityId,bindIp:ip[h],signer:keys[h],external:h==='s'?slowReg:reg,installed:installed[h],ctx,
-  openStorage:async path=>openNodeSqliteStorage(path),openHarness:async st=>Harness.open(st,{models:createModels(),registry:createRegistry()},ctx)});
+  ...OWN_SYNC_FACTORIES});
  try{await fn({open,reg,spaceId,slowStandby:on=>{slow=on;}});}finally{reg.close();installed.p.close();installed.s.close();rmSync(dir,{recursive:true,force:true});}
 }
 /** What the federation host does: the served service of the Space, swapped by the resolver. */
@@ -122,9 +120,10 @@ test('a commit in flight is not a sealed candidate: concurrent reads and polls a
   const inFlight=remote.write({type:'Job',fields:{n:2}},null,core.FOREVER);
   await new Promise(r=>setTimeout(r,60));
   assert.notEqual(p.journal.head().revision,p.journal.appliedRevision,'the second commit is sealed and waits for its ACK');
+  // reads and polls are served while the commit waits for its ACK; none shows the commit before the standby confirmed it
+  const applied=()=>p.journal.appliedRevision===p.journal.head().revision;
   for(let n=0;n<4;n++){
-   assert.equal(await remote.count({type:'Job'}),1);
-   assert.equal((await remote.readAll({type:'Job'})).length,1);
+   for(const seen of [await remote.count({type:'Job'}),(await remote.readAll({type:'Job'})).length])assert.ok(seen===1||(seen===2&&applied()),`read ${seen} Jobs before the commit was confirmed`);
    assert.equal((await remote.pollOperation(request)).state,'done');
   }
   await inFlight;o.slowStandby(false);
