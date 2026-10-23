@@ -302,7 +302,20 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
   - **Nicht angefasst:** die Föderations- und Overlay-Container (`host-a/b`, `member-1/2`, `nb-*`, seit 5 Tagen mit dem
     alten Image). `destroy` würde auch die NetBird-Peer-Anmeldungen der `nb-*`-Volumes löschen. Ihre alten Stores
     werden vom neuen Code abgewiesen (D6). Neuaufbau (`destroy --yes`, `up federation`, `netbird setup`): eigene Freigabe.
-- **Bleibt:** U7 und die Betriebsprobe der Föderation auf `big`.
+- **U7, erste Messung (D2-Kapazität), `scripts/capacity-probe.ts`:** 20 benannte Spaces mit je 10 000 Einträgen (je
+  ca. 130 Byte Nutzlast) in einem Speicher:
+  - Schreiben: 352 s (200 000 Einträge, 500 parallele `write`);
+  - Datei: 265 MB;
+  - Öffnen des Speichers: 48 ms (Budget ≤ 2 s: erfüllt);
+  - alle 20 Spaces einmal anfassen: 4,5 s; **RSS 386 MB, Heap 259 MB**.
+  - **Budget nicht erfüllt:** Das Profil sind 100 Spaces zu 10 000 Einträgen bei ≤ 300 MB RSS. Der Host hält jedes
+    einmal geladene Dokument für immer im Speicher (`#docs`), also rund 13 MB je angefasstem 10k-Space und hochgerechnet
+    über 1 GB für 100. Bleiben die Spaces kalt, ist das kein Problem; das Budget gilt aber für das Profil.
+  - **Nächster Schritt (nicht begonnen):** ein Speicherbudget für geladene Dokumente, das kalte Dokumente ohne
+    Beobachter, Entwurf und ausstehende Schreibung verdrängt. Das berührt `OwnStoreHost` und braucht eine
+    Entscheidung zur Verdrängungsregel.
+- **Bleibt:** U7 (Rest: Plattenvoll, Backup/Restore, Entry-Match-Index, Dauerlast) und die Betriebsprobe der Föderation
+  auf `big`.
 
 **Stand U4 (2026-10-23):**
 
