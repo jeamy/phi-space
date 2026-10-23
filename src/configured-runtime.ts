@@ -60,7 +60,7 @@ export type FederationConfig = {
 	syncSpaces?: SyncSpaceConfig[];
 };
 /** The stores of primary/sync Spaces: the daemon's (pi-durable until U5), else the own store. */
-const syncStores = (f?: SyncSpaceFactories) => (f?.openSyncStorage && f.openSyncHarness ? { openStorage: f.openSyncStorage, openHarness: f.openSyncHarness } : OWN_SYNC_FACTORIES);
+export const syncStores = (f?: SyncSpaceFactories) => (f?.openSyncStorage && f.openSyncHarness ? { openStorage: f.openSyncStorage, openHarness: f.openSyncHarness } : OWN_SYNC_FACTORIES);
 /** Factories for the dedicated stores of primary/sync Spaces; supplied by the daemon, which owns the storage backend. */
 /** Absent store factories: the own store (OWN_SYNC_FACTORIES). */
 export type SyncSpaceFactories = { openSyncStorage?: (path: string) => Promise<LegacyStorage | import("./store/sync-store.ts").SyncStore>; openSyncHarness?: (storage: any) => Promise<ClosableStoreHost>;

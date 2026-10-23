@@ -86,7 +86,7 @@ export class RotationService {
 				if (admitted.kind === "done") return admitted.result;
 				if (admitted.kind === "cancelled") throw new claims.OperationCancelled("rotation was cancelled");
 				// Verify against a detached preview before creating a command; invalid requests cannot queue privileged work.
-				const preview = core.plain(s); core.beginCommit(preview);
+				const preview = core.previewOf(s); core.beginCommit(preview);
 				rotateKeyIn(preview, now, args as unknown as { challenge: RotationChallenge; oldSignature: string; newSignature: string }, id.principal.peerId);
 				const commandId = `rotate:${id.principal.peerId}:${a.challenge.nonce}`;
 				core.write(s, now, { type: "Command", fields: { commandId, kind: "rotateKey", args } }, null, 60000, principalId(id.principal));

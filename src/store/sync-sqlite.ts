@@ -141,8 +141,8 @@ function primaryReplication(store: OwnSyncStore, journal: PrimarySyncJournal, pe
 			if (journal.historyBytes + pending + bytes * 2 > journal.maxHistoryBytes) throw markSyncBudgetExceeded(new SyncJournalFull("sync history is full; no committed result was discarded"));
 			pending += bytes * 2; // an entry encodes its rows once more (canonical JSON of the JSON strings)
 		},
-		async seal(rows) {
-			pending = Math.max(0, pending - Buffer.byteLength(JSON.stringify(rows)) * 2); // admitted, now in this batch
+		async seal(rows, admitted) {
+			pending = Math.max(0, pending - admitted * 2); // exactly what admit counted for this batch's commits
 			if (poisoned || journal.head().revision !== journal.appliedRevision) throw new PrimarySyncBlocked(POISONED);
 			await o.assertPrimary();
 			const head = journal.head(), m = await store.marker(spaceId);

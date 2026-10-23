@@ -197,6 +197,15 @@ const clone = jsonCopy; // draft proxies are not structured-cloneable
 /** A plain copy of a value read from a document draft. Drafts are unusable once their commit settles, so anything a
  * commit returns that came from the document (a stored claim, for one) must be copied out inside the commit. */
 export const plain = <T>(v: T): T => (v === undefined ? v : clone(v));
+/** A detached copy of a space for a dry run. Claims a store keeps on its disk are left out (a dry run of a command does
+ *  not read a day of them); with claims in memory it is `plain(s)`. */
+export function previewOf(s: Readonly<SpaceState>): SpaceState {
+	return s.rpc && diskMapOf(s.rpc.claims) ? plain({ ...s, rpc: { ...s.rpc, claims: {} } }) as SpaceState : plain(s) as SpaceState;
+}
+/** JSON bytes of a whole space as stored; claims on the disk by their running tally (they are not read for this). */
+export function docBytes(s: Readonly<SpaceState>): number {
+	return s.rpc && diskMapOf(s.rpc.claims) ? jsonBytes({ ...s, rpc: { ...s.rpc, claims: {} } }) + Math.max(0, (s.rpc.bytes ?? 0) - jsonBytes(s.rpc.generations)) : jsonBytes(s);
+}
 const commitBudgets = new WeakMap<object, { used: number }>();
 export function seal(s: object): void { sealStream(s); commitBudgets.delete(s); }
 /** Called once per storage transaction; all subsequent operations share its byte budget and revision. */
@@ -1178,7 +1187,7 @@ export function stats(s: Readonly<SpaceState>, now: number): SpaceStats {
 	for (const w of s.waiters) if (w.deadline > now) r.waiters++;
 	for (const g of s.regs) if (g.expires > now) r.registrations++;
 	// the whole document as stored; claims on the disk by their running tally (they are not read for this)
-	r.bytes!.total = s.rpc && diskMapOf(s.rpc.claims) ? jsonBytes({ ...s, rpc: { ...s.rpc, claims: {} } }) + Math.max(0, (s.rpc.bytes ?? 0) - jsonBytes(s.rpc.generations)) : jsonBytes(s);
+	r.bytes!.total = docBytes(s);
 	return r;
 }
 

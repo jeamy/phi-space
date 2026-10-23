@@ -331,3 +331,17 @@ test("a value rebuilt from its draft and read back in the same commit holds no d
 	assert.deepEqual(structuredClone(v), { policy: { v: 2, def: { x: 1 }, rules: [{ m: 9 }, { m: 2 }] }, seen: [2] });
 	await h.close(ctx);
 });
+
+test("primary/sync Spaces use the own store when the daemon supplies no store factories", async () => {
+	const { syncStores } = await import("../src/configured-runtime.ts");
+	const { OWN_SYNC_FACTORIES, OwnSyncStore } = await import("../src/store/sync-sqlite.ts");
+	assert.equal(syncStores(undefined), OWN_SYNC_FACTORIES);
+	assert.equal(syncStores({ mainReplica: () => { throw new Error("unused"); } }), OWN_SYNC_FACTORIES, "only main-store hooks: still the own store");
+	const own = { openSyncStorage: async () => { throw new Error("daemon's"); }, openSyncHarness: async () => { throw new Error("daemon's"); } };
+	assert.equal(syncStores(own).openStorage, own.openSyncStorage);
+	const raw = await OWN_SYNC_FACTORIES.openStorage(fresh());
+	assert.ok(raw instanceof OwnSyncStore);
+	const h = await OWN_SYNC_FACTORIES.openHarness(raw);
+	await new PhiSpaces(h, ctx).write({ type: "Job", fields: {} }, null, FOREVER);
+	await h.close(ctx);
+});

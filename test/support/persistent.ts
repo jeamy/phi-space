@@ -27,19 +27,41 @@ export const PI_DURABLE_BACKENDS: readonly Backend[] = ["jsonl", "sqlite"];
 export type Fault = "failBeforeCommit" | "loseAnswer";
 export class InjectedFault extends Error {}
 
-/** The own store's rows as the tests' fault predicates read pi-durable writes: a written document or record is a
- *  `document.change` whose content holds its new value (as `ops` and `value`), a deleted one a `document.retire`. */
-function asWrites(ops: readonly import("../../src/store/sqlite-ops.ts").WriteOp[]): StorageWrite[] {
+/** The own store's rows as the tests' fault predicates read pi-durable writes, as pi-durable would write them: a
+ *  document's head as a `document.change` whose `ops` hold only the top-level fields that changed since the head this
+ *  switch saw last (all of them for a new one), a part's record as one with the record, a deleted one as a
+ *  `document.retire`. `heads` keeps the last head per document across commits and reopenings. */
+function asWrites(ops: readonly import("../../src/store/sqlite-ops.ts").WriteOp[], heads: Map<string, Record<string, unknown>>): StorageWrite[] {
 	return ops.map((op) => {
-		if (op.t === "doc" || op.t === "part") {
-			const value = JSON.parse(op.value), content = { kind: "delta", version: op.t === "doc" ? op.version : 1, ops: value };
+		if (op.t === "doc") {
+			const id = `${op.kind}/${op.key}`, value = JSON.parse(op.value) as Record<string, unknown>, prev = heads.get(id);
+			heads.set(id, value);
+			const changed: Record<string, unknown> = {};
+			for (const k of new Set([...Object.keys(value), ...Object.keys(prev ?? {})])) if (!prev || JSON.stringify(prev[k]) !== JSON.stringify(value[k])) changed[k] = value[k] ?? null;
+			const content = { kind: "delta", version: op.version, ops: changed };
+			Object.defineProperty(content, "value", { value, enumerable: false });
+			return { type: "document.change", id, content };
+		}
+		if (op.t === "part") {
+			const value = JSON.parse(op.value), content = { kind: "delta", version: 1, ops: value };
 			Object.defineProperty(content, "value", { value, enumerable: false }); // once in a stringified write, as on the disk
-			return { type: "document.change", id: `${op.kind}/${op.key}${op.t === "part" ? `/${op.part}/${op.id}` : ""}`, content };
+			return { type: "document.change", id: `${op.kind}/${op.key}/${op.part}/${op.id}`, content };
 		}
 		if (op.t === "meta") return { type: "meta", key: op.key };
 		return { type: "document.retire", id: `${op.kind}/${op.key}${op.t === "partDel" ? `/${op.part}/${op.id}` : ""}` };
 	}) as unknown as StorageWrite[];
 }
+
+/** FAULT_LOG=1: what the commit a fault fires at changed (documents and their changed fields), to compare stores. */
+const logFired = (writes: readonly StorageWrite[]) => {
+	if (process.env.FAULT_LOG !== "1") return;
+	const what = writes.filter((w) => w.type === "document.change" || w.type === "document.create").map((w) => {
+		const c = (w as unknown as { content: { ops?: unknown; value?: unknown } }).content, ops = c.ops ?? c.value;
+		const kind = w.type === "document.create" ? (w as unknown as { record: { kind: string } }).record.kind : String((w as unknown as { id: unknown }).id).split("/")[0];
+		return `${kind}:${ops && typeof ops === "object" && !Array.isArray(ops) ? Object.keys(ops).slice(0, 8).join("|") : typeof ops}`;
+	});
+	console.error(`FAULT fired at: ${[...new Set(what)].join(" ; ")}`);
+};
 
 /** Arms faults on a storage. `when` picks the commit (default: the next one); each armed fault fires once. */
 export class FaultSwitch {
@@ -47,10 +69,12 @@ export class FaultSwitch {
 	fired = 0;
 	arm(fault: Fault, when: (writes: readonly StorageWrite[]) => boolean = () => true): void { this.#armed = { fault, when }; }
 	/** The same switch for the own store (its batches' rows go to `when`). */
+	#heads = new Map<string, Record<string, unknown>>();
 	readonly own: StoreFaults = {
 		take: (ops) => {
-			const a = this.#armed;
-			if (!a || !a.when(asWrites(ops))) return undefined;
+			const a = this.#armed, writes = asWrites(ops, this.#heads); // every batch, so the heads stay current
+			if (!a || !a.when(writes)) return undefined;
+			logFired(writes);
 			this.#armed = undefined;
 			this.fired++;
 			return { fault: a.fault, error: new InjectedFault(a.fault === "failBeforeCommit" ? "injected: crash before commit" : "injected: commit durable, answer lost") };
@@ -68,6 +92,7 @@ export class FaultSwitch {
 				return async (writes: readonly StorageWrite[], context: typeof ctx) => {
 					const a = this.#armed;
 					if (!a || !a.when(writes)) return target.commit(writes, context);
+					logFired(writes);
 					this.#armed = undefined;
 					this.fired++;
 					if (a.fault === "failBeforeCommit") throw new InjectedFault("injected: crash before commit");

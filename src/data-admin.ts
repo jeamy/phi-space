@@ -3,7 +3,8 @@ import type {Context} from './context.ts';
 import { defineDocFamily } from './store/documents.ts';
 import {createHash} from 'node:crypto';
 import type {SpaceHost} from './client.ts';
-import {pendingClaims,type Principal} from './claims.ts';
+import {pendingClaims,type ClaimRec,type Principal} from './claims.ts';
+import {diskMapOf} from './store/types.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import {principalId} from './mailbox.ts';
 import {spaceDoc} from './spaces.ts';
@@ -67,7 +68,7 @@ export class DataAdminController {
    if(Object.keys(d.commands).length>=128)throw new core.ResourceExhausted('admin journal is full');
    const now=(this.o.now??Date.now)(),s=await spaceDoc(tx,spaceId,now);stableSpace(s,spaceId);core.assertAdminIdle(s);core.settle(s,now);quiescent(s);reserveHeader(s,now,id);
    s.adminMaintenance={commandId:id,hash};s.snapshotEpoch=(s.snapshotEpoch??0)+1;
-   if(bytes(s)>core.limitsOf(s).maxDocBytes)throw new core.ResourceExhausted('admin fence exceeds maxDocBytes');
+   if(core.docBytes(s)>core.limitsOf(s).maxDocBytes)throw new core.ResourceExhausted('admin fence exceeds maxDocBytes');
    d.commands[id]={hash,kind:'deletePrincipal',admin,at:now,count:0,phase:'registrations',principal:core.plain(p),incarnation:s.incarnation??null,authorityId:s.acceptedAuthorityId??s.membership?.authorityId??null,batches:0};core.touch(s,now);
    await this.check(admin,'deletePrincipal',spaceId);
    return {...audit(d.commands[id]!),phase:'registrations' as Phase,batches:0};
@@ -123,15 +124,23 @@ function eraseBatch(s:core.SpaceState,c:Command,p:Principal,now:number,id:string
    c.phase='claims';return;
   }
   case 'claims': {
-   for(const claims of [s.rpc?.claims,s.restoredClaims])for(const [key,claim]of Object.entries(claims??{})) {
-    if(same(claim.principal)){if(!spend(256+bytes(key))){tally(s);return;}delete claims![key];}
-    else if(claim.result!==undefined&&affected(claim.result)){if(!spend(256+bytes(key))){tally(s);return;}delete claim.result;claim.resultExpired=true;delete claim.reservedResultBytes;}
+   // claims are values (a store may freeze them): a changed one is replaced. Claims on the disk are read whole here (a
+   // rare admin step; a key cursor is U7 of docs/umstellung-ohne-pi-durable.md) and keep their tally per change.
+   for(const claims of [s.rpc?.claims,s.restoredClaims]){
+    const disk=diskMapOf<ClaimRec>(claims),inRpc=claims!==undefined&&claims===s.rpc?.claims;
+    const change=(key:string,before:ClaimRec,next:ClaimRec|undefined)=>{if(disk&&inRpc){s.rpc!.bytes=(s.rpc!.bytes??0)-bytes(before)+(next?bytes(next):-bytes(key)-2);s.rpc!.reservedBytes=Math.max(0,(s.rpc!.reservedBytes??0)-(before.reservedResultBytes??0));}if(next)claims![key]=next;else delete claims![key];};
+    for(const [key,claim]of disk?disk.entries():Object.entries(claims??{})) {
+     if(same(claim.principal)){if(!spend(256+bytes(key))){if(!disk)tally(s);return;}change(key,claim,undefined);}
+     else if(claim.result!==undefined&&affected(claim.result)){if(!spend(256+bytes(key))){if(!disk)tally(s);return;}const {result:_r,reservedResultBytes:_b,...rest}=claim;change(key,claim,{...rest,resultExpired:true});}
+    }
    }
-   tally(s);c.phase='generations';return;
+   if(!diskMapOf(s.rpc?.claims))tally(s);c.phase='generations';return;
   }
   case 'generations': {
-   for(const [g,r]of Object.entries(s.rpc?.generations??{}))if(same(r.principal)){if(!spend(256+bytes(g))){tally(s);return;}delete s.rpc!.generations[g];}
-   tally(s);c.phase='entries';return;
+   // with claims on the disk the tally is kept per change (tally would read every claim)
+   const disk=!!diskMapOf(s.rpc?.claims);
+   for(const [g,r]of Object.entries(s.rpc?.generations??{}))if(same(r.principal)){if(!spend(256+bytes(g))){if(!disk)tally(s);return;}if(disk)s.rpc!.bytes=(s.rpc!.bytes??0)-bytes(r)-bytes(g)-2;delete s.rpc!.generations[g];}
+   if(!disk)tally(s);c.phase='entries';return;
   }
   case 'entries': {
    for(let i=s.entries.length-1;i>=0;i--)if(s.entries[i]!.owner===pid){if(!spend(256+bytes(s.entries[i]!.id)))return;s.entries.splice(i,1);c.count++;}

@@ -195,6 +195,7 @@ class SqliteLedger implements Ledger {
 			if (!this.#ords.has(id)) { this.#ords.set(id, new Map()); undo?.push(() => this.#ords.delete(id)); }
 			const inline = d.parts.filter((p) => this.#inline.has(`${id}\u0000${p.path.join(".")}`));
 			const c = partChanges(inline.length ? headOf(d.before, inline) : d.before, d.value, d.parts, d.changes ?? new Map(), this.#ords.get(id)!, undo);
+			for (const part of c.clear) ops.push({ t: "partClear", kind: d.kind, key: k, part });
 			const indexOf = new Map(d.parts.filter((p) => p.disk).map((p) => [p.path.join("."), p.disk!]));
 			for (const r of c.put) {
 				const ix = indexOf.get(r.part), v = r.value as Record<string, unknown> | null;
@@ -243,14 +244,14 @@ class SqliteLedger implements Ledger {
 		this.#writing = { batch, done, lost: null };
 		this.#worker.ref(); // a write in flight keeps the process alive until it is durable
 		this.#stats.batches++; this.#stats.commits += done.length; this.#stats.maxBatch = Math.max(this.#stats.maxBatch, done.length);
-		void this.#write(batch, done.flatMap((d) => d.ops));
+		void this.#write(batch, done.flatMap((d) => d.ops), bytes);
 	}
 
-	async #write(batch: number, rows: WriteOp[]): Promise<void> {
+	async #write(batch: number, rows: WriteOp[], bytes: number): Promise<void> {
 		let ops = rows;
 		try {
 			// sealed (and confirmed by the standby) before the data is written; a failure after sealing poisons the store
-			if (this.replication) ops = await this.replication.seal(rows);
+			if (this.replication) ops = await this.replication.seal(rows, bytes);
 			const f = this.faults?.take(ops);
 			if (f?.fault === "failBeforeCommit") throw f.error;
 			if (f && this.#writing?.batch === batch) this.#writing.lost = f.error;
@@ -326,9 +327,9 @@ const rowBytes = (ops: readonly WriteOp[]) => ops.reduce((n, op) => n + ("value"
 export interface LedgerReplication {
 	/** Rows one batch may carry (a journal entry's budget). */
 	readonly maxBatchBytes: number;
-	/** Seals a batch, waits for its standby, and returns the rows to write (the marker last). Throws CommitSealed when it
-	 *  fails after sealing. */
-	seal(rows: WriteOp[]): Promise<WriteOp[]>;
+	/** Seals a batch (`admitted`: the bytes its commits were admitted with), waits for its standby, and returns the rows
+	 *  to write (the marker last). Throws CommitSealed when it fails after sealing. */
+	seal(rows: WriteOp[], admitted: number): Promise<WriteOp[]>;
 	/** The sealed batch is on the disk. */
 	applied(): void;
 	/** A batch failed: the error its commits get (CommitSealed once it was sealed) and the refusal of everything after. */

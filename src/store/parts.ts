@@ -1,6 +1,7 @@
 // A document with parts (DocDef.parts) stored as rows: its head (everything but the parts) and one row per record of
 // each part. Arrays keep their order through an `ord` per row; maps are keyed. Shared by the SQLite ledger and its tests.
 import type { PartChanges } from "./draft.ts";
+import { diskMapOf } from "./types.ts";
 
 export type PartSpec = import("./types.ts").PartDef;
 /** One stored record of a part: its part (dotted path), its id (array: the record's `id`, else its position's key;
@@ -53,12 +54,14 @@ const idOf = (v: unknown): string => {
  *  records' identity (a changed record is a new object); maps use the keys their draft reported. `ords` keeps each
  *  array record's order between commits (per part): a record appended gets the next one; if the order cannot be kept
  *  (a record moved, or one inserted in the middle), every record of the part is written with a fresh order. */
-export function partChanges(before: unknown, after: unknown, parts: readonly PartSpec[], mapChanges: PartChanges, ords: Map<string, Map<string, number>>, undo?: Array<() => void>): { put: PartRow[]; del: Array<{ part: string; id: string }> } {
-	const put: PartRow[] = [], del: Array<{ part: string; id: string }> = [];
+export function partChanges(before: unknown, after: unknown, parts: readonly PartSpec[], mapChanges: PartChanges, ords: Map<string, Map<string, number>>, undo?: Array<() => void>): { put: PartRow[]; del: Array<{ part: string; id: string }>; clear: string[] } {
+	const put: PartRow[] = [], del: Array<{ part: string; id: string }> = [], clear: string[] = [];
 	for (const p of parts) {
 		const name = p.path.join("."), now = partAt(after, p.path), was = partAt(before, p.path);
 		if (p.kind === "map") {
 			const m = (now ?? {}) as Record<string, unknown>;
+			// a map part on the disk replaced as a whole (or gone): all its rows go, the new map's records are written
+			if (was !== now && diskMapOf(was)) { clear.push(name); for (const k of Object.keys(m)) put.push({ part: name, id: k, ord: 0, value: m[k] }); continue; }
 			// a map part that appeared or was replaced as a whole (not through its draft): every key is compared
 			const keys = was === now ? (mapChanges.get(name) ?? new Set<string>()) : new Set([...Object.keys((was ?? {}) as object), ...Object.keys(m)]);
 			const old = (was ?? {}) as Record<string, unknown>;
@@ -100,7 +103,7 @@ export function partChanges(before: unknown, after: unknown, parts: readonly Par
 		});
 		o.max(max);
 	}
-	return { put, del };
+	return { put, del, clear };
 }
 
 /** The highest order of a part's records, kept beside its order map so an append does not scan them all. */

@@ -120,3 +120,18 @@ for(const backend of BACKENDS){
   }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}
  });
 }
+
+test('an empty standby journal binds to a store kind only with an entry it stores: a refused one binds nothing',async()=>{
+ const home=new PersistentHome('own-sqlite'),p=new PrimarySyncJournal(join(home.dir,'journal.sqlite'),config),standbyDir=new PersistentHome('own-sqlite');
+ const s=new PrimarySyncJournal(join(standbyDir.dir,'journal.sqlite'),config,{self:'s'});
+ const raw=home.storage.bind(home);home.storage=async()=>primarySyncStorage(await raw(),p,{accept:async()=>({revision:p.head().revision,hash:p.head().hash,configHash:p.configHash})},{assertPrimary:async()=>{}});
+ try{
+  const h=await home.open();await new PhiSpaces(h,ctx).write({type:'Job',fields:{n:1}},null,core.FOREVER);await home.close(h);
+  const first=p.intent(1)!;assert.equal(s.format,undefined);
+  await assert.rejects(s.accept({...first,config:{...first.config,standbyReplica:'other'}}),/not the standby/);
+  const forged=structuredClone(first);forged.validatedAt++;await assert.rejects(s.accept(forged),/hash changed/);
+  assert.equal(s.format,undefined,'a refused entry binds nothing');
+  await s.accept(first);assert.equal(s.format,'own');
+  s.close();assert.equal(new PrimarySyncJournal(join(standbyDir.dir,'journal.sqlite'),config,{self:'s'}).format,'own','the binding is stored with the entry');
+ }finally{p.close();try{s.close();}catch{}await home.dispose();await standbyDir.dispose();}
+});

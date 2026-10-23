@@ -11,6 +11,7 @@ export type WriteOp =
 	| { t: "retire"; kind: string; key: string }
 	| { t: "part"; kind: string; key: string; part: string; id: string; ord: number; value: string; at: number | null; grp: string | null; flag: number | null }
 	| { t: "partDel"; kind: string; key: string; part: string; id: string }
+	| { t: "partClear"; kind: string; key: string; part: string }
 	| { t: "meta"; key: string; value: string };
 
 export type OpStatements = Record<WriteOp["t"] | "retireParts" | "seq", ReturnType<DatabaseSync["prepare"]>>;
@@ -22,6 +23,7 @@ export function prepareOps(db: DatabaseSync): OpStatements {
 		retireParts: db.prepare("DELETE FROM parts WHERE kind = ? AND key = ?"),
 		part: db.prepare("INSERT INTO parts (kind, key, part, id, ord, value, at, grp, flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (kind, key, part, id) DO UPDATE SET ord = excluded.ord, value = excluded.value, at = excluded.at, grp = excluded.grp, flag = excluded.flag"),
 		partDel: db.prepare("DELETE FROM parts WHERE kind = ? AND key = ? AND part = ? AND id = ?"),
+		partClear: db.prepare("DELETE FROM parts WHERE kind = ? AND key = ? AND part = ?"),
 		meta: db.prepare("INSERT INTO store_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"),
 		seq: db.prepare("UPDATE store_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'commit_seq'"),
 	};
@@ -34,6 +36,7 @@ export function applyOps(stmts: OpStatements, ops: readonly WriteOp[]): void {
 		else if (op.t === "retire") { stmts.retire.run(op.kind, op.key); stmts.retireParts.run(op.kind, op.key); }
 		else if (op.t === "part") stmts.part.run(op.kind, op.key, op.part, op.id, op.ord, op.value, op.at, op.grp, op.flag);
 		else if (op.t === "partDel") stmts.partDel.run(op.kind, op.key, op.part, op.id);
+		else if (op.t === "partClear") stmts.partClear.run(op.kind, op.key, op.part);
 		else stmts.meta.run(op.key, op.value);
 	}
 	stmts.seq.run();

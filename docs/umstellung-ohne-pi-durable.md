@@ -224,6 +224,13 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
   degradeToSingle, setStandby), Bootstrap, CommitSealed, NotCommitted, Degrade/Revoke, Configured Root, Router,
   Delegation, föderierter Space, Restore, Erasure, Deployment, Run-Recovery. Root-Suite: 996 von 997 (einer
   übersprungen wie bisher).
+- **Prüfung nach der Prüfung:**
+  - Ein abgewiesener Eintrag bindet ein leeres Standby-Journal nicht mehr; die Bindung wird in derselben Transaktion
+    wie der erste angenommene Eintrag geschrieben.
+  - Das Gate zieht beim Versiegeln genau die zugelassenen Bytes ab, sonst wäre das Budget unter Bündelung langsam
+    vollgelaufen.
+  - Die Fehlerprädikate sehen bei einem Dokumentkopf nur die geänderten Felder, wie bei pi-durable. Mit `FAULT_LOG=1`
+    verglichen, greifen die Fehler im föderierten Space auf beiden Speichern an denselben Commits.
 - **Was der eigene Speicher dabei gezeigt hat** (behoben, mit Tests):
   - Entwürfe wurden einzeln abgeschlossen und sofort widerrufen; ein Wert, der von einem Dokument in ein anderes
     wanderte, traf einen widerrufenen Proxy.
@@ -237,9 +244,19 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
     verloren; jetzt bleibt er erhalten und wird mit dem nächsten Commit als Zeilen geschrieben.
   - Bei einer verlorenen Antwort wurden die Commits des Bündels nie abgeschlossen.
 - **Offen:**
-  - Zwei seltene Verwaltungswege lesen auf dem eigenen Speicher je Schritt alle Claims: die Claim-Phase eines
-    Restores und das Markieren entschiedener Claims bei einem Mitgliederwechsel. Sie sind korrekt, brauchen aber einen
-    Schlüssel-Cursor statt eines Scans (U7, Dauerlast).
+  - Drei seltene Verwaltungswege lesen auf dem eigenen Speicher je Schritt alle Claims:
+    - die Claim-Phase eines Restores;
+    - das Markieren entschiedener Claims bei einem Mitgliederwechsel;
+    - die Claim-Phase beim Löschen nach Principal (`data-admin`; dort werden Claims jetzt ersetzt statt geändert, und
+      die Byte-Bilanz wird je Änderung geführt).
+
+    Sie sind korrekt, brauchen aber einen Schlüssel-Cursor statt eines Scans (U7, Dauerlast). Ein Zustand aus der
+    Zeit vor der Byte-Bilanz (`rpc.bytes` fehlt) wird einmal komplett nachgezählt.
+  - Strenger Lauf der ganzen Root-Suite (`PHI_SPACES_STRICT_DISK_MAPS=1 npm test`): Außer den genannten Wegen zählt
+    nur Testcode Claims auf, der Snapshots absichtlich ganz serialisiert oder vergleicht. Behoben wurden dabei:
+    - die Vorprüfung einer Schlüsselrotation, die den ganzen Control-Space kopierte (`core.previewOf`);
+    - die Prüfung gegen `maxDocBytes` beim Löschen (`core.docBytes`);
+    - das Ersetzen einer ganzen Claim-Map auf der Platte, jetzt ein Vorgang `partClear`.
   - Wartung eines gestoppten Speichers (`compactErasedSqlite` gibt es nur für pi-durable): ein Gegenstück für den
     eigenen Speicher (U7).
   - Chat-Test „code full of control characters …“ (etwa einer von fünf Läufen, schon vor U4): Der Web-Teil liest einen

@@ -76,7 +76,9 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  private assertStandby?:(config:PrimarySyncConfig,version:1|2|3)=>Promise<void>;private self?:string;
  #codec?:SyncCodec;
  /** How the deltas of this journal's store look (stored with the journal once it is bound to a store kind). */
- get codec():SyncCodec{if(!this.#codec)throw new PrimarySyncBlocked('this journal is not bound to a store kind yet');return this.#codec;}
+ get codec():SyncCodec{const c=this.#codec??this.#tentative;if(!c)throw new PrimarySyncBlocked('this journal is not bound to a store kind yet');return c;}
+ /** The store kind an unbound journal checks its first entry with; bound only when that entry is stored. */
+ #tentative?:SyncCodec;
  /** The store kind, once bound: by the `format` option, by the first store it drives, or by the first entry it accepts. */
  get format():string|undefined{return this.#codec?.format;}
  /** Binds an empty journal to a store kind; a bound one refuses another. */
@@ -181,24 +183,31 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  sealTransition(next:PrimarySyncConfig,reason:string,mark:SyncDelta,validatedAt:number):PrimaryConfigIntent{
   return this.sealEntry(head=>({version:2 as const,config:configOf(next),previousConfigHash:this.configHash,reason,revision:head.revision+1,previousHash:head.hash,batchHash:hash([]),deltas:[copy(mark)],validatedAt})) as PrimaryConfigIntent;
  }
- /** An empty, unbound journal takes the store kind whose codec recognises the entry's marker write. */
- private bindFrom(i:PrimaryIntent){
-  if(this.#codec)return;const last=Array.isArray(i?.deltas)?i.deltas.at(-1):undefined,spaceId=i?.config?.spaceId;
+ /** The store kind of an entry: the bound one, or (unbound journal) the one whose codec recognises its marker write. */
+ private codecFor(i:PrimaryIntent):SyncCodec{
+  if(this.#codec)return this.#codec;const last=Array.isArray(i?.deltas)?i.deltas.at(-1):undefined,spaceId=i?.config?.spaceId;
   const f=Object.values(CODECS).find(c=>{try{return last!==undefined&&typeof spaceId==='string'&&c.markerOf(last,spaceId)!==null;}catch{return false;}});
-  if(!f)throw new PrimarySyncBlocked('commit marker does not bind the batch');this.bindFormat(f.format);
+  if(!f)throw new PrimarySyncBlocked('commit marker does not bind the batch');return f;
+ }
+ /** Stores an accepted entry; an unbound journal is bound to the entry's store kind in the same transaction, so a
+  *  refused entry (wrong standby, a changed hash) binds nothing. */
+ private store(i:PrimaryIntent,codec:SyncCodec){
+  this.#tentative=codec;
+  try{this.transaction(()=>{this.insert(i);if(!this.#codec)this.setMeta('format',codec.format);});}finally{this.#tentative=undefined;}
+  this.#codec??=codec;
  }
  async accept(input:PrimaryIntent):Promise<PrimarySyncAck>{
-  const i=copy(input);this.bindFrom(i);
+  const i=copy(input),codec=this.codecFor(i);
   if(this.self!==undefined&&i.config.standbyReplica!==this.self)throw new PrimarySyncBlocked('this replica is not the standby of the entry');
   await this.assertStandby?.(copy(i.config),i.version);
-  this.transaction(()=>this.insert(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
+  this.store(i,codec);return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
  }
  /**
   * Catch-up of a quarantined replica before setStandby: accepts the existing history in order although earlier
   * entries name other standbys. Only while `assertQuarantine` confirms the quarantine state; no other effect.
   */
  async catchUp(input:PrimaryIntent,assertQuarantine:()=>Promise<void>):Promise<PrimarySyncAck>{
-  const i=copy(input);await assertQuarantine();this.bindFrom(i);this.transaction(()=>this.insert(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
+  const i=copy(input);await assertQuarantine();this.store(i,this.codecFor(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
  }
  /** Durable record of a replica transition (promotion, degradeToSingle, setStandby) for idempotent continuation. */
  /** IDs of transitions in phase started or locallyCommitted; while any exists, business writes are paused. */
