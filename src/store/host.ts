@@ -29,6 +29,8 @@ export interface Ledger {
 	prepare?(set: CommitSet): unknown;
 	persist(set: CommitSet, prepared?: unknown): void | Promise<void>;
 	close(): void | Promise<void>;
+	/** Tests: gives the store up as a killed process would. */
+	abandon?(): void;
 	/** Why the ledger takes no more work, when that differs from the error of the commit that failed (a primary whose
 	 *  sealed candidate failed refuses everything after it until it is reopened and resolved). */
 	readonly failure?: Error | null;
@@ -222,6 +224,14 @@ export class OwnStoreHost implements ClosableStoreHost {
 		if (!this.#watches.has(a)) this.#watches.set(a, new Set());
 		this.#watches.get(a)!.add(w);
 		return w;
+	}
+
+	/** Tests: drops the host as a killed process would (no close, no flush; the store's owner lock is free again). */
+	abandon(): void {
+		this.#closed = true;
+		for (const set of this.#watches.values()) for (const w of [...set]) w.finish({ reason: "session_closed" });
+		this.#watches.clear();
+		this.#ledger.abandon?.();
 	}
 
 	/** How the ledger writes (absent for one that keeps nothing). */

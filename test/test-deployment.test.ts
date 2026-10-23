@@ -17,7 +17,7 @@ import { principalId } from "../src/mailbox.ts";
 import { SpaceLifecycle, SpaceLifecycleService, spaceCommands } from "../src/space-lifecycle.ts";
 import { createSpace, listSpaces, snapshotSpace, spaceDoc } from "../src/spaces.ts";
 import { WorkerAssignments } from "../src/workers.ts";
-import { BACKENDS, ctx, PersistentHome } from "./support/persistent.ts";
+import { BACKENDS, ctx, PersistentHome, type Backend } from "./support/persistent.ts";
 
 const example = (): DeploymentConfig => ({
 	schemaVersion: 1, deployment: "prime-demo", coordinator: "host-a",
@@ -44,7 +44,7 @@ test("config validation lists every problem and refuses secrets", () => {
 });
 
 /** Coordinator (store A) and host-b (store B); the lifecycle commands reach each host's own store. */
-async function fixture(backend: "jsonl" | "sqlite") {
+async function fixture(backend: Backend) {
 	const homes = { a: new PersistentHome(backend), b: new PersistentHome(backend) };
 	const hosts = { a: await homes.a.open(), b: await homes.b.open() };
 	const keys = { control: generateKey("ed25519", "control"), a: generateKey("ed25519", "a"), b: generateKey("ed25519", "b") };

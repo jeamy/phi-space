@@ -6,8 +6,11 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {PrimarySyncJournal,PrimarySyncBlocked,CommitSealed,primarySyncStorage,recoverPrimarySync,materializeSyncHistory,PhiSpaces,Space,core,type PrimarySyncPeer,type PrimaryCommitIntent,type PrimarySyncConfig} from '../src/index.ts';
 import {canonicalJson} from '../src/canonical.ts';
+import {syncStoreOf} from '../src/primary-sync.ts';
+/** A data write of a sealed batch (not the marker), in either store kind's shape. */
+const dataWrite=(w:any)=>w.t?w.t==='doc'||w.t==='part':String(w.type).startsWith('document.');
 import {SpaceService,StaticIdentity,DEFAULT_POLICY,RemoteSpace,inProcessTransport} from '../src/index.ts';
-import {SyncBudgetExceeded} from '../src/store/legacy.ts';
+import {isSyncBudgetExceeded} from '../src/commit-sealed.ts';
 import {BACKENDS,PersistentHome,ctx} from './support/persistent.ts';
 const config:PrimarySyncConfig={spaceId:'sync-space',authorityId:'authority',primaryEpoch:1,replicaConfigVersion:1,primaryReplica:'p',standbyReplica:'s'};
 const digest=(v:unknown)=>createHash('sha256').update(canonicalJson(v as any)).digest('hex');
@@ -25,7 +28,7 @@ for(const backend of BACKENDS){
    if(failure==='beforeData')home.faults.arm('failBeforeCommit');else if(failure==='lostDataAnswer')home.faults.arm('loseAnswer');else fault=true;
    await assert.rejects(client().write({type:'Job',fields:{n:1}},null,core.FOREVER,{request}),CommitSealed);
    assert.equal(primary.head().revision,before+1);assert.equal(primary.appliedRevision,before);
-   const sealed=primary.intent(before+1)!;assert.ok(sealed.deltas.some(w=>w.type.startsWith('document.')));
+   const sealed=primary.intent(before+1)!;assert.ok(sealed.deltas.some(dataWrite));
    await assert.rejects(client().write({type:'Job',fields:{n:2}}),/poisoned|resolve sealed/);
    // Authorization/deadlines of the sealed business decision are not reevaluated during recovery.
    await home.close(host);primary.close();standby.close();primary=new PrimarySyncJournal(join(home.dir,'sync-journal.sqlite'),config);standby=new PrimarySyncJournal(join(standbyHome.dir,'sync-journal.sqlite'),config);
@@ -49,7 +52,7 @@ for(const backend of BACKENDS){
   try{
    const first=primary.intent(1)!;assert.deepEqual(await standby.accept(first),{revision:1,hash:first.hash,configHash:primary.configHash});
    const changed=structuredClone(first);changed.validatedAt++;const {hash:_,...body}=changed;changed.hash=digest(body);await assert.rejects(standby.accept(changed),/immutable/);
-   const gap=structuredClone(first);gap.revision=3;const marker=gap.deltas.at(-1)!;if(marker.type==='document.create'&&marker.content.kind==='base')marker.content.value.revision=3;const {hash:__,...g}=gap;gap.hash=digest(g);await assert.rejects(standby.accept(gap),/gap or fork/);
+   const gap=structuredClone(first);gap.revision=3;const mark=primary.codec.markerOf(gap.deltas.at(-1),config.spaceId)!;gap.deltas[gap.deltas.length-1]=primary.codec.markerWrite(config.spaceId,{...(mark.value as any),revision:3},null,mark.ref);const {hash:__,...g}=gap;gap.hash=digest(g);await assert.rejects(standby.accept(gap),/gap or fork/);
    const wrong={...first,config:{...config,standbyReplica:'other'}};await assert.rejects(standby.accept(wrong),/intent/);
    standby.close();standby=new PrimarySyncJournal(join(standbyHome.dir,'journal.sqlite'),config);assert.equal(standby.head().hash,first.hash);
    assert.throws(()=>new PrimarySyncJournal(join(home.dir,'journal.sqlite'),{...config,primaryEpoch:2}),/configuration changed/);
@@ -77,9 +80,9 @@ for(const backend of BACKENDS){
    // Reopening with an empty journal must not turn existing application state into an unexplained base.
    const empty=new PrimarySyncJournal(join(home.dir,'empty-journal.sqlite'),config),storage=await raw();
    await assert.rejects(recoverPrimarySync(storage,empty,s,ctx,async()=>{}),/untracked/);empty.close();
-   const marker=await storage.findDocument({kind:'phi-spaces.primary-sync-storage-marker',key:config.spaceId,scope:{kind:'session'}},'current',ctx);assert.ok(marker);
-   const value=(await storage.document(marker.id,'current',ctx))!.value;
-   await storage.commit([{type:'document.change',id:marker.id,content:{kind:'base',version:1,value:{...value,revision:9999}}}],ctx);
+   // the store's own marker, changed behind the journal's back (either store kind)
+   const st=syncStoreOf(storage),marker=await st.marker(config.spaceId,ctx);assert.ok(marker);
+   await st.commit([st.codec.markerWrite(config.spaceId,{...marker.value,revision:9999},marker.ref,null)],ctx);
    await assert.rejects(recoverPrimarySync(storage,p,s,ctx,async()=>{}),/does not match/);await storage.close(ctx);assert.equal(p.head().revision,revision);
    const original=p.intent(1)!,large=structuredClone(original);large.deltas.push(...Array.from({length:30000},()=>original.deltas[0]!));
    await assert.rejects(s.accept(large),/oversized/);assert.equal(s.head().revision,revision);
@@ -96,7 +99,8 @@ for(const backend of BACKENDS){
    let n=0,refused:unknown;for(;n<1000&&!refused;n++)await r.write({type:'Job',fields:{n,pad:'x'.repeat(2000)}},null,core.FOREVER).catch(e=>{refused=e;});
    assert.ok(refused instanceof core.ResourceExhausted&&/journal: sync history is full/.test(refused.message),`ResourceExhausted, not Internal: ${refused}`);
    assert.deepEqual(s.head(),p.head(),'nothing sealed: no candidate, both replicas equal');assert.equal(p.appliedRevision,p.head().revision);
-   await assert.rejects(new PhiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(2000)}},null,core.FOREVER),SyncBudgetExceeded);
+   // refused before sealing, marked as such by either store kind (pi-durable's SyncBudgetExceeded, the own store's SyncJournalFull)
+   await assert.rejects(new PhiSpaces(h,ctx).write({type:'Job',fields:{pad:'x'.repeat(2000)}},null,core.FOREVER),isSyncBudgetExceeded);
    assert.equal(await r.count({type:'Job'}),n-1,'reads still served');
    await r.write({type:'Small',fields:{}},null,core.FOREVER);assert.deepEqual(s.head(),p.head(),'a write that fits is still confirmed');
   }finally{await home.close(h).catch(()=>{});p.close();s.close();await home.dispose();await replica.dispose();}

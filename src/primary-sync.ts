@@ -10,6 +10,7 @@ import type {Storage,StorageWrite,Seq} from '@earendil-works/pi-durable';
 import {isSyncStore,type SyncCodec,type SyncStore} from './store/sync-store.ts';
 import {LEGACY_CODEC,legacySyncStore} from './store/legacy-sync.ts';
 import {OWN_CODEC} from './store/own-sync-codec.ts';
+import type {ReplicatedOwnStore,PrimaryOptions} from './store/sync-sqlite.ts';
 import {canonicalJson,digestJson} from './canonical.ts';
 import {CommitSealed} from './commit-sealed.ts';
 import {limitCheckpointBytes} from './doc.ts';
@@ -71,10 +72,19 @@ async function marker(store:SyncStore,c:PrimarySyncConfig,ctx:Context){
 const markerOf=(i:PrimaryIntent)=>({configHash:hash(i.config),revision:i.revision,batchHash:i.batchHash,previousHash:i.previousHash});
 /** Dedicated local journal, not the independent recovery register. Open before the Harness. */
 export class PrimarySyncJournal implements PrimarySyncPeer{
- private genesis:PrimarySyncConfig;private configs:PrimarySyncConfig[];readonly maxIntentBytes:number;private db:DatabaseSync;private maxHistoryBytes:number;
+ private genesis:PrimarySyncConfig;private configs:PrimarySyncConfig[];readonly maxIntentBytes:number;private db:DatabaseSync;readonly maxHistoryBytes:number;
  private assertStandby?:(config:PrimarySyncConfig,version:1|2|3)=>Promise<void>;private self?:string;
- /** How the deltas of this journal's store look (stored with the journal). */
- readonly codec:SyncCodec;
+ #codec?:SyncCodec;
+ /** How the deltas of this journal's store look (stored with the journal once it is bound to a store kind). */
+ get codec():SyncCodec{if(!this.#codec)throw new PrimarySyncBlocked('this journal is not bound to a store kind yet');return this.#codec;}
+ /** The store kind, once bound: by the `format` option, by the first store it drives, or by the first entry it accepts. */
+ get format():string|undefined{return this.#codec?.format;}
+ /** Binds an empty journal to a store kind; a bound one refuses another. */
+ bindFormat(format:string){
+  if(this.#codec){if(this.#codec.format!==format)throw new PrimarySyncBlocked(`this journal belongs to a ${this.#codec.format} store, not ${format} (moving it is U5 of docs/umstellung-ohne-pi-durable.md)`);return;}
+  const c=CODECS[format];if(!c)throw new PrimarySyncBlocked(`unknown store kind ${format}`);
+  this.transaction(()=>this.setMeta('format',format));this.#codec=c;
+ }
  /** Configuration after the newest entry, including an unresolved candidate. */
  get config(){return copy(this.configs.at(-1)!);}
  get configHash(){return hash(this.configs.at(-1));}
@@ -92,12 +102,11 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   mkdirSync(dirname(path),{recursive:true,mode:0o700});try{if(lstatSync(path).isSymbolicLink())throw new PrimarySyncBlocked('journal must not be a symlink');}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
   this.db=new DatabaseSync(path);chmodSync(path,0o600);this.db.exec('PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sync_intents (revision INTEGER PRIMARY KEY, hash TEXT NOT NULL, intent TEXT NOT NULL)');
   try{
-   // the store format: a journal of the other store kind is refused here, not at its first entry
-   const format=this.transaction(()=>{const prior=this.meta('config');if(prior&&prior!==canonical(this.genesis))throw new PrimarySyncBlocked('stored replica configuration changed');if(!prior)this.setMeta('config',canonical(this.genesis));
-    const stored=this.meta('format')??(prior?'pi-durable':undefined),wanted=o.format??stored??'pi-durable';
-    if(stored&&stored!==wanted)throw new PrimarySyncBlocked(`this journal belongs to a ${stored} store, not ${wanted} (moving it is U5 of docs/umstellung-ohne-pi-durable.md)`);
-    if(!this.meta('format'))this.setMeta('format',wanted);return wanted;});
-   this.codec=CODECS[format]!;
+   this.transaction(()=>{const prior=this.meta('config');if(prior&&prior!==canonical(this.genesis))throw new PrimarySyncBlocked('stored replica configuration changed');if(!prior)this.setMeta('config',canonical(this.genesis));});
+   // the store kind: stored, or pi-durable for entries from before it was stored; an empty journal binds on first use
+   const stored=this.meta('format')??(this.db.prepare('SELECT 1 FROM sync_intents LIMIT 1').get()?'pi-durable':undefined);
+   if(stored)this.#codec=CODECS[stored];
+   if(o.format)this.bindFormat(o.format);
    let previous=zero,revision=0;for(const row of this.db.prepare('SELECT revision,hash,intent FROM sync_intents ORDER BY revision').all()){const i=JSON.parse(row.intent as string) as PrimaryIntent;this.validate(i,this.configs.at(-1)!);if(row.revision!==i.revision||row.hash!==i.hash)throw new PrimarySyncBlocked('journal index disagrees with immutable intent');if(i.revision!==++revision||i.previousHash!==previous)throw new PrimarySyncBlocked('journal history is not a complete prefix');previous=i.hash;this.configs.push(copy(i.config));}
    if(!integer(this.appliedRevision)||this.appliedRevision>revision)throw new PrimarySyncBlocked('journal applied position exceeds history');
   }catch(e){this.db.close();throw e;}
@@ -106,6 +115,9 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  private meta(key:string):string|undefined{return(this.db.prepare('SELECT value FROM sync_meta WHERE key=?').get(key) as {value:string}|undefined)?.value;}
  private setMeta(key:string,value:string){this.db.prepare('INSERT INTO sync_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,value);}
  get appliedRevision(){return Number(this.meta('applied')??0);}
+ private usedBytes?:number;
+ /** Bytes the sealed history takes (against maxHistoryBytes). */
+ get historyBytes():number{return this.usedBytes??=(this.db.prepare('SELECT COALESCE(SUM(length(CAST(intent AS BLOB))),0) AS n FROM sync_intents').get() as {n:number}).n;}
  /** Revisions completed locally without a standby ACK under a verified fencing proof (5.3.1 step 3). */
  get recoveredCommitted():number[]{return JSON.parse(this.meta('recoveredCommitted')??'[]');}
  head():PrimarySyncAck{const row=this.db.prepare('SELECT revision,hash FROM sync_intents ORDER BY revision DESC LIMIT 1').get() as {revision:number;hash:string}|undefined;return {...(row??{revision:0,hash:zero}),configHash:this.configHash};}
@@ -142,7 +154,7 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   if(i.version!==3&&before?.version===3&&before.bootstrap.index!==before.bootstrap.total-1)throw new PrimarySyncBlocked('the bootstrap is not complete');
   const encoded=canonical(i),used=(this.db.prepare('SELECT COALESCE(SUM(length(CAST(intent AS BLOB))),0) AS n FROM sync_intents').get() as {n:number}).n;
   if(used+Buffer.byteLength(encoded)>this.maxHistoryBytes)throw new SyncJournalFull('sync history is full; no committed result was discarded');
-  this.db.prepare('INSERT INTO sync_intents(revision,hash,intent) VALUES(?,?,?)').run(i.revision,i.hash,encoded);this.configs.push(copy(i.config));
+  this.db.prepare('INSERT INTO sync_intents(revision,hash,intent) VALUES(?,?,?)').run(i.revision,i.hash,encoded);this.configs.push(copy(i.config));this.usedBytes=undefined;
  }
  private sealEntry(build:(head:PrimarySyncAck)=>Omit<PrimaryIntent,'hash'>):PrimaryIntent{
   return this.transaction(()=>{const head=this.head();if(head.revision!==this.appliedRevision)throw new PrimarySyncBlocked('a sealed candidate is already unresolved');
@@ -169,8 +181,14 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
  sealTransition(next:PrimarySyncConfig,reason:string,mark:SyncDelta,validatedAt:number):PrimaryConfigIntent{
   return this.sealEntry(head=>({version:2 as const,config:configOf(next),previousConfigHash:this.configHash,reason,revision:head.revision+1,previousHash:head.hash,batchHash:hash([]),deltas:[copy(mark)],validatedAt})) as PrimaryConfigIntent;
  }
+ /** An empty, unbound journal takes the store kind whose codec recognises the entry's marker write. */
+ private bindFrom(i:PrimaryIntent){
+  if(this.#codec)return;const last=Array.isArray(i?.deltas)?i.deltas.at(-1):undefined,spaceId=i?.config?.spaceId;
+  const f=Object.values(CODECS).find(c=>{try{return last!==undefined&&typeof spaceId==='string'&&c.markerOf(last,spaceId)!==null;}catch{return false;}});
+  if(!f)throw new PrimarySyncBlocked('commit marker does not bind the batch');this.bindFormat(f.format);
+ }
  async accept(input:PrimaryIntent):Promise<PrimarySyncAck>{
-  const i=copy(input);
+  const i=copy(input);this.bindFrom(i);
   if(this.self!==undefined&&i.config.standbyReplica!==this.self)throw new PrimarySyncBlocked('this replica is not the standby of the entry');
   await this.assertStandby?.(copy(i.config),i.version);
   this.transaction(()=>this.insert(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
@@ -180,7 +198,7 @@ export class PrimarySyncJournal implements PrimarySyncPeer{
   * entries name other standbys. Only while `assertQuarantine` confirms the quarantine state; no other effect.
   */
  async catchUp(input:PrimaryIntent,assertQuarantine:()=>Promise<void>):Promise<PrimarySyncAck>{
-  const i=copy(input);await assertQuarantine();this.transaction(()=>this.insert(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
+  const i=copy(input);await assertQuarantine();this.bindFrom(i);this.transaction(()=>this.insert(i));return {revision:i.revision,hash:i.hash,configHash:hash(i.config)};
  }
  /** Durable record of a replica transition (promotion, degradeToSingle, setStandby) for idempotent continuation. */
  /** IDs of transitions in phase started or locallyCommitted; while any exists, business writes are paused. */
@@ -267,7 +285,7 @@ export async function bootstrapPrimarySync(raw:Storage|SyncStore,journal:Primary
 }
 /** A store of the journal's format (a journal of the other store kind is refused). */
 function storeFor(raw:Storage|SyncStore,journal:PrimarySyncJournal):SyncStore{
- const s=syncStoreOf(raw);if(s.codec.format!==journal.codec.format)throw new PrimarySyncBlocked(`a ${journal.codec.format} journal cannot drive a ${s.codec.format} store`);return s;
+ const s=syncStoreOf(raw);journal.bindFormat(s.codec.format);return s;
 }
 async function apply(storage:SyncStore,journal:PrimarySyncJournal,intent:PrimaryIntent,ctx:Context,recovered=false):Promise<unknown>{
  const m=await marker(storage,journal.configAt(intent.revision),ctx),expected=markerOf(intent);
@@ -344,8 +362,13 @@ export async function applyConfigTransition(raw:Storage|SyncStore,journal:Primar
 }
 /** Captures every document, claim, task, mailbox and root table write in the supplied storage domain. */
 /** `onPoisoned`: a sealed candidate was not confirmed; this storage refuses all work until it is reopened and resolved. */
-export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:{assertPrimary:()=>Promise<void>;now?:()=>number;onPoisoned?:(sealed:{revision:number;hash:string})=>void}):Storage{
- const store=storeFor(storage,journal);let poisoned=false,busy=false;
+export function primarySyncStorage(storage:Storage,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:PrimaryOptions):Storage;
+/** The own store as a primary: its host (`open()`) seals, confirms and writes every batch (store/sync-sqlite.ts). */
+export function primarySyncStorage(storage:SyncStore,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:PrimaryOptions):ReplicatedOwnStore;
+export function primarySyncStorage(storage:Storage|SyncStore,journal:PrimarySyncJournal,peer:PrimarySyncPeer|null,o:PrimaryOptions):Storage|ReplicatedOwnStore{
+ const store=storeFor(storage,journal);
+ if(isSyncStore(storage)){if(!storage.replicated)throw new PrimarySyncBlocked('this store cannot be a primary');return storage.replicated(journal,peer,o) as ReplicatedOwnStore;}
+ let poisoned=false,busy=false;
  // A Space base must fit one sealed commit together with the other writes of that commit.
  limitCheckpointBytes(journal.maxIntentBytes-64*1024);
  return new Proxy(storage,{get(target,property,receiver){

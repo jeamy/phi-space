@@ -9,9 +9,13 @@ import { createRegistry, Harness, type Storage, type StorageWrite } from "@earen
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createModels } from "@earendil-works/pi-ai/models";
+import { OwnSyncStore, ReplicatedOwnStore } from "../../src/store/sync-sqlite.ts";
+import type { StoreFaults } from "../../src/store/sqlite.ts";
+import { OwnStoreHost } from "../../src/store/host.ts";
 
-export type Backend = "jsonl" | "sqlite";
-export const BACKENDS: readonly Backend[] = ["jsonl", "sqlite"];
+/** pi-durable's JSONL and SQLite storage, and phi-spaces' own SQLite store (docs/umstellung-ohne-pi-durable.md). */
+export type Backend = "jsonl" | "sqlite" | "own-sqlite";
+export const BACKENDS: readonly Backend[] = ["jsonl", "sqlite", "own-sqlite"];
 
 /**
  * What the next matching storage commit does:
@@ -26,6 +30,16 @@ export class FaultSwitch {
 	#armed: { fault: Fault; when: (writes: readonly StorageWrite[]) => boolean } | undefined;
 	fired = 0;
 	arm(fault: Fault, when: (writes: readonly StorageWrite[]) => boolean = () => true): void { this.#armed = { fault, when }; }
+	/** The same switch for the own store (its batches' rows go to `when`). */
+	readonly own: StoreFaults = {
+		take: (ops) => {
+			const a = this.#armed;
+			if (!a || !a.when(ops as never)) return undefined;
+			this.#armed = undefined;
+			this.fired++;
+			return { fault: a.fault, error: new InjectedFault(a.fault === "failBeforeCommit" ? "injected: crash before commit" : "injected: commit durable, answer lost") };
+		},
+	};
 	disarm(): void { this.#armed = undefined; }
 	/** A storage whose `commit` obeys this switch; every other method is the original. */
 	wrap(storage: Storage): Storage {
@@ -62,13 +76,24 @@ export class PersistentHome {
 		this.backend = backend;
 		this.dir = mkdtempSync(join(tmpdir(), `phi-spaces-${backend}-`));
 	}
+	/** The raw store. For own-sqlite an OwnSyncStore (typed as pi-durable's Storage for the tests that pass it on to
+	 *  the replication functions, which take either). */
 	async storage(): Promise<Storage> {
+		if (this.backend === "own-sqlite") return new OwnSyncStore(join(this.dir, "store.sqlite"), { faults: this.faults.own }) as unknown as Storage;
 		const s = this.backend === "jsonl" ? await openNodeJsonlStorage(this.dir, ctx) : await openNodeSqliteStorage(join(this.dir, "harness.sqlite"));
 		return this.faults.wrap(s);
 	}
 	/** `o`: models and registry for agent tests (a faux provider, installed extensions); defaults are empty. */
 	async open(o: { models?: ReturnType<typeof createModels>; registry?: ReturnType<typeof createRegistry> } = {}): Promise<Harness> {
-		const h = await Harness.open(await this.storage(), { models: o.models ?? createModels(), registry: o.registry ?? createRegistry() }, ctx);
+		const s = await this.storage() as unknown;
+		// the own store's host is a StoreHost, not a Harness: typed as one for the tests, which use what both have
+		if (s instanceof OwnSyncStore || s instanceof ReplicatedOwnStore) {
+			if (o.models || o.registry) throw new Error("agent tests need pi-durable's Harness, not the own store");
+			const h = (await (s instanceof ReplicatedOwnStore ? s.open() : s.openHost())) as unknown as Harness;
+			this.#open.add(h);
+			return h;
+		}
+		const h = await Harness.open(s as Storage, { models: o.models ?? createModels(), registry: o.registry ?? createRegistry() }, ctx);
 		this.#open.add(h);
 		return h;
 	}
@@ -77,7 +102,11 @@ export class PersistentHome {
 		await h.close(ctx);
 	}
 	/** Abandon `h` as a crash would: no close, no flush beyond what was committed. The caller must not use it again. */
-	crash(h: Harness): void { this.#open.delete(h); this.abandoned.push(h); }
+	crash(h: Harness): void {
+		this.#open.delete(h);
+		// a killed process leaves its store unlocked; pi-durable's storage has no owner lock to free
+		if ((h as unknown) instanceof OwnStoreHost) (h as unknown as OwnStoreHost).abandon(); else this.abandoned.push(h);
+	}
 	readonly abandoned: Harness[] = [];
 	/** Close what is still open (abandoned harnesses too, best effort, so file handles are released) and delete. */
 	async dispose(): Promise<void> {

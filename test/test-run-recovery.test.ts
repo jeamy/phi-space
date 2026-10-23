@@ -7,7 +7,7 @@ import { PhiSpaces } from "../src/client.ts";
 import { beginRestore, completeRestore, restoreBatch, snapshotHash } from "../src/restore.ts";
 import { RunBusy, RunController, localRunMember, type RunIdentity, type RunMember, type RunSpec } from "../src/run-controller.ts";
 import { createSpace, snapshotSpace, spaceDoc } from "../src/spaces.ts";
-import { BACKENDS, ctx, PersistentHome } from "./support/persistent.ts";
+import { BACKENDS, ctx, PersistentHome, type Backend } from "./support/persistent.ts";
 
 type Host = Awaited<ReturnType<PersistentHome["open"]>>;
 const T = (type: string, fields: c.Fields = {}): c.Template => ({ type, fields });
@@ -70,7 +70,7 @@ test("recovery entry fences block takes, task writes and lease extension; bound 
 });
 
 // Members are named Spaces of one store; the controller journal lives in its own store, so it can be lost.
-async function setup(backend: "jsonl" | "sqlite", aliases: string[]) {
+async function setup(backend: Backend, aliases: string[]) {
 	const data = new PersistentHome(backend), control = [new PersistentHome(backend)];
 	const h = await data.open(), ids: string[] = [];
 	for (const alias of aliases) {

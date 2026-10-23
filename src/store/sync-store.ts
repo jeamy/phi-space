@@ -34,6 +34,8 @@ export interface SyncStore<W = unknown> {
 	isEmpty(ctx: Context): Promise<boolean>;
 	/** A fresh id for a new marker. */
 	mintId(): Promise<unknown>;
+	/** The store as a primary under a journal (primarySyncStorage); absent where the caller wraps the store itself. */
+	replicated?(journal: any, peer: any, o: any): unknown;
 }
 
 export const isSyncStore = (v: unknown): v is SyncStore => typeof v === "object" && v !== null && "codec" in v && typeof (v as SyncStore).capture === "function";

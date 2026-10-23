@@ -35,6 +35,8 @@ export type SqliteStoreOptions = {
 	/** Tests: what the next write of a batch does (test/support/persistent.ts) — fail before the data is written, or write
 	 *  it and lose the answer. */
 	faults?: StoreFaults;
+	/** Primary/sync: the replication of every batch (store/sync-sqlite.ts). */
+	replication?: LedgerReplication;
 };
 export type StoreFaults = { take(ops: readonly WriteOp[]): { fault: "failBeforeCommit" | "loseAnswer"; error: Error } | undefined };
 
@@ -216,7 +218,7 @@ class SqliteLedger implements Ledger {
 		}
 		for (const r of set.retired) { this.#ords.delete(`${r.kind}\u0000${docKey(r.key)}`); this.#diskMaps.delete(`${r.kind}\u0000${docKey(r.key)}`); }
 		return new Promise((resolve, reject) => {
-			this.#queued.push({ ops, bytes: rowBytes(ops), resolve, reject });
+			this.#queued.push({ ops, bytes: this.replication ? Buffer.byteLength(JSON.stringify(ops)) : rowBytes(ops), resolve, reject });
 			if (!this.#writing) this.#send();
 		});
 	}
@@ -243,7 +245,7 @@ class SqliteLedger implements Ledger {
 			const f = this.faults?.take(ops);
 			if (f?.fault === "failBeforeCommit") throw f.error;
 			if (f && this.#writing?.batch === batch) this.#writing.lost = f.error;
-		} catch (e) { this.#fail(e instanceof Error ? e : new Error(String(e)), this.replication?.poison(e)); return; }
+		} catch (e) { const f = this.replication?.failed(e); this.#fail(f?.now ?? (e instanceof Error ? e : new Error(String(e))), f?.later); return; }
 		if (this.#writing?.batch !== batch) return;
 		this.#stats.rows += ops.length;
 		this.#sentAt = performance.now();
@@ -256,17 +258,18 @@ class SqliteLedger implements Ledger {
 			this.#stats.writeMs += performance.now() - this.#sentAt;
 			const { done, lost } = this.#writing;
 			this.#writing = null;
+			// durable, but the answer is lost (a test's fault): as after a crash, the journal learns it when it is reopened
+			if (lost) { const f = this.replication?.failed(lost); for (const d of done) d.reject(f?.now ?? lost); this.#fail(f?.now ?? lost, f?.later); return; }
 			try { this.replication?.applied(); } catch (e) { this.#fail(e as Error); return; }
 			// what these commits wrote into map parts on the disk is read from there from now on
 			this.#durableCount += done.length;
 			for (const maps of this.#diskMaps.values()) for (const m of maps.values()) m.settle(this.#durableCount);
-			if (lost) { this.#fail(lost); return; } // durable, but the answer is lost (a test's fault)
 			for (const d of done) d.resolve();
 			this.#send();
 			if (!this.#writing) this.#worker.unref(); // idle: the store does not keep the process alive
 			return;
 		}
-		if (r.type === "failed") this.#fail(new Error(`the store could not write: ${r.error}`), this.replication?.poison(new Error(r.error)));
+		if (r.type === "failed") { const e = new Error(`the store could not write: ${r.error}`), f = this.replication?.failed(e); this.#fail(f?.now ?? e, f?.later); }
 	}
 
 	/** A write failed: this batch and everything after it fails (with `later`, if given); the store takes no more (plan
@@ -286,6 +289,14 @@ class SqliteLedger implements Ledger {
 			if (this.#failure) return;
 			await new Promise<void>((r) => setTimeout(r, 1));
 		}
+	}
+
+	/** As a killed process would leave it: nothing more is written or flushed, the owner lock is free (tests). */
+	abandon(): void {
+		this.#fail(new Error("the store was abandoned"));
+		void this.#worker.terminate();
+		try { this.#read.close(); } catch { /* already closed */ }
+		try { this.#lock.close(); } catch { /* already closed */ }
 	}
 
 	async close(): Promise<void> {
@@ -311,16 +322,16 @@ export interface LedgerReplication {
 	seal(rows: WriteOp[]): Promise<WriteOp[]>;
 	/** The sealed batch is on the disk. */
 	applied(): void;
-	/** The refusal of everything after a failed batch, or undefined (the batch's own error then). */
-	poison(cause: unknown): Error | undefined;
+	/** A batch failed: the error its commits get (CommitSealed once it was sealed) and the refusal of everything after. */
+	failed(cause: unknown): { now: Error; later?: Error };
 }
 
 /** A store file opened by its owner: the read connection and the held owner lock. */
-type StoreFiles = { path: string; read: DatabaseSync; lock: DatabaseSync };
+export type StoreFiles = { path: string; read: DatabaseSync; lock: DatabaseSync };
 
 /** Opens (or creates) the store file at `path` for its owner. Refuses when another process owns the store or the file
  *  is of a newer format or of another program. */
-function openFiles(path: string): StoreFiles {
+export function openFiles(path: string): StoreFiles {
 	mkdirSync(dirname(path), { recursive: true });
 	// the owner lock: an exclusive lock on a file next to the store, held while it is open
 	const lock = new DatabaseSync(`${path}.owner`, { timeout: 0 });
@@ -363,7 +374,7 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 }
 
 /** The host over opened store files (they belong to it from now on). */
-async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnStoreHost> {
+export async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnStoreHost> {
 	const { path, read, lock } = files;
 	const worker = new Worker(new URL("./sqlite-writer.ts", import.meta.url));
 	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL" } satisfies WriterRequest); });
@@ -371,6 +382,7 @@ async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnSt
 	const ledger = new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1");
 	if (o.gate) ledger.gate = o.gate;
 	if (o.faults) ledger.faults = o.faults;
+	if (o.replication) ledger.replication = o.replication;
 	const host = new OwnStoreHost(ledger);
 	// an idle writer does not keep the process alive (unref after its listeners: a listener refs it again)
 	worker.unref();
