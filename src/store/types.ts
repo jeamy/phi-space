@@ -39,6 +39,8 @@ export interface DiskMapQuery<V> {
 	hasGroup(g: string): boolean;
 	/** Whether the map holds any record. */
 	any(): boolean;
+	/** Records in key order after `after` (null: from the start), at most `limit`: a cursor through the map. */
+	page(after: string | null, limit: number): Array<[string, V]>;
 	/** Every record: reads the whole map (audits and tests ask for it on purpose; enumerating the map may throw). */
 	entries(): Array<[string, V]>;
 }

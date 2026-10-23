@@ -1,10 +1,13 @@
-// Maintenance of an exclusively owned, stopped pi-durable SQLite store, schema v1 only.
+// Maintenance of an exclusively owned, stopped pi-durable SQLite store, schema v1 only (the own store: store/erasure-own.ts).
 // Removes obsolete logical revisions and free pages; media snapshots require the archive policy.
 import {DatabaseSync} from 'node:sqlite';
 import {lstatSync,realpathSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {apply} from '@earendil-works/chord/delta';
+/** The own store (it has a store_meta table) goes to store/erasure-own.ts; pi-durable's is compacted here. */
 export async function compactErasedSqlite(path:string,assertExclusiveFenced:()=>Promise<void>){
+ const probe=new DatabaseSync(resolve(path),{readOnly:true});let own=false;try{own=!!probe.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='store_meta'").get();}finally{probe.close();}
+ if(own)return (await import('./store/erasure-own.ts')).compactErasedOwnStore(path,assertExclusiveFenced);
  await assertExclusiveFenced();const absolute=resolve(path),stat=lstatSync(absolute);if(!stat.isFile()||stat.isSymbolicLink()||realpathSync(absolute)!==absolute)throw Error('owned regular SQLite file required');
  const db=new DatabaseSync(absolute);let documents=0,revisionsRemoved=0;
  try{

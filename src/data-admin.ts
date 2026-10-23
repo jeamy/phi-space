@@ -14,7 +14,9 @@ import { jsonBytes } from './json.ts';
 
 type Phase = 'registrations'|'mailboxes'|'claims'|'generations'|'entries'|'history'|'completed';
 type Audit = {hash:string;at:number;kind:'purgeTasks'|'deletePrincipal';admin:string;count:number};
-type Command = Audit & {phase?:Phase;principal?:Principal;incarnation?:string|null;authorityId?:string|null;batches?:number};
+type Command = Audit & {phase?:Phase;principal?:Principal;incarnation?:string|null;authorityId?:string|null;batches?:number;
+ /** Claims on the disk: the key the claims phase handled last (walked in key order, not read whole each step). */
+ claimKey?:string};
 export const DataAdminJournal=defineDocFamily<{commands:Record<string,Command>},null>({
  kind:'phi-spaces.data-admin',version:1,scope:'session',family:true,initial:()=>({commands:{}})
 });
@@ -124,15 +126,18 @@ function eraseBatch(s:core.SpaceState,c:Command,p:Principal,now:number,id:string
    c.phase='claims';return;
   }
   case 'claims': {
-   // claims are values (a store may freeze them): a changed one is replaced. Claims on the disk are read whole here (a
-   // rare admin step; a key cursor is U7 of docs/umstellung-ohne-pi-durable.md) and keep their tally per change.
+   // claims are values (a store may freeze them): a changed one is replaced. Claims on the disk are walked in key order
+   // from the key handled last (c.claimKey) and keep their tally per change.
    for(const claims of [s.rpc?.claims,s.restoredClaims]){
     const disk=diskMapOf<ClaimRec>(claims),inRpc=claims!==undefined&&claims===s.rpc?.claims;
     const change=(key:string,before:ClaimRec,next:ClaimRec|undefined)=>{if(disk&&inRpc){s.rpc!.bytes=(s.rpc!.bytes??0)-bytes(before)+(next?bytes(next):-bytes(key)-2);s.rpc!.reservedBytes=Math.max(0,(s.rpc!.reservedBytes??0)-(before.reservedResultBytes??0));}if(next)claims![key]=next;else delete claims![key];};
-    for(const [key,claim]of disk?disk.entries():Object.entries(claims??{})) {
-     if(same(claim.principal)){if(!spend(256+bytes(key))){if(!disk)tally(s);return;}change(key,claim,undefined);}
-     else if(claim.result!==undefined&&affected(claim.result)){if(!spend(256+bytes(key))){if(!disk)tally(s);return;}const {result:_r,reservedResultBytes:_b,...rest}=claim;change(key,claim,{...rest,resultExpired:true});}
-    }
+    const handle=(key:string,claim:ClaimRec):boolean=>{
+     if(same(claim.principal)){if(!spend(256+bytes(key)))return false;change(key,claim,undefined);}
+     else if(claim.result!==undefined&&affected(claim.result)){if(!spend(256+bytes(key)))return false;const {result:_r,reservedResultBytes:_b,...rest}=claim;change(key,claim,{...rest,resultExpired:true});}
+     return true;
+    };
+    if(disk){for(let page=disk.page(c.claimKey??null,64);page.length;page=disk.page(c.claimKey??null,64))for(const [key,claim]of page){if(!handle(key,claim))return;c.claimKey=key;}continue;}
+    for(const [key,claim]of Object.entries(claims??{}))if(!handle(key,claim)){if(!diskMapOf(s.rpc?.claims))tally(s);return;}
    }
    if(!diskMapOf(s.rpc?.claims))tally(s);c.phase='generations';return;
   }

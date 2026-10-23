@@ -250,21 +250,26 @@ offenen Entscheidungen. Die Messung dort macht die Teilablage großer Dokumente 
     verloren; jetzt bleibt er erhalten und wird mit dem nächsten Commit als Zeilen geschrieben.
   - Bei einer verlorenen Antwort wurden die Commits des Bündels nie abgeschlossen.
 - **Offen:**
-  - Drei seltene Verwaltungswege lesen auf dem eigenen Speicher je Schritt alle Claims:
-    - die Claim-Phase eines Restores;
-    - das Markieren entschiedener Claims bei einem Mitgliederwechsel;
-    - die Claim-Phase beim Löschen nach Principal (`data-admin`; dort werden Claims jetzt ersetzt statt geändert, und
-      die Byte-Bilanz wird je Änderung geführt).
-
-    Sie sind korrekt, brauchen aber einen Schlüssel-Cursor statt eines Scans (U7, Dauerlast). Ein Zustand aus der
-    Zeit vor der Byte-Bilanz (`rpc.bytes` fehlt) wird einmal komplett nachgezählt.
+  - ~~Drei seltene Verwaltungswege lesen je Schritt alle Claims~~ (erledigt, 2026-10-23): Restore, Markieren beim
+    Mitgliederwechsel und Löschen nach Principal gehen über einen Schlüssel-Cursor (`DISK_MAP.page`), der im
+    Restore-, Übergangs- bzw. Befehlszustand steht. Jeder Schritt setzt hinter dem zuletzt bearbeiteten Claim fort,
+    statt von vorn zu suchen. Ein Test läuft seitenweise durch eine Claim-Map, während überlappende Commits Claims
+    löschen und hinzufügen. Ein Zustand aus der Zeit vor der Byte-Bilanz (`rpc.bytes` fehlt) wird weiterhin einmal
+    komplett nachgezählt.
+  - `restoredClaims` (die historischen Claims nach einem Restore) ist ein gewöhnliches Feld im Kopf des Space-Dokuments,
+    kein Teil auf der Platte: Nach dem Restore eines großen Space läge ein Tag Claims im Kopf (U7).
   - Strenger Lauf der ganzen Root-Suite (`PHI_SPACES_STRICT_DISK_MAPS=1 npm test`): Außer den genannten Wegen zählt
     nur Testcode Claims auf, der Snapshots absichtlich ganz serialisiert oder vergleicht. Behoben wurden dabei:
     - die Vorprüfung einer Schlüsselrotation, die den ganzen Control-Space kopierte (`core.previewOf`);
     - die Prüfung gegen `maxDocBytes` beim Löschen (`core.docBytes`);
     - das Ersetzen einer ganzen Claim-Map auf der Platte, jetzt ein Vorgang `partClear`.
-  - Wartung eines gestoppten Speichers (`compactErasedSqlite` gibt es nur für pi-durable): ein Gegenstück für den
-    eigenen Speicher (U7).
+  - ~~Wartung eines gestoppten Speichers~~ (erledigt, 2026-10-23): `compactErasedSqlite` erkennt den eigenen Speicher
+    und gibt ihn an `src/store/erasure-own.ts` weiter. Das läuft unter Owner-Lock und Fencing-Prüfung: WAL leeren,
+    `VACUUM` mit `secure_delete`, WAL noch einmal leeren, Integritätsprüfung.
+    - Revisionen gibt es hier keine.
+    - Gelöschte Zeilen überschreibt das in Node gebündelte SQLite (`SECURE_DELETE`) schon in der Datei.
+    - Übrig bleiben alte Seitenbilder im WAL eines getöteten Prozesses. Ein Test zeigt, dass die gelöschten Daten
+      dort stehen und danach nirgends mehr.
   - Statische Importe von pi-durable in `src`: `agent.ts` (U6), `store/legacy.ts` und `store/legacy-sync.ts` (bis
     U5/U8), Typ-Importe in `primary-sync.ts` und `replica-control.ts` für den pi-durable-Pfad.
 

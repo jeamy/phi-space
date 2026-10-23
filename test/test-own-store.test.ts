@@ -345,3 +345,26 @@ test("primary/sync Spaces use the own store when the daemon supplies no store fa
 	await new PhiSpaces(h, ctx).write({ type: "Job", fields: {} }, null, FOREVER);
 	await h.close(ctx);
 });
+
+test("a disk map's pages walk every record once in key order, with what commits not yet durable wrote and deleted", async () => {
+	const h = await openSqliteHost(fresh(), { strictDiskMaps: true });
+	let gen = "";
+	await h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState, now = Date.now();
+		gen = claims.issueGeneration(s, now, { peerId: "p" }).generation;
+		for (let i = 0; i < 100; i++) { const a = claims.admit(s, now, ref(gen, i), "write", {}, now + 60_000); claims.decide(s, now, a.key, { state: "done", result: null }); }
+	}, ctx);
+	// overlapping commits change the map while it is walked: the walk sees each of their states in order
+	const walk = (s: core.SpaceState) => { const out: string[] = []; for (let after: string | null = null; ;) { const p = claimsOf(s)!.page(after, 7); out.push(...p.map(([k]) => k)); if (p.length < 7) return out; after = p.at(-1)![0]; } };
+	const commits = [0, 1, 2].map((round) => h.commit(async (tx) => {
+		const s = await tx.doc(Space) as core.SpaceState, now = Date.now();
+		for (let i = round * 10; i < round * 10 + 10; i++) delete s.rpc!.claims[claims.keyOf(s, ref(gen, i))];
+		for (let i = 0; i < 5; i++) claims.admit(s, now, ref(gen, `new-${round}-${i}`), "write", {}, now + 60_000);
+		const keys = walk(s);
+		assert.deepEqual(keys, [...keys].sort(), "key order");
+		assert.equal(new Set(keys).size, keys.length, "each once");
+		assert.equal(keys.length, 100 - (round + 1) * 10 + (round + 1) * 5);
+	}, ctx));
+	await Promise.all(commits);
+	await h.close(ctx);
+});

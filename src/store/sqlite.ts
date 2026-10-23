@@ -169,6 +169,7 @@ class SqliteLedger implements Ledger {
 			nextAt: (t) => (this.#prep(`SELECT min(at) AS at ${base} AND at IS NOT NULL AND at > ? AND flag = 0`).get(kind, key, part, t) as { at: number | null }).at ?? undefined,
 			group: (g, limit) => (this.#prep(`SELECT id ${base} AND grp = ? LIMIT ?`).all(kind, key, part, g, limit) as Array<{ id: string }>).map((r) => r.id),
 			unindexed: () => (this.#prep(`SELECT id, value ${base} AND at IS NULL`).all(kind, key, part) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]),
+			after: (after, limit) => (this.#prep(`SELECT id, value ${base} AND id > ? ORDER BY id LIMIT ?`).all(kind, key, part, after ?? "", limit) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]),
 			firstIds: (limit) => (this.#prep(`SELECT id ${base} ORDER BY id LIMIT ?`).all(kind, key, part, limit) as Array<{ id: string }>).map((r) => r.id),
 		};
 	}

@@ -2,8 +2,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import * as core from "./core.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
+import type { ClaimRec } from "./claims.ts";
+import { diskMapOf } from "./store/types.ts";
 
-export type RestoreState = { recoveryId: string; argumentHash: string; snapshotHash: string; incarnation: string; primaryEpoch: number; startedAt: number; waitUntil: number; stage: "entries" | "claims" | "generations" | "gates" | "waiting" | "completed"; cursor: number; kind: "data" | "control" };
+export type RestoreState = { recoveryId: string; argumentHash: string; snapshotHash: string; incarnation: string; primaryEpoch: number; startedAt: number; waitUntil: number; stage: "entries" | "claims" | "generations" | "gates" | "waiting" | "completed"; cursor: number; kind: "data" | "control";
+	/** Claims of the source on the disk: the key restored last (they are walked in key order after its other claims). */
+	claimKey?: string };
 /** The recovery ID that fences run gates of a restore: the restore ID itself if it is a valid gate ID, else a stable hash. */
 export const runRecoveryIdOf = (recoveryId: string): string => /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,95}$/.test(recoveryId) ? recoveryId : "restore-" + createHash("sha256").update(recoveryId).digest("hex").slice(0, 32);
 export const snapshotHash = (s: core.SpaceState): string => digestJson(s);
@@ -46,18 +50,27 @@ export function restoreBatch(s: core.SpaceState, now: number, source: core.Space
 		r.stage = "claims"; r.cursor = 0;
 	}
 	if (r.stage === "claims") {
-		const claims = Object.entries({ ...source.restoredClaims, ...source.rpc?.claims });
-		for (; r.cursor < claims.length; r.cursor++) {
-			const [key, c] = claims[r.cursor]!;
+		// claims of the source on the disk are not listed whole: its historical claims (in memory) go first by index,
+		// then its claims in key order from the key restored last; a key in both counts once, as its current claim
+		const disk = diskMapOf<ClaimRec>(source.rpc?.claims);
+		const claims = disk ? Object.entries(source.restoredClaims ?? {}).filter(([k]) => source.rpc!.claims[k] === undefined) : Object.entries({ ...source.restoredClaims, ...source.rpc?.claims });
+		const next = (): [string, ClaimRec] | undefined => {
+			if (r.cursor < claims.length) return claims[r.cursor];
+			return disk?.page(r.claimKey ?? null, 1)[0];
+		};
+		for (let item = next(); item; item = next()) {
+			const [key, c] = item;
+			const advance = () => { if (r.cursor < claims.length) r.cursor++; else r.claimKey = key; };
 			const cost = Buffer.byteLength(JSON.stringify(c)) + Buffer.byteLength(JSON.stringify(key)) + 256;
 			const historyBytes = core.claimBytes(s) + cost;
 			if (historyBytes > core.limitsOf(s).maxClaimBytes || core.overheadBytes(s) + cost + s.entries.reduce((n, e) => n + (e.size ?? Buffer.byteLength(JSON.stringify(e.fields))), 0) > core.limitsOf(s).maxDocBytes) throw new core.ResourceExhausted("restored history violates current space limits");
 			if (cost + 1024 > core.limitsOf(s).maxCommitBytes) throw new core.ResourceExhausted("historical claim does not fit the restore budget");
-			if (!core.maintenanceStep(s, cost, now, `restore-claim:${r.cursor}`)) return core.plain(r);
+			if (!core.maintenanceStep(s, cost, now, `restore-claim:${r.claimKey ?? r.cursor}`)) return core.plain(r);
 			const copy = core.plain(c); delete copy.reservedResultBytes;
 			s.restoredClaims![key] = copy; core.touch(s, now);
+			advance();
 		}
-		r.stage = "generations"; r.cursor = 0; core.touch(s, now);
+		r.stage = "generations"; r.cursor = 0; delete r.claimKey; core.touch(s, now);
 	}
 	if (r.stage === "generations") {
 		const generations = [...new Set([...Object.keys(source.invalidGenerations ?? {}), ...Object.keys(source.rpc?.generations ?? {})])];
