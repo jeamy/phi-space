@@ -17,15 +17,15 @@ Stufe 2 (`help-site/examples/v2-local-durable/run.ts`) macht den Multiplayer Spa
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Prozess**, **1 Harness** auf einer **SQLite-Datei** (`chat-v2.sqlite`).
+- **1 Prozess**, **1 Host** auf einer **SQLite-Datei** (`chat-v2.sqlite`).
 - **1 benannter Space** (`chat-v2`): Threads, `Msg`, `ChatTask`, `ScheduledJob`, `TimerLock`, Subagent-Entries – alles persistent in einem Space.
-- Für die Crash-Demo wird der Harness geschlossen und **auf derselben SQLite-Datei neu geöffnet**: der Space überlebt den simulierten Neustart, offene Leases werden gereapt.
+- Für die Crash-Demo wird der Host geschlossen und **auf derselben SQLite-Datei neu geöffnet**: der Space überlebt den simulierten Neustart, offene Leases werden gereapt.
 
 ## Arbeitsablauf {#workflow}
 
 ### Schritt 1: SQLite-Storage und RequestRef-Claims {#step-1-sqlite-claims}
 
-Statt `MemoryStorage` öffnet der Host `await openNodeSqliteStorage(dbPath)`. Für jeden Teilnehmer wird `const { generation } = await space.issueGeneration(principal)` ausgestellt. Wird `createThread` oder `submitMessage` nach einem Verbindungsabbruch mit derselben `requestId` wiederholt, gibt `phi-spaces` exakt das erste Ergebnis zurück.
+Statt des Speichers im Arbeitsspeicher öffnet der Host `await openSqliteHost(dbPath)` (der eigene SQLite-Speicher). Für jeden Teilnehmer wird `const { generation } = await space.issueGeneration(principal)` ausgestellt. Wird `createThread` oder `submitMessage` nach einem Verbindungsabbruch mit derselben `requestId` wiederholt, gibt `phi-spaces` exakt das erste Ergebnis zurück.
 
 ### Schritt 2: Geplante Alarme über ScheduledJob + TimerLock-Lease {#step-2-alarms}
 

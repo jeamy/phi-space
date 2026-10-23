@@ -22,7 +22,7 @@ FROM deps AS builder
 WORKDIR /opt/phi-spaces
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-COPY examples/live-models.ts ./examples/live-models.ts
+COPY agent/src/live-models.ts ./agent/src/live-models.ts
 COPY codemode-chat ./codemode-chat
 RUN npm --prefix codemode-chat run typecheck && npm --prefix codemode-chat run build
 
@@ -45,7 +45,7 @@ WORKDIR /opt/phi-spaces
 COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spaces/package-lock.json ./
 COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
-COPY --from=builder --chown=node:node /opt/phi-spaces/examples ./examples
+COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/package.json /opt/phi-spaces/codemode-chat/package-lock.json ./codemode-chat/
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/node_modules ./codemode-chat/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/codemode-chat/next.config.mjs /opt/phi-spaces/codemode-chat/tsconfig.json ./codemode-chat/

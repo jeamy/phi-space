@@ -4,11 +4,8 @@ import assert from 'node:assert/strict';
 import {copyFileSync,existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
 import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
-import {core,claims,canonicalJson,principalId,RouterJournal,RouterController,FederationOperations,partitionRouterId,parentJournalKey,snapshotSpace,type RouterStep,type FederationOperation,type MailboxState} from '../../../src/index.ts';
+import {core,claims,canonicalJson,principalId,RouterJournal,RouterController,FederationOperations,partitionRouterId,parentJournalKey,snapshotSpace,type RouterStep,type FederationOperation,type MailboxState,openSqliteHost,type OwnStoreHost} from '../../../src/index.ts';
 import {rpcDomain} from '../../../src/rpc-domain.ts';
 const fixture=process.argv[2]!,output=process.argv[3]!;
 const config=JSON.parse(readFileSync(join(fixture,'shared/config.json'),'utf8')),report=JSON.parse(readFileSync(join(fixture,'shared/netbird-sieve.json'),'utf8'));
@@ -19,8 +16,8 @@ const expectedFaults=report.journalCommitCrashesExercised?0:report.memberProcess
 if(!report.processCrashesExercised&&!report.memberProcessCrashesExercised)assert.equal(report.rpcFaultBoundary,'both');
 assert.equal(faultedRequests.length,expectedFaults);
 if(report.mailboxAckFaultsExercised){assert.equal(ackFaults.length,6);assert.equal(probes.length,6);}
-const hosts:Harness[]=[];
-async function copyStore(name:string){const dir=join('/tmp',name);mkdirSync(dir,{recursive:true});for(const suffix of ['','-wal','-shm']){const from=join(fixture,name,'harness.sqlite'+suffix);if(existsSync(from))copyFileSync(from,join(dir,'harness.sqlite'+suffix));}const host=await Harness.open(await openNodeSqliteStorage(join(dir,'harness.sqlite')),{models:createModels(),registry:createRegistry()},ctx);hosts.push(host);return host;}
+const hosts:OwnStoreHost[]=[];
+async function copyStore(name:string){const dir=join('/tmp',name);mkdirSync(dir,{recursive:true});for(const suffix of ['','-wal','-shm']){const from=join(fixture,name,'harness.sqlite'+suffix);if(existsSync(from))copyFileSync(from,join(dir,'harness.sqlite'+suffix));}const host=await openSqliteHost(join(dir,'harness.sqlite'));hosts.push(host);return host;}
 try{
  const root=await copyStore('root'),readOnlyRoot=new Proxy(root,{get(target,property){if(property==='commit')return()=>{throw new Error('audit must never commit');};const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;}}),steps=new Map<string,RouterStep>(),parentRecords=new Map<string,Readonly<FederationOperation>>();let parents=0,commands=0;
  for(let n=0;n<1024;n++){

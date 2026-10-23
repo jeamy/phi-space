@@ -98,9 +98,9 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 					else if (r.id === v.node) throw new Error("history node unavailable");
 				}
 			}
-			const edge = s.entries.find((e) => e.id === kept.id);
+			const at = s.entries.findIndex((e) => e.id === kept.id), edge = s.entries[at];
 			if (!edge || String(edge.fields.next ?? "") !== part[part.length - 1]!.node) throw new Error("history chain changed");
-			edge.fields.next = "";
+			s.entries[at] = { ...edge, fields: { ...edge.fields, next: "" } }; // records are values: replaced, never changed
 			core.touch(s, now);
 			return n;
 		}, b.ctx);

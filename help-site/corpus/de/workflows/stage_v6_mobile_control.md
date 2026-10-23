@@ -17,8 +17,8 @@ Stufe 6 (`help-site/examples/v6-mobile-control/run.ts` sowie der Web-Bereich **`
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Harness** (`MemoryStorage` im Runner) trägt **mehrere benannte Spaces**: den `CONTROL_SPACE` (Operations-Ebene: Enroll, Worker-Assignments, RunGate, Audit), `sieve-ops`, plus dynamisch per `SpaceLifecycle` erzeugte Chat-Spaces.
-- Verteilung: ein Host, mehrere isolierte Spaces — Steuerbefehle landen im Control-Space, Chat-Daten bleiben in eigenen Daten-Spaces. In der Live-Bereitstellung entspricht der Harness dem Prod-Host hinter `spaces.eibrain.org`.
+- **1 Host** (im Arbeitsspeicher des Runners) trägt **mehrere benannte Spaces**: den `CONTROL_SPACE` (Operations-Ebene: Enroll, Worker-Assignments, RunGate, Audit), `sieve-ops`, plus dynamisch per `SpaceLifecycle` erzeugte Chat-Spaces.
+- Verteilung: ein Host, mehrere isolierte Spaces — Steuerbefehle landen im Control-Space, Chat-Daten bleiben in eigenen Daten-Spaces. In der Live-Bereitstellung entspricht dieser Host dem Prod-Host hinter `spaces.eibrain.org`.
 
 ## Arbeitsablauf {#workflow}
 

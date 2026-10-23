@@ -1,5 +1,5 @@
 // Stage 4 (v4-gated-auth): Overlay Gate (Layer A/B), Token Enrollment, 60s Grants, BootGuard & Key Rotation.
-// Runs two independent persistent Harnesses (Control Host + Data Host) behind real TCP Gates.
+// Runs two independent persistent hosts (Control Host + Data Host, each its own store) behind real TCP Gates.
 // Demonstrates:
 //   - SqliteRecoveryRegister + HostBootState boot guard
 //   - Admin bootstrap pairing + Supervisor `createEnroll` for the Chat Worker
@@ -12,11 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { bootstrapEnroll, CONTROL_SPACE, createSpace, GateIdentity, generateKey, GrantAuthority, GrantVerifier, hashToken, listSpaces, newEnrollToken, PhiSpaces, RemoteSpace, socketTransport, spaceDoc, SpaceKeyDirectory, SqliteRecoveryRegister, startFederationHost, startService, type Signer } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { bootstrapEnroll, CONTROL_SPACE, createSpace, GateIdentity, generateKey, GrantAuthority, GrantVerifier, hashToken, listSpaces, newEnrollToken, PhiSpaces, RemoteSpace, socketTransport, spaceDoc, SpaceKeyDirectory, SqliteRecoveryRegister, startFederationHost, startService, type Signer, openSqliteHost, type OwnStoreHost } from "../../../src/index.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 const until = async (fn: () => Promise<boolean>, ms = 5_000) => {
@@ -34,29 +30,17 @@ export async function runStageV4() {
 	const externalReg = new SqliteRecoveryRegister(join(dir, "external-boot.sqlite"));
 	const installedReg = new SqliteRecoveryRegister(join(dir, "installed-boot.sqlite"));
 
-	const registry1 = createRegistry();
-	registry1.install(spaces);
-	const registry2 = createRegistry();
-	registry2.install(spaces);
 
-	const controlHarness = await Harness.open(
-		await openNodeSqliteStorage(controlDb),
-		{ models: createModels(), registry: registry1 },
-		ctx,
-	);
-	const dataHarness = await Harness.open(
-		await openNodeSqliteStorage(dataDb),
-		{ models: createModels(), registry: registry2 },
-		ctx,
-	);
-	await dataHarness.commit(async (tx) => {
+	const controlStore = await openSqliteHost(controlDb);
+	const dataStore = await openSqliteHost(dataDb);
+	await dataStore.commit(async (tx) => {
 		await createSpace(tx, "chat-v4", Date.now());
 	}, ctx);
-	const stopControlService = await startService(controlHarness, ctx);
-	const stopDataService = await startService(dataHarness, ctx);
+	const stopControlService = await startService(controlStore, ctx);
+	const stopDataService = await startService(dataStore, ctx);
 
 	const authorityId = "authority-chat-v4";
-	const provisionBoot = async (host: Harness, hostId: string) => {
+	const provisionBoot = async (host: OwnStoreHost, hostId: string) => {
 		await host.commit((tx) => spaceDoc(tx, undefined, Date.now()), ctx);
 		const spacesMap: Record<string, any> = {};
 		for (const info of await listSpaces(host, ctx)) {
@@ -94,7 +78,7 @@ export async function runStageV4() {
 
 	const rootKey = generateKey("ed25519", "control-signer");
 	const identity = new GateIdentity();
-	const keys = new SpaceKeyDirectory(controlHarness, ctx, Date.now);
+	const keys = new SpaceKeyDirectory(controlStore, ctx, Date.now);
 	const verifier = () =>
 		new GrantVerifier({
 			authorityId,
@@ -130,18 +114,18 @@ export async function runStageV4() {
 		// 1. Bootstrap enrollment token for "chat-worker" (acting as admin + worker for the demo)
 		const workerInitialKey = generateKey("ed25519", "worker-initial");
 		const enrollToken = newEnrollToken();
-		await bootstrapEnroll(controlHarness, ctx, {
+		await bootstrapEnroll(controlStore, ctx, {
 			tokenHash: hashToken(enrollToken),
 			allowedPeerId: "chat-worker",
 		});
 
-		controlHost = await startFederationHost(controlHarness, ctx, {
+		controlHost = await startFederationHost(controlStore, ctx, {
 			hostId: "control-host",
 			authorityId,
 			keys,
 			verifier: verifier(),
-			boot: await provisionBoot(controlHarness, "control-host"),
-			control: { host: controlHarness, authority: authority() },
+			boot: await provisionBoot(controlStore, "control-host"),
+			control: { host: controlStore, authority: authority() },
 			directory,
 			groupRoles,
 			listen: { host: "127.0.0.1", port: 0 },
@@ -173,18 +157,18 @@ export async function runStageV4() {
 		await controlClient.authenticate();
 
 		// 2. Prepare Data Host with "chat-v4" space and CompletionProfiles
-		const localDataSpace = new PhiSpaces(dataHarness, ctx, Date.now, undefined, undefined, { space: "chat-v4" });
+		const localDataSpace = new PhiSpaces(dataStore, ctx, Date.now, undefined, undefined, { space: "chat-v4" });
 		await new SpaceChatEngine(localDataSpace).installProfilesIfSupported();
 
 		const networkKeys = {
 			find: (peerId: string, keyId: string) => controlClient.lookupPeerKey(peerId, keyId),
 		};
-		dataHost = await startFederationHost(dataHarness, ctx, {
+		dataHost = await startFederationHost(dataStore, ctx, {
 			hostId: "data-host",
 			authorityId,
 			keys: networkKeys,
 			verifier: verifier(),
-			boot: await provisionBoot(dataHarness, "data-host"),
+			boot: await provisionBoot(dataStore, "data-host"),
 			directory,
 			groupRoles,
 			listen: { host: "127.0.0.1", port: 0 },
@@ -228,7 +212,7 @@ export async function runStageV4() {
 		await until(
 			async () =>
 				(
-					await new PhiSpaces(controlHarness, ctx, Date.now, undefined, undefined, {
+					await new PhiSpaces(controlStore, ctx, Date.now, undefined, undefined, {
 						space: CONTROL_SPACE,
 					}).readAll({ type: "Result", fields: { commandId: rotation.commandId } })
 				).length === 1,
@@ -278,8 +262,8 @@ export async function runStageV4() {
 		await controlHost?.close();
 		await stopDataService();
 		await stopControlService();
-		await dataHarness.close(ctx);
-		await controlHarness.close(ctx);
+		await dataStore.close(ctx);
+		await controlStore.close(ctx);
 		externalReg.close();
 		installedReg.close();
 		await rm(dir, { recursive: true, force: true });

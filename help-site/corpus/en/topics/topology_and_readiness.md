@@ -19,12 +19,12 @@ A runnable example demonstrates a workflow, not automatically real distribution 
 
 | Stage | Processes/Hosts and Storage | Demonstrated Boundary | Not Established |
 |---|---|---|---|
-| v1 | One process, one memory harness, named Chat Space | Local tasks, threads, results | Persistence or network |
+| v1 | One process, one in-memory host, named Chat Space | Local tasks, threads, results | Persistence or network |
 | v2 | One process, SQLite harness, close/reopen | Durable alarms/search and restart | SIGKILL, power or host loss |
 | v3 | One process, separate remote clients, real Unix socket | RPC, identity, mailbox | Independent physical hosts |
-| v4 | Two persistent harnesses and local TCP gates | Key proof, enrollment, grants, rotation | Real NetBird provisioning |
-| v5 | Four memory harnesses in one process | Router, HRW, federated search, LWW component | Production cluster/fencing |
-| v6 | One memory harness with multiple Spaces | Local operations and sample enrollment | Automatic phone pairing or full remote operations acceptance |
+| v4 | Two persistent hosts and local TCP gates | Key proof, enrollment, grants, rotation | Real NetBird provisioning |
+| v5 | Four in-memory hosts in one process | Router, HRW, federated search, LWW component | Production cluster/fencing |
+| v6 | One in-memory host with multiple Spaces | Local operations and sample enrollment | Automatic phone pairing or full remote operations acceptance |
 
 ## Which API Is Interchangeable? {#api}
 

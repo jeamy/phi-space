@@ -11,11 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createSpace, DEFAULT_POLICY, FOREVER, GateIdentity, Meter, PhiSpaces, RemoteSpace, serveSpace, socketTransport, SpaceService, startService } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { createSpace, DEFAULT_POLICY, FOREVER, GateIdentity, Meter, PhiSpaces, RemoteSpace, serveSpace, socketTransport, SpaceService, openSqliteHost, startService } from "../../../src/index.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV3() {
@@ -24,21 +20,18 @@ export async function runStageV3() {
 	const socketPath = join(dir, "space.sock");
 	const meter = new Meter();
 
-	const registry = createRegistry();
-	registry.install(spaces);
-	const storage = await openNodeSqliteStorage(dbPath);
-	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
-	await harness.commit(async (tx) => {
+	const host = await openSqliteHost(dbPath);
+	await host.commit(async (tx) => {
 		await createSpace(tx, "chat-v3", Date.now());
 	}, ctx);
-	const stopService = await startService(harness, ctx);
+	const stopService = await startService(host, ctx);
 
 	// Host installs CompletionProfiles before exposing the socket
-	const hostAdminSpace = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v3" });
+	const hostAdminSpace = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v3" });
 	await new SpaceChatEngine(hostAdminSpace).installProfilesIfSupported();
 
 	const service = new SpaceService({
-		host: harness,
+		host,
 		ctx,
 		identity: new GateIdentity(),
 		policy: DEFAULT_POLICY,
@@ -137,7 +130,7 @@ export async function runStageV3() {
 		searchTransport.close();
 		await spaceServer.close();
 		await stopService();
-		await harness.close(ctx);
+		await host.close(ctx);
 		await rm(dir, { recursive: true, force: true });
 	}
 }

@@ -19,12 +19,12 @@ Ein lauffähiger Runner zeigt einen Ablauf, nicht automatisch reale Verteilung o
 
 | Stufe | Prozesse/Hosts und Storage | Geprüfte Grenze | Nicht dadurch belegt |
 |---|---|---|---|
-| v1 | Ein Prozess, ein Memory-Harness, benannter Chat-Space | Lokale Tasks, Threads, Ergebnisse | Persistenz oder Netz |
+| v1 | Ein Prozess, ein Host im Arbeitsspeicher, benannter Chat-Space | Lokale Tasks, Threads, Ergebnisse | Persistenz oder Netz |
 | v2 | Ein Prozess, SQLite-Harness, Close/Reopen | Persistente Alarme/Suche und Wiederanlauf | SIGKILL, Strom- oder Hostverlust |
 | v3 | Ein Prozess mit getrennten Remote-Clients und echtem Unix-Socket | RPC, Identität und Mailbox | Unabhängige physische Hosts |
-| v4 | Zwei persistente Harnesses und TCP-Gates lokal | Schlüsselbeweis, Enrollment, Grants, Rotation | Reales NetBird-Provisioning |
-| v5 | Vier Memory-Harnesses im selben Prozess | Router, HRW, föderierte Suche, LWW-Komponente | Produktivcluster/Fencing |
-| v6 | Ein Memory-Harness mit mehreren Spaces | Lokale Betriebsbausteine und Beispiel-Enrollment | Automatisches Phone-Pairing oder vollständige Remote-Betriebsabnahme |
+| v4 | Zwei persistente Hosts und TCP-Gates lokal | Schlüsselbeweis, Enrollment, Grants, Rotation | Reales NetBird-Provisioning |
+| v5 | Vier Hosts im Arbeitsspeicher im selben Prozess | Router, HRW, föderierte Suche, LWW-Komponente | Produktivcluster/Fencing |
+| v6 | Ein Host im Arbeitsspeicher mit mehreren Spaces | Lokale Betriebsbausteine und Beispiel-Enrollment | Automatisches Phone-Pairing oder vollständige Remote-Betriebsabnahme |
 
 ## Welche API ist austauschbar? {#api}
 

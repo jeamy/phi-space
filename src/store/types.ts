@@ -8,12 +8,11 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type JsonObject = { [key: string]: JsonValue };
 
 /** What a document definition needs to know about its stored value: its kind and schema version, how a new one looks,
- *  how an older version is brought up to date, and (for documents that grow) when the store may compact its history. */
+ *  and how an older version is brought up to date. */
 type DocCommon<T> = {
 	readonly kind: string;
 	readonly version: number;
 	readonly migrate?: (value: T & Record<string, any>, fromVersion: number) => T & Record<string, any>;
-	readonly checkpointWhen?: (value: Readonly<T>, ops: readonly unknown[], info: { deltasSinceBase: number }) => boolean;
 	/** The big collections of the document whose records are immutable values (replaced, never changed): an array by
 	 *  its records' `id`, or a map by key. The own store drafts them cheaply and stores them as rows of their own. */
 	readonly parts?: readonly PartDef[];
@@ -47,22 +46,10 @@ export interface DiskMapQuery<V> {
 }
 export const diskMapOf = <V>(m: unknown): DiskMapQuery<V> | undefined => (typeof m === "object" && m !== null ? (m as Record<symbol, DiskMapQuery<V> | undefined>)[DISK_MAP] : undefined);
 
-/** The same definition in the shape the transitional pi-durable host reads (session scope). It goes once the own
- *  store serves every host (U2/U3). */
-type HostDefinition<T> = {
-	readonly kind: string;
-	readonly version: number;
-	readonly scope: "session";
-	initial(): T;
-	migrate?(value: any, fromVersion: number): T;
-	checkpointWhen?(value: Readonly<T>, ops: readonly any[], info: { deltasSinceBase: number }): boolean;
-};
-type HostFamilyDefinition<T, I> = Omit<HostDefinition<T>, "initial"> & { readonly family: true; initial(seed: I): T };
-
 /** One document of a kind per store. */
-export type DocDef<T> = DocCommon<T> & { readonly family?: false; readonly initial: () => T; readonly definition: HostDefinition<T> };
+export type DocDef<T> = DocCommon<T> & { readonly family?: false; readonly initial: () => T };
 /** Many documents of a kind, each under its key; `seed` makes a new one. */
-export type DocFamilyDef<T, I> = DocCommon<T> & { readonly family: true; readonly initial: (seed: I) => T; readonly definition: HostFamilyDefinition<T, I> };
+export type DocFamilyDef<T, I> = DocCommon<T> & { readonly family: true; readonly initial: (seed: I) => T };
 
 /** The transaction of one commit: every document it reads is the same draft for the whole callback; the changes are
  *  stored together or not at all. */

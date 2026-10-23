@@ -6,11 +6,10 @@
 // PI_PROVIDER / PI_MODEL pick another model; the default is the first Mistral model (codestral-latest if present).
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { evolve, loadCodemode, TIME_N, type Contributor } from "./codemode-evolve.ts";
-import { liveModels } from "./live-models.ts";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
+import { evolve, loadCodemode, TIME_N, type Contributor } from "../../examples/codemode-evolve.ts";
+import { liveModels } from "../src/live-models.ts";
+import { openOwnMemoryHost } from "../../src/index.ts";
 
 /** Different temperaments keep the contributions from collapsing onto one answer. */
 const STYLES = [
@@ -59,7 +58,7 @@ async function main() {
 	if (!cm) { console.log("pi-codemode not found; skipping"); return; }
 	const { contributor, label, usage } = await mistralContributor();
 	console.log(`agents: ${label}`);
-	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const h = openOwnMemoryHost();
 	const r = await evolve(h, cm, { agents: arg("agents", 4), gens: arg("gens", 3), perAgent: arg("per-agent", 1), n: arg("n", 100), seed: 1, contributor, logFile, log: console.log });
 	console.log(`log: ${logFile}`);
 	const u = usage();

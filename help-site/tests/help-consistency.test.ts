@@ -15,10 +15,7 @@ import { runTupleBasics } from "../examples/tuple-basics.ts";
 import { refreshMirror, type LiveMirror } from "../examples/shared/live-mirror.ts";
 import { SnapshotExpired, type Changes, type Page } from "../../src/core.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, Meter, PhiSpaces } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { FOREVER, Meter, PhiSpaces, openOwnMemoryHost } from "../../src/index.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 import { previousArticlePaths, retireGeneratedArticles } from "../scripts/generated-articles.ts";
 
@@ -117,8 +114,7 @@ test("help tutorial: full model-free program has the documented output", async (
 });
 
 test("help lifecycle: close during background init cannot create orphan intervals", async t => {
-	const registry = createRegistry(); registry.install(spaces);
-	const host = await Harness.open(new MemoryStorage(), {models:createModels(),registry},ctx);
+	const host = openOwnMemoryHost();
 	const realSet = globalThis.setInterval, realClear = globalThis.clearInterval;
 	const live = new Set<ReturnType<typeof setInterval>>();
 	t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => { const id=realSet(...args); live.add(id); return id; });
@@ -164,8 +160,7 @@ test("help live sync: expired/mismatched stream discards partial state, failure 
 });
 
 test("help live sync: actual PhiSpaces puts/deletes converge without mutating the old mirror", async () => {
-	const registry = createRegistry(); registry.install(spaces);
-	const host = await Harness.open(new MemoryStorage(),{models:createModels(),registry},ctx);
+	const host = openOwnMemoryHost();
 	try {
 		const space = new PhiSpaces(host,ctx);
 		const first = await space.write({type:"Job",fields:{n:1}},null,FOREVER);

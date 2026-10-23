@@ -17,8 +17,8 @@ Stage 6 (`help-site/examples/v6-mobile-control/run.ts` and the **`AdminSpaces`**
 
 ## Topology: Space Distribution {#topology}
 
-- **1 harness** (`MemoryStorage` in the runner) carries **several named spaces**: the `CONTROL_SPACE` (operations layer: enroll, worker assignments, run gate, audit), `sieve-ops`, plus chat spaces created dynamically via `SpaceLifecycle`.
-- Distribution: one host, several isolated spaces — control commands land in the control space while chat data stays in dedicated data spaces. In the live deployment this harness is the prod host behind `spaces.eibrain.org`.
+- **1 host** (in the runner's memory) carries **several named spaces**: the `CONTROL_SPACE` (operations layer: enroll, worker assignments, run gate, audit), `sieve-ops`, plus chat spaces created dynamically via `SpaceLifecycle`.
+- Distribution: one host, several isolated spaces — control commands land in the control space while chat data stays in dedicated data spaces. In the live deployment this host is the prod host behind `spaces.eibrain.org`.
 
 ## Workflow {#workflow}
 

@@ -54,13 +54,13 @@ Damit man sowohl in wenigen Sekunden lokal starten als auch den Weg bis zur vert
 
 ### Die 6 Stufen im Überblick {#six-stages}
 
-1. **[Stufe 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-Setup im Arbeitsspeicher (\`MemoryStorage\` + \`PhiSpaces\`). Sofort ausführbar ohne Dateien oder Netzwerk.
+1. **[Stufe 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-Setup im Arbeitsspeicher (\`openOwnMemoryHost()\` + \`PhiSpaces\`). Sofort ausführbar ohne Dateien oder Netzwerk.
 2. **[Stufe 2 (\`v2-local-durable\`)](help.workflow.stage_v2_local_durable#overview)**: Lokale SQLite-Persistenz, \`RequestRef\`-Idempotenz, \`readPage\`/\`changes\`, \`TimerLock\`-Alarme und \`search_history\`-Subagent.
 3. **[Stufe 3 (\`v3-remote-socket\`)](help.workflow.stage_v3_remote_socket#overview)**: Trennung in Server und Remote-Worker über \`SpaceService\`, \`RemoteSpace\` (Unix-Socket/TCP) und Consumer-Mailboxes (\`events\` + \`ack\`).
 4. **[Stufe 4 (\`v4-gated-auth\`)](help.workflow.stage_v4_gated_auth#overview)**: Zwei-Schichten-Sicherheit (\`startGate\`, Ed25519-Challenge, Token-Enrollment, 60-s-Grants, Schlüsselrotation und Boot-Guard).
-5. **[Stufe 5 (\`v5-federated-cluster\`)](help.workflow.stage_v5_federated_cluster#overview)**: Föderierter Cluster (\`createFederationController\`) mit 3 Member-Spaces, HRW-Routing nach \`threadId\` und \`takeWaiting\`-Waiter-Wettlauf — in der Demo als 4 Harnesses in einem Prozess simuliert.
+5. **[Stufe 5 (\`v5-federated-cluster\`)](help.workflow.stage_v5_federated_cluster#overview)**: Föderierter Cluster (\`createFederationController\`) mit 3 Member-Spaces, HRW-Routing nach \`threadId\` und \`takeWaiting\`-Waiter-Wettlauf — in der Demo als 4 Hosts in einem Prozess simuliert.
 
-Jede Stufen-Beschreibung enthält einen Abschnitt **Topologie: Space-Verteilung**, der zeigt, wie viele Harnesses/Spaces beteiligt sind und wie Entries verteilt werden.
+Jede Stufen-Beschreibung enthält einen Abschnitt **Topologie: Space-Verteilung**, der zeigt, wie viele Hosts/Spaces beteiligt sind und wie Entries verteilt werden.
 6. **[Stufe 6 (\`v6-mobile-control\`)](help.workflow.stage_v6_mobile_control#overview)**: Vollständige Betriebssteuerung & Überwachung über die Mobile App (\`pi-termux-mobile\`) und den login-geschützten Web-Bereich **\`AdminSpaces\`** auf \`https://spaces.eibrain.org\`.
 
 ## Siehe auch {#see-also}
@@ -91,14 +91,14 @@ To let you start locally in seconds and progressively scale to a distributed pro
 
 ### The 6 Stages At A Glance {#six-stages}
 
-1. **[Stage 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-setup in memory (\`MemoryStorage\` + \`PhiSpaces\`). Runs immediately without files or network ports.
+1. **[Stage 1 (\`v1-local-memory\`)](help.workflow.stage_v1_local_memory#overview)**: Zero-setup in memory (\`openOwnMemoryHost()\` + \`PhiSpaces\`). Runs immediately without files or network ports.
 2. **[Stage 2 (\`v2-local-durable\`)](help.workflow.stage_v2_local_durable#overview)**: Local SQLite persistence, \`RequestRef\` idempotency, \`readPage\`/\`changes\`, \`TimerLock\` alarms, and \`search_history\` subagent.
 3. **[Stage 3 (\`v3-remote-socket\`)](help.workflow.stage_v3_remote_socket#overview)**: Process decoupling via \`SpaceService\`, \`RemoteSpace\` (Unix socket/TCP), and consumer mailboxes (\`events\` + \`ack\`).
 4. **[Stage 4 (\`v4-gated-auth\`)](help.workflow.stage_v4_gated_auth#overview)**: Two-layer security (\`startGate\`, Ed25519 challenge, token enrollment, 60s grants, key rotation, and boot guard).
 5. **[Stage 5 (\`v5-federated-cluster\`)](help.workflow.stage_v5_federated_cluster#overview)**: Federated cluster (\`createFederationController\`) across 3 member spaces with HRW routing by \`threadId\` and \`takeWaiting\` waiter races — simulated as 4 harnesses in one process in the demo.
 6. **[Stage 6 (\`v6-mobile-control\`)](help.workflow.stage_v6_mobile_control#overview)**: Full operations control & monitoring via the mobile app (\`pi-termux-mobile\`) and the login-protected **\`AdminSpaces\`** web portal on \`https://spaces.eibrain.org\`.
 
-Each stage description includes a **Topology: Space Distribution** section showing how many harnesses/spaces are involved and how entries are distributed.
+Each stage description includes a **Topology: Space Distribution** section showing how many hosts/spaces are involved and how entries are distributed.
 
 ## See Also {#see-also}
 
@@ -131,11 +131,11 @@ Each stage description includes a **Topology: Space Distribution** section showi
 			short: "Die einfachste lauffähige Version des Multiplayer Space-Chats im Arbeitsspeicher: Threads, Forking, Presence-Leases und transaktionale Antwortverarbeitung.",
 			body: `## Überblick {#overview}
 
-Stufe 1 (\`help-site/examples/v1-local-memory/run.ts\`) benötigt keinerlei Einrichtung, Datenbankdateien oder offene Ports. Sie öffnet einen \`MemoryStorage\`-Harness, legt einen benannten Space an und demonstriert das komplette Grundmodell des Multiplayer Space-Chats in unter einer Sekunde.
+Stufe 1 (\`help-site/examples/v1-local-memory/run.ts\`) benötigt keinerlei Einrichtung, Datenbankdateien oder offene Ports. Sie öffnet einen Host im Arbeitsspeicher (\`openOwnMemoryHost()\`), legt einen benannten Space an und demonstriert das komplette Grundmodell des Multiplayer Space-Chats in unter einer Sekunde.
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Prozess**, **1 Harness** auf \`MemoryStorage\` (flüchtig, kein Restart-Szenario).
+- **1 Prozess**, **1 Host** im Arbeitsspeicher (\`openOwnMemoryHost()\`; flüchtig, kein Restart-Szenario).
 - **1 benannter Space** (\`chat-v1\`): alle Entries (\`Presence\`, \`Thread\`, \`Msg\`, \`ChatTask\`) liegen in genau diesem Space.
 - Clients (alice/bob) und Worker greifen in-process über dasselbe \`PhiSpaces\`-Objekt zu — kein Socket, keine Datei, kein Netz.
 
@@ -144,10 +144,10 @@ Stufe 1 (\`help-site/examples/v1-local-memory/run.ts\`) benötigt keinerlei Einr
 ### Schritt 1: Space und CompletionProfile initialisieren {#step-1-init}
 
 \`\`\`ts
-const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
-const stopService = await startService(harness, ctx);
+const host = openOwnMemoryHost();
+await host.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
+const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const stopService = await startService(host, ctx);
 
 await space.setCompletionProfiles([
   { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
@@ -179,11 +179,11 @@ node --experimental-strip-types help-site/examples/v1-local-memory/run.ts
 			short: "The simplest runnable version of the Multiplayer Space-Chat in memory: threads, forking, presence leases, and transactional reply processing.",
 			body: `## Overview {#overview}
 
-Stage 1 (\`help-site/examples/v1-local-memory/run.ts\`) requires zero setup, database files, or open network ports. It opens a \`MemoryStorage\` harness, creates a named space, and demonstrates the complete core model of the Multiplayer Space-Chat in under a second.
+Stage 1 (\`help-site/examples/v1-local-memory/run.ts\`) requires zero setup, database files, or open network ports. It opens a host in memory (\`openOwnMemoryHost()\`), creates a named space, and demonstrates the complete core model of the Multiplayer Space-Chat in under a second.
 
 ## Topology: Space Distribution {#topology}
 
-- **1 process**, **1 harness** on \`MemoryStorage\` (volatile, no restart scenario).
+- **1 process**, **1 host** in memory (\`openOwnMemoryHost()\`; volatile, no restart scenario).
 - **1 named space** (\`chat-v1\`): every entry (\`Presence\`, \`Thread\`, \`Msg\`, \`ChatTask\`) lives in that single space.
 - Clients (alice/bob) and workers share the same in-process \`PhiSpaces\` object — no socket, no file, no network.
 
@@ -192,10 +192,10 @@ Stage 1 (\`help-site/examples/v1-local-memory/run.ts\`) requires zero setup, dat
 ### Step 1: Initialize Space And CompletionProfile {#step-1-init}
 
 \`\`\`ts
-const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
-const stopService = await startService(harness, ctx);
+const host = openOwnMemoryHost();
+await host.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
+const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const stopService = await startService(host, ctx);
 
 await space.setCompletionProfiles([
   { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }
@@ -253,15 +253,15 @@ Stufe 2 (\`help-site/examples/v2-local-durable/run.ts\`) macht den Multiplayer S
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Prozess**, **1 Harness** auf einer **SQLite-Datei** (\`chat-v2.sqlite\`).
+- **1 Prozess**, **1 Host** auf einer **SQLite-Datei** (\`chat-v2.sqlite\`).
 - **1 benannter Space** (\`chat-v2\`): Threads, \`Msg\`, \`ChatTask\`, \`ScheduledJob\`, \`TimerLock\`, Subagent-Entries – alles persistent in einem Space.
-- Für die Crash-Demo wird der Harness geschlossen und **auf derselben SQLite-Datei neu geöffnet**: der Space überlebt den simulierten Neustart, offene Leases werden gereapt.
+- Für die Crash-Demo wird der Host geschlossen und **auf derselben SQLite-Datei neu geöffnet**: der Space überlebt den simulierten Neustart, offene Leases werden gereapt.
 
 ## Arbeitsablauf {#workflow}
 
 ### Schritt 1: SQLite-Storage und RequestRef-Claims {#step-1-sqlite-claims}
 
-Statt \`MemoryStorage\` öffnet der Host \`await openNodeSqliteStorage(dbPath)\`. Für jeden Teilnehmer wird \`const { generation } = await space.issueGeneration(principal)\` ausgestellt. Wird \`createThread\` oder \`submitMessage\` nach einem Verbindungsabbruch mit derselben \`requestId\` wiederholt, gibt \`phi-spaces\` exakt das erste Ergebnis zurück.
+Statt des Speichers im Arbeitsspeicher öffnet der Host \`await openSqliteHost(dbPath)\` (der eigene SQLite-Speicher). Für jeden Teilnehmer wird \`const { generation } = await space.issueGeneration(principal)\` ausgestellt. Wird \`createThread\` oder \`submitMessage\` nach einem Verbindungsabbruch mit derselben \`requestId\` wiederholt, gibt \`phi-spaces\` exakt das erste Ergebnis zurück.
 
 ### Schritt 2: Geplante Alarme über ScheduledJob + TimerLock-Lease {#step-2-alarms}
 
@@ -298,15 +298,15 @@ Stage 2 (\`help-site/examples/v2-local-durable/run.ts\`) makes the Multiplayer S
 
 ## Topology: Space Distribution {#topology}
 
-- **1 process**, **1 harness** on a **SQLite file** (\`chat-v2.sqlite\`).
+- **1 process**, **1 host** on a **SQLite file** (\`chat-v2.sqlite\`).
 - **1 named space** (\`chat-v2\`): threads, \`Msg\`, \`ChatTask\`, \`ScheduledJob\`, \`TimerLock\`, subagent entries — all durable in one space.
-- For the crash demo the harness is closed and **reopened on the same SQLite file**: the space survives the simulated restart and expired leases are reaped.
+- For the crash demo the host is closed and **reopened on the same SQLite file**: the space survives the simulated restart and expired leases are reaped.
 
 ## Workflow {#workflow}
 
 ### Step 1: SQLite Storage And RequestRef Claims {#step-1-sqlite-claims}
 
-Instead of \`MemoryStorage\`, the host opens \`await openNodeSqliteStorage(dbPath)\`. Each participant obtains a generation via \`const { generation } = await space.issueGeneration(principal)\`. Re-sending \`createThread\` or \`submitMessage\` with the same \`requestId\` after a connection drop returns the original result without duplicating entries.
+Instead of the in-memory store, the host opens \`await openSqliteHost(dbPath)\` (the own SQLite store). Each participant obtains a generation via \`const { generation } = await space.issueGeneration(principal)\`. Re-sending \`createThread\` or \`submitMessage\` with the same \`requestId\` after a connection drop returns the original result without duplicating entries.
 
 ### Step 2: Scheduled Alarms Via ScheduledJob + TimerLock Lease {#step-2-alarms}
 
@@ -361,11 +361,11 @@ node --experimental-strip-types help-site/examples/v2-local-durable/run.ts
 			short: "Trennt Space-Host, Web-Gateway, Chat-Worker und Search-Subagent in separate RemoteSpace-Verbindungen über Unix-Socket oder TCP inklusive Consumer-Mailboxes.",
 			body: `## Überblick {#overview}
 
-In Stufe 3 (\`help-site/examples/v3-remote-socket/run.ts\`) greifen Chat-Gateway, Chat-Worker und Search-Subagent nicht mehr direkt auf das \`Harness\`-Objekt zu. Stattdessen veröffentlicht der Host den Space über \`SpaceService\` und \`serveSpace\` auf einem Unix-Domain-Socket (bzw. TCP-Port), und alle Teilnehmer arbeiten über \`RemoteSpace\`.
+In Stufe 3 (\`help-site/examples/v3-remote-socket/run.ts\`) greifen Chat-Gateway, Chat-Worker und Search-Subagent nicht mehr direkt auf den Host zu. Stattdessen veröffentlicht der Host den Space über \`SpaceService\` und \`serveSpace\` auf einem Unix-Domain-Socket (bzw. TCP-Port), und alle Teilnehmer arbeiten über \`RemoteSpace\`.
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Host** (Harness + SQLite + \`serveSpace\`) exponiert den Space \`chat-v3\` über einen **Unix-Socket** (\`space.sock\`).
+- **1 Host** (eigener SQLite-Speicher + \`serveSpace\`) exponiert den Space \`chat-v3\` über einen **Unix-Socket** (\`space.sock\`).
 - **3 getrennte \`RemoteSpace\`-Clients** greifen auf denselben Space zu: Gateway (UI), Chat-Worker, Search-Subagent – jeder mit eigenem Transport und eigener Consumer-Mailbox.
 - Verteilung: **1 Space, 1 Server, 3 Remote-Consumer** — echte Socket-Grenze statt geteiltem In-Memory-Objekt; dieselbe Engine läuft unverändert gegen \`RemoteSpace\`.
 
@@ -375,7 +375,7 @@ In Stufe 3 (\`help-site/examples/v3-remote-socket/run.ts\`) greifen Chat-Gateway
 
 \`\`\`ts
 const service = new SpaceService({
-  host: harness,
+  host,
   ctx,
   identity: new GateIdentity(),
   policy: DEFAULT_POLICY
@@ -411,11 +411,11 @@ node --experimental-strip-types help-site/examples/v3-remote-socket/run.ts
 			short: "Decouples space host, web gateway, chat worker, and search subagent into separate RemoteSpace connections over Unix socket or TCP with consumer mailboxes.",
 			body: `## Overview {#overview}
 
-In Stage 3 (\`help-site/examples/v3-remote-socket/run.ts\`), the chat gateway, chat worker, and search subagent no longer touch the \`Harness\` directly. Instead, the host exposes the space via \`SpaceService\` and \`serveSpace\` on a Unix domain socket (or TCP port), and all participants operate through \`RemoteSpace\`.
+In Stage 3 (\`help-site/examples/v3-remote-socket/run.ts\`), the chat gateway, chat worker, and search subagent no longer touch the host directly. Instead, the host exposes the space via \`SpaceService\` and \`serveSpace\` on a Unix domain socket (or TCP port), and all participants operate through \`RemoteSpace\`.
 
 ## Topology: Space Distribution {#topology}
 
-- **1 host** (harness + SQLite + \`serveSpace\`) exposes the \`chat-v3\` space over a **Unix socket** (\`space.sock\`).
+- **1 host** (own SQLite store + \`serveSpace\`) exposes the \`chat-v3\` space over a **Unix socket** (\`space.sock\`).
 - **3 separate \`RemoteSpace\` clients** access the same space: gateway (UI), chat worker, search subagent — each with its own transport and consumer mailbox.
 - Distribution: **1 space, 1 server, 3 remote consumers** — a real socket boundary instead of a shared in-memory object; the same engine runs unchanged against \`RemoteSpace\`.
 
@@ -425,7 +425,7 @@ In Stage 3 (\`help-site/examples/v3-remote-socket/run.ts\`), the chat gateway, c
 
 \`\`\`ts
 const service = new SpaceService({
-  host: harness,
+  host,
   ctx,
   identity: new GateIdentity(),
   policy: DEFAULT_POLICY
@@ -487,7 +487,7 @@ Stufe 4 (\`help-site/examples/v4-gated-auth/run.ts\`) hebt den Space-Chat auf da
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **2 unabhängige, persistente Harnesses**, jeweils hinter einem eigenen TCP-Gate:
+- **2 unabhängige, persistente Hosts** (je ein eigener SQLite-Speicher), jeweils hinter einem eigenen TCP-Gate:
   - **Control Host** mit dem \`CONTROL_SPACE\` (PeerDirectory, Enroll-Tokens, Grants, Key-Rotation, BootGuard).
   - **Data Host** mit dem Chat-Space (Threads, \`Msg\`, \`Presence\`).
 - Zugriff auf den Data-Space nur über **Gate Layer A (Overlay-Peer) + Layer B (Ed25519-Challenge)** und pro Operation einen 60-s-Grant aus dem Control-Space.
@@ -496,7 +496,7 @@ Stufe 4 (\`help-site/examples/v4-gated-auth/run.ts\`) hebt den Space-Chat auf da
 
 ### Schritt 1: Boot-Register und startFederationHost starten {#step-1-host}
 
-Der Host initialisiert ein \`SqliteRecoveryRegister\` und \`installBootGuard\`, erzeugt die Host- und Authority-Schlüssel (\`generateKey("ed25519")\`) und startet \`startFederationHost(harness, ctx, ...)\` auf einem TCP-Loopback-/Overlay-Port.
+Der Host initialisiert ein \`SqliteRecoveryRegister\` und \`installBootGuard\`, erzeugt die Host- und Authority-Schlüssel (\`generateKey("ed25519")\`) und startet \`startFederationHost(host, ctx, ...)\` auf einem TCP-Loopback-/Overlay-Port.
 
 ### Schritt 2: Admin-Bootstrap & Worker-Enrollment {#step-2-enroll}
 
@@ -536,7 +536,7 @@ Stage 4 (\`help-site/examples/v4-gated-auth/run.ts\`) upgrades the Space-Chat to
 
 ### Step 1: Initialize Boot Register And startFederationHost {#step-1-host}
 
-The host sets up a \`SqliteRecoveryRegister\` and \`installBootGuard\`, generates host and authority keys (\`generateKey("ed25519")\`), and starts \`startFederationHost(harness, ctx, ...)\` on a TCP port.
+The host sets up a \`SqliteRecoveryRegister\` and \`installBootGuard\`, generates host and authority keys (\`generateKey("ed25519")\`), and starts \`startFederationHost(host, ctx, ...)\` on a TCP port.
 
 ### Step 2: Admin Bootstrap & Worker Enrollment {#step-2-enroll}
 
@@ -589,7 +589,7 @@ Stufe 5 (\`help-site/examples/v5-federated-cluster/run.ts\`) skaliert den Multip
 
 ## Topologie: Space-Verteilung {#topology}
 
-Der Cluster läuft **simuliert in einem einzigen Prozess**: **4 Harnesses** (alle \`MemoryStorage\`), die echte Member-Hosts mit echten Federation-Komponenten spielen — kein Netzwerk, aber exakt dieselbe Routing- und Journal-Logik wie in echter Verteilung.
+Der Cluster läuft **simuliert in einem einzigen Prozess**: **4 Hosts** (alle im Arbeitsspeicher, \`openOwnMemoryHost()\`), die echte Member-Hosts mit echten Federation-Komponenten spielen — kein Netzwerk, aber exakt dieselbe Routing- und Journal-Logik wie in echter Verteilung.
 
 - **1 Koordinator-Host**: \`RouterController\` (\`router-root\` + 2 Partition-Router für die Routing-Journals) und \`FederatedSpace\` (id \`fed-v5\`). Der Koordinator besitzt selbst keinen Chat-Daten-Space — er führt nur die Policy aus.
 - **3 Member-Hosts** (\`member-1\`, \`member-2\`, \`member-3\`): jeder hat einen eigenen, unabhängigen Space mit eigenem Space-Doc.
@@ -634,7 +634,7 @@ Stage 5 (\`help-site/examples/v5-federated-cluster/run.ts\`) scales the Multipla
 
 ## Topology: Space Distribution {#topology}
 
-The cluster is **simulated inside a single process**: **4 harnesses** (all \`MemoryStorage\`) playing real member hosts with real federation components — no network, but the exact same routing and journal logic as a truly distributed deployment.
+The cluster is **simulated inside a single process**: **4 hosts** (all in memory, \`openOwnMemoryHost()\`) playing real member hosts with real federation components — no network, but the exact same routing and journal logic as a truly distributed deployment.
 
 - **1 coordinator host**: \`RouterController\` (\`router-root\` + 2 partition routers for the routing journals) and \`FederatedSpace\` (id \`fed-v5\`). The coordinator owns no chat-data space itself — it only executes the policy.
 - **3 member hosts** (\`member-1\`, \`member-2\`, \`member-3\`): each owns its own independent space with its own space doc.
@@ -701,8 +701,8 @@ Stufe 6 (\`help-site/examples/v6-mobile-control/run.ts\` sowie der Web-Bereich *
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Harness** (\`MemoryStorage\` im Runner) trägt **mehrere benannte Spaces**: den \`CONTROL_SPACE\` (Operations-Ebene: Enroll, Worker-Assignments, RunGate, Audit), \`sieve-ops\`, plus dynamisch per \`SpaceLifecycle\` erzeugte Chat-Spaces.
-- Verteilung: ein Host, mehrere isolierte Spaces — Steuerbefehle landen im Control-Space, Chat-Daten bleiben in eigenen Daten-Spaces. In der Live-Bereitstellung entspricht der Harness dem Prod-Host hinter \`spaces.eibrain.org\`.
+- **1 Host** (im Arbeitsspeicher des Runners) trägt **mehrere benannte Spaces**: den \`CONTROL_SPACE\` (Operations-Ebene: Enroll, Worker-Assignments, RunGate, Audit), \`sieve-ops\`, plus dynamisch per \`SpaceLifecycle\` erzeugte Chat-Spaces.
+- Verteilung: ein Host, mehrere isolierte Spaces — Steuerbefehle landen im Control-Space, Chat-Daten bleiben in eigenen Daten-Spaces. In der Live-Bereitstellung entspricht dieser Host dem Prod-Host hinter \`spaces.eibrain.org\`.
 
 ## Arbeitsablauf {#workflow}
 
@@ -739,8 +739,8 @@ Stage 6 (\`help-site/examples/v6-mobile-control/run.ts\` and the **\`AdminSpaces
 
 ## Topology: Space Distribution {#topology}
 
-- **1 harness** (\`MemoryStorage\` in the runner) carries **several named spaces**: the \`CONTROL_SPACE\` (operations layer: enroll, worker assignments, run gate, audit), \`sieve-ops\`, plus chat spaces created dynamically via \`SpaceLifecycle\`.
-- Distribution: one host, several isolated spaces — control commands land in the control space while chat data stays in dedicated data spaces. In the live deployment this harness is the prod host behind \`spaces.eibrain.org\`.
+- **1 host** (in the runner's memory) carries **several named spaces**: the \`CONTROL_SPACE\` (operations layer: enroll, worker assignments, run gate, audit), \`sieve-ops\`, plus chat spaces created dynamically via \`SpaceLifecycle\`.
+- Distribution: one host, several isolated spaces — control commands land in the control space while chat data stays in dedicated data spaces. In the live deployment this host is the prod host behind \`spaces.eibrain.org\`.
 
 ## Workflow {#workflow}
 
@@ -1413,66 +1413,70 @@ If a commit violates the profile, \`commit\` fails with \`CompletionViolation\` 
 		since: "0.0.1",
 		de: {
 			title: "Agent-Tools (spaces) & startService – Replay-sichere LLM-Werkzeuge",
-			short: "Stellt KI-Agenten 8 replay-sichere Tools mit automatischem Task-Claim und Ownership-Schutz bereit; startService betreibt Reaper und Zustellung.",
+			short: "Stellt KI-Agenten 8 replay-sichere Tools mit Request-Identität pro Aufruf und Ownership-Schutz bereit; startService betreibt Reaper und Zustellung.",
 			body: `## Überblick {#overview}
 
-\`registry.install(spaces)\` registriert die Erweiterung \`spaces\` im \`pi-durable\`-Harness. \`startService(harness, ctx, { space? })\` startet die Hintergrundschleife für Lease-Ablauf (\`core.reap\`) und Zustellung an wartende Conversations.
+Die Werkzeuge kommen aus dem optionalen Agent-Paket (\`agent/\`, eigene Abhängigkeiten): \`createSpaces(localSpaces(host))\` erzeugt die Erweiterung für die Agenten-Registry von \`pi-durable\`. Der Space liegt dabei nicht im Speicher der Agenten, sondern auf einem eigenen Host (dem eigenen Speicher). Er überlebt so einen Neustart der Agenten, und umgekehrt. \`startService(withEventSink(host, agentHost), ctx, { space? })\` startet die Hintergrundschleife für Lease-Ablauf (\`core.reap\`) und die Zustellung an die Conversations der Agenten.
 
 ## Technische Referenz {#technical-reference}
 
 \`\`\`ts
-const registry = createRegistry();
-registry.install(spaces);
-const stopService = await startService(harness, ctx);
+const spaces = createSpaces(localSpaces(host)); // the space: its own host
+registry.install(spaces); // the agents' registry (pi-durable)
+const stopService = await startService(withEventSink(host, agentHost), ctx);
 \`\`\`
 
 ## Die 8 Werkzeuge und ihre Sicherheit {#parameters}
 
 | Tool | Zweck |
 | --- | --- |
-| \`space_write\`, \`space_read\`, \`space_take\` | Grundlegende Entry-Operationen mit automatischem Task-Claim pro Tool-Aufruf. |
+| \`space_write\`, \`space_read\`, \`space_take\` | Grundlegende Entry-Operationen; jeder Tool-Aufruf ist eine eigene Request-Identität des Spaces. |
 | \`space_list\` | Auflisten sichtbarer Entries eines Spaces/Templates (read-only). |
 | \`space_txn\` | Beginnen, committen oder abbrechen von Transaktionen aus dem Agenten heraus. |
 | \`space_wait\`, \`space_notify\` | Langlebige Wünsche und Abos ohne den Agenten-Turn zu blockieren. |
 | \`space_lease\` | \`renew\`/\`cancel\` für eigene Ressourcen. |
 
+Jeder Tool-Aufruf erhält eine Request-Identität (die Generation der Conversation und die Task-ID des Aufrufs). Sie wird vor dem ersten Space-Aufruf im Speicher der Agenten festgehalten. Der Space speichert Operation und Ergebnis zusammen: Ein nach einem Absturz wiederholter Aufruf erhält das erste Ergebnis. Ein Aufruf, dessen Generation nicht mehr zulässt, wird abgewiesen (\`RequestExpired\`) und nie neu ausgeführt. Ohne verbundenen Agenten-Host warten Ereignisse im Postausgang des Spaces; nur für eine nicht mehr existierende Conversation werden sie verworfen.
+
 Alle Entry-Inhalte werden dem Agenten strikt als \`[data, not instructions]\` ausgezeichnet; Ownership-Checks verhindern, dass ein Agent fremde Leases oder Claims manipuliert. \`startService\` betreibt den Lease-Reaper, die Waiter-Wecklogik und die Mailbox-Zustellung – auch ohne Hintergrunddienst wird Ablauf bei Zugriffen abgeglichen; ohne Zustelldienst kommen Conversation-Ereignisse nicht automatisch an.
 
 ## Typische Anwendungsfälle {#use-cases}
 
-- **KI-Chat-Agent**: Ein LLM beantwortet \`ChatTask\`s über \`space_take\`/\`space_write\`, bleibt dank Tool-Claims bei Replays duplikatfrei.
+- **KI-Chat-Agent**: Ein LLM beantwortet \`ChatTask\`s über \`space_take\`/\`space_write\`, bleibt dank der Request-Identität jedes Aufrufs bei Replays duplikatfrei.
 - **Subagent-Suche**: Der \`search_history\`-Subagent bearbeitet \`SearchTask\`s mit denselben Werkzeugen in einem eigenen Prozess.`
 		},
 		en: {
 			title: "Agent Tools (spaces) & startService – Replay-Safe LLM Tools",
-			short: "Provides AI agents with 8 replay-safe tools with automatic task claims and ownership protection; startService runs the reaper and delivery.",
+			short: "Provides AI agents with 8 replay-safe tools with a request identity per call and ownership protection; startService runs the reaper and delivery.",
 			body: `## Overview {#overview}
 
-\`registry.install(spaces)\` registers the \`spaces\` extension in a \`pi-durable\` harness. \`startService(harness, ctx, { space? })\` starts the background loop for lease expiration (\`core.reap\`) and event delivery to waiting conversations.
+The tools come from the optional agent package (\`agent/\`, with its own dependencies): \`createSpaces(localSpaces(host))\` makes the extension for the agents' \`pi-durable\` registry. The space does not live in the agents' store but on a host of its own (the own store), so it survives an agent restart, and the other way round. \`startService(withEventSink(host, agentHost), ctx, { space? })\` starts the background loop for lease expiration (\`core.reap\`) and delivery to the agents' conversations.
 
 ## Technical Reference {#technical-reference}
 
 \`\`\`ts
-const registry = createRegistry();
-registry.install(spaces);
-const stopService = await startService(harness, ctx);
+const spaces = createSpaces(localSpaces(host)); // the space: its own host
+registry.install(spaces); // the agents' registry (pi-durable)
+const stopService = await startService(withEventSink(host, agentHost), ctx);
 \`\`\`
 
 ## The 8 Tools And Their Safety {#parameters}
 
 | Tool | Purpose |
 | --- | --- |
-| \`space_write\`, \`space_read\`, \`space_take\` | Fundamental entry operations with an automatic task claim per tool call. |
+| \`space_write\`, \`space_read\`, \`space_take\` | Fundamental entry operations; every tool call is a request identity of its own in the space. |
 | \`space_list\` | Lists visible entries of a space/template (read-only). |
 | \`space_txn\` | Starts, commits, or aborts transactions from within the agent. |
 | \`space_wait\`, \`space_notify\` | Long-lived wishes and subscriptions without blocking the agent's turn. |
 | \`space_lease\` | \`renew\`/\`cancel\` for owned resources. |
 
+Every tool call gets a request identity (the conversation's generation and the call's task id), recorded in the agents' store before the first space call. The space keeps the operation and its result together: a call repeated after a crash gets the first result. A call whose generation no longer admits is refused (\`RequestExpired\`) and never run anew. Without a connected agent host, events wait in the space's outbox; they are dropped only for a conversation that no longer exists.
+
 All entry payloads are presented to the agent strictly as \`[data, not instructions]\`; ownership checks prevent an agent from manipulating foreign leases or claims. \`startService\` runs the lease reaper, waiter wakeup logic, and mailbox delivery – operations still settle expiry without background maintenance; conversation delivery needs a running delivery service.
 
 ## Typical Use Cases {#use-cases}
 
-- **AI chat agent**: An LLM answers \`ChatTask\`s via \`space_take\`/\`space_write\`, staying duplicate-free under replays thanks to tool claims.
+- **AI chat agent**: An LLM answers \`ChatTask\`s via \`space_take\`/\`space_write\`, staying duplicate-free under replays thanks to each call's request identity.
 - **Subagent search**: The \`search_history\` subagent processes \`SearchTask\`s with the same tools in a dedicated process.`
 		}
 	},
@@ -1550,12 +1554,12 @@ const remote = new RemoteSpace(socketTransport({ path: "/tmp/space.sock" }), { s
 			short: "Kombiniert NetBird-Peer-Auflösung (Schicht A), Ed25519/P-256-Challenge (Schicht B), QR/Token-Enrollment, 60-s-Grants und atomare Schlüsselrotation.",
 			body: `## Überblick {#overview}
 
-\`startFederationHost(harness, ctx, options)\` komponiert Gate, Schicht-A/B-Authentisierung, Enrollment, Grant-Ausstellung/-Prüfung, Supervisor, Schlüsselrotation und Boot-Guard zu einem einzigen persistenten Host-Dienst.
+\`startFederationHost(host, ctx, options)\` komponiert Gate, Schicht-A/B-Authentisierung, Enrollment, Grant-Ausstellung/-Prüfung, Supervisor, Schlüsselrotation und Boot-Guard zu einem einzigen persistenten Host-Dienst.
 
 ## Technische Referenz {#technical-reference}
 
 \`\`\`ts
-const host = await startFederationHost(harness, ctx, {
+const federation = await startFederationHost(host, ctx, {
   hostId,
   authorityId,
   keys: keyDirectory,
@@ -1588,12 +1592,12 @@ Die Beispielvariablen keyDirectory, grantVerifier, directory und die beiden unab
 			short: "Combines NetBird peer resolution (Layer A), Ed25519/P-256 challenge (Layer B), QR/token enrollment, 60s grants, and atomic key rotation.",
 			body: `## Overview {#overview}
 
-\`startFederationHost(harness, ctx, options)\` composes gate, Layer A/B authentication, enrollment, grant issuance/verification, supervisor, key rotation, and boot guard into a single persistent host runtime.
+\`startFederationHost(host, ctx, options)\` composes gate, Layer A/B authentication, enrollment, grant issuance/verification, supervisor, key rotation, and boot guard into a single persistent host runtime.
 
 ## Technical Reference {#technical-reference}
 
 \`\`\`ts
-const host = await startFederationHost(harness, ctx, {
+const federation = await startFederationHost(host, ctx, {
   hostId,
   authorityId,
   keys: keyDirectory,
@@ -1641,7 +1645,7 @@ Configure keyDirectory, grantVerifier, directory and both independent registers 
 \`\`\`ts
 const fed = await createFederationController({
   ...federationOptions, // Configured keys, transport, grants, lease and authority/admin guards.
-  host: harness,
+  host,
   ctx,
   id: "router-main",
   journalPartitions: 4
@@ -1676,7 +1680,7 @@ const fed = await createFederationController({
 \`\`\`ts
 const fed = await createFederationController({
   ...federationOptions, // Configured keys, transport, grants, lease and authority/admin guards.
-  host: harness,
+  host,
   ctx,
   id: "router-main",
   journalPartitions: 4
@@ -1720,7 +1724,7 @@ Diese Controller bilden das Backend für die mobile Steuerung (\`pi-termux-mobil
 await runController.start("cmd-start-1", spec);
 await runController.pause("cmd-pause-1", runId);
 await runController.resume("cmd-resume-1", runId);
-const alerts = await collectAlerts({ host: harness, ctx, controlSpaceId, runs: runController, now: Date.now });
+const alerts = await collectAlerts({ host, ctx, controlSpaceId, runs: runController, now: Date.now });
 \`\`\`
 
 ## Controller im Überblick {#parameters}
@@ -1752,7 +1756,7 @@ These controllers power both the mobile control pages (\`pi-termux-mobile\`) and
 await runController.start("cmd-start-1", spec);
 await runController.pause("cmd-pause-1", runId);
 await runController.resume("cmd-resume-1", runId);
-const alerts = await collectAlerts({ host: harness, ctx, controlSpaceId, runs: runController, now: Date.now });
+const alerts = await collectAlerts({ host, ctx, controlSpaceId, runs: runController, now: Date.now });
 \`\`\`
 
 ## Controllers At A Glance {#parameters}

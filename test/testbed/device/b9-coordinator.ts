@@ -1,4 +1,5 @@
 // Device acceptance coordinator for the mobile Spaces control page (docs/betrieb-und-mobile-steuerung.md §8 B9).
+import { openSqliteHost } from "../../../src/index.ts";
 // The production composition (startFederationHost with grants, enrollment, control access, supervisor, run and worker
 // commands) on a LAN address; the phone is pinned by its LAN IP (layer A fixture). State persists in <dir>, so a
 // restart is a crash test. Usage: node --experimental-strip-types test/testbed/device/b9-coordinator.ts <dir> <bindIp> <phoneIp> [--netbird]
@@ -8,9 +9,6 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	CONTROL_SPACE, GateIdentity, GrantAuthority, GrantVerifier, RunController, SpaceKeyDirectory, WorkerAssignments, WorkerSupervisor, bootstrapEnroll, core,
 	createSpace, hashToken, listSpaces, loadFileSigner, localRunMember, newEnrollToken, provisionFileSigner, snapshotSpace, spaceDoc, startFederationHost,
@@ -41,7 +39,7 @@ const PHONE_PEER = NETBIRD ? (await netbirdPeers()).find(p => p.ip === PHONE)?.i
 if (!PHONE_PEER) throw new Error(`no NetBird peer with overlay IP ${PHONE}`);
 mkdirSync(dir, { recursive: true });
 const fresh = !existsSync(join(dir, "store"));
-const h = await Harness.open(await openNodeJsonlStorage(join(dir, "store"), ctx), { models: createModels(), registry: createRegistry() }, ctx);
+const h = await openSqliteHost(join(dir, "store", "space.sqlite"));
 const keyFile = join(dir, "control.key"), signer = existsSync(keyFile) ? loadFileSigner(keyFile) : provisionFileSigner(keyFile);
 const spaces: string[] = [];
 for (const alias of ["sieve-a", "sieve-b"]) {

@@ -7,7 +7,7 @@
 // swarm is capped (see LLM_PER_MIN in server/social/swarm.ts).
 
 import type { LlmReply, ReplyGenerator } from "../examples/shared/chat-core.ts";
-import { liveModels } from "../../examples/live-models.ts";
+import { liveModels } from "../../agent/src/live-models.ts";
 
 interface SharedLlm {
 	models: any;

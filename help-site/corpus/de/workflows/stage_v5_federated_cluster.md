@@ -17,7 +17,7 @@ Stufe 5 (`help-site/examples/v5-federated-cluster/run.ts`) skaliert den Multipla
 
 ## Topologie: Space-Verteilung {#topology}
 
-Der Cluster läuft **simuliert in einem einzigen Prozess**: **4 Harnesses** (alle `MemoryStorage`), die echte Member-Hosts mit echten Federation-Komponenten spielen — kein Netzwerk, aber exakt dieselbe Routing- und Journal-Logik wie in echter Verteilung.
+Der Cluster läuft **simuliert in einem einzigen Prozess**: **4 Hosts** (alle im Arbeitsspeicher, `openOwnMemoryHost()`), die echte Member-Hosts mit echten Federation-Komponenten spielen — kein Netzwerk, aber exakt dieselbe Routing- und Journal-Logik wie in echter Verteilung.
 
 - **1 Koordinator-Host**: `RouterController` (`router-root` + 2 Partition-Router für die Routing-Journals) und `FederatedSpace` (id `fed-v5`). Der Koordinator besitzt selbst keinen Chat-Daten-Space — er führt nur die Policy aus.
 - **3 Member-Hosts** (`member-1`, `member-2`, `member-3`): jeder hat einen eigenen, unabhängigen Space mit eigenem Space-Doc.

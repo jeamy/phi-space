@@ -1,53 +1,53 @@
 // Isolated wire acceptance: real NetBird peers, key proofs, grants and delegation; fixture provisioning.
-import {applyImmutable} from '@earendil-works/chord/delta';
 import {journalTransitions} from './journal-checkpoints.ts';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync,existsSync,renameSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
+import type {StoreFaults} from '../../../src/store/sqlite.ts';
 import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {core,claims,canonicalJson,principalId,FederationOperations,operationPartition,parentJournalKey,searchMembers,createSpace,spaceDoc,snapshotSpace,provisionFileSigner,loadFileSigner,privateFile,MemoryKeyDirectory,
  NetbirdDirectory,GateIdentity,SpaceService,ProvingService,startGate,GrantVerifier,GrantAuthority,DelegationVerifier,
  RouterLeaseAuthority,createFederationController,FederationRouting,socketTransport,RemoteSpace,
- FederationPending,type Transport,type FederationPolicy,type SignedRouterLease,type Principal,type PeerKeyRec,type Taken} from '../../../src/index.ts';
+ FederationPending,OwnSyncStore,type Transport,type FederationPolicy,type SignedRouterLease,type Principal,type PeerKeyRec,type Taken} from '../../../src/index.ts';
 
 const [mode,configFile,memberId]=process.argv.slice(2);const config=JSON.parse(privateFile(configFile!).toString());
 const home='/data',common='/shared',authorityId=config.authorityId,controlPeerId=config.root.peerId;
 mkdirSync(home,{recursive:true,mode:0o700});
 const policy:FederationPolicy={authorityId,policyVersion:1,default:{mode:'local',member:'a'},rules:['Load','SieveTask','SieveResult',...((config.ackCrashes||config.journalCrashes)?['AckProbe']:[])].map(type=>({type,mode:'expand',by:{field:'taskId'},members:['a','b','c']})),completionProfiles:[{taskType:'SieveTask',resultTypes:['SieveResult'],equalFields:['taskId','rangeStart','rangeEnd'],maxResultCount:1,maxResultBytes:32768,maxLeaseMs:60000}]};
 let selectedJournal:()=>any=()=>undefined;
-const rawStorage=await openNodeSqliteStorage(join(home,'harness.sqlite'));
-const storage=new Proxy(rawStorage,{get(target,key){const value=Reflect.get(target,key);if(key!=='commit')return typeof value==='function'?value.bind(target):value;
- return async(writes:any[],context:typeof ctx)=>{
-  const selected=selectedJournal();let match:any;
-  if(selected&&!progress.crashes.some((f:any)=>f.parentId===selected.parentId)){
-   const digest=(x:any)=>createHash('sha256').update(canonicalJson(x)).digest('hex'),child=(label:string)=>'f-'+digest([selected.parentId,label]);
-   const childIds=new Set(['initial:a','initial:b','initial:c','winner-commit','cancel:a','cancel:b','cancel:c','abort:a','abort:b','abort:c'].map(child)),budgetId=child('budget');
-   const states=new Map<number,any>();
-   for(const w of writes){
-    if(!['document.create','document.change'].includes(w.type))continue;
-    let record:any,before:any,after:any;
-    if(w.type==='document.create'){record=w.record;before=undefined;after=structuredClone(w.content.value);}
-    else{const prior=states.get(w.id)??await target.document(w.id,'current',context);if(!prior)continue;record=prior.record;before=prior.value;after=w.content.kind==='base'?structuredClone(w.content.value):applyImmutable(before,w.content.ops);}
-    const kind=record.kind;
-    if(journalTransitions(kind,before,after,selected.parentId,childIds,budgetId).includes(selected.kind)){
-     const select=(v:any)=>kind==='phi-spaces.federation-operations'?v?.operations?.[selected.parentId]??null:kind==='phi-spaces.router-command'?v?.command??null:{future:v?.future?.[budgetId]??null};
-     match={documentId:record.id,documentKind:kind,documentKey:record.key,budgetId,before:select(before),plannedAfter:select(after),deltaHash:digest(w.content)};
-    }
-    states.set(record.id,{record,value:after});
+// The root's store stops the process at the selected journal transition: the batch in which a document (compared with
+// its stored head) makes it, before that batch is written or once it is durable (read back first).
+let match:any;
+const kill=(commitSeq?:number)=>{const selected=selectedJournal(),fault={...selected,effect:'journal',...match,commitSeq:commitSeq??null,activeWorkers,completedJobs:progress.done.length,at:new Date().toISOString()};progress.crashes.push(fault);atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'root-sigkill',kind:fault.kind,boundary:fault.boundary,parentId:fault.parentId,effect:fault.effect,commitSeq:fault.commitSeq,activeWorkers,completedJobs:fault.completedJobs}));process.kill(process.pid,'SIGKILL');throw Error('SIGKILL returned');};
+const storeFaults:StoreFaults={
+ take:ops=>{
+  const selected=selectedJournal();match=undefined;
+  if(!selected||progress.crashes.some((f:any)=>f.parentId===selected.parentId))return undefined;
+  const digest=(x:any)=>createHash('sha256').update(canonicalJson(x)).digest('hex'),child=(label:string)=>'f-'+digest([selected.parentId,label]);
+  const childIds=new Set(['initial:a','initial:b','initial:c','winner-commit','cancel:a','cancel:b','cancel:c','abort:a','abort:b','abort:c'].map(child)),budgetId=child('budget');
+  const states=new Map<string,any>();
+  for(const op of ops){
+   if(op.t!=='doc')continue;
+   const id=op.kind+'/'+op.key,before=states.has(id)?states.get(id):store.head(op.kind,op.key),after=JSON.parse(op.value);
+   if(journalTransitions(op.kind,before,after,selected.parentId,childIds,budgetId).includes(selected.kind)){
+    const select=(v:any)=>op.kind==='phi-spaces.federation-operations'?v?.operations?.[selected.parentId]??null:op.kind==='phi-spaces.router-command'?v?.command??null:{future:v?.future?.[budgetId]??null};
+    match={documentId:id,documentKind:op.kind,documentKey:op.key,budgetId,before:select(before),plannedAfter:select(after),deltaHash:digest(op as any)};
    }
+   states.set(id,after);
   }
-  const kill=(commitSeq?:number)=>{const fault={...selected,effect:'journal',...match,commitSeq:commitSeq??null,activeWorkers,completedJobs:progress.done.length,at:new Date().toISOString()};progress.crashes.push(fault);atomicJson(progressFile,progress);console.log(JSON.stringify({stage:'root-sigkill',kind:fault.kind,boundary:fault.boundary,parentId:fault.parentId,effect:fault.effect,commitSeq:fault.commitSeq,activeWorkers,completedJobs:fault.completedJobs}));process.kill(process.pid,'SIGKILL');throw Error('SIGKILL returned');};
   if(match&&selected.boundary==='beforeCommit')kill();
-  const seq=await target.commit(writes,context);
-  if(match){const persisted=await target.document(match.documentId,'current',context);assert.ok(persisted);const v:any=persisted.value,readBack=match.documentKind==='phi-spaces.federation-operations'?v.operations?.[selected.parentId]??null:match.documentKind==='phi-spaces.router-command'?v.command??null:{future:v.future?.[match.budgetId]??null};assert.deepEqual(readBack,match.plannedAfter);kill(seq);}
-  return seq;
- };
-}});
-const host=await Harness.open(storage, {models:createModels(),registry:createRegistry()},ctx);
+  return undefined;
+ },
+ written:()=>{
+  if(!match)return;
+  const v:any=store.head(match.documentKind,match.documentKey);assert.ok(v);
+  const readBack=match.documentKind==='phi-spaces.federation-operations'?v.operations?.[selectedJournal().parentId]??null:match.documentKind==='phi-spaces.router-command'?v.command??null:{future:v.future?.[match.budgetId]??null};
+  assert.deepEqual(readBack,match.plannedAfter);kill(store.commitSeq());
+ },
+};
+const store=new OwnSyncStore(join(home,'harness.sqlite'),{faults:storeFaults});
+const host=await store.openHost();
 const directory=new NetbirdDirectory({url:config.managementUrl,token:privateFile('/secrets/management-token').toString().trim()});
 const transports=new Map<string,Transport>();
 type ProcessCrash={member:string;boundary:string;effect:string;generation:string;requestId:string;at:string};

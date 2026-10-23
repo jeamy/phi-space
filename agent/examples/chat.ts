@@ -5,13 +5,13 @@
 //
 // Run scripted (no model, no network):  node --experimental-strip-types examples/chat.ts
 // Run with a real model:                node --experimental-strip-types examples/chat.ts --live ["topic"]
-import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, startService } from "../src/index.ts";
-import { spaces } from "../src/agent.ts";
-import { liveModels } from "./live-models.ts";
+import { FOREVER, PhiSpaces, openOwnMemoryHost, startService, withEventSink } from "../../src/index.ts";
+import { createSpaces, localSpaces } from "../src/agent.ts";
+import { liveModels } from "../src/live-models.ts";
 import { pathToFileURL } from "node:url";
 
 export async function runChat(options: {live?: boolean; topic?: string; maxTurns?: number; timeoutMs?: number} = {}) {
@@ -58,11 +58,14 @@ const { models, model } = live ? await liveModels() : (() => {
 	const m = createModels(); const f = scripted(); m.setProvider(f.provider);
 	return { models: m, model: { provider: "faux", modelId: "faux-1" } };
 })();
+// The space is a host of its own; its events reach the agents' conversations through the service.
+const space = openOwnMemoryHost();
+const spaces = createSpaces(localSpaces(space));
 const registry = createRegistry();
 registry.install(spaces);
 const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-const host = new PhiSpaces(h, ctx);
-const stopService = await startService(h, ctx);
+const host = new PhiSpaces(space, ctx);
+const stopService = await startService(withEventSink(space, h), ctx);
 
 const subs: string[] = [];
 const conversations = [];
@@ -87,6 +90,7 @@ return msgs;
 } finally {
 await stopService();
 await h.close(ctx);
+await space.close(ctx);
 }
 }
 

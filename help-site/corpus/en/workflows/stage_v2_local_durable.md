@@ -17,15 +17,15 @@ Stage 2 (`help-site/examples/v2-local-durable/run.ts`) makes the Multiplayer Spa
 
 ## Topology: Space Distribution {#topology}
 
-- **1 process**, **1 harness** on a **SQLite file** (`chat-v2.sqlite`).
+- **1 process**, **1 host** on a **SQLite file** (`chat-v2.sqlite`).
 - **1 named space** (`chat-v2`): threads, `Msg`, `ChatTask`, `ScheduledJob`, `TimerLock`, subagent entries — all durable in one space.
-- For the crash demo the harness is closed and **reopened on the same SQLite file**: the space survives the simulated restart and expired leases are reaped.
+- For the crash demo the host is closed and **reopened on the same SQLite file**: the space survives the simulated restart and expired leases are reaped.
 
 ## Workflow {#workflow}
 
 ### Step 1: SQLite Storage And RequestRef Claims {#step-1-sqlite-claims}
 
-Instead of `MemoryStorage`, the host opens `await openNodeSqliteStorage(dbPath)`. Each participant obtains a generation via `const { generation } = await space.issueGeneration(principal)`. Re-sending `createThread` or `submitMessage` with the same `requestId` after a connection drop returns the original result without duplicating entries.
+Instead of the in-memory store, the host opens `await openSqliteHost(dbPath)` (the own SQLite store). Each participant obtains a generation via `const { generation } = await space.issueGeneration(principal)`. Re-sending `createThread` or `submitMessage` with the same `requestId` after a connection drop returns the original result without duplicating entries.
 
 ### Step 2: Scheduled Alarms Via ScheduledJob + TimerLock Lease {#step-2-alarms}
 

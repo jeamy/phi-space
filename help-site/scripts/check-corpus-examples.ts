@@ -9,11 +9,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixture = `
  const space: api.PhiSpaces = undefined!;
  const remote: api.RemoteSpace = undefined!;
- const harness: durable.Harness = undefined!;
+ const host: api.OwnStoreHost = undefined!;
+ const harness: api.OwnStoreHost = undefined!;
  const ctx: import("../../src/context.ts").Context = undefined!;
  const meter: api.Meter = undefined!;
- const models: ReturnType<typeof ai.createModels> = undefined!;
  const registry: ReturnType<typeof durable.createRegistry> = undefined!;
+ const agentHost: api.EventSink = undefined!;
  const principal: api.Principal = {peerId:"reader"};
  const conversationId: core.Target = "reader";
  const generation: string = "generation", txnId: string | null = null;
@@ -22,12 +23,13 @@ const fixture = `
  const reqBegin: api.RequestRef = undefined!, reqCommit: api.RequestRef = undefined!;
  const socketPath: string = "/tmp/docs.sock";
  const FOREVER = api.FOREVER, NO_WAIT = api.NO_WAIT;
- const Harness = durable.Harness, MemoryStorage = durable.MemoryStorage;
+ const openOwnMemoryHost = api.openOwnMemoryHost, openSqliteHost = api.openSqliteHost, withEventSink = api.withEventSink;
  const PhiSpaces = api.PhiSpaces, RemoteSpace = api.RemoteSpace;
  const createRegistry = durable.createRegistry, createSpace = api.createSpace;
+ const createSpaces = agent.createSpaces, localSpaces = agent.localSpaces;
  const startService = api.startService, SpaceService = api.SpaceService;
  const serveSpace = api.serveSpace, socketTransport = api.socketTransport;
- const spaces = agent.spaces;
+ const spaces = agent.createSpaces(agent.localSpaces(host));
  type Json = core.Json;
  const handleEvent: (event: core.SpaceEvent) => Promise<void> = async () => {};
  const page: core.Page = undefined!;
@@ -61,7 +63,7 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 			const imports = ast.statements.filter(ts.isImportDeclaration);
 			let body = code;
 			for (const declaration of [...imports].reverse()) body = body.slice(0, declaration.getFullStart()) + body.slice(declaration.end);
-			virtual.set(file, `import * as api from "../../src/index.ts";\nimport * as agent from "../../src/agent.ts";\nimport * as core from "../../src/core.ts";\nimport * as durable from "@earendil-works/pi-durable";\nimport * as ai from "@earendil-works/pi-ai/models";\n${imports.map(d => d.getText(ast)).join("\n")}\nasync function documentationExample() {\n${fixture}\n{\n${body}\n}\n}\n`);
+			virtual.set(file, `import * as api from "../../src/index.ts";\nimport * as agent from "../../agent/src/agent.ts";\nimport * as core from "../../src/core.ts";\nimport * as durable from "@earendil-works/pi-durable";\nimport * as ai from "@earendil-works/pi-ai/models";\n${imports.map(d => d.getText(ast)).join("\n")}\nasync function documentationExample() {\n${fixture}\n{\n${body}\n}\n}\n`);
 		}
 	}
 	const options: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, skipLibCheck: true, noEmit: true, allowImportingTsExtensions: true, types: ["node"] };
@@ -73,7 +75,7 @@ export function checkCorpusExamples(seeds: ArticleSeed[] = ALL_ARTICLES): { exam
 	};
 	host.resolveModuleNames = (names, containingFile) => names.map(name => {
 		if (name === "phi-spaces") return { resolvedFileName: resolve(ROOT, "src/index.ts"), extension: ts.Extension.Ts };
-		if (name === "phi-spaces/agent") return { resolvedFileName: resolve(ROOT, "src/agent.ts"), extension: ts.Extension.Ts };
+		if (name === "phi-spaces/agent") return { resolvedFileName: resolve(ROOT, "agent/src/agent.ts"), extension: ts.Extension.Ts };
 		if (name.startsWith("./help-site/")) return { resolvedFileName: resolve(ROOT, name), extension: ts.Extension.Ts };
 		return ts.resolveModuleName(name, containingFile, options, host).resolvedModule;
 	});

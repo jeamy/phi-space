@@ -17,11 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget, openOwnMemoryHost, openSqliteHost } from "../../src/index.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
 import { swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
 
@@ -42,20 +38,17 @@ const shardTag = process.env.SWARM_TAG ?? "b-";
 const produce = process.env.SWARM_PRODUCE === "1";
 
 const meter = new Meter();
-const registry = createRegistry();
-registry.install(spaces);
 
-const storage = process.env.SWARM_MEM === "1"
-	? new MemoryStorage()
+// The own store (a pi-durable file of an older version is refused, not taken over: phi-spaces decision D6).
+const host = process.env.SWARM_MEM === "1"
+	? openOwnMemoryHost()
 	: await (async () => {
 			await mkdir(dirname(dbPath), { recursive: true });
-			return await openNodeSqliteStorage(dbPath);
+			return await openSqliteHost(dbPath);
 		})();
+await startService(host, ctx, { watchDebounceMs: 400 });
 
-const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
-await startService(harness, ctx, { watchDebounceMs: 400 });
-
-const hub = new SocialSwarmHub(harness, ctx, meter, {
+const hub = new SocialSwarmHub(host, ctx, meter, {
 	shardTag,
 	produce,
 	pulses: false,
@@ -67,12 +60,12 @@ if (llmReply) hub.setReplyGenerator(llmReply);
 if (llmPost) hub.setPostGenerator(llmPost);
 
 // The space must exist before the service is queried by the hub.
-const info = await harness.commit((tx) => createSpace(tx, SWARM_ALIAS, Date.now()), ctx);
+const info = await host.commit((tx) => createSpace(tx, SWARM_ALIAS, Date.now()), ctx);
 
 const identity = new StaticIdentity({
 	"peer-hub": { principal: { peerId: "peer-hub" }, roles: ["member"] },
 });
-const server = await serveSpace(new SpaceService({ host: harness, ctx, identity }), {
+const server = await serveSpace(new SpaceService({ host: host, ctx, identity }), {
 	listen,
 	connection: () => ({ peerId: "peer-hub" }),
 });
@@ -85,7 +78,7 @@ void hub.init()
 const shutdown = async () => {
 	await hub.close();
 	await server.close();
-	await harness.close(ctx);
+	await host.close(ctx);
 	process.exit(0);
 };
 process.on("SIGINT", () => void shutdown());

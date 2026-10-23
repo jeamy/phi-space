@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Ein `@earendil-works/pi-durable`-Harness verwaltet standardmäßig den Default-Space (`phi-spaces.space`, Alias `"default"`) sowie über die `Registry` (`phi-spaces.registry`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (`phi-spaces.named-space`).
+Ein Host (der eigene Speicher) verwaltet standardmäßig den Default-Space (`phi-spaces.space`, Alias `"default"`) sowie über die `Registry` (`phi-spaces.registry`) mehrere durch Ressourcenlimits begrenzte isolierte **benannte Spaces** (`phi-spaces.named-space`).
 
 ## Begriffs- und Systemmodell {#concept-model}
 
@@ -22,18 +22,18 @@ Ein `@earendil-works/pi-durable`-Harness verwaltet standardmäßig den Default-S
 ```ts
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 
-// 1. Benannten Space für eine Chat-Session im Harness-Commit anlegen:
-await harness.commit(async (tx) => {
+// 1. Benannten Space für eine Chat-Session im Commit des Hosts anlegen:
+await host.commit(async (tx) => {
   await createSpace(tx, "chat-session-alpha", Date.now());
 }, ctx);
 
 // 2. Client auf diesen benannten Space richten:
-const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, {
+const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, {
   space: "chat-session-alpha"
 });
 
 // 3. Hintergrunddienst (Reaper + lokale Zustellung) für alle Spaces starten:
-const stopService = await startService(harness, ctx);
+const stopService = await startService(host, ctx);
 ```
 
 - Wird im `PhiSpaces`-Konstruktor `conversationId` übergeben, prüft der Client strikt die Ownership (eine Conversation darf nur ihre eigenen Transaktionen committen/abbrechen und nur ihre eigenen Leases verlängern/kündigen).

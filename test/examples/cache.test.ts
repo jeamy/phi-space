@@ -4,10 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, PhiSpaces } from "../../src/index.ts";
+import { FOREVER, PhiSpaces, openSqliteHost } from "../../src/index.ts";
 import { SpaceCache, runCacheDemo } from "../../examples/cache.ts";
 import { openTestHost } from "../support/host.ts";
 
@@ -105,9 +102,9 @@ test("Cache external transaction conflicts do not overwrite a reservation", asyn
   } finally { await h.close(ctx); }
 });
 
-test("Cache survives JSONL reopen without reusing old versions after delete", async () => {
+test("Cache survives a reopen without reusing old versions after delete", async () => {
   const dir = mkdtempSync(join(tmpdir(), "cache-reopen-"));
-  const open = async () => Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
+  const open = () => openSqliteHost(join(dir, "space.sqlite"));
   try {
     let h = await open(); let cache = new SpaceCache(h);
     const initial = await cache.set("k", { persisted: true }, FOREVER);

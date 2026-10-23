@@ -5,10 +5,7 @@
 
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, Space, startService } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { FOREVER, PhiSpaces, Space, openOwnMemoryHost, startService } from "../../../src/index.ts";
 import { FederatedSpace, type FederationIO } from "../../../src/federated-space.ts";
 import { partitionRouterId } from "../../../src/federation-journals.ts";
 import { RouterController } from "../../../src/router.ts";
@@ -23,11 +20,7 @@ import {
 } from "../shared/chat-core.ts";
 
 export async function runStageV5() {
-	const makeHarness = async () => {
-		const reg = createRegistry();
-		reg.install(spaces);
-		return await Harness.open(new MemoryStorage(), { models: createModels(), registry: reg }, ctx);
-	};
+	const makeHarness = async () => openOwnMemoryHost();
 
 	const coordinatorHost = await makeHarness();
 	const memberHosts = {

@@ -34,16 +34,16 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - Standalone space service (own store, no pi-durable): `npm run space-server -- --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT`
   (`src/standalone.ts`); `examples/sieve.ts` and `examples/cache.ts` take `--remote <address>`. `test/support/no-durable.mjs`
   (`node --import`) refuses pi-durable, chord and pi-ai; `test/test-standalone.test.ts` runs service and examples under it.
-- Examples without a model: `npm run example`, `npm run example:pipeline`, `npm run example:chat`, `npm run example:sieve`, `npm run example:cache`
-- Live examples (real model, cost tokens, ask first): `examples/chat.ts --live`, `npm run example:arxiv`
+- Examples without a model: `npm run example:pipeline`, `npm run example:sieve`, `npm run example:cache`, `npm run example:golomb` (root); `npm run example`, `npm run example:chat`, `npm run example:blocking` (agent package, scripted models)
+- Live examples (real model, cost tokens, ask first): `agent/examples/chat.ts --live`, `npm run example:arxiv`
 
-Run typecheck and tests after every change.
+Run typecheck and tests after every change (root: `npm run typecheck`, `npm test`; agent package: `npm run typecheck:agent`, `npm run test:agent`; the chat and the help site have their own, below).
 
 ## Layout
 
 - `src/core.ts` pure semantics, `src/doc.ts` the default Space document, `src/spaces.ts` registry and named spaces,
   `src/claims.ts` request claims/generations, `src/client.ts` `PhiSpaces`, `src/index.ts` exports, delivery, reaper,
-  `src/agent.ts` the agent tools (pi-durable), `src/context.ts` the invocation context, `src/store/` the storage boundary
+  `agent/` the agent package (own dependencies: pi-durable, chord, pi-ai; `agent/src/agent.ts` the space tools over a separate space host, `agent/src/with-agent.ts` the mobile bundle entry, `agent/examples`, `agent/test`), `src/context.ts` the invocation context, `src/store/` the storage boundary
   (`host.ts`/`sqlite.ts` the own store, `sqlite-writer.ts` its writer thread, an eval worker so bundles need no second file;
   `disk-map.ts` the claims kept on the disk, asked through `DISK_MAP` instead of enumerated: tests on own-sqlite throw
   on such an enumeration; `sync-store.ts` what the primary/sync journal needs of a store,

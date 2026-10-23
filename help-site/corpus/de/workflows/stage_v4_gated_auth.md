@@ -17,7 +17,7 @@ Stufe 4 (`help-site/examples/v4-gated-auth/run.ts`) hebt den Space-Chat auf das 
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **2 unabhängige, persistente Harnesses**, jeweils hinter einem eigenen TCP-Gate:
+- **2 unabhängige, persistente Hosts** (je ein eigener SQLite-Speicher), jeweils hinter einem eigenen TCP-Gate:
   - **Control Host** mit dem `CONTROL_SPACE` (PeerDirectory, Enroll-Tokens, Grants, Key-Rotation, BootGuard).
   - **Data Host** mit dem Chat-Space (Threads, `Msg`, `Presence`).
 - Zugriff auf den Data-Space nur über **Gate Layer A (Overlay-Peer) + Layer B (Ed25519-Challenge)** und pro Operation einen 60-s-Grant aus dem Control-Space.
@@ -26,7 +26,7 @@ Stufe 4 (`help-site/examples/v4-gated-auth/run.ts`) hebt den Space-Chat auf das 
 
 ### Schritt 1: Boot-Register und startFederationHost starten {#step-1-host}
 
-Der Host initialisiert ein `SqliteRecoveryRegister` und `installBootGuard`, erzeugt die Host- und Authority-Schlüssel (`generateKey("ed25519")`) und startet `startFederationHost(harness, ctx, ...)` auf einem TCP-Loopback-/Overlay-Port.
+Der Host initialisiert ein `SqliteRecoveryRegister` und `installBootGuard`, erzeugt die Host- und Authority-Schlüssel (`generateKey("ed25519")`) und startet `startFederationHost(host, ctx, ...)` auf einem TCP-Loopback-/Overlay-Port.
 
 ### Schritt 2: Admin-Bootstrap & Worker-Enrollment {#step-2-enroll}
 

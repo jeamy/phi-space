@@ -21,7 +21,7 @@ These controllers power both the mobile control pages (`pi-termux-mobile`) and t
 await runController.start("cmd-start-1", spec);
 await runController.pause("cmd-pause-1", runId);
 await runController.resume("cmd-resume-1", runId);
-const alerts = await collectAlerts({ host: harness, ctx, controlSpaceId, runs: runController, now: Date.now });
+const alerts = await collectAlerts({ host, ctx, controlSpaceId, runs: runController, now: Date.now });
 ```
 
 ## Controllers At A Glance {#parameters}

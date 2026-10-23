@@ -21,7 +21,7 @@ Diese Controller bilden das Backend für die mobile Steuerung (`pi-termux-mobile
 await runController.start("cmd-start-1", spec);
 await runController.pause("cmd-pause-1", runId);
 await runController.resume("cmd-resume-1", runId);
-const alerts = await collectAlerts({ host: harness, ctx, controlSpaceId, runs: runController, now: Date.now });
+const alerts = await collectAlerts({ host, ctx, controlSpaceId, runs: runController, now: Date.now });
 ```
 
 ## Controller im Überblick {#parameters}

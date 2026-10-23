@@ -3,10 +3,7 @@
 
 import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, NO_WAIT, startService } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { FOREVER, PhiSpaces, NO_WAIT, openOwnMemoryHost, startService, type OwnStoreHost } from "../../src/index.ts";
 import { 
   openWindow, 
   collect, 
@@ -31,18 +28,14 @@ const TEST_SOURCES = ["station", "forecast", "cloud"];
 // ============================================================================
 
 async function setupPipelineHarness() {
-  const models = createModels();
-  const registry = createRegistry();
-  registry.install(spaces);
-  
-  const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
+  const h = openOwnMemoryHost();
   const host = new PhiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
-  return { h, host, stopService, models };
+  return { h, host, stopService };
 }
 
-async function teardownPipelineHarness(h: Harness, stopService: () => Promise<void>) {
+async function teardownPipelineHarness(h: OwnStoreHost, stopService: () => Promise<void>) {
   await stopService();
   await h.close(ctx);
 }
@@ -52,7 +45,7 @@ async function teardownPipelineHarness(h: Harness, stopService: () => Promise<vo
 // ============================================================================
 
 describe("sensor-pipeline.ts", () => {
-  let h: Harness;
+  let h: OwnStoreHost;
   let host: PhiSpaces;
   let stopService: () => Promise<void>;
 
@@ -537,7 +530,7 @@ describe("sensor-pipeline.ts", () => {
 // ============================================================================
 
 describe("sensor-pipeline Performance", () => {
-  let h: Harness;
+  let h: OwnStoreHost;
   let host: PhiSpaces;
   let stopService: () => Promise<void>;
 

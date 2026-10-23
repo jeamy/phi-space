@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-`phi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) für `@earendil-works/pi-durable`. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
+`phi-spaces` ist ein transaktionaler, persistenter **Koordinationsraum** (eine moderne Weiterentwicklung des klassischen Linda-/JavaSpaces-Paradigmas) mit eigenem Speicher (SQLite, ein Prozess besitzt ihn); für `@earendil-works/pi-durable`-Agenten gibt es ein optionales Agent-Paket. Anstatt Clients, Hintergrund-Worker, KI-Agenten und Administrationswerkzeuge über fehleranfällige Punkt-zu-Punkt-Aufrufe direkt miteinander zu verkoppeln, tauschen alle Teilnehmer unveränderliche, typisierte JSON-Objekte (**Entries**) über gemeinsam nutzbare, versionierte Datenräume (**Spaces**) aus.
 
 ## Herkunft: Linda und JavaSpaces {#history}
 
@@ -77,13 +77,13 @@ PhiSpaces und RemoteSpace implementieren den SpaceLike-Basisvertrag. FederatedSp
 ## Arbeitsablauf {#workflow}
 
 1. **Vertrag definieren**: Entry-Typen (`type`), Pflichtfelder (`fields`) und optionale `CompletionProfiles` (welcher Task-Typ erfordert welchen Ergebnis-Typ beim Transaktions-Commit?) festlegen.
-2. **Space öffnen und Dienst starten**: `new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space })` erstellen und `await startService(harness, ctx)` für Lease-Reaper und Event-Zustellung starten.
+2. **Space öffnen und Dienst starten**: `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space })` erstellen und `await startService(host, ctx)` für Lease-Reaper und Event-Zustellung starten.
 3. **Aufgaben einstellen und bearbeiten**: Produzenten schreiben Aufgaben mit `RequestRef`-Claim; Worker reservieren Aufgaben per `take(..., { txn })`, schreiben Ergebnisse unter derselben `txn` und rufen `commit(txn)` auf.
 4. **Live-Beobachtung und Steuerung**: UI-Clients lesen initial `readPage()` (Snapshot mit `rev`) und folgen Änderungen über `changes(afterRev)` oder Consumer-Mailboxes (`events` / `ack`).
 
 ## Regeln, Garantien und Grenzen {#rules-and-boundaries}
 
-- **Ein Commit, eine Wahrheit**: Space-Mutation, Request-Claim, Revisionszähler `rev`, Mailbox-Ereignis und Byte-Budget-Prüfung werden in einem einzigen atomaren Harness-Commit persistiert.
+- **Ein Commit, eine Wahrheit**: Space-Mutation, Request-Claim, Revisionszähler `rev`, Mailbox-Ereignis und Byte-Budget-Prüfung werden in einem einzigen atomaren Commit des Hosts persistiert.
 - **Daten sind keine Anweisungen**: Entries aus dem Space stammen potenziell von anderen Agenten oder Benutzern. Die Agenten-Tools kennzeichnen sie strikt als `[data, not instructions]`.
 - **Help ≠ Live State**: Diese Referenz dokumentiert die stabilen Verträge und Garantien. Den aktuellen Laufzeitbestand eines Spaces zeigen der integrierte **Live Space-Inspector** und der geschützte Bereich **AdminSpaces**.
 

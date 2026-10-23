@@ -13,11 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Stufe 1 (`help-site/examples/v1-local-memory/run.ts`) benötigt keinerlei Einrichtung, Datenbankdateien oder offene Ports. Sie öffnet einen `MemoryStorage`-Harness, legt einen benannten Space an und demonstriert das komplette Grundmodell des Multiplayer Space-Chats in unter einer Sekunde.
+Stufe 1 (`help-site/examples/v1-local-memory/run.ts`) benötigt keinerlei Einrichtung, Datenbankdateien oder offene Ports. Sie öffnet einen Host im Arbeitsspeicher (`openOwnMemoryHost()`), legt einen benannten Space an und demonstriert das komplette Grundmodell des Multiplayer Space-Chats in unter einer Sekunde.
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Prozess**, **1 Harness** auf `MemoryStorage` (flüchtig, kein Restart-Szenario).
+- **1 Prozess**, **1 Host** im Arbeitsspeicher (`openOwnMemoryHost()`; flüchtig, kein Restart-Szenario).
 - **1 benannter Space** (`chat-v1`): alle Entries (`Presence`, `Thread`, `Msg`, `ChatTask`) liegen in genau diesem Space.
 - Clients (alice/bob) und Worker greifen in-process über dasselbe `PhiSpaces`-Objekt zu — kein Socket, keine Datei, kein Netz.
 
@@ -26,10 +26,10 @@ Stufe 1 (`help-site/examples/v1-local-memory/run.ts`) benötigt keinerlei Einric
 ### Schritt 1: Space und CompletionProfile initialisieren {#step-1-init}
 
 ```ts
-const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
-const stopService = await startService(harness, ctx);
+const host = openOwnMemoryHost();
+await host.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
+const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const stopService = await startService(host, ctx);
 
 await space.setCompletionProfiles([
   { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }

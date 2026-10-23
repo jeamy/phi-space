@@ -23,11 +23,11 @@ async function testBlockingTake(
 ): Promise<{ success: boolean; durationMs: number; error?: string }> {
   const startTime = Date.now();
   
-  // Erstelle Promise für write
-  const writePromise = new Promise<void>(async (resolve) => {
-    setTimeout(async () => {
-      await harness.space.write(blockingToolFixtures.jobWithTimeout(timeoutMs));
-      resolve();
+  // Erstelle Promise für write (der Timer wird am Ende gelöscht: kein Schreiben nach dem Test)
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const writePromise = new Promise<void>((resolve, reject) => {
+    timer = setTimeout(() => {
+      harness.space.write(blockingToolFixtures.jobWithTimeout(timeoutMs)).then(() => resolve(), reject);
     }, delayMs);
   });
 
@@ -55,6 +55,8 @@ async function testBlockingTake(
       durationMs,
       error: String(error)
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

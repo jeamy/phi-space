@@ -1,8 +1,6 @@
 // Evolving primes code in a codemode sandbox. Skips when pi-codemode is not installed (nothing is installed here).
 import { describe, test, expect } from "./compat.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { evaluate, evolve, firstPrimes, genomeToSource, loadCodemode, type Genome } from "../../examples/codemode-evolve.ts";
 import { openTestHost } from "../support/host.ts";
 
@@ -31,13 +29,5 @@ describe("codemode-evolve", () => {
 		expect(r.best).not.toBeNull();
 		expect((await evaluate(cm!, r.best!.source, 100)).ok).toBe(true);
 		await h.close(ctx);
-	});
-});
-
-describe("codemode-evolve-live helpers", () => {
-	test("extractCode takes the first fenced block, else the whole answer", async () => {
-		const { extractCode } = await import("../../examples/codemode-evolve-live.ts");
-		expect(extractCode("Here:\n```js\nfunction a(){}\n```\nbye")).toBe("function a(){}");
-		expect(extractCode("function b(){}")).toBe("function b(){}");
 	});
 });

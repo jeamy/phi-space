@@ -4,10 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { PhiSpaces, FOREVER } from "../../src/index.ts";
+import { PhiSpaces, FOREVER, openSqliteHost } from "../../src/index.ts";
 import { segmentedSieve, prepareSieveRun, processSieveTask, collectSieveResults, runSieve, type SieveConfig } from "../../examples/sieve.ts";
 import { openTestHost } from "../support/host.ts";
 
@@ -62,11 +59,10 @@ test("Sieve commit failure returns task and discards staged result", async () =>
   } finally { await h.close(ctx); }
 });
 
-test("Sieve reservation returns at lease expiry and completed work survives JSONL reopen", async () => {
+test("Sieve reservation returns at lease expiry and completed work survives a reopen", async () => {
   const dir = mkdtempSync(join(tmpdir(), "sieve-reopen-"));
   let now = 1000;
-  // JSONL open is asynchronous; keep the storage contract explicit.
-  const openStore = async () => Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry: createRegistry() }, ctx);
+  const openStore = () => openSqliteHost(join(dir, "space.sqlite"));
   try {
     let h = await openStore();
     const worker = new PhiSpaces(h, ctx, () => now, undefined, 1);

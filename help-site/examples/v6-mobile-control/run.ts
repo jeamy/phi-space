@@ -9,10 +9,7 @@
 
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { auditLog, collectAlerts, CONTROL_SPACE, createSpace, enrollQr, FOREVER, generateKey, hashToken, localRunMember, Meter, newEnrollToken, PhiSpaces, RunController, SpaceLifecycle, startService, WorkerAssignments, WorkerSupervisor, type WorkerKind } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { auditLog, collectAlerts, CONTROL_SPACE, createSpace, enrollQr, FOREVER, generateKey, hashToken, localRunMember, Meter, newEnrollToken, PhiSpaces, RunController, SpaceLifecycle, startService, WorkerAssignments, WorkerSupervisor, type WorkerKind, openOwnMemoryHost } from "../../../src/index.ts";
 import {
 	configureGatedSieveSpace,
 	normalizeSieveRunConfig,
@@ -24,9 +21,7 @@ import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV6() {
 	const meter = new Meter();
-	const registry = createRegistry();
-	registry.install(spaces);
-	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+	const harness = openOwnMemoryHost();
 	const controlSpaceId = (await harness.commit((tx) => createSpace(tx, CONTROL_SPACE, Date.now()), ctx)).spaceId;
 	const sieveSpaceId = (await harness.commit((tx) => createSpace(tx, "sieve-ops", Date.now()), ctx)).spaceId;
 	const stopService = await startService(harness, ctx);

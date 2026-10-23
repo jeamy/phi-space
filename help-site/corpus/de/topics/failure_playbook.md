@@ -26,7 +26,7 @@ Transportfehler, fachliche Ablehnung und Storage-Fehler sind verschieden. Vor je
 | ResourceExhausted | Grenze identifizieren, Transaktion begrenzen/abbrechen, kleinere Batches versuchen. | Quoten unkontrolliert erhöhen. |
 | NotCommitted | Autoritative Negativentscheidung und aktuellen Rahmen prüfen; zulässigen neuen Auftrag bewusst starten. | Mit OutcomeUnknown gleichsetzen. |
 | needsReview | Tatsächliche Wirkung und Journal prüfen; Entscheidung dokumentieren. | Zweiten Admin-Befehl blind starten. |
-| Session is poisoned | Neue Writes stoppen, versiegelten Kandidaten auflösen und Harness wieder öffnen. | Async-Fallback oder unbestätigte Writes fortsetzen. |
+| Session is poisoned | Neue Writes stoppen, versiegelten Kandidaten auflösen und den Host wieder öffnen. | Async-Fallback oder unbestätigte Writes fortsetzen. |
 
 ## Welche Diagnoseinformationen? {#evidence}
 

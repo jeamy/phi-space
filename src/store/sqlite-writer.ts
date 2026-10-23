@@ -54,6 +54,8 @@ export function writerMain(parentPort: MessagePort, DatabaseSync: typeof import(
 	});
 }
 
-/** The source of the writer thread (`new Worker(writerSource(), { eval: true })`). */
+/** The source of the writer thread (`new Worker(writerSource(), { eval: true })`). A worker inherits the process's
+ *  flags, so the source runs as a CommonJS script or as a module (`--input-type=module`): it loads its modules with
+ *  process.getBuiltinModule, which both have. */
 export const writerSource = (): string =>
-	`const { parentPort } = require("node:worker_threads"); const { DatabaseSync } = require("node:sqlite"); const { writeFileSync } = require("node:fs");\n(${writerMain})(parentPort, DatabaseSync, writeFileSync, ${prepareOps}, ${applyOps});`;
+	`const { parentPort } = process.getBuiltinModule("node:worker_threads"), { DatabaseSync } = process.getBuiltinModule("node:sqlite"), { writeFileSync } = process.getBuiltinModule("node:fs");\n(${writerMain})(parentPort, DatabaseSync, writeFileSync, ${prepareOps}, ${applyOps});`;

@@ -7,7 +7,7 @@
 // one run: the caller names the model. Agents are teammates: each sees the cases, the team's attempts with their test
 // results, and the notes, and repairs, explores or improves (teamPrompt).
 import { AsyncLocalStorage } from "node:async_hooks";
-import { liveModels } from "../../examples/live-models.ts";
+import { liveModels } from "../../agent/src/live-models.ts";
 import { isText, type Task } from "./tasks.ts";
 
 const CALLS_PER_MIN = Number(process.env.CODEMODE_LLM_PER_MIN ?? 20);

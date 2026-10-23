@@ -13,12 +13,12 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`startFederationHost(harness, ctx, options)` composes gate, Layer A/B authentication, enrollment, grant issuance/verification, supervisor, key rotation, and boot guard into a single persistent host runtime.
+`startFederationHost(host, ctx, options)` composes gate, Layer A/B authentication, enrollment, grant issuance/verification, supervisor, key rotation, and boot guard into a single persistent host runtime.
 
 ## Technical Reference {#technical-reference}
 
 ```ts
-const host = await startFederationHost(harness, ctx, {
+const federation = await startFederationHost(host, ctx, {
   hostId,
   authorityId,
   keys: keyDirectory,

@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-Die Erweiterung `spaces` (`createSpaces(meter)` in `src/index.ts`) stattet `pi-durable`-Conversations mit 8 Werkzeugen aus, die sämtlich mit `replay: "safe"` und einem task-gebundenen `Claim`-Dokument (`phi-spaces.claim`) abgesichert sind.
+Die Erweiterung `spaces` (`createSpaces(localSpaces(host))` im Agent-Paket) stattet `pi-durable`-Conversations mit 8 Werkzeugen aus, die sämtlich mit `replay: "safe"` laufen. Jeder Aufruf hat eine feste Request-Identität im Space, ein wiederholter Aufruf liefert das erste Ergebnis.
 
 ## Technische Referenz {#technical-reference}
 

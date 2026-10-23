@@ -13,12 +13,12 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-`startFederationHost(harness, ctx, options)` komponiert Gate, Schicht-A/B-Authentisierung, Enrollment, Grant-Ausstellung/-Prüfung, Supervisor, Schlüsselrotation und Boot-Guard zu einem einzigen persistenten Host-Dienst.
+`startFederationHost(host, ctx, options)` komponiert Gate, Schicht-A/B-Authentisierung, Enrollment, Grant-Ausstellung/-Prüfung, Supervisor, Schlüsselrotation und Boot-Guard zu einem einzigen persistenten Host-Dienst.
 
 ## Technische Referenz {#technical-reference}
 
 ```ts
-const host = await startFederationHost(harness, ctx, {
+const federation = await startFederationHost(host, ctx, {
   hostId,
   authorityId,
   keys: keyDirectory,

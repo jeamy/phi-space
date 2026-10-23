@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-A `@earendil-works/pi-durable` harness hosts the default space (`phi-spaces.space`, alias `"default"`) plus resource-bounded isolated **named spaces** (`phi-spaces.named-space`) tracked in the `Registry` (`phi-spaces.registry`).
+A host (the own store) holds the default space (`phi-spaces.space`, alias `"default"`) plus resource-bounded isolated **named spaces** (`phi-spaces.named-space`) tracked in the `Registry` (`phi-spaces.registry`).
 
 ## Concept And System Model {#concept-model}
 
@@ -22,18 +22,18 @@ A `@earendil-works/pi-durable` harness hosts the default space (`phi-spaces.spac
 ```ts
 import { createSpace, listSpaces, PhiSpaces, startService } from "phi-spaces";
 
-// 1. Create a named space for a chat session inside a harness commit:
-await harness.commit(async (tx) => {
+// 1. Create a named space for a chat session inside a host commit:
+await host.commit(async (tx) => {
   await createSpace(tx, "chat-session-alpha", Date.now());
 }, ctx);
 
 // 2. Point a PhiSpaces client at the named space:
-const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, {
+const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, {
   space: "chat-session-alpha"
 });
 
 // 3. Start background reaper and local event delivery across all spaces:
-const stopService = await startService(harness, ctx);
+const stopService = await startService(host, ctx);
 ```
 
 - Passing `conversationId` to `PhiSpaces` enables strict ownership enforcement (a conversation can only commit/abort its own transactions and renew/cancel its own leases).

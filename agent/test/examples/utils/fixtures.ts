@@ -1,8 +1,8 @@
 // Test-Fixtures für phi-spaces Beispiele
 // Bereitstellung von Test-Daten und Mock-Implementierungen
 
-import { FOREVER } from "../../../src/index.ts";
-import type { EntryDraft } from "../../../src/index.ts";
+import { FOREVER } from "../../../../src/index.ts";
+import type { EntryDraft } from "../../../../src/index.ts";
 
 /**
  * Fixtures für workers.ts Tests

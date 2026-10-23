@@ -23,7 +23,7 @@ try { available = !localOnly && (await stat(resolve(mobileRoot, 'runtime/package
 catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (!available && !localOnly && process.env.PHI_SPACES_MOBILE_ROOT) throw new Error(`Mobile runtime not found: ${mobileRoot}`);
 
-await build({ absWorkingDir: root, entryPoints: ['src/with-agent.ts'], outfile: output,
+await build({ absWorkingDir: root, entryPoints: ['agent/src/with-agent.ts'], outfile: output,
   bundle: true, format: 'esm', platform: 'node', target: 'node22',
   external: ['@earendil-works/*'], legalComments: 'none' });
 if (!available) {
@@ -32,8 +32,10 @@ if (!available) {
   const target = resolve(mobileRoot, 'runtime/phi-spaces.mjs');
   const bytes = await readFile(output);
   console.log(await syncFile(target, bytes) ? `Updated ${target}` : 'Mobile phi-spaces bundle is current.');
-  const examples = (await readdir(resolve(root, 'examples'))).filter(name => name.endsWith('.ts')).sort();
-  const compiled = await build({ absWorkingDir: root, entryPoints: examples.map(name => `examples/${name}`),
+  // the examples of the library and of the agent package (the phone hosts both)
+  const examples = [];
+  for (const dir of ['examples', 'agent/examples']) for (const name of (await readdir(resolve(root, dir))).filter(n => n.endsWith('.ts')).sort()) examples.push(`${dir}/${name}`);
+  const compiled = await build({ absWorkingDir: root, entryPoints: examples,
     outdir: resolve(root, 'dist/mobile-examples'), outExtension: { '.js': '.mjs' }, write: false,
     bundle: true, format: 'esm', platform: 'node', target: 'node22', external: ['@earendil-works/*'], legalComments: 'none' });
   const targetDir = resolve(mobileRoot, 'runtime/space-examples');

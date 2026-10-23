@@ -32,19 +32,15 @@ This is help-site/examples/tuple-basics.ts; relative imports assume that exact l
 // Complete, model-free tutorial. Run from the repository root with node --experimental-strip-types.
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, NO_WAIT, PhiSpaces, startService } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, openOwnMemoryHost, startService } from "../../src/index.ts";
 
 export async function runTupleBasics() {
-	const registry = createRegistry(); registry.install(spaces);
-	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+	const host = openOwnMemoryHost();
 	let stop: (() => Promise<void>) | undefined;
 	try {
-		const space = new PhiSpaces(harness, ctx);
+		const space = new PhiSpaces(host, ctx);
 		await space.setCompletionProfiles([{ taskType: "Job", resultTypes: ["Result"], equalFields: ["jobId"], maxResultCount: 1 }]);
-		stop = await startService(harness, ctx);
+		stop = await startService(host, ctx);
 		await space.write({ type: "Job", fields: { jobId: "square-7", value: 7 } }, null, FOREVER);
 		const inspected = await space.read({ type: "Job" }, NO_WAIT);
 		if (!inspected) throw new Error("Expected one visible job");
@@ -62,7 +58,7 @@ export async function runTupleBasics() {
 		return { inspected: inspected.fields.value, squared: result?.fields.squared, jobsRemaining: await space.count({ type: "Job" }) };
 	} finally {
 		await stop?.();
-		await harness.close(ctx);
+		await host.close(ctx);
 	}
 }
 
@@ -72,4 +68,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 ## Failure and Persistence {#failure-and-storage}
 
-Experiment by omitting the Result write: commit raises CompletionViolation and catch aborts, returning the job. Finally stops the service and closes the harness even on failure. MemoryStorage loses data at process exit; use persistent storage for restart survival. This example proves neither power-loss nor multi-host guarantees. Next: [task lifecycle](help.topic.task_lifecycle#overview).
+Experiment by omitting the Result write: commit raises CompletionViolation and catch aborts, returning the job. Finally stops the service and closes the host even on failure. The in-memory store loses data at process exit; use persistent storage for restart survival. This example proves neither power-loss nor multi-host guarantees. Next: [task lifecycle](help.topic.task_lifecycle#overview).

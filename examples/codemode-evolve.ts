@@ -18,9 +18,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost } from "../src/index.ts";
+import { FOREVER, NO_WAIT, PhiSpaces, TransactionError, type SpaceHost, openOwnMemoryHost } from "../src/index.ts";
 
 export type Genome = { engine: "trial" | "sieve"; cands: "all" | "odd" | "6k"; divisors: "all" | "half" | "sqrt" | "primes"; early: boolean; edge: "ok" | "off" };
 export type Score = { candidateId: string; ok: boolean; ms: number; error?: string };
@@ -218,7 +216,7 @@ async function main() {
 	const argText = (name: string) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
 	const cm = await loadCodemode();
 	if (!cm) { console.log("pi-codemode not found (set PI_CODEMODE_DIR); skipping"); return; }
-	const h = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
+	const h = openOwnMemoryHost();
 	const logFile = argText("log") ?? `${tmpdir()}/codemode-evolve-${Date.now()}.md`;
 	const r = await evolve(h, cm, { agents: arg("agents", 6), gens: arg("gens", 4), perAgent: arg("per-agent", 2), n: arg("n", 100), seed: arg("seed", 1), logFile, log: console.log });
 	console.log(`log: ${logFile}`);

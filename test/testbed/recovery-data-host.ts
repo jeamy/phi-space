@@ -1,7 +1,5 @@
 // Administrative testbed process: private backup or exclusive data recovery, with no normal gate or agents.
-import { Harness, createRegistry } from '@earendil-works/pi-durable';
-import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
-import { createModels } from '@earendil-works/pi-ai/models';
+import { openSqliteHost, type OwnStoreHost } from "../../src/index.ts";
 import { BACKGROUND_CONTEXT as ctx } from '../../src/context.ts';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, openSync, closeSync, unlinkSync, existsSync, readdirSync, rmSync, chmodSync } from 'node:fs';
@@ -13,7 +11,7 @@ if(mode==='backup'){
  const folder=join(home,'acceptance-backup');mkdirSync(folder,{recursive:true,mode:0o700});
  const database=new DatabaseSync(join(home,'harness.sqlite'),{readOnly:true});try{await backup(database,join(folder,'harness.sqlite'));chmodSync(join(folder,'harness.sqlite'),0o600);}finally{database.close();}
  const copy=mkdtempSync(join(folder,'snapshot-'));const {copyFileSync}=await import('node:fs');copyFileSync(join(folder,'harness.sqlite'),join(copy,'harness.sqlite'));
- const h=await Harness.open(await openNodeSqliteStorage(join(copy,'harness.sqlite')),{models:createModels(),registry:createRegistry()},ctx);
+ const h=await openSqliteHost(join(copy,'harness.sqlite'));
  try{const info=(await listSpaces(h,ctx)).find(s=>s.alias===alias);if(!info)throw new Error('requested space missing');const state=await snapshotSpace(h,info.spaceId,ctx);writeFileSync(join(folder,alias+'.json'),JSON.stringify(state)+'\n',{mode:0o600});console.log(JSON.stringify({spaceId:info.spaceId,incarnation:info.incarnation,primaryEpoch:state?.primaryEpoch??1,entries:state?.entries.length}));}finally{await h.close(ctx);rmSync(copy,{recursive:true,force:true});}
 }else{
  const config=JSON.parse(privateFile(join(home,'federation.json')).toString()) as FederationConfig;
@@ -22,9 +20,9 @@ if(mode==='backup'){
  if(!existsSync(join(home,'restart.lock'))||!stopped())throw new Error('stopped and restart-locked target required');
  const lock=join(home,'owner.lock'),fd=openSync(lock,'wx',0o600);writeFileSync(fd,JSON.stringify({pid:process.pid,mode:'data-recovery'})+'\n');closeSync(fd);
  const installed=new SqliteRecoveryRegister(config.installedRegisterFile),external=new TlsRecoveryRegister(config.registerTls!);
- let h:Harness|undefined,service:Awaited<ReturnType<typeof startConfiguredRecovery>>|undefined;
+ let h:OwnStoreHost|undefined,service:Awaited<ReturnType<typeof startConfiguredRecovery>>|undefined;
  try{
-  h=await Harness.open(await openNodeSqliteStorage(join(home,'harness.sqlite')),{models:createModels(),registry:createRegistry()},ctx);
+  h=await openSqliteHost(join(home,'harness.sqlite'));
   if(!stopped())throw new Error('normal target restarted while opening recovery storage');
   if(mode==='inspect'){
    const info=(await listSpaces(h,ctx)).find(s=>s.alias==='jobs');if(!info)throw new Error('jobs space missing');const state=await snapshotSpace(h,info.spaceId,ctx);

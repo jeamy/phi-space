@@ -1,15 +1,13 @@
 // Isolated operator-controlled fixture. Peer-IP and private-token scoped exchange; no normal service data.
+import { openSqliteHost } from "../../../src/index.ts";
 import {createInterface} from 'node:readline';
 import {mkdirSync} from 'node:fs';
 import {join} from 'node:path';
-import {Harness,createRegistry} from '@earendil-works/pi-durable';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
 import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {EntryReplicationController,EntryReplicationPump,EntryReplicationUnavailable,serveSpace,socketTransport,type EntryMutation,type EntryStreamIdentity} from '../../../src/index.ts';
 const [home,replicaId,bindIp,allowedIp,token]=process.argv.slice(2);
 if(!home||!['a','b'].includes(replicaId!)||!/^100\.[0-9.]+$/.test(bindIp!)||!/^100\.[0-9.]+$/.test(allowedIp!)||!/^\w{48,128}$/.test(token!))throw Error('private fixture arguments required');
-mkdirSync(home,{recursive:true,mode:0o700});let host=await Harness.open(await openNodeSqliteStorage(join(home,'entries.sqlite')),{models:createModels(),registry:createRegistry()},ctx);
+mkdirSync(home,{recursive:true,mode:0o700});let host=await openSqliteHost(join(home,'entries.sqlite'));
 const controller=()=>new EntryReplicationController({host,ctx,config:{spaceId:'isolated-overlay-phase3',authorityId:'isolated-overlay-authority',replicaId:replicaId!,incarnation:'v1',members:['a','b'].map(replicaId=>({replicaId,incarnation:'v1'})),rules:[{type:'State',variant:'lww',keyFields:['key']},{type:'Fact',variant:'set'}]},authorize:async()=>{},assertActive:async()=>{},clockUncertaintyMs:()=>0});
 let server:Awaited<ReturnType<typeof serveSpace>>|undefined;let received=0;const commands=createInterface({input:process.stdin});
 const listen=async()=>{if(server)return;server=await serveSpace({handleText:async(text)=>{
@@ -25,7 +23,7 @@ try{for await(const line of commands){let q:any;try{q=JSON.parse(line);let resul
  else if(q.op==='describe')result=await controller().describeStream();
  else if(q.op==='status')result={entries:await controller().read(),stream:await controller().describeStream(),received,at:Date.now()};
  else if(q.op==='maintain'){let j=await controller().startSnapshotMaintenance(q.requestId,8192);while(j.phase!=='completed')j=await controller().advanceSnapshotMaintenance(q.requestId);result={phase:j.phase};}
- else if(q.op==='reopen'){await host.close(ctx);host=await Harness.open(await openNodeSqliteStorage(join(home,'entries.sqlite')),{models:createModels(),registry:createRegistry()},ctx);result={reopened:true};}
+ else if(q.op==='reopen'){await host.close(ctx);host=await openSqliteHost(join(home,'entries.sqlite'));result={reopened:true};}
  else if(q.op==='pull'||q.op==='bootstrap'||q.op==='exchange'){
   if(q.host!==allowedIp)throw Error('unprovisioned source endpoint');const transport=socketTransport({host:q.host,port:17431},{localAddress:bindIp,connectTimeoutMs:3000});
   const read=async(method:string,args:Record<string,unknown>={})=>{try{const response=await transport.request(JSON.stringify({method,token,...args}));const reply=JSON.parse(response);if(!reply.ok)throw Error('export rejected');return reply.result;}catch(e){throw new EntryReplicationUnavailable('overlay exchange failed: '+(e instanceof Error?e.message:'unknown'));}};

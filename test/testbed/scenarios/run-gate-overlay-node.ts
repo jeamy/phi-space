@@ -1,13 +1,11 @@
 // Case 3 of docs/betrieb-und-mobile-steuerung.md §7.4 over the real NetBird overlay (§8 B4). Operator-driven fixture,
+import { openSqliteHost } from "../../../src/index.ts";
 // one JSON command per stdin line. `member` runs on big behind the composed Gate (layer B key proof, signed run gate
 // instructions) on its NetBird address; `controller` runs on the operator host with a second, local Member.
 // Layer A uses a fixture peer-IP pin, not the NetBird Management API.
 import { createInterface } from "node:readline";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { GrantVerifier, RemoteSpace, RunController, RunGateService, core, createSpace, listSpaces, loadFileSigner, localRunMember, provisionFileSigner, remoteRunMember, signRun, snapshotSpace, socketTransport, spaceDoc, startFederationHost, type RunGateInstruction, type RunMember, type RunSpec } from "../../../src/index.ts";
 
@@ -18,7 +16,7 @@ mkdirSync(home, { recursive: true, mode: 0o700 });
 const JOB_PROFILE: core.CompletionProfile = { taskType: "Job", resultTypes: ["Done"], equalFields: ["runId", "n"], maxResultCount: 1, maxLeaseMs: 60_000, gateField: "runId" };
 const keyFile = join(home, `${role}.key`);
 const signer = existsSync(keyFile) ? loadFileSigner(keyFile) : provisionFileSigner(keyFile);
-const open = async () => Harness.open(await openNodeSqliteStorage(join(home, `${role}.sqlite`)), { models: createModels(), registry: createRegistry() }, ctx);
+const open = () => openSqliteHost(join(home, `${role}.sqlite`));
 let host = await open();
 async function jobsSpace(alias: string): Promise<string> {
 	const known = (await listSpaces(host, ctx)).find(i => i.alias === alias);

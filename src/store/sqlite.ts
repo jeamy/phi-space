@@ -39,7 +39,9 @@ export type SqliteStoreOptions = {
 };
 export type StoreFaults = { take(ops: readonly WriteOp[]): { fault: "failBeforeCommit" | "loseAnswer"; error: Error } | undefined;
 	/** Every commit's rows as it is handed over (tests measure commit sizes). */
-	observe?(ops: readonly WriteOp[]): void };
+	observe?(ops: readonly WriteOp[]): void;
+	/** The batch the last `take` saw is durable; its commits are not acknowledged yet (a crash test stops here). */
+	written?(): void };
 
 /** Refused: another process owns the store, or the file is of an unknown format. */
 export class StoreUnavailable extends Error {}
@@ -270,6 +272,7 @@ class SqliteLedger implements Ledger {
 			this.#stats.writeMs += performance.now() - this.#sentAt;
 			const { done, lost } = this.#writing;
 			this.#writing = null;
+			this.faults?.written?.();
 			// durable, but the answer is lost (a test's fault): as after a crash, the journal learns it when it is reopened
 			if (lost) { const f = this.replication?.failed(lost); for (const d of done) d.reject(f?.now ?? lost); this.#fail(f?.now ?? lost, f?.later); return; }
 			try { this.replication?.applied(); } catch (e) { this.#fail(e as Error); return; }

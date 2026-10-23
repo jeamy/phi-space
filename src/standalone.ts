@@ -45,7 +45,9 @@ export async function startStandalone(o: StandaloneOptions): Promise<{ address: 
 	} catch (e) { await host.close(ctx); throw e; }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+// Started directly, as this file: inlined into a bundle (an example that imports parseListen), import.meta.url is the
+// bundle's, and the bundle's own start must not run this one.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href && /\/standalone\.(ts|m?js)$/.test(import.meta.url)) {
 	const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 	const store = arg("--store"), listen = arg("--listen");
 	if (!store || !listen) { console.error("usage: standalone.ts --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT [--peer ID]"); process.exit(2); }

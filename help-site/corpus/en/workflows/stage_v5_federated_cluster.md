@@ -17,7 +17,7 @@ Stage 5 (`help-site/examples/v5-federated-cluster/run.ts`) scales the Multiplaye
 
 ## Topology: Space Distribution {#topology}
 
-The cluster is **simulated inside a single process**: **4 harnesses** (all `MemoryStorage`) playing real member hosts with real federation components — no network, but the exact same routing and journal logic as a truly distributed deployment.
+The cluster is **simulated inside a single process**: **4 hosts** (all in memory, `openOwnMemoryHost()`) playing real member hosts with real federation components — no network, but the exact same routing and journal logic as a truly distributed deployment.
 
 - **1 coordinator host**: `RouterController` (`router-root` + 2 partition routers for the routing journals) and `FederatedSpace` (id `fed-v5`). The coordinator owns no chat-data space itself — it only executes the policy.
 - **3 member hosts** (`member-1`, `member-2`, `member-3`): each owns its own independent space with its own space doc.

@@ -1,7 +1,6 @@
 // Tests für workers.ts – Master-Worker-Pattern
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "./compat.ts";
-import { spaces } from "../../src/agent.ts";
 import { createTestHarness, runWithHarness } from "./utils/harness.ts";
 import { 
   assertEntryType, 
@@ -35,7 +34,7 @@ async function runWorkersExample(harness: any, config: { jobs?: number; workers?
     ownership: { kind: "ownerless" },
     agent: { 
       model: { provider: "faux", modelId: "faux-1" },
-      extensions: [spaces],
+      extensions: [harness.spaces],
       instructions: "Du bist der Boss. Schreibe Jobs in den Space."
     }
   }, harness.context);
@@ -44,7 +43,7 @@ async function runWorkersExample(harness: any, config: { jobs?: number; workers?
     ownership: { kind: "ownerless" },
     agent: { 
       model: { provider: "faux", modelId: "faux-1" },
-      extensions: [spaces],
+      extensions: [harness.spaces],
       instructions: "Du bist der Worker. Nimm Jobs aus dem Space."
     }
   }, harness.context);

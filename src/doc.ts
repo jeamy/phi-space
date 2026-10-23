@@ -23,11 +23,7 @@ export const Space = defineDoc<SpaceState & Record<string, any>>({
 	scope: "session",
 	initial: () => core.initialState() as SpaceState & Record<string, any>,
 	migrate: (v, from) => core.migrate(v, from) as SpaceState & Record<string, any>,
-	// Compact the delta tail periodically: without a base every read replays the
-	// whole journal, so unbounded spaces degrade to O(history) per read.
-	checkpointWhen: (v, _ops, info) => checkpointDue(v, info),
 	parts: SPACE_PARTS,
 });
 
-/** pi-durable's Harness (the agent side until U6): a base every 500 deltas. The own store keeps no deltas. */
-export function checkpointDue(_value: unknown, info: { deltasSinceBase: number }): boolean { return info.deltasSinceBase >= 500; }
+

@@ -16,10 +16,7 @@ import { runStageV6 } from "../examples/v6-mobile-control/run.ts";
 import { startHelpServer } from "../server/index.ts";
 import type { AddressInfo } from "node:net";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { Meter, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport, openOwnMemoryHost } from "../../src/index.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "../server/social/swarm.ts";
 import { ALL_ARTICLES } from "../scripts/corpus.ts";
 
@@ -288,10 +285,8 @@ test("4. Next.js 16 Production Server (useNext: true) serves SSR App Router & He
 });
 
 test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, delta merge, thread routing & fault tolerance", async () => {
-	// 1. Shard B (nano): own Harness with MemoryStorage, running headless SocialSwarmHub with shardTag "b-"
-	const regB = createRegistry();
-	regB.install(spaces);
-	const harnessB = await Harness.open(new MemoryStorage(), { models: createModels(), registry: regB }, ctx);
+	// 1. Shard B (nano): own host in memory, running headless SocialSwarmHub with shardTag "b-"
+	const harnessB = openOwnMemoryHost();
 	const stopServiceB = await startService(harnessB, ctx, { watchDebounceMs: 20 });
 	const meterB = new Meter();
 	const hubB = new SocialSwarmHub(harnessB, ctx, meterB, {
@@ -314,10 +309,8 @@ test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, 
 	const transportB = socketTransport({ host: "127.0.0.1", port: addrB.port });
 	const remoteSpace = new RemoteSpace(transportB, { space: SWARM_ALIAS });
 
-	// 2. Hub A (big): own Harness with MemoryStorage, attach remote shard B
-	const regA = createRegistry();
-	regA.install(spaces);
-	const harnessA = await Harness.open(new MemoryStorage(), { models: createModels(), registry: regA }, ctx);
+	// 2. Hub A (big): own host in memory, attach remote shard B
+	const harnessA = openOwnMemoryHost();
 	const stopServiceA = await startService(harnessA, ctx, { watchDebounceMs: 20 });
 	const meterA = new Meter();
 	const hubA = new SocialSwarmHub(harnessA, ctx, meterA, {

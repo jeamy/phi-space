@@ -32,13 +32,13 @@ Damit man sowohl in wenigen Sekunden lokal starten als auch den Weg bis zur vert
 
 ### Die 6 Stufen im Überblick {#six-stages}
 
-1. **[Stufe 1 (`v1-local-memory`)](help.workflow.stage_v1_local_memory#overview)**: Zero-Setup im Arbeitsspeicher (`MemoryStorage` + `PhiSpaces`). Sofort ausführbar ohne Dateien oder Netzwerk.
+1. **[Stufe 1 (`v1-local-memory`)](help.workflow.stage_v1_local_memory#overview)**: Zero-Setup im Arbeitsspeicher (`openOwnMemoryHost()` + `PhiSpaces`). Sofort ausführbar ohne Dateien oder Netzwerk.
 2. **[Stufe 2 (`v2-local-durable`)](help.workflow.stage_v2_local_durable#overview)**: Lokale SQLite-Persistenz, `RequestRef`-Idempotenz, `readPage`/`changes`, `TimerLock`-Alarme und `search_history`-Subagent.
 3. **[Stufe 3 (`v3-remote-socket`)](help.workflow.stage_v3_remote_socket#overview)**: Trennung in Server und Remote-Worker über `SpaceService`, `RemoteSpace` (Unix-Socket/TCP) und Consumer-Mailboxes (`events` + `ack`).
 4. **[Stufe 4 (`v4-gated-auth`)](help.workflow.stage_v4_gated_auth#overview)**: Zwei-Schichten-Sicherheit (`startGate`, Ed25519-Challenge, Token-Enrollment, 60-s-Grants, Schlüsselrotation und Boot-Guard).
-5. **[Stufe 5 (`v5-federated-cluster`)](help.workflow.stage_v5_federated_cluster#overview)**: Föderierter Cluster (`createFederationController`) mit 3 Member-Spaces, HRW-Routing nach `threadId` und `takeWaiting`-Waiter-Wettlauf — in der Demo als 4 Harnesses in einem Prozess simuliert.
+5. **[Stufe 5 (`v5-federated-cluster`)](help.workflow.stage_v5_federated_cluster#overview)**: Föderierter Cluster (`createFederationController`) mit 3 Member-Spaces, HRW-Routing nach `threadId` und `takeWaiting`-Waiter-Wettlauf — in der Demo als 4 Hosts in einem Prozess simuliert.
 
-Jede Stufen-Beschreibung enthält einen Abschnitt **Topologie: Space-Verteilung**, der zeigt, wie viele Harnesses/Spaces beteiligt sind und wie Entries verteilt werden.
+Jede Stufen-Beschreibung enthält einen Abschnitt **Topologie: Space-Verteilung**, der zeigt, wie viele Hosts/Spaces beteiligt sind und wie Entries verteilt werden.
 6. **[Stufe 6 (`v6-mobile-control`)](help.workflow.stage_v6_mobile_control#overview)**: Vollständige Betriebssteuerung & Überwachung über die Mobile App (`pi-termux-mobile`) und den login-geschützten Web-Bereich **`AdminSpaces`** auf `https://spaces.eibrain.org`.
 
 ## Siehe auch {#see-also}

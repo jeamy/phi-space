@@ -25,10 +25,7 @@ import { setImmediate as yieldTurn } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, PhiSpaces, Space, startService, type Taken } from "../src/index.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { FOREVER, PhiSpaces, Space, openSqliteHost, startService, type Taken } from "../src/index.ts";
 
 // Known optimal lengths for Golomb rulers (canonical table, OEIS A003022)
 export const KNOWN_OPTIMAL_LENGTHS: Record<number, number> = {
@@ -500,11 +497,10 @@ async function main() {
 	const outFile = out ?? join(dir, `GOL_${order}.txt`);
 	console.log(`Golomb ruler search: order=${order}, workers=${workers}, length ≤ ${bound}\nstate ${dir}`);
 
-	const registry = createRegistry();
-	const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models: createModels(), registry }, ctx);
-	h.resume();
+	// the store's owner lock makes this CLI the sole process of the store
+	const h = await openSqliteHost(join(dir, "space.sqlite"));
 		const host = new PhiSpaces(h, ctx);
-		// This CLI is the sole process permitted to own this store. Recover abandoned reservations
+		// Recover abandoned reservations
 		// before the master enumerates pending tasks; otherwise locked tasks could be recreated.
 		const state = await h.snapshot(Space, ctx);
 		for (const txn of Object.values(state?.txns ?? {})) await host.abort(txn.id).catch(() => {});

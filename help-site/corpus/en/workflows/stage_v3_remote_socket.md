@@ -13,11 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-In Stage 3 (`help-site/examples/v3-remote-socket/run.ts`), the chat gateway, chat worker, and search subagent no longer touch the `Harness` directly. Instead, the host exposes the space via `SpaceService` and `serveSpace` on a Unix domain socket (or TCP port), and all participants operate through `RemoteSpace`.
+In Stage 3 (`help-site/examples/v3-remote-socket/run.ts`), the chat gateway, chat worker, and search subagent no longer touch the host directly. Instead, the host exposes the space via `SpaceService` and `serveSpace` on a Unix domain socket (or TCP port), and all participants operate through `RemoteSpace`.
 
 ## Topology: Space Distribution {#topology}
 
-- **1 host** (harness + SQLite + `serveSpace`) exposes the `chat-v3` space over a **Unix socket** (`space.sock`).
+- **1 host** (own SQLite store + `serveSpace`) exposes the `chat-v3` space over a **Unix socket** (`space.sock`).
 - **3 separate `RemoteSpace` clients** access the same space: gateway (UI), chat worker, search subagent — each with its own transport and consumer mailbox.
 - Distribution: **1 space, 1 server, 3 remote consumers** — a real socket boundary instead of a shared in-memory object; the same engine runs unchanged against `RemoteSpace`.
 
@@ -27,7 +27,7 @@ In Stage 3 (`help-site/examples/v3-remote-socket/run.ts`), the chat gateway, cha
 
 ```ts
 const service = new SpaceService({
-  host: harness,
+  host,
   ctx,
   identity: new GateIdentity(),
   policy: DEFAULT_POLICY

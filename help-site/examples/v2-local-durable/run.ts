@@ -3,7 +3,7 @@
 //   1. Thread 1: Alice states "We decided to use PostgreSQL for the event store."
 //   2. Thread 2: Bob asks "Was haben wir bezüglich des Event-Stores entschieden?" -> Search Subagent runs
 //   3. Alice schedules an alarm ("Erinnere uns in 50 ms daran, das Backup-Fenster zu prüfen")
-//   4. Simulated process restart: Harness is closed and reopened on the same SQLite file;
+//   4. Simulated process restart: the host is closed and reopened on the same SQLite file;
 //      the expired TimerLock lease is reaped and the wakeup ChatTask produces the alarm Msg!
 
 import { mkdtemp, rm } from "node:fs/promises";
@@ -11,11 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createSpace, Meter, PhiSpaces, startService } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { createSpace, Meter, PhiSpaces, openSqliteHost, startService } from "../../../src/index.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } = {}) {
@@ -26,18 +22,15 @@ export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } 
 	try {
 		// ---- Phase A: Initial run before simulated restart ----
 		{
-			const registry = createRegistry();
-			registry.install(spaces);
-			const storage = await openNodeSqliteStorage(dbPath);
-			const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
-			await harness.commit(async (tx) => {
+			const host = await openSqliteHost(dbPath);
+			await host.commit(async (tx) => {
 				await createSpace(tx, "chat-v2", Date.now());
 			}, ctx);
-			const stopService = await startService(harness, ctx);
+			const stopService = await startService(host, ctx);
 
 			try {
 
-				const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v2" });
+				const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v2" });
 				const engine = new SpaceChatEngine(space);
 				await engine.installProfilesIfSupported();
 
@@ -81,7 +74,7 @@ export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } 
 				});
 			} finally {
 				await stopService();
-				await harness.close(ctx);
+				await host.close(ctx);
 			}
 		}
 
@@ -90,14 +83,11 @@ export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } 
 
 		// ---- Phase B: Reopen the same SQLite store, reap expired TimerLock & process alarm ----
 		{
-			const registry = createRegistry();
-			registry.install(spaces);
-			const storage = await openNodeSqliteStorage(dbPath);
-			const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
-			const stopService = await startService(harness, ctx);
+			const host = await openSqliteHost(dbPath);
+			const stopService = await startService(host, ctx);
 
 			try {
-				const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v2" });
+				const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v2" });
 				const engine = new SpaceChatEngine(space);
 
 				const triggeredJobs = await engine.tickAlarms();
@@ -114,7 +104,7 @@ export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } 
 				};
 			} finally {
 				await stopService();
-				await harness.close(ctx);
+				await host.close(ctx);
 			}
 		}
 	} finally {

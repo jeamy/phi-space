@@ -1,5 +1,5 @@
 // Stage 1 (v1-local-memory): Zero-Setup In-Memory Multiplayer Space-Chat.
-// Runs immediately in RAM with MemoryStorage + PhiSpaces + startService.
+// Runs immediately in RAM with the own store in memory (openOwnMemoryHost) + PhiSpaces + startService.
 // Demonstrates:
 //   - NamedSpace isolation ("chat-v1")
 //   - Presence entries with 30s leases and heartbeat renewal
@@ -8,26 +8,21 @@
 //   - Conversation forking up to a selected message sequence number
 
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { createSpace, Meter, PhiSpaces, startService } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { createSpace, Meter, PhiSpaces, openOwnMemoryHost, startService } from "../../../src/index.ts";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 import { pathToFileURL } from "node:url";
 
 export async function runStageV1() {
 	const meter = new Meter();
-	const registry = createRegistry();
-	registry.install(spaces);
-	const harness = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
-	await harness.commit(async (tx) => {
+	const host = openOwnMemoryHost();
+	await host.commit(async (tx) => {
 		await createSpace(tx, "chat-v1", Date.now());
 	}, ctx);
-	const stopService = await startService(harness, ctx);
+	const stopService = await startService(host, ctx);
 
 	try {
 
-		const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+		const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v1" });
 		const engine = new SpaceChatEngine(space);
 		await engine.installProfilesIfSupported();
 
@@ -104,7 +99,7 @@ export async function runStageV1() {
 		};
 	} finally {
 		await stopService();
-		await harness.close(ctx);
+		await host.close(ctx);
 	}
 }
 

@@ -1,0 +1,17 @@
+{
+  "name": "phi-spaces-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The space tools of a pi-durable agent over a separate phi-spaces store, and the bundle of the mobile runtime",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "node --experimental-strip-types --test test/*.test.ts test/examples/*.test.ts"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "1.0.3",
+    "@earendil-works/pi-ai": "1.0.3",
+    "@earendil-works/pi-durable": "1.0.3"
+  },
+  "license": "MIT"
+}

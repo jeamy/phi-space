@@ -3,11 +3,7 @@
 
 import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, PhiSpaces, startService } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { FOREVER, PhiSpaces, openSqliteHost, startService, type OwnStoreHost } from "../../src/index.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,20 +30,14 @@ function createTestHarness(dir?: string) {
 }
 
 async function setupGolombHarness(testDir: string) {
-  const models = createModels();
-  const registry = createRegistry();
-  registry.install(spaces);
-  
-  const storage = await openNodeJsonlStorage(testDir, ctx);
-  const h = await Harness.open(storage, { models, registry }, ctx);
-  h.resume();
+  const h = await openSqliteHost(join(testDir, "space.sqlite"));
   const host = new PhiSpaces(h, ctx);
   const stopService = await startService(h, ctx);
   
-  return { h, host, stopService, storage };
+  return { h, host, stopService };
 }
 
-async function teardownGolombHarness(h: Harness, stopService: () => Promise<void>, testDir: string) {
+async function teardownGolombHarness(h: OwnStoreHost, stopService: () => Promise<void>, testDir: string) {
   await stopService();
   await h.close(ctx);
   try { rmSync(testDir, { recursive: true, force: true }); } catch {}

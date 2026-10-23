@@ -5,14 +5,11 @@ import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {Harness,createRegistry,type Storage,type StorageWrite} from '@earendil-works/pi-durable';
-import {openNodeJsonlStorage} from '@earendil-works/pi-durable/storage/jsonl/node';
-import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {createModels} from '@earendil-works/pi-ai/models';
+import type {StoreFaults} from '../../../src/store/sqlite.ts';
 import {BACKGROUND_CONTEXT as ctx} from '../../../src/context.ts';
 import {PhiSpaces,argHash,rpcDomain,core,Registry,spaceDoc,SpaceService,StaticIdentity,FederatedSpace,FederationPending,
  RouterController,RouterJournal,partitionRouterId,type RouterStep,type RouterReceipt,type RouterTarget,
- type FederationIO,type RoutingState} from '../../../src/index.ts';
+ type FederationIO,type RoutingState,OwnSyncStore,type OwnStoreHost} from '../../../src/index.ts';
 
 const boundaries=['candidate','winner','completed','ack','rpc'] as const;
 const phases=['before','after'] as const;
@@ -21,7 +18,7 @@ const [mode,home,backend,boundary,phase]=process.argv.slice(2);
 if(!mode){
  const dir=mkdtempSync(join(tmpdir(),'pi-process-crashes-')),cases=[];
  try{
-  for(const b of ['jsonl','sqlite'])for(const point of boundaries)for(const edge of phases){
+  for(const b of ['own-sqlite'])for(const point of boundaries)for(const edge of phases){
    const path=join(dir,`${b}-${point}-${edge}`);mkdirSync(path);
    const run=(m:string)=>spawnSync(process.execPath,[...process.execArgv,fileURLToPath(import.meta.url),m,path,b,point,edge],{encoding:'utf8',timeout:60000,maxBuffer:2**20});
    for(const m of ['prepare','crash','recover','verify']){
@@ -37,24 +34,30 @@ if(!mode){
   console.log(JSON.stringify({passed:true,cases:cases.length,transport:'in-process',clock:'fixed',overlay:false,powerLoss:false,results:cases}));
  }finally{rmSync(dir,{recursive:true,force:true});}
 }else{
- assert.ok(['prepare','crash','recover','verify'].includes(mode));assert.ok(home);assert.ok(['jsonl','sqlite'].includes(backend!));
+ assert.ok(['prepare','crash','recover','verify'].includes(mode));assert.ok(home);assert.ok(['own-sqlite'].includes(backend!));
  assert.ok(boundaries.includes(boundary as any));assert.ok(phases.includes(phase as any));
- const hosts=new Map<string,Harness>();
+ const hosts=new Map<string,OwnStoreHost>();
  const kill=()=>{writeFileSync(join(home!,'killed.json'),JSON.stringify({boundary,phase}));process.kill(process.pid,'SIGKILL');throw Error('SIGKILL returned');};
- const storage=async(name:string):Promise<Storage>=>{
+ // The root's store stops the process at the selected boundary: the commit that records the candidate, the winner or the
+ // completed operation (its federation-operations document compared with the stored head); before it or once durable.
+ const open=async(name:string):Promise<OwnStoreHost>=>{
   const path=join(home!,name);mkdirSync(path,{recursive:true});
-  const raw=backend==='jsonl'?await openNodeJsonlStorage(path,ctx):await openNodeSqliteStorage(join(path,'harness.sqlite'));
-  if(name!=='root'||mode!=='crash'||!['candidate','winner','completed'].includes(boundary!))return raw;
-  return new Proxy(raw,{get(target,key){if(key!=='commit'){const v=Reflect.get(target,key);return typeof v==='function'?v.bind(target):v;}
-   return async(writes:readonly StorageWrite[],context:typeof ctx)=>{
-    const hit=writes.some((w:any)=>{if(w.type!=='document.change'||w.content.kind!=='delta')return false;const ops=JSON.stringify(w.content.ops);
-     return ops.includes('"operations"')&&(boundary==='candidate'?ops.includes('"candidates"')&&ops.includes('"event"')&&!ops.includes('"winner"'):boundary==='winner'?ops.includes('"winner"')&&!ops.includes('"phase":"done"'):ops.includes('"phase":"done"'));});
-    if(hit&&phase==='before')kill();await target.commit(writes,context);if(hit)kill();
-   };
-  }});
+  if(name!=='root'||mode!=='crash'||!['candidate','winner','completed'].includes(boundary!))return new OwnSyncStore(join(path,'space.sqlite')).openHost();
+  const matches=(v:string)=>v.includes('"operations"')&&(boundary==='candidate'?v.includes('"candidates"')&&v.includes('"event"')&&!v.includes('"winner"'):boundary==='winner'?v.includes('"winner"')&&!v.includes('"phase":"done"'):v.includes('"phase":"done"'));
+  let store:OwnSyncStore,armed=false;
+  const faults:StoreFaults={
+   take:ops=>{
+    for(const op of ops)if(op.t==='doc'&&op.kind==='phi-spaces.federation-operations'){const before=store.head(op.kind,op.key);if(matches(op.value)&&!matches(JSON.stringify(before??{})))armed=true;}
+    if(armed&&phase==='before')kill();
+    return undefined;
+   },
+   written:()=>{if(armed)kill();},
+  };
+  store=new OwnSyncStore(join(path,'space.sqlite'),{faults});
+  return store.openHost();
  };
  try{
-  for(const name of ['root','a','b','c'])hosts.set(name,await Harness.open(await storage(name),{models:createModels(),registry:createRegistry()},ctx));
+  for(const name of ['root','a','b','c'])hosts.set(name,await open(name));
   const client=(name:string)=>new PhiSpaces(hosts.get(name)!,ctx,now,undefined,undefined,{authorityId:'authority-1'});
   const targets=Object.fromEntries(['a','b','c'].map(name=>[name,{hostId:name,spaceId:'space-'+name,authorityId:'authority-1',dataIncarnation:'inc-'+name,primaryEpoch:1}]));
   if(mode==='prepare')for(const name of ['a','b','c'])await hosts.get(name)!.commit(async tx=>{

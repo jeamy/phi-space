@@ -1,4 +1,5 @@
 // Prime sieve over the network protocol: the space service in one process (the host), a phone and workers as clients of
+import { openSqliteHost } from "../../../src/index.ts";
 // that service through sockets (docs/testumgebung-big.md). Unlike sieve-mobile, nothing here touches the host's storage
 // directly: every effect goes through RemoteSpace -> socket -> SpaceService, with request identities, claims, polls and
 // retries. The host process is killed with SIGKILL in the middle of the run and started again; the clients keep retrying.
@@ -15,9 +16,6 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { createModels } from "@earendil-works/pi-ai/models";
 import { FOREVER, GateIdentity, NetbirdDirectory, PhiSpaces, RemoteSpace, createSpace, listSpaces, snapshotSpace, startMaintenance, SpaceService, StaticIdentity, serveSpace, socketTransport, startGate, type Connection, type Identity, type IdentityAdapter, type ListenTarget, type SpaceServer } from "../../../src/index.ts";
 import { segmentedSieve } from "../../../examples/sieve.ts";
 
@@ -94,8 +92,7 @@ const chain = (...a: IdentityAdapter[]): IdentityAdapter => ({ async authenticat
 
 async function serve(o: Opts): Promise<void> {
 	mkdirSync(o.dir, { recursive: true });
-	const storage = await openNodeJsonlStorage(join(o.dir, "data"), ctx);
-	const h = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, ctx);
+	const h = await openSqliteHost(join(o.dir, "data", "space.sqlite"));
 	const sieveInfo = (await listSpaces(h, ctx)).find(info => info.alias === SIEVE_SPACE) ?? await h.commit(tx => createSpace(tx, SIEVE_SPACE, Date.now()), ctx);
 	const local = new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: SIEVE_SPACE });
 	// Preserve active transactions on a crash/reopen; the profile is installed before the first task is admitted.

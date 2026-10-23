@@ -51,6 +51,12 @@ export class OwnSyncStore implements SyncStore<WriteOp> {
 		return row ? { ref: markerKey(spaceId), value: JSON.parse(row.value) as SyncMarker } : null;
 	}
 
+	/** How many commits the store holds (store_meta commit_seq; evidence of operator tools and crash tests). */
+	commitSeq(): number {
+		const row = this.#db().read.prepare("SELECT value FROM store_meta WHERE key = 'commit_seq'").get() as { value: string } | undefined;
+		return Number(row?.value ?? 0);
+	}
+
 	/** The stored head of a document without its parts (operator tools on a stopped store); undefined: none. */
 	head(kind: string, key: string | null): unknown | undefined {
 		const row = this.#db().read.prepare("SELECT value FROM documents WHERE kind = ? AND key = ?").get(kind, key ?? "") as { value: string } | undefined;

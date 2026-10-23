@@ -75,6 +75,14 @@ const MAX_TRIES = 5; // a poisoned event is dropped after this many failed deliv
  * hold back the others: it is retried on the next trigger and dropped after MAX_TRIES. `requestId` makes redelivery
  * harmless. Delivered and given-up events leave the outbox in one commit. When a served take cannot be delivered
  * (dropped or given up), its transaction is aborted in that commit, so the entry is back in the space at once.
+ *
+ * Who receives (docs/umstellung-ohne-pi-durable.md, section 6):
+ * - no target: nobody ever will; dropped;
+ * - no agent host connected (the host has no `conversation`): the event waits in the (bounded) outbox, and nothing is
+ *   released; a missing adapter is "not connected", not "gone";
+ * - the conversation does not exist: it is gone for good; dropped, its reservation released;
+ * - a served take whose transaction is already gone (its lease lapsed, the entry is back): nothing left to hand over;
+ *   dropped.
  */
 export async function deliverEvents(harness: ServiceHost, ctx: Context, o: ServiceOptions = {}): Promise<number> {
 	const now = o.now ?? Date.now;
@@ -89,7 +97,9 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 	const served: Counter[] = []; // waiter ops the space performed on someone's behalf; counted once delivered
 	const deliver = async (e: core.SpaceEvent) => {
 		try {
-			const conv = typeof e.target === "number" && harness.conversation ? await harness.conversation(e.target, ctx) : undefined;
+			if (typeof e.target !== "number" || (e.txn && !snap!.txns[e.txn])) { dropped.add(key(e)); return; }
+			if (!harness.conversation) return; // not connected: the event waits
+			const conv = await harness.conversation(e.target, ctx);
 			if (!conv) dropped.add(key(e));
 			else {
 				// Namespaced: request ids dedupe per conversation forever, so a bare "n3:1" could swallow or collide with
@@ -149,6 +159,18 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 export type EventSink = { conversation(id: number, ctx: Context): Promise<{ submit(input: { type: "input"; requestId: string; content: string }, ctx: Context): Promise<unknown> } | undefined> };
 /** A host the background service runs on: the store, and an agent host's conversations where there are any. */
 export type ServiceHost = StoreHost & Partial<EventSink>;
+/** A space host whose events go to the conversations of a separate agent host (the agent package, the mobile runtime).
+ *  Everything else (commit, snapshot, close, …) is the host's own. */
+export function withEventSink<H extends StoreHost>(host: H, sink: EventSink): H & EventSink {
+	return new Proxy(host, {
+		get(target, key) {
+			if (key === "conversation") return (id: number, context: Context) => sink.conversation(id, context);
+			const v = Reflect.get(target, key, target);
+			return typeof v === "function" ? v.bind(target) : v;
+		},
+		has: (target, key) => key === "conversation" || Reflect.has(target, key),
+	}) as H & EventSink;
+}
 export type ServiceOptions = { now?: () => number; onError?: (e: unknown) => void; retryMs?: number; meter?: Meter; /** alias or spaceId; omitted: the default space */ space?: string; /** Collapse watch-triggered maintenance runs to at most one per this window. 0 (default) keeps the old every-commit behaviour. Under sustained writes each commit would otherwise cost a full settle+nextExpiry scan. */ watchDebounceMs?: number };
 
 /** Committed state of a space for the background services (the default space even before it is registered). */

@@ -26,7 +26,7 @@ Stage 4 (`help-site/examples/v4-gated-auth/run.ts`) upgrades the Space-Chat to P
 
 ### Step 1: Initialize Boot Register And startFederationHost {#step-1-host}
 
-The host sets up a `SqliteRecoveryRegister` and `installBootGuard`, generates host and authority keys (`generateKey("ed25519")`), and starts `startFederationHost(harness, ctx, ...)` on a TCP port.
+The host sets up a `SqliteRecoveryRegister` and `installBootGuard`, generates host and authority keys (`generateKey("ed25519")`), and starts `startFederationHost(host, ctx, ...)` on a TCP port.
 
 ### Step 2: Admin Bootstrap & Worker Enrollment {#step-2-enroll}
 

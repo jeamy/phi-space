@@ -59,6 +59,8 @@ WORKDIR /opt/phi-spaces
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 COPY examples ./examples
+# live-models.ts (the help server's model access) lives in the agent package
+COPY agent/src ./agent/src
 COPY help-site ./help-site
 
 # Generate bilingual Help corpus (DE/EN), standalone React bundle, and Next.js 16 production build
@@ -96,6 +98,7 @@ COPY --from=builder --chown=node:node /opt/phi-spaces/package.json /opt/phi-spac
 COPY --from=builder --chown=node:node /opt/phi-spaces/node_modules ./node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/src ./src
 COPY --from=builder --chown=node:node /opt/phi-spaces/examples ./examples
+COPY --from=builder --chown=node:node /opt/phi-spaces/agent/src ./agent/src
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/package.json /opt/phi-spaces/help-site/package-lock.json ./help-site/
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/node_modules ./help-site/node_modules
 COPY --from=builder --chown=node:node /opt/phi-spaces/help-site/next.config.mjs /opt/phi-spaces/help-site/tsconfig.json ./help-site/

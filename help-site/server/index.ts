@@ -32,11 +32,7 @@ function loadDotEnvIfPresent(): void {
 }
 loadDotEnvIfPresent();
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { Meter, startService, RemoteSpace, socketTransport, type ListenTarget } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { Meter, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, type ListenTarget } from "../../src/index.ts";
 import { WebAdminController } from "./admin/admin-controller.ts";
 import { SpaceChatHub, type StageId } from "./space-chat/stage-runner.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
@@ -141,22 +137,20 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	const requests = new Map<string, { at: number; count: number }>();
 
 	const meter = new Meter();
-	const registry = createRegistry();
-	registry.install(spaces);
 
-	const storage = options.sqlitePath
+	// The own store (a pi-durable file of an older version is refused, not taken over: phi-spaces decision D6).
+	const host = options.sqlitePath
 		? await (async () => {
 				await mkdir(dirname(options.sqlitePath!), { recursive: true });
-				return await openNodeSqliteStorage(options.sqlitePath!);
+				return await openSqliteHost(options.sqlitePath!);
 			})()
-		: new MemoryStorage();
+		: openOwnMemoryHost();
 	// Uploaded images live beside the durable store (prod: /data/uploads on the volume).
 	const uploadDir = join(dirname(options.sqlitePath ?? join(ROOT, ".local", "help.sqlite")), "uploads");
 	const uploads = new UploadStore(uploadDir);
 
-	const harness = await Harness.open(storage, { models: createModels(), registry }, ctx);
 	const admin = new WebAdminController({
-		host: harness,
+		host,
 		ctx,
 		meter,
 		adminPassword: options.adminPassword,
@@ -164,14 +158,14 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	await admin.initialize();
 	// Every commit notifies the doc watch; without debouncing that costs a full settle scan per
 	// commit (~30/s under swarm load). 400ms collapses the storm – expiry stays lazy-correct.
-	const stopService = await startService(harness, ctx, { watchDebounceMs: 400 });
+	const stopService = await startService(host, ctx, { watchDebounceMs: 400 });
 	const llmChat = await chatReplyGenerator();
 	const llmSwarm = await swarmReplyGenerator();
 	const llmSwarmPost = await swarmPostGenerator();
-	const chatHub = new SpaceChatHub(harness, ctx, meter, llmChat ?? undefined);
+	const chatHub = new SpaceChatHub(host, ctx, meter, llmChat ?? undefined);
 	await chatHub.initialize();
 	await chatHub.ensureSession("lobby");
-	const swarm = new SocialSwarmHub(harness, ctx, meter, {
+	const swarm = new SocialSwarmHub(host, ctx, meter, {
 		adminCheck: (password: string) => admin.verifyPassword(password),
 	});
 	if (llmSwarm) swarm.setReplyGenerator(llmSwarm);
@@ -504,7 +498,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 			await admin.close();
 			await new Promise<void>((r) => server.close(() => r()));
 			await stopService();
-			await harness.close(ctx);
+			await host.close(ctx);
 		},
 	};
 }

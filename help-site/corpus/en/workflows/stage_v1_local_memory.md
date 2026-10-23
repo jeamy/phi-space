@@ -13,11 +13,11 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-Stage 1 (`help-site/examples/v1-local-memory/run.ts`) requires zero setup, database files, or open network ports. It opens a `MemoryStorage` harness, creates a named space, and demonstrates the complete core model of the Multiplayer Space-Chat in under a second.
+Stage 1 (`help-site/examples/v1-local-memory/run.ts`) requires zero setup, database files, or open network ports. It opens a host in memory (`openOwnMemoryHost()`), creates a named space, and demonstrates the complete core model of the Multiplayer Space-Chat in under a second.
 
 ## Topology: Space Distribution {#topology}
 
-- **1 process**, **1 harness** on `MemoryStorage` (volatile, no restart scenario).
+- **1 process**, **1 host** in memory (`openOwnMemoryHost()`; volatile, no restart scenario).
 - **1 named space** (`chat-v1`): every entry (`Presence`, `Thread`, `Msg`, `ChatTask`) lives in that single space.
 - Clients (alice/bob) and workers share the same in-process `PhiSpaces` object — no socket, no file, no network.
 
@@ -26,10 +26,10 @@ Stage 1 (`help-site/examples/v1-local-memory/run.ts`) requires zero setup, datab
 ### Step 1: Initialize Space And CompletionProfile {#step-1-init}
 
 ```ts
-const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-await harness.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
-const space = new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space: "chat-v1" });
-const stopService = await startService(harness, ctx);
+const host = openOwnMemoryHost();
+await host.commit((tx) => createSpace(tx, "chat-v1", Date.now()), ctx);
+const space = new PhiSpaces(host, ctx, Date.now, meter, undefined, { space: "chat-v1" });
+const stopService = await startService(host, ctx);
 
 await space.setCompletionProfiles([
   { taskType: "ChatTask", resultTypes: ["Msg"], equalFields: ["taskId", "threadId"], maxResultCount: 1 }

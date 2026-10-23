@@ -13,11 +13,11 @@ since: 0.0.1
 
 ## Überblick {#overview}
 
-In Stufe 3 (`help-site/examples/v3-remote-socket/run.ts`) greifen Chat-Gateway, Chat-Worker und Search-Subagent nicht mehr direkt auf das `Harness`-Objekt zu. Stattdessen veröffentlicht der Host den Space über `SpaceService` und `serveSpace` auf einem Unix-Domain-Socket (bzw. TCP-Port), und alle Teilnehmer arbeiten über `RemoteSpace`.
+In Stufe 3 (`help-site/examples/v3-remote-socket/run.ts`) greifen Chat-Gateway, Chat-Worker und Search-Subagent nicht mehr direkt auf den Host zu. Stattdessen veröffentlicht der Host den Space über `SpaceService` und `serveSpace` auf einem Unix-Domain-Socket (bzw. TCP-Port), und alle Teilnehmer arbeiten über `RemoteSpace`.
 
 ## Topologie: Space-Verteilung {#topology}
 
-- **1 Host** (Harness + SQLite + `serveSpace`) exponiert den Space `chat-v3` über einen **Unix-Socket** (`space.sock`).
+- **1 Host** (eigener SQLite-Speicher + `serveSpace`) exponiert den Space `chat-v3` über einen **Unix-Socket** (`space.sock`).
 - **3 getrennte `RemoteSpace`-Clients** greifen auf denselben Space zu: Gateway (UI), Chat-Worker, Search-Subagent – jeder mit eigenem Transport und eigener Consumer-Mailbox.
 - Verteilung: **1 Space, 1 Server, 3 Remote-Consumer** — echte Socket-Grenze statt geteiltem In-Memory-Objekt; dieselbe Engine läuft unverändert gegen `RemoteSpace`.
 
@@ -27,7 +27,7 @@ In Stufe 3 (`help-site/examples/v3-remote-socket/run.ts`) greifen Chat-Gateway, 
 
 ```ts
 const service = new SpaceService({
-  host: harness,
+  host,
   ctx,
   identity: new GateIdentity(),
   policy: DEFAULT_POLICY

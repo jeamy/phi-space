@@ -32,14 +32,14 @@ To let you start locally in seconds and progressively scale to a distributed pro
 
 ### The 6 Stages At A Glance {#six-stages}
 
-1. **[Stage 1 (`v1-local-memory`)](help.workflow.stage_v1_local_memory#overview)**: Zero-setup in memory (`MemoryStorage` + `PhiSpaces`). Runs immediately without files or network ports.
+1. **[Stage 1 (`v1-local-memory`)](help.workflow.stage_v1_local_memory#overview)**: Zero-setup in memory (`openOwnMemoryHost()` + `PhiSpaces`). Runs immediately without files or network ports.
 2. **[Stage 2 (`v2-local-durable`)](help.workflow.stage_v2_local_durable#overview)**: Local SQLite persistence, `RequestRef` idempotency, `readPage`/`changes`, `TimerLock` alarms, and `search_history` subagent.
 3. **[Stage 3 (`v3-remote-socket`)](help.workflow.stage_v3_remote_socket#overview)**: Process decoupling via `SpaceService`, `RemoteSpace` (Unix socket/TCP), and consumer mailboxes (`events` + `ack`).
 4. **[Stage 4 (`v4-gated-auth`)](help.workflow.stage_v4_gated_auth#overview)**: Two-layer security (`startGate`, Ed25519 challenge, token enrollment, 60s grants, key rotation, and boot guard).
 5. **[Stage 5 (`v5-federated-cluster`)](help.workflow.stage_v5_federated_cluster#overview)**: Federated cluster (`createFederationController`) across 3 member spaces with HRW routing by `threadId` and `takeWaiting` waiter races — simulated as 4 harnesses in one process in the demo.
 6. **[Stage 6 (`v6-mobile-control`)](help.workflow.stage_v6_mobile_control#overview)**: Full operations control & monitoring via the mobile app (`pi-termux-mobile`) and the login-protected **`AdminSpaces`** web portal on `https://spaces.eibrain.org`.
 
-Each stage description includes a **Topology: Space Distribution** section showing how many harnesses/spaces are involved and how entries are distributed.
+Each stage description includes a **Topology: Space Distribution** section showing how many hosts/spaces are involved and how entries are distributed.
 
 ## See Also {#see-also}
 

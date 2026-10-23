@@ -20,7 +20,7 @@ since: 0.0.1
 ```ts
 const fed = await createFederationController({
   ...federationOptions, // Configured keys, transport, grants, lease and authority/admin guards.
-  host: harness,
+  host,
   ctx,
   id: "router-main",
   journalPartitions: 4

@@ -11,17 +11,16 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DIRS = ["src", "examples", "test", "scripts", "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site"];
+const DIRS = ["src", "examples", "test", "scripts", "agent", "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site"];
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
 const SKIP = /(^|\/)(node_modules|\.next|dist|\.local|evidence)(\/|$)/;
 const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earendil-works/pi-ai"];
 /** Where these packages may still be used, directly or not (U6–U8 shrink this list to the agent package). */
 const ALLOWED = [
-	"src/agent.ts", "src/with-agent.ts", "test/agent-integration.test.ts", // the agent package (U6)
-	"examples/", "test/examples/", "test/testbed/", "help-site/", "scripts/spike-durable.ts", // tools and examples (U8)
+	"agent/", // the agent package, with its own dependencies
 ];
-/** pi-ai alone (models, no durable store) is also allowed here: the chat calls models itself. */
-const ALLOWED_PI_AI = ["codemode-chat/"];
+/** pi-ai alone (models, no durable store) is also allowed here: the chat and the help site call models themselves. */
+const ALLOWED_PI_AI = ["codemode-chat/", "help-site/"];
 
 /** Every source file under the scanned directories. */
 function files(dir, out = []) {

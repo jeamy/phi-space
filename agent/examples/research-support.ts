@@ -1,10 +1,10 @@
 // Shared enforcement for the model-driven examples. Prompts alone cannot provide atomicity.
 import { mkdirSync, readdirSync, openSync, closeSync } from "node:fs";
 import { join } from "node:path";
-import { defineExtension, defineDoc } from "@earendil-works/pi-durable";
-import { Space } from "../src/index.ts";
-import { spaces } from "../src/agent.ts";
-import type { liveModels } from "./live-models.ts";
+import { defineExtension } from "@earendil-works/pi-durable";
+import { Space, type SpaceHost } from "../../src/index.ts";
+import { createSpaces, localSpaces } from "../src/agent.ts";
+import type { liveModels } from "../src/live-models.ts";
 
 export type ModelBundle = Awaited<ReturnType<typeof liveModels>>;
 export type ResearchOptions = {
@@ -25,11 +25,11 @@ const resultTasks: Record<string, string> = {
   ClassificationDone: "ClassifyTask", PaperSummary: "SummarizeTask", SummarizationDone: "SummarizeTask",
   QueryResponse: "UserQuery"
 };
-const Validation = defineDoc<{ checked: boolean }>({
-  kind: "phi-spaces.research-validation", version: 1, scope: "task", initial: () => ({ checked: false })
-});
 
-export const researchSpaces = defineExtension({
+/** The space tools on `space`, with space_write checked against the research rules. */
+export function researchSpaces(space: SpaceHost) {
+  const spaces = createSpaces(localSpaces(space));
+  return defineExtension({
   ...spaces,
   name: "research-spaces",
   tools: spaces.tools!.map(tool => tool.name !== "space_write" ? tool : {
@@ -50,22 +50,22 @@ export const researchSpaces = defineExtension({
       const taskType = resultTasks[a.type];
       if (taskType) {
         if (!a.txn) throw new Error(`${a.type} requires the transaction delivered with ${taskType}`);
-        await api.commit(async tx => {
-          const validation = await tx.doc(Validation, api.taskId);
-          if (validation.checked) return; // replay may occur after the task transaction was committed
-          const state = await tx.doc(Space);
-          const txn = state.txns[a.txn!];
-          if (!txn || txn.owner !== api.conversationId || txn.expires <= Date.now() ||
+        // a replay may occur after the task transaction was committed: the first check holds
+        if (!(await api.memo<boolean>("research-checked", ctx))) {
+          const state = await space.snapshot(Space, ctx);
+          const txn = state?.txns[a.txn];
+          if (!state || !txn || txn.owner !== api.conversationId || txn.expires <= Date.now() ||
             !state.entries.some(e => e.type === taskType && e.takenBy === a.txn)) {
             throw new Error("Result transaction must reserve the matching task and belong to this conversation");
           }
-          validation.checked = true;
-        }, ctx);
+          await api.memo("research-checked", true, ctx);
+        }
       }
       return tool.execute(args, api, ctx);
     }
   })
-});
+  });
+}
 
 export const TRANSACTION_RULE = `Für jede Ausgabe nach einem bedienten Take-Wait: übergib bei JEDEM space_write
 das Argument txn mit der ID aus der Wait-Meldung, auch für Abschlussmarker und Folgeaufgaben. Erst danach

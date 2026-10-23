@@ -255,6 +255,41 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
   - die `definition`-Brücke in `store/documents.ts`, über die pi-durables Harness dieselben Dokumente bedient.
   - Auf dem Telefon bedient `pi-serverd` seinen Space weiter über den Harness der Agentensitzungen.
 
+**Stand U6 (2026-10-23): Agent-Paket.**
+
+- **Paket `agent/`** mit eigenen Abhängigkeiten (pi-durable, chord, pi-ai, exakt auf die Versionen der Wurzel gepinnt;
+  das Lockfile ist aus dem der Wurzel abgeleitet und enthält dieselben Versionen):
+  - `src/agent.ts`: die Space-Werkzeuge;
+  - `src/with-agent.ts`: Einstieg des Mobil-Bundles;
+  - `src/live-models.ts`, `examples/`, `test/`.
+  - Die Wurzel kennt pi-durable nicht mehr. Der Wächter `npm run check:durable` prüft das, auch quer in `agent/`.
+- **Der Space ist ein eigener Host** (der eigene Speicher), nicht der Speicher der Agenten.
+  - Jeder Werkzeugaufruf bekommt eine Request-Identität des Spaces: die Generation der Conversation und die Task-ID
+    des Aufrufs. Sie wird vor dem ersten Space-Aufruf als Memo im Agentenspeicher festgehalten.
+  - Der Space hält Operation und Ergebnis zusammen. Ein nach einem Absturz wiederholter Aufruf erhält das erste
+    Ergebnis (Test: Agentenspeicher JSONL, Space SQLite; eine zufällige Request-ID je Ausführung lässt ihn
+    scheitern).
+  - Blockierende Aufrufe behalten ihre erste Frist im Claim des Spaces.
+  - Die frühere Atomarität mit dem Harness-Commit (`Once`) gibt es für Agenten nicht mehr. Das ist der API-Bruch aus
+    Abschnitt 6, ausdrücklich so beschlossen.
+- **Zustellung** (`deliverEvents`): `withEventSink(host, sink)` koppelt die Conversations eines Agentenhosts an den Space.
+  - Ohne verbundenen Agentenhost warten Ereignisse im Postausgang. Nichts wird verworfen oder freigegeben.
+  - Für eine nicht mehr existierende Conversation oder eine abgelaufene Reservierung wird verworfen.
+  - Tests ohne Agent in der Wurzel; mit Agent in `agent/test`.
+- **Dokumentenbrücke entfernt:** Der Harness bedient keine Space-Dokumente mehr. `definition` und `checkpointWhen` sind
+  aus `store/` raus.
+- **Mobile Laufzeit** (`../pi-termux-mobile`, lokal geändert, nicht eingecheckt):
+  - `pi-serverd.mjs` öffnet den Space in `space.sqlite` (eigener Speicher), getrennt von `harness.sqlite`;
+  - `common.mjs` exportiert `createSpaces`, `localSpaces`, `openSqliteHost`, `withEventSink`;
+  - Abnahme: der gebaute Bundle läuft im echten `pi-serverd` (Test `agent/test/pi-server.test.ts`), der Space
+    überlebt den Daemon; die 20 Tests der Laufzeit sind grün.
+  - Nicht belegt: `node:sqlite` und `worker_threads` auf dem Gerät (Android/Termux). Das braucht einen Gerätelauf.
+- **Werkzeuge und Testbed** laufen auf dem eigenen Speicher: Beispiele, Hilfeseite (Server, Beispiele, Tests,
+  Korpus), `federation-host`, Szenarien, Audits (`test/testbed/read-store.ts`). Die Testbed-Szenarien mit
+  `SIGKILL` (`phase2-process-crashes`) laufen lokal: 10 von 10 Fällen.
+- **Bleibt:** Neuaufbau des Testbeds auf `big` (Freigabe liegt vor, `--dry-run` zuerst), U7 und die
+  `package.json`-Bereinigung (U8).
+
 **Stand U4 (2026-10-23):**
 
 - **Primary/Sync auf dem eigenen Speicher:**

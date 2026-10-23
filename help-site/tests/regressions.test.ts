@@ -7,11 +7,7 @@ import { mkdtemp, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { core, FOREVER, Meter, PhiSpaces, RemoteSpace, SpaceService, StaticIdentity, inProcessTransport, spaceDoc } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { core, FOREVER, Meter, PhiSpaces, RemoteSpace, SpaceService, StaticIdentity, inProcessTransport, spaceDoc, openOwnMemoryHost, openSqliteHost } from "../../src/index.ts";
 import { SpaceChatEngine } from "../examples/shared/chat-core.ts";
 import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 import { WebAdminController, WebAdminState } from "../server/admin/admin-controller.ts";
@@ -27,8 +23,7 @@ import { UploadStore } from "../server/uploads.ts";
 import { SIEVE_EXPORTER, collectSieveResults } from "../../examples/sieve.ts";
 
 async function memory() {
-	const registry = createRegistry(); registry.install(spaces);
-	return Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+	return openOwnMemoryHost();
 }
 async function until(check: () => Promise<boolean>, ms = 5_000) {
 	const deadline = Date.now() + ms;
@@ -126,7 +121,7 @@ test("F08/F10: presence replay across engines and completed search provenance", 
 
 test("F03/F06/F07: durable admin replay, parallel requests, enrollment separation and stable identity on SQLite reopen", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "help-admin-regression-"));
-	const open = async () => { const registry = createRegistry(); registry.install(spaces); return Harness.open(await openNodeSqliteStorage(join(dir, "store.sqlite")), { models: createModels(), registry }, ctx); };
+	const open = () => openSqliteHost(join(dir, "store.sqlite"));
 	let h = await open();
 	let admin = new WebAdminController({ host: h, ctx, meter: new Meter(), adminPassword: "test" });
 	try {

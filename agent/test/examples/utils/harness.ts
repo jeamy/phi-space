@@ -3,7 +3,7 @@
 
 import { 
   BACKGROUND_CONTEXT as ctx
-} from "../../../src/context.ts";
+} from "../../../../src/context.ts";
 import { 
   createModels, 
   type Models 
@@ -18,8 +18,8 @@ import {
   Harness, 
   MemoryStorage 
 } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, type EntryDraft } from "../../../src/index.ts";
-import { spaces } from "../../../src/agent.ts";
+import { FOREVER, PhiSpaces, openOwnMemoryHost, type EntryDraft, type OwnStoreHost } from "../../../../src/index.ts";
+import { createSpaces, localSpaces } from "../../../src/agent.ts";
 
 /**
  * Test-Harness-Konfiguration
@@ -47,7 +47,11 @@ export interface TestHarnessConfig {
  */
 export interface TestHarness {
   harness: Harness;
+  /** The space: a host of its own (the own store, in memory), as host code. */
   space: PhiSpaces;
+  spaceHost: OwnStoreHost;
+  /** The space tools on that host, for the agents' extensions. */
+  spaces: ReturnType<typeof createSpaces>;
   models: Models;
   config: TestHarnessConfig;
   context: typeof ctx;
@@ -96,6 +100,10 @@ export async function createTestHarness(config: TestHarnessConfig = {}): Promise
     models.setProvider(faux.provider);
   }
 
+  // Der Space ist ein eigener Host; die Werkzeuge der Agenten arbeiten auf ihm.
+  const spaceHost = openOwnMemoryHost();
+  const spaces = createSpaces(localSpaces(spaceHost));
+
   // Registry erstellen
   const registry = createRegistry();
   
@@ -110,12 +118,14 @@ export async function createTestHarness(config: TestHarnessConfig = {}): Promise
 
   // Harness erstellen
   const harness = await Harness.open(storage, { models, registry }, ctx);
-  const space = new PhiSpaces(harness, ctx);
+  const space = new PhiSpaces(spaceHost, ctx);
 
   // Test-Harness-Objekt zurückgeben
   const result: TestHarness = {
     harness,
     space,
+    spaceHost,
+    spaces,
     models,
     config: {
       ...config,
@@ -129,20 +139,30 @@ export async function createTestHarness(config: TestHarnessConfig = {}): Promise
     context: ctx,
     
     async close() {
-      await harness.close(ctx);
+      await result.harness.close(ctx);
+      await result.spaceHost.close(ctx);
     },
     
     async reset() {
-      await harness.close(ctx);
+      await result.harness.close(ctx);
+      await result.spaceHost.close(ctx);
       // Neues Harness erstellen
       const newStorage = useMemoryStorage 
         ? new MemoryStorage() 
         : await import("@earendil-works/pi-durable/storage/jsonl/node").then(
             ({ openNodeJsonlStorage }) => openNodeJsonlStorage(config.storageDir || "/tmp/phi-spaces-test", ctx)
           );
-      const newHarness = await Harness.open(newStorage, { models, registry }, ctx);
+      // a new space as well: the extension in the registry stays bound to the old one, so it is replaced too
+      const newSpaceHost = openOwnMemoryHost();
+      const newSpaces = createSpaces(localSpaces(newSpaceHost));
+      const newRegistry = createRegistry();
+      if (registerSpaces) newRegistry.install(newSpaces);
+      if (registerResearch) newRegistry.install((await import("../../../examples/arxiv-tool.ts")).research);
+      const newHarness = await Harness.open(newStorage, { models, registry: newRegistry }, ctx);
       result.harness = newHarness;
-      result.space = new PhiSpaces(newHarness, ctx);
+      result.spaceHost = newSpaceHost;
+      result.spaces = newSpaces;
+      result.space = new PhiSpaces(newSpaceHost, ctx);
     }
   };
   return result;
@@ -246,10 +266,10 @@ export async function waitForCount(
 /**
  * Erstellt einen einfachen Agenten für Tests
  */
-export function createTestAgent(instructions: string, model?: { provider: string; modelId: string }) {
+export function createTestAgent(harness: TestHarness, instructions: string, model?: { provider: string; modelId: string }) {
   return {
     model: model || { provider: "faux", modelId: "faux-1" },
-    extensions: [spaces],
+    extensions: [harness.spaces],
     instructions
   };
 }

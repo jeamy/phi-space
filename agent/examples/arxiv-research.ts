@@ -11,15 +11,14 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
+import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, PhiSpaces, startService } from "../src/index.ts";
-import { spaces } from "../src/agent.ts";
+import { FOREVER, PhiSpaces, openSqliteHost, startService, withEventSink } from "../../src/index.ts";
 import { research } from "./arxiv-tool.ts";
 import { pathToFileURL } from "node:url";
 import { claimFreshDirectory, researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
-import { liveModels } from "./live-models.ts";
+import { liveModels } from "../src/live-models.ts";
 
 export async function runArxivResearch(options: ResearchOptions = {}) {
 const topic = options.topic ?? "Die Entwicklung großer Sprachmodelle (LLMs): Ansätze vom Beginn bis zum heutigen Stand";
@@ -70,18 +69,21 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
 4. Committe die Transaktion aus der Wait-Meldung mit space_txn {"action": "commit", "txn": "<id>"}.`;
 
 const { models, model } = options.modelBundle ?? await liveModels();
+// The space is a store of its own next to the agents' state: it outlives an agent restart.
+const space = await openSqliteHost(join(dir, "space.sqlite"));
+const spaces = researchSpaces(space);
 const registry = createRegistry();
-registry.install(researchSpaces);
+registry.install(spaces);
 registry.install(research);
 const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models, registry }, ctx);
 h.resume();
-const host = new PhiSpaces(h, ctx);
-const stopService = await startService(h, ctx);
+const host = new PhiSpaces(space, ctx);
+const stopService = await startService(withEventSink(space, h), ctx);
 try {
 console.log(`model ${model.provider}/${model.modelId}\ntopic ${topic}\nstate ${dir}\n`);
 
 const agent = (instructions: string, withResearch = false) =>
-	h.createConversation({ ownership: { kind: "ownerless" }, agent: { model, extensions: withResearch ? [researchSpaces, research] : [researchSpaces], instructions } }, ctx);
+	h.createConversation({ ownership: { kind: "ownerless" }, agent: { model, extensions: withResearch ? [spaces, research] : [spaces], instructions } }, ctx);
 const team = [await agent(analyst), await agent(presenter), ...(await Promise.all(COLLECTORS.map((c) => agent(collector(c), true))))];
 for (const c of team) await c.submit({ type: "input", content: "Beginne." }, ctx); // waiters first, then collectors
 
@@ -108,6 +110,7 @@ console.log("space:", JSON.stringify(await host.stats()));
 } finally {
 await stopService();
 await h.close(ctx);
+await space.close(ctx);
 }
 }
 

@@ -21,7 +21,7 @@ const bindings: Record<string, string[]> = {
 
 export function apiSignatures(): Map<string, string> {
 	// the public module and the agent module (the agent tools are not exported by the public one: they need pi-durable)
-	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts"), agentPath = resolve(root, "src/agent.ts");
+	const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.."), path = resolve(root, "src/index.ts"), agentPath = resolve(root, "agent/src/agent.ts");
 	const program = ts.createProgram([path, agentPath], {target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strictNullChecks:true,skipLibCheck:true,allowImportingTsExtensions:true,noEmit:true});
 	const checker = program.getTypeChecker(), source = program.getSourceFile(path)!;
 	const exports = new Map([source, program.getSourceFile(agentPath)!].flatMap(f => checker.getExportsOfModule(checker.getSymbolAtLocation(f)!)).map(s => [s.name,s]));

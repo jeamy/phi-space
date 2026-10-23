@@ -2,12 +2,14 @@
 // Tests: Publish-Subscribe, Ring-Kommunikation, Determinismus
 
 import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
+import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, startService } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { FOREVER, PhiSpaces, openOwnMemoryHost, startService, withEventSink } from "../../../src/index.ts";
+import { createSpaces, localSpaces } from "../../src/agent.ts";
+/** The space tools of the current setup (each setup has its own space host). */
+let spaces: ReturnType<typeof createSpaces>;
 
 // ============================================================================
 // TEST UTILITIES
@@ -68,12 +70,16 @@ async function setupChatHarness() {
   const models = createModels();
   models.setProvider(faux.provider);
   
+  const space = openOwnMemoryHost();
+  
+  spaces = createSpaces(localSpaces(space));
+  
   const registry = createRegistry();
   registry.install(spaces);
   
   const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-  const host = new PhiSpaces(h, ctx);
-  const stopService = await startService(h, ctx);
+  const host = new PhiSpaces(space, ctx);
+  const stopService = await startService(withEventSink(space, h as any), ctx);
   
   return { h, host, stopService, models, faux };
 }
@@ -188,8 +194,9 @@ describe("chat.ts", () => {
       // Zwei separate Durchläufe mit gleichem Input
       const runChat = async (runId: string) => {
         const h1 = await Harness.open(new MemoryStorage(), { models: createModels(), registry: createRegistry() }, ctx);
-        const host1 = new PhiSpaces(h1, ctx);
-        const stop1 = await startService(h1, ctx);
+        const space1 = openOwnMemoryHost();
+        const host1 = new PhiSpaces(space1, ctx);
+        const stop1 = await startService(withEventSink(space1, h1 as any), ctx);
         
         const faux1 = createScriptedFaux();
         const m1 = createModels();
@@ -396,12 +403,16 @@ describe("chat.ts Integration Tests", () => {
     const models = createModels();
     models.setProvider(faux.provider);
     
+    const space = openOwnMemoryHost();
+    
+    spaces = createSpaces(localSpaces(space));
+    
     const registry = createRegistry();
     registry.install(spaces);
     
     const h = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
-    const host = new PhiSpaces(h, ctx);
-    const stopService = await startService(h, ctx);
+    const host = new PhiSpaces(space, ctx);
+    const stopService = await startService(withEventSink(space, h as any), ctx);
     
     try {
       const subs: string[] = [];

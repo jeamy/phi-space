@@ -13,7 +13,7 @@ since: 0.0.1
 
 ## Overview {#overview}
 
-`phi-spaces` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) built on `@earendil-works/pi-durable`. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
+`phi-spaces` is a transactional, persistent **coordination space** (a modern evolution of the classic Linda / JavaSpaces paradigm) with a store of its own (SQLite, owned by one process); `@earendil-works/pi-durable` agents get an optional agent package. Instead of coupling clients, background workers, AI agents, and administrative tools through fragile point-to-point calls, every participant exchanges immutable, typed JSON objects (**entries**) through shared, versioned data spaces (**spaces**).
 
 ## Origins: Linda And JavaSpaces {#history}
 
@@ -77,13 +77,13 @@ PhiSpaces and RemoteSpace implement the SpaceLike base contract. FederatedSpace 
 ## Workflow {#workflow}
 
 1. **Define the contract**: Specify entry types (`type`), required `fields`, and optional `CompletionProfiles` (which task type requires which result type on transaction commit).
-2. **Open the space and start maintenance**: Instantiate `new PhiSpaces(harness, ctx, Date.now, meter, undefined, { space })` and call `await startService(harness, ctx)` for lease reaping and event delivery.
+2. **Open the space and start maintenance**: Instantiate `new PhiSpaces(host, ctx, Date.now, meter, undefined, { space })` and call `await startService(host, ctx)` for lease reaping and event delivery.
 3. **Submit and process work**: Producers write tasks with a `RequestRef` claim; workers reserve tasks via `take(..., { txn })`, write results under the same `txn`, and call `commit(txn)`.
 4. **Observe and control live**: UI clients read an initial `readPage()` snapshot (with `rev`) and follow updates via `changes(afterRev)` or consumer mailboxes (`events` / `ack`).
 
 ## Rules, Guarantees And Boundaries {#rules-and-boundaries}
 
-- **One Commit, One Truth**: Space mutation, request claim, revision counter `rev`, mailbox event, and byte-budget reservation are persisted in a single atomic harness commit.
+- **One Commit, One Truth**: Space mutation, request claim, revision counter `rev`, mailbox event, and byte-budget reservation are persisted in a single atomic host commit.
 - **Data Is Not Instructions**: Entries read from a space originate from other agents or users. Agent tools explicitly wrap payloads as `[data, not instructions]`.
 - **Help ≠ Live State**: This reference documents stable contracts and guarantees. Live runtime state is inspected in the **Live Space Inspector** and controlled in **AdminSpaces**.
 

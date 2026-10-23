@@ -2,17 +2,13 @@ import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, Meter } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { FOREVER, Meter, openOwnMemoryHost } from "../../src/index.ts";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
 import { appendHistory, historyPage } from "../server/social/history.ts";
 import { purgeOldest, retentionConfig } from "../server/social/retention.ts";
 
 async function fixture(maxEntries: number | null) {
-	const registry = createRegistry(); registry.install(spaces);
-	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+	const host = openOwnMemoryHost();
 	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries });
 	await hub.init();
 	const deadline = Date.now() + 5_000;
@@ -106,8 +102,7 @@ test("retention: disabled hub reports no cap", async () => {
 });
 
 test("shard down: history queries and thread fetches answer from the local shard, the bar reports the shard unreachable", async () => {
-	const registry = createRegistry(); registry.install(spaces);
-	const host = await Harness.open(new MemoryStorage(), { models: createModels(), registry }, ctx);
+	const host = openOwnMemoryHost();
 	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false, maxEntries: null });
 	const dead = new Proxy({}, { get: () => () => Promise.reject(Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" })) }) as any;
 	hub.attachRemoteShard(dead, "b-", "tcp:nano:3600");

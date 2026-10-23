@@ -5,28 +5,23 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { core, createSpace, FOREVER, Meter, PhiSpaces, spaceDoc } from "../../src/index.ts";
-import { spaces } from "../../src/agent.ts";
+import { core, createSpace, FOREVER, Meter, PhiSpaces, spaceDoc, OwnStoreHost, openSqliteHost } from "../../src/index.ts";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch } from "../server/social/batch.ts";
 import type { SwarmPost } from "../server/social/swarm.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 
-class CountingStorage extends MemoryStorage {
+/** The own host over a ledger that keeps nothing (memory) and counts the commits it is handed; `fail` makes a write
+ *  fail, after which the host takes no more work (it must be reopened). */
+class CountingStorage {
 	commits = 0;
 	fail = false;
-	override async commit(...args: Parameters<MemoryStorage["commit"]>) {
-		this.commits++;
-		if (this.fail) throw new Error("injected storage failure");
-		return super.commit(...args);
+	host(): OwnStoreHost {
+		return new OwnStoreHost({ load: () => null, persist: async () => { this.commits++; if (this.fail) throw new Error("injected storage failure"); }, close: () => {} });
 	}
 }
 
 async function fixture(n = 4) {
-	const storage = new CountingStorage(), registry = createRegistry(); registry.install(spaces);
-	const host = await Harness.open(storage, { models: createModels(), registry }, ctx);
+	const storage = new CountingStorage(), host = storage.host();
 	const info = await host.commit(tx => createSpace(tx, "batch-test", Date.now()), ctx);
 	const b = { host, spaceId: info.spaceId, ctx };
 	await host.commit(async tx => {
@@ -62,14 +57,14 @@ test("worker batches: four posts, history, counters and follow-ups use exactly t
 	} finally { await f.close(); }
 });
 
-test("worker batches: storage rejection poisons the session, never publishes candidate results", async () => {
+test("worker batches: a failed write stops the host, never publishes candidate results", async () => {
 	const f = await fixture();
 	try {
 		const batch = (await reserveBatch(f.b))!;
 		f.storage.fail = true;
 		await assert.rejects(finishBatch(f.b, batch.txn, posts(batch.tasks), []), /injected storage failure/);
-		await assert.rejects(abortBatch(f.b, batch.txn), /poisoned/);
-		await assert.rejects(reserveBatch(f.b), /poisoned/);
+		await assert.rejects(abortBatch(f.b, batch.txn), /must be reopened/);
+		await assert.rejects(reserveBatch(f.b), /must be reopened/);
 	} finally { f.storage.fail = false; await f.close(); }
 });
 
@@ -130,8 +125,7 @@ test("worker batches: mixed post/like completion and successive batches preserve
 });
 
 test("worker batches: actual hub dispatcher publishes four queued posts in two commits", async () => {
-	const storage = new CountingStorage(), registry = createRegistry(); registry.install(spaces);
-	const host = await Harness.open(storage, { models: createModels(), registry }, ctx);
+	const storage = new CountingStorage(), host = storage.host();
 	const hub = new SocialSwarmHub(host, ctx, new Meter(), { produce: false, pulses: false, seedContent: false });
 	try {
 		await hub.init();
@@ -156,8 +150,7 @@ test("worker batches: actual hub dispatcher publishes four queued posts in two c
 test("worker batches: SQLite reopen retains reservations and completed results without replay duplicates", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pi-swarm-batch-"));
 	const open = async () => {
-		const registry = createRegistry(); registry.install(spaces);
-		return Harness.open(await openNodeSqliteStorage(join(dir, "store.sqlite")), { models: createModels(), registry }, ctx);
+		return openSqliteHost(join(dir, "store.sqlite"));
 	};
 	let host = await open();
 	try {
