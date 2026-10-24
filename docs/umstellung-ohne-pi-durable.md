@@ -314,6 +314,14 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
   - **Nächster Schritt (nicht begonnen):** ein Speicherbudget für geladene Dokumente, das kalte Dokumente ohne
     Beobachter, Entwurf und ausstehende Schreibung verdrängt. Das berührt `OwnStoreHost` und braucht eine
     Entscheidung zur Verdrängungsregel.
+- **Neuaufbau `big` und Gerätabnahme (2026-10-24):** `destroy --yes` und `up federation` liefen auf `big`, `netbird setup
+  --rotate-keys --prune-stale` erneuerte Keys und Policies und entfernte die vier verwaisten Peer-Einträge; `test all`
+  ist auf dem frischen Stand grün. Ein `--dry-run` hinter dem Befehl wurde dabei ignoriert, `destroy` lief sofort: jetzt
+  zählt das Flag an jeder Stelle. Auf dem Xiaomi (Node 26.4.0 aus dem Rootfs) laufen `node:sqlite`, WAL, der Eval-Worker
+  und der Own-Store aus dem ausgelieferten Bundle; die B9-Abnahme (Kopplung, Sieblauf starten/pausieren/fortsetzen/
+  stoppen, Worker, Koordinator-Absturz mit erneutem Senden derselben ID, unabhängige Prüfung der Ergebnisse) ist mit
+  dem Own-Store bestanden: `test/evidence/b9-device-2026-10-24/README.md`. Offen bleibt die Abnahme über NetBird und
+  mit dem Bildschirm aus.
 - **Bleibt:** U7 (Rest: Plattenvoll, Backup/Restore, Entry-Match-Index, Dauerlast) und die Betriebsprobe der Föderation
   auf `big`.
 
