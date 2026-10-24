@@ -19,7 +19,7 @@ import {
 	type SpaceLike,
 } from "phi-spaces";
 import type { WsConnection } from "../ws.ts";
-import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, filledHistory, historyRead } from "./history.ts";
+import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
 import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "phi-spaces/core";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
 import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts, type PurgeNotice, type RetentionConfig } from "./retention.ts";
@@ -1724,9 +1724,13 @@ export class SocialSwarmHub {
       try {
        const scan = { kind, channel, handle, beforeAt: Number.isFinite(Number(msg.beforeAt)) ? Number(msg.beforeAt) : Infinity, beforeId: String(msg.beforeId ?? ""), limit };
        let result;
-       if (this.#historyReady) {
+       // A filtered page (one channel, one author, AI only) is asked of the shards' own filter: walking the history chain looks
+       // at 512 posts per round and on a busy feed the posts of a channel lie much further back (and over the socket to a
+       // shard that is far too slow), so a chain walk answers empty while the posts exist.
+       const filtered = (kind as string) !== "feed.more" || channel !== "all";
+       if (this.#historyReady && !filtered) {
         try {
-         result = await this.#remoteCall(filledHistory(this.#remote ? [this.space, this.#remote] : [this.space], {
+         result = await this.#remoteCall(mergedHistory(this.#remote ? [this.space, this.#remote] : [this.space], {
           beforeAt: scan.beforeAt, beforeId: scan.beforeId, limit,
           cursors: Array.isArray(msg.cursors) && msg.cursors.every((c: unknown) => typeof c === "string") ? msg.cursors : undefined,
           ...(kind === "feed.more" && channel !== "all" ? { channel } : {}),

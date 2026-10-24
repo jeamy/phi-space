@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER, Meter, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
-import { appendHistory, historyPage, mergedHistory, filledHistory } from "../server/social/history.ts";
+import { appendHistory, historyPage } from "../server/social/history.ts";
 import { purgeOldest, retentionConfig, SWARM_CLAIM_RESULT_MS } from "../server/social/retention.ts";
 import { core, NamedSpace } from "phi-spaces";
 
@@ -151,7 +151,7 @@ test("the feed goes on when the change history has moved past the hub's cursor: 
 	} finally { await f.close(); }
 });
 
-test("a channel's posts are found however far back they lie: a filtered page goes on past one round of 512 posts", async () => {
+test("a channel's posts are found however far back they lie (a busy feed): feed.more with a channel asks the shard's own filter", async () => {
 	const f = await fixture(null);
 	try {
 		const add = async (i: number, channel: string) => {
@@ -162,15 +162,16 @@ test("a channel's posts are found however far back they lie: a filtered page goe
 			await f.hub.space.commit(txn.id);
 		};
 		for (let i = 1; i <= 7; i++) await add(i, "meins");
-		for (let i = 8; i <= 620; i++) await add(i, "home"); // 613 newer posts of other channels: more than one round looks at
-		const input = { beforeAt: Infinity, beforeId: "", limit: 50, channel: "meins" };
-		const one = await mergedHistory([f.hub.space], input);
-		assert.equal(one.posts.length, 0, "a single round does not reach them");
-		assert.equal(one.exhausted, false);
-		const all = await filledHistory([f.hub.space], input);
-		assert.deepEqual(all.posts.map((p) => p.postId), ["p-7", "p-6", "p-5", "p-4", "p-3", "p-2", "p-1"]);
-		assert.equal(all.exhausted, true);
-		assert.equal((await filledHistory([f.hub.space], { ...input, channel: undefined })).posts.length, 50, "an unfiltered page is one round as before");
+		for (let i = 8; i <= 620; i++) await add(i, "home"); // 613 newer posts of other channels: more than one chain round looks at
+		const sent: any[] = [];
+		let say!: (raw: string) => Promise<void> | void;
+		await f.hub.attachWebSocket({ id: "t", send: (d: any) => sent.push(typeof d === "string" ? JSON.parse(d) : d), close() {}, onMessage: (h: typeof say) => { say = h; }, onClose() {} } as any);
+		await say(JSON.stringify({ type: "feed.more", channel: "meins", limit: 50 }));
+		const deadline = Date.now() + 8_000;
+		while (!sent.some((m) => m.type === "feed.more")) { assert.ok(Date.now() < deadline, "answered"); await new Promise((r) => setTimeout(r, 20)); }
+		const m = sent.find((x) => x.type === "feed.more");
+		assert.deepEqual(m.posts.map((p: SwarmPost) => p.postId), ["p-7", "p-6", "p-5", "p-4", "p-3", "p-2", "p-1"]);
+		assert.equal(m.exhausted, true);
 	} finally { await f.close(); }
 });
 

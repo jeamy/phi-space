@@ -193,18 +193,3 @@ export async function mergedHistory(spaces: SpaceLike[], input: { cursors?: stri
 	const cursors = pages.map((p, shard) => p.candidates.find(c => !consumed.has(shard + ":" + c.cursor))?.cursor ?? p.next);
 	return { posts: selected.map(c => c.post), cursors, complete: true, exhausted: cursors.every(c => c === "") };
 }
-
-/** A filtered page (one channel, one author, AI only) that is filled: one mergedHistory round looks at no more than 512 posts
- *  per shard, and on a busy feed a channel's posts lie further back than that, so a single round answers empty while more
- *  exist. Rounds go on from the cursors until the page is full, the history is exhausted, or the rounds or the signal run out. */
-export async function filledHistory(spaces: SpaceLike[], input: Parameters<typeof mergedHistory>[1], maxRounds = 40) {
-	const filtered = !!(input.channel || input.handle || input.ai);
-	let r = await mergedHistory(spaces, input);
-	if (!filtered) return r;
-	const posts = [...r.posts];
-	for (let round = 1; round < maxRounds && posts.length < input.limit && !r.exhausted && !input.signal?.aborted; round++) {
-		r = await mergedHistory(spaces, { ...input, cursors: r.cursors, limit: input.limit - posts.length });
-		posts.push(...r.posts);
-	}
-	return { ...r, posts };
-}
