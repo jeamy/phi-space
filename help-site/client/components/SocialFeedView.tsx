@@ -816,7 +816,14 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 							{adminDlg ? (
 								<form
 									className="sf-admin-login"
-									onSubmit={(e) => { e.preventDefault(); send({ type: "admin.auth", password: adminPwd }); }}
+									onSubmit={(e) => {
+										e.preventDefault();
+										send({ type: "admin.auth", password: adminPwd });
+										// the same password also opens the HTTP admin session that the AI switch and model picker need
+										void fetch("/api/admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: adminPwd }) })
+											.then((r) => { if (r.ok) window.dispatchEvent(new Event("focus")); })
+											.catch(() => {});
+									}}
 								>
 									<input
 										className="sf-input"
