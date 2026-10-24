@@ -1352,6 +1352,7 @@ a.secondary-action, a.primary-action { text-decoration: none; }
   overflow: hidden; text-overflow: ellipsis;
 }
 .sf-llm-picker select:disabled { opacity: 0.45; }
+.sf-llm-hint { font-size: 11px; opacity: 0.8; white-space: nowrap; }
 .sf-llm-toggle {
   border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
   background: var(--surface); color: var(--muted); cursor: pointer;

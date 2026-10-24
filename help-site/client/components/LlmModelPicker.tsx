@@ -77,6 +77,7 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 	return (
 		<span className="sf-llm-picker">
 			{error ? <span role="alert">{error}</span> : null}
+			{!canManage ? <small className="sf-llm-hint">{locale === "de" ? "Admin-Anmeldung nötig (Reiter ADMINSPACES)" : "Admin sign-in needed (ADMINSPACES tab)"}</small> : null}
 			<button
 				type="button"
 				className={on ? "sf-llm-toggle sf-llm-toggle--on" : "sf-llm-toggle"}
