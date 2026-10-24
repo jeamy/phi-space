@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER, Meter, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
-import { appendHistory, historyPage } from "../server/social/history.ts";
+import { appendHistory, historyPage, mergedHistory, filledHistory } from "../server/social/history.ts";
 import { purgeOldest, retentionConfig } from "../server/social/retention.ts";
 
 async function fixture(maxEntries: number | null) {
@@ -147,5 +147,28 @@ test("the feed goes on when the change history has moved past the hub's cursor: 
 		while (inits() < 2) { assert.ok(Date.now() < deadline, "the hub sent the state again"); await new Promise((r) => setTimeout(r, 50)); }
 		await addPost(f.hub, 2);
 		while (!sent.some((m) => m.type === "feed.delta" && m.likes?.some((l: any) => l.postId === "post-2"))) { assert.ok(Date.now() < deadline + 8_000, "deltas flow again"); await new Promise((r) => setTimeout(r, 50)); }
+	} finally { await f.close(); }
+});
+
+test("a channel's posts are found however far back they lie: a filtered page goes on past one round of 512 posts", async () => {
+	const f = await fixture(null);
+	try {
+		const add = async (i: number, channel: string) => {
+			const post: SwarmPost = { postId: `p-${i}`, seq: i, taskId: `t-${i}`, author: "a", handle: "a", name: "A", hue: 0, channel, text: `post ${i}`, replyTo: null, replyToHandle: null, at: 1_000 + i, likes: 0, replies: 0, imageSeed: null, imageAlt: null, imageUrl: null };
+			const txn = await f.hub.space.createTransaction(30_000);
+			await appendHistory(f.hub.space, post, txn.id);
+			await f.hub.space.write({ type: "Post", fields: { ...post } }, txn.id, FOREVER);
+			await f.hub.space.commit(txn.id);
+		};
+		for (let i = 1; i <= 7; i++) await add(i, "meins");
+		for (let i = 8; i <= 620; i++) await add(i, "home"); // 613 newer posts of other channels: more than one round looks at
+		const input = { beforeAt: Infinity, beforeId: "", limit: 50, channel: "meins" };
+		const one = await mergedHistory([f.hub.space], input);
+		assert.equal(one.posts.length, 0, "a single round does not reach them");
+		assert.equal(one.exhausted, false);
+		const all = await filledHistory([f.hub.space], input);
+		assert.deepEqual(all.posts.map((p) => p.postId), ["p-7", "p-6", "p-5", "p-4", "p-3", "p-2", "p-1"]);
+		assert.equal(all.exhausted, true);
+		assert.equal((await filledHistory([f.hub.space], { ...input, channel: undefined })).posts.length, 50, "an unfiltered page is one round as before");
 	} finally { await f.close(); }
 });

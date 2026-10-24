@@ -19,7 +19,7 @@ import {
 	type SpaceLike,
 } from "phi-spaces";
 import type { WsConnection } from "../ws.ts";
-import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
+import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, filledHistory, historyRead } from "./history.ts";
 import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "phi-spaces/core";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
 import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts, type PurgeNotice, type RetentionConfig } from "./retention.ts";
@@ -1726,7 +1726,7 @@ export class SocialSwarmHub {
        let result;
        if (this.#historyReady) {
         try {
-         result = await this.#remoteCall(mergedHistory(this.#remote ? [this.space, this.#remote] : [this.space], {
+         result = await this.#remoteCall(filledHistory(this.#remote ? [this.space, this.#remote] : [this.space], {
           beforeAt: scan.beforeAt, beforeId: scan.beforeId, limit,
           cursors: Array.isArray(msg.cursors) && msg.cursors.every((c: unknown) => typeof c === "string") ? msg.cursors : undefined,
           ...(kind === "feed.more" && channel !== "all" ? { channel } : {}),
