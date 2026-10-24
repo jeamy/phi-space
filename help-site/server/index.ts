@@ -167,6 +167,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	await chatHub.ensureSession("lobby");
 	const swarm = new SocialSwarmHub(host, ctx, meter, {
 		adminCheck: (password: string) => admin.verifyPassword(password),
+		sessionCheck: (sessionId: string) => admin.getSession(sessionId) !== null,
 	});
 	if (llmSwarm) swarm.setReplyGenerator(llmSwarm);
 	if (llmSwarmPost) swarm.setPostGenerator(llmSwarmPost);

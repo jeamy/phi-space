@@ -302,6 +302,8 @@ export interface SwarmShardOptions {
 	seedContent?: boolean;
 	/** Password verifier for admin-gated controls (swarm.pause/rate/burst/agentCount); null = open. */
 	adminCheck?: ((password: string) => boolean) | null;
+	/** Whether an AdminSpaces session is valid: one sign-in then makes a feed connection admin too (message `admin.session`). */
+	sessionCheck?: ((sessionId: string) => boolean) | null;
 	/** Entry cap of this shard's database (default `SWARM_MAX_ENTRIES`, 20000); null disables the purge. */
 	maxEntries?: number | null;
 }
@@ -393,6 +395,7 @@ export class SocialSwarmHub {
 	}
 
 	#adminCheck: ((password: string) => boolean) | null = null;
+	#sessionCheck: ((sessionId: string) => boolean) | null = null;
 	#admins = new Set<WsConnection>();
 	#retention: RetentionConfig | null;
 	#purging = false;
@@ -406,6 +409,7 @@ export class SocialSwarmHub {
 		this.#pulses = opts.pulses ?? true;
 		this.#seedContent = opts.seedContent ?? true;
 		this.#adminCheck = opts.adminCheck ?? null;
+		this.#sessionCheck = opts.sessionCheck ?? null;
 		this.#retention = opts.maxEntries === undefined ? retentionConfig() : opts.maxEntries === null ? null : retentionConfig(opts.maxEntries);
 	}
 
@@ -1684,6 +1688,14 @@ export class SocialSwarmHub {
 							ws.send({ type: "admin.ok" });
 						} else {
 							ws.send({ type: "admin.denied" });
+						}
+						break;
+					}
+					case "admin.session": {
+						// An open AdminSpaces session is as good as the swarm-control password; nothing is sent when it is not.
+						if (this.#sessionCheck?.(String(msg.sessionId ?? ""))) {
+							this.#admins.add(ws);
+							ws.send({ type: "admin.ok" });
 						}
 						break;
 					}

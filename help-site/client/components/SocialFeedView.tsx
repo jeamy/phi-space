@@ -288,6 +288,19 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const pendingPostRef = useRef<{ text: string; handle: string; at: number } | null>(null);
 	const beamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+	// One sign-in is enough: an open AdminSpaces session (cookie) makes this feed connection admin as well.
+	useEffect(() => {
+		if (!connected || isAdmin) return;
+		let dead = false;
+		const sync = () => void fetch("/api/admin/session").then((r) => r.json()).then((d) => {
+			if (!dead && d.authenticated && d.session?.sessionId) wsRef.current?.send(JSON.stringify({ type: "admin.session", sessionId: d.session.sessionId }));
+		}).catch(() => {});
+		sync();
+		const timer = setInterval(sync, 15_000);
+		window.addEventListener("focus", sync);
+		return () => { dead = true; clearInterval(timer); window.removeEventListener("focus", sync); };
+	}, [connected, isAdmin]);
+
 	useEffect(() => {
 		const proto = window.location.protocol === "https:" ? "wss" : "ws";
 		const ws = new WebSocket(`${proto}://${window.location.host}/ws/feed`);
