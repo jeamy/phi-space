@@ -344,8 +344,19 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
     Einträgen 7–14 ms je Operation (Nehmen und Zurückschreiben 22 ms), grob 1 µs je Eintrag, bei 100 000 also rund
     140 ms. Für das Profil (10 000 je Space) reicht das; ein Index wird erst nötig, wenn Spaces regelmäßig über
     50 000 Einträge halten und feldgenau gesucht wird.
-- **Bleibt:** U7 (Rest: Plattformtests ausser Linux/Android, RPO/RTO im Betreiberprofil) und die Betriebsprobe der Föderation
-  auf `big`.
+- **Plattformen (Entscheidung 2026-10-24):** Unterstützt und getestet sind Linux (Server, Docker, Entwicklung) und
+  Android (Termux, Xiaomi M2007J17G, Node 26.4.0). Tests für weitere Plattformen stellt, wer sie braucht, selbst bereit;
+  damit ist der Punkt Plattformtests in U7 abgeschlossen.
+- **Backup im Betrieb:** Die Aufbewahrung steht in der Umgebung (`CODEMODE_BACKUP_KEEP`, Standard 7, `.env`); das
+  Intervall ist keine Variable, sondern der Takt, in dem `npm --prefix codemode-chat run docker:backup` (oder
+  `server/backup.ts`) aufgerufen wird, also ein Zeitgeber des Betreibers (cron oder systemd-Timer). Das größte
+  Datenverlustfenster ist dann das Intervall; das Alter des ältesten Backups ist Intervall mal `CODEMODE_BACKUP_KEEP`.
+- **Docker-Images (2026-10-24):** `phi-spaces-codemode:prod` und `:dev-test` sowie `phi-spaces-help:prod`, `:nano`
+  und `:dev-test` bauen mit dem Agent-Paket (Typecheck und Next.js-Build im Image); die Tests laufen im Container
+  grün (Chat 112, Help-Site 53). Der erste Containerlauf des Chats hatte einen nicht reproduzierbaren Fehlschlag
+  („a person's thumbs-up counts as earlier material in its own room only"), der zweite war grün.
+- **Bleibt:** RPO/RTO im Betreiberprofil (U0: der Betreiber legt Intervall und Alter fest) und die Betriebsprobe der
+  Föderation auf `big`.
 
 **Stand U4 (2026-10-23):**
 
