@@ -131,3 +131,21 @@ test("shard down: history queries and thread fetches answer from the local shard
 		assert.deepEqual(sys.shards.map((s) => [s.shard, s.up]), [["a", true], ["b", false]]);
 	} finally { await hub.close(); await host.close(ctx); }
 });
+
+test("the feed goes on when the change history has moved past the hub's cursor: it starts again from now and sends the state", async () => {
+	const f = await fixture(null);
+	try {
+		const sent: any[] = [];
+		await f.hub.attachWebSocket({ id: "t", send: (d: any) => sent.push(typeof d === "string" ? JSON.parse(d) : d), close() {}, onMessage() {}, onClose() {} } as any);
+		await addPost(f.hub, 1);
+		const floor = (await f.hub.space.readPage(null, { maxBytes: 1_000 })).rev;
+		const changes = f.hub.space.changes.bind(f.hub.space);
+		// the retained history now starts at `floor`: asking for anything older fails, as a trimmed log does
+		(f.hub.space as any).changes = async (rev: number, o: any) => { if (rev < floor) throw new Error("history dropped"); return changes(rev, o); };
+		const inits = () => sent.filter((m) => m.type === "feed.init").length;
+		const deadline = Date.now() + 8_000;
+		while (inits() < 2) { assert.ok(Date.now() < deadline, "the hub sent the state again"); await new Promise((r) => setTimeout(r, 50)); }
+		await addPost(f.hub, 2);
+		while (!sent.some((m) => m.type === "feed.delta" && m.likes?.some((l: any) => l.postId === "post-2"))) { assert.ok(Date.now() < deadline + 8_000, "deltas flow again"); await new Promise((r) => setTimeout(r, 50)); }
+	} finally { await f.close(); }
+});

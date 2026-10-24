@@ -306,6 +306,10 @@ export interface SwarmShardOptions {
 	maxEntries?: number | null;
 }
 
+/** Whether a changes read failed because the revision asked for is no longer (or not yet) in the retained history. */
+const historyGone = (e: unknown): boolean =>
+	e instanceof SnapshotExpired || e instanceof RevisionAhead || (e as Error)?.name === "SnapshotExpired" || String(e).includes("dropped") || String(e).includes("ahead");
+
 export class SocialSwarmHub {
 	readonly host: SpaceHost;
 	readonly ctx: Context;
@@ -1368,7 +1372,17 @@ export class SocialSwarmHub {
 			const likedPosts = new Map<string, number>();
 			const repliedPosts = new Map<string, number>();
 
-			const page = await this.space.changes(this.#rev, { maxBytes: 300_000 });
+			let page;
+			try { page = await this.space.changes(this.#rev, { maxBytes: 300_000 }); }
+			catch (e) {
+				if (!historyGone(e)) throw e;
+				// The cursor fell behind the space's retained change history (no viewer for a while, or a burst of writes):
+				// reading from it can only fail again. Start again from now and hand the viewers the current state.
+				this.#rev = (await this.space.readPage(null, { maxBytes: 1_000 })).rev;
+				const init = { type: "feed.init", ...this.snapshot(), onlineCount: this.#online.size, stats: await this.stats(), agentTotal: this.#agentCount };
+				for (const c of this.clients) c.send(init);
+				return;
+			}
 			if (page.batches.length > 0) {
 				this.#rev = page.next;
 				for (const b of page.batches) {
@@ -1426,7 +1440,7 @@ export class SocialSwarmHub {
 						}
 					} catch (e) {
 						this.#markRemoteDown();
-						if (e instanceof SnapshotExpired || e instanceof RevisionAhead || (e as Error).name === "SnapshotExpired" || String(e).includes("dropped") || String(e).includes("ahead")) {
+						if (historyGone(e)) {
 							void this.#syncRemoteShard();
 						}
 					}
