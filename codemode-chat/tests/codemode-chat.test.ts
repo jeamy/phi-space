@@ -48,6 +48,7 @@ t("contribution -> score entry -> websocket frame, with limits", async () => {
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
 	try {
 		const frames: any[] = [];
+		await post(srv.url, "/api/sessions/room1/task", { taskId: "primes" }); // a new room has no block until one is opened
 		const ws = new WebSocket(srv.url.replace("http", "ws") + "/ws/room1");
 		ws.onmessage = (e) => frames.push(view(JSON.parse(String(e.data))));
 		await until(async () => frames.length > 0);
@@ -93,6 +94,7 @@ t("judge processes on two hosts share the candidates of the one space; the syste
 	const srv = await startServer({ port: 0, bind: "127.0.0.1", judges: [{ host: "big", workers: 1 }, { host: "nano", workers: 1 }] });
 	try {
 		const slow = taskById("primes")!.variants[1]!, bad = taskById("primes")!.variants[4]!; // right, and slow enough that both judges get work
+		await post(srv.url, "/api/sessions/shard1/task", { taskId: "primes" });
 		for (let i = 0; i < 6; i++) await post(srv.url, "/api/sessions/shard1/code", { author: `p${i}`, source: i % 3 === 2 ? bad : slow });
 		const snap = await until(async () => { const s = await view(await (await fetch(srv.url + "/api/sessions/shard1")).json()); return s.contributions.length === 6 && s.contributions.every((c: any) => c.ok !== null) ? s : false; }, 60_000);
 		assert.deepEqual([...new Set(snap.contributions.map((c: any) => c.host))].sort(), ["big", "nano"]);
@@ -150,17 +152,16 @@ t("every task is its own block with its own contributions and best code", async 
 		await until(async () => (await get()).blocks.at(-1).contributions.every((c: any) => c.ok !== null) && (await get()).blocks.at(-1).contributions.length === 1);
 		await post(srv.url, "/api/sessions/blocks1/task", { taskId: "primes" });
 		await post(srv.url, "/api/sessions/blocks1/code", { author: "b", source: primes.variants[3]! });
-		const snap = await until(async () => { const s = await get(); return s.blocks.length === 3 && s.blocks.at(-1).contributions.length === 1 && s.blocks.at(-1).contributions[0].ok !== null ? s : false; });
-		// block 0: the default first task (empty), 1: gcd, 2: primes
-		assert.deepEqual(snap.blocks.map((b: any) => b.task.id), ["primes", "gcd", "primes"]);
-		assert.equal(snap.blocks[1].contributions.length, 1);
-		assert.equal(snap.blocks[1].best.source, gcd.variants[2]);
-		assert.equal(snap.blocks[2].best.source, primes.variants[3]);
-		assert.equal(snap.blocks[0].best, null);
-		assert.equal(snap.current, snap.blocks[2].blockId);
+		const snap = await until(async () => { const s = await get(); return s.blocks.length === 2 && s.blocks.at(-1).contributions.length === 1 && s.blocks.at(-1).contributions[0].ok !== null ? s : false; });
+		// block 0: gcd, 1: primes (a new room has no block of its own)
+		assert.deepEqual(snap.blocks.map((b: any) => b.task.id), ["gcd", "primes"]);
+		assert.equal(snap.blocks[0].contributions.length, 1);
+		assert.equal(snap.blocks[0].best.source, gcd.variants[2]);
+		assert.equal(snap.blocks[1].best.source, primes.variants[3]);
+		assert.equal(snap.current, snap.blocks[1].blockId);
 		assert.equal(snap.blocks.filter((b: any) => b.active).length, 1);
 		// the log lines of a block belong to it,
-		assert.ok(snap.blocks[1].messages.some((m: any) => m.text.startsWith("Task: ")));
+		assert.ok(snap.blocks[0].messages.some((m: any) => m.text.startsWith("Task: ")));
 	} finally { await srv.close(); }
 });
 
@@ -183,8 +184,11 @@ t("deleting the last block leaves the room empty, also after a restart; old dele
 	let srv = await startServer({ port: 0, bind: "127.0.0.1", dbPath: sqlite });
 	try {
 		const get = async () => (await (await fetch(srv.url + "/api/sessions/empty1")).json()) as any;
+		assert.equal((await get()).blocks.length, 0); // a new room has no block: the first one opens when a task is created or a run starts
+		assert.equal((await post(srv.url, "/api/sessions/empty1/code", { author: "a", source: "function f(){}" })).status, 400, "no code without a block");
+		await post(srv.url, "/api/sessions/empty1/task", { taskId: "primes" });
 		const first = await get();
-		assert.equal(first.blocks.length, 1); // a new room starts with the first catalog task
+		assert.equal(first.blocks.length, 1);
 		await srv.hub.host.write({ type: "ChatMessage", fields: { session: "empty1", author: "system", text: "Task block deleted: The first n primes", ts: Date.now() } } as never, null, 3_600_000);
 		assert.equal((await post(srv.url, "/api/sessions/empty1/delete", { blockId: first.current })).status, 200);
 		const after = await get();
@@ -201,7 +205,8 @@ t("deleting a task block removes its entries; the active block moves on; a runni
 		const get = async () => (await (await fetch(srv.url + "/api/sessions/del1")).json()) as any;
 		const judged = async () => ((await (await fetch(srv.url + "/api/system")).json()) as any).shards.reduce((n: number, x: any) => n + x.judged, 0) as number;
 		const gcd = taskById("gcd")!, primes = taskById("primes")!;
-		await post(srv.url, "/api/sessions/del1/code", { author: "a", source: primes.variants[3]! }); // default block (primes)
+		await post(srv.url, "/api/sessions/del1/task", { taskId: "primes" });
+		await post(srv.url, "/api/sessions/del1/code", { author: "a", source: primes.variants[3]! });
 		await until(async () => (await get()).blocks[0].contributions[0]?.ok !== undefined && (await get()).blocks[0].contributions[0]?.ok !== null);
 		await post(srv.url, "/api/sessions/del1/task", { taskId: "gcd" });
 		await post(srv.url, "/api/sessions/del1/code", { author: "b", source: gcd.variants[2]! });
@@ -247,6 +252,7 @@ t("deleting a block removes its verdicts from the shared space, whichever host j
 		const get = async () => (await (await fetch(srv.url + "/api/sessions/del2")).json()) as any;
 		const judged = async () => ((await (await fetch(srv.url + "/api/system")).json()) as any).shards.reduce((n: number, x: any) => n + x.judged, 0);
 		const good = taskById("primes")!.variants[2]!;
+		await post(srv.url, "/api/sessions/del2/task", { taskId: "primes" });
 		for (let i = 0; i < 4; i++) await post(srv.url, "/api/sessions/del2/code", { author: `p${i}`, source: good });
 		const snap = await until(async () => { const s = await get(); const b = s.blocks[0]; return b.contributions.length === 4 && b.contributions.every((c: any) => c.ok !== null) ? s : false; });
 		assert.equal(await judged(), 4);
@@ -302,6 +308,7 @@ t("a contribution cannot forge its verdict or fool the check by patching builtin
 t("a room with many large contributions stays below the frame limit; left-out code is fetched on demand", async () => {
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
 	try {
+		await post(srv.url, "/api/sessions/big1/task", { taskId: "primes" });
 		const first = (await (await fetch(srv.url + "/api/sessions/big1")).json()) as any;
 		const src = "function firstPrimes(n){return []}\n" + "//".padEnd(15_900, "x");
 		for (let i = 0; i < 70; i++) await srv.hub.host.write({ type: "CodeScore", fields: { session: "big1", blockId: first.current, candidateId: `c${i}`, author: "x", via: "human", gen: 0, ok: false, ms: 5000, source: src, ts: Date.now() + i } } as never, null, 3_600_000);
@@ -379,6 +386,7 @@ t("code that is right only on the small cases does not win the bench", async () 
 t("code full of control characters does not blow the frame up (JSON escapes count)", async () => {
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
 	try {
+		await post(srv.url, "/api/sessions/esc1/task", { taskId: "primes" });
 		const first = (await (await fetch(srv.url + "/api/sessions/esc1")).json()) as any;
 		const src = "\u0001".repeat(6_500); // 39 kB as JSON: as much as a source may take
 		for (let i = 0; i < 60; i++) await srv.hub.host.write({ type: "CodeScore", fields: { session: "esc1", blockId: first.current, candidateId: `e${i}`, author: "\u0002".repeat(40), via: "human", gen: 0, ok: false, ms: 5000, error: "\u0003".repeat(200), source: src, ts: Date.now() + i } } as never, null, 3_600_000);
@@ -679,7 +687,7 @@ t("not happy after a run: reject, give a hint, keep working in the same block", 
 		// keep working: a run without a new task block
 		assert.equal((await post(srv.url, "/api/sessions/cont1/run", run)).status, 200);
 		snap = await until(async () => { const s = await get(); return s.run && !s.run.active && s.blocks.at(-1).contributions.length === 4 ? s : false; }, 60_000);
-		assert.equal(snap.blocks.length, 2); // the default first block and this one: no new block
+		assert.equal(snap.blocks.length, 1); // the one block, changed in place: no new block
 		const b = snap.blocks.at(-1);
 		assert.equal(b.blockId, first.blockId);
 		assert.ok(b.best && !b.contributions.find((c: any) => c.candidateId === b.best.candidateId).vetoed);
@@ -765,7 +773,7 @@ t("the same custom task with another time limit changes the active block in plac
 		assert.equal(before.task.timeoutS, 5);
 		assert.equal((await post(srv.url, "/api/sessions/time1/task", { custom: { ...spec, check: undefined, timeoutS: 30 } })).status, 200);
 		const snap = await get(), b = snap.blocks.at(-1);
-		assert.equal(snap.blocks.length, 2); // the default first block and this one: no new block
+		assert.equal(snap.blocks.length, 1); // the one block, changed in place: no new block
 		assert.equal(b.blockId, before.blockId);
 		assert.equal(b.task.timeoutS, 30);
 		assert.equal(b.task.check, spec.check); // the rule stays

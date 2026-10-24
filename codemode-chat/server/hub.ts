@@ -204,7 +204,7 @@ export class CodeChatHub {
 		const known = !!(await this.host.readIfExists({ type: "CodeRoom", fields: { session: s.id } }, NO_WAIT));
 		if (!known) await this.host.write({ type: "CodeRoom", fields: { session: s.id, ts: Date.now() } }, null, this.#ttl);
 		if (last && task) { s.task = task; s.blockId = String(last.blockId ?? `t${last.ts}`); }
-		else if (!known) await this.#openBlock(s, TASKS[0]!, false); // a new room starts with the first catalog task
+		// a new room has no block: the first one opens when a run starts or a task is created
 		// work items of runs that are gone (no CodeRun: an item an agent held while the run was stopped comes back later)
 		const runs = new Set((await this.host.readAll({ type: "CodeRun", fields: { session: s.id } }, { limit: 20 })).map((e) => String((e.fields as { runId?: unknown }).runId)));
 		const gone = new Map<string, boolean>();
