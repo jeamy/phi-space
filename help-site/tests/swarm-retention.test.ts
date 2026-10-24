@@ -5,7 +5,8 @@ import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { FOREVER, Meter, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
 import { appendHistory, historyPage, mergedHistory, filledHistory } from "../server/social/history.ts";
-import { purgeOldest, retentionConfig } from "../server/social/retention.ts";
+import { purgeOldest, retentionConfig, SWARM_CLAIM_RESULT_MS } from "../server/social/retention.ts";
+import { core, NamedSpace } from "phi-spaces";
 
 async function fixture(maxEntries: number | null) {
 	const host = openOwnMemoryHost();
@@ -170,5 +171,14 @@ test("a channel's posts are found however far back they lie: a filtered page goe
 		assert.deepEqual(all.posts.map((p) => p.postId), ["p-7", "p-6", "p-5", "p-4", "p-3", "p-2", "p-1"]);
 		assert.equal(all.exhausted, true);
 		assert.equal((await filledHistory([f.hub.space], { ...input, channel: undefined })).posts.length, 50, "an unfiltered page is one round as before");
+	} finally { await f.close(); }
+});
+
+test("the swarm space keeps request results for minutes, not the default day (claims would fill maxClaimBytes)", async () => {
+	const f = await fixture(null);
+	try {
+		const s = await f.host.snapshot(NamedSpace, f.hub.spaceId, ctx);
+		assert.equal(core.limitsOf(s!).claimResultMs, SWARM_CLAIM_RESULT_MS);
+		assert.ok(SWARM_CLAIM_RESULT_MS < core.DEFAULT_LIMITS.claimResultMs);
 	} finally { await f.close(); }
 });

@@ -6,6 +6,8 @@ import { core, FOREVER, NamedSpace, spaceDoc } from "phi-spaces";
 import type { BatchHost } from "./batch.ts";
 
 export const DEFAULT_MAX_ENTRIES = 20_000;
+/** How long the swarm spaces keep the result of a finished request (core.Limits.claimResultMs). */
+export const SWARM_CLAIM_RESULT_MS = 15 * 60_000;
 const MIN_KEEP_POSTS = 20;
 const BATCH_POSTS = 50;
 
@@ -38,6 +40,10 @@ export function hostFacts(): HostFacts {
 export async function writeHostInfo(b: BatchHost, facts: HostFacts, cap: number | null): Promise<void> {
 	await b.host.commit(async (tx) => {
 		const now = Date.now(), s = await spaceDoc(tx, b.spaceId, now);
+		// The swarm writes several calls a second, each with a request claim whose result is kept for `claimResultMs`: at the
+		// default of 24 hours that fills maxClaimBytes within hours and new requests are refused. A repeat of a call comes
+		// within seconds, so a few minutes of kept results is all the idempotence the swarm needs.
+		core.setLimits(s, { claimResultMs: SWARM_CLAIM_RESULT_MS }, now);
 		while (core.probe(s, now, { type: "HostInfo" }, null, true).status === "found");
 		core.write(s, now, { type: "HostInfo", fields: { ...facts, cap } }, null, FOREVER);
 	}, b.ctx);
