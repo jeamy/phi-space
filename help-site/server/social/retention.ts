@@ -9,6 +9,8 @@ export const DEFAULT_MAX_ENTRIES = 20_000;
 /** How long the swarm spaces keep the result of a finished request (core.Limits.claimResultMs). */
 export const SWARM_CLAIM_RESULT_MS = 15 * 60_000;
 const MIN_KEEP_POSTS = 20;
+/** The author id of the operator's own posts (SwarmTask kind user): never purged, nor are the replies under them. */
+const HUMAN_AUTHOR = "agent-you";
 const BATCH_POSTS = 50;
 
 export interface RetentionConfig { cap: number; low: number }
@@ -77,23 +79,35 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 		seen.add(id); newestFirst.push(n); id = String(n.fields.next ?? "");
 	}
 	const oldest = newestFirst.reverse();
+	// What stays: posts of people (the operator's own) and every reply under them, however deep the thread: the swarm's
+	// own posts are what the cap is for.
+	const info = oldest.map((n) => { try { const p = JSON.parse(String(n.fields.post)); return { id: String(p.postId ?? ""), author: String(p.author ?? ""), replyTo: p.replyTo ? String(p.replyTo) : "" }; } catch { return { id: "", author: "", replyTo: "" }; } });
+	const children = new Map<string, string[]>();
+	for (const i of info) if (i.replyTo) (children.get(i.replyTo) ?? children.set(i.replyTo, []).get(i.replyTo)!).push(i.id);
+	const keep = new Set<string>();
+	const todo = info.filter((i) => i.author === HUMAN_AUTHOR && i.id).map((i) => i.id);
+	for (let id = todo.pop(); id !== undefined; id = todo.pop()) if (!keep.has(id)) { keep.add(id); todo.push(...(children.get(id) ?? [])); }
 	const target = visible - cfg.low;
 	const victims: Array<{ node: string; refs: Ref[]; postId: string }> = [];
 	let planned = 0;
 	for (let i = 0; i < oldest.length - MIN_KEEP_POSTS && planned < target; i++) {
-		const node = oldest[i]!;
-		let postId = "";
-		try { postId = String(JSON.parse(String(node.fields.post)).postId ?? ""); } catch { /* node without a readable post: only the node goes */ }
+		const node = oldest[i]!, postId = info[i]!.id;
+		if (postId && keep.has(postId)) continue;
 		const refs: Ref[] = [{ id: node.id, type: "PostHistoryNode" }, ...(posts.has(postId) ? [posts.get(postId)!] : []), ...(likes.get(postId) ?? [])];
 		victims.push({ node: node.id, refs, postId });
 		planned += refs.length;
 	}
 	if (!victims.length) return null;
 
+	// The history chain runs from the newest node to the oldest (`next` points to the older one). A node that goes is
+	// unlinked: the next newer node takes over its `next`, so survivors in the middle (the kept threads) stay chained.
+	const olderOf = new Map<string, string>(), newerOf = new Map<string, string>();
+	oldest.forEach((n, i) => { olderOf.set(n.id, String(n.fields.next ?? "")); if (i + 1 < oldest.length) newerOf.set(n.id, oldest[i + 1]!.id); });
 	let removed = 0;
 	const postIds: string[] = [];
 	for (let a = 0; a < victims.length; a += BATCH_POSTS) {
-		const part = victims.slice(a, a + BATCH_POSTS), kept = oldest[a + part.length]!;
+		const part = victims.slice(a, a + BATCH_POSTS);
+		const links = part.map((v) => { const l = { node: v.node, newer: newerOf.get(v.node) ?? "", older: olderOf.get(v.node) ?? "" }; if (l.newer) olderOf.set(l.newer, l.older); if (l.older) newerOf.set(l.older, l.newer); return l; });
 		removed += await b.host.commit(async (tx) => {
 			const now = Date.now(), s = await spaceDoc(tx, b.spaceId, now);
 			let n = 0;
@@ -104,9 +118,13 @@ export async function purgeOldest(b: BatchHost, cfg: RetentionConfig): Promise<P
 					else if (r.id === v.node) throw new Error("history node unavailable");
 				}
 			}
-			const at = s.entries.findIndex((e) => e.id === kept.id), edge = s.entries[at];
-			if (!edge || String(edge.fields.next ?? "") !== part[part.length - 1]!.node) throw new Error("history chain changed");
-			s.entries[at] = { ...edge, fields: { ...edge.fields, next: "" } }; // records are values: replaced, never changed
+			const going = new Set(part.map((v) => v.node));
+			for (const l of links) {
+				if (!l.newer || going.has(l.newer)) continue; // the newest node never goes (MIN_KEEP_POSTS); a neighbour that goes too is not relinked
+				const at = s.entries.findIndex((e) => e.id === l.newer), edge = s.entries[at];
+				if (!edge) throw new Error("history chain changed");
+				s.entries[at] = { ...edge, fields: { ...edge.fields, next: l.older } }; // records are values: replaced, never changed
+			}
 			core.touch(s, now);
 			return n;
 		}, b.ctx);

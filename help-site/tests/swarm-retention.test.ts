@@ -182,3 +182,32 @@ test("the swarm space keeps request results for minutes, not the default day (cl
 		assert.ok(SWARM_CLAIM_RESULT_MS < core.DEFAULT_LIMITS.claimResultMs);
 	} finally { await f.close(); }
 });
+
+test("retention keeps the operator's own posts and every reply under them; the history chain stays whole around them", async () => {
+	const f = await fixture(null);
+	try {
+		const add = async (i: number, over: Partial<SwarmPost> = {}) => {
+			const post: SwarmPost = { postId: `post-${i}`, seq: i, taskId: `t-${i}`, author: "agent-9", handle: "a", name: "A", hue: 0, channel: "home", text: `post ${i}`, replyTo: null, replyToHandle: null, at: 1_000 + i, likes: 0, replies: 0, imageSeed: null, imageAlt: null, imageUrl: null, ...over };
+			const txn = await f.hub.space.createTransaction(30_000);
+			await appendHistory(f.hub.space, post, txn.id);
+			await f.hub.space.write({ type: "Post", fields: { ...post } }, txn.id, FOREVER);
+			await f.hub.space.commit(txn.id);
+		};
+		await add(1);
+		await add(2, { author: "agent-you", channel: "meins" });          // the operator's post
+		await add(3, { replyTo: "post-2" });                              // an AI reply under it
+		await add(4, { replyTo: "post-3" });                              // a reply under the reply
+		for (let i = 5; i <= 80; i++) await add(i);
+		const r = (await purgeOldest(f.b, { cap: 60, low: 40 }))!;
+		assert.ok(r && r.removed > 0);
+		const left = (await f.hub.space.readAll({ type: "Post" }, { limit: 1000 })).map((e) => String(e.fields.postId));
+		for (const id of ["post-2", "post-3", "post-4"]) assert.ok(left.includes(id), `${id} stays`);
+		assert.ok(!left.includes("post-1") && !left.includes("post-5"), "the swarm's own old posts go");
+		const page = await historyPage(f.hub.space, { beforeAt: Infinity, beforeId: "", limit: 512 });
+		assert.equal(page.candidates.length, left.length, "paging walks the whole kept chain");
+		assert.equal(page.next, "", "and ends cleanly");
+		assert.deepEqual(page.candidates.slice(-3).map((c) => c.post.postId), ["post-4", "post-3", "post-2"], "the kept thread sits at the old end, newest first");
+		const own = await historyPage(f.hub.space, { beforeAt: Infinity, beforeId: "", limit: 50, channel: "meins" });
+		assert.deepEqual(own.candidates.map((c) => c.post.postId), ["post-2"]);
+	} finally { await f.close(); }
+});
