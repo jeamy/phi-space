@@ -13,9 +13,9 @@ import { helpUrl, parseHelpView, resourceView } from "../client/lib/help-navigat
 import { startIndexLoad } from "../client/lib/index-load.ts";
 import { runTupleBasics } from "../examples/tuple-basics.ts";
 import { refreshMirror, type LiveMirror } from "../examples/shared/live-mirror.ts";
-import { SnapshotExpired, type Changes, type Page } from "../../src/core.ts";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { FOREVER, Meter, PhiSpaces, openOwnMemoryHost } from "../../src/index.ts";
+import { SnapshotExpired, type Changes, type Page } from "phi-spaces/core";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { FOREVER, Meter, PhiSpaces, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 import { previousArticlePaths, retireGeneratedArticles } from "../scripts/generated-articles.ts";
 

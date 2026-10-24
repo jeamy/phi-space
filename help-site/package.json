@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "next": "16.4.0",
+    "phi-spaces": "file:..",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

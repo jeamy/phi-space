@@ -6,7 +6,7 @@
 //     `Post`/`Like` results, enforced by a server-side CompletionProfile
 //   - `AgentPulse` entries with bounded leases model "who is online" (lease reaping)
 //   - The browser feed consumes `readPage` snapshot + `changes(rev)` deltas live
-import type { Context } from "../../../src/context.ts";
+import type { Context } from "phi-spaces/context";
 import {
 	createSpace,
 	FOREVER,
@@ -17,10 +17,10 @@ import {
 	type RequestRef,
 	type SpaceHost,
 	type SpaceLike,
-} from "../../../src/index.ts";
+} from "phi-spaces";
 import type { WsConnection } from "../ws.ts";
 import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
-import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "../../../src/core.ts";
+import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "phi-spaces/core";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
 import { hostFacts, purgeOldest, retentionConfig, writeHostInfo, type HostFacts, type PurgeNotice, type RetentionConfig } from "./retention.ts";
 

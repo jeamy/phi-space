@@ -8,7 +8,7 @@
 //   CODEMODE_HOST_NAME=big                         name in the system bar and on the tiles (default: hostname)
 import "./env.ts";
 import { pathToFileURL } from "node:url";
-import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";

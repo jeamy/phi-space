@@ -2,7 +2,7 @@
 // knows about it, handing in a contribution, leaving a note. Plain functions over a SpaceLike, so the web process and
 // the agent processes share them; a `txn` lets an agent do them inside the transaction of its work item.
 import { randomBytes } from "node:crypto";
-import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { sourceProblem, type Verdict } from "./judge.ts";
 import { clipWords, type Attempt, type Earlier, type Finding, type Note, type Role, type Usage } from "./llm.ts";
 import { EARLIER_CAP, validMs } from "./results.ts";

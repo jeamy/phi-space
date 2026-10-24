@@ -15,8 +15,8 @@ import { runStageV5 } from "../examples/v5-federated-cluster/run.ts";
 import { runStageV6 } from "../examples/v6-mobile-control/run.ts";
 import { startHelpServer } from "../server/index.ts";
 import type { AddressInfo } from "node:net";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { Meter, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport, openOwnMemoryHost } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, RemoteSpace, socketTransport, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub, SWARM_ALIAS } from "../server/social/swarm.ts";
 import { ALL_ARTICLES } from "../scripts/corpus.ts";
 

@@ -1,8 +1,8 @@
 // Durable newest-first linked index. Nodes are committed with their Post; cursors visit bounded nodes.
-import type { Context } from "../../../src/context.ts";
-import { core, FOREVER, ResourceExhausted, spaceDoc, type SpaceHost, type SpaceLike } from "../../../src/index.ts";
+import type { Context } from "phi-spaces/context";
+import { core, FOREVER, ResourceExhausted, spaceDoc, type SpaceHost, type SpaceLike } from "phi-spaces";
 import type { SwarmPost } from "./swarm.ts";
-import { UnsupportedOperation } from "../../../src/remote.ts";
+import { UnsupportedOperation } from "phi-spaces";
 
 /** Stop a traversal on deadline/disconnect; an already sent read may finish, but no next read is issued. */
 export async function historyRead<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {

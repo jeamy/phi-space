@@ -11,7 +11,7 @@ import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { NO_WAIT, TransactionError, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { sourceProblem } from "./judge.ts";
 import { adminModels, callLimits, metered, setCallGate, llmContribution, llmCriteria, llmCritique, llmInfo, llmJudge, llmModels, llmPropose, llmResearch, llmReviewCriteria, llmVerifier, llmVote, setAllowedModels, setLlm, type Usage } from "./llm.ts";
 import { callArgs, voteScores, type CallKind, type LlmCall } from "./context.ts";

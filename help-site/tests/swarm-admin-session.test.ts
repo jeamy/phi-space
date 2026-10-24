@@ -1,8 +1,8 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { Meter, openOwnMemoryHost } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { Meter, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub } from "../server/social/swarm.ts";
 
 async function connect(opts: ConstructorParameters<typeof SocialSwarmHub>[3]) {

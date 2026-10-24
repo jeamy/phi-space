@@ -1,6 +1,6 @@
 // Trusted, local worker path: Space semantics inside actual Durable commit boundaries.
-import type { Context } from "../../../src/context.ts";
-import { core, FOREVER, NamedSpace, spaceDoc, type SpaceHost } from "../../../src/index.ts";
+import type { Context } from "phi-spaces/context";
+import { core, FOREVER, NamedSpace, spaceDoc, type SpaceHost } from "phi-spaces";
 import type { SwarmPost } from "./swarm.ts";
 
 export type BatchHost = { host: SpaceHost; spaceId: string; ctx: Context };

@@ -1,6 +1,6 @@
 // Atomic client projection: publish only a complete snapshot plus contiguous deltas.
-import type { SpaceLike } from "../../../src/index.ts";
-import { SnapshotExpired, RevisionAhead, type EntryView } from "../../../src/core.ts";
+import type { SpaceLike } from "phi-spaces";
+import { SnapshotExpired, RevisionAhead, type EntryView } from "phi-spaces/core";
 
 export type LiveMirror = { streamId: string; rev: number; entries: Map<string, EntryView> };
 type Reader = Pick<SpaceLike, "readPage" | "changes">;

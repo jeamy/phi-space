@@ -26,13 +26,13 @@ PHI_SPACES_LLM=0 node --experimental-strip-types help-site/examples/tuple-basics
 
 ## Vollständiges, getestetes Programm {#complete-program}
 
-Dies ist der Inhalt von help-site/examples/tuple-basics.ts; relative Imports gelten an genau diesem Speicherort. Der Build übernimmt denselben Quelltext, der durch Typecheck und Laufzeittest geprüft wird.
+Dies ist der Inhalt von help-site/examples/tuple-basics.ts; die Imports gehen über das Paket phi-spaces, das die help-site per `file:..` einbindet. Der Build übernimmt denselben Quelltext, der durch Typecheck und Laufzeittest geprüft wird.
 
 ```ts
 // Complete, model-free tutorial. Run from the repository root with node --experimental-strip-types.
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { FOREVER, NO_WAIT, PhiSpaces, openOwnMemoryHost, startService } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { FOREVER, NO_WAIT, PhiSpaces, openOwnMemoryHost, startService } from "phi-spaces";
 
 export async function runTupleBasics() {
 	const host = openOwnMemoryHost();

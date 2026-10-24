@@ -7,8 +7,8 @@
 //   - Transactional ChatTask worker enforced by CompletionProfile
 //   - Conversation forking up to a selected message sequence number
 
-import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createSpace, Meter, PhiSpaces, openOwnMemoryHost, startService } from "../../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { createSpace, Meter, PhiSpaces, openOwnMemoryHost, startService } from "phi-spaces";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 import { pathToFileURL } from "node:url";
 

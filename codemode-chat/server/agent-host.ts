@@ -7,7 +7,7 @@
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { announce, awaitWork, connectSpace, entryLeaseMs, keepAlive } from "./space.ts";
-import { NO_WAIT } from "../../src/index.ts";
+import { NO_WAIT } from "phi-spaces";
 import { loadCodemode } from "./judge.ts";
 import { agentLoop, ITEM_LEASE_MS, type Slot } from "./run.ts";
 import { modelInfoOf } from "./room.ts";

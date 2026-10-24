@@ -4,8 +4,8 @@
 // and demonstrates cross-member search plus Phase 3 `EntryReplicationController` (HLC + LWW) for Presence.
 
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { FOREVER, PhiSpaces, Space, openOwnMemoryHost, startService } from "../../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { FOREVER, PhiSpaces, Space, openOwnMemoryHost, startService } from "phi-spaces";
 import { FederatedSpace, type FederationIO } from "../../../src/federated-space.ts";
 import { partitionRouterId } from "../../../src/federation-journals.ts";
 import { RouterController } from "../../../src/router.ts";

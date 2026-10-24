@@ -19,7 +19,7 @@
 // A call's usage is booked on the run in the commit that takes its LlmResult (success or failure), so exactly once.
 // The CodeRun counts the items not done yet (`pending`) in the same commits that write and finish them: the run is over
 // when that count is 0, whatever another agent holds right now.
-import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { limitOf, maxTimeoutMs } from "./judge.ts";
 import { criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
 import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";

@@ -11,10 +11,10 @@ import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { openOwnMemoryHost } from "../../src/store/host.ts";
-import { openSqliteHost } from "../../src/store/sqlite.ts";
-import { PhiSpaces, serveSpace, SpaceService, StaticIdentity, startService } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { openOwnMemoryHost } from "phi-spaces/store/host";
+import { openSqliteHost } from "phi-spaces/store/sqlite";
+import { PhiSpaces, serveSpace, SpaceService, StaticIdentity, startService } from "phi-spaces";
 import { announce, DEFAULT_SPACE, parseTarget } from "./space.ts";
 
 const MiB = 1024 * 1024;

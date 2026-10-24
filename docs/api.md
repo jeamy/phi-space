@@ -5,6 +5,28 @@ des lokalen Clients `PhiSpaces`, des Remote-Clients `RemoteSpace` und den
 Servicevertrag. Sie beschreibt keine Federation-Garantie; dafür ist
 [federation-plan-v3.md](federation-plan-v3.md) maßgeblich.
 
+## Paket und Unterpfade
+
+Projekte, die auf phi-spaces aufbauen (codemode-chat, help-site, künftige), binden die Bibliothek als Paket ein:
+`"phi-spaces": "file:.."` in ihren `dependencies` (npm legt einen Symlink an) und Importe über den Paketnamen.
+`exports` zeigt direkt auf die TypeScript-Quellen; es gibt keinen Build-Schritt, Node entfernt die Typen
+(`--experimental-strip-types`), weil der Symlink auf den echten Pfad außerhalb von `node_modules` auflöst.
+
+| Import | Quelle | Inhalt |
+| --- | --- | --- |
+| `phi-spaces` | `src/index.ts` | Öffentliche API (`PhiSpaces`, `RemoteSpace`, `serveSpace`, `SpaceService`, Fehler, …) |
+| `phi-spaces/context` | `src/context.ts` | `Context`, `BACKGROUND_CONTEXT` |
+| `phi-spaces/core` | `src/core.ts` | Reine Semantik: `matches`, Fehlerklassen wie `SnapshotExpired`, Typen |
+| `phi-spaces/store/host` | `src/store/host.ts` | Eigener Store im Speicher (`openOwnMemoryHost`) |
+| `phi-spaces/store/sqlite` | `src/store/sqlite.ts` | Eigener SQLite-Store (`openSqliteHost`) |
+| `phi-spaces/store/documents` | `src/store/documents.ts` | Dokument-Helfer des Stores |
+
+Nur diese Unterpfade sind Vertrag; ein neuer Unterpfad ist eine API-Änderung und gehört in diese Tabelle.
+`npm run check:package` (auch Teil von `npm test`) lehnt in solchen Projekten relative Importe nach `src/` und
+nicht exportierte Unterpfade ab. Ausnahmen: das Agentenpaket `agent/` (greift auf Föderations-Interna zu) und zwei
+einzeln begründete Dateien der help-site (`scripts/package-imports.mjs`, `ALLOWED`). `pi-codemode` ist nur noch
+Entwicklungsabhängigkeit des Roots (Beispiele); wer den Sandbox braucht, führt ihn selbst.
+
 ## Gemeinsame Typen
 
 ```ts

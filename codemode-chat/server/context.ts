@@ -3,7 +3,7 @@
 // model process reads the task, the team's attempts, notes, plans, critiques, findings and earlier results itself. So a
 // call entry stays small whatever the room holds (the space caps an entry at 64 KiB, and the context of one call can be
 // several times that). Calls about a task that has no block yet (its check rule, its criteria) carry the task's spec.
-import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { HELD_WAIT_MS } from "./space.ts";
 import type { Attempt, CritiqueRef, Earlier, Finding, PlanRef, Role, TeamContext, Usage } from "./llm.ts";
 import { blockTask, earlierFor, findingsOf, rankedProposals, teamView } from "./room.ts";

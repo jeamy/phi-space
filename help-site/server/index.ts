@@ -31,8 +31,8 @@ function loadDotEnvIfPresent(): void {
 	}
 }
 loadDotEnvIfPresent();
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { Meter, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, type ListenTarget } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { Meter, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, type ListenTarget } from "phi-spaces";
 import { WebAdminController } from "./admin/admin-controller.ts";
 import { SpaceChatHub, type StageId } from "./space-chat/stage-runner.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";

@@ -11,9 +11,9 @@
 //   - Live alerts (`collectAlerts`) and audit log (`auditLog`)
 
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, generateKeyPairSync, randomBytes, scryptSync, sign, timingSafeEqual } from "node:crypto";
-import { defineDoc } from "../../../src/store/documents.ts";
+import { defineDoc } from "phi-spaces/store/documents";
 import { availableParallelism, freemem, totalmem } from "node:os";
-import type { Context } from "../../../src/context.ts";
+import type { Context } from "phi-spaces/context";
 import {
 	auditLog,
 	CapabilityDirectory,
@@ -40,7 +40,7 @@ import {
 	spaceDoc,
 	canonicalJson,
 	type WorkerKind,
-} from "../../../src/index.ts";
+} from "phi-spaces";
 import {
 	configureGatedSieveSpace,
 	normalizeSieveRunConfig,

@@ -13,7 +13,7 @@ import {
 	NO_WAIT,
 	type CompletionProfile,
 	type SpaceLike,
-} from "../../../src/index.ts";
+} from "phi-spaces";
 
 type EntryView = core.EntryView;
 

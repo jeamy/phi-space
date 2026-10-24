@@ -10,8 +10,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { createSpace, Meter, PhiSpaces, openSqliteHost, startService } from "../../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { createSpace, Meter, PhiSpaces, openSqliteHost, startService } from "phi-spaces";
 import { SpaceChatEngine } from "../shared/chat-core.ts";
 
 export async function runStageV2(options: { dbDir?: string; keepDir?: boolean } = {}) {

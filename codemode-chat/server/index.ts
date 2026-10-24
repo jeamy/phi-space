@@ -16,7 +16,7 @@ import { MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { requestExec } from "./exec.ts";
 import { CodeChatHub } from "./hub.ts";
 import { announce, connectSpace } from "./space.ts";
-import { NO_WAIT } from "../../src/index.ts";
+import { NO_WAIT } from "phi-spaces";
 import { upgradeWebSocket } from "./ws.ts";
 import { TASKS } from "./tasks.ts";
 

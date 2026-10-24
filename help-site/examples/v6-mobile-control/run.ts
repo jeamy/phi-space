@@ -8,8 +8,8 @@
 //   5. Monitoring alerts (`collectAlerts`) and audit logs (`auditLog`)
 
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
-import { auditLog, collectAlerts, CONTROL_SPACE, createSpace, enrollQr, FOREVER, generateKey, hashToken, localRunMember, Meter, newEnrollToken, PhiSpaces, RunController, SpaceLifecycle, startService, WorkerAssignments, WorkerSupervisor, type WorkerKind, openOwnMemoryHost } from "../../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { auditLog, collectAlerts, CONTROL_SPACE, createSpace, enrollQr, FOREVER, generateKey, hashToken, localRunMember, Meter, newEnrollToken, PhiSpaces, RunController, SpaceLifecycle, startService, WorkerAssignments, WorkerSupervisor, type WorkerKind, openOwnMemoryHost } from "phi-spaces";
 import {
 	configureGatedSieveSpace,
 	normalizeSieveRunConfig,

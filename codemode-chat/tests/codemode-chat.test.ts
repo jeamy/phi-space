@@ -404,7 +404,7 @@ t("code full of control characters does not blow the frame up (JSON escapes coun
 
 test("CODEMODE_TTL_HOURS: hours to a lease, 0 = no expiry, garbage refused", async () => {
 	const { entryLeaseMs } = await import("../server/space.ts");
-	const { FOREVER } = await import("../../src/index.ts");
+	const { FOREVER } = await import("phi-spaces");
 	assert.equal(entryLeaseMs(undefined), 24 * 3600_000);
 	assert.equal(entryLeaseMs(""), 24 * 3600_000);
 	assert.equal(entryLeaseMs("168"), 168 * 3600_000);
@@ -1312,7 +1312,7 @@ t("a person's thumbs-up counts as earlier material in its own room only; the jud
 
 test("defaults of the new limits: archive 30 days, visitor budget, address allowance, wait for a judge of another model", async () => {
 	const { earlierLeaseMs, runBudgetTokens, ipTokensPerDay, crossWaitMs } = await import("../server/hub.ts");
-	const { FOREVER } = await import("../../src/index.ts");
+	const { FOREVER } = await import("phi-spaces");
 	assert.equal(earlierLeaseMs(), 30 * 86_400_000);
 	process.env.CODEMODE_EARLIER_DAYS = "0"; assert.equal(earlierLeaseMs(), FOREVER);
 	process.env.CODEMODE_EARLIER_DAYS = "2"; assert.equal(earlierLeaseMs(), 2 * 86_400_000);

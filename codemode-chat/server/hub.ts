@@ -17,7 +17,7 @@
 // carries how many cases passed and what each case returned, so agents can build on attempts that got close: a run is
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
 import { randomBytes } from "node:crypto";
-import { FOREVER, NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, type Codemode, type Verdict } from "./judge.ts";
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";

@@ -16,8 +16,8 @@
 import { dirname, join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget, openOwnMemoryHost, openSqliteHost } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget, openOwnMemoryHost, openSqliteHost } from "phi-spaces";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
 import { swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
 

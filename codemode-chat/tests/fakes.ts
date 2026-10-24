@@ -1,7 +1,7 @@
 // The fake model teams of the tests, loaded by the model process (CODEMODE_LLM_MODULE, CODEMODE_TEST=1) and picked by
 // room: every test runs in a room of its own. They talk to the test only through the space: what they saw goes into
 // FakeCall entries (`log`), and a team that must hang until the test says so waits for a FakeGate entry.
-import type { SpaceLike } from "../../src/index.ts";
+import type { SpaceLike } from "phi-spaces";
 import { taskById } from "../server/tasks.ts";
 import { callSignal } from "../server/llm.ts";
 

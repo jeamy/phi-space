@@ -2,7 +2,7 @@
 // admission at a time per limit (its QuotaLock, taken under a transaction and written back), and every admitted use is
 // a QuotaUse entry, counted per minute and per day in that same transaction. So two model processes never both take
 // the last call of a day. A day is the UTC calendar day.
-import type { SpaceLike } from "../../src/index.ts";
+import type { SpaceLike } from "phi-spaces";
 import { StillHeld, takeExisting } from "./space.ts";
 import { today } from "./limits.ts";
 

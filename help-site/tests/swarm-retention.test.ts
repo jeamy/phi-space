@@ -1,8 +1,8 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { FOREVER, Meter, openOwnMemoryHost } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { FOREVER, Meter, openOwnMemoryHost } from "phi-spaces";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
 import { appendHistory, historyPage } from "../server/social/history.ts";
 import { purgeOldest, retentionConfig } from "../server/social/retention.ts";

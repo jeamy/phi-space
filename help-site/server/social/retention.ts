@@ -2,7 +2,7 @@
 // database. Commit and scan costs are O(live entries) per Space, so the limit is per Space/database. Above the cap the
 // oldest posts go together with their history nodes and likes (ChannelCount totals stay lifetime counters).
 import os from "node:os";
-import { core, FOREVER, NamedSpace, spaceDoc } from "../../../src/index.ts";
+import { core, FOREVER, NamedSpace, spaceDoc } from "phi-spaces";
 import type { BatchHost } from "./batch.ts";
 
 export const DEFAULT_MAX_ENTRIES = 20_000;

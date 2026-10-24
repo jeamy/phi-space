@@ -8,7 +8,7 @@
 //   ExecStop     { execId }                                the page stopped the run
 //   ExecRun      { execId, session, host }                 a run in progress (renewed while it runs)
 import { randomBytes } from "node:crypto";
-import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import type { Codemode } from "./judge.ts";
 import { execTarget } from "./room.ts";
 import { EXEC_TIMEOUT_MS, execRunning, execute, type ExecEvent } from "./runner.ts";

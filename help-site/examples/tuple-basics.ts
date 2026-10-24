@@ -1,7 +1,7 @@
 // Complete, model-free tutorial. Run from the repository root with node --experimental-strip-types.
 import { pathToFileURL } from "node:url";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { FOREVER, NO_WAIT, PhiSpaces, openOwnMemoryHost, startService } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
+import { FOREVER, NO_WAIT, PhiSpaces, openOwnMemoryHost, startService } from "phi-spaces";
 
 export async function runTupleBasics() {
 	const host = openOwnMemoryHost();

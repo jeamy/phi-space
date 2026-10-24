@@ -6,7 +6,7 @@ import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { startServer as startWeb } from "../server/index.ts";
 import { connectSpace } from "../server/space.ts";
-import type { SpaceLike } from "../../src/index.ts";
+import type { SpaceLike } from "phi-spaces";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;

@@ -2,7 +2,7 @@
 // for a custom task, or the criteria of a text task and three agents review them. The model calls go to the model
 // process; the cross-check of a rule runs in this process's sandbox. The answer is a TaskReady entry, written in the
 // same transaction that takes the request.
-import { NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { plain, sandboxSlot, testRule, type Codemode } from "./judge.ts";
 import { addUsage, clipWords, NO_USAGE, tallyCriteria, type CriterionVote, type Usage } from "./llm.ts";
 import { callModel } from "./run.ts";

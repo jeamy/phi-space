@@ -2,7 +2,7 @@
 // to it, how long a room's entries live, and the Process entry each process keeps there while it runs.
 import os from "node:os";
 import { randomBytes } from "node:crypto";
-import { FOREVER, RemoteSpace, socketTransport, type ListenTarget, type SpaceLike, type Taken, type Template } from "../../src/index.ts";
+import { FOREVER, RemoteSpace, socketTransport, type ListenTarget, type SpaceLike, type Taken, type Template } from "phi-spaces";
 
 /** Where the space host listens and every other process connects, unless CODEMODE_LISTEN / CODEMODE_SPACE say else. */
 export const DEFAULT_SPACE = "unix:/tmp/codemode-space.sock";

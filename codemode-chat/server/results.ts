@@ -4,7 +4,7 @@
 // first CodeBest of a block is written `unique`, so of two judges that both find none, the second tries again.
 // CodeBest names the verdict (candidate and time) and carries no code: the code is in the CodeScore and the archive,
 // and a judge's commit (verdict, best, archive) has to fit the space's commit limit.
-import { FOREVER, NO_WAIT, type SpaceLike } from "../../src/index.ts";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { isText, type Task } from "./tasks.ts";
 
 /** Accepted results kept as material for later tasks (one per block); the oldest give way. */

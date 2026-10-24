@@ -842,7 +842,7 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 										className="sf-input"
 										type="password"
 										autoFocus
-										placeholder={locale === "de" ? "Admin-Passwort (.env)" : "Admin password (.env)"}
+										placeholder={locale === "de" ? "Admin-Passwort" : "Admin password (.env)"}
 										value={adminPwd}
 										onChange={(e) => setAdminPwd(e.target.value)}
 									/>
