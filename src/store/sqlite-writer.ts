@@ -11,7 +11,7 @@ import type { MessagePort } from "node:worker_threads";
 import { applyOps, prepareOps, type OpStatements, type WriteOp } from "./sqlite-ops.ts";
 
 export type { WriteOp };
-export type WriterRequest = { type: "open"; path: string; synchronous: "FULL" | "NORMAL" } | { type: "write"; batch: number; ops: WriteOp[] } | { type: "close" };
+export type WriterRequest = { type: "open"; path: string; synchronous: "FULL" | "NORMAL"; maxPages?: number } | { type: "write"; batch: number; ops: WriteOp[] } | { type: "close" };
 export type WriterReply = { type: "opened" } | { type: "written"; batch: number } | { type: "failed"; batch: number | null; error: string } | { type: "closed" };
 
 /** The writer thread's code. */
@@ -33,6 +33,7 @@ export function writerMain(parentPort: MessagePort, DatabaseSync: typeof import(
 			try {
 				db = new DatabaseSync(m.path, { timeout: 10_000 });
 				db.exec(`PRAGMA journal_mode = WAL; PRAGMA synchronous = ${m.synchronous};`);
+				if (m.maxPages) db.exec(`PRAGMA max_page_count = ${Math.floor(m.maxPages)};`); // tests: a disk of that size
 				stmts = prepareOps(db);
 				reply({ type: "opened" });
 			} catch (e) { reply({ type: "failed", batch: null, error: (e as Error).message }); }

@@ -371,12 +371,12 @@ test("a disk map's pages walk every record once in key order, with what commits 
 
 test("a memory budget drops the documents untouched for longest and reads them again", async () => {
 	const file = fresh();
-	let h = await openSqliteHost(file, { memoryBudget: 250 });
+	let h = await openSqliteHost(file, { memoryBudget: 250, hotMs: 0 });
 	const space = (n: number, host = h) => new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: `s${n}` });
 	for (let i = 0; i < 6; i++) await h.commit((tx) => createSpace(tx, `s${i}`, Date.now()), ctx);
 	for (let i = 0; i < 6; i++) for (let k = 0; k < 100; k++) await space(i).write({ type: "Item", fields: { i, k } }, null, FOREVER);
 	await h.close(ctx);
-	h = await openSqliteHost(file, { memoryBudget: 250 });
+	h = await openSqliteHost(file, { memoryBudget: 250, hotMs: 0 });
 	// 6 spaces of 100 entries do not fit 250: the weight stays near the budget however many are touched
 	for (let round = 0; round < 3; round++) for (let i = 0; i < 6; i++) {
 		assert.equal(await space(i).count({ type: "Item" }), 100);

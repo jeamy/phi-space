@@ -120,7 +120,12 @@ export class OwnStoreHost implements ClosableStoreHost {
 	readonly #unsettled = new Map<string, number>();
 	#running = false;
 
-	constructor(ledger: Ledger, o: { memoryBudget?: number } = {}) { this.#ledger = ledger; this.#budget = ledger.forget ? (o.memoryBudget ?? Infinity) : Infinity; }
+	/** When each document was last used: one used within `hotMs` is not dropped, so a working set larger than the budget
+	 *  costs memory instead of a reload for every commit. */
+	readonly #usedAt = new Map<string, number>();
+	readonly #hotMs: number;
+
+	constructor(ledger: Ledger, o: { memoryBudget?: number; hotMs?: number } = {}) { this.#ledger = ledger; this.#budget = ledger.forget ? (o.memoryBudget ?? Infinity) : Infinity; this.#hotMs = o.hotMs ?? 250; }
 
 	#weigh(a: string, doc: StoredDoc | null, parts?: AnyDef["parts"]): void {
 		this.#weight -= this.#weights.get(a) ?? 0;
@@ -137,9 +142,11 @@ export class OwnStoreHost implements ClosableStoreHost {
 	 *  by a commit not yet durable, or is in use by the commit running. Between commits only. */
 	#trim(): void {
 		if (this.#weight <= this.#budget || this.#running) return;
+		const now = Date.now();
 		for (const a of [...this.#docs.keys()]) {
 			if (this.#weight <= this.#budget) break;
-			if (this.#watches.get(a)?.size || this.#unsettled.has(a)) continue;
+			if (this.#watches.get(a)?.size || this.#unsettled.has(a) || now - (this.#usedAt.get(a) ?? 0) < this.#hotMs) continue;
+			this.#usedAt.delete(a);
 			const d = this.#docs.get(a);
 			this.#docs.delete(a);
 			this.#weigh(a, null);
@@ -154,6 +161,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 	}
 	#committed(kind: string, key: string | null, parts?: AnyDef["parts"]): StoredDoc | null {
 		const a = addr(kind, key);
+		if (this.#budget !== Infinity) this.#usedAt.set(a, Date.now());
 		if (!this.#docs.has(a)) { const d = this.#ledger.load(kind, key, parts); this.#docs.set(a, d); this.#weigh(a, d, parts); }
 		else if (this.#budget !== Infinity) { const d = this.#docs.get(a)!; this.#docs.delete(a); this.#docs.set(a, d); } // most recently used last
 		return this.#docs.get(a)!;
@@ -241,7 +249,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 		for (const r of records) deepFreeze(r);
 		// the next commit builds on this one at once; readers and watches see it once it is durable
 		const touched: string[] = [];
-		for (const d of set.put) { const a = addr(d.kind, d.key), doc = { kind: d.kind, key: d.key, version: d.version, value: d.value }; this.#docs.delete(a); this.#docs.set(a, doc); this.#weigh(a, doc, d.parts ?? drafts.get(a)?.def.parts); touched.push(a); }
+		for (const d of set.put) { const a = addr(d.kind, d.key), doc = { kind: d.kind, key: d.key, version: d.version, value: d.value }; this.#docs.delete(a); this.#docs.set(a, doc); this.#usedAt.set(a, Date.now()); this.#weigh(a, doc, d.parts ?? drafts.get(a)?.def.parts); touched.push(a); }
 		for (const r of set.retired) { const a = addr(r.kind, r.key); this.#docs.set(a, null); this.#weigh(a, null); touched.push(a); }
 		for (const a of touched) this.#unsettled.set(a, (this.#unsettled.get(a) ?? 0) + 1);
 		const settled = () => { for (const a of touched) { const n = this.#unsettled.get(a)! - 1; if (n > 0) this.#unsettled.set(a, n); else this.#unsettled.delete(a); } };

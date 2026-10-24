@@ -22,16 +22,20 @@ import { writerSource, type WriteOp, type WriterReply, type WriterRequest } from
 /** The format of the file; a newer one is refused, an older one is migrated (1 to 2: the index columns of parts). */
 export const FORMAT_VERSION = 2;
 
-/** Records of the parts of the documents the host keeps in memory (a Space counts its entries twice here; RSS stays near 280 MB for 20 Spaces of 10 000 entries at this value). */
-export const DEFAULT_MEMORY_BUDGET = 50_000;
+/** Records of the parts of the documents the host keeps in memory (a Space counts its entries twice here; RSS stays near 300 MB for 100 Spaces of 10 000 entries at 50 000). */
+export const DEFAULT_MEMORY_BUDGET = 40_000;
 
 export type SqliteStoreOptions = {
 	/** Memory budget of the host in records (default DEFAULT_MEMORY_BUDGET): the documents untouched for longest are
 	 *  dropped and read again from the file when needed; watched ones and ones being written are kept. */
 	memoryBudget?: number;
+	/** A document used within this many ms is not dropped, whatever the budget (default 250). */
+	hotMs?: number;
 	/** FULL (default): a commit is acknowledged once it is on the disk. NORMAL: faster, the last commits can be lost when
 	 *  the system (not the process) fails. */
 	synchronous?: "FULL" | "NORMAL";
+	/** Tests: the store file may not grow beyond this many pages, as on a full disk (SQLITE_FULL). */
+	maxPages?: number;
 	/** Enumerating a map part on the disk throws instead of reading every key (tests: such a scan is a defect). */
 	strictDiskMaps?: boolean;
 	/** Checks every commit's rows before the commit is published; throwing refuses that commit, which then leaves no
@@ -415,13 +419,13 @@ export async function openSqliteHost(path: string, o: SqliteStoreOptions = {}): 
 export async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promise<OwnStoreHost> {
 	const { path, read, lock } = files;
 	const worker = new Worker(writerSource(), { eval: true });
-	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL" } satisfies WriterRequest); });
+	const opened = await new Promise<WriterReply>((resolve) => { worker.once("message", resolve); worker.postMessage({ type: "open", path, synchronous: o.synchronous ?? "FULL", ...(o.maxPages ? { maxPages: o.maxPages } : {}) } satisfies WriterRequest); });
 	if (opened.type !== "opened") { await worker.terminate(); read.close(); lock.close(); throw new StoreUnavailable(`the store writer could not open ${path}: ${(opened as { error?: string }).error}`); }
 	const ledger = new SqliteLedger(read, lock, worker, o.strictDiskMaps ?? process.env.PHI_SPACES_STRICT_DISK_MAPS === "1");
 	if (o.gate) ledger.gate = o.gate;
 	if (o.faults) ledger.faults = o.faults;
 	if (o.replication) ledger.replication = o.replication;
-	const host = new OwnStoreHost(ledger, { memoryBudget: o.memoryBudget ?? DEFAULT_MEMORY_BUDGET });
+	const host = new OwnStoreHost(ledger, { memoryBudget: o.memoryBudget ?? DEFAULT_MEMORY_BUDGET, ...(o.hotMs !== undefined ? { hotMs: o.hotMs } : {}) });
 	// an idle writer does not keep the process alive (unref after its listeners: a listener refs it again)
 	worker.unref();
 	return host;

@@ -312,27 +312,39 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
     einmal geladene Dokument für immer im Speicher (`#docs`), also rund 13 MB je angefasstem 10k-Space und hochgerechnet
     über 1 GB für 100. Bleiben die Spaces kalt, ist das kein Problem; das Budget gilt aber für das Profil.
   - **Speicherbudget (2026-10-24):** `OwnStoreHost` führt ein Gewicht je geladenem Dokument (1 plus Einträge seiner
-    Parts, Platten-Maps zählen nicht; ein Space zählt etwa doppelt je Eintrag) und verdrängt über dem Budget
-    (`memoryBudget`, Standard 50 000) die am längsten unberührten Dokumente. Nie verdrängt werden Dokumente mit
-    Beobachter, mit Commit in Arbeit (noch nicht dauerhaft) und das des laufenden Commits; verdrängt wird nur zwischen
-    Commits und nach Snapshots. Die SQLite-Ledger vergisst dazu ihren Zustand (`forget`: Ordnungskarten, Platten-Maps);
-    die Speicher-Ledger kann nicht neu laden und verdrängt nie. Gemessen an 20 × 10 000 (RSS folgt dem Heap mit
-    Verzögerung, weil V8 den Müll der Ladevorgänge hält):
-
-    | Budget | Dokumente im Speicher | Heap | RSS | alle anfassen |
-    |---|---|---|---|---|
-    | unbegrenzt (vorher) | 21 | 207–259 MB | 386–390 MB | 4,5 s |
-    | 200 000 | 10 | 99 MB | 372 MB | 4,9 s |
-    | 100 000 | 5 | 50 MB | 319 MB | 4,9 s |
-    | **50 000 (Standard)** | 3 | 30 MB | **281 MB** | 4,9 s |
-    | 25 000 | 2 | 21 MB | 250 MB | 5,0 s |
-    | 50 000 + `--max-old-space-size=120` | 3 | 27 MB | 192 MB | 5,0 s |
-
-    Das RSS-Budget (≤ 300 MB) ist damit bei 20 Spaces erfüllt; der RSS hängt von den verdrängten, nicht von den
-    vorhandenen Spaces ab, 100 Spaces sind also nicht grundsätzlich anders (nicht gemessen: Schreiben dauert ca. 40 min).
-    Preis: ein wiederholtes Anfassen eines verdrängten 10k-Spaces liest ihn neu (ca. 0,25 s). Wer Spaces im Wechsel
-    anfasst, stellt `memoryBudget` höher; Zähler: `host.cached`. Test: `test/test-own-store.test.ts`.
-- **Bleibt:** U7 (Rest: 100-Spaces-Messung, Plattenvoll, Backup/Restore, Entry-Match-Index, Dauerlast) und die Betriebsprobe der Föderation
+    Parts, Platten-Maps zählen nicht; ein Space zählt etwa doppelt je Eintrag, sein Änderungsprotokoll zählt mit) und
+    verdrängt über dem Budget (`memoryBudget`, Standard 40 000) die am längsten unberührten Dokumente. Nie verdrängt
+    werden Dokumente mit Beobachter, mit Commit in Arbeit (noch nicht dauerhaft), das des laufenden Commits und
+    solche, die in den letzten 250 ms benutzt wurden (`hotMs`). Verdrängt wird nur zwischen Commits und nach
+    Snapshots. Die SQLite-Ledger vergisst dazu ihren Zustand (`forget`: Ordnungskarten, Platten-Maps); die
+    Speicher-Ledger kann nicht neu laden und verdrängt nie. Zähler: `host.cached`. Test: `test/test-own-store.test.ts`.
+  - **Gemessen, 100 Spaces × 10 000 Einträge** (Schreiben 28 min, Datei 1,3 GB, Messung in einem frischen Prozess):
+    Öffnen 54–70 ms (Budget ≤ 2 s: erfüllt); **RSS 251–259 MB** (Budget ≤ 300 MB: erfüllt; vorher hochgerechnet über
+    1 GB); alle 100 Spaces einmal anfassen 22–24 s (je verdrängtem 10k-Space ca. 0,25 s Neulesen). Bei 50 000 lag der
+    RSS bei 300 MB, bei 20 Spaces: unbegrenzt 386 MB, 100 000 → 319, 50 000 → 281, 25 000 → 250 (der RSS folgt dem
+    Heap verzögert, weil V8 den Müll der Ladevorgänge hält).
+  - **Fund aus dem Dauerlauf, behoben:** Ohne das Schonfenster verdrängte die LRU-Regel bei mehr aktiven Spaces, als
+    ins Budget passen, genau die Dokumente, die gleich wieder gebraucht wurden: die Schreibrate brach von 1000 auf
+    10 pro Sekunde ein, die Latenz stieg auf 0,5–1 s. Mit `hotMs` kostet ein zu großer Arbeitssatz Speicher statt
+    Neulesen.
+  - **Dauerlast, `scripts/endurance-probe.ts`:** 5 Spaces, je 2 Erzeuger und 2 Abnehmer, 10 min, alle 60 s Schließen
+    und Wiederöffnen: 119 698 Elemente, jedes genau einmal genommen (0 Verluste, 0 Doppelte, 0 Fehler), 10
+    Wiederöffnungen. Datei erreicht 80 MB und bleibt dort, WAL 4 MB, Schreibrate fällt von 1000 auf ca. 165–250 pro
+    Sekunde (p50 8 → 25–45 ms), sobald das Änderungsprotokoll seine 4 MB je Space erreicht hat, und bleibt dann
+    stabil. RSS erreicht bei 5 gesättigten Spaces 520–660 MB (je Space rund 100 MB mit vollem Protokoll): wer viele
+    gleichzeitig aktive Spaces betreibt, plant das ein oder senkt `maxLogBytes`.
+  - **Plattenvoll, `test/test-own-store-ops.test.ts`** (`maxPages` begrenzt die Datei wie ein voller Datenträger): der
+    Commit, der nicht mehr passt, scheitert; der Host nimmt danach nichts mehr an (`failed`); jeder bestätigte Commit
+    ist nach dem Wiederöffnen da, in Reihenfolge, ohne halben Commit; `integrity_check` ist `ok`; mit Platz geht es weiter.
+  - **Backup/Restore, ebenda:** `VACUUM INTO` während geschrieben wird liefert einen Stand, der sich öffnen lässt, dem
+    `integrity_check` genügt und genau ein Präfix der Commits enthält (keiner halb). Wiederherstellung = die Datei
+    ist der Store eines neuen Ortes, der weiterschreibt; das Original bleibt unberührt. Backup-Intervall und RTO bleiben
+    Betreiberprofil (U0), hier ist die Mechanik belegt.
+  - **Entry-Match-Index: nicht nötig.** Lesen, Zählen und Nehmen nach einem Feld sind eine lineare Suche: bei 10 000
+    Einträgen 7–14 ms je Operation (Nehmen und Zurückschreiben 22 ms), grob 1 µs je Eintrag, bei 100 000 also rund
+    140 ms. Für das Profil (10 000 je Space) reicht das; ein Index wird erst nötig, wenn Spaces regelmäßig über
+    50 000 Einträge halten und feldgenau gesucht wird.
+- **Bleibt:** U7 (Rest: Plattformtests ausser Linux/Android, RPO/RTO im Betreiberprofil) und die Betriebsprobe der Föderation
   auf `big`.
 
 **Stand U4 (2026-10-23):**
