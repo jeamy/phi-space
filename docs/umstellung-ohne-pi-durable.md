@@ -311,18 +311,28 @@ U5 entfällt. Es folgen U6 bis U8: Agent-Paket, pi-durable aus Hauptpaket und Te
   - **Budget nicht erfüllt:** Das Profil sind 100 Spaces zu 10 000 Einträgen bei ≤ 300 MB RSS. Der Host hält jedes
     einmal geladene Dokument für immer im Speicher (`#docs`), also rund 13 MB je angefasstem 10k-Space und hochgerechnet
     über 1 GB für 100. Bleiben die Spaces kalt, ist das kein Problem; das Budget gilt aber für das Profil.
-  - **Nächster Schritt (nicht begonnen):** ein Speicherbudget für geladene Dokumente, das kalte Dokumente ohne
-    Beobachter, Entwurf und ausstehende Schreibung verdrängt. Das berührt `OwnStoreHost` und braucht eine
-    Entscheidung zur Verdrängungsregel.
-- **Neuaufbau `big` und Gerätabnahme (2026-10-24):** `destroy --yes` und `up federation` liefen auf `big`, `netbird setup
-  --rotate-keys --prune-stale` erneuerte Keys und Policies und entfernte die vier verwaisten Peer-Einträge; `test all`
-  ist auf dem frischen Stand grün. Ein `--dry-run` hinter dem Befehl wurde dabei ignoriert, `destroy` lief sofort: jetzt
-  zählt das Flag an jeder Stelle. Auf dem Xiaomi (Node 26.4.0 aus dem Rootfs) laufen `node:sqlite`, WAL, der Eval-Worker
-  und der Own-Store aus dem ausgelieferten Bundle; die B9-Abnahme (Kopplung, Sieblauf starten/pausieren/fortsetzen/
-  stoppen, Worker, Koordinator-Absturz mit erneutem Senden derselben ID, unabhängige Prüfung der Ergebnisse) ist mit
-  dem Own-Store bestanden: `test/evidence/b9-device-2026-10-24/README.md`. Offen bleibt die Abnahme über NetBird und
-  mit dem Bildschirm aus.
-- **Bleibt:** U7 (Rest: Plattenvoll, Backup/Restore, Entry-Match-Index, Dauerlast) und die Betriebsprobe der Föderation
+  - **Speicherbudget (2026-10-24):** `OwnStoreHost` führt ein Gewicht je geladenem Dokument (1 plus Einträge seiner
+    Parts, Platten-Maps zählen nicht; ein Space zählt etwa doppelt je Eintrag) und verdrängt über dem Budget
+    (`memoryBudget`, Standard 50 000) die am längsten unberührten Dokumente. Nie verdrängt werden Dokumente mit
+    Beobachter, mit Commit in Arbeit (noch nicht dauerhaft) und das des laufenden Commits; verdrängt wird nur zwischen
+    Commits und nach Snapshots. Die SQLite-Ledger vergisst dazu ihren Zustand (`forget`: Ordnungskarten, Platten-Maps);
+    die Speicher-Ledger kann nicht neu laden und verdrängt nie. Gemessen an 20 × 10 000 (RSS folgt dem Heap mit
+    Verzögerung, weil V8 den Müll der Ladevorgänge hält):
+
+    | Budget | Dokumente im Speicher | Heap | RSS | alle anfassen |
+    |---|---|---|---|---|
+    | unbegrenzt (vorher) | 21 | 207–259 MB | 386–390 MB | 4,5 s |
+    | 200 000 | 10 | 99 MB | 372 MB | 4,9 s |
+    | 100 000 | 5 | 50 MB | 319 MB | 4,9 s |
+    | **50 000 (Standard)** | 3 | 30 MB | **281 MB** | 4,9 s |
+    | 25 000 | 2 | 21 MB | 250 MB | 5,0 s |
+    | 50 000 + `--max-old-space-size=120` | 3 | 27 MB | 192 MB | 5,0 s |
+
+    Das RSS-Budget (≤ 300 MB) ist damit bei 20 Spaces erfüllt; der RSS hängt von den verdrängten, nicht von den
+    vorhandenen Spaces ab, 100 Spaces sind also nicht grundsätzlich anders (nicht gemessen: Schreiben dauert ca. 40 min).
+    Preis: ein wiederholtes Anfassen eines verdrängten 10k-Spaces liest ihn neu (ca. 0,25 s). Wer Spaces im Wechsel
+    anfasst, stellt `memoryBudget` höher; Zähler: `host.cached`. Test: `test/test-own-store.test.ts`.
+- **Bleibt:** U7 (Rest: 100-Spaces-Messung, Plattenvoll, Backup/Restore, Entry-Match-Index, Dauerlast) und die Betriebsprobe der Föderation
   auf `big`.
 
 **Stand U4 (2026-10-23):**

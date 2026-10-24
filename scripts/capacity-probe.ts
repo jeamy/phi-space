@@ -14,10 +14,12 @@ const [spaces, entries] = [Number(process.argv[2] ?? 100), Number(process.argv[3
 const mb = (n: number) => Math.round(n / 1048576);
 if (process.argv[2] === "--open") {
 	const [, , , path, n] = process.argv;
-	const t0 = performance.now(), h = await openSqliteHost(path!), open = performance.now() - t0;
+	const budget = process.env.PHI_BUDGET ? { memoryBudget: Number(process.env.PHI_BUDGET) } : {};
+	const t0 = performance.now(), h = await openSqliteHost(path!, budget), open = performance.now() - t0;
 	const t1 = performance.now();
 	for (let i = 0; i < Number(n); i++) await new PhiSpaces(h, ctx, Date.now, undefined, undefined, { space: `s${i}` }).count({ type: "Item" });
-	console.log(JSON.stringify({ openMs: Math.round(open), touchAllMs: Math.round(performance.now() - t1), rssMb: mb(process.memoryUsage().rss), heapMb: mb(process.memoryUsage().heapUsed) }));
+	globalThis.gc?.();
+	console.log(JSON.stringify({ cached: h.cached, openMs: Math.round(open), touchAllMs: Math.round(performance.now() - t1), rssMb: mb(process.memoryUsage().rss), heapMb: mb(process.memoryUsage().heapUsed) }));
 	await h.close(ctx);
 } else {
 	const dir = process.argv[4] ?? mkdtempSync(join(tmpdir(), "capacity-probe-")), path = join(dir, "store.sqlite");
@@ -31,7 +33,7 @@ if (process.argv[2] === "--open") {
 		const wrote = performance.now() - t0;
 		await h.close(ctx);
 		console.log(JSON.stringify({ spaces, entries, writeS: Math.round(wrote / 1000), fileMb: mb(statSync(path).size) }));
-		const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", process.argv[1]!, "--open", path, String(spaces)], { encoding: "utf8" });
+		const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--expose-gc", process.argv[1]!, "--open", path, String(spaces)], { encoding: "utf8" });
 		console.log(r.stdout.trim() || r.stderr);
 	} finally { if (!process.argv[4]) rmSync(dir, { recursive: true, force: true }); }
 }

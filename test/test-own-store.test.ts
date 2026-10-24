@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { BACKGROUND_CONTEXT as ctx, PhiSpaces, FOREVER, Space, core, claims } from "../src/index.ts";
+import { BACKGROUND_CONTEXT as ctx, PhiSpaces, FOREVER, Space, core, claims, createSpace } from "../src/index.ts";
 import { openSqliteHost, StoreUnavailable } from "../src/store/sqlite.ts";
 
 const dirs: string[] = [];
@@ -366,5 +366,31 @@ test("a disk map's pages walk every record once in key order, with what commits 
 		assert.equal(keys.length, 100 - (round + 1) * 10 + (round + 1) * 5);
 	}, ctx));
 	await Promise.all(commits);
+	await h.close(ctx);
+});
+
+test("a memory budget drops the documents untouched for longest and reads them again", async () => {
+	const file = fresh();
+	let h = await openSqliteHost(file, { memoryBudget: 250 });
+	const space = (n: number, host = h) => new PhiSpaces(host, ctx, Date.now, undefined, undefined, { space: `s${n}` });
+	for (let i = 0; i < 6; i++) await h.commit((tx) => createSpace(tx, `s${i}`, Date.now()), ctx);
+	for (let i = 0; i < 6; i++) for (let k = 0; k < 100; k++) await space(i).write({ type: "Item", fields: { i, k } }, null, FOREVER);
+	await h.close(ctx);
+	h = await openSqliteHost(file, { memoryBudget: 250 });
+	// 6 spaces of 100 entries do not fit 250: the weight stays near the budget however many are touched
+	for (let round = 0; round < 3; round++) for (let i = 0; i < 6; i++) {
+		assert.equal(await space(i).count({ type: "Item" }), 100);
+		await space(i).write({ type: "Mark", fields: { round } }, null, FOREVER);
+		assert.ok(h.cached.weight <= 250 + 110, `weight ${h.cached.weight}`);
+	}
+	// what was dropped comes back as it was, order and later writes included
+	const first = await space(0).readAll({ type: "Item" });
+	assert.deepEqual(first.map((e) => e.fields.k), Array.from({ length: 100 }, (_, k) => k));
+	assert.ok(await space(2).take({ type: "Item", fields: { k: 50 } }, 0));
+	assert.equal(await space(2).count({ type: "Item" }), 99);
+	await h.close(ctx);
+	h = await openSqliteHost(file);
+	assert.equal(await space(2).count({ type: "Item" }), 99);
+	assert.equal(await space(5).count({ type: "Mark" }), 3);
 	await h.close(ctx);
 });

@@ -22,7 +22,13 @@ import { writerSource, type WriteOp, type WriterReply, type WriterRequest } from
 /** The format of the file; a newer one is refused, an older one is migrated (1 to 2: the index columns of parts). */
 export const FORMAT_VERSION = 2;
 
+/** Records of the parts of the documents the host keeps in memory (a Space counts its entries twice here; RSS stays near 280 MB for 20 Spaces of 10 000 entries at this value). */
+export const DEFAULT_MEMORY_BUDGET = 50_000;
+
 export type SqliteStoreOptions = {
+	/** Memory budget of the host in records (default DEFAULT_MEMORY_BUDGET): the documents untouched for longest are
+	 *  dropped and read again from the file when needed; watched ones and ones being written are kept. */
+	memoryBudget?: number;
 	/** FULL (default): a commit is acknowledged once it is on the disk. NORMAL: faster, the last commits can be lost when
 	 *  the system (not the process) fails. */
 	synchronous?: "FULL" | "NORMAL";
@@ -105,6 +111,14 @@ class SqliteLedger implements Ledger {
 		this.#read = read; this.#lock = lock; this.#worker = worker; this.#strict = strict;
 		worker.on("message", (r: WriterReply) => this.#reply(r));
 		worker.on("error", (e) => this.#fail(e instanceof Error ? e : new Error(String(e))));
+	}
+
+	/** The host dropped a document: what is kept for it here goes too (it is read again when it is next needed). */
+	forget(kind: string, key: string | null): void {
+		const id = `${kind}\u0000${docKey(key)}`;
+		this.#ords.delete(id);
+		this.#diskMaps.delete(id);
+		for (const k of [...this.#inline]) if (k.startsWith(`${id}\u0000`)) this.#inline.delete(k);
 	}
 
 	load(kind: string, key: string | null, parts?: readonly PartSpec[]): StoredDoc | null {
@@ -407,7 +421,7 @@ export async function hostOver(files: StoreFiles, o: SqliteStoreOptions): Promis
 	if (o.gate) ledger.gate = o.gate;
 	if (o.faults) ledger.faults = o.faults;
 	if (o.replication) ledger.replication = o.replication;
-	const host = new OwnStoreHost(ledger);
+	const host = new OwnStoreHost(ledger, { memoryBudget: o.memoryBudget ?? DEFAULT_MEMORY_BUDGET });
 	// an idle writer does not keep the process alive (unref after its listeners: a listener refs it again)
 	worker.unref();
 	return host;
