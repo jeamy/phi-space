@@ -1,0 +1,20 @@
+# Override for the `big` host (docker compose -f docker-compose.yml -f docker-compose.hostnet.yml --profile big ...): the
+# roles share the host network, so they reach the nano space through the SSH tunnel on the host's loopback
+# (CODEMODE_SPACE=tcp:127.0.0.1:3800 in .env, the user unit codemode-nano-tunnel) as the help system does. The web
+# process listens on the loopback only, for the reverse proxy in front.
+services:
+  web:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      CODEMODE_BIND: 127.0.0.1
+  judge-big:
+    network_mode: host
+    networks: !reset []
+  agents:
+    network_mode: host
+    networks: !reset []
+  model:
+    network_mode: host
+    networks: !reset []

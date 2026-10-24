@@ -110,6 +110,7 @@ The test bed runs big and nano as on two hosts: every role talks to the space ov
 "big" and "nano", and nano's containers get 2 CPUs (`NANO_CPUS`). Only the model container gets the model credentials.
 The space socket has no TLS: publish it only on an internal address (`CODEMODE_SPACE_BIND`). Deployment examples (host
 names are placeholders): `deploy/Caddyfile`, `deploy/nginx-codemode.conf`, `deploy/phi-spaces-codemode.service`.
+On a host where the space is reached through an SSH tunnel on the loopback (as the help system's nano shard), add `-f docker/docker-compose.hostnet.yml`: the big roles then share the host network and the web process listens on `127.0.0.1` only.
 
 ## Help pages and themes
 
