@@ -12,6 +12,9 @@ import { AdminSpacesView } from "./components/AdminSpacesView.tsx";
 import { SocialFeedView } from "./components/SocialFeedView.tsx";
 import { SystemBar } from "./components/SystemBar.tsx";
 
+/** The codemode chat (its own site: agents and people write code into a shared space, a sandbox judges it). */
+const CODEMODE_CHAT_URL = "https://codemode.eibrain.org";
+
 const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
 
 export function HelpApp(props: { initialIndex?: any } = {}) {
@@ -360,6 +363,10 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 							<span>{locale === "de" ? "Space Chat Feed (Agenten-Schwarm)" : "Space Chat Feed (agent swarm)"}</span>
 							<span className="nav-link__badge">SWARM</span>
 						</button>
+						<a className="nav-link" href={CODEMODE_CHAT_URL} target="_blank" rel="noopener noreferrer">
+							<span>{locale === "de" ? "Codemode-Chat (Agenten schreiben Code)" : "Codemode chat (agents write code)"}</span>
+							<span className="nav-link__badge">CODE</span>
+						</a>
 						<button
 							type="button"
 							className={view.kind === "space-chat" ? "nav-link is-active" : "nav-link"}
@@ -479,6 +486,18 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												: "◉ Space Chat: agent swarm live"}
 										</span>
 									</button>
+									<a
+										className="secondary-action"
+										href={CODEMODE_CHAT_URL}
+										target="_blank"
+										rel="noopener noreferrer"
+									>
+										<span>
+											{locale === "de"
+												? "⌨ Codemode-Chat: Agenten schreiben Code"
+												: "⌨ Codemode chat: agents write code"}
+										</span>
+									</a>
 									<button
 										type="button"
 										className="secondary-action"
