@@ -1,0 +1,210 @@
+"use client";
+// spaces-mmo in the browser: a welcome page (play as a guest, log in, register) and the game: the PixiJS map of the
+// room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
+// tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CharView, MsgView, ServerFrame } from "../server/gateway.ts";
+import { MapView } from "./MapView.tsx";
+
+type Account = { name: string; guest: boolean; admin: boolean };
+type Hello = Extract<ServerFrame, { t: "hello" }>;
+type Line = MsgView | { kind: "echo"; text: string; from: string; at: number };
+
+async function post(path: string, body: unknown = {}): Promise<{ account: Account | null; error?: string }> {
+	const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json", "x-mmo": "1" }, body: JSON.stringify(body) });
+	const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+	if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+	return d;
+}
+
+export function MmoApp() {
+	const [account, setAccount] = useState<Account | null | undefined>(undefined);
+	useEffect(() => { void fetch("/api/me").then((r) => r.json()).then((d) => setAccount(d.account ?? null), () => setAccount(null)); }, []);
+	if (account === undefined) return <main className="welcome"><p className="muted">Lädt …</p></main>;
+	if (!account) return <Welcome onIn={setAccount} />;
+	return <Game account={account} onAccount={setAccount} />;
+}
+
+function Welcome({ onIn }: { onIn: (a: Account) => void }) {
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	const guest = async () => {
+		setBusy(true); setError("");
+		try { onIn((await post("/api/guest")).account!); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+	};
+	return (
+		<main className="welcome">
+			<h1>Leuchtfeuer</h1>
+			<p className="pitch muted">Ein Archipel im Nebel. Wo ein Leuchtfeuer brennt, wird es licht – und keines brennt lange allein.</p>
+			<div className="card">
+				<button className="primary" onClick={guest} disabled={busy}>Als Gast spielen</button>
+				<p className="muted" style={{ fontSize: 13, margin: "10px 0 0" }}>Sofort los, ohne Anmeldung. Wer sich später registriert, behält alles, was er als Gast erreicht hat.</p>
+				{error && <p className="error">{error}</p>}
+			</div>
+			<div className="card"><AccountForm onDone={onIn} /></div>
+			<About />
+		</main>
+	);
+}
+
+/** Log in or register. `guest`: shown inside the game of a guest (registering keeps the guest's progress; logging in
+ *  to another account does not). */
+function AccountForm({ onDone, guest = false }: { onDone: (a: Account) => void; guest?: boolean }) {
+	const [mode, setMode] = useState<"login" | "register">(guest ? "register" : "login");
+	const [name, setName] = useState(""), [password, setPassword] = useState(""), [token, setToken] = useState("");
+	const [busy, setBusy] = useState(false), [error, setError] = useState("");
+	const submit = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setBusy(true); setError("");
+		try { onDone((await post(mode === "login" ? "/api/login" : "/api/register", { name, password, ...(mode === "register" && token ? { setupToken: token } : {}) })).account!); }
+		catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+	};
+	return (
+		<form className="form" onSubmit={submit}>
+			<div className="tabs" role="tablist">
+				<button type="button" role="tab" aria-selected={mode === "register"} onClick={() => setMode("register")}>Registrieren</button>
+				<button type="button" role="tab" aria-selected={mode === "login"} onClick={() => setMode("login")}>Anmelden</button>
+			</div>
+			{guest && mode === "register" && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Deine Figur, ihr Platz und alles Weitere bleiben erhalten.</p>}
+			{guest && mode === "login" && <p className="warning" style={{ margin: 0, fontSize: 13 }}>Mit einem bestehenden Konto anmelden: Der Fortschritt dieses Gastes wird nicht übernommen und verfällt.</p>}
+			<label>Name<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" required minLength={3} maxLength={20} /></label>
+			<label>Passwort<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 8 : 1} /></label>
+			{mode === "register" && !guest && (
+				<details><summary>Einrichtungstoken (nur für den ersten Admin)</summary><input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" /></details>
+			)}
+			<button className="primary" disabled={busy}>{mode === "login" ? "Anmelden" : "Registrieren"}</button>
+			{error && <p className="error" style={{ margin: 0 }}>{error}</p>}
+		</form>
+	);
+}
+
+function About() {
+	return (
+		<p className="about muted">
+			Eine Welt auf <a href="https://spaces.eibrain.org" target="_blank" rel="noreferrer">phi-spaces</a>. Grafiken: Intersect-Assets von
+			PixelFox, Zetasis, George und Murdoc, CC BY 4.0 (<a href="/assets/leuchtfeuer/CREDITS.md" target="_blank" rel="noreferrer">Nachweise</a>).
+		</p>
+	);
+}
+
+function Game({ account, onAccount }: { account: Account; onAccount: (a: Account | null) => void }) {
+	const [hello, setHello] = useState<Hello | null>(null);
+	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
+	const [log, setLog] = useState<Line[]>([]);
+	const [live, setLive] = useState(false);
+	const [line, setLine] = useState("");
+	const [panel, setPanel] = useState<null | "account" | "leave">(null);
+	const ws = useRef<WebSocket | null>(null);
+	const logEnd = useRef<HTMLDivElement>(null);
+	const input = useRef<HTMLInputElement>(null);
+	const me = hello?.me.charId ?? "";
+
+	const append = useCallback((l: Line) => setLog((old) => (old.length >= 300 ? [...old.slice(-299), l] : [...old, l])), []);
+
+	// the game socket; it reconnects with a backoff, and a socket refused for a lapsed login logs out
+	useEffect(() => {
+		let dead = false, retry = 0, timer: ReturnType<typeof setTimeout> | undefined;
+		const connect = () => {
+			const s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+			ws.current = s;
+			s.onopen = () => setLive(true);
+			s.onmessage = (e) => {
+				const f = JSON.parse(String(e.data)) as ServerFrame;
+				if (f.t === "hello") { retry = 0; setHello(f); setChars(new Map(f.chars.map((c) => [c.charId, c]))); setLog(f.log); }
+				else if (f.t === "char") setChars((m) => new Map(m).set(f.c.charId, f.c));
+				else if (f.t === "gone") setChars((m) => { const n = new Map(m); n.delete(f.charId); return n; });
+				else if (f.t === "msg") append(f.m);
+			};
+			s.onclose = () => {
+				setLive(false);
+				if (dead) return;
+				void fetch("/api/me").then((r) => r.json()).then((d) => { if (!d.account) onAccount(null); }, () => {});
+				timer = setTimeout(connect, Math.min(10_000, 500 * 2 ** retry++));
+			};
+		};
+		connect();
+		return () => { dead = true; clearTimeout(timer); ws.current?.close(); };
+	}, [append, onAccount]);
+
+	useEffect(() => { logEnd.current?.scrollIntoView({ block: "end" }); }, [log]);
+
+	const send = useCallback((text: string, echo = true) => {
+		const s = ws.current;
+		if (!s || s.readyState !== WebSocket.OPEN) { append({ kind: "error", text: "Nicht verbunden; ein Moment …", from: "", at: Date.now() }); return; }
+		s.send(JSON.stringify({ t: "cmd", line: text }));
+		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
+	}, [append]);
+
+	/** One step from the own character: by `d`, or toward a tapped cell (the longer axis first; if that cell is not
+	 *  walkable, the other axis). A tap walks exactly like an arrow key, one cell per tap. */
+	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
+		const self = chars.get(me);
+		if (!self || !hello) return;
+		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk;
+		let moves: Array<[number, number]>;
+		if (Array.isArray(d)) moves = [d];
+		else {
+			const dx = Math.sign(d.x - self.x), dy = Math.sign(d.y - self.y);
+			if (!dx && !dy) return;
+			const horizontal = Math.abs(d.x - self.x) >= Math.abs(d.y - self.y);
+			moves = (horizontal ? [[dx, 0], [0, dy]] : [[0, dy], [dx, 0]] as Array<[number, number]>).filter(([a, b]) => a || b) as Array<[number, number]>;
+		}
+		const go = moves.find(([a, b]) => free(self.x + a, self.y + b)) ?? moves[0]!;
+		send(`move ${self.x + go[0]} ${self.y + go[1]}`, false);
+	}, [chars, me, hello, send]);
+
+	// arrow keys walk, unless the command line has the focus
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (document.activeElement === input.current || (e.target as HTMLElement)?.tagName === "INPUT") return;
+			const d = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[e.key];
+			if (!d) return;
+			e.preventDefault();
+			step(d);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [step]);
+
+	const logout = async () => { await post("/api/logout").catch(() => {}); onAccount(null); };
+
+	return (
+		<div className="game">
+			<header className="bar">
+				<span className="title">{hello?.world.title ?? "Leuchtfeuer"}</span>
+				<span className={`live${live ? " on" : ""}`} title={live ? "verbunden" : "getrennt"} />
+				<span>{hello?.room.name ?? ""}</span>
+				<span className="spacer" />
+				<span>{account.name}</span>
+				{account.guest && <span className="badge">Gast</span>}
+				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")}>Registrieren, um den Fortschritt zu behalten</button>}
+				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
+			</header>
+			<div className="main">
+				{hello ? <MapView world={hello.world} room={hello.room} chars={chars} me={me} onCell={(x, y) => step({ x, y })} /> : <div className="map"><p className="muted">Verbinde …</p></div>}
+				<aside className="side">
+					{panel === "account" && (
+						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
+					)}
+					{panel === "leave" && (
+						<div className="panel">
+							<h2>Als Gast abmelden?</h2>
+							<p style={{ margin: "0 0 10px", fontSize: 13 }}>Ohne Registrierung kommst du nicht zu dieser Figur zurück; sie verfällt nach einigen Tagen.</p>
+							<div style={{ display: "flex", gap: 8 }}><button onClick={() => setPanel("account")}>Erst registrieren</button><button onClick={() => void logout()}>Trotzdem abmelden</button></div>
+						</div>
+					)}
+					{!panel && <div />}
+					<div className="log" role="log" aria-live="polite">
+						{log.map((l, i) => <div key={i} className={l.kind}>{l.text}</div>)}
+						<div ref={logEnd} />
+					</div>
+					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>
+						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} placeholder="Befehl, z. B. look, say Hallo, help" maxLength={300} aria-label="Befehl" autoFocus />
+						<button className="primary">Senden</button>
+					</form>
+					<About />
+				</aside>
+			</div>
+		</div>
+	);
+}
