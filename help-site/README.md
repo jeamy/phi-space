@@ -138,7 +138,7 @@ Configuration: `help-site/docker/Dockerfile` and `help-site/docker/docker-compos
 | `spaces-help-prod` | Production Next.js server, unprivileged user, dropped capabilities, SQLite volume and healthcheck; host networking. |
 | `spaces-help-dev` | Next.js development mode; published port and separate SQLite volume. |
 | `spaces-help-test` | Fresh corpus/Next.js build and the full help test suite, profile `test`, with SSR enabled. |
-| `swarm-nano` | Optional headless worker shard, profile `nano`, separate SQLite volume and socket port 3600. |
+| `swarm-nano` | Optional headless worker shard, profile `nano`, separate SQLite volume and socket port 3600. On the `nano` host (rootless Docker) build containers on the default network cannot reach the internet, so `npm ci` hangs: build there with `docker build --network host -f help-site/docker/Dockerfile --target nano -t phi-spaces-help:nano .` from the repository root. |
 
 Compose requires a private `PHI_SPACES_ADMIN_PASSWORD` during configuration, including test-profile selection.
 Production uses a prebuilt `.next` output; development compiles with Turbopack.
