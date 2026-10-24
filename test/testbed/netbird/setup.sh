@@ -4,6 +4,7 @@
 # script's working directory; the token is passed to curl through a config pipe and is never printed or put on a command line.
 # Names follow docs/federation-plan-v3.md 4.1: groups space-hosts, space-admin, space-observer.
 # Environment: NB_URL (https://...), NB_SPACE_PORT (TCP port of the space service, placeholder until space-gate exists),
+#              NB_PRUNE_STALE=1 (delete disconnected peers whose name equals a connected peer's: left over from a re-enrolled container),
 #              NB_ROTATE_KEYS=1 (create new setup keys even if the old ones exist; old ones are revoked).
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -102,6 +103,12 @@ policy space-admin-ssh "ssh from admin devices to the hosts" "$(jq -nc --arg b "
 
 echo "== existing policies (the default allow-all policy defeats the group rules; disable it by hand once the groups work)"
 api GET policies | jq -r '.[] | "  \(if .enabled then "ON " else "off" end)  \(.name)  ports=\([.rules[].ports // [] | join(",")] | join(";"))  proto=\([.rules[].protocol] | join(","))"'
+if [[ ${NB_PRUNE_STALE:-0} == 1 ]]; then
+	echo "== stale peers (disconnected, same name as a connected peer)"
+	for id in $(api GET peers | jq -r '[.[] | select(.connected)] as $c | .[] | select((.connected | not) and (.name as $n | $c | any(.name == $n))) | .id'); do
+		api DELETE "peers/$id" >/dev/null; echo "  peer $id deleted" >&2
+	done
+fi
 echo "== peers (name, id, overlay ip, groups, connected)"
 api GET peers | jq -r '.[] | "  \(.name)  id=\(.id)  ip=\(.ip)  groups=\([.groups[].name] | join(","))  connected=\(.connected)  v\(.version)"'
 echo "ok"

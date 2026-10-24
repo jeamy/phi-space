@@ -517,11 +517,11 @@ nb_status() {
 	fi
 }
 
-# netbird setup [--rotate-keys]: groups, setup keys and policies through the management API. Runs on the server (the token in
+# netbird setup [--rotate-keys] [--prune-stale]: groups, setup keys and policies through the management API. Runs on the server (the token in
 # <dir>/netbird/secrets.env never leaves it and is never printed); idempotent. New setup keys are stored in secrets.env.
 nb_setup() {
-	local rotate=0
-	[[ ${1:-} == --rotate-keys ]] && rotate=1
+	local rotate=0 prune=0 a
+	for a in "$@"; do case $a in --rotate-keys) rotate=1 ;; --prune-stale) prune=1 ;; esac; done
 	ensure_connection
 	local nd
 	nd=$(NB_DIR)
@@ -529,7 +529,7 @@ nb_setup() {
 		die "netbird setup: $nd/secrets.env is missing. Create a service user (role Network Admin) in the dashboard, make a token for it and store it there: NB_PAT=<token>, mode 600"
 	fi
 	put "$HERE/netbird/setup.sh" "$nd/setup.sh" 700
-	r "cd $(shq "$nd") && NB_URL=$(shq "https://$TESTBED_NETBIRD_DOMAIN") NB_SPACE_PORT=$(shq "$TESTBED_NETBIRD_SPACE_PORT") NB_ROTATE_KEYS=$rotate bash ./setup.sh"
+	r "cd $(shq "$nd") && NB_URL=$(shq "https://$TESTBED_NETBIRD_DOMAIN") NB_SPACE_PORT=$(shq "$TESTBED_NETBIRD_SPACE_PORT") NB_ROTATE_KEYS=$rotate NB_PRUNE_STALE=$prune bash ./setup.sh"
 }
 
 cmd_netbird() {
@@ -565,6 +565,10 @@ main() {
 		esac
 	done
 	[[ -n $cmd ]] || { usage; exit 2; }
+	# -n/--dry-run also counts after the command: a destructive command must never run for real because the flag came late
+	local rest=() a
+	for a in "$@"; do case $a in -n | --dry-run) DRY_RUN=1 ;; *) rest+=("$a") ;; esac; done
+	set -- ${rest[@]+"${rest[@]}"}
 	configure
 	case $cmd in
 		config) cmd_config ;;
