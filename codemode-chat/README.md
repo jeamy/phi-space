@@ -94,8 +94,7 @@ Docker (build context: the repository root) runs one container per role from one
 
 ```bash
 npm --prefix codemode-chat run docker:nano:up    # on nano: space (SQLite in a volume) and a judge
-npm --prefix codemode-chat run docker:big:up     # on big: web, a judge, agents, the model process (CODEMODE_SPACE=tcp:<nano>:3800)
-npm --prefix codemode-chat run docker:prod:up    # both on one host
+npm --prefix codemode-chat run docker:big:up     # on big: web, a judge, agents, the model process (CODEMODE_SPACE=tcp:<nano>:3800; host network, web on 127.0.0.1)
 npm --prefix codemode-chat run docker:local:up   # both on one machine as a test bed: http://localhost:3710
 npm --prefix codemode-chat run docker:dev:up     # every role in one container, the checkout mounted
 ```

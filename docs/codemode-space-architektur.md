@@ -418,8 +418,12 @@ Die Rollen sprechen nur über den Space miteinander, per TCP. Auf zwei Rechnern 
 und nano veröffentlicht den Space auf seiner internen Adresse (`CODEMODE_SPACE_BIND`). Der Socket hat kein TLS und behandelt
 jede Verbindung als Prozess des Chats: nie auf einer öffentlichen Schnittstelle.
 
-Skripte in `codemode-chat/package.json`: `docker:nano:*`, `docker:big:*`, `docker:prod:*` (beide Profile auf einem
-Rechner), `docker:local:*`, `docker:dev:*`, `docker:test`.
+Skripte in `codemode-chat/package.json`: `docker:nano:*` (auf nano), `docker:big:*` (auf big, mit
+`docker-compose.hostnet.yml`: Host-Netz, Web nur auf `127.0.0.1`, der Space kommt über den SSH-Tunnel), `docker:local:*`
+(beide auf diesem Rechner), `docker:dev:*`, `docker:test`. `docker:prod:*` gibt es nicht mehr: beide Profile auf einem
+Server kollidieren mit dem Tunnelport. Auf den Servern genügt `git pull` und dann `npm --prefix codemode-chat run
+docker:nano:up` bzw. `docker:big:up`; die Images werden im Host-Netz gebaut (rootless Docker auf nano erreicht aus dem
+Standardnetz die npm-Registry nicht).
 
 **Backup und Restore des Space:**
 - `server/backup.ts` schreibt im laufenden Betrieb eine konsistente Kopie des SQLite-Speichers (`VACUUM INTO`, eine
