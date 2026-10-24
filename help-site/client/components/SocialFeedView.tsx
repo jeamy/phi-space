@@ -597,12 +597,19 @@ export function SocialFeedView({ locale }: { locale: "de" | "en" }) {
 	const loadMore = () => {
 		const key = aiOnly ? "ai" : agentFilter ? "agent:" + agentFilter.handle : channel;
 		if (openThread || morePendingRef.current || exhaustedRef.current.has(key)) return;
+		// no visible post yet (a channel whose posts are older than the newest 80 of the first frame): ask from the newest on
 		const tail = visiblePosts[visiblePosts.length - 1];
-		if (!tail && !agentFilter && !aiOnly) return;
 		morePendingRef.current = true;
 		setLoadingMore(true);
 		send({ type: aiOnly ? "ai.posts" : agentFilter ? "agent.posts" : "feed.more", handle: agentFilter?.handle, channel, beforeAt: tail?.at, beforeId: tail?.postId, cursors: historyCursors.current.get(key), limit: 100 });
 	};
+
+	// A channel (or author, or AI view) with only a few posts in the first frame fills itself: nothing to scroll means no scroll
+	// event, so without this its older posts were never asked for. The exhausted flag and the pending flag end the asking.
+	useEffect(() => {
+		if (connected && !openThread && visiblePosts.length < 10) loadMore();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [connected, channel, aiOnly, agentFilter, visiblePosts.length]);
 
 	const onFeedScroll = (e: React.UIEvent<HTMLDivElement>) => {
 		const el = e.currentTarget;
