@@ -30,7 +30,7 @@ function schritt(sicht, merk) {
 }
 ```
 
-**`sicht`** (vom Welt-Prozess gebaut, JSON):
+**`sicht`** (vom Welt-Worker gebaut, JSON):
 
 ```js
 {
@@ -64,7 +64,7 @@ an.
 Welt-Ticker  ── alle 5 s: fällige Automaten (Fuel-Lease lebt, nicht pausiert)
 Automaten-Worker ── take AutomatonDue{id} ──▶ Sicht bauen ──▶ Sandbox: schritt(sicht, merk)
                  ── write Intent{actor: automat, line} je Befehl, write AutomatonMemory, write AutomatonLog (Lease 1 h)
-Welt-Prozess     ── nimmt die Intents wie von Menschen (Locks, Cmdsets, Transaktionen gelten unverändert)
+Welt-Worker     ── nimmt die Intents wie von Menschen (Locks, Cmdsets, Transaktionen gelten unverändert)
 ```
 
 Der Automaten-Worker ist ein eigener Prozess (`automaton-host.ts`), wie die Judges in codemode-chat ein eigener
@@ -155,6 +155,112 @@ Befehle.
 Die Tests laufen im echten Sandbox (wie `judgeInSlot`). Eine Vorlage, die ihre Szenen nicht besteht, wird nicht
 ausgeliefert.
 
+## Sprache: Deutsch und Englisch
+
+Jede Nutzerin und jeder Nutzer wählt die Sprache (`de` oder `en`, Voreinstellung nach der Oberfläche). Die Beispiele
+in diesem Dokument sind die deutsche Fassung.
+
+- **Befehle gelten immer in beiden Sprachen.** Jeder Befehl hat `key` und `aliases` (`go`/`gehe`, `get`/`nimm`,
+  `say`/`sage`); ein Umschalter ist nicht nötig, und Automaten, Menschen und Agenten können mischen. Gegenstände
+  werden über `name` und `aliases` gefunden (`get treibholz` und `get driftwood`).
+- **Anzeigenamen:** Prototypen, Gegenstände und Räume bekommen `names: { de, en }` neben `name`. Die Ausgabe nimmt die
+  Sprache des Empfängers, `name` bleibt der Schlüssel und die Rückfallsprache.
+- **Code pro Automat:** Das Feld `lang` am Automaten (`de`/`en`, bei `automat vorlage` aus der Sprache der Nutzerin,
+  mit `automat sprache en` änderbar) bestimmt die Namen der Schnittstelle. Der Quelltext wird so gespeichert, wie er
+  geschrieben wurde.
+
+| Deutsch | Englisch |
+| --- | --- |
+| `schritt(sicht, merk)` | `step(view, memo)` |
+| `{ tue, merk }` | `{ do, memo }` |
+| `sicht.takt`, `.ich`, `.raum`, `.hoerte`, `.fehler` | `view.tick`, `.me`, `.room`, `.heard`, `.error` |
+| `raum.ausgaenge`, `.dinge`, `.leute`, `.feuer`, `.nebel` | `room.exits`, `.items`, `.people`, `.fire`, `.fog` |
+| `ich.inventar`, `.oel`; `anzahl`, `richtung`, `ziel`, `stand`, `brennstoff` | `me.inventory`, `.oil`; `count`, `direction`, `target`, `level`, `fuel` |
+
+Die vollständige Zuordnung steht in einer Tabelle `automata/keys.ts` (eine Quelle für Worker, Editor-Vervollständigung,
+Referenzartikel und Assistent). Der Worker benennt die Schlüssel von `sicht` vor dem Aufruf um und liest die Rückgabe
+nach dem Aufruf zurück. Der Sandbox sieht nur die Namen der gewählten Sprache. `do` ist in JavaScript ein
+Schlüsselwort, als Objektschlüssel aber erlaubt; Vorlagen benutzen `{ do: [...] }` und nie eine Variable `do`.
+
+Unverändert in beiden Sprachen: Typ-Kennungen (`Flotsam`, `Automaton`), Befehlsargumente, die Gegenstände benennen
+(beide Sprachen werden verstanden), und die JavaScript-Wörter (`if`, `const`, `return`). „Alles auf Deutsch“ gilt
+daher für unsere Schnittstelle, nicht für die Sprache selbst.
+
+Was für beide Sprachen vorhanden sein muss:
+
+- **Vorlagen:** je Vorlage eine deutsche und eine englische Fassung (`feuerwaerter.js`/`fire-keeper.js`) mit denselben
+  Szenen; ein Test führt beide gegen dieselben Szenen aus und vergleicht die Befehle.
+- **Hilfeartikel und Fehlermeldungen** in beiden Sprachen (`help automat` und die Referenz im Editor zeigen die Sprache
+  der Nutzerin).
+- **Assistent und Regelbaukasten:** schreiben in der Sprache des Automaten.
+- **Modell-NPCs:** ihr Automat nimmt die Sprache des NPC (Voreinstellung `en`, weil Modelle englischen Code verlässlicher
+  schreiben).
+
+## Einstieg ohne Programmierkenntnisse
+
+Wer nie programmiert hat, soll trotzdem einen eigenen Automaten haben. Dafür gibt es vier Wege, die dieselbe
+`schritt`-Funktion erzeugen; welchen man wählt, ist Geschmack, und man kann jederzeit zum nächsten wechseln.
+
+1. **Vorlage mit Feldern.** Jede Vorlage nennt ihre Stellschrauben (Feuerwärter: „Öl nachlegen unter [25] %“,
+   Bote: „Ware [treibholz], von [Graue Bucht] nach [Kontor]“). Man füllt Felder aus, der Editor setzt sie in den
+   Code ein. Die Felder stehen als Kommentarzeile `// @param schwelle: Zahl 0..1 = 0.25` in der Vorlage, so bleibt der
+   Code die einzige Quelle.
+2. **Regelbaukasten.** Eine Liste „Wenn <Bedingung>, dann <Befehl>“, Bedingungen und Befehle aus Auswahllisten, die
+   aus dem Schema von `sicht` und der Befehlsliste des `AutomatonCmdSet` kommen. Die Regeln sind Daten und werden zu
+   Code übersetzt; „Als Code anzeigen“ zeigt das Ergebnis und führt zum Code-Editor.
+3. **Vormachen.** `automat aufnehmen` merkt die eigenen Befehle (sie stehen als `Intent`-Entries im Space), `automat
+   aufnehmen ende` bietet daraus eine Routine an („Diese 4 Befehle in Schleife?“) und erzeugt den Code.
+4. **Beschreiben (Assistent).** Man schreibt in einem Satz, was der Automat tun soll. Ein Agent erzeugt `schritt`
+   (siehe unten). Von Anfang an Teil dieser Phase, nicht erst später.
+
+Im Code-Editor selbst hilft eine **Vervollständigung aus dem Schema**: `sicht.raum.` bietet `dinge`, `leute`,
+`feuer` an, `tue` kennt die erlaubten Befehle. Ohne Modell, aus einer Typdeklaration für `sicht`, die zugleich die
+Referenz „Was ein Automat sieht“ speist. Der Editor ist CodeMirror 6 (neue Abhängigkeit, vor dem Einbau
+freigeben lassen; bis dahin ein einfaches Textfeld).
+
+### Probelauf gegen die Vergangenheit
+
+Der Automaten-Worker bewahrt die letzten 20 `sicht`-Werte je Automat im `AutomatonLog` (Lease 1 h). Der Probelauf
+kann den Code gegen diese echten Sichten laufen lassen und zeigt, was er getan hätte, neben dem, was der alte Code
+getan hat. Das ist der Prüfstand für alle vier Wege.
+
+### Assistent: Beschreibung zu Code
+
+Ablauf wie Task und Judge in codemode-chat: ein Agent schreibt, der Sandbox prüft.
+
+```
+Spielerin: "Bring Treibholz zum Kontor und warte bei Nebel"
+Assistent (Agent, Prozess npc/assistant)
+   1. schreibt schritt(sicht, merk) und 2-4 Szenen (sicht, erwartet) dazu
+   2. lässt beides im Sandbox laufen (Grenzen wie oben); scheitert es, bekommt er die Fehlermeldung und
+      versucht es erneut (höchstens 3 Versuche)
+   3. liefert Code, Szenen und eine Erklärung in einem Satz je Block zurück
+Spielerin: sieht Code + Probelauf, ändert oder übernimmt ("automat code übernehmen")
+```
+
+- Das Modell läuft nur beim Schreiben. Der fertige Automat ist eine gewöhnliche Funktion und kostet im Betrieb nur Öl.
+- Tokens: eigenes Kontingent pro Konto und Tag (wie `CODEMODE_LLM_PER_DAY`/`_PER_MIN`, Variable
+  `SPACES_MMO_ASSISTANT_PER_DAY`), standardmäßig aus (`SPACES_MMO_LLM=0`); die Vorlagen, der Regelbaukasten und das
+  Vormachen funktionieren ohne.
+- Der Assistent sieht nur die Beschreibung, die Referenzartikel, die Vorlagen und den Code des eigenen Automaten,
+  nie Daten anderer Spieler. Sein Ergebnis wird nie ausgeführt, bevor die Spielerin es übernommen hat.
+- Tests mit geskripteten Modellen (Systemnachrichten vor dem Prüfen der letzten Nachricht herausfiltern, siehe
+  `docs/examples.md`); ein Live-Lauf nur auf ausdrückliche Freigabe.
+
+### Agenten als Besitzer von Automaten
+
+Modell-NPCs (Phase 5) dürfen Automaten bauen und programmieren, mit denselben Regeln wie Menschen:
+
+- Der NPC ist eine Figur mit `owner`-Rolle; die Grenze von 2 Automaten und das Öl gelten für ihn genauso.
+- Er benutzt dieselben Befehle: `automat vorlage <name>`, dann `automat code`, `automat probe`, `automat start`. Es gibt
+  keinen Sonderzugang. Der Quelltext (≤ 8 000 Zeichen, auch mehrzeilig) steht nicht in der Befehlszeile, sondern im
+  Feld `payload` des `Intent`-Entries; die Zeile bleibt `automat code`. Der Browser-Editor und Agenten benutzen dasselbe
+  Feld, nur der reine Textmodus braucht den mehrzeiligen Eingabemodus.
+- Für das Schreiben gilt dieselbe Schleife wie beim Assistenten (schreiben, Probelauf, nachbessern), und die Tokens
+  zählen auf das Kontingent des NPC (`SPACES_MMO_LLM`), nicht auf das einer Spielerin.
+- Gegen Wildwuchs: höchstens 1 Automat je Modell-NPC, ein Codewechsel je 10 Minuten (vom Admin im Konfigurationsfenster einstellbar, siehe [Einstellungen für Betreiber](#einstellungen-für-betreiber)), und die Automaten eines NPC tragen
+  im Namen und in `sicht` das Kennzeichen `von: "npc"`, damit Spieler sie von menschlichen unterscheiden.
+
 ## Kleines Hilfesystem
 
 Drei Teile, eine Quelle:
@@ -192,10 +298,46 @@ Artikelliste (klein gehalten):
 | `automat zeige [<automat>]` | Zeigt Code, Ölstand, Status |
 | `automat start` / `automat stop` | Startet oder pausiert |
 | `automat log` | Die letzten 20 Zeilen: ausgeführte Befehle, Fehler, Grenzverletzungen |
-| `automat probe` | Probelauf gegen die aktuelle Sicht, ohne auszuführen |
+| `automat probe` | Probelauf gegen die aktuelle Sicht oder die letzten 20 gespeicherten, ohne auszuführen |
+| `automat aufnehmen` / `automat aufnehmen ende` | Eigene Befehle aufzeichnen und daraus eine Routine erzeugen |
+| `automat beschreibe <Satz>` | Der Assistent schreibt Code zu der Beschreibung (Kontingent) |
+| `automat code [übernehmen]` | Setzt den Quelltext; `übernehmen` nimmt den Vorschlag des Assistenten |
 
 Den Code selbst bearbeitet man im Browser-Editor. Im reinen Textmodus geht das über einen mehrzeiligen Eingabemodus
 (EvEditor-Entsprechung).
+
+## Einstellungen für Betreiber
+
+Der Admin meldet sich im Browser an und öffnet das **Konfigurationsfenster**. Dort stehen die Grenzen und
+Kontingente als Formularfelder mit Beschriftung, Einheit, Standardwert und „?“-Hilfe, kein Befehl nötig. „Speichern“
+schreibt sie als `Setting`-Entries in den Space; sie bleiben damit über Neustarts erhalten und gelten auf jedem
+Prozess, der den Space benutzt, ohne Neustart (die Prozesse lesen sie beim nächsten Schritt oder über `watch`).
+
+Reihenfolge, wer gewinnt: **gespeicherter Wert im Space → Umgebungsvariable (`.env`) → eingebauter Standard.** Die
+`.env` liefert also die Anfangswerte, das Fenster überschreibt sie; „Zurücksetzen“ löscht den Eintrag im Space, und
+wieder gilt die `.env`. Das Fenster zeigt je Feld, woher der Wert gerade kommt.
+
+| Feld | Umgebungsvariable | Standard |
+| --- | --- | --- |
+| Modell-NPCs erlaubt | `SPACES_MMO_LLM` | aus |
+| Assistent: Läufe je Konto und Tag | `SPACES_MMO_ASSISTANT_PER_DAY` | 10 |
+| Modell-NPCs gleichzeitig **wach** (Höchstzahl) | `SPACES_MMO_NPC_MAX` | 10 |
+| Automaten gleichzeitig in der ganzen Welt (Höchstzahl) | `SPACES_MMO_AUTOMATA_MAX` | 100 |
+| Codewechsel eines Modell-NPC: Wartezeit (Minuten) | `SPACES_MMO_NPC_CODE_COOLDOWN_MIN` | 10 |
+| Anfragen je Minute und Verbindung | `SPACES_MMO_REQ_PER_MIN` | 120 |
+| Gäste je Stunde | `SPACES_MMO_GUESTS_PER_HOUR` | 5 |
+| Lebensdauer von Gästen | `SPACES_MMO_GUEST_TTL_MS` | 7 Tage |
+
+Die Höchstzahlen zählen die laufenden Figuren; ist die Grenze erreicht, wird ein weiterer Modell-NPC nicht gestartet
+bzw. `automat start` abgelehnt („Die Welt ist voll, versuche es später“), und das Fenster zeigt, wie viele gerade laufen.
+Die Grenzen je Besitzer (2 Automaten, Gäste 1) bleiben davon unberührt.
+
+Nicht im Fenster, nur in der `.env`: alles, was den Prozess selbst betrifft (Adressen, Pfade, `SPACES_MMO_SPACE`,
+`SPACES_MMO_LISTEN`, `SPACES_MMO_DATA`) und alle Geheimnisse (`SPACES_MMO_SETUP_TOKEN`, Passwörter). Das Fenster zeigt
+und speichert nie ein Geheimnis. Jede Änderung steht mit Wer und Wann im Admin-Log.
+
+Schreiben darf nur eine Admin-Sitzung (dieselbe Anmeldung wie sonst); der Server prüft Typ und Grenzen jedes Feldes
+(eine Wartezeit unter 1 Minute oder ein Kontingent über dem Höchstwert wird abgelehnt, das Fenster zeigt den Grund).
 
 ## Sicherheit und Fairness
 
@@ -216,3 +358,12 @@ Den Code selbst bearbeitet man im Browser-Editor. Im reinen Textmodus geht das �
 - Ein Automat mit Endlosschleife hält nach 5 Schritten an, ohne andere Automaten zu verzögern.
 - Ein Neustart des Automaten-Workers: alle laufenden Automaten machen mit ihrem `merk` weiter.
 - `help automat` im Spiel und die Referenz im Editor zeigen denselben Text (Test vergleicht beide Ausgaben).
+- Ein Assistent-Lauf mit geskriptetem Modell liefert Code, der die eigenen Szenen besteht; ein Lauf, der dreimal
+  scheitert, liefert keinen Code und verbraucht nur das Kontingent, nicht den Besitzer-Slot.
+- Ein Modell-NPC baut einen Automaten über dieselben Befehle; der zweite wird abgelehnt (1 je NPC), ein Codewechsel
+  innerhalb der eingestellten Wartezeit ebenso; eine im Fenster geänderte und gespeicherte Wartezeit gilt ab dem nächsten Versuch und nach einem Neustart weiter.
+- Ein Mensch ohne Code kommt über Vorlage + Felder zu einem laufenden Automaten (Test spielt den Weg durch).
+- Dieselbe Vorlage in `de` und `en` besteht dieselben Szenen und liefert gleiche Befehle; ein Automat mit `lang: "en"`
+  sieht nur englische Schlüssel (Test greift auf `sicht.raum` und bekommt `undefined`).
+- Zwei Nutzer in verschiedenen Sprachen spielen im selben Raum; jeder sieht Räume, Gegenstände und Hilfe in seiner
+  Sprache, und `get treibholz` und `get driftwood` finden denselben Gegenstand.

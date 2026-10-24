@@ -1,22 +1,22 @@
 "use client";
 // The tile map of the current room, drawn with PixiJS (docs/architektur.md, "Grafik"). React owns the frame; PixiJS
-// only the canvas: the ground once per room, then one sprite per online character, updated from the frames the
+// only the canvas: the ground once per room, exits and things on it, then one sprite per online character, updated from the frames the
 // gateway sends. A tap on a cell is handed to `onCell`, which turns it into a text command; the map never changes the
 // world by itself. pixi.js is imported in the browser only.
 import { useEffect, useRef } from "react";
-import type { CharView, ServerFrame } from "../server/gateway.ts";
+import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Pixi = typeof import("pixi.js");
-type Scene = { pixi: Pixi; chars: import("pixi.js").Container; skins: import("pixi.js").Texture[]; frames: Map<string, import("pixi.js").Texture>; sprites: Map<string, { body: import("pixi.js").Sprite; label: import("pixi.js").Text; x: number; y: number; row: number }> };
+type Scene = { pixi: Pixi; chars: import("pixi.js").Container; objs: import("pixi.js").Container; skins: import("pixi.js").Texture[]; frames: Map<string, import("pixi.js").Texture>; sprites: Map<string, { body: import("pixi.js").Sprite; label: import("pixi.js").Text; x: number; y: number; row: number }> };
 
 const ROW = { down: 0, left: 1, right: 2, up: 3 } as const;
 
-export function MapView({ world, room, chars, me, onCell }: { world: Hello["world"]; room: Hello["room"]; chars: Map<string, CharView>; me: string; onCell: (x: number, y: number) => void }) {
+export function MapView({ world, room, chars, objs, me, onCell }: { world: Hello["world"]; room: Hello["room"]; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; onCell: (x: number, y: number) => void }) {
 	const host = useRef<HTMLDivElement>(null);
 	const scene = useRef<Scene | null>(null);
-	const latest = useRef({ chars, me, onCell });
-	latest.current = { chars, me, onCell };
+	const latest = useRef({ chars, objs, me, onCell });
+	latest.current = { chars, objs, me, onCell };
 
 	// the ground: built again when the room changes
 	useEffect(() => {
@@ -51,9 +51,10 @@ export function MapView({ world, room, chars, me, onCell }: { world: Hello["worl
 				s.position.set(x * ts, y * ts);
 				ground.addChild(s);
 			}
+			const objLayer = new pixi.Container();
 			const charLayer = new pixi.Container();
 			charLayer.sortableChildren = true;
-			a.stage.addChild(ground, charLayer);
+			a.stage.addChild(ground, objLayer, charLayer);
 			a.stage.eventMode = "static";
 			a.stage.hitArea = a.screen;
 			a.stage.on("pointertap", (e) => {
@@ -61,8 +62,9 @@ export function MapView({ world, room, chars, me, onCell }: { world: Hello["worl
 				const x = Math.floor(p.x / ts), y = Math.floor(p.y / ts);
 				if (x >= 0 && y >= 0 && x < w && y < h) latest.current.onCell(x, y);
 			});
-			scene.current = { pixi, chars: charLayer, skins, frames: new Map(), sprites: new Map() };
+			scene.current = { pixi, chars: charLayer, objs: objLayer, skins, frames: new Map(), sprites: new Map() };
 			draw(scene.current, world, latest.current.chars, latest.current.me);
+			drawObjs(scene.current, world, room.roomId, latest.current.objs);
 		})();
 		return () => {
 			dead = true;
@@ -73,8 +75,35 @@ export function MapView({ world, room, chars, me, onCell }: { world: Hello["worl
 
 	// the characters: every change of the map of online characters
 	useEffect(() => { if (scene.current) draw(scene.current, world, chars, me); }, [world, chars, me]);
+	// things and exits: few per room, drawn again on every change
+	useEffect(() => { if (scene.current) drawObjs(scene.current, world, room.roomId, objs); }, [world, room, objs]);
 
 	return <div className="map" ref={host} />;
+}
+
+/** Exits as marked cells with their name, things lying in the room as glyphs (no item graphics are licensed yet). */
+function drawObjs(s: Scene, world: Hello["world"], roomId: string, objs: Map<string, ObjView>): void {
+	const ts = world.tileSize, p = s.pixi;
+	for (const child of s.objs.removeChildren()) child.destroy({ children: true });
+	for (const o of objs.values()) {
+		if (o.location !== roomId) continue;
+		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
+		if (o.kind === "exit") {
+			const g = new p.Graphics().rect(x + 2, y + 2, ts - 4, ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
+			const label = new p.Text({ text: o.name, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(cx, y + ts);
+			s.objs.addChild(g, label);
+			continue;
+		}
+		const color = o.glyph?.color ?? "#9aa3ad", shape = o.glyph?.shape ?? "square";
+		const g = new p.Graphics();
+		if (shape === "circle") g.circle(cx, cy + 4, 6);
+		else if (shape === "diamond") g.poly([cx, cy - 4, cx + 7, cy + 4, cx, cy + 12, cx - 7, cy + 4]);
+		else g.rect(cx - 8, cy, 16, 9);
+		g.fill({ color }).stroke({ width: 1.5, color: "#1b1b1b" });
+		s.objs.addChild(g);
+	}
 }
 
 /** Brings the sprites in line with `chars`: new ones appear, gone ones are removed, moved ones face the way they went. */

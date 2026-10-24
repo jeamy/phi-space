@@ -39,6 +39,12 @@ niemanden ab und verliert nichts.
 
 ## Phase 1 – Weltkern nach Evennia
 
+**Stand 2026-10-24: umgesetzt.** Beide Abnahmen als Tests (`tests/phase1.test.ts`, mit zwei Welt-Workern bzw. einem
+Welt-Worker, der mitten im `give` per SIGKILL stirbt), dazu Ausgänge, Gegenstände, Builder, Locks, Tags und Laden der
+Welt; Unit-Tests für Lock-Parser, FuncParser, Cmdset-Merge und Typklassen (`tests/engine.test.ts`). Neu dabei:
+`step <dx> <dy>` (Klick und Pfeiltaste, relativ), `perm` (Admin vergibt Builder), `tag`, `lock`, `examine`;
+`npm run world:load [-- --replace]`. Abweichungen und Grenzen: [evennia-abbildung.md](evennia-abbildung.md#stand-phase-1).
+
 - Typklassen-Registry, Objects/Rooms/Exits/Characters, `location`-Modell; Engine und Welt getrennt
   (`server/engine/` vs. `worlds/leuchtfeuer/`).
 - Commands + Cmdsets mit Merge-Regeln; `go`/Richtungen, `get`, `drop`, `give`, `inventory`, `emote`.
@@ -83,6 +89,8 @@ gleich der Summe davor plus Spawns minus Verbrauch (Erhaltungsprüfung).
 
 ## Phase 5 – Modell-NPCs (kosten Tokens, nur nach Freigabe)
 
+Ausführlich in [modell-npcs.md](modell-npcs.md): feste Rollen, die bei Ereignissen aufwachen (döst/wach/abwesend), Wanderer durch Ereignisse, `SPACES_MMO_NPC_MAX` zählt nur die wachen.
+
 - `npc`-Prozess nutzt das `agent/`-Paket; Agenten spielen über dieselben Befehle wie Menschen.
 - Kontingente pro Tag/Minute wie `CODEMODE_LLM_PER_DAY`, `CODEMODE_LLM_PER_MIN`; standardmäßig aus
   (`SPACES_MMO_LLM=0`).
@@ -91,7 +99,7 @@ gleich der Summe davor plus Spawns minus Verbrauch (Erhaltungsprüfung).
 
 ## Phase 6 – Automaten (Spielerprogramme)
 
-Ausführlich in [automaten.md](automaten.md).
+Ausführlich in [automaten.md](automaten.md): Vorlagen mit Feldern, Regelbaukasten, Vormachen und Assistent (Beschreibung zu Code) von Anfang an; Modell-NPCs dürfen Automaten bauen. Deutsch und Englisch umschaltbar (Befehle immer in beiden, Code und Texte je Nutzer).
 
 - Spieler schreiben kleine Programme (`schritt(sicht, merk) → { tue, merk }`), die im pi-codemode-Sandbox laufen
   (wie die Beiträge in codemode-chat), in einem eigenen Automaten-Prozess.

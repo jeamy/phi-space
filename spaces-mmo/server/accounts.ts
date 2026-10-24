@@ -9,7 +9,7 @@
 import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { walkable, type WorldDef } from "./engine/world.ts";
-import { asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type WebSessionFields } from "./model.ts";
+import { actorToken, asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type WebSessionFields } from "./model.ts";
 import { envMs, readExisting, StillHeld } from "./space.ts";
 
 const scrypt = (password: string, salt: Buffer): Promise<Buffer> =>
@@ -67,6 +67,7 @@ export class Accounts {
 		try {
 			await this.world.write({ type: "Account", fields: asFields(account) }, txn, this.guestTtlMs);
 			await this.world.write({ type: "Character", fields: asFields(char) }, txn, FOREVER);
+			await this.world.write(actorToken(char.charId), txn, FOREVER);
 			await this.world.commit(txn);
 		} catch (e) { await this.world.abort(txn).catch(() => {}); throw e; }
 		return { ...pick(account), charId: char.charId };
@@ -126,6 +127,7 @@ export class Accounts {
 				const char = this.#newCharacter(account);
 				await this.world.write({ type: "Account", fields: asFields(account) }, t2, FOREVER);
 				await this.world.write({ type: "Character", fields: asFields(char) }, t2, FOREVER);
+				await this.world.write(actorToken(char.charId), t2, FOREVER);
 				charId = char.charId;
 			}
 			await this.world.commit(t2);

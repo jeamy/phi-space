@@ -12,6 +12,7 @@
     "space": "node --no-warnings --experimental-strip-types server/space-host.ts",
     "world": "node --no-warnings --experimental-strip-types server/world-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
+    "world:load": "node --no-warnings --experimental-strip-types server/world-load.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts"
   },
   "dependencies": {

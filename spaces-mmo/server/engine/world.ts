@@ -3,13 +3,32 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT } from "../env.ts";
+import type { ExitFields, HelpEntryFields, PrototypeFields } from "../model.ts";
+import { parseLocks } from "./locks.ts";
+import { typeChain } from "./typeclasses.ts";
 
 /** A 32×32 cut of a sheet (pixel offsets); `walk`: characters may stand on it. */
 export type TileDef = { sheet: string; x: number; y: number; walk: boolean };
 /** A character sheet: 4 frames per row, rows down, left, right, up. */
 export type SkinDef = { sheet: string; frameW: number; frameH: number };
 export type RoomDef = { roomId: string; name: string; desc: string; ground: string[]; spawn: { x: number; y: number } };
-export type WorldDef = { id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; help: string[]; guestName: string };
+export type ExitDef = Omit<ExitFields, "location" | "locks"> & { room: string; locks?: string };
+/** An item the world places once: spawned only while no item with its itemId exists anywhere. */
+export type PlacedDef = { itemId: string; proto: string; room: string; x: number; y: number };
+export type WorldDef = {
+	id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; guestName: string;
+	/** Raised when the definition changes: a world worker loads a newer version (rooms, exits, prototypes, help). */
+	version: number;
+	/** Typeclasses below the engine's (name → parent). */
+	typeclasses: Record<string, string | null>;
+	prototypes: PrototypeFields[];
+	objects: PlacedDef[];
+	exits: ExitDef[];
+	/** Help topics beyond the command list; `help` without a topic starts with `intro`. */
+	help: HelpEntryFields[];
+	/** What a room dug by a builder looks like until it is shaped. */
+	dig: { ground: string[]; spawn: { x: number; y: number }; desc: string };
+};
 
 const WORLD_ID = /^[a-z0-9-]{1,40}$/;
 
@@ -18,13 +37,32 @@ const WORLD_ID = /^[a-z0-9-]{1,40}$/;
 export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeuer"): Promise<WorldDef> {
 	if (!WORLD_ID.test(id)) throw new Error(`SPACES_MMO_WORLD: a-z, 0-9 and -, got ${id}`);
 	const w = (await import(join(ROOT, "worlds", id, "world.ts"))).world as WorldDef;
-	for (const r of w.rooms) {
-		const width = r.ground[0]?.length ?? 0;
-		if (!width || r.ground.some((row) => row.length !== width)) throw new Error(`room ${r.roomId}: rows of different width`);
-		for (const row of r.ground) for (const k of row) if (!w.tiles[k]) throw new Error(`room ${r.roomId}: unknown tile ${k}`);
-		if (!w.tiles[r.ground[r.spawn.y]?.[r.spawn.x] ?? ""]?.walk) throw new Error(`room ${r.roomId}: spawn is not walkable`);
+	const grid = (what: string, ground: string[], spawn: { x: number; y: number }) => {
+		const width = ground[0]?.length ?? 0;
+		if (!width || ground.some((row) => row.length !== width)) throw new Error(`${what}: rows of different width`);
+		for (const row of ground) for (const k of row) if (!w.tiles[k]) throw new Error(`${what}: unknown tile ${k}`);
+		if (!walkable(w, ground, spawn.x, spawn.y)) throw new Error(`${what}: spawn is not walkable`);
+	};
+	for (const r of w.rooms) grid(`room ${r.roomId}`, r.ground, r.spawn);
+	grid("dig template", w.dig.ground, w.dig.spawn);
+	const room = (roomId: string) => w.rooms.find((r) => r.roomId === roomId);
+	if (!room(w.start)) throw new Error(`world ${id}: unknown start room ${w.start}`);
+	for (const p of w.prototypes) {
+		typeChain(p.typeclass, w.typeclasses);
+		if (p.parent && !w.prototypes.some((q) => q.key === p.parent)) throw new Error(`prototype ${p.key}: unknown parent ${p.parent}`);
+		parseLocks(p.locks);
 	}
-	if (!w.rooms.some((r) => r.roomId === w.start)) throw new Error(`world ${id}: unknown start room ${w.start}`);
+	for (const e of w.exits) {
+		const from = room(e.room), to = room(e.destination);
+		if (!from || !to) throw new Error(`exit ${e.exitId}: unknown room`);
+		if (!walkable(w, from.ground, e.x, e.y) || !walkable(w, to.ground, e.arrive.x, e.arrive.y)) throw new Error(`exit ${e.exitId}: cell or arrival not walkable`);
+		if (w.exits.some((o) => o.room === e.destination && o.x === e.arrive.x && o.y === e.arrive.y)) throw new Error(`exit ${e.exitId}: arrives on another exit`);
+		parseLocks(e.locks ?? "");
+	}
+	for (const o of w.objects) {
+		const r = room(o.room);
+		if (!r || !walkable(w, r.ground, o.x, o.y) || !w.prototypes.some((p) => p.key === o.proto)) throw new Error(`object ${o.itemId}: unknown room or prototype, or not on a walkable cell`);
+	}
 	return w;
 }
 

@@ -108,3 +108,40 @@ Charakters nacheinander laufen (ein `ActorLock`-Entry pro Charakter, wie `RoomLo
   Absturz ist der Zustand der letzte Commit.
 - **Ausgabe ist Weltzustand** (`Msg`-Entries) und nicht ein Funktionsaufruf an Sessions. Dadurch sehen Agenten,
   Zuschauer und ein neu verbundenes Gerät denselben Verlauf.
+
+## Stand Phase 1
+
+Umgesetzt in `server/engine/` (Engine) und `worlds/leuchtfeuer/world.ts` (Welt). Wo die Umsetzung von den Tabellen oben
+abweicht:
+
+- **Gegenstände** sind Entries ihres Typklassen-Typs mit den Obertypen `Item` und `Object` (eine Münze: `Coin` <
+  `Item` < `Object`); Felder `itemId`, `name`, `aliases`, `desc`, `location` (Raum oder Figur), `x`/`y`, `glyph`,
+  `locks`, `proto`. Figuren behalten `room` statt `location`: Eine Figur steht immer in einem Raum.
+- **Ausgänge** liegen auf einer Kachel (`x`/`y`) und haben eine Ankunftsstelle (`arrive`). Betreten der Kachel oder
+  `go <name>` oder nur der Name führt hindurch. Statt eines `atTraverse`-Hooks prüft der Welt-Worker den Lock
+  `traverse`.
+- **Hooks** (`atGet`, `atDrop` …) gibt es noch nicht; das Verhalten steckt in den Befehlen, die Typklassen tragen nur die
+  Typkette. Das kommt, sobald eine Welt eigenes Verhalten braucht (Phase 2: Feuer, Flut).
+- **Command Sets:** Standard (Priorität 0), Builder (1, mit `cmd`-Lock pro Befehl), ein Befehl je Ausgang (10). Sets an
+  getragenen Objekten kommen später.
+- **Locks:** `all()`, `none()`, `perm(Stufe)`, `id(figur)`, `holds(itemId|prototyp)`, `guest()`, `not`, `and`, `or`,
+  Klammern. Stufen Guest < Player < Builder < Admin; ein Admin hat alle, `perm <name> = Builder` vergibt Builder. Ein
+  gespeicherter Lock-String, der nicht parst, verweigert.
+- **FuncParser:** `$you()` und `$conj(du-form|andere-form)`; deutsche Verben sind unregelmäßig, deshalb nennt `$conj`
+  beide Formen. Das Gateway rendert pro Empfänger, auch den Verlauf in der Begrüßung.
+- **Prototypen** stehen vollständig in der Welt; `parent` vererbt Felder, die ein Kind leer lässt.
+- **Laden der Welt:** unter `Lock{name:"world"}` in einer Transaktion. Fehlende Teile werden immer geschrieben; Räume,
+  Ausgänge, Prototypen und Hilfe werden ersetzt, wenn die Welt eine neuere `version` hat (oder `--replace`). Ein
+  platzierter Gegenstand entsteht nur beim (Neu-)Laden und nur, wenn es seine `itemId` nirgends gibt.
+- **Gegenstandsgrafik:** Glyphen (Kreis, Quadrat, Raute) statt Sprites, weil die Gegenstands-Icons von Intersect-Assets
+  meist CC BY-SA 3.0 sind.
+- **Reihenfolge pro Figur:** Jede Figur hat ein `ActorToken`. Ein Welt-Worker nimmt es in die Transaktion des Befehls,
+  dann den ältesten Auftrag dieser Figur, und legt es beim Commit zurück. Befehle einer Figur laufen so nacheinander und
+  in der gesendeten Reihenfolge, Befehle verschiedener Figuren parallel auf mehreren Workern. Stirbt ein Worker, kehrt
+  das Token mit seiner Transaktion zurück. Tokens entstehen mit der Figur; für ältere Figuren schreibt sie jeder Worker
+  beim Start (unter der Welt-Sperre).
+- **Sprache:** Jeder Befehl hat einen englischen Schlüssel und deutsche Aliase (`get`/`nimm`, `dig`/`grabe`,
+  `examine`/`untersuche` …); beide gelten immer, ohne Umschalter, und `help` zeigt alle Namen. Gegenstände und Ausgänge
+  haben auch englische Aliase (`driftwood`, `shell`, `east`). Ausgaben in der Sprache des Empfängers (`names: {de, en}`,
+  siehe [automaten.md](automaten.md#sprache-deutsch-und-englisch)) folgen später; bis dahin sind die Meldungen deutsch.
+  Schon platzierte Gegenstände behalten die Aliase, mit denen sie entstanden sind.

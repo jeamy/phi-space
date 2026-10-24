@@ -1,5 +1,5 @@
 // Acceptance of Phase 0 (docs/phasen.md): guests and accounts, one room, text and map, and what survives a process
-// that dies. Every test starts its own space process and world process (tests/stack.ts).
+// that dies. Every test starts its own space process and world worker (tests/stack.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -82,7 +82,7 @@ test("a web process that dies takes its players offline within the session lease
 	} finally { await stack.close(); }
 });
 
-test("a world process that dies loses nothing: positions stay, and a command sent meanwhile runs after the restart", async () => {
+test("a world worker that dies loses nothing: positions stay, and a command sent meanwhile runs after the restart", async () => {
 	const stack = await startStack();
 	const srv = await startServer({ stack });
 	try {
@@ -93,7 +93,7 @@ test("a world process that dies loses nothing: positions stay, and a command sen
 		a.send("move 5 9");
 		await a.until(at(5, 9));
 		await stack.kill(stack.worlds[0]!, "SIGKILL");
-		a.send("move 6 9"); // no world process runs: the intent waits in the space
+		a.send("move 6 9"); // no world worker runs: the intent waits in the space
 		await new Promise((r) => setTimeout(r, 500));
 		assert.equal(a.frames.some(at(6, 9)), false);
 		await stack.worldProcess();

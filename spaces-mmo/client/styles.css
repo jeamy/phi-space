@@ -83,3 +83,9 @@ a { color: var(--accent); }
   .main { grid-template-columns: 1fr; grid-template-rows: auto minmax(220px, 1fr); }
   .game { height: auto; min-height: 100vh; }
 }
+.things { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.things h3 { margin: 4px 0; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.things ul { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 4px; }
+.things li { display: flex; align-items: center; gap: 6px; }
+.things li span { flex: 1; color: var(--text-strong); }
+.things button { padding: 2px 8px; font-size: 12px; }

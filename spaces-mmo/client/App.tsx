@@ -3,7 +3,7 @@
 // room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CharView, MsgView, ServerFrame } from "../server/gateway.ts";
+import type { CharView, MsgView, ObjView, ServerFrame } from "../server/gateway.ts";
 import { MapView } from "./MapView.tsx";
 
 type Account = { name: string; guest: boolean; admin: boolean };
@@ -87,9 +87,27 @@ function About() {
 	);
 }
 
+/** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
+function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void }) {
+	const all = [...objs.values()].filter((o) => o.kind === "item");
+	const carried = all.filter((o) => o.location === me);
+	const near = self ? all.filter((o) => o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1) : [];
+	if (!carried.length && !near.length) return <div />;
+	const row = (o: ObjView, verb: string, label: string) => (
+		<li key={o.id}><span>{o.name}</span><button onClick={() => send(`${verb} ${o.name}`)}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
+	);
+	return (
+		<div className="things">
+			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
+			{carried.length > 0 && <><h3>Du trägst</h3><ul>{carried.map((o) => row(o, "drop", "Ablegen"))}</ul></>}
+		</div>
+	);
+}
+
 function Game({ account, onAccount }: { account: Account; onAccount: (a: Account | null) => void }) {
 	const [hello, setHello] = useState<Hello | null>(null);
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
+	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
 	const [log, setLog] = useState<Line[]>([]);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
@@ -103,16 +121,25 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 
 	// the game socket; it reconnects with a backoff, and a socket refused for a lapsed login logs out
 	useEffect(() => {
-		let dead = false, retry = 0, timer: ReturnType<typeof setTimeout> | undefined;
+		let dead = false, retry = 0, timer: ReturnType<typeof setTimeout> | undefined, greeted = false;
 		const connect = () => {
 			const s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
 			ws.current = s;
 			s.onopen = () => setLive(true);
 			s.onmessage = (e) => {
 				const f = JSON.parse(String(e.data)) as ServerFrame;
-				if (f.t === "hello") { retry = 0; setHello(f); setChars(new Map(f.chars.map((c) => [c.charId, c]))); setLog(f.log); }
+				if (f.t === "hello") {
+					retry = 0; setHello(f);
+					setChars(new Map(f.chars.map((c) => [c.charId, c])));
+					setObjs(new Map(f.objs.map((o) => [o.id, o])));
+					// the first hello brings the room's recent talk; a later one (another room, a reconnect) keeps the log
+					if (!greeted) setLog(f.log); else append({ kind: "echo", text: `— ${f.room.name} —`, from: "", at: Date.now() });
+					greeted = true;
+				}
 				else if (f.t === "char") setChars((m) => new Map(m).set(f.c.charId, f.c));
 				else if (f.t === "gone") setChars((m) => { const n = new Map(m); n.delete(f.charId); return n; });
+				else if (f.t === "obj") setObjs((m) => new Map(m).set(f.o.id, f.o));
+				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
 				else if (f.t === "msg") append(f.m);
 			};
 			s.onclose = () => {
@@ -150,7 +177,8 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 			moves = (horizontal ? [[dx, 0], [0, dy]] : [[0, dy], [dx, 0]] as Array<[number, number]>).filter(([a, b]) => a || b) as Array<[number, number]>;
 		}
 		const go = moves.find(([a, b]) => free(self.x + a, self.y + b)) ?? moves[0]!;
-		send(`move ${self.x + go[0]} ${self.y + go[1]}`, false);
+		// relative: the server steps from where the character really is, not from where this page last saw it
+		send(`step ${go[0]} ${go[1]}`, false);
 	}, [chars, me, hello, send]);
 
 	// arrow keys walk, unless the command line has the focus
@@ -181,7 +209,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
 			</header>
 			<div className="main">
-				{hello ? <MapView world={hello.world} room={hello.room} chars={chars} me={me} onCell={(x, y) => step({ x, y })} /> : <div className="map"><p className="muted">Verbinde …</p></div>}
+				{hello ? <MapView world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} onCell={(x, y) => step({ x, y })} /> : <div className="map"><p className="muted">Verbinde …</p></div>}
 				<aside className="side">
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
@@ -193,7 +221,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 							<div style={{ display: "flex", gap: 8 }}><button onClick={() => setPanel("account")}>Erst registrieren</button><button onClick={() => void logout()}>Trotzdem abmelden</button></div>
 						</div>
 					)}
-					{!panel && <div />}
+					{!panel && <Things objs={objs} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} send={send} />}
 					<div className="log" role="log" aria-live="polite">
 						{log.map((l, i) => <div key={i} className={l.kind}>{l.text}</div>)}
 						<div ref={logEnd} />

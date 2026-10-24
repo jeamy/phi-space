@@ -1,79 +1,38 @@
-// The commands of Phase 0 (docs/phasen.md): look, say, who, help, move. A command runs inside the world process's
-// transaction for its intent: what it changes (a character's position) and what it says (Msg entries) commit
-// together with the intent being taken, or not at all.
-import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { asFields, fieldsOf, type CharacterFields, type MsgFields, type MsgKind, type RoomFields, type SessionFields } from "../model.ts";
-import { findPath, type WorldDef } from "./world.ts";
+// Runs one command line (docs/evennia-abbildung.md, "Ablauf eines Befehls"): the actor's command sets are merged
+// (defaults, builder commands, one command per exit of the room), commands whose `cmd` lock the actor fails are
+// dropped, and the command the first word names runs inside the intent's transaction.
+import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
+import { BUILDER_COMMANDS } from "./commands/builder.ts";
+import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts";
+import { CommandError, lockCtx, type CommandCtx } from "./context.ts";
+import { allowed } from "./locks.ts";
 
-export type CommandCtx = { space: SpaceLike; txn: string; world: WorldDef; actor: CharacterFields; msgLeaseMs: number };
+export { CommandError, type CommandCtx };
 
-/** A refusal shown to the actor; the transaction is aborted. */
-export class CommandError extends Error {}
-
-const MAX_SAY = 300;
+/** The commands the actor has, by every name. */
+export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
+	const lc = await lockCtx(c);
+	const offered = (cmds: Command[]) => cmds.filter((cmd) => !cmd.locks || allowed(cmd.locks, "cmd", lc));
+	const exits = await exitCmdSet(c);
+	let all: Map<string, Command> = new Map();
+	// the help lists the commands, not the exits (look names those)
+	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
+	const sets: CmdSet[] = [
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, help]) },
+		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
+		exits,
+	];
+	all = merge(sets);
+	return all;
+}
 
 export async function execute(c: CommandCtx, line: string): Promise<void> {
 	line = line.trim();
-	if (line.startsWith("'")) line = `say ${line.slice(1)}`;
-	const [verb = "", ...rest] = line.split(/\s+/);
-	const arg = line.slice(verb.length).trim();
-	switch (verb.toLowerCase()) {
-		case "look": case "l": return look(c);
-		case "say": return say(c, arg);
-		case "who": return who(c);
-		case "help": case "?": return msg(c, c.actor.charId, "help", c.world.help.join("\n"));
-		case "move": return move(c, rest);
-		case "": return;
-		default: throw new CommandError(`Unbekannter Befehl „${verb.slice(0, 20)}“. „help“ zeigt alle Befehle.`);
-	}
-}
-
-async function look(c: CommandCtx): Promise<void> {
-	const room = await roomOf(c);
-	const others = (await onlineIn(c.space, c.actor.room)).filter((ch) => ch.charId !== c.actor.charId).map((ch) => ch.name);
-	const people = others.length ? `Hier sind: ${others.join(", ")}.` : "Niemand sonst ist hier.";
-	await msg(c, c.actor.charId, "look", `${room.name}\n${room.desc}\n${people}`);
-}
-
-async function say(c: CommandCtx, text: string): Promise<void> {
-	if (!text) throw new CommandError("Was möchtest du sagen? Zum Beispiel: say Hallo");
-	await msg(c, "*", "say", `${c.actor.name}: ${text.slice(0, MAX_SAY)}`);
-}
-
-async function who(c: CommandCtx): Promise<void> {
-	const online = await onlineIn(c.space, null);
-	const rooms = new Map(c.world.rooms.map((r) => [r.roomId, r.name]));
-	const list = online.map((ch) => `${ch.name} (${rooms.get(ch.room) ?? ch.room})`).sort();
-	await msg(c, c.actor.charId, "who", `Gerade spielen ${list.length}: ${list.join(", ")}`);
-}
-
-async function move(c: CommandCtx, args: string[]): Promise<void> {
-	const [x, y] = args.map(Number);
-	if (args.length !== 2 || !Number.isInteger(x) || !Number.isInteger(y)) throw new CommandError("So geht es: move <x> <y>, zum Beispiel move 10 8");
-	const room = await roomOf(c);
-	const path = findPath(c.world, room.ground, c.actor, { x: x!, y: y! });
-	if (!path) throw new CommandError("Dorthin führt kein Weg.");
-	if (!path.length) return;
-	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
-	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
-	await c.space.write({ type: "Character", fields: asFields<CharacterFields>({ ...fieldsOf<CharacterFields>(e), x: x!, y: y! }) }, c.txn, FOREVER);
-}
-
-async function roomOf(c: CommandCtx): Promise<RoomFields> {
-	const r = await c.space.readIfExists({ type: "Room", fields: { roomId: c.actor.room } }, NO_WAIT);
-	if (!r) throw new CommandError("Dieser Ort ist verschwunden.");
-	return fieldsOf<RoomFields>(r);
-}
-
-/** Characters with a live session (`room` null: all rooms). */
-export async function onlineIn(space: SpaceLike, room: string | null): Promise<CharacterFields[]> {
-	const live = new Set((await space.readAll({ type: "Session" })).map((s) => fieldsOf<SessionFields>(s).charId));
-	const chars = (await space.readAll({ type: "Character", fields: room ? { room } : {} })).map((e) => fieldsOf<CharacterFields>(e));
-	return chars.filter((ch) => live.has(ch.charId));
-}
-
-/** A message from the actor's room; `txn` null writes it at once (a refusal after the abort). */
-export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs"> & { txn: string | null }, to: string, kind: MsgKind, text: string): Promise<void> {
-	const m: MsgFields = { room: c.actor.room, to, kind, text, from: c.actor.name, at: Date.now() };
-	await c.space.write({ type: "Msg", fields: asFields(m) }, c.txn, c.msgLeaseMs);
+	if (!line) return;
+	// "'text" and ":text" are say and emote without a space
+	const short = /^(['":])(.*)$/s.exec(line);
+	const [verb, arg] = short ? [short[1] === ":" ? "emote" : "say", short[2]!.trim()] : [line.split(/\s+/)[0]!, line.slice(line.split(/\s+/)[0]!.length).trim()];
+	const cmd = (await commandsOf(c)).get(verb.toLowerCase());
+	if (!cmd) throw new CommandError(`Unbekannter Befehl „${verb.slice(0, 20)}“. „help“ zeigt alle Befehle.`);
+	await cmd.func(c, arg);
 }

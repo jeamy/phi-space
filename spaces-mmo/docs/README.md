@@ -19,6 +19,7 @@ umgesetzt; siehe [phasen.md](phasen.md).
 | [spielidee.md](spielidee.md) | Die Spielwelt „Leuchtfeuer“ und warum sie zu einem Space passt |
 | [evennia-abbildung.md](evennia-abbildung.md) | Evennia-Komponenten → Entries, Templates, Leases, Worker |
 | [architektur.md](architektur.md) | Prozesse, Datenfluss, Konten und Login, Grafik (PixiJS), Verzeichnisaufbau |
+| [modell-npcs.md](modell-npcs.md) | Phase 5: Modell-NPCs als feste Rollen, Wecken durch Ereignisse, Wanderer, Kosten |
 | [automaten.md](automaten.md) | Phase 6: Spielerprogramme, Beispielautomaten, kleines Hilfesystem |
 | [phasen.md](phasen.md) | Umsetzung in Phasen mit Abnahmekriterien |
 

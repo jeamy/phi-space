@@ -1,5 +1,5 @@
 // The processes a test needs, started as real OS processes: the space process (in memory, or on SQLite files to survive
-// a restart) and world processes. The web part runs in the test process (startServer) and reaches the spaces over the
+// a restart) and world workers. The web part runs in the test process (startServer) and reaches the spaces over the
 // sockets like in production. Player is a small client: HTTP with a cookie jar and the game WebSocket.
 import { spawn, type ChildProcess } from "node:child_process";
 import { rm } from "node:fs/promises";
@@ -33,11 +33,11 @@ const stop = (c: ChildProcess, sig: NodeJS.Signals = "SIGTERM") => new Promise<v
 
 export type Stack = {
 	world: string; accounts: string; space: SpaceLike;
-	/** The world processes started so far (the first one by startStack). */
+	/** The world workers started so far (the first one by startStack). */
 	worlds: ChildProcess[];
 	/** Kills the space process and starts it again on the same sockets (and the same files, with `dataDir`). */
 	restartSpace(): Promise<void>;
-	/** Starts one more world process (`env`: e.g. a short cleanup interval). */
+	/** Starts one more world worker (`env`: e.g. a short cleanup interval). */
 	worldProcess(env?: Record<string, string>): Promise<ChildProcess>;
 	/** Starts a web process without Next (to kill it in the middle of play); its URL comes with it. */
 	webProcess(env?: Record<string, string>, port?: number): Promise<{ child: ChildProcess; url: string; port: number }>;
@@ -45,8 +45,8 @@ export type Stack = {
 	close(): Promise<void>;
 };
 
-/** A space process (SQLite files in `dataDir`, else in memory) and one world process. */
-export async function startStack(o: { dataDir?: string; worldEnv?: Record<string, string> } = {}): Promise<Stack> {
+/** A space process (SQLite files in `dataDir`, else in memory) and `worlds` world workers (default one). */
+export async function startStack(o: { dataDir?: string; worldEnv?: Record<string, string>; worlds?: number } = {}): Promise<Stack> {
 	const base = `/tmp/mmo-test-${process.pid}-${seq++}`, world = `unix:${base}-world.sock`, accounts = `unix:${base}-accounts.sock`;
 	const startSpace = () => run("server/space-host.ts", { SPACES_MMO_LISTEN: world, SPACES_MMO_ACCOUNTS_LISTEN: accounts, ...(o.dataDir ? { SPACES_MMO_DATA: o.dataDir, SPACES_MMO_MEM: "" } : { SPACES_MMO_MEM: "1" }) }, (l) => l.startsWith("[space] ready"));
 	let spaceProc = await startSpace();
@@ -73,7 +73,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 		kill: (c, sig) => stop(c, sig),
 		async close() { await Promise.all(procs.map((c) => stop(c))); conn.close(); await stop(spaceProc); await rm(`${base}-world.sock`, { force: true }); await rm(`${base}-accounts.sock`, { force: true }); },
 	};
-	await stack.worldProcess();
+	for (let i = 0; i < (o.worlds ?? 1); i++) await stack.worldProcess();
 	return stack;
 }
 

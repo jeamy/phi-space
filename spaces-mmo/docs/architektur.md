@@ -181,7 +181,7 @@ Animationen, Gegenstände, Oberfläche, Klänge und Musik, alles in einem Stil.
   werden die Stile nicht gemischt.
 - **Ausweichweg:** Kein WebGL verfügbar → PixiJS-Canvas-Fallback bzw. Textmodus. Der Umschalter „nur Text“ bleibt
   immer da (Barrierefreiheit, schwache Geräte, Agenten).
-- Sichtfeld und Wegfindung rechnet der Server (Welt-Prozess), nicht der Renderer.
+- Sichtfeld und Wegfindung rechnet der Server (Welt-Worker), nicht der Renderer.
 
 ## Verzeichnisaufbau (geplant)
 
