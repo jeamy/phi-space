@@ -1,6 +1,6 @@
 "use client";
-// The admin panel (like SWARM CONTROLS in the help system): login with the admin token from .env (the server answers with
-// an HttpOnly cookie, the token is not kept in the browser), then model agents on/off and the models that may take
+// The admin panel (like SWARM CONTROLS in the help system): login with the admin password from .env (the server answers with
+// an HttpOnly cookie, the password is not kept in the browser), then model agents on/off and the models that may take
 // part, grouped by provider: one box per provider selects all of its models, below it every model on its own.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lang } from "./lib/theme.ts";
@@ -9,8 +9,8 @@ type AdminModel = { label: string; provider: string; id: string; name: string };
 type AdminState = { enabled: boolean; on: boolean; models: AdminModel[]; allowed: string[]; custom: boolean };
 
 const T = {
-	de: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin-Login", tokenPh: "Admin-Token (.env)", signIn: "Anmelden", logout: "Abmelden", noToken: "Kein Admin-Token gesetzt (CODEMODE_ADMIN_TOKEN).", agentsOn: "Modell-Agenten an", models: "Erlaubte Modelle", filter: "Modelle filtern …", save: "Speichern", reset: "Standard", resetTitle: "Zurück zur Standardauswahl (codestral-latest und das neueste Haiku)", saved: "Gespeichert.", none: "Keine Modelle mit Zugangsdaten (CODEMODE_CHAT_LLM=1 und API-Schlüssel oder pi-CLI-Anmeldung).", count: (k: number, n: number) => `${k} von ${n}`, std: "Standardauswahl aktiv" },
-	en: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin login", tokenPh: "Admin token (.env)", signIn: "Sign in", logout: "Sign out", noToken: "No admin token set (CODEMODE_ADMIN_TOKEN).", agentsOn: "Model agents on", models: "Allowed models", filter: "Filter models …", save: "Save", reset: "Default", resetTitle: "Back to the default choice (codestral-latest and the newest haiku)", saved: "Saved.", none: "No models with credentials (CODEMODE_CHAT_LLM=1 and an API key or the pi CLI login).", count: (k: number, n: number) => `${k} of ${n}`, std: "default choice active" },
+	de: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin-Login", tokenPh: "Admin-Passwort (.env)", signIn: "Anmelden", logout: "Abmelden", noToken: "Kein Admin-Passwort gesetzt (CODEMODE_ADMIN_PASSWORD in der .env).", agentsOn: "Modell-Agenten an", models: "Erlaubte Modelle", filter: "Modelle filtern …", save: "Speichern", reset: "Standard", resetTitle: "Zurück zur Standardauswahl (codestral-latest und das neueste Haiku)", saved: "Gespeichert.", none: "Keine Modelle mit Zugangsdaten (CODEMODE_CHAT_LLM=1 und API-Schlüssel oder pi-CLI-Anmeldung).", count: (k: number, n: number) => `${k} von ${n}`, std: "Standardauswahl aktiv" },
+	en: { title: "ADMIN", badge: "🔐 admin", login: "🔐 Admin login", tokenPh: "Admin password (.env)", signIn: "Sign in", logout: "Sign out", noToken: "No admin password set (CODEMODE_ADMIN_PASSWORD in .env).", agentsOn: "Model agents on", models: "Allowed models", filter: "Filter models …", save: "Save", reset: "Default", resetTitle: "Back to the default choice (codestral-latest and the newest haiku)", saved: "Saved.", none: "No models with credentials (CODEMODE_CHAT_LLM=1 and an API key or the pi CLI login).", count: (k: number, n: number) => `${k} of ${n}`, std: "default choice active" },
 } as const;
 
 async function call<R>(path: string, body?: unknown): Promise<R> {
@@ -61,7 +61,7 @@ export function AdminPanel({ lang, onChanged, onSession }: { lang: Lang; onChang
 			{!session.available ? <div className="notice">{t.noToken}</div>
 			: !session.admin ? (
 				form ? (
-					<form className="row" onSubmit={(e) => { e.preventDefault(); void run(async () => { await call("/login", { token }); setToken(""); setSession({ ...session, admin: true }); await load(); }); }}>
+					<form className="row" onSubmit={(e) => { e.preventDefault(); void run(async () => { await call("/login", { password: token }); setToken(""); setSession({ ...session, admin: true }); await load(); }); }}>
 						<input type="password" autoFocus autoComplete="current-password" placeholder={t.tokenPh} value={token} onChange={(e) => setToken(e.target.value)} />
 						<button type="submit" className="btn btn--primary" disabled={!token}>{t.signIn}</button>
 					</form>

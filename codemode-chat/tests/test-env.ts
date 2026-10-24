@@ -12,6 +12,7 @@ process.env.CODEMODE_CROSS_WAIT_S = "";
 process.env.CODEMODE_HOST_NAME = "";
 process.env.CODEMODE_CHAT_LLM = "0";
 process.env.CODEMODE_ADMIN_TOKEN = "";
+process.env.CODEMODE_ADMIN_PASSWORD = "";
 process.env.CODEMODE_TTL_HOURS = "";
 process.env.CODEMODE_MAX_TIMEOUT_S = "";
 process.env.CODEMODE_REQ_PER_MIN = "100000"; // the tests poll snapshots in tight loops; the quota has its own test

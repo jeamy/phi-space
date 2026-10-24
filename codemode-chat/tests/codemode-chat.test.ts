@@ -912,6 +912,20 @@ t("work board: critiques go to the critic model first, and the critic never revi
 
 // ---- admin panel: login with the token, the choice of models ----
 
+t("admin login with the password from CODEMODE_ADMIN_PASSWORD (field `password`); without one there is no admin", async () => {
+	const srv = await startServer({ port: 0, bind: "127.0.0.1" });
+	try {
+		assert.deepEqual(await (await fetch(srv.url + "/api/admin/session")).json(), { admin: false, available: false }); // nothing set: no admin
+		process.env.CODEMODE_ADMIN_PASSWORD = "pw-from-env";
+		assert.deepEqual(await (await fetch(srv.url + "/api/admin/session")).json(), { admin: false, available: true });
+		assert.equal((await post(srv.url, "/api/admin/login", { password: "wrong" })).status, 403);
+		const r = await fetch(srv.url + "/api/admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "pw-from-env" }) });
+		assert.equal(r.status, 200);
+		const cookie = (r.headers.get("set-cookie") ?? "").split(";")[0]!;
+		assert.deepEqual(await (await fetch(srv.url + "/api/admin/session", { headers: { cookie } })).json(), { admin: true, available: true });
+	} finally { process.env.CODEMODE_ADMIN_PASSWORD = ""; await srv.close(); }
+});
+
 t("admin panel: login with the token sets an HttpOnly cookie; the model choice needs it (and the header) and is kept", async () => {
 	process.env.CODEMODE_ADMIN_TOKEN = "panel-secret";
 	const srv = await startServer({ port: 0, bind: "127.0.0.1" });

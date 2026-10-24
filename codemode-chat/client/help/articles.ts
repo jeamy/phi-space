@@ -604,7 +604,7 @@ Setze \`CODEMODE_CHAT_LLM=1\` und sorge für Zugangsdaten: Umgebungsvariablen de
 
 ## Erlaubte Modelle {#models}
 
-Welche Modelle mitarbeiten dürfen, legt der Betreiber im **Admin-Panel** links unten fest: Anmeldung mit dem Admin-Token (\`CODEMODE_ADMIN_TOKEN\`), dann Modell-Agenten an/aus und alle Modelle mit Zugangsdaten, nach Anbieter gruppiert. Das Kästchen eines Anbieters wählt alle seine Modelle, darunter lassen sich einzelne an- und abwählen; **Speichern** übernimmt die Auswahl dauerhaft (sie liegt im Space und übersteht einen Neustart), **Standard** kehrt zur Grundeinstellung zurück: \`codestral-latest\` (Mistral) und das neueste Haiku. In der Kopfzeile steht die Zahl der erlaubten Modelle; ausgewählt wird im Lauf-Panel unter **Teilnehmer** (Mehrfachauswahl). \`CODEMODE_CHAT_MODEL\` wählt per Teilname das Standardmodell, \`CODEMODE_VERIFIER_MODEL\` das des Prüfer-Agenten und \`CODEMODE_CRITIC_MODEL\` das, das im Auftragsbrett zuerst kritisiert (beide Standard \`haiku\`).
+Welche Modelle mitarbeiten dürfen, legt der Betreiber im **Admin-Panel** links unten fest: Anmeldung mit dem Admin-Passwort (\`CODEMODE_ADMIN_PASSWORD\` in der \`.env\`), dann Modell-Agenten an/aus und alle Modelle mit Zugangsdaten, nach Anbieter gruppiert. Das Kästchen eines Anbieters wählt alle seine Modelle, darunter lassen sich einzelne an- und abwählen; **Speichern** übernimmt die Auswahl dauerhaft (sie liegt im Space und übersteht einen Neustart), **Standard** kehrt zur Grundeinstellung zurück: \`codestral-latest\` (Mistral) und das neueste Haiku. In der Kopfzeile steht die Zahl der erlaubten Modelle; ausgewählt wird im Lauf-Panel unter **Teilnehmer** (Mehrfachauswahl). \`CODEMODE_CHAT_MODEL\` wählt per Teilname das Standardmodell, \`CODEMODE_VERIFIER_MODEL\` das des Prüfer-Agenten und \`CODEMODE_CRITIC_MODEL\` das, das im Auftragsbrett zuerst kritisiert (beide Standard \`haiku\`).
 
 ## Grenzen {#limits}
 
@@ -638,7 +638,7 @@ Set \`CODEMODE_CHAT_LLM=1\` and provide credentials: the provider's environment 
 
 ## Allowed models {#models}
 
-Which models may work is set by the operator in the **admin panel** at the bottom left: sign in with the admin token (\`CODEMODE_ADMIN_TOKEN\`), then model agents on/off and every model with credentials, grouped by provider. A provider's box selects all of its models, below it single models can be ticked; **Save** keeps the choice (it lives in the space and survives a restart), **Default** returns to the basic setting: \`codestral-latest\` (Mistral) and the newest Haiku. The header shows the number of allowed models; you pick in the run panel under **Contenders** (multi-select). \`CODEMODE_CHAT_MODEL\` selects the default model by a part of its name, \`CODEMODE_VERIFIER_MODEL\` the verifier agent's and \`CODEMODE_CRITIC_MODEL\` the one that critiques first on the work board (both default \`haiku\`).
+Which models may work is set by the operator in the **admin panel** at the bottom left: sign in with the admin password (\`CODEMODE_ADMIN_PASSWORD\` in \`.env\`), then model agents on/off and every model with credentials, grouped by provider. A provider's box selects all of its models, below it single models can be ticked; **Save** keeps the choice (it lives in the space and survives a restart), **Default** returns to the basic setting: \`codestral-latest\` (Mistral) and the newest Haiku. The header shows the number of allowed models; you pick in the run panel under **Contenders** (multi-select). \`CODEMODE_CHAT_MODEL\` selects the default model by a part of its name, \`CODEMODE_VERIFIER_MODEL\` the verifier agent's and \`CODEMODE_CRITIC_MODEL\` the one that critiques first on the work board (both default \`haiku\`).
 
 ## Limits {#limits}
 
@@ -778,7 +778,7 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_JUDGES\` | judge: parallele Bewerter je Prozess, Standard 2 |
 | \`CODEMODE_JUDGE_LEASE_MS\` | judge: Lease der Transaktion eines Bewerters; stirbt er, ist sein Beitrag danach wieder frei, Standard 60 000 |
 | \`CODEMODE_TTL_HOURS\` | Lebensdauer der Einträge eines Raums in Stunden, Standard 24; \`0\` = bis der Block gelöscht wird |
-| \`CODEMODE_ADMIN_TOKEN\` | Hub: Token für \`POST /api/llm\` (Header \`x-admin-token\`); leer = Umschalten aus |
+| \`CODEMODE_ADMIN_PASSWORD\` | Hub: Passwort des Admin-Logins (Panel links unten; für Skripte als Header \`x-admin-token\`); leer = kein Admin. Älterer Name: \`CODEMODE_ADMIN_TOKEN\` |
 | \`CODEMODE_MAX_TIMEOUT_S\` | höchstes Zeitlimit je Beitrag, das eine eigene Aufgabe wählen darf, Standard 60; das Formularfeld richtet sich danach. Ein langes Limit belegt einen Bewerter entsprechend lange |
 | \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
 | \`PI_AUTH_DIR\` | Pfad der pi-Zugangsdaten für den Container |
@@ -836,7 +836,7 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_JUDGES\` | judge: parallel judges per process, default 2 |
 | \`CODEMODE_JUDGE_LEASE_MS\` | judge: lease of a judge's transaction; when it dies, its contribution is free again after it, default 60,000 |
 | \`CODEMODE_TTL_HOURS\` | lifetime of a room's entries in hours, default 24; \`0\` = until the block is deleted |
-| \`CODEMODE_ADMIN_TOKEN\` | hub: token for \`POST /api/llm\` (header \`x-admin-token\`); empty = switching off |
+| \`CODEMODE_ADMIN_PASSWORD\` | hub: password of the admin login (panel at the bottom left; for scripts as the header \`x-admin-token\`); empty = no admin. Older name: \`CODEMODE_ADMIN_TOKEN\` |
 | \`CODEMODE_MAX_TIMEOUT_S\` | the longest time limit per contribution a custom task may choose, default 60; the form's field follows it. A long limit keeps one judge busy that long |
 | \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |
 | \`PI_AUTH_DIR\` | path of the pi credentials for the container |

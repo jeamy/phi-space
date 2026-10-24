@@ -4,7 +4,7 @@
 // Run: node --experimental-strip-types codemode-chat/server/index.ts [--dev]
 // Env (also read from codemode-chat/.env): PORT (3700), CODEMODE_BIND (127.0.0.1), CODEMODE_SPACE (unix:/tmp/codemode-space.sock), CODEMODE_CHAT_LLM=1,
 //      CODEMODE_HOST_NAME (name in the system bar),
-//      CODEMODE_ADMIN_TOKEN (switches the model agents via POST /api/llm with the header x-admin-token; unset: switching is off),
+//      CODEMODE_ADMIN_PASSWORD (the admin login; CODEMODE_ADMIN_TOKEN is the older name; scripts may send it as the header x-admin-token; unset: no admin),
 //      CODEMODE_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
 //      CODEMODE_TTL_HOURS (lifetime of a room's entries in hours, default 24; 0 = until the block is deleted).
 import http from "node:http";
@@ -43,9 +43,12 @@ function quota(perMin: number): (ip: string) => boolean {
 	};
 }
 
-/** Constant-time check of a presented admin token; without a configured token nobody is admin. */
+/** The admin password from .env (CODEMODE_ADMIN_TOKEN is the older name for it). */
+const adminSecret = (): string | undefined => process.env.CODEMODE_ADMIN_PASSWORD || process.env.CODEMODE_ADMIN_TOKEN || undefined;
+
+/** Constant-time check of a presented admin password; without a configured one nobody is admin. */
 function tokenOk(got: unknown): boolean {
-	const want = process.env.CODEMODE_ADMIN_TOKEN;
+	const want = adminSecret();
 	if (!want || typeof got !== "string") return false;
 	const h = (v: string) => createHash("sha256").update(v).digest();
 	return timingSafeEqual(h(want), h(got));
@@ -115,11 +118,12 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				await hub.saveLlmChoice({ on: b.on, model: b.model });
 				return json(res, 200, (await hub.modelInfo()).info);
 			}
-			// ---- admin panel: login with the token, then the choice of models ----
-			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req)), available: !!process.env.CODEMODE_ADMIN_TOKEN });
+			// ---- admin panel: login with the password from .env, then the choice of models ----
+			if (p === "/api/admin/session" && req.method === "GET") return json(res, 200, { admin: (await isAdmin(req)), available: !!adminSecret() });
 			if (p === "/api/admin/login" && req.method === "POST") {
 				if (!loginTries(clientIp(req))) return json(res, 429, { error: "Too many login attempts; retry in a minute" });
-				if (!tokenOk((await readBody(req)).token)) return json(res, 403, { error: "Wrong admin token" });
+				const body = await readBody(req);
+				if (!tokenOk(body.password ?? body.token)) return json(res, 403, { error: "Wrong admin password" });
 				const sid = randomBytes(24).toString("hex");
 				await conn.space.write({ type: "AdminSession", fields: { key: sessionKey(sid), ts: Date.now() } }, null, ADMIN_TTL_MS);
 				const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
