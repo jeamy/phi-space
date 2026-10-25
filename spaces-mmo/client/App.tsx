@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CharView, MsgView, ObjView, ServerFrame } from "../server/gateway.ts";
 import { MapView } from "./MapView.tsx";
+import { HelpPanel } from "./HelpPanel.tsx";
 
 type Account = { name: string; guest: boolean; admin: boolean };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
@@ -158,6 +159,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
 	const [panel, setPanel] = useState<null | "account" | "leave">(null);
+	const [help, setHelp] = useState(false);
 	const [stale, setStale] = useState(false);
 	// text only: by choice (remembered in this browser) or because the map cannot draw (no WebGL)
 	const [textOnly, setTextOnly] = useState(() => { try { return localStorage.getItem("mmo.textOnly") === "1"; } catch { return false; } });
@@ -252,6 +254,18 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
 	}, [chars, me, hello, objs, send, append]);
 
+	// an arrow key in the command line goes back to the map and walks: up and down always, left and right while the line is
+	// empty (with text in it they move the cursor)
+	const onCommandKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Escape") { input.current?.blur(); return; }
+		const d = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[e.key];
+		if (!d || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+		if (d[1] === 0 && line !== "") return;
+		e.preventDefault();
+		input.current?.blur();
+		step(d);
+	};
+
 	// arrow keys walk, space picks up, unless the command line has the focus
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
@@ -273,6 +287,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		<div className="game">
 			<header className="bar">
 				<span className="title">{hello?.world.title ?? "Leuchtfeuer"}</span>
+				<button className="help-btn" onClick={() => setHelp((h) => !h)} aria-expanded={help} aria-label="Hilfe / Help" title="Hilfe / Help">?</button>
 				<span className={`live${live ? " on" : ""}`} title={live ? "verbunden" : "getrennt"} />
 				<span>{hello?.room.name ?? ""}</span>
 				<span className="spacer" />
@@ -282,6 +297,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				<button onClick={toggleText} aria-pressed={textOnly}>{textOnly ? "Karte zeigen" : "Nur Text"}</button>
 				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
 			</header>
+			{help && <HelpPanel onClose={() => setHelp(false)} />}
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className={`main${textOnly ? " text-only" : ""}`}>
 				{textOnly ? null : hello ? (
@@ -308,7 +324,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>
-						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") input.current?.blur(); }} placeholder="Enter: Befehl tippen, z. B. look, say Hallo · Esc: zurück zur Karte" maxLength={300} aria-label="Befehl" />
+						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} placeholder="Enter: Befehl tippen, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte" maxLength={300} aria-label="Befehl" />
 						<button className="primary">Senden</button>
 					</form>
 					<About />

@@ -1,0 +1,68 @@
+# Betrieb mit Docker
+
+Aufgebaut wie `codemode-chat/docker/` (siehe `docs/codemode-space-architektur.md` im Root): ein Image, ein Container je
+Rolle, alle sprechen nur über den Space und TCP. Dateien: `spaces-mmo/docker/Dockerfile`, `docker-compose.yml`,
+`docker-compose.hostnet.yml`; die Skripte stehen in `spaces-mmo/package.json` (`docker:*`).
+
+## Profile
+
+| Profil | Container | Wo |
+| --- | --- | --- |
+| `nano` | `space` (Welt- und Kontenspeicher als SQLite im Volume `mmo-space-data`), `world-nano` | der Rechner, der den Zustand hält |
+| `big` | `web`, `world-big`, `npc` | der Rechner, der die Arbeit macht |
+| `test` | `mmo-test` (die Testsuite) | überall |
+| nano + big | beides auf einer Maschine | lokaler Testaufbau |
+
+`world` lässt sich mehrfach starten (je Rechner ein Arbeiter); `npc` läuft einmal, auf big.
+
+## Ports
+
+| Port | Dienst | Veröffentlicht auf |
+| --- | --- | --- |
+| 3900 | web (Browser, WebSocket, `/healthz`) | `HOST_BIND` (Standard 127.0.0.1), davor der Reverse Proxy |
+| 3950 | Weltspace | `SPACES_MMO_SPACE_BIND` (Standard 127.0.0.1) |
+| 3951 | Kontenspeicher (Zugangsdaten, Sitzungen) | `SPACES_MMO_SPACE_BIND` |
+
+Die beiden Space-Ports haben **kein TLS** und behandeln jede Verbindung als Prozess des Spiels; der Kontenspeicher hält
+die Zugangsdaten. Sie gehören nie auf eine öffentliche Schnittstelle, nur auf die interne Adresse (LAN/NetBird) oder auf
+die Loopback-Adresse hinter einem SSH-Tunnel. Codemode-chat belegt 3700/3800, das Help-System 3500/3600.
+
+## Lokal testen (beide Rollen auf dieser Maschine)
+
+```
+npm --prefix spaces-mmo run docker:local:up     # baut das Image, startet space, world-nano, web, world-big, npc
+npm --prefix spaces-mmo run docker:local:logs
+npm --prefix spaces-mmo run docker:local:down
+```
+
+Das Spiel ist dann auf <http://127.0.0.1:3910> erreichbar (Web 3910, Welt 3960, Konten 3961, damit eine laufende
+Entwicklungsinstanz auf 3900 nicht stört). `NANO_CPUS` (Standard 2) begrenzt nano wie den kleineren Rechner. Die Tests in
+Docker: `npm --prefix spaces-mmo run docker:test`.
+
+## Produktion: nano und big
+
+Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann das Skript des Rechners.
+
+1. **nano** (hält den Zustand): in `spaces-mmo/.env` `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>`, dann
+   `npm --prefix spaces-mmo run docker:nano:up`.
+2. **big** (Web, Arbeiter, NPCs): in `spaces-mmo/.env` `SPACES_MMO_SPACE=tcp:127.0.0.1:3950` und
+   `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, dazu zwei SSH-Tunnel als Benutzer-Units auf big (wie `swarm-nano-tunnel`
+   und `codemode-nano-tunnel`) von 127.0.0.1:3950 und :3951 nach nano. Dann
+   `npm --prefix spaces-mmo run docker:big:up` (Host-Netzwerk über `docker-compose.hostnet.yml`, web nur auf der
+   Loopback-Adresse, davor nginx).
+3. `docker:prod:up` ist absichtlich gesperrt, damit nicht beide Profile auf einem Rechner laufen.
+
+Das Image wird auf dem Rechner selbst gebaut (`docker build --network host`: auf dem rootless Docker von nano erreicht ein
+Build im Standardnetz die npm-Registry nicht). Der Speicher bleibt beim Neustart der Container im Volume erhalten.
+
+## Einstellungen
+
+Die `.env` (Vorlage `spaces-mmo/.env.example`) wird allen Containern als `env_file` mitgegeben; `environment:` im Compose
+überschreibt sie für Adressen und Ports. Das erste Admin-Konto entsteht mit `SPACES_MMO_SETUP_TOKEN` (einmalig, danach
+entfernen). Die Image-Datei enthält keine `.env` (`.dockerignore`).
+
+## Nicht enthalten
+
+- Modell-NPCs sind noch nicht gebaut (Phase 5): das Image trägt `agent/` mit seinen Abhängigkeiten schon, `SPACES_MMO_LLM` bleibt aus.
+- Kein Backup-Skript wie `docker:backup` im Chat; der Speicher liegt im Volume, die Sicherung des Verzeichnisses
+  übernimmt der Betreiber, bis ein Sicherungsbefehl vorgesehen ist.

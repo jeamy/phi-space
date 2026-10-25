@@ -18,3 +18,5 @@ test/evidence
 **/*.key
 codemode-chat/.next
 codemode-chat/.local
+spaces-mmo/.next
+spaces-mmo/.local
