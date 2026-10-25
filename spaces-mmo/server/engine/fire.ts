@@ -109,7 +109,7 @@ export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 	for (const fr of w.flood.rooms) {
 		if ((await space.count({ type: "Item", fields: { location: fr.room, flotsam: true } })) >= fr.max) continue;
 		const room = w.rooms.find((r) => r.roomId === fr.room)!;
-		const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: fr.room } })), ...(await space.readAll({ type: "Exit", fields: { location: fr.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+		const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: fr.room } })), ...(await space.readAll({ type: "Exit", fields: { location: fr.room } })), ...(await space.readAll({ type: "Beacon", fields: { room: fr.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
 		const cells: Array<{ x: number; y: number }> = [];
 		room.ground.forEach((row, y) => [...row].forEach((t, x) => { if (t === fr.tile && walkable(w, room.ground, x, y) && !taken.has(`${x},${y}`)) cells.push({ x, y }); }));
 		if (!cells.length) continue;

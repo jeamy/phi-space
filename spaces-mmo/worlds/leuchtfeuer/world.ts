@@ -11,7 +11,8 @@ export const world: WorldDef = {
 	version: 4,
 	tileSize: 32,
 	tiles: {
-		"~": { sheet: "tilesets/Autotiles_Water.png", x: 16, y: 48, walk: false }, // the inner water of the first autotile
+		// water against sand: the autotile blocks 3..5 of the first row are the three frames of its waves
+		"~": { sheet: "tilesets/Autotiles_Water.png", x: 208, y: 48, walk: false, auto: { blocks: [{ x: 192, y: 0 }, { x: 256, y: 0 }, { x: 320, y: 0 }], frameMs: 700 } },
 		".": { sheet: "tilesets/Ground.png", x: 128, y: 224, walk: true }, // sand
 		",": { sheet: "tilesets/Ground.png", x: 32, y: 32, walk: true }, // grass
 		":": { sheet: "tilesets/Ground.png", x: 320, y: 128, walk: true }, // cobbles

@@ -228,7 +228,7 @@ export class Accounts {
 	async #newCharacter(account: AccountFields, txn: string): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
 		const room = this.w.rooms.find((r) => r.roomId === this.w.start)!;
 		const held = await holdRoom(this.world, txn, room.roomId, 3_000);
-		const avoid = new Set([...(await occupiedIn(this.world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e))]);
+		const avoid = new Set([...(await occupiedIn(this.world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...this.w.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
 		// a little scatter around the spawn, then the nearest free cell from there
 		const near = { x: room.spawn.x + randomInt(-3, 4), y: room.spawn.y + randomInt(-2, 3) };
 		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid) ?? room.spawn;

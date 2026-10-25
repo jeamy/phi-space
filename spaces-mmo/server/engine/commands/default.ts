@@ -6,7 +6,7 @@ import { fieldsOf, type BeaconFields, type ContributionFields, type CharacterFie
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, type CommandCtx } from "../context.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
-import { cellKey, freeCellNear, holdRoom, occupiedIn } from "../occupancy.ts";
+import { cellKey, freeCellNear, holdRoom, occupiedIn, solidIn } from "../occupancy.ts";
 import { findPath, walkable } from "../world.ts";
 
 const MAX_SAY = 300;
@@ -34,10 +34,11 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 	const room = await roomOf(c);
 	const held = await holdRoom(c.space, c.txn, room.roomId);
 	if (!held) throw new CommandError("Hier ist gerade viel Bewegung; bitte noch einmal.");
-	const occ = await occupiedIn(c.space, room.roomId, c.actor.charId);
+	const occ = await occupiedIn(c.space, room.roomId, c.actor.charId), solid = await solidIn(c.space, room.roomId);
+	if (solid.has(cellKey(to))) throw new CommandError("Dort brennt das Leuchtfeuer; da läuft man nicht hinein.");
 	const there = occ.get(cellKey(to));
 	if (there) throw new CommandError(`Dort steht schon ${there}.`);
-	if (o.path && !findPath(c.world, room.ground, c.actor, to, 40, new Set(occ.keys()))) throw new CommandError("Dorthin führt kein freier Weg.");
+	if (o.path && !findPath(c.world, room.ground, c.actor, to, 40, new Set([...occ.keys(), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
 	await relocate(c, { room: room.roomId, x: to.x, y: to.y });
 	await held.release();
 }
@@ -56,7 +57,7 @@ export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	// arriving: the exit's arrival cell, or the nearest free one when someone stands there (never on an exit cell)
 	const held = await holdRoom(c.space, c.txn, dest.roomId);
 	if (!held) throw new CommandError(`Drüben in ${dest.name} ist gerade viel Bewegung; bitte noch einmal.`);
-	const avoid = new Set([...(await occupiedIn(c.space, dest.roomId, c.actor.charId)).keys(), ...(await exitsHere(c, dest.roomId)).map((x) => cellKey(x.f))]);
+	const avoid = new Set([...(await occupiedIn(c.space, dest.roomId, c.actor.charId)).keys(), ...(await exitsHere(c, dest.roomId)).map((x) => cellKey(x.f)), ...(await solidIn(c.space, dest.roomId))]);
 	const at = freeCellNear(c.world, dest.ground, exit.arrive, avoid);
 	if (!at) throw new CommandError(`In ${dest.name} ist kein Platz mehr.`);
 	await relocate(c, { room: dest.roomId, x: at.x, y: at.y });
@@ -160,14 +161,15 @@ const step: Command = {
  *  Sent by the gateway when a browser connects; not offered in the help. */
 const arrive: Command = {
 	key: "arrive", hidden: true,
-	help: "arrive – auf eine freie Stelle treten, falls die eigene besetzt ist",
+	help: "arrive – auf eine freie Stelle treten, falls die eigene besetzt ist oder ein Feuer ist",
 	async func(c) {
 		const room = await roomOf(c);
 		const held = await holdRoom(c.space, c.txn, room.roomId);
 		if (!held) return;
-		const occ = await occupiedIn(c.space, room.roomId, c.actor.charId);
-		if (occ.has(cellKey(c.actor))) {
-			const avoid = new Set([...occ.keys(), ...(await exitsHere(c)).map((x) => cellKey(x.f))]);
+		const occ = await occupiedIn(c.space, room.roomId, c.actor.charId), solid = await solidIn(c.space, room.roomId);
+		// someone else on the own cell, or the own cell is a fire (a character from before beacons were solid)
+		if (occ.has(cellKey(c.actor)) || solid.has(cellKey(c.actor))) {
+			const avoid = new Set([...occ.keys(), ...solid, ...(await exitsHere(c)).map((x) => cellKey(x.f))]);
 			const at = freeCellNear(c.world, room.ground, c.actor, avoid);
 			if (at) await relocate(c, { room: room.roomId, x: at.x, y: at.y });
 		}

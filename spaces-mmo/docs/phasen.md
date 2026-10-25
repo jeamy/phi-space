@@ -78,6 +78,19 @@ beschränkt).
 
 ## Phase 3 – Grafik ausbauen (PixiJS)
 
+**Stand 2026-10-25: umgesetzt.**
+- **Grafik:** Wasser und Ufer als Autotiles (RPG-Maker-VX-Blöcke aus Viertelkacheln, die drei Wellenbilder animiert);
+  Figuren gleiten mit Laufbildern von Kachel zu Kachel; das Feuer flackert.
+- **Nebel:** ein Schleier mit Aussparungen um die eigene Figur und um ein brennendes Feuer.
+- **Bedienung:** Zoom 1×/2×/3× mit Kamera, die der eigenen Figur folgt; Ziehen schaut sich um; langes Drücken oder
+  Rechtsklick öffnet ein Kontextmenü; Umschalter „Nur Text“; ohne WebGL weiter als Text.
+- **Namen:** In vollen Räumen stehen nur der eigene Name und die von Figuren in der Nähe.
+- **Gemessen** (`tests/phase3.test.ts`, Latenz allein mit `npm run test:perf`): Begrüßung 3 KB bei 12 Figuren (Grenze 64 KiB); vom Schritt bis zur
+  Positionsmeldung im Mittel 105 ms bei 90 % unter 186 ms (Ziel unter 150 ms); jeder Spieler bekommt nur seinen Raum.
+- **Im Headless-Chromium** mit 30 Figuren, davon 29 laufende Bots: 38 Bilder/s bei Zoom 1, 37 bei Zoom 2. Das ist
+  Software-Rendering ohne Grafikchip; auf einem echten Telefon ist es nicht gemessen.
+- **Ein Texturatlas** ist nicht nötig: Die wenigen Blätter werden einmal geladen und ihre Ausschnitte zwischengespeichert.
+
 - Deltas statt Snapshots, Interpolation der Bewegungen, Nebel-Ebene mit Maske, Feuer als animiertes Sprite.
 - Tilesets aus Intersect-Assets mit `CREDITS.md`, Autotiles (Wasser, Ufer), Texturatlas der Welt Leuchtfeuer,
   Figuren aus `entities`, ganzzahliger Zoom, Touch (Tippen, Ziehen, Kontextmenü).

@@ -90,6 +90,36 @@ function About() {
 	);
 }
 
+/** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
+ *  Every entry is a text command. */
+function CellMenu({ at, chars, objs, self, room, me, send, close }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; close: () => void }) {
+	useEffect(() => {
+		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+		window.addEventListener("keydown", key);
+		return () => window.removeEventListener("keydown", key);
+	}, [close]);
+	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
+	const fuel = [...objs.values()].find((o) => o.kind === "item" && o.location === me && o.name === "Treibholz");
+	const entries: Array<{ label: string; line: string }> = [];
+	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
+	for (const o of objs.values()) {
+		if (o.location !== room || o.x !== at.x || o.y !== at.y) continue;
+		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
+		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
+		if (o.kind === "exit") entries.push({ label: `Nach ${o.name} gehen`, line: `go ${o.name}` });
+	}
+	if (!(self && self.x === at.x && self.y === at.y)) entries.push({ label: "Hierhin gehen", line: `move ${at.x} ${at.y}` });
+	const left = Math.min(at.left, window.innerWidth - 220), top = Math.min(at.top, window.innerHeight - 40 * (entries.length + 1));
+	return (
+		<>
+			<div className="menu-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
+			<ul className="cell-menu" role="menu" style={{ left, top }}>
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { send(e.line); close(); }}>{e.label}</button></li>)}
+			</ul>
+		</>
+	);
+}
+
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
 function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
@@ -129,6 +159,10 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [line, setLine] = useState("");
 	const [panel, setPanel] = useState<null | "account" | "leave">(null);
 	const [stale, setStale] = useState(false);
+	// text only: by choice (remembered in this browser) or because the map cannot draw (no WebGL)
+	const [textOnly, setTextOnly] = useState(() => { try { return localStorage.getItem("mmo.textOnly") === "1"; } catch { return false; } });
+	const [menu, setMenu] = useState<null | { x: number; y: number; left: number; top: number }>(null);
+	const toggleText = () => setTextOnly((v) => { try { localStorage.setItem("mmo.textOnly", v ? "0" : "1"); } catch { /* private window */ } return !v; });
 	const ws = useRef<WebSocket | null>(null);
 	const logEnd = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLInputElement>(null);
@@ -189,7 +223,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		const self = chars.get(me);
 		if (!self || !hello) return;
 		// walkable and nobody standing there (the server checks again; this only picks the better of two directions)
-		const taken = new Set([...chars.values()].filter((c) => c.charId !== me).map((c) => `${c.x},${c.y}`));
+		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== me), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 		let moves: Array<[number, number]>;
 		if (Array.isArray(d)) moves = [d];
@@ -202,7 +236,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		const go = moves.find(([a, b]) => free(self.x + a, self.y + b)) ?? moves[0]!;
 		// relative: the server steps from where the character really is, not from where this page last saw it
 		send(`step ${go[0]} ${go[1]}`, false);
-	}, [chars, me, hello, send]);
+	}, [chars, objs, me, hello, send]);
 
 	/** Space: pick up what lies nearest (the own cell first); with nothing there, feed a fire within reach. */
 	const action = useCallback(() => {
@@ -245,11 +279,18 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				<span>{account.name}</span>
 				{account.guest && <span className="badge">Gast</span>}
 				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")}>Registrieren, um den Fortschritt zu behalten</button>}
+				<button onClick={toggleText} aria-pressed={textOnly}>{textOnly ? "Karte zeigen" : "Nur Text"}</button>
 				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
 			</header>
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
-			<div className="main">
-				{hello ? <MapView world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onCell={(x, y) => { input.current?.blur(); step({ x, y }); }} /> : <div className="map"><p className="muted">Verbinde …</p></div>}
+			<div className={`main${textOnly ? " text-only" : ""}`}>
+				{textOnly ? null : hello ? (
+					<MapView world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog}
+						onCell={(x, y) => { input.current?.blur(); setMenu(null); step({ x, y }); }}
+						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
+						onFail={(why) => { setTextOnly(true); append({ kind: "error", text: why, from: "", at: Date.now() }); }} />
+				) : <div className="map"><p className="muted">Verbinde …</p></div>}
+				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} />}
 				<aside className="side">
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>

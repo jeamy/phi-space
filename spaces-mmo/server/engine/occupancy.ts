@@ -20,6 +20,11 @@ export async function occupiedIn(space: SpaceLike, room: string, except?: string
 	return out;
 }
 
+/** Cells nobody may stand on, whoever is online: the beacons of `room` (one does not walk into a fire). */
+export async function solidIn(space: SpaceLike, room: string): Promise<Set<string>> {
+	return new Set((await space.readAll({ type: "Beacon", fields: { room } })).map((e) => cellKey({ x: Number(e.fields.x), y: Number(e.fields.y) })));
+}
+
 /** The nearest walkable cell to `at` (itself first) that is not in `avoid`, searching outwards; null when there is
  *  none within `radius`. */
 export function freeCellNear(w: WorldDef, ground: string[], at: Cell, avoid: ReadonlySet<string> | ReadonlyMap<string, unknown>, radius = 8): Cell | null {

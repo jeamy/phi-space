@@ -154,8 +154,16 @@ Wahrheit konkurrieren würde.
   hält eine `Map<entryId, Sprite>`, Bewegungen werden über ~200 ms interpoliert (Ticker von PixiJS).
 - **Eingabe:** Klick/Tippen auf die Karte → **ein Schritt** in diese Richtung (längere Achse zuerst, sonst die andere; belegte Kacheln weicht der Client aus), genau wie eine Pfeiltaste; daraus wird `step dx dy`. **Leertaste** hebt das nächste Ding in Reichweite auf (die eigene Kachel zuerst), ohne Ding legt sie Brennholz ins nahe Feuer. **Enter** springt in die Befehlszeile, **Esc** zurück zur Karte. Auf ein Objekt (ab Phase 1) → Kontextmenü mit Textbefehlen
   (`get`, `look`, `talk`). Alles wird ein Textbefehl; der getippte Befehl `move x y` geht dagegen den ganzen Weg.
-- **Darstellung:** `scaleMode: "nearest"` für scharfe Pixel, ganzzahlige Zoomstufen, `resolution` =
-  `devicePixelRatio`, ein Texturatlas pro Welt.
+- **Darstellung:** `scaleMode: "nearest"` für scharfe Pixel, ganzzahlige Zoomstufen (1×–3×, die Kamera folgt der eigenen
+  Figur, Ziehen verschiebt den Blick), `resolution` = `devicePixelRatio`, Schrift in dreifacher Auflösung. Statt eines
+  Atlas werden die Blätter einmal geladen und ihre Ausschnitte zwischengespeichert.
+- **Autotiles:** Eine Kachel mit `auto` (Wasser) wird nach dem RPG-Maker-VX-Schema aus vier Viertelkacheln je Zelle
+  zusammengesetzt (Mitte, Innenecke, Kante, Außenecke, je nach den Nachbarn). Jeder Block der Liste ist ein Bild der
+  Wellenanimation; außerhalb des Raums zählt als gleiche Kachel (die See geht weiter).
+- **Bewegung und Leben:** Figuren gleiten in etwa 140 ms von Kachel zu Kachel und zeigen dabei ihre vier Laufbilder,
+  das Feuer flackert, der Nebel spart die eigene Figur und brennende Feuer aus.
+- **Kontextmenü:** langes Drücken oder Rechtsklick auf eine Kachel; die Einträge (ansehen, aufheben, nachlegen,
+  hingehen) sind Textbefehle.
 
 ### Grafiken: Intersect-Assets
 
@@ -182,6 +190,85 @@ Animationen, Gegenstände, Oberfläche, Klänge und Musik, alles in einem Stil.
 - **Ausweichweg:** Kein WebGL verfügbar → PixiJS-Canvas-Fallback bzw. Textmodus. Der Umschalter „nur Text“ bleibt
   immer da (Barrierefreiheit, schwache Geräte, Agenten).
 - Sichtfeld und Wegfindung rechnet der Server (Welt-Worker), nicht der Renderer.
+
+### 3D-Ausblick: Three.js
+
+Soll die Karte später räumlich dargestellt werden, ist die Wahl **Three.js** (MIT; die Version wird wie
+`pixi.js` exakt gepinnt). Das erste Ziel ist ausdrücklich eine **2,5D-Ansicht der bestehenden Rasterwelt**, kein
+neues dreidimensionales Welt- oder Bewegungsmodell. Three.js rendert und interpoliert im Client; es bringt keine
+autoritative Spielsimulation oder Physik mit. Der Client braucht trotzdem einen Renderloop
+(`WebGLRenderer.setAnimationLoop`). Einbindung nach demselben Muster: Client-Komponente, dynamisches `import()`,
+`Map<entryId, Object3D>` statt der Sprite-Map und Deltas aus `changes`. Godot oder Bevy wären dagegen kein Einbau,
+sondern ein Plattformwechsel, weil ihr Export das ganze Canvas übernimmt.
+
+Autoritative Erzeugung und Darstellung sind zwei getrennte Wege:
+
+```
+Bauanweisung → serverseitiger Generator/Prüfer → persistiertes ground-Raster → Spielregeln
+                                                        ├───────────────→ 2D-Renderer
+                                                        └───────────────→ 3D-Renderer
+```
+
+Das `ground`-Raster, `TileDef.walk` sowie die `x`/`y`-Positionen der Entries bleiben die einzige Wahrheit. Höhe,
+Beleuchtung und rein visuelle Deko dürfen weder Begehbarkeit noch Reichweite, Sichtlinie oder Kollision verändern.
+Brücken, übereinanderliegende Flächen, Sprünge und vertikale Wege wären eine spätere Änderung des Servermodells und
+sind von diesem Ausblick ausdrücklich nicht umfasst.
+
+**3D-Darstellungsvertrag:** Three.js erzeugt keinen neuen Weltzustand, sondern baut eine Ansicht des persistierten
+Rasters:
+
+- **Koordinaten:** Eine Rasterzelle entspricht einer festgelegten Welteinheit. `x` wird zur horizontalen X-Achse,
+  `y` zur horizontalen Z-Achse; die vertikale Y-Position liefert genau eine versionierte Funktion
+  `terrainHeight(roomId, ground, x, y)`. Figuren, Gegenstände, Ausgänge und Effekte verwenden dieselbe Funktion.
+- **Terrain:** Eine Welt definiert die visuelle Basishöhe je Kacheltyp. Gestuftes Gelände verwendet wenige
+  `InstancedMesh`-Gruppen je Geometrie und Material; geglättetes Gelände verwendet ein gemeinsames Höhenfeld. Kleine
+  Höhenabweichungen dürfen nur innerhalb festgelegter visueller Grenzen liegen, damit eine serverseitig begehbare
+  Kachel nicht wie eine unüberwindbare Wand aussieht.
+- **Determinismus:** Ein stabiler String-Hash und ein festgelegter PRNG erzeugen Rauschen aus `roomId`,
+  Darstellungs-Seed und `terrainRendererVersion`. `Math.random()` ist dafür unzulässig. Eine zusätzliche Bibliothek
+  wie `simplex-noise` ist eine eigene Abhängigkeitsentscheidung, nicht Voraussetzung dieses Entwurfs.
+- **Wasser:** Wasser ist eine eigene Ebene. Der `Water`-Effekt ist ein explizit importiertes Three.js-Addon und an
+  den `WebGLRenderer` gebunden; Normalmap, Renderer und ein einfacherer Fallback werden zusammen mit dem Asset
+  versioniert.
+- **Figuren und Objekte:** Zunächst Billboards, später optional Low-Poly-glTF-Modelle (`GLTFLoader`), z. B. aus
+  CC0-Baukästen. Modelle werden je Asset geladen und wiederverwendet; GPU-Ressourcen werden beim Raumwechsel
+  freigegeben. Der Fußpunkt liegt auf `terrainHeight(...)`, nicht auf einer unabhängig geschätzten Höhe.
+- **Deko:** Gras, Büsche und Steine dürfen deterministisch gestreut werden, sind aber nicht auswählbar, begehbar oder
+  Teil der Spielphysik. Alles Spielrelevante bleibt ein Entry.
+- **Umfang:** Kleine Räume brauchen kein Chunking oder LOD, aber mehrere gebatchte Meshes bzw. InstancedMeshes pro
+  Raum (Terrainmaterialien, Wasser, Deko, Figuren) sind normal. Ein Mesh pro Kachel wird vermieden. Chunking und LOD
+  werden erst für ein späteres durchgängiges Gelände benötigt.
+
+## Prozedurale Räume: Wave Function Collapse (Option)
+
+Für Räume, die nicht von Hand gezeichnet sind (v. a. die Inseln der Götter, siehe
+[goetter.md](goetter.md)): **Wave Function Collapse** im Tiled-Modell — ein Constraint-Löser, der aus
+Kacheln und ausdrücklich definierten Nachbarschaftsregeln ein `ground`-Raster erzeugt. Ein RPG-Maker-Autotile
+beschreibt, wie eine vorhandene Geländekachel abhängig von ihren Nachbarn gezeichnet wird; es ist noch keine
+vollständige WFC-Grammatik. Jede Domänenpalette definiert deshalb separat ihre Kachelgewichte und zulässigen
+Nachbarn, etwa Wasser ↔ Ufer ↔ Sand ↔ Gras ↔ Fels.
+
+- **Ort und Zeitpunkt:** Der Generator läuft serverseitig beim Erstellen eines Entwurfs oder vor der ersten
+  Veröffentlichung einer statischen Welt, nie im Client und nie erneut bei jedem Neustart. Das fertige `ground` wird
+  als Serverzustand gespeichert; Textmodus, 2D- und 3D-Client erhalten dasselbe Raster.
+- **Reproduktion:** Der Entwurf speichert `algorithm`, `generatorVersion`, `palette`, `seed` und den erzeugten Output.
+  Ein stabiler Hash und ein eigener festgelegter PRNG machen denselben Versuch bytegleich wiederholbar. Die Metadaten
+  dienen Diagnose und Test, nicht der Regeneration eines bereits veröffentlichten Raums.
+- **Ablauf:** Vorbelegte Ausgänge, Spawnzellen, Feuerstellen und Ankerplätze schränken die Möglichkeiten ein. Danach
+  propagiert der Löser alle Einschränkungen und kollabiert eine noch offene Zelle mit minimaler Entropie. Nur Zellen
+  neben bereits belegten Zellen zu wählen ist keine Garantie für Zusammenhang.
+- **Grenze von WFC:** WFC garantiert nur lokale Kachelkompatibilität. Ein nachgeschalteter Prüfer kontrolliert per BFS
+  begehbare Wege zwischen Spawn, allen Ausgängen und besonderen Stellen sowie Rückweg und Mindestflächen.
+- **Fehlschlag:** Widerspruch oder eine global unspielbare Karte führen nur bis zu einer festen Höchstzahl zu einem
+  deterministischen Folgeversuch (`seed` plus Versuchsnummer). Danach verwendet der Entwurfsweg einen geprüften
+  Fallback-Grundriss oder lehnt den Entwurf ab; er läuft niemals unbegrenzt.
+- **Implementierung:** Ein eigener Tiled-Löser vermeidet eine Laufzeitabhängigkeit. Der erwartete Umfang ist keine
+  Architekturgarantie: Backtracking, Grenzen, Diagnose und Tests gehören zur Implementierung.
+
+**Abnahme:** Gleicher Seed, gleiche Palette und gleiche Generatorversion liefern bytegleiches `ground`; jede
+Nachbarschaft ist erlaubt; Spawn, Ausgänge und besondere Stellen sind erreichbar. Ein Neustart ändert keinen
+veröffentlichten Raum. 2D- und 3D-Client adressieren dieselben Rasterzellen, und keine 3D-Höhe oder Deko verändert die
+serverseitige Begehbarkeit. Für die 3D-Ansicht kommen zusätzlich ein FPS- und Speicherziel auf dem Zieltelefon hinzu.
 
 ## Verzeichnisaufbau (geplant)
 

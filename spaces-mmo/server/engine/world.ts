@@ -7,8 +7,10 @@ import type { BeaconFields, ExitFields, HelpEntryFields, PrototypeFields } from 
 import { parseLocks } from "./locks.ts";
 import { typeChain } from "./typeclasses.ts";
 
-/** A 32×32 cut of a sheet (pixel offsets); `walk`: characters may stand on it. */
-export type TileDef = { sheet: string; x: number; y: number; walk: boolean };
+/** A 32×32 cut of a sheet (pixel offsets); `walk`: characters may stand on it. `auto`: drawn as an autotile (RPG Maker
+ *  VX layout, 2×3 tiles per block, composed from quarter tiles by its neighbours), one block per animation frame;
+ *  `x`/`y` stay the flat fallback. */
+export type TileDef = { sheet: string; x: number; y: number; walk: boolean; auto?: { blocks: Array<{ x: number; y: number }>; frameMs: number } };
 /** A character sheet: 4 frames per row, rows down, left, right, up. */
 export type SkinDef = { sheet: string; frameW: number; frameH: number };
 export type RoomDef = { roomId: string; name: string; desc: string; ground: string[]; spawn: { x: number; y: number } };

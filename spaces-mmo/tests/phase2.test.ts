@@ -113,11 +113,11 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 		const space = stack.space;
 		// a fire that burns the whole test keeps the fog down and the ways open
 		await space.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + 120_000, litAt: Date.now() } as never }, null, 120_000);
-		await eventually(async () => (await fog(space, "graue-bucht")) === 0, 10_000, "fog cleared");
+		await eventually(async () => (await fog(space, "graue-bucht")) === 0, 20_000, "fog cleared");
 		const a = await player(srv.url, "Gast");
 		await stack.npcProcess();
 		a.p.send("who");
-		await a.p.until((f) => f.t === "msg" && /Bo \(/.test(f.m.text) && /Ines \(/.test(f.m.text), 10_000);
+		await a.p.until((f) => f.t === "msg" && /Bo \(/.test(f.m.text) && /Ines \(/.test(f.m.text), 20_000);
 		await does(a.p, "say hallo zusammen", "Willkommen am Feuer, Gast!");
 		const rooms: string[] = [];
 		const sample = async () => {
@@ -141,7 +141,7 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 		assert.ok(end.entries <= mid.entries + 25, `entries stay bounded (${mid.entries} → ${end.entries})`);
 		// the keeper notices a fire that is gone
 		await space.take({ type: "Flame", fields: { beaconId: "feuer-bucht" } }, 2_000);
-		await a.p.until((f) => f.t === "msg" && f.m.text === "Ines: Das Feuer ist aus! Ohne Licht frisst uns der Nebel.", 10_000);
+		await a.p.until((f) => f.t === "msg" && f.m.text === "Ines: Das Feuer ist aus! Ohne Licht frisst uns der Nebel.", 20_000);
 		await a.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });

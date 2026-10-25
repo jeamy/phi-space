@@ -91,3 +91,16 @@ test("a player who comes back to a cell someone took meanwhile is moved to a fre
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
 });
+
+test("nobody walks into the fire: a step onto the beacon is refused, a walk goes around it", async () => {
+	const srv = await startServer();
+	try {
+		const space = srv.stack.space;
+		const a = await player(srv.url, "Vorsicht");
+		await walk(a.p, space, a.me, 9, 9); // just north of the beacon at 9,10
+		assert.match(await does(a.p, "step 0 1", "Leuchtfeuer"), /da läuft man nicht hinein/);
+		assert.match(await does(a.p, "move 9 10", "Leuchtfeuer"), /da läuft man nicht hinein/);
+		await walk(a.p, space, a.me, 9, 11); // the other side: around the fire
+		await a.p.leave();
+	} finally { await srv.close(); }
+});

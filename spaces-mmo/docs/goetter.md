@@ -43,6 +43,38 @@ Gegenstände ändern oder löschen, Befehle außerhalb des `GodCmdSet`, Automate
 - **Bei Bedarf statt auf Vorrat:** Eine Insel wird erst gebaut, wenn Spieler sie anlaufen können (oder ein freier
   Tagesplatz bleibt), nicht fünfzig im Voraus.
 
+## Wie ein Gott baut: Generator statt Freihand
+
+Ein Gott muss keine `grid`-Strings schreiben. Er liefert im Entwurf je Raum eine **Bauanweisung**:
+Größe, Biom (Strand, Fels, Sumpf, Lichtung …), Lage der Ausgänge, besondere Stellen (Feuerstelle,
+Ankerplatz), dazu die Texte. Ein **Generator** (Skript, kein Modell, im selben Sandbox wie der Prüfer)
+baut daraus die `ground`-Zeichenkette mit **Wave Function Collapse** im Tiled-Modell. Jede Domäne besitzt eine
+versionierte Palette mit ausdrücklich definierten Kachelgewichten und Nachbarschaftsregeln — diese werden nicht aus
+den Autotile-Bildern abgeleitet. Die Nebelmutter kann daher eine andere Palette als ein Feuergott verwenden. Ein
+stabiler Hash und ein festgelegter PRNG leiten den Seed aus Entwurfs-, Raum- und Versuchsschlüssel ab. Die
+Bauanweisung wirkt als *Vorseed*: Ausgänge, Spawn, Feuerstelle und Ankerplatz sind festgelegte Zellen, deren
+Einschränkungen vor dem ersten Kollaps über das ganze Raster propagiert werden.
+
+Der Entwurf enthält neben dem fertigen `ground` auch `algorithm`, `generatorVersion`, `palette` und `seed`. Das Raster
+wird geprüft und beim Veröffentlichen gespeichert; ein Neustart erzeugt es nicht noch einmal. Damit bleiben bereits
+veröffentlichte Räume auch nach Änderungen am Generator unverändert. Die genaue Trennung zwischen autoritativem
+Raster und einer optionalen 3D-Darstellung beschreibt [architektur.md](architektur.md#3d-ausblick-threejs).
+
+Das teilt die Arbeit dort, wo sie zuverlässig ist:
+
+- **Das Modell** liefert Sinn: Thema, Namen, Beschreibungen, Auftragshaken, wohin Ausgänge führen.
+- **Der Generator** liefert Form und garantiert lokale Kachelkompatibilität. Er kann trotzdem in einen Widerspruch
+  laufen oder eine lokal gültige, aber global unspielbare Karte erzeugen. Das Modell muss keine vollständige
+  24×16-Zeichenkette erfinden, was Tokens und syntaktische Fehler spart.
+- **Der Prüfer** bleibt die Grenze (siehe unten): Er prüft den fertigen Entwurf genau wie einen
+  handgeschriebenen (Erreichbarkeit, Budget, Texte). Widerspruch oder fehlende Erreichbarkeit führen bis zu einer
+  festen Höchstzahl zu deterministischen Folgeversuchen. Danach wird ein geprüfter Fallback-Grundriss verwendet oder
+  der Entwurf abgelehnt; der Generator läuft niemals unbegrenzt.
+
+Handgezeichnete Räume bleiben erlaubt (feste Orte der Domäne, besondere Bauten); der Generator ist für
+die Geländeräume gedacht, die sonst alle gleich aussehen müssten. Das Modell *kann* auch selbst ein
+`grid` liefern — der Generator füllt dann nur die freien Flächen auf.
+
 ## Prüfung (statt Freigabe)
 
 Ein Gott schreibt sein Werk als **Entwurf** (`Draft`-Entry im Format der Weltdateien). Der Prüfer (kein Modell, ein
@@ -84,6 +116,9 @@ Gott bis zum nächsten Tag und zeigt eine Skriptzeile.
 
 - Ein Entwurf mit unerreichbarem Raum, einem unbekannten Befehl, zu vielen Gegenständen oder einem Eingriff in eine
   fremde Zone wird abgelehnt; ein gültiger geht in einer Transaktion live.
+- Gleicher Seed, gleiche Palette und gleiche Generatorversion ergeben bytegleiches `ground`; alle Nachbarschaften
+  entsprechen der Palette. Spawn, alle Ausgänge und besonderen Stellen sind per BFS gegenseitig erreichbar.
+- Ein Neustart regeneriert keinen veröffentlichten Raum; ein späteres Generator-Update verändert nur neue Entwürfe.
 - Ein geskripteter Gott kann mit dem `GodCmdSet` keinen vorhandenen Raum ändern oder löschen.
 - Mit `SPACES_MMO_GODS=0` oder abgeschalteter Befugnis entsteht nichts Neues; Bestehendes bleibt.
 - „Zone entfernen“ löscht alle Entries der Zone und lässt Spieler und ihre Sachen heil.

@@ -41,16 +41,23 @@ test("twenty players grab one coin at once across two world workers: exactly one
 		const [coin] = await items(srv.stack.space, { proto: "muenze" });
 		assert.ok(coin);
 		const players = await Promise.all(Array.from({ length: 20 }, () => player(srv.url, "", { guest: true })));
-		// the eleven far off first go to cells of their own on the grass, so none stands where the nine are going
-		players.slice(9).forEach(({ p }, i) => p.send(`move ${i + 2} 14`));
-		await eventually(async () => { for (let i = 9; i < 20; i++) if ((await charAt(srv.stack.space, players[i]!.h.me.charId)).y !== 14) return false; return true; }, 20_000, "eleven on the grass");
+		// first everyone goes to a cell of their own on the grass (new characters crowd around the spawn and can stand
+		// where the nine are going); the eleven far off stay there
+		// (a crowd can block the way for a moment: a refused walk is sent again, as a player would)
+		const goTo = async (i: number, x: number, y: number) => {
+			for (let tries = 0; tries < 50; tries++) {
+				const c = await charAt(srv.stack.space, players[i]!.h.me.charId);
+				if (c.x === x && c.y === y) return;
+				players[i]!.p.send(`move ${x} ${y}`);
+				await new Promise((r) => setTimeout(r, 600));
+			}
+			throw new Error(`player ${i} did not reach ${x},${y}`);
+		};
+		await Promise.all(players.map((_, i) => (i < 9 ? goTo(i, i + 2, 13) : goTo(i, i - 7, 14))));
 		// the coin's cell and its eight neighbours (all sand around 16,8): nine players within reach, eleven further off.
 		// One after another, the middle first, so nobody is walled out by the others
 		const ring = [[0, 0], [-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].map(([dx, dy]) => ({ x: Number(coin.x) + dx!, y: Number(coin.y) + dy! }));
-		for (let i = 0; i < ring.length; i++) {
-			players[i]!.p.send(`move ${ring[i]!.x} ${ring[i]!.y}`);
-			await eventually(async () => { const c = await charAt(srv.stack.space, players[i]!.h.me.charId); return c.x === ring[i]!.x && c.y === ring[i]!.y; }, 10_000, `player ${i} at ${ring[i]!.x},${ring[i]!.y}`);
-		}
+		for (let i = 0; i < ring.length; i++) await goTo(i, ring[i]!.x, ring[i]!.y);
 		const cells = new Set<string>();
 		for (const { h } of players) { const c = await charAt(srv.stack.space, h.me.charId); cells.add(`${c.x},${c.y}`); }
 		assert.equal(cells.size, 20, "twenty players on twenty different cells");

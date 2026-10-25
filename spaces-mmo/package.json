@@ -14,7 +14,8 @@
     "npc": "node --no-warnings --experimental-strip-types server/npc-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
     "world:load": "node --no-warnings --experimental-strip-types server/world-load.ts",
-    "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts"
+    "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test --test-concurrency=3 tests/*.test.ts",
+    "test:perf": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/perf/*.test.ts"
   },
   "dependencies": {
     "next": "16.4.3",

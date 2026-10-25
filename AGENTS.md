@@ -34,7 +34,7 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - spaces-mmo (`spaces-mmo/`: MMORPG engine, first world Leuchtfeuer; processes space, world, web; PixiJS map; docs German in
   `spaces-mmo/docs/`, plan and phases in `spaces-mmo/docs/phasen.md`): `npm --prefix spaces-mmo run build`, then
   `npm --prefix spaces-mmo start` (port 3900; `SPACES_MMO_MEM=1` in memory), tests `npm --prefix spaces-mmo test` (they start the
-  processes), typecheck `npm --prefix spaces-mmo run typecheck` (own tsconfig). Graphics: `worlds/<id>/assets/CREDITS.md` (CC BY 4.0).
+  processes; `npm --prefix spaces-mmo run test:perf` measures the step latency alone), typecheck `npm --prefix spaces-mmo run typecheck` (own tsconfig). Graphics: `worlds/<id>/assets/CREDITS.md` (CC BY 4.0).
 - Standalone space service (own store, no pi-durable): `npm run space-server -- --store FILE|memory --listen unix:/path.sock|tcp:HOST:PORT`
   (`src/standalone.ts`); `examples/sieve.ts` and `examples/cache.ts` take `--remote <address>`. `test/support/no-durable.mjs`
   (`node --import`) refuses pi-durable, chord and pi-ai; `test/test-standalone.test.ts` runs service and examples under it.
