@@ -14,13 +14,15 @@ export type CharacterFields = { charId: string; accountId: string; name: string;
 export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };
 /** A thing: on the ground of a room (`location` = roomId, at x/y) or carried (`location` = charId, x/y = -1). The entry
  *  type is its typeclass, the supertypes include "Item" and "Object". */
-export type ItemFields = { itemId: string; name: string; aliases: string[]; desc: string; location: string; x: number; y: number; glyph: Glyph; locks: string; proto: string; flotsam?: boolean };
+export type ItemFields = { itemId: string; name: string; aliases: string[]; desc: string; location: string; x: number; y: number; glyph: Glyph; locks: string; proto: string; flotsam?: boolean;
+	/** A tool: uses left (it breaks at 0). */ wear?: number;
+	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string };
 /** A way out of a room, on a cell of it; stepping on the cell or `go <name>` leads to `destination`, arriving at `arrive`. */
 export type ExitFields = { exitId: string; name: string; aliases: string[]; desc: string; location: string; destination: string; x: number; y: number; arrive: { x: number; y: number }; locks: string; fogMax?: number };
 /** A label on an object (Tags cannot be array fields: templates match whole values). */
 export type TagFields = { target: string; key: string; category: string };
 /** A template to spawn items from; `parent` names the prototype whose fields it extends. */
-export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string };
+export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number };
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
 export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };
@@ -32,6 +34,14 @@ export type ContributionFields = { beaconId: string; charId: string; name: strin
 export type FogFields = { room: string; level: number };
 /** A recurring job (Evennia's Script/TickerHandler): due at `due`; the world worker that takes it runs it once. */
 export type TickerFields = { key: string; due: number };
+/** A direct trade: `from` offers the items `give` (still in its pack until accepted) to `to`, for `want` (names and
+ *  counts, taken from `to`'s pack on accept). Accepting moves all of it in one transaction or nothing. */
+export type OfferFields = { offerId: string; from: string; fromName: string; to: string; toName: string; give: string[]; giveNames: string[]; want: Array<{ name: string; count: number }>; room: string; at: number };
+/** A listing on the market board: the item waits in escrow (location "market") until bought, withdrawn or the lease
+ *  ends (then the market ticker gives it back). Prices are counted in coins (prototype `currency` of the world). */
+export type ListingFields = { listingId: string; seller: string; sellerName: string; itemId: string; itemName: string; price: number; room: string; at: number };
+/** A job on the order board (master–worker): posted by the world, taken by one player, delivered for a reward. */
+export type OrderFields = { orderId: string; kind: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; takenBy: string; room: string };
 /** A help topic of the world. */
 export type HelpEntryFields = { key: string; category: string; text: string };
 /** Which version of a world's definition the space holds (written by the loader). */

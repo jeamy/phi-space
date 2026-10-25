@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT } from "phi-spaces";
 import { CommandError, execute } from "./engine/commands.ts";
 import { msg } from "./engine/context.ts";
+import { marketTick, ordersTick } from "./engine/commands/trade.ts";
 import { fireTick, floodTick, fogTick } from "./engine/fire.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { runDue, type Job } from "./engine/ticker.ts";
@@ -36,6 +37,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 		{ key: "fire", everyMs: gameMs(15_000, 100), run: () => fireTick(space, w, msgLeaseMs) },
 		{ key: "fog", everyMs: gameMs(w.fog.stepMs), run: () => fogTick(space, w, msgLeaseMs) },
 		{ key: "flood", everyMs: gameMs(w.flood.everyMs), run: () => floodTick(space, w, msgLeaseMs) },
+		{ key: "orders", everyMs: gameMs(w.orders.everyMs), run: () => ordersTick(space, w) },
+		{ key: "market", everyMs: gameMs(60_000, 100), run: () => marketTick(space) },
 	];
 	const loaded = await loadIntoSpace(space, w, { tickers: jobs });
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);

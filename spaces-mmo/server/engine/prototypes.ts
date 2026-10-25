@@ -46,7 +46,7 @@ export const newItemId = () => `i-${randomBytes(6).toString("hex")}`;
 
 /** Writes an item of prototype `p` (under `txn`); `lease`: it vanishes by itself (flotsam), else it stays. */
 export async function spawn(space: SpaceLike, txn: string | null, w: WorldDef, p: PrototypeFields, at: { itemId?: string; location: string; x: number; y: number; flotsam?: boolean; lease?: number }): Promise<ItemFields> {
-	const item: ItemFields = { itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.key, ...(at.flotsam ? { flotsam: true } : {}) };
+	const item: ItemFields = { itemId: at.itemId ?? newItemId(), name: p.name, aliases: p.aliases ?? [], desc: p.desc ?? "", location: at.location, x: at.x, y: at.y, glyph: p.glyph, locks: p.locks || DEFAULT_ITEM_LOCKS, proto: p.key, ...(at.flotsam ? { flotsam: true } : {}), ...(p.wear ? { wear: p.wear } : {}) };
 	await space.write(draftOf(p.typeclass || "Item", w.typeclasses, item), txn, at.lease ?? FOREVER);
 	return item;
 }

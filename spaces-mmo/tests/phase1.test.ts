@@ -226,7 +226,7 @@ test("builders shape the world: dig, open, create, set, lock, tag, examine, dest
 		assert.equal((await items(srv.stack.space, { name: "Kiste" })).length, 0);
 		assert.equal(await srv.stack.space.count({ type: "Tag", fields: { target: kiste.itemId } }), 0, "its tags went with it");
 		// spawn from a prototype; perm makes Bert a builder
-		assert.match(await does(admin.p, "spawn", "Prototypen:"), /muenze, muschel, treibholz/);
+		assert.match(await does(admin.p, "spawn", "Prototypen:"), /holzbuendel, muenze, muschel, muschelmesser, treibholz/);
 		await does(admin.p, "spawn muschel", "erschaffst Muschel");
 		assert.match(await does(admin.p, "create Ding:constructor", "Typklasse"), /unbekannte Typklasse/);
 		await does(admin.p, "perm Bert = Builder", "Bert ist jetzt Builder.");

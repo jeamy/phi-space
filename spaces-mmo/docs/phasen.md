@@ -101,6 +101,18 @@ Spielbar am Telefon. 30 Figuren in einem Raum laufen auf einem Mittelklasse-Tele
 
 ## Phase 4 – Handel und Wirtschaft
 
+**Stand 2026-10-25: umgesetzt** (`tests/phase4.test.ts`).
+- **Tausch:** `offer <dinge> an <person> [für <dinge>]`, `accept`, `decline`, `offer zurück`.
+- **Marktbrett:** an der Grauen Bucht, Preise in Münzen; die Ware wartet treuhänderisch am Ort `market`, ein Ticker
+  bringt sie nach abgelaufenem Angebot zurück.
+- **Handwerk:** `craft` mit Muschelmesser und Holzbündel; Werkzeug nutzt sich mit jeder Benutzung ab.
+- **Auftragstafel:** Ein Ticker hängt bis zu drei Aufträge aus; nehmen, liefern, Lohn in Münzen.
+- **Erhaltungs-Fuzz:** 6 Spieler, 2 Welt-Worker, 15 s zufällige Tausche, Käufe, Rücknahmen und Geschenke; im
+  gemessenen Lauf gelangen 56. Jeder der 42 eingesetzten Gegenstände existiert danach genau einmal, bei einem Spieler
+  oder am Markt hinter einem lebenden Angebot.
+- **Senken:** Brennstoff verbrennt, Werkzeug zerbricht, Aufträge verbrauchen die gelieferten Dinge. Münzen entstehen
+  nur als Lohn der Tafel.
+
 - Direkter Tausch (`offer`/`accept`) als eine Transaktion; Marktbrett (Angebote als Entries mit Lease).
 - Rezepte/Handwerk über Prototypen; Auftragstafel als Master-Worker.
 - Senken gegen Inflation: Brennstoff verbrennt, Werkzeug nutzt sich ab (OnDemand).

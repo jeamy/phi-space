@@ -180,3 +180,18 @@ online sind; eine Offline-Figur ist nicht auf der Karte und blockiert niemanden.
   belegte Ankunftsstelle eines Ausgangs führt auf die nächste freie Kachel, nie auf eine Ausgangskachel.
 - Neue Figuren entstehen auf einer freien Kachel. Beim Verbinden schickt das Gateway `arrive`: Steht inzwischen jemand
   auf der Kachel der Figur, tritt sie auf die nächste freie.
+
+## Stand Phase 4
+
+- **Tausch ohne Treuhand:** Ein `Offer` nennt die angebotenen Gegenstände (sie bleiben im Inventar des Anbieters) und
+  die Wünsche (Name und Anzahl). `accept` nimmt in einer Transaktion beide Seiten und schreibt sie getauscht; fehlt
+  etwas, bricht alles ab. Ein Angebot lebt zwei Minuten echte Zeit.
+- **Markt mit Treuhand:** Beim Einstellen geht die Ware an den Ort `market` (mit `listing` und `seller`), das `Listing`
+  hat eine Lease. Kaufen nimmt Listing, Münzen und Ware in einer Transaktion. Ein Ticker (`market`) gibt Ware zurück,
+  deren Listing es nicht mehr gibt; ein gerade gehaltenes Listing gilt als lebendig.
+- **Auftragstafel (Master–Worker):** Die Welt schreibt `Order`-Einträge (Ticker `orders`), ein Spieler nimmt einen per
+  `take` und schreibt ihn mit `takenBy` zurück; Liefern verbraucht die Dinge und erzeugt den Lohn.
+- **Handwerk:** Rezepte stehen in der Welt; ein Werkzeug trägt `wear` und zerbricht bei 0. Das ist eine Zählung pro
+  Benutzung statt OnDemand-Zeit.
+- **Gäste** können weder tauschen noch handeln noch Aufträge annehmen; die Liste ansehen dürfen sie.
+- **Grenze:** Angebote und Aufträge sind bisher nur Textbefehle; die Seite zeigt sie im Log, ohne eigene Knöpfe.

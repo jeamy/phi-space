@@ -42,6 +42,14 @@ export type WorldDef = {
 	channels: string[];
 	/** Characters played by scripts (the npc process), not by models. */
 	npcs: NpcDef[];
+	/** Phase 4. The prototype that counts as money (prices, rewards). */
+	currency: string;
+	/** Where the market board stands and how long a listing stays. */
+	market: { room: string; listMs: number };
+	/** Recipes: what goes in (used up), which tool is needed (it wears by one), what comes out. */
+	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string }>;
+	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
+	orders: { room: string; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number } }> };
 };
 export type NpcDef = { npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string };
 
@@ -86,6 +94,11 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		if (!r || !walkable(w, r.ground, n.x, n.y)) throw new Error(`npc ${n.npcId}: unknown room or not walkable`);
 		if (n.beacon && !w.beacons.some((b) => b.beaconId === n.beacon)) throw new Error(`npc ${n.npcId}: unknown beacon`);
 	}
+	const proto = (k: string, what: string) => { if (!w.prototypes.some((q) => q.key === k)) throw new Error(`${what}: unknown prototype ${k}`); };
+	proto(w.currency, "currency");
+	if (!room(w.market.room) || !room(w.orders.room)) throw new Error("market or order board: unknown room");
+	for (const r of w.recipes) { r.needs.forEach((n) => proto(n.proto, `recipe ${r.key}`)); proto(r.makes, `recipe ${r.key}`); if (r.tool) proto(r.tool, `recipe ${r.key}`); }
+	for (const k of w.orders.kinds) { k.needs.forEach((n) => proto(n.proto, `order ${k.key}`)); proto(k.reward.proto, `order ${k.key}`); }
 	for (const o of w.objects) {
 		const r = room(o.room);
 		if (!r || !walkable(w, r.ground, o.x, o.y) || !w.prototypes.some((p) => p.key === o.proto)) throw new Error(`object ${o.itemId}: unknown room or prototype, or not on a walkable cell`);

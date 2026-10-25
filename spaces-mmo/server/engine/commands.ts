@@ -4,6 +4,7 @@
 import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
 import { BUILDER_COMMANDS } from "./commands/builder.ts";
 import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts";
+import { TRADE_COMMANDS } from "./commands/trade.ts";
 import { CommandError, lockCtx, type CommandCtx } from "./context.ts";
 import { allowed } from "./locks.ts";
 
@@ -18,7 +19,7 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	// the help lists the commands, not the exits (look names those)
 	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
 	const sets: CmdSet[] = [
-		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, help]) },
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, help]) },
 		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
 		exits,
 	];
