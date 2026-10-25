@@ -28,7 +28,8 @@ const self = async (n: Npc) => { const e = await n.space.readIfExists({ type: "C
  *  up it dozes and says script lines (the warnings and greetings of Phase 2). */
 function waerter(): Script {
 	let state: "ok" | "low" | "out" | null = null;
-	let seen = Date.now(), lastDoze = Date.now(), pensive = false, budgetSaid = false;
+	let lastDoze = Date.now(), pensive = false, budgetSaid = false;
+	const heardSince = newHeard();
 	let present: Set<string> | null = null;
 	const greeted = new Map<string, number>();
 	return async (n) => {
@@ -45,8 +46,7 @@ function waerter(): Script {
 			state = next;
 			fireText = burnText(f, now);
 		}
-		const said = (await n.space.readAll({ type: "Msg", fields: { room: me.room, to: "*", kind: "say" } })).map((e) => fieldsOf<MsgFields>(e)).filter((m) => m.at > seen && m.from !== me.name);
-		seen = Date.now();
+		const said = await heardSince(n, me);
 		if (said.some((m) => m.text.toLowerCase().includes(me.name.toLowerCase()))) events.push("spoken");
 		const people = await humansIn(n, me.room);
 		if (present && people.some((p) => !present!.has(p))) events.push("person.enters");
@@ -91,7 +91,8 @@ function waerter(): Script {
  *  cooldown; it speaks when people are there (with the model while awake, else a script line) and goes when nobody has
  *  spoken to it for its stay, or when nobody is there for two game minutes. */
 function wanderer(): Script {
-	let denseSince = 0, lastSpoken = 0, aloneSince = 0, seen = Date.now();
+	let denseSince = 0, lastSpoken = 0, aloneSince = 0;
+	const heardSince = newHeard();
 	return async (n) => {
 		const wd = n.def.wanderer!, m = n.def.model, now = Date.now();
 		const me = await self(n);
@@ -103,14 +104,14 @@ function wanderer(): Script {
 			if (denseSince && now - denseSince >= gameMs(2 * 60_000) && cool) {
 				await n.space.write({ type: "NpcVisit", fields: { npcId: n.def.npcId, at: now } }, null, gameMs(wd.cooldownMs));
 				await n.setOnline(true);
-				lastSpoken = now; aloneSince = 0; seen = now;
+				lastSpoken = now; aloneSince = 0;
+				await heardSince(n, me); // what was said before he came is not for him
 				if ((await humansIn(n, n.def.room)).length) await speak(n, me.name, wd.event, []);
 			}
 			await n.sleep(gameMs(5_000, 100));
 			return;
 		}
-		const said = (await n.space.readAll({ type: "Msg", fields: { room: me.room, to: "*", kind: "say" } })).map((e) => fieldsOf<MsgFields>(e)).filter((x) => x.at > seen && x.from !== me.name);
-		seen = Date.now();
+		const said = await heardSince(n, me);
 		if (said.some((x) => /fremd/i.test(x.text) || x.text.toLowerCase().includes(me.name.toLowerCase()))) { lastSpoken = now; await speak(n, me.name, "spoken", said.map((x) => x.text)); }
 		const people = await humansIn(n, me.room);
 		aloneSince = people.length ? 0 : aloneSince || now;
@@ -132,6 +133,20 @@ async function speak(n: Npc, name: string, event: string, heard: string[]): Prom
 		if (typeof r === "object") { for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
 	}
 	await n.act(event === "spoken" ? "say Licht … wo brennt das nächste Licht?" : "say Wo geht es hier aus dem Nebel?");
+}
+
+/** What others said in the NPC's room since the last call, by message id (a time would miss a message read while its
+ *  transaction was still open: its time is older than its commit). The first call takes what was said since the role
+ *  started here (a process that just took the role over answers what was said meanwhile, not the old talk). */
+function newHeard() {
+	let known: Set<string> | null = null;
+	const started = Date.now() - 2_000;
+	return async (n: Npc, me: CharacterFields): Promise<MsgFields[]> => {
+		const all = await n.space.readAll({ type: "Msg", fields: { room: me.room, to: "*", kind: "say" } });
+		const fresh = known ? all.filter((e) => !known!.has(e.id)) : all.filter((e) => Number(e.fields.at) >= started);
+		known = new Set(all.map((e) => e.id)); // messages lapse with their lease: the set stays as small as the room's talk
+		return fresh.map((e) => fieldsOf<MsgFields>(e)).filter((m) => m.from !== me.name);
+	};
 }
 
 /** Online characters of players in a room (not NPCs). */

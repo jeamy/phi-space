@@ -122,6 +122,18 @@ gleich der Summe davor plus Spawns minus Verbrauch (Erhaltungsprüfung).
 
 ## Phase 5 – Modell-NPCs (kosten Tokens, nur nach Freigabe)
 
+**Stand 2026-10-25: umgesetzt, nur mit geskripteten Modellen getestet** (`tests/phase5.test.ts`); ein Live-Lauf mit
+einem echten Modell steht aus und braucht Freigabe.
+- **Ines** ist eine Modellrolle: geweckt durch schwaches oder erloschenes Feuer, Ansprache oder jemanden, der
+  hereinkommt; wach antwortet sie mit dem Modell (nur `say`/`emote`) und merkt sich mit `NOTE:` etwas.
+- **Der Fremde** ist ein Wanderer, der nur bei länger dichtem Nebel erscheint.
+- **Grenzen:** `SPACES_MMO_NPC_MAX`, Tagesbudget je Rolle, gemeinsame Kontingente. Rollen gehen per Lease an einen
+  npc-Prozess; stirbt er, übernimmt ein anderer.
+- **Kennzeichnung:** Modellrollen sind auf der Karte und im Log als KI gekennzeichnet.
+- **Abweichungen:** [modell-npcs.md](modell-npcs.md#stand).
+- **Dazu: Eingaben in natürlicher Sprache** ([architektur.md](architektur.md#eingaben-in-natürlicher-sprache)) und
+  Knöpfe für Tausch, Markt und Aufträge.
+
 Ausführlich in [modell-npcs.md](modell-npcs.md): feste Rollen, die bei Ereignissen aufwachen (döst/wach/abwesend), Wanderer durch Ereignisse, `SPACES_MMO_NPC_MAX` zählt nur die wachen.
 
 - `npc`-Prozess nutzt das `agent/`-Paket; Agenten spielen über dieselben Befehle wie Menschen.

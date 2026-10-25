@@ -60,6 +60,22 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
 - Spieler haben keinen direkten Zugang zum Space; ihre Identität kennt nur das Gateway.
 - Builder- und Admin-Rechte sind Weltrecht (`perms` am Account, Locks), keine Space-Rollen.
 
+## Eingaben in natürlicher Sprache
+
+Wer statt eines Befehls einen Satz tippt, wird in zwei Stufen verstanden:
+
+1. **Regeln** (`server/engine/translate.ts`, kostenlos, immer an) übersetzen gängige Sätze mit Blick auf den Raum:
+   „gehe nach osten“ → `go ost`, „nimm das holz auf“ → `get holz`, „kaufe muschel am markt“ → `market kaufe 1`,
+   „biete muschel am markt für 2 an“ → `market biete muschel für 2`, „lege holz ins feuer“ → `put holz in feuer`,
+   „schau dich um“ → `look`. Getippte Befehle und Gesprochenes (`say`, `kanal`) bleiben unverändert.
+2. **Ein günstiges Modell** (`server/model-host.ts`, nur mit `SPACES_MMO_LLM=1`) bekommt, was die Regeln nicht
+   verstehen. Der Welt-Worker schreibt dafür einen `Translate`-Eintrag; der Modellprozess zeigt dem Modell die Befehle
+   und was der Spieler sieht, und schreibt die Antwort als neuen Auftrag mit dem Originalsatz (`asked`) zurück. Eine
+   Antwort, die nicht mit einem bekannten Befehl beginnt, wird verworfen; eine Übersetzung wird nie erneut übersetzt.
+   Kontingente: je Konto und Tag (Gäste weniger), dazu die gemeinsamen Grenzen pro Minute und Tag.
+
+Der Spieler sieht jedes Mal, wie er verstanden wurde: „gehe nach osten“ → go ost.
+
 ## Konten und Login
 
 Ab Phase 0 gibt es beides: sofort als Gast spielen oder mit Konto. Ein Gast kann sich jederzeit registrieren und

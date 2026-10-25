@@ -89,3 +89,28 @@ Skriptzeilen und nur im Zustand *wach* Modellantworten als `Intent`s. Er darf nu
 - Leeres Tagesbudget: kein Modellaufruf, Skriptzeile statt Antwort, am nächsten Tag geht es weiter.
 - Neustart des `npc`-Prozesses: Zustände und `NpcMemory` bleiben, kein Doppelstart einer Rolle bei zwei Prozessen.
 - Ein Live-Lauf mit echtem Modell nur auf ausdrückliche Freigabe.
+
+## Stand
+
+Umgesetzt in `server/npc/minds.ts`, `server/npc/scripts.ts`, `server/npc-host.ts`, `server/llm.ts`; Abnahme in
+`tests/phase5.test.ts` mit einem geskripteten Modell (`tests/fake-llm.ts`). Abweichungen vom Entwurf oben:
+
+- **Rollen in der Weltdatei:** in `worlds/leuchtfeuer/world.ts` (Feld `model` an den NPCs, `wanderer` für Wanderer),
+  nicht in einer eigenen `npcs.ts`. Rollen bisher: Ines (Wärterin) und der Fremde (Wanderer bei `fog.dense`).
+- **Kein Plan (abwesend nach Uhrzeit):** Die Welt hat noch keine Weltzeit; Ines ist immer da, der Fremde nur durch
+  sein Ereignis.
+- **Ereignisse:** bisher `fire.low`, `fire.out`, `spoken`, `person.enters`, `fog.dense`. Die npc-Prozesse lesen dafür
+  alle paar Spielsekunden den Space (Feuer, Nebel, Nachrichten, Anwesende), statt dem Änderungsstrom zu folgen.
+- **Was ein Modell darf:** nur `say` und `emote` (höchstens zwei Zeilen je Antwort), dazu eine `NOTE:`-Zeile fürs
+  Gedächtnis (`NpcMemory`, höchstens 4 KiB, älteste Notizen fallen weg). Es sieht Gedächtnis, Ort, Anwesende,
+  Feuerstand, Ereignis und Gehörtes, nie Konten.
+- **Wach und Rollen:** `NpcAwake` (Lease 5 Spielminuten, bei jeder Ansprache erneuert) und `NpcOwner` (Lease je Rolle,
+  `SPACES_MMO_NPC_ROLE_LEASE_MS`) werden unter `Lock{name:"npc"}` geschrieben; so sind nie mehr als
+  `SPACES_MMO_NPC_MAX` wach und keine Rolle läuft doppelt. Eine übernommene Rolle startet mit frischem Skript.
+- **Budget leer:** eine Dös-Zeile der Rolle („Ines flickt ein Netz.“) statt der Antwort; volles NPC_MAX: „ist in
+  Gedanken.“
+- **Zusammenfassen mehrerer Spieler** zu einem Aufruf: Alles, was seit der letzten Runde gesagt wurde, geht in einen
+  Aufruf. Höchstens ein Aufruf je NPC zugleich ergibt sich aus der Runde; eine eigene Grenze von 6 pro Minute gibt es
+  nicht (die gemeinsame Minutengrenze gilt).
+- **Kennzeichnung:** Figuren und Nachrichten von Modellrollen tragen `ai` und erscheinen als „Name (KI)“ bzw. mit
+  „KI“-Marke im Log.

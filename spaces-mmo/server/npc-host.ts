@@ -30,8 +30,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const starting: Promise<void>[] = [];
 	const owner = `npc-proc-${randomBytes(4).toString("hex")}`;
 	for (const def of w.npcs) {
-		const script = scriptFor(def.script);
-		if (!script) { console.error(`[npc] ${def.npcId}: unknown script ${def.script}`); continue; }
+		if (!scriptFor(def.script)) { console.error(`[npc] ${def.npcId}: unknown script ${def.script}`); continue; }
 		const charId = `npc-${def.npcId}`;
 		let lease: string | null = null, online = !def.wanderer; // a wanderer is away until its event
 		let started!: () => void, startingDone = false;
@@ -64,6 +63,8 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				const role = await claimRole(space, def.npcId, owner, roleLeaseMs()).catch(() => null);
 				if (!role) { ready(); await sleep(roleLeaseMs() / 2); continue; }
 				let lost = false;
+				// a fresh script for every claim: what it has seen starts here, not at the process's start
+				const script = scriptFor(def.script)!;
 				await keep();
 				ready();
 				const beat = setInterval(() => {
