@@ -160,11 +160,15 @@ services:
       SPACES_MMO_DATA: /data
       # the page may be opened as localhost too (Next's dev server serves its scripts only to known origins)
       SPACES_MMO_DEV_ORIGINS: "localhost"
+      # model calls (they cost tokens): off unless started with SPACES_MMO_LLM=1 in the shell or .env
+      SPACES_MMO_LLM: "${SPACES_MMO_LLM:-0}"
     ports:
       # loopback only; 3920 so a game on 3900 or the local test bed on 3910 keeps running next to it
       - "127.0.0.1:${SPACES_MMO_DEV_PORT:-3920}:3900"
     volumes:
       - mmo-dev-data:/data
+      # the host's pi CLI login, read-only, for model NPCs and translations in dev (PI_AUTH_DIR= skips it)
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
       - ../app:/opt/phi-spaces/spaces-mmo/app
       - ../client:/opt/phi-spaces/spaces-mmo/client
       - ../server:/opt/phi-spaces/spaces-mmo/server

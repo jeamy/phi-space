@@ -55,6 +55,12 @@ lädt von selbst), und jeder Serverprozess (space, world, npc, web) startet neu,
 Kern ändert. Der Speicher liegt im Volume `mmo-dev-data` und bleibt über Neustarts erhalten; `docker volume rm
 phi-spaces-mmo_mmo-dev-data` setzt die Welt zurück.
 
+Modellaufrufe (Modell-NPCs, Übersetzen von Sätzen in Befehle) kosten Tokens und sind im Dev-Container aus, außer er wird
+mit `SPACES_MMO_LLM=1` gestartet (`SPACES_MMO_LLM=1 npm --prefix spaces-mmo run docker:dev:up`, oder in der `.env`). Die
+Zugangsdaten kommen aus dem pi-CLI-Login des Rechners (`~/.pi/agent`, nur lesend eingebunden; `PI_AUTH_DIR=` schaltet das
+ab). Gewählt wird das neueste verfügbare Modell, dessen ID `SPACES_MMO_LLM_MODEL` enthält (Standard `haiku`); die
+Grenzen stehen in `.env.example`.
+
 ## Produktion: nano und big
 
 Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann das Skript des Rechners.
@@ -79,6 +85,5 @@ entfernen). Die Image-Datei enthält keine `.env` (`.dockerignore`).
 
 ## Nicht enthalten
 
-- Modell-NPCs sind noch nicht gebaut (Phase 5): das Image trägt `agent/` mit seinen Abhängigkeiten schon, `SPACES_MMO_LLM` bleibt aus.
 - Kein Backup-Skript wie `docker:backup` im Chat; der Speicher liegt im Volume, die Sicherung des Verzeichnisses
   übernimmt der Betreiber, bis ein Sicherungsbefehl vorgesehen ist.
