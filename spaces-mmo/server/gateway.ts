@@ -9,19 +9,29 @@ import type { SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
-import { asFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields } from "./model.ts";
+import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields } from "./model.ts";
 import { envMs } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
 
 /** What a client sees of a character. */
-export type CharView = { charId: string; name: string; x: number; y: number; skin: number };
+export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon"; name: string; location: string; x: number; y: number; glyph?: Glyph; until?: number };
-export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at">;
+export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at"> & { ai?: true };
+/** What a client sees of trade: offers it made or got, the order board and the market board (the boards only in their
+ *  room), its own taken order. */
+export type TradeView = {
+	offersIn: Array<Pick<OfferFields, "offerId" | "fromName" | "giveNames" | "want">>;
+	offersOut: Array<Pick<OfferFields, "offerId" | "toName" | "giveNames" | "want">>;
+	orders: Array<{ nr: number; text: string; reward: number }> | null;
+	myOrder: { text: string; needs: OrderFields["needs"] } | null;
+	listings: Array<{ nr: number; itemName: string; price: number; sellerName: string; mine: boolean }> | null;
+};
 /** Frames to the browser. */
 export type ServerFrame =
 	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins">; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number }
 	| { t: "fog"; level: number }
+	| { t: "trade"; trade: TradeView }
 	| { t: "char"; c: CharView }
 	| { t: "gone"; charId: string }
 	| { t: "obj"; o: ObjView }
@@ -36,10 +46,12 @@ const INTENT_LEASE_MS = 30_000;
 
 type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null };
 
-const charView = (c: CharacterFields): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin });
+/** The characters a model plays (docs/modell-npcs.md: marked as AI wherever they appear). */
+let modelChars = new Set<string>(), modelNames = new Set<string>();
+const charView = (c: CharacterFields): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}) });
 const itemView = (f: ItemFields): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph });
 const exitView = (f: ExitFields): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, location: f.location, x: f.x, y: f.y });
-const msgView = (m: MsgFields, viewer: string): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at });
+const msgView = (m: MsgFields, viewer: string): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}) });
 
 export class Gateway {
 	readonly sessionLeaseMs = envMs("SPACES_MMO_SESSION_LEASE_MS", 30_000);
@@ -58,6 +70,9 @@ export class Gateway {
 	readonly #flames = new Map<string, number>(); // beaconId -> until
 	readonly #flameOf = new Map<string, string>(); // flame entry id -> beaconId
 	readonly #fog = new Map<string, number>(); // room -> level
+	readonly #offers = new Map<string, OfferFields>(); // entry id -> offer
+	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
+	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
 	#applied = -1; // the revision the state above reflects
 	readonly #waiting = new Set<{ rev: number; ok: () => void }>();
 	#watch: Promise<void>;
@@ -69,6 +84,8 @@ export class Gateway {
 
 	constructor(space: SpaceLike, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null) {
 		this.space = space; this.w = w; this.onActivity = onActivity; this.build = build;
+		modelChars = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
+		modelNames = new Set(w.npcs.filter((n) => n.model).map((n) => n.name));
 		let ready!: () => void;
 		this.#ready = new Promise((r) => (ready = r));
 		this.#watch = this.#follow(ready);
@@ -149,6 +166,7 @@ export class Gateway {
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map(charView);
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
 		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId));
+		queueMicrotask(() => c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame));
 		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now() } satisfies ServerFrame);
 	}
 
@@ -161,7 +179,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await this.space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "Offer", "Order", "Listing"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
 					for (const e of await this.space.readAll({ type: "Msg", fields: { to: "*" } })) this.#put(e.id, e.type, e.types, e.fields, msgs);
 					this.#advance(rev);
 					ready();
@@ -173,6 +191,7 @@ export class Gateway {
 					const objs = new Map<string, string | null>(); // objId -> location before the batch
 					const msgs: MsgFields[] = [];
 					const fogs = new Set<string>(); // rooms whose fog changed
+					let trade = false; // offers, orders or listings changed
 					const touch = (entryId: string, fields?: Record<string, unknown>, types?: string[]) => {
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
@@ -181,12 +200,13 @@ export class Gateway {
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
 					for (const op of b.ops) {
-						if (op.op === "put") { touch(op.id, op.fields, op.types); this.#put(op.id, op.type, op.types, op.fields, msgs); }
-						else { touch(op.id); this.#del(op.id); }
+						if (op.op === "put") { touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(op.id, op.type, op.types, op.fields, msgs); }
+						else { touch(op.id); trade ||= this.#offers.has(op.id) || this.#orders.has(op.id) || this.#listings.has(op.id); this.#del(op.id); }
 					}
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
+					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
 					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId) } satisfies ServerFrame);
 				}
@@ -204,7 +224,7 @@ export class Gateway {
 	}
 
 	#reset(): void {
-		for (const m of [this.#chars, this.#charOf, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#recent, this.#flames, this.#flameOf, this.#fog]) m.clear();
+		for (const m of [this.#chars, this.#charOf, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
@@ -228,6 +248,9 @@ export class Gateway {
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
 		else if (type === "Fog") { const f = fields as unknown as FogFields; this.#fog.set(f.room, f.level); }
+		else if (type === "Offer") this.#offers.set(id, fields as unknown as OfferFields);
+		else if (type === "Order") this.#orders.set(id, fields as unknown as OrderFields);
+		else if (type === "Listing") this.#listings.set(id, fields as unknown as ListingFields);
 		else if (types.includes("Item") || types.includes("Exit")) {
 			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields) : exitView(fields as unknown as ExitFields);
 			for (const [eid, oid] of this.#objOf) if (oid === o.id && eid !== id) this.#objOf.delete(eid);
@@ -245,6 +268,7 @@ export class Gateway {
 	}
 
 	#del(id: string): void {
+		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id)) return;
 		const beaconId = this.#flameOf.get(id);
 		if (beaconId) { this.#flameOf.delete(id); if (![...this.#flameOf.values()].includes(beaconId)) this.#flames.delete(beaconId); return; }
 		const charId = this.#charOf.get(id);
@@ -265,6 +289,23 @@ export class Gateway {
 			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!) } satisfies ServerFrame);
 			else if (cl.room !== null && (cl.room === roomBefore || cl.room === c?.room)) cl.ws.send({ t: "gone", charId } satisfies ServerFrame);
 		}
+	}
+
+	/** The client's view of trade, numbered like the text commands number them (order of posting). */
+	#trade(c: Client): TradeView {
+		const me = c.me.charId;
+		const offers = [...this.#offers.values()];
+		const orders = [...this.#orders.values()].sort((a, b) => a.orderId.localeCompare(b.orderId));
+		const open = orders.filter((o) => !o.takenBy);
+		const mine = orders.find((o) => o.takenBy === me);
+		const listings = [...this.#listings.values()].sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId));
+		return {
+			offersIn: offers.filter((o) => o.to === me).map(({ offerId, fromName, giveNames, want }) => ({ offerId, fromName, giveNames, want })),
+			offersOut: offers.filter((o) => o.from === me).map(({ offerId, toName, giveNames, want }) => ({ offerId, toName, giveNames, want })),
+			orders: c.room === this.w.orders.room ? open.map((o, i) => ({ nr: i + 1, text: o.text, reward: o.reward.count })) : null,
+			myOrder: mine ? { text: mine.text, needs: mine.needs } : null,
+			listings: c.room === this.w.market.room ? listings.map((l, i) => ({ nr: i + 1, itemName: l.itemName, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
+		};
 	}
 
 	/** A beacon with its fire's end (0: out). */

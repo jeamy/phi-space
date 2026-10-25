@@ -5,7 +5,11 @@ import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
 import { BUILDER_COMMANDS } from "./commands/builder.ts";
 import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts";
 import { TRADE_COMMANDS } from "./commands/trade.ts";
-import { CommandError, lockCtx, type CommandCtx } from "./context.ts";
+import { randomBytes } from "node:crypto";
+import { llmEnabled } from "../llm.ts";
+import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
+import { CommandError, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
+import { translateRules, type TranslateView } from "./translate.ts";
 import { allowed } from "./locks.ts";
 
 export { CommandError, type CommandCtx };
@@ -27,13 +31,49 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	return all;
 }
 
+const split = (line: string): [string, string] => {
+	// "'text" and ":text" are say and emote without a space
+	const short = /^(['":])(.*)$/s.exec(line);
+	if (short) return [short[1] === ":" ? "emote" : "say", short[2]!.trim()];
+	const verb = line.split(/\s+/)[0]!;
+	return [verb, line.slice(verb.length).trim()];
+};
+
+/** What the translation rules may look at. */
+async function viewFor(c: CommandCtx): Promise<TranslateView> {
+	const listings = c.actor.room === c.world.market.room ? (await c.space.readAll({ type: "Listing" })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId)).map((l, i) => ({ nr: i + 1, itemName: l.itemName })) : [];
+	return { exits: (await exitsHere(c)).map((x) => ({ name: x.f.name, aliases: x.f.aliases })), listings, carried: (await inventory(c)).map((i) => i.f.name) };
+}
+
 export async function execute(c: CommandCtx, line: string): Promise<void> {
 	line = line.trim();
 	if (!line) return;
-	// "'text" and ":text" are say and emote without a space
-	const short = /^(['":])(.*)$/s.exec(line);
-	const [verb, arg] = short ? [short[1] === ":" ? "emote" : "say", short[2]!.trim()] : [line.split(/\s+/)[0]!, line.slice(line.split(/\s+/)[0]!.length).trim()];
-	const cmd = (await commandsOf(c)).get(verb.toLowerCase());
-	if (!cmd) throw new CommandError(`Unbekannter Befehl „${verb.slice(0, 20)}“. „help“ zeigt alle Befehle.`);
-	await cmd.func(c, arg);
+	const cmds = await commandsOf(c);
+	// plain language: the rules first (free); a line they rewrite says how it was understood
+	const said = c.asked ?? line;
+	const ruled = say(line) ? null : translateRules(line, await viewFor(c));
+	if (ruled) line = ruled;
+	const understood = said !== line ? `„${said.slice(0, 80)}“ → ${line}` : null;
+	const [verb, arg] = split(line);
+	const cmd = cmds.get(verb.toLowerCase());
+	if (!cmd) {
+		// nothing understood it: the model process may (once; a translation that is no command is refused)
+		if (llmEnabled() && !c.asked && c.account && !c.account.npc) {
+			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: line.slice(0, 300), room: c.actor.room, at: Date.now() };
+			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
+			return msg(c, c.actor.charId, "info", `„${line.slice(0, 80)}“ – einen Moment, ich versuche das zu verstehen …`);
+		}
+		throw new CommandError(c.asked ? `„${c.asked.slice(0, 80)}“ habe ich nicht verstanden. „help“ zeigt die Befehle.` : `Unbekannter Befehl „${verb.slice(0, 20)}“. „help“ zeigt alle Befehle.`);
+	}
+	try {
+		if (understood) await msg(c, c.actor.charId, "info", understood);
+		await cmd.func(c, arg);
+	} catch (e) {
+		// a refusal of a translated line says what it was translated to
+		if (e instanceof CommandError && understood) throw new CommandError(`${understood}: ${e.message}`);
+		throw e;
+	}
 }
+
+/** Talk is never translated: "sag ich gehe nach osten" says it. */
+const say = (line: string) => /^(say|sag|sage|'|emote|:|channel|kanal)/i.test(line) || line.startsWith("'") || line.startsWith(":");

@@ -154,3 +154,4 @@ a { color: var(--accent); }
 .trade .row input { padding: 3px 6px; }
 .trade p { margin: 2px 0 6px; font-size: 12px; }
 button.link { border: 0; background: transparent; color: var(--accent); padding: 2px 0; text-align: left; }
+.ai-badge { margin-left: 6px; font: 600 10px var(--font-sans); color: #9fd3ff; border: 1px solid #9fd3ff; border-radius: 4px; padding: 0 4px; vertical-align: 1px; }

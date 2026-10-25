@@ -8,7 +8,7 @@ const ITEM_LOCKS = "get:all();drop:all();give:not guest()";
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 5,
+	version: 6,
 	tileSize: 32,
 	tiles: {
 		// water against sand: the autotile blocks 3..5 of the first row are the three frames of its waves
@@ -103,8 +103,20 @@ export const world: WorldDef = {
 	flood: { everyMs: 60_000, lifetimeMs: 5 * 60_000, rooms: [{ room: "graue-bucht", tile: ".", max: 4 }], protos: [{ proto: "treibholz", weight: 3 }, { proto: "muschel", weight: 1 }] },
 	channels: ["hafen"],
 	npcs: [
-		{ npcId: "ines", name: "Ines", skin: 4, room: "graue-bucht", x: 10, y: 9, script: "waerter", beacon: "feuer-bucht" },
+		{
+			npcId: "ines", name: "Ines", skin: 4, room: "graue-bucht", x: 10, y: 9, script: "waerter", beacon: "feuer-bucht",
+			model: {
+				persona: "Ines hütet seit Jahren das Leuchtfeuer der Grauen Bucht. Sie ist ruhig, praktisch und ein wenig spöttisch, kennt jede Boje und jeden Stammgast und sorgt sich um das Licht. Sie bittet um Treibholz, wenn das Feuer schwach wird, und erklärt Neuen kurz, wie man es nährt.",
+				wake: ["fire.low", "fire.out", "spoken", "person.enters"], budgetDay: 40,
+				dozing: ["Ines flickt ein Netz.", "Ines schaut in die Glut.", "Ines summt ein altes Lied."],
+			},
+		},
 		{ npcId: "bo", name: "Bo", skin: 0, room: "graue-bucht", x: 20, y: 8, script: "faehrmann" },
+		{
+			npcId: "fremder", name: "Fremder", skin: 3, room: "klippenpfad", x: 14, y: 10, script: "wanderer",
+			model: { persona: "Ein Fremder, der sich im dichten Nebel verlaufen hat. Er ist müde, misstrauisch und will nur wissen, wo das nächste Licht brennt. Er erzählt bruchstückhaft von einer Insel, die im Nebel verschwunden ist.", wake: ["fog.dense", "spoken"], budgetDay: 20, dozing: ["Der Fremde starrt in den Nebel."] },
+			wanderer: { event: "fog.dense", cooldownMs: 30 * 60_000, stayMs: 10 * 60_000 },
+		},
 	],
 	currency: "muenze",
 	market: { room: "graue-bucht", listMs: 24 * 3600_000 },

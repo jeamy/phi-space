@@ -14,7 +14,7 @@ import { FOREVER, PhiSpaces, serveSpace, SpaceService, startService, StaticIdent
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
 import { openOwnMemoryHost } from "phi-spaces/store/host";
 import { openSqliteHost } from "phi-spaces/store/sqlite";
-import { NAMES_LOCK, WORLD_LOCK } from "./model.ts";
+import { NAMES_LOCK, NPC_LOCK, WORLD_LOCK } from "./model.ts";
 import { DEFAULT_ACCOUNTS, DEFAULT_SPACE, parseTarget } from "./space.ts";
 
 const MiB = 1024 * 1024;
@@ -40,6 +40,7 @@ export async function startSpaceHost(o: { listen?: string; accountsListen?: stri
 	if (!(await accounts.local.count({ type: NAMES_LOCK.type }))) await accounts.local.write({ type: NAMES_LOCK.type, fields: { ...NAMES_LOCK.fields } }, null, FOREVER);
 	// and the lock a world worker takes while it loads the world definition
 	if (!(await world.local.count(WORLD_LOCK))) await world.local.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER);
+	if (!(await world.local.count(NPC_LOCK))) await world.local.write({ type: NPC_LOCK.type, fields: { ...NPC_LOCK.fields } }, null, FOREVER);
 	return { listen, accountsListen, async close() { await world.close(); await accounts.close(); } };
 }
 

@@ -13,6 +13,8 @@ export type CommandCtx = {
 	actor: CharacterFields;
 	account: AccountFields | null;
 	msgLeaseMs: number;
+	/** The sentence this command was translated from by the model process, if it was. */
+	asked?: string;
 	/** Memo of the actor's inventory for this command (read once, outside the transaction). */
 	cache: { inventory?: Array<{ e: Taken; f: ItemFields }> };
 };

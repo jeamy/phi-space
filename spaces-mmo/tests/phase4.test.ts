@@ -180,3 +180,28 @@ test("conservation: a fuzz of trades, purchases, withdrawals and gifts across tw
 		await Promise.all(ps.map((x) => x.p.leave()));
 	} finally { await srv.close(); }
 });
+
+test("the page's trade view: offers to and from a player, the boards only where they stand, numbered like the commands", async () => {
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.002" } });
+	try {
+		const s = srv.stack.space;
+		// a fire for the whole test keeps the fog down and the way east open (game time runs fast here)
+		await s.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + 120_000, litAt: Date.now() } as never }, null, 120_000);
+		await eventually(async () => Number((await s.readIfExists({ type: "Fog", fields: { room: "graue-bucht" } }, 2_000))?.fields.level) === 0, 15_000, "fog cleared");
+		const a = await player(srv.url, "Sicht"), b = await player(srv.url, "Gegenueber");
+		await give(s, a.me, "muschel", 1);
+		const tv = (p: Player) => [...p.frames].reverse().find((f) => f.t === "trade") as Extract<ServerFrame, { t: "trade" }> | undefined;
+		await does(a.p, "offer muschel an Gegenueber für münze", "Du bietest");
+		await b.p.until((f) => f.t === "trade" && f.trade.offersIn.length === 1);
+		assert.deepEqual(tv(b.p)!.trade.offersIn[0]!.giveNames, ["Muschel"]);
+		assert.equal(tv(a.p)!.trade.offersOut[0]!.toName, "Gegenueber");
+		await eventually(async () => (tv(a.p)?.trade.orders?.length ?? 0) > 0, 15_000, "the order board shows in the bay");
+		await does(a.p, "markt biete muschel für 3", "ans Marktbrett");
+		await b.p.until((f) => f.t === "trade" && f.trade.listings?.[0]?.price === 3 && !f.trade.listings[0].mine);
+		await a.p.until((f) => f.t === "trade" && f.trade.listings?.[0]?.mine === true);
+		const n = b.p.frames.length;
+		b.p.send("go ost");
+		await b.p.until((f) => f.t === "trade" && f.trade.listings === null && f.trade.orders === null, 10_000, n);
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});

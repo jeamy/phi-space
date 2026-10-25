@@ -300,7 +300,7 @@ function draw(s: Scene, chars: Map<string, CharView>, me: string): void {
 		let sp = s.sprites.get(c.charId);
 		if (!sp) {
 			const body = new s.pixi.Sprite();
-			const label = new s.pixi.Text({ text: c.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 11, fill: c.charId === me ? "#AED83C" : "#ffffff", stroke: { color: "#000000", width: 3 } } });
+			const label = new s.pixi.Text({ text: c.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 11, fill: c.charId === me ? "#AED83C" : c.ai ? "#9fd3ff" : "#ffffff", stroke: { color: "#000000", width: 3 } } });
 			label.anchor.set(0.5, 1);
 			s.chars.addChild(body, label);
 			sp = { body, label, tx: c.x, ty: c.y, px: c.x * ts, py: c.y * ts, row: ROW.down, skin: c.skin };
@@ -308,7 +308,7 @@ function draw(s: Scene, chars: Map<string, CharView>, me: string): void {
 		}
 		if (c.x !== sp.tx || c.y !== sp.ty) sp.row = c.x > sp.tx ? ROW.right : c.x < sp.tx ? ROW.left : c.y < sp.ty ? ROW.up : ROW.down;
 		Object.assign(sp, { tx: c.x, ty: c.y, skin: c.skin });
-		sp.label.text = c.name;
+		sp.label.text = c.ai ? `${c.name} (KI)` : c.name; // a model plays it: always marked
 	}
 	s.fogDirty = true;
 }

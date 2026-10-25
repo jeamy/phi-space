@@ -5,6 +5,7 @@
 #   profile big:   web, a world worker and the npc process — the host that does most of the work
 #   both at once:  the big/nano pair on one machine (local test bed): the same TCP connections as between two hosts,
 #                  NANO_CPUS caps nano's CPUs like the smaller machine
+#   profile dev:   all roles in one container with the checkout mounted, recompiled and restarted on every change
 #   profile test:  the test suite
 #
 # On two real hosts, big reaches nano's spaces at SPACES_MMO_SPACE=tcp:<nano's internal address>:3950 and
@@ -139,8 +140,44 @@ services:
       NODE_ENV: test
     command: ["npm", "--prefix", "spaces-mmo", "test"]
 
+  # ---- development: every role in one container, the checkout mounted ----
+  mmo-dev:
+    build:
+      context: ../..
+      dockerfile: spaces-mmo/docker/Dockerfile
+      target: dev-test
+    image: phi-spaces-mmo:dev-test
+    profiles: [dev]
+    init: true
+    user: "node"
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      NODE_ENV: development
+      SPACES_MMO_BIND: 0.0.0.0
+      PORT: "3900"
+      SPACES_MMO_DATA: /data
+      # the page may be opened as localhost too (Next's dev server serves its scripts only to known origins)
+      SPACES_MMO_DEV_ORIGINS: "localhost"
+    ports:
+      # loopback only; 3920 so a game on 3900 or the local test bed on 3910 keeps running next to it
+      - "127.0.0.1:${SPACES_MMO_DEV_PORT:-3920}:3900"
+    volumes:
+      - mmo-dev-data:/data
+      - ../app:/opt/phi-spaces/spaces-mmo/app
+      - ../client:/opt/phi-spaces/spaces-mmo/client
+      - ../server:/opt/phi-spaces/spaces-mmo/server
+      - ../worlds:/opt/phi-spaces/spaces-mmo/worlds
+      - ../../src:/opt/phi-spaces/src
+    working_dir: /opt/phi-spaces/spaces-mmo
+    # space, world, npc and web (Next.js dev mode) as processes of their own: Next.js recompiles app/ and client/ on change
+    # (Fast Refresh), and each process restarts when server/, worlds/ or the phi-spaces sources change
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/launch.ts", "--dev"]
+
 networks:
   mmo: {}
 
 volumes:
   mmo-space-data: {}
+  mmo-dev-data: {}

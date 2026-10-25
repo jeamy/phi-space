@@ -3,7 +3,7 @@
 // room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CharView, MsgView, ObjView, ServerFrame } from "../server/gateway.ts";
+import type { CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { MapView } from "./MapView.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 
@@ -93,7 +93,7 @@ function About() {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, chars, objs, self, room, me, send, close }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; close: () => void }) {
+function CellMenu({ at, chars, objs, self, room, me, send, close, offer }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; close: () => void; offer?: (name: string) => void }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
 		window.addEventListener("keydown", key);
@@ -101,8 +101,11 @@ function CellMenu({ at, chars, objs, self, room, me, send, close }: { at: { x: n
 	}, [close]);
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const fuel = [...objs.values()].find((o) => o.kind === "item" && o.location === me && o.name === "Treibholz");
-	const entries: Array<{ label: string; line: string }> = [];
-	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
+	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
+	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
+		entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
+		if (offer) entries.push({ label: `${c.name} einen Tausch anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
+	}
 	for (const o of objs.values()) {
 		if (o.location !== room || o.x !== at.x || o.y !== at.y) continue;
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
@@ -115,9 +118,58 @@ function CellMenu({ at, chars, objs, self, room, me, send, close }: { at: { x: n
 		<>
 			<div className="menu-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
 			<ul className="cell-menu" role="menu" style={{ left, top }}>
-				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { send(e.line); close(); }}>{e.label}</button></li>)}
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (e.run) e.run(); else send(e.line); close(); }}>{e.label}</button></li>)}
 			</ul>
 		</>
+	);
+}
+
+/** Trade as buttons: offers to and from the player, a form for a new offer, the order board and the market board when
+ *  standing at them. Every button sends the text command the help names. */
+function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }: { trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string) => void }) {
+	const carried = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
+	const others = [...chars.values()].filter((c) => c.charId !== me);
+	const [give, setGive] = useState<string[]>([]);
+	const [want, setWant] = useState("");
+	const [sell, setSell] = useState(""), [price, setPrice] = useState("2");
+	const wants = (w: Array<{ name: string; count: number }>) => (w.length ? ` für ${w.map((x) => `${x.count}× ${x.name}`).join(", ")}` : " als Geschenk");
+	const has = trade.offersIn.length || trade.offersOut.length || trade.orders || trade.myOrder || trade.listings || offerTo;
+	if (!has) return null;
+	return (
+		<div className="things trade">
+			{trade.offersIn.length > 0 && <><h3>Angebote an dich</h3><ul>{trade.offersIn.map((o) => (
+				<li key={o.offerId}><span>{o.fromName}: {o.giveNames.join(", ")}{wants(o.want)}</span><button onClick={() => send(`accept ${o.fromName}`)}>Annehmen</button><button onClick={() => send(`decline ${o.fromName}`)}>Ablehnen</button></li>
+			))}</ul></>}
+			{trade.offersOut.length > 0 && <><h3>Deine Angebote</h3><ul>{trade.offersOut.map((o) => (
+				<li key={o.offerId}><span>an {o.toName}: {o.giveNames.join(", ")}{wants(o.want)}</span><button onClick={() => send("offer zurück")}>Zurücknehmen</button></li>
+			))}</ul></>}
+			{offerTo !== null && !guest && (
+				<form className="trade-form" onSubmit={(e) => { e.preventDefault(); if (!offerTo || !give.length) return; send(`offer ${give.map((g) => g.replace(/#\d+$/, "")).join(", ")} an ${offerTo}${want.trim() ? ` für ${want.trim()}` : ""}`); setGive([]); setWant(""); setOfferTo(null); }}>
+					<h3>Tausch anbieten</h3>
+					<label>An <select value={offerTo} onChange={(e) => setOfferTo(e.target.value)}><option value="">wählen …</option>{others.map((c) => <option key={c.charId} value={c.name}>{c.name}</option>)}</select></label>
+					<div className="checks">{carried.length ? carried.map((o, i) => (
+						<label key={o.id}><input type="checkbox" checked={give.includes(`${o.name}#${i}`)} onChange={(e) => setGive((g) => (e.target.checked ? [...g, `${o.name}#${i}`] : g.filter((x) => x !== `${o.name}#${i}`)))} />{o.name}</label>
+					)) : <span className="muted">Du trägst nichts.</span>}</div>
+					<label>Dafür (leer: Geschenk) <input value={want} onChange={(e) => setWant(e.target.value)} placeholder="z. B. 2 münze" /></label>
+					<div className="row"><button className="primary" disabled={!offerTo || !give.length}>Anbieten</button><button type="button" onClick={() => setOfferTo(null)}>Abbrechen</button></div>
+				</form>
+			)}
+			{offerTo === null && !guest && others.length > 0 && carried.length > 0 && <button className="link" onClick={() => setOfferTo("")}>Tausch anbieten …</button>}
+			{trade.myOrder && <><h3>Dein Auftrag</h3><ul><li><span>{trade.myOrder.text}</span><button onClick={() => send("auftrag liefere")}>Liefern</button><button onClick={() => send("auftrag aufgeben")}>Aufgeben</button></li></ul></>}
+			{trade.orders && <><h3>Auftragstafel</h3>{trade.orders.length ? <ul>{trade.orders.map((o) => (
+				<li key={o.nr}><span>{o.text} ({o.reward} Münze{o.reward === 1 ? "" : "n"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
+			))}</ul> : <p className="muted">Gerade keine Aufträge.</p>}</>}
+			{trade.listings && <><h3>Marktbrett</h3>{trade.listings.length ? <ul>{trade.listings.map((l) => (
+				<li key={l.nr}><span>{l.itemName} – {l.price} Münze{l.price === 1 ? "" : "n"} ({l.mine ? "deins" : l.sellerName})</span>{!guest && (l.mine ? <button onClick={() => send(`markt zurück ${l.nr}`)}>Zurückholen</button> : <button onClick={() => send(`markt kaufe ${l.nr}`)}>Kaufen</button>)}</li>
+			))}</ul> : <p className="muted">Das Brett ist leer.</p>}
+			{!guest && carried.length > 0 && (
+				<form className="row" onSubmit={(e) => { e.preventDefault(); if (sell) send(`markt biete ${sell} für ${price}`); setSell(""); }}>
+					<select value={sell} onChange={(e) => setSell(e.target.value)} aria-label="Was verkaufen"><option value="">verkaufen …</option>{[...new Set(carried.map((o) => o.name))].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+					<input type="number" min={1} max={1000} value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Preis in Münzen" style={{ width: 70 }} />
+					<button disabled={!sell}>Einstellen</button>
+				</form>
+			)}</>}
+		</div>
 	);
 }
 
@@ -155,6 +207,8 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
 	const [fog, setFog] = useState(0);
+	const [trade, setTrade] = useState<TradeView | null>(null);
+	const [offerTo, setOfferTo] = useState<string | null>(null);
 	const [log, setLog] = useState<Line[]>([]);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
@@ -170,7 +224,12 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
 
-	const append = useCallback((l: Line) => setLog((old) => (old.length >= 300 ? [...old.slice(-299), l] : [...old, l])), []);
+	// the same error twice in a row (a held arrow key against a wall) shows once
+	const append = useCallback((l: Line) => setLog((old) => {
+		const last = old[old.length - 1];
+		if (l.kind === "error" && last?.kind === "error" && last.text === l.text) return old;
+		return old.length >= 300 ? [...old.slice(-299), l] : [...old, l];
+	}), []);
 
 	// the game socket; it reconnects with a backoff, and a socket refused for a lapsed login logs out
 	useEffect(() => {
@@ -196,6 +255,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				else if (f.t === "gone") setChars((m) => { const n = new Map(m); n.delete(f.charId); return n; });
 				else if (f.t === "obj") setObjs((m) => new Map(m).set(f.o.id, f.o));
 				else if (f.t === "fog") setFog(f.level);
+				else if (f.t === "trade") setTrade(f.trade);
 				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
 				else if (f.t === "msg") append(f.m);
 			};
@@ -306,7 +366,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
 						onFail={(why) => { setTextOnly(true); append({ kind: "error", text: why, from: "", at: Date.now() }); }} />
 				) : <div className="map"><p className="muted">Verbinde …</p></div>}
-				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} />}
+				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }} />}
 				<aside className="side">
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
@@ -318,9 +378,14 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 							<div style={{ display: "flex", gap: 8 }}><button onClick={() => setPanel("account")}>Erst registrieren</button><button onClick={() => void logout()}>Trotzdem abmelden</button></div>
 						</div>
 					)}
-					{!panel && <Things objs={objs} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} send={send} />}
+					{!panel && (
+						<div className="side-top">
+							<Things objs={objs} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} send={send} />
+							{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
+						</div>
+					)}
 					<div className="log" role="log" aria-live="polite">
-						{log.map((l, i) => <div key={i} className={l.kind}>{l.text}</div>)}
+						{log.map((l, i) => <div key={i} className={l.kind}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>

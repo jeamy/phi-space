@@ -1,7 +1,9 @@
-// The npc process (docs/phasen.md Phase 2): characters played by scripts, not by people and not by models. An NPC is a
-// character like any other: it is online while this process keeps its Session entry, and it acts only by writing
-// intents, which a world worker runs like a player's commands (locks, fog and transactions apply to it the same way).
-// Scripts (server/npc/scripts.ts) look at the world through reads and decide what to type next.
+// The npc process (docs/phasen.md Phases 2 and 5, docs/modell-npcs.md): the world's NPCs. An NPC is a character like any
+// other: it is online while this process keeps its Session entry, and it acts only by writing intents, which a world
+// worker runs like a player's commands (locks, fog and transactions apply to it the same way). Scripts
+// (server/npc/scripts.ts) look at the world through reads and decide what to type next; model roles answer with a
+// model while awake (server/npc/minds.ts). Each role is claimed with a lease, so several npc processes share the roles
+// and never play one twice; a process that dies loses its roles to another when the lease runs out.
 //
 //   SPACES_MMO_SPACE        the world space (default unix:/tmp/spaces-mmo-world.sock)
 //   SPACES_MMO_TIME_SCALE   factor on game durations (the scripts' pauses scale with it)
@@ -9,11 +11,14 @@ import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
+import { claimRole } from "./npc/minds.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { asFields, type IntentFields, type SessionFields } from "./model.ts";
 import { connectSpace, DEFAULT_SPACE } from "./space.ts";
 
 const SESSION_LEASE_MS = 30_000;
+/** How long a role stays with a process that stopped renewing it (SPACES_MMO_NPC_ROLE_LEASE_MS): then another takes over. */
+const roleLeaseMs = () => Number(process.env.SPACES_MMO_NPC_ROLE_LEASE_MS ?? 30_000);
 
 export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
@@ -22,19 +27,27 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const halt = new AbortController();
 	const sleep = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
 	const runs: Promise<void>[] = [];
+	const starting: Promise<void>[] = [];
+	const owner = `npc-proc-${randomBytes(4).toString("hex")}`;
 	for (const def of w.npcs) {
 		const script = scriptFor(def.script);
 		if (!script) { console.error(`[npc] ${def.npcId}: unknown script ${def.script}`); continue; }
 		const charId = `npc-${def.npcId}`;
-		let lease: string | null = null;
+		let lease: string | null = null, online = !def.wanderer; // a wanderer is away until its event
+		let started!: () => void, startingDone = false;
+		starting.push(new Promise<void>((resolve) => { started = resolve; }));
+		const ready = () => { if (!startingDone) { startingDone = true; started(); } };
 		const keep = async () => {
 			try {
+				if (!online) { if (lease) { await space.cancel(lease).catch(() => {}); lease = null; } return; }
 				if (lease) { try { await space.renew(lease, SESSION_LEASE_MS); return; } catch { lease = null; } }
 				lease = (await space.write({ type: "Session", fields: asFields<SessionFields>({ sessionId: `npc-${randomBytes(4).toString("hex")}`, charId, accountId: charId }) }, null, SESSION_LEASE_MS)).id;
 			} catch { /* the space is not reachable now: the next beat tries again */ }
 		};
 		const npc: Npc = {
 			def, charId, space, world: w, halt: halt.signal, sleep,
+			async setOnline(on) { online = on; await keep(); if (on) await npc.act("arrive"); },
+			isOnline: () => online,
 			async act(line) {
 				const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId, line, at: Date.now() };
 				await space.write({ type: "Intent", fields: asFields(intent) }, null, 30_000);
@@ -46,19 +59,33 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 			},
 		};
 		runs.push((async () => {
-			await keep();
-			const beat = setInterval(() => void keep(), SESSION_LEASE_MS / 3);
-			beat.unref?.();
-			try {
-				while (!halt.signal.aborted) {
-					try { await script(npc); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
+			while (!halt.signal.aborted) {
+				// the role: claimed under the NPC lock; another process may hold it (then wait and try again)
+				const role = await claimRole(space, def.npcId, owner, roleLeaseMs()).catch(() => null);
+				if (!role) { ready(); await sleep(roleLeaseMs() / 2); continue; }
+				let lost = false;
+				await keep();
+				ready();
+				const beat = setInterval(() => {
+					void keep();
+					void space.renew(role, roleLeaseMs()).catch(() => { lost = true; });
+				}, Math.min(SESSION_LEASE_MS, roleLeaseMs()) / 3);
+				beat.unref?.();
+				try {
+					while (!halt.signal.aborted && !lost) {
+						try { await script(npc); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
+					}
+				} finally {
+					clearInterval(beat);
+					if (lease) { await space.cancel(lease).catch(() => {}); lease = null; }
+					await space.cancel(role).catch(() => {});
 				}
-			} finally {
-				clearInterval(beat);
-				if (lease) await space.cancel(lease).catch(() => {});
 			}
 		})());
 	}
+	// The launcher and integration tests treat "ready" as usable: every role has either established its initial
+	// session or found that another npc process already owns it.
+	await Promise.all(starting);
 	return { async close() { halt.abort(); await Promise.all(runs); conn.close(); } };
 }
 

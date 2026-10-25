@@ -1,7 +1,10 @@
 // Scripts of the npc process. A script is one round of an NPC's life: it reads the world, types at most a few commands
 // (npc.act waits until each is taken) and sleeps; the npc process calls it again and again. Pauses are game time.
-import type { SpaceLike } from "phi-spaces";
-import { flameOf } from "../engine/fire.ts";
+import { randomInt } from "node:crypto";
+import { NO_WAIT, type SpaceLike } from "phi-spaces";
+import { burnText, flameOf, fogOf } from "../engine/fire.ts";
+import { llmEnabled } from "../llm.ts";
+import { isAwake, keepAwake, remember, sleep, think, tryWake } from "./minds.ts";
 import { gameMs } from "../engine/time.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type MsgFields } from "../model.ts";
@@ -9,6 +12,9 @@ import { fieldsOf, type CharacterFields, type ExitFields, type MsgFields } from 
 export type Npc = {
 	def: NpcDef; charId: string; space: SpaceLike; world: WorldDef; halt: AbortSignal;
 	sleep(ms: number): Promise<void>;
+	/** Shows or hides the NPC in the world (a wanderer comes and goes); showing it steps it onto a free cell. */
+	setOnline(on: boolean): Promise<void>;
+	isOnline(): boolean;
 	/** Types a command (an intent) and waits until a world worker has taken it. */
 	act(line: string): Promise<void>;
 };
@@ -17,38 +23,126 @@ export type Script = (npc: Npc) => Promise<void>;
 /** The NPC's character, or null while the world has not created it yet (the npc process may start first). */
 const self = async (n: Npc) => { const e = await n.space.readIfExists({ type: "Character", fields: { charId: n.charId } }, 5_000); return e ? fieldsOf<CharacterFields>(e) : null; };
 
-/** The beacon keeper: watches its fire and says when it grows weak, goes out or burns again; greets who says hello. */
+/** The beacon keeper: watches its fire, who comes and what is said. As a model role (docs/modell-npcs.md) the events of
+ *  its wake list wake it and it answers with the model while awake; asleep, without model calls or with its budget used
+ *  up it dozes and says script lines (the warnings and greetings of Phase 2). */
 function waerter(): Script {
 	let state: "ok" | "low" | "out" | null = null;
-	let seen = Date.now();
+	let seen = Date.now(), lastDoze = Date.now(), pensive = false, budgetSaid = false;
+	let present: Set<string> | null = null;
 	const greeted = new Map<string, number>();
 	return async (n) => {
+		const me = await self(n);
+		if (!me) { await n.sleep(1000); return; }
+		const events: string[] = [];
 		const beacon = n.world.beacons.find((b) => b.beaconId === n.def.beacon);
+		let fireText: string | undefined;
 		if (beacon) {
 			const f = await flameOf(n.space, beacon.beaconId), now = Date.now();
 			const piece = Math.min(...Object.values(n.world.fire.fuel).map((ms) => gameMs(ms)));
 			const next = !f || f.until <= now ? "out" : f.until - now < piece * 1.5 ? "low" : "ok";
-			if (state !== null && next !== state) {
-				if (next === "low") await n.act("say Das Feuer wird schwach – bringt Treibholz!");
-				else if (next === "out") await n.act("say Das Feuer ist aus! Ohne Licht frisst uns der Nebel.");
-				else await n.act("say Danke! So brennt es wieder.");
-			}
+			if (state !== null && next !== state) events.push(next === "low" ? "fire.low" : next === "out" ? "fire.out" : "fire.ok");
 			state = next;
+			fireText = burnText(f, now);
 		}
-		// greetings: whoever said hello in this room since the last round (once per name in a while)
-		const me = await self(n);
-		if (!me) { await n.sleep(1000); return; }
 		const said = (await n.space.readAll({ type: "Msg", fields: { room: me.room, to: "*", kind: "say" } })).map((e) => fieldsOf<MsgFields>(e)).filter((m) => m.at > seen && m.from !== me.name);
 		seen = Date.now();
-		for (const m of said) {
-			if (!/\b(hallo|hi|moin|hello|servus)\b/i.test(m.text)) continue;
-			if (Date.now() - (greeted.get(m.from) ?? 0) < gameMs(10 * 60_000)) continue;
-			greeted.set(m.from, Date.now());
-			await n.act(`say Willkommen am Feuer, ${m.from}!`);
+		if (said.some((m) => m.text.toLowerCase().includes(me.name.toLowerCase()))) events.push("spoken");
+		const people = await humansIn(n, me.room);
+		if (present && people.some((p) => !present!.has(p))) events.push("person.enters");
+		present = new Set(people);
+		const m = n.def.model;
+		if (m && llmEnabled()) {
+			const awakeMs = gameMs(5 * 60_000);
+			const wakes = events.filter((e) => m.wake.includes(e) || e === "fire.ok");
+			const awake = await isAwake(n.space, n.def.npcId);
+			if (wakes.length || (awake && said.length)) {
+				if (!awake && !(await tryWake(n.space, n.def.npcId, npcMax(), awakeMs))) {
+					if (!pensive) { pensive = true; await n.act(`emote ist in Gedanken.`); }
+				} else {
+					pensive = false;
+					await keepAwake(n.space, n.def.npcId, awakeMs);
+					const r = await think(n.space, { npcId: n.def.npcId, name: me.name, persona: m.persona, budgetDay: m.budgetDay }, { room: (await roomName(n, me.room)), people, ...(fireText ? { fire: fireText } : {}), event: wakes.join(", ") || "talk", heard: said.map((x) => x.text) });
+					if (r === "budget") { if (!budgetSaid) { budgetSaid = true; await n.act(`emote ${dozeLine(me.name, m.dozing, 0)}`); } }
+					else if (r !== "off") { budgetSaid = false; for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); }
+				}
+			} else if (!awake && people.length && Date.now() - lastDoze > gameMs(3 * 60_000)) {
+				lastDoze = Date.now();
+				await n.act(`emote ${dozeLine(me.name, m.dozing, randomInt(0, m.dozing.length))}`);
+			}
+			await n.sleep(gameMs(3_000, 100));
+			return;
+		}
+		// no model: the script of Phase 2
+		if (events.includes("fire.low")) await n.act("say Das Feuer wird schwach – bringt Treibholz!");
+		else if (events.includes("fire.out")) await n.act("say Das Feuer ist aus! Ohne Licht frisst uns der Nebel.");
+		else if (events.includes("fire.ok")) await n.act("say Danke! So brennt es wieder.");
+		for (const x of said) {
+			if (!/\b(hallo|hi|moin|hello|servus)\b/i.test(x.text)) continue;
+			if (Date.now() - (greeted.get(x.from) ?? 0) < gameMs(10 * 60_000)) continue;
+			greeted.set(x.from, Date.now());
+			await n.act(`say Willkommen am Feuer, ${x.from}!`);
 		}
 		await n.sleep(gameMs(3_000, 100));
 	};
 }
+
+/** A wanderer: away until its event (a room in dense fog for two game minutes), then it appears, at most once per its
+ *  cooldown; it speaks when people are there (with the model while awake, else a script line) and goes when nobody has
+ *  spoken to it for its stay, or when nobody is there for two game minutes. */
+function wanderer(): Script {
+	let denseSince = 0, lastSpoken = 0, aloneSince = 0, seen = Date.now();
+	return async (n) => {
+		const wd = n.def.wanderer!, m = n.def.model, now = Date.now();
+		const me = await self(n);
+		if (!me) { await n.sleep(1000); return; }
+		if (!n.isOnline()) {
+			const dense = (await fogOf(n.space, n.def.room)) >= n.world.fog.max;
+			denseSince = dense ? denseSince || now : 0;
+			const cool = !(await n.space.readIfExists({ type: "NpcVisit", fields: { npcId: n.def.npcId } }, NO_WAIT));
+			if (denseSince && now - denseSince >= gameMs(2 * 60_000) && cool) {
+				await n.space.write({ type: "NpcVisit", fields: { npcId: n.def.npcId, at: now } }, null, gameMs(wd.cooldownMs));
+				await n.setOnline(true);
+				lastSpoken = now; aloneSince = 0; seen = now;
+				if ((await humansIn(n, n.def.room)).length) await speak(n, me.name, wd.event, []);
+			}
+			await n.sleep(gameMs(5_000, 100));
+			return;
+		}
+		const said = (await n.space.readAll({ type: "Msg", fields: { room: me.room, to: "*", kind: "say" } })).map((e) => fieldsOf<MsgFields>(e)).filter((x) => x.at > seen && x.from !== me.name);
+		seen = Date.now();
+		if (said.some((x) => /fremd/i.test(x.text) || x.text.toLowerCase().includes(me.name.toLowerCase()))) { lastSpoken = now; await speak(n, me.name, "spoken", said.map((x) => x.text)); }
+		const people = await humansIn(n, me.room);
+		aloneSince = people.length ? 0 : aloneSince || now;
+		if (now - lastSpoken >= gameMs(wd.stayMs) || (aloneSince && now - aloneSince >= gameMs(2 * 60_000))) {
+			if (people.length) await n.act("emote verschwindet im Nebel.");
+			if (m) await sleep(n.space, n.def.npcId);
+			await n.setOnline(false);
+		}
+		await n.sleep(gameMs(3_000, 100));
+	};
+}
+
+/** A wanderer's words: the model while it can be woken, else its script line. */
+async function speak(n: Npc, name: string, event: string, heard: string[]): Promise<void> {
+	const m = n.def.model;
+	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, npcMax(), gameMs(5 * 60_000)))) {
+		const me = await self(n);
+		const r = await think(n.space, { npcId: n.def.npcId, name, persona: m.persona, budgetDay: m.budgetDay }, { room: await roomName(n, me?.room ?? n.def.room), people: await humansIn(n, me?.room ?? n.def.room), event, heard });
+		if (typeof r === "object") { for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
+	}
+	await n.act(event === "spoken" ? "say Licht … wo brennt das nächste Licht?" : "say Wo geht es hier aus dem Nebel?");
+}
+
+/** Online characters of players in a room (not NPCs). */
+async function humansIn(n: Npc, room: string): Promise<string[]> {
+	const live = new Set((await n.space.readAll({ type: "Session" })).map((s) => String(s.fields.charId)));
+	return (await n.space.readAll({ type: "Character", fields: { room } })).map((e) => fieldsOf<CharacterFields>(e)).filter((c) => live.has(c.charId) && !c.charId.startsWith("npc-")).map((c) => c.name);
+}
+const roomName = async (n: Npc, room: string) => String((await n.space.readIfExists({ type: "Room", fields: { roomId: room } }, NO_WAIT))?.fields.name ?? room);
+/** "Ines flickt ein Netz." → "flickt ein Netz." (emote puts the name in front). */
+const dozeLine = (name: string, lines: string[], i: number) => (lines[i] ?? `${name} döst.`).replace(new RegExp(`^${name}\\s+`), "");
+const npcMax = () => Number(process.env.SPACES_MMO_NPC_MAX ?? 10);
 
 /** The ferryman: walks to the exit of the room he is in, takes it, rests, and goes back the same way. Fog that hides
  *  the way stops him until it clears (the world refuses the step; he tries again later). */
@@ -65,7 +159,7 @@ function faehrmann(): Script {
 	};
 }
 
-const MAKERS: Record<string, () => Script> = { waerter, faehrmann };
+const MAKERS: Record<string, () => Script> = { waerter, faehrmann, wanderer };
 
 /** A fresh instance of the named script (state such as "already greeted" is per NPC), or undefined. */
 export const scriptFor = (name: string): Script | undefined => (Object.hasOwn(MAKERS, name) ? MAKERS[name]!() : undefined);

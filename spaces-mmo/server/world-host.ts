@@ -86,7 +86,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 				if (a) {
 					actor = fieldsOf<CharacterFields>(a);
 					const acc = await space.readIfExists({ type: "Account", fields: { accountId: actor.accountId } }, 2_000);
-					await execute({ space, txn, world: w, actor, account: acc ? fieldsOf<AccountFields>(acc) : null, msgLeaseMs, cache: {} }, intent.line);
+					await execute({ space, txn, world: w, actor, account: acc ? fieldsOf<AccountFields>(acc) : null, msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}) }, intent.line);
 				}
 				await space.write(actorToken(charId), txn, FOREVER);
 				await space.commit(txn);

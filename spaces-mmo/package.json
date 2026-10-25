@@ -12,6 +12,7 @@
     "space": "node --no-warnings --experimental-strip-types server/space-host.ts",
     "world": "node --no-warnings --experimental-strip-types server/world-host.ts",
     "npc": "node --no-warnings --experimental-strip-types server/npc-host.ts",
+    "model": "node --no-warnings --experimental-strip-types server/model-host.ts",
     "web": "node --no-warnings --experimental-strip-types server/index.ts",
     "world:load": "node --no-warnings --experimental-strip-types server/world-load.ts",
     "test": "node --no-warnings --experimental-strip-types --import ./tests/test-env.ts --test tests/*.test.ts",
@@ -29,7 +30,10 @@
     "docker:big:logs": "docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.hostnet.yml --profile big logs -f",
     "docker:local:up": "NANO_CPUS=${NANO_CPUS:-2} PORT=${PORT:-3910} SPACES_MMO_SPACE_BIND=127.0.0.1 SPACES_MMO_WORLD_PORT=3960 SPACES_MMO_ACCOUNTS_PORT=3961 docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-mmo-local --profile nano --profile big up -d --no-build",
     "docker:local:down": "docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-mmo-local --profile nano --profile big down",
-    "docker:local:logs": "docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-mmo-local --profile nano --profile big logs -f"
+    "docker:local:logs": "docker compose --env-file .env -f docker/docker-compose.yml -p phi-spaces-mmo-local --profile nano --profile big logs -f",
+    "docker:dev:up": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev up -d --build mmo-dev",
+    "docker:dev:down": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev down",
+    "docker:dev:logs": "docker compose --env-file .env -f docker/docker-compose.yml --profile dev logs -f mmo-dev"
   },
   "dependencies": {
     "next": "16.4.3",

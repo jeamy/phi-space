@@ -3,13 +3,13 @@
 // ends on its own is started again after a second.
 //
 //   node --experimental-strip-types server/launch.ts [--dev]
-//   SPACES_MMO_ROLES=space,world,npc,web   which roles to start here (default all of them)
+//   SPACES_MMO_ROLES=space,world,npc,model,web   which roles to start here (default all of them)
 //   --dev                              every process restarts when its sources change, web in Next's dev mode
 import { ROOT } from "./env.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { DEFAULT_ACCOUNTS, DEFAULT_SPACE } from "./space.ts";
 
-const ROLES = { space: "server/space-host.ts", world: "server/world-host.ts", npc: "server/npc-host.ts", web: "server/index.ts" } as const;
+const ROLES = { space: "server/space-host.ts", world: "server/world-host.ts", npc: "server/npc-host.ts", model: "server/model-host.ts", web: "server/index.ts" } as const;
 type Role = keyof typeof ROLES;
 const dev = process.argv.includes("--dev");
 const wanted = (process.env.SPACES_MMO_ROLES || Object.keys(ROLES).join(",")).split(",").map((r) => r.trim()).filter(Boolean);
@@ -50,7 +50,7 @@ function start(role: Role): Promise<void> {
 	});
 }
 
-const order = (["space", "world", "npc", "web"] as Role[]).filter((r) => wanted.includes(r));
+const order = (["space", "world", "npc", "model", "web"] as Role[]).filter((r) => wanted.includes(r));
 for (const role of order) await start(role);
 console.log(`[launch] ${order.join(", ")} running${dev ? " (dev)" : ""}; world ${env.SPACES_MMO_SPACE}, accounts ${env.SPACES_MMO_ACCOUNTS}`);
 

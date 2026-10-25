@@ -15,3 +15,5 @@ process.env.SPACES_MMO_CLEANUP_MS = "";
 process.env.SPACES_MMO_MSG_LEASE_MS = "";
 process.env.SPACES_MMO_REQ_PER_MIN = "100000"; // the tests call in tight loops; the login limit has its own test
 process.env.SPACES_MMO_GUESTS_PER_HOUR = "100000";
+process.env.SPACES_MMO_LLM = ""; // never a real model in the tests: a test that wants one names tests/fake-llm.ts
+process.env.SPACES_MMO_LLM_MODULE = "";

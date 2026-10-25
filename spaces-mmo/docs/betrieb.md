@@ -10,6 +10,7 @@ Rolle, alle sprechen nur über den Space und TCP. Dateien: `spaces-mmo/docker/Do
 | --- | --- | --- |
 | `nano` | `space` (Welt- und Kontenspeicher als SQLite im Volume `mmo-space-data`), `world-nano` | der Rechner, der den Zustand hält |
 | `big` | `web`, `world-big`, `npc` | der Rechner, der die Arbeit macht |
+| `dev` | `mmo-dev` (alle Rollen in einem Container, Quelltext eingebunden) | lokal |
 | `test` | `mmo-test` (die Testsuite) | überall |
 | nano + big | beides auf einer Maschine | lokaler Testaufbau |
 
@@ -38,6 +39,21 @@ npm --prefix spaces-mmo run docker:local:down
 Das Spiel ist dann auf <http://127.0.0.1:3910> erreichbar (Web 3910, Welt 3960, Konten 3961, damit eine laufende
 Entwicklungsinstanz auf 3900 nicht stört). `NANO_CPUS` (Standard 2) begrenzt nano wie den kleineren Rechner. Die Tests in
 Docker: `npm --prefix spaces-mmo run docker:test`.
+
+## Entwicklung (kompiliert bei jeder Änderung neu)
+
+```
+npm --prefix spaces-mmo run docker:dev:up       # baut das Dev-Image, startet einen Container mit allen Rollen
+npm --prefix spaces-mmo run docker:dev:logs
+npm --prefix spaces-mmo run docker:dev:down
+```
+
+Ein Container (`mmo-dev`), der Quelltext des Arbeitsverzeichnisses ist eingebunden (`app/`, `client/`, `server/`, `worlds/`
+und `src/` des phi-spaces-Kerns). Die Seite ist auf <http://127.0.0.1:3920> erreichbar (`SPACES_MMO_DEV_PORT`; 3900 und die
+3910 des lokalen Testaufbaus bleiben frei). `app/` und `client/` kompiliert Next.js im Dev-Modus neu (Fast Refresh, die Seite
+lädt von selbst), und jeder Serverprozess (space, world, npc, web) startet neu, sobald sich `server/`, `worlds/` oder der
+Kern ändert. Der Speicher liegt im Volume `mmo-dev-data` und bleibt über Neustarts erhalten; `docker volume rm
+phi-spaces-mmo_mmo-dev-data` setzt die Welt zurück.
 
 ## Produktion: nano und big
 

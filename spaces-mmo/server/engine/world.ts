@@ -51,7 +51,15 @@ export type WorldDef = {
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
 	orders: { room: string; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number } }> };
 };
-export type NpcDef = { npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string };
+export type NpcDef = {
+	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
+	/** A model role (docs/modell-npcs.md): who it is, which events wake it, its model calls per day. Without model calls
+	 *  (SPACES_MMO_LLM unset) or with its budget used up it dozes and speaks script lines. */
+	model?: { persona: string; wake: string[]; budgetDay: number; dozing: string[] };
+	/** A wanderer: appears only through its event, at most once per `cooldownMs`, leaves after `stayMs` without being
+	 *  spoken to (game time). */
+	wanderer?: { event: string; cooldownMs: number; stayMs: number };
+};
 
 const WORLD_ID = /^[a-z0-9-]{1,40}$/;
 

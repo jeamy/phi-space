@@ -51,7 +51,9 @@ export type RoomFields = { roomId: string; name: string; desc: string; ground: s
 /** A character being played right now: held by the web process with a short lease while the WebSocket is open. */
 export type SessionFields = { sessionId: string; charId: string; accountId: string };
 /** One command line, written by the web process (or later an NPC), taken by a world worker. */
-export type IntentFields = { intentId: string; charId: string; line: string; at: number };
+export type IntentFields = { intentId: string; charId: string; line: string; at: number; asked?: string };
+/** A sentence no rule understood, for the model process to turn into a command (an Intent with `asked`). */
+export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number };
 /** Output: to one character (`to` = its charId), to everyone in `room` (`to` = "*"), or to everyone on a channel
  *  (`to` = "#hafen"). With `actor` (a charId) the text
  *  holds FuncParser calls ($you(), $conj(a|b)) that the gateway renders for each reader. */
@@ -74,6 +76,15 @@ export const roomToken = (room: string) => ({ type: "RoomToken", fields: { room 
 /** World space: the lock a world worker takes while it loads the world definition, so two loading at once cannot
  *  both spawn the placed items. */
 export const WORLD_LOCK = { type: "Lock", fields: { name: "world" } } as const;
+/** World space: the lock under which an npc process claims a role (so two processes never play one) and under which
+ *  an NPC is woken (so no more than SPACES_MMO_NPC_MAX are awake). */
+export const NPC_LOCK = { type: "Lock", fields: { name: "npc" } } as const;
+/** An npc process plays this role while the lease lives. */
+export type NpcOwnerFields = { npcId: string; owner: string };
+/** A model NPC is awake (answers with the model) while this lives; its lease is renewed whenever it is spoken to. */
+export type NpcAwakeFields = { npcId: string; since: number };
+/** What a model NPC remembers (≤ 4 KiB), written by itself with NOTE lines. */
+export type NpcMemoryFields = { npcId: string; text: string };
 
 export const asFields = <T extends object>(f: T): Fields => f as unknown as Fields;
 export const fieldsOf = <T>(e: { fields: Fields }): T => e.fields as unknown as T;

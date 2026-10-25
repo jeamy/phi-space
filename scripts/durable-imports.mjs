@@ -11,7 +11,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DIRS = ["src", "examples", "test", "scripts", "agent", "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site"];
+const DIRS = ["src", "examples", "test", "scripts", "agent", "codemode-chat/server", "codemode-chat/tests", "codemode-chat/app", "codemode-chat/client", "help-site", "spaces-mmo"];
 const EXT = /\.(ts|tsx|mts|mjs|js)$/;
 const SKIP = /(^|\/)(node_modules|\.next|dist|\.local|evidence)(\/|$)/;
 const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earendil-works/pi-ai"];
@@ -19,8 +19,9 @@ const PACKAGES = ["@earendil-works/pi-durable", "@earendil-works/chord", "@earen
 const ALLOWED = [
 	"agent/", // the agent package, with its own dependencies
 ];
-/** pi-ai alone (models, no durable store) is also allowed here: the chat and the help site call models themselves. */
-const ALLOWED_PI_AI = ["codemode-chat/", "help-site/"];
+/** pi-ai alone (models, no durable store) is also allowed here: the chat, the help site and spaces-mmo call models
+ *  themselves. */
+const ALLOWED_PI_AI = ["codemode-chat/", "help-site/", "spaces-mmo/"];
 
 /** Every source file under the scanned directories. */
 function files(dir, out = []) {
