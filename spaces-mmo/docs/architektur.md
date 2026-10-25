@@ -152,7 +152,7 @@ Wahrheit konkurrieren würde.
   nach Nebelstufe), Markierungen (Ziel, Auswahl).
 - **Deltas:** Das Gateway schickt `{t:"delta"}` mit hinzugekommenen, entfernten und bewegten Objekten; `MapView`
   hält eine `Map<entryId, Sprite>`, Bewegungen werden über ~200 ms interpoliert (Ticker von PixiJS).
-- **Eingabe:** Klick/Tippen auf die Karte → **ein Schritt** in diese Richtung (längere Achse zuerst, sonst die andere), genau wie eine Pfeiltaste; daraus wird `move x y` zur Nachbarkachel. Auf ein Objekt (ab Phase 1) → Kontextmenü mit Textbefehlen
+- **Eingabe:** Klick/Tippen auf die Karte → **ein Schritt** in diese Richtung (längere Achse zuerst, sonst die andere; belegte Kacheln weicht der Client aus), genau wie eine Pfeiltaste; daraus wird `step dx dy`. **Leertaste** hebt das nächste Ding in Reichweite auf (die eigene Kachel zuerst), ohne Ding legt sie Brennholz ins nahe Feuer. **Enter** springt in die Befehlszeile, **Esc** zurück zur Karte. Auf ein Objekt (ab Phase 1) → Kontextmenü mit Textbefehlen
   (`get`, `look`, `talk`). Alles wird ein Textbefehl; der getippte Befehl `move x y` geht dagegen den ganzen Weg.
 - **Darstellung:** `scaleMode: "nearest"` für scharfe Pixel, ganzzahlige Zoomstufen, `resolution` =
   `devicePixelRatio`, ein Texturatlas pro Welt.

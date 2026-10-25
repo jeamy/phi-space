@@ -39,6 +39,8 @@ export type Stack = {
 	restartSpace(): Promise<void>;
 	/** Starts one more world worker (`env`: e.g. a short cleanup interval). */
 	worldProcess(env?: Record<string, string>): Promise<ChildProcess>;
+	/** Starts the npc process (the world's scripted characters). */
+	npcProcess(env?: Record<string, string>): Promise<ChildProcess>;
 	/** Starts a web process without Next (to kill it in the middle of play); its URL comes with it. */
 	webProcess(env?: Record<string, string>, port?: number): Promise<{ child: ChildProcess; url: string; port: number }>;
 	kill(c: ChildProcess, sig?: NodeJS.Signals): Promise<void>;
@@ -62,6 +64,11 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 		async worldProcess(env = {}) {
 			const c = await run("server/world-host.ts", { SPACES_MMO_SPACE: world, ...o.worldEnv, ...env }, (l) => l.startsWith("[world] ready"));
 			procs.push(c); stack.worlds.push(c);
+			return c;
+		},
+		async npcProcess(env = {}) {
+			const c = await run("server/npc-host.ts", { SPACES_MMO_SPACE: world, ...o.worldEnv, ...env }, (l) => l.startsWith("[npc] ready"));
+			procs.push(c);
 			return c;
 		},
 		async webProcess(env = {}, port) {

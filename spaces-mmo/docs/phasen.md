@@ -59,6 +59,14 @@ wird.
 
 ## Phase 2 – Zeit: Flut, Feuer, Nebel
 
+**Stand 2026-10-25: umgesetzt.** Abnahme als Tests (`tests/phase2.test.ts`, Spielzeit beschleunigt über
+`SPACES_MMO_TIME_SCALE`): Ein Feuer erlischt zur berechneten Zeit von selbst (der `Flame`-Eintrag hat die Restbrenndauer
+als Lease), der Nebel steigt auf 3 und schließt die Ausgänge, Nachlegen senkt ihn und öffnet sie. Bo pendelt über mehr
+als eine Spielstunde zwischen den Räumen, ohne dass sich Einträge ansammeln. Dazu Flut (Strandgut mit Lease,
+höchstens 4 je Raum), Kanal `hafen`, `ruf`, Ines als Feuerwärterin, die warnt und grüßt. Abweichungen:
+[evennia-abbildung.md](evennia-abbildung.md#stand-phase-2). Außerdem: Seiten erkennen einen neuen Build und laden neu;
+zwei Figuren stehen nie auf derselben Kachel (Raum-Token, `tests/collision.test.ts`); Leertaste hebt auf.
+
 - Ticker-Worker, Scripts als Entries, OnDemand-Rechnung.
 - Strandgut mit Lease, Leuchtfeuer mit erneuerbarer Lease, Nebelstufen pro Raum.
 - Kanäle (`ChannelMsg`), Ruf-Zähler pro Feuer.
@@ -96,6 +104,10 @@ Ausführlich in [modell-npcs.md](modell-npcs.md): feste Rollen, die bei Ereignis
   (`SPACES_MMO_LLM=0`).
 - Tests mit geskripteten Modellen (Systemnachrichten vor dem Prüfen der letzten Nachricht herausfiltern, siehe
   `docs/examples.md`).
+
+## Phase 5b – Götter (Modell-NPCs, die die Welt erweitern)
+
+Ausführlich in [goetter.md](goetter.md): Inseln, Aufträge, Ereignisse und Geschichten in Stufe 1, Gegenstände, Wesen und Markt in Stufe 2, neue Welten als Entwurf in Stufe 3. Ein Prüfer lässt Entwürfe live gehen, der Admin kann abschalten und zurückrollen.
 
 ## Phase 6 – Automaten (Spielerprogramme)
 

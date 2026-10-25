@@ -9,12 +9,16 @@
 //   SPACES_MMO_MSG_LEASE_MS       how long a message stays (default 10 min)
 //   SPACES_MMO_CLEANUP_MS         how often lapsed guests are looked for (default 60 s)
 //   SPACES_MMO_TXN_MS             lease of a command's transaction: how soon the work of a dead process returns (15 s)
+//   SPACES_MMO_TIME_SCALE         factor on every game duration (burn time, fog steps, tide); tests run fast with 0.01
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT } from "phi-spaces";
 import { CommandError, execute } from "./engine/commands.ts";
 import { msg } from "./engine/context.ts";
-import { ensureActorTokens, loadIntoSpace } from "./engine/loader.ts";
+import { fireTick, floodTick, fogTick } from "./engine/fire.ts";
+import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
+import { runDue, type Job } from "./engine/ticker.ts";
+import { gameMs } from "./engine/time.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
 import { awaitWork, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
@@ -27,10 +31,16 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const TXN_MS = envMs("SPACES_MMO_TXN_MS", 15_000);
 	const halt = new AbortController();
 
-	const loaded = await loadIntoSpace(space, w);
+	// the world's recurring jobs (engine/ticker.ts): whichever worker takes a due ticker runs it, once
+	const jobs: Job[] = [
+		{ key: "fire", everyMs: gameMs(15_000, 100), run: () => fireTick(space, w, msgLeaseMs) },
+		{ key: "fog", everyMs: gameMs(w.fog.stepMs), run: () => fogTick(space, w, msgLeaseMs) },
+		{ key: "flood", everyMs: gameMs(w.flood.everyMs), run: () => floodTick(space, w, msgLeaseMs) },
+	];
+	const loaded = await loadIntoSpace(space, w, { tickers: jobs });
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
-	const tokens = await ensureActorTokens(space);
-	if (tokens) console.log(`[world] wrote ${tokens} missing actor tokens`);
+	const tokens = await ensureTokens(space);
+	if (tokens) console.log(`[world] wrote ${tokens} missing tokens`);
 
 	/** In `txn`: the character's token and its oldest intent, or null (another worker has the token, or no intent is
 	 *  left). Only the token's holder takes a character's intents, so all of them are visible here. */
@@ -105,6 +115,15 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 		}
 	})();
 
+	const ticking = (async () => {
+		while (!halt.signal.aborted) {
+			let wait = 1000;
+			try { wait = await runDue(space, jobs, { txnMs: TXN_MS, maxWaitMs: 1000 }); }
+			catch (e) { if (!halt.signal.aborted) console.error("[world] tickers:", (e as Error).message); }
+			await new Promise<void>((r) => { const t = setTimeout(r, wait); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
+		}
+	})();
+
 	/** Characters of guest accounts that lapsed are removed. An account held by a transaction (a registration in
 	 *  progress) is skipped this round. */
 	const cleanup = async () => {
@@ -123,7 +142,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); await loop; conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); await loop; await ticking; conn.close(); },
 	};
 }
 

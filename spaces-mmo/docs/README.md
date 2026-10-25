@@ -20,6 +20,7 @@ umgesetzt; siehe [phasen.md](phasen.md).
 | [evennia-abbildung.md](evennia-abbildung.md) | Evennia-Komponenten → Entries, Templates, Leases, Worker |
 | [architektur.md](architektur.md) | Prozesse, Datenfluss, Konten und Login, Grafik (PixiJS), Verzeichnisaufbau |
 | [modell-npcs.md](modell-npcs.md) | Phase 5: Modell-NPCs als feste Rollen, Wecken durch Ereignisse, Wanderer, Kosten |
+| [goetter.md](goetter.md) | Götter: Modell-NPCs, die Inseln, Aufträge und Ereignisse nach Regeln erschaffen; Prüfung statt Freigabe |
 | [automaten.md](automaten.md) | Phase 6: Spielerprogramme, Beispielautomaten, kleines Hilfesystem |
 | [phasen.md](phasen.md) | Umsetzung in Phasen mit Abnahmekriterien |
 

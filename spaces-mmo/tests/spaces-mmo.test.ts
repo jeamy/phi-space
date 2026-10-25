@@ -7,8 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eventually, Player, startServer, startStack } from "./stack.ts";
 import type { ServerFrame } from "../server/gateway.ts";
+import type { SpaceLike } from "phi-spaces";
 
 const charOf = (f: ServerFrame) => (f.t === "char" ? f.c : null);
+/** Accounts or characters of players (the world's NPCs have their own, with ids npc-…). */
+const players = async (space: SpaceLike, type: "Account" | "Character") => (await space.readAll({ type })).filter((e) => !String(e.fields.accountId).startsWith("npc-")).length;
 
 test("two registered players see each other on the map and hear each other", async () => {
 	const srv = await startServer();
@@ -143,7 +146,7 @@ test("two registrations of the same name at once: exactly one succeeds", async (
 	try {
 		const tries = await Promise.all(Array.from({ length: 6 }, (_, i) => new Player(srv.url).post("/api/register", { name: i % 2 ? "Sol" : "SOL", password: `geheim-${i}00` })));
 		assert.deepEqual(tries.map((t) => t.status).sort(), [200, 409, 409, 409, 409, 409]);
-		assert.equal(await srv.stack.space.count({ type: "Account", fields: { guest: false } }), 1);
+		assert.equal(await players(srv.stack.space, "Account"), 1);
 	} finally { await srv.close(); }
 });
 
@@ -164,8 +167,8 @@ test("a guest who registers keeps the same character, its place and its account"
 		assert.equal(again.me.charId, h.me.charId, "the same character");
 		assert.equal(again.me.name, "Lene");
 		assert.ok(again.chars.some((c) => c.charId === h.me.charId && c.x === 4 && c.y === 9), "at the same place");
-		assert.equal(await srv.stack.space.count({ type: "Account" }), 1, "converted, not copied");
-		assert.equal(await srv.stack.space.count({ type: "Character" }), 1);
+		assert.equal(await players(srv.stack.space, "Account"), 1, "converted, not copied");
+		assert.equal(await players(srv.stack.space, "Character"), 1);
 		// and the new name logs in from anywhere
 		assert.equal((await new Player(srv.url).post("/api/login", { name: "Lene", password: "geheim-123" })).status, 200);
 		await g.leave();
@@ -215,7 +218,7 @@ test("a guest without activity disappears with its character when its lease runs
 		await g.leave();
 		await eventually(async () => (await srv.stack.space.count({ type: "Character", fields: { charId: h.me.charId } })) === 0, 10_000, "the guest's character removed");
 		assert.equal((await g.me()).account, null, "the guest's login ends with its account");
-		assert.equal(await srv.stack.space.count({ type: "Character" }), 1, "registered characters stay");
+		assert.equal(await players(srv.stack.space, "Character"), 1, "registered characters stay");
 	} finally { await srv.close(); }
 });
 

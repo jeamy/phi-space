@@ -10,6 +10,9 @@ type Account = { name: string; guest: boolean; admin: boolean };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Line = MsgView | { kind: "echo"; text: string; from: string; at: number };
 
+/** The build this page was loaded with (from the first /api/me); a hello from another build means a newer version. */
+let pageBuild: string | null | undefined;
+
 async function post(path: string, body: unknown = {}): Promise<{ account: Account | null; error?: string }> {
 	const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json", "x-mmo": "1" }, body: JSON.stringify(body) });
 	const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
@@ -19,7 +22,7 @@ async function post(path: string, body: unknown = {}): Promise<{ account: Accoun
 
 export function MmoApp() {
 	const [account, setAccount] = useState<Account | null | undefined>(undefined);
-	useEffect(() => { void fetch("/api/me").then((r) => r.json()).then((d) => setAccount(d.account ?? null), () => setAccount(null)); }, []);
+	useEffect(() => { void fetch("/api/me").then((r) => r.json()).then((d) => { pageBuild ??= d.build ?? null; setAccount(d.account ?? null); }, () => setAccount(null)); }, []);
 	if (account === undefined) return <main className="welcome"><p className="muted">Lädt …</p></main>;
 	if (!account) return <Welcome onIn={setAccount} />;
 	return <Game account={account} onAccount={setAccount} />;
@@ -91,13 +94,25 @@ function About() {
 function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
-	const near = self ? all.filter((o) => o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1) : [];
-	if (!carried.length && !near.length) return <div />;
+	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
+	const near = all.filter(close);
+	const fire = [...objs.values()].find((o) => o.kind === "beacon" && close(o));
+	const fuel = carried.find((o) => o.name === "Treibholz");
+	// the burn time left counts down while a fire is near
+	const [, tick] = useState(0);
+	useEffect(() => { if (!fire) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [fire?.id]);
+	if (!carried.length && !near.length && !fire) return <div />;
 	const row = (o: ObjView, verb: string, label: string) => (
 		<li key={o.id}><span>{o.name}</span><button onClick={() => send(`${verb} ${o.name}`)}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
 	);
 	return (
 		<div className="things">
+			{fire && (
+				<><h3>{fire.name}</h3><ul><li>
+					<span>{(fire.until ?? 0) > Date.now() ? `brennt noch ${Math.max(1, Math.round(((fire.until ?? 0) - Date.now()) / 1000))} s` : "ist erloschen"}</span>
+					<button disabled={!fuel} onClick={() => fuel && send(`put ${fuel.name} in ${fire.name}`)} title={fuel ? "" : "Du trägst kein Brennholz"}>Nachlegen</button>
+				</li></ul></>
+			)}
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
 			{carried.length > 0 && <><h3>Du trägst</h3><ul>{carried.map((o) => row(o, "drop", "Ablegen"))}</ul></>}
 		</div>
@@ -108,10 +123,12 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [hello, setHello] = useState<Hello | null>(null);
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
+	const [fog, setFog] = useState(0);
 	const [log, setLog] = useState<Line[]>([]);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
 	const [panel, setPanel] = useState<null | "account" | "leave">(null);
+	const [stale, setStale] = useState(false);
 	const ws = useRef<WebSocket | null>(null);
 	const logEnd = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLInputElement>(null);
@@ -129,9 +146,12 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 			s.onmessage = (e) => {
 				const f = JSON.parse(String(e.data)) as ServerFrame;
 				if (f.t === "hello") {
+					// the server runs a newer build than this page: reload, so the page understands what it is sent
+					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
 					retry = 0; setHello(f);
 					setChars(new Map(f.chars.map((c) => [c.charId, c])));
 					setObjs(new Map(f.objs.map((o) => [o.id, o])));
+					setFog(f.fog);
 					// the first hello brings the room's recent talk; a later one (another room, a reconnect) keeps the log
 					if (!greeted) setLog(f.log); else append({ kind: "echo", text: `— ${f.room.name} —`, from: "", at: Date.now() });
 					greeted = true;
@@ -139,6 +159,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				else if (f.t === "char") setChars((m) => new Map(m).set(f.c.charId, f.c));
 				else if (f.t === "gone") setChars((m) => { const n = new Map(m); n.delete(f.charId); return n; });
 				else if (f.t === "obj") setObjs((m) => new Map(m).set(f.o.id, f.o));
+				else if (f.t === "fog") setFog(f.level);
 				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
 				else if (f.t === "msg") append(f.m);
 			};
@@ -167,7 +188,9 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
 		const self = chars.get(me);
 		if (!self || !hello) return;
-		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk;
+		// walkable and nobody standing there (the server checks again; this only picks the better of two directions)
+		const taken = new Set([...chars.values()].filter((c) => c.charId !== me).map((c) => `${c.x},${c.y}`));
+		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 		let moves: Array<[number, number]>;
 		if (Array.isArray(d)) moves = [d];
 		else {
@@ -181,10 +204,26 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		send(`step ${go[0]} ${go[1]}`, false);
 	}, [chars, me, hello, send]);
 
-	// arrow keys walk, unless the command line has the focus
+	/** Space: pick up what lies nearest (the own cell first); with nothing there, feed a fire within reach. */
+	const action = useCallback(() => {
+		const self = chars.get(me);
+		if (!self || !hello) return;
+		const d = (o: ObjView) => Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y));
+		const near = [...objs.values()].filter((o) => o.location === hello.room.roomId && d(o) <= 1);
+		const item = near.filter((o) => o.kind === "item").sort((a, b) => d(a) - d(b))[0];
+		if (item) return send(`get ${item.name}`);
+		const fire = near.find((o) => o.kind === "beacon");
+		const fuel = [...objs.values()].find((o) => o.kind === "item" && o.location === me && o.name === "Treibholz");
+		if (fire && fuel) return send(`put ${fuel.name} in ${fire.name}`);
+		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
+	}, [chars, me, hello, objs, send, append]);
+
+	// arrow keys walk, space picks up, unless the command line has the focus
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (document.activeElement === input.current || (e.target as HTMLElement)?.tagName === "INPUT") return;
+			if (e.key === "Enter") { e.preventDefault(); input.current?.focus(); return; }
+			if (e.key === " ") { e.preventDefault(); if (!e.repeat) action(); return; }
 			const d = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[e.key];
 			if (!d) return;
 			e.preventDefault();
@@ -192,7 +231,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [step]);
+	}, [step, action]);
 
 	const logout = async () => { await post("/api/logout").catch(() => {}); onAccount(null); };
 
@@ -208,8 +247,9 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")}>Registrieren, um den Fortschritt zu behalten</button>}
 				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
 			</header>
+			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className="main">
-				{hello ? <MapView world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} onCell={(x, y) => step({ x, y })} /> : <div className="map"><p className="muted">Verbinde …</p></div>}
+				{hello ? <MapView world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onCell={(x, y) => { input.current?.blur(); step({ x, y }); }} /> : <div className="map"><p className="muted">Verbinde …</p></div>}
 				<aside className="side">
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
@@ -227,7 +267,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>
-						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} placeholder="Befehl, z. B. look, say Hallo, help" maxLength={300} aria-label="Befehl" autoFocus />
+						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") input.current?.blur(); }} placeholder="Enter: Befehl tippen, z. B. look, say Hallo · Esc: zurück zur Karte" maxLength={300} aria-label="Befehl" />
 						<button className="primary">Senden</button>
 					</form>
 					<About />

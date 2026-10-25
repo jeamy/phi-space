@@ -10,6 +10,8 @@
 //
 // Every POST must carry the header `x-mmo: 1`: a cross-site form cannot set it, and the cookie is SameSite=Strict.
 import http from "node:http";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ROOT } from "./env.ts";
 import { pathToFileURL } from "node:url";
 import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts";
@@ -45,12 +47,14 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 	return undefined;
 };
 
-export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; accountOptions?: AccountOptions } = {}) {
+export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; accountOptions?: AccountOptions; build?: string | null } = {}) {
 	const w = await loadWorld();
 	const world = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
 	const accounts = new Accounts(world.space, store.space, w, o.accountOptions);
-	const gateway = new Gateway(world.space, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}));
+	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
+	const build = o.build !== undefined ? o.build : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
+	const gateway = new Gateway(world.space, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build);
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
 	let nextUpgrade: ((req: http.IncomingMessage, socket: any, head: Buffer) => void) | null = null;
@@ -83,7 +87,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			? `${COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(accounts.webSessionMs / 1000)}${secure}`
 			: `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`;
 	};
-	const meView = (me: Me | null) => ({ account: me ? { name: me.name, guest: me.guest, admin: me.admin } : null, world: { id: w.id, title: w.title } });
+	const meView = (me: Me | null) => ({ account: me ? { name: me.name, guest: me.guest, admin: me.admin } : null, world: { id: w.id, title: w.title }, build });
 	/** Logs `me` in: a new web session, the old one (a guest's, say) ends. */
 	const signIn = async (req: http.IncomingMessage, res: http.ServerResponse, me: Me) => {
 		await accounts.closeSession(cookieOf(req, COOKIE));

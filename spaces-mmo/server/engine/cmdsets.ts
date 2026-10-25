@@ -9,6 +9,8 @@ export type Command = {
 	aliases?: string[];
 	/** Lock string; its `cmd` access decides whether the command exists for the actor. */
 	locks?: string;
+	/** Not listed by help (internal commands such as `arrive`). */
+	hidden?: boolean;
 	/** One line for the command list, then details. */
 	help: string;
 	func: (c: CommandCtx, args: string) => Promise<void>;

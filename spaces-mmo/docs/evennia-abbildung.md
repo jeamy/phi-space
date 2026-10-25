@@ -145,3 +145,38 @@ abweicht:
   haben auch englische Aliase (`driftwood`, `shell`, `east`). Ausgaben in der Sprache des Empfängers (`names: {de, en}`,
   siehe [automaten.md](automaten.md#sprache-deutsch-und-englisch)) folgen später; bis dahin sind die Meldungen deutsch.
   Schon platzierte Gegenstände behalten die Aliase, mit denen sie entstanden sind.
+
+## Stand Phase 2
+
+- **Scripts/TickerHandler** sind `Ticker{key, due}`-Einträge: Jeder Welt-Worker schaut; wer einen fälligen Ticker nimmt
+  (in einer Transaktion), führt den Job aus und schreibt ihn mit dem nächsten Termin zurück. So läuft jeder Job genau
+  einmal, egal wie viele Worker laufen. Jobs: `fire` (bemerkt erloschene Feuer), `fog` (ein Nebelschritt), `flood`
+  (Strandgut). Ein neuer Ticker ist erst nach seinem Intervall fällig.
+- **OnDemand statt Zählen:** Die Brenndauer wird nicht heruntergezählt. Der `Flame`-Eintrag hat sie als Lease, der
+  Space entfernt ihn zur berechneten Zeit. Nachlegen nimmt den `Beacon`-Eintrag als Sperre, nimmt Brennstoff und alte
+  Flamme und schreibt eine längere (höchstens `fire.maxMs`). Der Fire-Ticker schreibt nur den Zustand `lit` und die
+  Meldung.
+- **Nebel** ist ein `Fog{room, level}`-Eintrag je Raum, den ein Leuchtfeuer abdeckt (`covers`). Ausgänge mit `fogMax`
+  sind bei dichterem Nebel zu; der Welt-Worker lehnt den Durchgang ab.
+- **Strandgut** sind Gegenstände mit `flotsam: true` und einer Lease (`flood.lifetimeMs`); wer eins aufhebt, schreibt
+  es ohne Lease neu, dann bleibt es.
+- **Kanäle:** statt eines eigenen `ChannelMsg`-Typs eine `Msg` mit `to: "#hafen"`, die das Gateway an alle schickt.
+- **Ruf:** `Contribution{beaconId, charId, pieces, ms}` je Figur und Feuer, unter der Feuer-Sperre hochgezählt.
+- **Skript-NPCs** (Prozess `npc`, `server/npc/`): Figuren mit eigenem Konto (`npc: true`), vom Loader angelegt. Sie halten
+  eine Session und schreiben nur Intents, einen nach dem anderen. Ihre Namen sind für Registrierungen gesperrt.
+- **Spielzeit:** `SPACES_MMO_TIME_SCALE` multipliziert alle Spielzeiten (Brenndauer, Nebelschritt, Flut, Pausen der NPCs);
+  Leases des Systems (Sessions, Transaktionen) zählen nicht dazu.
+
+### Kollision
+
+Zwei Figuren stehen nie auf derselben Kachel (`server/engine/occupancy.ts`). Belegt ist eine Kachel nur von Figuren, die
+online sind; eine Offline-Figur ist nicht auf der Karte und blockiert niemanden.
+
+- Jeder Raum hat ein `RoomToken`. Wer sich in einem Raum bewegt oder in ihm ankommt, nimmt es in die Transaktion des
+  Befehls. Prüfen und Betreten sind damit ein Schritt, auch über mehrere Welt-Worker (Test: zehn Spieler laufen
+  gleichzeitig auf eine Kachel, genau einer kommt an).
+- Kein Worker hält zwei Raum-Tokens: Wer auf einen Ausgang tritt, nimmt nur das Token des Zielraums.
+- `step` auf eine besetzte Kachel wird abgelehnt („Dort steht schon …“). `move` sucht einen Weg um Figuren herum. Eine
+  belegte Ankunftsstelle eines Ausgangs führt auf die nächste freie Kachel, nie auf eine Ausgangskachel.
+- Neue Figuren entstehen auf einer freien Kachel. Beim Verbinden schickt das Gateway `arrive`: Steht inzwischen jemand
+  auf der Kachel der Figur, tritt sie auf die nächste freie.

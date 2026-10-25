@@ -8,15 +8,15 @@ import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Pixi = typeof import("pixi.js");
-type Scene = { pixi: Pixi; chars: import("pixi.js").Container; objs: import("pixi.js").Container; skins: import("pixi.js").Texture[]; frames: Map<string, import("pixi.js").Texture>; sprites: Map<string, { body: import("pixi.js").Sprite; label: import("pixi.js").Text; x: number; y: number; row: number }> };
+type Scene = { pixi: Pixi; chars: import("pixi.js").Container; objs: import("pixi.js").Container; fog: import("pixi.js").Graphics; size: { w: number; h: number }; skins: import("pixi.js").Texture[]; frames: Map<string, import("pixi.js").Texture>; sprites: Map<string, { body: import("pixi.js").Sprite; label: import("pixi.js").Text; x: number; y: number; row: number }> };
 
 const ROW = { down: 0, left: 1, right: 2, up: 3 } as const;
 
-export function MapView({ world, room, chars, objs, me, onCell }: { world: Hello["world"]; room: Hello["room"]; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; onCell: (x: number, y: number) => void }) {
+export function MapView({ world, room, chars, objs, me, fog, onCell }: { world: Hello["world"]; room: Hello["room"]; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; fog: number; onCell: (x: number, y: number) => void }) {
 	const host = useRef<HTMLDivElement>(null);
 	const scene = useRef<Scene | null>(null);
-	const latest = useRef({ chars, objs, me, onCell });
-	latest.current = { chars, objs, me, onCell };
+	const latest = useRef({ chars, objs, me, fog, onCell });
+	latest.current = { chars, objs, me, fog, onCell };
 
 	// the ground: built again when the room changes
 	useEffect(() => {
@@ -54,7 +54,9 @@ export function MapView({ world, room, chars, objs, me, onCell }: { world: Hello
 			const objLayer = new pixi.Container();
 			const charLayer = new pixi.Container();
 			charLayer.sortableChildren = true;
-			a.stage.addChild(ground, objLayer, charLayer);
+			const fogLayer = new pixi.Graphics();
+			fogLayer.eventMode = "none";
+			a.stage.addChild(ground, objLayer, charLayer, fogLayer);
 			a.stage.eventMode = "static";
 			a.stage.hitArea = a.screen;
 			a.stage.on("pointertap", (e) => {
@@ -62,9 +64,10 @@ export function MapView({ world, room, chars, objs, me, onCell }: { world: Hello
 				const x = Math.floor(p.x / ts), y = Math.floor(p.y / ts);
 				if (x >= 0 && y >= 0 && x < w && y < h) latest.current.onCell(x, y);
 			});
-			scene.current = { pixi, chars: charLayer, objs: objLayer, skins, frames: new Map(), sprites: new Map() };
+			scene.current = { pixi, chars: charLayer, objs: objLayer, fog: fogLayer, size: { w: w * ts, h: h * ts }, skins, frames: new Map(), sprites: new Map() };
 			draw(scene.current, world, latest.current.chars, latest.current.me);
 			drawObjs(scene.current, world, room.roomId, latest.current.objs);
+			drawFog(scene.current, latest.current.fog);
 		})();
 		return () => {
 			dead = true;
@@ -77,6 +80,8 @@ export function MapView({ world, room, chars, objs, me, onCell }: { world: Hello
 	useEffect(() => { if (scene.current) draw(scene.current, world, chars, me); }, [world, chars, me]);
 	// things and exits: few per room, drawn again on every change
 	useEffect(() => { if (scene.current) drawObjs(scene.current, world, room.roomId, objs); }, [world, room, objs]);
+	// the fog of the room as a veil over everything
+	useEffect(() => { if (scene.current) drawFog(scene.current, fog); }, [fog]);
 
 	return <div className="map" ref={host} />;
 }
@@ -88,6 +93,17 @@ function drawObjs(s: Scene, world: Hello["world"], roomId: string, objs: Map<str
 	for (const o of objs.values()) {
 		if (o.location !== roomId) continue;
 		const x = o.x * ts, y = o.y * ts, cx = x + ts / 2, cy = y + ts / 2;
+		if (o.kind === "beacon") {
+			// a fire that burns: flames in a ring; one that is out: a cold, dark ring
+			const lit = (o.until ?? 0) > Date.now();
+			const g = new p.Graphics().circle(cx, cy, 13).fill({ color: lit ? "#3a2412" : "#2b2f33" }).stroke({ width: 2, color: lit ? "#8a5a2b" : "#5a6068" });
+			if (lit) g.circle(cx, cy, 9).fill({ color: "#f08a24" }).circle(cx, cy + 2, 5).fill({ color: "#ffd84a" });
+			const label = new p.Text({ text: o.name, style: { fontFamily: "sans-serif", fontSize: 10, fill: lit ? "#ffd84a" : "#c0c6cc", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(cx, y + ts);
+			s.objs.addChild(g, label);
+			continue;
+		}
 		if (o.kind === "exit") {
 			const g = new p.Graphics().rect(x + 2, y + 2, ts - 4, ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
 			const label = new p.Text({ text: o.name, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });
@@ -104,6 +120,13 @@ function drawObjs(s: Scene, world: Hello["world"], roomId: string, objs: Map<str
 		g.fill({ color }).stroke({ width: 1.5, color: "#1b1b1b" });
 		s.objs.addChild(g);
 	}
+}
+
+/** Fog levels 1..3 as a growing grey veil (0: none). */
+function drawFog(s: Scene, level: number): void {
+	s.fog.clear();
+	const alpha = [0, 0.22, 0.42, 0.62][Math.max(0, Math.min(3, level))]!;
+	if (alpha) s.fog.rect(0, 0, s.size.w, s.size.h).fill({ color: "#c9d2da", alpha });
 }
 
 /** Brings the sprites in line with `chars`: new ones appear, gone ones are removed, moved ones face the way they went. */

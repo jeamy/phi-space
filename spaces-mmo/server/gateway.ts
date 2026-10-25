@@ -9,18 +9,19 @@ import type { SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
-import { asFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields } from "./model.ts";
+import { asFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields } from "./model.ts";
 import { envMs } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
 
 /** What a client sees of a character. */
 export type CharView = { charId: string; name: string; x: number; y: number; skin: number };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
-export type ObjView = { id: string; kind: "item" | "exit"; name: string; location: string; x: number; y: number; glyph?: Glyph };
+export type ObjView = { id: string; kind: "item" | "exit" | "beacon"; name: string; location: string; x: number; y: number; glyph?: Glyph; until?: number };
 export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at">;
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins">; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[] }
+	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins">; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number }
+	| { t: "fog"; level: number }
 	| { t: "char"; c: CharView }
 	| { t: "gone"; charId: string }
 	| { t: "obj"; o: ObjView }
@@ -54,6 +55,9 @@ export class Gateway {
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
 	readonly #objOf = new Map<string, string>(); // space entry id -> itemId / exitId
 	readonly #recent = new Map<string, MsgFields[]>(); // room -> last messages to everyone there
+	readonly #flames = new Map<string, number>(); // beaconId -> until
+	readonly #flameOf = new Map<string, string>(); // flame entry id -> beaconId
+	readonly #fog = new Map<string, number>(); // room -> level
 	#applied = -1; // the revision the state above reflects
 	readonly #waiting = new Set<{ rev: number; ok: () => void }>();
 	#watch: Promise<void>;
@@ -61,9 +65,10 @@ export class Gateway {
 	private readonly space: SpaceLike;
 	private readonly w: WorldDef;
 	private readonly onActivity: (accountId: string) => void;
+	private readonly build: string | null;
 
-	constructor(space: SpaceLike, w: WorldDef, onActivity: (accountId: string) => void = () => {}) {
-		this.space = space; this.w = w; this.onActivity = onActivity;
+	constructor(space: SpaceLike, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null) {
+		this.space = space; this.w = w; this.onActivity = onActivity; this.build = build;
 		let ready!: () => void;
 		this.#ready = new Promise((r) => (ready = r));
 		this.#watch = this.#follow(ready);
@@ -89,6 +94,8 @@ export class Gateway {
 			} catch (e) { console.error("[gateway] session:", (e as Error).message); }
 		};
 		await keep();
+		// online now: if someone else stands on this character's cell meanwhile, the world moves it to a free one
+		await this.#intent(c, "arrive");
 		c.timer = setInterval(() => void keep(), Math.max(1000, Math.floor(this.sessionLeaseMs / 3)));
 		c.timer.unref?.();
 		// read your writes: the hello is built from the stream, so it waits until the stream has caught up with the space
@@ -124,10 +131,14 @@ export class Gateway {
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
 		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
 		if (!line) return;
+		await this.#intent(c, line);
+		this.onActivity(c.me.accountId);
+	}
+
+	async #intent(c: Client, line: string): Promise<void> {
 		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now() };
 		try { await this.space.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
-		this.onActivity(c.me.accountId);
 	}
 
 	#hello(c: Client): void {
@@ -136,9 +147,9 @@ export class Gateway {
 		if (!self || !room) { c.ws.send({ t: "msg", m: { kind: "error", text: "Deine Figur ist noch nicht in der Welt angekommen.", from: "", at: Date.now() } } satisfies ServerFrame); return; }
 		c.room = self.room;
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map(charView);
-		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId);
+		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
 		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId));
-		c.ws.send({ t: "hello", world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log } satisfies ServerFrame);
+		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now() } satisfies ServerFrame);
 	}
 
 	/** Reads the world once (from a revision taken before the reads) and then follows the change stream. Replaying ops
@@ -150,7 +161,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await this.space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
 					for (const e of await this.space.readAll({ type: "Msg", fields: { to: "*" } })) this.#put(e.id, e.type, e.types, e.fields, msgs);
 					this.#advance(rev);
 					ready();
@@ -161,10 +172,12 @@ export class Gateway {
 					const chars = new Map<string, string | null>(); // charId -> room before the batch
 					const objs = new Map<string, string | null>(); // objId -> location before the batch
 					const msgs: MsgFields[] = [];
+					const fogs = new Set<string>(); // rooms whose fog changed
 					const touch = (entryId: string, fields?: Record<string, unknown>, types?: string[]) => {
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
-						const objId = this.#objOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : undefined);
+						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : undefined);
+						if (fields && types?.includes("Fog")) fogs.add(String(fields.room));
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
 					for (const op of b.ops) {
@@ -174,7 +187,8 @@ export class Gateway {
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
-					for (const m of msgs) for (const c of this.#clients) if (m.to === "*" ? c.room === m.room : c.me.charId === m.to) c.ws.send({ t: "msg", m: msgView(m, c.me.charId) } satisfies ServerFrame);
+					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
+					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId) } satisfies ServerFrame);
 				}
 				rev = ch.next;
 				this.#advance(rev);
@@ -190,7 +204,7 @@ export class Gateway {
 	}
 
 	#reset(): void {
-		for (const m of [this.#chars, this.#charOf, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#recent]) m.clear();
+		for (const m of [this.#chars, this.#charOf, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#recent, this.#flames, this.#flameOf, this.#fog]) m.clear();
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
@@ -206,6 +220,14 @@ export class Gateway {
 			const s = fields as unknown as SessionFields;
 			this.#sessions.set(id, s.charId); this.#online.set(s.charId, (this.#online.get(s.charId) ?? 0) + 1);
 		}
+		else if (type === "Beacon") {
+			const b = fields as unknown as BeaconFields;
+			const o: ObjView = { id: b.beaconId, kind: "beacon", name: b.name, location: b.room, x: b.x, y: b.y };
+			for (const [eid, oid] of this.#objOf) if (oid === o.id && eid !== id) this.#objOf.delete(eid);
+			this.#objs.set(o.id, o); this.#objOf.set(id, o.id);
+		}
+		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
+		else if (type === "Fog") { const f = fields as unknown as FogFields; this.#fog.set(f.room, f.level); }
 		else if (types.includes("Item") || types.includes("Exit")) {
 			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields) : exitView(fields as unknown as ExitFields);
 			for (const [eid, oid] of this.#objOf) if (oid === o.id && eid !== id) this.#objOf.delete(eid);
@@ -223,6 +245,8 @@ export class Gateway {
 	}
 
 	#del(id: string): void {
+		const beaconId = this.#flameOf.get(id);
+		if (beaconId) { this.#flameOf.delete(id); if (![...this.#flameOf.values()].includes(beaconId)) this.#flames.delete(beaconId); return; }
 		const charId = this.#charOf.get(id);
 		if (charId) { this.#charOf.delete(id); if (![...this.#charOf.values()].includes(charId)) this.#chars.delete(charId); return; }
 		const objId = this.#objOf.get(id);
@@ -243,9 +267,14 @@ export class Gateway {
 		}
 	}
 
+	/** A beacon with its fire's end (0: out). */
+	#view(o: ObjView): ObjView {
+		return o.kind === "beacon" ? { ...o, until: this.#flames.get(o.id) ?? 0 } : o;
+	}
+
 	/** After a batch: the clients that saw the object where it was, or see it where it is now (a room, a pack). */
 	#announceObj(objId: string, before: string | null): void {
-		const o = this.#objs.get(objId);
+		const base = this.#objs.get(objId), o = base && this.#view(base);
 		const sees = (cl: Client, loc: string | null | undefined) => !!loc && (cl.room === loc || cl.me.charId === loc);
 		for (const cl of this.#clients) {
 			if (o && sees(cl, o.location)) cl.ws.send({ t: "obj", o } satisfies ServerFrame);

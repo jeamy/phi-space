@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT } from "../env.ts";
-import type { ExitFields, HelpEntryFields, PrototypeFields } from "../model.ts";
+import type { BeaconFields, ExitFields, HelpEntryFields, PrototypeFields } from "../model.ts";
 import { parseLocks } from "./locks.ts";
 import { typeChain } from "./typeclasses.ts";
 
@@ -28,7 +28,20 @@ export type WorldDef = {
 	help: HelpEntryFields[];
 	/** What a room dug by a builder looks like until it is shaped. */
 	dig: { ground: string[]; spawn: { x: number; y: number }; desc: string };
+	/** Phase 2. Where fires can burn and which rooms each keeps clear of fog. */
+	beacons: Array<Omit<BeaconFields, "lit">>;
+	/** Burn time each fuel prototype gives, and the most a fire can hold. */
+	fire: { fuel: Record<string, number>; maxMs: number };
+	/** Fog levels 0..max; every `stepMs` it rises by one in rooms without a burning fire and falls by one with. */
+	fog: { max: number; start: number; stepMs: number };
+	/** The tide: every `everyMs` one piece of flotsam per room (up to `max` lying there) on a cell of `tile`. */
+	flood: { everyMs: number; lifetimeMs: number; rooms: Array<{ room: string; tile: string; max: number }>; protos: Array<{ proto: string; weight: number }> };
+	/** Channels everyone hears, across rooms. */
+	channels: string[];
+	/** Characters played by scripts (the npc process), not by models. */
+	npcs: NpcDef[];
 };
+export type NpcDef = { npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string };
 
 const WORLD_ID = /^[a-z0-9-]{1,40}$/;
 
@@ -59,6 +72,18 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		if (w.exits.some((o) => o.room === e.destination && o.x === e.arrive.x && o.y === e.arrive.y)) throw new Error(`exit ${e.exitId}: arrives on another exit`);
 		parseLocks(e.locks ?? "");
 	}
+	for (const b of w.beacons) {
+		const r = room(b.room);
+		if (!r || !walkable(w, r.ground, b.x, b.y) || b.covers.some((c) => !room(c))) throw new Error(`beacon ${b.beaconId}: unknown room or not walkable`);
+	}
+	for (const p of Object.keys(w.fire.fuel)) if (!w.prototypes.some((q) => q.key === p)) throw new Error(`fire fuel: unknown prototype ${p}`);
+	for (const f of w.flood.rooms) if (!room(f.room)) throw new Error(`flood: unknown room ${f.room}`);
+	for (const p of w.flood.protos) if (!w.prototypes.some((q) => q.key === p.proto)) throw new Error(`flood: unknown prototype ${p.proto}`);
+	for (const n of w.npcs) {
+		const r = room(n.room);
+		if (!r || !walkable(w, r.ground, n.x, n.y)) throw new Error(`npc ${n.npcId}: unknown room or not walkable`);
+		if (n.beacon && !w.beacons.some((b) => b.beaconId === n.beacon)) throw new Error(`npc ${n.npcId}: unknown beacon`);
+	}
 	for (const o of w.objects) {
 		const r = room(o.room);
 		if (!r || !walkable(w, r.ground, o.x, o.y) || !w.prototypes.some((p) => p.key === o.proto)) throw new Error(`object ${o.itemId}: unknown room or prototype, or not on a walkable cell`);
@@ -76,10 +101,10 @@ export function worldAsset(id: string, path: string): { body: Buffer; type: stri
 export const walkable = (w: WorldDef, ground: string[], x: number, y: number): boolean =>
 	Number.isInteger(x) && Number.isInteger(y) && y >= 0 && y < ground.length && x >= 0 && x < (ground[0]?.length ?? 0) && !!w.tiles[ground[y]![x]!]?.walk;
 
-/** The shortest walk from one cell to another over walkable cells (4 directions), at most `max` steps; null when there
- *  is none. The cells after the start, the target last. */
-export function findPath(w: WorldDef, ground: string[], from: { x: number; y: number }, to: { x: number; y: number }, max = 40): Array<{ x: number; y: number }> | null {
-	if (!walkable(w, ground, to.x, to.y)) return null;
+/** The shortest walk from one cell to another over walkable cells (4 directions) that are not `blocked` ("x,y"), at
+ *  most `max` steps; null when there is none. The cells after the start, the target last. */
+export function findPath(w: WorldDef, ground: string[], from: { x: number; y: number }, to: { x: number; y: number }, max = 40, blocked: ReadonlySet<string> = new Set()): Array<{ x: number; y: number }> | null {
+	if (!walkable(w, ground, to.x, to.y) || blocked.has(`${to.x},${to.y}`)) return null;
 	if (from.x === to.x && from.y === to.y) return [];
 	const width = ground[0]!.length, key = (x: number, y: number) => y * width + x;
 	const prev = new Map<number, number>([[key(from.x, from.y), -1]]);
@@ -88,7 +113,7 @@ export function findPath(w: WorldDef, ground: string[], from: { x: number; y: nu
 		const next: Array<{ x: number; y: number }> = [];
 		for (const c of frontier) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
 			const x = c.x + dx, y = c.y + dy, k = key(x, y);
-			if (prev.has(k) || !walkable(w, ground, x, y)) continue;
+			if (prev.has(k) || !walkable(w, ground, x, y) || blocked.has(`${x},${y}`)) continue;
 			prev.set(k, key(c.x, c.y));
 			if (x === to.x && y === to.y) {
 				const path: Array<{ x: number; y: number }> = [];

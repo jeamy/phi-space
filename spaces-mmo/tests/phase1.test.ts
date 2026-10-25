@@ -28,20 +28,32 @@ async function does(p: Player, line: string, text: string | RegExp, ms = 10_000)
 	return (f as Extract<ServerFrame, { t: "msg" }>).m.text;
 }
 
-test("twenty players grab one coin at once across two world workers: exactly one gets it", async () => {
+test("twenty players grab one coin at once across two world workers: exactly one gets it (nine stand within reach)", async () => {
 	const srv = await startServer({ accountOptions: { setupToken: "t" } });
 	try {
 		await srv.stack.worldProcess(); // two world workers take intents in parallel
 		const admin = await player(srv.url, "Wirtin", { token: "t" });
+		admin.p.send("move 16 8"); // away from where new characters appear
+		await eventually(async () => (await charAt(srv.stack.space, admin.h.me.charId)).x === 16, 10_000, "admin at 16,8");
 		await does(admin.p, "spawn muenze", "erschaffst Münze");
+		admin.p.send("move 20 7"); // off the coin's cell: no two characters share one, so the cell is for a player
+		await eventually(async () => (await charAt(srv.stack.space, admin.h.me.charId)).x === 20, 10_000, "admin away");
 		const [coin] = await items(srv.stack.space, { proto: "muenze" });
 		assert.ok(coin);
 		const players = await Promise.all(Array.from({ length: 20 }, () => player(srv.url, "", { guest: true })));
-		for (const { p } of players) p.send(`move ${coin.x} ${coin.y}`);
-		await eventually(async () => {
-			for (const { h } of players) { const c = await charAt(srv.stack.space, h.me.charId); if (c.x !== coin.x || c.y !== coin.y) return false; }
-			return true;
-		}, 20_000, "all players on the coin");
+		// the eleven far off first go to cells of their own on the grass, so none stands where the nine are going
+		players.slice(9).forEach(({ p }, i) => p.send(`move ${i + 2} 14`));
+		await eventually(async () => { for (let i = 9; i < 20; i++) if ((await charAt(srv.stack.space, players[i]!.h.me.charId)).y !== 14) return false; return true; }, 20_000, "eleven on the grass");
+		// the coin's cell and its eight neighbours (all sand around 16,8): nine players within reach, eleven further off.
+		// One after another, the middle first, so nobody is walled out by the others
+		const ring = [[0, 0], [-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].map(([dx, dy]) => ({ x: Number(coin.x) + dx!, y: Number(coin.y) + dy! }));
+		for (let i = 0; i < ring.length; i++) {
+			players[i]!.p.send(`move ${ring[i]!.x} ${ring[i]!.y}`);
+			await eventually(async () => { const c = await charAt(srv.stack.space, players[i]!.h.me.charId); return c.x === ring[i]!.x && c.y === ring[i]!.y; }, 10_000, `player ${i} at ${ring[i]!.x},${ring[i]!.y}`);
+		}
+		const cells = new Set<string>();
+		for (const { h } of players) { const c = await charAt(srv.stack.space, h.me.charId); cells.add(`${c.x},${c.y}`); }
+		assert.equal(cells.size, 20, "twenty players on twenty different cells");
 		const from = players.map(({ p }) => p.frames.length);
 		for (const { p } of players) p.send("get münze");
 		// every intent answered: the winner hears its success, every other one a refusal
@@ -50,6 +62,7 @@ test("twenty players grab one coin at once across two world workers: exactly one
 		const winners = players.filter(({ p }, i) => p.frames.slice(from[i]).some((f) => f.t === "msg" && f.m.text === "Du hebst Münze auf."));
 		assert.equal(winners.length, 1, "exactly one success message");
 		assert.equal(after?.location, winners[0]!.h.me.charId, "the coin is with the winner");
+		assert.ok(players.indexOf(winners[0]!) < 9, "the winner stood within reach");
 		assert.equal((await items(srv.stack.space, { proto: "muenze" })).length, 1, "still one coin");
 		// the others saw it happen, rendered for them
 		const other = players.find((x) => x !== winners[0])!;
@@ -199,8 +212,8 @@ test("builders shape the world: dig, open, create, set, lock, tag, examine, dest
 		assert.match(ex, /locks: "get:perm\(Builder\)"/);
 		assert.match(ex, /tags: schwer:gewicht/);
 		const kiste = (await items(srv.stack.space, { name: "Kiste" }))[0]!;
-		gast.p.send(`move ${kiste.x} ${kiste.y}`);
-		await eventually(async () => (await charAt(srv.stack.space, gast.h.me.charId)).x === kiste.x, 10_000, "guest at the chest");
+		gast.p.send(`move ${Number(kiste.x) + 1} ${kiste.y}`); // next to it: the admin still stands on the chest's cell
+		await eventually(async () => (await charAt(srv.stack.space, gast.h.me.charId)).x === Number(kiste.x) + 1, 10_000, "guest at the chest");
 		assert.equal(await does(gast.p, "get kiste", "lässt sich"), "Kiste lässt sich nicht aufheben.");
 		await does(admin.p, "destroy kiste", "vernichtest Kiste");
 		assert.equal((await items(srv.stack.space, { name: "Kiste" })).length, 0);

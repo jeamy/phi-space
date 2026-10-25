@@ -8,6 +8,7 @@
 // stops after step 2 is completed by the next login.
 import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
+import { cellKey, freeCellNear, holdRoom, occupiedIn } from "./engine/occupancy.ts";
 import { walkable, type WorldDef } from "./engine/world.ts";
 import { actorToken, asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type WebSessionFields } from "./model.ts";
 import { envMs, readExisting, StillHeld } from "./space.ts";
@@ -62,9 +63,12 @@ export class Accounts {
 	async createGuest(): Promise<Me> {
 		const now = Date.now();
 		const account: AccountFields = { accountId: id("a"), name: `${this.w.guestName}-${randomInt(1000, 10000)}`, guest: true, admin: false, createdAt: now, touchedAt: now };
-		const char = this.#newCharacter(account);
 		const txn = (await this.world.createTransaction(10_000)).id;
+		let char: CharacterFields;
 		try {
+			const made = await this.#newCharacter(account, txn);
+			char = made.char;
+			await made.release();
 			await this.world.write({ type: "Account", fields: asFields(account) }, txn, this.guestTtlMs);
 			await this.world.write({ type: "Character", fields: asFields(char) }, txn, FOREVER);
 			await this.world.write(actorToken(char.charId), txn, FOREVER);
@@ -81,6 +85,7 @@ export class Accounts {
 		if (name.toLowerCase().startsWith(`${this.w.guestName.toLowerCase()}-`)) throw new AuthError(400, `Namen wie „${this.w.guestName}-…“ sind Gästen vorbehalten`);
 		if (typeof password !== "string" || password.length < 8 || password.length > 200) throw new AuthError(400, "Passwort: 8 bis 200 Zeichen");
 		const key = name.toLowerCase();
+		if (this.w.npcs.some((n) => n.name.toLowerCase() === key)) throw new AuthError(409, "Dieser Name gehört einer Figur der Welt");
 		const guest = o.guestAccountId ? await this.#account(o.guestAccountId) : null;
 		if (o.guestAccountId && !guest?.guest) throw new AuthError(409, "Dieses Gastkonto gibt es nicht mehr; bitte neu als Gast beginnen oder ohne Gast registrieren");
 		const accountId = guest?.accountId ?? id("a");
@@ -124,7 +129,8 @@ export class Accounts {
 			} else {
 				const now = Date.now();
 				const account: AccountFields = { accountId, name, guest: false, admin, createdAt: now, touchedAt: now };
-				const char = this.#newCharacter(account);
+				const { char, release } = await this.#newCharacter(account, t2);
+				await release();
 				await this.world.write({ type: "Account", fields: asFields(account) }, t2, FOREVER);
 				await this.world.write({ type: "Character", fields: asFields(char) }, t2, FOREVER);
 				await this.world.write(actorToken(char.charId), t2, FOREVER);
@@ -216,14 +222,18 @@ export class Accounts {
 		return { ...pick(account), charId: fieldsOf<CharacterFields>(c).charId };
 	}
 
-	#newCharacter(account: AccountFields): CharacterFields {
+	/** A new character at the start, on a free cell near the spawn (under the room's token in `txn`, so two new
+	 *  characters never get the same cell; without a token, as before the world loaded, best effort). The caller
+	 *  writes the token back with `release`. */
+	async #newCharacter(account: AccountFields, txn: string): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
 		const room = this.w.rooms.find((r) => r.roomId === this.w.start)!;
-		let at = room.spawn;
-		for (let i = 0; i < 20; i++) {
-			const x = room.spawn.x + randomInt(-3, 4), y = room.spawn.y + randomInt(-2, 3);
-			if (walkable(this.w, room.ground, x, y)) { at = { x, y }; break; }
-		}
-		return { charId: id("c"), accountId: account.accountId, name: account.name, room: room.roomId, x: at.x, y: at.y, skin: randomInt(0, this.w.skins.length), guest: account.guest };
+		const held = await holdRoom(this.world, txn, room.roomId, 3_000);
+		const avoid = new Set([...(await occupiedIn(this.world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e))]);
+		// a little scatter around the spawn, then the nearest free cell from there
+		const near = { x: room.spawn.x + randomInt(-3, 4), y: room.spawn.y + randomInt(-2, 3) };
+		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid) ?? room.spawn;
+		const char = { charId: id("c"), accountId: account.accountId, name: account.name, room: room.roomId, x: at.x, y: at.y, skin: randomInt(0, this.w.skins.length), guest: account.guest };
+		return { char, release: async () => { await held?.release(); } };
 	}
 
 	#tokenOk(got: string): boolean {

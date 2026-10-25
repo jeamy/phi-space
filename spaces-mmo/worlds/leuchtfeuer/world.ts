@@ -8,7 +8,7 @@ const ITEM_LOCKS = "get:all();drop:all();give:not guest()";
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 3,
+	version: 4,
 	tileSize: 32,
 	tiles: {
 		"~": { sheet: "tilesets/Autotiles_Water.png", x: 16, y: 48, walk: false }, // the inner water of the first autotile
@@ -83,13 +83,24 @@ export const world: WorldDef = {
 		{ itemId: "muschel-2", proto: "muschel", room: "klippenpfad", x: 12, y: 5 },
 	],
 	exits: [
-		{ exitId: "bucht-ost", name: "ost", aliases: ["o", "osten", "east", "e", "klippenpfad"], desc: "Der Strand wird zum Pfad, der auf die Klippen führt.", room: "graue-bucht", destination: "klippenpfad", x: 23, y: 8, arrive: { x: 1, y: 8 } },
-		{ exitId: "pfad-west", name: "west", aliases: ["w", "westen", "bucht"], desc: "Hinunter zur Grauen Bucht.", room: "klippenpfad", destination: "graue-bucht", x: 0, y: 8, arrive: { x: 22, y: 8 } },
+		{ exitId: "bucht-ost", name: "ost", aliases: ["o", "osten", "east", "e", "klippenpfad"], desc: "Der Strand wird zum Pfad, der auf die Klippen führt.", room: "graue-bucht", destination: "klippenpfad", x: 23, y: 8, arrive: { x: 1, y: 8 }, fogMax: 2 },
+		{ exitId: "pfad-west", name: "west", aliases: ["w", "westen", "bucht"], desc: "Hinunter zur Grauen Bucht.", room: "klippenpfad", destination: "graue-bucht", x: 0, y: 8, arrive: { x: 22, y: 8 }, fogMax: 2 },
 	],
 	help: [
 		{ key: "intro", category: "Allgemein", text: "Willkommen im Archipel. Sieh dich mit „look“ (schau) um, sprich mit „say“ (sag), geh mit Klicks auf die Karte, den Pfeiltasten oder „go <richtung>“ (geh). Was am Strand liegt, hebst du mit „get <ding>“ (nimm) auf. Alle Befehle gelten auf Englisch und Deutsch." },
-		{ key: "leuchtfeuer", category: "Welt", text: "Wo ein Leuchtfeuer brennt, ist der Nebel licht. Noch brennt keines; auf dem Kopfsteinplatz der Grauen Bucht soll das erste entstehen." },
+		{ key: "leuchtfeuer", category: "Welt", text: "Wo ein Leuchtfeuer brennt, ist der Nebel licht. Das erste steht im Kopfsteinring der Grauen Bucht. Treibholz ins Feuer legen (put treibholz in feuer, oder: lege holz ins feuer) hält es am Brennen; jedes Scheit gibt zehn Minuten. Ohne Feuer steigt der Nebel, bis er die Wege verschluckt. „ruf“ zeigt, was du beigetragen hast; „kanal hafen <text>“ hören alle." },
 		{ key: "bauen", category: "Bauen", text: "Builder formen die Welt: dig/grabe, open/öffne, create/erschaffe, spawn/erzeuge, set/setze, tag/markiere, lock/sperre, examine/untersuche, destroy/vernichte. Jeder Befehl gilt auf Englisch und Deutsch. „help <befehl>“ erklärt jeden. Lock-Strings: zugriff:ausdruck;… mit all(), none(), perm(Stufe), id(figur), holds(ding), guest(), not, and, or." },
+	],
+	beacons: [
+		{ beaconId: "feuer-bucht", name: "Leuchtfeuer", aliases: ["feuer", "fire", "beacon", "leuchtturm"], room: "graue-bucht", x: 9, y: 10, covers: ["graue-bucht", "klippenpfad"] },
+	],
+	fire: { fuel: { treibholz: 10 * 60_000 }, maxMs: 2 * 3600_000 },
+	fog: { max: 3, start: 2, stepMs: 2 * 60_000 },
+	flood: { everyMs: 60_000, lifetimeMs: 5 * 60_000, rooms: [{ room: "graue-bucht", tile: ".", max: 4 }], protos: [{ proto: "treibholz", weight: 3 }, { proto: "muschel", weight: 1 }] },
+	channels: ["hafen"],
+	npcs: [
+		{ npcId: "ines", name: "Ines", skin: 4, room: "graue-bucht", x: 10, y: 9, script: "waerter", beacon: "feuer-bucht" },
+		{ npcId: "bo", name: "Bo", skin: 0, room: "graue-bucht", x: 20, y: 8, script: "faehrmann" },
 	],
 	dig: {
 		desc: "Ein neu entdecktes Stück Land im Nebel.",
