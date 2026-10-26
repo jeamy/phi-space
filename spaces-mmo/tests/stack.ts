@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 import type { ClientFrame, ServerFrame } from "../server/gateway.ts";
 import { startServer as startWeb } from "../server/index.ts";
 import { connectSpace } from "../server/space.ts";
-import type { SpaceLike } from "phi-spaces";
+import { FOREVER, type SpaceLike } from "phi-spaces";
+import { readClock } from "../server/engine/clock.ts";
+import { worldNow } from "../server/engine/worldtime.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let seq = 0;
@@ -159,4 +161,10 @@ export async function eventually<T>(check: () => Promise<T | null | undefined | 
 		if (Date.now() > end) throw new Error(`${what} not reached within ${ms} ms`);
 		await new Promise((r) => setTimeout(r, 50));
 	}
+}
+
+/** A fire that burns for `realMs` of real time (the world's rate turns that into the world time it burns until). */
+export async function lightFire(space: SpaceLike, realMs: number, beaconId = "feuer-bucht"): Promise<void> {
+	const clock = await readClock(space), now = worldNow(clock);
+	await space.write({ type: "Flame", fields: { beaconId, until: now + realMs * clock.rate, litAt: now } as never }, null, FOREVER);
 }

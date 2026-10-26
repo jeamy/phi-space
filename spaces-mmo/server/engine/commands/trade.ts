@@ -9,7 +9,7 @@ import { readExisting, StillHeld } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, msg, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
-import { gameMs } from "../time.ts";
+import { worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
 
 /** How long a trade offer waits for an answer (real time: the other one is at the keyboard now). */
@@ -153,7 +153,7 @@ const market: Command = {
 			if ("missing" in got) throw new CommandError(`Du hast nicht: ${got.missing}.`);
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
 			await move(c, item, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });
-			await c.space.write({ type: "Listing", fields: { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, price, room: c.actor.room, at: Date.now() } satisfies ListingFields as never }, c.txn, gameMs(c.world.market.listMs));
+			await c.space.write({ type: "Listing", fields: { listingId, seller: c.actor.charId, sellerName: c.actor.name, itemId: item.itemId, itemName: item.name, price, room: c.actor.room, at: Date.now(), expiresWorldMs: (await worldNowOf(c.space, c.txn)) + c.world.market.listMs } satisfies ListingFields as never }, c.txn, FOREVER);
 			return msg(c, "*", "info", `$you() $conj(hängst|hängt) ${item.name} für ${price} Münze${price === 1 ? "" : "n"} ans Marktbrett.`, { templ: true });
 		}
 		if (/^(kaufe|buy)$/i.test(verb)) {
@@ -240,13 +240,13 @@ const order: Command = {
 			const o = open[Number(n) - 1];
 			if (!o) throw new CommandError("Diese Nummer hängt nicht an der Tafel. „order“ zeigt sie.");
 			if (!(await c.space.take({ type: "Order", id: o.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – den hat gerade jemand genommen.");
-			await c.space.write({ type: "Order", fields: { ...o.f, takenBy: c.actor.charId } as never }, c.txn, gameMs(c.world.orders.leaseMs));
+			await c.space.write({ type: "Order", fields: { ...o.f, takenBy: c.actor.charId, expiresWorldMs: (await worldNowOf(c.space, c.txn)) + c.world.orders.leaseMs } as never }, c.txn, FOREVER);
 			return msg(c, c.actor.charId, "info", `Du übernimmst: ${o.f.text}`);
 		}
 		if (!mine) throw new CommandError("Du hast keinen Auftrag. „order nimm <nr>“ übernimmt einen.");
 		if (/^(aufgeben|abandon)$/i.test(verb)) {
 			if (!(await c.space.take({ type: "Order", id: mine.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Der Auftrag ist gerade nicht greifbar.");
-			await c.space.write({ type: "Order", fields: { ...mine.f, takenBy: "" } as never }, c.txn, gameMs(c.world.orders.leaseMs));
+			await c.space.write({ type: "Order", fields: { ...mine.f, takenBy: "", expiresWorldMs: (await worldNowOf(c.space, c.txn)) + c.world.orders.leaseMs } as never }, c.txn, FOREVER);
 			return msg(c, c.actor.charId, "info", "Du gibst den Auftrag zurück an die Tafel.");
 		}
 		if (/^(liefere|deliver)$/i.test(verb)) {
@@ -277,8 +277,8 @@ export async function ordersTick(space: SpaceLike, w: WorldDef): Promise<void> {
 		const kinds = w.orders.kinds.filter((k) => !k.rooms || k.rooms.includes(room));
 		if (!kinds.length || (await space.count({ type: "Order", fields: { room } })) >= w.orders.max) continue;
 		const k = kinds[randomInt(0, kinds.length)]!;
-		const o: OrderFields = { orderId: `j-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room };
-		await space.write({ type: "Order", fields: o as never }, null, gameMs(w.orders.leaseMs));
+		const o: OrderFields = { orderId: `j-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room, expiresWorldMs: (await worldNowOf(space)) + w.orders.leaseMs };
+		await space.write({ type: "Order", fields: o as never }, null, FOREVER);
 	}
 }
 

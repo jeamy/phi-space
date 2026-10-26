@@ -17,11 +17,10 @@ import { CommandError, execute } from "./engine/commands.ts";
 import { msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
 import { fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
+import { sweepTick } from "./engine/sweep.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
-import { runDue, type Job } from "./engine/ticker.ts";
-import { SCHEDULE_HANDLERS } from "./engine/worldevents.ts";
-import { gameMs } from "./engine/time.ts";
+import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
 import { awaitWork, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
@@ -34,16 +33,19 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const TXN_MS = envMs("SPACES_MMO_TXN_MS", 15_000);
 	const halt = new AbortController();
 
-	// the world's recurring jobs (engine/ticker.ts): whichever worker takes a due ticker runs it, once
-	const jobs: Job[] = [
-		{ key: "fire", everyMs: gameMs(15_000, 100), run: () => fireTick(space, w, msgLeaseMs) },
-		{ key: "fog", everyMs: gameMs(w.fog.stepMs), run: () => fogTick(space, w, msgLeaseMs) },
-		{ key: "flood", everyMs: gameMs(w.flood.everyMs), run: () => floodTick(space, w, msgLeaseMs) },
-		{ key: "orders", everyMs: gameMs(w.orders.everyMs), run: () => ordersTick(space, w) },
-		{ key: "market", everyMs: gameMs(60_000, 100), run: () => marketTick(space) },
-		...(w.storm ? [{ key: "storm", everyMs: gameMs(w.storm.everyMs), run: async () => { await stormTick(space, w, msgLeaseMs); } }] : []),
-	];
-	const loaded = await loadIntoSpace(space, w, { tickers: jobs }).catch((e) => { conn.close(); throw e; });
+	// the world's recurring jobs run as dates in world time (engine/schedule.ts, worldevents.ts tickJobs): whichever worker
+	// takes a due date runs the job, once
+	const runs: Record<string, () => Promise<void>> = {
+		fire: () => fireTick(space, w, msgLeaseMs),
+		fog: () => fogTick(space, w, msgLeaseMs),
+		flood: () => floodTick(space, w, msgLeaseMs),
+		sweep: () => sweepTick(space),
+		orders: () => ordersTick(space, w),
+		market: () => marketTick(space),
+		storm: async () => { await stormTick(space, w, msgLeaseMs); },
+	};
+	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
+	const loaded = await loadIntoSpace(space, w).catch((e) => { conn.close(); throw e; });
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
 	const tokens = await ensureTokens(space);
 	if (tokens) console.log(`[world] wrote ${tokens} missing tokens`);
@@ -121,21 +123,12 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 		}
 	})();
 
-	const ticking = (async () => {
-		while (!halt.signal.aborted) {
-			let wait = 1000;
-			try { wait = await runDue(space, jobs, { txnMs: TXN_MS, maxWaitMs: 1000 }); }
-			catch (e) { if (!halt.signal.aborted) console.error("[world] tickers:", (e as Error).message); }
-			await new Promise<void>((r) => { const t = setTimeout(r, wait); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
-		}
-	})();
-
 	// the world's dates (engine/schedule.ts): whichever worker takes a due one serves it, once
 	const guard = new ClockGuard({ toleranceMs: envMs("SPACES_MMO_CLOCK_TOLERANCE_MS", 5 * 60_000) });
 	const scheduling = (async () => {
 		while (!halt.signal.aborted) {
 			let wait = 1000;
-			try { wait = await runSchedules(space, SCHEDULE_HANDLERS, { txnMs: TXN_MS, maxWaitMs: 1000, guard }); }
+			try { wait = await runSchedules(space, handlers, { txnMs: TXN_MS, maxWaitMs: 1000, guard }); }
 			catch (e) { if (!halt.signal.aborted) console.error("[world] schedules:", (e as Error).message); }
 			await new Promise<void>((r) => { const t = setTimeout(r, wait); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
 		}
@@ -159,7 +152,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); await loop; await ticking; await scheduling; conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); await loop; await scheduling; conn.close(); },
 	};
 }
 

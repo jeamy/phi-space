@@ -13,6 +13,7 @@
 // All of them answer trade offers by their price list, tell people who speak to them what they buy and sell, and the
 // traders and keepers offer people coins for what they want.
 import { randomInt } from "node:crypto";
+import { clockOf } from "../engine/clockcache.ts";
 import { flameOf } from "../engine/fire.ts";
 import { gameMs } from "../engine/time.ts";
 import type { WorldDef } from "../engine/world.ts";
@@ -237,8 +238,8 @@ function huter(): Script {
 		if (!beacon) { await n.sleep(gameMs(60_000)); return; }
 		const fuels = Object.keys(n.world.fire.fuel);
 		const fuel = l.pack.filter((i) => fuels.includes(i.proto));
-		const f = await flameOf(n.space, beacon.beaconId), now = Date.now();
-		const piece = Math.min(...Object.values(n.world.fire.fuel).map((ms) => gameMs(ms)));
+		const f = await flameOf(n.space, beacon.beaconId), now = (await clockOf(n.space).now()) ?? 0; // world time
+		const piece = Math.min(...Object.values(n.world.fire.fuel)); // in world milliseconds
 		const weak = !f || f.until - now < piece * 3;
 		const homes = n.def.home ?? [beacon.room];
 		let acted = (await talk(n, l));
@@ -349,7 +350,7 @@ async function gossip(n: Npc): Promise<string | null> {
 	if (listing) told.push(`Am Marktbrett in ${roomName(w, listing.room)} gibt es ${listing.itemName} für ${plural(listing.price, "Münze", "Münzen")}.`);
 	for (const b of w.beacons) {
 		const f = await flameOf(n.space, b.beaconId);
-		if (!f || f.until <= Date.now()) told.push(`Das ${b.name} auf ${islandOf(w, b.room)} ist aus – dort steigt der Nebel.`);
+		if (!f || f.until <= ((await clockOf(n.space).now()) ?? 0)) told.push(`Das ${b.name} auf ${islandOf(w, b.room)} ist aus – dort steigt der Nebel.`);
 	}
 	const order = pick((await n.space.readAll({ type: "Order" })).map((e) => fieldsOf<OrderFields>(e)).filter((o) => !o.takenBy));
 	if (order) told.push(`An der Tafel in ${roomName(w, order.room)}: ${order.text} ${plural(order.reward.count, "Münze", "Münzen")} Lohn.`);

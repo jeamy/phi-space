@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { eventually, Player, startServer } from "./stack.ts";
+import { STEP_MS } from "../client/stepping.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
 
@@ -105,19 +106,20 @@ test("nobody walks into the fire: a step onto the beacon is refused, a walk goes
 	} finally { await srv.close(); }
 });
 
-test("a held arrow key does not queue a long walk: of twenty steps sent at once one is taken, then one per pace", async () => {
+test("a flood of steps does not queue a long walk: of twenty sent at once a few are taken; the page's pace is always taken", async () => {
 	const srv = await startServer();
 	try {
 		const a = await player(srv.url, "Eilige");
 		a.p.send("move 4 13"); // on the grass, the whole row east of it free
 		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === 4, 10_000, "at the start");
 		for (let i = 0; i < 20; i++) a.p.send("step 1 0");
-		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === 5, 10_000, "one step");
-		await new Promise((r) => setTimeout(r, 1_000));
-		assert.equal((await charAt(srv.stack.space, a.me)).x, 5, "and only one");
-		// at the page's pace every step is taken
-		for (let i = 0; i < 3; i++) { a.p.send("step 1 0"); await new Promise((r) => setTimeout(r, 520)); }
-		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === 8, 10_000, "three more at 500 ms");
+		await new Promise((r) => setTimeout(r, 2_000));
+		const x = Number((await charAt(srv.stack.space, a.me)).x);
+		assert.ok(x > 4 && x - 4 <= 3, `the burst, not the flood (${x - 4} steps)`);
+		// at the page's pace (client/stepping.ts) every step is taken
+		await new Promise((r) => setTimeout(r, 600));
+		for (let i = 0; i < 6; i++) { a.p.send("step 1 0"); await new Promise((r) => setTimeout(r, STEP_MS)); }
+		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === x + 6, 10_000, "six more at the page's pace");
 		await a.p.leave();
 	} finally { await srv.close(); }
 });

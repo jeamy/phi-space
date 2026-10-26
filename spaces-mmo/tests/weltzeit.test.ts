@@ -179,20 +179,125 @@ test("a late date: `once` goes on from the date it missed, `coalesce` makes one 
 	} finally { await stack.close(); }
 });
 
-test("with two world workers the evening is made once a day; Ines goes home at 22:00 and is back at 6:00", async () => {
-	// 0.0001: ten thousand world seconds per real second, a world day in 8.6 real seconds
+test("with two world workers the evening is made once; Ines goes home at 22:00 and is back at 6:00", async () => {
 	const stack = await startStack({ worlds: 2, worldEnv: { SPACES_MMO_TIME_SCALE: "0.0001" } });
 	try {
 		const s = stack.space;
+		// set the clock to 19:00 of day 0 at an hour per real second: the evening (20:00) comes in one second, Ines leaves at 22:00
+		// (three seconds on) and is back at 06:00 (eight more); the dates of the world are in absolute world time and wait for it
+		await rewriteClock(s, (c, realNow) => ({ ...c, realAnchorMs: realNow, worldAnchorMs: 19 * WORLD_HOUR_MS, rate: 3600 }));
 		await stack.npcProcess();
 		const here = async () => (await s.count({ type: "Session", fields: { charId: "npc-ines" } })) > 0;
-		await eventually(here, 10_000, "Ines is there in the morning (08:00)");
+		await eventually(here, 15_000, "Ines is there in the evening (19:00)");
+		await eventually(async () => (await s.count({ type: "WorldEvent" })) >= 1, 15_000, "the evening of day 0");
 		await eventually(async () => !(await here()), 20_000, "Ines goes home at 22:00");
-		await eventually(here, 20_000, "Ines is back at 06:00");
-		await eventually(async () => (await s.count({ type: "WorldEvent" })) >= 2, 25_000, "the evening of two days");
+		await eventually(here, 30_000, "Ines is back at 06:00");
 		const ids = (await s.readAll({ type: "WorldEvent" })).map((e) => String(e.fields.eventId));
-		assert.equal(new Set(ids).size, ids.length, `one event per day and epoch, two workers: ${ids.join(", ")}`);
-		assert.ok(ids.every((id) => /^evening:e1:d\d+$/.test(id)));
-		assert.equal(await s.count({ type: "WorldSchedule" }) <= 1, true, "one date for the evening");
+		assert.deepEqual(ids, ["evening:e1:d0"], "one event for the day, two workers");
+		// a date is taken and written back many times a second: one read may catch one of them twice or not at all (the read
+		// is not one snapshot), a duplicate that is real shows in every read
+		const reads: string[][] = [];
+		for (let i = 0; i < 6; i++) { reads.push((await s.readAll({ type: "WorldSchedule" })).map((e) => String(e.fields.scheduleId))); await new Promise((r) => setTimeout(r, 70)); }
+		assert.ok(reads.some((d) => new Set(d).size === d.length), `every date exists once, with two workers: ${reads.map((d) => d.join(",")).join(" | ")}`);
+	} finally { await stack.close(); }
+});
+
+// ---- step 5: fire, fog, tide and flotsam in world time ----
+import { isLit } from "../server/engine/fire.ts";
+import { sweepTick } from "../server/engine/sweep.ts";
+import { readClock, worldNowOf } from "../server/engine/clock.ts";
+import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
+import { loadWorld } from "../server/engine/world.ts";
+import { lightFire } from "./stack.ts";
+
+const rewriteClock = async (space: import("phi-spaces").SpaceLike, change: (c: WorldClockFields, realNow: number) => WorldClockFields) => {
+	const e = (await space.readAll({ type: "WorldClock" }))[0]!;
+	await space.take({ type: "WorldClock", id: e.id }, 2_000);
+	await space.write({ type: "WorldClock", fields: change(e.fields as unknown as WorldClockFields, Date.now()) as never }, null, FOREVER);
+};
+
+test("the sweep takes flotsam whose world time is up and leaves the rest; a thing picked up keeps no date", async () => {
+	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.002" } });
+	const srv = await startServer({ stack });
+	try {
+		const s = stack.space, w = await loadWorld();
+		const now = await worldNowOf(s);
+		const proto = (await resolvePrototype(s, "treibholz"))!;
+		const at = (itemId: string, x: number, expiresWorldMs?: number) => spawn(s, null, w, proto, { itemId, location: "graue-bucht", x, y: 3, flotsam: true, ...(expiresWorldMs !== undefined ? { expiresWorldMs } : {}) });
+		await at("t-past", 1, now - 1); await at("t-soon", 2, now + 10 * WORLD_HOUR_MS); await at("t-kept", 3);
+		await sweepTick(s);
+		const left = (await s.readAll({ type: "Item", fields: { flotsam: true } })).map((e) => String(e.fields.itemId)).filter((id) => id.startsWith("t-")).sort();
+		assert.deepEqual(left, ["t-kept", "t-soon"], "what lapsed is gone; what is still ahead and what never had a date stay");
+		// picked up, the date is gone: a thing in a pack is no flotsam of the tide
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/register", { name: "Sammler", password: "geheim-123" })).status, 200);
+		const hello = await p.play();
+		await s.takeIfExists({ type: "Item", fields: { itemId: "t-soon" } }, 2_000);
+		const me = (await s.readIfExists({ type: "Character", fields: { charId: hello.me.charId } }, 5_000))!.fields as { x: number; y: number };
+		await spawn(s, null, w, proto, { itemId: "t-mine", location: "graue-bucht", x: me.x, y: me.y, flotsam: true, expiresWorldMs: (await worldNowOf(s)) + 10 * WORLD_HOUR_MS });
+		const from = p.frames.length;
+		p.send("get treibholz");
+		await p.until((f) => f.t === "msg" && /hebst Treibholz auf|hebt Treibholz auf|Du hebst/.test(f.m.text), 10_000, from);
+		const mine = (await s.readIfExists({ type: "Item", fields: { itemId: "t-mine" } }, 5_000))!.fields as Record<string, unknown>;
+		assert.equal(mine.location, hello.me.charId);
+		assert.equal(mine.expiresWorldMs, undefined, "picked up: no date any more");
+		await p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});
+
+test("a paused world keeps its fire, takes no fog step and brings no tide; resumed, it goes on", async () => {
+	// 0.005: a log burns 10 world minutes = 3 real seconds, a fog step 0.6 s, the tide every 0.3 s
+	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.005" } });
+	try {
+		const s = stack.space;
+		await lightFire(s, 4_000); // burns for four real seconds
+		await eventually(async () => (await s.count({ type: "Item", fields: { flotsam: true } })) >= 1, 10_000, "the tide has brought something");
+		await rewriteClock(s, (c, realNow) => paused(c, realNow));
+		await new Promise((r) => setTimeout(r, 1_000)); // a tick that was already running ends
+		const flotsam = () => s.count({ type: "Item", fields: { flotsam: true } });
+		const fog = async () => Number((await s.readIfExists({ type: "Fog", fields: { room: "graue-bucht" } }, 1_000))?.fields.level);
+		const before = { flotsam: await flotsam(), fog: await fog() };
+		await new Promise((r) => setTimeout(r, 6_000)); // longer than the fire would burn, many fog steps, many tides
+		const clock = await readClock(s);
+		assert.equal(clock.paused, true);
+		assert.deepEqual({ flotsam: await flotsam(), fog: await fog() }, before, "nothing moved in a world that stands still");
+		const flame = (await s.readIfExists({ type: "Flame", fields: { beaconId: "feuer-bucht" } }, 1_000))!.fields as unknown as { until: number };
+		assert.equal(isLit(flame as never, worldNow(clock)), true, "the fire still burns: its world time has not come");
+		assert.equal(((await s.readIfExists({ type: "Beacon", fields: { beaconId: "feuer-bucht" } }, 1_000))!.fields as { lit: boolean }).lit, true);
+		// resumed, the clock runs and the dates come due again
+		await rewriteClock(s, (c, realNow) => resumed(c, realNow));
+		await eventually(async () => (await flotsam()) !== before.flotsam || (await fog()) !== before.fog, 15_000, "the weather goes on");
+		await eventually(async () => !isLit((await s.readIfExists({ type: "Flame", fields: { beaconId: "feuer-bucht" } }, 1_000))?.fields as never ?? null, worldNow(await readClock(s))), 15_000, "and the fire burns down");
+	} finally { await stack.close(); }
+});
+
+test("the order board and the market keep their times in world time: what lapsed is swept, a listing's item goes back", async () => {
+	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.002" } });
+	try {
+		const s = stack.space, now = await worldNowOf(s);
+		const order = (orderId: string, expiresWorldMs: number) => s.write({ type: "Order", fields: { orderId, kind: "t", text: "t", needs: [], reward: { proto: "muenze", count: 1 }, takenBy: "", room: "graue-bucht", expiresWorldMs } as never }, null, FOREVER);
+		const listing = (listingId: string, expiresWorldMs: number) => s.write({ type: "Listing", fields: { listingId, seller: "c-x", sellerName: "x", itemId: `i-${listingId}`, itemName: "Muschel", price: 1, room: "graue-bucht", at: Date.now(), expiresWorldMs } as never }, null, FOREVER);
+		await order("o-old", now - 1); await order("o-new", now + 10 * WORLD_HOUR_MS);
+		await listing("l-old", now - 1); await listing("l-new", now + 10 * WORLD_HOUR_MS);
+		await sweepTick(s);
+		assert.deepEqual((await s.readAll({ type: "Order" })).map((e) => e.fields.orderId).filter((id) => String(id).startsWith("o-")).sort(), ["o-new"]);
+		assert.deepEqual((await s.readAll({ type: "Listing" })).map((e) => e.fields.listingId).sort(), ["l-new"]);
+		// the world's own board hangs jobs with a world-time date (the tick that brings them is `tick.orders`)
+		await eventually(async () => (await s.readAll({ type: "Order" })).some((e) => typeof e.fields.expiresWorldMs === "number" && !String(e.fields.orderId).startsWith("o-")), 20_000, "a job of the world with its date");
+	} finally { await stack.close(); }
+});
+
+test("a fire dated in real milliseconds (from before the clock) goes out when the world loads; a fire of the right kind stays", async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space, w = await loadWorld();
+		const { loadIntoSpace } = await import("../server/engine/loader.ts");
+		await loadIntoSpace(s, w); // the clock and the beacons
+		const old = w.beacons[0]!.beaconId, fresh = w.beacons[1]!.beaconId;
+		await s.write({ type: "Flame", fields: { beaconId: old, until: Date.now() + 600_000, litAt: Date.now() } as never }, null, 600_000);
+		await lightFire(s, 5_000, fresh);
+		await loadIntoSpace(s, w);
+		assert.equal(await s.count({ type: "Flame", fields: { beaconId: old } }), 0, "the old-style fire is out");
+		assert.equal(await s.count({ type: "Flame", fields: { beaconId: fresh } }), 1, "a fire of the world's time stays");
 	} finally { await stack.close(); }
 });

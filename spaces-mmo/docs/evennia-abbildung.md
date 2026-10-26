@@ -148,14 +148,15 @@ abweicht:
 
 ## Stand Phase 2
 
-- **Scripts/TickerHandler** sind `Ticker{key, due}`-Einträge: Jeder Welt-Worker schaut; wer einen fälligen Ticker nimmt
-  (in einer Transaktion), führt den Job aus und schreibt ihn mit dem nächsten Termin zurück. So läuft jeder Job genau
-  einmal, egal wie viele Worker laufen. Jobs: `fire` (bemerkt erloschene Feuer), `fog` (ein Nebelschritt), `flood`
-  (Strandgut). Ein neuer Ticker ist erst nach seinem Intervall fällig.
-- **OnDemand statt Zählen:** Die Brenndauer wird nicht heruntergezählt. Der `Flame`-Eintrag hat sie als Lease, der
-  Space entfernt ihn zur berechneten Zeit. Nachlegen nimmt den `Beacon`-Eintrag als Sperre, nimmt Brennstoff und alte
-  Flamme und schreibt eine längere (höchstens `fire.maxMs`). Der Fire-Ticker schreibt nur den Zustand `lit` und die
-  Meldung.
+- **Scripts/TickerHandler** sind seit der Weltzeit ([weltzeit.md](weltzeit.md)) `WorldSchedule{scheduleId, dueWorldMs, kind,
+  payload}`-Einträge: Jeder Welt-Worker schaut; wer einen fälligen Termin nimmt (in einer Transaktion), führt den Job aus und
+  schreibt den nächsten Termin in derselben Transaktion. So läuft jeder Job genau einmal, egal wie viele Worker laufen. Jobs
+  (Art `tick`): `fire` (bemerkt erloschene Feuer), `fog` (ein Nebelschritt), `flood` (Strandgut), `storm`, `sweep`, `orders`, `market`.
+  Ein neuer Termin ist erst nach seinem Intervall fällig. (Vorher: `Ticker{key, due}` in Echtzeit.)
+- **OnDemand statt Zählen:** Die Brenndauer wird nicht heruntergezählt. Der `Flame`-Eintrag sagt, bis zu welcher **Weltzeit** er
+  brennt (`until`); die Uhr entscheidet, ob er brennt, und eine angehaltene Welt behält ihr Feuer. Nachlegen nimmt den
+  `Beacon`-Eintrag als Sperre, nimmt Brennstoff und alte Flamme und schreibt eine längere (höchstens `fire.maxMs`). Der
+  Fire-Termin schreibt nur den Zustand `lit` und die Meldung.
 - **Nebel** ist ein `Fog{room, level}`-Eintrag je Raum, den ein Leuchtfeuer abdeckt (`covers`). Ausgänge mit `fogMax`
   sind bei dichterem Nebel zu; der Welt-Worker lehnt den Durchgang ab.
 - **Strandgut** sind Gegenstände mit `flotsam: true` und einer Lease (`flood.lifetimeMs`); wer eins aufhebt, schreibt
@@ -188,7 +189,7 @@ online sind; eine Offline-Figur ist nicht auf der Karte und blockiert niemanden.
   die Wünsche (Name und Anzahl). `accept` nimmt in einer Transaktion beide Seiten und schreibt sie getauscht; fehlt
   etwas, bricht alles ab. Ein Angebot lebt zwei Minuten echte Zeit.
 - **Markt mit Treuhand:** Beim Einstellen geht die Ware an den Ort `market` (mit `listing` und `seller`), das `Listing`
-  hat eine Lease. Kaufen nimmt Listing, Münzen und Ware in einer Transaktion. Ein Ticker (`market`) gibt Ware zurück,
+  hat ein Weltzeit-Ende (`expiresWorldMs`; die Aufräumrunde `sweep` nimmt es). Kaufen nimmt Listing, Münzen und Ware in einer Transaktion. Ein Ticker (`market`) gibt Ware zurück,
   deren Listing es nicht mehr gibt; ein gerade gehaltenes Listing gilt als lebendig.
 - **Auftragstafel (Master–Worker):** Die Welt schreibt `Order`-Einträge (Ticker `orders`), ein Spieler nimmt einen per
   `take` und schreibt ihn mit `takenBy` zurück; Liefern verbraucht die Dinge und erzeugt den Lohn.

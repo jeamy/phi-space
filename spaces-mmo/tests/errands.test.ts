@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { requestOf } from "../server/npc/requests.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 import type { SpaceLike } from "phi-spaces";
 
 test("requests are understood by name, in the ways people say them", () => {
@@ -20,7 +20,7 @@ test("requests are understood by name, in the ways people say them", () => {
 	assert.equal(requestOf("hallo bo", "Ines"), null);
 });
 
-const lit = (s: SpaceLike, ms: number) => s.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + ms, litAt: Date.now() } as never }, null, ms);
+const lit = (s: SpaceLike, ms: number) => lightFire(s, ms);
 const heard = (p: Player, starts: string, ms = 20_000, from = 0) => p.until((f: ServerFrame) => f.t === "msg" && f.m.text.startsWith(starts), ms, from);
 
 test("asked to fetch wood, Ines fetches it, feeds the fire and says so; a sentence she cannot do gets an answer", async () => {

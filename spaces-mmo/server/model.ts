@@ -14,7 +14,7 @@ export type CharacterFields = { charId: string; accountId: string; name: string;
 export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };
 /** A thing: on the ground of a room (`location` = roomId, at x/y) or carried (`location` = charId, x/y = -1). The entry
  *  type is its typeclass, the supertypes include "Item" and "Object". */
-export type ItemFields = { itemId: string; name: string; aliases: string[]; desc: string; location: string; x: number; y: number; glyph: Glyph; locks: string; proto: string; flotsam?: boolean;
+export type ItemFields = { itemId: string; name: string; aliases: string[]; desc: string; location: string; x: number; y: number; glyph: Glyph; locks: string; proto: string; flotsam?: boolean; expiresWorldMs?: number;
 	/** A tool: uses left (it breaks at 0). */ wear?: number;
 	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string };
 /** A way out of a room, on a cell of it; stepping on the cell or `go <name>` leads to `destination`, arriving at `arrive`. */
@@ -26,7 +26,8 @@ export type PrototypeFields = { key: string; parent: string | null; typeclass: s
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
 export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };
-/** A burning fire: its lease is the burn time left, so the space puts it out at the computed moment by itself. */
+/** A fire: it burns while the world time is before `until` (world milliseconds, docs/weltzeit.md); it stays as an entry
+ *  when it has gone out, and the clock decides. `litAt`: since when it burns, in world time. */
 export type FlameFields = { beaconId: string; until: number; litAt: number };
 /** What a character has put into a beacon (its reputation there). */
 export type ContributionFields = { beaconId: string; charId: string; name: string; pieces: number; ms: number };
@@ -50,9 +51,9 @@ export type WorldEventFields = { eventId: string; kind: string; worldMs: number;
 export type OfferFields = { offerId: string; from: string; fromName: string; to: string; toName: string; give: string[]; giveNames: string[]; want: Array<{ name: string; count: number }>; room: string; at: number };
 /** A listing on the market board: the item waits in escrow (location "market") until bought, withdrawn or the lease
  *  ends (then the market ticker gives it back). Prices are counted in coins (prototype `currency` of the world). */
-export type ListingFields = { listingId: string; seller: string; sellerName: string; itemId: string; itemName: string; price: number; room: string; at: number };
+export type ListingFields = { listingId: string; seller: string; sellerName: string; itemId: string; itemName: string; price: number; room: string; at: number; expiresWorldMs?: number };
 /** A job on the order board (master–worker): posted by the world, taken by one player, delivered for a reward. */
-export type OrderFields = { orderId: string; kind: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; takenBy: string; room: string };
+export type OrderFields = { orderId: string; kind: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; takenBy: string; room: string; expiresWorldMs?: number };
 /** A help topic of the world. */
 export type HelpEntryFields = { key: string; category: string; text: string };
 /** Which version of a world's definition the space holds (written by the loader). */

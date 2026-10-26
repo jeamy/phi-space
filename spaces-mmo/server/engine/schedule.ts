@@ -12,13 +12,22 @@ export type ScheduleHandler = {
 	/** Serves one due date, inside its transaction (what it writes commits with the date). */
 	run: (c: ScheduleContext) => Promise<void>;
 	/** The next date strictly after `afterWorldMs`; absent: a date that happens once. */
-	next?: (afterWorldMs: number, s: WorldScheduleFields) => number;
+	next?: (afterWorldMs: number, s: WorldScheduleFields, clock: WorldClockFields) => number;
 };
 
-/** Writes the date unless one with its id exists (inside `txn`: made under the world lock, so two workers cannot both). */
-export async function ensureSchedule(space: SpaceLike, txn: string | null, f: WorldScheduleFields): Promise<boolean> {
+/** Writes the date unless one with its id exists (inside `txn`: made under the world lock, so two workers cannot both).
+ *  `refresh`: an existing date whose kind or payload differs from the definition (a period changed) takes the new ones and keeps
+ *  its due time. True when something was written. */
+export async function ensureSchedule(space: SpaceLike, txn: string | null, f: WorldScheduleFields, o: { refresh?: boolean } = {}): Promise<boolean> {
 	if (f.missed === "replay-bounded") throw new RangeError("missed: replay-bounded is not implemented");
-	if (await space.readIfExists({ type: "WorldSchedule", fields: { scheduleId: f.scheduleId } }, NO_WAIT, txn ? { txn } : {})) return false;
+	const have = await space.readIfExists({ type: "WorldSchedule", fields: { scheduleId: f.scheduleId } }, NO_WAIT, txn ? { txn } : {});
+	if (have) {
+		const h = fieldsOf<WorldScheduleFields>(have);
+		if (!o.refresh || (h.kind === f.kind && JSON.stringify(h.payload) === JSON.stringify(f.payload) && h.missed === f.missed)) return false;
+		if (!(await space.takeIfExists({ type: "WorldSchedule", id: have.id }, NO_WAIT, txn ? { txn } : {}))) return false;
+		await space.write({ type: "WorldSchedule", fields: { ...f, dueWorldMs: h.dueWorldMs, clockEpoch: h.clockEpoch } as never }, txn, FOREVER);
+		return true;
+	}
 	await space.write({ type: "WorldSchedule", fields: f as never }, txn, FOREVER);
 	return true;
 }
@@ -69,7 +78,7 @@ export async function runSchedules(space: SpaceLike, handlers: Record<string, Sc
 			if (handler.next) {
 				// late: `once` goes on from the date it missed, `coalesce` from now (one event for all the periods missed)
 				const after = s.missed === "coalesce" ? Math.max(s.dueWorldMs, worldMs) : s.dueWorldMs;
-				await space.write({ type: "WorldSchedule", fields: { ...s, dueWorldMs: handler.next(after, s) } as never }, txn, FOREVER);
+				await space.write({ type: "WorldSchedule", fields: { ...s, dueWorldMs: handler.next(after, s, clock) } as never }, txn, FOREVER);
 			}
 			await space.commit(txn);
 			next = Math.min(next, 20);

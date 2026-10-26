@@ -5,6 +5,7 @@ import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, type CommandCtx } from "../context.ts";
+import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { cellKey, freeCellNear, holdRoom, occupiedIn, solidIn } from "../occupancy.ts";
 import { findPath, walkable } from "../world.ts";
@@ -76,7 +77,7 @@ async function describeRoom(c: CommandCtx, roomId: string, arriving = false): Pr
 	const fog = await fogOf(c.space, roomId);
 	return [
 		room.name, room.desc,
-		...(await Promise.all(beacons.map(async (b) => `Das ${b.f.name} ${burnText(await flameOf(c.space, b.f.beaconId))}.`))),
+		...(await Promise.all(beacons.map(async (b) => `Das ${b.f.name} ${burnText(await flameOf(c.space, b.f.beaconId), await worldNowOf(c.space, c.txn))}.`))),
 		...(fog ? [["", "Leichter Nebel liegt über allem.", "Dichter Nebel; man sieht kaum zum Wasser.", "Undurchdringlicher Nebel verschluckt die Wege."][Math.min(3, fog)]!] : []),
 		exits.length ? `Ausgänge: ${exits.join(", ")}.` : "Kein Weg führt hinaus.",
 		...(items.length ? [`Hier liegt: ${items.join(", ")}.`] : []),
@@ -94,7 +95,7 @@ const look: Command = {
 		const beacon = byName(await beaconsIn(c, c.actor.room), arg)[0];
 		if (beacon) {
 			const top = (await c.space.readAll({ type: "Contribution", fields: { beaconId: beacon.f.beaconId } })).map((e) => fieldsOf<ContributionFields>(e)).sort((a, b) => b.pieces - a.pieces).slice(0, 3);
-			return msg(c, c.actor.charId, "look", `${beacon.f.name}: Es ${burnText(await flameOf(c.space, beacon.f.beaconId))}.${top.length ? `\nAm meisten nachgelegt: ${top.map((t) => `${t.name} (${t.pieces})`).join(", ")}.` : "\nNoch hat niemand nachgelegt."}`);
+			return msg(c, c.actor.charId, "look", `${beacon.f.name}: Es ${burnText(await flameOf(c.space, beacon.f.beaconId), await worldNowOf(c.space, c.txn))}.${top.length ? `\nAm meisten nachgelegt: ${top.map((t) => `${t.name} (${t.pieces})`).join(", ")}.` : "\nNoch hat niemand nachgelegt."}`);
 		}
 		const exit = byName(await exitsHere(c), arg)[0];
 		if (exit) return msg(c, c.actor.charId, "look", `${exit.f.name}: ${exit.f.desc || "ein Weg"}`);
@@ -199,7 +200,9 @@ const get: Command = {
 		// held by another world worker right now: someone else is faster
 		const e = await c.space.take({ type: "Item", fields: { itemId: item.f.itemId, location: c.actor.room } }, NO_WAIT, { txn: c.txn });
 		if (!e) throw new CommandError("Zu spät – jemand anderes war schneller.");
-		await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...fieldsOf<ItemFields>(e), location: c.actor.charId, x: -1, y: -1 } as never }, c.txn, FOREVER);
+		// picked up, the tide's date no longer applies: what is carried stays
+		const { expiresWorldMs: _tide, ...kept } = fieldsOf<ItemFields>(e);
+		await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...kept, location: c.actor.charId, x: -1, y: -1 } as never }, c.txn, FOREVER);
 		await msg(c, "*", "info", `$you() $conj(hebst|hebt) ${item.f.name} auf.`, { templ: true });
 	},
 };

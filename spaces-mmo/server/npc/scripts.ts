@@ -2,6 +2,7 @@
 // (npc.act waits until each is taken) and sleeps; the npc process calls it again and again. Pauses are game time.
 import { randomInt } from "node:crypto";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
+import { clockOf } from "../engine/clockcache.ts";
 import { burnText, flameOf, fogOf } from "../engine/fire.ts";
 import { llmEnabled } from "../llm.ts";
 import { isAwake, keepAwake, remember, sleep, think, tryWake } from "./minds.ts";
@@ -41,8 +42,8 @@ function waerter(): Script {
 		const beacon = n.world.beacons.find((b) => b.beaconId === n.def.beacon);
 		let fireText: string | undefined;
 		if (beacon) {
-			const f = await flameOf(n.space, beacon.beaconId), now = Date.now();
-			const piece = Math.min(...Object.values(n.world.fire.fuel).map((ms) => gameMs(ms)));
+			const f = await flameOf(n.space, beacon.beaconId), now = (await clockOf(n.space).now()) ?? 0; // world time
+			const piece = Math.min(...Object.values(n.world.fire.fuel)); // a piece of fuel, in world milliseconds
 			const next = !f || f.until <= now ? "out" : f.until - now < piece * 1.5 ? "low" : "ok";
 			if (state !== null && next !== state) events.push(next === "low" ? "fire.low" : next === "out" ? "fire.out" : "fire.ok");
 			state = next;

@@ -8,7 +8,7 @@ import type { SpaceLike } from "phi-spaces";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, lightFire, Player, startServer } from "./stack.ts";
 
 const w = await loadWorld();
 type P = { p: Player; me: string; name: string };
@@ -189,7 +189,7 @@ test("the page's trade view: offers to and from a player, the boards only where 
 	try {
 		const s = srv.stack.space;
 		// a fire for the whole test keeps the fog down and the way east open (game time runs fast here)
-		await s.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + 120_000, litAt: Date.now() } as never }, null, 120_000);
+		await lightFire(s, 120_000);
 		await eventually(async () => Number((await s.readIfExists({ type: "Fog", fields: { room: "graue-bucht" } }, 2_000))?.fields.level) === 0, 15_000, "fog cleared");
 		const a = await player(srv.url, "Sicht"), b = await player(srv.url, "Gegenueber");
 		await give(s, a.me, "muschel", 1);

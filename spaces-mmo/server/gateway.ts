@@ -9,7 +9,7 @@ import type { SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
-import { viewOf, type WorldTimeView } from "./engine/worldtime.ts";
+import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { envMs } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
@@ -56,10 +56,11 @@ export type ClientFrame = { t: "cmd"; line: string };
 const MAX_LINE = 300;
 const RECENT = 40;
 const INTENT_LEASE_MS = 30_000;
-/** One step per client at most this often (the page sends one every 500 ms; a little slack for the network). */
-const STEP_MS = 400;
+/** Against a flood of steps (the page paces them itself, client/stepping.ts): a client may have STEP_BURST steps in
+ *  hand, and gets one back every STEP_REFILL_MS; a step beyond that is dropped. The page's pace always fits. */
+const STEP_BURST = 3, STEP_REFILL_MS = 150;
 
-type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; lastStep?: number;
+type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; steps?: { left: number; at: number };
 	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
 /** At most this often the overview's state goes out after a change (people walk, fires burn down, fog moves). */
 const ATLAS_MS = 1_000;
@@ -94,7 +95,7 @@ export class Gateway {
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
 	readonly #objOf = new Map<string, string>(); // space entry id -> itemId / exitId
 	readonly #recent = new Map<string, MsgFields[]>(); // room -> last messages to everyone there
-	readonly #flames = new Map<string, number>(); // beaconId -> until
+	readonly #flames = new Map<string, number>(); // beaconId -> until, in world time
 	readonly #flameOf = new Map<string, string>(); // flame entry id -> beaconId
 	readonly #fog = new Map<string, number>(); // room -> level
 	#clock: WorldClockFields | null = null; // the world's clock entry (docs/weltzeit.md)
@@ -196,8 +197,14 @@ export class Gateway {
 	}
 
 	async #intent(c: Client, line: string): Promise<void> {
-		// steps faster than STEP_MS are dropped (the page paces them too; this holds for every client)
-		if (/^step\s/.test(line)) { if (Date.now() - (c.lastStep ?? 0) < STEP_MS) return; c.lastStep = Date.now(); }
+		// a flood of steps (a stuck key, a script) is dropped beyond the burst; the page's pace never reaches the limit
+		if (/^step\s/.test(line)) {
+			const now = Date.now(), b = c.steps ?? { left: STEP_BURST, at: now };
+			b.left = Math.min(STEP_BURST, b.left + (now - b.at) / STEP_REFILL_MS); b.at = now;
+			c.steps = b;
+			if (b.left < 1) return;
+			b.left -= 1;
+		}
 		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now() };
 		try { await this.space.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
@@ -256,7 +263,7 @@ export class Gateway {
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
-					if (clock) this.#broadcastTime();
+					if (clock) { this.#broadcastTime(); for (const [id, o] of this.#objs) if (o.kind === "beacon") this.#announceObj(id, o.location); }
 					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 					if (chars.size || fogs.size || [...objs.keys()].some((id) => this.#objs.get(id)?.kind === "beacon")) this.#atlasChanged();
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
@@ -377,8 +384,7 @@ export class Gateway {
 			const n = (people[ch.room] ??= [0, 0]);
 			n[ch.charId.startsWith("npc-") ? 1 : 0]++;
 		}
-		const now = Date.now();
-		const lit = this.w.beacons.filter((b) => (this.#flames.get(b.beaconId) ?? 0) > now).map((b) => b.room);
+		const lit = this.w.beacons.filter((b) => this.#burns(this.#flames.get(b.beaconId) ?? 0)).map((b) => b.room);
 		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people };
 	}
 
@@ -394,7 +400,19 @@ export class Gateway {
 
 	/** A beacon with its fire's end (0: out). */
 	#view(o: ObjView): ObjView {
-		return o.kind === "beacon" ? { ...o, until: this.#flames.get(o.id) ?? 0 } : o;
+		return o.kind === "beacon" ? { ...o, until: this.#realUntil(this.#flames.get(o.id) ?? 0) } : o;
+	}
+
+	/** Does a fire that burns until world time `until` burn now? */
+	#burns(until: number): boolean { return !!this.#clock && until > worldNow(this.#clock, Date.now()); }
+
+	/** The end of a fire for the browser, in its own real time (0: out). The map and the fire's countdown ask the browser's
+	 *  clock; a paused world's fire has no end in sight, so far away. A change of the clock sends the beacons again. */
+	#realUntil(until: number): number {
+		const now = Date.now();
+		if (!this.#clock || !this.#burns(until)) return 0;
+		const wait = msUntilWorld(this.#clock, until, now);
+		return now + (Number.isFinite(wait) ? wait : 10 * 365 * 24 * 3600_000);
 	}
 
 	/** After a batch: the clients that saw the object where it was, or see it where it is now (a room, a pack). */

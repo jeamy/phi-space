@@ -7,10 +7,10 @@ import { sleep as putToSleep, tryWake } from "../server/npc/minds.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 
 const MODEL = { SPACES_MMO_LLM: "1", SPACES_MMO_LLM_MODULE: "tests/fake-llm.ts", SPACES_MMO_TIME_SCALE: "0.002" };
-const fire = (s: SpaceLike, ms: number) => s.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + ms, litAt: Date.now() } as never }, null, ms);
+const fire = (s: SpaceLike, ms: number) => lightFire(s, ms);
 const noFire = async (s: SpaceLike) => { while (await s.takeIfExists({ type: "Flame", fields: { beaconId: "feuer-bucht" } }, 1_000)); };
 async function player(url: string, name: string) {
 	const p = new Player(url);

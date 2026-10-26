@@ -4,7 +4,10 @@
 // for (game) hours without leaving entries behind.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { readClock } from "../server/engine/clock.ts";
+import { isLit } from "../server/engine/fire.ts";
+import { msUntilWorld, worldNow } from "../server/engine/worldtime.ts";
+import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
 
@@ -40,19 +43,21 @@ test("a fire goes out by itself at the computed moment; without it the fog rises
 		await walk(a.p, space, a.me, 5, 7);
 		await does(a.p, "nimm treibholz", "Du hebst Treibholz auf.");
 		await walk(a.p, space, a.me, 9, 9); // next to the beacon in the cobble ring
-		const t0 = Date.now();
+		const clock = await readClock(space);
 		await does(a.p, "lege holz ins feuer", /Du legst Treibholz ins Leuchtfeuer/);
 		const f = (await flame(space))!;
-		assert.ok(f.until >= t0 + 2_500 && f.until <= Date.now() + 3_100, `burns about 3 s, until ${f.until - t0} ms`);
+		const burns = f.until - worldNow(clock);
+		assert.ok(burns > 540_000 && burns <= 600_000, `a log burns ten world minutes (3 s at this rate), ${burns} ms`);
 		// the fire clears the fog; the way opens again
 		await eventually(async () => (await fog(space, "graue-bucht")) <= 2, 10_000, "fog falls");
 		const n = a.p.frames.length;
 		a.p.send("go ost");
 		await a.p.until((fr) => fr.t === "hello" && fr.room.roomId === "klippenpfad", 10_000, n);
-		// it goes out at the computed moment, by itself (the flame's lease), and its rooms hear it
-		await new Promise((r) => setTimeout(r, Math.max(0, f.until - Date.now() - 400)));
-		assert.ok(await flame(space), "still burning shortly before");
-		await eventually(async () => !(await flame(space)), Math.max(0, f.until - Date.now()) + 1_500, "out at the computed moment");
+		// it goes out at the computed moment, by the clock, and its rooms hear it
+		const left = msUntilWorld(clock, f.until, Date.now());
+		await new Promise((r) => setTimeout(r, Math.max(0, left - 400)));
+		assert.ok(isLit(await flame(space) as never, worldNow(clock)), "still burning shortly before");
+		await eventually(async () => !isLit(await flame(space) as never, worldNow(clock)), Math.max(0, msUntilWorld(clock, f.until, Date.now())) + 1_500, "out at the computed moment");
 		await a.p.until((fr) => fr.t === "msg" && fr.m.text.includes("ist erloschen"), 5_000);
 		await eventually(async () => (await fog(space, "klippenpfad")) === 3, 10_000, "fog back to 3");
 		assert.match(await does(a.p, "go west", "zu dicht"), /Weg nach west/);
@@ -112,7 +117,7 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 	try {
 		const space = stack.space;
 		// a fire that burns the whole test keeps the fog down and the ways open
-		await space.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + 120_000, litAt: Date.now() } as never }, null, 120_000);
+		await lightFire(space, 120_000);
 		await eventually(async () => (await fog(space, "graue-bucht")) === 0, 20_000, "fog cleared");
 		const a = await player(srv.url, "Gast");
 		await stack.npcProcess();

@@ -8,10 +8,11 @@ import { stormTick } from "../server/engine/fire.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { eventually, Player, startServer, startStack } from "./stack.ts";
+import { worldNowOf } from "../server/engine/clock.ts";
+import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
-const allFires = async (s: SpaceLike, ms = 120_000) => { for (const b of w.beacons) await s.write({ type: "Flame", fields: { beaconId: b.beaconId, until: Date.now() + ms, litAt: Date.now() } as never }, null, ms); };
+const allFires = async (s: SpaceLike, ms = 120_000) => { for (const b of w.beacons) await lightFire(s, ms, b.beaconId); };
 async function player(url: string, name: string) {
 	const p = new Player(url);
 	assert.equal((await p.post("/api/register", { name, password: "geheim-123" })).status, 200);
@@ -143,7 +144,7 @@ test("Tran burns an hour: put in the fire it keeps it six times as long as a pie
 		await give(s, a.me, "tran");
 		a.p.send("move 9 9"); // next to the fire of the grey bay
 		await eventually(async () => (await s.readIfExists({ type: "Character", fields: { charId: a.me } }, 2_000))?.fields.y === 9, 10_000, "next to the fire");
-		const before = Date.now();
+		const before = await worldNowOf(s); // the fire burns until a world time
 		a.p.send("lege tran ins feuer");
 		await msg(a.p, (t) => t.startsWith("Du legst Tran ins Leuchtfeuer"));
 		const flame = await s.readIfExists({ type: "Flame", fields: { beaconId: "feuer-bucht" } }, 2_000);
