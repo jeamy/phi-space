@@ -15,6 +15,8 @@ const GONE_GRACE_MS = 2500;
 import { MapRenderer, type MapMode } from "./MapRenderer.tsx";
 import { TouchPad } from "./TouchPad.tsx";
 
+/** A thing picked up shows in the pack at once; without word from the server for this long it lies there again. */
+const PICKUP_MS = 3_000;
 type Account = { name: string; guest: boolean; admin: boolean };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 /** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */
@@ -201,7 +203,7 @@ function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
 }
 
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
-function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void }) {
+function Things({ objs, self, room, me, send, pick }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; pick: (o: ObjView) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
 	const carried = all.filter((o) => o.location === me);
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
@@ -217,7 +219,7 @@ function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; se
 	const chosen = kinds.find(([name]) => name === picked);
 	if (!carried.length && !near.length && !fire) return <div />;
 	const row = (o: ObjView, verb: string, label: string) => (
-		<li key={o.id}><Glyph o={o} size={20} /><span>{o.name}</span><button onClick={() => send(`${verb} ${o.name}`)}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
+		<li key={o.id}><Glyph o={o} size={20} /><span>{o.name}</span><button onClick={() => (verb === "get" ? pick(o) : send(`${verb} ${o.name}`))}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
 	);
 	return (
 		<div className="things">
@@ -332,14 +334,14 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 					clearTimeout(goneTimers.get(f.charId));
 					goneTimers.set(f.charId, setTimeout(() => { goneTimers.delete(f.charId); setChars((m) => { if (!m.has(f.charId)) return m; const n = new Map(m); n.delete(f.charId); return n; }); }, GONE_GRACE_MS));
 				}
-				else if (f.t === "obj") setObjs((m) => new Map(m).set(f.o.id, f.o));
+				else if (f.t === "obj") { pickups.current.delete(f.o.id); setObjs((m) => new Map(m).set(f.o.id, f.o)); }
 				else if (f.t === "fog") setFog(f.level);
 				else if (f.t === "time") setWorldTime({ v: f.time, at: Date.now() });
 				else if (f.t === "trade") setTrade(f.trade);
 				else if (f.t === "atlas") setAtlas(f.atlas);
 				else if (f.t === "atlasState") setAtlasState(f.state);
-				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
-				else if (f.t === "msg") append(f.m);
+				else if (f.t === "objgone") { pickups.current.delete(f.id); setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; }); }
+				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); append(f.m); }
 			};
 			s.onclose = () => {
 				setLive(false);
@@ -421,6 +423,22 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		return () => { window.removeEventListener("blur", stop); document.removeEventListener("visibilitychange", stop); stop(); };
 	}, [release]);
 
+	// picking up: the thing goes into the pack at once, as the figure walks ahead of the server (the server takes it after
+	// the steps still on their way); a refusal, or no word from the server within PICKUP_MS, puts it back where it lay
+	const pickups = useRef(new Map<string, { o: ObjView; at: number }>());
+	const pickUp = useCallback((o: ObjView) => {
+		pickups.current.set(o.id, { o, at: Date.now() });
+		setObjs((m) => new Map(m).set(o.id, { ...o, location: meRef.current, x: -1, y: -1 }));
+		send(`get ${o.name}`);
+	}, [send]);
+	const putBack = useCallback((older = 0) => {
+		const back = [...pickups.current.values()].filter((p) => Date.now() - p.at >= older);
+		if (!back.length) return;
+		for (const p of back) pickups.current.delete(p.o.id);
+		setObjs((m) => { const n = new Map(m); for (const p of back) n.set(p.o.id, p.o); return n; });
+	}, []);
+	useEffect(() => { const t = setInterval(() => putBack(PICKUP_MS), 500); return () => clearInterval(t); }, [putBack]);
+
 	/** Space: pick up what lies nearest (the own cell first); with nothing there, feed a fire within reach. */
 	const action = useCallback(() => {
 		const self = chars.get(me);
@@ -428,12 +446,12 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		const d = (o: ObjView) => Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y));
 		const near = [...objs.values()].filter((o) => o.location === hello.room.roomId && d(o) <= 1);
 		const item = near.filter((o) => o.kind === "item").sort((a, b) => d(a) - d(b))[0];
-		if (item) return send(`get ${item.name}`);
+		if (item) return pickUp(item);
 		const fire = near.find((o) => o.kind === "beacon");
 		const fuel = fuelIn(objs, me);
 		if (fire && fuel) return send(`put ${fuel.name} in ${fire.name}`);
 		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
-	}, [chars, me, hello, objs, send, append]);
+	}, [chars, me, hello, objs, send, append, pickUp]);
 
 	// an arrow key in the command line goes back to the map and walks: up and down always, left and right while the line is
 	// empty (with text in it they move the cursor)
@@ -525,7 +543,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 					)}
 					{!panel && (
 						<div className="side-top">
-							<Things objs={objs} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} send={send} />
+							<Things objs={objs} self={chars.get(me)} room={hello?.room.roomId ?? ""} me={me} send={send} pick={pickUp} />
 							{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
 						</div>
 					)}
