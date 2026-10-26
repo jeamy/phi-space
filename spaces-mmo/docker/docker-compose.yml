@@ -160,6 +160,10 @@ services:
       SPACES_MMO_DATA: /data
       # the page may be opened as localhost too (Next's dev server serves its scripts only to known origins)
       SPACES_MMO_DEV_ORIGINS: "localhost"
+      # a developer opens many guests an hour (the default allows five per address)
+      SPACES_MMO_GUESTS_PER_HOUR: "200"
+      # which NPC roles play in the dev container (empty: all of them); SPACES_MMO_DEV_NPCS=ines,bo lightens the load
+      SPACES_MMO_NPCS: "${SPACES_MMO_DEV_NPCS:-}"
       # model calls (they cost tokens): off unless started with SPACES_MMO_LLM=1 in the shell or .env
       SPACES_MMO_LLM: "${SPACES_MMO_LLM:-0}"
     ports:

@@ -93,6 +93,20 @@ Wiederholungsfensters (30 s Zeitgrenze, drei Versuche), die Genau-einmal-Zusiche
 räumt sich nach dem Neustart des Space selbst auf (rund 250 Claims je Sekunde); die Datei `world.sqlite` schrumpft dabei nicht.
 Das Help-System hat denselben Wert (`claimResultMs` 15 Minuten).
 
+Dazu gehört `generationAdmitMs` (Kern-Standard 1 Stunde): Der Space behält den Hash eines Claims, bis seine Generation keine
+neuen Anfragen mehr annimmt. Mit nur zehn Minuten gehaltener Ergebnisse säßen tausende abgelaufene, aber noch gehaltene
+Claims im Space, und der Sweep jedes Commits läse sie wieder (gemessen: 53 % der CPU des Space-Prozesses in der
+Datenbankabfrage `due`). Beide Werte sind deshalb gleich; das Help-System setzt sie ebenfalls gleich.
+
+## Last des Space-Prozesses
+
+Jeder Aufruf (auch ein Lesen) ist eine Transaktion mit Claim; der Space-Prozess ist ein einzelner Thread. Die meisten Aufrufe
+machen die NPC-Skripte (jede Runde mehrere Lesezugriffe): mit allen NPCs sind es rund 30 Aufrufe je Sekunde, und die
+Antwort auf einen Schritt kann dann Sekunden dauern. Deshalb: Händler und Arbeiter schauen alle 8 s (statt 5 s), ein
+Wanderer in Abwesenheit alle 10 s, und das Warten auf einen Befehl (`act`) fragt mit wachsendem Abstand (50, 100, 200,
+250 ms) statt alle 50 ms. Ines und wache Wanderer bleiben bei 3 s, weil Spieler auf sie warten. Im Dev-Container lassen sich
+NPCs auswählen: `SPACES_MMO_DEV_NPCS=ines,bo npm --prefix spaces-mmo run docker:dev:up`.
+
 ## Nicht enthalten
 
 - Kein Backup-Skript wie `docker:backup` im Chat; der Speicher liegt im Volume, die Sicherung des Verzeichnisses

@@ -32,7 +32,9 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	// new requests: "the generation exceeds maxClaimBytes"). A repeat of a call comes within its retry window (a call times
 	// out after 30 s, three attempts), so ten minutes keep exactly-once where it matters.
 	const claimResultMs = Number(process.env.SPACES_MMO_CLAIM_RESULT_MS) > 0 ? Number(process.env.SPACES_MMO_CLAIM_RESULT_MS) : 10 * 60_000;
-	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, claimResultMs, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
+	// The space keeps a claim's hash until its generation stops admitting new request ids (default 1 hour): with results kept
+	// only ten minutes, thousands of claims would sit expired but kept, and every commit's sweep would read them again.
+	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, claimResultMs, generationAdmitMs: claimResultMs, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
 	return { local, async close() { await server.close(); await stopService(); await harness.close(ctx); } };
 }
 
