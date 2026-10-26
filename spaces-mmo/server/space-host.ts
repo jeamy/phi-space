@@ -27,7 +27,12 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity }), { listen: parseTarget(listen), connection: () => ({ peerId: peer }) });
 	const local = new PhiSpaces(harness, ctx);
 	// every process connects as the same peer: the per-owner caps cover all of them together
-	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
+	// Every call of every process leaves a request claim whose result is kept for `claimResultMs`; the processes poll several
+	// times a second, so at the default of 24 hours the claims alone fill maxClaimBytes within a day (the space then refuses
+	// new requests: "the generation exceeds maxClaimBytes"). A repeat of a call comes within its retry window (a call times
+	// out after 30 s, three attempts), so ten minutes keep exactly-once where it matters.
+	const claimResultMs = Number(process.env.SPACES_MMO_CLAIM_RESULT_MS) > 0 ? Number(process.env.SPACES_MMO_CLAIM_RESULT_MS) : 10 * 60_000;
+	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, claimResultMs, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
 	return { local, async close() { await server.close(); await stopService(); await harness.close(ctx); } };
 }
 

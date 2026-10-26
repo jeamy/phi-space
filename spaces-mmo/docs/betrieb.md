@@ -83,6 +83,16 @@ Die `.env` (Vorlage `spaces-mmo/.env.example`) wird allen Containern als `env_fi
 überschreibt sie für Adressen und Ports. Das erste Admin-Konto entsteht mit `SPACES_MMO_SETUP_TOKEN` (einmalig, danach
 entfernen). Die Image-Datei enthält keine `.env` (`.dockerignore`).
 
+## Wenn „the generation exceeds maxClaimBytes“ erscheint
+
+Jeder Aufruf jedes Prozesses hinterlässt einen Request-Claim, dessen Ergebnis der Space `claimResultMs` lang behält
+(Standard des Kerns: 24 Stunden). Die Prozesse fragen mehrmals je Sekunde; nach etwa einem Tag ist `maxClaimBytes` voll, und
+der Space lehnt neue Anfragen ab (Web und Modellprozess melden den Fehler, die Welt steht). `server/space-host.ts` setzt
+deshalb `claimResultMs` auf **10 Minuten** (`SPACES_MMO_CLAIM_RESULT_MS`); ein wiederholter Aufruf kommt innerhalb seines
+Wiederholungsfensters (30 s Zeitgrenze, drei Versuche), die Genau-einmal-Zusicherung bleibt. Ein schon volles Volume
+räumt sich nach dem Neustart des Space selbst auf (rund 250 Claims je Sekunde); die Datei `world.sqlite` schrumpft dabei nicht.
+Das Help-System hat denselben Wert (`claimResultMs` 15 Minuten).
+
 ## Nicht enthalten
 
 - Kein Backup-Skript wie `docker:backup` im Chat; der Speicher liegt im Volume, die Sicherung des Verzeichnisses
