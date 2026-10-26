@@ -11,7 +11,10 @@
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { ClockCache } from "./engine/clockcache.ts";
+import { gameMs } from "./engine/time.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
+import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
@@ -30,6 +33,20 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const runs: Promise<void>[] = [];
 	const starting: Promise<void>[] = [];
 	const owner = `npc-proc-${randomBytes(4).toString("hex")}`;
+	const clock = new ClockCache(space, w.id);
+	/** The role's plan in world hours (docs/weltzeit.md): where the plan says away, the figure leaves (with a word) and its
+	 *  script does not run; where it says present, it comes back. Read from the clock every round, so a restart or a role taken
+	 *  over starts from what the hour says. False: the role is away now. */
+	const atPlan = async (npc: Npc): Promise<boolean> => {
+		const plan = npc.def.plan;
+		if (!plan || npc.def.wanderer) return true;
+		const at = await clock.now();
+		if (at === null) return true; // no clock yet: no plan to follow
+		const want = presentAt(plan, at);
+		if (want && !npc.isOnline()) await npc.setOnline(true);
+		else if (!want && npc.isOnline()) { await npc.act("emote geht nach Hause."); await npc.setOnline(false); }
+		return want;
+	};
 	const only = (process.env.SPACES_MMO_NPCS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 	for (const def of w.npcs) {
 		if (only.length && !only.includes(def.npcId)) continue;
@@ -80,7 +97,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				beat.unref?.();
 				try {
 					while (!halt.signal.aborted && !lost) {
-						try { await script(npc); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
+						try { if (await atPlan(npc)) await script(npc); else await sleep(gameMs(5_000, 200)); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
 					}
 				} finally {
 					clearInterval(beat);

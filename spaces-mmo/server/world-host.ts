@@ -18,7 +18,9 @@ import { msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
 import { fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
+import { ClockGuard, runSchedules } from "./engine/schedule.ts";
 import { runDue, type Job } from "./engine/ticker.ts";
+import { SCHEDULE_HANDLERS } from "./engine/worldevents.ts";
 import { gameMs } from "./engine/time.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
@@ -128,6 +130,17 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 		}
 	})();
 
+	// the world's dates (engine/schedule.ts): whichever worker takes a due one serves it, once
+	const guard = new ClockGuard({ toleranceMs: envMs("SPACES_MMO_CLOCK_TOLERANCE_MS", 5 * 60_000) });
+	const scheduling = (async () => {
+		while (!halt.signal.aborted) {
+			let wait = 1000;
+			try { wait = await runSchedules(space, SCHEDULE_HANDLERS, { txnMs: TXN_MS, maxWaitMs: 1000, guard }); }
+			catch (e) { if (!halt.signal.aborted) console.error("[world] schedules:", (e as Error).message); }
+			await new Promise<void>((r) => { const t = setTimeout(r, wait); halt.signal.addEventListener("abort", () => { clearTimeout(t); r(); }, { once: true }); });
+		}
+	})();
+
 	/** Characters of guest accounts that lapsed are removed. An account held by a transaction (a registration in
 	 *  progress) is skipped this round. */
 	const cleanup = async () => {
@@ -146,7 +159,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); await loop; await ticking; conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); await loop; await ticking; await scheduling; conn.close(); },
 	};
 }
 

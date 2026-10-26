@@ -6,8 +6,10 @@
 // has are taken out.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { timeScale } from "./time.ts";
-import { DEFAULT_START_HOUR, initialClock } from "./worldtime.ts";
-import { actorToken, fieldsOf, roomToken, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type WorldLoadedFields } from "../model.ts";
+import { ensureSchedule } from "./schedule.ts";
+import { worldSchedules } from "./worldevents.ts";
+import { DEFAULT_START_HOUR, initialClock, worldNow } from "./worldtime.ts";
+import { actorToken, fieldsOf, roomToken, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
 import { ensureTickers } from "./ticker.ts";
 import { readExisting, StillHeld } from "../space.ts";
 import { resolveFrom, spawn } from "./prototypes.ts";
@@ -119,7 +121,10 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			await space.write({ type: "WorldLoaded", fields: { worldId: w.id, version: w.version, at: Date.now() } satisfies WorldLoadedFields as never }, txn, FOREVER);
 		}
 		// the world's clock: made once, with the world (a reload and a restart keep it, so the world goes on where it was)
-		if (!(await space.readIfExists({ type: "WorldClock", fields: { worldId: w.id } }, NO_WAIT, { txn }))) await space.write({ type: "WorldClock", fields: initialClock(w.id, w.startHour ?? DEFAULT_START_HOUR, Date.now(), timeScale()) as never }, txn, FOREVER);
+		let clock = (await space.readIfExists({ type: "WorldClock", fields: { worldId: w.id } }, NO_WAIT, { txn }))?.fields as unknown as WorldClockFields | undefined;
+		if (!clock) { clock = initialClock(w.id, w.startHour ?? DEFAULT_START_HOUR, Date.now(), timeScale()); await space.write({ type: "WorldClock", fields: clock as never }, txn, FOREVER); }
+		// and its dates in world time (the evening); a date that exists is left to its schedule
+		for (const f of worldSchedules(w, clock.epoch, worldNow(clock, Date.now()))) await ensureSchedule(space, txn, f);
 		await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
 		await space.commit(txn);
 		return { loaded: replace, version: w.version, spawned };

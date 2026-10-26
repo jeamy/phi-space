@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { calendar, CLOCK_VERSION, formatWorldTime, initialClock, MAX_RATE, MIN_RATE, paused, presentAt, resumed, shownWorldMs, viewOf, withRate, WORLD_DAY_MS, WORLD_HOUR_MS, worldNow } from "../server/engine/worldtime.ts";
 import type { WorldClockFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
-import { Player, startServer, startStack } from "./stack.ts";
+import { eventually, Player, startServer, startStack } from "./stack.ts";
 
 const clock = (over: Partial<WorldClockFields> = {}): WorldClockFields => ({ worldId: "w", epoch: 1, realAnchorMs: 1_000_000, worldAnchorMs: 8 * WORLD_HOUR_MS, rate: 60, paused: false, version: CLOCK_VERSION, ...over });
 
@@ -105,4 +105,94 @@ test("the game: the clock is made with the world, shown in the hello and by `tim
 		await admin.until((f) => f.t === "time" && !f.time.paused);
 		await admin.leave(); await bert.leave();
 	} finally { await srv.close(); await stack.close(); }
+});
+
+// ---- step 3: the dates of the world (engine/schedule.ts), the evening, and the NPC plans ----
+import { runSchedules, ClockGuard, ensureSchedule } from "../server/engine/schedule.ts";
+import { SCHEDULE_HANDLERS } from "../server/engine/worldevents.ts";
+import { msUntilWorld, nextAtHour } from "../server/engine/worldtime.ts";
+
+import type { WorldEventFields, WorldScheduleFields } from "../server/model.ts";
+import { FOREVER } from "phi-spaces";
+
+test("the next date at an hour of the day is strictly after the moment, and a wait is real time at the clock's rate", () => {
+	const day = (d: number, h: number) => d * WORLD_DAY_MS + h * WORLD_HOUR_MS;
+	assert.equal(nextAtHour(day(3, 8), 20), day(3, 20));
+	assert.equal(nextAtHour(day(3, 20), 20), day(4, 20), "at the hour itself: the next day");
+	assert.equal(nextAtHour(day(3, 23.99), 20), day(4, 20));
+	assert.equal(nextAtHour(day(3, 0), 0), day(4, 0));
+	const c = clock({ rate: 60, realAnchorMs: 0, worldAnchorMs: 0 });
+	assert.equal(msUntilWorld(c, 600_000, 0), 10_000, "ten world minutes at rate 60: ten real seconds");
+	assert.equal(msUntilWorld(c, 600_000, 20_000), 0, "already due");
+	assert.equal(msUntilWorld({ ...c, paused: true }, 600_000, 0), Infinity, "a paused clock never gets there");
+});
+
+test("a host clock that jumps back or far ahead stops new events for a while and says so; events served stay served", () => {
+	const g = new ClockGuard({ toleranceMs: 60_000, holdMs: 5_000 });
+	const err = console.error; const said: string[] = []; console.error = (...a: unknown[]) => { said.push(a.join(" ")); };
+	try {
+		assert.equal(g.ok(1_000_000), true);
+		assert.equal(g.ok(1_001_000), true, "a normal second");
+		assert.equal(g.ok(900_000), false, "back by 100 s: stop");
+		assert.equal(g.ok(902_000), false, "still held");
+		assert.equal(g.ok(906_000), true, "trusted again from the new reading");
+		assert.equal(g.ok(1_000_000), false, "ahead by 94 s (tolerance 60 s): stop");
+		assert.equal(g.alarms.length, 2);
+		assert.ok(said.every((l) => /clock alarm/.test(l)) && said.length === 2, "an alarm each time");
+	} finally { console.error = err; }
+});
+
+test("a late date: `once` goes on from the date it missed, `coalesce` makes one event and goes on from now; a paused clock serves nothing", async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space, day = (d: number, h: number) => d * WORLD_DAY_MS + h * WORLD_HOUR_MS;
+		const real0 = 1_000_000_000_000;
+		// the world is at day 5, 10:00 (the clock was made at real0, 8:00 of day 0, rate 1: 5 days + 2 hours later)
+		const at = real0 + 5 * WORLD_DAY_MS + 2 * WORLD_HOUR_MS;
+		await s.write({ type: "WorldClock", fields: { worldId: "t", epoch: 1, realAnchorMs: real0, worldAnchorMs: day(0, 8), rate: 1, paused: false, version: 1 } as never }, null, FOREVER);
+		const sched = (scheduleId: string, missed: WorldScheduleFields["missed"]) => ({ scheduleId, clockEpoch: 1, dueWorldMs: day(3, 20), kind: "evening", payload: { hour: 20 }, missed });
+		const events = async () => (await s.readAll({ type: "WorldEvent" })).map((e) => (e.fields as unknown as WorldEventFields).eventId).sort();
+		const due = async (id: string) => ((await s.readIfExists({ type: "WorldSchedule", fields: { scheduleId: id } }, 1_000))!.fields as unknown as WorldScheduleFields).dueWorldMs;
+		const run = () => runSchedules(s, SCHEDULE_HANDLERS, { txnMs: 5_000, maxWaitMs: 1000, now: () => at });
+		assert.equal(await ensureSchedule(s, null, sched("coalesce", "coalesce")), true);
+		assert.equal(await ensureSchedule(s, null, sched("coalesce", "coalesce")), false, "one entry per id");
+		await run();
+		assert.deepEqual(await events(), ["evening:e1:d3"], "one event for the day that was due");
+		assert.equal(await due("coalesce"), day(5, 20), "and the next date is the one still ahead (today's evening), not the days between");
+		await run();
+		assert.deepEqual(await events(), ["evening:e1:d3"], "nothing more: the next is not due yet");
+		// `once`: from the missed date on, one day at a time
+		await s.takeIfExists({ type: "WorldSchedule", fields: { scheduleId: "coalesce" } }, 1_000);
+		await ensureSchedule(s, null, sched("once", "once"));
+		await run();
+		assert.equal(await due("once"), day(4, 20), "the next date after the one it missed");
+		await run();
+		assert.equal(await due("once"), day(5, 20));
+		assert.deepEqual(await events(), ["evening:e1:d3", "evening:e1:d4"], "a deterministic key: day 3 is not made twice");
+		// a paused clock: its time stands, so nothing in the future comes due
+		const clockEntry = (await s.readAll({ type: "WorldClock" }))[0]!;
+		await s.take({ type: "WorldClock", id: clockEntry.id }, 1_000);
+		await s.write({ type: "WorldClock", fields: { worldId: "t", epoch: 1, realAnchorMs: real0, worldAnchorMs: day(5, 10), rate: 1, paused: true, version: 1 } as never }, null, FOREVER);
+		await run();
+		assert.equal(await due("once"), day(5, 20), "paused at 10:00 of day 5: the evening stays ahead");
+		assert.equal((await events()).length, 2);
+	} finally { await stack.close(); }
+});
+
+test("with two world workers the evening is made once a day; Ines goes home at 22:00 and is back at 6:00", async () => {
+	// 0.0001: ten thousand world seconds per real second, a world day in 8.6 real seconds
+	const stack = await startStack({ worlds: 2, worldEnv: { SPACES_MMO_TIME_SCALE: "0.0001" } });
+	try {
+		const s = stack.space;
+		await stack.npcProcess();
+		const here = async () => (await s.count({ type: "Session", fields: { charId: "npc-ines" } })) > 0;
+		await eventually(here, 10_000, "Ines is there in the morning (08:00)");
+		await eventually(async () => !(await here()), 20_000, "Ines goes home at 22:00");
+		await eventually(here, 20_000, "Ines is back at 06:00");
+		await eventually(async () => (await s.count({ type: "WorldEvent" })) >= 2, 25_000, "the evening of two days");
+		const ids = (await s.readAll({ type: "WorldEvent" })).map((e) => String(e.fields.eventId));
+		assert.equal(new Set(ids).size, ids.length, `one event per day and epoch, two workers: ${ids.join(", ")}`);
+		assert.ok(ids.every((id) => /^evening:e1:d\d+$/.test(id)));
+		assert.equal(await s.count({ type: "WorldSchedule" }) <= 1, true, "one date for the evening");
+	} finally { await stack.close(); }
 });

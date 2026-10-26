@@ -31,7 +31,7 @@ export const self = async (n: Npc) => { const e = await n.space.readIfExists({ t
 function waerter(): Script {
 	let state: "ok" | "low" | "out" | null = null;
 	let lastDoze = Date.now(), pensive = false, budgetSaid = false;
-	const heardSince = newHeard();
+	const heardSince = newHeard(), worldEvents = newWorldEvents();
 	let present: Set<string> | null = null, offered: Set<string> | null = null;
 	const greeted = new Map<string, number>();
 	return async (n) => {
@@ -57,6 +57,7 @@ function waerter(): Script {
 		present = new Set(people);
 		const offers = (await n.space.readAll({ type: "Offer", fields: { to: me.charId } })).map((e) => e.id);
 		if (offered && offers.some((id) => !offered!.has(id))) events.push("offer");
+		for (const kind of await worldEvents(n)) events.push(kind); // dates of the world clock: the evening
 		offered = new Set(offers);
 		const m = n.def.model;
 		if (m && llmEnabled()) {
@@ -84,6 +85,7 @@ function waerter(): Script {
 		if (events.includes("fire.low")) await n.act("say Das Feuer wird schwach – bringt Treibholz!");
 		else if (events.includes("fire.out")) await n.act("say Das Feuer ist aus! Ohne Licht frisst uns der Nebel.");
 		else if (events.includes("fire.ok")) await n.act("say Danke! So brennt es wieder.");
+		else if (events.includes("evening") && people.length) await n.act("say Der Abend kommt: wer kann, bringe Holz für die Nacht.");
 		for (const x of fromPeople) {
 			// asked for something by name: do it (or say why not), before any greeting
 			const ask = requestOf(x.text, me.name);
@@ -148,6 +150,18 @@ async function speak(n: Npc, name: string, event: string, heard: string[]): Prom
 		if (typeof r === "object") { for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
 	}
 	await n.act(event === "spoken" ? "say Licht … wo brennt das nächste Licht?" : "say Wo geht es hier aus dem Nebel?");
+}
+
+/** The kinds of the world events (engine/worldevents.ts) that appeared since the last call, each once; what was there when
+ *  the role started is not new. */
+export function newWorldEvents() {
+	let known: Set<string> | null = null;
+	return async (n: Npc): Promise<string[]> => {
+		const all = await n.space.readAll({ type: "WorldEvent" });
+		const fresh = known ? all.filter((e) => !known!.has(String(e.fields.eventId))) : [];
+		known = new Set(all.map((e) => String(e.fields.eventId)));
+		return fresh.map((e) => String(e.fields.kind));
+	};
 }
 
 /** Said by a person, not by an NPC. */

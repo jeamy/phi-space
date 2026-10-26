@@ -25,6 +25,8 @@ export type WorldDef = {
 	version: number;
 	/** The hour of day 0 a new world's clock starts at (default 8; docs/weltzeit.md). */
 	startHour?: number;
+	/** A daily `evening` event at this world hour (docs/weltzeit.md): the schedule is made with the world. */
+	evening?: { hour: number };
 	/** Typeclasses below the engine's (name → parent). */
 	typeclasses: Record<string, string | null>;
 	prototypes: PrototypeFields[];
@@ -60,6 +62,8 @@ export type WorldDef = {
 };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
+	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */
+	plan?: { presentFromHour: number; presentUntilHour: number };
 	/** A model role (docs/modell-npcs.md): who it is, which events wake it, its model calls per day. Without model calls
 	 *  (SPACES_MMO_LLM unset) or with its budget used up it dozes and speaks script lines. */
 	model?: { persona: string; wake: string[]; budgetDay: number; dozing: string[] };

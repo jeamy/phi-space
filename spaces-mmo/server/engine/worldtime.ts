@@ -70,3 +70,16 @@ export function presentAt(plan: Plan, worldMs: number): boolean {
 	if (from === until) return true;
 	return from < until ? h >= from && h < until : h >= from || h < until;
 }
+
+/** The first world time strictly after `afterMs` at which the clock shows `hour` o'clock (a daily date). */
+export function nextAtHour(afterMs: number, hour: number): number {
+	const day = Math.floor(afterMs / WORLD_DAY_MS);
+	for (const d of [day, day + 1]) { const at = d * WORLD_DAY_MS + hour * WORLD_HOUR_MS; if (at > afterMs) return at; }
+	return (day + 2) * WORLD_DAY_MS + hour * WORLD_HOUR_MS;
+}
+
+/** Real milliseconds until the world time reaches `dueWorldMs` (0 when it has; Infinity while the clock is paused). */
+export function msUntilWorld(clock: Pick<WorldClockFields, "paused" | "worldAnchorMs" | "realAnchorMs" | "rate">, dueWorldMs: number, realNow: number): number {
+	const left = dueWorldMs - worldNow(clock, realNow);
+	return left <= 0 ? 0 : clock.paused ? Infinity : Math.ceil(left / clock.rate);
+}

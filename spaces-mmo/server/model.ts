@@ -37,6 +37,14 @@ export type TickerFields = { key: string; due: number };
 /** The world's clock (docs/weltzeit.md), one entry per world: the world time is `worldAnchorMs + (now - realAnchorMs) * rate`
  *  (unless `paused`). A change takes the entry and writes it again with both anchors moved to the moment of the change. */
 export type WorldClockFields = { worldId: string; epoch: number; realAnchorMs: number; worldAnchorMs: number; rate: number; paused: boolean; version: number };
+/** A date in world time (docs/weltzeit.md): fires once when the world time reaches `dueWorldMs`. `kind` names the handler
+ *  (server/engine/worldevents.ts); `scheduleId` is the deterministic key (one entry per id). `missed`: what a late one does
+ *  (the clock was behind: a restart, a pause): `once` runs it, `coalesce` runs it once and goes on from now; a later
+ *  `replay-bounded` is not implemented. */
+export type WorldScheduleFields = { scheduleId: string; clockEpoch: number; dueWorldMs: number; kind: string; payload: Record<string, unknown>; missed: "once" | "coalesce" | "replay-bounded" };
+/** What a schedule leaves for the processes that watch the world: one entry per `eventId` (`evening:e1:d183`), so a day's
+ *  event exists once however many workers run the schedule. It lapses (real time) after a few minutes. */
+export type WorldEventFields = { eventId: string; kind: string; worldMs: number; epoch: number; day: number };
 /** A direct trade: `from` offers the items `give` (still in its pack until accepted) to `to`, for `want` (names and
  *  counts, taken from `to`'s pack on accept). Accepting moves all of it in one transaction or nothing. */
 export type OfferFields = { offerId: string; from: string; fromName: string; to: string; toName: string; give: string[]; giveNames: string[]; want: Array<{ name: string; count: number }>; room: string; at: number };

@@ -2,7 +2,7 @@
 
 ## Status
 
-**Schritte 1 und 2 der [Migration](#migration) sind implementiert** (2026-10-26); die übrigen Schritte sind Entwurf. Heute
+**Schritte 1 bis 3 der [Migration](#migration) sind implementiert** (2026-10-26); die übrigen Schritte sind Entwurf. Heute
 laufen Feuer, Nebel, Flut und NPC-Pausen weiter über `SPACES_MMO_TIME_SCALE` und `Date.now()` des Servers
 (`engine/time.ts`, `engine/ticker.ts`); die Uhr läuft daneben und zeigt die Weltzeit, bestimmt aber noch keinen fachlichen Termin.
 
@@ -12,11 +12,25 @@ laufen Feuer, Nebel, Flut und NPC-Pausen weiter über `SPACES_MMO_TIME_SCALE` un
 | Uhr beim Anlegen der Welt (eine je Welt, ein Neustart behält sie) | fertig | `engine/loader.ts` unter dem Welt-Lock |
 | Anzeige: `worldTime` im `hello`, Frame `time` bei Änderung und alle 30 s, Kopfzeile des Clients | fertig | `gateway.ts`, `client/App.tsx` |
 | Befehle `time`/`zeit` (alle), `clock`/`uhr` (Admin: Stand, `pause`, `weiter`, `rate <n>`) | fertig | `engine/commands/clock.ts` |
-| NPC-Pläne und `evening` auf `WorldSchedule` (Schritt 3) | offen | |
+| `WorldSchedule`, Scheduler (`once`, `coalesce`; `replay-bounded` wird abgelehnt), Fail-closed-Wächter für die Hostzeit | fertig | `engine/schedule.ts`, `world-host.ts` |
+| `evening`: ein Termin je Welt (`WorldDef.evening`), ein `WorldEvent` je Welttag und Epoche (`evening:e1:d183`) | fertig | `engine/worldevents.ts`, `engine/loader.ts` |
+| NPC-Pläne (`NpcDef.plan`, auch über Mitternacht; Ines 6–22 Uhr) | fertig, anders als im Entwurf (siehe unten) | `npc-host.ts`, `engine/clockcache.ts` |
 | Narrative Tagesbudgets (Schritt 4) | offen | |
 | Feuer, Nebel, Flut, Gegenstandsfristen auf Weltfristen (Schritt 5) | offen | |
-| Scheduler mit Fail-closed-Prüfung der Hostzeit, `WorldClockOwner` (Abschnitt „Serverzeit“) | offen | |
+| `WorldClockOwner`-Lease und gespeicherter Diagnosezustand der Hostzeit (Abschnitt „Serverzeit“) | offen (jeder Welt-Worker plant; der Schutz gegen Doppelverarbeitung ist die Transaktion am Termin) | |
 | `SPACES_MMO_TIME_SCALE` nur noch Anfangswert (Schritt 6) | offen | |
+
+**Abweichung beim NPC-Plan:** Der Entwurf lässt den NPC-Prozess aus den Planrändern Termine erzeugen. Umgesetzt ist stattdessen
+ein Abgleich vor jeder Runde der Rolle: Die Figur ist da, wenn `presentAt(plan, Weltzeit)` es sagt, sonst geht sie (mit
+„geht nach Hause.“) und ihr Skript läuft nicht. Die Weltzeit kommt aus einem Zwischenspeicher der Uhr (alle 15 s gelesen,
+dazwischen gerechnet). Das deckt Neustart und Übernahme der Rolle von selbst ab und braucht keinen Termin, weil das Ein- und
+Ausblenden vom Prozess der Rolle abhängt (ihre Session hält nur er); Termine bleiben für Ereignisse, die ein Welt-Worker
+auslöst. Der Plan gilt nicht für Wanderer.
+
+**Nachholen:** `once` setzt den nächsten Termin vom verpassten aus, `coalesce` von jetzt aus (ein Ereignis für alle verpassten
+Tage). Der Wächter (`ClockGuard`, Toleranz `SPACES_MMO_CLOCK_TOLERANCE_MS`, Standard 5 Minuten) stoppt bei einer Hostzeit, die
+zurückspringt oder zu weit vorspringt, für zehn Sekunden alle neuen Weltzeit-Ereignisse und meldet das im Log
+(`clock alarm`); bereits ausgelöste Ereignisse bleiben.
 
 Tests: `tests/weltzeit.test.ts` (Berechnung, Pause und Rate ohne Sprung, Kalender, Pläne 6–22 und 20–2 an allen vier Grenzen,
 Browser-Interpolation, die Uhr im Spiel mit Admin-Befehlen). Der Implementierungsstand in

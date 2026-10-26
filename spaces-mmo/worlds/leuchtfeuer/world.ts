@@ -151,6 +151,7 @@ const plazaOf = (roomId: string) => byId.get(roomId)!.plaza!;
 const NPCS: NpcDef[] = [
 	{
 		npcId: "ines", name: "Ines", skin: 4, room: "graue-bucht", x: 10, y: 9, script: "waerter", beacon: "feuer-bucht",
+		plan: { presentFromHour: 6, presentUntilHour: 22 }, // she goes home for the night (docs/weltzeit.md)
 		model: {
 			persona: "Ines hütet seit Jahren das Leuchtfeuer der Grauen Bucht. Sie ist ruhig, praktisch und ein wenig spöttisch, kennt jede Boje und jeden Stammgast und sorgt sich um das Licht. Sie bittet um Treibholz, wenn das Feuer schwach wird, und erklärt Neuen kurz, wie man es nährt. Sie weiß, dass man in Kupferhafen am besten handelt und dass auf Nebelholm niemand das Feuer hütet. Das Feuer brennt mit Treibholz (zehn Minuten je Stück), Holzbündeln (vierzig Minuten; Jorin im Fischerdorf macht sie aus drei Treibholz) oder Tran (eine Stunde; Marta verkauft ihn auf dem Markt von Kupferhafen, und manchmal spült ein Sturm ein Fass an). Kohle oder Torf gibt es im Archipel nicht, und das sagt sie auch so, statt etwas zu erfinden.",
 			wake: ["fire.low", "fire.out", "spoken", "person.enters", "offer"], budgetDay: 40,
@@ -218,6 +219,8 @@ export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
 	version: 9,
+	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
+	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
 	tiles: {
 		// water against sand: the autotile blocks 3..5 of the first row are the three frames of its waves
