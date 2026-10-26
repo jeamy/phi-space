@@ -37,7 +37,7 @@ Unterschied.
   Graue Bucht und der Klippenpfad bleiben Zelle für Zelle wie zuvor; sie bekommen nur neue Ausgänge.
 - **Ausgänge**: Räume einer Insel, die auf der Übersicht nebeneinander liegen, sind über `nord`/`ost`/`süd`/`west`
   verbunden (Tür in der Mitte der Seite). **Fähren** verbinden die Inseln (Ausgang am Steg, benannt nach der
-  Zielinsel, z. B. `kupferhafen`; wo nur eine abgeht, auch `fähre`). Alle Wege schließt Nebel der Stufe 3.
+  Zielinsel, z. B. `kupferhafen`; wo nur eine abgeht, auch `fähre`). Nebel der Stufe 3 schließt die Wege, nur nicht den zum Licht: der Ausgang auf dem kürzesten Weg zu dem Feuer, das den Raum frei hält, bleibt begehbar, damit niemand dort festsitzt, wo kein Feuer steht. Die Ablehnung sagt, wo dieses Feuer steht.
 - **Feuer**: eines je Insel, jedes deckt die Räume seiner Insel (das erste weiterhin nur Bucht und Pfad).
 - **Flut**: Strände spülen eigenes Strandgut an (Tang am Torfmoor, Bernstein in der Wrackbucht, Perlen im
   Perlengrund). **Sturmflut** (`storm`, alle 20 Spielminuten): sechs Dinge auf einmal an einem Strand, der Hafenkanal

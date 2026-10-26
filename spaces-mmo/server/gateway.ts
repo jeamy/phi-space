@@ -257,11 +257,14 @@ export class Gateway {
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
 					for (const op of b.ops) {
-						if (op.op === "put") { clock ||= op.type === "WorldClock"; touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(op.id, op.type, op.types, op.fields, msgs); }
+						// a renewed session is the same session: the character did not change, nothing to announce
+						if (op.op === "put") { clock ||= op.type === "WorldClock"; if (!(op.type === "Session" && this.#sessions.has(op.id))) touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(op.id, op.type, op.types, op.fields, msgs); }
 						else { touch(op.id); trade ||= this.#offers.has(op.id) || this.#orders.has(op.id) || this.#listings.has(op.id); this.#del(op.id); }
 					}
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
+					// someone with an open offer came, went or lost the connection: the trade lists change
+					if (!trade && [...chars.keys()].some((id) => [...this.#offers.values()].some((o) => o.from === id || o.to === id))) trade = true;
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
 					if (clock) { this.#broadcastTime(); for (const [id, o] of this.#objs) if (o.kind === "beacon") this.#announceObj(id, o.location); }
 					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
@@ -361,8 +364,9 @@ export class Gateway {
 		const mine = orders.find((o) => o.takenBy === me);
 		const listings = [...this.#listings.values()].sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId));
 		return {
-			offersIn: offers.filter((o) => o.to === me).map(({ offerId, fromName, giveNames, want }) => ({ offerId, fromName, giveNames, want })),
-			offersOut: offers.filter((o) => o.from === me).map(({ offerId, toName, giveNames, want }) => ({ offerId, toName, giveNames, want })),
+			// only offers whose other side is still here and online (leaving withdraws them anyway; a lost connection does not)
+			offersIn: offers.filter((o) => o.to === me && this.#here(o.from, c.room)).map(({ offerId, fromName, giveNames, want }) => ({ offerId, fromName, giveNames, want })),
+			offersOut: offers.filter((o) => o.from === me && this.#here(o.to, c.room)).map(({ offerId, toName, giveNames, want }) => ({ offerId, toName, giveNames, want })),
 			orders: c.room && this.w.orders.rooms.includes(c.room) ? open.filter((o) => o.room === c.room).map((o, i) => ({ nr: i + 1, text: o.text, reward: o.reward.count })) : null,
 			myOrder: mine ? { text: mine.text, needs: mine.needs, here: !!c.room && this.w.orders.rooms.includes(c.room), boards: this.w.orders.rooms.map((r) => this.#rooms.get(r)?.name ?? r) } : null,
 			listings: c.room && this.w.market.rooms.includes(c.room) ? listings.filter((l) => l.room === c.room).map((l, i) => ({ nr: i + 1, itemName: l.itemName, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
@@ -396,6 +400,12 @@ export class Gateway {
 			for (const c of this.#clients) if (c.atlas) c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		}, ATLAS_MS);
 		this.#atlasDue.unref?.();
+	}
+
+	/** Whether a character is online and in `room`. */
+	#here(charId: string, room: string | null): boolean {
+		const ch = this.#chars.get(charId);
+		return !!ch && ch.room === room && !!this.#online.get(charId);
 	}
 
 	/** A beacon with its fire's end (0: out). */

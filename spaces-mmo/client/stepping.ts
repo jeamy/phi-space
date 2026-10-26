@@ -7,8 +7,9 @@
 //  - an answer that differs (the server refused or placed the figure elsewhere) drops the predictions: the server decides.
 export const STEP_MS = 170;
 export const MAX_IN_FLIGHT = 2;
-/** An unanswered step stops counting after this long (a refused step is answered by a message, not by a place). */
-export const EXPIRE_MS = 700;
+/** An unanswered step stops counting after this long: a lost answer (a refused step is answered by a refusal, see
+ *  `refused`); long enough that a slow moment of the server does not pull the figure back. */
+export const EXPIRE_MS = 2000;
 
 type Cell = { x: number; y: number };
 
@@ -39,6 +40,13 @@ export class StepPacer {
 		this.#predicted = [];
 		return stale;
 	}
+
+	/** Steps predicted and not yet confirmed. */
+	get waiting(): boolean { return this.#predicted.length > 0; }
+
+	/** The server refused a step (someone stands there, a wall, the fog): it is answered, and the predictions are dropped;
+	 *  the figure goes back to where the server last put it. */
+	refused(): void { this.#sent.shift(); this.#predicted = []; }
 
 	/** The server says where the own character is. `ahead`: later steps are still on their way, keep the figure where the
 	 *  prediction put it. `apply`: take this place. */

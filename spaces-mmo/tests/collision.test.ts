@@ -123,3 +123,19 @@ test("a flood of steps does not queue a long walk: of twenty sent at once a few 
 		await a.p.leave();
 	} finally { await srv.close(); }
 });
+
+test("standing still sends no positions: a renewed session is no move (the page would take it for an answer)", async () => {
+	// 1.5 s session leases: the gateway (in this process) renews every 0.5 s
+	process.env.SPACES_MMO_SESSION_LEASE_MS = "1500";
+	const srv = await startServer();
+	process.env.SPACES_MMO_SESSION_LEASE_MS = "";
+	try {
+		const a = await player(srv.url, "Stille");
+		await new Promise((r) => setTimeout(r, 1_000));
+		const from = a.p.frames.length;
+		await new Promise((r) => setTimeout(r, 3_000));
+		const own = a.p.frames.slice(from).filter((f) => (f.t === "char" && f.c.charId === a.me) || (f.t === "gone" && f.charId === a.me));
+		assert.equal(own.length, 0, JSON.stringify(own));
+		await a.p.leave();
+	} finally { await srv.close(); }
+});

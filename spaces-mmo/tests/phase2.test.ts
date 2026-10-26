@@ -39,7 +39,7 @@ test("a fire goes out by itself at the computed moment; without it the fog rises
 		const a = await player(srv.url, "Feuerwart");
 		// no fire: the fog climbs from 2 to 3 and the way east is gone
 		await eventually(async () => (await fog(space, "graue-bucht")) === 3, 10_000, "fog 3");
-		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach ost/);
+		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach ost findest du nicht\. Entzünde das Leuchtfeuer hier/);
 		await walk(a.p, space, a.me, 5, 7);
 		await does(a.p, "nimm treibholz", "Du hebst Treibholz auf.");
 		await walk(a.p, space, a.me, 9, 9); // next to the beacon in the cobble ring
@@ -60,7 +60,11 @@ test("a fire goes out by itself at the computed moment; without it the fog rises
 		await eventually(async () => !isLit(await flame(space) as never, worldNow(clock)), Math.max(0, msUntilWorld(clock, f.until, Date.now())) + 1_500, "out at the computed moment");
 		await a.p.until((fr) => fr.t === "msg" && fr.m.text.includes("ist erloschen"), 5_000);
 		await eventually(async () => (await fog(space, "klippenpfad")) === 3, 10_000, "fog back to 3");
-		assert.match(await does(a.p, "go west", "zu dicht"), /Weg nach west/);
+		// away from the fire the fog closes the ways and says where the light is; toward it one finds the way
+		assert.match(await does(a.p, "go ost", "zu dicht"), /Weg nach ost findest du nicht\. Das Leuchtfeuer steht in Graue Bucht; den Weg nach west dorthin findest du noch\./);
+		const back = a.p.frames.length;
+		a.p.send("go west");
+		await a.p.until((fr) => fr.t === "hello" && fr.room.roomId === "graue-bucht", 10_000, back);
 		assert.equal(await does(a.p, "ruf", "Ruf"), "Dein Ruf: 1 Scheit in 1 Leuchtfeuer.");
 		await a.p.leave();
 	} finally { await srv.close(); }

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
 import { loadIntoSpace } from "../server/engine/loader.ts";
-import { findPath, loadWorld, walkable } from "../server/engine/world.ts";
+import { findPath, loadWorld, walkable, wayTo } from "../server/engine/world.ts";
 import { actorToken } from "../server/model.ts";
 import { startStack } from "./stack.ts";
 
@@ -48,6 +48,14 @@ test("inside every room: from where one arrives to every exit and next to every 
 		for (const b of fires) place(b.beaconId, b.x, b.y);
 		for (const n of w.npcs.filter((n) => n.room === r.roomId)) place(`npc ${n.npcId}`, n.x, n.y);
 		for (const o of w.objects.filter((o) => o.room === r.roomId)) place(o.itemId, o.x, o.y);
+	}
+});
+
+test("no one is caught in the fog: every room has a fire that keeps it clear, and a way to it", () => {
+	for (const r of w.rooms) {
+		const fires = w.beacons.filter((b) => b.covers.includes(r.roomId));
+		assert.ok(fires.length, `${r.roomId} has a fire`);
+		assert.ok(fires.some((b) => b.room === r.roomId || wayTo(w, r.roomId, b.room)), `${r.roomId} reaches its fire`);
 	}
 });
 

@@ -2,13 +2,13 @@
 // transaction its intent is taken in: what it changes and what it says commit together, or not at all. An item changes
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type SessionFields } from "../../model.ts";
+import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, type CommandCtx } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { cellKey, freeCellNear, holdRoom, occupiedIn, solidIn } from "../occupancy.ts";
-import { findPath, walkable } from "../world.ts";
+import { findPath, walkable, wayTo } from "../world.ts";
 
 const MAX_SAY = 300;
 
@@ -51,9 +51,36 @@ async function relocate(c: CommandCtx, to: { room: string; x: number; y: number 
 	await c.space.write({ type: "Character", fields: { ...fieldsOf<CharacterFields>(e), ...to } as never }, c.txn, FOREVER);
 }
 
+/** Leaving a room ends the trade offers made there: one's own are withdrawn, those made to one lapse; the other side
+ *  hears it. An offer being accepted right now (held) is left to that acceptance, which finds the actor gone. */
+async function dropOffers(c: CommandCtx): Promise<void> {
+	for (const side of ["from", "to"] as const) for (const e of await c.space.readAll({ type: "Offer", fields: { [side]: c.actor.charId } })) {
+		const taken = await c.space.takeIfExists({ type: "Offer", id: e.id }, NO_WAIT, { txn: c.txn });
+		if (!taken) continue;
+		const o = fieldsOf<OfferFields>(taken);
+		await msg(c, side === "from" ? o.to : o.from, "info", side === "from" ? `${c.actor.name} ist gegangen; das Angebot gilt nicht mehr.` : `${c.actor.name} ist gegangen und hat dein Angebot nicht angenommen.`);
+	}
+}
+
+/** Dense fog hides the ways, but never the way to the light: the exit on the shortest way to a fire that keeps this
+ *  room clear stays to be found, so nobody is caught where no fire stands. Any other way is refused, and the refusal
+ *  says where that fire is (or that it stands here). */
+async function throughFog(c: CommandCtx, exit: ExitFields): Promise<void> {
+	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room));
+	const roomName = (id: string) => c.world.rooms.find((r) => r.roomId === id)?.name ?? id;
+	const here = fires.find((b) => b.room === c.actor.room);
+	if (here) throw new CommandError(`Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Entzünde das ${here.name} hier, dann lichtet er sich.`);
+	const ways = fires.map((b) => ({ b, way: wayTo(c.world, c.actor.room, b.room) })).filter((x) => x.way);
+	if (ways.some((x) => x.way === exit.name)) return; // toward the light: one finds it
+	const to = ways[0];
+	throw new CommandError(to
+		? `Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Das ${to.b.name} steht in ${roomName(to.b.room)}; den Weg nach ${to.way} dorthin findest du noch.`
+		: `Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Ein Leuchtfeuer würde helfen.`);
+}
+
 export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	await check(c, exit.locks, "traverse", `Der Weg nach ${exit.name} ist dir versperrt.`);
-	if (exit.fogMax !== undefined && (await fogOf(c.space, c.actor.room)) > exit.fogMax) throw new CommandError(`Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Ein Leuchtfeuer würde helfen.`);
+	if (exit.fogMax !== undefined && (await fogOf(c.space, c.actor.room)) > exit.fogMax) await throughFog(c, exit);
 	const dest = await roomOf(c, exit.destination);
 	// arriving: the exit's arrival cell, or the nearest free one when someone stands there (never on an exit cell)
 	const held = await holdRoom(c.space, c.txn, dest.roomId);
@@ -63,6 +90,7 @@ export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	if (!at) throw new CommandError(`In ${dest.name} ist kein Platz mehr.`);
 	await relocate(c, { room: dest.roomId, x: at.x, y: at.y });
 	await held.release();
+	await dropOffers(c);
 	await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${exit.name}.`, { templ: true });
 	await msg(c, "*", "info", `$you() $conj(kommst|kommt) an.`, { templ: true, room: dest.roomId });
 	await msg(c, c.actor.charId, "look", await describeRoom(c, dest.roomId, true), { room: dest.roomId });

@@ -305,7 +305,13 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				else if (f.t === "char") {
 					clearTimeout(goneTimers.get(f.c.charId)); goneTimers.delete(f.c.charId);
 					// the own figure may already stand further on than this answer (the steps it predicted): then it stays there
-					if (f.c.charId === meRef.current) { serverPos.current = { x: f.c.x, y: f.c.y }; if (pacer.current.answer(f.c) === "ahead") return; }
+					if (f.c.charId === meRef.current) {
+						// the place the server reported before, again (not the answer to a step): the predictions stay
+						const was = serverPos.current;
+						if (was && was.x === f.c.x && was.y === f.c.y && pacer.current.waiting) return;
+						serverPos.current = { x: f.c.x, y: f.c.y };
+						if (pacer.current.answer(f.c) === "ahead") return;
+					}
 					setChars((m) => new Map(m).set(f.c.charId, f.c));
 				}
 				else if (f.t === "gone") {
@@ -324,7 +330,15 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				else if (f.t === "atlas") setAtlas(f.atlas);
 				else if (f.t === "atlasState") setAtlasState(f.state);
 				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
-				else if (f.t === "msg") append(f.m);
+				else if (f.t === "msg") {
+					// a refused step while steps are predicted: back to where the server last put the figure
+					if (f.m.kind === "error" && pacer.current.waiting) {
+						pacer.current.refused();
+						const back = serverPos.current;
+						if (back) setChars((m) => { const c = m.get(meRef.current); return c && (c.x !== back.x || c.y !== back.y) ? new Map(m).set(c.charId, { ...c, x: back.x, y: back.y }) : m; });
+					}
+					append(f.m);
+				}
 			};
 			s.onclose = () => {
 				setLive(false);

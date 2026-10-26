@@ -15,7 +15,7 @@
 import { randomInt } from "node:crypto";
 import { clockOf } from "../engine/clockcache.ts";
 import { flameOf } from "../engine/fire.ts";
-import type { WorldDef } from "../engine/world.ts";
+import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 
@@ -47,23 +47,6 @@ const protoOf = (w: WorldDef, name: string) => {
 const roomName = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId === roomId)?.name ?? roomId;
 const islandOf = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId === roomId)?.island ?? w.title;
 
-/** The name of the first exit on the shortest way from one room to another (over the world's exits), or null. */
-export function wayTo(w: WorldDef, from: string, to: string): string | null {
-	if (from === to) return null;
-	const first = new Map<string, string>([[from, ""]]);
-	let frontier = [from];
-	while (frontier.length) {
-		const next: string[] = [];
-		for (const r of frontier) for (const e of w.exits.filter((x) => x.room === r)) {
-			if (first.has(e.destination)) continue;
-			first.set(e.destination, first.get(r) || e.name);
-			if (e.destination === to) return first.get(to)!;
-			next.push(e.destination);
-		}
-		frontier = next;
-	}
-	return null;
-}
 
 /** One step of the way to `room`: true when the NPC is there already. */
 async function travel(n: Npc, l: Look, room: string): Promise<boolean> {

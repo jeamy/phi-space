@@ -39,3 +39,12 @@ test("steps the server never answered (refused) make the figure go back", () => 
 	const q = new StepPacer(); q.sent(0, { x: 1, y: 0 }); q.answer({ x: 1, y: 0 });
 	assert.equal(q.settle(EXPIRE_MS + 1), false, "an answered step needs no correction");
 });
+
+test("a refused step drops the predictions at once and frees its place", () => {
+	const p = new StepPacer();
+	p.sent(0, { x: 1, y: 0 }); p.sent(STEP_MS, { x: 2, y: 0 });
+	assert.equal(p.waiting, true);
+	p.refused();
+	assert.equal(p.waiting, false, "nothing predicted any more");
+	assert.equal(p.canSend(2 * STEP_MS), true, "one place is free again");
+});

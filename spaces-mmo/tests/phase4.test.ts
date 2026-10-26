@@ -208,3 +208,22 @@ test("the page's trade view: offers to and from a player, the boards only where 
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
 });
+
+test("an offer ends when one side leaves the room: withdrawn, the other side told, gone from the lists", async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		await s.write({ type: "Flame", fields: { beaconId: "feuer-bucht", until: Date.now() + 120_000, litAt: Date.now() } as never }, null, 120_000); // the ways open
+		const a = await player(srv.url, "Bleibende"), b = await player(srv.url, "Gehende");
+		await give(s, b.me, "muschel", 1);
+		await does(b.p, "offer muschel an Bleibende", "Du bietest Bleibende");
+		await a.p.until((f) => f.t === "trade" && f.trade.offersIn.length === 1);
+		const from = a.p.frames.length;
+		b.p.send("go ost");
+		await a.p.until((f) => f.t === "msg" && f.m.text === "Gehende ist gegangen; das Angebot gilt nicht mehr.", 15_000, from);
+		await a.p.until((f) => f.t === "trade" && f.trade.offersIn.length === 0, 15_000, from);
+		assert.equal(await s.count({ type: "Offer" }), 0, "withdrawn");
+		assert.equal((await pack(s, b.me, "muschel")).length, 1, "the shell stays with her");
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});
