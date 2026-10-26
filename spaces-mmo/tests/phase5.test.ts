@@ -56,7 +56,7 @@ test("spoken to, Ines wakes, answers with the model and remembers; without more 
 	} finally { await srv.close(); await stack.close(); }
 });
 
-test("Ines may do what a player may: asked in plain words she says why not, takes wood offered in trade and feeds the fire", async () => {
+test("asked for wood, Ines really does it (by script, model or not); a model's words never claim what its commands could not do", async () => {
 	const stack = await startStack({ worldEnv: { ...MODEL, SPACES_MMO_TIME_SCALE: "0.02" } });
 	const srv = await startServer({ stack });
 	try {
@@ -65,14 +65,23 @@ test("Ines may do what a player may: asked in plain words she says why not, take
 		const a = await player(srv.url, "Bittende");
 		await stack.npcProcess();
 		await eventually(async () => (await s.count({ type: "NpcOwner" })) === 3, 10_000, "all roles played");
+		// nothing carried: she fetches a piece from the beach and puts it in, and says what she did
+		let from = a.p.frames.length;
 		a.p.send("hallo ines, leg holz ins feuer");
-		await heard(a.p, "Ines: Ich habe kein Holz bei mir."); // nothing carried: she says why
+		await heard(a.p, "Ines: Gern, ich hole erst ein Scheit Treibholz.", 15_000, from);
+		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ines legt Treibholz ins Leuchtfeuer"), 20_000, from);
+		await heard(a.p, "Ines: Fertig, Bittende: 1 Scheit liegen im Feuer.", 20_000, from);
+		// the model claims to give a pearl she does not have: the command fails, the claim is not said
+		from = a.p.frames.length;
+		a.p.send("Ines, hast du eine Perle für mich?");
+		await heard(a.p, "Ines: Hm, das klappt gerade nicht.", 15_000, from);
+		assert.ok(!a.p.frames.slice(from).some((f) => f.t === "msg" && f.m.text === "Ines: Hier, deine Perle."), "no claim");
 		await spawn(s, null, w, (await eventually(() => resolvePrototype(s, "treibholz"), 10_000, "treibholz"))!, { location: a.me, x: -1, y: -1 });
 		a.p.send("offer treibholz an Ines");
 		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ines nimmt dein Angebot an: Treibholz"));
 		await heard(a.p, "Ines: Danke, Bittende!");
 		assert.equal(await s.count({ type: "Item", fields: { location: "npc-ines" } }), 1, "she carries the wood");
-		const from = a.p.frames.length;
+		from = a.p.frames.length;
 		a.p.send("Ines, leg bitte holz ins feuer");
 		await heard(a.p, "Ines: Gern, ich lege nach.", 15_000, from);
 		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ines legt Treibholz ins Leuchtfeuer"), 15_000, from);

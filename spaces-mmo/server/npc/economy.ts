@@ -22,6 +22,15 @@ import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scr
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
  *  wait on a trader as they do on the keeper, so the rounds are not short. */
 const round = (n: Npc) => n.pace(8_000, 200);
+/** How long a round rests: at the pace above while a person is on the NPC's island (someone could see it), almost four
+ *  times longer while nobody is: the island goes on, with a fraction of the calls to the space (every call costs the
+ *  space time in proportion to all it holds, so idle islands must not keep it busy). */
+async function rest(n: Npc, room: string): Promise<number> {
+	const island = (r: unknown) => n.world.rooms.find((x) => x.roomId === r)?.island;
+	const live = new Set((await n.space.readAll({ type: "Session" })).map((e) => String(e.fields.charId)).filter((id) => !id.startsWith("npc-")));
+	if (live.size && (await n.space.readAll({ type: "Character" })).some((e) => live.has(String(e.fields.charId)) && island(e.fields.room) === island(room))) return round(n);
+	return n.pace(30_000, 800);
+}
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const pick = <T>(xs: T[]): T | undefined => xs[randomInt(0, Math.max(1, xs.length))];
 
@@ -209,7 +218,7 @@ function sammler(): Script {
 				else { home = (home + 1) % homes.length; await travel(n, l, homes[home]!); }
 			}
 		}
-		await n.sleep(round(n));
+		await n.sleep(await rest(n, l.me.room));
 	};
 }
 
@@ -241,7 +250,7 @@ function huter(): Script {
 		}
 		if (!acted) acted = (await offer(n, l, fuels)) || (await say(n, l));
 		if (!acted && l.me.room !== beacon.room) await travel(n, l, beacon.room);
-		await n.sleep(round(n));
+		await n.sleep(await rest(n, l.me.room));
 	};
 }
 
@@ -265,12 +274,12 @@ function haendler(): Script {
 		if (!l) { await n.sleep(1000); return; }
 		const route = n.def.route ?? [l.me.room];
 		const target = route[at % route.length]!;
-		if (l.me.room !== target) { if (!(await talk(n, l))) await travel(n, l, target); await n.sleep(round(n)); return; }
+		if (l.me.room !== target) { if (!(await talk(n, l))) await travel(n, l, target); await n.sleep(await rest(n, l.me.room)); return; }
 		// at a market of its route: buys below its price, asks more than it paid; after a while it moves on
 		const acted = (await talk(n, l)) || (await buy(n, l)) || (await sell(n, l)) || (await offer(n, l)) || (await say(n, l));
 		rounds++;
 		if (route.length > 1 && (rounds > 12 || (!acted && rounds > 4))) { at++; rounds = 0; }
-		await n.sleep(round(n));
+		await n.sleep(await rest(n, l.me.room));
 	};
 }
 
@@ -297,7 +306,7 @@ function handwerker(): Script {
 		if (!acted && homes.includes(l.me.room)) acted = await gather(n, l, inputs);
 		if (!acted && !homes.includes(l.me.room) && !(products.length && n.def.market === l.me.room)) acted = !(await travel(n, l, homes[0]!));
 		if (!acted) await say(n, l);
-		await n.sleep(round(n));
+		await n.sleep(await rest(n, l.me.room));
 	};
 }
 
@@ -325,7 +334,7 @@ function plauderer(): Script {
 				if (",.".includes(ground[y]?.[x] ?? "~")) await n.act(`move ${x} ${y}`);
 			}
 		}
-		await n.sleep(round(n));
+		await n.sleep(await rest(n, l.me.room));
 	};
 }
 

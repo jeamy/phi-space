@@ -6,7 +6,8 @@
 //
 //   SPACES_MMO_SPACE              the world space (default unix:/tmp/spaces-mmo-world.sock)
 //   SPACES_MMO_WORLD              which world to load (default leuchtfeuer)
-//   SPACES_MMO_MSG_LEASE_MS       how long a message stays (default 10 min)
+//   SPACES_MMO_MSG_LEASE_MS       how long a message stays (default 2 min: every message is an entry, and every call
+//                                 costs the space time in proportion to its entries; pages get messages at once)
 //   SPACES_MMO_CLEANUP_MS         how often lapsed guests are looked for (default 60 s)
 //   SPACES_MMO_TXN_MS             lease of a command's transaction: how soon the work of a dead process returns (15 s)
 //   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.md); an existing clock keeps its rate
@@ -29,7 +30,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space;
-	const msgLeaseMs = envMs("SPACES_MMO_MSG_LEASE_MS", 10 * 60_000);
+	const msgLeaseMs = envMs("SPACES_MMO_MSG_LEASE_MS", 2 * 60_000);
 	const TXN_MS = envMs("SPACES_MMO_TXN_MS", 15_000);
 	const halt = new AbortController();
 

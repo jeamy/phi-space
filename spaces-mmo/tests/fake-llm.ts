@@ -12,6 +12,8 @@ export async function complete(system: string, user: string): Promise<string> {
 		const heard = /Heard: (.*)$/m.exec(user)?.[1] ?? "";
 		const offerer = /Offers to you: (\S+) offers/.exec(user)?.[1];
 		if (offerer) return `accept ${offerer}\nsay Danke, ${offerer}!`;
+		// a model that claims what it cannot do: she has no pearl to give
+		if (/perle/i.test(heard)) return "say Hier, deine Perle.\ngive perle an Bittende";
 		if (/holz/i.test(heard) && /feuer/i.test(heard)) return /carry: .*Treibholz/.test(user) ? "say Gern, ich lege nach.\nput treibholz in feuer" : "say Ich habe kein Holz bei mir.";
 		return heard ? `say Hallo! ${heard.includes("öl") ? "Öl haben wir keins, aber Treibholz brennt." : "Bringt Treibholz, dann bleibt das Licht."}\nNOTE: hat mit jemandem über das Feuer gesprochen` : "say Das Feuer braucht Holz!\nNOTE: hat um Holz gebeten";
 	}

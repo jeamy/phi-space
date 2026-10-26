@@ -73,15 +73,19 @@ function waerter(): Script {
 			const awakeMs = AWAKE_WORLD_MS;
 			const wakes = events.filter((e) => m.wake.includes(e) || e === "fire.ok");
 			const awake = await isAwake(n.space, n.def.npcId);
-			if (wakes.length || (awake && fromPeople.length)) {
+			// a request the script can carry out (wood to the fire) is done by the script, model or not: its words then say
+			// what really happened; the model answers the rest of the talk
+			const asked = await doRequests(n, me, fromPeople);
+			if (asked.length && fromPeople.every((x) => asked.includes(x))) { await keepAwake(n.space, n.def.npcId, AWAKE_WORLD_MS).catch(() => {}); await n.sleep(n.pace(3_000, 100)); return; }
+			if (wakes.length || (awake && fromPeople.some((x) => !asked.includes(x)))) {
 				if (!awake && !(await tryWake(n.space, n.def.npcId, npcMax(), awakeMs))) {
 					if (!pensive) { pensive = true; await n.act(`emote ist in Gedanken.`); }
 				} else {
 					pensive = false;
 					await keepAwake(n.space, n.def.npcId, awakeMs);
-					const r = await think(n.space, { npcId: n.def.npcId, name: me.name, persona: m.persona, budgetDay: m.budgetDay }, { room: (await roomName(n, me.room)), people, ...(fireText ? { fire: fireText } : {}), ...(beacon ? { fireAt: { x: beacon.x, y: beacon.y } } : {}), event: wakes.join(", ") || "talk", heard: fromPeople.map((x) => x.text), ...(await surroundings(n, me)) });
+					const r = await think(n.space, { npcId: n.def.npcId, name: me.name, persona: m.persona, budgetDay: m.budgetDay }, { room: (await roomName(n, me.room)), people, ...(fireText ? { fire: fireText } : {}), ...(beacon ? { fireAt: { x: beacon.x, y: beacon.y } } : {}), event: wakes.join(", ") || "talk", heard: fromPeople.filter((x) => !asked.includes(x)).map((x) => x.text), ...(await surroundings(n, me)) });
 					if (r === "budget") { if (!budgetSaid) { budgetSaid = true; await n.act(`emote ${dozeLine(me.name, m.dozing, 0)}`); } }
-					else if (r !== "off") { budgetSaid = false; for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); }
+					else if (r !== "off") { budgetSaid = false; await actThenSay(n, r.lines); if (r.note) await remember(n.space, n.def.npcId, r.note); }
 				}
 			} else if (!awake && people.length && wnow - lastDoze > 3 * 60_000) {
 				lastDoze = wnow;
@@ -95,15 +99,12 @@ function waerter(): Script {
 		else if (events.includes("fire.out")) await n.act("say Das Feuer ist aus! Ohne Licht frisst uns der Nebel.");
 		else if (events.includes("fire.ok")) await n.act("say Danke! So brennt es wieder.");
 		else if (events.includes("evening") && people.length) await n.act("say Der Abend kommt: wer kann, bringe Holz für die Nacht.");
+		const done = await doRequests(n, me, fromPeople);
 		for (const x of fromPeople) {
-			// asked for something by name: do it (or say why not), before any greeting
+			if (done.includes(x)) continue;
+			// asked for something the script cannot do: say so, before any greeting
 			const ask = requestOf(x.text.startsWith(`${x.from}: `) ? x.text.slice(x.from.length + 2) : x.text, me.name); // the text of a say starts with the speaker
-			if (ask && ask.kind !== "greet") {
-				if (ask.kind === "gather") await gather(n, me, x.from, ask.count, async () => { const c = await self(n); return c ? { x: c.x, y: c.y, room: c.room } : null; });
-				else if (ask.kind === "feed") await gather(n, me, x.from, 0, async () => { const c = await self(n); return c ? { x: c.x, y: c.y, room: c.room } : null; });
-				else await n.act(`say ${unclear(x.from)}`);
-				continue;
-			}
+			if (ask && ask.kind !== "greet") { await n.act(`say ${unclear(x.from)}`); continue; }
 			if (!/\b(hallo|hi|moin|hello|servus)\b/i.test(x.text)) continue;
 			if (wnow - (greeted.get(x.from) ?? -Infinity) < 10 * 60_000) continue;
 			greeted.set(x.from, wnow);
@@ -111,6 +112,36 @@ function waerter(): Script {
 		}
 		await n.sleep(n.pace(3_000, 100));
 	};
+}
+
+/** Requests by name that the script carries out (gather wood, feed the fire): done, one after another; returns the
+ *  messages it answered. */
+async function doRequests(n: Npc, me: CharacterFields, heard: MsgFields[]): Promise<MsgFields[]> {
+	const done: MsgFields[] = [];
+	const position = async () => { const c = await self(n); return c ? { x: c.x, y: c.y, room: c.room } : null; };
+	for (const x of heard) {
+		const ask = requestOf(x.text.startsWith(`${x.from}: `) ? x.text.slice(x.from.length + 2) : x.text, me.name); // the text of a say starts with the speaker
+		if (ask?.kind !== "gather" && ask?.kind !== "feed") continue;
+		await gather(n, me, x.from, ask.kind === "gather" ? ask.count : 0, position);
+		done.push(x);
+	}
+	return done;
+}
+
+/** A model's lines: the commands first, in their order, then the words, and the words only when every command went
+ *  through (a refusal comes back as an error message to the NPC); else it says that it did not work out. So it never
+ *  claims what it did not do. */
+async function actThenSay(n: Npc, lines: string[]): Promise<void> {
+	const talk = (l: string) => /^(say|sag|sage|emote|pose|geste|channel|kanal)\b/i.test(l);
+	const refusals = async () => (await n.space.readAll({ type: "Msg", fields: { to: n.charId, kind: "error" } })).length;
+	let failed = false;
+	for (const line of lines.filter((l) => !talk(l))) {
+		const before = await refusals();
+		await n.act(line);
+		if ((await refusals()) > before) { failed = true; break; }
+	}
+	if (failed) { await n.act("say Hm, das klappt gerade nicht."); return; }
+	for (const line of lines.filter(talk)) await n.act(line);
 }
 
 /** A wanderer: away until its event (a room in dense fog for two game minutes), then it appears, at most once per its
@@ -158,7 +189,7 @@ async function speak(n: Npc, name: string, event: string, heard: string[]): Prom
 	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, npcMax(), AWAKE_WORLD_MS))) {
 		const me = await self(n);
 		const r = await think(n.space, { npcId: n.def.npcId, name, persona: m.persona, budgetDay: m.budgetDay }, { room: await roomName(n, me?.room ?? n.def.room), people: await humansIn(n, me?.room ?? n.def.room), event, heard, ...(me ? await surroundings(n, me) : {}) });
-		if (typeof r === "object") { for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
+		if (typeof r === "object") { await actThenSay(n, r.lines); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
 	}
 	await n.act(event === "spoken" ? "say Licht … wo brennt das nächste Licht?" : "say Wo geht es hier aus dem Nebel?");
 }

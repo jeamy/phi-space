@@ -112,6 +112,7 @@ export async function think(space: SpaceLike, npc: { npcId: string; name: string
 		"you may do everything a player may (say speaks, emote shows what you do in third person without your name):",
 		...NPC_COMMANDS.map((c) => `  ${c.help}`),
 		"When someone asks you to do something, decide in character; if you do it, type the commands in order (e.g. walk, pick up, feed the fire, accept a trade) and say so briefly; if you cannot (you lack the thing, it is too far), say why. Use the names of things exactly as listed.",
+		"Never say you did something you did not type as a command in the same answer (\"I put wood on the fire\" needs the put command, and wood in your pack); the commands run first, and if one fails, your words are not said.",
 		`Answer with at most ${MAX_LINES} such lines. Then, if something is worth remembering for later, one line: NOTE: <what>`,
 	].join("\n");
 	const memory = await memoryOf(space, npc.npcId);
