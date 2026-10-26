@@ -17,6 +17,26 @@ each file. The game shows this attribution under "About".
 
 Item icons of the pack (mostly CC BY-SA 3.0) are deliberately not included.
 
+## Plants (`tilesets/Plants.png`)
+
+Cut unchanged (32 px cells, rearranged onto one small sheet) from `resources/tilesets/Overworld.png` of the same commit.
+Authors: George (AGD), commissioned and extended by Murdoc; licensed CC BY 4.0 (`7b19f8ee6b`: "Tilesets commissioned by
+Murdoc. Includes, and is based off tiles originally released by George at AGD. Licensed CC BY 4.0. Original Tiles
+Release: https://www.ascensiongamedev.com/topic/742-16x16-custom-assets/"). The game tints some of the white flowers.
+
+| Cut in `Plants.png` (x, y, w×h px) | Cell of `Overworld.png` (column, row of the 32 px grid) |
+| --- | --- |
+| 0, 0, 32×32 flowers | (2, 4) |
+| 32, 0, 32×32 flowers | (3, 4) |
+| 64, 0, 32×32 flowers | (4, 4) |
+| 96, 0, 32×32 flower stalk | (1, 4) |
+| 128, 0, 32×32 leafy plant | (0, 4) |
+| 160, 0, 32×32 fern | (2, 5) |
+| 192, 0, 32×32 rose bush | (3, 6) |
+| 224, 0, 32×32 round bush | (4, 6) |
+| 0, 32, 32×64 small tree | (5, 6) and (5, 7) |
+| 32, 32, 32×64 conifer | (2, 6) and (2, 7) |
+
 ## Item icons (`items/`)
 
 32×32 icons cut unchanged from the sheet `#1 - Transparent Icons.png` of

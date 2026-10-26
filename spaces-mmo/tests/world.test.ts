@@ -59,6 +59,29 @@ test("no one is caught in the fog: every room has a fire that keeps it clear, an
 	}
 });
 
+test("plants grow on grass only, off paths, doors, people, fires and things, and their cuts lie inside their sheet", () => {
+	for (const [k, d] of Object.entries(w.decor ?? {})) {
+		const png = worldAsset(w.id, d.sheet)!.body;
+		assert.ok(d.x + d.w <= png.readUInt32BE(16) && d.y + d.h <= png.readUInt32BE(20), `decor ${k} inside ${d.sheet}`);
+	}
+	let grown = 0;
+	for (const r of w.rooms) {
+		const near = (c: { x: number; y: number }, x: number, y: number) => Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1;
+		const keep = [r.spawn, ...w.exits.filter((e) => e.room === r.roomId), ...w.exits.filter((e) => e.destination === r.roomId).map((e) => e.arrive),
+			...w.beacons.filter((b) => b.room === r.roomId), ...w.npcs.filter((n) => n.room === r.roomId), ...w.objects.filter((o) => o.room === r.roomId)];
+		r.decor!.forEach((row, y) => [...row].forEach((k, x) => {
+			if (k === " ") return;
+			grown++;
+			assert.equal(r.ground[y]![x], ",", `${r.roomId} ${x},${y}: ${k} on grass`);
+			assert.ok(!keep.some((c) => near(c, x, y)), `${r.roomId} ${x},${y}: ${k} keeps clear`);
+			for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) assert.notEqual(r.ground[y + dy]?.[x + dx], ":", `${r.roomId} ${x},${y}: ${k} beside a path`);
+		}));
+	}
+	assert.ok(grown > 200, `${grown} plants`);
+	// the start rooms keep their ground: the plants only lie over it
+	assert.equal(roomOf("graue-bucht").ground[10], ",,,.....:..:....,,,,,,,,");
+});
+
 test("every thing but the plain one has a picture, a 32x32 PNG in the world's assets", () => {
 	for (const p of w.prototypes.filter((p) => p.key !== "ding")) {
 		assert.ok(p.icon, `${p.key} has an icon`);

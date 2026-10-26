@@ -60,3 +60,30 @@ async function build(t: T, world: World, anisotropy: number): Promise<Map<string
 	}));
 	return out;
 }
+
+const plantLooks = new Map<string, Promise<Map<string, import("three").Texture>>>();
+
+/** One texture per decor key (plants), cut from its sheet and kept sharp; a key whose sheet does not load is left out. */
+export function loadDecorLooks(t: T, world: World): Promise<Map<string, import("three").Texture>> {
+	let p = plantLooks.get(world.id);
+	if (!p) {
+		p = (async () => {
+			const out = new Map<string, import("three").Texture>();
+			await Promise.all(Object.entries(world.decor ?? {}).map(async ([key, d]) => {
+				try {
+					const img = await sheet(`/assets/${world.id}/${d.sheet}`);
+					const c = document.createElement("canvas"); c.width = d.w; c.height = d.h;
+					const g = c.getContext("2d")!; g.imageSmoothingEnabled = false; g.drawImage(img, d.x, d.y, d.w, d.h, 0, 0, d.w, d.h);
+					const tex = new t.CanvasTexture(c);
+					tex.colorSpace = t.SRGBColorSpace; tex.magFilter = t.NearestFilter; tex.minFilter = t.NearestFilter;
+					tex.userData.shared = true;
+					out.set(key, tex);
+				} catch { /* no plant there */ }
+			}));
+			return out;
+		})();
+		plantLooks.set(world.id, p);
+	}
+	return p;
+}
+

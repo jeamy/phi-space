@@ -85,3 +85,34 @@ export function scatter(ground: string[], seed: string, n: number, tiles = ".,",
 	}));
 	return cells.sort((a, b) => a.k - b.k).slice(0, n).map(({ x, y }) => ({ x, y }));
 }
+
+/** How much grows in a room: flowers and small plants, bushes, small trees (each 0 = none, 1 = the usual meadow). */
+export type Flora = { flowers: number; bushes: number; trees: number };
+/** The plant keys of the world's `decor` (world.ts): flower patches share one kind, so a patch is one colour. */
+const FLOWERS = ["*", "+", "o", "x"], HERBS = ["i", "w", "v"], BUSHES = ["r", "b"], TREES = ["T", "A"];
+
+/** Plants over the grass of a room, chosen by the seed: flowers in patches, now and then a herb, a bush or a small tree.
+ *  Only on grass, never on or beside a path or a plaza, never on or beside a cell in `keep` (doors, the spawn, people,
+ *  fires, things); bushes and trees only with grass all around and no other one beside them. Returns the `decor` grid
+ *  (a space where nothing grows). Plants are for the eye: they change no rule, everyone walks through them. */
+export function plants(ground: string[], seed: string, flora: Flora, keep: Cell[] = []): string[] {
+	const g = ground.map((row) => [...row].map(() => " "));
+	const at = (x: number, y: number) => ground[y]?.[x] ?? "~";
+	const around = (x: number, y: number, ok: (t: string, x: number, y: number) => boolean) => {
+		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!ok(at(x + dx, y + dy), x + dx, y + dy)) return false;
+		return true;
+	};
+	const kept = (x: number, y: number) => keep.some((c) => Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1);
+	const doors = Object.values(DOOR).concat(Object.values(ARRIVE));
+	for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+		if (at(x, y) !== "," || kept(x, y) || doors.some((d) => Math.abs(d.x - x) <= 1 && Math.abs(d.y - y) <= 1)) continue;
+		if (!around(x, y, (t) => t !== ":")) continue;
+		const r = hash(`${seed}/plant`, x, y);
+		const tall = around(x, y, (t, ax, ay) => t === "," && !TREES.includes(g[ay]?.[ax] ?? "") && !BUSHES.includes(g[ay]?.[ax] ?? ""));
+		if (tall && y > 0 && r < 0.045 * flora.trees) g[y]![x] = TREES[Math.floor(hash(`${seed}/tree`, x, y) * TREES.length)]!;
+		else if (tall && r < 0.045 * flora.trees + 0.06 * flora.bushes) g[y]![x] = BUSHES[Math.floor(hash(`${seed}/bush`, x, y) * BUSHES.length)]!;
+		else if (noise(`${seed}/patch`, x, y, 3) > 1 - 0.3 * flora.flowers && r < 0.75) g[y]![x] = FLOWERS[Math.floor(noise(`${seed}/colour`, x, y, 6) * FLOWERS.length)]!;
+		else if (r > 0.97 - 0.05 * flora.flowers) g[y]![x] = HERBS[Math.floor(hash(`${seed}/herb`, x, y) * HERBS.length)]!;
+	}
+	return g.map((row) => row.join(""));
+}

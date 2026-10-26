@@ -96,6 +96,8 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			};
 			const sheets = new Map<string, InstanceType<Px["Texture"]>>();
 			for (const t of Object.values(world.tiles)) if (!sheets.has(t.sheet)) sheets.set(t.sheet, await load(t.sheet));
+			const plantSheets = [...new Set(Object.values(world.decor ?? {}).map((d) => d.sheet))].filter((u) => !sheets.has(u));
+			await Promise.all(plantSheets.map(async (u) => { try { sheets.set(u, await load(u)); } catch { /* plants are for the eye: the room stands without */ } }));
 			const skins = await Promise.all(world.skins.map((s) => load(s.sheet)));
 			const icons = new Map<string, InstanceType<Px["Texture"]>>();
 			await Promise.all(world.icons.map(async (url) => {
@@ -135,8 +137,19 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			const objLayer = new pixi.Container();
 			const charLayer = new pixi.Container();
 			charLayer.sortableChildren = true;
+			// plants: flat ones under the things, upright ones among the figures (sorted like them, just in front of one on
+			// the same cell, so its name stays readable)
+			const flat = new pixi.Container();
+			for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+				const d = world.decor?.[room.decor?.[y]?.[x] ?? " "], sheet = d && sheets.get(d.sheet);
+				if (!d || !sheet) continue;
+				const sp = new pixi.Sprite(new pixi.Texture({ source: sheet.source, frame: new pixi.Rectangle(d.x, d.y, d.w, d.h) }));
+				sp.position.set(x * ts + (ts - d.w) / 2, (y + 1) * ts - d.h);
+				if (d.tint !== undefined) sp.tint = d.tint;
+				if (d.upright) { sp.zIndex = y * ts * 2 + 0.5; charLayer.addChild(sp); } else flat.addChild(sp);
+			}
 			const fogLayer = new pixi.Graphics();
-			cam.addChild(ground, ...water, objLayer, charLayer, fogLayer);
+			cam.addChild(ground, ...water, flat, objLayer, charLayer, fogLayer);
 			a.stage.addChild(cam);
 			const s: Scene = {
 				pixi, app: a, cam, water, waterMs: Math.min(...Object.values(world.tiles).map((t) => t.auto?.frameMs ?? Infinity)),

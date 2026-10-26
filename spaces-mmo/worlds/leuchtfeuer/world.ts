@@ -6,19 +6,21 @@
 // trade (server/npc/economy.ts). Graphics: assets/CREDITS.md; items are drawn as glyphs until licensed item graphics
 // exist.
 import type { ExitDef, NpcDef, RoomDef, WorldDef } from "../../server/engine/world.ts";
-import { ARRIVE, DOOR, land, OPPOSITE, scatter, spot, type Cell, type LandSpec, type Side } from "./islands.ts";
+import { ARRIVE, DOOR, land, OPPOSITE, plants, scatter, spot, type Cell, type Flora, type LandSpec, type Side } from "./islands.ts";
 
 const ITEM_LOCKS = "get:all();drop:all();give:not guest()";
 
-const ISLANDS: Record<string, { name: string; ferry: string; aliases: string[] }> = {
-	grau: { name: "Graue Insel", ferry: "graue-insel", aliases: ["grau", "graueinsel", "heim"] },
-	moewe: { name: "Möwenfels", ferry: "möwenfels", aliases: ["moewenfels", "möwen", "moewen"] },
-	kupfer: { name: "Kupferhafen", ferry: "kupferhafen", aliases: ["kupfer", "hafen"] },
-	tang: { name: "Tangriff", ferry: "tangriff", aliases: ["riff", "tang"] },
-	nebel: { name: "Nebelholm", ferry: "nebelholm", aliases: ["holm", "nebel"] },
+// `flora`: what grows on the island's grass (a place may say otherwise): no tree on the windy Möwenfels or on the reef
+// ("Auf dem Riff wächst kein Baum"), birches and bushes on Nebelholm
+const ISLANDS: Record<string, { name: string; ferry: string; aliases: string[]; flora: Flora }> = {
+	grau: { name: "Graue Insel", ferry: "graue-insel", aliases: ["grau", "graueinsel", "heim"], flora: { flowers: 1, bushes: 1, trees: 0.6 } },
+	moewe: { name: "Möwenfels", ferry: "möwenfels", aliases: ["moewenfels", "möwen", "moewen"], flora: { flowers: 0.6, bushes: 0.5, trees: 0 } },
+	kupfer: { name: "Kupferhafen", ferry: "kupferhafen", aliases: ["kupfer", "hafen"], flora: { flowers: 0.5, bushes: 0.4, trees: 0.3 } },
+	tang: { name: "Tangriff", ferry: "tangriff", aliases: ["riff", "tang"], flora: { flowers: 0.4, bushes: 0.3, trees: 0 } },
+	nebel: { name: "Nebelholm", ferry: "nebelholm", aliases: ["holm", "nebel"], flora: { flowers: 0.3, bushes: 1, trees: 2 } },
 };
 
-type Place = { roomId: string; name: string; island: keyof typeof ISLANDS; at: [number, number]; desc: string; sea?: Side[]; beach?: number; soil?: LandSpec["soil"]; plaza?: LandSpec["plaza"]; ground?: string[]; spawn?: Cell };
+type Place = { roomId: string; name: string; island: keyof typeof ISLANDS; at: [number, number]; desc: string; sea?: Side[]; beach?: number; soil?: LandSpec["soil"]; plaza?: LandSpec["plaza"]; ground?: string[]; spawn?: Cell; flora?: Flora };
 
 const PLACES: Place[] = [
 	// Graue Insel
@@ -69,9 +71,9 @@ const PLACES: Place[] = [
 		],
 	},
 	{ roomId: "fischerdorf", name: "Fischerdorf", island: "grau", at: [0, 1], sea: ["n", "w"], plaza: { x: 15, y: 11, r: 2 }, desc: "Ein paar schiefe Hütten, Netze auf Gestellen, der Geruch von Teer und Salz. Ein Steg führt nach Westen in den Nebel, wo Nebelholm liegen soll." },
-	{ roomId: "torfmoor", name: "Torfmoor", island: "grau", at: [0, 2], sea: ["w", "s"], beach: 1, desc: "Weicher, federnder Boden, braune Tümpel, Wollgras. Am Ufer liegt Tang in dicken Wülsten." },
-	{ roomId: "duenen", name: "Dünen", island: "grau", at: [1, 2], soil: ".", desc: "Sandhügel mit Strandhafer, der im Wind flüstert. Von hier sieht man bei klarem Wetter alle Wege der Insel." },
-	{ roomId: "salzwiesen", name: "Salzwiesen", island: "grau", at: [2, 2], sea: ["e", "s"], desc: "Flache Wiesen, die die Springflut überschwemmt. Zwischen den Prielen bleibt allerlei hängen." },
+	{ roomId: "torfmoor", name: "Torfmoor", island: "grau", at: [0, 2], sea: ["w", "s"], beach: 1, flora: { flowers: 0.4, bushes: 0.6, trees: 0.3 }, desc: "Weicher, federnder Boden, braune Tümpel, Wollgras. Am Ufer liegt Tang in dicken Wülsten." },
+	{ roomId: "duenen", name: "Dünen", island: "grau", at: [1, 2], soil: ".", flora: { flowers: 0.3, bushes: 0.3, trees: 0 }, desc: "Sandhügel mit Strandhafer, der im Wind flüstert. Von hier sieht man bei klarem Wetter alle Wege der Insel." },
+	{ roomId: "salzwiesen", name: "Salzwiesen", island: "grau", at: [2, 2], sea: ["e", "s"], flora: { flowers: 1.3, bushes: 0.4, trees: 0 }, desc: "Flache Wiesen, die die Springflut überschwemmt. Zwischen den Prielen bleibt allerlei hängen." },
 	{ roomId: "klippenkopf", name: "Klippenkopf", island: "grau", at: [3, 1], sea: ["n", "e", "s"], desc: "Das Ende der Klippen. Zwei Stege hängen über der Brandung: nach Norden zum Möwenfels, nach Osten nach Kupferhafen." },
 	{ roomId: "anleger", name: "Anleger", island: "grau", at: [1, 3], sea: ["w", "e", "s"], plaza: { x: 7, y: 5, r: 2 }, desc: "Der alte Anleger der Insel, Pfähle voller Muscheln. Von hier setzt der Kahn nach Süden zum Tangriff über; ein Feuerkorb soll den Booten leuchten." },
 	// Möwenfels
@@ -92,9 +94,9 @@ const PLACES: Place[] = [
 	{ roomId: "perlengrund", name: "Perlengrund", island: "tang", at: [2, 6], sea: ["e", "s"], beach: 3, desc: "Flaches, klares Wasser über weißem Sand. Wer Glück hat, findet hier eine Perle in einer Muschel." },
 	// Nebelholm
 	{ roomId: "nebelholm-ufer", name: "Ufer von Nebelholm", island: "nebel", at: [-2, 1], sea: ["n", "e"], desc: "Grauer Sand, grauer Himmel, graues Wasser. Ein morscher Steg im Osten führt zurück zum Fischerdorf." },
-	{ roomId: "moorwald", name: "Moorwald", island: "nebel", at: [-3, 1], sea: ["n", "w"], desc: "Krumme Birken im Moor, Flechten wie Bärte. Man hört Schritte, wo keine sind." },
+	{ roomId: "moorwald", name: "Moorwald", island: "nebel", at: [-3, 1], sea: ["n", "w"], flora: { flowers: 0.2, bushes: 1, trees: 3 }, desc: "Krumme Birken im Moor, Flechten wie Bärte. Man hört Schritte, wo keine sind." },
 	{ roomId: "steinkreis", name: "Steinkreis", island: "nebel", at: [-2, 2], sea: ["e", "s"], plaza: { x: 8, y: 5, r: 2 }, desc: "Ein Kreis aus hohen Steinen um eine alte Feuerstelle. Niemand hütet sie; wer sie entzündet, vertreibt den Nebel von ganz Nebelholm." },
-	{ roomId: "verlorener-hain", name: "Verlorener Hain", island: "nebel", at: [-3, 2], sea: ["w", "s"], desc: "Ein Hain, der auf keiner Karte steht. Zwischen den Wurzeln liegt, was andere verloren haben." },
+	{ roomId: "verlorener-hain", name: "Verlorener Hain", island: "nebel", at: [-3, 2], sea: ["w", "s"], flora: { flowers: 0.6, bushes: 1, trees: 3 }, desc: "Ein Hain, der auf keiner Karte steht. Zwischen den Wurzeln liegt, was andere verloren haben." },
 ];
 
 /** Ferries (a pier on each side): [room, side of its pier, room, side of its pier]. */
@@ -218,7 +220,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 11,
+	version: 12,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -228,6 +230,20 @@ export const world: WorldDef = {
 		".": { sheet: "tilesets/Ground.png", x: 128, y: 224, walk: true }, // sand
 		",": { sheet: "tilesets/Ground.png", x: 32, y: 32, walk: true }, // grass
 		":": { sheet: "tilesets/Ground.png", x: 320, y: 128, walk: true }, // cobbles
+	},
+	// plants over the grass (islands.ts `plants`): white flowers, three of them tinted, herbs, two bushes, two small trees
+	decor: {
+		"*": { sheet: "tilesets/Plants.png", x: 0, y: 0, w: 32, h: 32 },
+		"+": { sheet: "tilesets/Plants.png", x: 32, y: 0, w: 32, h: 32, tint: 0xffd54a },
+		"o": { sheet: "tilesets/Plants.png", x: 64, y: 0, w: 32, h: 32, tint: 0xff9ec4 },
+		"x": { sheet: "tilesets/Plants.png", x: 0, y: 0, w: 32, h: 32, tint: 0xc7a6ff },
+		"i": { sheet: "tilesets/Plants.png", x: 96, y: 0, w: 32, h: 32 },
+		"w": { sheet: "tilesets/Plants.png", x: 128, y: 0, w: 32, h: 32 },
+		"v": { sheet: "tilesets/Plants.png", x: 160, y: 0, w: 32, h: 32 },
+		"r": { sheet: "tilesets/Plants.png", x: 192, y: 0, w: 32, h: 32, upright: true },
+		"b": { sheet: "tilesets/Plants.png", x: 224, y: 0, w: 32, h: 32, upright: true },
+		"T": { sheet: "tilesets/Plants.png", x: 0, y: 32, w: 32, h: 64, upright: true },
+		"A": { sheet: "tilesets/Plants.png", x: 32, y: 32, w: 32, h: 64, upright: true },
 	},
 	skins: ["Misc_George", "Misc_PixelFox", "Misc_Zetasis", "Misc_jcsnider", "Misc_Kibbelz"].map((n) => ({ sheet: `entities/${n}.png`, frameW: 32, frameH: 48 })),
 	rooms: ROOMS,
@@ -356,3 +372,13 @@ export const world: WorldDef = {
 		],
 	},
 };
+
+// The plants come last: they keep clear of everything placed above (the spawn, the ways in and out, people, fires,
+// things). Ground stays as it is, the hand-drawn rooms included.
+for (const r of world.rooms) {
+	const p = byId.get(r.roomId)!;
+	const keep: Cell[] = [r.spawn, ...world.npcs.filter((n) => n.room === r.roomId), ...world.beacons.filter((b) => b.room === r.roomId),
+		...world.objects.filter((o) => o.room === r.roomId), ...world.exits.filter((e) => e.room === r.roomId),
+		...world.exits.filter((e) => e.destination === r.roomId).map((e) => e.arrive)];
+	r.decor = plants(r.ground, r.roomId, p.flora ?? ISLANDS[p.island]!.flora, keep);
+}

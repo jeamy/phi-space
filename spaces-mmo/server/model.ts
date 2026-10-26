@@ -63,7 +63,7 @@ export type HelpEntryFields = { key: string; category: string; text: string };
 /** Which version of a world's definition the space holds (written by the loader). */
 export type WorldLoadedFields = { worldId: string; version: number; at: number };
 /** A room of the loaded world: its grid of tile keys, one string per row. */
-export type RoomFields = { roomId: string; name: string; desc: string; ground: string[]; spawn?: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
+export type RoomFields = { roomId: string; name: string; desc: string; ground: string[]; decor?: string[]; spawn?: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
 /** A character being played right now: held by the web process with a short lease while the WebSocket is open. */
 export type SessionFields = { sessionId: string; charId: string; accountId: string };
 /** One command line, written by the web process (or later an NPC), taken by a world worker. */

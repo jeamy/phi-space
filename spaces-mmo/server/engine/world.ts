@@ -11,16 +11,23 @@ import { typeChain } from "./typeclasses.ts";
  *  VX layout, 2×3 tiles per block, composed from quarter tiles by its neighbours), one block per animation frame;
  *  `x`/`y` stay the flat fallback. */
 export type TileDef = { sheet: string; x: number; y: number; walk: boolean; auto?: { blocks: Array<{ x: number; y: number }>; frameMs: number } };
+/** Something drawn over a ground tile (a flower, a bush, a small tree): a `w`×`h` cut of a sheet, standing on the bottom of
+ *  its cell (taller cuts reach into the cell above), optionally tinted; `upright` ones stand among the figures (one behind
+ *  it is hidden), the others lie flat under things and figures. Only for the eye: it changes no rule. */
+export type DecorDef = { sheet: string; x: number; y: number; w: number; h: number; tint?: number; upright?: boolean };
 /** A character sheet: 4 frames per row, rows down, left, right, up. */
 export type SkinDef = { sheet: string; frameW: number; frameH: number };
 /** `map`: where the room lies on the overview of the world (one unit per room; rooms of one island side by side),
  *  `island`: the island it belongs to (the overview groups and names them). */
-export type RoomDef = { roomId: string; name: string; desc: string; ground: string[]; spawn: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
+/** `decor`: the same grid as `ground`, a key of the world's `decor` or a space per cell. */
+export type RoomDef = { roomId: string; name: string; desc: string; ground: string[]; decor?: string[]; spawn: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
 export type ExitDef = Omit<ExitFields, "location" | "locks"> & { room: string; locks?: string };
 /** An item the world places once: spawned only while no item with its itemId exists anywhere. */
 export type PlacedDef = { itemId: string; proto: string; room: string; x: number; y: number };
 export type WorldDef = {
 	id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; guestName: string;
+	/** What a room's `decor` grid names (plants and the like). */
+	decor?: Record<string, DecorDef>;
 	/** Raised when the definition changes: a world worker loads a newer version (rooms, exits, prototypes, help). */
 	version: number;
 	/** The hour of day 0 a new world's clock starts at (default 8; docs/weltzeit.md). */
@@ -90,7 +97,12 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		for (const row of ground) for (const k of row) if (!w.tiles[k]) throw new Error(`${what}: unknown tile ${k}`);
 		if (!walkable(w, ground, spawn.x, spawn.y)) throw new Error(`${what}: spawn is not walkable`);
 	};
-	for (const r of w.rooms) grid(`room ${r.roomId}`, r.ground, r.spawn);
+	for (const r of w.rooms) {
+		grid(`room ${r.roomId}`, r.ground, r.spawn);
+		if (!r.decor) continue;
+		if (r.decor.length !== r.ground.length || r.decor.some((row) => row.length !== r.ground[0]!.length)) throw new Error(`room ${r.roomId}: decor not the size of the ground`);
+		for (const row of r.decor) for (const k of row) if (k !== " " && !w.decor?.[k]) throw new Error(`room ${r.roomId}: unknown decor ${k}`);
+	}
 	grid("dig template", w.dig.ground, w.dig.spawn);
 	const room = (roomId: string) => w.rooms.find((r) => r.roomId === roomId);
 	if (!room(w.start)) throw new Error(`world ${id}: unknown start room ${w.start}`);

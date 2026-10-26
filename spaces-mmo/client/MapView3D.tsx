@@ -11,7 +11,7 @@ import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
 import { tile3d } from "./terrain3d.ts";
-import { loadTileLooks, type TileLook } from "./tiles3d.ts";
+import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
@@ -116,12 +116,13 @@ export function MapView3D(props: MapRendererProps) {
 		s.room = props.room; s.world = props.world;
 		for (const m of [s.chars, s.objs]) for (const id of [...m.keys()]) remove(s, m, id);
 		void (async () => {
-			let looks = new Map<string, TileLook>();
+			let looks = new Map<string, TileLook>(), plants = new Map<string, import("three").Texture>();
 			try { looks = await loadTileLooks(s.t, props.world, s.renderer.capabilities.getMaxAnisotropy()); } catch { /* flat colours */ }
+			try { plants = await loadDecorLooks(s.t, props.world); } catch { /* a bare room */ }
 			if (dead || state.current !== s) return;
 			if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); }
 			s.water = [];
-			s.ground = buildTerrain(s, looks);
+			s.ground = buildTerrain(s, looks, plants);
 			s.scene.add(s.ground);
 			sync(s, latest.current.chars, latest.current.objs, latest.current.me, true);
 			resize(s);
@@ -156,8 +157,9 @@ export function MapView3D(props: MapRendererProps) {
 
 const dims = (room: MapRendererProps["room"]) => ({ w: room.ground[0]?.length ?? 0, h: room.ground.length });
 
-/** The ground: one instanced box per tile kind, the tile art on top, plain earth on the sides. Boxes touch (no seams). */
-function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three").Group {
+/** The ground: one instanced box per tile kind, the tile art on top, plain earth on the sides. Boxes touch (no seams).
+ *  The plants stand on it as pictures that face the camera (flat ones smaller). */
+function buildTerrain(s: Scene3D, looks: Map<string, TileLook>, plants: Map<string, import("three").Texture>): import("three").Group {
 	const { t, room, world } = s, { w, h } = dims(room);
 	const group = new t.Group(); group.userData.owned = true;
 	const byTile = new Map<string, Array<{ x: number; y: number }>>();
@@ -176,6 +178,18 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three")
 		});
 		mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
 		if (look && look.frames.length > 1) s.water.push({ material: top, look });
+	}
+	const materials = new Map<string, import("three").SpriteMaterial>();
+	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key], map = plants.get(key);
+		if (!d || !map) continue;
+		let material = materials.get(key);
+		if (!material) { material = new t.SpriteMaterial({ map, color: d.tint ?? 0xffffff, alphaTest: 0.5 }); materials.set(key, material); }
+		const sprite = new t.Sprite(material), size = d.upright ? 1 : 0.6;
+		sprite.center.set(0.5, 0);
+		sprite.scale.set((d.w / world.tileSize) * size, (d.h / world.tileSize) * size, 1);
+		sprite.position.set(x - w / 2 + 0.5, surface(room, world, x, y), y - h / 2 + 0.5);
+		group.add(sprite);
 	}
 	return group;
 }

@@ -53,7 +53,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (old) await space.take({ type, id: old.id }, NO_WAIT, { txn });
 			await space.write(draft, txn, FOREVER);
 		};
-		for (const r of w.rooms) await upsert("Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: r.ground, spawn: r.spawn, ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
+		for (const r of w.rooms) await upsert("Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: r.ground, ...(r.decor ? { decor: r.decor } : {}), spawn: r.spawn, ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
 		for (const e of w.exits) {
 			const { room, ...rest } = e;
 			await upsert("Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, location: room, locks: e.locks ?? "" } satisfies ExitFields));

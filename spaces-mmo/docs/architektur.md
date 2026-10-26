@@ -219,6 +219,12 @@ Animationen, Gegenstände, Oberfläche, Klänge und Musik, alles in einem Stil.
 - **Übernahme:** Nur ausgewählte Dateien (wenige MB) nach `spaces-mmo/worlds/leuchtfeuer/assets/`, kein Submodul und
   keine Kopie des ganzen Repos (~120 MB). Daneben `CREDITS.md` mit Datei, Autor, Lizenz und Quell-Commit; die
   Oberfläche zeigt die Namensnennung unter „Über“.
+- **Pflanzen:** Blumen, Kräuter, Büsche und kleine Bäume liegen als eigene Schicht `decor` über dem Boden (gleiches
+  Raster wie `ground`, Schlüssel aus `world.decor`, ausgeschnitten aus `Overworld.png` nach `tilesets/Plants.png`).
+  `plants()` in `islands.ts` setzt sie per Seed nur auf Gras, nie auf oder neben Wege, Türen, Startpunkt, Leute, Feuer
+  und Dinge; wie viel wächst, sagt `flora` je Insel oder Ort (kein Baum auf Möwenfels und Tangriff, Wald auf Nebelholm).
+  Sie sind nur fürs Auge: alle Felder bleiben begehbar, keine Spielregel ändert sich. 2D zeichnet flache Pflanzen unter
+  den Dingen und aufrechte (`upright`) zwischen den Figuren, 3D stellt sie als Bilder zur Kamera auf.
 - **Ausweichweg:** Kenney-Pakete (CC0, keine Namensnennung) für Testszenen oder wenn eine Kachel fehlt; im selben Raum
   werden die Stile nicht gemischt.
 - **Ausweichweg:** Kein WebGL verfügbar → PixiJS-Canvas-Fallback bzw. Textmodus. Der Umschalter „nur Text“ bleibt
