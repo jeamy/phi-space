@@ -6,13 +6,12 @@
 // and never play one twice; a process that dies loses its roles to another when the lease runs out.
 //
 //   SPACES_MMO_SPACE        the world space (default unix:/tmp/spaces-mmo-world.sock)
-//   SPACES_MMO_TIME_SCALE   factor on game durations (the scripts' pauses scale with it)
+//   (the rhythm of the scripts and their timers follow the world clock's rate, not an environment variable)
 //   SPACES_MMO_NPCS         the roles this process plays, by npcId with commas (default: all of the world)
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { ClockCache } from "./engine/clockcache.ts";
-import { gameMs } from "./engine/time.ts";
+import { ClockCache, paceMs, worldNowMs } from "./engine/clockcache.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
@@ -67,6 +66,8 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 			def, charId, space, world: w, halt: halt.signal, sleep,
 			async setOnline(on) { online = on; await keep(); if (on) await npc.act("arrive"); },
 			isOnline: () => online,
+			now: () => worldNowMs(space),
+			pace: (worldMs, minMs) => paceMs(space, worldMs, minMs),
 			async act(line) {
 				const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId, line, at: Date.now() };
 				await space.write({ type: "Intent", fields: asFields(intent) }, null, 30_000);
@@ -97,7 +98,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 				beat.unref?.();
 				try {
 					while (!halt.signal.aborted && !lost) {
-						try { if (await atPlan(npc)) await script(npc); else await sleep(gameMs(5_000, 200)); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
+						try { if (await atPlan(npc)) await script(npc); else await sleep(paceMs(space, 5_000, 200)); } catch (e) { if (!halt.signal.aborted) { console.error(`[npc] ${def.npcId}:`, (e as Error).message); await sleep(1000); } }
 					}
 				} finally {
 					clearInterval(beat);

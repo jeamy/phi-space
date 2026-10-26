@@ -2,10 +2,11 @@
 
 ## Status
 
-**Schritte 1 bis 5 der [Migration](#migration) sind implementiert** (2026-10-26); Schritt 6 ist offen. Feuer, Nebel, Flut,
-Strandgut, Aufträge und Marktangebote laufen in Weltzeit: die Uhr bestimmt, wann etwas fällig ist, und eine pausierte Welt hält
-sie an. `SPACES_MMO_TIME_SCALE` bestimmt nur noch die Rate einer neuen Uhr und den Takt der NPC-Skripte (`engine/time.ts`
-`gameMs`: Pausen und Fristen der NPC-Rollen).
+**Alle sechs Schritte der [Migration](#migration) sind implementiert** (2026-10-26). Die Uhr bestimmt, wann etwas fällig ist:
+Feuer, Nebel, Flut, Strandgut, Aufträge, Marktangebote und die eigenen Timer der NPC-Rollen (Wachzeit, Wanderer-Fristen,
+Grußsperren, Geplauder) laufen in Weltzeit, und eine pausierte Welt hält sie an. `SPACES_MMO_TIME_SCALE` ist nur noch der
+Anfangswert der Rate einer **neuen** Uhr (`rate = 1 / Wert`); `gameMs` gibt es nicht mehr. Offen sind nur die beiden Punkte
+des Abschnitts „Serverzeit“ (siehe die letzten Zeilen der Tabelle).
 
 | Teil | Stand | Wo |
 | --- | --- | --- |
@@ -22,7 +23,8 @@ sie an. `SPACES_MMO_TIME_SCALE` bestimmt nur noch die Rate einer neuen Uhr und d
 | Fristen als `expiresWorldMs` (Strandgut, Aufträge, Marktangebote); `sweep` (alle 10 Weltsekunden) nimmt Abgelaufenes; `get` löscht die Frist | fertig | `engine/sweep.ts`, `engine/commands/default.ts`, `trade.ts` |
 | Gateway: `ObjView.until` bleibt Echtzeit des Browsers (aus Weltzeit gerechnet, bei Uhrwechsel neu gesendet), Brenndauer in Weltminuten | fertig | `gateway.ts`, `fire.ts` (`burnText`) |
 | `WorldClockOwner`-Lease und gespeicherter Diagnosezustand der Hostzeit (Abschnitt „Serverzeit“) | offen (jeder Welt-Worker plant; der Schutz gegen Doppelverarbeitung ist die Transaktion am Termin) | |
-| Schritt 6: NPC-Skripte (Pausen, Wachzeit `NpcAwake`, Wanderer-Fristen, Grußsperren) auf Weltzeit; dann ist `SPACES_MMO_TIME_SCALE` nur noch der Anfangswert | offen | `npc/scripts.ts`, `npc/economy.ts`, `npc/minds.ts` |
+| NPC-Rollen: eigene Timer in Weltzeit (`Npc.now()`: Wachzeit `NpcAwake.untilWorldMs` ohne Lease, die Sperre nach einem Besuch `NpcVisit.untilWorldMs`, Grußsperren, Gossip, Geplauder, Aufenthalt von Wanderern); der Rhythmus einer Runde folgt der Rate der Uhr (`Npc.pace`), die Runden laufen auch in einer pausierten Welt (die Rollen hören weiter zu); `sweep` räumt abgelaufene `NpcAwake` | fertig | `npc/scripts.ts`, `npc/economy.ts`, `npc/minds.ts`, `npc-host.ts`, `engine/clockcache.ts` |
+| `SPACES_MMO_TIME_SCALE` nur noch Anfangswert der Rate (Schritt 6); `gameMs` entfernt | fertig | `engine/time.ts`, `engine/loader.ts` |
 
 **Abweichung beim NPC-Plan:** Der Entwurf lässt den NPC-Prozess aus den Planrändern Termine erzeugen. Umgesetzt ist stattdessen
 ein Abgleich vor jeder Runde der Rolle: Die Figur ist da, wenn `presentAt(plan, Weltzeit)` es sagt, sonst geht sie (mit
@@ -41,9 +43,11 @@ zurückspringt oder zu weit vorspringt, für zehn Sekunden alle neuen Weltzeit-E
 laufen mit ihrer Lease aus (sie haben kein `expiresWorldMs`). Alles ist in einem Schritt umgestellt: Es gibt keinen
 Echtzeit-Ticker mehr, der dieselbe Aufgabe doppelt auslösen könnte.
 
-**Anmerkung zur Rate:** Dauern in der Weltdefinition (Brennstoff, Nebelschritt, Gezeiten, Lebensdauer von Strandgut) sind jetzt
-Weltmillisekunden ohne Umrechnung. Mit `SPACES_MMO_TIME_SCALE=0.002` (Rate 500) läuft alles wie vorher schneller, eine
-pausierte oder verlangsamte Uhr betrifft aber alles zugleich.
+**Anmerkung zur Rate:** Dauern in der Weltdefinition (Brennstoff, Nebelschritt, Gezeiten, Lebensdauer von Strandgut) und die Timer der
+NPC-Rollen sind Weltmillisekunden ohne Umrechnung. Mit `SPACES_MMO_TIME_SCALE=0.002` (Rate 500) legt eine neue Welt ihre Uhr
+beschleunigt an; eine bestehende Welt behält ihre gespeicherte Rate, und `clock rate <n>` ändert sie für alles zugleich
+(auch den Rhythmus der Rollen). Der Zwischenspeicher der Uhr in den Prozessen der Rollen (15 s) lässt eine Änderung dort
+spätestens nach dieser Zeit wirken.
 
 Tests: `tests/weltzeit.test.ts`, `tests/weltzeit-budget.test.ts` (der Schlüssel wechselt an der Welttagsgrenze, die realen Limits zählen weiter) (Berechnung, Pause und Rate ohne Sprung, Kalender, Pläne 6–22 und 20–2 an allen vier Grenzen,
 Browser-Interpolation, die Uhr im Spiel mit Admin-Befehlen, Termine, der Wächter, eine pausierte Welt hält Feuer, Nebel und Gezeiten an, die Aufräumrunde). Der Implementierungsstand in

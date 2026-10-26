@@ -15,14 +15,13 @@
 import { randomInt } from "node:crypto";
 import { clockOf } from "../engine/clockcache.ts";
 import { flameOf } from "../engine/fire.ts";
-import { gameMs } from "../engine/time.ts";
 import type { WorldDef } from "../engine/world.ts";
 import { fieldsOf, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
 import { byPerson, humansIn, newHeard, self, type Npc, type Script } from "./scripts.ts";
 
 /** One round of a trader or a worker: every look is several calls to the space (each a transaction), and players do not
  *  wait on a trader as they do on the keeper, so the rounds are not short. */
-const round = () => gameMs(8_000, 200);
+const round = (n: Npc) => n.pace(8_000, 200);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const pick = <T>(xs: T[]): T | undefined => xs[randomInt(0, Math.max(1, xs.length))];
 
@@ -161,8 +160,9 @@ function social(): (n: Npc, l: Look) => Promise<boolean> {
 		const said = (await heard(n, l.me)).filter(byPerson);
 		const named = said.find((m: MsgFields) => m.text.toLowerCase().includes(n.def.name.toLowerCase()));
 		if (named) { await n.act(`say ${n.def.script === "plauderer" ? `${named.from}, ${pick(n.def.lines ?? []) ?? "ja?"}` : tradeTalk(n, named.from)}`); return true; }
-		const hello = said.find((m) => /\b(hallo|hi|moin|servus|hello|hey)\b/i.test(m.text) && Date.now() - (greeted.get(m.from) ?? 0) > gameMs(10 * 60_000));
-		if (hello && randomInt(0, 3) === 0) { greeted.set(hello.from, Date.now()); await n.act(`say Moin, ${hello.from}.`); return true; }
+		const wnow = await n.now();
+		const hello = said.find((m) => /\b(hallo|hi|moin|servus|hello|hey)\b/i.test(m.text) && wnow - (greeted.get(m.from) ?? -Infinity) > 10 * 60_000);
+		if (hello && randomInt(0, 3) === 0) { greeted.set(hello.from, wnow); await n.act(`say Moin, ${hello.from}.`); return true; }
 		return false;
 	};
 }
@@ -175,12 +175,12 @@ function pitcher(): (n: Npc, l: Look, protos?: string[]) => Promise<boolean> {
 		if ((await n.space.count({ type: "Offer", fields: { from: l.me.charId } })) > 0) return false;
 		const people = await humansIn(n, l.me.room);
 		if (!people.length) return false;
-		const coins = coinsOf(n, l).length;
+		const coins = coinsOf(n, l).length, wnow = await n.now();
 		for (const ch of (await n.space.readAll({ type: "Character", fields: { room: l.me.room } })).map((e) => fieldsOf<CharacterFields>(e)).filter((c) => people.includes(c.name))) {
 			const theirs = (await n.space.readAll({ type: "Item", fields: { location: ch.charId } })).map((e) => fieldsOf<ItemFields>(e));
-			const want = theirs.find((i) => (!protos || protos.includes(i.proto)) && buyPrice(n, i.proto) > 0 && i.proto !== n.world.currency && buyPrice(n, i.proto) <= coins && Date.now() - (pitched.get(`${ch.charId}:${i.proto}`) ?? 0) > gameMs(10 * 60_000));
+			const want = theirs.find((i) => (!protos || protos.includes(i.proto)) && buyPrice(n, i.proto) > 0 && i.proto !== n.world.currency && buyPrice(n, i.proto) <= coins && wnow - (pitched.get(`${ch.charId}:${i.proto}`) ?? -Infinity) > 10 * 60_000);
 			if (!want) continue;
-			pitched.set(`${ch.charId}:${want.proto}`, Date.now());
+			pitched.set(`${ch.charId}:${want.proto}`, wnow);
 			const price = buyPrice(n, want.proto);
 			await n.act(`offer ${price} münze an ${ch.name} für ${want.name.toLowerCase()}`);
 			await n.act(`say ${ch.name}, für dein ${want.name} zahle ich ${plural(price, "Münze", "Münzen")}. „accept ${n.def.name}“, wenn du einverstanden bist.`);
@@ -192,10 +192,12 @@ function pitcher(): (n: Npc, l: Look, protos?: string[]) => Promise<boolean> {
 
 /** Now and then a line of its own, while people are there to hear it. */
 function chatter(everyMs: number): (n: Npc, l: Look) => Promise<boolean> {
-	let last = Date.now() - randomInt(0, everyMs);
+	let last: number | null = null;
 	return async (n, l) => {
-		if (Date.now() - last < gameMs(everyMs) || !n.def.lines?.length) return false;
-		last = Date.now();
+		const wnow = await n.now();
+		last ??= wnow - randomInt(0, everyMs);
+		if (wnow - last < everyMs || !n.def.lines?.length) return false;
+		last = wnow;
 		if (!(await humansIn(n, l.me.room)).length) return false;
 		await n.act(`say ${pick(n.def.lines)!}`);
 		return true;
@@ -224,7 +226,7 @@ function sammler(): Script {
 				else { home = (home + 1) % homes.length; await travel(n, l, homes[home]!); }
 			}
 		}
-		await n.sleep(round());
+		await n.sleep(round(n));
 	};
 }
 
@@ -235,7 +237,7 @@ function huter(): Script {
 		const l = await look(n);
 		if (!l) { await n.sleep(1000); return; }
 		const beacon = n.world.beacons.find((b) => b.beaconId === n.def.beacon);
-		if (!beacon) { await n.sleep(gameMs(60_000)); return; }
+		if (!beacon) { await n.sleep(n.pace(60_000)); return; }
 		const fuels = Object.keys(n.world.fire.fuel);
 		const fuel = l.pack.filter((i) => fuels.includes(i.proto));
 		const f = await flameOf(n.space, beacon.beaconId), now = (await clockOf(n.space).now()) ?? 0; // world time
@@ -256,7 +258,7 @@ function huter(): Script {
 		}
 		if (!acted) acted = (await offer(n, l, fuels)) || (await say(n, l));
 		if (!acted && l.me.room !== beacon.room) await travel(n, l, beacon.room);
-		await n.sleep(round());
+		await n.sleep(round(n));
 	};
 }
 
@@ -280,12 +282,12 @@ function haendler(): Script {
 		if (!l) { await n.sleep(1000); return; }
 		const route = n.def.route ?? [l.me.room];
 		const target = route[at % route.length]!;
-		if (l.me.room !== target) { if (!(await talk(n, l))) await travel(n, l, target); await n.sleep(round()); return; }
+		if (l.me.room !== target) { if (!(await talk(n, l))) await travel(n, l, target); await n.sleep(round(n)); return; }
 		// at a market of its route: buys below its price, asks more than it paid; after a while it moves on
 		const acted = (await talk(n, l)) || (await buy(n, l)) || (await sell(n, l)) || (await offer(n, l)) || (await say(n, l));
 		rounds++;
 		if (route.length > 1 && (rounds > 12 || (!acted && rounds > 4))) { at++; rounds = 0; }
-		await n.sleep(round());
+		await n.sleep(round(n));
 	};
 }
 
@@ -312,19 +314,21 @@ function handwerker(): Script {
 		if (!acted && homes.includes(l.me.room)) acted = await gather(n, l, inputs);
 		if (!acted && !homes.includes(l.me.room) && !(products.length && n.def.market === l.me.room)) acted = !(await travel(n, l, homes[0]!));
 		if (!acted) await say(n, l);
-		await n.sleep(round());
+		await n.sleep(round(n));
 	};
 }
 
 function plauderer(): Script {
 	const talk = social(), say = chatter(2 * 60_000);
-	let lastGossip = Date.now() - randomInt(0, gameMs(8 * 60_000)), home = 0;
+	let lastGossip: number | null = null, home = 0;
 	return async (n) => {
 		const l = await look(n);
 		if (!l) { await n.sleep(1000); return; }
+		const wnow = await n.now();
+		lastGossip ??= wnow - randomInt(0, 8 * 60_000);
 		let acted = (await talk(n, l)) || (await say(n, l));
-		if (!acted && Date.now() - lastGossip > gameMs(8 * 60_000)) {
-			lastGossip = Date.now();
+		if (!acted && wnow - lastGossip > 8 * 60_000) {
+			lastGossip = wnow;
 			const g = await gossip(n);
 			if (g) { await n.act(randomInt(0, 2) && (await humansIn(n, l.me.room)).length ? `say ${g}` : `kanal ${n.world.channels[0] ?? "hafen"} ${g}`); acted = true; }
 		}
@@ -338,7 +342,7 @@ function plauderer(): Script {
 				if (",.".includes(ground[y]?.[x] ?? "~")) await n.act(`move ${x} ${y}`);
 			}
 		}
-		await n.sleep(round());
+		await n.sleep(round(n));
 	};
 }
 

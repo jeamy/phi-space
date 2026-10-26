@@ -6,7 +6,7 @@
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS } from "../engine/commands/default.ts";
 import { TRADE_COMMANDS } from "../engine/commands/trade.ts";
-import { worldDayKey } from "../engine/clockcache.ts";
+import { worldDayKey, worldNowMs } from "../engine/clockcache.ts";
 import { complete, llmEnabled } from "../llm.ts";
 import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields } from "../model.ts";
 import { readExisting, StillHeld } from "../space.ts";
@@ -42,24 +42,32 @@ export async function claimRole(space: SpaceLike, npcId: string, owner: string, 
 	});
 }
 
-/** Wakes an NPC if fewer than `max` are awake; true when it is awake now (also when it already was). */
-export async function tryWake(space: SpaceLike, npcId: string, max: number, leaseMs: number): Promise<boolean> {
+/** Wakes an NPC for `forWorldMs` of world time if fewer than `max` are awake; true when it is awake now (also when it already
+ *  was). An awake role is an entry with the world time it stays awake until: a paused world lets it stay, and the sweep
+ *  (engine/sweep.ts) removes it when the time has come. */
+export async function tryWake(space: SpaceLike, npcId: string, max: number, forWorldMs: number): Promise<boolean> {
 	return locked(space, async (txn) => {
-		if (await space.readIfExists({ type: "NpcAwake", fields: { npcId } }, NO_WAIT, { txn })) return true;
-		if ((await space.count({ type: "NpcAwake" }, txn)) >= max) return false;
-		await space.write({ type: "NpcAwake", fields: { npcId, since: Date.now() } satisfies NpcAwakeFields as never }, txn, leaseMs);
+		const now = await worldNowMs(space);
+		const awake = (await space.readAll({ type: "NpcAwake" }, { txn })).filter((e) => Number(e.fields.untilWorldMs) > now);
+		if (awake.some((e) => e.fields.npcId === npcId)) return true;
+		if (awake.length >= max) return false;
+		await space.takeIfExists({ type: "NpcAwake", fields: { npcId } }, NO_WAIT, { txn }); // a lapsed one
+		await space.write({ type: "NpcAwake", fields: { npcId, since: now, untilWorldMs: now + forWorldMs } satisfies NpcAwakeFields as never }, txn, FOREVER);
 		return true;
 	});
 }
 
-export const isAwake = async (space: SpaceLike, npcId: string) => !!(await space.readIfExists({ type: "NpcAwake", fields: { npcId } }, 1_000));
+export const isAwake = async (space: SpaceLike, npcId: string) => {
+	const e = await space.readIfExists({ type: "NpcAwake", fields: { npcId } }, 1_000);
+	return !!e && Number(e.fields.untilWorldMs) > (await worldNowMs(space));
+};
 
-/** Keeps an awake NPC awake for another `leaseMs` (it was spoken to, or something happened). */
-export async function keepAwake(space: SpaceLike, npcId: string, leaseMs: number): Promise<void> {
+/** Keeps an awake NPC awake for another `forWorldMs` of world time (it was spoken to, or something happened). */
+export async function keepAwake(space: SpaceLike, npcId: string, forWorldMs: number): Promise<void> {
 	const txn = (await space.createTransaction(10_000)).id;
 	try {
 		const e = await space.takeIfExists({ type: "NpcAwake", fields: { npcId } }, 1_000, { txn });
-		if (e) await space.write({ type: "NpcAwake", fields: e.fields }, txn, leaseMs);
+		if (e) await space.write({ type: "NpcAwake", fields: { ...e.fields, untilWorldMs: (await worldNowMs(space)) + forWorldMs } }, txn, FOREVER);
 		await space.commit(txn);
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }

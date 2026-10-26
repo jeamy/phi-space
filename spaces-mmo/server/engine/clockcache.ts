@@ -23,6 +23,9 @@ export class ClockCache {
 		return this.#clock;
 	}
 
+	/** World milliseconds per real millisecond as last read (1 before the first read). */
+	rate(): number { return this.#clock?.rate ?? 1; }
+
 	/** The world time now, or null while the world has no clock. */
 	async now(realNow = Date.now()): Promise<number | null> {
 		const c = await this.clock(realNow);
@@ -33,6 +36,14 @@ export class ClockCache {
 const caches = new WeakMap<SpaceLike, ClockCache>();
 /** The cache of a space's clock, shared by whoever in this process asks. */
 export const clockOf = (space: SpaceLike): ClockCache => { let c = caches.get(space); if (!c) { c = new ClockCache(space); caches.set(space, c); } return c; };
+
+/** The world time now (real time while the world has no clock): what an NPC's own timers count in. */
+export const worldNowMs = async (space: SpaceLike, realNow = Date.now()): Promise<number> => (await clockOf(space).now(realNow)) ?? realNow;
+
+/** Real milliseconds for a rhythm of `worldMs` of the world's time (at least `minMs`): how often a role looks around.
+ *  A rhythm follows the clock's rate, so a world that runs fast has quick roles; it does not stop with a pause (a role still
+ *  hears what is said in a world that stands still). */
+export const paceMs = (space: SpaceLike, worldMs: number, minMs = 50): number => Math.max(minMs, Math.round(worldMs / clockOf(space).rate()));
 
 /** The key of the world day, `e1:d183` (clock epoch and day), or null while the world has no clock: what a narrative
  *  budget "per day" counts by (docs/weltzeit.md, "Modellbudgets"). */

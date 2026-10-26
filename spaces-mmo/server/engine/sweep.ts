@@ -14,7 +14,7 @@ async function takeIfLapsed(space: SpaceLike, id: string, type: string): Promise
 	} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
 }
 
-/** Flotsam, open or taken jobs and listings whose world time is up are removed (a listing's item goes back to its seller with
+/** Flotsam, open or taken jobs, listings and awake roles whose world time is up are removed (a listing's item goes back to its seller with
  *  the market tick, as when its lease used to end). A thing picked up is stripped of the date (the `get` command), so what is carried stays. */
 export async function sweepTick(space: SpaceLike): Promise<void> {
 	const now = await worldNowOf(space);
@@ -22,6 +22,7 @@ export async function sweepTick(space: SpaceLike): Promise<void> {
 		const f = fieldsOf<ItemFields>(e);
 		if (f.expiresWorldMs !== undefined && f.expiresWorldMs <= now) await takeIfLapsed(space, e.id, "Item");
 	}
+	for (const e of await space.readAll({ type: "NpcAwake" })) if (Number(e.fields.untilWorldMs ?? 0) <= now) await takeIfLapsed(space, e.id, "NpcAwake"); // a role awake until a world time
 	for (const e of await space.readAll({ type: "Order" })) if ((fieldsOf<OrderFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Order");
 	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Listing");
 }

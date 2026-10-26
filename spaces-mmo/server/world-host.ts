@@ -9,7 +9,7 @@
 //   SPACES_MMO_MSG_LEASE_MS       how long a message stays (default 10 min)
 //   SPACES_MMO_CLEANUP_MS         how often lapsed guests are looked for (default 60 s)
 //   SPACES_MMO_TXN_MS             lease of a command's transaction: how soon the work of a dead process returns (15 s)
-//   SPACES_MMO_TIME_SCALE         factor on every game duration (burn time, fog steps, tide); tests run fast with 0.01
+//   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.md); an existing clock keeps its rate
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT } from "phi-spaces";

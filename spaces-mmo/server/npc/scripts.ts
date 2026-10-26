@@ -1,12 +1,11 @@
 // Scripts of the npc process. A script is one round of an NPC's life: it reads the world, types at most a few commands
 // (npc.act waits until each is taken) and sleeps; the npc process calls it again and again. Pauses are game time.
 import { randomInt } from "node:crypto";
-import { NO_WAIT, type SpaceLike } from "phi-spaces";
+import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { clockOf } from "../engine/clockcache.ts";
 import { burnText, flameOf, fogOf } from "../engine/fire.ts";
 import { llmEnabled } from "../llm.ts";
 import { isAwake, keepAwake, remember, sleep, think, tryWake } from "./minds.ts";
-import { gameMs } from "../engine/time.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { ECONOMY } from "./economy.ts";
 import { gather, requestOf, unclear } from "./requests.ts";
@@ -20,8 +19,15 @@ export type Npc = {
 	isOnline(): boolean;
 	/** Types a command (an intent) and waits until a world worker has run it. */
 	act(line: string): Promise<void>;
+	/** The world time now: what the role's own timers (cooldowns, stays, how long it is awake) count in. */
+	now(): Promise<number>;
+	/** Real milliseconds for a rhythm of `worldMs` of world time (at least `minMs`): how long a round sleeps. */
+	pace(worldMs: number, minMs?: number): number;
 };
 export type Script = (npc: Npc) => Promise<void>;
+
+/** How long a model role stays awake after something woke it or spoke to it, in world time. */
+const AWAKE_WORLD_MS = 5 * 60_000;
 
 /** The NPC's character, or null while the world has not created it yet (the npc process may start first). */
 export const self = async (n: Npc) => { const e = await n.space.readIfExists({ type: "Character", fields: { charId: n.charId } }, 5_000); return e ? fieldsOf<CharacterFields>(e) : null; };
@@ -31,13 +37,15 @@ export const self = async (n: Npc) => { const e = await n.space.readIfExists({ t
  *  up it dozes and says script lines (the warnings and greetings of Phase 2). */
 function waerter(): Script {
 	let state: "ok" | "low" | "out" | null = null;
-	let lastDoze = Date.now(), pensive = false, budgetSaid = false;
+	let lastDoze: number | null = null, pensive = false, budgetSaid = false;
 	const heardSince = newHeard(), worldEvents = newWorldEvents();
 	let present: Set<string> | null = null, offered: Set<string> | null = null;
 	const greeted = new Map<string, number>();
 	return async (n) => {
 		const me = await self(n);
 		if (!me) { await n.sleep(1000); return; }
+		const wnow = await n.now();
+		lastDoze ??= wnow;
 		const events: string[] = [];
 		const beacon = n.world.beacons.find((b) => b.beaconId === n.def.beacon);
 		let fireText: string | undefined;
@@ -62,7 +70,7 @@ function waerter(): Script {
 		offered = new Set(offers);
 		const m = n.def.model;
 		if (m && llmEnabled()) {
-			const awakeMs = gameMs(5 * 60_000);
+			const awakeMs = AWAKE_WORLD_MS;
 			const wakes = events.filter((e) => m.wake.includes(e) || e === "fire.ok");
 			const awake = await isAwake(n.space, n.def.npcId);
 			if (wakes.length || (awake && fromPeople.length)) {
@@ -75,11 +83,11 @@ function waerter(): Script {
 					if (r === "budget") { if (!budgetSaid) { budgetSaid = true; await n.act(`emote ${dozeLine(me.name, m.dozing, 0)}`); } }
 					else if (r !== "off") { budgetSaid = false; for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); }
 				}
-			} else if (!awake && people.length && Date.now() - lastDoze > gameMs(3 * 60_000)) {
-				lastDoze = Date.now();
+			} else if (!awake && people.length && wnow - lastDoze > 3 * 60_000) {
+				lastDoze = wnow;
 				await n.act(`emote ${dozeLine(me.name, m.dozing, randomInt(0, m.dozing.length))}`);
 			}
-			await n.sleep(gameMs(3_000, 100));
+			await n.sleep(n.pace(3_000, 100));
 			return;
 		}
 		// no model: the script of Phase 2
@@ -97,11 +105,11 @@ function waerter(): Script {
 				continue;
 			}
 			if (!/\b(hallo|hi|moin|hello|servus)\b/i.test(x.text)) continue;
-			if (Date.now() - (greeted.get(x.from) ?? 0) < gameMs(10 * 60_000)) continue;
-			greeted.set(x.from, Date.now());
+			if (wnow - (greeted.get(x.from) ?? -Infinity) < 10 * 60_000) continue;
+			greeted.set(x.from, wnow);
 			await n.act(`say Willkommen am Feuer, ${x.from}!`);
 		}
-		await n.sleep(gameMs(3_000, 100));
+		await n.sleep(n.pace(3_000, 100));
 	};
 }
 
@@ -112,40 +120,42 @@ function wanderer(): Script {
 	let denseSince = 0, lastSpoken = 0, aloneSince = 0;
 	const heardSince = newHeard();
 	return async (n) => {
-		const wd = n.def.wanderer!, m = n.def.model, now = Date.now();
+		const wd = n.def.wanderer!, m = n.def.model, now = await n.now();
 		const me = await self(n);
 		if (!me) { await n.sleep(1000); return; }
 		if (!n.isOnline()) {
 			const dense = (await fogOf(n.space, n.def.room)) >= n.world.fog.max;
 			denseSince = dense ? denseSince || now : 0;
-			const cool = !(await n.space.readIfExists({ type: "NpcVisit", fields: { npcId: n.def.npcId } }, NO_WAIT));
-			if (denseSince && now - denseSince >= gameMs(2 * 60_000) && cool) {
-				await n.space.write({ type: "NpcVisit", fields: { npcId: n.def.npcId, at: now } }, null, gameMs(wd.cooldownMs));
+			const visit = await n.space.readIfExists({ type: "NpcVisit", fields: { npcId: n.def.npcId } }, NO_WAIT);
+			const cool = !visit || Number(visit.fields.untilWorldMs ?? 0) <= now;
+			if (denseSince && now - denseSince >= 2 * 60_000 && cool) {
+				if (visit) await n.space.takeIfExists({ type: "NpcVisit", id: visit.id }, NO_WAIT);
+				await n.space.write({ type: "NpcVisit", fields: { npcId: n.def.npcId, at: now, untilWorldMs: now + wd.cooldownMs } }, null, FOREVER);
 				await n.setOnline(true);
 				lastSpoken = now; aloneSince = 0;
 				await heardSince(n, me); // what was said before he came is not for him
 				if ((await humansIn(n, n.def.room)).length) await speak(n, me.name, wd.event, []);
 			}
-			await n.sleep(gameMs(10_000, 100)); // away: it waits for its event, nobody is waiting on it
+			await n.sleep(n.pace(10_000, 100)); // away: it waits for its event, nobody is waiting on it
 			return;
 		}
 		const said = (await heardSince(n, me)).filter(byPerson);
 		if (said.some((x) => /fremd/i.test(x.text) || x.text.toLowerCase().includes(me.name.toLowerCase()))) { lastSpoken = now; await speak(n, me.name, "spoken", said.map((x) => x.text)); }
 		const people = await humansIn(n, me.room);
 		aloneSince = people.length ? 0 : aloneSince || now;
-		if (now - lastSpoken >= gameMs(wd.stayMs) || (aloneSince && now - aloneSince >= gameMs(2 * 60_000))) {
+		if (now - lastSpoken >= wd.stayMs || (aloneSince && now - aloneSince >= 2 * 60_000)) {
 			if (people.length) await n.act("emote verschwindet im Nebel.");
 			if (m) await sleep(n.space, n.def.npcId);
 			await n.setOnline(false);
 		}
-		await n.sleep(gameMs(3_000, 100));
+		await n.sleep(n.pace(3_000, 100));
 	};
 }
 
 /** A wanderer's words: the model while it can be woken, else its script line. */
 async function speak(n: Npc, name: string, event: string, heard: string[]): Promise<void> {
 	const m = n.def.model;
-	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, npcMax(), gameMs(5 * 60_000)))) {
+	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, npcMax(), AWAKE_WORLD_MS))) {
 		const me = await self(n);
 		const r = await think(n.space, { npcId: n.def.npcId, name, persona: m.persona, budgetDay: m.budgetDay }, { room: await roomName(n, me?.room ?? n.def.room), people: await humansIn(n, me?.room ?? n.def.room), event, heard, ...(me ? await surroundings(n, me) : {}) });
 		if (typeof r === "object") { for (const line of r.lines) await n.act(line); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
@@ -213,10 +223,10 @@ function faehrmann(): Script {
 		const exits = (await n.space.readAll({ type: "Exit", fields: { location: me.room } })).map((e) => fieldsOf<ExitFields>(e));
 		const route = n.def.route ?? [];
 		const exit = exits.find((x) => route.includes(x.destination) && x.destination !== me.room) ?? (route.length ? undefined : exits[0]);
-		if (!exit) { await n.sleep(gameMs(30_000)); return; }
+		if (!exit) { await n.sleep(n.pace(30_000)); return; }
 		await n.act(`move ${exit.x} ${exit.y}`);
 		const after = await self(n);
-		await n.sleep(after && after.room !== me.room ? gameMs(30_000) : gameMs(15_000));
+		await n.sleep(after && after.room !== me.room ? n.pace(30_000) : n.pace(15_000));
 	};
 }
 

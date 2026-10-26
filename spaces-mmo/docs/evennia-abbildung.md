@@ -165,9 +165,9 @@ abweicht:
 - **Ruf:** `Contribution{beaconId, charId, pieces, ms}` je Figur und Feuer, unter der Feuer-Sperre hochgezählt.
 - **Skript-NPCs** (Prozess `npc`, `server/npc/`): Figuren mit eigenem Konto (`npc: true`), vom Loader angelegt. Sie halten
   eine Session und schreiben nur Intents, einen nach dem anderen. Ihre Namen sind für Registrierungen gesperrt.
-- **Spielzeit:** `SPACES_MMO_TIME_SCALE` multipliziert derzeit alle Spieldauern (Brenndauer, Nebelschritt, Flut,
-  Pausen der NPCs); Leases des Systems (Sessions, Transaktionen) zählen nicht dazu. Das ist noch keine Weltuhr;
-  deren Persistenz- und Scheduler-Vertrag steht in [weltzeit.md](weltzeit.md).
+- **Spielzeit:** Die Welt hat eine Uhr (`WorldClock`, [weltzeit.md](weltzeit.md)): Brenndauer, Nebelschritt, Flut, Fristen und
+  die Timer der NPCs laufen in Weltzeit; `SPACES_MMO_TIME_SCALE` ist nur noch die Anfangsrate einer neuen Uhr. Leases des
+  Systems (Sessions, Transaktionen, Rollen) bleiben Echtzeit.
 
 ### Kollision
 

@@ -301,3 +301,38 @@ test("a fire dated in real milliseconds (from before the clock) goes out when th
 		assert.equal(await s.count({ type: "Flame", fields: { beaconId: fresh } }), 1, "a fire of the world's time stays");
 	} finally { await stack.close(); }
 });
+
+// ---- step 6: the roles' own timers in world time ----
+test("a model role is awake until a world time: the room for others counts the awake ones, the time passes with the clock and the sweep clears it", async () => {
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space, { tryWake, isAwake } = await import("../server/npc/minds.ts");
+		// an hour of world time a real second: five world minutes are 83 ms
+		await s.write({ type: "WorldClock", fields: { worldId: "t", epoch: 1, realAnchorMs: Date.now(), worldAnchorMs: 8 * WORLD_HOUR_MS, rate: 3600, paused: false, version: 1 } as never }, null, FOREVER);
+		assert.equal(await tryWake(s, "ines", 1, 20 * 60_000), true);
+		const e = (await s.readIfExists({ type: "NpcAwake", fields: { npcId: "ines" } }, 1_000))!.fields as { since: number; untilWorldMs: number };
+		assert.ok(Math.abs(e.untilWorldMs - e.since - 20 * 60_000) < 1_000, "awake for twenty world minutes");
+		assert.equal(await isAwake(s, "ines"), true);
+		assert.equal(await tryWake(s, "kalle", 1, 20 * 60_000), false, "one may be awake: the other waits");
+		await new Promise((r) => setTimeout(r, 600)); // 36 world minutes
+		assert.equal(await isAwake(s, "ines"), false, "the time has passed with the clock, though the entry is still there");
+		assert.equal(await tryWake(s, "kalle", 1, 20 * 60_000), true, "a lapsed role no longer fills the house");
+		await sweepTick(s);
+		assert.equal(await s.count({ type: "NpcAwake", fields: { npcId: "ines" } }), 0, "the sweep clears what lapsed");
+		assert.equal(await s.count({ type: "NpcAwake", fields: { npcId: "kalle" } }), 1);
+	} finally { await stack.close(); }
+});
+
+test("the rhythm of a role follows the clock's rate, and no duration is scaled by SPACES_MMO_TIME_SCALE any more", async () => {
+	const { paceMs, clockOf } = await import("../server/engine/clockcache.ts");
+	const stack = await startStack({ worlds: 0 });
+	try {
+		const s = stack.space;
+		await s.write({ type: "WorldClock", fields: { worldId: "t", epoch: 1, realAnchorMs: Date.now(), worldAnchorMs: 0, rate: 30, paused: false, version: 1 } as never }, null, FOREVER);
+		await clockOf(s).clock(); // read once: the rate is known
+		assert.equal(paceMs(s, 3_000, 50), 100, "three world seconds at rate 30: a tenth of a real second");
+		assert.equal(paceMs(s, 3_000, 200), 200, "at least the minimum");
+		const { readFileSync } = await import("node:fs");
+		assert.equal(/export const gameMs|export function gameMs/.test(readFileSync(new URL("../server/engine/time.ts", import.meta.url), "utf8")), false, "gameMs is gone");
+	} finally { await stack.close(); }
+});

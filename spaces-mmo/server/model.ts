@@ -95,7 +95,8 @@ export const NPC_LOCK = { type: "Lock", fields: { name: "npc" } } as const;
 /** An npc process plays this role while the lease lives. */
 export type NpcOwnerFields = { npcId: string; owner: string };
 /** A model NPC is awake (answers with the model) while this lives; its lease is renewed whenever it is spoken to. */
-export type NpcAwakeFields = { npcId: string; since: number };
+/** A model role that is awake until a world time (docs/weltzeit.md); the sweep removes it when that has passed. */
+export type NpcAwakeFields = { npcId: string; since: number; untilWorldMs: number };
 /** What a model NPC remembers (≤ 4 KiB), written by itself with NOTE lines. */
 export type NpcMemoryFields = { npcId: string; text: string };
 

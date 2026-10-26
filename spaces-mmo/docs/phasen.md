@@ -60,9 +60,8 @@ wird.
 ## Phase 2 – Zeit: Flut, Feuer, Nebel
 
 **Stand 2026-10-25: umgesetzt.** Abnahme als Tests (`tests/phase2.test.ts`, Spielzeit beschleunigt über
-`SPACES_MMO_TIME_SCALE`): Ein Feuer erlischt zur berechneten Zeit von selbst (der `Flame`-Eintrag hat die Restbrenndauer
-als Lease), der Nebel steigt auf 3 und schließt die Ausgänge, Nachlegen senkt ihn und öffnet sie. Bo pendelt über mehr
-als eine Spielstunde zwischen den Räumen, ohne dass sich Einträge ansammeln. Dazu Flut (Strandgut mit Lease,
+`SPACES_MMO_TIME_SCALE`): Ein Feuer erlischt zur berechneten Zeit von selbst (der `Flame`-Eintrag nennt die Weltzeit, bis zu der er brennt; seit der Weltzeit, [weltzeit.md](weltzeit.md)), der Nebel steigt auf 3 und schließt die Ausgänge, Nachlegen senkt ihn und öffnet sie. Bo pendelt über mehr
+als eine Spielstunde zwischen den Räumen, ohne dass sich Einträge ansammeln. Dazu Flut (Strandgut mit Weltzeit-Ende,
 höchstens 4 je Raum), Kanal `hafen`, `ruf`, Ines als Feuerwärterin, die warnt und grüßt. Abweichungen:
 [evennia-abbildung.md](evennia-abbildung.md#stand-phase-2). Außerdem: Seiten erkennen einen neuen Build und laden neu;
 zwei Figuren stehen nie auf derselben Kachel (Raum-Token, `tests/collision.test.ts`); Leertaste hebt auf.
