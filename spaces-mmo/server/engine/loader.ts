@@ -5,6 +5,8 @@
 // starting together cannot both spawn it. Rooms and things builders made are never touched; NPCs the world no longer
 // has are taken out.
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
+import { timeScale } from "./time.ts";
+import { DEFAULT_START_HOUR, initialClock } from "./worldtime.ts";
 import { actorToken, fieldsOf, roomToken, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type WorldLoadedFields } from "../model.ts";
 import { ensureTickers } from "./ticker.ts";
 import { readExisting, StillHeld } from "../space.ts";
@@ -116,6 +118,8 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (marker) await space.take({ type: "WorldLoaded", id: marker.id }, NO_WAIT, { txn });
 			await space.write({ type: "WorldLoaded", fields: { worldId: w.id, version: w.version, at: Date.now() } satisfies WorldLoadedFields as never }, txn, FOREVER);
 		}
+		// the world's clock: made once, with the world (a reload and a restart keep it, so the world goes on where it was)
+		if (!(await space.readIfExists({ type: "WorldClock", fields: { worldId: w.id } }, NO_WAIT, { txn }))) await space.write({ type: "WorldClock", fields: initialClock(w.id, w.startHour ?? DEFAULT_START_HOUR, Date.now(), timeScale()) as never }, txn, FOREVER);
 		await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
 		await space.commit(txn);
 		return { loaded: replace, version: w.version, spawned };

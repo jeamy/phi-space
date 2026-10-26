@@ -186,3 +186,5 @@ button.link { border: 0; background: transparent; color: var(--accent); padding:
 .pack-do span { flex: 1; color: var(--text-strong); }
 /* what someone else says to the player, or about them: stands out in the log */
 .log .to-me { background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 3px solid var(--accent); padding: 1px 0 1px 6px; margin: 1px 0; border-radius: 3px; color: var(--text-strong); font-weight: 600; }
+
+.worldtime { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }

@@ -8,6 +8,7 @@ import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { appendLine } from "./log.ts";
 import { EXPIRE_MS, StepPacer } from "./stepping.ts";
+import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
 const GONE_GRACE_MS = 2500;
@@ -268,6 +269,10 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
 	const pacer = useRef(new StepPacer());
+	// the world's clock as the server last told it; shown by interpolation, nothing is decided by it
+	const [worldTime, setWorldTime] = useState<{ v: WorldTimeView; at: number } | null>(null);
+	const [, setTick] = useState(0);
+	useEffect(() => { if (!worldTime || worldTime.v.paused) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [worldTime]);
 	const meRef = useRef("");
 	const serverPos = useRef<{ x: number; y: number } | null>(null);
 	meRef.current = me;
@@ -287,7 +292,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				if (f.t === "hello") {
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
-					retry = 0; setHello(f);
+					retry = 0; setHello(f); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
 					for (const t of goneTimers.values()) clearTimeout(t); goneTimers.clear();
 					pacer.current = new StepPacer(); { const mine = f.chars.find((c) => c.charId === f.me.charId); serverPos.current = mine ? { x: mine.x, y: mine.y } : null; } fuels = f.world.fuels;
 					setChars(new Map(f.chars.map((c) => [c.charId, c])));
@@ -314,6 +319,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				}
 				else if (f.t === "obj") setObjs((m) => new Map(m).set(f.o.id, f.o));
 				else if (f.t === "fog") setFog(f.level);
+				else if (f.t === "time") setWorldTime({ v: f.time, at: Date.now() });
 				else if (f.t === "trade") setTrade(f.trade);
 				else if (f.t === "atlas") setAtlas(f.atlas);
 				else if (f.t === "atlasState") setAtlasState(f.state);
@@ -423,6 +429,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				<button className="help-btn" onClick={() => setHelp((h) => !h)} aria-expanded={help} aria-label="Hilfe / Help" title="Hilfe / Help">?</button>
 				<span className={`live${live ? " on" : ""}`} title={live ? "verbunden" : "getrennt"} />
 				<span>{hello?.room.name ?? ""}</span>
+				{worldTime && <span className="worldtime" title="Weltzeit (Tag und Uhrzeit in der Welt)">{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}</span>}
 				<span className="spacer" />
 				<span>{account.name}</span>
 				{account.guest && <span className="badge">Gast</span>}

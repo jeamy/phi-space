@@ -2,10 +2,25 @@
 
 ## Status
 
-**Entwurf, noch nicht implementiert.** Heute besitzt spaces-mmo skalierte **Spieldauern** über
-`SPACES_MMO_TIME_SCALE`: Feuer, Nebel, Flut und NPC-Pausen laufen dadurch in Tests schneller. Es gibt aber noch
-keine persistierte Uhr mit Weltstunde, Welttag oder Kalender. Alle aktuellen Termine beruhen letztlich auf
-`Date.now()` des Servers. Der Implementierungsstand in [modell-npcs.md](modell-npcs.md#stand) ist maßgeblich.
+**Schritte 1 und 2 der [Migration](#migration) sind implementiert** (2026-10-26); die übrigen Schritte sind Entwurf. Heute
+laufen Feuer, Nebel, Flut und NPC-Pausen weiter über `SPACES_MMO_TIME_SCALE` und `Date.now()` des Servers
+(`engine/time.ts`, `engine/ticker.ts`); die Uhr läuft daneben und zeigt die Weltzeit, bestimmt aber noch keinen fachlichen Termin.
+
+| Teil | Stand | Wo |
+| --- | --- | --- |
+| `WorldClock`-Eintrag, Berechnung, Kalender, Pläne in Weltstunden (rein) | fertig | `server/engine/worldtime.ts`, `model.ts` |
+| Uhr beim Anlegen der Welt (eine je Welt, ein Neustart behält sie) | fertig | `engine/loader.ts` unter dem Welt-Lock |
+| Anzeige: `worldTime` im `hello`, Frame `time` bei Änderung und alle 30 s, Kopfzeile des Clients | fertig | `gateway.ts`, `client/App.tsx` |
+| Befehle `time`/`zeit` (alle), `clock`/`uhr` (Admin: Stand, `pause`, `weiter`, `rate <n>`) | fertig | `engine/commands/clock.ts` |
+| NPC-Pläne und `evening` auf `WorldSchedule` (Schritt 3) | offen | |
+| Narrative Tagesbudgets (Schritt 4) | offen | |
+| Feuer, Nebel, Flut, Gegenstandsfristen auf Weltfristen (Schritt 5) | offen | |
+| Scheduler mit Fail-closed-Prüfung der Hostzeit, `WorldClockOwner` (Abschnitt „Serverzeit“) | offen | |
+| `SPACES_MMO_TIME_SCALE` nur noch Anfangswert (Schritt 6) | offen | |
+
+Tests: `tests/weltzeit.test.ts` (Berechnung, Pause und Rate ohne Sprung, Kalender, Pläne 6–22 und 20–2 an allen vier Grenzen,
+Browser-Interpolation, die Uhr im Spiel mit Admin-Befehlen). Der Implementierungsstand in
+[modell-npcs.md](modell-npcs.md#stand) bleibt für die NPCs maßgeblich.
 
 Dieses Dokument legt den Vertrag für eine echte Weltzeit fest. Sie ermöglicht insbesondere NPC-Pläne wie „Ines ist
 von 6 bis 22 Uhr da“, das Ereignis `evening`, nach Weltzeit geplante Werke der Götter und narrative Tagesbudgets.

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { ARTICLES, DEFAULT_ARTICLE, articleById, tocOf } from "../client/help/articles.ts";
 import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 import { DEFAULT_COMMANDS } from "../server/engine/commands/default.ts";
+import { CLOCK_COMMANDS } from "../server/engine/commands/clock.ts";
 import { TRADE_COMMANDS } from "../server/engine/commands/trade.ts";
 
 const LANGS = ["de", "en"] as const;
@@ -37,7 +38,7 @@ test("help links point at existing articles and anchors", () => {
 });
 
 test("every command in the command tables exists in the engine, under its English and German names", () => {
-	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	known.add("help"); known.add("hilfe"); known.add("?"); // helpCommand is built per room
 	const article = articleById("help.game.commands")!;
 	for (const l of LANGS) {

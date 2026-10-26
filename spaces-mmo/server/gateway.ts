@@ -9,7 +9,8 @@ import type { SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
-import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields } from "./model.ts";
+import { viewOf, type WorldTimeView } from "./engine/worldtime.ts";
+import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { envMs } from "./space.ts";
 import type { WsConnection } from "./ws.ts";
 
@@ -37,8 +38,10 @@ export type TradeView = {
 };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins"> & { fuels: string[] }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number }
+	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins"> & { fuels: string[] }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
 	| { t: "fog"; level: number }
+	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
+	| { t: "time"; time: WorldTimeView }
 	| { t: "trade"; trade: TradeView }
 	| { t: "char"; c: CharView }
 	| { t: "gone"; charId: string }
@@ -94,6 +97,8 @@ export class Gateway {
 	readonly #flames = new Map<string, number>(); // beaconId -> until
 	readonly #flameOf = new Map<string, string>(); // flame entry id -> beaconId
 	readonly #fog = new Map<string, number>(); // room -> level
+	#clock: WorldClockFields | null = null; // the world's clock entry (docs/weltzeit.md)
+	#clockTimer: ReturnType<typeof setInterval> | null = null;
 	readonly #offers = new Map<string, OfferFields>(); // entry id -> offer
 	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
 	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
@@ -114,6 +119,9 @@ export class Gateway {
 		let ready!: () => void;
 		this.#ready = new Promise((r) => (ready = r));
 		this.#watch = this.#follow(ready);
+		// a regular reminder, so a browser that was hidden or lost frames shows the same hour again
+		this.#clockTimer = setInterval(() => this.#broadcastTime(), 30_000);
+		this.#clockTimer.unref?.();
 	}
 
 	/** A browser of `me` plays now. */
@@ -161,8 +169,16 @@ export class Gateway {
 		for (const w of this.#waiting) if (w.rev <= rev) { this.#waiting.delete(w); w.ok(); }
 	}
 
+	/** The clock as a browser is told it (null in a world that has none yet). */
+	#worldTime(): WorldTimeView | null { return this.#clock ? viewOf(this.#clock, Date.now()) : null; }
+	#broadcastTime(): void {
+		const time = this.#worldTime();
+		if (time) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "time", time } satisfies ServerFrame);
+	}
+
 	async close(): Promise<void> {
 		this.#closed = true;
+		if (this.#clockTimer) clearInterval(this.#clockTimer);
 		if (this.#atlasDue) clearTimeout(this.#atlasDue);
 		for (const c of [...this.#clients]) c.ws.close();
 		await this.#watch.catch(() => {});
@@ -200,7 +216,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Reads the world once (from a revision taken before the reads) and then follows the change stream. Replaying ops
@@ -212,7 +228,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await this.space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "Offer", "Order", "Listing"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
 					for (const e of await this.space.readAll({ type: "Msg", fields: { to: "*" } })) this.#put(e.id, e.type, e.types, e.fields, msgs);
 					this.#advance(rev);
 					ready();
@@ -225,6 +241,7 @@ export class Gateway {
 					const msgs: MsgFields[] = [];
 					const fogs = new Set<string>(); // rooms whose fog changed
 					let trade = false; // offers, orders or listings changed
+					let clock = false; // the world clock was written
 					const touch = (entryId: string, fields?: Record<string, unknown>, types?: string[]) => {
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
@@ -233,12 +250,13 @@ export class Gateway {
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
 					for (const op of b.ops) {
-						if (op.op === "put") { touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(op.id, op.type, op.types, op.fields, msgs); }
+						if (op.op === "put") { clock ||= op.type === "WorldClock"; touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(op.id, op.type, op.types, op.fields, msgs); }
 						else { touch(op.id); trade ||= this.#offers.has(op.id) || this.#orders.has(op.id) || this.#listings.has(op.id); this.#del(op.id); }
 					}
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
+					if (clock) this.#broadcastTime();
 					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 					if (chars.size || fogs.size || [...objs.keys()].some((id) => this.#objs.get(id)?.kind === "beacon")) this.#atlasChanged();
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
@@ -258,12 +276,14 @@ export class Gateway {
 	}
 
 	#reset(): void {
+		this.#clock = null;
 		for (const m of [this.#chars, this.#charOf, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
 	#put(id: string, type: string, types: string[], fields: Record<string, unknown>, msgs: MsgFields[]): void {
-		if (type === "Room") { const r = fields as unknown as RoomFields; this.#rooms.set(r.roomId, r); }
+		if (type === "WorldClock") this.#clock = fields as unknown as WorldClockFields;
+		else if (type === "Room") { const r = fields as unknown as RoomFields; this.#rooms.set(r.roomId, r); }
 		else if (type === "Character") {
 			const c = fields as unknown as CharacterFields;
 			for (const [eid, cid] of this.#charOf) if (cid === c.charId && eid !== id) this.#charOf.delete(eid);

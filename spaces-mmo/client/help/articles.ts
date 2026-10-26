@@ -239,6 +239,7 @@ Tippe sie in die Befehlszeile (Enter). Jeder Befehl gilt **auf Englisch und auf 
 | \`step <dx> <dy>\` | \`schritt\` | Einen Schritt gehen |
 | \`go <richtung>\` | \`geh\`, \`gehe\` | Einen Ausgang nehmen |
 | \`who\` | \`wer\` | Wer gerade spielt |
+| \`time\` | \`zeit\` | Tag und Uhrzeit in der Welt (steht auch oben in der Kopfzeile) |
 
 ## Dinge {#things}
 
@@ -293,6 +294,7 @@ Type them into the command line (Enter). Every command works **in English and in
 | \`step <dx> <dy>\` | \`schritt\` | Take one step |
 | \`go <direction>\` | \`geh\`, \`gehe\` | Take an exit |
 | \`who\` | \`wer\` | Who is playing right now |
+| \`time\` | \`zeit\` | Day and time of day in the world (also shown in the header bar) |
 
 ## Things {#things}
 

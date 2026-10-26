@@ -23,6 +23,8 @@ export type WorldDef = {
 	id: string; title: string; tileSize: number; tiles: Record<string, TileDef>; skins: SkinDef[]; rooms: RoomDef[]; start: string; guestName: string;
 	/** Raised when the definition changes: a world worker loads a newer version (rooms, exits, prototypes, help). */
 	version: number;
+	/** The hour of day 0 a new world's clock starts at (default 8; docs/weltzeit.md). */
+	startHour?: number;
 	/** Typeclasses below the engine's (name → parent). */
 	typeclasses: Record<string, string | null>;
 	prototypes: PrototypeFields[];
