@@ -180,6 +180,7 @@ test("the swarm space keeps request results for minutes, not the default day (cl
 	try {
 		const s = await f.host.snapshot(NamedSpace, f.hub.spaceId, ctx);
 		assert.equal(core.limitsOf(s!).claimResultMs, SWARM_CLAIM_RESULT_MS);
+		assert.equal(core.limitsOf(s!).generationAdmitMs, SWARM_CLAIM_RESULT_MS, "a generation admits no longer than the results are kept: no expired claims wait for it");
 		assert.ok(SWARM_CLAIM_RESULT_MS < core.DEFAULT_LIMITS.claimResultMs);
 	} finally { await f.close(); }
 });

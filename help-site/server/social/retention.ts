@@ -45,7 +45,9 @@ export async function writeHostInfo(b: BatchHost, facts: HostFacts, cap: number 
 		// The swarm writes several calls a second, each with a request claim whose result is kept for `claimResultMs`: at the
 		// default of 24 hours that fills maxClaimBytes within hours and new requests are refused. A repeat of a call comes
 		// within seconds, so a few minutes of kept results is all the idempotence the swarm needs.
-		core.setLimits(s, { claimResultMs: SWARM_CLAIM_RESULT_MS }, now);
+		// A claim's hash is kept until its generation stops admitting request ids (default 1 hour): with results kept only
+		// minutes, thousands of claims would sit expired but kept, and the sweep of every commit would read them again.
+		core.setLimits(s, { claimResultMs: SWARM_CLAIM_RESULT_MS, generationAdmitMs: SWARM_CLAIM_RESULT_MS }, now);
 		while (core.probe(s, now, { type: "HostInfo" }, null, true).status === "found");
 		core.write(s, now, { type: "HostInfo", fields: { ...facts, cap } }, null, FOREVER);
 	}, b.ctx);
