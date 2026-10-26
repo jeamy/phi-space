@@ -126,17 +126,18 @@ const decline: Command = {
 	},
 };
 
-async function listings(space: SpaceLike): Promise<Array<{ e: Taken; f: ListingFields }>> {
-	return (await space.readAll({ type: "Listing" })).map((e) => ({ e, f: fieldsOf<ListingFields>(e) })).sort((a, b) => a.f.at - b.f.at || a.f.listingId.localeCompare(b.f.listingId));
+/** The listings of one market board, numbered in order of posting. */
+async function listings(space: SpaceLike, room: string): Promise<Array<{ e: Taken; f: ListingFields }>> {
+	return (await space.readAll({ type: "Listing", fields: { room } })).map((e) => ({ e, f: fieldsOf<ListingFields>(e) })).sort((a, b) => a.f.at - b.f.at || a.f.listingId.localeCompare(b.f.listingId));
 }
 
 const market: Command = {
 	key: "market", aliases: ["markt"],
 	help: "market – das Marktbrett: market biete <ding> für <n>, market kaufe <nr>, market zurück <nr> (Preise in Münzen)",
 	async func(c, arg) {
-		if (c.actor.room !== c.world.market.room) throw new CommandError("Das Marktbrett steht an der Grauen Bucht.");
+		if (!c.world.market.rooms.includes(c.actor.room)) throw new CommandError(`Hier steht kein Marktbrett. Marktbretter stehen in: ${roomNames(c.world, c.world.market.rooms)}.`);
 		const [verb = "", ...rest] = arg.trim().split(/\s+/);
-		const all = await listings(c.space);
+		const all = await listings(c.space, c.actor.room);
 		const nr = (s: string | undefined) => { const n = Number(s); if (!Number.isInteger(n) || n < 1 || n > all.length) throw new CommandError("Diese Nummer steht nicht auf dem Brett. „markt“ zeigt es."); return all[n - 1]!; };
 		const coin = c.world.currency;
 		if (!verb) {
@@ -223,10 +224,11 @@ const order: Command = {
 	key: "order", aliases: ["auftrag", "auftraege", "aufträge"],
 	help: "order – die Auftragstafel: order nimm <nr>, order liefere, order aufgeben (Lohn in Münzen)",
 	async func(c, arg) {
-		if (c.actor.room !== c.world.orders.room) throw new CommandError("Die Auftragstafel hängt an der Grauen Bucht.");
+		if (!c.world.orders.rooms.includes(c.actor.room)) throw new CommandError(`Hier hängt keine Auftragstafel. Tafeln hängen in: ${roomNames(c.world, c.world.orders.rooms)}.`);
 		const [verb = "", n] = arg.trim().split(/\s+/);
+		// the open orders of this board; one's own order can be delivered at any board
 		const all = await ordersOf(c.space);
-		const open = all.filter((o) => !o.f.takenBy), mine = all.find((o) => o.f.takenBy === c.actor.charId);
+		const open = all.filter((o) => !o.f.takenBy && o.f.room === c.actor.room), mine = all.find((o) => o.f.takenBy === c.actor.charId);
 		const reward = (o: OrderFields) => `${o.reward.count} Münze${o.reward.count === 1 ? "" : "n"}`;
 		if (!verb) {
 			const lines = open.map((o, i) => `  ${i + 1}. ${o.f.text} Lohn: ${reward(o.f)}`);
@@ -267,12 +269,17 @@ const order: Command = {
 
 export const TRADE_COMMANDS: Command[] = [offer, accept, decline, market, craft, order];
 
-/** Order ticker: the board gets a new job while fewer than `max` are posted. */
+const roomNames = (w: WorldDef, rooms: string[]) => rooms.map((r) => w.rooms.find((x) => x.roomId === r)?.name ?? r).join(", ");
+
+/** Order ticker: each board gets a new job while fewer than `max` are posted there. */
 export async function ordersTick(space: SpaceLike, w: WorldDef): Promise<void> {
-	if ((await space.count({ type: "Order" })) >= w.orders.max || !w.orders.kinds.length) return;
-	const k = w.orders.kinds[randomInt(0, w.orders.kinds.length)]!;
-	const o: OrderFields = { orderId: `j-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room: w.orders.room };
-	await space.write({ type: "Order", fields: o as never }, null, gameMs(w.orders.leaseMs));
+	for (const room of w.orders.rooms) {
+		const kinds = w.orders.kinds.filter((k) => !k.rooms || k.rooms.includes(room));
+		if (!kinds.length || (await space.count({ type: "Order", fields: { room } })) >= w.orders.max) continue;
+		const k = kinds[randomInt(0, kinds.length)]!;
+		const o: OrderFields = { orderId: `j-${Date.now().toString(36)}-${randomBytes(3).toString("hex")}`, kind: k.key, text: k.text, needs: k.needs, reward: k.reward, takenBy: "", room };
+		await space.write({ type: "Order", fields: o as never }, null, gameMs(w.orders.leaseMs));
+	}
 }
 
 /** Market ticker: an item in escrow whose listing lapsed goes back to its seller. A listing held right now (a

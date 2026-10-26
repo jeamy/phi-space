@@ -41,8 +41,9 @@ const split = (line: string): [string, string] => {
 
 /** What the translation rules may look at. */
 async function viewFor(c: CommandCtx): Promise<TranslateView> {
-	const listings = c.actor.room === c.world.market.room ? (await c.space.readAll({ type: "Listing" })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId)).map((l, i) => ({ nr: i + 1, itemName: l.itemName })) : [];
-	return { exits: (await exitsHere(c)).map((x) => ({ name: x.f.name, aliases: x.f.aliases })), listings, carried: (await inventory(c)).map((i) => i.f.name) };
+	const listings = c.world.market.rooms.includes(c.actor.room) ? (await c.space.readAll({ type: "Listing", fields: { room: c.actor.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at || a.listingId.localeCompare(b.listingId)).map((l, i) => ({ nr: i + 1, itemName: l.itemName })) : [];
+	const people = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => String(e.fields.name)).filter((n) => n !== c.actor.name);
+	return { exits: (await exitsHere(c)).map((x) => ({ name: x.f.name, aliases: x.f.aliases })), listings, carried: (await inventory(c)).map((i) => i.f.name), people };
 }
 
 export async function execute(c: CommandCtx, line: string): Promise<void> {
@@ -76,4 +77,4 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 }
 
 /** Talk is never translated: "sag ich gehe nach osten" says it. */
-const say = (line: string) => /^(say|sag|sage|'|emote|:|channel|kanal)/i.test(line) || line.startsWith("'") || line.startsWith(":");
+const say = (line: string) => /^(say|sag|sage|'|emote|:|channel|kanal)\b/i.test(line) || line.startsWith("'") || line.startsWith(":");

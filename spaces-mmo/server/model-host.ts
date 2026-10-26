@@ -18,7 +18,7 @@ import { awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space.ts";
 const COMMANDS = [...DEFAULT_COMMANDS, ...TRADE_COMMANDS].filter((c) => !c.hidden);
 const VERBS = new Set(COMMANDS.flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 
-export const TRANSLATE_SYSTEM = "You turn what a player of a text adventure typed (German or English) into exactly one game command. Answer with the command alone on one line, no explanation, no quotes. Use the names of things, people and exits exactly as listed. If no command fits, answer ?";
+export const TRANSLATE_SYSTEM = "You turn what a player of a text adventure typed (German or English) into exactly one game command. Answer with the command alone on one line, no explanation, no quotes. Use the names of things, people and exits exactly as listed. When the player speaks to someone who is here (names them, greets them, asks them to do something), that is talk, not a command for the player: answer say <the player's words, all of them, the name included>. If no command fits, answer ?";
 
 /** What the model is shown: the commands, then what the player sees, then the sentence. */
 export async function translatePrompt(space: SpaceLike, w: WorldDef, t: TranslateFields): Promise<string> {
@@ -27,7 +27,7 @@ export async function translatePrompt(space: SpaceLike, w: WorldDef, t: Translat
 	const here = await space.readAll({ type: "Item", fields: { location: t.room } });
 	const carried = await space.readAll({ type: "Item", fields: { location: t.charId } });
 	const people = (await space.readAll({ type: "Character", fields: { room: t.room } })).filter((e) => fieldsOf<CharacterFields>(e).charId !== t.charId);
-	const listings = t.room === w.market.room ? (await space.readAll({ type: "Listing" })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at).map((l, i) => `${i + 1}. ${l.itemName} for ${l.price}`) : [];
+	const listings = w.market.rooms.includes(t.room) ? (await space.readAll({ type: "Listing", fields: { room: t.room } })).map((e) => fieldsOf<ListingFields>(e)).sort((a, b) => a.at - b.at).map((l, i) => `${i + 1}. ${l.itemName} for ${l.price}`) : [];
 	return [
 		"Commands:", ...COMMANDS.map((c) => `  ${helpLine(c)}`),
 		`Exits here: ${exits.join(", ") || "–"}`,
@@ -68,7 +68,9 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 			const perDay = t.guest ? Number(process.env.SPACES_MMO_TRANSLATE_GUEST_PER_DAY ?? 20) : Number(process.env.SPACES_MMO_TRANSLATE_PER_DAY ?? 200);
 			const res = await complete(space, TRANSLATE_SYSTEM, await translatePrompt(space, w, t), { maxTokens: 60, own: { key: `translate:${t.accountId}`, perDay } }).catch((err) => { console.error("[model] translate:", (err as Error).message); return null; });
 			const exitNames = (await space.readAll({ type: "Exit", fields: { location: t.room } })).flatMap((x) => [String(x.fields.name), ...((x.fields.aliases as string[]) ?? [])].map((n) => n.toLowerCase()));
-			const line = res && commandOf(res.text, exitNames);
+			// talk is said as it was typed (the model may shorten it and drop the name of whom it is for)
+			const cmd = res && commandOf(res.text, exitNames);
+			const line = cmd && /^(say|sag|sage)\s/i.test(cmd) ? `say ${t.line}` : cmd;
 			if (!res) await say(t, `„${t.line.slice(0, 80)}“ kann ich gerade nicht übersetzen (Modell aus oder Kontingent für heute aufgebraucht). „help“ zeigt die Befehle.`, txn);
 			else if (!line) await say(t, `„${t.line.slice(0, 80)}“ habe ich nicht verstanden. „help“ zeigt die Befehle.`, txn);
 			else await space.write({ type: "Intent", fields: { intentId: randomBytes(8).toString("hex"), charId: t.charId, line, at: Date.now(), asked: t.line } satisfies IntentFields as never }, txn, 30_000);

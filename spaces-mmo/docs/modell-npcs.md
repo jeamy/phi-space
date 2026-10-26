@@ -1,6 +1,12 @@
 # Modell-NPCs (Phase 5)
 
-Figuren, hinter denen ein Modell (Agent aus `agent/`) steckt: eine Leuchtturmwärterin, die um Öl bittet, ein Erzähler
+**NPC** steht für *Non-Player Character*, eine Nicht-Spieler-Figur: eine Figur der Welt, die kein Mensch steuert,
+sondern ein Skript oder ein Sprachmodell (hier Ines, die Wärterin des Leuchtfeuers, Bo, der Fährmann, und der Fremde
+im Nebel). NPCs haben ein registriertes Konto (kein Gastkonto) und dürfen alles, was angemeldete Spieler dürfen:
+sprechen, laufen, aufheben, ablegen, nachlegen, weitergeben, tauschen, am Markt kaufen und verkaufen, herstellen,
+Aufträge annehmen. Bauen und Rechte vergeben dürfen sie nicht, so wenig wie ein Spieler ohne Bau- oder Adminrecht.
+
+Figuren, hinter denen ein Modell (Agent aus `agent/`) steckt: eine Leuchtturmwärterin, die um Treibholz bittet, ein Erzähler
 am Abend, ein Fremder im Nebel. Sie spielen über dieselben Textbefehle wie Menschen (`Intent`-Entries) und sind als KI
 gekennzeichnet (`von: "npc"` in jeder Sicht und in der Anzeige). Sie kosten Tokens und sind standardmäßig aus
 (`SPACES_MMO_LLM=0`).
@@ -10,14 +16,15 @@ gekennzeichnet (`von: "npc"` in jeder Sicht und in der Anzeige). Sie kosten Toke
 Welche Modell-NPCs es gibt, legt die Weltdatei fest (`worlds/<welt>/npcs.ts`), nicht der Zufall:
 
 ```ts
-{ id: "waerterin", name: "Ines", ort: "Graue Bucht", rolle: "Hütet das Leuchtfeuer, bittet um Öl, kennt jede Boje.",
+{ id: "waerterin", name: "Ines", ort: "Graue Bucht", rolle: "Hütet das Leuchtfeuer, bittet um Treibholz, kennt jede Boje.",
   persona: "…", plan: { tag: "06-22" }, wecken: ["fire.low", "person.enters", "spoken"], budgetTag: 40 }
 ```
 
 - **Dauerhafte Identität:** Name, Ort, Rolle und eine **Zusammenfassung** dessen, was sie erlebt hat
   (`NpcMemory`-Entry, ≤ 4 KiB, nach jedem Gespräch vom Modell fortgeschrieben). Nach einem Neustart ist sie dieselbe
   Ines und erinnert sich an Stammgäste.
-- **Plan:** Zeiten, in denen sie da ist (Ines 6 bis 22 Uhr Weltzeit, danach „zu Hause“; der Erzähler ab Abend). Wer
+- **Plan:** Zeiten, in denen sie da ist (Ines 6 bis 22 Uhr Weltzeit, danach „zu Hause“; der Erzähler ab Abend; Vertrag
+  und Implementierungsweg siehe [weltzeit.md](weltzeit.md)). Wer
   nicht da ist, fehlt in der Welt, das ist Teil der Geschichte und kostet nichts.
 
 ## Drei Zustände
@@ -41,7 +48,7 @@ Alle Ereignisse kommen aus dem, was die Welt ohnehin schreibt (`changes` des Spa
 | --- | --- | --- |
 | `person.enters` | Mensch betritt den Raum der Rolle | Rollen mit Ort in diesem Raum (Wärterin, Gerüchteküche) |
 | `spoken` | Mensch spricht sie an oder nennt ihren Namen | die Angesprochene |
-| `fire.low` | Feuerstand unter 20 % im Raum | Wärterin bittet um Öl; zählt auch als Ruf-Chance für Spieler |
+| `fire.low` | Feuerstand unter 20 % im Raum | Wärterin bittet um Treibholz; zählt auch als Ruf-Chance für Spieler |
 | `fire.out` | Feuer erloschen | Wärterin ruft um Hilfe; Wanderer „Verirrter Fischer“ taucht im Nebel auf |
 | `fog.dense` | Nebel Stufe 3 im Raum länger als 2 Minuten | Wanderer „Fremder“ fragt nach dem Weg |
 | `tide.storm` | große Flut (viel Strandgut auf einmal) | Wanderer „Schiffbrüchiger“ liegt am Strand und braucht Hilfe |
@@ -63,6 +70,8 @@ Das Wecken ist billig, weil das Skript nur Ereignisse zählt; erst die erste Ant
 - `SPACES_MMO_LLM` (aus/an), `SPACES_MMO_NPC_MAX` (gleichzeitig **wache** NPCs, Standard 10), Tageskontingent je NPC
   (`budgetTag` in der Rolle, Modellaufrufe pro Weltzeit-Tag) und ein gemeinsames Kontingent wie in codemode-chat
   (`quota.ts`). Alle Werte im Konfigurationsfenster des Admins ([automaten.md](automaten.md#einstellungen-für-betreiber)).
+- **Nur Menschen wecken:** Nachrichten tragen die `fromId` des Sprechers; was NPCs sagen (auch die Bewohner aus
+  [welt.md](welt.md)), weckt keine Modellrolle und hält sie nicht im Gespräch.
 - **Budget leer:** der NPC bleibt, schweigt und zeigt eine Skriptzeile („Ines brütet über dem Feuer.“) bis zum
   nächsten Tag. Er verschwindet nicht.
 - Pro wachem NPC höchstens ein Modellaufruf zugleich, höchstens 6 pro Minute; Antworten auf `Intent`s mehrerer Spieler
@@ -98,12 +107,21 @@ Umgesetzt in `server/npc/minds.ts`, `server/npc/scripts.ts`, `server/npc-host.ts
 - **Rollen in der Weltdatei:** in `worlds/leuchtfeuer/world.ts` (Feld `model` an den NPCs, `wanderer` für Wanderer),
   nicht in einer eigenen `npcs.ts`. Rollen bisher: Ines (Wärterin) und der Fremde (Wanderer bei `fog.dense`).
 - **Kein Plan (abwesend nach Uhrzeit):** Die Welt hat noch keine Weltzeit; Ines ist immer da, der Fremde nur durch
-  sein Ereignis.
-- **Ereignisse:** bisher `fire.low`, `fire.out`, `spoken`, `person.enters`, `fog.dense`. Die npc-Prozesse lesen dafür
+  sein Ereignis. Der noch nicht implementierte Vertrag steht in [weltzeit.md](weltzeit.md).
+- **Ereignisse:** bisher `fire.low`, `fire.out`, `spoken`, `person.enters`, `offer` (jemand bietet ihr einen Tausch
+  an), `fog.dense`. Die npc-Prozesse lesen dafür
   alle paar Spielsekunden den Space (Feuer, Nebel, Nachrichten, Anwesende), statt dem Änderungsstrom zu folgen.
-- **Was ein Modell darf:** nur `say` und `emote` (höchstens zwei Zeilen je Antwort), dazu eine `NOTE:`-Zeile fürs
-  Gedächtnis (`NpcMemory`, höchstens 4 KiB, älteste Notizen fallen weg). Es sieht Gedächtnis, Ort, Anwesende,
-  Feuerstand, Ereignis und Gehörtes, nie Konten.
+- **Was ein Modell darf:** jeden Befehl eines angemeldeten Spielers, der etwas bewirkt (`say`, `emote`, `move`,
+  `step`, `go`, `get`, `drop`, `put`, `give`, `offer`, `accept`, `decline`, `market`, `craft`, `order`); das Modell
+  bekommt die Hilfetexte der Befehle selbst (`server/npc/minds.ts`), die Liste kann also nicht vom Spiel abweichen.
+  Befehle, die nur etwas zeigen (`look`, `inventory`, `who`, …), fehlen: ihre Antwort käme nach der des Modells, und was
+  sie zeigen, steht schon in der Lage. Höchstens vier Zeilen je Antwort, dazu eine `NOTE:`-Zeile fürs Gedächtnis
+  (`NpcMemory`, höchstens 4 KiB, älteste Notizen fallen weg). Die Zeilen laufen wie die eines Spielers als `Intent`
+  durch den Welt-Worker (Reichweite, Kollision, Sperren, Transaktion); was misslingt, misslingt wie bei einem Spieler.
+- **Was ein Modell sieht (die Lage):** Gedächtnis, Ort, Anwesende, Feuerstand und -position, die eigene Position, was
+  es trägt, was im Raum liegt (mit Zellen), die Ausgänge, Tauschangebote an es, am Markt das Marktbrett, Ereignis und
+  Gehörtes; nie Konten. Bittet jemand Ines, Holz nachzulegen, tut sie es, wenn sie Holz trägt, und sagt sonst, warum
+  nicht; bietet man ihr Holz an, nimmt sie es an.
 - **Wach und Rollen:** `NpcAwake` (Lease 5 Spielminuten, bei jeder Ansprache erneuert) und `NpcOwner` (Lease je Rolle,
   `SPACES_MMO_NPC_ROLE_LEASE_MS`) werden unter `Lock{name:"npc"}` geschrieben; so sind nie mehr als
   `SPACES_MMO_NPC_MAX` wach und keine Rolle läuft doppelt. Eine übernommene Rolle startet mit frischem Skript.

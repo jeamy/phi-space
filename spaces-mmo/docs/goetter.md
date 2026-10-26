@@ -37,7 +37,7 @@ Gegenstände ändern oder löschen, Befehle außerhalb des `GodCmdSet`, Automate
 
 - **Auf Anlass:** Spieler legen Öl oder Strandgut als Gabe ins Feuer, der Gott „erhört“ sie und baut (die Gabe bezahlt
   zugleich die Grenze der Kosten).
-- **Von sich aus:** nach Plan (`inselnTag` je Gott, Weltzeit) und bei Ereignissen, etwa nach `fire.out` einen Auftrag,
+- **Von sich aus:** nach Plan (`inselnTag` je Gott, geplante [Weltzeit](weltzeit.md)) und bei Ereignissen, etwa nach `fire.out` einen Auftrag,
   oder wenn viele Spieler Fortschritt haben und das Ziel „unerforschte Inseln“ unter einem Schwellwert fällt. Er wacht
   dafür auf wie ein Modell-NPC und zählt auf `SPACES_MMO_NPC_MAX`.
 - **Bei Bedarf statt auf Vorrat:** Eine Insel wird erst gebaut, wenn Spieler sie anlaufen können (oder ein freier

@@ -65,7 +65,7 @@ a { color: var(--accent); }
 .badge { font-size: 12px; border: 1px solid var(--warning); color: var(--warning); border-radius: 999px; padding: 1px 8px; }
 .live { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: inline-block; }
 .live.on { background: var(--accent); }
-.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 12px; padding: 12px 16px; min-height: 0; }
+.main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 12px; padding: 12px 16px; min-height: 0; }
 .map { background: #0b1016; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; }
 .map canvas { width: 100%; height: auto; max-height: 100%; object-fit: contain; image-rendering: pixelated; display: block; touch-action: manipulation; }
 .side { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-height: 0; }
@@ -97,6 +97,15 @@ a { color: var(--accent); }
 .map-zoom { position: absolute; right: 8px; top: 8px; display: flex; gap: 4px; }
 .map-zoom button { padding: 2px 8px; font-size: 12px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
 .map-zoom button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.renderer-tabs { display: flex; }
+.renderer-tabs button { border-radius: 0; padding: 4px 9px; }
+.renderer-tabs button:first-child { border-radius: 6px 0 0 6px; }
+.renderer-tabs button:last-child { border-radius: 0 6px 6px 0; }
+.renderer-tabs button + button { margin-left: -1px; }
+.renderer-tabs button[aria-pressed="true"] { position: relative; border-color: var(--accent); color: var(--accent); }
+.map-3d canvas { height: 100%; min-height: 300px; image-rendering: auto; cursor: pointer; touch-action: manipulation; }
+.map-3d-controls { z-index: 2; }
+.map-mode-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 7px; border-radius: 5px; background: rgba(8, 13, 18, .72); color: #d5dce3; font-size: 11px; pointer-events: none; }
 .main.text-only { grid-template-columns: minmax(0, 1fr); max-width: 900px; margin: 0 auto; width: 100%; }
 .menu-backdrop { position: fixed; inset: 0; z-index: 20; }
 .cell-menu { position: fixed; z-index: 21; list-style: none; margin: 0; padding: 4px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 8px; min-width: 180px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
@@ -155,3 +164,25 @@ a { color: var(--accent); }
 .trade p { margin: 2px 0 6px; font-size: 12px; }
 button.link { border: 0; background: transparent; color: var(--accent); padding: 2px 0; text-align: left; }
 .ai-badge { margin-left: 6px; font: 600 10px var(--font-sans); color: #9fd3ff; border: 1px solid #9fd3ff; border-radius: 4px; padding: 0 4px; vertical-align: 1px; }
+
+/* the overview of the world, top left over the map (client/Atlas.tsx) */
+.atlas { position: absolute; top: 18px; left: 22px; z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
+.atlas > * { pointer-events: auto; }
+.atlas canvas { width: min(250px, 44vw); height: auto; image-rendering: pixelated; border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: zoom-in; display: block; }
+.atlas.big canvas { width: min(560px, calc(100vw - 48px)); cursor: zoom-out; }
+.atlas-toggle { font-size: 12px; padding: 2px 8px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
+.atlas-label { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-strong); }
+.main.text-only .atlas { position: static; }
+@media (max-width: 760px) {
+  .atlas { top: 14px; left: 18px; }
+}
+
+/* the pack: one chip per kind of thing, icon and count (client/App.tsx, Things) */
+.pack { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+.things .chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 4px; border-radius: 999px; }
+.things .chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+.chip .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-strong); }
+.pack-do { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pack-do span { flex: 1; color: var(--text-strong); }
+/* what someone else says to the player, or about them: stands out in the log */
+.log .to-me { background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 3px solid var(--accent); padding: 1px 0 1px 6px; margin: 1px 0; border-radius: 3px; color: var(--text-strong); font-weight: 600; }

@@ -102,23 +102,52 @@ export async function fogOf(space: SpaceLike, room: string): Promise<number> {
 	return e ? fieldsOf<FogFields>(e).level : 0;
 }
 
-/** The tide: in each flood room below its maximum, one piece of flotsam on a free cell of the room's tile, with the
- *  world's lifetime as lease (picked up, it is written anew without one and stays). */
+/** Free cells of `tile` in a room (no thing, exit or fire on them). */
+async function freeCells(space: SpaceLike, w: WorldDef, roomId: string, tile: string): Promise<Array<{ x: number; y: number }>> {
+	const room = w.rooms.find((r) => r.roomId === roomId)!;
+	const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: roomId } })), ...(await space.readAll({ type: "Exit", fields: { location: roomId } })), ...(await space.readAll({ type: "Beacon", fields: { room: roomId } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	const cells: Array<{ x: number; y: number }> = [];
+	room.ground.forEach((row, y) => [...row].forEach((t, x) => { if (t === tile && walkable(w, room.ground, x, y) && !taken.has(`${x},${y}`)) cells.push({ x, y }); }));
+	return cells;
+}
+
+const weighted = (protos: Array<{ proto: string; weight: number }>) => {
+	let r = randomInt(0, protos.reduce((s, p) => s + p.weight, 0));
+	return protos.find((p) => (r -= p.weight) < 0)!.proto;
+};
+
+/** The tide: in each flood room below its maximum, one piece of flotsam on a free cell of the room's tile (the room's
+ *  own things, else the world's), with the world's lifetime as lease (picked up, it is written anew without one and
+ *  stays). */
 export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<void> {
-	const total = w.flood.protos.reduce((s, p) => s + p.weight, 0);
 	for (const fr of w.flood.rooms) {
 		if ((await space.count({ type: "Item", fields: { location: fr.room, flotsam: true } })) >= fr.max) continue;
-		const room = w.rooms.find((r) => r.roomId === fr.room)!;
-		const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: fr.room } })), ...(await space.readAll({ type: "Exit", fields: { location: fr.room } })), ...(await space.readAll({ type: "Beacon", fields: { room: fr.room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
-		const cells: Array<{ x: number; y: number }> = [];
-		room.ground.forEach((row, y) => [...row].forEach((t, x) => { if (t === fr.tile && walkable(w, room.ground, x, y) && !taken.has(`${x},${y}`)) cells.push({ x, y }); }));
+		const cells = await freeCells(space, w, fr.room, fr.tile);
 		if (!cells.length) continue;
-		let r = randomInt(0, total);
-		const pick = w.flood.protos.find((p) => (r -= p.weight) < 0)!;
-		const proto = await resolvePrototype(space, pick.proto);
+		const proto = await resolvePrototype(space, weighted(fr.protos ?? w.flood.protos));
 		if (!proto) continue;
 		const at = cells[randomInt(0, cells.length)]!;
 		const item = await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, lease: gameMs(w.flood.lifetimeMs) });
 		await say(space, leaseMs, [fr.room], "info", `Die Flut spült ${item.name} an.`);
 	}
+}
+
+/** A storm surge: on the beach of one of the storm's rooms `count` things at once (leased like flotsam), and everyone
+ *  hears on the channel where. Who comes first finds the most. */
+export async function stormTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<string | null> {
+	if (!w.storm?.rooms.length) return null;
+	const roomId = w.storm.rooms[randomInt(0, w.storm.rooms.length)]!;
+	const cells = await freeCells(space, w, roomId, ".");
+	const names: string[] = [];
+	for (let i = 0; i < w.storm.count && cells.length; i++) {
+		const proto = await resolvePrototype(space, weighted(w.storm.protos));
+		if (!proto) continue;
+		const at = cells.splice(randomInt(0, cells.length), 1)[0]!;
+		names.push((await spawn(space, null, w, proto, { location: roomId, x: at.x, y: at.y, flotsam: true, lease: gameMs(w.flood.lifetimeMs * 2) })).name);
+	}
+	if (!names.length) return null;
+	const room = w.rooms.find((r) => r.roomId === roomId)!;
+	await space.write({ type: "Msg", fields: { room: roomId, to: `#${w.storm.channel}`, kind: "channel", text: `[${w.storm.channel}] Sturmflut in ${room.name} (${room.island ?? w.title})! Das Meer wirft Strandgut aus.`, from: "", at: Date.now() } as never }, null, leaseMs);
+	await say(space, leaseMs, [roomId], "world", `Eine Sturmflut rollt heran und lässt ${names.length} Dinge am Strand zurück: ${[...new Set(names)].join(", ")}.`);
+	return roomId;
 }

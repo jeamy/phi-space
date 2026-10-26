@@ -29,7 +29,7 @@ Die Spielmechaniken *sind* die Space-Semantik. Dadurch zeigt das Spiel phi-space
 ## Spielschleife
 
 1. **Bergen:** Die Flut (Welt-Tick, etwa alle 30 s pro Strandabschnitt) schreibt `Flotsam`-Entries mit kurzer Lease
-   (2–5 min). Treibholz, Öl, Tauwerk, selten Fundstücke mit Geschichte.
+   (2–5 min). Treibholz, Tang, Muscheln, selten Fundstücke mit Geschichte.
 2. **Verarbeiten:** Aus Rohstoffen werden Brennstoff, Bootsteile und Werkzeug (Rezepte als Prototypen).
 3. **Feuer halten:** Brennstoff in ein Leuchtfeuer legen verlängert dessen Lease. Jedes Feuer zeigt öffentlich, wer
    wie viel beigetragen hat (Ruf).

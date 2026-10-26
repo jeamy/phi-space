@@ -104,3 +104,20 @@ test("nobody walks into the fire: a step onto the beacon is refused, a walk goes
 		await a.p.leave();
 	} finally { await srv.close(); }
 });
+
+test("a held arrow key does not queue a long walk: of twenty steps sent at once one is taken, then one per pace", async () => {
+	const srv = await startServer();
+	try {
+		const a = await player(srv.url, "Eilige");
+		a.p.send("move 4 13"); // on the grass, the whole row east of it free
+		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === 4, 10_000, "at the start");
+		for (let i = 0; i < 20; i++) a.p.send("step 1 0");
+		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === 5, 10_000, "one step");
+		await new Promise((r) => setTimeout(r, 1_000));
+		assert.equal((await charAt(srv.stack.space, a.me)).x, 5, "and only one");
+		// at the page's pace every step is taken
+		for (let i = 0; i < 3; i++) { a.p.send("step 1 0"); await new Promise((r) => setTimeout(r, 520)); }
+		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === 8, 10_000, "three more at 500 ms");
+		await a.p.leave();
+	} finally { await srv.close(); }
+});

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { eventually, Player, startServer, startStack } from "./stack.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
+import { loadWorld } from "../server/engine/world.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 const items = async (space: SpaceLike, fields: Record<string, unknown>) => (await space.readAll({ type: "Item", fields: fields as never })).map((e) => e.fields as Record<string, any>);
@@ -38,7 +39,7 @@ test("twenty players grab one coin at once across two world workers: exactly one
 		await does(admin.p, "spawn muenze", "erschaffst Münze");
 		admin.p.send("move 20 7"); // off the coin's cell: no two characters share one, so the cell is for a player
 		await eventually(async () => (await charAt(srv.stack.space, admin.h.me.charId)).x === 20, 10_000, "admin away");
-		const [coin] = await items(srv.stack.space, { proto: "muenze" });
+		const [coin] = await items(srv.stack.space, { proto: "muenze", location: "graue-bucht" }); // NPCs carry coins of their own
 		assert.ok(coin);
 		const players = await Promise.all(Array.from({ length: 20 }, () => player(srv.url, "", { guest: true })));
 		// first everyone goes to a cell of their own on the grass (new characters crowd around the spawn and can stand
@@ -70,7 +71,7 @@ test("twenty players grab one coin at once across two world workers: exactly one
 		assert.equal(winners.length, 1, "exactly one success message");
 		assert.equal(after?.location, winners[0]!.h.me.charId, "the coin is with the winner");
 		assert.ok(players.indexOf(winners[0]!) < 9, "the winner stood within reach");
-		assert.equal((await items(srv.stack.space, { proto: "muenze" })).length, 1, "still one coin");
+		assert.equal((await items(srv.stack.space, { proto: "muenze" })).filter((m) => !String(m.location).startsWith("npc-")).length, 1, "still one coin (beside the purses of the NPCs)");
 		// the others saw it happen, rendered for them
 		const other = players.find((x) => x !== winners[0])!;
 		await other.p.until((f) => f.t === "msg" && f.m.text === `${winners[0]!.h.me.name} hebt Münze auf.`);
@@ -140,7 +141,7 @@ test("things: get, inventory, look, drop; the map and the pack follow", async ()
 		assert.equal(a.p.frames.filter((f) => f.t === "hello").length, 1, "one hello per connection");
 		assert.ok(a.h.objs.some((o) => o.id === "treibholz-1" && o.location === "graue-bucht" && o.kind === "item"), "the hello shows what lies here");
 		assert.ok(a.h.objs.some((o) => o.id === "bucht-ost" && o.kind === "exit"), "and the exits");
-		assert.match(await does(a.p, "look", "Ausgänge"), /Ausgänge: ost\.\nHier liegt: .*Treibholz/);
+		assert.match(await does(a.p, "look", "Ausgänge"), /Ausgänge: ost, süd, west\.\nHier liegt: .*Treibholz/);
 		assert.match(await does(a.p, "get treibholz", /weit weg|Hier liegt nichts/), /Treibholz liegt zu weit weg/);
 		a.p.send("move 17 9");
 		await eventually(async () => (await charAt(srv.stack.space, a.h.me.charId)).x === 17, 10_000, "next to the driftwood");
@@ -226,7 +227,7 @@ test("builders shape the world: dig, open, create, set, lock, tag, examine, dest
 		assert.equal((await items(srv.stack.space, { name: "Kiste" })).length, 0);
 		assert.equal(await srv.stack.space.count({ type: "Tag", fields: { target: kiste.itemId } }), 0, "its tags went with it");
 		// spawn from a prototype; perm makes Bert a builder
-		assert.match(await does(admin.p, "spawn", "Prototypen:"), /holzbuendel, muenze, muschel, muschelmesser, treibholz/);
+		assert.match(await does(admin.p, "spawn", "Prototypen:"), /Prototypen:.*holzbuendel.*muenze, muschel, muschelmesser.*treibholz/);
 		await does(admin.p, "spawn muschel", "erschaffst Muschel");
 		assert.match(await does(admin.p, "create Ding:constructor", "Typklasse"), /unbekannte Typklasse/);
 		await does(admin.p, "perm Bert = Builder", "Bert ist jetzt Builder.");
@@ -267,8 +268,10 @@ test("the world loads once: world workers starting together place each item once
 	try {
 		await Promise.all([stack.worldProcess(), stack.worldProcess(), stack.worldProcess()]);
 		for (const id of ["treibholz-1", "treibholz-2", "muschel-1", "muschel-2"]) assert.equal((await items(stack.space, { itemId: id })).length, 1, id);
-		assert.equal(await stack.space.count({ type: "Room" }), 2);
-		assert.equal(await stack.space.count({ type: "Exit" }), 2);
+		const w = await loadWorld();
+		for (const o of w.objects) assert.equal((await items(stack.space, { itemId: o.itemId })).length, 1, o.itemId);
+		assert.equal(await stack.space.count({ type: "Room" }), w.rooms.length);
+		assert.equal(await stack.space.count({ type: "Exit" }), w.exits.length);
 		const a = await player(srv.url, "Finn");
 		a.p.send("move 14 5");
 		await eventually(async () => (await charAt(stack.space, a.h.me.charId)).y === 5, 10_000, "at the shell");

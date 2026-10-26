@@ -10,6 +10,9 @@ export async function complete(system: string, user: string): Promise<string> {
 	}
 	if (/You are Ines/.test(system)) {
 		const heard = /Heard: (.*)$/m.exec(user)?.[1] ?? "";
+		const offerer = /Offers to you: (\S+) offers/.exec(user)?.[1];
+		if (offerer) return `accept ${offerer}\nsay Danke, ${offerer}!`;
+		if (/holz/i.test(heard) && /feuer/i.test(heard)) return /carry: .*Treibholz/.test(user) ? "say Gern, ich lege nach.\nput treibholz in feuer" : "say Ich habe kein Holz bei mir.";
 		return heard ? `say Hallo! ${heard.includes("öl") ? "Öl haben wir keins, aber Treibholz brennt." : "Bringt Treibholz, dann bleibt das Licht."}\nNOTE: hat mit jemandem über das Feuer gesprochen` : "say Das Feuer braucht Holz!\nNOTE: hat um Holz gebeten";
 	}
 	if (/You are Fremder/.test(system)) return "say Wo geht es hier aus dem Nebel?";

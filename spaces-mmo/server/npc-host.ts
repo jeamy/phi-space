@@ -7,13 +7,14 @@
 //
 //   SPACES_MMO_SPACE        the world space (default unix:/tmp/spaces-mmo-world.sock)
 //   SPACES_MMO_TIME_SCALE   factor on game durations (the scripts' pauses scale with it)
+//   SPACES_MMO_NPCS         the roles this process plays, by npcId with commas (default: all of the world)
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { claimRole } from "./npc/minds.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
-import { asFields, type IntentFields, type SessionFields } from "./model.ts";
+import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
 import { connectSpace, DEFAULT_SPACE } from "./space.ts";
 
 const SESSION_LEASE_MS = 30_000;
@@ -29,7 +30,9 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	const runs: Promise<void>[] = [];
 	const starting: Promise<void>[] = [];
 	const owner = `npc-proc-${randomBytes(4).toString("hex")}`;
+	const only = (process.env.SPACES_MMO_NPCS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 	for (const def of w.npcs) {
+		if (only.length && !only.includes(def.npcId)) continue;
 		if (!scriptFor(def.script)) { console.error(`[npc] ${def.npcId}: unknown script ${def.script}`); continue; }
 		const charId = `npc-${def.npcId}`;
 		let lease: string | null = null, online = !def.wanderer; // a wanderer is away until its event
@@ -50,10 +53,13 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 			async act(line) {
 				const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId, line, at: Date.now() };
 				await space.write({ type: "Intent", fields: asFields(intent) }, null, 30_000);
-				// one command at a time: wait until a world worker has taken it
-				for (let i = 0; i < 100 && !halt.signal.aborted; i++) {
-					if (!(await space.count({ type: "Intent", fields: { charId } }))) return;
-					await sleep(50);
+				// one command at a time: wait until a world worker has taken it, then until its transaction is over (the
+				// worker holds the character's token meanwhile; a read of the token waits for it), so the next look of
+				// the script sees what the command did
+				const giveUp = Date.now() + 5_000;
+				for (let i = 0; Date.now() < giveUp && !halt.signal.aborted; i++) {
+					if (!(await space.count({ type: "Intent", fields: { charId } }))) { await space.readIfExists(actorToken(charId), 5_000).catch(() => null); return; }
+					await sleep(Math.min(250, 50 * 2 ** Math.min(i, 3))); // 50, 100, 200, 250 …: every look is a call to the space
 				}
 			},
 		};

@@ -17,41 +17,65 @@ import type { WsConnection } from "./ws.ts";
 export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon"; name: string; location: string; x: number; y: number; glyph?: Glyph; until?: number };
-export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at"> & { ai?: true };
+/** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them. */
+export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at"> & { ai?: true; toMe?: true };
 /** What a client sees of trade: offers it made or got, the order board and the market board (the boards only in their
  *  room), its own taken order. */
+/** The overview of the world (top left in the page): every room placed on it, with its ground, its fires and the
+ *  ways to other places (ferries are the links between rooms that are not side by side). Sent once per connection. */
+export type AtlasView = { rooms: Array<{ roomId: string; name: string; island: string; x: number; y: number; ground: string[]; fires: Array<{ x: number; y: number }> }>; links: Array<[string, string]> };
+/** What changes on the overview: where the player is, the fog of each room, the rooms whose fire burns, and how many
+ *  people and NPCs are online in each room. */
+export type AtlasState = { here: string; fog: Record<string, number>; lit: string[]; people: Record<string, [number, number]> };
 export type TradeView = {
 	offersIn: Array<Pick<OfferFields, "offerId" | "fromName" | "giveNames" | "want">>;
 	offersOut: Array<Pick<OfferFields, "offerId" | "toName" | "giveNames" | "want">>;
 	orders: Array<{ nr: number; text: string; reward: number }> | null;
-	myOrder: { text: string; needs: OrderFields["needs"] } | null;
+	/** The player's order; `here`: a board stands in this room (only there it is delivered or given up); `boards`: where. */
+	myOrder: { text: string; needs: OrderFields["needs"]; here: boolean; boards: string[] } | null;
 	listings: Array<{ nr: number; itemName: string; price: number; sellerName: string; mine: boolean }> | null;
 };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins">; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number }
+	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins"> & { fuels: string[] }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number }
 	| { t: "fog"; level: number }
 	| { t: "trade"; trade: TradeView }
 	| { t: "char"; c: CharView }
 	| { t: "gone"; charId: string }
 	| { t: "obj"; o: ObjView }
 	| { t: "objgone"; id: string }
-	| { t: "msg"; m: MsgView };
+	| { t: "msg"; m: MsgView }
+	| { t: "atlas"; atlas: AtlasView }
+	| { t: "atlasState"; state: AtlasState };
 /** Frames from the browser. */
 export type ClientFrame = { t: "cmd"; line: string };
 
 const MAX_LINE = 300;
 const RECENT = 40;
 const INTENT_LEASE_MS = 30_000;
+/** One step per client at most this often (the page sends one every 500 ms; a little slack for the network). */
+const STEP_MS = 400;
 
-type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null };
+type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; lastStep?: number;
+	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
+/** At most this often the overview's state goes out after a change (people walk, fires burn down, fog moves). */
+const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.md: marked as AI wherever they appear). */
 let modelChars = new Set<string>(), modelNames = new Set<string>();
 const charView = (c: CharacterFields): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}) });
 const itemView = (f: ItemFields): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph });
 const exitView = (f: ExitFields): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, location: f.location, x: f.x, y: f.y });
-const msgView = (m: MsgFields, viewer: string): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}) });
+const msgView = (m: MsgFields, viewer: string, viewerName = ""): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}) });
+/** Whether a message is meant for the viewer: written to them alone by someone else (not the answer to their own
+ *  command, not an error), or someone else's words that name them. */
+function forViewer(m: MsgFields, viewer: string, name: string): boolean {
+	if (m.kind === "error" || (m.fromId ?? "") === viewer || (name && m.from === name)) return false;
+	if (m.to === viewer) return !!m.fromId;
+	if (!name || !["say", "emote", "channel"].includes(m.kind)) return false;
+	const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`(^|[^\\p{L}\\p{N}])${esc}([^\\p{L}\\p{N}]|$)`, "iu").test(m.text);
+}
 
 export class Gateway {
 	readonly sessionLeaseMs = envMs("SPACES_MMO_SESSION_LEASE_MS", 30_000);
@@ -74,6 +98,7 @@ export class Gateway {
 	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
 	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
 	#applied = -1; // the revision the state above reflects
+	#atlasDue: ReturnType<typeof setTimeout> | null = null;
 	readonly #waiting = new Set<{ rev: number; ok: () => void }>();
 	#watch: Promise<void>;
 
@@ -93,7 +118,7 @@ export class Gateway {
 
 	/** A browser of `me` plays now. */
 	async attach(ws: WsConnection, me: Me): Promise<void> {
-		const c: Client = { ws, me, room: null, lease: null, timer: null };
+		const c: Client = { ws, me, room: null, lease: null, timer: null, chain: Promise.resolve() };
 		this.#clients.add(c);
 		ws.onClose(() => {
 			this.#clients.delete(c);
@@ -138,6 +163,7 @@ export class Gateway {
 
 	async close(): Promise<void> {
 		this.#closed = true;
+		if (this.#atlasDue) clearTimeout(this.#atlasDue);
 		for (const c of [...this.#clients]) c.ws.close();
 		await this.#watch.catch(() => {});
 	}
@@ -148,11 +174,14 @@ export class Gateway {
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
 		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
 		if (!line) return;
-		await this.#intent(c, line);
+		c.chain = c.chain.then(() => this.#intent(c, line));
+		await c.chain;
 		this.onActivity(c.me.accountId);
 	}
 
 	async #intent(c: Client, line: string): Promise<void> {
+		// steps faster than STEP_MS are dropped (the page paces them too; this holds for every client)
+		if (/^step\s/.test(line)) { if (Date.now() - (c.lastStep ?? 0) < STEP_MS) return; c.lastStep = Date.now(); }
 		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now() };
 		try { await this.space.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
@@ -165,9 +194,13 @@ export class Gateway {
 		c.room = self.room;
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map(charView);
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
-		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId));
-		queueMicrotask(() => c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame));
-		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now() } satisfies ServerFrame);
+		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, self.name));
+		queueMicrotask(() => {
+			c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
+			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
+			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
+		});
+		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k) }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now() } satisfies ServerFrame);
 	}
 
 	/** Reads the world once (from a revision taken before the reads) and then follows the change stream. Replaying ops
@@ -207,8 +240,9 @@ export class Gateway {
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
 					for (const [objId, before] of objs) this.#announceObj(objId, before);
 					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
+					if (chars.size || fogs.size || [...objs.keys()].some((id) => this.#objs.get(id)?.kind === "beacon")) this.#atlasChanged();
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
-					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId) } satisfies ServerFrame);
+					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#chars.get(c.me.charId)?.name) } satisfies ServerFrame);
 				}
 				rev = ch.next;
 				this.#advance(rev);
@@ -302,10 +336,40 @@ export class Gateway {
 		return {
 			offersIn: offers.filter((o) => o.to === me).map(({ offerId, fromName, giveNames, want }) => ({ offerId, fromName, giveNames, want })),
 			offersOut: offers.filter((o) => o.from === me).map(({ offerId, toName, giveNames, want }) => ({ offerId, toName, giveNames, want })),
-			orders: c.room === this.w.orders.room ? open.map((o, i) => ({ nr: i + 1, text: o.text, reward: o.reward.count })) : null,
-			myOrder: mine ? { text: mine.text, needs: mine.needs } : null,
-			listings: c.room === this.w.market.room ? listings.map((l, i) => ({ nr: i + 1, itemName: l.itemName, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
+			orders: c.room && this.w.orders.rooms.includes(c.room) ? open.filter((o) => o.room === c.room).map((o, i) => ({ nr: i + 1, text: o.text, reward: o.reward.count })) : null,
+			myOrder: mine ? { text: mine.text, needs: mine.needs, here: !!c.room && this.w.orders.rooms.includes(c.room), boards: this.w.orders.rooms.map((r) => this.#rooms.get(r)?.name ?? r) } : null,
+			listings: c.room && this.w.market.rooms.includes(c.room) ? listings.filter((l) => l.room === c.room).map((l, i) => ({ nr: i + 1, itemName: l.itemName, price: l.price, sellerName: l.sellerName, mine: l.seller === me })) : null,
 		};
+	}
+
+	/** The overview: the rooms with a place on it (rooms builders dug have none) and the ways between them. */
+	#atlas(): AtlasView {
+		const rooms = [...this.#rooms.values()].filter((r) => r.map).map((r) => ({ roomId: r.roomId, name: r.name, island: r.island ?? "", x: r.map!.x, y: r.map!.y, ground: r.ground, fires: this.w.beacons.filter((b) => b.room === r.roomId).map(({ x, y }) => ({ x, y })) }));
+		const placed = new Set(rooms.map((r) => r.roomId)), links = new Map<string, [string, string]>();
+		for (const e of this.w.exits) if (placed.has(e.room) && placed.has(e.destination)) links.set([e.room, e.destination].sort().join(" "), [e.room, e.destination].sort() as [string, string]);
+		return { rooms, links: [...links.values()] };
+	}
+
+	#atlasState(c: Client): AtlasState {
+		const people: Record<string, [number, number]> = {};
+		for (const ch of this.#chars.values()) {
+			if (!this.#online.get(ch.charId)) continue;
+			const n = (people[ch.room] ??= [0, 0]);
+			n[ch.charId.startsWith("npc-") ? 1 : 0]++;
+		}
+		const now = Date.now();
+		const lit = this.w.beacons.filter((b) => (this.#flames.get(b.beaconId) ?? 0) > now).map((b) => b.room);
+		return { here: c.room ?? "", fog: Object.fromEntries(this.#fog), lit, people };
+	}
+
+	/** Something on the overview changed: its state goes out to every client once the short pause is over. */
+	#atlasChanged(): void {
+		if (this.#atlasDue) return;
+		this.#atlasDue = setTimeout(() => {
+			this.#atlasDue = null;
+			for (const c of this.#clients) if (c.atlas) c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
+		}, ATLAS_MS);
+		this.#atlasDue.unref?.();
 	}
 
 	/** A beacon with its fire's end (0: out). */

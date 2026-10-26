@@ -118,9 +118,12 @@ test("order board: the world posts jobs, one player takes one, delivering uses u
 	try {
 		const s = srv.stack.space;
 		const a = await player(srv.url, "Arbeiterin"), b = await player(srv.url, "Zweite");
-		await eventually(async () => (await s.count({ type: "Order" })) === 3, 15_000, "three jobs posted");
+		// every board gets its own jobs, up to three each
+		const here = { type: "Order", fields: { room: "graue-bucht" } };
+		await eventually(async () => (await s.count(here)) === 3, 15_000, "three jobs posted");
 		await new Promise((r) => setTimeout(r, 1_500));
-		assert.equal(await s.count({ type: "Order" }), 3, "never more than three");
+		assert.ok((await s.count(here)) <= 3, "never more than three (one may just have lapsed)");
+		assert.ok((await s.count({ type: "Order" })) <= 3 * w.orders.rooms.length, "at most three at every board");
 		const board = await does(a.p, "auftrag", "Auftragstafel:");
 		assert.match(board, /1\. .+ Lohn: \d Münze/);
 		await does(a.p, "auftrag nimm 1", "Du übernimmst");

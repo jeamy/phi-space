@@ -47,7 +47,7 @@ export type HelpEntryFields = { key: string; category: string; text: string };
 /** Which version of a world's definition the space holds (written by the loader). */
 export type WorldLoadedFields = { worldId: string; version: number; at: number };
 /** A room of the loaded world: its grid of tile keys, one string per row. */
-export type RoomFields = { roomId: string; name: string; desc: string; ground: string[]; spawn?: { x: number; y: number } };
+export type RoomFields = { roomId: string; name: string; desc: string; ground: string[]; spawn?: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
 /** A character being played right now: held by the web process with a short lease while the WebSocket is open. */
 export type SessionFields = { sessionId: string; charId: string; accountId: string };
 /** One command line, written by the web process (or later an NPC), taken by a world worker. */
@@ -57,7 +57,8 @@ export type TranslateFields = { reqId: string; charId: string; accountId: string
 /** Output: to one character (`to` = its charId), to everyone in `room` (`to` = "*"), or to everyone on a channel
  *  (`to` = "#hafen"). With `actor` (a charId) the text
  *  holds FuncParser calls ($you(), $conj(a|b)) that the gateway renders for each reader. */
-export type MsgFields = { room: string; to: string; kind: MsgKind; text: string; from: string; at: number; actor?: string };
+/** `fromId`: the speaker's charId (NPCs start with "npc-"), so model NPCs answer people, not each other. */
+export type MsgFields = { room: string; to: string; kind: MsgKind; text: string; from: string; at: number; actor?: string; fromId?: string };
 export type MsgKind = "say" | "emote" | "system" | "look" | "error" | "help" | "who" | "info" | "channel" | "world";
 
 /** Accounts space. `key` is the lower-cased name; a `pending` credential belongs to a registration in progress. */

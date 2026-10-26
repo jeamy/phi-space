@@ -4,6 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SpaceLike } from "phi-spaces";
 import { sleep as putToSleep, tryWake } from "../server/npc/minds.ts";
+import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
+import { loadWorld } from "../server/engine/world.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer, startStack } from "./stack.ts";
 
@@ -46,9 +48,53 @@ test("spoken to, Ines wakes, answers with the model and remembers; without more 
 		a.p.send("say Hallo Ines, habt ihr öl?");
 		await heard(a.p, "Ines: Hallo! Öl haben wir keins, aber Treibholz brennt.");
 		assert.ok(await s.readIfExists({ type: "NpcAwake", fields: { npcId: "ines" } }, 1_000), "awake");
-		assert.match(String((await s.readIfExists({ type: "NpcMemory", fields: { npcId: "ines" } }, 2_000))?.fields.text), /über das Feuer gesprochen/);
+		// she notes it after her words are said
+		await eventually(async () => /über das Feuer gesprochen/.test(String((await s.readIfExists({ type: "NpcMemory", fields: { npcId: "ines" } }, 2_000))?.fields.text)), 10_000, "remembered");
 		assert.equal((await s.readAll({ type: "LlmCount" })).some((e) => String(e.fields.key).startsWith("npc:ines:")), true, "counted against her day");
 		await eventually(async () => !(await s.readIfExists({ type: "NpcAwake", fields: { npcId: "ines" } }, 0)), 20_000, "asleep again");
+		await a.p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});
+
+test("Ines may do what a player may: asked in plain words she says why not, takes wood offered in trade and feeds the fire", async () => {
+	const stack = await startStack({ worldEnv: { ...MODEL, SPACES_MMO_TIME_SCALE: "0.02" } });
+	const srv = await startServer({ stack });
+	try {
+		const s = stack.space, w = await loadWorld();
+		await fire(s, 120_000);
+		const a = await player(srv.url, "Bittende");
+		await stack.npcProcess();
+		await eventually(async () => (await s.count({ type: "NpcOwner" })) === 3, 10_000, "all roles played");
+		a.p.send("hallo ines, leg holz ins feuer");
+		await heard(a.p, "Ines: Ich habe kein Holz bei mir."); // nothing carried: she says why
+		await spawn(s, null, w, (await eventually(() => resolvePrototype(s, "treibholz"), 10_000, "treibholz"))!, { location: a.me, x: -1, y: -1 });
+		a.p.send("offer treibholz an Ines");
+		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ines nimmt dein Angebot an: Treibholz"));
+		await heard(a.p, "Ines: Danke, Bittende!");
+		assert.equal(await s.count({ type: "Item", fields: { location: "npc-ines" } }), 1, "she carries the wood");
+		const from = a.p.frames.length;
+		a.p.send("Ines, leg bitte holz ins feuer");
+		await heard(a.p, "Ines: Gern, ich lege nach.", 15_000, from);
+		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Ines legt Treibholz ins Leuchtfeuer"), 15_000, from);
+		assert.equal(await s.count({ type: "Item", fields: { location: "npc-ines" } }), 0, "the wood is burnt");
+		await a.p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});
+
+test("NPCs talking next to Ines cost no model call: only people wake her and keep her talking", async () => {
+	const stack = await startStack({ worldEnv: { ...MODEL, SPACES_MMO_TIME_SCALE: "0.02", SPACES_MMO_NPCS: "ines,kalle" } });
+	const srv = await startServer({ stack });
+	try {
+		const s = stack.space, w = await loadWorld();
+		await fire(s, 120_000);
+		const a = await player(srv.url, "Schweigsam");
+		// with wood in the pack the trader speaks to her (and Ines hears him)
+		await spawn(s, null, w, (await eventually(() => resolvePrototype(s, "treibholz"), 10_000, "treibholz"))!, { location: a.me, x: -1, y: -1 });
+		await stack.npcProcess();
+		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Kalle: Schweigsam, für dein Treibholz"), 20_000);
+		await new Promise((r) => setTimeout(r, 3_000));
+		const calls = async () => (await s.readAll({ type: "LlmCount" })).filter((e) => String(e.fields.key).startsWith("npc:ines:")).reduce((n, e) => n + Number(e.fields.used), 0);
+		assert.ok((await calls()) <= 1, `at most the one call for the person who came (${await calls()})`);
 		await a.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });

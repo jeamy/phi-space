@@ -76,7 +76,7 @@ export const reach = (a: { x: number; y: number }, b: { x: number; y: number }) 
 /** A message from the actor in `room` (default its room). `templ`: the text holds $you()/$conj() and is rendered per
  *  reader. `txn` null writes it at once (a refusal after the abort). */
 export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs"> & { txn: string | null }, to: string, kind: MsgKind, text: string, o: { templ?: boolean; room?: string } = {}): Promise<void> {
-	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, at: Date.now(), ...(o.templ ? { actor: c.actor.charId } : {}) };
+	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: Date.now(), ...(o.templ ? { actor: c.actor.charId } : {}) };
 	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs);
 }
 

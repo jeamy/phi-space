@@ -13,7 +13,9 @@ import { typeChain } from "./typeclasses.ts";
 export type TileDef = { sheet: string; x: number; y: number; walk: boolean; auto?: { blocks: Array<{ x: number; y: number }>; frameMs: number } };
 /** A character sheet: 4 frames per row, rows down, left, right, up. */
 export type SkinDef = { sheet: string; frameW: number; frameH: number };
-export type RoomDef = { roomId: string; name: string; desc: string; ground: string[]; spawn: { x: number; y: number } };
+/** `map`: where the room lies on the overview of the world (one unit per room; rooms of one island side by side),
+ *  `island`: the island it belongs to (the overview groups and names them). */
+export type RoomDef = { roomId: string; name: string; desc: string; ground: string[]; spawn: { x: number; y: number }; map?: { x: number; y: number }; island?: string };
 export type ExitDef = Omit<ExitFields, "location" | "locks"> & { room: string; locks?: string };
 /** An item the world places once: spawned only while no item with its itemId exists anywhere. */
 export type PlacedDef = { itemId: string; proto: string; room: string; x: number; y: number };
@@ -36,20 +38,23 @@ export type WorldDef = {
 	fire: { fuel: Record<string, number>; maxMs: number };
 	/** Fog levels 0..max; every `stepMs` it rises by one in rooms without a burning fire and falls by one with. */
 	fog: { max: number; start: number; stepMs: number };
-	/** The tide: every `everyMs` one piece of flotsam per room (up to `max` lying there) on a cell of `tile`. */
-	flood: { everyMs: number; lifetimeMs: number; rooms: Array<{ room: string; tile: string; max: number }>; protos: Array<{ proto: string; weight: number }> };
+	/** The tide: every `everyMs` one piece of flotsam per room (up to `max` lying there) on a cell of `tile`; a room
+	 *  may wash up its own things (`protos`) instead of the world's. */
+	flood: { everyMs: number; lifetimeMs: number; rooms: Array<{ room: string; tile: string; max: number; protos?: Array<{ proto: string; weight: number }> }>; protos: Array<{ proto: string; weight: number }> };
+	/** A storm surge now and then: `count` things at once on a beach of one of `rooms`, announced on `channel`. */
+	storm?: { everyMs: number; count: number; rooms: string[]; protos: Array<{ proto: string; weight: number }>; channel: string };
 	/** Channels everyone hears, across rooms. */
 	channels: string[];
 	/** Characters played by scripts (the npc process), not by models. */
 	npcs: NpcDef[];
 	/** Phase 4. The prototype that counts as money (prices, rewards). */
 	currency: string;
-	/** Where the market board stands and how long a listing stays. */
-	market: { room: string; listMs: number };
+	/** Where market boards stand (each its own listings) and how long a listing stays. */
+	market: { rooms: string[]; listMs: number };
 	/** Recipes: what goes in (used up), which tool is needed (it wears by one), what comes out. */
 	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string }>;
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
-	orders: { room: string; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number } }> };
+	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
 };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
@@ -59,6 +64,11 @@ export type NpcDef = {
 	/** A wanderer: appears only through its event, at most once per `cooldownMs`, leaves after `stayMs` without being
 	 *  spoken to (game time). */
 	wanderer?: { event: string; cooldownMs: number; stayMs: number };
+	/** The economy (server/npc/economy.ts): the rooms it works in, the market it sells at, the rooms a trader travels
+	 *  between, what it pays at most and asks per prototype ([buy, sell], 0: not), the recipes it makes, what it
+	 *  carries when the world creates it, and what it says now and then. */
+	home?: string[]; market?: string; route?: string[]; prices?: Record<string, [number, number]>; crafts?: string[];
+	carry?: Array<{ proto: string; count: number }>; lines?: string[];
 };
 
 const WORLD_ID = /^[a-z0-9-]{1,40}$/;
@@ -101,10 +111,22 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		const r = room(n.room);
 		if (!r || !walkable(w, r.ground, n.x, n.y)) throw new Error(`npc ${n.npcId}: unknown room or not walkable`);
 		if (n.beacon && !w.beacons.some((b) => b.beaconId === n.beacon)) throw new Error(`npc ${n.npcId}: unknown beacon`);
+		for (const r of [...(n.home ?? []), ...(n.route ?? []), ...(n.market ? [n.market] : [])]) if (!room(r)) throw new Error(`npc ${n.npcId}: unknown room ${r}`);
+		for (const p of [...Object.keys(n.prices ?? {}), ...(n.carry ?? []).map((c) => c.proto)]) if (!w.prototypes.some((q) => q.key === p)) throw new Error(`npc ${n.npcId}: unknown prototype ${p}`);
+		for (const k of n.crafts ?? []) if (!w.recipes.some((r) => r.key === k)) throw new Error(`npc ${n.npcId}: unknown recipe ${k}`);
+	}
+	// the overview: no two rooms on one place
+	const placed = new Map<string, string>();
+	for (const r of w.rooms) if (r.map) {
+		const k = `${r.map.x},${r.map.y}`;
+		if (placed.has(k)) throw new Error(`rooms ${placed.get(k)} and ${r.roomId} on one place of the overview`);
+		placed.set(k, r.roomId);
 	}
 	const proto = (k: string, what: string) => { if (!w.prototypes.some((q) => q.key === k)) throw new Error(`${what}: unknown prototype ${k}`); };
 	proto(w.currency, "currency");
-	if (!room(w.market.room) || !room(w.orders.room)) throw new Error("market or order board: unknown room");
+	for (const r of [...w.market.rooms, ...w.orders.rooms, ...w.orders.kinds.flatMap((k) => k.rooms ?? [])]) if (!room(r)) throw new Error(`market or order board: unknown room ${r}`);
+	for (const p of [...w.flood.rooms.flatMap((r) => r.protos ?? []), ...(w.storm?.protos ?? [])]) proto(p.proto, "flood or storm");
+	for (const r of w.storm?.rooms ?? []) if (!room(r)) throw new Error(`storm: unknown room ${r}`);
 	for (const r of w.recipes) { r.needs.forEach((n) => proto(n.proto, `recipe ${r.key}`)); proto(r.makes, `recipe ${r.key}`); if (r.tool) proto(r.tool, `recipe ${r.key}`); }
 	for (const k of w.orders.kinds) { k.needs.forEach((n) => proto(n.proto, `order ${k.key}`)); proto(k.reward.proto, `order ${k.key}`); }
 	for (const o of w.objects) {

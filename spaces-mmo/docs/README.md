@@ -1,7 +1,8 @@
 # spaces-mmo – MMORPG-Engine auf phi-spaces
 
 `spaces-mmo` (Paket `phi-spaces-mmo`) ist eine browserfähige Mehrspieler-Engine, deren gesamte Welt in einem phi-space
-liegt: Text als Grundlage (wie ein MUD), darüber eine Kachelgrafik mit PixiJS. Die Struktur der Spielwelt folgt
+liegt: Text als Grundlage (wie ein MUD), darüber eine Kachelgrafik mit PixiJS und optional eine 2,5D-Ansicht mit
+Three.js. Die Struktur der Spielwelt folgt
 [Evennia](https://www.evennia.com/docs/latest/Components/Components-Overview.html), die Prozessaufteilung folgt
 `codemode-chat/` (siehe `docs/codemode-space-architektur.md` im Root).
 
@@ -19,6 +20,8 @@ umgesetzt; siehe [phasen.md](phasen.md).
 | [spielidee.md](spielidee.md) | Die Spielwelt „Leuchtfeuer“ und warum sie zu einem Space passt |
 | [evennia-abbildung.md](evennia-abbildung.md) | Evennia-Komponenten → Entries, Templates, Leases, Worker |
 | [architektur.md](architektur.md) | Prozesse, Datenfluss, Konten und Login, Grafik (PixiJS), Verzeichnisaufbau |
+| [weltzeit.md](weltzeit.md) | Persistierte Weltuhr, Kalender, Scheduler, Neustart- und Mehrhost-Vertrag |
+| [welt.md](welt.md) | Wie Welten wachsen; der Archipel (25 Räume, fünf Inseln), die Bewohner und ihr Handel, die Übersichtskarte |
 | [modell-npcs.md](modell-npcs.md) | Phase 5: Modell-NPCs als feste Rollen, Wecken durch Ereignisse, Wanderer, Kosten |
 | [goetter.md](goetter.md) | Götter: Modell-NPCs, die Inseln, Aufträge und Ereignisse nach Regeln erschaffen; Prüfung statt Freigabe |
 | [betrieb.md](betrieb.md) | Docker: Image, Profile nano/big, lokaler Testaufbau, Produktion auf big und nano |
@@ -30,7 +33,7 @@ umgesetzt; siehe [phasen.md](phasen.md).
 | # | Frage | Entscheidung |
 | --- | --- | --- |
 | 1 | Name | Verzeichnis `spaces-mmo/`, Paket `phi-spaces-mmo`; „Leuchtfeuer“ ist die erste Welt |
-| 2 | Grafik | PixiJS `8.22.0` von Anfang an (Phase 0 rendert schon eine Kachelkarte); Tilesets aus Intersect-Assets (CC BY 4.0, mit Namensnennung) |
+| 2 | Grafik | PixiJS `8.22.0` rendert die 2D-Karte; die optionale 2,5D-Ansicht verwendet Three.js `0.186.1`. Beide sind nur Ansichten desselben autoritativen Rasters und exakt gepinnt. Tilesets stammen aus Intersect-Assets (CC BY 4.0, mit Namensnennung). |
 | 3 | Space und Spiel | Bleiben getrennt: kein Spiel- oder Webcode in `src/`; Gateway-Helfer wie `ws.ts` bekommt spaces-mmo als eigene Kopie, wie help-site und codemode-chat |
 | 4 | Einbindung | phi-spaces wird **vor Phase 0** ein richtiges Paket (`exports`), und alle Projekte, die darauf aufbauen, importieren `phi-spaces` statt `../../src/…` ([paket.md](paket.md)) |
 | 5 | Konten | Ab Phase 0 Gastzugang und Login (Benutzername + Passwort); bei der Registrierung wird der Gast-Fortschritt übernommen ([architektur.md](architektur.md#gastzugang)) |

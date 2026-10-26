@@ -3,12 +3,24 @@
 // room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
-import { MapView } from "./MapView.tsx";
+import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
+import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
+import { appendLine } from "./log.ts";
+import { EXPIRE_MS, StepPacer } from "./stepping.ts";
+
+/** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
+const GONE_GRACE_MS = 2500;
+import { MapRenderer, type MapMode } from "./MapRenderer.tsx";
 
 type Account = { name: string; guest: boolean; admin: boolean };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
+/** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */
+let fuels: string[] = ["Treibholz"];
+const fuelIn = (objs: Map<string, ObjView>, me: string) => {
+	const mine = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
+	return fuels.map((n) => mine.find((o) => o.name === n)).find(Boolean);
+};
 type Line = MsgView | { kind: "echo"; text: string; from: string; at: number };
 
 /** The build this page was loaded with (from the first /api/me); a hello from another build means a newer version. */
@@ -100,7 +112,7 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer }: { at:
 		return () => window.removeEventListener("keydown", key);
 	}, [close]);
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
-	const fuel = [...objs.values()].find((o) => o.kind === "item" && o.location === me && o.name === "Treibholz");
+	const fuel = fuelIn(objs, me);
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
 		entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
@@ -155,7 +167,8 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }
 				</form>
 			)}
 			{offerTo === null && !guest && others.length > 0 && carried.length > 0 && <button className="link" onClick={() => setOfferTo("")}>Tausch anbieten …</button>}
-			{trade.myOrder && <><h3>Dein Auftrag</h3><ul><li><span>{trade.myOrder.text}</span><button onClick={() => send("auftrag liefere")}>Liefern</button><button onClick={() => send("auftrag aufgeben")}>Aufgeben</button></li></ul></>}
+			{trade.myOrder && <><h3>Dein Auftrag</h3><ul><li><span>{trade.myOrder.text}</span>{trade.myOrder.here && <><button onClick={() => send("auftrag liefere")}>Liefern</button><button onClick={() => send("auftrag aufgeben")}>Aufgeben</button></>}</li></ul>
+				{!trade.myOrder.here && <p className="muted" style={{ margin: "0 0 4px" }}>Abliefern an einer Auftragstafel: {trade.myOrder.boards.join(", ")}.</p>}</>}
 			{trade.orders && <><h3>Auftragstafel</h3>{trade.orders.length ? <ul>{trade.orders.map((o) => (
 				<li key={o.nr}><span>{o.text} ({o.reward} Münze{o.reward === 1 ? "" : "n"})</span>{!guest && !trade.myOrder && <button onClick={() => send(`auftrag nimm ${o.nr}`)}>Nehmen</button>}</li>
 			))}</ul> : <p className="muted">Gerade keine Aufträge.</p>}</>}
@@ -173,6 +186,16 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }
 	);
 }
 
+/** A thing's icon: its glyph (shape and colour) until licensed item graphics exist. */
+function Glyph({ o }: { o: ObjView }) {
+	const c = o.glyph?.color ?? "#9aa3ad", shape = o.glyph?.shape ?? "square";
+	return (
+		<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+			{shape === "circle" ? <circle cx="8" cy="8" r="6" fill={c} stroke="#0008" /> : shape === "diamond" ? <path d="M8 1.5 14.5 8 8 14.5 1.5 8Z" fill={c} stroke="#0008" /> : <rect x="2.5" y="2.5" width="11" height="11" rx="2" fill={c} stroke="#0008" />}
+		</svg>
+	);
+}
+
 /** What the player carries and what lies within reach, as buttons (on a phone there is no keyboard to type with). */
 function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void }) {
 	const all = [...objs.values()].filter((o) => o.kind === "item");
@@ -180,10 +203,14 @@ function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; se
 	const close = (o: ObjView) => !!self && o.location === room && Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1;
 	const near = all.filter(close);
 	const fire = [...objs.values()].find((o) => o.kind === "beacon" && close(o));
-	const fuel = carried.find((o) => o.name === "Treibholz");
+	const fuel = fuelIn(objs, me);
 	// the burn time left counts down while a fire is near
 	const [, tick] = useState(0);
 	useEffect(() => { if (!fire) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [fire?.id]);
+	// the pack in short: one icon per kind of thing with how many; a tap shows what can be done with it
+	const [picked, setPicked] = useState<string | null>(null);
+	const kinds = [...carried.reduce((m, o) => m.set(o.name, [...(m.get(o.name) ?? []), o]), new Map<string, ObjView[]>())].sort(([a], [b]) => a.localeCompare(b));
+	const chosen = kinds.find(([name]) => name === picked);
 	if (!carried.length && !near.length && !fire) return <div />;
 	const row = (o: ObjView, verb: string, label: string) => (
 		<li key={o.id}><span>{o.name}</span><button onClick={() => send(`${verb} ${o.name}`)}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
@@ -197,7 +224,19 @@ function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; se
 				</li></ul></>
 			)}
 			{near.length > 0 && <><h3>Neben dir</h3><ul>{near.map((o) => row(o, "get", "Aufheben"))}</ul></>}
-			{carried.length > 0 && <><h3>Du trägst</h3><ul>{carried.map((o) => row(o, "drop", "Ablegen"))}</ul></>}
+			{carried.length > 0 && <>
+				<h3>Du trägst</h3>
+				<div className="pack">{kinds.map(([name, os]) => (
+					<button key={name} className={`chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
+						<Glyph o={os[0]!} /><span className="n">{os.length}</span>
+					</button>
+				))}</div>
+				{chosen && <div className="pack-do"><span>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</span>
+					<button onClick={() => send(`drop ${chosen[0]}`)}>Ablegen</button>
+					{fire && fuels.includes(chosen[0]) && <button onClick={() => send(`put ${chosen[0]} in ${fire.name}`)}>Nachlegen</button>}
+					<button onClick={() => send(`look ${chosen[0]}`)}>Ansehen</button>
+				</div>}
+			</>}
 		</div>
 	);
 }
@@ -208,6 +247,8 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
 	const [fog, setFog] = useState(0);
 	const [trade, setTrade] = useState<TradeView | null>(null);
+	const [atlas, setAtlas] = useState<AtlasView | null>(null);
+	const [atlasState, setAtlasState] = useState<AtlasState | null>(null);
 	const [offerTo, setOfferTo] = useState<string | null>(null);
 	const [log, setLog] = useState<Line[]>([]);
 	const [live, setLive] = useState(false);
@@ -215,25 +256,28 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [panel, setPanel] = useState<null | "account" | "leave">(null);
 	const [help, setHelp] = useState(false);
 	const [stale, setStale] = useState(false);
-	// text only: by choice (remembered in this browser) or because the map cannot draw (no WebGL)
-	const [textOnly, setTextOnly] = useState(() => { try { return localStorage.getItem("mmo.textOnly") === "1"; } catch { return false; } });
+	// Text, established 2D or optional 3D: remembered per browser. The old text-only preference migrates forward.
+	const [mapMode, setMapModeState] = useState<MapMode>(() => {
+		try { const saved = localStorage.getItem("mmo.renderer"); return saved === "text" || saved === "2d" || saved === "3d" ? saved : localStorage.getItem("mmo.textOnly") === "1" ? "text" : "2d"; }
+		catch { return "2d"; }
+	});
 	const [menu, setMenu] = useState<null | { x: number; y: number; left: number; top: number }>(null);
-	const toggleText = () => setTextOnly((v) => { try { localStorage.setItem("mmo.textOnly", v ? "0" : "1"); } catch { /* private window */ } return !v; });
+	const setMapMode = (mode: MapMode) => { setMenu(null); setMapModeState(mode); try { localStorage.setItem("mmo.renderer", mode); localStorage.setItem("mmo.textOnly", mode === "text" ? "1" : "0"); } catch { /* private window */ } };
 	const ws = useRef<WebSocket | null>(null);
 	const logEnd = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
+	const pacer = useRef(new StepPacer());
+	const meRef = useRef("");
+	const serverPos = useRef<{ x: number; y: number } | null>(null);
+	meRef.current = me;
 
-	// the same error twice in a row (a held arrow key against a wall) shows once
-	const append = useCallback((l: Line) => setLog((old) => {
-		const last = old[old.length - 1];
-		if (l.kind === "error" && last?.kind === "error" && last.text === l.text) return old;
-		return old.length >= 300 ? [...old.slice(-299), l] : [...old, l];
-	}), []);
+	const append = useCallback((l: Line) => setLog((old) => appendLine(old, l)), []);
 
 	// the game socket; it reconnects with a backoff, and a socket refused for a lapsed login logs out
 	useEffect(() => {
 		let dead = false, retry = 0, timer: ReturnType<typeof setTimeout> | undefined, greeted = false;
+		const goneTimers = new Map<string, ReturnType<typeof setTimeout>>();
 		const connect = () => {
 			const s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
 			ws.current = s;
@@ -244,6 +288,8 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 					// the server runs a newer build than this page: reload, so the page understands what it is sent
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
 					retry = 0; setHello(f);
+					for (const t of goneTimers.values()) clearTimeout(t); goneTimers.clear();
+					pacer.current = new StepPacer(); { const mine = f.chars.find((c) => c.charId === f.me.charId); serverPos.current = mine ? { x: mine.x, y: mine.y } : null; } fuels = f.world.fuels;
 					setChars(new Map(f.chars.map((c) => [c.charId, c])));
 					setObjs(new Map(f.objs.map((o) => [o.id, o])));
 					setFog(f.fog);
@@ -251,11 +297,26 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 					if (!greeted) setLog(f.log); else append({ kind: "echo", text: `— ${f.room.name} —`, from: "", at: Date.now() });
 					greeted = true;
 				}
-				else if (f.t === "char") setChars((m) => new Map(m).set(f.c.charId, f.c));
-				else if (f.t === "gone") setChars((m) => { const n = new Map(m); n.delete(f.charId); return n; });
+				else if (f.t === "char") {
+					clearTimeout(goneTimers.get(f.c.charId)); goneTimers.delete(f.c.charId);
+					// the own figure may already stand further on than this answer (the steps it predicted): then it stays there
+					if (f.c.charId === meRef.current) { serverPos.current = { x: f.c.x, y: f.c.y }; if (pacer.current.answer(f.c) === "ahead") return; }
+					setChars((m) => new Map(m).set(f.c.charId, f.c));
+				}
+				else if (f.t === "gone") {
+					// A character that takes a step is gone from the space for the moment its move is committed (the server takes
+					// its entry and writes it back): when that moment is long, a figure that vanishes and comes back is a
+					// flicker. So a "gone" counts only if no "char" for it follows within a moment; the own figure never goes
+					// this way (leaving a room comes as a new hello).
+					if (f.charId === meRef.current) return;
+					clearTimeout(goneTimers.get(f.charId));
+					goneTimers.set(f.charId, setTimeout(() => { goneTimers.delete(f.charId); setChars((m) => { if (!m.has(f.charId)) return m; const n = new Map(m); n.delete(f.charId); return n; }); }, GONE_GRACE_MS));
+				}
 				else if (f.t === "obj") setObjs((m) => new Map(m).set(f.o.id, f.o));
 				else if (f.t === "fog") setFog(f.level);
 				else if (f.t === "trade") setTrade(f.trade);
+				else if (f.t === "atlas") setAtlas(f.atlas);
+				else if (f.t === "atlasState") setAtlasState(f.state);
 				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
 				else if (f.t === "msg") append(f.m);
 			};
@@ -267,7 +328,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 			};
 		};
 		connect();
-		return () => { dead = true; clearTimeout(timer); ws.current?.close(); };
+		return () => { dead = true; clearTimeout(timer); for (const t of goneTimers.values()) clearTimeout(t); ws.current?.close(); };
 	}, [append, onAccount]);
 
 	useEffect(() => { logEnd.current?.scrollIntoView({ block: "end" }); }, [log]);
@@ -296,8 +357,20 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 			moves = (horizontal ? [[dx, 0], [0, dy]] : [[0, dy], [dx, 0]] as Array<[number, number]>).filter(([a, b]) => a || b) as Array<[number, number]>;
 		}
 		const go = moves.find(([a, b]) => free(self.x + a, self.y + b)) ?? moves[0]!;
+		if (!pacer.current.canSend(Date.now())) return;
 		// relative: the server steps from where the character really is, not from where this page last saw it
+		const to = { x: self.x + go[0], y: self.y + go[1] };
+		const sure = free(to.x, to.y);
+		pacer.current.sent(Date.now(), sure ? to : undefined);
 		send(`step ${go[0]} ${go[1]}`, false);
+		// the figure starts walking at once; a step the server refuses is put right by the next place it reports
+		if (sure) {
+			setChars((m) => { const c = m.get(me); return c ? new Map(m).set(me, { ...c, x: to.x, y: to.y }) : m; });
+			setTimeout(() => {
+				const back = serverPos.current;
+				if (back && pacer.current.settle(Date.now())) setChars((m) => { const c = m.get(me); return c && (c.x !== back.x || c.y !== back.y) ? new Map(m).set(me, { ...c, x: back.x, y: back.y }) : m; });
+			}, EXPIRE_MS + 50);
+		}
 	}, [chars, objs, me, hello, send]);
 
 	/** Space: pick up what lies nearest (the own cell first); with nothing there, feed a fire within reach. */
@@ -309,7 +382,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		const item = near.filter((o) => o.kind === "item").sort((a, b) => d(a) - d(b))[0];
 		if (item) return send(`get ${item.name}`);
 		const fire = near.find((o) => o.kind === "beacon");
-		const fuel = [...objs.values()].find((o) => o.kind === "item" && o.location === me && o.name === "Treibholz");
+		const fuel = fuelIn(objs, me);
 		if (fire && fuel) return send(`put ${fuel.name} in ${fire.name}`);
 		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
 	}, [chars, me, hello, objs, send, append]);
@@ -354,17 +427,20 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				<span>{account.name}</span>
 				{account.guest && <span className="badge">Gast</span>}
 				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")}>Registrieren, um den Fortschritt zu behalten</button>}
-				<button onClick={toggleText} aria-pressed={textOnly}>{textOnly ? "Karte zeigen" : "Nur Text"}</button>
+				<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
+					{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => setMapMode(mode)} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
+				</div>
 				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
 			</header>
 			{help && <HelpPanel onClose={() => setHelp(false)} />}
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
-			<div className={`main${textOnly ? " text-only" : ""}`}>
-				{textOnly ? null : hello ? (
-					<MapView world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog}
+			<div className={`main${mapMode === "text" ? " text-only" : ""}`}>
+				{atlas && atlas.rooms.length > 1 && <Atlas atlas={atlas} state={atlasState} />}
+				{mapMode === "text" ? null : hello ? (
+					<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog}
 						onCell={(x, y) => { input.current?.blur(); setMenu(null); step({ x, y }); }}
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
-						onFail={(why) => { setTextOnly(true); append({ kind: "error", text: why, from: "", at: Date.now() }); }} />
+						onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 				) : <div className="map"><p className="muted">Verbinde …</p></div>}
 				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }} />}
 				<aside className="side">
@@ -385,7 +461,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 						</div>
 					)}
 					<div className="log" role="log" aria-live="polite">
-						{log.map((l, i) => <div key={i} className={l.kind}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
+						{log.map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>

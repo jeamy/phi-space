@@ -17,3 +17,6 @@ process.env.SPACES_MMO_REQ_PER_MIN = "100000"; // the tests call in tight loops;
 process.env.SPACES_MMO_GUESTS_PER_HOUR = "100000";
 process.env.SPACES_MMO_LLM = ""; // never a real model in the tests: a test that wants one names tests/fake-llm.ts
 process.env.SPACES_MMO_LLM_MODULE = "";
+// the three roles of the earlier phases; the people of the islands (server/npc/economy.ts) would walk through their
+// tests, and tests/economy.test.ts plays them itself
+process.env.SPACES_MMO_NPCS = "ines,bo,fremder";

@@ -158,6 +158,8 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | Klick oder Tipp auf ein Feld | Dorthin gehen (\`move x y\`), der Server findet den Weg |
 | Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen … |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
+| 3D: Mausrad | Näher heran und weiter weg (Zoom) |
+| 3D: Ziehen mit der Maus | Die Ansicht nach links oder rechts drehen (die Knöpfe ↶ ↷ drehen in Achtelschritten) |
 
 ## Tastatur {#keys}
 
@@ -188,6 +190,8 @@ Rechts (auf dem Handy unter der Karte) stehen **Neben dir**, **Du trägst** und 
 | Click or tap a cell | Walk there (\`move x y\`), the server finds the way |
 | Right click or long press | Menu for that cell: look, pick up, add fuel … |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
+| 3D: mouse wheel | Zoom in and out |
+| 3D: drag with the mouse | Turn the view left or right (the ↶ ↷ buttons turn in eighths) |
 
 ## Keyboard {#keys}
 

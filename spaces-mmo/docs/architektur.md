@@ -41,6 +41,8 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
   zwischen zwei Positionen; er sagt nichts voraus, was der Server verwerfen könnte, außer einer optimistischen
   Anzeige der eigenen Figur.
 - Welt-Ticks um 1 Hz für Zustand mit sichtbarer Zeit (Nebel, Flut), alles Langsamere über Leases und OnDemand-Rechnung.
+  Eine persistierte Uhr mit Weltstunde und pausierbaren fachlichen Terminen ist separat in
+  [weltzeit.md](weltzeit.md) entworfen und noch nicht implementiert.
 - Ziel für Phase 3: Befehl bis Anzeige < 150 ms im LAN, < 400 ms über das Netz.
 
 ## Skalierung
@@ -60,6 +62,13 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
 - Spieler haben keinen direkten Zugang zum Space; ihre Identität kennt nur das Gateway.
 - Builder- und Admin-Rechte sind Weltrecht (`perms` am Account, Locks), keine Space-Rollen.
 
+## Übersichtskarte
+
+Oben links liegt über der Raumkarte eine Übersicht aller Räume mit Platz (`RoomDef.map`, `island`), siehe
+[welt.md](welt.md#übersichtskarte). Das Gateway schickt `atlas` (Gelände, Feuer, Verbindungen) einmal je Verbindung
+und `atlasState` (eigener Raum, Nebel, brennende Feuer, Anwesende je Raum) nach Änderungen, höchstens einmal je
+Sekunde. Gezeichnet wird mit einem einfachen 2D-Canvas, unabhängig von der 2D-/3D-Raumkarte.
+
 ## Eingaben in natürlicher Sprache
 
 Wer statt eines Befehls einen Satz tippt, wird in zwei Stufen verstanden:
@@ -67,7 +76,10 @@ Wer statt eines Befehls einen Satz tippt, wird in zwei Stufen verstanden:
 1. **Regeln** (`server/engine/translate.ts`, kostenlos, immer an) übersetzen gängige Sätze mit Blick auf den Raum:
    „gehe nach osten“ → `go ost`, „nimm das holz auf“ → `get holz`, „kaufe muschel am markt“ → `market kaufe 1`,
    „biete muschel am markt für 2 an“ → `market biete muschel für 2`, „lege holz ins feuer“ → `put holz in feuer`,
-   „schau dich um“ → `look`. Getippte Befehle und Gesprochenes (`say`, `kanal`) bleiben unverändert.
+   „schau dich um“ → `look`, „gib ines ein stück holz“ → `give holz an Ines`. Getippte Befehle und Gesprochenes (`say`, `kanal`) bleiben unverändert. Ein Satz, der
+   jemanden im Raum anspricht („hallo ines, leg holz ins feuer“, „Bo: wohin?“), ist Gesprochenes (`say …`), kein
+   Befehl für den Spieler: die Angesprochene hört es und handelt selbst (docs/modell-npcs.md). Ein Gruß ohne Namen
+   („hallo, leg holz ins feuer“) wird übergangen.
 2. **Ein günstiges Modell** (`server/model-host.ts`, nur mit `SPACES_MMO_LLM=1`) bekommt, was die Regeln nicht
    verstehen. Der Welt-Worker schreibt dafür einen `Translate`-Eintrag; der Modellprozess zeigt dem Modell die Befehle
    und was der Spieler sieht, und schreibt die Antwort als neuen Auftrag mit dem Originalsatz (`asked`) zurück. Eine
@@ -207,15 +219,43 @@ Animationen, Gegenstände, Oberfläche, Klänge und Musik, alles in einem Stil.
   immer da (Barrierefreiheit, schwache Geräte, Agenten).
 - Sichtfeld und Wegfindung rechnet der Server (Welt-Worker), nicht der Renderer.
 
-### 3D-Ausblick: Three.js
+### 3D-Ansicht: Three.js
 
-Soll die Karte später räumlich dargestellt werden, ist die Wahl **Three.js** (MIT; die Version wird wie
-`pixi.js` exakt gepinnt). Das erste Ziel ist ausdrücklich eine **2,5D-Ansicht der bestehenden Rasterwelt**, kein
+Die optionale räumliche Karte verwendet **Three.js `0.186.1`** (MIT, exakt gepinnt). Der erste Prototyp ist eine
+**2,5D-Ansicht der bestehenden Rasterwelt**, kein
 neues dreidimensionales Welt- oder Bewegungsmodell. Three.js rendert und interpoliert im Client; es bringt keine
-autoritative Spielsimulation oder Physik mit. Der Client braucht trotzdem einen Renderloop
-(`WebGLRenderer.setAnimationLoop`). Einbindung nach demselben Muster: Client-Komponente, dynamisches `import()`,
-`Map<entryId, Object3D>` statt der Sprite-Map und Deltas aus `changes`. Godot oder Bevy wären dagegen kein Einbau,
+autoritative Spielsimulation oder Physik mit. `MapRenderer` ist die gemeinsame Grenze für 2D und 3D: Beide Ansichten
+erhalten dieselben Raum-, Figuren- und Objektansichten und geben Rasterzellen an dieselben Eingabe-Callbacks zurück.
+`MapView3D` lädt Three.js dynamisch im Browser, führt einen `requestAnimationFrame`-Renderloop und hält
+`Map<entryId, Object3D>` für Figuren und Objekte. Godot oder Bevy wären dagegen kein Einbau,
 sondern ein Plattformwechsel, weil ihr Export das ganze Canvas übernimmt.
+
+Der Nutzer kann unabhängig vom Server zwischen Text, 2D und 3D wechseln; die Auswahl bleibt im Browser gespeichert.
+Kann Three.js oder WebGL nicht starten, fällt der Client auf 2D zurück. Scheitert auch die 2D-Karte, bleibt der
+Textmodus. Gezeichnet werden instanziierte Kachelquader, einfache Geometrien und Namens-Billboards; Low-Poly-
+Modelle, Wasser-Shader, Deko, gemessene Telefonbudgets und WFC-generierte Räume sind noch keine implementierte
+3D-Abnahme.
+
+**Ruhiges Bild:** Renderer, Kamera und Renderloop entstehen **einmal**; ein Raumwechsel tauscht nur Boden und Dinge aus
+(`MapView3D`, Effekt je `roomId`). Die Kamera blickt auf die **Mitte des Raums** aus einem Abstand, der den ganzen Raum
+zeigt, und bleibt dort: Ein Schritt bewegt nur die Figur, nicht den Boden. Nur Drehen und Zoomen bewegen die Kamera.
+`setSize` läuft nur, wenn sich die Größe wirklich ändert (es leert das Bild), und der Nebel ist ein einziges `FogExp2`,
+dessen Dichte sich ändert. Gemessen mit Chromium und SwiftShader: nach sechs Schritten ist der Boden Pixel für Pixel
+unverändert, es gibt einen WebGL-Kontext und zwei Größenanpassungen insgesamt.
+
+**Texturen:** Der Boden benutzt die Kachelbilder der Welt, dieselben Sheets wie die 2D-Karte (`client/tiles3d.ts`). Jede
+Kachelart wird in eine eigene kleine Canvas-Textur geschnitten (so bluten Mipmaps nicht über den Rand), nah mit
+`NearestFilter`, in der Ferne mit Mipmaps (nichts flimmert); Wasser besteht aus den Einzelbildern des Autotiles und
+wechselt im Takt von `frameMs`. Die Texturen liegen je Welt im Cache. Die Quader schließen ohne Lücke aneinander; die
+kleine Höhenstreuung aus `terrain3d.ts` bleibt in der Ansicht aus, weil schon ein Hundertstel Unterschied zwischen
+Nachbarn als dunkle Naht erscheint. Die Seiten sind einfarbige Erde.
+
+**Figuren:** `client/figure3d.ts` baut jede Figur aus Primitiven zu einem Menschen (Kopf mit Haar und Augen, Hals, Rumpf mit
+Gürtel, Arme, Beine, Stiefel, Schatten). Aussehen aus Skin-Nummer (Tunika, Hose) und Figuren-ID (Hautton, Haar); die
+eigene Figur trägt grün und einen Ring, KI-Figuren blau. Sie dreht sich in Gehrichtung, die Gliedmaßen schwingen beim
+Gehen, im Stand atmet sie und blickt sich um. Die Figuren sind das 1,3-Fache einer Zelle hoch gezeichnet, damit sie in der
+Gesamtansicht lesbar bleiben. Echte Modelle (glTF) wären der nächste Schritt; sie brauchen Dateien mit Lizenz und einen
+Eintrag in `CREDITS.md`.
 
 Autoritative Erzeugung und Darstellung sind zwei getrennte Wege:
 
@@ -235,17 +275,20 @@ Rasters:
 
 - **Koordinaten:** Eine Rasterzelle entspricht einer festgelegten Welteinheit. `x` wird zur horizontalen X-Achse,
   `y` zur horizontalen Z-Achse; die vertikale Y-Position liefert genau eine versionierte Funktion
-  `terrainHeight(roomId, ground, x, y)`. Figuren, Gegenstände, Ausgänge und Effekte verwenden dieselbe Funktion.
+  `terrainHeight(roomId, ground, tiles, x, y)` in `client/terrain3d.ts`. Figuren, Gegenstände, Ausgänge und Effekte
+  verwenden dieselbe Funktion.
 - **Terrain:** Eine Welt definiert die visuelle Basishöhe je Kacheltyp. Gestuftes Gelände verwendet wenige
   `InstancedMesh`-Gruppen je Geometrie und Material; geglättetes Gelände verwendet ein gemeinsames Höhenfeld. Kleine
   Höhenabweichungen dürfen nur innerhalb festgelegter visueller Grenzen liegen, damit eine serverseitig begehbare
   Kachel nicht wie eine unüberwindbare Wand aussieht.
 - **Determinismus:** Ein stabiler String-Hash und ein festgelegter PRNG erzeugen Rauschen aus `roomId`,
-  Darstellungs-Seed und `terrainRendererVersion`. `Math.random()` ist dafür unzulässig. Eine zusätzliche Bibliothek
-  wie `simplex-noise` ist eine eigene Abhängigkeitsentscheidung, nicht Voraussetzung dieses Entwurfs.
-- **Wasser:** Wasser ist eine eigene Ebene. Der `Water`-Effekt ist ein explizit importiertes Three.js-Addon und an
-  den `WebGLRenderer` gebunden; Normalmap, Renderer und ein einfacherer Fallback werden zusammen mit dem Asset
-  versioniert.
+  Kachelkoordinaten und `TERRAIN_RENDERER_VERSION`. Der Prototyp verwendet FNV-1a und kein `Math.random()`.
+  Ein gesonderter Welt-Seed oder ein festgelegter PRNG ist erst nötig, wenn neben der kleinen Höhenvariation weitere
+  deterministische Deko erzeugt wird. Eine zusätzliche Bibliothek wie `simplex-noise` ist dafür keine Voraussetzung.
+- **Wasser:** Der Prototyp hält Wasser flach und rendert es als einfaches Material in der Terrain-Instanzgruppe.
+  Ziel für die ausgebaute Ansicht ist eine eigene Ebene. Ein späterer `Water`-Effekt wird als explizit importiertes
+  Three.js-Addon an den `WebGLRenderer` gebunden; Normalmap, Renderer und einfacher Fallback werden dann gemeinsam
+  mit dem Asset versioniert.
 - **Figuren und Objekte:** Zunächst Billboards, später optional Low-Poly-glTF-Modelle (`GLTFLoader`), z. B. aus
   CC0-Baukästen. Modelle werden je Asset geladen und wiederverwendet; GPU-Ressourcen werden beim Raumwechsel
   freigegeben. Der Fußpunkt liegt auf `terrainHeight(...)`, nicht auf einer unabhängig geschätzten Höhe.

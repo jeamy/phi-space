@@ -67,6 +67,9 @@ höchstens 4 je Raum), Kanal `hafen`, `ruf`, Ines als Feuerwärterin, die warnt 
 [evennia-abbildung.md](evennia-abbildung.md#stand-phase-2). Außerdem: Seiten erkennen einen neuen Build und laden neu;
 zwei Figuren stehen nie auf derselben Kachel (Raum-Token, `tests/collision.test.ts`); Leertaste hebt auf.
 
+Diese Phase implementiert skalierte Dauern, noch keine Uhr mit Weltstunde oder Welttag. Der persistierte Zeit- und
+Scheduler-Vertrag ist in [weltzeit.md](weltzeit.md) geplant.
+
 - Ticker-Worker, Scripts als Entries, OnDemand-Rechnung.
 - Strandgut mit Lease, Leuchtfeuer mit erneuerbarer Lease, Nebelstufen pro Raum.
 - Kanäle (`ChannelMsg`), Ruf-Zähler pro Feuer.
@@ -99,6 +102,22 @@ beschränkt).
 **Abnahme:** Latenzziele aus [architektur.md](architektur.md#takt). Frames bleiben unter 64 KiB pro Raum-Snapshot.
 Spielbar am Telefon. 30 Figuren in einem Raum laufen auf einem Mittelklasse-Telefon flüssig (≥ 30 fps).
 
+## Phase 3b – optionale 3D-Ansicht (parallel)
+
+**Stand 2026-10-25: erster Prototyp umgesetzt.** Die Arbeit ist vom Weltmodell entkoppelt und kann parallel zu den
+weiteren Engine-Phasen fortgesetzt werden.
+
+- `MapRenderer` gibt dieselben Serveransichten und Rastereingaben entweder an PixiJS oder Three.js weiter; Text,
+  2D und 3D sind im laufenden Client umschaltbar.
+- Three.js `0.186.1` ist exakt gepinnt und wird nur für die 3D-Ansicht dynamisch geladen. Ein Fehler fällt zuerst
+  auf 2D und danach auf den vollständig spielbaren Textmodus zurück.
+- `terrainHeight` ist versioniert, deterministisch und rein visuell. Instanzierte Geländekacheln, Figuren,
+  Spielobjekte, Nebel, Kameranachführung, Drehung, Zoom und Raster-Klicks sind vorhanden.
+- Ein fokussierter Test prüft deterministische und begrenzte Höhen sowie unbekannte Kacheltypen.
+
+**Noch keine Abnahme:** Low-Poly-Assets und Wasser-Shader, GPU- und Speicherbudgets auf einem Zieltelefon sowie ein
+Browser-E2E-Vergleich der 2D-/3D-Rastereingaben. Diese Punkte blockieren weder Weltlogik noch die Phasen 4 bis 7.
+
 ## Phase 4 – Handel und Wirtschaft
 
 **Stand 2026-10-25: umgesetzt** (`tests/phase4.test.ts`).
@@ -119,6 +138,18 @@ Spielbar am Telefon. 30 Figuren in einem Raum laufen auf einem Mittelklasse-Tele
 
 **Abnahme:** Fuzz-Test mit vielen gleichzeitigen Tauschen und Abbrüchen; die Summe aller Gegenstände ist danach
 gleich der Summe davor plus Spawns minus Verbrauch (Erhaltungsprüfung).
+
+## Phase 4b – Archipel und Bewohner
+
+**Stand 2026-10-25: umgesetzt** (`tests/world.test.ts`, `tests/economy.test.ts`); ausführlich in [welt.md](welt.md).
+- **Welt**: 25 Räume auf fünf Inseln (Generator `worlds/leuchtfeuer/islands.ts`), Fähren, ein Feuer je Insel,
+  Strandgut je Strand, Sturmflut, neue Dinge und Rezepte, drei Märkte und Auftragstafeln.
+- **Bewohner**: 16 Skript-NPCs (Sammler, Hüter, Händler, Handwerker, Plauderer) handeln, tauschen und reden über
+  dieselben Befehle wie Spieler, ohne Modellaufrufe. Modellrollen hören nur Menschen.
+- **Übersichtskarte** oben links.
+
+**Abnahme:** jeder Raum vom Start aus erreichbar, jeder Weg in jedem Raum begehbar; alle NPCs zugleich spielen
+lassen ändert die Zahl der Münzen nicht.
 
 ## Phase 5 – Modell-NPCs (kosten Tokens, nur nach Freigabe)
 

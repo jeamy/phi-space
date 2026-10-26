@@ -16,7 +16,7 @@ import { FOREVER, NO_WAIT } from "phi-spaces";
 import { CommandError, execute } from "./engine/commands.ts";
 import { msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
-import { fireTick, floodTick, fogTick } from "./engine/fire.ts";
+import { fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { runDue, type Job } from "./engine/ticker.ts";
 import { gameMs } from "./engine/time.ts";
@@ -39,8 +39,9 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 		{ key: "flood", everyMs: gameMs(w.flood.everyMs), run: () => floodTick(space, w, msgLeaseMs) },
 		{ key: "orders", everyMs: gameMs(w.orders.everyMs), run: () => ordersTick(space, w) },
 		{ key: "market", everyMs: gameMs(60_000, 100), run: () => marketTick(space) },
+		...(w.storm ? [{ key: "storm", everyMs: gameMs(w.storm.everyMs), run: async () => { await stormTick(space, w, msgLeaseMs); } }] : []),
 	];
-	const loaded = await loadIntoSpace(space, w, { tickers: jobs });
+	const loaded = await loadIntoSpace(space, w, { tickers: jobs }).catch((e) => { conn.close(); throw e; });
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
 	const tokens = await ensureTokens(space);
 	if (tokens) console.log(`[world] wrote ${tokens} missing tokens`);
@@ -150,7 +151,16 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-	const world = await startWorld();
+	// started together with the space (the dev runner restarts both on a change): wait until its socket is there
+	let world: Awaited<ReturnType<typeof startWorld>> | undefined;
+	for (let tries = 0; !world; tries++) {
+		try { world = await startWorld(); }
+		catch (e) {
+			if (tries >= 30 || !/ENOENT|ECONNREFUSED/.test((e as Error).message)) throw e;
+			if (!tries) console.log("[world] waiting for the space …");
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+	}
 	// the starter and the tests wait for this line
 	console.log(`[world] ready (${process.env.SPACES_MMO_WORLD || "leuchtfeuer"})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await world.close(); process.exit(0); };

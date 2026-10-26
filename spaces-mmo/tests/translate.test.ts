@@ -11,7 +11,7 @@ import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, Player, startServer, startStack } from "./stack.ts";
 
 const w = await loadWorld();
-const view = { exits: [{ name: "ost", aliases: ["o", "osten", "east", "e", "klippenpfad"] }], listings: [{ nr: 1, itemName: "Muschel" }, { nr: 2, itemName: "Treibholz" }], carried: ["Treibholz"] };
+const view = { exits: [{ name: "ost", aliases: ["o", "osten", "east", "e", "klippenpfad"] }], listings: [{ nr: 1, itemName: "Muschel" }, { nr: 2, itemName: "Treibholz" }], carried: ["Treibholz"], people: ["Ines", "Bo"] };
 
 test("rules: common sentences become commands; commands and talk stay as they are", () => {
 	const t = (s: string) => translateRules(s, view);
@@ -31,6 +31,21 @@ test("rules: common sentences become commands; commands and talk stay as they ar
 	assert.equal(t("wirf das treibholz ins leuchtfeuer"), "put treibholz in leuchtfeuer");
 	assert.equal(t("schau dich um"), "look");
 	assert.equal(t("was trage ich?"), "inventory");
+	// speaking to someone here is talk, even when it asks for something
+	assert.equal(t("hallo ines, leg holz ins feuer"), "say hallo ines, leg holz ins feuer");
+	assert.equal(t("Ines: wie geht es dem Feuer?"), "say Ines: wie geht es dem Feuer?");
+	assert.equal(t("hey Bo, wohin fährst du?"), "say hey Bo, wohin fährst du?");
+	assert.equal(t("Fremder, wer bist du?"), null, "not here: no talk to them");
+	assert.equal(t("ines leg holz ins feuer"), "say ines leg holz ins feuer", "without a comma, the name stays");
+	assert.equal(t("leg bitte holz nach, Ines!"), "say leg bitte holz nach, Ines!", "the name at the end");
+	assert.equal(t("hallo, leg holz ins feuer"), "put holz in feuer", "a greeting without a name is no address");
+	// giving: the person first, or the thing with an article or a measure
+	assert.equal(t("gib ines ein stück holz"), "give holz an Ines");
+	assert.equal(t("lege noch ein holz ins feuer"), "put holz in feuer");
+	assert.equal(t("nimm noch ein stück holz auf"), "get holz");
+	assert.equal(t("schenke Bo die Muschel"), "give muschel an Bo");
+	assert.equal(t("gib das treibholz an ines"), "give treibholz an Ines");
+	assert.equal(t("gib fremder ein stück holz"), null, "not here: no one to give it to");
 	for (const keep of ["go ost", "get treibholz", "move 9 9", "biete treibholz an Bert für muschel", "markt biete muschel für 2", "give münze an Bert"]) assert.equal(t(keep), null, keep);
 });
 
@@ -65,6 +80,8 @@ test("rules in play: walking, the market and looking by sentence, each saying ho
 		await a.p.until((f) => f.t === "msg" && f.m.text === "Du hängst Muschel für 2 Münzen ans Marktbrett.");
 		await does(b.p, "kaufe muschel am markt", "Du kaufst Muschel vom Marktbrett.");
 		assert.match(await does(b.p, "schau dich um", "Graue Bucht"), /Ausgänge/);
+		// talk is said as typed, also when it names someone here at its end (no rule rewrites a said line)
+		assert.equal(await does(b.p, "say danke, Sprecherin!", "danke"), "Kaeuferin: danke, Sprecherin!");
 		const n = b.p.frames.length;
 		b.p.send("gehe nach osten");
 		await b.p.until((f) => f.t === "hello" && f.room.roomId === "klippenpfad", 10_000, n);
