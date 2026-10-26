@@ -6,7 +6,9 @@
 //   PORT (3900), SPACES_MMO_BIND (127.0.0.1), SPACES_MMO_SPACE, SPACES_MMO_ACCOUNTS (the sockets of the space process),
 //   SPACES_MMO_REQ_PER_MIN (API requests and WebSocket connects per client IP and minute, default 120),
 //   SPACES_MMO_GUESTS_PER_HOUR (new guests per client IP and hour, default 5), SPACES_MMO_SETUP_TOKEN (first admin),
-//   SPACES_MMO_NO_NEXT=1 (API, assets and game socket only, no pages: the tests that start the web as a process)
+//   SPACES_MMO_NO_NEXT=1 (API, assets and game socket only, no pages: the tests that start the web as a process),
+//   SPACES_MMO_PUBLIC_URL (where a browser reaches it, when that is not where it listens: in a container, the port
+//   Docker publishes; only for the log line)
 //
 // Every POST must carry the header `x-mmo: 1`: a cross-site form cannot set it, and the cookie is SameSite=Strict.
 import http from "node:http";
@@ -179,7 +181,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const dev = process.argv.includes("--dev");
 	const srv = await startServer({ useNext: process.env.SPACES_MMO_NO_NEXT !== "1", dev });
-	console.log(`[web] spaces-mmo listening on ${srv.url}`);
+	const pub = process.env.SPACES_MMO_PUBLIC_URL;
+	console.log(`[web] spaces-mmo listening on ${srv.url}${pub && pub !== srv.url ? ` (in the container; open ${pub})` : ""}`);
 	for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => {
 		// dev: exit at once, so `node --watch` can start the replacement before Next's dev lock is still held
 		if (dev) process.exit(0);

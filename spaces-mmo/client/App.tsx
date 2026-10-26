@@ -7,12 +7,13 @@ import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, Tr
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { appendLine } from "./log.ts";
-import { EXPIRE_MS, StepPacer } from "./stepping.ts";
+import { WALK_MS, Walker } from "./walk.ts";
 import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
 const GONE_GRACE_MS = 2500;
 import { MapRenderer, type MapMode } from "./MapRenderer.tsx";
+import { TouchPad } from "./TouchPad.tsx";
 
 type Account = { name: string; guest: boolean; admin: boolean };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
@@ -268,14 +269,19 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const logEnd = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
-	const pacer = useRef(new StepPacer());
+	// the own figure's walk: drawn ahead of the server, matched by step numbers (client/walk.ts)
+	const walker = useRef(new Walker());
 	// the world's clock as the server last told it; shown by interpolation, nothing is decided by it
 	const [worldTime, setWorldTime] = useState<{ v: WorldTimeView; at: number } | null>(null);
 	const [, setTick] = useState(0);
 	useEffect(() => { if (!worldTime || worldTime.v.paused) return; const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, [worldTime]);
 	const meRef = useRef("");
-	const serverPos = useRef<{ x: number; y: number } | null>(null);
 	meRef.current = me;
+	/** Draws the own figure at `at` (where the walk puts it). */
+	const showOwn = useCallback((at: { x: number; y: number } | null) => {
+		if (!at) return;
+		setChars((m) => { const c = m.get(meRef.current); return c && (c.x !== at.x || c.y !== at.y) ? new Map(m).set(c.charId, { ...c, x: at.x, y: at.y }) : m; });
+	}, []);
 
 	const append = useCallback((l: Line) => setLog((old) => appendLine(old, l)), []);
 
@@ -294,7 +300,8 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 					if (pageBuild && f.build && f.build !== pageBuild) { setStale(true); setTimeout(() => location.reload(), 1500); return; }
 					retry = 0; setHello(f); setWorldTime(f.worldTime ? { v: f.worldTime, at: Date.now() } : null);
 					for (const t of goneTimers.values()) clearTimeout(t); goneTimers.clear();
-					pacer.current = new StepPacer(); { const mine = f.chars.find((c) => c.charId === f.me.charId); serverPos.current = mine ? { x: mine.x, y: mine.y } : null; } fuels = f.world.fuels;
+					meRef.current = f.me.charId;
+					{ const mine = f.chars.find((c) => c.charId === f.me.charId); if (mine) walker.current.reset(mine); } fuels = f.world.fuels;
 					setChars(new Map(f.chars.map((c) => [c.charId, c])));
 					setObjs(new Map(f.objs.map((o) => [o.id, o])));
 					setFog(f.fog);
@@ -304,13 +311,11 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				}
 				else if (f.t === "char") {
 					clearTimeout(goneTimers.get(f.c.charId)); goneTimers.delete(f.c.charId);
-					// the own figure may already stand further on than this answer (the steps it predicted): then it stays there
+					// the own figure: drawn where the walk puts it (the server's place plus the steps still on their way)
 					if (f.c.charId === meRef.current) {
-						// the place the server reported before, again (not the answer to a step): the predictions stay
-						const was = serverPos.current;
-						if (was && was.x === f.c.x && was.y === f.c.y && pacer.current.waiting) return;
-						serverPos.current = { x: f.c.x, y: f.c.y };
-						if (pacer.current.answer(f.c) === "ahead") return;
+						const at = walker.current.report(f.c, f.ack, Date.now());
+						setChars((m) => { const old = m.get(f.c.charId); return new Map(m).set(f.c.charId, { ...f.c, ...(at ?? (old ? { x: old.x, y: old.y } : {})) }); });
+						return;
 					}
 					setChars((m) => new Map(m).set(f.c.charId, f.c));
 				}
@@ -330,15 +335,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				else if (f.t === "atlas") setAtlas(f.atlas);
 				else if (f.t === "atlasState") setAtlasState(f.state);
 				else if (f.t === "objgone") setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; });
-				else if (f.t === "msg") {
-					// a refused step while steps are predicted: back to where the server last put the figure
-					if (f.m.kind === "error" && pacer.current.waiting) {
-						pacer.current.refused();
-						const back = serverPos.current;
-						if (back) setChars((m) => { const c = m.get(meRef.current); return c && (c.x !== back.x || c.y !== back.y) ? new Map(m).set(c.charId, { ...c, x: back.x, y: back.y }) : m; });
-					}
-					append(f.m);
-				}
+				else if (f.t === "msg") append(f.m);
 			};
 			s.onclose = () => {
 				setLive(false);
@@ -360,38 +357,59 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		if (echo) append({ kind: "echo", text: `> ${text}`, from: "", at: Date.now() });
 	}, [append]);
 
-	/** One step from the own character: by `d`, or toward a tapped cell (the longer axis first; if that cell is not
-	 *  walkable, the other axis). A tap walks exactly like an arrow key, one cell per tap. */
+	// what the walk looks at between renders (the hold timer runs outside React's render)
+	const seen = useRef({ chars, objs, hello });
+	seen.current = { chars, objs, hello };
+
+	/** One step of the own figure: by `d`, or toward a tapped cell (the longer axis first; if that cell is not free, the
+	 *  other axis). It is drawn at once and sent with its number; a cell that is not free is not walked into. */
 	const step = useCallback((d: [number, number] | { x: number; y: number }) => {
-		const self = chars.get(me);
-		if (!self || !hello) return;
-		// walkable and nobody standing there (the server checks again; this only picks the better of two directions)
-		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== me), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
+		const { chars, objs, hello } = seen.current;
+		const from = walker.current.shown;
+		if (!from || !hello) return;
+		const s = ws.current;
+		if (!s || s.readyState !== WebSocket.OPEN) return;
+		// walkable and nobody standing there (the server checks again and answers either way)
+		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 		let moves: Array<[number, number]>;
 		if (Array.isArray(d)) moves = [d];
 		else {
-			const dx = Math.sign(d.x - self.x), dy = Math.sign(d.y - self.y);
+			const dx = Math.sign(d.x - from.x), dy = Math.sign(d.y - from.y);
 			if (!dx && !dy) return;
-			const horizontal = Math.abs(d.x - self.x) >= Math.abs(d.y - self.y);
+			const horizontal = Math.abs(d.x - from.x) >= Math.abs(d.y - from.y);
 			moves = (horizontal ? [[dx, 0], [0, dy]] : [[0, dy], [dx, 0]] as Array<[number, number]>).filter(([a, b]) => a || b) as Array<[number, number]>;
 		}
-		const go = moves.find(([a, b]) => free(self.x + a, self.y + b)) ?? moves[0]!;
-		if (!pacer.current.canSend(Date.now())) return;
-		// relative: the server steps from where the character really is, not from where this page last saw it
-		const to = { x: self.x + go[0], y: self.y + go[1] };
-		const sure = free(to.x, to.y);
-		pacer.current.sent(Date.now(), sure ? to : undefined);
-		send(`step ${go[0]} ${go[1]}`, false);
-		// the figure starts walking at once; a step the server refuses is put right by the next place it reports
-		if (sure) {
-			setChars((m) => { const c = m.get(me); return c ? new Map(m).set(me, { ...c, x: to.x, y: to.y }) : m; });
-			setTimeout(() => {
-				const back = serverPos.current;
-				if (back && pacer.current.settle(Date.now())) setChars((m) => { const c = m.get(me); return c && (c.x !== back.x || c.y !== back.y) ? new Map(m).set(me, { ...c, x: back.x, y: back.y }) : m; });
-			}, EXPIRE_MS + 50);
-		}
-	}, [chars, objs, me, hello, send]);
+		const go = moves.find(([a, b]) => free(from.x + a, from.y + b));
+		if (!go) return;
+		const st = walker.current.step(go[0], go[1], Date.now());
+		if (!st) return;
+		s.send(JSON.stringify({ t: "step", seq: st.seq, dx: st.dx, dy: st.dy }));
+		showOwn(walker.current.shown);
+	}, [showOwn]);
+
+	// steps without any answer for a while are given up: the figure goes to the server's place
+	useEffect(() => { const t = setInterval(() => showOwn(walker.current.tick(Date.now())), 500); return () => clearInterval(t); }, [showOwn]);
+
+	// a held arrow key walks at an even pace (its own timer, not the keyboard's repeat, which starts late and unevenly);
+	// the last key pressed leads; letting go of all of them stops at once
+	const held = useRef<Array<[number, number]>>([]);
+	const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+	const hold = useCallback((d: [number, number]) => {
+		held.current = [...held.current.filter(([a, b]) => a !== d[0] || b !== d[1]), d];
+		step(d);
+		holdTimer.current ??= setInterval(() => { const last = held.current.at(-1); if (last) step(last); }, WALK_MS);
+	}, [step]);
+	const release = useCallback((d?: [number, number]) => {
+		held.current = d ? held.current.filter(([a, b]) => a !== d[0] || b !== d[1]) : [];
+		if (!held.current.length && holdTimer.current) { clearInterval(holdTimer.current); holdTimer.current = null; }
+	}, []);
+	useEffect(() => {
+		const stop = () => release();
+		window.addEventListener("blur", stop);
+		document.addEventListener("visibilitychange", stop);
+		return () => { window.removeEventListener("blur", stop); document.removeEventListener("visibilitychange", stop); stop(); };
+	}, [release]);
 
 	/** Space: pick up what lies nearest (the own cell first); with nothing there, feed a fire within reach. */
 	const action = useCallback(() => {
@@ -416,23 +434,26 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 		if (d[1] === 0 && line !== "") return;
 		e.preventDefault();
 		input.current?.blur();
-		step(d);
+		if (!e.repeat) hold(d);
 	};
 
-	// arrow keys walk, space picks up, unless the command line has the focus
+	// arrow keys walk while held, space picks up, unless the command line has the focus
 	useEffect(() => {
+		const dirOf = (k: string) => ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[k];
 		const onKey = (e: KeyboardEvent) => {
 			if (document.activeElement === input.current || (e.target as HTMLElement)?.tagName === "INPUT") return;
-			if (e.key === "Enter") { e.preventDefault(); input.current?.focus(); return; }
+			if (e.key === "Enter") { e.preventDefault(); release(); input.current?.focus(); return; }
 			if (e.key === " ") { e.preventDefault(); if (!e.repeat) action(); return; }
-			const d = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[e.key];
+			const d = dirOf(e.key);
 			if (!d) return;
 			e.preventDefault();
-			step(d);
+			if (!e.repeat) hold(d); // the keyboard's repeat is not used: the hold timer paces the walk
 		};
+		const onUp = (e: KeyboardEvent) => { const d = dirOf(e.key); if (d) release(d); };
 		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [step, action]);
+		window.addEventListener("keyup", onUp);
+		return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onUp); };
+	}, [hold, release, action]);
 
 	const logout = async () => { await post("/api/logout").catch(() => {}); onAccount(null); };
 
@@ -459,6 +480,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				{atlas && atlas.rooms.length > 1 && <Atlas atlas={atlas} state={atlasState} />}
 				{mapMode === "text" ? null : hello ? (
 					<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog}
+						controls={<TouchPad hold={(d) => { input.current?.blur(); setMenu(null); hold(d); }} release={release} action={action} />}
 						onCell={(x, y) => { input.current?.blur(); setMenu(null); step({ x, y }); }}
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
 						onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
@@ -486,7 +508,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>
-						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} placeholder="Enter: Befehl tippen, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte" maxLength={300} aria-label="Befehl" />
+						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder="Enter: Befehl tippen, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte" maxLength={300} aria-label="Befehl" />
 						<button className="primary">Senden</button>
 					</form>
 					<About />

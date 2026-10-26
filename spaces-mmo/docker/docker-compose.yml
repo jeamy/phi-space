@@ -94,6 +94,8 @@ services:
       SPACES_MMO_ACCOUNTS: "${SPACES_MMO_ACCOUNTS:-tcp:space:3951}"
       SPACES_MMO_BIND: 0.0.0.0
       PORT: "3900"
+      # where the browser reaches it (the published port; the log line names it)
+      SPACES_MMO_PUBLIC_URL: "http://${HOST_BIND:-127.0.0.1}:${PORT:-3900}"
     ports:
       # loopback by default, for the reverse proxy in front
       - "${HOST_BIND:-127.0.0.1}:${PORT:-3900}:3900"
@@ -157,6 +159,7 @@ services:
       NODE_ENV: development
       SPACES_MMO_BIND: 0.0.0.0
       PORT: "3900"
+      SPACES_MMO_PUBLIC_URL: "http://127.0.0.1:${SPACES_MMO_DEV_PORT:-3920}"
       SPACES_MMO_DATA: /data
       # the page may be opened as localhost too (Next's dev server serves its scripts only to known origins)
       SPACES_MMO_DEV_ORIGINS: "localhost"

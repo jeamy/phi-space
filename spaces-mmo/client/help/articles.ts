@@ -158,8 +158,16 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | Klick oder Tipp auf ein Feld | Dorthin gehen (\`move x y\`), der Server findet den Weg |
 | Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen … |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
-| 3D: Mausrad | Näher heran und weiter weg (Zoom) |
-| 3D: Ziehen mit der Maus | Die Ansicht nach links oder rechts drehen (die Knöpfe ↶ ↷ drehen in Achtelschritten) |
+| 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
+| 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
+| 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom) |
+| 3D: Ziehen mit Maus oder Finger | Die Ansicht nach links oder rechts drehen (die Knöpfe ↶ ↷ drehen in Achtelschritten) |
+
+## Am Handy und Tablet {#touch}
+
+Unten rechts auf der Karte liegt ein **Steuerkreuz**: Solange du eine Richtung hältst, gehst du Schritt für Schritt (wie die Pfeiltasten); **✋** in der Mitte hebt auf oder legt nach (wie die Leertaste). Es erscheint nur auf Geräten, die man mit dem Finger bedient. Ein Tipp auf ein Feld geht weiterhin direkt dorthin.
+
+Ein Tablet im Hochformat zeigt die Karte oben und das Seitenfeld darunter, im Querformat beide nebeneinander. Über „Zum Startbildschirm hinzufügen“ öffnet sich das Spiel ohne die Leisten des Browsers.
 
 ## Tastatur {#keys}
 
@@ -175,7 +183,7 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 ## Seitenfeld {#side}
 
-Rechts (auf dem Handy unter der Karte) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter das **Protokoll** mit allem, was du siehst und hörst, und die **Befehlszeile**.
+Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter das **Protokoll** mit allem, was du siehst und hörst, und die **Befehlszeile**.
 
 ## Kopfzeile {#bar}
 
@@ -190,8 +198,16 @@ Rechts (auf dem Handy unter der Karte) stehen **Neben dir**, **Du trägst** und 
 | Click or tap a cell | Walk there (\`move x y\`), the server finds the way |
 | Right click or long press | Menu for that cell: look, pick up, add fuel … |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
-| 3D: mouse wheel | Zoom in and out |
-| 3D: drag with the mouse | Turn the view left or right (the ↶ ↷ buttons turn in eighths) |
+| 2D: drag (zoomed in) | Move the view |
+| 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |
+| 3D: mouse wheel or two fingers | Zoom in and out |
+| 3D: drag with mouse or finger | Turn the view left or right (the ↶ ↷ buttons turn in eighths) |
+
+## On a phone or tablet {#touch}
+
+A **pad** lies at the bottom right of the map: while you hold a direction you walk step by step (like the arrow keys); **✋** in its middle picks up or adds fuel (like the space bar). It appears only on devices used with a finger. A tap on a cell still walks straight there.
+
+A tablet held upright shows the map on top and the side panel below it, held sideways both next to each other. “Add to Home Screen” opens the game without the browser's bars.
 
 ## Keyboard {#keys}
 
@@ -207,7 +223,7 @@ The keys work as long as the command line does not have the focus.
 
 ## Side panel {#side}
 
-On the right (below the map on a phone) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons. Below that the **log** with everything you see and hear, and the **command line**.
+On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons. Below that the **log** with everything you see and hear, and the **command line**.
 
 ## Header bar {#bar}
 

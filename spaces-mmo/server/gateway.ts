@@ -43,7 +43,8 @@ export type ServerFrame =
 	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
 	| { t: "time"; time: WorldTimeView }
 	| { t: "trade"; trade: TradeView }
-	| { t: "char"; c: CharView }
+	/** `ack`: for the own character only, the number of the last step of this page it took (client/walk.ts). */
+	| { t: "char"; c: CharView; ack?: number }
 	| { t: "gone"; charId: string }
 	| { t: "obj"; o: ObjView }
 	| { t: "objgone"; id: string }
@@ -51,14 +52,17 @@ export type ServerFrame =
 	| { t: "atlas"; atlas: AtlasView }
 	| { t: "atlasState"; state: AtlasState };
 /** Frames from the browser. */
-export type ClientFrame = { t: "cmd"; line: string };
+/** Frames from the browser: a typed command, or a numbered step of the own character (the page walks ahead of the
+ *  server and matches the answers by number, client/walk.ts). */
+export type ClientFrame = { t: "cmd"; line: string } | { t: "step"; seq: number; dx: number; dy: number };
 
 const MAX_LINE = 300;
 const RECENT = 40;
 const INTENT_LEASE_MS = 30_000;
-/** Against a flood of steps (the page paces them itself, client/stepping.ts): a client may have STEP_BURST steps in
- *  hand, and gets one back every STEP_REFILL_MS; a step beyond that is dropped. The page's pace always fits. */
-const STEP_BURST = 3, STEP_REFILL_MS = 150;
+/** Against a flood of steps (the page paces them itself, client/walk.ts, at most one per WALK_MS): a client may have
+ *  STEP_BURST steps in hand and gets one back every STEP_REFILL_MS; a step beyond that is dropped (the page then
+ *  resynchronizes after a while). The page's pace never reaches the limit. */
+const STEP_BURST = 8, STEP_REFILL_MS = 100;
 
 type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; steps?: { left: number; at: number };
 	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
@@ -188,6 +192,14 @@ export class Gateway {
 	async #inbound(c: Client, text: string): Promise<void> {
 		let f: ClientFrame;
 		try { f = JSON.parse(text); } catch { return; }
+		if (f?.t === "step") {
+			const { seq, dx, dy } = f;
+			if (!Number.isSafeInteger(seq) || ![dx, dy].every((d) => d === -1 || d === 0 || d === 1) || Math.abs(dx) + Math.abs(dy) !== 1) return;
+			c.chain = c.chain.then(() => this.#intent(c, `step ${dx} ${dy}`, { conn: c.ws.id, seq }));
+			await c.chain;
+			this.onActivity(c.me.accountId);
+			return;
+		}
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
 		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
 		if (!line) return;
@@ -196,7 +208,7 @@ export class Gateway {
 		this.onActivity(c.me.accountId);
 	}
 
-	async #intent(c: Client, line: string): Promise<void> {
+	async #intent(c: Client, line: string, step?: { conn: string; seq: number }): Promise<void> {
 		// a flood of steps (a stuck key, a script) is dropped beyond the burst; the page's pace never reaches the limit
 		if (/^step\s/.test(line)) {
 			const now = Date.now(), b = c.steps ?? { left: STEP_BURST, at: now };
@@ -205,7 +217,7 @@ export class Gateway {
 			if (b.left < 1) return;
 			b.left -= 1;
 		}
-		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now() };
+		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now(), ...(step ? { step } : {}) };
 		try { await this.space.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
 	}
@@ -350,7 +362,7 @@ export class Gateway {
 		for (const cl of this.#clients) {
 			// its own room changed (a client not greeted yet gets its hello from attach)
 			if (cl.me.charId === charId && c && cl.room !== null && cl.room !== c.room) { this.#hello(cl); continue; }
-			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!) } satisfies ServerFrame);
+			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!), ...(cl.me.charId === charId && c!.ack?.conn === cl.ws.id ? { ack: c!.ack.seq } : {}) } satisfies ServerFrame);
 			else if (cl.room !== null && (cl.room === roomBefore || cl.room === c?.room)) cl.ws.send({ t: "gone", charId } satisfies ServerFrame);
 		}
 	}

@@ -2,7 +2,7 @@
 // The overview of the world, top left over the map (docs/architektur.md, "Übersichtskarte"): every room of the islands
 // at its place, one pixel per cell, drawn once on a plain 2D canvas; on top what changes: fog, burning fires, people
 // (light dots) and NPCs (dark dots), the ferries as dashed lines, the own room outlined. A tap enlarges it; the
-// button folds it away (remembered per browser). It shows the world, it never changes it.
+// button folds it away (remembered per browser; on a phone it starts folded). It shows the world, it never changes it.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasState, AtlasView } from "../server/gateway.ts";
 
@@ -15,7 +15,8 @@ const store = (key: string, v: boolean) => { try { localStorage.setItem(key, v ?
 
 export function Atlas({ atlas, state }: { atlas: AtlasView; state: AtlasState | null }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
-	const [open, setOpen] = useState(() => stored("mmo.atlas", true));
+	// on a phone it starts folded (it would cover much of the small map), until the player opens it
+	const [open, setOpen] = useState(() => stored("mmo.atlas", typeof window === "undefined" || !window.matchMedia("(max-width: 760px)").matches));
 	const [big, setBig] = useState(false);
 	const [hover, setHover] = useState<string | null>(null);
 	const box = useMemo(() => {

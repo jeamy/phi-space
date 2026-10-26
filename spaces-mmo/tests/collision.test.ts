@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { eventually, Player, startServer } from "./stack.ts";
-import { STEP_MS } from "../client/stepping.ts";
+import { WALK_MS } from "../client/walk.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
 
@@ -115,10 +115,10 @@ test("a flood of steps does not queue a long walk: of twenty sent at once a few 
 		for (let i = 0; i < 20; i++) a.p.send("step 1 0");
 		await new Promise((r) => setTimeout(r, 2_000));
 		const x = Number((await charAt(srv.stack.space, a.me)).x);
-		assert.ok(x > 4 && x - 4 <= 3, `the burst, not the flood (${x - 4} steps)`);
-		// at the page's pace (client/stepping.ts) every step is taken
+		assert.ok(x > 4 && x - 4 <= 10, `the burst of eight (and what refills meanwhile), not the flood of twenty (${x - 4} steps)`);
+		// at the page's pace (client/walk.ts) every step is taken
 		await new Promise((r) => setTimeout(r, 600));
-		for (let i = 0; i < 6; i++) { a.p.send("step 1 0"); await new Promise((r) => setTimeout(r, STEP_MS)); }
+		for (let i = 0; i < 6; i++) { a.p.send("step 1 0"); await new Promise((r) => setTimeout(r, WALK_MS)); }
 		await eventually(async () => (await charAt(srv.stack.space, a.me)).x === x + 6, 10_000, "six more at the page's pace");
 		await a.p.leave();
 	} finally { await srv.close(); }

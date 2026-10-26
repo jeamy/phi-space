@@ -15,6 +15,8 @@ export type MapRendererProps = {
 	onCell: (x: number, y: number) => void;
 	onMenu: (x: number, y: number, clientX: number, clientY: number) => void;
 	onFail: (why: string) => void;
+	/** Drawn over the map, e.g. the touch pad. */
+	controls?: React.ReactNode;
 };
 
 /** The shared renderer boundary: both views consume the same server-authoritative room and emit the same cell input. */

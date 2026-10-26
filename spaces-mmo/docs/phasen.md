@@ -87,6 +87,13 @@ beschränkt).
 - **Bedienung:** Zoom 1×/2×/3× mit Kamera, die der eigenen Figur folgt; Ziehen schaut sich um; langes Drücken oder
   Rechtsklick öffnet ein Kontextmenü; Umschalter „Nur Text“; ohne WebGL weiter als Text.
 - **Namen:** In vollen Räumen stehen nur der eigene Name und die von Figuren in der Nähe.
+- **Telefon und Tablet** (2026-10-26): zwei Finger zoomen, in 2D in den ganzzahligen Stufen 1×/2×/3× (die Pixel
+  bleiben scharf), in 3D stufenlos (`client/pinch.ts`); die Karten nehmen alle Finger selbst (`touch-action: none`), die
+  Seite scrollt daneben. Ein Steuerkreuz mit Aktionsknopf (`client/TouchPad.tsx`, wie Pfeiltasten und Leertaste) und
+  größere Tippflächen erscheinen nur bei `pointer: coarse`. Ein Tablet im Hochformat (bis 1100 px) stapelt Karte und
+  Seitenfeld wie das Telefon, im Querformat stehen sie nebeneinander. `viewport-fit=cover` mit Safe-Area-Rändern für
+  Notch-Geräte, `100dvh` statt `100vh`, ein Web-App-Manifest (`app/manifest.ts`, Symbol `app/icon.svg`) für den
+  Startbildschirm. Auf echten Geräten noch nicht geprüft.
 - **Gemessen** (`tests/phase3.test.ts`, Latenz allein mit `npm run test:perf`): Begrüßung 3 KB bei 12 Figuren (Grenze 64 KiB); vom Schritt bis zur
   Positionsmeldung im Mittel 105 ms bei 90 % unter 186 ms (Ziel unter 150 ms); jeder Spieler bekommt nur seinen Raum.
 - **Im Headless-Chromium** mit 30 Figuren, davon 29 laufende Bots: 38 Bilder/s bei Zoom 1, 37 bei Zoom 2. Das ist

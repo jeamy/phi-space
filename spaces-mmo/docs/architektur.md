@@ -37,9 +37,15 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
 
 ## Takt
 
-- Bewegung auf einem Raster, ein Schritt pro Befehl, serverseitig geprüft. Der Client interpoliert die Animation
-  zwischen zwei Positionen; er sagt nichts voraus, was der Server verwerfen könnte, außer einer optimistischen
-  Anzeige der eigenen Figur.
+- Bewegung auf einem Raster, ein Schritt pro Befehl, serverseitig geprüft. Die eigene Figur läuft der Antwort voraus
+  (`client/walk.ts`): Jeder Schritt bekommt eine Nummer und wird sofort gezeichnet; der Server bestätigt jeden
+  nummerierten Schritt an der Figur (`Character.ack`, nur an die Verbindung, die ihn schickte), auch einen, der nicht
+  ging (eine Wand, jemand steht dort). Die Seite streicht die bestätigten Schritte und zeichnet die Figur am Ort des
+  Servers plus den Schritten, die noch unterwegs sind. Eine Position ohne neuere Bestätigung zählt nicht, solange
+  Schritte unterwegs sind; nur ohne jede Antwort für 3 s nimmt die Seite wieder den Ort des Servers. Eine gehaltene
+  Pfeiltaste läuft mit eigenem Takt (`WALK_MS`, 150 ms je Zelle, die Karte gleitet im selben Takt), nicht mit der
+  Wiederholung der Tastatur; Loslassen hält sofort an. Höchstens acht Schritte laufen der Bestätigung voraus. Andere
+  Figuren werden zwischen den Positionen des Servers interpoliert.
 - Welt-Ticks um 1 Hz für Zustand mit sichtbarer Zeit (Nebel, Flut), alles Langsamere über Leases und OnDemand-Rechnung.
   Eine persistierte Uhr mit Weltstunde und pausierbaren fachlichen Terminen ist separat in
   [weltzeit.md](weltzeit.md) entworfen und noch nicht implementiert.
@@ -183,7 +189,7 @@ Wahrheit konkurrieren würde.
 - **Eingabe:** Klick/Tippen auf die Karte → **ein Schritt** in diese Richtung (längere Achse zuerst, sonst die andere; belegte Kacheln weicht der Client aus), genau wie eine Pfeiltaste; daraus wird `step dx dy`. **Leertaste** hebt das nächste Ding in Reichweite auf (die eigene Kachel zuerst), ohne Ding legt sie Brennholz ins nahe Feuer. **Enter** springt in die Befehlszeile, **Esc** zurück zur Karte; eine **Pfeiltaste** in der Befehlszeile geht ebenfalls zurück zur Karte und macht den Schritt (hoch/runter immer, links/rechts nur bei leerer Zeile, sonst bewegen sie den Cursor). Auf ein Objekt (ab Phase 1) → Kontextmenü mit Textbefehlen
   (`get`, `look`, `talk`). Alles wird ein Textbefehl; der getippte Befehl `move x y` geht dagegen den ganzen Weg.
 - **Darstellung:** `scaleMode: "nearest"` für scharfe Pixel, ganzzahlige Zoomstufen (1×–3×, die Kamera folgt der eigenen
-  Figur, Ziehen verschiebt den Blick), `resolution` = `devicePixelRatio`, Schrift in dreifacher Auflösung. Statt eines
+  Figur, Ziehen verschiebt den Blick, zwei Finger wechseln die Stufe), `resolution` = `devicePixelRatio`, Schrift in dreifacher Auflösung. Statt eines
   Atlas werden die Blätter einmal geladen und ihre Ausschnitte zwischengespeichert.
 - **Autotiles:** Eine Kachel mit `auto` (Wasser) wird nach dem RPG-Maker-VX-Schema aus vier Viertelkacheln je Zelle
   zusammengesetzt (Mitte, Innenecke, Kante, Außenecke, je nach den Nachbarn). Jeder Block der Liste ist ein Bild der

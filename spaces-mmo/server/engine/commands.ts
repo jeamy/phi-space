@@ -53,7 +53,8 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 	const cmds = await commandsOf(c);
 	// plain language: the rules first (free); a line they rewrite says how it was understood
 	const said = c.asked ?? line;
-	const ruled = say(line) ? null : translateRules(line, await viewFor(c));
+	// talk and what pages and NPCs send by themselves (steps, walks, arriving) are never translated
+	const ruled = say(line) || /^(step|move|arrive)\b/.test(line) ? null : translateRules(line, await viewFor(c));
 	if (ruled) line = ruled;
 	const understood = said !== line ? `„${said.slice(0, 80)}“ → ${line}` : null;
 	const [verb, arg] = split(line);

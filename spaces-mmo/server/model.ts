@@ -8,7 +8,9 @@ import type { Fields } from "phi-spaces";
 export type AccountFields = { accountId: string; name: string; guest: boolean; admin: boolean; createdAt: number; touchedAt: number; perms?: string[]; npc?: boolean };
 /** One character per account; `guest` mirrors the account so the cleanup can find orphans. A character's location is
  *  always a room (`room`); items use `location`, which may also be a character. */
-export type CharacterFields = { charId: string; accountId: string; name: string; room: string; x: number; y: number; skin: number; guest: boolean };
+/** `ack`: the last numbered step of a page this character took (client/walk.ts): the connection and its step number,
+ *  written with every such step, also one that could not be taken, so the page knows which of its steps are done. */
+export type CharacterFields = { charId: string; accountId: string; name: string; room: string; x: number; y: number; skin: number; guest: boolean; ack?: { conn: string; seq: number } };
 
 /** How an object looks on the map until it has a sprite (no item graphics are licensed yet). */
 export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };
@@ -63,7 +65,8 @@ export type RoomFields = { roomId: string; name: string; desc: string; ground: s
 /** A character being played right now: held by the web process with a short lease while the WebSocket is open. */
 export type SessionFields = { sessionId: string; charId: string; accountId: string };
 /** One command line, written by the web process (or later an NPC), taken by a world worker. */
-export type IntentFields = { intentId: string; charId: string; line: string; at: number; asked?: string };
+/** `step`: a numbered step of a page (its connection and number), acknowledged on the character. */
+export type IntentFields = { intentId: string; charId: string; line: string; at: number; asked?: string; step?: { conn: string; seq: number } };
 /** A sentence no rule understood, for the model process to turn into a command (an Intent with `asked`). */
 export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number };
 /** Output: to one character (`to` = its charId), to everyone in `room` (`to` = "*"), or to everyone on a channel

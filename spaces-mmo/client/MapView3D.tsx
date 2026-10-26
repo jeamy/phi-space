@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
+import { pinch } from "./pinch.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -51,7 +52,7 @@ export function MapView3D(props: MapRendererProps) {
 	const latest = useRef(props);
 	latest.current = props;
 	const [ready, setReady] = useState(false);
-	// what the mouse does to the view: the wheel zooms, dragging turns (the pointer code reads these through a ref)
+	// what the mouse and fingers do to the view: the wheel and a pinch zoom, dragging turns (the pointer code reads these through a ref)
 	const view = useRef({ zoomBy: (_f: number) => {}, turned: (_a: number) => {} });
 	const [angle, setAngle] = useState(() => stored("mmo.3d.angle", Math.PI / 4));
 	const [zoom, setZoom] = useState(() => stored("mmo.3d.zoom", 1));
@@ -144,6 +145,7 @@ export function MapView3D(props: MapRendererProps) {
 				<button onClick={() => setZoom((z) => clamp(z + 0.2, ZOOM_MIN, ZOOM_MAX))} aria-label="Vergrößern">+</button>
 				<button onClick={() => setZoom((z) => clamp(z - 0.2, ZOOM_MIN, ZOOM_MAX))} aria-label="Verkleinern">−</button>
 			</div>
+			{props.controls}
 			<span className="map-mode-label">3D · Darstellung, Spielregeln bleiben 2D</span>
 		</div>
 	);
@@ -286,17 +288,26 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		return x >= 0 && y >= 0 && x < w && y < h ? { x, y } : null;
 	};
 	let down: { x: number; y: number; at: { x: number; y: number } | null; long: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
-	const onDown = (e: PointerEvent) => { if (e.button === 2) return; const at = cell(e); down = { x: e.clientX, y: e.clientY, at, long: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) }; };
+	const fingers = pinch();
+	const onDown = (e: PointerEvent) => {
+		if (e.button === 2) return;
+		// a second finger: a pinch, no tap, no long press, no turn
+		if (fingers.down(e.pointerId, e.clientX, e.clientY)) { if (down) clearTimeout(down.timer); if (dragged) view.current.turned(s.angle); down = null; dragged = false; return; }
+		if (fingers.active) return;
+		const at = cell(e); down = { x: e.clientX, y: e.clientY, at, long: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
+	};
 	// dragging turns the view: left and right around the room (the camera follows the pointer live, the state is set when the pointer is lifted)
 	let last = 0, dragged = false;
 	const onMove = (e: PointerEvent) => {
+		const spread = fingers.move(e.pointerId, e.clientX, e.clientY);
+		if (spread !== null) { view.current.zoomBy(spread); fingers.rebase(); return; }
 		if (!down) return;
 		if (!dragged && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_PX) { dragged = true; clearTimeout(down.timer); down.at = null; last = down.x; s.canvas.setPointerCapture?.(e.pointerId); }
 		if (!dragged) return;
 		s.angle -= (e.clientX - last) * 0.008; last = e.clientX;
 		positionCamera(s);
 	};
-	const onUp = () => { if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
+	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
 	const onWheel = (e: WheelEvent) => { e.preventDefault(); view.current.zoomBy(Math.exp(-Math.sign(e.deltaY) * 0.12)); };
 	const onContext = (e: MouseEvent) => { e.preventDefault(); const at = cell(e as PointerEvent); if (at) latest.current.onMenu(at.x, at.y, e.clientX, e.clientY); };
 	Object.assign(s.canvas.dataset, { map3d: "1" }); s.canvas.addEventListener("pointerdown", onDown); s.canvas.addEventListener("pointermove", onMove); s.canvas.addEventListener("pointerup", onUp); s.canvas.addEventListener("pointercancel", onUp); s.canvas.addEventListener("contextmenu", onContext); s.canvas.addEventListener("wheel", onWheel, { passive: false });

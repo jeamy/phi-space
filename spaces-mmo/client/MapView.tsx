@@ -3,14 +3,16 @@
 // only the canvas: the ground once per room (autotiled water whose waves move), exits and things on it, one sprite per
 // online character that glides from cell to cell with its walking frames, a flickering fire, and the fog as a veil with
 // clearings around the own character and a burning fire. A zoom of 2 or 3 follows the own character; dragging looks
-// around. A tap on a cell goes to `onCell`, a long press or a right click to `onMenu`; the map never changes the world
-// by itself. pixi.js is imported in the browser only; without WebGL `onFail` says so and the page plays as text.
+// around, two fingers pinch through the zoom steps. A tap on a cell goes to `onCell`, a long press or a right click to
+// `onMenu`; the map never changes the world by itself. pixi.js is imported in the browser only; without WebGL `onFail` says so and the page plays as text.
 import { useEffect, useRef, useState } from "react";
 import type { CharView, ObjView, ServerFrame } from "../server/gateway.ts";
+import { pinch } from "./pinch.ts";
+import { WALK_MS } from "./walk.ts";
 
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 type Px = typeof import("pixi.js");
-type Sp = { body: InstanceType<Px["Sprite"]>; label: InstanceType<Px["Text"]>; tx: number; ty: number; px: number; py: number; row: number; skin: number };
+type Sp = { body: InstanceType<Px["Sprite"]>; label: InstanceType<Px["Text"]>; tx: number; ty: number; px: number; py: number; row: number; skin: number; movedAt?: number };
 type Scene = {
 	pixi: Px; app: InstanceType<Px["Application"]>; cam: InstanceType<Px["Container"]>;
 	water: Array<InstanceType<Px["Container"]>>; waterMs: number;
@@ -24,11 +26,17 @@ type Scene = {
 };
 
 const ROW = { down: 0, left: 1, right: 2, up: 3 } as const;
-const SPEED = 32 * 7; // px per second: a step takes about 140 ms
+/** px per second: a cell in a little less than the walk's pace (client/walk.ts), so a held key glides on without a
+ *  stop in every cell */
+const SPEED = (32 * 1000) / WALK_MS * 1.1;
+/** The walking frames keep going this long after the figure reached its cell (the next step is on its way). */
+const WALK_GRACE_MS = WALK_MS + 60;
 const STEP_MS = 130; // one walking frame
 const LONG_PRESS_MS = 500;
 const DRAG_PX = 8;
 const ZOOMS = [1, 2, 3] as const;
+/** How far two fingers spread (or close) before the zoom goes one step: the zoom stays an integer, for sharp pixels. */
+const PINCH_STEP = 1.35;
 /** Above this many characters in a room only the own name and the names close by are shown. */
 const CROWD = 8;
 /** Text is drawn at this resolution, so names stay sharp when the map is zoomed. */
@@ -45,15 +53,16 @@ const QUARTER: Record<"TL" | "TR" | "BL" | "BR", Record<"center" | "inner" | "ve
 const stored = (key: string, fallback: number) => { try { const v = Number(localStorage.getItem(key)); return Number.isFinite(v) && v > 0 ? v : fallback; } catch { return fallback; } };
 const store = (key: string, v: number) => { try { localStorage.setItem(key, String(v)); } catch { /* private window */ } };
 
-export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onFail }: {
+export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onFail, controls }: {
 	world: Hello["world"]; room: Hello["room"]; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; fog: number;
 	onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, clientX: number, clientY: number) => void; onFail: (why: string) => void;
+	controls?: React.ReactNode;
 }) {
 	const host = useRef<HTMLDivElement>(null);
 	const scene = useRef<Scene | null>(null);
 	const [zoom, setZoom] = useState(() => stored("mmo.zoom", 1));
-	const latest = useRef({ chars, objs, me, fog, onCell, onMenu, onFail, zoom });
-	latest.current = { chars, objs, me, fog, onCell, onMenu, onFail, zoom };
+	const latest = useRef({ chars, objs, me, fog, onCell, onMenu, onFail, zoom, setZoom });
+	latest.current = { chars, objs, me, fog, onCell, onMenu, onFail, zoom, setZoom };
 
 	// the scene: built again when the room changes
 	useEffect(() => {
@@ -158,19 +167,25 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			<div className="map-zoom" role="group" aria-label="Zoom">
 				{ZOOMS.map((z) => <button key={z} aria-pressed={zoom === z} onClick={() => setZoom(z)}>{z}×</button>)}
 			</div>
+			{controls}
 		</div>
 	);
 }
 
-/** Taps, long presses, right clicks and drags on the canvas. A drag (zoomed in) moves the view and is no tap. */
-function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: number } | null, latest: { current: { onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, cx: number, cy: number) => void } }) {
+/** Taps, long presses, right clicks, drags and pinches on the canvas. A drag (zoomed in) moves the view and is no tap; a
+ *  pinch steps the zoom and is neither. */
+function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: number } | null, latest: { current: { onCell: (x: number, y: number) => void; onMenu: (x: number, y: number, cx: number, cy: number) => void; zoom: number; setZoom: (z: number) => void } }) {
 	const stage = s.app.stage;
 	stage.eventMode = "static";
 	stage.hitArea = s.app.screen;
+	const fingers = pinch();
+	s.app.canvas.addEventListener("pointercancel", (e) => { fingers.up(e.pointerId); if (down) { clearTimeout(down.timer); down = null; } });
 	let down: { x: number; y: number; panX: number; panY: number; dragged: boolean; pressed: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 	const cell = (e: { getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } }) => { const p = e.getLocalPosition(s.cam); return cellAt(p.x, p.y); };
 	stage.on("pointerdown", (e) => {
 		if (e.button === 2) return; // the right click opens the menu below
+		if (fingers.down(e.pointerId, e.global.x, e.global.y)) { if (down) clearTimeout(down.timer); down = null; return; }
+		if (fingers.active) return;
 		const at = cell(e), client = { x: e.client.x, y: e.client.y };
 		down = { x: e.global.x, y: e.global.y, panX: s.view.panX, panY: s.view.panY, dragged: false, pressed: false, timer: setTimeout(() => {
 			if (!down || down.dragged || !at) return;
@@ -179,21 +194,29 @@ function pointer(s: Scene, cellAt: (x: number, y: number) => { x: number; y: num
 		}, LONG_PRESS_MS) };
 	});
 	stage.on("pointermove", (e) => {
+		const spread = fingers.move(e.pointerId, e.global.x, e.global.y);
+		if (spread !== null) {
+			const i = ZOOMS.indexOf(latest.current.zoom as (typeof ZOOMS)[number]);
+			const next = spread > PINCH_STEP ? ZOOMS[i + 1] : spread < 1 / PINCH_STEP ? ZOOMS[i - 1] : undefined;
+			if (next) { latest.current.setZoom(next); fingers.rebase(); }
+			return;
+		}
 		if (!down) return;
 		const dx = e.global.x - down.x, dy = e.global.y - down.y;
 		if (!down.dragged && Math.hypot(dx, dy) > DRAG_PX) { down.dragged = true; clearTimeout(down.timer); }
 		if (down.dragged && s.view.zoom > 1) { s.view.panX = down.panX + dx; s.view.panY = down.panY + dy; s.fogDirty = true; }
 	});
-	const up = (e: { getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } } | null) => {
+	const up = (e: { pointerId: number; getLocalPosition: (c: InstanceType<Px["Container"]>) => { x: number; y: number } }, inside: boolean) => {
+		fingers.up(e.pointerId);
 		if (!down) return;
 		clearTimeout(down.timer);
 		const tap = !down.dragged && !down.pressed;
 		down = null;
-		const at = e && cell(e);
+		const at = inside ? cell(e) : null;
 		if (tap && at) latest.current.onCell(at.x, at.y);
 	};
-	stage.on("pointerup", up);
-	stage.on("pointerupoutside", () => up(null));
+	stage.on("pointerup", (e) => up(e, true));
+	stage.on("pointerupoutside", (e) => up(e, false));
 	stage.on("rightclick", (e) => { const at = cell(e); if (at) latest.current.onMenu(at.x, at.y, e.client.x, e.client.y); });
 }
 
@@ -208,7 +231,8 @@ function frame(s: Scene, world: Hello["world"], me: string, roomId: string, objs
 		const moving = dist > 0.5;
 		if (dist > ts * 3) { sp.px = gx; sp.py = gy; } // a jump (another room, a long walk): no slow slide across the map
 		else if (moving) { const k = Math.min(1, (SPEED * dt) / 1000 / dist); sp.px += dx * k; sp.py += dy * k; if (id === me) s.fogDirty = true; }
-		const col = moving ? Math.floor(t / STEP_MS) % 4 : 0;
+		if (moving) sp.movedAt = t;
+		const col = moving || t - (sp.movedAt ?? -Infinity) < WALK_GRACE_MS ? Math.floor(t / STEP_MS) % 4 : 0;
 		const fk = `${sp.skin % s.skins.length}:${sp.row}:${col}`;
 		let tex = s.frames.get(fk);
 		if (!tex) { tex = new s.pixi.Texture({ source: s.skins[sp.skin % s.skins.length]!.source, frame: new s.pixi.Rectangle(col * skin.frameW, sp.row * skin.frameH, skin.frameW, skin.frameH) }); s.frames.set(fk, tex); }

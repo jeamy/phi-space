@@ -22,7 +22,34 @@ export function parseTarget(spec: string): ListenTarget {
 export function connectSpace(spec: string, o: { callTimeoutMs?: number } = {}): { space: SpaceLike; close: () => void } {
 	const callTimeoutMs = o.callTimeoutMs ?? Number(process.env.SPACES_MMO_CALL_TIMEOUT ?? 30_000);
 	const transport = socketTransport(parseTarget(spec), { connectTimeoutMs: 5_000, requestTimeoutMs: callTimeoutMs + 5_000 });
-	return { space: new RemoteSpace(transport, { callTimeoutMs, attempts: 3 }), close: () => transport.close() };
+	const space = new RemoteSpace(transport, { callTimeoutMs, attempts: 3 });
+	return { space: process.env.SPACES_MMO_TRACE ? traced(space) : space, close: () => transport.close() };
+}
+
+/** SPACES_MMO_TRACE=1: every ten seconds this process logs how many calls it made to the space, per method and the
+ *  template's type, with their time (to find who keeps the space busy). */
+function traced(space: SpaceLike): SpaceLike {
+	const calls = new Map<string, { n: number; ms: number }>();
+	const who = (process.argv[1] ?? "").split("/").pop();
+	setInterval(() => {
+		const top = [...calls].sort((a, b) => b[1].n - a[1].n).slice(0, 12).map(([k, v]) => `${k}:${v.n}/${Math.round(v.ms / Math.max(1, v.n))}ms`);
+		console.error(`[trace] ${who} ${[...calls.values()].reduce((s, v) => s + v.n, 0)} calls in 10 s: ${top.join(" ")}`);
+		calls.clear();
+	}, 10_000).unref();
+	return new Proxy(space, {
+		get(target, prop, receiver) {
+			const v = Reflect.get(target, prop, receiver);
+			if (typeof v !== "function") return v;
+			return (...args: unknown[]) => {
+				const t = Date.now(), k = `${String(prop)}(${String((args[0] as { type?: unknown } | undefined)?.type ?? "")})`;
+				const done = () => { const c = calls.get(k) ?? { n: 0, ms: 0 }; c.n++; c.ms += Date.now() - t; calls.set(k, c); };
+				const r = v.apply(target, args);
+				if (r && typeof (r as Promise<unknown>).then === "function") (r as Promise<unknown>).then(done, done);
+				else done();
+				return r;
+			};
+		},
+	});
 }
 
 /** How long a check waits on an entry another transaction holds right now (see readExisting). */

@@ -48,7 +48,7 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }): Promise<void> {
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
-	await c.space.write({ type: "Character", fields: { ...fieldsOf<CharacterFields>(e), ...to } as never }, c.txn, FOREVER);
+	await c.space.write({ type: "Character", fields: { ...fieldsOf<CharacterFields>(e), ...to, ...(c.step ? { ack: c.step } : {}) } as never }, c.txn, FOREVER);
 }
 
 /** Leaving a room ends the trade offers made there: one's own are withdrawn, those made to one lapse; the other side
@@ -181,8 +181,15 @@ const step: Command = {
 		const [dx, dy] = arg.split(/\s+/).map(Number);
 		if (!Number.isInteger(dx) || !Number.isInteger(dy) || Math.abs(dx!) + Math.abs(dy!) !== 1) throw new CommandError("So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0");
 		const to = { x: c.actor.x + dx!, y: c.actor.y + dy! };
-		if (!walkable(c.world, (await roomOf(c)).ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
-		await moveTo(c, to);
+		try {
+			if (!walkable(c.world, (await roomOf(c)).ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
+			await moveTo(c, to);
+		} catch (e) {
+			// a numbered step of a page that cannot be taken (a wall, someone there, the fire) is still answered: the
+			// character stays and carries the step's number, so the page walks on from where it really is
+			if (!(e instanceof CommandError) || !c.step) throw e;
+			await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y });
+		}
 	},
 };
 

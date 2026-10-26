@@ -15,6 +15,8 @@ export type CommandCtx = {
 	msgLeaseMs: number;
 	/** The sentence this command was translated from by the model process, if it was. */
 	asked?: string;
+	/** A numbered step of a page: written on the character with the step, taken or not (CharacterFields.ack). */
+	step?: { conn: string; seq: number };
 	/** Memo of the actor's inventory for this command (read once, outside the transaction). */
 	cache: { inventory?: Array<{ e: Taken; f: ItemFields }> };
 };

@@ -58,16 +58,17 @@ a { color: var(--accent); }
 .form details { font-size: 13px; color: var(--muted); }
 
 /* game */
-.game { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
-.bar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.game { display: grid; grid-template-rows: auto 1fr; height: 100vh; height: 100dvh; }
+/* the safe-area insets keep the content out of a notch and the rounded corners (app/layout.tsx: viewport-fit=cover) */
+.bar { display: flex; align-items: center; gap: 12px; padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
 .bar .title { color: var(--text-strong); font-weight: 700; letter-spacing: 0.03em; }
 .bar .spacer { flex: 1; }
 .badge { font-size: 12px; border: 1px solid var(--warning); color: var(--warning); border-radius: 999px; padding: 1px 8px; }
 .live { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: inline-block; }
 .live.on { background: var(--accent); }
-.main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 12px; padding: 12px 16px; min-height: 0; }
+.main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 12px; padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); min-height: 0; }
 .map { background: #0b1016; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; }
-.map canvas { width: 100%; height: auto; max-height: 100%; object-fit: contain; image-rendering: pixelated; display: block; touch-action: manipulation; }
+.map canvas { width: 100%; height: auto; max-height: 100%; object-fit: contain; image-rendering: pixelated; display: block; touch-action: none; }
 .side { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-height: 0; }
 .log { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-y: auto; font: 13px/1.45 var(--font-mono); white-space: pre-wrap; min-height: 160px; }
 .log .say { color: var(--text-strong); }
@@ -79,7 +80,8 @@ a { color: var(--accent); }
 .panel { background: var(--surface); border: 1px solid var(--warning); border-radius: 8px; padding: 12px; }
 .panel h2 { font-size: 15px; margin: 0 0 8px; color: var(--text-strong); }
 .about { font-size: 12px; }
-@media (max-width: 760px) {
+/* a phone, and a tablet held upright: the map on top, the side panel below it, the page scrolls */
+@media (max-width: 760px), (max-width: 1100px) and (orientation: portrait) {
   .main { grid-template-columns: 1fr; grid-template-rows: auto minmax(220px, 1fr); }
   .game { height: auto; min-height: 100vh; }
 }
@@ -89,7 +91,7 @@ a { color: var(--accent); }
 .things li { display: flex; align-items: center; gap: 6px; }
 .things li span { flex: 1; color: var(--text-strong); }
 .things button { padding: 2px 8px; font-size: 12px; }
-.stale { position: fixed; top: 0; left: 0; right: 0; z-index: 10; background: var(--accent); color: var(--accent-ink); text-align: center; padding: 6px 12px; font-weight: 600; }
+.stale { position: fixed; top: 0; left: 0; right: 0; z-index: 10; background: var(--accent); color: var(--accent-ink); text-align: center; padding: calc(6px + env(safe-area-inset-top)) 12px 6px; font-weight: 600; }
 .log .channel { color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
 .log .world { color: var(--warning); font-style: italic; }
 .map { position: relative; }
@@ -103,7 +105,7 @@ a { color: var(--accent); }
 .renderer-tabs button:last-child { border-radius: 0 6px 6px 0; }
 .renderer-tabs button + button { margin-left: -1px; }
 .renderer-tabs button[aria-pressed="true"] { position: relative; border-color: var(--accent); color: var(--accent); }
-.map-3d canvas { height: 100%; min-height: 300px; image-rendering: auto; cursor: pointer; touch-action: manipulation; }
+.map-3d canvas { height: 100%; min-height: 300px; image-rendering: auto; cursor: pointer; touch-action: none; }
 .map-3d-controls { z-index: 2; }
 .map-mode-label { position: absolute; left: 8px; bottom: 8px; padding: 2px 7px; border-radius: 5px; background: rgba(8, 13, 18, .72); color: #d5dce3; font-size: 11px; pointer-events: none; }
 .main.text-only { grid-template-columns: minmax(0, 1fr); max-width: 900px; margin: 0 auto; width: 100%; }
@@ -115,7 +117,7 @@ a { color: var(--accent); }
 /* the help sidebar (opened by the "?" in the header bar), after the phi-spaces help systems */
 .help-btn { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-weight: 700; line-height: 1; }
 .help-btn[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.help { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(440px, 100vw); display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line-strong); box-shadow: 6px 0 28px rgba(0,0,0,.35); }
+.help { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(440px, 100vw); padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left); display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line-strong); box-shadow: 6px 0 28px rgba(0,0,0,.35); }
 .help-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .help-head .spacer { flex: 1; }
 .help-head strong { color: var(--text-strong); letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; }
@@ -173,8 +175,8 @@ button.link { border: 0; background: transparent; color: var(--accent); padding:
 .atlas-toggle { font-size: 12px; padding: 2px 8px; background: color-mix(in srgb, var(--surface) 85%, transparent); }
 .atlas-label { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--text-strong); }
 .main.text-only .atlas { position: static; }
-@media (max-width: 760px) {
-  .atlas { top: 14px; left: 18px; }
+@media (max-width: 760px), (max-width: 1100px) and (orientation: portrait) {
+  .atlas { top: 14px; left: max(18px, calc(env(safe-area-inset-left) + 2px)); }
 }
 
 /* the pack: one chip per kind of thing, icon and count (client/App.tsx, Things) */
@@ -188,3 +190,17 @@ button.link { border: 0; background: transparent; color: var(--accent); padding:
 .log .to-me { background: color-mix(in srgb, var(--accent) 16%, transparent); border-left: 3px solid var(--accent); padding: 1px 0 1px 6px; margin: 1px 0; border-radius: 3px; color: var(--text-strong); font-weight: 600; }
 
 .worldtime { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+
+/* the touch pad over the map (client/TouchPad.tsx): only where the main pointer is a finger */
+.touchpad { display: none; }
+@media (pointer: coarse) {
+  .touchpad { position: absolute; right: 10px; bottom: 10px; z-index: 3; display: grid; grid-template: ". up ." 44px "left act right" 44px ". down ." 44px / 44px 44px 44px; gap: 2px; opacity: .8; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .touchpad button { padding: 0; font-size: 16px; line-height: 1; background: color-mix(in srgb, var(--raised) 80%, transparent); }
+  .touchpad button:active { background: var(--accent); color: var(--accent-ink); }
+  .touchpad .touchpad-act { border-radius: 50%; font-size: 18px; }
+  /* fingers need larger targets than a mouse: about 40 px */
+  .map-zoom button, .renderer-tabs button, .help-btn { min-width: 40px; min-height: 40px; }
+  .help-btn { width: 40px; height: 40px; }
+  .things button, .atlas-toggle { min-height: 36px; }
+  .cell-menu button { padding: 11px 12px; }
+}
