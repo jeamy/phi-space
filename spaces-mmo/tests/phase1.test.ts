@@ -140,6 +140,8 @@ test("things: get, inventory, look, drop; the map and the pack follow", async ()
 		await new Promise((r) => setTimeout(r, 300));
 		assert.equal(a.p.frames.filter((f) => f.t === "hello").length, 1, "one hello per connection");
 		assert.ok(a.h.objs.some((o) => o.id === "treibholz-1" && o.location === "graue-bucht" && o.kind === "item"), "the hello shows what lies here");
+		assert.equal(a.h.objs.find((o) => o.id === "treibholz-1")?.icon, "/assets/leuchtfeuer/items/treibholz.png", "with its picture");
+		assert.ok(a.h.world.icons.includes("/assets/leuchtfeuer/items/netz.png"), "the page loads every picture of the world");
 		assert.ok(a.h.objs.some((o) => o.id === "bucht-ost" && o.kind === "exit"), "and the exits");
 		assert.match(await does(a.p, "look", "Ausgänge"), /Ausgänge: ost, süd, west\.\nHier liegt: .*Treibholz/);
 		assert.match(await does(a.p, "get treibholz", /weit weg|Hier liegt nichts/), /Treibholz liegt zu weit weg/);

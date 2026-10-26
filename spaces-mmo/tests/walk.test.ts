@@ -1,7 +1,7 @@
 // The own character's walk on the page (client/walk.ts): ahead of the server, matched by step numbers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_AHEAD, RESYNC_MS, Walker } from "../client/walk.ts";
+import { MAX_AHEAD, RESYNC_MS, screenToGrid, Walker } from "../client/walk.ts";
 
 const walker = (x = 5, y = 5) => { const w = new Walker(); w.reset({ x, y }); return w; };
 
@@ -58,4 +58,17 @@ test("a new room drops what is on its way, and an answer to an old step cannot m
 	assert.ok(b.seq > a.seq, "the numbers go on");
 	assert.equal(w.report({ x: 6, y: 5 }, a.seq, 150), null, "the old answer does not count for the new step");
 	assert.deepEqual(w.shown, { x: 1, y: 9 });
+});
+
+test("in the 3D view the arrows follow the view: turned half around, up walks down the grid", () => {
+	const up: [number, number] = [0, -1], right: [number, number] = [1, 0], down: [number, number] = [0, 1], left: [number, number] = [-1, 0];
+	const start = Math.PI / 4; // the view a page starts with
+	assert.deepEqual([up, right, down, left].map((d) => screenToGrid(d, start)), [up, right, down, left], "the start view: as on the screen");
+	const half = start + Math.PI;
+	assert.deepEqual([up, right, down, left].map((d) => screenToGrid(d, half)), [down, left, up, right], "half around: everything the other way");
+	const quarter = Math.PI / 2 + Math.PI / 2; // turned a quarter
+	const q = [up, right, down, left].map((d) => screenToGrid(d, quarter));
+	assert.equal(new Set(q.map(String)).size, 4, "a quarter turn: four different steps");
+	assert.ok(q.every(([x, y]) => Math.abs(x) + Math.abs(y) === 1), "each one cell along the grid");
+	assert.deepEqual(screenToGrid(up, start + 2 * Math.PI), up, "a full turn is no turn");
 });

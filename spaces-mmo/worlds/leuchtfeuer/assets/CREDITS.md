@@ -16,3 +16,31 @@ each file. The game shows this attribution under "About".
 | `entities/Misc_Kibbelz.png` | `resources/entities/Misc_Kibbelz.png` | Zetasis, after designs by PixelFox | CC BY 4.0 (`58b2c06c3e`) |
 
 Item icons of the pack (mostly CC BY-SA 3.0) are deliberately not included.
+
+## Item icons (`items/`)
+
+32×32 icons cut unchanged from the sheet `#1 - Transparent Icons.png` of
+[Shikashi's Fantasy Icons Pack](https://shikashipx.itch.io/shikashis-fantasy-icons-pack) v2 (19 April 2020) by
+**Matt Firth (shikashipx)**, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (as stated on the itch.io
+page). Many icons of the pack are based on designs from [game-icons.net](https://game-icons.net) (CC BY 3.0).
+
+| File | Icon of the pack (column, row of the 32 px sheet) |
+| --- | --- |
+| `items/treibholz.png` | wood (0, 17) |
+| `items/holzbuendel.png` | wooden beam (11, 19) |
+| `items/muschel.png` | fossil (13, 16) |
+| `items/tang.png` | herb (15, 11) |
+| `items/muenze.png` | crown coin (7, 12) |
+| `items/muschelmesser.png` | broad dagger (6, 5) |
+| `items/tangseil.png` | rope (13, 10) |
+| `items/bernstein.png` | orange orb (3, 18) |
+| `items/kette.png` | gold necklace (6, 8) |
+| `items/tran.png` | full orange flask (7, 19) |
+
+`items/perle.png` is `I_Opal.png` of [496 pixel art icons for medieval/fantasy RPG](https://opengameart.org/node/39455)
+by Henrique Lazarini (7Soul1), [CC0](https://creativecommons.org/publicdomain/zero/1.0/), its one-pixel transparent
+border cut off (34 → 32 px).
+
+`items/netz.png` was drawn for this world in the style and with the colours of the pack above, by the script
+`items-src/net.py` (same license as this project).
+

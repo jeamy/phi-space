@@ -98,6 +98,7 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 		typeChain(p.typeclass, w.typeclasses);
 		if (p.parent && !w.prototypes.some((q) => q.key === p.parent)) throw new Error(`prototype ${p.key}: unknown parent ${p.parent}`);
 		parseLocks(p.locks);
+		if (p.icon && !worldAsset(id, p.icon)?.type.startsWith("image/")) throw new Error(`prototype ${p.key}: icon ${p.icon} is no picture in worlds/${id}/assets`);
 	}
 	for (const e of w.exits) {
 		const from = room(e.room), to = room(e.destination);

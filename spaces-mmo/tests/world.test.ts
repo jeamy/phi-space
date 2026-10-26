@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER } from "phi-spaces";
 import { loadIntoSpace } from "../server/engine/loader.ts";
-import { findPath, loadWorld, walkable, wayTo } from "../server/engine/world.ts";
+import { findPath, loadWorld, walkable, wayTo, worldAsset } from "../server/engine/world.ts";
 import { actorToken } from "../server/model.ts";
 import { startStack } from "./stack.ts";
 
@@ -56,6 +56,14 @@ test("no one is caught in the fog: every room has a fire that keeps it clear, an
 		const fires = w.beacons.filter((b) => b.covers.includes(r.roomId));
 		assert.ok(fires.length, `${r.roomId} has a fire`);
 		assert.ok(fires.some((b) => b.room === r.roomId || wayTo(w, r.roomId, b.room)), `${r.roomId} reaches its fire`);
+	}
+});
+
+test("every thing but the plain one has a picture, a 32x32 PNG in the world's assets", () => {
+	for (const p of w.prototypes.filter((p) => p.key !== "ding")) {
+		assert.ok(p.icon, `${p.key} has an icon`);
+		const png = worldAsset(w.id, p.icon!)!.body;
+		assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [32, 32], `${p.icon} is 32x32`);
 	}
 });
 

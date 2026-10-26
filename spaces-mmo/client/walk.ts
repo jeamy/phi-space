@@ -69,3 +69,15 @@ export class Walker {
 		return this.shown;
 	}
 }
+
+/** An arrow on the screen (up is [0, -1]) as a step on the grid, for a 3D view whose camera stands at `angle` around the
+ *  room (MapView3D: the camera at (cos a, sin a) of the room's middle, looking at it). Up walks away from the camera,
+ *  right to the right of it; the view's turn is taken to the nearest quarter, so a slanted view still has one answer
+ *  (at the start view, up is up). */
+export function screenToGrid(d: [number, number], angle: number): [number, number] {
+	const quarter = Math.round((angle - Math.PI / 2) / (Math.PI / 2));
+	const a = Math.PI / 2 + quarter * (Math.PI / 2);
+	const forward = [-Math.cos(a), -Math.sin(a)], right = [Math.sin(a), -Math.cos(a)];
+	const x = d[0] * right[0]! - d[1] * forward[0]!, y = d[0] * right[1]! - d[1] * forward[1]!;
+	return [Math.round(x) || 0, Math.round(y) || 0];
+}

@@ -24,7 +24,9 @@ export type ExitFields = { exitId: string; name: string; aliases: string[]; desc
 /** A label on an object (Tags cannot be array fields: templates match whole values). */
 export type TagFields = { target: string; key: string; category: string };
 /** A template to spawn items from; `parent` names the prototype whose fields it extends. */
-export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number };
+/** `icon`: a picture of the thing, a 32×32 PNG below the world's assets (e.g. "items/tang.png"); without one the map
+ *  draws its glyph. */
+export type PrototypeFields = { key: string; parent: string | null; typeclass: string; name: string; desc: string; aliases: string[]; glyph: Glyph; locks: string; wear?: number; icon?: string };
 /** A beacon: where a fire can burn. It is also the lock every change of its fire takes (feeding, the fire tick), so
  *  two players feeding at once cannot light two flames. `lit` is what the fire tick last saw. */
 export type BeaconFields = { beaconId: string; name: string; aliases: string[]; room: string; x: number; y: number; covers: string[]; lit: boolean };

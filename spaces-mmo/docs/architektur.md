@@ -44,7 +44,7 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
   Servers plus den Schritten, die noch unterwegs sind. Eine Position ohne neuere Bestätigung zählt nicht, solange
   Schritte unterwegs sind; nur ohne jede Antwort für 3 s nimmt die Seite wieder den Ort des Servers. Eine gehaltene
   Pfeiltaste läuft mit eigenem Takt (`WALK_MS`, 150 ms je Zelle, die Karte gleitet im selben Takt), nicht mit der
-  Wiederholung der Tastatur; Loslassen hält sofort an. Höchstens acht Schritte laufen der Bestätigung voraus. Andere
+  Wiederholung der Tastatur; Loslassen hält sofort an. In der 3D-Ansicht folgen die Pfeile der Drehung: oben heißt von der Kamera weg (auf die nächste Vierteldrehung gerundet, `screenToGrid`), um 180° gedreht ist oben also unten im Raster. Höchstens acht Schritte laufen der Bestätigung voraus. Andere
   Figuren werden zwischen den Positionen des Servers interpoliert.
 - Welt-Ticks um 1 Hz für Zustand mit sichtbarer Zeit (Nebel, Flut), alles Langsamere über Leases und OnDemand-Rechnung.
   Eine persistierte Uhr mit Weltstunde und pausierbaren fachlichen Terminen ist separat in

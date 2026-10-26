@@ -17,6 +17,8 @@ export type MapRendererProps = {
 	onFail: (why: string) => void;
 	/** Drawn over the map, e.g. the touch pad. */
 	controls?: React.ReactNode;
+	/** The 3D view tells where its camera stands (the arrows then follow the view, client/walk.ts screenToGrid). */
+	onTurn?: (angle: number) => void;
 };
 
 /** The shared renderer boundary: both views consume the same server-authoritative room and emit the same cell input. */

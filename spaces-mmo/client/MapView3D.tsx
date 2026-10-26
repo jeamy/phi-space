@@ -135,6 +135,9 @@ export function MapView3D(props: MapRendererProps) {
 		store("mmo.3d.angle", angle); store("mmo.3d.zoom", zoom);
 		if (state.current) { state.current.angle = angle; state.current.zoom = zoom; positionCamera(state.current); }
 	}, [angle, zoom, ready]);
+	// where the camera stands, for the arrows (they follow the view)
+	const onTurn = props.onTurn;
+	useEffect(() => { onTurn?.(angle); }, [angle, onTurn]);
 
 	return (
 		<div className="map map-3d" ref={host}>
@@ -225,10 +228,27 @@ function object(t: T, obj: ObjView): Entry {
 		e.flame = { light, cone };
 	} else if (obj.kind === "exit") {
 		const ring = new t.Mesh(new t.TorusGeometry(0.2, 0.055, 8, 18), new t.MeshStandardMaterial({ color: 0x91b8d0 })); ring.position.y = 0.2; ring.rotation.x = Math.PI / 2; group.add(ring);
+	} else if (obj.icon) {
+		// the thing's picture as a small sign that always faces the camera
+		const sprite = new t.Sprite(new t.SpriteMaterial({ map: iconTexture(t, obj.icon), transparent: true, alphaTest: 0.1 }));
+		sprite.position.y = 0.28; sprite.scale.set(0.5, 0.5, 1); group.add(sprite);
 	} else {
 		const rock = new t.Mesh(new t.DodecahedronGeometry(0.15), new t.MeshStandardMaterial({ color: Number.parseInt(obj.glyph?.color.slice(1) ?? "b9c26d", 16), roughness: 0.85 })); rock.position.y = 0.16; group.add(rock);
 	}
 	return e;
+}
+
+/** A thing's picture as a texture, loaded once per URL and kept sharp (pixel art). */
+const iconTextures = new Map<string, import("three").Texture>();
+function iconTexture(t: T, url: string): import("three").Texture {
+	let tex = iconTextures.get(url);
+	if (!tex) {
+		tex = new t.TextureLoader().load(url);
+		tex.magFilter = t.NearestFilter; tex.minFilter = t.NearestFilter; tex.colorSpace = t.SRGBColorSpace;
+		tex.userData.shared = true; // kept when a thing goes (dispose)
+		iconTextures.set(url, tex);
+	}
+	return tex;
 }
 
 function label(t: T, text: string, color: string): import("three").Sprite {
@@ -304,7 +324,7 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		if (!down) return;
 		if (!dragged && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_PX) { dragged = true; clearTimeout(down.timer); down.at = null; last = down.x; s.canvas.setPointerCapture?.(e.pointerId); }
 		if (!dragged) return;
-		s.angle -= (e.clientX - last) * 0.008; last = e.clientX;
+		s.angle += (e.clientX - last) * 0.008; last = e.clientX; // the room turns with the pointer
 		positionCamera(s);
 	};
 	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };

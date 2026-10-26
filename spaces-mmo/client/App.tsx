@@ -7,7 +7,7 @@ import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, Tr
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { appendLine } from "./log.ts";
-import { WALK_MS, Walker } from "./walk.ts";
+import { screenToGrid, WALK_MS, Walker } from "./walk.ts";
 import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
 /** How long a "gone" waits for the "char" that follows it when a character is only being moved (see the handler). */
@@ -100,7 +100,8 @@ function About() {
 	return (
 		<p className="about muted">
 			Eine Welt auf <a href="https://spaces.eibrain.org" target="_blank" rel="noreferrer">phi-spaces</a>. Grafiken: Intersect-Assets von
-			PixelFox, Zetasis, George und Murdoc, CC BY 4.0 (<a href="/assets/leuchtfeuer/CREDITS.md" target="_blank" rel="noreferrer">Nachweise</a>).
+			PixelFox, Zetasis, George und Murdoc, CC BY 4.0; Gegenstände: Shikashi's Fantasy Icons von Matt Firth (shikashipx) nach
+			game-icons.net, CC BY 4.0, und 7Soul1, CC0 (<a href="/assets/leuchtfeuer/CREDITS.md" target="_blank" rel="noreferrer">Nachweise</a>).
 		</p>
 	);
 }
@@ -188,8 +189,9 @@ function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }
 	);
 }
 
-/** A thing's icon: its glyph (shape and colour) until licensed item graphics exist. */
-function Glyph({ o }: { o: ObjView }) {
+/** A thing's icon: its picture (worlds/<id>/assets/items), or its glyph (shape and colour) where it has none. */
+function Glyph({ o, size = 16 }: { o: ObjView; size?: number }) {
+	if (o.icon) return <img className="icon" src={o.icon} width={size} height={size} alt="" aria-hidden="true" />;
 	const c = o.glyph?.color ?? "#9aa3ad", shape = o.glyph?.shape ?? "square";
 	return (
 		<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -215,7 +217,7 @@ function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; se
 	const chosen = kinds.find(([name]) => name === picked);
 	if (!carried.length && !near.length && !fire) return <div />;
 	const row = (o: ObjView, verb: string, label: string) => (
-		<li key={o.id}><span>{o.name}</span><button onClick={() => send(`${verb} ${o.name}`)}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
+		<li key={o.id}><Glyph o={o} size={20} /><span>{o.name}</span><button onClick={() => send(`${verb} ${o.name}`)}>{label}</button><button onClick={() => send(`look ${o.name}`)}>Ansehen</button></li>
 	);
 	return (
 		<div className="things">
@@ -230,7 +232,7 @@ function Things({ objs, self, room, me, send }: { objs: Map<string, ObjView>; se
 				<h3>Du trägst</h3>
 				<div className="pack">{kinds.map(([name, os]) => (
 					<button key={name} className={`chip${picked === name ? " on" : ""}`} onClick={() => setPicked(picked === name ? null : name)} title={name} aria-label={`${name}: ${os.length}`} aria-pressed={picked === name}>
-						<Glyph o={os[0]!} /><span className="n">{os.length}</span>
+						<Glyph o={os[0]!} size={24} /><span className="n">{os.length}</span>
 					</button>
 				))}</div>
 				{chosen && <div className="pack-do"><span>{chosen[0]}{chosen[1].length > 1 ? ` ×${chosen[1].length}` : ""}</span>
@@ -397,11 +399,17 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	// the last key pressed leads; letting go of all of them stops at once
 	const held = useRef<Array<[number, number]>>([]);
 	const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+	// in the 3D view an arrow means a direction on the screen: it walks the way the view is turned (screenToGrid)
+	const viewAngle = useRef<number | null>(null);
+	const modeRef = useRef(mapMode);
+	modeRef.current = mapMode;
+	const onTurn = useCallback((a: number) => { viewAngle.current = a; }, []);
+	const onGrid = useCallback((d: [number, number]): [number, number] => (modeRef.current === "3d" && viewAngle.current !== null ? screenToGrid(d, viewAngle.current) : d), []);
 	const hold = useCallback((d: [number, number]) => {
 		held.current = [...held.current.filter(([a, b]) => a !== d[0] || b !== d[1]), d];
-		step(d);
-		holdTimer.current ??= setInterval(() => { const last = held.current.at(-1); if (last) step(last); }, WALK_MS);
-	}, [step]);
+		step(onGrid(d));
+		holdTimer.current ??= setInterval(() => { const last = held.current.at(-1); if (last) step(onGrid(last)); }, WALK_MS);
+	}, [step, onGrid]);
 	const release = useCallback((d?: [number, number]) => {
 		held.current = d ? held.current.filter(([a, b]) => a !== d[0] || b !== d[1]) : [];
 		if (!held.current.length && holdTimer.current) { clearInterval(holdTimer.current); holdTimer.current = null; }
@@ -497,7 +505,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 			<div className={`main${mapMode === "text" ? " text-only" : ""}`}>
 				{atlas && atlas.rooms.length > 1 && <Atlas atlas={atlas} state={atlasState} />}
 				{mapMode === "text" ? null : hello ? (
-					<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog}
+					<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
 						controls={<TouchPad hold={(d) => { input.current?.blur(); setMenu(null); hold(d); }} release={release} action={action} />}
 						onCell={(x, y) => { input.current?.blur(); setMenu(null); step({ x, y }); }}
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}

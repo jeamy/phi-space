@@ -19,6 +19,8 @@ type Scene = {
 	objs: InstanceType<Px["Container"]>; chars: InstanceType<Px["Container"]>; fog: InstanceType<Px["Graphics"]>;
 	flames: Array<InstanceType<Px["Graphics"]>>;
 	skins: Array<InstanceType<Px["Texture"]>>; frames: Map<string, InstanceType<Px["Texture"]>>; sprites: Map<string, Sp>;
+	/** The pictures of things, by URL (loaded with the scene; a thing without one is drawn as its glyph). */
+	icons: Map<string, InstanceType<Px["Texture"]>>;
 	size: { w: number; h: number }; ts: number;
 	/** Camera: zoom and how far the player dragged the view away from the own character. */
 	view: { zoom: number; panX: number; panY: number };
@@ -95,6 +97,10 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			const sheets = new Map<string, InstanceType<Px["Texture"]>>();
 			for (const t of Object.values(world.tiles)) if (!sheets.has(t.sheet)) sheets.set(t.sheet, await load(t.sheet));
 			const skins = await Promise.all(world.skins.map((s) => load(s.sheet)));
+			const icons = new Map<string, InstanceType<Px["Texture"]>>();
+			await Promise.all(world.icons.map(async (url) => {
+				try { const t = await pixi.Assets.load<InstanceType<Px["Texture"]>>(url); t.source.scaleMode = "nearest"; icons.set(url, t); } catch { /* the glyph stands in */ }
+			}));
 			if (dead) return;
 			const cut = new Map<string, InstanceType<Px["Texture"]>>();
 			const tex = (sheet: string, x: number, y: number, size: number) => {
@@ -134,7 +140,7 @@ export function MapView({ world, room, chars, objs, me, fog, onCell, onMenu, onF
 			a.stage.addChild(cam);
 			const s: Scene = {
 				pixi, app: a, cam, water, waterMs: Math.min(...Object.values(world.tiles).map((t) => t.auto?.frameMs ?? Infinity)),
-				objs: objLayer, chars: charLayer, fog: fogLayer, flames: [], skins, frames: new Map(), sprites: new Map(),
+				objs: objLayer, chars: charLayer, fog: fogLayer, flames: [], skins, frames: new Map(), sprites: new Map(), icons,
 				size: { w: w * ts, h: h * ts }, ts, view: { zoom: latest.current.zoom, panX: 0, panY: 0 }, fogLevel: latest.current.fog, fogDirty: true,
 			};
 			scene.current = s;
@@ -271,8 +277,8 @@ function drawFog(s: Scene, roomId: string, objs: Map<string, ObjView>, own: Sp |
 	for (const o of objs.values()) if (o.kind === "beacon" && o.location === roomId && (o.until ?? 0) > Date.now()) g.circle(o.x * ts + ts / 2, o.y * ts + ts / 2, ts * 4).cut();
 }
 
-/** Exits as marked cells with their name, things lying in the room as glyphs (no item graphics are licensed yet), a
- *  beacon as a fire in a ring (its flames flicker in `frame`) or a cold ring. */
+/** Exits as marked cells with their name, things lying in the room as their pictures (or glyphs where a thing has
+ *  none), a beacon as a fire in a ring (its flames flicker in `frame`) or a cold ring. */
 function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 	const ts = s.ts, p = s.pixi;
 	for (const child of s.objs.removeChildren()) child.destroy({ children: true });
@@ -303,6 +309,16 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			label.anchor.set(0.5, 0);
 			label.position.set(cx, y + ts);
 			s.objs.addChild(g, label);
+			continue;
+		}
+		const icon = o.icon && s.icons.get(o.icon);
+		if (icon) {
+			// a little smaller than the cell, standing on its lower edge, with a soft shadow under it
+			const shadow = new p.Graphics().ellipse(cx, y + ts - 4, 9, 3).fill({ color: "#000000", alpha: 0.28 });
+			const sp = new p.Sprite(icon);
+			sp.width = sp.height = ts - 6;
+			sp.position.set(x + 3, y + 1);
+			s.objs.addChild(shadow, sp);
 			continue;
 		}
 		const color = o.glyph?.color ?? "#9aa3ad", shape = o.glyph?.shape ?? "square";
