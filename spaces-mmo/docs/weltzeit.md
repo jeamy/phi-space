@@ -2,7 +2,7 @@
 
 ## Status
 
-**Schritte 1 bis 3 der [Migration](#migration) sind implementiert** (2026-10-26); die übrigen Schritte sind Entwurf. Heute
+**Schritte 1 bis 4 der [Migration](#migration) sind implementiert** (2026-10-26); die übrigen Schritte sind Entwurf. Heute
 laufen Feuer, Nebel, Flut und NPC-Pausen weiter über `SPACES_MMO_TIME_SCALE` und `Date.now()` des Servers
 (`engine/time.ts`, `engine/ticker.ts`); die Uhr läuft daneben und zeigt die Weltzeit, bestimmt aber noch keinen fachlichen Termin.
 
@@ -15,7 +15,7 @@ laufen Feuer, Nebel, Flut und NPC-Pausen weiter über `SPACES_MMO_TIME_SCALE` un
 | `WorldSchedule`, Scheduler (`once`, `coalesce`; `replay-bounded` wird abgelehnt), Fail-closed-Wächter für die Hostzeit | fertig | `engine/schedule.ts`, `world-host.ts` |
 | `evening`: ein Termin je Welt (`WorldDef.evening`), ein `WorldEvent` je Welttag und Epoche (`evening:e1:d183`) | fertig | `engine/worldevents.ts`, `engine/loader.ts` |
 | NPC-Pläne (`NpcDef.plan`, auch über Mitternacht; Ines 6–22 Uhr) | fertig, anders als im Entwurf (siehe unten) | `npc-host.ts`, `engine/clockcache.ts` |
-| Narrative Tagesbudgets (Schritt 4) | offen | |
+| Narrative Tagesbudgets: der Schlüssel der Rolle trägt Epoche und Welttag (`npc:ines:e1:d183`); die Limits je UTC-Tag und Minute bleiben | fertig | `engine/clockcache.ts` (`worldDayKey`), `llm.ts`, `npc/minds.ts` |
 | Feuer, Nebel, Flut, Gegenstandsfristen auf Weltfristen (Schritt 5) | offen | |
 | `WorldClockOwner`-Lease und gespeicherter Diagnosezustand der Hostzeit (Abschnitt „Serverzeit“) | offen (jeder Welt-Worker plant; der Schutz gegen Doppelverarbeitung ist die Transaktion am Termin) | |
 | `SPACES_MMO_TIME_SCALE` nur noch Anfangswert (Schritt 6) | offen | |
@@ -32,7 +32,7 @@ Tage). Der Wächter (`ClockGuard`, Toleranz `SPACES_MMO_CLOCK_TOLERANCE_MS`, Sta
 zurückspringt oder zu weit vorspringt, für zehn Sekunden alle neuen Weltzeit-Ereignisse und meldet das im Log
 (`clock alarm`); bereits ausgelöste Ereignisse bleiben.
 
-Tests: `tests/weltzeit.test.ts` (Berechnung, Pause und Rate ohne Sprung, Kalender, Pläne 6–22 und 20–2 an allen vier Grenzen,
+Tests: `tests/weltzeit.test.ts`, `tests/weltzeit-budget.test.ts` (der Schlüssel wechselt an der Welttagsgrenze, die realen Limits zählen weiter) (Berechnung, Pause und Rate ohne Sprung, Kalender, Pläne 6–22 und 20–2 an allen vier Grenzen,
 Browser-Interpolation, die Uhr im Spiel mit Admin-Befehlen). Der Implementierungsstand in
 [modell-npcs.md](modell-npcs.md#stand) bleibt für die NPCs maßgeblich.
 

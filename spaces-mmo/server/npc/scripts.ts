@@ -88,7 +88,7 @@ function waerter(): Script {
 		else if (events.includes("evening") && people.length) await n.act("say Der Abend kommt: wer kann, bringe Holz für die Nacht.");
 		for (const x of fromPeople) {
 			// asked for something by name: do it (or say why not), before any greeting
-			const ask = requestOf(x.text, me.name);
+			const ask = requestOf(x.text.startsWith(`${x.from}: `) ? x.text.slice(x.from.length + 2) : x.text, me.name); // the text of a say starts with the speaker
 			if (ask && ask.kind !== "greet") {
 				if (ask.kind === "gather") await gather(n, me, x.from, ask.count, async () => { const c = await self(n); return c ? { x: c.x, y: c.y, room: c.room } : null; });
 				else if (ask.kind === "feed") await gather(n, me, x.from, 0, async () => { const c = await self(n); return c ? { x: c.x, y: c.y, room: c.room } : null; });

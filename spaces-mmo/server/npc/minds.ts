@@ -6,6 +6,7 @@
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS } from "../engine/commands/default.ts";
 import { TRADE_COMMANDS } from "../engine/commands/trade.ts";
+import { worldDayKey } from "../engine/clockcache.ts";
 import { complete, llmEnabled } from "../llm.ts";
 import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields } from "../model.ts";
 import { readExisting, StillHeld } from "../space.ts";
@@ -119,7 +120,7 @@ export async function think(space: SpaceLike, npc: { npcId: string; name: string
 		`Event: ${s.event}`,
 		`Heard: ${s.heard.join(" | ")}`,
 	].join("\n");
-	const res = await complete(space, system, user, { maxTokens: 200, own: { key: `npc:${npc.npcId}`, perDay: budget } }).catch((e) => { console.error(`[npc] ${npc.npcId} model:`, (e as Error).message); return null; });
+	const res = await complete(space, system, user, { maxTokens: 200, own: { key: `npc:${npc.npcId}`, perDay: budget, day: (await worldDayKey(space)) ?? undefined } }).catch((e) => { console.error(`[npc] ${npc.npcId} model:`, (e as Error).message); return null; });
 	if (!res) return "budget";
 	const lines: string[] = [];
 	let note: string | undefined;

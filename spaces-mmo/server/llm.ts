@@ -61,11 +61,11 @@ async function admit(space: SpaceLike, key: string, limit: number, leaseMs: numb
 }
 
 /** A model call, or null: calls off, no model, or a limit reached (`own`: the caller's key and its limit per day). */
-export async function complete(space: SpaceLike, system: string, user: string, o: { maxTokens: number; own?: { key: string; perDay: number } }): Promise<Completion | null> {
+export async function complete(space: SpaceLike, system: string, user: string, o: { maxTokens: number; own?: { key: string; perDay: number; day?: string } }): Promise<Completion | null> {
 	const m = await load();
 	if (!m) return null;
 	const now = new Date(), day = now.toISOString().slice(0, 10), minute = now.toISOString().slice(0, 16);
-	if (o.own && !(await admit(space, `${o.own.key}:${day}`, o.own.perDay, 26 * 3600_000))) return null;
+	if (o.own && !(await admit(space, `${o.own.key}:${o.own.day ?? day}`, o.own.perDay, 26 * 3600_000))) return null;
 	if (!(await admit(space, `day:${day}`, perDay(), 26 * 3600_000))) return null;
 	if (!(await admit(space, `min:${minute}`, perMin(), 120_000))) return null;
 	return m.complete(system, user, o.maxTokens);

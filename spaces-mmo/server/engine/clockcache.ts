@@ -3,23 +3,40 @@
 // space nothing. A change by the operator reaches the process within `ttlMs`.
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields } from "../model.ts";
-import { worldNow } from "./worldtime.ts";
+import { calendar, worldNow } from "./worldtime.ts";
 
 export class ClockCache {
 	#clock: WorldClockFields | null = null;
 	#at = 0;
 	readonly #space: SpaceLike;
-	readonly #worldId: string;
+	readonly #worldId: string | undefined;
 	readonly #ttlMs: number;
-	constructor(space: SpaceLike, worldId: string, ttlMs = 15_000) { this.#space = space; this.#worldId = worldId; this.#ttlMs = ttlMs; }
+	/** `worldId` absent: the space's one clock. */
+	constructor(space: SpaceLike, worldId?: string, ttlMs = 15_000) { this.#space = space; this.#worldId = worldId; this.#ttlMs = ttlMs; }
+
+	/** The clock as last read (null while the world has none). */
+	async clock(realNow = Date.now()): Promise<WorldClockFields | null> {
+		if (!this.#clock || realNow - this.#at > this.#ttlMs) {
+			const e = await this.#space.readIfExists({ type: "WorldClock", ...(this.#worldId ? { fields: { worldId: this.#worldId } } : {}) }, NO_WAIT).catch(() => null);
+			if (e) { this.#clock = fieldsOf<WorldClockFields>(e); this.#at = realNow; }
+		}
+		return this.#clock;
+	}
 
 	/** The world time now, or null while the world has no clock. */
 	async now(realNow = Date.now()): Promise<number | null> {
-		if (!this.#clock || realNow - this.#at > this.#ttlMs) {
-			const e = await this.#space.readIfExists({ type: "WorldClock", fields: { worldId: this.#worldId } }, NO_WAIT).catch(() => null);
-			if (e) { this.#clock = fieldsOf<WorldClockFields>(e); this.#at = realNow; }
-			else if (!this.#clock) return null;
-		}
-		return worldNow(this.#clock!, realNow);
+		const c = await this.clock(realNow);
+		return c ? worldNow(c, realNow) : null;
 	}
+}
+
+const caches = new WeakMap<SpaceLike, ClockCache>();
+/** The cache of a space's clock, shared by whoever in this process asks. */
+export const clockOf = (space: SpaceLike): ClockCache => { let c = caches.get(space); if (!c) { c = new ClockCache(space); caches.set(space, c); } return c; };
+
+/** The key of the world day, `e1:d183` (clock epoch and day), or null while the world has no clock: what a narrative
+ *  budget "per day" counts by (docs/weltzeit.md, "Modellbudgets"). */
+export async function worldDayKey(space: SpaceLike, realNow = Date.now()): Promise<string | null> {
+	const c = await clockOf(space).clock(realNow);
+	return c ? `e${c.epoch}:d${calendar(worldNow(c, realNow)).day}` : null;
 }
