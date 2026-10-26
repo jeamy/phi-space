@@ -22,6 +22,19 @@ wie `ANTHROPIC_API_KEY` in `.env`). Modellaufrufe kosten Tokens und laufen nur m
 bleiben die Modell-NPCs bei ihren Skripten und freie Sätze bei den kostenlosen Regeln. Die Meldung `[llm] no models`
 heißt: weder Schlüssel noch pi-Anmeldung im Container.
 
+Auf big läuft Docker rootless: dort gehört das eingebundene `~/.pi/agent` im Container root, und der Benutzer `node`
+kann `auth.json` nicht lesen (ebenfalls `[llm] no models`). Wie codemode-chat und das Help-System nutzt spaces-mmo dort
+eine Kopie, die der Container-Benutzer `node` besitzt (auf dem Host uid 100999), und setzt in `spaces-mmo/.env`
+`PI_AUTH_DIR=/home/mux/.pi/agent-node`. Die Kopie entsteht (und nach einer neuen pi-Anmeldung erneut) mit
+
+```sh
+mkdir -p -m 755 ~/.pi/agent-node && cp ~/.pi/agent/auth.json ~/.pi/agent-node/
+docker run --rm -v ~/.pi/agent-node:/d node:22-bookworm-slim sh -c 'chown 1000:1000 /d/auth.json && chmod 400 /d/auth.json'
+```
+
+Danach `npm --prefix spaces-mmo run docker:big:up`; `docker exec phi-spaces-mmo-npc-1 cat /home/node/.pi/agent/auth.json
+>/dev/null` prüft, ob `node` die Datei lesen kann.
+
 ## Ports
 
 | Port | Dienst | Veröffentlicht auf |
