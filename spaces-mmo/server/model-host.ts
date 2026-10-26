@@ -18,7 +18,7 @@ import { awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space.ts";
 const COMMANDS = [...DEFAULT_COMMANDS, ...TRADE_COMMANDS].filter((c) => !c.hidden);
 const VERBS = new Set(COMMANDS.flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 
-export const TRANSLATE_SYSTEM = "You turn what a player of a text adventure typed (German or English) into exactly one game command. Answer with the command alone on one line, no explanation, no quotes. Use the names of things, people and exits exactly as listed. When the player speaks to someone who is here (names them, greets them, asks them to do something), that is talk, not a command for the player: answer say <the player's words, all of them, the name included>. If no command fits, answer ?";
+export const TRANSLATE_SYSTEM = "You turn what a player of a text adventure typed (German or English) into exactly one game command. Answer with the command alone on one line, no explanation, no quotes. Use the names of things, people and exits exactly as listed. When the player speaks to someone who is here (names them, greets them, asks them to do something), or greets anyone at all, that is talk, not a command for the player: answer say <the player's words, all of them, the name included>. If no command fits, answer ?";
 
 /** What the model is shown: the commands, then what the player sees, then the sentence. */
 export async function translatePrompt(space: SpaceLike, w: WorldDef, t: TranslateFields): Promise<string> {

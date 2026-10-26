@@ -257,6 +257,8 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	const [line, setLine] = useState("");
 	const [panel, setPanel] = useState<null | "account" | "leave">(null);
 	const [help, setHelp] = useState(false);
+	// on a phone the map modes and logging out sit behind "⋯" in the header bar (styles.css, `.bar-tools`)
+	const [more, setMore] = useState(false);
 	const [stale, setStale] = useState(false);
 	// Text, established 2D or optional 3D: remembered per browser. The old text-only preference migrates forward.
 	const [mapMode, setMapModeState] = useState<MapMode>(() => {
@@ -441,9 +443,21 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 	useEffect(() => {
 		const dirOf = (k: string) => ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[k];
 		const onKey = (e: KeyboardEvent) => {
-			if (document.activeElement === input.current || (e.target as HTMLElement)?.tagName === "INPUT") return;
+			if (document.activeElement === input.current || ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
 			if (e.key === "Enter") { e.preventDefault(); release(); input.current?.focus(); return; }
 			if (e.key === " ") { e.preventDefault(); if (!e.repeat) action(); return; }
+			// typing text: the first letter goes to the command line, which takes the rest (a shortcut with Ctrl, Alt or
+			// Cmd stays the browser's)
+			if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+				e.preventDefault();
+				release();
+				const el = input.current;
+				if (!el) return;
+				setLine((l) => l + e.key);
+				el.focus();
+				requestAnimationFrame(() => { const n = el.value.length; el.setSelectionRange(n, n); });
+				return;
+			}
 			const d = dirOf(e.key);
 			if (!d) return;
 			e.preventDefault();
@@ -468,11 +482,15 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 				<span className="spacer" />
 				<span>{account.name}</span>
 				{account.guest && <span className="badge">Gast</span>}
-				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")}>Registrieren, um den Fortschritt zu behalten</button>}
-				<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
-					{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => setMapMode(mode)} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
+				{account.guest && <button onClick={() => setPanel(panel === "account" ? null : "account")} title="Registrieren, um den Fortschritt zu behalten"><span className="long">Registrieren, um den Fortschritt zu behalten</span><span className="short">Registrieren</span></button>}
+				<button className="bar-more" onClick={() => setMore((m) => !m)} aria-expanded={more} aria-label="Darstellung und Abmelden">⋯</button>
+				{more && <div className="menu-backdrop bar-backdrop" onClick={() => setMore(false)} />}
+				<div className={`bar-tools${more ? " open" : ""}`}>
+					<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
+						{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => { setMore(false); setMapMode(mode); }} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
+					</div>
+					<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
 				</div>
-				<button onClick={() => (account.guest ? setPanel("leave") : void logout())}>Abmelden</button>
 			</header>
 			{help && <HelpPanel onClose={() => setHelp(false)} />}
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
@@ -508,7 +526,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>
-						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder="Enter: Befehl tippen, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte" maxLength={300} aria-label="Befehl" />
+						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder="Einfach lostippen: Befehl oder Satz, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte" maxLength={300} aria-label="Befehl" />
 						<button className="primary">Senden</button>
 					</form>
 					<About />

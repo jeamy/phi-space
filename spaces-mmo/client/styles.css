@@ -61,6 +61,19 @@ a { color: var(--accent); }
 .game { display: grid; grid-template-rows: auto 1fr; height: 100vh; height: 100dvh; }
 /* the safe-area insets keep the content out of a notch and the rounded corners (app/layout.tsx: viewport-fit=cover) */
 .bar { display: flex; align-items: center; gap: 12px; padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.bar { position: relative; }
+.bar-tools { display: flex; align-items: center; gap: 12px; }
+.bar-more, .bar .short, .bar-backdrop { display: none; }
+/* a phone: a short "Registrieren", the map modes and logging out behind "⋯" (client/App.tsx) */
+@media (max-width: 760px) {
+  .bar { gap: 8px 10px; }
+  .bar .long { display: none; }
+  .bar .short { display: inline; }
+  .bar-more { display: inline-block; font-weight: 700; letter-spacing: .05em; }
+  .bar-backdrop { display: block; }
+  .bar-tools { display: none; position: absolute; z-index: 21; top: calc(100% - 4px); right: max(16px, env(safe-area-inset-right)); flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  .bar-tools.open { display: flex; }
+}
 .bar .title { color: var(--text-strong); font-weight: 700; letter-spacing: 0.03em; }
 .bar .spacer { flex: 1; }
 .badge { font-size: 12px; border: 1px solid var(--warning); color: var(--warning); border-radius: 999px; padding: 1px 8px; }
@@ -199,7 +212,7 @@ button.link { border: 0; background: transparent; color: var(--accent); padding:
   .touchpad button:active { background: var(--accent); color: var(--accent-ink); }
   .touchpad .touchpad-act { border-radius: 50%; font-size: 18px; }
   /* fingers need larger targets than a mouse: about 40 px */
-  .map-zoom button, .renderer-tabs button, .help-btn { min-width: 40px; min-height: 40px; }
+  .map-zoom button, .renderer-tabs button, .help-btn, .bar-more { min-width: 40px; min-height: 40px; }
   .help-btn { width: 40px; height: 40px; }
   .things button, .atlas-toggle { min-height: 36px; }
   .cell-menu button { padding: 11px 12px; }

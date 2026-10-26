@@ -176,6 +176,7 @@ Ein Tablet im Hochformat zeigt die Karte oben und das Seitenfeld darunter, im Qu
 | Pfeiltasten | Einen Schritt gehen (\`step dx dy\`) |
 | Leertaste | Aufheben, was neben dir liegt; sonst das Feuer neben dir nachlegen |
 | Enter | In die Befehlszeile springen |
+| Buchstaben, Ziffern | Einfach lostippen: der Text geht in die Befehlszeile |
 | Pfeiltasten in der Befehlszeile | Zurück zur Karte und einen Schritt gehen: hoch und runter immer, links und rechts, solange die Zeile leer ist (mit Text bewegen sie den Cursor) |
 | Esc | Aus der Befehlszeile zurück zur Karte; schließt Menüs und diese Hilfe |
 
@@ -189,8 +190,10 @@ Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neb
 
 - **?** öffnet diese Hilfe.
 - Der Punkt zeigt, ob du verbunden bist (grün) oder nicht (rot).
-- **Nur Text** blendet die Karte aus: für Screenreader, schwache Geräte oder wer es lieber wie ein MUD mag. Alles bleibt spielbar.
-- **Abmelden** beendet die Sitzung.`,
+- Daneben stehen der **Raum**, in dem du bist, und die **Weltzeit** (Tag und Uhrzeit; ⏸, wenn die Welt angehalten ist), rechts dein Name.
+- **Text / 2D / 3D** wählt die Darstellung. **Text** blendet die Karte aus: für Screenreader, schwache Geräte oder wer es lieber wie ein MUD mag; alles bleibt spielbar. **2D** ist die Kachelkarte, **3D** eine Ansicht derselben Welt von schräg oben.
+- **Abmelden** beendet die Sitzung.
+- Auf dem Handy liegen Darstellung und Abmelden hinter **⋯**.`,
 			en: `## On the map {#map}
 
 | Input | Effect |
@@ -216,6 +219,7 @@ A tablet held upright shows the map on top and the side panel below it, held sid
 | Arrow keys | Take one step (\`step dx dy\`) |
 | Space | Pick up what lies next to you; otherwise feed the fire next to you |
 | Enter | Jump to the command line |
+| Letters, digits | Just start typing: the text goes to the command line |
 | Arrow keys in the command line | Back to the map and one step: up and down always, left and right while the line is empty (with text they move the cursor) |
 | Esc | Leave the command line back to the map; closes menus and this help |
 
@@ -229,8 +233,10 @@ On the right (below the map on a phone and an upright tablet) you find **Next to
 
 - **?** opens this help.
 - The dot shows whether you are connected (green) or not (red).
-- **Text only** hides the map: for screen readers, weak devices or if you prefer a MUD feel. Everything stays playable.
-- **Log out** ends the session.`,
+- Next to it the **room** you are in and the **world time** (day and hour; ⏸ while the world is paused), on the right your name.
+- **Text / 2D / 3D** picks the view. **Text** hides the map: for screen readers, weak devices or if you prefer a MUD feel; everything stays playable. **2D** is the tile map, **3D** a view of the same world from above at an angle.
+- **Log out** ends the session.
+- On a phone the view and logging out sit behind **⋯**.`,
 		},
 	},
 	{
@@ -244,7 +250,7 @@ On the right (below the map on a phone and an upright tablet) you find **Next to
 		body: {
 			de: `## So funktionieren Befehle {#how}
 
-Tippe sie in die Befehlszeile (Enter). Jeder Befehl gilt **auf Englisch und auf Deutsch**, ohne Umschalter: \`get treibholz\` und \`nimm holz\` sind dasselbe. Dinge findest du über Name oder Kurzname (\`holz\`, \`wood\`). Den Namen eines Ausgangs kannst du allein tippen (\`ost\`). \`help <befehl>\` erklärt einen Befehl, \`help\` listet alle.
+Tippe sie einfach los, sie landen in der Befehlszeile (oder Enter). Jeder Befehl gilt **auf Englisch und auf Deutsch**, ohne Umschalter: \`get treibholz\` und \`nimm holz\` sind dasselbe. Dinge findest du über Name oder Kurzname (\`holz\`, \`wood\`). Den Namen eines Ausgangs kannst du allein tippen (\`ost\`). \`help <befehl>\` erklärt einen Befehl, \`help\` listet alle.
 
 ## Bewegen und umsehen {#move}
 
@@ -299,7 +305,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 Wer die Stufe *Builder* hat, formt die Welt: \`dig\`/\`grabe\`, \`open\`/\`öffne\`, \`create\`/\`erschaffe\`, \`spawn\`/\`erzeuge\`, \`set\`/\`setze\`, \`tag\`/\`markiere\`, \`lock\`/\`sperre\`, \`examine\`/\`untersuche\`, \`destroy\`/\`vernichte\`. Die Befehle erscheinen nur in der \`help\` dieser Figuren; \`help bauen\` erklärt sie.`,
 			en: `## How commands work {#how}
 
-Type them into the command line (Enter). Every command works **in English and in German**, with no switch: \`get driftwood\` and \`nimm holz\` are the same. Things are found by name or short name (\`wood\`, \`holz\`). You can type an exit's name alone (\`east\`). \`help <command>\` explains one command, \`help\` lists all.
+Just start typing, they go to the command line (or Enter). Every command works **in English and in German**, with no switch: \`get driftwood\` and \`nimm holz\` are the same. Things are found by name or short name (\`wood\`, \`holz\`). You can type an exit's name alone (\`east\`). \`help <command>\` explains one command, \`help\` lists all.
 
 ## Moving and looking {#move}
 

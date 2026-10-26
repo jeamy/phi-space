@@ -2,7 +2,8 @@
 # space over TCP (docs/architektur.md), laid out like codemode-chat/docker/docker-compose.yml.
 #
 #   profile nano:  space (the world and accounts stores in a volume) and a world worker — the host that keeps the state
-#   profile big:   web, a world worker and the npc process — the host that does most of the work
+#   profile big:   web, a world worker, the npc process and the model process (translations) — the host that does most
+#                  of the work; npc and model are the only roles with model credentials (the host's pi CLI login)
 #   both at once:  the big/nano pair on one machine (local test bed): the same TCP connections as between two hosts,
 #                  NANO_CPUS caps nano's CPUs like the smaller machine
 #   profile dev:   all roles in one container with the checkout mounted, recompiled and restarted on every change
@@ -121,6 +122,22 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
+    volumes:
+      # model NPCs: the host's pi CLI login, read-only (or API keys such as ANTHROPIC_API_KEY in .env); model calls
+      # only with SPACES_MMO_LLM=1
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  # plain language into commands, for what the free rules do not understand (server/model-host.ts)
+  model:
+    <<: *big
+    profiles: [big]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
+    volumes:
+      # the same login as npc
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   # ---- tests in Docker ----
   mmo-test:

@@ -10,6 +10,8 @@ export type TranslateView = { exits: Array<{ name: string; aliases: string[] }>;
 const FILLER = /\b(bitte|mal|doch|jetzt|noch|auch|einfach|schnell|gerne?|ich|möchte|moechte|will|würde|wuerde|gern|please|i|want|would|like)\b/gi;
 const ARTICLE = /^(den|dem|die|das|der|des|ein|eine|einen|einem|the|a|an)\s+/i;
 const GREETING = /^(hallo|hi|hey|moin|servus|hello)\b\s*/;
+/** A greeting alone, with a name, or with a name and a comma before more: "hallo", "hallo henning!", "moin Bo, wie geht's?" */
+const GREETED = /^(?:hallo|hi|hey|moin|servus|hello|guten (?:tag|morgen|abend))(?![\p{L}\p{N}_-])(?:\s*[.!?]*|\s*,?\s*[\p{L}\p{N}_-]+\s*(?:[.!?]*|[,:]\s*\S.*))$/iu;
 const clean = (s: string) => s.toLowerCase().replace(/[.!?,;]+/g, " ").replace(FILLER, " ").replace(/\s+/g, " ").trim().replace(GREETING, "");
 const noArticle = (s: string) => s.replace(ARTICLE, "").trim();
 /** "ein stück holz" → "holz", "etwas tang" → "tang": the thing, without article and measure. */
@@ -25,6 +27,8 @@ export function translateRules(line: string, v: TranslateView): string | null {
 	const addressed = /^(?:(?:hallo|hi|hey|moin|servus|hello|guten (?:tag|morgen|abend))\s+)?([\p{L}\p{N}_-]+)(?:\s*[,:!]\s*|\s+)\S/iu.exec(line.trim());
 	const last = /\S\s*,\s*([\p{L}\p{N}_-]+)\s*[.!?]*$/u.exec(line.trim());
 	if (here(addressed?.[1]) || here(last?.[1])) return `say ${line.trim()}`;
+	// a greeting is talk, also to someone who is not here: "hallo", "hallo henning", "moin Bo, wie geht's?"
+	if (GREETED.test(line.trim())) return `say ${line.trim()}`;
 	const s = clean(line);
 	if (!s) return null;
 	// walking: "gehe nach osten", "lauf richtung klippenpfad", "nach osten", "go to the east"

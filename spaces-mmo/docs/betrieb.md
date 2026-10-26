@@ -9,12 +9,18 @@ Rolle, alle sprechen nur über den Space und TCP. Dateien: `spaces-mmo/docker/Do
 | Profil | Container | Wo |
 | --- | --- | --- |
 | `nano` | `space` (Welt- und Kontenspeicher als SQLite im Volume `mmo-space-data`), `world-nano` | der Rechner, der den Zustand hält |
-| `big` | `web`, `world-big`, `npc` | der Rechner, der die Arbeit macht |
+| `big` | `web`, `world-big`, `npc`, `model` (übersetzt freie Sätze in Befehle) | der Rechner, der die Arbeit macht |
 | `dev` | `mmo-dev` (alle Rollen in einem Container, Quelltext eingebunden) | lokal |
 | `test` | `mmo-test` (die Testsuite) | überall |
 | nano + big | beides auf einer Maschine | lokaler Testaufbau |
 
-`world` lässt sich mehrfach starten (je Rechner ein Arbeiter); `npc` läuft einmal, auf big.
+`world` lässt sich mehrfach starten (je Rechner ein Arbeiter); `npc` und `model` laufen einmal, auf big.
+
+**Modellzugang:** Wie codemode-chat und das Help-System lesen `npc` und `model` die Anmeldung der pi-CLI des Hosts:
+`${PI_AUTH_DIR:-$HOME/.pi/agent}` wird schreibgeschützt nach `/home/node/.pi/agent` eingebunden (alternativ API-Schlüssel
+wie `ANTHROPIC_API_KEY` in `.env`). Modellaufrufe kosten Tokens und laufen nur mit `SPACES_MMO_LLM=1` in `.env`; ohne
+bleiben die Modell-NPCs bei ihren Skripten und freie Sätze bei den kostenlosen Regeln. Die Meldung `[llm] no models`
+heißt: weder Schlüssel noch pi-Anmeldung im Container.
 
 ## Ports
 
@@ -31,7 +37,7 @@ die Loopback-Adresse hinter einem SSH-Tunnel. Codemode-chat belegt 3700/3800, da
 ## Lokal testen (beide Rollen auf dieser Maschine)
 
 ```
-npm --prefix spaces-mmo run docker:local:up     # baut das Image, startet space, world-nano, web, world-big, npc
+npm --prefix spaces-mmo run docker:local:up     # baut das Image, startet space, world-nano, web, world-big, npc, model
 npm --prefix spaces-mmo run docker:local:logs
 npm --prefix spaces-mmo run docker:local:down
 ```

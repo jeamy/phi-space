@@ -36,6 +36,14 @@ test("rules: common sentences become commands; commands and talk stay as they ar
 	assert.equal(t("Ines: wie geht es dem Feuer?"), "say Ines: wie geht es dem Feuer?");
 	assert.equal(t("hey Bo, wohin fährst du?"), "say hey Bo, wohin fährst du?");
 	assert.equal(t("Fremder, wer bist du?"), null, "not here: no talk to them");
+	// a greeting is talk, also to someone who is not here
+	assert.equal(t("hallo henning"), "say hallo henning");
+	assert.equal(t("Hallo Ines!"), "say Hallo Ines!");
+	assert.equal(t("moin"), "say moin");
+	assert.equal(t("hilfe"), "help", "a word that starts like a greeting is none");
+	assert.equal(t("guten Morgen, Henning"), "say guten Morgen, Henning");
+	assert.equal(t("hey Henning, wie geht's?"), "say hey Henning, wie geht's?");
+	assert.equal(t("hallo, nimm das treibholz auf"), "get treibholz", "a greeting before a command is no talk");
 	assert.equal(t("ines leg holz ins feuer"), "say ines leg holz ins feuer", "without a comma, the name stays");
 	assert.equal(t("leg bitte holz nach, Ines!"), "say leg bitte holz nach, Ines!", "the name at the end");
 	assert.equal(t("hallo, leg holz ins feuer"), "put holz in feuer", "a greeting without a name is no address");

@@ -21,3 +21,8 @@ services:
     networks: !reset []
     environment:
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:127.0.0.1:3950}"
+  model:
+    network_mode: host
+    networks: !reset []
+    environment:
+      SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:127.0.0.1:3950}"
