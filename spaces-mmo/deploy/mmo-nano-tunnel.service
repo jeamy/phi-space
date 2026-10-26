@@ -1,0 +1,17 @@
+# User unit for big (~/.config/systemd/user/mmo-nano-tunnel.service): the spaces of spaces-mmo run on nano (profile nano of
+# docker/docker-compose.yml, ports 3950 world and 3951 accounts on nano's loopback); the roles on big reach them through this tunnel
+# on big's loopback, as codemode-nano-tunnel and swarm-nano-tunnel do for the chat and the help system (docs/betrieb.md).
+#
+#   cp spaces-mmo/deploy/mmo-nano-tunnel.service ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now mmo-nano-tunnel
+[Unit]
+Description=SSH tunnel to the nano spaces-mmo spaces (127.0.0.1:3950 world and 3951 accounts -> nano)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ssh -N -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o BatchMode=yes -L 127.0.0.1:3950:127.0.0.1:3950 -L 127.0.0.1:3951:127.0.0.1:3951 nano
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
