@@ -58,13 +58,33 @@ export async function roomOf(c: CommandCtx, roomId = c.actor.room): Promise<Room
 	return r.fields as unknown as RoomFields;
 }
 
-/** Things named `name` (name or alias, case-insensitive; exact matches first, then prefixes), nearest first. */
+/** Edits between two words (a letter missing, added, changed, or two swapped), counted up to `max` + 1. */
+export function typos(a: string, b: string, max: number): number {
+	if (Math.abs(a.length - b.length) > max) return max + 1;
+	let prev2: number[] = [], prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+	for (let i = 1; i <= a.length; i++) {
+		const row = [i];
+		for (let j = 1; j <= b.length; j++) {
+			let d = Math.min(prev[j]! + 1, row[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+			if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d = Math.min(d, prev2[j - 2]! + 1);
+			row.push(d);
+		}
+		prev2 = prev; prev = row;
+	}
+	return prev[b.length]!;
+}
+/** How many typos a word of this length may have and still mean a name: none below four letters, one, two from eight. */
+const tolerance = (n: string) => (n.length < 4 ? 0 : n.length < 8 ? 1 : 2);
+
+/** Things named `name` (name or alias, case-insensitive; exact matches first, then prefixes, then names with a typo or
+ *  two: "feur" is the fire), nearest first. */
 export function byName<T extends { name: string; aliases: string[] }>(list: Array<{ e: Taken; f: T }>, name: string, near?: { x: number; y: number }): Array<{ e: Taken; f: T }> {
 	const n = name.trim().toLowerCase();
 	if (!n) return [];
 	const names = (f: T) => [f.name, ...f.aliases].map((s) => s.toLowerCase());
 	const exact = list.filter((i) => names(i.f).includes(n));
-	const hits = exact.length ? exact : list.filter((i) => names(i.f).some((s) => s.startsWith(n)));
+	const prefix = exact.length ? exact : list.filter((i) => names(i.f).some((s) => s.startsWith(n)));
+	const hits = prefix.length || !tolerance(n) ? prefix : list.filter((i) => names(i.f).some((s) => typos(n, s, tolerance(n)) <= tolerance(n)));
 	const d = (f: T) => (near && "x" in f ? Math.max(Math.abs((f as unknown as { x: number }).x - near.x), Math.abs((f as unknown as { y: number }).y - near.y)) : 0);
 	return hits.sort((a, b) => d(a.f) - d(b.f));
 }

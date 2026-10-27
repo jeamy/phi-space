@@ -66,3 +66,19 @@ test("typeclasses: a type and its supertypes, world classes below the engine's, 
 	assert.throws(() => typeChain("A", { A: "B", B: "A" }), /im Kreis/);
 	assert.deepEqual(typeChain("Item", { Item: "Coin", Coin: "Item" }), ["Item", "Object"], "a world cannot move the engine's classes");
 });
+
+test("names with a typo still mean the thing: one from four letters, two from eight; exact names and prefixes come first", async () => {
+	const { byName, typos } = await import("../server/engine/context.ts");
+	const t = (name: string, aliases: string[] = []) => ({ e: {} as never, f: { name, aliases } });
+	const things = [t("Leuchtfeuer", ["feuer"]), t("Treibholz", ["holz"]), t("Muschel")];
+	const one = (n: string) => byName(things, n).map((x) => x.f.name);
+	assert.deepEqual(one("feur"), ["Leuchtfeuer"], "a letter missing");
+	assert.deepEqual(one("fueer"), ["Leuchtfeuer"], "two letters swapped");
+	assert.deepEqual(one("treibhloz"), ["Treibholz"]);
+	assert.deepEqual(one("leuchtfuer"), ["Leuchtfeuer"]);
+	assert.deepEqual(one("muschl"), ["Muschel"]);
+	assert.deepEqual(one("hol"), ["Treibholz"], "a prefix, as before");
+	assert.deepEqual(one("hut"), [], "short words must match: no guess from three letters");
+	assert.deepEqual(one("faden"), [], "more than one letter off in a short word is another word");
+	assert.equal(typos("ost", "ots", 1), 1);
+});
