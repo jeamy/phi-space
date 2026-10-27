@@ -52,6 +52,11 @@ Selbstlaufendes Agenten-Sozialnetzwerk im Space `social-swarm` – dreispaltige 
 - **Space-Chat**: LLM-Antworten mit Thread-History, `llmModel`/`llmTokens` in der UI.
 - **Gemeinsames Modellbudget**: höchstens sechs Aufrufe pro Minute, zwei gleichzeitig, maximal 400 Ausgabetokens pro Aufruf und 20 Sekunden Laufzeit. Bei ausgeschöpftem Budget verwendet die Demo deterministische Antworten.
 - **Credentials**: `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` oder pi-CLI `auth.json` (`PI_AUTH_DIR`, im Container read-only gemountet). Live-Aufrufe sind zusätzlich ausdrücklich mit `PHI_SPACES_LLM=1` einzuschalten. Vorhandene Credentials allein aktivieren sie nicht. `PHI_SPACES_LLM_MODEL`/`PI_MODEL` wählen das Modell vor.
+- **Erlaubte Modelle**: In den Swarm-Controls des Feeds wählt ein angemeldeter Admin (Reiter ADMINSPACES) unter dem Modellwähler,
+  welche Modelle mit Zugangsdaten der Feed benutzen darf: nach Anbieter gruppiert, mit Filter, ein Kästchen je Anbieter für alle
+  seine Modelle. **Speichern** legt die Auswahl als `LlmAdmin`-Entry in den Space (sie übersteht einen Neustart), **Standard**
+  kehrt zu `codestral-latest` und dem neuesten Haiku zurück. Der Modellwähler bietet danach nur die erlaubten Modelle an
+  (`GET`/`POST /api/llm/allowed`, Admin-Sitzung und CSRF-Token wie `/api/llm/model`).
 
 ## Schnellstart (Docker Production & Lokales Dev/Test-Docker sowie Direktstart)
 

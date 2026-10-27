@@ -2,6 +2,7 @@
 // Live LLM model picker + on/off switch – shared by SpaceChatWorkbench and SocialFeedView.
 // Reads GET /api/llm/models, switches via POST /api/llm/model ({model} and/or {on}).
 import { useEffect, useMemo, useState } from "react";
+import { LLM_MODELS_CHANGED, LlmAllowedModels } from "./LlmAllowedModels.tsx";
 
 interface LlmModelInfo { id: string; provider: string; label: string }
 
@@ -21,7 +22,7 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 		// An AdminSpaces login in another tab or after load must enable the picker without a page reload.
 		const timer = setInterval(checkSession, 15_000);
 		window.addEventListener("focus", checkSession);
-		void fetch("/api/llm/models")
+		const loadModels = () => void fetch("/api/llm/models")
 			.then((r) => r.json())
 			.then((d) => {
 				if (dead) return;
@@ -31,7 +32,10 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 				setModels(d.models ?? []);
 			})
 			.catch(() => {});
-		return () => { dead = true; clearInterval(timer); window.removeEventListener("focus", checkSession); };
+		loadModels();
+		// the admin saved another choice of allowed models: offer those
+		window.addEventListener(LLM_MODELS_CHANGED, loadModels);
+		return () => { dead = true; clearInterval(timer); window.removeEventListener("focus", checkSession); window.removeEventListener(LLM_MODELS_CHANGED, loadModels); };
 	}, []);
 
 	const groups = useMemo(() => {
@@ -75,6 +79,7 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 	}
 
 	return (
+		<>
 		<span className="sf-llm-picker">
 			{error ? <span role="alert">{error}</span> : null}
 			{!canManage ? <small className="sf-llm-hint">{locale === "de" ? "Admin-Anmeldung nötig (Reiter ADMINSPACES)" : "Admin sign-in needed (ADMINSPACES tab)"}</small> : null}
@@ -108,5 +113,7 @@ export function LlmModelPicker({ locale }: { locale: "de" | "en" }) {
 				))}
 			</select>
 		</span>
+		<LlmAllowedModels locale={locale} canManage={canManage} />
+		</>
 	);
 }

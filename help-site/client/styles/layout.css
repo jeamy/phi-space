@@ -1353,6 +1353,25 @@ a.secondary-action, a.primary-action { text-decoration: none; }
 }
 .sf-llm-picker select:disabled { opacity: 0.45; }
 .sf-llm-hint { font-size: 11px; opacity: 0.8; white-space: nowrap; }
+/* the admin's choice of allowed models (LlmAllowedModels) */
+.sf-llm-allowed { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 8px; font: 600 11px/1.35 var(--font-geist-mono); color: var(--text); }
+.sf-llm-allowed__head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+.sf-llm-allowed__muted { color: var(--muted); font-weight: 500; }
+.sf-llm-allowed__filter { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; padding: 6px 8px; }
+/* like the picker's open list: bold provider groups, the models indented, a chosen one highlighted like the selected option */
+.sf-llm-allowed__list { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; background: var(--surface); }
+.sf-llm-allowed__list details { padding: 0; }
+.sf-llm-allowed__list summary { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 10px; }
+.sf-llm-allowed__list summary b { font-weight: 700; }
+.sf-llm-allowed__model { display: flex; align-items: flex-start; gap: 6px; padding: 4px 10px 4px 30px; cursor: pointer; overflow-wrap: anywhere; }
+.sf-llm-allowed__model:hover { background: color-mix(in srgb, var(--surface) 70%, var(--line)); }
+.sf-llm-allowed__model:has(input:checked) { background: #a9cdfb; color: #0b0f14; }
+.sf-llm-allowed__model:has(input:checked) .sf-llm-allowed__muted { color: #2b3a4a; }
+.sf-llm-allowed__row { display: flex; gap: 6px; flex-wrap: wrap; }
+.sf-llm-allowed__btn { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--surface); color: var(--text); cursor: pointer; font: 700 11px/1 var(--font-geist-mono); }
+.sf-llm-allowed__btn--primary { color: #0b0f14; border-color: transparent; background: #a3e635; }
+.sf-llm-allowed__btn:disabled { opacity: 0.5; cursor: default; }
+.sf-llm-allowed__msg { color: var(--muted); }
 .sf-llm-toggle {
   border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
   background: var(--surface); color: var(--muted); cursor: pointer;

@@ -81,7 +81,9 @@ Both demos work without a model. Credentials alone do not enable live calls: exp
 Credentials may come from provider environment variables or pi CLI `auth.json` (`PI_AUTH_DIR` for the Docker mount).
 `PHI_SPACES_LLM_MODEL`/`PI_MODEL` select the initial model.
 
-The shared picker lists allowed Codestral/Haiku models through `GET /api/llm/models`.
+The shared picker lists the allowed models through `GET /api/llm/models`. A signed-in admin chooses them below the picker
+(every model with credentials, grouped by provider, with a filter); the choice is kept in the space as an `LlmAdmin` entry
+(`GET`/`POST /api/llm/allowed`, admin session and CSRF token); Default goes back to Codestral and the newest Haiku.
 Changes through `POST /api/llm/model`, including `{on:false}`, require an admin session and CSRF token.
 Budget: at most six provider calls/minute, two concurrent calls, 400 output tokens/call and 20 seconds/call.
 Budget exhaustion or provider failure uses deterministic fallback text. These are process-local limits, not a

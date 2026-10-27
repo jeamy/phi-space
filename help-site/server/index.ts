@@ -32,11 +32,11 @@ function loadDotEnvIfPresent(): void {
 }
 loadDotEnvIfPresent();
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { Meter, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, type ListenTarget } from "phi-spaces";
+import { FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, type ListenTarget } from "phi-spaces";
 import { WebAdminController } from "./admin/admin-controller.ts";
 import { SpaceChatHub, type StageId } from "./space-chat/stage-runner.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
-import { chatReplyGenerator, isLlmActive, listLlmModels, setLlmActive, setLlmModel, sharedLlm, swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
+import { adminLlmModels, chatReplyGenerator, isLlmActive, listLlmModels, restoreAllowedModels, setAllowedModels, setLlmActive, setLlmModel, sharedLlm, swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
 import { upgradeWebSocket } from "./ws.ts";
 import { UploadStore } from "./uploads.ts";
 
@@ -194,6 +194,10 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	// The swarm starts AFTER server.listen below: its workers would otherwise pin the
 	// event loop at ~100% CPU and starve nextApp.prepare() for minutes on boot.
 	let swarmReady: Promise<void> | null = null;
+	// the admin's choice of models lives in the space (an LlmAdmin entry), so it outlives a restart
+	const settings = new PhiSpaces(host, ctx);
+	const savedModels = (await settings.readAll({ type: "LlmAdmin", fields: { key: "models" } }, { limit: 1 }))[0];
+	if (savedModels) restoreAllowedModels((savedModels.fields.allowed as string[] | undefined) ?? null);
 	const llm = await sharedLlm();
 	if (llm) console.log(`[llm] live replies enabled via ${llm.label} (PHI_SPACES_LLM=0 disables)`);
 
@@ -285,6 +289,22 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 			// ---- 1c. Live LLM model selection (/api/llm/*) ----
 			if (pathname === "/api/llm/models" && method === "GET") {
 				return sendJson(res, 200, await listLlmModels());
+			}
+			// the models the admin allows (GET: every model with credentials and the choice; POST {allowed: labels | null})
+			if (pathname === "/api/llm/allowed") {
+				const session = admin.getSession(parseCookies(req.headers.cookie)["phi_spaces_admin_sid"]);
+				if (!session) return sendJson(res, 401, { error: "Admin login required" });
+				if (method === "POST") {
+					if (req.headers["x-csrf-token"] !== session.csrfToken) return sendJson(res, 403, { error: "Invalid CSRF token" });
+					const body = await readJsonBody(req);
+					if (body.allowed !== null && !(Array.isArray(body.allowed) && body.allowed.every((l: unknown) => typeof l === "string"))) return sendJson(res, 400, { error: "allowed: a list of model labels, or null for the default" });
+					const labels = body.allowed === null ? null : (body.allowed as string[]);
+					const unknown = await setAllowedModels(labels);
+					if (unknown.length) return sendJson(res, 400, { error: `Unknown models: ${unknown.slice(0, 5).join(", ")}` });
+					while (await settings.takeIfExists({ type: "LlmAdmin", fields: { key: "models" } }, NO_WAIT));
+					if (labels) await settings.write({ type: "LlmAdmin", fields: { key: "models", allowed: labels, ts: Date.now() } }, null, FOREVER);
+				} else if (method !== "GET") return sendJson(res, 405, { error: "GET or POST" });
+				return sendJson(res, 200, { ...(await adminLlmModels()), current: (await sharedLlm())?.label ?? null });
 			}
 			if (pathname === "/api/llm/model" && method === "POST") {
 				const session = admin.getSession(parseCookies(req.headers.cookie)["phi_spaces_admin_sid"]);

@@ -132,6 +132,8 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 		const unauthRes = await fetch(`${srv.url}/api/admin/overview`);
 		assert.equal(unauthRes.status, 401);
 		assert.equal((await fetch(`${srv.url}/api/llm/model`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on: true }) })).status, 401);
+		assert.equal((await fetch(`${srv.url}/api/llm/allowed`)).status, 401, "the allowed models are the admin's");
+		assert.equal((await fetch(`${srv.url}/api/llm/allowed`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ allowed: null }) })).status, 401);
 		assert.equal((await fetch(`${srv.url}/api/chat/sessions/demo-room/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "unknown" }) })).status, 400);
 
 		// Login to AdminSpaces
@@ -151,6 +153,12 @@ test("3. HTTP Server, Live Multiplayer Space-Chat API & Login-Protected AdminSpa
 		assert.ok(cookiePair.startsWith("phi_spaces_admin_sid="));
 		assert.ok(csrfToken.length >= 16);
 		assert.equal((await fetch(`${srv.url}/api/llm/model`, { method: "POST", headers: { "content-type": "application/json", cookie: cookiePair }, body: JSON.stringify({ on: true }) })).status, 403);
+		// the allowed models: readable for the admin (without credentials in the tests: nothing to choose), a change needs the CSRF token
+		const allowed = await (await fetch(`${srv.url}/api/llm/allowed`, { headers: { cookie: cookiePair } })).json();
+		assert.equal(allowed.enabled, false);
+		assert.equal((await fetch(`${srv.url}/api/llm/allowed`, { method: "POST", headers: { "content-type": "application/json", cookie: cookiePair }, body: JSON.stringify({ allowed: null }) })).status, 403);
+		assert.equal((await fetch(`${srv.url}/api/llm/allowed`, { method: "POST", headers: { "content-type": "application/json", cookie: cookiePair, "x-csrf-token": csrfToken }, body: JSON.stringify({ allowed: "all" }) })).status, 400);
+		assert.equal((await fetch(`${srv.url}/api/llm/allowed`, { method: "POST", headers: { "content-type": "application/json", cookie: cookiePair, "x-csrf-token": csrfToken }, body: JSON.stringify({ allowed: null }) })).status, 200);
 
 		// Missing CSRF token on POST is rejected with 403
 		const noCsrfRes = await fetch(`${srv.url}/api/admin/command`, {

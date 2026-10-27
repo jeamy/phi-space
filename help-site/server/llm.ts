@@ -34,7 +34,7 @@ export function isLlmActive(): boolean {
 	return llmActive;
 }
 
-/** Demo whitelist: the picker only offers these two – codestral-latest + the newest haiku. */
+/** The default choice: codestral-latest + the newest haiku (as in codemode-chat). */
 function demoWhitelist(avail: readonly any[]): any[] {
 	const codestral = avail.filter((m) => String(m.id).toLowerCase() === "codestral-latest");
 	const haikus = avail
@@ -43,7 +43,20 @@ function demoWhitelist(avail: readonly any[]): any[] {
 	return [...codestral, ...(haikus.length ? [haikus[0]] : [])];
 }
 
-/** List the two picker-selectable models plus the currently selected one. */
+const labelOf = (m: any) => `${m.provider}/${m.id}`;
+
+/** The admin's choice of models ("provider/id" labels); null: the default choice. Kept in the space by the server
+ *  (server/index.ts, an `LlmAdmin` entry) and set here when it starts and whenever the admin saves. */
+let allowedLabels: string[] | null = null;
+
+/** The models the picker may offer: the admin's choice among those with credentials, else the default choice. */
+function allowedOf(avail: readonly any[]): any[] {
+	if (!allowedLabels) return demoWhitelist(avail);
+	const set = new Set(allowedLabels);
+	return avail.filter((m) => set.has(labelOf(m)));
+}
+
+/** List the selectable models (the allowed ones) plus the currently selected one. */
 export async function listLlmModels(): Promise<{ enabled: boolean; on: boolean; current: string | null; models: LlmModelInfo[] }> {
 	const llm = await sharedLlm();
 	if (!llm) return { enabled: false, on: false, current: null, models: [] };
@@ -52,17 +65,50 @@ export async function listLlmModels(): Promise<{ enabled: boolean; on: boolean; 
 		enabled: true,
 		on: llmActive,
 		current: llm.label,
-		models: demoWhitelist(avail)
-			.map((m) => ({ id: String(m.id), provider: String(m.provider), label: `${m.provider}/${m.id}` }))
+		models: allowedOf(avail)
+			.map((m) => ({ id: String(m.id), provider: String(m.provider), label: labelOf(m) }))
 			.sort((a, b) => a.label.localeCompare(b.label)),
 	};
 }
 
-/** Switch the shared model at runtime – restricted to the whitelist (exact id, "provider/id", or substring). */
+export type AdminModel = { label: string; provider: string; id: string; name: string };
+/** For the admin: every model with credentials, the allowed ones, and whether that is the admin's own choice. */
+export async function adminLlmModels(): Promise<{ enabled: boolean; on: boolean; models: AdminModel[]; allowed: string[]; custom: boolean }> {
+	const llm = await sharedLlm();
+	if (!llm) return { enabled: false, on: false, models: [], allowed: [], custom: false };
+	const avail: readonly any[] = await llm.models.getAvailable();
+	return {
+		enabled: true,
+		on: llmActive,
+		models: avail.map((m) => ({ label: labelOf(m), provider: String(m.provider), id: String(m.id), name: String(m.name ?? "") })).sort((a, b) => a.label.localeCompare(b.label)),
+		allowed: allowedOf(avail).map(labelOf),
+		custom: allowedLabels !== null,
+	};
+}
+
+/** Sets the allowed models (null: back to the default choice). Labels without credentials are refused; the current model
+ *  moves to the first allowed one when it is no longer allowed. Returns the labels it refused. */
+export async function setAllowedModels(labels: string[] | null): Promise<string[]> {
+	const llm = await sharedLlm();
+	if (!llm) { allowedLabels = labels; return []; }
+	const avail: readonly any[] = await llm.models.getAvailable();
+	const known = new Set(avail.map(labelOf));
+	const unknown = (labels ?? []).filter((l) => !known.has(l));
+	if (unknown.length) return unknown;
+	allowedLabels = labels ? [...new Set(labels)] : null;
+	const allowed = allowedOf(avail);
+	if (allowed.length && !allowed.some((m) => labelOf(m) === llm.label)) { llm.model = allowed[0]; llm.label = labelOf(allowed[0]); }
+	return [];
+}
+
+/** At start: the choice the space kept (labels whose credentials are gone are dropped quietly). */
+export function restoreAllowedModels(labels: string[] | null): void { allowedLabels = labels; }
+
+/** Switch the shared model at runtime – restricted to the allowed models (exact id, "provider/id", or substring). */
 export async function setLlmModel(wanted: string): Promise<string | null> {
 	const llm = await sharedLlm();
 	if (!llm) return null;
-	const avail = demoWhitelist(await llm.models.getAvailable());
+	const avail = allowedOf(await llm.models.getAvailable());
 	const w = wanted.toLowerCase();
 	const full =
 		avail.find((m) => `${m.provider}/${m.id}`.toLowerCase() === w) ??
