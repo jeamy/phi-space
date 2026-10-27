@@ -31,7 +31,7 @@ export function burnText(f: FlameFields | null, worldMs: number): string {
 
 /** Puts a carried fuel item into a beacon next to the actor: the flame burns longer (or is lit), the actor's
  *  contribution grows. All in the command's transaction. */
-export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, beacon: BeaconFields): Promise<void> {
+export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, beacon: BeaconFields, o: { quiet?: boolean } = {}): Promise<{ until: number; now: number }> {
 	const fuel = c.world.fire.fuel[item.f.proto];
 	if (!fuel) throw new CommandError(`${item.f.name} brennt nicht.`);
 	const b = await c.space.take({ type: "Beacon", fields: { beaconId: beacon.beaconId } }, 5_000, { txn: c.txn });
@@ -47,8 +47,9 @@ export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, bea
 	const mine = await c.space.take({ type: "Contribution", fields: { beaconId: beacon.beaconId, charId: c.actor.charId } }, NO_WAIT, { txn: c.txn });
 	const had = mine ? fieldsOf<ContributionFields>(mine) : { beaconId: beacon.beaconId, charId: c.actor.charId, name: c.actor.name, pieces: 0, ms: 0 };
 	await c.space.write({ type: "Contribution", fields: { ...had, name: c.actor.name, pieces: had.pieces + 1, ms: had.ms + fuel } satisfies ContributionFields as never }, c.txn, FOREVER);
-	await msg(c, "*", "info", `$you() $conj(legst|legt) ${item.f.name} ins ${beacon.name}. Es ${burnText({ beaconId: beacon.beaconId, until, litAt: now }, now)}.`, { templ: true });
+	if (!o.quiet) await msg(c, "*", "info", `$you() $conj(legst|legt) ${item.f.name} ins ${beacon.name}. Es ${burnText({ beaconId: beacon.beaconId, until, litAt: now }, now)}.`, { templ: true });
 	if (!left) await say(c.space, c.msgLeaseMs, beacon.covers, "world", `Das ${beacon.name} flammt auf.`, c.txn);
+	return { until, now };
 }
 
 /** A message from the world itself to everyone in `rooms`. */

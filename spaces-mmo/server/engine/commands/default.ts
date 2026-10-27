@@ -4,7 +4,7 @@
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
-import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, type CommandCtx } from "../context.ts";
+import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { cellKey, claimSpot, freeCellNear, occupiedIn, solidIn } from "../occupancy.ts";
@@ -330,18 +330,45 @@ export function helpCommand(commands: () => Command[]): Command {
 
 const put: Command = {
 	key: "put", aliases: ["nachlegen", "wirf", "feed"],
-	help: "put <ding> in <feuer> – Brennholz in ein Leuchtfeuer neben dir legen (auch: lege holz ins feuer)",
+	help: "put [anzahl|alle] <ding> in <feuer> – Brennholz in ein Leuchtfeuer neben dir legen (auch: lege 3 hölzer ins feuer)",
 	async func(c, arg) {
 		const m = /^(.+?)\s+(?:in|ins|into)\s+(.+)$/i.exec(arg);
-		const what = m ? m[1]! : arg, where = m ? m[2]! : "feuer";
-		const item = byName(await inventory(c), what)[0];
-		if (!item) throw new CommandError(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
+		const where = m ? m[2]! : "feuer";
+		// how many: "5 holz", "drei scheite", "alle hölzer"; a plural without a number ("hölzer") means all of it
+		const counted = countOf(m ? m[1]! : arg);
+		const what = counted.what;
+		const found = byName(await inventory(c), what);
+		if (!found.length) throw new CommandError(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
 		const beacon = byName(await beaconsIn(c, c.actor.room), where, c.actor)[0];
 		if (!beacon) throw new CommandError(`Hier ist kein ${where.slice(0, 30)}.`);
 		if (reach(beacon.f, c.actor) > 1) throw new CommandError(`Das ${beacon.f.name} ist zu weit weg; geh näher heran.`);
-		await feed(c, item, beacon.f);
+		const plural = counted.count === null && !found.some((i) => [i.f.name, ...i.f.aliases].some((n) => n.toLowerCase() === what.toLowerCase())) && stem(what) !== what.toLowerCase();
+		const want = counted.count ?? (plural ? Infinity : 1);
+		if (want === 1) { await feed(c, found[0]!, beacon.f); return; }
+		// several: every one that burns, as many as asked for (or as there are), told in one line
+		const fuel = found.filter((i) => c.world.fire.fuel[i.f.proto]);
+		if (!fuel.length) throw new CommandError(`${found[0]!.f.name} brennt nicht.`);
+		const pieces = fuel.slice(0, want);
+		let last = { until: 0, now: 0 };
+		for (const i of pieces) last = await feed(c, i, beacon.f, { quiet: true });
+		const names = [...new Set(pieces.map((i) => i.f.name))].join(", ");
+		const short = Number.isFinite(want) && pieces.length < want ? ` (mehr hast du nicht dabei)` : "";
+		await msg(c, "*", "info", `$you() $conj(legst|legt) ${pieces.length} ${names} ins ${beacon.f.name}${short}. Es ${burnText({ beaconId: beacon.f.beaconId, until: last.until, litAt: last.now }, last.now)}.`, { templ: true });
 	},
 };
+
+const NUMBERS: Record<string, number> = { ein: 1, eine: 1, einen: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, fuenf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10, one: 1, two: 2, three: 3, four: 4, five: 5 };
+/** "5 holz" → 5 and "holz", "drei scheite" → 3, "alle hölzer" → all; without a number: null and the words as they are. */
+function countOf(words: string): { count: number | null; what: string } {
+	const m = /^(\d+|alle|alles|all|[a-zäöü]+)\s+(.+)$/i.exec(words.trim());
+	if (!m) return { count: null, what: words.trim() };
+	const w = m[1]!.toLowerCase();
+	const what = m[2]!.trim().replace(/^(?:stück|stücke|stueck|stuecke|pieces? of)\s+/i, ""); // "drei stück holz"
+	if (/^\d+$/.test(w)) return { count: Math.max(1, Math.min(50, Number(w))), what };
+	if (w === "alle" || w === "alles" || w === "all") return { count: Infinity, what };
+	if (Object.hasOwn(NUMBERS, w)) return { count: NUMBERS[w]!, what };
+	return { count: null, what: words.trim() };
+}
 
 const channel: Command = {
 	key: "channel", aliases: ["kanal", "chan"],

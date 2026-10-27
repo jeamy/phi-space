@@ -166,3 +166,23 @@ test("pages learn the build: /api/me and every hello name it, and NPC names cann
 		await p.leave();
 	} finally { await srv.close(); }
 });
+
+test("feeding several at once: \"lege 5 hölzer ins feuer\" puts in what one carries, up to five, in one line", async () => {
+	const { loadWorld } = await import("../server/engine/world.ts");
+	const { resolvePrototype, spawn } = await import("../server/engine/prototypes.ts");
+	const srv = await startServer();
+	try {
+		const space = srv.stack.space, w = await loadWorld();
+		const a = await player(srv.url, "Heizer");
+		const wood = (await resolvePrototype(space, "treibholz"))!;
+		for (let i = 0; i < 3; i++) await spawn(space, null, w, wood, { location: a.me, x: -1, y: -1 });
+		await walk(a.p, space, a.me, 10, 10);
+		const said = await does(a.p, "lege 5 hölzer ins feuer", "ins Leuchtfeuer");
+		assert.match(said, /^Du legst 3 Treibholz ins Leuchtfeuer \(mehr hast du nicht dabei\)\. Es brennt noch etwa 30 Minuten\.$/);
+		assert.equal((await space.readAll({ type: "Item", fields: { location: a.me } })).length, 0, "all three went in");
+		for (let i = 0; i < 3; i++) await spawn(space, null, w, wood, { location: a.me, x: -1, y: -1 });
+		assert.match(await does(a.p, "put zwei treibholz in feuer", "ins Leuchtfeuer"), /^Du legst 2 Treibholz ins Leuchtfeuer\. Es brennt noch etwa 50 Minuten\.$/);
+		assert.match(await does(a.p, "lege holz ins feur", "ins Leuchtfeuer"), /^Du legst Treibholz ins Leuchtfeuer\. Es brennt noch etwa 60 Minuten\.$/, "one, and a typo in the fire");
+		await a.p.leave();
+	} finally { await srv.close(); }
+});

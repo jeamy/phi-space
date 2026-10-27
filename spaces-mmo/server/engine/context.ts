@@ -76,15 +76,24 @@ export function typos(a: string, b: string, max: number): number {
 /** How many typos a word of this length may have and still mean a name: none below four letters, one, two from eight. */
 const tolerance = (n: string) => (n.length < 4 ? 0 : n.length < 8 ? 1 : 2);
 
-/** Things named `name` (name or alias, case-insensitive; exact matches first, then prefixes, then names with a typo or
- *  two: "feur" is the fire), nearest first. */
+/** A word without its German plural or case ending and with plain vowels: "hölzer" → "holz", "muscheln" → "muschel",
+ *  "münzen" → "munz", "münze" → "munz" (both sides of a comparison are stemmed alike). */
+export function stem(word: string): string {
+	let w = word.toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");
+	for (const end of ["ern", "er", "en", "e", "n", "s"]) if (w.length - end.length >= 3 && w.endsWith(end)) { w = w.slice(0, -end.length); break; }
+	return w;
+}
+
+/** Things named `name` (name or alias, case-insensitive; exact matches first, then prefixes, then the same word in
+ *  another form ("hölzer" is the "holz"), then names with a typo or two: "feur" is the fire), nearest first. */
 export function byName<T extends { name: string; aliases: string[] }>(list: Array<{ e: Taken; f: T }>, name: string, near?: { x: number; y: number }): Array<{ e: Taken; f: T }> {
 	const n = name.trim().toLowerCase();
 	if (!n) return [];
 	const names = (f: T) => [f.name, ...f.aliases].map((s) => s.toLowerCase());
 	const exact = list.filter((i) => names(i.f).includes(n));
 	const prefix = exact.length ? exact : list.filter((i) => names(i.f).some((s) => s.startsWith(n)));
-	const hits = prefix.length || !tolerance(n) ? prefix : list.filter((i) => names(i.f).some((s) => typos(n, s, tolerance(n)) <= tolerance(n)));
+	const forms = prefix.length ? prefix : list.filter((i) => names(i.f).some((s) => stem(s) === stem(n)));
+	const hits = forms.length || !tolerance(n) ? forms : list.filter((i) => names(i.f).some((s) => typos(n, s, tolerance(n)) <= tolerance(n)));
 	const d = (f: T) => (near && "x" in f ? Math.max(Math.abs((f as unknown as { x: number }).x - near.x), Math.abs((f as unknown as { y: number }).y - near.y)) : 0);
 	return hits.sort((a, b) => d(a.f) - d(b.f));
 }

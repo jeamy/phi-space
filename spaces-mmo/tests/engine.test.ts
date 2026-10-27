@@ -82,3 +82,14 @@ test("names with a typo still mean the thing: one from four letters, two from ei
 	assert.deepEqual(one("faden"), [], "more than one letter off in a short word is another word");
 	assert.equal(typos("ost", "ots", 1), 1);
 });
+
+test("plural and umlauts: \"hölzer\" is the wood, \"muscheln\" the shell, \"münzen\" the coin", async () => {
+	const { byName, stem } = await import("../server/engine/context.ts");
+	const t = (name: string, aliases: string[] = []) => ({ e: {} as never, f: { name, aliases } });
+	const things = [t("Treibholz", ["holz"]), t("Muschel"), t("Münze")];
+	const one = (n: string) => byName(things, n).map((x) => x.f.name);
+	assert.deepEqual(one("hölzer"), ["Treibholz"]);
+	assert.deepEqual(one("muscheln"), ["Muschel"]);
+	assert.deepEqual(one("münzen"), ["Münze"]);
+	assert.equal(stem("Hölzer"), stem("holz"));
+});
