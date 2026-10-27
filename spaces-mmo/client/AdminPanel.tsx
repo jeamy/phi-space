@@ -59,6 +59,11 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
 	if (!state) return <div className="panel admin"><h2>Admin</h2><p className="muted">{msg || "Lädt …"}</p></div>;
 	const changed = state.fields.filter((f) => draft[f.key] !== String(f.value));
 	const models = state.models, chosen = [...allowed].sort();
+	// the select offers the allowed models grouped by provider, as the help site's picker does
+	const usedGroups = [...chosen.reduce((g, l) => {
+		const m = models.available.find((a) => a.label === l) ?? { label: l, provider: l.split("/")[0] ?? "", id: l.split("/").slice(1).join("/") || l, name: "" };
+		return g.set(m.provider, [...(g.get(m.provider) ?? []), m]);
+	}, new Map<string, Model[]>())];
 	return (
 		<div className="panel admin">
 			<div className="admin-head"><h2>Admin · Einstellungen</h2><button className="help-x" onClick={onClose} aria-label="Schließen">×</button></div>
@@ -89,7 +94,11 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
 					</div>
 					<label className="admin-field"><span>Verwendet wird</span>
 						<select value={model && allowed.has(model) ? model : chosen[0] ?? ""} onChange={(e) => setModel(e.target.value)} disabled={!chosen.length}>
-							{chosen.map((l) => <option key={l} value={l}>{l}</option>)}
+							{usedGroups.map(([provider, ms]) => (
+								<optgroup key={provider} label={provider}>
+									{ms.map((m) => <option key={m.label} value={m.label}>{m.id}</option>)}
+								</optgroup>
+							))}
 						</select>
 					</label>
 					<div className="admin-row">
