@@ -1,9 +1,10 @@
 # Docker Compose for spaces-mmo: one container per role, all from the one `production` image, talking only through the
 # space over TCP (docs/architektur.md), laid out like codemode-chat/docker/docker-compose.yml.
 #
-#   profile nano:  space (the world and accounts stores in a volume) and a world worker — the host that keeps the state
-#   profile big:   web, a world worker, the npc process and the model process (translations) — the host that does most
-#                  of the work; npc and model are the only roles with model credentials (the host's pi CLI login)
+#   profile nano:  space (the world and accounts stores in a volume) and the world worker that runs every command — the
+#                  host that keeps the state; a command's calls to the space stay on this host
+#   profile big:   web, a world worker for the world's dates only, the npc process and the model process (translations);
+#                  npc and model are the only roles with model credentials (the host's pi CLI login)
 #   both at once:  the big/nano pair on one machine (local test bed): the same TCP connections as between two hosts,
 #                  NANO_CPUS caps nano's CPUs like the smaller machine
 #   profile dev:   all roles in one container with the checkout mounted, recompiled and restarted on every change
@@ -48,7 +49,7 @@ x-big: &big
       required: false
 
 services:
-  # ---- nano: the spaces and a world worker ----
+  # ---- nano: the spaces and the world worker that runs the commands ----
   space:
     <<: *role
     profiles: [nano]
@@ -84,7 +85,7 @@ services:
       space:
         condition: service_healthy
 
-  # ---- big: web, a world worker, the npc process ----
+  # ---- big: web, a world worker for the dates, the npc process ----
   web:
     <<: *big
     profiles: [big]
@@ -107,6 +108,8 @@ services:
       start_period: 20s
       retries: 3
 
+  # the world's dates (fire, fog, tide, market) and sweeps; no commands: a command makes about a dozen calls to the space
+  # one after another, which over the link to nano cost seconds per step (docs/betrieb.md, "Last und Latenz")
   world-big:
     <<: *big
     profiles: [big]
@@ -114,6 +117,7 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
+      SPACES_MMO_WORLD_INTENTS: "0"
 
   npc:
     <<: *big

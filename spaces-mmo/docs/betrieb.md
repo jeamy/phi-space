@@ -8,13 +8,15 @@ Rolle, alle sprechen nur über den Space und TCP. Dateien: `spaces-mmo/docker/Do
 
 | Profil | Container | Wo |
 | --- | --- | --- |
-| `nano` | `space` (Welt- und Kontenspeicher als SQLite im Volume `mmo-space-data`), `world-nano` | der Rechner, der den Zustand hält |
-| `big` | `web`, `world-big`, `npc`, `model` (übersetzt freie Sätze in Befehle) | der Rechner, der die Arbeit macht |
+| `nano` | `space` (Welt- und Kontenspeicher als SQLite im Volume `mmo-space-data`), `world-nano` (führt alle Befehle aus) | der Rechner, der den Zustand hält |
+| `big` | `web`, `world-big` (nur Termine der Welt und Aufräumen, `SPACES_MMO_WORLD_INTENTS=0`), `npc`, `model` (übersetzt freie Sätze in Befehle) | der Rechner, der die Arbeit macht |
 | `dev` | `mmo-dev` (alle Rollen in einem Container, Quelltext eingebunden) | lokal |
 | `test` | `mmo-test` (die Testsuite) | überall |
 | nano + big | beides auf einer Maschine | lokaler Testaufbau |
 
-`world` lässt sich mehrfach starten (je Rechner ein Arbeiter); `npc` und `model` laufen einmal, auf big.
+`world` lässt sich mehrfach starten; Befehle führt aber nur der Arbeiter neben dem Space aus (`world-nano`), weil ein
+Befehl rund ein Dutzend Aufrufe nacheinander an den Space macht (siehe [Last und Latenz](#last-und-latenz)). `npc` und
+`model` laufen einmal, auf big.
 
 **Modellzugang:** Wie codemode-chat und das Help-System lesen `npc` und `model` die Anmeldung der pi-CLI des Hosts:
 `${PI_AUTH_DIR:-$HOME/.pi/agent}` wird schreibgeschützt nach `/home/node/.pi/agent` eingebunden (alternativ API-Schlüssel
@@ -117,14 +119,63 @@ neuen Anfragen mehr annimmt. Mit nur zehn Minuten gehaltener Ergebnisse säßen 
 Claims im Space, und der Sweep jedes Commits läse sie wieder (gemessen: 53 % der CPU des Space-Prozesses in der
 Datenbankabfrage `due`). Beide Werte sind deshalb gleich; das Help-System setzt sie ebenfalls gleich.
 
-## Last des Space-Prozesses
+## Last und Latenz
 
-Jeder Aufruf (auch ein Lesen) ist eine Transaktion mit Claim; der Space-Prozess ist ein einzelner Thread. Die meisten Aufrufe
-machen die NPC-Skripte (jede Runde mehrere Lesezugriffe): mit allen NPCs sind es rund 30 Aufrufe je Sekunde, und die
-Antwort auf einen Schritt kann dann Sekunden dauern. Deshalb: Händler und Arbeiter schauen alle 8 s (statt 5 s), ein
-Wanderer in Abwesenheit alle 10 s, und das Warten auf einen Befehl (`act`) fragt mit wachsendem Abstand (50, 100, 200,
-250 ms) statt alle 50 ms. Ines und wache Wanderer bleiben bei 3 s, weil Spieler auf sie warten. Im Dev-Container lassen sich
-NPCs auswählen: `SPACES_MMO_DEV_NPCS=ines,bo npm --prefix spaces-mmo run docker:dev:up`.
+Gemessen wird mit `tests/perf/load.test.ts` (`npm run test:perf`): der Space auf SQLite, alle NPC-Rollen, mehrere Spieler,
+die im Takt der Seite laufen (ein Schritt je 150 ms, höchstens acht der Antwort voraus), und ein Proxy, der die Verbindung
+zwischen big und nano verzögert (`LOAD_PLAYERS`, `LOAD_SECONDS`, `LOAD_DELAY_MS` je Richtung, `LOAD_WORLDS=near|far|both`
+für den Ort der Welt-Worker). Gemessen wird die Zeit vom Schritt bis zu seiner Bestätigung an der eigenen Figur.
+
+Stand 2026-10-27, auf dem Entwicklungsrechner (Docker, alle Spieler im selben Raum):
+
+| Fall | vorher | nachher |
+| --- | --- | --- |
+| 5 Spieler, keine NPCs | Median 65 ms, p99 110 ms | Median 21 ms, p99 52 ms (3 Spieler) |
+| 10 Spieler, alle NPCs | 0,3 Schritte/s beantwortet, Median 5–10 s | Median 19 ms, p99 206 ms |
+| 20 Spieler, alle NPCs, Ping 10 ms | – | Median 38 ms, p99 112 ms |
+| 20 Spieler, alle NPCs, Ping 20 ms | – | Median 55 ms, p99 119 ms |
+| 20 Spieler, Ping 20 ms, Welt-Worker auf big | – | Median 3,2 s |
+| 30 Spieler, alle NPCs | – | gesättigt bei rund 135 Schritten/s (Median 1,8 s) |
+
+Was es langsam machte, und was sich geändert hat:
+
+- **Verlorene Raum-Tokens.** Ein Schritt gegen eine besetzte Kachel wurde abgelehnt, aber trotzdem bestätigt; das Token des
+  Raums blieb dabei genommen und ging mit dem Commit verloren. Jede weitere Bewegung im Raum wartete dann 5 s darauf. Die
+  Belegung läuft jetzt über `Spot`-Entries mit `unique` ([evennia-abbildung.md](evennia-abbildung.md#kollision)), ohne
+  Sperre je Raum.
+- **Abfragen alle 50 ms.** Der Space-Dienst sah bei wartenden Aufrufen (blockierendes Lesen, `changes`) nur alle 50 ms nach;
+  das kostete jeden Schritt zweimal bis zu 50 ms. Er wird jetzt beim Commit geweckt (`src/service.ts`, `commitSignal`).
+- **Ein Befehl nach dem anderen.** Der Welt-Worker bedient jetzt bis zu `SPACES_MMO_WORLD_LANES` (16) Figuren zugleich, jede
+  der Reihe nach, und nimmt die Figuren in der Reihenfolge ihres ältesten Befehls dran: Wer viel tippt, hält eine Spur.
+- **Lesen mit Commit.** `readIfExists(…, NO_WAIT)` ist ein Aufruf mit Claim, den der Space committet; Prüfungen ohne Warten
+  lesen jetzt als Schnappschuss (`peek`, `readAll`). Ein Schritt liest weder Konto noch Befehlssätze noch (für die Räume der
+  Welt) den Raum.
+- **Die Änderungshistorie.** Der Space kopierte und durchlief bei jedem Commit die ganze Historie des Änderungsstroms (4 MiB,
+  tausende Stapel). Der Kern durchläuft sie nicht mehr (`src/store/draft.ts`), und spaces-mmo hält 512 KiB
+  (`SPACES_MMO_LOG_BYTES`): bei voller Last einige Sekunden; ein Web-Prozess, der weiter zurückfällt, liest die Welt neu
+  (`[gateway] change stream: …; reading the world again`).
+- **Grenzen des Dienstes.** Alle Prozesse sind gegenüber dem Space ein Teilnehmer; dessen Grenzen (1024 Aufrufe je Sekunde,
+  128 wartende Aufrufe, 32 Aufrufe je Verbindung) sind für das ganze Spiel bemessen worden.
+
+**Wo die Welt-Worker laufen:** Ein Befehl macht rund ein Dutzend Aufrufe nacheinander an den Space. Neben dem Space (nano)
+kostet das Millisekunden, über die Verbindung zwischen den Rechnern ein Vielfaches des Pings je Aufruf. Deshalb führt
+`world-nano` alle Befehle aus; `world-big` läuft mit `SPACES_MMO_WORLD_INTENTS=0` und bedient nur die Termine der Welt und
+das Aufräumen.
+
+**Grenze:** Der Space-Prozess ist ein Thread. Bei rund 135 Schritten je Sekunde (etwa 20 Spieler, die ohne Pause laufen) ist
+er auf dem Entwicklungsrechner voll; darüber staut es sich. Weitere Schritte wären im Kern: ein Index der Entries nach Typ
+(jedes `readAll` durchläuft heute alle Entries) und mehrere Operationen in einem Aufruf.
+
+**Gegen Fluten:** Das Gateway begrenzt je Konto (über alle offenen Seiten zusammen) Schritte auf 8 auf einmal und 10 je
+Sekunde und getippte Befehle auf `SPACES_MMO_CMD_BURST` (20) auf einmal und `SPACES_MMO_CMD_PER_SEC` (5) je Sekunde; ein
+Konto hat höchstens vier Seiten offen, eine fünfte schließt die älteste.
+
+**Diagnose:** `SPACES_MMO_TRACE=1` (Aufrufe je Prozess und Methode alle 10 s), `SPACES_MMO_SLOW_MS=200` (der Welt-Worker
+meldet jeden Befehl, der später als das nach dem Tippen beantwortet wurde, mit seiner eigenen Laufzeit).
+
+Die NPC-Skripte schauen in eigenem Takt: Händler und Arbeiter alle 8 s, ein Wanderer in Abwesenheit alle 10 s, Ines und wache
+Wanderer alle 3 s. Im Dev-Container lassen sich NPCs auswählen: `SPACES_MMO_DEV_NPCS=ines,bo npm --prefix spaces-mmo run
+docker:dev:up`.
 
 ## Nicht enthalten
 

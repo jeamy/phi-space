@@ -5,7 +5,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
-import { readExisting, StillHeld } from "../../space.ts";
+import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, msg, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
@@ -101,7 +101,7 @@ const accept: Command = {
 		if (!theirs || fieldsOf<AccountFields>(theirs).guest) throw new CommandError("Mit Gästen kann man nicht tauschen.");
 		// their side: exactly the items offered, still in their pack
 		for (const id of o.f.give) {
-			const e = await c.space.readIfExists({ type: "Item", fields: { itemId: id, location: o.f.from } }, NO_WAIT);
+			const e = await peek(c.space, { type: "Item", fields: { itemId: id, location: o.f.from } });
 			if (!e) throw new CommandError(`Das Angebot gilt nicht mehr: ${o.f.fromName} hat nicht mehr alles.`);
 			await move(c, fieldsOf<ItemFields>(e), o.f.from, c.actor.charId);
 		}
@@ -163,7 +163,7 @@ const market: Command = {
 			const coins = byProto(await inventory(c), coin, l.f.price);
 			if (!coins) throw new CommandError(`Dafür brauchst du ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
 			for (const m of coins) await move(c, m.f, c.actor.charId, l.f.seller);
-			const item = await c.space.readIfExists({ type: "Item", fields: { itemId: l.f.itemId, location: "market" } }, NO_WAIT);
+			const item = await peek(c.space, { type: "Item", fields: { itemId: l.f.itemId, location: "market" } });
 			if (!item) throw new CommandError("Die Ware ist nicht mehr am Brett.");
 			await move(c, fieldsOf<ItemFields>(item), "market", c.actor.charId);
 			await msg(c, l.f.seller, "info", `${c.actor.name} kauft dein ${l.f.itemName} für ${l.f.price} Münze${l.f.price === 1 ? "" : "n"}.`);
@@ -173,7 +173,7 @@ const market: Command = {
 			const l = nr(rest[0]);
 			if (l.f.seller !== c.actor.charId) throw new CommandError("Das ist nicht dein Angebot.");
 			if (!(await c.space.take({ type: "Listing", id: l.e.id }, NO_WAIT, { txn: c.txn }))) throw new CommandError("Zu spät – jemand kauft es gerade.");
-			const item = await c.space.readIfExists({ type: "Item", fields: { itemId: l.f.itemId, location: "market" } }, NO_WAIT);
+			const item = await peek(c.space, { type: "Item", fields: { itemId: l.f.itemId, location: "market" } });
 			if (item) await move(c, fieldsOf<ItemFields>(item), "market", c.actor.charId);
 			return msg(c, c.actor.charId, "info", `Du holst ${l.f.itemName} vom Marktbrett zurück.`);
 		}

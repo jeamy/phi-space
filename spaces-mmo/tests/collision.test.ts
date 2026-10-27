@@ -1,8 +1,8 @@
-// Two characters never stand on one cell (engine/occupancy.ts): every position change happens under the room's token,
-// so even two world workers moving several players onto one cell at once let exactly one arrive.
+// Two characters never stand on one cell (engine/occupancy.ts): every position change writes the cell's Spot with the
+// space's unique check, so even two world workers moving several players onto one cell at once let exactly one arrive.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { eventually, Player, startServer } from "./stack.ts";
+import { eventually, Player, startServer, startStack } from "./stack.ts";
 import { WALK_MS } from "../client/walk.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import type { SpaceLike } from "phi-spaces";
@@ -138,4 +138,26 @@ test("standing still sends no positions: a renewed session is no move (the page 
 		assert.equal(own.length, 0, JSON.stringify(own));
 		await a.p.leave();
 	} finally { await srv.close(); }
+});
+
+test("a flood of typed commands is cut after the account's burst, across all its pages; a fifth page closes the oldest", async () => {
+	const stack = await startStack();
+	try {
+		const web = await stack.webProcess({ SPACES_MMO_CMD_BURST: "5", SPACES_MMO_CMD_PER_SEC: "1", SPACES_MMO_REQ_PER_MIN: "100000" });
+		const a = await player(web.url, "Flut");
+		const second = new Player(web.url); second.cookie = a.p.cookie; await second.play(); // the same account in a second page
+		const from = a.p.frames.length;
+		for (let i = 1; i <= 6; i++) a.p.send(`say a${i}`);
+		for (let i = 1; i <= 6; i++) second.send(`say b${i}`);
+		await a.p.until((f) => f.t === "msg" && f.m.kind === "error" && /Zu viele Befehle/.test(f.m.text), 10_000, from);
+		await new Promise((r) => setTimeout(r, 1_500));
+		const said = a.p.frames.slice(from).filter((f) => f.t === "msg" && f.m.kind === "say").length;
+		assert.ok(said >= 5 && said <= 7, `the burst of five (and what refilled meanwhile), not twelve: ${said}`);
+		// a third, fourth and fifth page: the account keeps four, the oldest (a) is closed
+		const more = [new Player(web.url), new Player(web.url), new Player(web.url)];
+		for (const p of more) { p.cookie = a.p.cookie; await p.play(); }
+		await eventually(async () => a.p.ws?.readyState === WebSocket.CLOSED, 5_000, "the oldest page closed");
+		assert.equal(second.ws?.readyState, WebSocket.OPEN);
+		for (const p of [second, ...more]) await p.leave();
+	} finally { await stack.close(); }
 });

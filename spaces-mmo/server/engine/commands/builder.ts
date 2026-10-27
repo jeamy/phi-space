@@ -3,13 +3,14 @@
 // stored; a string that does not parse is refused with the reason.
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, roomToken, type AccountFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
+import { fieldsOf, type AccountFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, exitsHere, inventory, itemsHere, msg, roomOf, type CommandCtx } from "../context.ts";
 import { LEVELS, LockError, parseLocks } from "../locks.ts";
 import { DEFAULT_ITEM_LOCKS, newItemId, resolvePrototype, spawn as spawnItem } from "../prototypes.ts";
 import { draftOf, typeChain } from "../typeclasses.ts";
 import { walkable } from "../world.ts";
+import { peek } from "../../space.ts";
 
 const BUILDER = "cmd:perm(Builder)";
 const ADMIN = "cmd:perm(Admin)";
@@ -21,7 +22,7 @@ type Target = { kind: "item" | "exit" | "room"; e: Taken; id: string; name: stri
 async function target(c: CommandCtx, name: string): Promise<Target> {
 	const n = name.trim();
 	if (["hier", "here"].includes(n.toLowerCase())) {
-		const e = await c.space.readIfExists({ type: "Room", fields: { roomId: c.actor.room } }, NO_WAIT);
+		const e = await peek(c.space, { type: "Room", fields: { roomId: c.actor.room } });
 		if (!e) throw new CommandError("Dieser Ort ist verschwunden.");
 		return { kind: "room", e, id: c.actor.room, name: String(e.fields.name) };
 	}
@@ -74,7 +75,6 @@ const dig: Command = {
 		if (exitsHereNow.some((x) => x.x === c.actor.x && x.y === c.actor.y)) throw new CommandError("Hier ist schon ein Ausgang; stell dich auf eine andere Stelle.");
 		const roomId = `r-${randomBytes(5).toString("hex")}`, d = c.world.dig;
 		await c.space.write(draftOf("Room", c.world.typeclasses, { roomId, name: a[0], desc: d.desc, ground: d.ground, spawn: d.spawn } satisfies RoomFields), c.txn, FOREVER);
-		await c.space.write(roomToken(roomId), c.txn, FOREVER);
 		const backExit = back ? [{ x: d.spawn.x, y: d.spawn.y }] : [];
 		await writeExit(c, { exitId: `x-${randomBytes(5).toString("hex")}`, name: ways, aliases: [], desc: `Nach ${a[0]}.`, location: here.roomId, destination: roomId, x: c.actor.x, y: c.actor.y, arrive: arrivalNear(c, d.ground, d.spawn, backExit), locks: "" });
 		if (back) await writeExit(c, { exitId: `x-${randomBytes(5).toString("hex")}`, name: back, aliases: [], desc: `Zurück nach ${here.name}.`, location: roomId, destination: here.roomId, x: d.spawn.x, y: d.spawn.y, arrive: arrivalNear(c, here.ground, c.actor, [...exitsHereNow, { x: c.actor.x, y: c.actor.y }]), locks: "" });
@@ -177,7 +177,7 @@ const tag: Command = {
 		const fields: TagFields = { target: t.id, key, category };
 		if (remove) {
 			if (!(await c.space.take({ type: "Tag", fields: fields as never }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${t.name} hat das Tag ${key}:${category} nicht.`);
-		} else if (!(await c.space.readIfExists({ type: "Tag", fields: fields as never }, NO_WAIT))) await c.space.write({ type: "Tag", fields: fields as never }, c.txn, FOREVER);
+		} else if (!(await peek(c.space, { type: "Tag", fields: fields as never }))) await c.space.write({ type: "Tag", fields: fields as never }, c.txn, FOREVER);
 		await msg(c, c.actor.charId, "info", `${t.name}: Tag ${key}:${category} ${remove ? "abgenommen" : "angeheftet"}.`);
 	},
 };

@@ -50,6 +50,12 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
   Eine persistierte Uhr mit Weltstunde und pausierbaren fachlichen Terminen ist separat in
   [weltzeit.md](weltzeit.md) entworfen und noch nicht implementiert.
 - Ziel für Phase 3: Befehl bis Anzeige < 150 ms im LAN, < 400 ms über das Netz.
+- Der Weg eines Schritts (seit 2026-10-27, Messwerte in [betrieb.md](betrieb.md#last-und-latenz)): Das Gateway schreibt den
+  `Intent` (ein Aufruf). Der Welt-Worker bedient bis zu `SPACES_MMO_WORLD_LANES` Figuren gleichzeitig, jede Figur der Reihe
+  nach (ihr `ActorToken`), und nimmt jede wartende Figur in der Reihenfolge ihres ältesten Befehls dran. Ein Schritt liest
+  Figur, Ausgänge und die eigene Kachel als Schnappschuss (`readAll`, ohne Commit), schreibt den neuen `Spot` mit der
+  `unique`-Prüfung und die Figur und committet: kein Sperren eines Raums, kein Konto, keine Befehlssätze. Das Gateway
+  folgt dem Änderungsstrom, den der Space beim Commit weckt (vorher sah der Dienst alle 50 ms nach).
 
 ## Skalierung
 

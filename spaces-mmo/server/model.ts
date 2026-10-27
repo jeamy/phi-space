@@ -88,9 +88,9 @@ export const NAMES_LOCK = { type: "Lock", fields: { name: "names" } } as const;
  *  character's oldest intent and writes it back on commit, so one character's commands run one after another, in
  *  order, while other characters' commands run in parallel on other workers. */
 export const actorToken = (charId: string) => ({ type: "ActorToken", fields: { charId } });
-/** World space: one token per room. Whoever moves in a room or arrives in it takes it (in the command's transaction),
- *  so checking that a cell is free and stepping onto it is one step: two characters never stand on one cell. */
-export const roomToken = (room: string) => ({ type: "RoomToken", fields: { room } });
+/** World space: the cell a character stands on while it is online (engine/occupancy.ts). Written with the space's
+ *  `unique` check on room and cell, so two characters never hold one cell, without a lock on the room. */
+export type SpotFields = { room: string; x: number; y: number; charId: string; name: string };
 /** World space: the lock a world worker takes while it loads the world definition, so two loading at once cannot
  *  both spawn the placed items. */
 export const WORLD_LOCK = { type: "Lock", fields: { name: "world" } } as const;

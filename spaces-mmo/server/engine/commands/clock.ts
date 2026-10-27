@@ -6,11 +6,12 @@ import type { Command } from "../cmdsets.ts";
 import { CommandError, msg, type CommandCtx } from "../context.ts";
 import { fieldsOf, type WorldClockFields } from "../../model.ts";
 import { calendar, formatWorldTime, MAX_RATE, MIN_RATE, paused, resumed, withRate, worldNow } from "../worldtime.ts";
+import { peek } from "../../space.ts";
 
 const ADMIN = "cmd:perm(Admin)";
 
 async function readClock(c: CommandCtx) {
-	const e = await c.space.readIfExists({ type: "WorldClock", fields: { worldId: c.world.id } }, NO_WAIT, { txn: c.txn });
+	const e = await peek(c.space, { type: "WorldClock", fields: { worldId: c.world.id } }, { txn: c.txn });
 	if (!e) throw new CommandError("Diese Welt hat noch keine Uhr.");
 	return { e, clock: fieldsOf<WorldClockFields>(e) };
 }

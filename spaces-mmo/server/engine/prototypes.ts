@@ -6,6 +6,7 @@ import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type ItemFields, type PrototypeFields } from "../model.ts";
 import { draftOf } from "./typeclasses.ts";
 import type { WorldDef } from "./world.ts";
+import { peek } from "../space.ts";
 
 /** The engine's default locks of an item: anyone may pick it up and drop it, only registered players give it away. */
 export const DEFAULT_ITEM_LOCKS = "get:all();drop:all();give:not guest()";
@@ -20,7 +21,7 @@ export async function resolvePrototype(space: SpaceLike, key: string): Promise<P
 	const chain: PrototypeFields[] = [];
 	for (let k: string | null = key; k; ) {
 		if (chain.some((p) => p.key === k) || chain.length >= MAX_DEPTH) return null;
-		const e = await space.readIfExists({ type: "Prototype", fields: { key: k } }, NO_WAIT);
+		const e = await peek(space, { type: "Prototype", fields: { key: k } });
 		if (!e) return null;
 		const p = fieldsOf<PrototypeFields>(e);
 		chain.unshift(p);

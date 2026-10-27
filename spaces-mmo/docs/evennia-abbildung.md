@@ -174,10 +174,17 @@ abweicht:
 Zwei Figuren stehen nie auf derselben Kachel (`server/engine/occupancy.ts`). Belegt ist eine Kachel nur von Figuren, die
 online sind; eine Offline-Figur ist nicht auf der Karte und blockiert niemanden.
 
-- Jeder Raum hat ein `RoomToken`. Wer sich in einem Raum bewegt oder in ihm ankommt, nimmt es in die Transaktion des
-  Befehls. Prüfen und Betreten sind damit ein Schritt, auch über mehrere Welt-Worker (Test: zehn Spieler laufen
-  gleichzeitig auf eine Kachel, genau einer kommt an).
-- Kein Worker hält zwei Raum-Tokens: Wer auf einen Ausgang tritt, nimmt nur das Token des Zielraums.
+- Eine Figur, die online ist, hält ihre Kachel als `Spot`-Entry (`room`, `x`, `y`, `charId`, `name`). Ein Schritt schreibt
+  den neuen `Spot` mit der `unique`-Prüfung des Space auf Raum und Kachel und nimmt den alten weg, beides in der
+  Transaktion des Befehls. Der Space weist einen zweiten `Spot` auf derselben Kachel ab, auch wenn der erste erst in
+  einer offenen Transaktion geschrieben ist. Prüfen und Betreten sind damit ein Schritt, auch über mehrere Welt-Worker
+  (Test: zehn Spieler laufen gleichzeitig auf eine Kachel, genau einer kommt an).
+- Es gibt keine Sperre je Raum mehr: Schritte im selben Raum laufen nebeneinander, nur zwei Schritte auf dieselbe Kachel
+  schließen sich aus. Bis 2026-10-27 nahm jeder Schritt das `RoomToken` seines Raums; alle Schritte eines Raums liefen
+  damit nacheinander, und ein Schritt gegen eine besetzte Kachel verlor das Token (siehe [betrieb.md](betrieb.md#last-und-latenz)).
+- Der `Spot` einer Figur, die offline gegangen ist, blockiert niemanden: Wer auf die Kachel tritt, übernimmt ihn in seiner
+  Transaktion. Der Welt-Worker räumt solche `Spot`s außerdem alle 30 s weg (`SPACES_MMO_SPOT_SWEEP_MS`).
+- Leuchtfeuer stehen fest, wo die Weltdefinition sie hinstellt; ihre Kacheln kommen aus der Welt, nicht aus dem Space.
 - `step` auf eine besetzte Kachel wird abgelehnt („Dort steht schon …“). `move` sucht einen Weg um Figuren herum. Eine
   belegte Ankunftsstelle eines Ausgangs führt auf die nächste freie Kachel, nie auf eine Ausgangskachel.
 - Neue Figuren entstehen auf einer freien Kachel. Beim Verbinden schickt das Gateway `arrive`: Steht inzwischen jemand

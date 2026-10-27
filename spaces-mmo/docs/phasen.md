@@ -64,7 +64,7 @@ wird.
 als eine Spielstunde zwischen den Räumen, ohne dass sich Einträge ansammeln. Dazu Flut (Strandgut mit Weltzeit-Ende,
 höchstens 4 je Raum), Kanal `hafen`, `ruf`, Ines als Feuerwärterin, die warnt und grüßt. Abweichungen:
 [evennia-abbildung.md](evennia-abbildung.md#stand-phase-2). Außerdem: Seiten erkennen einen neuen Build und laden neu;
-zwei Figuren stehen nie auf derselben Kachel (Raum-Token, `tests/collision.test.ts`); Leertaste hebt auf.
+zwei Figuren stehen nie auf derselben Kachel (`Spot`-Entries mit `unique`, `tests/collision.test.ts`); Leertaste hebt auf.
 
 Diese Phase implementiert skalierte Dauern, noch keine Uhr mit Weltstunde oder Welttag. Der persistierte Zeit- und
 Scheduler-Vertrag ist in [weltzeit.md](weltzeit.md) geplant.
@@ -219,6 +219,12 @@ Kein Teil des Kerns; ein Engine-Modul `server/engine/combat/`, das jederzeit ab 
 **Abnahme:** Mit ausgeschaltetem Modul sind keine Kampfbefehle erreichbar und alle anderen Suiten unverändert grün.
 Eine Runde mit gleichzeitigen Befehlen vieler Teilnehmer wird genau einmal ausgewertet, auch nach einem Absturz von
 `world` mitten in der Runde.
+
+## Leistung (2026-10-27)
+
+Lasttest mit allen NPCs, SQLite und verzögerter Verbindung zwischen big und nano (`tests/perf/load.test.ts`); Ursachen,
+Änderungen und Messwerte in [betrieb.md](betrieb.md#last-und-latenz). Vorher beantwortete der Space mit allen NPCs und zehn
+Spielern 0,3 Schritte je Sekunde (verlorene Raum-Tokens); jetzt 20 Spieler bei Ping 20 ms mit Median 55 ms, p99 119 ms.
 
 ## Noch offen
 

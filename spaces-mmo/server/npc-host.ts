@@ -83,12 +83,14 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 		};
 		runs.push((async () => {
 			while (!halt.signal.aborted) {
+				// a fresh script for every claim: what it has seen starts here, not at the process's start. It is made before
+				// the claim: the claim is visible to everyone once committed, but its answer may come back here seconds later
+				// under load, and what was said meanwhile belongs to this role already
+				const script = scriptFor(def.script)!;
 				// the role: claimed under the NPC lock; another process may hold it (then wait and try again)
 				const role = await claimRole(space, def.npcId, owner, roleLeaseMs()).catch(() => null);
 				if (!role) { ready(); await sleep(roleLeaseMs() / 2); continue; }
 				let lost = false;
-				// a fresh script for every claim: what it has seen starts here, not at the process's start
-				const script = scriptFor(def.script)!;
 				await keep();
 				ready();
 				const beat = setInterval(() => {

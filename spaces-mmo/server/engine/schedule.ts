@@ -6,6 +6,7 @@
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields, type WorldScheduleFields } from "../model.ts";
 import { msUntilWorld, worldNow } from "./worldtime.ts";
+import { peek, readExisting, StillHeld } from "../space.ts";
 
 export type ScheduleContext = { space: SpaceLike; txn: string; clock: WorldClockFields; schedule: WorldScheduleFields; worldMs: number };
 export type ScheduleHandler = {
@@ -20,7 +21,10 @@ export type ScheduleHandler = {
  *  its due time. True when something was written. */
 export async function ensureSchedule(space: SpaceLike, txn: string | null, f: WorldScheduleFields, o: { refresh?: boolean } = {}): Promise<boolean> {
 	if (f.missed === "replay-bounded") throw new RangeError("missed: replay-bounded is not implemented");
-	const have = await space.readIfExists({ type: "WorldSchedule", fields: { scheduleId: f.scheduleId } }, NO_WAIT, txn ? { txn } : {});
+	// a date another worker holds right now (it serves it) exists: wait for it rather than write a second one
+	let have;
+	try { have = await readExisting(space, { type: "WorldSchedule", fields: { scheduleId: f.scheduleId } }, txn ? { txn } : {}, 5_000); }
+	catch (e) { if (e instanceof StillHeld) return false; throw e; }
 	if (have) {
 		const h = fieldsOf<WorldScheduleFields>(have);
 		if (!o.refresh || (h.kind === f.kind && JSON.stringify(h.payload) === JSON.stringify(f.payload) && h.missed === f.missed)) return false;
@@ -59,7 +63,7 @@ export class ClockGuard {
 /** Serves every due date. Returns the real milliseconds until the next one is due (at most `maxWaitMs`). */
 export async function runSchedules(space: SpaceLike, handlers: Record<string, ScheduleHandler>, o: { txnMs: number; maxWaitMs: number; guard?: ClockGuard; now?: () => number }): Promise<number> {
 	const now = o.now ?? Date.now;
-	const clockEntry = await space.readIfExists({ type: "WorldClock" }, NO_WAIT);
+	const clockEntry = await peek(space, { type: "WorldClock" });
 	if (!clockEntry) return o.maxWaitMs;
 	const clock = fieldsOf<WorldClockFields>(clockEntry);
 	if (o.guard && !o.guard.ok(now())) return o.maxWaitMs;

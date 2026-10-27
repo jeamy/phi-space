@@ -228,7 +228,17 @@ export function maintenanceStep(s: SpaceState, cost: number, now: number, cursor
 	if (!canCharge(s, cost)) { deferMaintenance(s, now, cursor); return false; }
 	charge(s, cost); return true;
 }
-export const limitsOf = (s: Readonly<SpaceState>): Limits => ({ ...DEFAULT_LIMITS, ...(s.limits ?? {}) });
+const FROZEN_DEFAULTS: Limits = Object.freeze({ ...DEFAULT_LIMITS });
+const mergedLimits = new WeakMap<object, Limits>();
+/** The space's limits over the defaults. Asked several times by every operation, so the merge is kept per limits object
+ *  (a change of limits assigns a new one); the result is frozen. */
+export const limitsOf = (s: Readonly<SpaceState>): Limits => {
+	const own = s.limits;
+	if (!own) return FROZEN_DEFAULTS;
+	let m = mergedLimits.get(own);
+	if (!m) { m = Object.freeze({ ...DEFAULT_LIMITS, ...own }); mergedLimits.set(own, m); }
+	return m;
+};
 /** Override quotas for this space (host code). Values must be positive integers; omitted ones keep their value. */
 export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): Limits {
 	for (const [k, v] of Object.entries(l)) {

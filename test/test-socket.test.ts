@@ -5,7 +5,7 @@ import net from "node:net";
 import { mkdtempSync, rmSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SpaceService, StaticIdentity, RemoteSpace, serveSpace, socketTransport, PhiSpaces, FOREVER, core, type Connection } from "../src/index.ts";
+import { SpaceService, StaticIdentity, RemoteSpace, serveSpace, socketTransport, startService, PhiSpaces, FOREVER, core, type Connection } from "../src/index.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
 
@@ -139,4 +139,34 @@ test("a call without an answer fails after requestTimeoutMs; the next call gets 
 	assert.equal(connections, 2, "the stuck connection was dropped");
 	const unbounded = socketTransport({ path: s.path }); tc.after(() => unbounded.close());
 	assert.equal(await unbounded.request("plain"), "answer:plain");
+});
+
+test("a blocking call and a change poll end at the commit that serves them, not at a polling interval", async (tc) => {
+	const h = await memory(); const f = sock();
+	const stopService = await startService(h, ctx);
+	tc.after(() => stopService());
+	await serve(tc, new SpaceService({ host: h, ctx, identity: ids }), { listen: { path: f.path }, connection: asPeer("peer-a") });
+	const t = socketTransport({ path: f.path });
+	tc.after(() => { t.close(); f.done(); });
+	const a = new RemoteSpace(t, fast), b = new RemoteSpace(t, fast);
+	const median = (xs: number[]) => xs.sort((x, y) => x - y)[Math.floor(xs.length / 2)]!;
+	const takes: number[] = [], polls: number[] = [];
+	for (let i = 0; i < 7; i++) {
+		const waiting = b.take({ type: "Wake", fields: { i } }, 5_000);
+		await new Promise((r) => setTimeout(r, 30));
+		await a.write({ type: "Wake", fields: { i } }, null, FOREVER);
+		const written = performance.now();
+		assert.ok(await waiting);
+		takes.push(performance.now() - written);
+		const rev = (await a.readPage({ type: "-" })).rev;
+		const polled = (a.changes as (r: number, o: { waitMs: number }) => Promise<{ batches: unknown[] }>)(rev, { waitMs: 5_000 });
+		await new Promise((r) => setTimeout(r, 30));
+		await a.write({ type: "Seen", fields: { i } }, null, FOREVER);
+		const seen = performance.now();
+		assert.ok((await polled).batches.length > 0);
+		polls.push(performance.now() - seen);
+	}
+	// the service looked every 50 ms before: a median of about 25 ms after the commit
+	assert.ok(median(takes) < 15, `blocking take: ${takes.map(Math.round)} ms after the write`);
+	assert.ok(median(polls) < 15, `change poll: ${polls.map(Math.round)} ms after the write`);
 });

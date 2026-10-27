@@ -64,8 +64,23 @@ const INTENT_LEASE_MS = 30_000;
  *  STEP_BURST steps in hand and gets one back every STEP_REFILL_MS; a step beyond that is dropped (the page then
  *  resynchronizes after a while). The page's pace never reaches the limit. */
 const STEP_BURST = 8, STEP_REFILL_MS = 100;
+/** Typed commands likewise: CMD_BURST at once, then one every CMD_REFILL_MS (a person types far slower; a script that
+ *  floods would fill the world's queue). Both buckets belong to the account, whatever number of pages it has open, and an
+ *  account keeps at most MAX_PAGES pages: a further one closes the oldest. */
+const CMD_BURST = Number(process.env.SPACES_MMO_CMD_BURST) > 0 ? Number(process.env.SPACES_MMO_CMD_BURST) : 20;
+const CMD_REFILL_MS = 1000 / (Number(process.env.SPACES_MMO_CMD_PER_SEC) > 0 ? Number(process.env.SPACES_MMO_CMD_PER_SEC) : 5);
+const MAX_PAGES = 4;
+type Bucket = { left: number; at: number };
+/** Takes one from the bucket (refilled by the time passed); false when it is empty. */
+function spend(b: Bucket, burst: number, refillMs: number): boolean {
+	const now = Date.now();
+	b.left = Math.min(burst, b.left + (now - b.at) / refillMs); b.at = now;
+	if (b.left < 1) return false;
+	b.left -= 1;
+	return true;
+}
 
-type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; steps?: { left: number; at: number };
+type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
 	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
 /** At most this often the overview's state goes out after a change (people walk, fires burn down, fog moves). */
 const ATLAS_MS = 1_000;
@@ -96,11 +111,13 @@ export class Gateway {
 	// the world as the change stream showed it
 	readonly #chars = new Map<string, CharacterFields>(); // by charId
 	readonly #charOf = new Map<string, string>(); // space entry id -> charId
+	readonly #charEntry = new Map<string, string>(); // charId -> its current space entry id (no scan per move)
 	readonly #sessions = new Map<string, string>(); // session entry id -> charId
 	readonly #online = new Map<string, number>(); // charId -> live sessions
 	readonly #rooms = new Map<string, RoomFields>();
 	readonly #objs = new Map<string, ObjView>(); // by itemId / exitId
 	readonly #objOf = new Map<string, string>(); // space entry id -> itemId / exitId
+	readonly #objEntry = new Map<string, string>(); // itemId / exitId / beaconId -> its current space entry id
 	readonly #recent = new Map<string, MsgFields[]>(); // room -> last messages to everyone there
 	readonly #flames = new Map<string, number>(); // beaconId -> until, in world time
 	readonly #flameOf = new Map<string, string>(); // flame entry id -> beaconId
@@ -135,7 +152,11 @@ export class Gateway {
 
 	/** A browser of `me` plays now. */
 	async attach(ws: WsConnection, me: Me): Promise<void> {
-		const c: Client = { ws, me, room: null, lease: null, timer: null, chain: Promise.resolve() };
+		// the account's other pages share its buckets; beyond MAX_PAGES the oldest page is closed
+		const mine = [...this.#clients].filter((x) => x.me.accountId === me.accountId);
+		for (const old of mine.slice(0, Math.max(0, mine.length - MAX_PAGES + 1))) old.ws.close();
+		const limits = mine.at(-1)?.limits ?? { steps: { left: STEP_BURST, at: Date.now() }, cmds: { left: CMD_BURST, at: Date.now() } };
+		const c: Client = { ws, me, room: null, lease: null, timer: null, limits, warned: 0, chain: Promise.resolve() };
 		this.#clients.add(c);
 		ws.onClose(() => {
 			this.#clients.delete(c);
@@ -199,6 +220,8 @@ export class Gateway {
 		if (f?.t === "step") {
 			const { seq, dx, dy } = f;
 			if (!Number.isSafeInteger(seq) || ![dx, dy].every((d) => d === -1 || d === 0 || d === 1) || Math.abs(dx) + Math.abs(dy) !== 1) return;
+			// a flood of steps (a stuck key, a script) is dropped beyond the burst; the page's pace never reaches the limit
+			if (!spend(c.limits.steps, STEP_BURST, STEP_REFILL_MS)) return;
 			c.chain = c.chain.then(() => this.#intent(c, `step ${dx} ${dy}`, { conn: c.ws.id, seq }));
 			await c.chain;
 			this.onActivity(c.me.accountId);
@@ -207,20 +230,16 @@ export class Gateway {
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
 		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
 		if (!line) return;
+		if (!(/^step\s/.test(line) ? spend(c.limits.steps, STEP_BURST, STEP_REFILL_MS) : spend(c.limits.cmds, CMD_BURST, CMD_REFILL_MS))) {
+			if (Date.now() - c.warned > 2_000) { c.warned = Date.now(); c.ws.send({ t: "msg", m: { kind: "error", text: "Zu viele Befehle auf einmal; einen Moment bitte.", from: "", at: Date.now() } } satisfies ServerFrame); }
+			return;
+		}
 		c.chain = c.chain.then(() => this.#intent(c, line));
 		await c.chain;
 		this.onActivity(c.me.accountId);
 	}
 
 	async #intent(c: Client, line: string, step?: { conn: string; seq: number }): Promise<void> {
-		// a flood of steps (a stuck key, a script) is dropped beyond the burst; the page's pace never reaches the limit
-		if (/^step\s/.test(line)) {
-			const now = Date.now(), b = c.steps ?? { left: STEP_BURST, at: now };
-			b.left = Math.min(STEP_BURST, b.left + (now - b.at) / STEP_REFILL_MS); b.at = now;
-			c.steps = b;
-			if (b.left < 1) return;
-			b.left -= 1;
-		}
 		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now(), ...(step ? { step } : {}) };
 		try { await this.space.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
@@ -294,7 +313,7 @@ export class Gateway {
 				if (this.#closed) break;
 				const m = (e as Error).message;
 				// the history moved past the cursor (or the space restarted): read everything again from now
-				if (/no longer kept|expired|ahead/i.test(m)) { this.#reset(); rev = -1; continue; }
+				if (/no longer kept|expired|ahead/i.test(m)) { console.error(`[gateway] change stream: ${m}; reading the world again`); this.#reset(); rev = -1; continue; }
 				console.error("[gateway] change stream:", m);
 				await new Promise((r) => setTimeout(r, 1000));
 			}
@@ -303,7 +322,7 @@ export class Gateway {
 
 	#reset(): void {
 		this.#clock = null;
-		for (const m of [this.#chars, this.#charOf, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
+		for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
@@ -312,8 +331,9 @@ export class Gateway {
 		else if (type === "Room") { const r = fields as unknown as RoomFields; this.#rooms.set(r.roomId, r); }
 		else if (type === "Character") {
 			const c = fields as unknown as CharacterFields;
-			for (const [eid, cid] of this.#charOf) if (cid === c.charId && eid !== id) this.#charOf.delete(eid);
-			this.#chars.set(c.charId, c); this.#charOf.set(id, c.charId);
+			const prev = this.#charEntry.get(c.charId);
+			if (prev !== undefined && prev !== id) this.#charOf.delete(prev);
+			this.#chars.set(c.charId, c); this.#charOf.set(id, c.charId); this.#charEntry.set(c.charId, id);
 		}
 		else if (type === "Session") {
 			if (this.#sessions.has(id)) return; // a renewal
@@ -323,8 +343,7 @@ export class Gateway {
 		else if (type === "Beacon") {
 			const b = fields as unknown as BeaconFields;
 			const o: ObjView = { id: b.beaconId, kind: "beacon", name: b.name, location: b.room, x: b.x, y: b.y };
-			for (const [eid, oid] of this.#objOf) if (oid === o.id && eid !== id) this.#objOf.delete(eid);
-			this.#objs.set(o.id, o); this.#objOf.set(id, o.id);
+			this.#setObj(id, o);
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
 		else if (type === "Fog") { const f = fields as unknown as FogFields; this.#fog.set(f.room, f.level); }
@@ -333,8 +352,7 @@ export class Gateway {
 		else if (type === "Listing") this.#listings.set(id, fields as unknown as ListingFields);
 		else if (types.includes("Item") || types.includes("Exit")) {
 			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields) : exitView(fields as unknown as ExitFields);
-			for (const [eid, oid] of this.#objOf) if (oid === o.id && eid !== id) this.#objOf.delete(eid);
-			this.#objs.set(o.id, o); this.#objOf.set(id, o.id);
+			this.#setObj(id, o);
 		}
 		else if (type === "Msg") {
 			const m = fields as unknown as MsgFields;
@@ -347,14 +365,21 @@ export class Gateway {
 		}
 	}
 
+	/** An object's view under its (new) space entry id; the entry it had before is forgotten. */
+	#setObj(id: string, o: ObjView): void {
+		const prev = this.#objEntry.get(o.id);
+		if (prev !== undefined && prev !== id) this.#objOf.delete(prev);
+		this.#objs.set(o.id, o); this.#objOf.set(id, o.id); this.#objEntry.set(o.id, id);
+	}
+
 	#del(id: string): void {
 		if (this.#offers.delete(id) || this.#orders.delete(id) || this.#listings.delete(id)) return;
 		const beaconId = this.#flameOf.get(id);
 		if (beaconId) { this.#flameOf.delete(id); if (![...this.#flameOf.values()].includes(beaconId)) this.#flames.delete(beaconId); return; }
 		const charId = this.#charOf.get(id);
-		if (charId) { this.#charOf.delete(id); if (![...this.#charOf.values()].includes(charId)) this.#chars.delete(charId); return; }
+		if (charId) { this.#charOf.delete(id); if (this.#charEntry.get(charId) === id) { this.#charEntry.delete(charId); this.#chars.delete(charId); } return; }
 		const objId = this.#objOf.get(id);
-		if (objId) { this.#objOf.delete(id); if (![...this.#objOf.values()].includes(objId)) this.#objs.delete(objId); return; }
+		if (objId) { this.#objOf.delete(id); if (this.#objEntry.get(objId) === id) { this.#objEntry.delete(objId); this.#objs.delete(objId); } return; }
 		const s = this.#sessions.get(id);
 		if (s) { this.#sessions.delete(id); const n = (this.#online.get(s) ?? 1) - 1; if (n > 0) this.#online.set(s, n); else this.#online.delete(s); }
 	}

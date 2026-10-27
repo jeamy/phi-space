@@ -25,6 +25,8 @@ import { principalId, MailboxEpochMismatch, InvalidAck } from "./mailbox.ts";
 export const PROTOCOL_VERSION = 1;
 export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
 export type Method = (typeof METHODS)[number];
+/** A long poll looks again at the latest after this long even without a commit (a decision that came without one). */
+const POLL_FALLBACK_MS = 1000;
 const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack"];
 
 // ---- identity and rights
@@ -367,11 +369,12 @@ export class SpaceService {
 			case "events": {
 				this.checkConsumer(a.consumer, c.id);
 				const end = this.now() + Math.min(optInt(a.waitMs, "waitMs") ?? 0, this.o.maxPollMs);
-				for (;;) {
+				const signal = end > this.now() ? await client.commitSignal() : null; // before the first look: no commit in between is missed
+				try { for (;;) {
 					const p = await client.events(c.id.principal, { ...(a.mailboxEpoch === undefined ? {} : { mailboxEpoch: str(a.mailboxEpoch, "mailboxEpoch") }), after: optInt(a.after, "after"), maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21) }, p => { for (const item of p.events) if (item.event.entry) this.checkTypes(grant, item.event.entry.types, "this mailbox event"); });
 					if (p.events.length || p.gap || this.now() >= end) return p as unknown as Json;
-					await awaitWithContext(new Promise<void>(r => setTimeout(r, Math.min(50, Math.max(1, end - this.now())))), this.o.ctx);
-				}
+					await awaitWithContext(signal!.wait(Math.max(1, end - this.now())), this.o.ctx);
+				} } finally { await signal?.stop(); }
 			}
 			case "ack": this.checkConsumer(a.consumer, c.id); return await client.ack(c.id.principal, str(a.mailboxEpoch, "mailboxEpoch"), int(a.upTo, "upTo"), { request }) as unknown as Json;
 			default: throw new Bad(`${method} is not implemented`);
@@ -496,12 +499,16 @@ export class SpaceService {
 		const t = this.target(a.targetRequest, c.id);
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
 		const end = this.now() + waitMs;
-		for (;;) {
-			const v = await c.client.pollOperation(t);
-			if (v.result && isObj(v.result) && Array.isArray(v.result.types)) this.checkTypes(this.allowed(c.id, "pollOperation"), v.result.types as string[], "this retained result");
-			if (v.state !== "pending" || v.restoredHistory || this.now() >= end) return v as unknown as Json;
-			await awaitWithContext(new Promise<void>((res) => setTimeout(res, Math.min(50, Math.max(1, end - this.now())))), this.o.ctx);
-		}
+		// a commit decides a pending request (the write that serves it, the expiry of its deadline is a timer below)
+		const signal = waitMs > 0 ? await c.client.commitSignal() : null;
+		try {
+			for (;;) {
+				const v = await c.client.pollOperation(t);
+				if (v.result && isObj(v.result) && Array.isArray(v.result.types)) this.checkTypes(this.allowed(c.id, "pollOperation"), v.result.types as string[], "this retained result");
+				if (v.state !== "pending" || v.restoredHistory || this.now() >= end) return v as unknown as Json;
+				await awaitWithContext(signal!.wait(Math.min(POLL_FALLBACK_MS, Math.max(1, end - this.now()))), this.o.ctx);
+			}
+		} finally { await signal?.stop(); }
 	}
 
 	/** Commit batches after a revision; `resync` tells the client to read pages again (history dropped or another stream). */
@@ -511,7 +518,8 @@ export class SpaceService {
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
 		const maxBytes = Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21);
 		const end = this.now() + waitMs;
-		for (;;) {
+		const signal = waitMs > 0 ? await c.client.commitSignal() : null; // before the first look: no commit in between is missed
+		try { for (;;) {
 			let r: core.Changes;
 			try { r = await c.client.changes(after, maxBytes === undefined ? {} : { maxBytes }); }
 			catch (e) {
@@ -520,8 +528,8 @@ export class SpaceService {
 			}
 			if (a.streamId !== undefined && a.streamId !== r.streamId) return { resync: true, reason: "another stream", streamId: r.streamId };
 			if (r.batches.length > 0 || this.now() >= end) return r as unknown as Json;
-			await awaitWithContext(new Promise<void>((res) => setTimeout(res, Math.min(50, Math.max(1, end - this.now())))), this.o.ctx);
-		}
+			await awaitWithContext(signal!.wait(Math.max(1, end - this.now())), this.o.ctx);
+		} } finally { await signal?.stop(); }
 	}
 
 	// ---- errors

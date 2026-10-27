@@ -5,6 +5,7 @@ import { NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type CharacterFields, type ExitFields, type ItemFields, type MsgFields, type MsgKind, type RoomFields } from "../model.ts";
 import { allowed, LEVELS, type Level, type LockCtx } from "./locks.ts";
 import type { WorldDef } from "./world.ts";
+import { peek } from "../space.ts";
 
 export type CommandCtx = {
 	space: SpaceLike;
@@ -12,6 +13,8 @@ export type CommandCtx = {
 	world: WorldDef;
 	actor: CharacterFields;
 	account: AccountFields | null;
+	/** Reads the account when `account` was left out (a step reads it only if a lock asks, e.g. on an exit's cell). */
+	loadAccount?: () => Promise<AccountFields | null>;
 	msgLeaseMs: number;
 	/** The sentence this command was translated from by the model process, if it was. */
 	asked?: string;
@@ -38,6 +41,7 @@ export async function inventory(c: CommandCtx): Promise<Array<{ e: Taken; f: Ite
 }
 
 export async function lockCtx(c: CommandCtx): Promise<LockCtx> {
+	if (!c.account && c.loadAccount) { c.account = await c.loadAccount(); delete c.loadAccount; }
 	const inv = await inventory(c);
 	const level = levelOf(c.account);
 	return { level, guest: c.account?.guest ?? true, charId: c.actor.charId, holds: (k) => inv.some((i) => i.f.itemId === k || i.f.proto === k) };
@@ -49,7 +53,7 @@ export async function check(c: CommandCtx, locks: string, access: string, refusa
 }
 
 export async function roomOf(c: CommandCtx, roomId = c.actor.room): Promise<RoomFields> {
-	const r = await c.space.readIfExists({ type: "Room", fields: { roomId } }, NO_WAIT);
+	const r = await peek(c.space, { type: "Room", fields: { roomId } });
 	if (!r) throw new CommandError("Dieser Ort ist verschwunden.");
 	return r.fields as unknown as RoomFields;
 }

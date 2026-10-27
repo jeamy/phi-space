@@ -9,24 +9,21 @@ import { timeScale } from "./time.ts";
 import { ensureSchedule } from "./schedule.ts";
 import { worldSchedules } from "./worldevents.ts";
 import { DEFAULT_START_HOUR, initialClock, worldNow } from "./worldtime.ts";
-import { actorToken, fieldsOf, roomToken, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
-import { readExisting, StillHeld } from "../space.ts";
+import { actorToken, fieldsOf, WORLD_LOCK, type AccountFields, type BeaconFields, type CharacterFields, type ExitFields, type FogFields, type RoomFields, type WorldClockFields, type WorldLoadedFields } from "../model.ts";
+import { readExisting, StillHeld, peek } from "../space.ts";
 import { resolveFrom, spawn } from "./prototypes.ts";
 import { draftOf } from "./typeclasses.ts";
 import type { WorldDef } from "./world.ts";
 
 export type LoadResult = { loaded: boolean; version: number; spawned: string[] };
 
-/** Writes the missing actor tokens (one per character) and room tokens (one per room), under the world lock so two
- *  workers never write two tokens for one character or room. A token held right now by a worker exists. */
+/** Writes the missing actor tokens (one per character), under the world lock so two workers never write two tokens for
+ *  one character. A token held right now by a worker exists. */
 export async function ensureTokens(space: SpaceLike): Promise<number> {
 	const txn = (await space.createTransaction(30_000)).id;
 	try {
 		if (!(await space.take(WORLD_LOCK, 20_000, { txn }))) throw new Error("the world lock stayed taken");
-		const wanted = [
-			...(await space.readAll({ type: "Character" })).map((e) => actorToken(String(e.fields.charId))),
-			...(await space.readAll({ type: "Room" })).map((e) => roomToken(String(e.fields.roomId))),
-		];
+		const wanted = (await space.readAll({ type: "Character" })).map((e) => actorToken(String(e.fields.charId)));
 		let written = 0;
 		for (const token of wanted) {
 			try { if (await readExisting(space, token, { txn })) continue; } catch (e) { if (e instanceof StillHeld) continue; throw e; }
@@ -43,12 +40,12 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 	const txn = (await space.createTransaction(o.txnMs ?? 30_000)).id;
 	try {
 		if (!(await space.take(WORLD_LOCK, 20_000, { txn }))) throw new Error("the world lock stayed taken");
-		const marker = await space.readIfExists({ type: "WorldLoaded", fields: { worldId: w.id } }, NO_WAIT, { txn });
+		const marker = await peek(space, { type: "WorldLoaded", fields: { worldId: w.id } }, { txn });
 		const have = marker ? fieldsOf<WorldLoadedFields>(marker).version : 0;
 		const replace = !!o.replace || have < w.version;
 		/** Writes `draft` keyed by `key`: when missing, or (replacing) instead of what is there. */
 		const upsert = async (type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => {
-			const old = await space.readIfExists({ type, fields: key }, NO_WAIT, { txn });
+			const old = await peek(space, { type, fields: key }, { txn });
 			if (old && !replace) return;
 			if (old) await space.take({ type, id: old.id }, NO_WAIT, { txn });
 			await space.write(draft, txn, FOREVER);
@@ -119,7 +116,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			await space.write({ type: "WorldLoaded", fields: { worldId: w.id, version: w.version, at: Date.now() } satisfies WorldLoadedFields as never }, txn, FOREVER);
 		}
 		// the world's clock: made once, with the world (a reload and a restart keep it, so the world goes on where it was)
-		let clock = (await space.readIfExists({ type: "WorldClock", fields: { worldId: w.id } }, NO_WAIT, { txn }))?.fields as unknown as WorldClockFields | undefined;
+		let clock = (await peek(space, { type: "WorldClock", fields: { worldId: w.id } }, { txn }))?.fields as unknown as WorldClockFields | undefined;
 		if (!clock) { clock = initialClock(w.id, w.startHour ?? DEFAULT_START_HOUR, Date.now(), timeScale()); await space.write({ type: "WorldClock", fields: clock as never }, txn, FOREVER); }
 		// a fire from before the world had a clock is dated in real milliseconds, which in world time is far beyond what a fire can
 		// hold (`fire.maxMs`): such a flame goes out (the keepers light it again)

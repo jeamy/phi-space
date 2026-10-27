@@ -114,6 +114,24 @@ export class PhiSpaces implements SpaceLike {
 		const id = await this.idOf();
 		return id === r?.defaultSpaceId ? this.host.watchDoc(Space, this.ctx) : this.host.watchDoc(NamedSpace, id, this.ctx);
 	}
+	/**
+	 * The commits of this space, for a long poll: `wait(ms)` returns at once when a commit came since the last `wait`
+	 * returned (or since the signal was made), else at the next commit or after `ms`. Make it before the first look, so a
+	 * commit between a look and the wait is not missed.
+	 */
+	async commitSignal(): Promise<{ wait(ms: number): Promise<void>; stop(): Promise<void> }> {
+		const watch = await this.watch();
+		let dirty = false, poke: (() => void) | null = null;
+		watch?.start(() => { dirty = true; poke?.(); });
+		return {
+			async wait(ms) {
+				if (!watch) ms = Math.min(ms, 50); // no document to watch yet: look again soon
+				if (!dirty) await new Promise<void>((res) => { const t = setTimeout(() => { poke = null; res(); }, ms); poke = () => { clearTimeout(t); poke = null; res(); }; });
+				dirty = false;
+			},
+			async stop() { await watch?.stop(); },
+		};
+	}
 	async configuration(): Promise<{ spaceId?: string; limits: core.Limits }> { const s = await this.snap(); return { spaceId: s?.spaceId, limits: core.limitsOf(s ?? core.initialState()) }; }
 
 	async write(entry: EntryDraft, txn: string | null = null, lease: number = core.ANY, o: Req = {}): Promise<Lease> {

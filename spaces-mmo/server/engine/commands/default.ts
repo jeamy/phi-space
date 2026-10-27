@@ -2,12 +2,12 @@
 // transaction its intent is taken in: what it changes and what it says commit together, or not at all. An item changes
 // hands by being taken (it is then held by this transaction, invisible to every other) and written anew.
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
-import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type SessionFields } from "../../model.ts";
+import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, type CommandCtx } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
-import { cellKey, freeCellNear, holdRoom, occupiedIn, solidIn } from "../occupancy.ts";
+import { cellKey, claimSpot, freeCellNear, occupiedIn, solidIn } from "../occupancy.ts";
 import { findPath, walkable, wayTo } from "../world.ts";
 
 const MAX_SAY = 300;
@@ -25,30 +25,47 @@ export async function online(c: Pick<CommandCtx, "space">, room: string | null):
 	return (await c.space.readAll({ type: "Character", fields: room ? { room } : {} })).map((e) => fieldsOf<CharacterFields>(e)).filter((ch) => live.has(ch.charId));
 }
 
-/** Moves the actor to `to` in its room; an exit on that cell is taken at once. */
-/** Moves the actor to `to` in its room, under the room's token: a cell another online character stands on is refused
- *  (`path`: the whole walk must get around them). An exit on the target cell is taken at once (traverse holds only the
- *  destination's token, so no worker ever holds two room tokens and none can wait for another in a circle). */
-async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: boolean } = {}): Promise<void> {
+/** Moves the actor to `to` in its room: a cell another online character stands on is refused (`path`: the whole walk
+ *  must get around them). An exit on the target cell is taken at once. Nothing is locked: the Spot written with the
+ *  space's unique check is what refuses a second character on the cell (engine/occupancy.ts). */
+async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: boolean; room?: RoomFields } = {}): Promise<void> {
 	const exit = (await exitsHere(c)).find((x) => x.f.x === to.x && x.f.y === to.y);
 	if (exit) return traverse(c, exit.f);
-	const room = await roomOf(c);
-	const held = await holdRoom(c.space, c.txn, room.roomId);
-	if (!held) throw new CommandError("Hier ist gerade viel Bewegung; bitte noch einmal.");
-	const occ = await occupiedIn(c.space, room.roomId, c.actor.charId), solid = await solidIn(c.space, room.roomId);
+	const room = o.room ?? (await roomOf(c));
+	const solid = solidIn(c.world, room.roomId);
 	if (solid.has(cellKey(to))) throw new CommandError("Dort brennt das Leuchtfeuer; da läuft man nicht hinein.");
-	const there = occ.get(cellKey(to));
-	if (there) throw new CommandError(`Dort steht schon ${there}.`);
-	if (o.path && !findPath(c.world, room.ground, c.actor, to, 40, new Set([...occ.keys(), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
+	if (o.path) {
+		const occ = await occupiedIn(c.space, room.roomId, c.actor.charId);
+		const there = occ.get(cellKey(to));
+		if (there) throw new CommandError(`Dort steht schon ${there}.`);
+		if (!findPath(c.world, room.ground, c.actor, to, 40, new Set([...occ.keys(), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
+	}
 	await relocate(c, { room: room.roomId, x: to.x, y: to.y });
-	await held.release();
 }
 
-/** Takes the actor's character and writes it at a new place. */
-async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }): Promise<void> {
+/** Takes the actor's character and writes it at a new place; its Spot goes along (`spot` false: the place is known to
+ *  be its own, e.g. a step that was not taken and is only answered). */
+async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }, o: { spot?: boolean } = {}): Promise<void> {
+	if (o.spot !== false) {
+		const there = await claimSpot(c.space, c.txn, c.actor, to);
+		if (there) throw new CommandError(`Dort steht schon ${there}.`);
+	}
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
 	await c.space.write({ type: "Character", fields: { ...fieldsOf<CharacterFields>(e), ...to, ...(c.step ? { ack: c.step } : {}) } as never }, c.txn, FOREVER);
+}
+
+/** Onto a free cell of `room`, starting at `at`: the nearest cell no online character holds, no exit and no fire is on,
+ *  claimed with the space's unique check (a few tries: someone may take one meanwhile). */
+async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean } = {}): Promise<{ x: number; y: number }> {
+	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...solidIn(c.world, room.roomId), ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f)))]);
+	for (let tries = 0; tries < 4; tries++) {
+		const cell = freeCellNear(c.world, room.ground, at, avoid);
+		if (!cell) break;
+		if (!(await claimSpot(c.space, c.txn, c.actor, { room: room.roomId, ...cell }))) return cell;
+		avoid.add(cellKey(cell));
+	}
+	throw new CommandError(`In ${room.name} ist kein Platz mehr.`);
 }
 
 /** Leaving a room ends the trade offers made there: one's own are withdrawn, those made to one lapse; the other side
@@ -83,13 +100,8 @@ export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	if (exit.fogMax !== undefined && (await fogOf(c.space, c.actor.room)) > exit.fogMax) await throughFog(c, exit);
 	const dest = await roomOf(c, exit.destination);
 	// arriving: the exit's arrival cell, or the nearest free one when someone stands there (never on an exit cell)
-	const held = await holdRoom(c.space, c.txn, dest.roomId);
-	if (!held) throw new CommandError(`Drüben in ${dest.name} ist gerade viel Bewegung; bitte noch einmal.`);
-	const avoid = new Set([...(await occupiedIn(c.space, dest.roomId, c.actor.charId)).keys(), ...(await exitsHere(c, dest.roomId)).map((x) => cellKey(x.f)), ...(await solidIn(c.space, dest.roomId))]);
-	const at = freeCellNear(c.world, dest.ground, exit.arrive, avoid);
-	if (!at) throw new CommandError(`In ${dest.name} ist kein Platz mehr.`);
-	await relocate(c, { room: dest.roomId, x: at.x, y: at.y });
-	await held.release();
+	const at = await placeIn(c, dest, exit.arrive);
+	await relocate(c, { room: dest.roomId, x: at.x, y: at.y }, { spot: false });
 	await dropOffers(c);
 	await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${exit.name}.`, { templ: true });
 	await msg(c, "*", "info", `$you() $conj(kommst|kommt) an.`, { templ: true, room: dest.roomId });
@@ -182,13 +194,15 @@ const step: Command = {
 		if (!Number.isInteger(dx) || !Number.isInteger(dy) || Math.abs(dx!) + Math.abs(dy!) !== 1) throw new CommandError("So geht es: step <dx> <dy> mit einem Schritt, z. B. step 1 0");
 		const to = { x: c.actor.x + dx!, y: c.actor.y + dy! };
 		try {
-			if (!walkable(c.world, (await roomOf(c)).ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
-			await moveTo(c, to);
+			// the ground of a room of the world comes from its definition (no builder changes it); only a dug room is read
+			const room = (c.world.rooms.find((r) => r.roomId === c.actor.room) as RoomFields | undefined) ?? (await roomOf(c));
+			if (!walkable(c.world, room.ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
+			await moveTo(c, to, { room });
 		} catch (e) {
 			// a numbered step of a page that cannot be taken (a wall, someone there, the fire) is still answered: the
 			// character stays and carries the step's number, so the page walks on from where it really is
 			if (!(e instanceof CommandError) || !c.step) throw e;
-			await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y });
+			await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y }, { spot: false });
 		}
 	},
 };
@@ -199,17 +213,10 @@ const arrive: Command = {
 	key: "arrive", hidden: true,
 	help: "arrive – auf eine freie Stelle treten, falls die eigene besetzt ist oder ein Feuer ist",
 	async func(c) {
+		// its Spot on its cell (or, when someone else stands there now or it is a fire, on the nearest free one)
 		const room = await roomOf(c);
-		const held = await holdRoom(c.space, c.txn, room.roomId);
-		if (!held) return;
-		const occ = await occupiedIn(c.space, room.roomId, c.actor.charId), solid = await solidIn(c.space, room.roomId);
-		// someone else on the own cell, or the own cell is a fire (a character from before beacons were solid)
-		if (occ.has(cellKey(c.actor)) || solid.has(cellKey(c.actor))) {
-			const avoid = new Set([...occ.keys(), ...solid, ...(await exitsHere(c)).map((x) => cellKey(x.f))]);
-			const at = freeCellNear(c.world, room.ground, c.actor, avoid);
-			if (at) await relocate(c, { room: room.roomId, x: at.x, y: at.y });
-		}
-		await held.release();
+		const at = await placeIn(c, room, c.actor, { exits: false });
+		if (at.x !== c.actor.x || at.y !== c.actor.y) await relocate(c, { room: room.roomId, x: at.x, y: at.y }, { spot: false });
 	},
 };
 

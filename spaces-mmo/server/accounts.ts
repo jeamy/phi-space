@@ -8,10 +8,10 @@
 // stops after step 2 is completed by the next login.
 import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { cellKey, freeCellNear, holdRoom, occupiedIn } from "./engine/occupancy.ts";
+import { cellKey, freeCellNear, occupiedIn } from "./engine/occupancy.ts";
 import { walkable, type WorldDef } from "./engine/world.ts";
 import { actorToken, asFields, fieldsOf, NAMES_LOCK, type AccountFields, type CharacterFields, type CredentialFields, type WebSessionFields } from "./model.ts";
-import { envMs, readExisting, StillHeld } from "./space.ts";
+import { envMs, readExisting, StillHeld, peek } from "./space.ts";
 
 const scrypt = (password: string, salt: Buffer): Promise<Buffer> =>
 	new Promise((ok, fail) => scryptCb(password, salt, 64, { N: 16384, r: 8, p: 1 }, (e, key) => (e ? fail(e) : ok(key))));
@@ -44,6 +44,8 @@ export class Accounts {
 	readonly pendingMs: number;
 	readonly webSessionMs: number;
 	readonly #setupToken: string | undefined;
+	/** When touchGuest last looked at an account (a throttle, not state: forgetting it costs one read). */
+	readonly #looked = new Map<string, number>();
 	/** Test hook: runs between step 1 and step 2 of a registration (a throw stands for a web process that died there). */
 	faults: { afterPendingCredential?: () => Promise<void> | void } = {};
 
@@ -89,7 +91,7 @@ export class Accounts {
 		const guest = o.guestAccountId ? await this.#account(o.guestAccountId) : null;
 		if (o.guestAccountId && !guest?.guest) throw new AuthError(409, "Dieses Gastkonto gibt es nicht mehr; bitte neu als Gast beginnen oder ohne Gast registrieren");
 		const accountId = guest?.accountId ?? id("a");
-		const admin = !!o.setupToken && this.#tokenOk(o.setupToken) && !(await this.world.readIfExists({ type: "Account", fields: { admin: true } }, NO_WAIT));
+		const admin = !!o.setupToken && this.#tokenOk(o.setupToken) && !(await peek(this.world, { type: "Account", fields: { admin: true } }));
 		const salt = randomBytes(16);
 		const hash = await scrypt(password, salt);
 
@@ -173,7 +175,7 @@ export class Accounts {
 	 *  a twelfth of its lifetime is renewed. */
 	async resolve(sid: string | undefined): Promise<Me | null> {
 		if (!sid || !/^[0-9a-f]{48}$/.test(sid)) return null;
-		const e = await this.store.readIfExists({ type: "WebSession", fields: { key: sha256(sid) } }, NO_WAIT);
+		const e = await peek(this.store, { type: "WebSession", fields: { key: sha256(sid) } });
 		if (!e) return null;
 		const s = fieldsOf<WebSessionFields>(e);
 		const account = await this.#account(s.accountId);
@@ -190,9 +192,14 @@ export class Accounts {
 		while (await this.store.takeIfExists({ type: "WebSession", fields: { key: sha256(sid) } }, NO_WAIT));
 	}
 
-	/** Renews a guest account's lease, at most every quarter of the lifetime (activity keeps a guest alive). */
+	/** Renews a guest account's lease, at most every quarter of the lifetime (activity keeps a guest alive). Every command
+	 *  of a player calls this; the account is looked at no more than once a minute per account. */
 	async touchGuest(accountId: string): Promise<void> {
-		const e = await this.world.readIfExists({ type: "Account", fields: { accountId, guest: true } }, NO_WAIT);
+		const now = Date.now(), last = this.#looked.get(accountId);
+		if (last !== undefined && now - last < 60_000) return;
+		if (this.#looked.size >= 10_000) for (const [k, t] of this.#looked) if (now - t >= 60_000) this.#looked.delete(k);
+		this.#looked.set(accountId, now);
+		const e = await peek(this.world, { type: "Account", fields: { accountId, guest: true } });
 		if (!e || Date.now() - fieldsOf<AccountFields>(e).touchedAt < this.guestTtlMs / 4) return;
 		const txn = (await this.world.createTransaction(10_000)).id;
 		try {
@@ -222,18 +229,17 @@ export class Accounts {
 		return { ...pick(account), charId: fieldsOf<CharacterFields>(c).charId };
 	}
 
-	/** A new character at the start, on a free cell near the spawn (under the room's token in `txn`, so two new
-	 *  characters never get the same cell; without a token, as before the world loaded, best effort). The caller
-	 *  writes the token back with `release`. */
-	async #newCharacter(account: AccountFields, txn: string): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
+	/** A new character at the start, on a cell near the spawn that no one online stands on. Two new characters may pick
+	 *  the same one: the character holds no cell until it comes online, and then `arrive` (engine/commands/default.ts)
+	 *  moves the later one aside. */
+	async #newCharacter(account: AccountFields, _txn: string): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
 		const room = this.w.rooms.find((r) => r.roomId === this.w.start)!;
-		const held = await holdRoom(this.world, txn, room.roomId, 3_000);
 		const avoid = new Set([...(await occupiedIn(this.world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...this.w.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
 		// a little scatter around the spawn, then the nearest free cell from there
 		const near = { x: room.spawn.x + randomInt(-3, 4), y: room.spawn.y + randomInt(-2, 3) };
 		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid) ?? room.spawn;
 		const char = { charId: id("c"), accountId: account.accountId, name: account.name, room: room.roomId, x: at.x, y: at.y, skin: randomInt(0, this.w.skins.length), guest: account.guest };
-		return { char, release: async () => { await held?.release(); } };
+		return { char, release: async () => {} };
 	}
 
 	#tokenOk(got: string): boolean {

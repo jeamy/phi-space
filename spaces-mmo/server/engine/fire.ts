@@ -11,10 +11,11 @@ import { CommandError, msg, type CommandCtx } from "./context.ts";
 import { resolvePrototype, spawn } from "./prototypes.ts";
 import { worldNowOf } from "./clock.ts";
 import { walkable, type WorldDef } from "./world.ts";
+import { peek } from "../space.ts";
 
 /** The flame of a beacon, or null when it is out. */
 export async function flameOf(space: SpaceLike, beaconId: string, txn?: string): Promise<FlameFields | null> {
-	const e = await space.readIfExists({ type: "Flame", fields: { beaconId } }, NO_WAIT, txn ? { txn } : {});
+	const e = await peek(space, { type: "Flame", fields: { beaconId } }, txn ? { txn } : {});
 	return e ? fieldsOf<FlameFields>(e) : null;
 }
 
@@ -60,7 +61,7 @@ async function say(space: SpaceLike, leaseMs: number, rooms: string[], kind: "wo
  *  the beacon every round, and the change stream stays quiet). */
 export async function fireTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<void> {
 	for (const def of w.beacons) {
-		const seen = await space.readIfExists({ type: "Beacon", fields: { beaconId: def.beaconId } }, NO_WAIT);
+		const seen = await peek(space, { type: "Beacon", fields: { beaconId: def.beaconId } });
 		if (!seen || isLit(await flameOf(space, def.beaconId), await worldNowOf(space)) === !!seen.fields.lit) continue;
 		const txn = (await space.createTransaction(10_000)).id;
 		try {
@@ -102,7 +103,7 @@ export const fogText = (level: number, denser: boolean): string =>
 	][Math.min(3, level)]!;
 
 export async function fogOf(space: SpaceLike, room: string): Promise<number> {
-	const e = await space.readIfExists({ type: "Fog", fields: { room } }, NO_WAIT);
+	const e = await peek(space, { type: "Fog", fields: { room } });
 	return e ? fieldsOf<FogFields>(e).level : 0;
 }
 

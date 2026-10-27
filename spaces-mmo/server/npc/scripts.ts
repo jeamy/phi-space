@@ -10,6 +10,7 @@ import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { ECONOMY } from "./economy.ts";
 import { gather, requestOf, unclear } from "./requests.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type ListingFields, type MsgFields, type OfferFields } from "../model.ts";
+import { peek } from "../space.ts";
 
 export type Npc = {
 	def: NpcDef; charId: string; space: SpaceLike; world: WorldDef; halt: AbortSignal;
@@ -157,7 +158,7 @@ function wanderer(): Script {
 		if (!n.isOnline()) {
 			const dense = (await fogOf(n.space, n.def.room)) >= n.world.fog.max;
 			denseSince = dense ? denseSince || now : 0;
-			const visit = await n.space.readIfExists({ type: "NpcVisit", fields: { npcId: n.def.npcId } }, NO_WAIT);
+			const visit = await peek(n.space, { type: "NpcVisit", fields: { npcId: n.def.npcId } });
 			const cool = !visit || Number(visit.fields.untilWorldMs ?? 0) <= now;
 			if (denseSince && now - denseSince >= 2 * 60_000 && cool) {
 				if (visit) await n.space.takeIfExists({ type: "NpcVisit", id: visit.id }, NO_WAIT);
@@ -239,7 +240,7 @@ export async function humansIn(n: Npc, room: string): Promise<string[]> {
 	const live = new Set((await n.space.readAll({ type: "Session" })).map((s) => String(s.fields.charId)));
 	return (await n.space.readAll({ type: "Character", fields: { room } })).map((e) => fieldsOf<CharacterFields>(e)).filter((c) => live.has(c.charId) && !c.charId.startsWith("npc-")).map((c) => c.name);
 }
-const roomName = async (n: Npc, room: string) => String((await n.space.readIfExists({ type: "Room", fields: { roomId: room } }, NO_WAIT))?.fields.name ?? room);
+const roomName = async (n: Npc, room: string) => String((await peek(n.space, { type: "Room", fields: { roomId: room } }))?.fields.name ?? room);
 /** "Ines flickt ein Netz." → "flickt ein Netz." (emote puts the name in front). */
 const dozeLine = (name: string, lines: string[], i: number) => (lines[i] ?? `${name} döst.`).replace(new RegExp(`^${name}\\s+`), "");
 const npcMax = () => Number(process.env.SPACES_MMO_NPC_MAX ?? 10);

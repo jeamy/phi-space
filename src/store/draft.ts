@@ -217,7 +217,14 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		const obj = s ? ((s.copy ?? s.base) as Obj) : v;
 		seen.set(v, obj);
 		if (s?.kind === "array") {
-			// unchanged records are committed values without drafts: only the ones written now are looked into
+			// unchanged records are committed values without drafts: only the ones written now are looked into. Every
+			// record a commit puts into a part array passes `assigned`; when none of them is a draft itself, each stays the
+			// same object (drafts inside it are replaced in place), so the array need not be walked: a log of thousands of
+			// batches would otherwise be walked by every commit that appends one
+			if (![...s.assigned].some((v) => stateOf(v))) {
+				for (const v of s.assigned) fresh.push(finalize(v));
+				return obj;
+			}
 			const a = obj as unknown[];
 			for (let i = 0; i < a.length; i++) { const c = a[i]; if (isObject(c) && (stateOf(c) || s.assigned.has(c))) { const f = finalize(c); if (f !== c) a[i] = f; fresh.push(f); } }
 		} else if (s || hasDraftInside(obj)) for (const k of Object.keys(obj)) {

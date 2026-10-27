@@ -47,9 +47,14 @@ async function viewFor(c: CommandCtx): Promise<TranslateView> {
 	return { exits: (await exitsHere(c)).map((x) => ({ name: x.f.name, aliases: x.f.aliases })), listings, carried: (await inventory(c)).map((i) => i.f.name), people };
 }
 
+/** The step command, run without merging the command sets: steps are most of what players send, and a step has no
+ *  lock; the sets would only cost reads (an exit a builder names "step" does not take its place). */
+const STEP = DEFAULT_COMMANDS.find((cmd) => cmd.key === "step")!;
+
 export async function execute(c: CommandCtx, line: string): Promise<void> {
 	line = line.trim();
 	if (!line) return;
+	if (/^step\s/.test(line)) return STEP.func(c, line.slice(5).trim());
 	const cmds = await commandsOf(c);
 	// plain language: the rules first (free); a line they rewrite says how it was understood
 	const said = c.asked ?? line;

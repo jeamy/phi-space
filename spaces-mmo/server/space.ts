@@ -52,6 +52,12 @@ function traced(space: SpaceLike): SpaceLike {
 	});
 }
 
+/** The first entry `tmpl` matches as the space stands now, or null: what readIfExists with NO_WAIT answers, as a snapshot
+ *  read (readAll). A readIfExists is a request with a claim the space commits; a step reads several such entries. */
+export async function peek(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}): Promise<Taken | null> {
+	return (await space.readAll(tmpl, { limit: 1, ...(o.txn ? { txn: o.txn } : {}) }))[0] ?? null;
+}
+
 /** How long a check waits on an entry another transaction holds right now (see readExisting). */
 export const HELD_WAIT_MS = 2_000;
 

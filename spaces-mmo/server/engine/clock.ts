@@ -4,9 +4,10 @@
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields } from "../model.ts";
 import { worldNow } from "./worldtime.ts";
+import { peek } from "../space.ts";
 
 export async function readClock(space: SpaceLike, txn?: string | null): Promise<WorldClockFields> {
-	const e = await space.readIfExists({ type: "WorldClock" }, NO_WAIT, txn ? { txn } : {});
+	const e = await peek(space, { type: "WorldClock" }, txn ? { txn } : {});
 	if (!e) throw new Error("the world has no clock");
 	return fieldsOf<WorldClockFields>(e);
 }

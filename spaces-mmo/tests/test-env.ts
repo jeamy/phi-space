@@ -15,6 +15,8 @@ process.env.SPACES_MMO_CLEANUP_MS = "";
 process.env.SPACES_MMO_MSG_LEASE_MS = "";
 process.env.SPACES_MMO_REQ_PER_MIN = "100000"; // the tests call in tight loops; the login limit has its own test
 process.env.SPACES_MMO_GUESTS_PER_HOUR = "100000";
+process.env.SPACES_MMO_CMD_BURST = "100000"; // likewise for typed commands; tests/collision.test.ts tests the limit with a web process of its own
+process.env.SPACES_MMO_CMD_PER_SEC = "100000";
 process.env.SPACES_MMO_LLM = ""; // never a real model in the tests: a test that wants one names tests/fake-llm.ts
 process.env.SPACES_MMO_LLM_MODULE = "";
 // the three roles of the earlier phases; the people of the islands (server/npc/economy.ts) would walk through their

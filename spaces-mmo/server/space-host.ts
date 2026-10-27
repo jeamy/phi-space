@@ -24,7 +24,9 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	const harness = dbPath ? await openSqliteHost(dbPath) : openOwnMemoryHost();
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 50 });
 	const identity = new StaticIdentity({ [peer]: { principal: { peerId: peer }, roles: ["member"] } });
-	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity }), { listen: parseTarget(listen), connection: () => ({ peerId: peer }) });
+	// every process of the game is this one peer: the service's limits per peer (calls per second, blocking calls at once)
+	// cover all of them together, so they are sized for the whole game, not for one client
+	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(listen), connection: () => ({ peerId: peer }), maxInflightPerConnection: 1024 });
 	const local = new PhiSpaces(harness, ctx);
 	// every process connects as the same peer: the per-owner caps cover all of them together
 	// Every call of every process leaves a request claim whose result is kept for `claimResultMs`; the processes poll several
@@ -34,7 +36,12 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	const claimResultMs = Number(process.env.SPACES_MMO_CLAIM_RESULT_MS) > 0 ? Number(process.env.SPACES_MMO_CLAIM_RESULT_MS) : 10 * 60_000;
 	// The space keeps a claim's hash until its generation stops admitting new request ids (default 1 hour): with results kept
 	// only ten minutes, thousands of claims would sit expired but kept, and every commit's sweep would read them again.
-	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, claimResultMs, generationAdmitMs: claimResultMs, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
+	// The change history (what the web process follows) is kept up to maxLogBytes. The space copies and walks that history
+	// with every commit, so its size is paid on every call: 4 MiB (the default) are some thousand batches and halved the
+	// steps a space could take. 512 KiB hold several seconds at full load; a web process that falls further behind reads
+	// the world again.
+	const logBytes = Number(process.env.SPACES_MMO_LOG_BYTES) > 0 ? Number(process.env.SPACES_MMO_LOG_BYTES) : 512 * 1024;
+	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, claimResultMs, generationAdmitMs: claimResultMs, maxLogBytes: logBytes, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
 	return { local, async close() { await server.close(); await stopService(); await harness.close(ctx); } };
 }
 

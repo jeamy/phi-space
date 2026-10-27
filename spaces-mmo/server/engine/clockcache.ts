@@ -4,6 +4,7 @@
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type WorldClockFields } from "../model.ts";
 import { calendar, worldNow } from "./worldtime.ts";
+import { peek } from "../space.ts";
 
 export class ClockCache {
 	#clock: WorldClockFields | null = null;
@@ -17,7 +18,7 @@ export class ClockCache {
 	/** The clock as last read (null while the world has none). */
 	async clock(realNow = Date.now()): Promise<WorldClockFields | null> {
 		if (!this.#clock || realNow - this.#at > this.#ttlMs) {
-			const e = await this.#space.readIfExists({ type: "WorldClock", ...(this.#worldId ? { fields: { worldId: this.#worldId } } : {}) }, NO_WAIT).catch(() => null);
+			const e = await peek(this.#space, { type: "WorldClock", ...(this.#worldId ? { fields: { worldId: this.#worldId } } : {}) }).catch(() => null);
 			if (e) { this.#clock = fieldsOf<WorldClockFields>(e); this.#at = realNow; }
 		}
 		return this.#clock;
