@@ -169,7 +169,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (p === "/api/login") {
 					const name = String(b.name ?? "").trim().toLowerCase();
 					if (!loginByIp(ip) || !loginByName(name)) return json(res, 429, { error: "Zu viele Anmeldeversuche; bitte in einer Minute noch einmal" });
-					return await signIn(req, res, await accounts.login(b.name, b.password));
+					return await signIn(req, res, await accounts.login(b.name, b.password, typeof b.setupToken === "string" && b.setupToken ? { setupToken: b.setupToken } : {}));
 				}
 				if (p === "/api/admin/settings") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), b));
 				if (p === "/api/logout") {

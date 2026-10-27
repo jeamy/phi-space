@@ -101,8 +101,10 @@ Build im Standardnetz die npm-Registry nicht). Der Speicher bleibt beim Neustart
 ## Einstellungen
 
 Die `.env` (Vorlage `spaces-mmo/.env.example`) wird allen Containern als `env_file` mitgegeben; `environment:` im Compose
-überschreibt sie für Adressen und Ports. Das erste Admin-Konto entsteht mit `SPACES_MMO_SETUP_TOKEN` (einmalig, danach
-entfernen). Die Image-Datei enthält keine `.env` (`.dockerignore`).
+überschreibt sie für Adressen und Ports. Das erste Admin-Konto entsteht mit `SPACES_MMO_SETUP_TOKEN` (beim Registrieren unter „Einrichtungstoken“).
+Ein schon bestehendes Konto wird Admin, wenn es sich mit dem Token anmeldet („Anmelden“, „Einrichtungstoken (macht
+dieses Konto zum Admin)“). Wer keine weiteren Admins will, entfernt den Token danach. Der Knopf „Admin“ (oben neben
+„Abmelden“, auf dem Handy im Menü ⋯) öffnet das Fenster für Modelle und Grenzen. Die Image-Datei enthält keine `.env` (`.dockerignore`).
 
 ## Wenn „the generation exceeds maxClaimBytes“ erscheint
 

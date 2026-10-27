@@ -82,7 +82,7 @@ function AccountForm({ onDone, guest = false }: { onDone: (a: Account) => void; 
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setBusy(true); setError("");
-		try { onDone((await post(mode === "login" ? "/api/login" : "/api/register", { name, password, ...(mode === "register" && token ? { setupToken: token } : {}) })).account!); }
+		try { onDone((await post(mode === "login" ? "/api/login" : "/api/register", { name, password, ...(token ? { setupToken: token } : {}) })).account!); }
 		catch (err) { setError((err as Error).message); } finally { setBusy(false); }
 	};
 	return (
@@ -95,8 +95,8 @@ function AccountForm({ onDone, guest = false }: { onDone: (a: Account) => void; 
 			{guest && mode === "login" && <p className="warning" style={{ margin: 0, fontSize: 13 }}>Mit einem bestehenden Konto anmelden: Der Fortschritt dieses Gastes wird nicht übernommen und verfällt.</p>}
 			<label>Name<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" required minLength={3} maxLength={20} /></label>
 			<label>Passwort<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={mode === "register" ? 8 : 1} /></label>
-			{mode === "register" && !guest && (
-				<details><summary>Einrichtungstoken (nur für den ersten Admin)</summary><input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" /></details>
+			{!guest && (
+				<details><summary>{mode === "login" ? "Einrichtungstoken (macht dieses Konto zum Admin)" : "Einrichtungstoken (nur für den ersten Admin)"}</summary><input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" /></details>
 			)}
 			<button className="primary" disabled={busy}>{mode === "login" ? "Anmelden" : "Registrieren"}</button>
 			{error && <p className="error" style={{ margin: 0 }}>{error}</p>}

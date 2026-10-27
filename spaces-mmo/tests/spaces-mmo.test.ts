@@ -222,12 +222,19 @@ test("a guest without activity disappears with its character when its lease runs
 	} finally { await srv.close(); }
 });
 
-test("the setup token makes the first registered account an admin, and only the first", async () => {
+test("the setup token makes the first registered account an admin, and any account that logs in with it", async () => {
 	const srv = await startServer({ accountOptions: { setupToken: "einmal-xyz" } });
 	try {
 		assert.equal((await new Player(srv.url).post("/api/register", { name: "Wache", password: "geheim-123", setupToken: "falsch" })).body.account.admin, false);
 		assert.equal((await new Player(srv.url).post("/api/register", { name: "Chefin", password: "geheim-123", setupToken: "einmal-xyz" })).body.account.admin, true);
 		assert.equal((await new Player(srv.url).post("/api/register", { name: "Zweite", password: "geheim-123", setupToken: "einmal-xyz" })).body.account.admin, false);
+		// an account registered without it (a second operator, an "admin" named so by hand) logs in with the token
+		const p = new Player(srv.url);
+		assert.equal((await p.post("/api/login", { name: "Wache", password: "geheim-123", setupToken: "falsch" })).status, 403);
+		assert.equal((await p.post("/api/login", { name: "Wache", password: "geheim-123" })).body.account.admin, false);
+		assert.equal((await p.post("/api/login", { name: "Wache", password: "geheim-123", setupToken: "einmal-xyz" })).body.account.admin, true);
+		assert.equal((await fetch(srv.url + "/api/admin/settings", { headers: { cookie: p.cookie } })).status, 200, "the operator's window opens");
+		assert.equal((await new Player(srv.url).post("/api/login", { name: "Wache", password: "geheim-123" })).body.account.admin, true, "it stays an admin");
 	} finally { await srv.close(); }
 });
 

@@ -29,7 +29,8 @@ export type AccountOptions = {
 	pendingMs?: number;
 	/** Lease of a web session, renewed on use (SPACES_MMO_WEB_SESSION_MS, 12 h). */
 	webSessionMs?: number;
-	/** The one-time token that makes the first registered account an admin (SPACES_MMO_SETUP_TOKEN). */
+	/** The operator's token (SPACES_MMO_SETUP_TOKEN): registering with it makes the first account an admin, logging in
+	 *  with it makes that account one. */
 	setupToken?: string;
 };
 
@@ -148,7 +149,9 @@ export class Accounts {
 
 	/** The account a name and password belong to. A credential left pending by a registration that got as far as the
 	 *  world is completed here. */
-	async login(name: string, password: string): Promise<Me> {
+	/** `setupToken`: the operator's token makes this (registered) account an admin, also when there is one already: whoever
+ *  holds the token runs the server (an account registered without it, say "admin", gets its rights this way). */
+	async login(name: string, password: string, o: { setupToken?: string } = {}): Promise<Me> {
 		const key = String(name ?? "").trim().toLowerCase();
 		const e = NAME.test(key) && typeof password === "string" && password.length <= 200 ? await readExisting(this.store, { type: "Credential", fields: { key } }) : null;
 		if (!e) { await scrypt(String(password ?? ""), randomBytes(16)); throw new AuthError(403, "Name oder Passwort stimmt nicht"); }
@@ -161,7 +164,23 @@ export class Accounts {
 			await this.#activate(key, c.accountId);
 		}
 		if (!account) throw new AuthError(403, "Zu diesem Namen gibt es kein Konto mehr");
+		if (o.setupToken) {
+			if (!this.#tokenOk(o.setupToken)) throw new AuthError(403, "Das Einrichtungstoken stimmt nicht");
+			if (!account.admin) return this.#me(await this.#makeAdmin(account.accountId));
+		}
 		return this.#me(account);
+	}
+
+	async #makeAdmin(accountId: string): Promise<AccountFields> {
+		const txn = (await this.world.createTransaction(10_000)).id;
+		try {
+			const a = await this.world.take({ type: "Account", fields: { accountId, guest: false } }, 5_000, { txn });
+			if (!a) throw new AuthError(409, "Dieses Konto ist gerade nicht greifbar; bitte noch einmal");
+			const f: AccountFields = { ...fieldsOf<AccountFields>(a), admin: true };
+			await this.world.write({ type: "Account", fields: asFields(f) }, txn, FOREVER);
+			await this.world.commit(txn);
+			return f;
+		} catch (e) { await this.world.abort(txn).catch(() => {}); throw e; }
 	}
 
 	/** A web session for an account: the cookie value (only its hash is stored). */
