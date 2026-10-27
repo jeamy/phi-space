@@ -45,14 +45,16 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 
 /** Takes the actor's character and writes it at a new place; its Spot goes along (`spot` false: the place is known to
  *  be its own, e.g. a step that was not taken and is only answered). */
-async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }, o: { spot?: boolean } = {}): Promise<void> {
+async function relocate(c: CommandCtx, to: { room: string; x: number; y: number }, o: { spot?: boolean; refused?: string } = {}): Promise<void> {
 	if (o.spot !== false) {
 		const there = await claimSpot(c.space, c.txn, c.actor, to);
 		if (there) throw new CommandError(`Dort steht schon ${there}.`);
 	}
 	const e = await c.space.take({ type: "Character", fields: { charId: c.actor.charId } }, 5_000, { txn: c.txn });
 	if (!e) throw new CommandError("Deine Figur ist gerade nicht greifbar; bitte noch einmal.");
-	await c.space.write({ type: "Character", fields: { ...fieldsOf<CharacterFields>(e), ...to, ...(c.step ? { ack: c.step } : {}) } as never }, c.txn, FOREVER);
+	// `refused`: the last reason a step was not taken (told once, not with every step of a held key); a move clears it
+	const { refused: _was, ...ch } = fieldsOf<CharacterFields>(e);
+	await c.space.write({ type: "Character", fields: { ...ch, ...to, ...(c.step ? { ack: c.step } : {}), ...(o.refused ? { refused: o.refused } : {}) } as never }, c.txn, FOREVER);
 }
 
 /** Onto a free cell of `room`, starting at `at`: the nearest cell no online character holds, no exit and no fire is on,
@@ -199,10 +201,12 @@ const step: Command = {
 			if (!walkable(c.world, room.ground, to.x, to.y)) throw new CommandError("Da geht es nicht weiter.");
 			await moveTo(c, to, { room });
 		} catch (e) {
-			// a numbered step of a page that cannot be taken (a wall, someone there, the fire) is still answered: the
-			// character stays and carries the step's number, so the page walks on from where it really is
+			// a numbered step of a page that cannot be taken (a wall, someone there, the fire, the fog at an exit) is still
+			// answered: the character stays and carries the step's number, so the page walks on from where it really is. The
+			// reason is told when it is new (a held key against the same wall says it once)
 			if (!(e instanceof CommandError) || !c.step) throw e;
-			await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y }, { spot: false });
+			if (c.actor.refused !== e.message) await msg(c, c.actor.charId, "error", e.message);
+			await relocate(c, { room: c.actor.room, x: c.actor.x, y: c.actor.y }, { spot: false, refused: e.message });
 		}
 	},
 };

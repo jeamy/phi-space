@@ -10,7 +10,9 @@ export type AccountFields = { accountId: string; name: string; guest: boolean; a
  *  always a room (`room`); items use `location`, which may also be a character. */
 /** `ack`: the last numbered step of a page this character took (client/walk.ts): the connection and its step number,
  *  written with every such step, also one that could not be taken, so the page knows which of its steps are done. */
-export type CharacterFields = { charId: string; accountId: string; name: string; room: string; x: number; y: number; skin: number; guest: boolean; ack?: { conn: string; seq: number } };
+export type CharacterFields = { charId: string; accountId: string; name: string; room: string; x: number; y: number; skin: number; guest: boolean; ack?: { conn: string; seq: number };
+	/** Why the last step was not taken (engine/commands/default.ts: told once per reason); gone with the next move. */
+	refused?: string };
 
 /** How an object looks on the map until it has a sprite (no item graphics are licensed yet). */
 export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };

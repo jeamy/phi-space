@@ -161,3 +161,25 @@ test("a flood of typed commands is cut after the account's burst, across all its
 		for (const p of [second, ...more]) await p.leave();
 	} finally { await stack.close(); }
 });
+
+test("a step that is not taken says why, once: a held key against the fire gets one hint, not one per step", async () => {
+	const srv = await startServer();
+	try {
+		const space = srv.stack.space;
+		const a = await player(srv.url, "Hinweis");
+		await walk(a.p, space, a.me, 9, 9); // just north of the beacon at 9,10
+		const from = a.p.frames.length;
+		for (let seq = 1; seq <= 3; seq++) { a.p.ws!.send(JSON.stringify({ t: "step", seq, dx: 0, dy: 1 })); await new Promise((r) => setTimeout(r, WALK_MS)); }
+		await a.p.until((f) => f.t === "char" && f.c.charId === a.me && f.ack === 3, 10_000, from);
+		await new Promise((r) => setTimeout(r, 500));
+		const hints = a.p.frames.slice(from).filter((f) => f.t === "msg" && f.m.kind === "error").map((f) => (f as Extract<ServerFrame, { t: "msg" }>).m.text);
+		assert.deepEqual(hints, ["Dort brennt das Leuchtfeuer; da läuft man nicht hinein."]);
+		// a step that is taken clears it: the next refusal is told again
+		await walk(a.p, space, a.me, 8, 9);
+		await walk(a.p, space, a.me, 9, 9);
+		const again = a.p.frames.length;
+		a.p.ws!.send(JSON.stringify({ t: "step", seq: 4, dx: 0, dy: 1 }));
+		await a.p.until((f) => f.t === "msg" && f.m.kind === "error" && /Leuchtfeuer/.test(f.m.text), 10_000, again);
+		await a.p.leave();
+	} finally { await srv.close(); }
+});
