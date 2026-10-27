@@ -58,7 +58,7 @@ export type Draft<T> = {
 };
 
 /** A draft of `base` (a JSON value: plain objects, arrays, primitives) with the given parts. */
-export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> {
+export function draftOf<T>(base: T, parts: readonly DraftPart[] = [], o: { skipUnchangedRecords?: boolean } = {}): Draft<T> {
 	if (!isObject(base)) throw new TypeError("a draft needs an object");
 	const partKind = new Map(parts.map((p) => [p.path.join("."), p.kind]));
 	const states: State[] = [];
@@ -217,11 +217,12 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = []): Draft<T> 
 		const obj = s ? ((s.copy ?? s.base) as Obj) : v;
 		seen.set(v, obj);
 		if (s?.kind === "array") {
-			// unchanged records are committed values without drafts: only the ones written now are looked into. Every
-			// record a commit puts into a part array passes `assigned`; when none of them is a draft itself, each stays the
+			// unchanged records are committed values without drafts: only the ones written now are looked into. With
+			// `skipUnchangedRecords` (OwnStoreHost.skipUnchangedRecords; off by default: codemode-chat's runs stalled now and
+			// then with it, not yet understood): every record a commit puts into a part array passes `assigned`; when none of them is a draft itself, each stays the
 			// same object (drafts inside it are replaced in place), so the array need not be walked: a log of thousands of
 			// batches would otherwise be walked by every commit that appends one
-			if (![...s.assigned].some((v) => stateOf(v))) {
+			if (o.skipUnchangedRecords && ![...s.assigned].some((v) => stateOf(v))) {
 				for (const v of s.assigned) fresh.push(finalize(v));
 				return obj;
 			}

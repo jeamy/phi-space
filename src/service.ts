@@ -25,6 +25,8 @@ import { principalId, MailboxEpochMismatch, InvalidAck } from "./mailbox.ts";
 export const PROTOCOL_VERSION = 1;
 export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
 export type Method = (typeof METHODS)[number];
+/** Without wakeOnCommit: look again every 50 ms, as before. */
+const sleepSignal = { wait: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(50, Math.max(1, ms)))), stop: async () => {} };
 /** A long poll looks again at the latest after this long even without a commit (a decision that came without one). */
 const POLL_FALLBACK_MS = 1000;
 /** A waiting call looks again at the first commit, then at most this often: every look costs the space a read, and a busy
@@ -82,6 +84,12 @@ export type MergeAdapter = { controller: import("./entry-replication.ts").EntryR
 /** v3 7.2: merge types know no exclusive allocation (take, transactions, waits, lease changes). */
 export class MergeTypeNotExclusive extends core.IllegalArgumentError {}
 export type SpaceServiceOptions = {
+	/**
+	 * Long polls (a waiting call's poll, `changes`, `events`) end at the commit that serves them instead of looking every
+	 * 50 ms. Off by default: under load in codemode-chat runs then stalled now and then (not yet understood), so a host
+	 * turns it on where it is tested (spaces-mmo/server/space-host.ts).
+	 */
+	wakeOnCommit?: boolean;
 	/**
 	 * primary/sync: a commit of this Space was sealed but not confirmed (docs/abnahme/ap3-primary-sync.md). From then on every
 	 * call is answered with `CommitSealed` until the host resolved the candidate and serves the Space anew.
@@ -372,7 +380,7 @@ export class SpaceService {
 			case "events": {
 				this.checkConsumer(a.consumer, c.id);
 				const end = this.now() + Math.min(optInt(a.waitMs, "waitMs") ?? 0, this.o.maxPollMs);
-				const signal = end > this.now() ? await client.commitSignal({ gapMs: POLL_GAP_MS }) : null; // before the first look: no commit in between is missed
+				const signal = end > this.now() ? (this.o.wakeOnCommit ? await client.commitSignal({ gapMs: POLL_GAP_MS }) : sleepSignal) : null; // before the first look: no commit in between is missed
 				try { for (;;) {
 					const p = await client.events(c.id.principal, { ...(a.mailboxEpoch === undefined ? {} : { mailboxEpoch: str(a.mailboxEpoch, "mailboxEpoch") }), after: optInt(a.after, "after"), maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21) }, p => { for (const item of p.events) if (item.event.entry) this.checkTypes(grant, item.event.entry.types, "this mailbox event"); });
 					if (p.events.length || p.gap || this.now() >= end) return p as unknown as Json;
@@ -503,7 +511,7 @@ export class SpaceService {
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
 		const end = this.now() + waitMs;
 		// a commit decides a pending request (the write that serves it, the expiry of its deadline is a timer below)
-		const signal = waitMs > 0 ? await c.client.commitSignal({ gapMs: POLL_GAP_MS }) : null;
+		const signal = waitMs > 0 ? (this.o.wakeOnCommit ? await c.client.commitSignal({ gapMs: POLL_GAP_MS }) : sleepSignal) : null;
 		try {
 			for (;;) {
 				const v = await c.client.pollOperation(t);
@@ -521,7 +529,7 @@ export class SpaceService {
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
 		const maxBytes = Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21);
 		const end = this.now() + waitMs;
-		const signal = waitMs > 0 ? await c.client.commitSignal() : null; // before the first look: no commit in between is missed
+		const signal = waitMs > 0 ? (this.o.wakeOnCommit ? await c.client.commitSignal() : sleepSignal) : null; // before the first look: no commit in between is missed
 		try { for (;;) {
 			let r: core.Changes;
 			try { r = await c.client.changes(after, maxBytes === undefined ? {} : { maxBytes }); }

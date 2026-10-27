@@ -26,7 +26,10 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	const identity = new StaticIdentity({ [peer]: { principal: { peerId: peer }, roles: ["member"] } });
 	// every process of the game is this one peer: the service's limits per peer (calls per second, blocking calls at once)
 	// cover all of them together, so they are sized for the whole game, not for one client
-	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(listen), connection: () => ({ peerId: peer }), maxInflightPerConnection: 1024 });
+	// waiting calls end at the commit that serves them, and a commit that appends to the change history does not walk it:
+	// both off in phi-spaces by default, tested here (docs/betrieb.md, "Last und Latenz")
+	harness.skipUnchangedRecords = true;
+	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096, wakeOnCommit: true }), { listen: parseTarget(listen), connection: () => ({ peerId: peer }), maxInflightPerConnection: 1024 });
 	const local = new PhiSpaces(harness, ctx);
 	// every process connects as the same peer: the per-owner caps cover all of them together
 	// Every call of every process leaves a request claim whose result is kept for `claimResultMs`; the processes poll several

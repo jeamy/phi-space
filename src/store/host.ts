@@ -125,6 +125,9 @@ export class OwnStoreHost implements ClosableStoreHost {
 	readonly #usedAt = new Map<string, number>();
 	readonly #hotMs: number;
 
+	/** A commit that appends to a part array (the change history) does not walk its unchanged records (store/draft.ts).
+	 *  Off by default; spaces-mmo turns it on (its space host), where it is tested under load. */
+	skipUnchangedRecords = false;
 	constructor(ledger: Ledger, o: { memoryBudget?: number; hotMs?: number } = {}) { this.#ledger = ledger; this.#budget = ledger.forget ? (o.memoryBudget ?? Infinity) : Infinity; this.#hotMs = o.hotMs ?? 250; }
 
 	#weigh(a: string, doc: StoredDoc | null, parts?: AnyDef["parts"]): void {
@@ -203,7 +206,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 				retired.delete(a);
 				const cur = this.#current(def, k);
 				const base = cur !== undefined ? cur : def.family ? (def as DocFamilyDef<any, any>).initial(seed) : (def as DocDef<any>).initial();
-				const draft = draftOf(base, def.parts);
+				const draft = draftOf(base, def.parts, { skipUnchangedRecords: this.skipUnchangedRecords });
 				drafts.set(a, { def, key: k, draft });
 				return draft.value;
 			}) as StoreTx["doc"],

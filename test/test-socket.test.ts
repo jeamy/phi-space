@@ -145,7 +145,7 @@ test("a blocking call and a change poll end at the commit that serves them, not 
 	const h = await memory(); const f = sock();
 	const stopService = await startService(h, ctx);
 	tc.after(() => stopService());
-	await serve(tc, new SpaceService({ host: h, ctx, identity: ids }), { listen: { path: f.path }, connection: asPeer("peer-a") });
+	await serve(tc, new SpaceService({ host: h, ctx, identity: ids, wakeOnCommit: true }), { listen: { path: f.path }, connection: asPeer("peer-a") });
 	const t = socketTransport({ path: f.path });
 	tc.after(() => { t.close(); f.done(); });
 	const a = new RemoteSpace(t, fast), b = new RemoteSpace(t, fast);
