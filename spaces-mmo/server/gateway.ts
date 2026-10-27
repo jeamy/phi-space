@@ -313,7 +313,7 @@ export class Gateway {
 				if (this.#closed) break;
 				const m = (e as Error).message;
 				// the history moved past the cursor (or the space restarted): read everything again from now
-				if (/no longer kept|expired|ahead/i.test(m)) { console.error(`[gateway] change stream: ${m}; reading the world again`); this.#reset(); rev = -1; continue; }
+				if (/no longer kept|expired|ahead|history dropped|another stream|read the pages again/i.test(m)) { console.error(`[gateway] change stream: ${m}; reading the world again`); this.#reset(); rev = -1; continue; }
 				console.error("[gateway] change stream:", m);
 				await new Promise((r) => setTimeout(r, 1000));
 			}
