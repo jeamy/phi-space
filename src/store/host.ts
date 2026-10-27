@@ -9,6 +9,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { awaitWithContext, type Context } from "../context.ts";
 import { detach, draftOf, isDraft, type Draft, type PartChanges } from "./draft.ts";
+import { partAt } from "./parts.ts";
 import { diskMapOf } from "./types.ts";
 import type { ClosableStoreHost, DocDef, DocFamilyDef, DocWatch, StoreTx, WatchEnd } from "./types.ts";
 
@@ -61,12 +62,14 @@ class Watch<T> implements DocWatch<T> {
 	#resolve!: (e: WatchEnd) => void;
 	readonly #ctx: Context;
 	readonly #drop: (w: Watch<T>) => void;
+	readonly #onAbort = () => this.finish({ reason: "cancelled" });
 	constructor(value: Readonly<T> | null, ctx: Context, drop: (w: Watch<T>) => void) {
 		this.value = value;
 		this.#ctx = ctx;
 		this.#drop = drop;
 		this.closed = new Promise((r) => { this.#resolve = r; });
-		ctx.abortSignal?.addEventListener("abort", () => this.finish({ reason: "cancelled" }), { once: true });
+		// removed again in finish: a long-lived context sees a watch per blocking read, and its listeners would pile up
+		ctx.abortSignal?.addEventListener("abort", this.#onAbort, { once: true });
 	}
 	start(listener: (value: Readonly<T> | null, ops: readonly unknown[], context: Context) => void | Promise<void>): void {
 		if (this.#listener) throw new Error("a watch has one listener");
@@ -94,6 +97,7 @@ class Watch<T> implements DocWatch<T> {
 	finish(end: WatchEnd): void {
 		if (this.#end) return;
 		this.#end = end;
+		this.#ctx.abortSignal?.removeEventListener("abort", this.#onAbort);
 		this.#drop(this);
 		this.#resolve(end);
 	}
@@ -134,7 +138,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 		this.#weight -= this.#weights.get(a) ?? 0;
 		let w = doc ? 1 : 0;
 		for (const p of doc ? parts ?? [] : []) {
-			const v = p.path.reduce<unknown>((x, k) => (x !== null && typeof x === "object" ? (x as Record<string, unknown>)[k] : undefined), doc!.value);
+			const v = partAt(doc!.value, p.path);
 			if (Array.isArray(v)) w += v.length;
 			else if (v !== null && typeof v === "object" && !diskMapOf(v)) w += Object.keys(v).length;
 		}
@@ -321,7 +325,7 @@ export class OwnStoreHost implements ClosableStoreHost {
 	}
 }
 
-function deepFreeze(v: unknown): void {
+export function deepFreeze(v: unknown): void {
 	if (typeof v !== "object" || v === null || Object.isFrozen(v)) return;
 	Object.freeze(v);
 	for (const x of Object.values(v)) deepFreeze(x);

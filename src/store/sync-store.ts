@@ -39,4 +39,3 @@ export interface SyncStore<W = unknown> {
 	replicated?(journal: any, peer: any, o: any): unknown;
 }
 
-export const isSyncStore = (v: unknown): v is SyncStore => typeof v === "object" && v !== null && "codec" in v && typeof (v as SyncStore).capture === "function";

@@ -197,6 +197,16 @@ test("waiter: served by a later write, entry taken under a txn that returns on l
 	assert.equal(c.probe(s, 2, T("Job"), null, true).status, "locked"); // held for the waiter
 	assert.equal(c.probe(s, 600, T("Job"), null, true).status, "found"); // lease lapsed: back in the space
 });
+test("waiter: a take whose transaction cannot reserve its abort's publication waits instead of failing the caller", () => {
+	const s = mk(); c.write(s, 0, job(1), null, c.FOREVER);
+	c.setLimits(s, { maxJobBytes: 8 }, 0); // no room for any completion reservation
+	const w = c.addWaiter(s, 1, { template: T("Job"), take: true, target: "c1", timeout: 10_000 }); // serve finds the entry but cannot reserve
+	assert.equal(s.waiters.length, 1); assert.equal(s.outbox.length, 0); assert.deepEqual(Object.keys(s.txns), []);
+	assert.equal(c.probe(s, 2, T("Other"), null, false).status, "none"); // an unrelated operation settles and is not refused
+	c.setLimits(s, { maxJobBytes: c.DEFAULT_LIMITS.maxJobBytes }, 3);
+	c.settle(s, 4);
+	assert.equal(s.waiters.length, 0); assert.equal(s.outbox[0]!.eventId, w); assert.ok(s.outbox[0]!.txn);
+});
 test("waiter: commit of the held txn makes the take permanent", () => {
 	const s = mk(); c.write(s, 0, job(1), null, c.FOREVER);
 	c.addWaiter(s, 1, { template: T("Job"), take: true, target: "c1", timeout: 1000 }); // served at once

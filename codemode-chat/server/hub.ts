@@ -17,7 +17,7 @@
 // carries how many cases passed and what each case returned, so agents can build on attempts that got close: a run is
 // teamwork (repair, explore, improve) that goes on until the task is solved, not a fixed number of tries.
 import { randomBytes } from "node:crypto";
-import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
+import { FOREVER, NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import { limitOf, maxTimeoutMs, plain, sandboxSlot, sourceProblem, testRule, type Codemode, type Verdict } from "./judge.ts";
 import { archive, earlierLeaseMs, EARLIER_CAP, setBest, validMs } from "./results.ts";
 import { endRun, readRun, startSpaceRun, type RunEntry, type RunInfo, type RunMode, type RunParams } from "./run.ts";
@@ -79,22 +79,8 @@ export class CodeChatHub {
 		void this.#watch();
 	}
 
-	/** The revision the space is at now: any read of the change stream that is not refused names it. A revision before
-	 *  the kept history is refused as expired, one beyond the stream as ahead, so a binary search finds one in between. */
-	async #currentRev(): Promise<number> {
-		let lo = 0, hi = 2 ** 48;
-		while (lo <= hi && !this.#closed) {
-			const at = lo === 0 ? 0 : Math.floor((lo + hi) / 2);
-			try { return (await this.host.changes(at)).rev; }
-			catch (e) {
-				const m = (e as Error).message;
-				if (/ahead/i.test(m)) hi = at - 1;
-				else if (/no longer kept|expired|read the pages again/i.test(m)) lo = at + 1;
-				else throw e;
-			}
-		}
-		throw new Error("no revision of the change stream could be read");
-	}
+	/** The revision the space is at now: every page read names the revision of its snapshot (an empty one is enough). */
+	async #currentRev(): Promise<number> { return (await this.host.readPage({ type: "-" }, { maxBytes: 1024 })).rev; }
 
 	/** Follows the space's change stream (a long poll): a change to a room's entries, made by any process (a judge's
 	 *  verdict, another web process), pushes a fresh snapshot to the room's clients. A removal names no room, so it
@@ -104,7 +90,7 @@ export class CodeChatHub {
 		while (!this.#closed) {
 			try {
 				if (rev < 0) { rev = await this.#currentRev(); for (const s of this.#sessions.values()) this.push(s); }
-				const ch = await (this.host.changes as (r: number, o: { waitMs: number }) => ReturnType<SpaceLike["changes"]>)(rev, { waitMs: 20_000 });
+				const ch = await this.host.changes(rev, { waitMs: 20_000 });
 				const rooms = new Set<string>();
 				let removed = false;
 				for (const b of ch.batches) for (const op of b.ops) {
@@ -158,7 +144,7 @@ export class CodeChatHub {
 				if (took) break;
 				// no lock yet: this transaction makes it (a second process that does the same at once is refused, and waits)
 				try { await this.host.write({ type: "RoomLock", fields: { session: s.id, ts: Date.now() } }, t.id, this.#ttl, { unique: ["session"] }); break; }
-				catch (e) { if (!/unique/i.test((e as Error).message)) throw e; }
+				catch (e) { if (!(e instanceof UniqueConflict)) throw e; }
 			}
 			const v = await fn();
 			if (took) await this.host.write({ type: "RoomLock", fields: { session: s.id, ts: Date.now() } }, t.id, this.#ttl);
@@ -807,7 +793,7 @@ export class CodeChatHub {
 				await this.host.commit(t.id);
 			} catch (e) {
 				await this.host.abort(t.id).catch(() => {});
-				throw /unique/i.test((e as Error).message) ? new Error("A run is already active") : e;
+				throw e instanceof UniqueConflict ? new Error("A run is already active") : e;
 			}
 		});
 		this.push(s);

@@ -309,8 +309,7 @@ export interface SwarmShardOptions {
 }
 
 /** Whether a changes read failed because the revision asked for is no longer (or not yet) in the retained history. */
-const historyGone = (e: unknown): boolean =>
-	e instanceof SnapshotExpired || e instanceof RevisionAhead || (e as Error)?.name === "SnapshotExpired" || String(e).includes("dropped") || String(e).includes("ahead");
+const historyGone = (e: unknown): boolean => e instanceof SnapshotExpired || e instanceof RevisionAhead;
 
 export class SocialSwarmHub {
 	readonly host: SpaceHost;

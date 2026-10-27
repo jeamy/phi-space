@@ -5,7 +5,7 @@
 // A character is online while a Session entry for it lives; the gateway holds one per open WebSocket and renews its
 // lease, so a web process that dies takes its players offline within the lease.
 import { randomBytes } from "node:crypto";
-import type { SpaceLike } from "phi-spaces";
+import { RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
@@ -85,13 +85,10 @@ type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | n
 const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.md: marked as AI wherever they appear). */
-let modelChars = new Set<string>(), modelNames = new Set<string>();
-const charView = (c: CharacterFields): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}) });
-/** Prototype key → the URL of its icon (set from the world when the gateway starts). */
-let protoIcons = new Map<string, string>();
-const itemView = (f: ItemFields): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
+const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}) });
+const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
 const exitView = (f: ExitFields): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, location: f.location, x: f.x, y: f.y });
-const msgView = (m: MsgFields, viewer: string, viewerName = ""): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}) });
+const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = ""): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}) });
 /** Whether a message is meant for the viewer: written to them alone by someone else (not the answer to their own
  *  command, not an error), or someone else's words that name them. */
 function forViewer(m: MsgFields, viewer: string, name: string): boolean {
@@ -130,6 +127,7 @@ export class Gateway {
 	#atlasDue: ReturnType<typeof setTimeout> | null = null;
 	readonly #waiting = new Set<{ rev: number; ok: () => void }>();
 	#watch: Promise<void>;
+	#modelChars!: Set<string>; #modelNames!: Set<string>; #protoIcons!: Map<string, string>;
 
 	private readonly space: SpaceLike;
 	private readonly w: WorldDef;
@@ -138,9 +136,9 @@ export class Gateway {
 
 	constructor(space: SpaceLike, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null) {
 		this.space = space; this.w = w; this.onActivity = onActivity; this.build = build;
-		modelChars = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
-		protoIcons = new Map(w.prototypes.filter((p) => p.icon).map((p) => [p.key, `/assets/${w.id}/${p.icon}`]));
-		modelNames = new Set(w.npcs.filter((n) => n.model).map((n) => n.name));
+		this.#modelChars = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
+		this.#protoIcons = new Map(w.prototypes.filter((p) => p.icon).map((p) => [p.key, `/assets/${w.id}/${p.icon}`]));
+		this.#modelNames = new Set(w.npcs.filter((n) => n.model).map((n) => n.name));
 		let ready!: () => void;
 		this.#ready = new Promise((r) => (ready = r));
 		this.#watch = this.#follow(ready);
@@ -251,15 +249,15 @@ export class Gateway {
 		const room = self ? this.#rooms.get(self.room) : undefined;
 		if (!self || !room) { c.ws.send({ t: "msg", m: { kind: "error", text: "Deine Figur ist noch nicht in der Welt angekommen.", from: "", at: Date.now() } } satisfies ServerFrame); return; }
 		c.room = self.room;
-		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map(charView);
+		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map((ch) => charView(ch, this.#modelChars));
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
-		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, self.name));
+		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, this.#modelNames, self.name));
 		queueMicrotask(() => {
 			c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set(protoIcons.values())] }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set(this.#protoIcons.values())] }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Reads the world once (from a revision taken before the reads) and then follows the change stream. Replaying ops
@@ -277,7 +275,7 @@ export class Gateway {
 					ready();
 					for (const c of this.#clients) this.#hello(c); // after a restart of the stream
 				}
-				const ch = await (this.space.changes as (r: number, o: { waitMs: number }) => ReturnType<SpaceLike["changes"]>)(rev, { waitMs: 20_000 });
+				const ch = await this.space.changes(rev, { waitMs: 20_000 });
 				for (const b of ch.batches) {
 					const chars = new Map<string, string | null>(); // charId -> room before the batch
 					const objs = new Map<string, string | null>(); // objId -> location before the batch
@@ -306,7 +304,7 @@ export class Gateway {
 					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 					if (chars.size || fogs.size || [...objs.keys()].some((id) => this.#objs.get(id)?.kind === "beacon")) this.#atlasChanged();
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
-					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#chars.get(c.me.charId)?.name) } satisfies ServerFrame);
+					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#modelNames, this.#chars.get(c.me.charId)?.name) } satisfies ServerFrame);
 				}
 				rev = ch.next;
 				this.#advance(rev);
@@ -314,7 +312,7 @@ export class Gateway {
 				if (this.#closed) break;
 				const m = (e as Error).message;
 				// the history moved past the cursor (or the space restarted): read everything again from now
-				if (/no longer kept|expired|ahead|history dropped|another stream|read the pages again/i.test(m)) { console.error(`[gateway] change stream: ${m}; reading the world again`); this.#reset(); rev = -1; continue; }
+				if (e instanceof SnapshotExpired || e instanceof RevisionAhead) { console.error(`[gateway] change stream: ${m}; reading the world again`); this.#reset(); rev = -1; continue; }
 				console.error("[gateway] change stream:", m);
 				await new Promise((r) => setTimeout(r, 1000));
 			}
@@ -352,7 +350,7 @@ export class Gateway {
 		else if (type === "Order") this.#orders.set(id, fields as unknown as OrderFields);
 		else if (type === "Listing") this.#listings.set(id, fields as unknown as ListingFields);
 		else if (types.includes("Item") || types.includes("Exit")) {
-			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields) : exitView(fields as unknown as ExitFields);
+			const o = types.includes("Item") ? itemView(fields as unknown as ItemFields, this.#protoIcons) : exitView(fields as unknown as ExitFields);
 			this.#setObj(id, o);
 		}
 		else if (type === "Msg") {
@@ -392,7 +390,7 @@ export class Gateway {
 		for (const cl of this.#clients) {
 			// its own room changed (a client not greeted yet gets its hello from attach)
 			if (cl.me.charId === charId && c && cl.room !== null && cl.room !== c.room) { this.#hello(cl); continue; }
-			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!), ...(cl.me.charId === charId && c!.ack?.conn === cl.ws.id ? { ack: c!.ack.seq } : {}) } satisfies ServerFrame);
+			if (visible && cl.room === c!.room) cl.ws.send({ t: "char", c: charView(c!, this.#modelChars), ...(cl.me.charId === charId && c!.ack?.conn === cl.ws.id ? { ack: c!.ack.seq } : {}) } satisfies ServerFrame);
 			else if (cl.room !== null && (cl.room === roomBefore || cl.room === c?.room)) cl.ws.send({ t: "gone", charId } satisfies ServerFrame);
 		}
 	}

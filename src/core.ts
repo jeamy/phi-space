@@ -69,6 +69,8 @@ export class ResponseBudgetTooSmall extends Error {
 	constructor(requiredBytes: number) { super(`the next element needs ${requiredBytes} bytes of budget`); this.requiredBytes = requiredBytes; }
 }
 export class IllegalArgumentError extends Error {}
+/** A write with `unique` found another entry of its type with the same key fields (client.ts Req.unique). */
+export class UniqueConflict extends IllegalArgumentError {}
 /** A conversation tried to use or change something that is not its own. */
 export class PermissionError extends Error {}
 /** v3 5.3.1 step 5: a replicated Member refuses new work until the router routes under its current replica
@@ -153,9 +155,9 @@ export type SpaceEvent = {
  * `spaceId` (immutable) and `incarnation` (replaced by a restore) identify this space; both are set when the space is
  * registered (see `spaces.ts`), so a fresh document has neither. Local ids carry the incarnation: `e<incarnation>-<n>`.
  */
-export type SpaceState = { erasureEpoch?:number; adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed"; /** claims on the disk: the key the history stage marked last */ claimCursor?: string; /** historical claims: likewise */ historyCursor?: string }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; /** the tally of restoredClaims when they are on the disk (claims.ts restoredBytes) */ restoredBytes?: number; invalidGenerations?: Record<string, true>; runGates?: Record<string, RunGateRec>; archived?: { at: number; commandId: string } };
+export type SpaceState = { erasureEpoch?:number; adminMaintenance?:{commandId:string;hash:string}; snapshotEpoch?:number; membership?: MemberAdmission; outboxBytes?: number; nextId: number; entries: EntryRec[]; txns: Record<string, TxnRec>; regs: RegRec[]; waiters: WaiterRec[]; outbox: SpaceEvent[]; returned: number ; limits?: Partial<Limits>; spaceId?: string; incarnation?: string; rpc?: import("./claims.ts").RpcState; stream?: StreamState; completionProfiles?: CompletionProfile[]; mailboxes?: MailboxState; jobs?: FanoutJob[]; releaseQueue?: string[]; maintenance?: { at: number; cursor: string }; primaryEpoch?: number; acceptedAuthorityId?: string; authorityTransition?: { recoveryId: string; authorityId: string; stage: "clearing" | "history" | "generations" | "completed"; /** claims on the disk: the key the history stage marked last */ claimCursor?: string; /** historical claims: likewise */ historyCursor?: string }; authorityCounters?: { routerEpoch: number; policyVersion: number }; restore?: import("./restore.ts").RestoreState; restoredClaims?: Record<string, import("./claims.ts").ClaimRec>; /** the tally of restoredClaims when they are on the disk (claims.ts restoredBytes) */ restoredBytes?: number; invalidGenerations?: Record<string, true>; runGates?: Record<string, RunGateRec>; archived?: { at: number; commandId: string } };
 
-export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], returned: 0 });
+export const initialState = (): SpaceState => ({ nextId: 1, entries: [], txns: {}, regs: [], waiters: [], outbox: [], outboxBytes: 2, returned: 0 });
 export const migrate = (v: any, _from: number): SpaceState => {
 	const d = initialState();
 	return {
@@ -165,6 +167,7 @@ export const migrate = (v: any, _from: number): SpaceState => {
 		regs: (v.regs ?? d.regs).map((r: any) => ({ ...r, seq: r.seq ?? 0 })),
 		waiters: v.waiters ?? d.waiters,
 		outbox: v.outbox ?? d.outbox,
+		...(v.outboxBytes !== undefined ? { outboxBytes: v.outboxBytes } : {}),
 		...(v.limits ? { limits: v.limits } : {}),
 		...(typeof v.spaceId === "string" ? { spaceId: v.spaceId } : {}),
 		...(typeof v.incarnation === "string" ? { incarnation: v.incarnation } : {}),
@@ -265,8 +268,16 @@ export function setLimits(s: SpaceState, l: Partial<Limits>, now = Date.now()): 
 const ownedBy = (as: Target) => (o: { owner: Target | null }) => o.owner === as;
 /** Bytes of the parts of the document that are not entries (claims by their running tally). */
 export function overheadBytes(s: Readonly<SpaceState>): number {
-	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + jsonBytes(s.outbox) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + mailboxesBytes(s) + jsonBytes(s.runGates ?? {});
+	return jsonBytes(s.adminMaintenance ?? {}) + jsonBytes(s.membership ?? {}) + Object.values(s.txns).reduce((n,t)=>n+(t.completion?.remainingBytes??0),0) + jsonBytes(s.authorityTransition ?? {}) + jsonBytes(s.authorityCounters ?? {}) + (s.restore ? jsonBytes(s.restore) : 0) + claimBytes(s) + (s.stream?.bytes ?? 0) + outboxBytes(s) + jsonBytes(s.waiters) + jsonBytes(s.regs) + jsonBytes(s.txns) + jsonBytes(s.jobs ?? []) + mailboxesBytes(s) + jsonBytes(s.runGates ?? {});
 }
+/** Encoded bytes of the outbox as a running tally (kept on the document); states that predate it are counted once. */
+export function outboxBytes(s: Readonly<SpaceState>): number { return s.outboxBytes ?? jsonBytes(s.outbox); }
+/** An event joins the outbox: it and its JSON separator are counted at once. */
+function pushOutbox(s: SpaceState, event: SpaceEvent): void { s.outboxBytes = outboxBytes(s) + jsonBytes(event) + 1; s.outbox.push(event); }
+/** Bytes of all entries' fields (the space-wide limits count these). */
+const entryBytes = (s: Readonly<SpaceState>): number => s.entries.reduce((n, e) => n + (e.size ?? jsonBytes(e.fields)), 0);
+/** The waiter leaves the array in place (document drafts track changes in place). */
+const dropWaiter = (s: SpaceState, w: WaiterRec): void => { s.waiters.splice(s.waiters.indexOf(w), 1); };
 /**
  * `jsonBytes(s.mailboxes)` without encoding every event: each box keeps the encoded size of its event array as
  * `bytes` (mailbox.ts), so the box costs its metadata with an empty array plus that tally. Exact, and O(boxes).
@@ -360,14 +371,14 @@ function queueEvent(s: SpaceState, now: number, event: SpaceEvent, consumer?: Pr
 		if (pendingFanout(s, consumer, event.target)) throw new ResourceExhausted("the consumer has a pending durable fanout backlog");
 		if (consumer) appendMail(s, consumer, event, now);
 		else {
-			if (jsonBytes(s.outbox) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) throw new ResourceExhausted("the local outbox is full");
-			s.outbox.push(event);
+			if (outboxBytes(s) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) throw new ResourceExhausted("the local outbox is full");
+			pushOutbox(s, event);
 			touch(s, now);
 		}
 		return;
 	}
 	// Completion must not fail when a consumer is slow. Admission reserves durable storage for this captured event.
-	if (!consumer && jsonBytes(s.outbox) + jsonBytes(event) + 1 <= limitsOf(s).maxOutboxBytes && !pendingFanout(s, undefined, event.target)) { s.outbox.push(clone(event)); touch(s, now); return; }
+	if (!consumer && outboxBytes(s) + jsonBytes(event) + 1 <= limitsOf(s).maxOutboxBytes && !pendingFanout(s, undefined, event.target)) { pushOutbox(s, clone(event)); touch(s, now); return; }
 	s.jobs ??= [];
 	s.jobs.push({ id: newId(s, "j"), at: now, cursor: 0, events: [{ event: clone(event), ...(consumer ? { consumer: { ...consumer } } : {}) }] });
 	touch(s, now);
@@ -380,10 +391,10 @@ function runJobs(s: SpaceState, now: number): void {
 			const { event, consumer } = job.events[job.cursor]!;
 			try {
 				if (consumer) assertMailboxCapacity(s, consumer, event, now);
-				else if (jsonBytes(s.outbox) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) { job.retryAt = coreJobRetry(now); break; }
+				else if (outboxBytes(s) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) { job.retryAt = coreJobRetry(now); break; }
 				if (!canCharge(s, jsonBytes(event) + EVENT_OVERHEAD)) { deferMaintenance(s, now, job.id); return; }
 				charge(s, jsonBytes(event) + EVENT_OVERHEAD);
-				if (consumer) appendMail(s, consumer, event, now); else s.outbox.push(clone(event));
+				if (consumer) appendMail(s, consumer, event, now); else pushOutbox(s, clone(event));
 				touch(s, now);
 				delete job.retryAt;
 			} catch (e) { if (e instanceof ResourceExhausted) { job.retryAt = coreJobRetry(now); break; } throw e; }
@@ -410,7 +421,7 @@ function reserve(s: SpaceState, txn: string | null, cost: number, lim: Limits): 
 /** Backpressure: while undelivered events exceed the budget, nothing new is subscribed (no event is ever dropped). */
 function checkOutbox(s: Readonly<SpaceState>): void {
 	const lim = limitsOf(s);
-	if (s.outbox.length > 0 && jsonBytes(s.outbox) > lim.maxOutboxBytes) throw new LimitError(`${lim.maxOutboxBytes} bytes of events wait for delivery; try again later`);
+	if (s.outbox.length > 0 && outboxBytes(s) > lim.maxOutboxBytes) throw new LimitError(`${lim.maxOutboxBytes} bytes of events wait for delivery; try again later`);
 }
 
 function checkSize(what: string, v: unknown, lim: Limits): void {
@@ -561,9 +572,9 @@ function expire(s: SpaceState, at: number): boolean {
 		const cost = jsonBytes(w.handback) + 256;
 		if (!canCharge(s, cost)) { deferMaintenance(s, at, w.id); return false; }
 		charge(s, cost);
-		if (w.claimKey) { if (s.rpc?.claims[w.claimKey]?.state === "pending") decideClaim(s, at, w.claimKey, { state: "done", result: null }); }
+		if (w.claimKey) { if (s.rpc?.claims[w.claimKey]?.state === "pending") decideClaim(s, at, w.claimKey, { state: "done", result: null, ...(find(s, w.template, w.requestTxn ?? null, w.take).status === "locked" ? { locked: true } : {}) }); }
 		else queueEvent(s, at, { kind: "timeout", eventId: w.id, seq: 1, handback: w.handback, target: w.target }, w.consumer, true);
-		s.waiters.splice(s.waiters.indexOf(w), 1);
+		dropWaiter(s, w);
 		touch(s, at);
 	}
 	return true;
@@ -606,8 +617,7 @@ export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string
 	};
 	rec.size = jsonBytes(entry.fields);
 	const lim = limitsOf(s);
-	let used = rec.size;
-	for (const e of s.entries) used += e.size ?? jsonBytes(e.fields);
+	const used = rec.size + entryBytes(s);
 	if (used > lim.maxSpaceBytes) throw new LimitError(`the space would exceed ${lim.maxSpaceBytes} bytes`);
 	if (used + overheadBytes(s) > lim.maxDocBytes) throw new LimitError(`the space document would exceed ${lim.maxDocBytes} bytes`);
 	if (expires <= now) { s.nextId++; touch(s, now); return { id: rec.id, expires }; }
@@ -642,7 +652,7 @@ function preflightFanout(s: SpaceState, rec: EntryRec, txn: string | null, now: 
 	for (const r of s.regs) if ((txn === null || r.txn === txn) && matches(r.template, rec)) add({ kind: "entry", eventId: r.id, seq: r.seq + 1, handback: r.handback, target: r.target, entry }, r.consumer);
 	if (txn === null) for (const w of s.waiters) if (!w.claimKey && matches(w.template, rec)) add({ kind: "waiter", eventId: w.id, seq: 1, handback: w.handback, target: w.target, entry }, w.consumer);
 	for (const group of consumers.values()) assertMailboxBatch(s, group.principal, group.events, now);
-	if (jsonBytes(s.outbox) + local.reduce((n, e) => n + jsonBytes(e) + 1, 0) > limitsOf(s).maxOutboxBytes) throw new ResourceExhausted("the local outbox cannot hold this fanout");
+	if (outboxBytes(s) + local.reduce((n, e) => n + jsonBytes(e) + 1, 0) > limitsOf(s).maxOutboxBytes) throw new ResourceExhausted("the local outbox cannot hold this fanout");
 }
 
 // Registrations fire for committed writes (null-txn registrations) and, for a registration made under transaction
@@ -756,7 +766,7 @@ export function createTxn(s: SpaceState, now: number, lease: number, as?: Target
 	if (as !== undefined && Object.values(s.txns).filter(ownedBy(as)).length >= limitsOf(s).maxTxnsPerOwner) throw new LimitError(`you already have ${limitsOf(s).maxTxnsPerOwner} open transactions`);
 	const t: TxnRec = { id: newId(s, "t"), expires: grant(lease, now), owner: as ?? null };
 	initializeMemberTxn(s,t,now);
-	if(t.completion && s.entries.reduce((n,e)=>n+(e.size??jsonBytes(e.fields)),0)+overheadBytes(s)+t.completion.remainingBytes+jsonBytes(t)>limitsOf(s).maxDocBytes)throw new ResourceExhausted("completion reservation exceeds Member document budget");
+	if(t.completion && entryBytes(s)+overheadBytes(s)+t.completion.remainingBytes+jsonBytes(t)>limitsOf(s).maxDocBytes)throw new ResourceExhausted("completion reservation exceeds Member document budget");
 	s.txns[t.id] = t;
 	touch(s, now);
 	return { id: t.id, expires: t.expires };
@@ -854,15 +864,15 @@ function serve(s: SpaceState, now: number): void {
 	for (const w of [...s.waiters]) {
 		if (w.claimKey) {
 			const claim = s.rpc?.claims[w.claimKey];
-			if (!claim || claim.state !== "pending") { s.waiters.splice(s.waiters.indexOf(w), 1); continue; }
+			if (!claim || claim.state !== "pending") { dropWaiter(s, w); continue; }
 			if (w.authorizedUntil !== undefined && now >= w.authorizedUntil) {
-				if (w.deadline <= now) { decideClaim(s, now, w.claimKey, { state: "done", result: null }); s.waiters.splice(s.waiters.indexOf(w), 1); }
+				if (w.deadline <= now) { decideClaim(s, now, w.claimKey, { state: "done", result: null }); dropWaiter(s, w); }
 				continue;
 			}
 			const txn = w.requestTxn ?? null;
 			if (txn !== null && !active(s, txn, now)) {
 				decideClaim(s, now, w.claimKey, { state: "done", result: null, error: { code: "TransactionError", message: `transaction ${txn} is not active` } });
-				s.waiters.splice(s.waiters.indexOf(w), 1); continue;
+				dropWaiter(s, w); continue;
 			}
 			const found = find(s, w.template, txn, w.take);
 			const miss = found.status !== "found" && (w.deadline <= now || (w.ifExists && found.status === "none"));
@@ -871,16 +881,18 @@ function serve(s: SpaceState, now: number): void {
 				if(w.take) {try{assertMemberTake(s,found.rec,txn,now);}catch(e){if(s.membership?.state!=="draining")throw e;continue;}}
 				if (w.take && txn === null && (s.completionProfiles ?? []).some(p => found.rec.types.includes(p.taskType))) {
 					decideClaim(s, now, w.claimKey, { state: "done", result: null, error: { code: "CompletionViolation", message: "profiled tasks require a transaction" } });
-					s.waiters.splice(s.waiters.indexOf(w), 1); continue;
+					dropWaiter(s, w); continue;
 				}
 				const cost = jsonBytes(view(found.rec, s.spaceId)) + 256;
 				if (!canCharge(s, cost)) { deferMaintenance(s, now, w.id); continue; }
+				// the request's transaction may not be able to reserve the publication of an abort: the waiter stays and is
+				// looked at again (serve runs inside every operation, so the caller's unrelated operation must not fail)
+				if (w.take && txn !== null && found.rec.writtenUnder !== txn) { try { reserve(s, txn, publishCost(s, found.rec), limitsOf(s)); } catch (e) { if (e instanceof ResourceExhausted) continue; throw e; } }
 				charge(s, cost);
-				if (w.take && txn !== null && found.rec.writtenUnder !== txn) reserve(s, txn, publishCost(s, found.rec), limitsOf(s));
 				decideClaim(s, now, w.claimKey, { state: "done", result: view(apply(s, now, found.rec, txn, w.take), s.spaceId) as unknown as Json });
-			} else if (miss) decideClaim(s, now, w.claimKey, { state: "done", result: null });
+			} else if (miss) decideClaim(s, now, w.claimKey, { state: "done", result: null, ...(found.status === "locked" ? { locked: true } : {}) });
 			else continue;
-			s.waiters.splice(s.waiters.indexOf(w), 1); continue;
+			dropWaiter(s, w); continue;
 		}
 		if (w.authorizedUntil !== undefined && now >= w.authorizedUntil) continue;
 		const f = find(s, w.template, null, w.take);
@@ -891,18 +903,20 @@ function serve(s: SpaceState, now: number): void {
 		if (!canCharge(s, jsonBytes(event) + 256)) { deferMaintenance(s, now, w.id); continue; }
 		try {
 			if (w.consumer) assertMailboxCapacity(s, w.consumer, event, now);
-			else if (jsonBytes(s.outbox) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) continue;
+			else if (outboxBytes(s) + jsonBytes(event) + 1 > limitsOf(s).maxOutboxBytes) continue;
 		} catch (e) { if (e instanceof ResourceExhausted) continue; throw e; }
-		charge(s, jsonBytes(event) + 256);
-		s.waiters.splice(s.waiters.indexOf(w), 1);
-		if (!w.take) { queueEvent(s, now, event, w.consumer); continue; }
+		if (!w.take) { charge(s, jsonBytes(event) + 256); dropWaiter(s, w); queueEvent(s, now, event, w.consumer); continue; }
 		const t: TxnRec = { id: newId(s, "t"), expires: until(now, w.txnLeaseMs), owner: w.target }; // the receiver commits it
 		initializeMemberTxn(s,t,now);
-	// waiters of requests carry their key; the search is for states from before that (claims on the disk are newer)
-	const originRequestKey=w.originRequestKey ?? (diskMapOf(s.rpc?.claims) ? undefined : Object.entries(s.rpc?.claims??{}).find(([,c])=>c.method==="wait"&&c.result===w.id)?.[0]);if(originRequestKey!==undefined)t.originRequestKey=originRequestKey;
-	s.txns[t.id] = t;
-		assertMemberTake(s,f.rec,t.id,now);
-		reserve(s, t.id, publishCost(s, f.rec), limitsOf(s));
+		// waiters of requests carry their key; the search is for states from before that (claims on the disk are newer)
+		const originRequestKey=w.originRequestKey ?? (diskMapOf(s.rpc?.claims) ? undefined : Object.entries(s.rpc?.claims??{}).find(([,c])=>c.method==="wait"&&c.result===w.id)?.[0]);if(originRequestKey!==undefined)t.originRequestKey=originRequestKey;
+		s.txns[t.id] = t;
+		// admission or the reservation of the abort's publication may be refused: the fresh transaction goes, the waiter
+		// stays for a later serve (the caller's operation, which only settled, must not fail for it)
+		try { assertMemberTake(s,f.rec,t.id,now); reserve(s, t.id, publishCost(s, f.rec), limitsOf(s)); }
+		catch (e) { delete s.txns[t.id]; if (e instanceof ResourceExhausted) continue; throw e; }
+		charge(s, jsonBytes(event) + 256);
+		dropWaiter(s, w);
 		queueEvent(s, now, { ...event, entry: view(apply(s, now, f.rec, t.id, true), s.spaceId), txn: t.id }, w.consumer);
 	}
 }
@@ -1089,7 +1103,6 @@ export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null
 }
 
 /** Bytes a page needs besides its items: the envelope, the cursor and separators. */
-export const PAGE_OVERHEAD = 96;
 export type Page = { items: EntryView[]; next: string | null; rev: number; streamId: string; token?: string }; // rev: revision when the page was read; `changes` after the first page's rev completes the picture
 
 const seqOf = (id: string): number => { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; };
@@ -1110,7 +1123,12 @@ export function listPage(s: Readonly<SpaceState>, now: number, tmpl: Template = 
 	const after = o.after == null ? 0 : Number(o.after);
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
-	const eligible = s.entries.filter(e => !(e.restoredUnverified && txn !== null) && seqOf(e.id) > after && (standing(s, e, now) === "visible" || (standing(s, e, now) === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)).map(e => view(e, s.spaceId));
+	const eligible: EntryView[] = [];
+	for (const e of s.entries) {
+		if (seqOf(e.id) <= after || (e.restoredUnverified && txn !== null)) continue;
+		const st = standing(s, e, now);
+		if (st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) if (matches(tmpl, e)) eligible.push(view(e, s.spaceId));
+	}
 	return bytePage(eligible, 0, cap, (items, next) => ({ items, next: next === null ? null : String(seqOf(eligible[next - 1]!.id)), rev: revisionOf(s), streamId: streamIdOf(s) }));
 }
 
@@ -1120,7 +1138,7 @@ const putOp = (e: EntryRec): Op => ({ op: "put", id: e.id, type: e.type, types: 
 function logPut(s: SpaceState, now: number, e: EntryRec): void { record(s, now, putOp(e), limitsOf(s).maxLogBytes); }
 export function importRestoredEntry(s: SpaceState, now: number, e: EntryRec): boolean {
 	const cost = jsonBytes(e) + jsonBytes(putOp(e)) + 256;
-	const lim = limitsOf(s), used = s.entries.reduce((n, x) => n + (x.size ?? jsonBytes(x.fields)), 0) + jsonBytes(e.fields);
+	const lim = limitsOf(s), used = entryBytes(s) + jsonBytes(e.fields);
 	if (s.entries.some(x => x.id === e.id) || s.entries.length >= lim.maxEntries || jsonBytes(e.fields) > lim.maxEntryBytes || used > lim.maxSpaceBytes || used + overheadBytes(s) + cost > lim.maxDocBytes) throw new ResourceExhausted("restored entry violates current space limits or has a duplicate id");
 	if (cost + 1024 > lim.maxCommitBytes) throw new ResourceExhausted("restored entry cannot fit the commit budget");
 	if (!maintenanceStep(s, cost, now, `restore-entry:${e.id}`)) return false;
@@ -1187,7 +1205,7 @@ export type SpaceStats = {
 
 /** A point-in-time summary of the space, as an operation would see it after settling; pure, so it runs on any snapshot. */
 export function stats(s: Readonly<SpaceState>, now: number): SpaceStats {
-	const r: SpaceStats = { entries: 0, byType: {}, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: s.outbox.length, returned: s.returned ?? 0, bytes: { entries: 0, outbox: jsonBytes(s.outbox), claims: claimBytes(s), waiters: jsonBytes(s.waiters), registrations: jsonBytes(s.regs), txns: jsonBytes(s.txns), total: 0 } };
+	const r: SpaceStats = { entries: 0, byType: {}, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: s.outbox.length, returned: s.returned ?? 0, bytes: { entries: 0, outbox: outboxBytes(s), claims: claimBytes(s), waiters: jsonBytes(s.waiters), registrations: jsonBytes(s.regs), txns: jsonBytes(s.txns), total: 0 } };
 	for (const e of s.entries) {
 		r.bytes!.entries += e.size ?? jsonBytes(e.fields);
 		const st = standing(s, e, now);
@@ -1281,7 +1299,7 @@ export function applyRunGate(s: SpaceState, now: number, c: RunGateCommand): Run
 	settle(s, now);
 	const spend = () => { // every gate mutation is bounded metadata, charged like other maintenance
 		if (!canCharge(s, GATE_COST)) throw new ResourceExhausted("the RunGate change exceeds the remaining commit budget");
-		if (overheadBytes(s) + GATE_COST + s.entries.reduce((n, e) => n + (e.size ?? jsonBytes(e.fields)), 0) > limitsOf(s).maxDocBytes) throw new ResourceExhausted("the RunGate change exceeds maxDocBytes");
+		if (overheadBytes(s) + GATE_COST + entryBytes(s) > limitsOf(s).maxDocBytes) throw new ResourceExhausted("the RunGate change exceeds maxDocBytes");
 		charge(s, GATE_COST);
 	};
 	s.runGates ??= {};

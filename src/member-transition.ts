@@ -40,7 +40,7 @@ export class MemberTransitionInstaller {
    await o.host.commit(async tx => {
     const s=await spaceDoc(tx,info.spaceId,now);
     if (!core.maintenanceStep(s,512,now,"member-authority-transition")) throw new core.ResourceExhausted("member transition metadata exceeds commit budget");
-    if (!s.authorityTransition || s.authorityTransition.recoveryId !== t.recoveryId) { s.authorityTransition={recoveryId:t.recoveryId,authorityId:t.newAuthorityId,stage:"clearing"}; s.waiters=[];s.regs=[];s.outbox=[];s.jobs=[];s.releaseQueue=[];s.mailboxes={boxes:{}};core.touch(s,now); }
+    if (!s.authorityTransition || s.authorityTransition.recoveryId !== t.recoveryId) { s.authorityTransition={recoveryId:t.recoveryId,authorityId:t.newAuthorityId,stage:"clearing"}; s.waiters=[];s.regs=[];s.outbox=[];delete s.outboxBytes;s.jobs=[];s.releaseQueue=[];s.mailboxes={boxes:{}};core.touch(s,now); }
     const step=s.authorityTransition;
     if (step.stage === "clearing") {
      const txn=Object.values(s.txns)[0];

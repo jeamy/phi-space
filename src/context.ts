@@ -43,7 +43,6 @@ class ValueContext extends BaseContext {
 /** The root context: no values, never cancelled. */
 export const BACKGROUND_CONTEXT: Context = new EmptyContext("[Context BACKGROUND_CONTEXT]");
 
-export function createContextKey<T>(description: string): ContextKey<T> { return Object.freeze({ token: Symbol(description) }); }
 
 /** A context with one value added or replaced; the parent stays as it is. */
 export function withContextValue<T>(key: ContextKey<T>, value: T, parent: Context): Context { return new ValueContext(parent, key as ContextKey<unknown>, value); }
@@ -54,11 +53,6 @@ export function withAbortSignal(signal: AbortSignal, context: Context): Context 
 	return withContextValue(ABORT_SIGNAL, parent === undefined ? signal : AbortSignal.any([parent, signal]), context);
 }
 
-/** A child context that can be cancelled on its own. */
-export function withCancel(context: Context): { readonly context: Context; readonly cancel: (reason?: unknown) => void } {
-	const controller = new AbortController();
-	return { context: withAbortSignal(controller.signal, context), cancel: (reason) => controller.abort(reason) };
-}
 
 /** Waits for `promise` until it settles or the context is cancelled. Cancelling rejects only this wait; the promise
  *  itself goes on. */

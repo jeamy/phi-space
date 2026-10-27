@@ -36,6 +36,22 @@ test("a reopened store gives back the space as it was: entries in their order, c
 	await h.close(ctx);
 });
 
+test("a stopped watch leaves no abort listener on its context (one blocking read per watch would pile them up)", async () => {
+	const { getEventListeners } = await import("node:events");
+	const { withAbortSignal } = await import("../src/context.ts");
+	const { openOwnMemoryHost } = await import("../src/store/host.ts");
+	const h = openOwnMemoryHost(), ac = new AbortController(), cx = withAbortSignal(ac.signal, ctx);
+	const s = new PhiSpaces(h, cx);
+	await s.write({ type: "Job", fields: {} }, null, FOREVER);
+	for (let i = 0; i < 50; i++) await s.read({ type: "Nothing" }, 0); // each blocking op holds a watch while it runs
+	for (let i = 0; i < 50; i++) await (await h.watchDoc(Space, cx))!.stop();
+	assert.equal(getEventListeners(ac.signal, "abort").length, 0);
+	const w = (await h.watchDoc(Space, cx))!;
+	ac.abort();
+	assert.equal((await w.closed).reason, "cancelled"); // the listener still ends a live watch
+	await h.close(ctx);
+});
+
 test("a store has one owner: a second opener is refused while the first holds it", async () => {
 	const file = fresh();
 	const h = await openSqliteHost(file);

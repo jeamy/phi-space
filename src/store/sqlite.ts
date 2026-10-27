@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { Worker } from "node:worker_threads";
 import { headOf, joinParts, partAt, partChanges, type PartRow, type PartSpec } from "./parts.ts";
-import { OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
+import { deepFreeze, OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
 import { DiskMap, isDiskMap, type DiskMapSource } from "./disk-map.ts";
 import { writerSource, type WriteOp, type WriterReply, type WriterRequest } from "./sqlite-writer.ts";
 
@@ -70,11 +70,6 @@ CREATE INDEX IF NOT EXISTS parts_open ON parts (kind, key, part) WHERE at IS NUL
 `;
 
 const docKey = (key: string | null) => key ?? "";
-function deepFreeze(v: unknown): void {
-	if (typeof v !== "object" || v === null || Object.isFrozen(v)) return;
-	Object.freeze(v);
-	for (const x of Object.values(v)) deepFreeze(x);
-}
 
 class SqliteLedger implements Ledger {
 	readonly #read: DatabaseSync;
@@ -147,7 +142,7 @@ class SqliteLedger implements Ledger {
 			for (const p of parts) if (!rows.has(p.path.join(".")) && inline(p) && (!onDisk.includes(p) || !this.#prep("SELECT 1 FROM parts WHERE kind = ? AND key = ? AND part = ? LIMIT 1").get(kind, docKey(key), p.path.join(".")))) this.#inline.add(`${kind}\u0000${docKey(key)}\u0000${p.path.join(".")}`);
 			// a map part on the disk stays there: the document holds a DiskMap in its place
 			for (const p of onDisk) {
-				const parent = p.path.slice(0, -1).reduce<unknown>((o, k) => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), value);
+				const parent = partAt(value, p.path.slice(0, -1));
 				if (parent === null || typeof parent !== "object" || !(p.path.at(-1)! in parent)) continue;
 				if (this.#inline.has(`${kind}\u0000${docKey(key)}\u0000${p.path.join(".")}`)) continue; // a plain map until it is written as rows
 				this.#index(kind, docKey(key), p);
@@ -184,7 +179,7 @@ class SqliteLedger implements Ledger {
 			ids: () => (this.#prep(`SELECT id ${base}`).all(kind, key, part) as Array<{ id: string }>).map((r) => r.id),
 			due: (t, limit, inGroups, known) => {
 				const sql = `SELECT id, value ${base} AND at IS NOT NULL AND at <= ? AND (flag = 0${inGroups.length ? ` OR grp IN (${list(inGroups.length)})` : ""} OR grp NOT IN (${list(known.length)})) ORDER BY id LIMIT ?`;
-				return (this.#read.prepare(sql).all(kind, key, part, t, ...inGroups, ...known, limit) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]);
+				return (this.#prep(sql).all(kind, key, part, t, ...inGroups, ...known, limit) as Array<{ id: string; value: string }>).map((r) => [r.id, r.value] as [string, string]);
 			},
 			nextAt: (t) => (this.#prep(`SELECT min(at) AS at ${base} AND at IS NOT NULL AND at > ? AND flag = 0`).get(kind, key, part, t) as { at: number | null }).at ?? undefined,
 			group: (g, limit) => (this.#prep(`SELECT id ${base} AND grp = ? LIMIT ?`).all(kind, key, part, g, limit) as Array<{ id: string }>).map((r) => r.id),
@@ -239,7 +234,7 @@ class SqliteLedger implements Ledger {
 			for (const p of d.parts ?? []) {
 				if (!p.disk || p.kind !== "map") continue;
 				const k = docKey(d.key);
-				const parent = p.path.slice(0, -1).reduce<unknown>((o, x) => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[x] : undefined), d.value);
+				const parent = partAt(d.value, p.path.slice(0, -1));
 				const last = p.path.at(-1)!, m = parent !== null && typeof parent === "object" ? (parent as Record<string, unknown>)[last] : undefined;
 				if (m === null || typeof m !== "object" || isDiskMap(m)) continue;
 				const disk = DiskMap.adopt(this.#source(d.kind, k, p.path.join(".")), p.disk, () => this.#handed + 1, this.#strict, m as Record<string, unknown>, written);
@@ -298,6 +293,7 @@ class SqliteLedger implements Ledger {
 			this.#durableCount += done.length;
 			for (const maps of this.#diskMaps.values()) for (const m of maps.values()) m.settle(this.#durableCount);
 			for (const d of done) d.resolve();
+			for (const w of this.#idleWaiters.splice(0)) w();
 			this.#send();
 			if (!this.#writing) this.#worker.unref(); // idle: the store does not keep the process alive
 			return;
@@ -314,14 +310,13 @@ class SqliteLedger implements Ledger {
 		for (const d of this.#queued) d.reject(later ?? e);
 		this.#writing = null;
 		this.#queued = [];
+		for (const w of this.#idleWaiters.splice(0)) w();
 	}
 
 	/** Waits for everything queued to be written. */
+	#idleWaiters: Array<() => void> = [];
 	async drain(): Promise<void> {
-		while (this.#writing || this.#queued.length) {
-			if (this.#failure) return;
-			await new Promise<void>((r) => setTimeout(r, 1));
-		}
+		while ((this.#writing || this.#queued.length) && !this.#failure) await new Promise<void>((r) => this.#idleWaiters.push(r));
 	}
 
 	/** As a killed process would leave it: nothing more is written or flushed, the owner lock is free (tests). */

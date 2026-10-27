@@ -67,10 +67,9 @@ export class StillHeld extends Error {}
 /** readIfExists that tells a missing entry from a held one: null means gone; a null that came only when the wait ran
  *  out (a match stayed held all along, e.g. an account in the middle of its registration) throws StillHeld. */
 export async function readExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
-	const t0 = Date.now();
-	const e = await space.readIfExists(tmpl, waitMs, o);
-	if (!e && Date.now() - t0 >= waitMs * 0.9) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
-	return e;
+	const p = space.probe ? await space.probe(tmpl, waitMs, { txn: o.txn ?? null }) : { entry: await space.readIfExists(tmpl, waitMs, o), locked: false };
+	if (!p.entry && p.locked) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
+	return p.entry;
 }
 
 /** Waits until an entry of `tmpl` is there, holding nothing (one blocking read). False when the wait ran out or `halt`

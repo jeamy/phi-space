@@ -19,7 +19,7 @@ export function beginRestore(s: core.SpaceState, now: number, o: RestoreArgs): R
 	if (!s.spaceId || s.incarnation !== o.expectedDataIncarnation || (s.primaryEpoch ?? 1) !== o.expectedPrimaryEpoch) throw new core.PermissionError("restore incarnation or epoch precondition failed");
 	const restoration: RestoreState = { recoveryId: o.recoveryId, argumentHash: hash, snapshotHash: o.snapshotHash, incarnation: randomBytes(4).toString("hex"), primaryEpoch: o.kind === "control" ? 1 : o.expectedPrimaryEpoch + 1, startedAt: now, waitUntil: now + 62000, stage: "entries", cursor: 0, kind: o.kind };
 	// Clearing a collection records one empty assignment, not a rewrite of the old values.
-	s.entries = []; s.txns = {}; s.regs = []; s.waiters = []; s.outbox = []; s.jobs = []; s.releaseQueue = []; s.mailboxes = { boxes: {} };
+	s.entries = []; s.txns = {}; s.regs = []; s.waiters = []; s.outbox = [];delete s.outboxBytes; s.jobs = []; s.releaseQueue = []; s.mailboxes = { boxes: {} };
 	s.rpc = { generations: {}, claims: {}, bytes: 0, reservedBytes: 0 }; s.restoredClaims = {}; delete s.restoredBytes; s.invalidGenerations = {}; s.nextId = 1;
 	s.stream = { rev: 0, floor: 0, bytes: 0, log: [] }; s.incarnation = restoration.incarnation; s.primaryEpoch = restoration.primaryEpoch; s.restore = restoration;
 	core.fenceGatesForRestore(s, now, runRecoveryIdOf(o.recoveryId)); // local run gates become historical evidence until the run is reconciled

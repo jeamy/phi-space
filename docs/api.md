@@ -195,7 +195,9 @@ bleibt offen.
 ## Fehler und Grenzen
 
 `IllegalArgumentError`, `PermissionError`, `TransactionError`, `LimitError`
-`CompletionViolation`, `MailboxEpochMismatch`, `InvalidAck`, `ResponseBudgetTooSmall`
+`CompletionViolation`, `MailboxEpochMismatch`, `InvalidAck`, `ResponseBudgetTooSmall`,
+`UniqueConflict` (ein `write` mit `unique`, dessen Schlüsselfelder schon ein Entry des Typs trägt; Code `UniqueConflict`),
+`SnapshotExpired`/`RevisionAhead` (ein `changes`-Cursor außerhalb der gehaltenen Historie)
 und `ResourceExhausted` beschreiben lokale Semantik bzw. Budgetverletzungen.
 Der Dienst serialisiert sie als Fehlercodes; der Remote-Client rekonstruiert
 bekannte Fehlerklassen als `RemoteError` oder die spezielle lokale Klasse.

@@ -263,7 +263,7 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = [], o: { skipU
 			live();
 			return finalize(root) as T;
 		},
-		revoke() { done = true; for (const s of states) s.revoke(); },
+		revoke() { end(); },
 		discard() {
 			if (done) return;
 			undo();

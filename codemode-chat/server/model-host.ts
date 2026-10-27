@@ -148,7 +148,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 			return true;
 		} catch (e) {
 			await space.abort(t.id).catch(() => {});
-			if (e instanceof TransactionError && !/could write|the limit is/i.test((e as Error).message)) return true;
+			if (e instanceof TransactionError) return true; // a limit of the space is ResourceExhausted, not a TransactionError
 			throw e;
 		} finally { stop(); open.delete(t.id); }
 	};

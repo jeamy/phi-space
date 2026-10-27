@@ -5,7 +5,6 @@
 import type { Context } from "../context.ts";
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-export type JsonObject = { [key: string]: JsonValue };
 
 /** What a document definition needs to know about its stored value: its kind and schema version, how a new one looks,
  *  and how an older version is brought up to date. */

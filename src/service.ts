@@ -7,7 +7,7 @@ import {RoutingConflict,MemberDrained,MigrationRequired} from "./routing-semanti
 // Placeholders until the federation stages: `authorityId` and `primaryEpoch` are checked against the configured values
 // (a single host is its own authority, epoch 0). Overlay authentication and grants belong to phase 1b.
 import { awaitWithContext } from "./context.ts";
-import { ReplicationConflict } from "./entry-replication.ts";
+import { ReplicationConflict, entryChangeId } from "./entry-replication.ts";
 import { ReplicationClockError } from "./replication-clock.ts";
 import { CommitSealed, isSyncBudgetExceeded } from "./commit-sealed.ts";
 import { canonicalJson, digestJson } from "./canonical.ts";
@@ -52,8 +52,8 @@ export type Policy = { roles: Record<string, RolePolicy> };
 export const DEFAULT_POLICY: Policy = {
 	roles: {
 		admin: { methods: "*" },
-		host: { methods: ["hello","generation","write","read","take","pollOperation", "resolveOperation","cancelOperation","readAll","count","stats","txn","lease","changes","wait","notify","events","ack"] },
-		member: { methods: ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] },
+		host: { methods: METHODS },
+		member: { methods: METHODS },
 		resolution: { methods: ["hello", "pollOperation", "resolveOperation", "cancelOperation", "txn", "lease"] },
 		observer: { methods: ["hello", "generation", "read", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "changes", "notify", "events", "ack"] }, // own read and notify results, never a write
 		unpaired: { methods: ["hello", "generation"] }, // a device in the enrollment group: nothing but its own pairing (enroll.ts handles `enroll` and `enrollStatus` before the service)
@@ -74,7 +74,7 @@ export type Call = {
 export type ErrorCode =
 	| "RoutingConflict" | "MemberDrained" | "MigrationRequired" | "BadRequest" | "Unauthenticated" | "PermissionDenied" | "UnknownSpace" | "UnsupportedMethod" | "UnsupportedProtocol"
 	| "AuthorityMismatch" | "StaleEpoch" | "RequestConflict" | "RequestExpired" | "ResultExpired" | "IncarnationChanged" | "OperationCancelled"
-	| "ResourceExhausted" | "ReplicaConfigPending" | "StalePolicyVersion" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "NotCommitted" | "MailboxEpochMismatch" | "InvalidAck" | "NotFound" | "Internal";
+	| "ResourceExhausted" | "ReplicaConfigPending" | "StalePolicyVersion" | "ResponseBudgetTooSmall" | "SnapshotExpired" | "RevisionAhead" | "TransactionError" | "ProofRequired" | "CompletionViolation" | "MergeTypeNotExclusive" | "CommitSealed" | "NotCommitted" | "MailboxEpochMismatch" | "InvalidAck" | "UniqueConflict" | "NotFound" | "Internal";
 export type ClaimReceipt={protocol:'phi-spaces-claim-receipt-v1';hostId:string;binding:Awaited<ReturnType<PhiSpaces['resolveOperationRecord']>>['binding'];resolution:claims.AdmissionResolution};
 export type Reply = { ok: true; result: Json; claimReceipt?:ClaimReceipt } | { ok: false; error: { code: ErrorCode; message: string; requiredBytes?: number } };
 
@@ -152,6 +152,7 @@ const duration = (v: unknown, what: string, dflt: number): number => {
 export const principalKey = (p: Principal): string => (p.agentId ? `${p.peerId}/${p.agentId}` : p.peerId);
 
 export class SpaceService {
+	private resolutionGrant?: { types: ReadonlySet<string> | "*" };
 	private o: Required<Pick<SpaceServiceOptions, "maxPollMs" | "maxPendingPerPrincipal" | "maxPendingPerPeer" | "maxCallsPerWindow" | "rateWindowMs" | "authorityId" | "primaryEpoch">> & SpaceServiceOptions;
 	private policy: Policy;
 	private now: () => number;
@@ -218,7 +219,7 @@ export class SpaceService {
 			if ((rawBytes ?? encodedBytes(call)) > frameBytes) throw new core.ResourceExhausted("the request exceeds the space frame limit");
 			const includeClaim=isObj(frame)&&frame.claimReceipt===true;
             if(isObj(frame)&&frame.claimReceipt!==undefined&&typeof frame.claimReceipt!=='boolean')throw new Bad('claimReceipt must be boolean');
-            if(includeClaim){if(!request)throw new Bad('claim receipt requires an original effect request');this.allowed(id,'resolveOperation');}
+            if(includeClaim){if(!request)throw new Bad('claim receipt requires an original effect request');this.resolutionGrant=this.allowed(id,'resolveOperation');}
             const result = await this.dispatch(method, args, { id, request, client, space, grant, frameBytes });
             const reply: Reply = { ok: true, result };
             if(includeClaim&&request){
@@ -227,7 +228,7 @@ export class SpaceService {
                 try{
                     const domain=rpcDomain(call as unknown as Call,id.principal),epoch=await this.o.epochForSpace?.(space)??this.o.primaryEpoch;
                     const record=await client.resolveOperationRecord(request,domain.method,claims.argHash(domain.method,domain.args),epoch);
-                    const resolutionGrant=this.allowed(id,'resolveOperation');
+                    const resolutionGrant=this.resolutionGrant!;
                     if('result' in record.resolution&&isObj(record.resolution.result)&&Array.isArray(record.resolution.result.types))this.checkTypes(resolutionGrant,record.resolution.result.types as string[],'this retained result');
                     const hostId=this.o.hostId??(await this.o.host.snapshot(Registry,this.o.ctx))?.hostId;
                     if(hostId)reply.claimReceipt={protocol:'phi-spaces-claim-receipt-v1',hostId,...record};
@@ -412,7 +413,7 @@ export class SpaceService {
 			spaceId: info.spaceId, alias: info.alias, incarnation: info.incarnation, streamId: core.streamIdOf(s ?? core.initialState()), rev: core.revision(s ?? core.initialState()),
 			authorityId: this.o.authorityId, primaryEpoch: await this.o.epochForSpace?.(info.spaceId) ?? this.o.primaryEpoch, role: "single",
 			principal: principalKey(c.id.principal), roles: c.id.roles,
-			features: [...METHODS, "write.unique", "read.chain"],
+			features: [...METHODS, "write.unique", "read.chain", "read.locked"],
 			limits: { maxFrameBytes: Math.min(lim.maxFrameBytes, c.frameBytes), maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs, maxPendingPerPrincipal: this.o.maxPendingPerPrincipal, maxPendingPerPeer: this.o.maxPendingPerPeer },
 			capabilities: { snapshotPagination: true, mailboxes: true, completionProfiles: true, transactions: true, blockingTake: true, mode: "single" },
 		} as Json;
@@ -433,7 +434,6 @@ export class SpaceService {
 		if (!merge) return undefined;
 		const rule = (type: unknown) => typeof type === "string" ? merge.rules.find(r => r.type === type) : undefined;
 		const refuse = (what: string) => { throw new MergeTypeNotExclusive(`${what} is not available for merge types (lww/set)`); };
-		const { entryChangeId } = await import("./entry-replication.ts");
 		const view = (v: import("./entry-replication.ts").ReplicatedEntryView) => ({ id: v.id, type: v.type, types: [v.type], fields: v.fields as Json, owner: v.owner as unknown as Json, expires: v.expiresAt ?? core.FOREVER, replicated: true });
 		const matches = (t: core.Template, v: import("./entry-replication.ts").ReplicatedEntryView) => !t || (!t.type || t.type === v.type) && Object.entries(t.fields ?? {}).every(([k, x]) => JSON.stringify(x) === JSON.stringify((v.fields as Record<string, unknown>)[k]));
 		if (method === "write") {
@@ -502,7 +502,7 @@ export class SpaceService {
 		if (view.resultExpired) throw new claims.ResultExpired("the stored result has expired");
 		if (view.error) throw view.error.code === "CompletionViolation" ? new core.CompletionViolation(view.error.message) : new core.TransactionError(view.error.message);
 		if (view.state === "cancelled") throw new claims.OperationCancelled("the operation was cancelled");
-		return view.state === "done" ? { state: "done", entry: view.result ?? null } : { state: "pending", deadline: view.deadline };
+		return view.state === "done" ? { state: "done", entry: view.result ?? null, ...(view.locked ? { locked: true } : {}) } : { state: "pending", deadline: view.deadline };
 	}
 
 	/** The state of an own request; waits up to `waitMs` (at most maxPollMs) for it to leave `pending`. Never extends a deadline. */
@@ -571,6 +571,7 @@ export class SpaceService {
 		if (e instanceof InvalidAck) return fail("InvalidAck", e.message);
 		if (e instanceof core.TransactionError || e instanceof core.UnknownLeaseError) return fail("TransactionError", (e as Error).message);
 		if (e instanceof MergeTypeNotExclusive) return fail("MergeTypeNotExclusive", e.message);
+		if (e instanceof core.UniqueConflict) return fail("UniqueConflict", e.message);
 		if (e instanceof ReplicationConflict) return fail("BadRequest", e.message);
 		if (e instanceof ReplicationClockError) return fail("ResourceExhausted", "replication clock: " + e.message);
 		if (e instanceof core.IllegalArgumentError || e instanceof TypeError) return fail("BadRequest", (e as Error).message);

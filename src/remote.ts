@@ -105,6 +105,7 @@ const CODE_ERRORS: Partial<Record<ErrorCode, (m: string, r?: number) => Error>> 
 	MailboxEpochMismatch: (m) => new MailboxEpochMismatch(m),
 	InvalidAck: (m) => new InvalidAck(m),
 	BadRequest: (m) => new core.IllegalArgumentError(m),
+	UniqueConflict: (m) => new core.UniqueConflict(m),
 };
 const toError = (e: { code: ErrorCode; message: string; requiredBytes?: number }): Error => CODE_ERRORS[e.code]?.(e.message, e.requiredBytes) ?? new RemoteError(e.code, e.message, e.requiredBytes);
 
@@ -312,12 +313,17 @@ export class RemoteSpace implements SpaceLike {
 		if (o.unique && !(await this.info()).features.includes("write.unique")) throw new UnsupportedOperation("server does not support atomic unique writes");
 		return (await this.mutate("write", { entry: entry as unknown as Json, txn, leaseMs: leaseArg(lease), ...(o.unique ? { unique: o.unique } : {}) }, o)) as unknown as Lease;
 	}
-	read(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, false); }
-	readIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, true); }
-	take(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("take", tmpl, timeout, o, false); }
-	takeIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("take", tmpl, timeout, o, true); }
+	read(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, false).then((r) => r.entry); }
+	readIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, true).then((r) => r.entry); }
+	take(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("take", tmpl, timeout, o, false).then((r) => r.entry); }
+	takeIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("take", tmpl, timeout, o, true).then((r) => r.entry); }
+	/** A readIfExists/takeIfExists that also reports a miss caused only by entries locked in other transactions. */
+	async probe(tmpl: Template, timeout: number, o: OpOptions & { take?: boolean } = {}): Promise<{ entry: Taken | null; locked: boolean }> {
+		if (!(await this.info()).features.includes("read.locked")) throw new UnsupportedOperation("server does not report locked misses");
+		return this.blocking(o.take === true ? "take" : "read", tmpl, timeout, o, true);
+	}
 
-	private async blocking(method: "read" | "take", tmpl: Template, timeout: number, o: OpOptions, ifExists: boolean): Promise<Taken | null> {
+	private async blocking(method: "read" | "take", tmpl: Template, timeout: number, o: OpOptions, ifExists: boolean): Promise<{ entry: Taken | null; locked: boolean }> {
 		if (o.once) throw new core.IllegalArgumentError("`once` is a local hook: a remote call keeps its outcome under its request identity instead");
 		const request = await this.identity(o);
 		const started = performance.now();
@@ -327,10 +333,10 @@ export class RemoteSpace implements SpaceLike {
 		// A sealed, unconfirmed commit of the Space: the request may not even be admitted yet. Wait a little, then send the
 		// very same call again (same request identity, so it meets its claim if there is one).
 		const sealedWait = async (e: unknown) => { if (!(e instanceof CommitSealedPending) || end !== undefined && performance.now() >= end) throw e; await this.o.sleep(Math.min(1000, end === undefined ? 1000 : Math.max(1, end - performance.now()))); return { state: "sealed" }; };
-		const call = () => this.send({ method, request, args }, unknown("the client stopped waiting; resolve the same request"), end).catch(sealedWait) as Promise<{ state: string; entry?: Taken | null }>;
+		const call = () => this.send({ method, request, args }, unknown("the client stopped waiting; resolve the same request"), end).catch(sealedWait) as Promise<{ state: string; entry?: Taken | null; locked?: boolean }>;
 		let r = await call();
 		for (;;) {
-			if (r.state === "done") return (r.entry ?? null) as Taken | null;
+			if (r.state === "done") return { entry: (r.entry ?? null) as Taken | null, locked: r.locked === true };
 			if (r.state === "sealed") { r = await call(); continue; }
 			if (this.o.maxClientWaitMs !== undefined && performance.now() - started >= this.o.maxClientWaitMs) throw new OutcomeUnknown(request, "the client stopped waiting; the operation continues on the host");
 			let view: ClaimView;
@@ -340,7 +346,7 @@ export class RemoteSpace implements SpaceLike {
 			if (view.unknownOutcome) throw new OutcomeUnknown(request, "restored history cannot establish the original outcome");
 			if (view.error) throw toError(view.error);
 			if (view.state === "cancelled") throw new claims.OperationCancelled(`request ${request.requestId} was cancelled`);
-			if (view.state === "done") return ((view.result ?? null) as unknown as Taken | null);
+			if (view.state === "done") return { entry: (view.result ?? null) as unknown as Taken | null, locked: view.locked === true };
 			r = { state: "pending" };
 		}
 	}

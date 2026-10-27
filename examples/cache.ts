@@ -101,9 +101,9 @@ export class RemoteCache {
   }
   /** takeIfExists/readIfExists that throws when a match stayed held for the whole wait (null then means nothing). */
   private async existing(take: boolean, tmpl: { type: string; fields: Record<string, Json> }, txn?: string) {
-    const t0 = Date.now();
-    const e = await (take ? this.space.takeIfExists(tmpl, HELD_WAIT_MS, { txn: txn ?? null }) : this.space.readIfExists(tmpl, HELD_WAIT_MS, { txn: txn ?? null }));
-    if (!e && Date.now() - t0 >= HELD_WAIT_MS * 0.9) throw new Error("Cache key is locked by an external transaction");
+    const p = this.space.probe ? await this.space.probe(tmpl, HELD_WAIT_MS, { txn: txn ?? null, take }) : { entry: await (take ? this.space.takeIfExists(tmpl, HELD_WAIT_MS, { txn: txn ?? null }) : this.space.readIfExists(tmpl, HELD_WAIT_MS, { txn: txn ?? null })), locked: false };
+    if (!p.entry && p.locked) throw new Error("Cache key is locked by an external transaction");
+    const e = p.entry;
     return e;
   }
   async get(key: string): Promise<CacheHit | null> {

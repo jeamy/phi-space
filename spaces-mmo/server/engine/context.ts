@@ -124,5 +124,4 @@ export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs"> 
 	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs);
 }
 
-export const levelName = (l: Level) => ({ Guest: "Gast", Player: "Spieler", Builder: "Builder", Admin: "Admin" })[l];
 export { LEVELS };

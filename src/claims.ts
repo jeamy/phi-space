@@ -28,6 +28,8 @@ export type ClaimRec = {
 	deadline: number; // fixed once, at the first accepted call
 	state: ClaimState;
 	result?: Json; // present while retained (done) or null (cancelled)
+	/** A done-with-null outcome where every matching entry was held by a transaction at the decision (probe "locked"). */
+	locked?: true;
 	resultExpired?: true; // the outcome was decided, its content is gone
 	decidedAt?: number;
 	generation: string;
@@ -43,7 +45,7 @@ export type RpcState = { generations: Record<string, GenerationRec>; claims: Rec
 	/** The earliest time a sweep can find a claim or generation to drop: before it, sweeping looks at nothing. Every
 	 *  change that can make something due earlier lowers it; absent, the next sweep scans everything. */
 	sweepAt?: number };
-export type ClaimView = { state: ClaimState; deadline: number; result?: Json; resultExpired?: true; method: string; error?: ClaimRec["error"]; restoredHistory?: true; unknownOutcome?: true; orphanedAfterRestore?: ClaimRec["orphanedAfterRestore"] };
+export type ClaimView = { state: ClaimState; deadline: number; result?: Json; locked?: true; resultExpired?: true; method: string; error?: ClaimRec["error"]; restoredHistory?: true; unknownOutcome?: true; orphanedAfterRestore?: ClaimRec["orphanedAfterRestore"] };
 
 /**
  * The request was never committed and never will be (v3 6.2): decided by the primary after a promotion, with a
@@ -138,7 +140,7 @@ export function admit(s: SpaceState, now: number, r: RequestRef, method: string,
 }
 
 /** Record the outcome in the commit that decides it. */
-export function decide(s: SpaceState, now: number, key: string, outcome: { state: "done"; result: Json; error?: ClaimRec["error"] } | { state: "cancelled" }): void {
+export function decide(s: SpaceState, now: number, key: string, outcome: { state: "done"; result: Json; locked?: true; error?: ClaimRec["error"] } | { state: "cancelled" }): void {
 	const c = rpc(s).claims[key];
 	if (!c) throw new Error(`no claim ${key}`);
 	if (c.state !== "pending") return;
@@ -149,7 +151,7 @@ export function decide(s: SpaceState, now: number, key: string, outcome: { state
 	st.reservedBytes = Math.max(0, (st.reservedBytes ?? 0) - (c.reservedResultBytes ?? 0));
 	// claims are values (a store may share and freeze them between commits): the decision replaces the record
 	const { reservedResultBytes: _reserved, ...rest } = c;
-	const next: ClaimRec = { ...rest, state: outcome.state, result: outcome.state === "done" ? outcome.result : null, decidedAt: now, ...(outcome.state === "done" && outcome.error ? { error: outcome.error } : {}) };
+	const next: ClaimRec = { ...rest, state: outcome.state, result: outcome.state === "done" ? outcome.result : null, decidedAt: now, ...(outcome.state === "done" && outcome.error ? { error: outcome.error } : {}), ...(outcome.state === "done" && outcome.locked ? { locked: true } : {}) };
 	st.claims[key] = next;
 	dueAt(st, now + limitsOf(s).claimResultMs);
 	st.bytes! += bytesOf(next) - before;
@@ -166,7 +168,7 @@ export function lookup(s: Readonly<SpaceState>, r: RequestRef, now: number): Cla
 	const c = (s as SpaceState & { rpc?: RpcState }).rpc?.claims[key] ?? historical;
 	if (!c) throw new RequestExpired(`request ${r.requestId} is unknown`);
 	const expired = c.resultExpired || (c.state !== "pending" && c.decidedAt !== undefined && c.decidedAt + limitsOf(s).claimResultMs <= now);
-	return { state: c.state, deadline: c.deadline, method: c.method, ...(c.orphanedAfterRestore ? { orphanedAfterRestore: c.orphanedAfterRestore } : {}), ...(historical ? { restoredHistory: true as const, ...(c.state === "pending" ? { unknownOutcome: true as const } : {}) } : {}), ...(c.error ? { error: c.error } : {}), ...(expired ? { resultExpired: true as const } : c.state === "pending" ? {} : { result: c.result ?? null }) };
+	return { state: c.state, deadline: c.deadline, method: c.method, ...(c.orphanedAfterRestore ? { orphanedAfterRestore: c.orphanedAfterRestore } : {}), ...(historical ? { restoredHistory: true as const, ...(c.state === "pending" ? { unknownOutcome: true as const } : {}) } : {}), ...(c.error ? { error: c.error } : {}), ...(expired ? { resultExpired: true as const } : c.state === "pending" ? {} : { result: c.result ?? null, ...(c.locked ? { locked: true as const } : {}) }) };
 }
 
 /** Cancel a pending request. A decided one stays as it is; the returned view says which. */

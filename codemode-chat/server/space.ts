@@ -108,10 +108,9 @@ export function takeExisting(space: SpaceLike, tmpl: Template, o: { txn?: string
 	return existing(space, tmpl, o, waitMs, true);
 }
 async function existing(space: SpaceLike, tmpl: Template, o: { txn?: string | null }, waitMs: number, take: boolean): Promise<Taken | null> {
-	const t0 = Date.now();
-	const e = await (take ? space.takeIfExists(tmpl, waitMs, o) : space.readIfExists(tmpl, waitMs, o));
-	if (!e && Date.now() - t0 >= waitMs * 0.9) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
-	return e;
+	const p = await (space.probe ? space.probe(tmpl, waitMs, { txn: o.txn ?? null, take }) : Promise.resolve({ entry: await (take ? space.takeIfExists(tmpl, waitMs, o) : space.readIfExists(tmpl, waitMs, o)), locked: false }));
+	if (!p.entry && p.locked) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
+	return p.entry;
 }
 
 /** Renews a transaction's lease while long work runs in it (a model call, a judgement), so a process that dies lets

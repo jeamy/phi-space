@@ -19,7 +19,7 @@
 // A call's usage is booked on the run in the commit that takes its LlmResult (success or failure), so exactly once.
 // The CodeRun counts the items not done yet (`pending`) in the same commits that write and finish them: the run is over
 // when that count is 0, whatever another agent holds right now.
-import { NO_WAIT, type SpaceLike } from "phi-spaces";
+import { NO_WAIT, UniqueConflict, type SpaceLike } from "phi-spaces";
 import { limitOf, maxTimeoutMs } from "./judge.ts";
 import { criticModel, type Attempt, type Role, type Usage } from "./llm.ts";
 import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
@@ -224,7 +224,7 @@ export async function callModel(space: SpaceLike, txn: string, call: LlmCall, un
 	if (!r) {
 		if (Date.now() >= until) return { callId: call.callId, session: call.session, ok: false, error: "no time left for this model call", ts: Date.now() };
 		try { await space.write({ type: "LlmCall", fields: call as never }, null, modelWaitMs() + 60_000, { unique: ["callId"] }); }
-		catch (e) { if (!/unique/i.test((e as Error).message)) throw e; } // asked before, the answer is still coming
+		catch (e) { if (!(e instanceof UniqueConflict)) throw e; } // asked before, the answer is still coming
 		const end = Math.min(until, Date.now() + modelWaitMs());
 		while (!r && Date.now() < end) r = await space.take(tmpl, Math.min(20_000, Math.max(1, end - Date.now())), { txn });
 		// given up: a call no model process has taken yet is withdrawn, so nobody pays for an answer nobody fetches

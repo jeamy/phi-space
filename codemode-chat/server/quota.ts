@@ -2,7 +2,7 @@
 // admission at a time per limit (its QuotaLock, taken under a transaction and written back), and every admitted use is
 // a QuotaUse entry, counted per minute and per day in that same transaction. So two model processes never both take
 // the last call of a day. A day is the UTC calendar day.
-import type { SpaceLike } from "phi-spaces";
+import { UniqueConflict, type SpaceLike } from "phi-spaces";
 import { StillHeld, takeExisting } from "./space.ts";
 import { today } from "./limits.ts";
 
@@ -35,7 +35,7 @@ export async function takeQuota(space: SpaceLike, key: string, l: QuotaLimits): 
 		} catch (e) {
 			await space.abort(t.id).catch(() => {});
 			// held by another process for long, or made by another one at the same moment: try again
-			if (tries < 20 && (e instanceof StillHeld || /unique/i.test((e as Error).message))) continue;
+			if (tries < 20 && (e instanceof StillHeld || e instanceof UniqueConflict)) continue;
 			throw e;
 		}
 	}

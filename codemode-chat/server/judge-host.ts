@@ -77,9 +77,9 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 	} catch (e) {
 		await space.abort(t.id).catch(() => {});
 		if (e instanceof StillHeld) return true; // the block's task stayed held: the candidate is back for a later round
-		// the transaction lapsed: the candidate is back for another try. A commit over the space's limits fails the same
-		// way but would fail every time: that one goes to the failed verdict below
-		if (e instanceof TransactionError && !/could write|the limit is/i.test((e as Error).message)) return true;
+		// the transaction lapsed: the candidate is back for another try. A commit over the space's limits fails
+		// with ResourceExhausted and would fail every time: that one goes to the failed verdict below
+		if (e instanceof TransactionError) return true; // a limit of the space is ResourceExhausted, not a TransactionError
 		// the verdict could not be stored (a limit of the space): the candidate is consumed with a short failed verdict,
 		// or it would come back to every judge forever
 		if (f) await failed(space, f, host, ttl, (e as Error).message).catch(() => { throw e; });

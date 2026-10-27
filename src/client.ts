@@ -17,7 +17,7 @@ import type { EntryDraft, Fields, Json, Lease, Template } from "./core.ts";
 import { snapshotPage, type SnapshotPageOptions } from "./snapshot.ts";
 import { mailboxPage, ackMailbox, type MailboxPage } from "./mailbox.ts";
 
-export { NO_WAIT, ANY, FOREVER, DEFAULT_LIMITS, IllegalArgumentError, LimitError, PermissionError, ResourceExhausted, TransactionError, UnknownLeaseError } from "./core.ts";
+export { NO_WAIT, ANY, FOREVER, DEFAULT_LIMITS, IllegalArgumentError, LimitError, PermissionError, ResourceExhausted, TransactionError, UnknownLeaseError, SnapshotExpired, RevisionAhead, UniqueConflict } from "./core.ts";
 export type { EntryDraft, Fields, Json, Lease, Limits, Template } from "./core.ts";
 export { Space };
 
@@ -57,13 +57,15 @@ export interface SpaceLike {
 	readIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
 	take(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
 	takeIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
+	/** takeIfExists by default (`take: false` = readIfExists); `locked` is true when the miss saw only locked matches. */
+	probe?(tmpl: Template, timeout: number, o?: OpOptions & { take?: boolean }): Promise<{ entry: Taken | null; locked: boolean }>;
 	notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json } & Req): Promise<{ eventId: string; lease: Lease }>;
 	wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string>;
 	readAll(tmpl?: Template, o?: { limit?: number; txn?: string | null }): Promise<Taken[]>;
 	/** One page limited by encoded bytes; continue with `next` (core.listPage). */
 	readPage(tmpl?: Template, o?: SnapshotPageOptions): Promise<core.Page>;
-	/** Commit batches after a revision (core.changes). */
-	changes(afterRev: number, o?: { maxBytes?: number }): Promise<core.Changes>;
+	/** Commit batches after a revision (core.changes). `waitMs`: a long poll, answered at the first batch or after the wait. */
+	changes(afterRev: number, o?: { maxBytes?: number; waitMs?: number }): Promise<core.Changes>;
 	count(tmpl?: Template, txn?: string | null): Promise<number>;
 	stats(): Promise<core.SpaceStats>;
 	createTransaction(lease?: number, o?: Req): Promise<Lease>;
@@ -146,7 +148,7 @@ export class PhiSpaces implements SpaceLike {
 			if (o.unique !== undefined) {
 				if (!Array.isArray(o.unique) || !o.unique.length || o.unique.some(k => typeof k !== "string" || !Object.hasOwn(entry.fields, k))) throw new core.IllegalArgumentError("unique needs existing field names");
 				core.settle(s, now);
-				if (s.entries.some(e => e.type === entry.type && o.unique!.every(k => core.deepEqual(e.fields[k] ?? null, entry.fields[k]!)))) throw new core.IllegalArgumentError("unique entry already exists");
+				if (s.entries.some(e => e.type === entry.type && o.unique!.every(k => core.deepEqual(e.fields[k] ?? null, entry.fields[k]!)))) throw new core.UniqueConflict("unique entry already exists");
 			}
 			return core.write(s, now, entry, txn, lease, this.as);
 		});
@@ -225,6 +227,13 @@ export class PhiSpaces implements SpaceLike {
 	readIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.op(tmpl, timeout, o, false, true); }
 	take(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.op(tmpl, timeout, o, true, false); }
 	takeIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.op(tmpl, timeout, o, true, true); }
+	/** A readIfExists/takeIfExists that also reports whether the miss saw only matches locked by other transactions
+	 *  (`locked` distinguishes "held, may come back" from "definitely gone" without a timing heuristic). */
+	async probe(tmpl: Template, timeout: number, o: OpOptions & { take?: boolean } = {}): Promise<{ entry: Taken | null; locked: boolean }> {
+		const out: { locked?: boolean } = {};
+		const entry = await this.op(tmpl, timeout, o, o.take === true, true, out);
+		return { entry, locked: out.locked === true };
+	}
 
 	/** `target` is the conversation that receives the events; without one they would have nobody to go to. */
 	async notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json } & Req) {
@@ -278,9 +287,19 @@ export class PhiSpaces implements SpaceLike {
 		return page;
 	}
 	/** The commit batches after `afterRev` (core.changes): limited by bytes, ends between batches, `more` says if there is newer. */
-	async changes(afterRev: number, o: { maxBytes?: number } = {}): Promise<core.Changes> {
-		const s = await this.snap();
-		return core.changes(s ?? core.initialState(), afterRev, o);
+	async changes(afterRev: number, o: { maxBytes?: number; waitMs?: number } = {}): Promise<core.Changes> {
+		const read = async () => core.changes((await this.snap()) ?? core.initialState(), afterRev, o);
+		const end = this.now() + (o.waitMs ?? 0);
+		if (!(o.waitMs! > 0)) return read();
+		// the long poll of the service: the signal is made before the first look, so no commit in between is missed
+		const signal = await this.commitSignal();
+		try {
+			for (;;) {
+				const r = await read();
+				if (r.batches.length || this.now() >= end) return r;
+				await awaitWithContext(signal.wait(Math.max(1, end - this.now())), this.ctx);
+			}
+		} finally { await signal.stop(); }
 	}
 	/** Revision of the newest domain or internal-state commit (0: none yet), with the stream it belongs to. */
 	async revision(): Promise<{ rev: number; streamId: string }> {
@@ -351,11 +370,11 @@ export class PhiSpaces implements SpaceLike {
 	}
 
 	/** `timeout` may be FOREVER. Long waits sleep in timer-sized chunks; every wake-up re-probes, so nothing is lost. */
-	private async op(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean): Promise<Taken | null> {
-		if (o.request) return this.durableOperation(tmpl, timeout, o, take, ifExists);
+	private async op(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean, out?: { locked?: boolean }): Promise<Taken | null> {
+		if (o.request) return this.durableOperation(tmpl, timeout, o, take, ifExists, out);
 		let deadline = o.deadline ?? core.deadlineOf(this.now(), timeout);
 		const txn = o.txn ?? null;
-		await this.host.commit(async (tx) => { await this.doc(tx); }, this.ctx); // the watch needs the doc to exist
+		if (!(await this.snap())?.spaceId) await this.host.commit(async (tx) => { await this.doc(tx); }, this.ctx); // the watch needs the doc to exist
 		// One watch for the whole wait. It is acquired before the first probe and flags every change, so a write that
 		// lands between a probe and the wait is never missed: `dirty` is cleared before each probe and checked after.
 		const watch = await this.watch();
@@ -377,12 +396,11 @@ export class PhiSpaces implements SpaceLike {
 					const miss = p.status !== "found" && ((p.status === "none" && ifExists) || dl <= now);
 					const outcome = p.status === "found" ? (view(p.entry, s.spaceId) as unknown as Json) : null;
 					if (o.once && (p.status === "found" || miss)) await o.once.set(tx, outcome);
-					return { ...p, miss, next: core.nextExpiry(s), spaceId: s.spaceId, deadline: dl }; // one commit per round: probe, outcome and next wake-up
+					return { ...p, miss, next: core.nextExpiry(s), spaceId: s.spaceId }; // one commit per round: probe, outcome and next wake-up
 				}, this.ctx);
 				if (r.status === "replay") return r.value; // a replayed call was counted the first time
-				deadline = r.deadline;
 				if (r.status === "found") { this.meter.inc(take ? "takes" : "reads"); return view(r.entry, r.spaceId); }
-				if (r.miss) { this.meter.inc("misses"); return null; }
+				if (r.miss) { this.meter.inc("misses"); if (out) out.locked = r.status === "locked"; return null; }
 				const left = deadline - this.now();
 				if (left <= 0) continue; // the deadline passed after the probe: the next round records the miss
 				if (dirty) { await this.calmDown(); continue; } // something changed during the probe: look again before sleeping
@@ -426,7 +444,7 @@ export class PhiSpaces implements SpaceLike {
 				const result = p.status === "found" ? core.view(p.entry, s.spaceId) as unknown as Json : null;
 				if (p.status === "found" || miss) {
 					if (o.resultBudget !== undefined && Buffer.byteLength(JSON.stringify(result)) > o.resultBudget) throw new core.ResponseBudgetTooSmall(Buffer.byteLength(JSON.stringify(result)));
-					claims.decide(s, now, ad.key, { state: "done", result });
+					claims.decide(s, now, ad.key, { state: "done", result, ...(p.status === "locked" ? { locked: true } : {}) });
 				} else { core.parkOperation(s, ad.key, tmpl, take, o.txn ?? null, ad.deadline, ifExists, this.as); this.authorizePending(s, o.request); }
 			}
 			return core.plain(claims.lookup(s, o.request, now));
@@ -447,7 +465,7 @@ export class PhiSpaces implements SpaceLike {
 		for (const w of s.waiters) if (w.claimKey === key && a.canExecutePending(w.take ? "take" : "read", w.template)) { this.claimMetadata(s,key); w.authorizedUntil = a.validUntil; core.touch(s, this.now()); }
 	}
 
-	private async durableOperation(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean): Promise<Taken | null> {
+	private async durableOperation(tmpl: Template, timeout: number, o: OpOptions, take: boolean, ifExists: boolean, out?: { locked?: boolean }): Promise<Taken | null> {
 		let value = await this.beginOperation(tmpl, timeout, o as OpOptions & { request: RequestRef }, take, ifExists);
 		const watch = await this.watch();
 		let wake: () => void = () => {}, dirty = false;
@@ -458,7 +476,7 @@ export class PhiSpaces implements SpaceLike {
 				if (value.resultExpired) throw new claims.ResultExpired("the operation's retained result expired");
 				if (value.error) throw value.error.code === "CompletionViolation" ? new core.CompletionViolation(value.error.message) : new core.TransactionError(value.error.message);
 				if (value.state === "cancelled") throw new claims.OperationCancelled("the operation was cancelled");
-				if (value.state === "done") { this.meter.inc(value.result === null ? "misses" : take ? "takes" : "reads"); return (value.result ?? null) as unknown as Taken | null; }
+				if (value.state === "done") { this.meter.inc(value.result === null ? "misses" : take ? "takes" : "reads"); if (out) out.locked = value.locked === true; return (value.result ?? null) as unknown as Taken | null; }
 				if (!dirty) await awaitWithContext(new Promise<void>(res => { wake = res; timer = setTimeout(res, core.timerDelay(Math.min(1000, value.deadline - this.now()))); }), this.ctx);
 				clearTimeout(timer); dirty = false;
 				value = await this.pollOperation(o.request!);

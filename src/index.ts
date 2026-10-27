@@ -125,7 +125,7 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 	let undeliverable = 0;
 	await harness.commit(async (tx) => {
 		const s = await spaceDoc(tx, o.space, now());
-		s.outbox = s.outbox.filter((x) => !done.has(key(x)));
+		s.outbox = s.outbox.filter((x) => !done.has(key(x))); delete s.outboxBytes;
 		for (const x of s.outbox) if (failed.has(key(x))) { x.tries = (x.tries ?? 0) + 1; x.retryAt = now() + retryMs * x.tries; }
 		const lost = new Set<string>();
 		const release: string[] = []; // primitives copied out: drafts are unreadable after the commit
@@ -136,7 +136,7 @@ export async function deliverEvents(harness: ServiceHost, ctx: Context, o: Servi
 			if (x.txn) release.push(x.txn);
 			if (giveUp) gaveUp.push(`gave up delivering ${x.kind} event ${x.eventId}:${x.seq} after ${MAX_TRIES} attempts`);
 		}
-		s.outbox = s.outbox.filter((x) => !lost.has(key(x)));
+		s.outbox = s.outbox.filter((x) => !lost.has(key(x))); delete s.outboxBytes;
 		for (const t of release) core.releaseTxn(s, now(), t); // may serve the entry to the next waiter (new outbox event)
 		undeliverable = lost.size;
 	}, ctx);

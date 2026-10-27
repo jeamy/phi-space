@@ -92,7 +92,6 @@ export async function setLlm(o: { on?: boolean; model?: string }): Promise<LlmIn
 	return llmInfo();
 }
 
-export const llmAvailable = async () => (await sharedModel()) !== null && on;
 
 /** Labels (`provider/id`) of the models that may take part in a run. */
 export async function llmModels(): Promise<string[]> {
