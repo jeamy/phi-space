@@ -26,8 +26,9 @@ export type CommandCtx = {
 
 /** A refusal shown to the actor; the transaction is aborted. */
 export class CommandError extends Error {}
-/** A refusal because no thing of that name was found: the model process may read the sentence once more ("holstücke"). */
-export class UnknownName extends CommandError {}
+/** A refusal that means "not understood" (no thing, person or exit of that name, a command without what it needs), not
+ *  "not now": with model calls on, the model process reads the sentence once before the refusal is shown ("holstücke"). */
+export class NotUnderstood extends CommandError {}
 
 /** The account's level: an admin has every level; `perms` adds Builder; a guest is a guest. */
 export function levelOf(a: AccountFields | null): Level {

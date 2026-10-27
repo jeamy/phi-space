@@ -7,7 +7,7 @@ import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
-import { CommandError, inventory, msg, type CommandCtx } from "../context.ts";
+import { CommandError, NotUnderstood, inventory, msg, type CommandCtx } from "../context.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
@@ -66,11 +66,11 @@ const offer: Command = {
 			return msg(c, c.actor.charId, "info", n ? `${n} Angebot${n === 1 ? "" : "e"} zurückgenommen.` : "Du hast kein offenes Angebot.");
 		}
 		const m = /^(.+?)\s+(?:an|to)\s+(\S+)(?:\s+(?:für|fuer|for)\s+(.+))?$/i.exec(arg.trim());
-		if (!m) throw new CommandError("So geht es: offer <dinge> an <person> [für <dinge>], z. B. offer treibholz an Bert für münze");
+		if (!m) throw new NotUnderstood("So geht es: offer <dinge> an <person> [für <dinge>], z. B. offer treibholz an Bert für münze");
 		const got = pick(await inventory(c), parseSpec(m[1]!));
 		if ("missing" in got) throw new CommandError(`Du hast nicht: ${got.missing}.`);
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.charId !== c.actor.charId && ch.name.toLowerCase() === m[2]!.toLowerCase());
-		if (!who) throw new CommandError(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
+		if (!who) throw new NotUnderstood(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
 		const want = m[3] ? parseSpec(m[3]) : [];
 		const o: OfferFields = { offerId: `o-${randomBytes(5).toString("hex")}`, from: c.actor.charId, fromName: c.actor.name, to: who.charId, toName: who.name, give: got.items.map((i) => i.f.itemId), giveNames: got.items.map((i) => i.f.name), want, room: c.actor.room, at: Date.now() };
 		await c.space.write({ type: "Offer", fields: o as never }, c.txn, OFFER_MS);
@@ -146,7 +146,7 @@ const market: Command = {
 		noGuest(c);
 		if (/^(biete|sell|verkaufe)$/i.test(verb)) {
 			const m = /^(.+?)\s+(?:für|fuer|for)\s+(\d+)$/i.exec(rest.join(" "));
-			if (!m) throw new CommandError("So geht es: markt biete <ding> für <n>");
+			if (!m) throw new NotUnderstood("So geht es: markt biete <ding> für <n>");
 			const price = Number(m[2]);
 			if (price < 1 || price > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
 			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1).map((s) => ({ ...s, count: 1 })));
@@ -177,7 +177,7 @@ const market: Command = {
 			if (item) await move(c, fieldsOf<ItemFields>(item), "market", c.actor.charId);
 			return msg(c, c.actor.charId, "info", `Du holst ${l.f.itemName} vom Marktbrett zurück.`);
 		}
-		throw new CommandError("Am Marktbrett: markt, markt biete <ding> für <n>, markt kaufe <nr>, markt zurück <nr>.");
+		throw new NotUnderstood("Am Marktbrett: markt, markt biete <ding> für <n>, markt kaufe <nr>, markt zurück <nr>.");
 	},
 };
 
@@ -192,7 +192,7 @@ const craft: Command = {
 		}
 		const a = arg.trim().toLowerCase();
 		const r = rs.find((x) => x.key === a || x.name.toLowerCase() === a);
-		if (!r) throw new CommandError(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
+		if (!r) throw new NotUnderstood(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
 		const inv = await inventory(c);
 		const used = new Set<string>(), inputs: Inv = [];
 		for (const n of r.needs) {
@@ -263,7 +263,7 @@ const order: Command = {
 			for (let i = 0; i < mine.f.reward.count; i++) await spawn(c.space, c.txn, c.world, p, { location: c.actor.charId, x: -1, y: -1 });
 			return msg(c, "*", "info", `$you() $conj(lieferst|liefert) einen Auftrag ab und $conj(bekommst|bekommt) ${reward(mine.f)}.`, { templ: true });
 		}
-		throw new CommandError("An der Tafel: order, order nimm <nr>, order liefere, order aufgeben.");
+		throw new NotUnderstood("An der Tafel: order, order nimm <nr>, order liefere, order aufgeben.");
 	},
 };
 

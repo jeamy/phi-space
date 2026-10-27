@@ -94,8 +94,11 @@ Wer statt eines Befehls einen Satz tippt, wird in zwei Stufen verstanden:
    („hallo, leg holz ins feuer“) wird übergangen. Namen von Dingen dürfen Tippfehler, Mehrzahl, Zahlen und angehängte
    Maße haben: „lege 5 holstücke ins feuer“ legt bis zu fünf Treibholz nach.
 2. **Ein günstiges Modell** (`server/model-host.ts`, nur mit `SPACES_MMO_LLM=1`) bekommt, was die Regeln nicht
-   verstehen, und auch einen Satz, dessen Befehl an einem unbekannten Namen scheitert („lege 2 brennstücke ins
-   feuer“: „Du trägst nichts, was … heißt“). Der Welt-Worker schreibt dafür einen `Translate`-Eintrag; der Modellprozess zeigt dem Modell die Befehle
+   verstehen, und jeden Satz, dessen Befehl nicht verstanden wird (ein unbekannter Name von Ding, Person, Ausgang,
+   Kanal oder Rezept, ein Befehl ohne das Nötige: „lege 2 brennstücke ins feuer“, „give holz“), bevor eine
+   Fehlermeldung kommt. Erst wenn auch das Modell nicht weiterweiß, sieht der Spieler die Ablehnung. Was am Spielstand
+   scheitert (zu weit weg, Nebel, zu wenig Münzen, gerade belegt), wird sofort abgelehnt; das Modell könnte dort nichts
+   ändern. Der Welt-Worker schreibt dafür einen `Translate`-Eintrag; der Modellprozess zeigt dem Modell die Befehle
    und was der Spieler sieht, und schreibt die Antwort als neuen Auftrag mit dem Originalsatz (`asked`) zurück. Eine
    Antwort, die nicht mit einem bekannten Befehl beginnt, wird verworfen; eine Übersetzung wird nie erneut übersetzt.
    Kontingente: je Konto und Tag (Gäste weniger), dazu die gemeinsamen Grenzen pro Minute und Tag.
