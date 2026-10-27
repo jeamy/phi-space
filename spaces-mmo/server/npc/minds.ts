@@ -10,6 +10,7 @@ import { worldDayKey, worldNowMs } from "../engine/clockcache.ts";
 import { complete, llmEnabled } from "../llm.ts";
 import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields } from "../model.ts";
 import { readExisting, StillHeld } from "../space.ts";
+import { setting } from "../settings.ts";
 
 const MEMORY_MAX = 4096;
 /** What a model NPC may type: every command of a registered player that changes something (its account is one, see
@@ -105,7 +106,7 @@ export type Situation = {
  *  "budget": its day (or the shared limit) is used up. */
 export async function think(space: SpaceLike, npc: { npcId: string; name: string; persona: string; budgetDay: number }, s: Situation): Promise<{ lines: string[]; note?: string } | "off" | "budget"> {
 	if (!llmEnabled()) return "off";
-	const budget = Number(process.env.SPACES_MMO_NPC_BUDGET_DAY ?? npc.budgetDay);
+	const all = await setting(space, "npc.budgetDay"), budget = all < 0 ? npc.budgetDay : all; // -1: the world's budget of the role
 	const system = [
 		`You are ${npc.name}, a character in the text game "Leuchtfeuer" (an archipelago in the fog; fires keep the fog away). ${npc.persona}`,
 		"You speak German, briefly (one or two sentences), in character. You act only by typing game commands, one per line;",

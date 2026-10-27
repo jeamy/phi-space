@@ -21,6 +21,8 @@ import { loadWorld, worldAsset } from "./engine/world.ts";
 import { Gateway } from "./gateway.ts";
 import { connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE } from "./space.ts";
 import { upgradeWebSocket } from "./ws.ts";
+import { chosen } from "./llm.ts";
+import { saveModelChoice, saveSettings, SETTINGS, settingsOf, type ModelInfoFields } from "./settings.ts";
 
 const COOKIE = "mmo_sid";
 
@@ -97,6 +99,42 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		json(res, 200, meView(me), { "set-cookie": cookie(req, sid) });
 	};
 
+	/** The operator's window (client/AdminPanel.tsx): the settings with where each value comes from, and the models the
+	 *  model process published, with the admin's choice. `change` (a POST): `values` (key → number, null back to the .env)
+	 *  and `models` ({on, allowed, model}, null back to the default choice). Only for an admin. */
+	const adminSettings = async (me: Me | null, change: Record<string, any> | null) => {
+		if (!me?.admin) throw new AuthError(403, "Nur für Admins");
+		const info = (await world.space.readAll({ type: "ModelInfo" }, { limit: 1 }))[0]?.fields as unknown as ModelInfoFields | undefined;
+		const available = info?.models ?? [];
+		if (change) {
+			try {
+				if (change.values !== undefined) {
+					if (!change.values || typeof change.values !== "object" || Array.isArray(change.values)) throw new RangeError("values: Schlüssel und Zahlen");
+					await saveSettings(world.space, change.values);
+				}
+				if (change.models !== undefined) {
+					const m = change.models;
+					if (m === null) await saveModelChoice(world.space, null);
+					else {
+						if (typeof m !== "object" || typeof m.on !== "boolean" || !(m.allowed === null || (Array.isArray(m.allowed) && m.allowed.every((l: unknown) => typeof l === "string"))) || !(m.model === null || typeof m.model === "string")) throw new RangeError("models: {on, allowed, model}");
+						const known = new Set(available.map((x) => x.label));
+						const unknown = [...(m.allowed ?? []), ...(m.model ? [m.model] : [])].filter((l: string) => !known.has(l));
+						if (unknown.length) throw new RangeError(`Unbekannte Modelle: ${unknown.slice(0, 5).join(", ")}`);
+						if (m.allowed && !m.allowed.length) throw new RangeError("Mindestens ein Modell erlauben (oder Standard)");
+						if (m.model && m.allowed && !m.allowed.includes(m.model)) throw new RangeError("Das verwendete Modell muss erlaubt sein");
+						await saveModelChoice(world.space, { on: m.on, allowed: m.allowed, model: m.model });
+					}
+				}
+			} catch (e) { if (e instanceof RangeError) throw new AuthError(400, e.message); throw e; }
+		}
+		const s = await settingsOf(world.space);
+		const pick = chosen(available, s.models);
+		return {
+			fields: SETTINGS.map((d) => ({ key: d.key, label: d.label, unit: d.unit, help: d.help, env: d.env, def: d.def, min: d.min, max: d.max, ...s.values[d.key]! })),
+			models: { enabled: info?.enabled ?? false, published: !!info, on: s.models.on, custom: s.models.allowed !== null, available, allowed: pick.allowed.map((m) => m.label), model: pick.model?.label ?? null },
+		};
+	};
+
 	const handle = async (req: http.IncomingMessage, res: http.ServerResponse) => {
 		try {
 			const url = new URL(req.url ?? "/", "http://localhost");
@@ -113,6 +151,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const ip = clientIp(req);
 				if (!allowed(ip)) return json(res, 429, { error: "Zu viele Anfragen; bitte in einer Minute noch einmal" });
 				if (p === "/api/me" && req.method === "GET") return json(res, 200, meView(await accounts.resolve(cookieOf(req, COOKIE))));
+				if (p === "/api/admin/settings" && req.method === "GET") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), null));
 				if (req.method !== "POST") return json(res, 405, { error: "POST erwartet" });
 				if (req.headers["x-mmo"] !== "1") return json(res, 403, { error: "Header x-mmo fehlt" });
 				const b = await readBody(req);
@@ -132,6 +171,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 					if (!loginByIp(ip) || !loginByName(name)) return json(res, 429, { error: "Zu viele Anmeldeversuche; bitte in einer Minute noch einmal" });
 					return await signIn(req, res, await accounts.login(b.name, b.password));
 				}
+				if (p === "/api/admin/settings") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), b));
 				if (p === "/api/logout") {
 					await accounts.closeSession(cookieOf(req, COOKIE));
 					return json(res, 200, meView(null), { "set-cookie": cookie(req, null) });

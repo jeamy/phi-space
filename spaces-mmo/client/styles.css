@@ -239,3 +239,28 @@ button.link:hover { transform: none; text-decoration: underline; }
 
 /* the pictures of things (worlds/<id>/assets/items): pixel art, kept sharp */
 img.icon { image-rendering: pixelated; display: inline-block; vertical-align: middle; flex: none; }
+
+/* the operator's window (client/AdminPanel.tsx) */
+.panel.admin { border-color: var(--line); display: grid; gap: 8px; max-height: 70vh; overflow-y: auto; }
+.admin-head { display: flex; align-items: center; justify-content: space-between; }
+.admin-head h2 { margin: 0; }
+.admin h3 { margin: 6px 0 0; font: 700 10px/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.admin-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12px; }
+.admin-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-strong); }
+/* the allowed models: like the model picker's open list in the help system's feed */
+.admin-models { max-height: 260px; overflow-y: auto; border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 0; background: var(--surface); font: 600 12px/1.35 var(--font-mono); }
+.admin-models summary { cursor: pointer; display: flex; gap: 6px; align-items: center; padding: 6px 10px; color: var(--text-strong); }
+.admin-models summary b { font-weight: 700; }
+.admin-model { display: flex; gap: 6px; align-items: flex-start; padding: 4px 10px 4px 30px; overflow-wrap: anywhere; cursor: pointer; }
+.admin-model:hover { background: var(--raised); }
+.admin-model:has(input:checked) { background: #a9cdfb; color: #0b0f14; }
+.admin-model:has(input:checked) .muted { color: #2b3a4a; }
+.admin-fields { display: grid; gap: 8px; }
+.admin-field { display: grid; gap: 4px; font: 600 11px/1.4 var(--font-mono); color: var(--muted); }
+.admin-field > span:first-child { color: var(--text); }
+.admin-input { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.admin-input input { width: 110px; }
+.admin-q { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-strong); font-size: 10px; cursor: help; color: var(--muted); }
+.admin-src { font: 700 9px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; border-radius: 999px; padding: 4px 7px; border: 1px solid var(--line-strong); color: var(--muted); }
+.admin-src--space { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.admin-msg { font-size: 12px; margin: 0; }

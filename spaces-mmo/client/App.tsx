@@ -4,6 +4,7 @@
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ThemeControls } from "./ThemeControls.tsx";
+import { AdminPanel } from "./AdminPanel.tsx";
 import { useTheme } from "./lib/theme.ts";
 import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
@@ -264,7 +265,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [log, setLog] = useState<Line[]>([]);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
-	const [panel, setPanel] = useState<null | "account" | "leave">(null);
+	const [panel, setPanel] = useState<null | "account" | "leave" | "admin">(null);
 	const [help, setHelp] = useState(false);
 	// on a phone the map modes and logging out sit behind "⋯" in the header bar (styles.css, `.bar-tools`)
 	const [more, setMore] = useState(false);
@@ -521,6 +522,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 						{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => { setMore(false); setMapMode(mode); }} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
 					</div>
 					{controls}
+					{account.admin && <button onClick={() => { setMore(false); setPanel(panel === "admin" ? null : "admin"); }} aria-pressed={panel === "admin"}>Admin</button>}
 					<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
 				</div>
 			</header>
@@ -540,6 +542,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
 					)}
+					{panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
 					{panel === "leave" && (
 						<div className="panel">
 							<h2>Als Gast abmelden?</h2>

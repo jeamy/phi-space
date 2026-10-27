@@ -12,6 +12,7 @@ import type { WorldDef } from "./engine/world.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { envMs } from "./space.ts";
+import { setting } from "./settings.ts";
 import type { WsConnection } from "./ws.ts";
 
 /** What a client sees of a character. */
@@ -64,11 +65,9 @@ const INTENT_LEASE_MS = 30_000;
  *  STEP_BURST steps in hand and gets one back every STEP_REFILL_MS; a step beyond that is dropped (the page then
  *  resynchronizes after a while). The page's pace never reaches the limit. */
 const STEP_BURST = 8, STEP_REFILL_MS = 100;
-/** Typed commands likewise: CMD_BURST at once, then one every CMD_REFILL_MS (a person types far slower; a script that
+/** Typed commands likewise: the settings' burst at once, then their rate per second (a person types far slower; a script that
  *  floods would fill the world's queue). Both buckets belong to the account, whatever number of pages it has open, and an
  *  account keeps at most MAX_PAGES pages: a further one closes the oldest. */
-const CMD_BURST = Number(process.env.SPACES_MMO_CMD_BURST) > 0 ? Number(process.env.SPACES_MMO_CMD_BURST) : 20;
-const CMD_REFILL_MS = 1000 / (Number(process.env.SPACES_MMO_CMD_PER_SEC) > 0 ? Number(process.env.SPACES_MMO_CMD_PER_SEC) : 5);
 const MAX_PAGES = 4;
 type Bucket = { left: number; at: number };
 /** Takes one from the bucket (refilled by the time passed); false when it is empty. */
@@ -155,7 +154,7 @@ export class Gateway {
 		// the account's other pages share its buckets; beyond MAX_PAGES the oldest page is closed
 		const mine = [...this.#clients].filter((x) => x.me.accountId === me.accountId);
 		for (const old of mine.slice(0, Math.max(0, mine.length - MAX_PAGES + 1))) old.ws.close();
-		const limits = mine.at(-1)?.limits ?? { steps: { left: STEP_BURST, at: Date.now() }, cmds: { left: CMD_BURST, at: Date.now() } };
+		const limits = mine.at(-1)?.limits ?? { steps: { left: STEP_BURST, at: Date.now() }, cmds: { left: await setting(this.space, "cmd.burst"), at: Date.now() } };
 		const c: Client = { ws, me, room: null, lease: null, timer: null, limits, warned: 0, chain: Promise.resolve() };
 		this.#clients.add(c);
 		ws.onClose(() => {
@@ -230,7 +229,9 @@ export class Gateway {
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
 		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
 		if (!line) return;
-		if (!(/^step\s/.test(line) ? spend(c.limits.steps, STEP_BURST, STEP_REFILL_MS) : spend(c.limits.cmds, CMD_BURST, CMD_REFILL_MS))) {
+		// the command limits are the operator's settings (server/settings.ts), read at most every few seconds
+		const cmdBurst = await setting(this.space, "cmd.burst"), cmdRefillMs = 1000 / Math.max(1, await setting(this.space, "cmd.perSec"));
+		if (!(/^step\s/.test(line) ? spend(c.limits.steps, STEP_BURST, STEP_REFILL_MS) : spend(c.limits.cmds, cmdBurst, cmdRefillMs))) {
 			if (Date.now() - c.warned > 2_000) { c.warned = Date.now(); c.ws.send({ t: "msg", m: { kind: "error", text: "Zu viele Befehle auf einmal; einen Moment bitte.", from: "", at: Date.now() } } satisfies ServerFrame); }
 			return;
 		}

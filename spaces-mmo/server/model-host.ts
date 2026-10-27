@@ -11,7 +11,8 @@ import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS, helpLine } from "./engine/commands/default.ts";
 import { TRADE_COMMANDS } from "./engine/commands/trade.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
-import { complete } from "./llm.ts";
+import { availableModels, complete, llmEnabled } from "./llm.ts";
+import { setting, type ModelInfoFields } from "./settings.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type IntentFields, type ItemFields, type ListingFields, type TranslateFields } from "./model.ts";
 import { awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space.ts";
 
@@ -65,7 +66,7 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 			const e = await space.takeIfExists({ type: "Translate", id: next.id }, NO_WAIT, { txn });
 			if (!e) { await space.abort(txn); return true; }
 			const t = fieldsOf<TranslateFields>(e);
-			const perDay = t.guest ? Number(process.env.SPACES_MMO_TRANSLATE_GUEST_PER_DAY ?? 20) : Number(process.env.SPACES_MMO_TRANSLATE_PER_DAY ?? 200);
+			const perDay = await setting(space, t.guest ? "translate.guestPerDay" : "translate.perDay");
 			const res = await complete(space, TRANSLATE_SYSTEM, await translatePrompt(space, w, t), { maxTokens: 60, own: { key: `translate:${t.accountId}`, perDay } }).catch((err) => { console.error("[model] translate:", (err as Error).message); return null; });
 			const exitNames = (await space.readAll({ type: "Exit", fields: { location: t.room } })).flatMap((x) => [String(x.fields.name), ...((x.fields.aliases as string[]) ?? [])].map((n) => n.toLowerCase()));
 			// talk is said as it was typed (the model may shorten it and drop the name of whom it is for)
@@ -79,13 +80,27 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 		return true;
 	};
 
+	// what the admin's window offers: every model with credentials, published for the web process (it has none)
+	const publish = async () => {
+		const info: ModelInfoFields = { enabled: llmEnabled(), models: await availableModels(), at: Date.now() };
+		const txn = (await space.createTransaction(10_000)).id;
+		try {
+			while (await space.takeIfExists({ type: "ModelInfo" }, NO_WAIT, { txn }));
+			await space.write({ type: "ModelInfo", fields: info as never }, txn, 60_000);
+			await space.commit(txn);
+		} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
+	};
+	void publish().catch((e) => console.error("[model] publish:", (e as Error).message));
+	const beat = setInterval(() => void publish().catch((e) => console.error("[model] publish:", (e as Error).message)), 20_000);
+	beat.unref?.();
+
 	const loop = (async () => {
 		while (!halt.signal.aborted) {
 			try { if (!(await step())) await awaitWork(space, { type: "Translate" }, halt.signal); }
 			catch (e) { if (halt.signal.aborted) break; console.error("[model] loop:", (e as Error).message); await new Promise((r) => setTimeout(r, 1000)); }
 		}
 	})();
-	return { async close() { halt.abort(); await loop; conn.close(); } };
+	return { async close() { halt.abort(); clearInterval(beat); await loop; conn.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

@@ -9,6 +9,7 @@ import { isAwake, keepAwake, remember, sleep, think, tryWake } from "./minds.ts"
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { ECONOMY } from "./economy.ts";
 import { gather, requestOf, unclear } from "./requests.ts";
+import { setting } from "../settings.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type ListingFields, type MsgFields, type OfferFields } from "../model.ts";
 import { peek } from "../space.ts";
 
@@ -79,7 +80,7 @@ function waerter(): Script {
 			const asked = await doRequests(n, me, fromPeople);
 			if (asked.length && fromPeople.every((x) => asked.includes(x))) { await keepAwake(n.space, n.def.npcId, AWAKE_WORLD_MS).catch(() => {}); await n.sleep(n.pace(3_000, 100)); return; }
 			if (wakes.length || (awake && fromPeople.some((x) => !asked.includes(x)))) {
-				if (!awake && !(await tryWake(n.space, n.def.npcId, npcMax(), awakeMs))) {
+				if (!awake && !(await tryWake(n.space, n.def.npcId, await npcMax(n), awakeMs))) {
 					if (!pensive) { pensive = true; await n.act(`emote ist in Gedanken.`); }
 				} else {
 					pensive = false;
@@ -187,7 +188,7 @@ function wanderer(): Script {
 /** A wanderer's words: the model while it can be woken, else its script line. */
 async function speak(n: Npc, name: string, event: string, heard: string[]): Promise<void> {
 	const m = n.def.model;
-	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, npcMax(), AWAKE_WORLD_MS))) {
+	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, await npcMax(n), AWAKE_WORLD_MS))) {
 		const me = await self(n);
 		const r = await think(n.space, { npcId: n.def.npcId, name, persona: m.persona, budgetDay: m.budgetDay }, { room: await roomName(n, me?.room ?? n.def.room), people: await humansIn(n, me?.room ?? n.def.room), event, heard, ...(me ? await surroundings(n, me) : {}) });
 		if (typeof r === "object") { await actThenSay(n, r.lines); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
@@ -243,7 +244,7 @@ export async function humansIn(n: Npc, room: string): Promise<string[]> {
 const roomName = async (n: Npc, room: string) => String((await peek(n.space, { type: "Room", fields: { roomId: room } }))?.fields.name ?? room);
 /** "Ines flickt ein Netz." → "flickt ein Netz." (emote puts the name in front). */
 const dozeLine = (name: string, lines: string[], i: number) => (lines[i] ?? `${name} döst.`).replace(new RegExp(`^${name}\\s+`), "");
-const npcMax = () => Number(process.env.SPACES_MMO_NPC_MAX ?? 10);
+const npcMax = (n: Npc) => setting(n.space, "npc.max");
 
 /** The ferryman: walks to the exit of the room he is in that leads to another room of his route, takes it, rests, and
  *  goes back the same way. Fog that hides the way stops him until it clears (the world refuses the step; he tries

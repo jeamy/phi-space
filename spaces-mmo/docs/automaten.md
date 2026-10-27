@@ -308,7 +308,31 @@ Den Code selbst bearbeitet man im Browser-Editor. Im reinen Textmodus geht das �
 
 ## Einstellungen für Betreiber
 
-Der Admin meldet sich im Browser an und öffnet das **Konfigurationsfenster**. Dort stehen die Grenzen und
+**Stand 2026-10-27: umgesetzt** für die Modelle und die Grenzen, die es schon gibt (`client/AdminPanel.tsx`,
+`server/settings.ts`, `tests/admin.test.ts`): Ein Admin sieht in der Kopfzeile des Spiels „Admin“ (auf dem Handy hinter
+„⋯“). Oben stehen die **Modelle** wie im Admin-Panel von codemode-chat und im Feed des Help-Systems: Modell-NPCs und
+Übersetzen an/aus, alle Modelle mit Zugangsdaten nach Anbieter gruppiert (ein Kästchen je Anbieter, Filter), dazu das
+Modell, das verwendet wird; „Standard“ kehrt zum neuesten Modell zu `SPACES_MMO_LLM_MODEL` (sonst Haiku) zurück. Die
+Liste der Modelle veröffentlicht der Modellprozess als `ModelInfo`-Entry, denn nur er hat Zugangsdaten. Freischalten
+lassen sich Modellaufrufe im Fenster nicht: Ohne `SPACES_MMO_LLM=1` in der `.env` bleiben sie aus, das Fenster kann sie
+nur zusätzlich abschalten. Darunter die **Grenzen**:
+
+| Feld | Umgebungsvariable | Standard |
+| --- | --- | --- |
+| Modellaufrufe je Minute (alle Prozesse) | `SPACES_MMO_LLM_PER_MIN` | 20 |
+| Modellaufrufe je Tag (alle Prozesse) | `SPACES_MMO_LLM_PER_DAY` | 500 |
+| Übersetzungen je Konto und Tag | `SPACES_MMO_TRANSLATE_PER_DAY` | 200 |
+| Übersetzungen je Gast und Tag | `SPACES_MMO_TRANSLATE_GUEST_PER_DAY` | 20 |
+| Wache Modell-NPCs zugleich | `SPACES_MMO_NPC_MAX` | 10 |
+| Modellaufrufe je NPC und Welttag (−1: das Budget der Rolle) | `SPACES_MMO_NPC_BUDGET_DAY` | −1 |
+| Getippte Befehle auf einmal je Konto | `SPACES_MMO_CMD_BURST` | 20 |
+| Getippte Befehle je Sekunde je Konto | `SPACES_MMO_CMD_PER_SEC` | 5 |
+
+Jeder Prozess liest die `Setting`-Entries höchstens alle `SPACES_MMO_SETTINGS_MS` (5 s). Noch offen aus dem Entwurf
+unten: die Felder der Automaten und des Assistenten (die es noch nicht gibt), die Grenzen des Web-Prozesses für Anfragen
+und Gäste und das Admin-Log.
+
+Entwurf: Der Admin meldet sich im Browser an und öffnet das **Konfigurationsfenster**. Dort stehen die Grenzen und
 Kontingente als Formularfelder mit Beschriftung, Einheit, Standardwert und „?“-Hilfe, kein Befehl nötig. „Speichern“
 schreibt sie als `Setting`-Entries in den Space; sie bleiben damit über Neustarts erhalten und gelten auf jedem
 Prozess, der den Space benutzt, ohne Neustart (die Prozesse lesen sie beim nächsten Schritt oder über `watch`).
