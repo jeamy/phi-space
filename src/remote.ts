@@ -383,9 +383,9 @@ export class RemoteSpace implements SpaceLike {
 		if (!(await this.info()).features.includes("read.chain")) throw new UnsupportedOperation("server does not support linked-entry pages");
 		return await this.send({ method: "readAll", args: { template: tmpl as Json, chain: core.plain(o) as Json } }) as unknown as ChainPage;
 	}
-	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; token?: string; txn?: string | null } = {}): Promise<core.Page> {
+	async readPage(tmpl: Template = null, o: { maxBytes?: number; after?: string | null; token?: string; txn?: string | null; limit?: number } = {}): Promise<core.Page> {
 		await this.info();
-		const args = { template: tmpl as unknown as Json, ...(o.maxBytes === undefined ? {} : { maxBytes: o.maxBytes }), ...(o.token === undefined ? {} : { token: o.token }), cursor: o.after ?? null, txn: o.txn ?? null };
+		const args = { template: tmpl as unknown as Json, ...(o.maxBytes === undefined ? {} : { maxBytes: o.maxBytes }), ...(o.token === undefined ? {} : { token: o.token }), ...(o.limit === undefined ? {} : { limit: o.limit }), cursor: o.after ?? null, txn: o.txn ?? null };
 		return (await this.send({ method: "readAll", args })) as unknown as core.Page;
 	}
 	/** Like the local `readAll`: all entries, or the first `limit` when supplied, fetched page by page. */
@@ -395,7 +395,8 @@ export class RemoteSpace implements SpaceLike {
 		const out: Taken[] = [];
 		let after: string | null = null;
 		do {
-			const p: core.Page = await this.readPage(tmpl, { after, txn: o.txn ?? null });
+			// the limit goes along (a server that does not know it lists everything; the slice below still holds)
+			const p: core.Page = await this.readPage(tmpl, { after, txn: o.txn ?? null, ...(o.limit === undefined ? {} : { limit }) });
 			out.push(...p.items);
 			after = p.next;
 		} while (after !== null && out.length < limit);

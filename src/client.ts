@@ -117,17 +117,24 @@ export class PhiSpaces implements SpaceLike {
 	/**
 	 * The commits of this space, for a long poll: `wait(ms)` returns at once when a commit came since the last `wait`
 	 * returned (or since the signal was made), else at the next commit or after `ms`. Make it before the first look, so a
-	 * commit between a look and the wait is not missed.
+	 * commit between a look and the wait is not missed. `gapMs`: after a return, the next one comes no sooner than this
+	 * (a busy space commits hundreds of times a second, and every waiting call that looks again costs it a read: many
+	 * waiters woken by every commit would keep it from committing).
 	 */
-	async commitSignal(): Promise<{ wait(ms: number): Promise<void>; stop(): Promise<void> }> {
-		const watch = await this.watch();
-		let dirty = false, poke: (() => void) | null = null;
+	async commitSignal(o: { gapMs?: number } = {}): Promise<{ wait(ms: number): Promise<void>; stop(): Promise<void> }> {
+		const watch = await this.watch(), gapMs = o.gapMs ?? 0;
+		let dirty = false, poke: (() => void) | null = null, last = -Infinity;
 		watch?.start(() => { dirty = true; poke?.(); });
+		const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 		return {
 			async wait(ms) {
+				const end = Date.now() + ms;
 				if (!watch) ms = Math.min(ms, 50); // no document to watch yet: look again soon
 				if (!dirty) await new Promise<void>((res) => { const t = setTimeout(() => { poke = null; res(); }, ms); poke = () => { clearTimeout(t); poke = null; res(); }; });
+				const early = last + gapMs - Date.now();
+				if (early > 0) await sleep(Math.min(early, Math.max(0, end - Date.now())));
 				dirty = false;
+				last = Date.now();
 			},
 			async stop() { await watch?.stop(); },
 		};

@@ -27,6 +27,9 @@ export const METHODS = ["hello", "generation", "write", "read", "take", "pollOpe
 export type Method = (typeof METHODS)[number];
 /** A long poll looks again at the latest after this long even without a commit (a decision that came without one). */
 const POLL_FALLBACK_MS = 1000;
+/** A waiting call looks again at the first commit, then at most this often: every look costs the space a read, and a busy
+ *  space with many waiting calls would spend its time on them (the 50 ms the service looked before, halved). */
+const POLL_GAP_MS = 25;
 const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack"];
 
 // ---- identity and rights
@@ -324,7 +327,7 @@ export class SpaceService {
 						maxBytes: Math.min(q.maxBytes === undefined ? c.frameBytes - 21 : int(q.maxBytes, "chain.maxBytes", 1), c.frameBytes - 21),
 					}) as unknown as Json;
 				}
-				const p = await client.readPage(t, { maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21), ...(a.token === undefined ? {} : { token: str(a.token, "token") }), after: (a.cursor as string | null | undefined) ?? null, txn: (a.txn as string | null | undefined) ?? null });
+				const p = await client.readPage(t, { maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21), ...(a.token === undefined ? {} : { token: str(a.token, "token") }), ...(a.limit === undefined ? {} : { limit: int(a.limit, "limit", 1) }), after: (a.cursor as string | null | undefined) ?? null, txn: (a.txn as string | null | undefined) ?? null });
 				return p as unknown as Json;
 			}
 			case "count": {
@@ -369,7 +372,7 @@ export class SpaceService {
 			case "events": {
 				this.checkConsumer(a.consumer, c.id);
 				const end = this.now() + Math.min(optInt(a.waitMs, "waitMs") ?? 0, this.o.maxPollMs);
-				const signal = end > this.now() ? await client.commitSignal() : null; // before the first look: no commit in between is missed
+				const signal = end > this.now() ? await client.commitSignal({ gapMs: POLL_GAP_MS }) : null; // before the first look: no commit in between is missed
 				try { for (;;) {
 					const p = await client.events(c.id.principal, { ...(a.mailboxEpoch === undefined ? {} : { mailboxEpoch: str(a.mailboxEpoch, "mailboxEpoch") }), after: optInt(a.after, "after"), maxBytes: Math.min(a.maxBytes === undefined ? c.frameBytes : int(a.maxBytes, "maxBytes", 1), c.frameBytes - 21) }, p => { for (const item of p.events) if (item.event.entry) this.checkTypes(grant, item.event.entry.types, "this mailbox event"); });
 					if (p.events.length || p.gap || this.now() >= end) return p as unknown as Json;
@@ -500,7 +503,7 @@ export class SpaceService {
 		const waitMs = Math.min(optInt(a.waitMs, "waitMs", 0) ?? 0, this.o.maxPollMs);
 		const end = this.now() + waitMs;
 		// a commit decides a pending request (the write that serves it, the expiry of its deadline is a timer below)
-		const signal = waitMs > 0 ? await c.client.commitSignal() : null;
+		const signal = waitMs > 0 ? await c.client.commitSignal({ gapMs: POLL_GAP_MS }) : null;
 		try {
 			for (;;) {
 				const v = await c.client.pollOperation(t);

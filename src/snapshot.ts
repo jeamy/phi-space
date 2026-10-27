@@ -8,7 +8,9 @@ type Record = { snapshotEpoch:number; token: string; streamId: string; query: st
 	/** Its last page was handed out: kept for a retry of that page, but the first to go when room is needed. */
 	read?: boolean };
 const hosts = new WeakMap<object, Map<string, Record>>();
-export type SnapshotPageOptions = { maxBytes?: number; after?: string | null; token?: string; txn?: string | null };
+export type SnapshotPageOptions = { maxBytes?: number; after?: string | null; token?: string; txn?: string | null;
+	/** At most this many entries in the whole snapshot (the first ones, as `readAll` with `limit`). */
+	limit?: number };
 
 export function snapshotPage(host: object, state: Readonly<core.SpaceState>, now: number, tmpl: core.Template, o: SnapshotPageOptions, owner?: core.Target): core.Page {
 	core.assertAdminIdle(state);
@@ -28,7 +30,11 @@ export function snapshotPage(host: object, state: Readonly<core.SpaceState>, now
 	if (record && (record.owner !== owner || record.query !== query)) throw new core.PermissionError("the snapshot belongs to another principal or query");
 	const fresh = record === undefined;
 	if (!record) {
-		const items = core.list(state, now, tmpl, o.txn ?? null, Number.MAX_SAFE_INTEGER, owner);
+		const items = core.list(state, now, tmpl, o.txn ?? null, o.limit ?? Number.MAX_SAFE_INTEGER, owner);
+		// the whole answer in one page (most reads, all of those with a small limit): nothing to keep for further pages,
+		// so no snapshot is made, no token and no copy of what list() already copied
+		const whole = bytePageIfWhole(items, Math.min(o.maxBytes ?? limits.maxFrameBytes, limits.maxFrameBytes), streamId, core.revision(state));
+		if (whole) return whole;
 		const bytes = encodedBytes(items);
 		if (bytes > limits.maxSnapshotBytes) throw new core.ResourceExhausted("the snapshot exceeds maxSnapshotBytes");
 		record = { snapshotEpoch:state.snapshotEpoch??0, token: `ss${randomBytes(16).toString("hex")}`, streamId, query, owner, rev: core.revision(state), expires: core.until(now, limits.snapshotTtlMs), bytes, items };
@@ -51,4 +57,11 @@ export function snapshotPage(host: object, state: Readonly<core.SpaceState>, now
 	} else cache.delete(rec.token);
 	cache.set(rec.token, rec);
 	return core.plain(page); // Local callers must not be able to mutate the retained snapshot through a page.
+}
+
+/** The page of `items` when all of them fit in one, else null (the caller pages through a kept snapshot). */
+function bytePageIfWhole(items: core.EntryView[], cap: number, streamId: string, rev: number): core.Page | null {
+	if (!Number.isSafeInteger(cap) || cap < 1) return null;
+	const page: core.Page = { items, next: null, streamId, rev };
+	return encodedBytes(page) <= cap ? page : null;
 }
