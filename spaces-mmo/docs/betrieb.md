@@ -154,6 +154,10 @@ Was es langsam machte, und was sich geändert hat:
   tausende Stapel). Der Kern durchläuft sie nicht mehr (`src/store/draft.ts`), und spaces-mmo hält 512 KiB
   (`SPACES_MMO_LOG_BYTES`): bei voller Last einige Sekunden; ein Web-Prozess, der weiter zurückfällt, liest die Welt neu
   (`[gateway] change stream: …; reading the world again`).
+- **Die Zählung der Historie.** Der Kern zählte je Operation ein Byte zu viel (das Komma vor der ersten eines Stapels); der
+  Überschuss blieb im Zähler, nach 2,6 Millionen Revisionen rund 2,6 MB. Mit 512 KiB lag der Zähler des Produktivspace
+  dauerhaft über der Grenze, und jeder Commit verwarf die ganze Historie; das Gateway las die Welt dann in einer Schleife neu.
+  Die Zählung ist jetzt genau, und ein vorgelaufener Zähler wird neu gerechnet, sobald nur noch ein Stapel übrig wäre.
 - **Grenzen des Dienstes.** Alle Prozesse sind gegenüber dem Space ein Teilnehmer; dessen Grenzen (1024 Aufrufe je Sekunde,
   128 wartende Aufrufe, 32 Aufrufe je Verbindung) sind für das ganze Spiel bemessen worden.
 

@@ -118,6 +118,22 @@ test("the log is bounded: old batches are dropped, an older cursor gets Snapshot
 	assert.ok(Math.abs(measured - st.bytes) <= st.log.length * 8, `tally ${st.bytes} vs measured ${measured}`);
 });
 
+test("the tally stays exact over many dropped batches, and one that ran ahead is put right instead of emptying the log", () => {
+	const s = core.initialState();
+	core.setLimits(s, { maxLogBytes: 4_000 });
+	const measured = () => s.stream!.log.reduce((n, b) => n + new TextEncoder().encode(JSON.stringify(b)).length + 1, 0);
+	for (let i = 0; i < 2_000; i++) { core.write(s, 1, { type: "Job", fields: { i } }, null, core.FOREVER); core.write(s, 1, { type: "Job", fields: { j: i } }, null, core.FOREVER); core.seal(s); }
+	assert.equal(s.stream!.bytes, measured(), "no byte per batch left over");
+	assert.ok(s.stream!.log.length > 10);
+	// a store written while the tally counted one byte too many per operation: far more than the log holds
+	s.stream!.bytes += 1_000_000;
+	core.write(s, 1, { type: "Job", fields: { k: 1 } }, null, core.FOREVER); core.seal(s);
+	core.write(s, 1, { type: "Job", fields: { k: 2 } }, null, core.FOREVER); core.seal(s);
+	for (let i = 0; i < 40; i++) { core.write(s, 1, { type: "Job", fields: { m: i } }, null, core.FOREVER); core.seal(s); }
+	assert.equal(s.stream!.bytes, measured());
+	assert.ok(s.stream!.log.length > 10, `history kept again: ${s.stream!.log.length} batches`);
+});
+
 test("the stream counts toward the document budget and survives migration of a state", () => {
 	const s = core.initialState();
 	core.write(s, 1, { type: "Job", fields: { a: 1 } }, null, core.FOREVER);

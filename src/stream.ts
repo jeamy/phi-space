@@ -23,7 +23,11 @@ export type StreamState = {
 };
 
 const bytesOf = jsonBytes;
-const opBytes = (o: Op): number => bytesOf(o) + 1;
+/** What an operation adds to its batch's JSON: itself, and a comma unless it is the batch's first. */
+const opBytes = (o: Op, first: boolean): number => bytesOf(o) + (first ? 0 : 1);
+/** The tally exactly (each batch and the comma after it). A tally that ran ahead (stores written while an operation
+ *  counted one byte too many) would drop every batch but the newest; it is put right when that happens. */
+const exact = (st: StreamState): number => st.log.reduce((n, b) => n + bytesOf(b) + 1, 0);
 
 type Open = { rev: number; at: Map<string, number> }; // `at`: position of an entry's operation inside the batch
 const open = new WeakMap<object, Open>();
@@ -41,6 +45,7 @@ export function touch(s: { stream?: StreamState }, now: number, maxLogBytes: num
 	s.stream.bytes += bytesOf({ rev, at: now, ops: [] }) + 1;
 	open.set(s, { rev, at: new Map() });
 	while (s.stream.bytes > maxLogBytes && s.stream.log.length > 1) { const old = s.stream.log[0]!; s.stream.floor = old.rev; s.stream.bytes -= bytesOf(old) + 1; s.stream.log.splice(0, 1); }
+	if (s.stream.log.length === 1 && s.stream.bytes > maxLogBytes) s.stream.bytes = exact(s.stream);
 }
 
 /**
@@ -55,12 +60,12 @@ export function record(s: { stream?: StreamState }, now: number, op: Op, maxLogB
 	const batch = st.log[o.rev - st.log[0]!.rev]!; // revisions in the log are consecutive
 	const prev = o.at.get(op.id);
 	if (prev !== undefined) { // the last operation per entry wins; position keeps the order of first touch
-		st.bytes += opBytes(op) - opBytes(batch.ops[prev]!);
+		st.bytes += bytesOf(op) - bytesOf(batch.ops[prev]!);
 		batch.ops[prev] = op;
 	} else {
 		o.at.set(op.id, batch.ops.length);
+		st.bytes += opBytes(op, batch.ops.length === 0);
 		batch.ops.push(op);
-		st.bytes += opBytes(op);
 	}
 	let drop = 0;
 	while (st.bytes > maxLogBytes && drop < st.log.length - 1) { // the batch being written stays
@@ -70,6 +75,7 @@ export function record(s: { stream?: StreamState }, now: number, op: Op, maxLogB
 		drop++;
 	}
 	if (drop > 0) st.log.splice(0, drop);
+	if (st.log.length === 1 && st.bytes > maxLogBytes) st.bytes = exact(st);
 }
 
 export type Collected = { batches: Batch[]; next: number } | { expired: true; floor: number } | { tooSmall: number } | { ahead: true; rev: number };
