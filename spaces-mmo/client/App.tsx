@@ -2,7 +2,9 @@
 // spaces-mmo in the browser: a welcome page (play as a guest, log in, register) and the game: the PixiJS map of the
 // room, the text log and the command line. Everything the player does is a text command sent over the WebSocket; a
 // tap on the map or an arrow key becomes `move x y` for one step. All text from the world is rendered as React text nodes.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ThemeControls } from "./ThemeControls.tsx";
+import { useTheme } from "./lib/theme.ts";
 import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
@@ -39,13 +41,15 @@ async function post(path: string, body: unknown = {}): Promise<{ account: Accoun
 
 export function MmoApp() {
 	const [account, setAccount] = useState<Account | null | undefined>(undefined);
+	const theme = useTheme();
+	const controls = <ThemeControls {...theme} />;
 	useEffect(() => { void fetch("/api/me").then((r) => r.json()).then((d) => { pageBuild ??= d.build ?? null; setAccount(d.account ?? null); }, () => setAccount(null)); }, []);
 	if (account === undefined) return <main className="welcome"><p className="muted">Lädt …</p></main>;
-	if (!account) return <Welcome onIn={setAccount} />;
-	return <Game account={account} onAccount={setAccount} />;
+	if (!account) return <Welcome onIn={setAccount} controls={controls} />;
+	return <Game account={account} onAccount={setAccount} controls={controls} />;
 }
 
-function Welcome({ onIn }: { onIn: (a: Account) => void }) {
+function Welcome({ onIn, controls }: { onIn: (a: Account) => void; controls: ReactNode }) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
 	const guest = async () => {
@@ -54,6 +58,7 @@ function Welcome({ onIn }: { onIn: (a: Account) => void }) {
 	};
 	return (
 		<main className="welcome">
+			<div className="welcome-top">{controls}</div>
 			<h1>Leuchtfeuer</h1>
 			<p className="pitch muted">Ein Archipel im Nebel. Wo ein Leuchtfeuer brennt, wird es licht – und keines brennt lange allein.</p>
 			<div className="card">
@@ -247,7 +252,7 @@ function Things({ objs, self, room, me, send, pick }: { objs: Map<string, ObjVie
 	);
 }
 
-function Game({ account, onAccount }: { account: Account; onAccount: (a: Account | null) => void }) {
+function Game({ account, onAccount, controls }: { account: Account; onAccount: (a: Account | null) => void; controls: ReactNode }) {
 	const [hello, setHello] = useState<Hello | null>(null);
 	const [chars, setChars] = useState<Map<string, CharView>>(new Map());
 	const [objs, setObjs] = useState<Map<string, ObjView>>(new Map());
@@ -515,6 +520,7 @@ function Game({ account, onAccount }: { account: Account; onAccount: (a: Account
 					<div className="renderer-tabs" role="group" aria-label="Kartendarstellung">
 						{(["text", "2d", "3d"] as const).map((mode) => <button key={mode} onClick={() => { setMore(false); setMapMode(mode); }} aria-pressed={mapMode === mode}>{mode === "text" ? "Text" : mode.toUpperCase()}</button>)}
 					</div>
+					{controls}
 					<button onClick={() => { setMore(false); if (account.guest) setPanel("leave"); else void logout(); }}>Abmelden</button>
 				</div>
 			</header>
