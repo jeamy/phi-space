@@ -91,9 +91,11 @@ Wer statt eines Befehls einen Satz tippt, wird in zwei Stufen verstanden:
    „schau dich um“ → `look`, „gib ines ein stück holz“ → `give holz an Ines`. Getippte Befehle und Gesprochenes (`say`, `kanal`) bleiben unverändert. Ein Satz, der
    jemanden im Raum anspricht („hallo ines, leg holz ins feuer“, „Bo: wohin?“), ist Gesprochenes (`say …`), kein
    Befehl für den Spieler: die Angesprochene hört es und handelt selbst (docs/modell-npcs.md). Ein Gruß ohne Namen
-   („hallo, leg holz ins feuer“) wird übergangen.
+   („hallo, leg holz ins feuer“) wird übergangen. Namen von Dingen dürfen Tippfehler, Mehrzahl, Zahlen und angehängte
+   Maße haben: „lege 5 holstücke ins feuer“ legt bis zu fünf Treibholz nach.
 2. **Ein günstiges Modell** (`server/model-host.ts`, nur mit `SPACES_MMO_LLM=1`) bekommt, was die Regeln nicht
-   verstehen. Der Welt-Worker schreibt dafür einen `Translate`-Eintrag; der Modellprozess zeigt dem Modell die Befehle
+   verstehen, und auch einen Satz, dessen Befehl an einem unbekannten Namen scheitert („lege 2 brennstücke ins
+   feuer“: „Du trägst nichts, was … heißt“). Der Welt-Worker schreibt dafür einen `Translate`-Eintrag; der Modellprozess zeigt dem Modell die Befehle
    und was der Spieler sieht, und schreibt die Antwort als neuen Auftrag mit dem Originalsatz (`asked`) zurück. Eine
    Antwort, die nicht mit einem bekannten Befehl beginnt, wird verworfen; eine Übersetzung wird nie erneut übersetzt.
    Kontingente: je Konto und Tag (Gäste weniger), dazu die gemeinsamen Grenzen pro Minute und Tag.

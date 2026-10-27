@@ -183,6 +183,8 @@ test("feeding several at once: \"lege 5 hölzer ins feuer\" puts in what one car
 		for (let i = 0; i < 3; i++) await spawn(space, null, w, wood, { location: a.me, x: -1, y: -1 });
 		assert.match(await does(a.p, "put zwei treibholz in feuer", "ins Leuchtfeuer"), /^Du legst 2 Treibholz ins Leuchtfeuer\. Es brennt noch etwa 50 Minuten\.$/);
 		assert.match(await does(a.p, "lege holz ins feur", "ins Leuchtfeuer"), /^Du legst Treibholz ins Leuchtfeuer\. Es brennt noch etwa 60 Minuten\.$/, "one, and a typo in the fire");
+		for (let i = 0; i < 2; i++) await spawn(space, null, w, wood, { location: a.me, x: -1, y: -1 });
+		assert.match(await does(a.p, "lege 5 holstücke ins feuer", "ins Leuchtfeuer"), /^Du legst 2 Treibholz ins Leuchtfeuer \(mehr hast du nicht dabei\)\. Es brennt noch etwa 80 Minuten\.$/, "a measure in the name, and a typo");
 		await a.p.leave();
 	} finally { await srv.close(); }
 });

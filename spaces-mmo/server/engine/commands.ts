@@ -9,7 +9,7 @@ import { TRADE_COMMANDS } from "./commands/trade.ts";
 import { randomBytes } from "node:crypto";
 import { llmEnabled } from "../llm.ts";
 import { fieldsOf, type ListingFields, type TranslateFields } from "../model.ts";
-import { CommandError, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
+import { CommandError, UnknownName, exitsHere, inventory, lockCtx, msg, type CommandCtx } from "./context.ts";
 import { translateRules, type TranslateView } from "./translate.ts";
 import { allowed } from "./locks.ts";
 
@@ -77,6 +77,12 @@ export async function execute(c: CommandCtx, line: string): Promise<void> {
 		if (understood) await msg(c, c.actor.charId, "info", understood);
 		await cmd.func(c, arg);
 	} catch (e) {
+		// no thing of that name ("lege 5 holstücke ins feuer"): the model process may read the sentence once more
+		if (e instanceof UnknownName && llmEnabled() && !c.asked && c.account && !c.account.npc) {
+			const t: TranslateFields = { reqId: randomBytes(6).toString("hex"), charId: c.actor.charId, accountId: c.account.accountId, guest: c.account.guest, line: said.slice(0, 300), room: c.actor.room, at: Date.now() };
+			await c.space.write({ type: "Translate", fields: t as never }, c.txn, 60_000);
+			return msg(c, c.actor.charId, "info", `${e.message} Einen Moment, ich versuche „${said.slice(0, 80)}“ zu verstehen …`);
+		}
 		// a refusal of a translated line says what it was translated to
 		if (e instanceof CommandError && understood) throw new CommandError(`${understood}: ${e.message}`);
 		throw e;

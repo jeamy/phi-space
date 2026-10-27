@@ -120,3 +120,23 @@ test("the model translates what the rules miss; nonsense is refused; the daily a
 		await a.p.leave();
 	} finally { await srv.close(); await stack.close(); }
 });
+
+test("a name nothing matches goes to the model once: \"lege 2 brennstücke ins feuer\" becomes two driftwood", async () => {
+	const stack = await startStack({ worldEnv: { SPACES_MMO_LLM: "1", SPACES_MMO_LLM_MODULE: "tests/fake-llm.ts" } });
+	const srv = await startServer({ stack });
+	try {
+		await stack.modelProcess();
+		const s = stack.space;
+		const a = await player(srv.url, "Heizerin");
+		for (let i = 0; i < 3; i++) await give(s, a.me, "treibholz");
+		a.p.send("move 9 9");
+		await eventually(async () => (await s.readIfExists({ type: "Character", fields: { charId: a.me } }, 2_000))?.fields.y === 9, 10_000, "next to the fire");
+		const from = a.p.frames.length;
+		assert.match(await does(a.p, "lege 2 brennstücke ins feuer", "Einen Moment"), /^Du trägst nichts, was „brennstücke“ heißt\. Einen Moment, ich versuche „lege 2 brennstücke ins feuer“ zu verstehen/);
+		await a.p.until((f) => f.t === "msg" && f.m.text === "„lege 2 brennstücke ins feuer“ → put 2 treibholz in feuer", 15_000, from);
+		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Du legst 2 Treibholz ins Leuchtfeuer"), 15_000, from);
+		// what the model cannot read either is refused, once (its answer is not sent to the model again)
+		assert.match(await does(a.p, "put kiesel in feuer", "nicht verstanden"), /help/);
+		await a.p.leave();
+	} finally { await srv.close(); await stack.close(); }
+});

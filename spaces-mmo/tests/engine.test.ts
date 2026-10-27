@@ -92,4 +92,7 @@ test("plural and umlauts: \"hölzer\" is the wood, \"muscheln\" the shell, \"mü
 	assert.deepEqual(one("muscheln"), ["Muschel"]);
 	assert.deepEqual(one("münzen"), ["Münze"]);
 	assert.equal(stem("Hölzer"), stem("holz"));
+	// a measure run into the name, also with a typo: "holzstücke", "holstücke", "holzscheite" are the wood
+	for (const n of ["holzstücke", "holzstück", "holstücke", "holzscheite"]) assert.deepEqual(one(n), ["Treibholz"], n);
+	assert.deepEqual(one("brennstücke"), [], "another word stays unknown (the model may read it)");
 });

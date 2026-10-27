@@ -4,7 +4,7 @@
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
-import { byName, check, CommandError, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx } from "../context.ts";
+import { byName, check, CommandError, UnknownName, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { cellKey, claimSpot, freeCellNear, occupiedIn, solidIn } from "../occupancy.ts";
@@ -143,7 +143,7 @@ const look: Command = {
 		if (exit) return msg(c, c.actor.charId, "look", `${exit.f.name}: ${exit.f.desc || "ein Weg"}`);
 		const person = (await online(c, c.actor.room)).find((ch) => ch.name.toLowerCase().startsWith(arg.toLowerCase()));
 		if (person) return msg(c, c.actor.charId, "look", `${person.name} steht hier.`);
-		throw new CommandError(`Hier ist nichts, was „${arg.slice(0, 30)}“ heißt.`);
+		throw new UnknownName(`Hier ist nichts, was „${arg.slice(0, 30)}“ heißt.`);
 	},
 };
 
@@ -241,7 +241,7 @@ const get: Command = {
 		if (!arg) throw new CommandError("Was möchtest du aufheben? Zum Beispiel: get treibholz");
 		const found = byName(await itemsHere(c), arg, c.actor);
 		const item = found.find((i) => reach(i.f, c.actor) <= 1);
-		if (!item) throw new CommandError(found.length ? `${found[0]!.f.name} liegt zu weit weg; geh näher heran.` : `Hier liegt nichts, was „${arg.slice(0, 30)}“ heißt.`);
+		if (!item) throw new (found.length ? CommandError : UnknownName)(found.length ? `${found[0]!.f.name} liegt zu weit weg; geh näher heran.` : `Hier liegt nichts, was „${arg.slice(0, 30)}“ heißt.`);
 		await check(c, item.f.locks, "get", `${item.f.name} lässt sich nicht aufheben.`);
 		// held by another world worker right now: someone else is faster
 		const e = await c.space.take({ type: "Item", fields: { itemId: item.f.itemId, location: c.actor.room } }, NO_WAIT, { txn: c.txn });
@@ -259,7 +259,7 @@ const drop: Command = {
 	async func(c, arg) {
 		if (/\s(in|ins|into)\s/i.test(arg)) return put.func(c, arg); // "lege holz ins feuer"
 		const item = byName(await inventory(c), arg)[0];
-		if (!item) throw new CommandError(arg ? `Du trägst nichts, was „${arg.slice(0, 30)}“ heißt.` : "Was möchtest du ablegen?");
+		if (!item) throw new (arg ? UnknownName : CommandError)(arg ? `Du trägst nichts, was „${arg.slice(0, 30)}“ heißt.` : "Was möchtest du ablegen?");
 		await check(c, item.f.locks, "drop", `${item.f.name} lässt sich nicht ablegen.`);
 		const e = await c.space.take({ type: "Item", fields: { itemId: item.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
 		if (!e) throw new CommandError(`${item.f.name} ist gerade nicht greifbar.`);
@@ -275,7 +275,7 @@ const give: Command = {
 		const m = /^(.+?)\s+(?:an|to|zu)\s+(.+)$/i.exec(arg) ?? /^(.+)\s+(\S+)$/.exec(arg);
 		if (!m) throw new CommandError("So geht es: give <ding> an <person>");
 		const item = byName(await inventory(c), m[1]!)[0];
-		if (!item) throw new CommandError(`Du trägst nichts, was „${m[1]!.slice(0, 30)}“ heißt.`);
+		if (!item) throw new UnknownName(`Du trägst nichts, was „${m[1]!.slice(0, 30)}“ heißt.`);
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e))
 			.filter((ch) => ch.charId !== c.actor.charId).find((ch) => ch.name.toLowerCase() === m[2]!.trim().toLowerCase());
 		if (!who) throw new CommandError(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
@@ -338,7 +338,7 @@ const put: Command = {
 		const counted = countOf(m ? m[1]! : arg);
 		const what = counted.what;
 		const found = byName(await inventory(c), what);
-		if (!found.length) throw new CommandError(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
+		if (!found.length) throw new (what ? UnknownName : CommandError)(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
 		const beacon = byName(await beaconsIn(c, c.actor.room), where, c.actor)[0];
 		if (!beacon) throw new CommandError(`Hier ist kein ${where.slice(0, 30)}.`);
 		if (reach(beacon.f, c.actor) > 1) throw new CommandError(`Das ${beacon.f.name} ist zu weit weg; geh näher heran.`);

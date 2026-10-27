@@ -26,6 +26,8 @@ export type CommandCtx = {
 
 /** A refusal shown to the actor; the transaction is aborted. */
 export class CommandError extends Error {}
+/** A refusal because no thing of that name was found: the model process may read the sentence once more ("holstücke"). */
+export class UnknownName extends CommandError {}
 
 /** The account's level: an admin has every level; `perms` adds Builder; a guest is a guest. */
 export function levelOf(a: AccountFields | null): Level {
@@ -77,9 +79,11 @@ export function typos(a: string, b: string, max: number): number {
 const tolerance = (n: string) => (n.length < 4 ? 0 : n.length < 8 ? 1 : 2);
 
 /** A word without its German plural or case ending and with plain vowels: "hölzer" → "holz", "muscheln" → "muschel",
- *  "münzen" → "munz", "münze" → "munz" (both sides of a comparison are stemmed alike). */
+ *  "münzen" → "munz", "münze" → "munz", "holzstücke" → "holz" (both sides of a comparison are stemmed alike). */
 export function stem(word: string): string {
 	let w = word.toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");
+	// a measure run into the name: "holzstücke", "holzscheite" are the "holz"
+	w = w.replace(/^(.{3,}?)(?:stuckchen|stucke?n?|scheite?n?)$/, "$1");
 	for (const end of ["ern", "er", "en", "e", "n", "s"]) if (w.length - end.length >= 3 && w.endsWith(end)) { w = w.slice(0, -end.length); break; }
 	return w;
 }
@@ -93,7 +97,11 @@ export function byName<T extends { name: string; aliases: string[] }>(list: Arra
 	const exact = list.filter((i) => names(i.f).includes(n));
 	const prefix = exact.length ? exact : list.filter((i) => names(i.f).some((s) => s.startsWith(n)));
 	const forms = prefix.length ? prefix : list.filter((i) => names(i.f).some((s) => stem(s) === stem(n)));
-	const hits = forms.length || !tolerance(n) ? forms : list.filter((i) => names(i.f).some((s) => typos(n, s, tolerance(n)) <= tolerance(n)));
+	// a typo in the word or in its stem: "feur" is the "feuer", "holstücke" the "holz"
+	// (a stem keeps one typo from three letters: "holstücke" → "hol", the "s" taken for the measure's)
+	const sn = stem(n), st = sn.length < 3 ? 0 : Math.max(1, tolerance(sn));
+	const near1 = (s: string) => typos(n, s, tolerance(n)) <= tolerance(n) || (st > 0 && typos(sn, stem(s), st) <= st);
+	const hits = forms.length || !tolerance(n) ? forms : list.filter((i) => names(i.f).some(near1));
 	const d = (f: T) => (near && "x" in f ? Math.max(Math.abs((f as unknown as { x: number }).x - near.x), Math.abs((f as unknown as { y: number }).y - near.y)) : 0);
 	return hits.sort((a, b) => d(a.f) - d(b.f));
 }
