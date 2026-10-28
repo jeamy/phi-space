@@ -17,6 +17,7 @@ import { openSqliteHost } from "phi-spaces/store/sqlite";
 import { loadWorld } from "./engine/world.ts";
 import { regionOfRoom, regionsOf } from "./engine/regions.ts";
 import { RegionSpaces } from "./region-spaces.ts";
+import { envMs } from "./space.ts";
 import { ROOT } from "./env.ts";
 
 const w = await loadWorld();
@@ -45,7 +46,7 @@ const put = async (to: string | null, e: Taken, lease = FOREVER) => {
 	await s.write({ type: e.type, types: e.types.slice(1), fields: e.fields as never }, null, lease);
 	counts.set(`${to} ${e.types.includes("Item") ? "Item" : e.type}`, (counts.get(`${to} ${e.types.includes("Item") ? "Item" : e.type}`) ?? 0) + 1);
 };
-const guestMs = Number(process.env.SPACES_MMO_GUEST_TTL_MS ?? 7 * 24 * 3600_000);
+const guestMs = envMs("SPACES_MMO_GUEST_TTL_MS", 7 * 24 * 3600_000);
 
 for (const e of chars.values()) await put(region(e.fields.room), e);
 // an account goes with its character (one each)

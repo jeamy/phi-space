@@ -20,6 +20,10 @@ import { TouchPad } from "./TouchPad.tsx";
 
 /** A thing picked up shows in the pack at once; without word from the server for this long it lies there again. */
 const PICKUP_MS = 3_000;
+/** Two clicks on one cell within this long are a double click (pick up what lies there). */
+const DOUBLE_MS = 400;
+/** How long a double-clicked thing is walked to before giving up (a long way, someone else took it). */
+const FETCH_MS = 15_000;
 type Account = { name: string; guest: boolean; admin: boolean };
 type Hello = Extract<ServerFrame, { t: "hello" }>;
 /** The names of what burns in a fire, cheapest first (from the hello): what the space key and the buttons feed. */
@@ -484,6 +488,27 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		append({ kind: "error", text: "Hier liegt nichts zum Aufheben.", from: "", at: Date.now() });
 	}, [chars, me, hello, objs, send, append, pickUp]);
 
+	// a double click (or double tap) on a thing on the map: walk there (the first click already does) and pick it up as
+	// Space does, once the figure stands next to it
+	const fetching = useRef<{ id: string; until: number } | null>(null);
+	const lastTap = useRef<{ x: number; y: number; at: number } | null>(null);
+	const onCell = useCallback((x: number, y: number) => {
+		const now = Date.now(), prev = lastTap.current;
+		lastTap.current = { x, y, at: now };
+		step({ x, y });
+		if (!prev || prev.x !== x || prev.y !== y || now - prev.at > DOUBLE_MS || !hello) return;
+		lastTap.current = null;
+		const item = [...objs.values()].find((o) => o.kind === "item" && o.location === hello.room.roomId && o.x === x && o.y === y);
+		if (item) fetching.current = { id: item.id, until: now + FETCH_MS };
+	}, [step, objs, hello]);
+	useEffect(() => {
+		const f = fetching.current, self = chars.get(me);
+		if (!f || !self || !hello) return;
+		const o = objs.get(f.id);
+		if (!o || o.location !== hello.room.roomId || Date.now() > f.until) { fetching.current = null; return; }
+		if (Math.max(Math.abs(o.x - self.x), Math.abs(o.y - self.y)) <= 1) { fetching.current = null; pickUp(o); }
+	}, [chars, objs, me, hello, pickUp]);
+
 	// an arrow key in the command line goes back to the map and walks: up and down always, left and right while the line is
 	// empty (with text in it they move the cursor)
 	const onCommandKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -558,7 +583,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				{mapMode === "text" ? null : hello ? (
 					<MapRenderer mode={mapMode} world={hello.world} room={hello.room} chars={chars} objs={objs} me={me} fog={fog} onTurn={onTurn}
 						controls={<TouchPad hold={(d) => { input.current?.blur(); setMenu(null); hold(d); }} release={release} action={action} />}
-						onCell={(x, y) => { input.current?.blur(); setMenu(null); step({ x, y }); }}
+						onCell={(x, y) => { input.current?.blur(); setMenu(null); onCell(x, y); }}
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
 						onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 				) : <div className="map"><p className="muted">Verbinde …</p></div>}

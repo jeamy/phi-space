@@ -118,7 +118,7 @@ You can **use fuel yourself** (build tools, trade) or **put it into the shared f
 
 1. **Losspielen:** Auf der Startseite „Als Gast spielen“ wählen. Du erscheinst in der **Grauen Bucht**, einem Strand mit einem Steinring in der Mitte.
 2. **Umsehen:** Tippe \`look\` (oder \`schau\`). Rechts im Seitenfeld steht, was neben dir liegt.
-3. **Treibholz aufheben:** Geh zu einem braunen Quadrat auf dem Sand (Klick auf die Karte oder Pfeiltasten) und drücke die **Leertaste** oder den Knopf „Aufheben“.
+3. **Treibholz aufheben:** Geh zu einem braunen Quadrat auf dem Sand (Klick auf die Karte oder Pfeiltasten) und drücke die **Leertaste** oder den Knopf „Aufheben“, oder doppelklicke einfach darauf.
 4. **Feuer anzünden:** Geh neben das Leuchtfeuer im Steinring und drücke wieder die Leertaste. Das Scheit brennt zehn Minuten. Der Nebel weicht.
 5. **Weiter:** Sammle mehr Holz, sag Ines Hallo (\`say Hallo\`), nimm den Pfad nach **Osten** zum Klippenpfad (\`go ost\` oder einfach \`ost\`).
 
@@ -175,6 +175,7 @@ Ein Tablet im Hochformat zeigt die Karte oben und das Seitenfeld darunter, im Qu
 | --- | --- |
 | Pfeiltasten | Einen Schritt gehen (\`step dx dy\`) |
 | Leertaste | Aufheben, was neben dir liegt; sonst das Feuer neben dir nachlegen |
+| Doppelklick auf ein Ding | Hingehen und aufheben (Holz, Muschel, Tang …); auf dem Handy Doppeltippen |
 | Enter | In die Befehlszeile springen |
 | Buchstaben, Ziffern | Einfach lostippen: der Text geht in die Befehlszeile |
 | Pfeiltasten in der Befehlszeile | Zurück zur Karte und einen Schritt gehen: hoch und runter immer, links und rechts, solange die Zeile leer ist (mit Text bewegen sie den Cursor) |

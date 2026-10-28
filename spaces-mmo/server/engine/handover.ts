@@ -7,14 +7,15 @@
 //      character already in B means an earlier try got that far: nothing is written twice.
 //   3. A's transaction is committed: the Handover and the old token are gone.
 // A worker that dies in step 2 lets A's transaction lapse; the Handover is back and the next try finishes it.
-import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
+import { FOREVER, NO_WAIT, StillHeld, takeExisting, type SpaceLike, type Taken } from "phi-spaces";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type RoomFields } from "../model.ts";
-import { awaitWork, peek, readExisting } from "../space.ts";
+import { awaitWork, envMs, peek, readExisting } from "../space.ts";
 import { CommandError, type CommandCtx } from "./context.ts";
 import { claimSpot, freeCellNear, occupiedIn, solidIn } from "./occupancy.ts";
 import type { WorldDef } from "./world.ts";
 
-const GUEST_MS = () => Number(process.env.SPACES_MMO_GUEST_TTL_MS ?? 7 * 24 * 3600_000);
+/** A guest account's lease, as the accounts write it (accounts.ts). */
+const GUEST_MS = () => envMs("SPACES_MMO_GUEST_TTL_MS", 7 * 24 * 3600_000);
 
 export type HandoverFields = {
 	handoverId: string; charId: string; from: string; to: string;
@@ -36,7 +37,11 @@ export async function handOff(c: CommandCtx, from: string, to: string, dest: { r
 		if (t) items.push({ type: t.type, types: t.types, fields: t.fields });
 	}
 	await c.space.takeIfExists({ type: "Spot", fields: { charId: c.actor.charId } }, NO_WAIT, { txn: c.txn });
-	const acc = await c.space.takeIfExists({ type: "Account", fields: { accountId: ch.accountId } }, 2_000, { txn: c.txn });
+	// the account goes along; one held by another transaction right now is not left behind: the command fails and the
+	// intent is tried again
+	let acc: Taken | null;
+	try { acc = await takeExisting(c.space, { type: "Account", fields: { accountId: ch.accountId } }, 2_000, { txn: c.txn }); }
+	catch (e) { if (e instanceof StillHeld) throw new Error("the account is held; the crossing is tried again"); throw e; }
 	const handover: HandoverFields = {
 		handoverId: `h-${c.actor.charId}-${Date.now().toString(36)}`, charId: c.actor.charId, from, to,
 		character: { ...ch, ...dest, ...(c.step ? { ack: c.step } : {}) }, account: acc ? fieldsOf<AccountFields>(acc) : null, items, at: Date.now(),

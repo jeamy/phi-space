@@ -284,11 +284,16 @@ Umzug einer Welt, die als ein Space lief (einmal; die alte Datei bleibt):
 npm --prefix spaces-mmo run docker:single:down                     # die alte Welt anhalten
 cp …/world.sqlite …/world.sqlite.before-regions                     # Sicherung im Volume
 docker compose … --profile regions up -d space-west space-nord space-ost space-sued
-docker compose … --profile regions run --rm --no-deps -e SPACES_MMO_DATA=/data \
+# das Volume mit world.sqlite einhängen: ohne verweigert das Skript (die Datei fehlt), statt nichts zu verschieben
+docker compose … --profile regions run --rm --no-deps -v mmo-space-data:/data -e SPACES_MMO_DATA=/data \
   -e SPACES_MMO_REGIONS=west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950 \
   world-west node --experimental-strip-types server/migrate-regions.ts
 npm --prefix spaces-mmo run docker:regions:up                      # Welt-Worker, NPCs, Modelle, Web
 ```
+
+Das Skript nennt vorher, was die alte Welt hält, und danach je Region, was es geschrieben hat. Danach über alle vier
+Regionen zusammen nachzählen: Figuren und Münzen wie vorher plus die der NPCs, die die neue Weltversion dazubringt;
+eine andere Zahl heißt, dass etwas fehlt oder doppelt ist.
 
 Zurück zu einem Space: `docker:regions:down`, dann `docker:single:up` (es liest wieder `world.sqlite`, den Stand vor dem
 Umzug).

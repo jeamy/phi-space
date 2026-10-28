@@ -45,6 +45,9 @@ test("regions: newcomers start in every region's bay, and a ferry takes a charac
 		west.p.send("say hallo möwen");
 		await west.p.until((f) => f.t === "msg" && /hallo möwen/.test(f.m.text), 10_000, n);
 		// the page still knows its account
-		assert.equal((await west.p.me()).account?.guest, true);
+		const acc = String(there[0]!.fields.accountId);
+		const where = Object.fromEntries(await Promise.all(r.ids.map(async (id) => [id, (await r.space(id).readAll({ type: "Account", fields: { accountId: acc } })).length])));
+		const meNow = { ...(await west.p.me()), where };
+		assert.equal(meNow.account?.guest, true, JSON.stringify(meNow));
 	} finally { await srv.close(); await r.close(); }
 });

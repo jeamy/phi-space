@@ -258,7 +258,9 @@ export class Accounts {
 	}
 
 	async #me(account: AccountFields): Promise<Me> {
-		const c = await readExisting(await this.#spaceOf(account.accountId), { type: "Character", fields: { accountId: account.accountId } });
+		const tmpl = { type: "Character", fields: { accountId: account.accountId } };
+		// with the account's region, or (a crossing half done) wherever the character stands
+		const c = (await readExisting(await this.#spaceOf(account.accountId), tmpl)) ?? (await this.#regions.find(tmpl, this.#regions.size > 1 ? 3_000 : 0).then((r) => (r ? readExisting(r.space, tmpl) : null)));
 		if (!c) throw new AuthError(409, "Zu diesem Konto gibt es keine Figur");
 		return { ...pick(account), charId: fieldsOf<CharacterFields>(c).charId };
 	}
