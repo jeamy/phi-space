@@ -95,7 +95,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 
 /** The world split into its regions (engine/regions.ts): per region a space process and a world worker, an accounts
  *  space, and the address list (SPACES_MMO_REGIONS) every process gets. */
-export async function startRegions(o: { worldEnv?: Record<string, string> } = {}) {
+export async function startRegions(o: { worldEnv?: Record<string, string>; workers?: boolean } = {}) {
 	const base = `/tmp/mmo-test-${process.pid}-${seq++}`, accounts = `unix:${base}-accounts.sock`;
 	const w = (await import("../worlds/leuchtfeuer/world.ts")).world;
 	const ids = (w.regions ?? []).map((g) => g.regionId);
@@ -105,10 +105,13 @@ export async function startRegions(o: { worldEnv?: Record<string, string> } = {}
 	procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "accounts", SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
 	for (const id of ids) procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
 	const env = (id: string) => ({ SPACES_MMO_SPACE: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_REGIONS: list, ...o.worldEnv });
-	for (const id of ids) procs.push(await run("server/world-host.ts", env(id), (l) => l.startsWith("[world] ready")));
+	const workers = async () => { for (const id of ids) procs.push(await run("server/world-host.ts", env(id), (l) => l.startsWith("[world] ready"))); };
+	if (o.workers !== false) await workers();
 	const conns = new Map(ids.map((id) => [id, connectSpace(addr(id))]));
 	return {
 		ids, accounts, list, space: (id: string) => conns.get(id)!.space,
+		/** The world workers, one per region (started already unless `workers: false`). */
+		workers,
 		async npcProcess(id: string, extra: Record<string, string> = {}) { const c = await run("server/npc-host.ts", { ...env(id), ...extra }, (l) => l.startsWith("[npc] ready")); procs.push(c); return c; },
 		async close() { for (const c of conns.values()) c.close(); await Promise.all(procs.reverse().map((c) => stop(c))); for (const id of [...ids, "accounts"]) await rm(`${base}-${id}.sock`, { force: true }); },
 	};

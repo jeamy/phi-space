@@ -265,6 +265,34 @@ Die NPC-Skripte schauen in eigenem Takt: Händler und Arbeiter alle 8 s, ein Wan
 Wanderer alle 3 s. Im Dev-Container lassen sich NPCs auswählen: `SPACES_MMO_DEV_NPCS=ines,bo npm --prefix spaces-mmo run
 docker:dev:up`.
 
+## Regionen
+
+Die Welt läuft auf Wunsch als vier Spaces, je Region einer ([welt-aufteilen.md](welt-aufteilen.md)): Compose-Profil
+`regions`. Je Region ein Space-Prozess (`world-<region>.sqlite` im Volume `mmo-space-data`, Port auf dem Loopback: West
+3950, Nord 3952, Ost 3953, Süd 3954), ein Welt-Worker, ein NPC- und ein Modell-Prozess; dazu der Web-Prozess im
+Host-Netz. Der Konten-Space bleibt, wo er ist (nano, über den Tunnel auf 3951).
+
+`.env` auf big dafür:
+
+```sh
+SPACES_MMO_WEB_REGIONS=west=tcp:127.0.0.1:3950,nord=tcp:127.0.0.1:3952,ost=tcp:127.0.0.1:3953,sued=tcp:127.0.0.1:3954
+```
+
+Umzug einer Welt, die als ein Space lief (einmal; die alte Datei bleibt):
+
+```sh
+npm --prefix spaces-mmo run docker:single:down                     # die alte Welt anhalten
+cp …/world.sqlite …/world.sqlite.before-regions                     # Sicherung im Volume
+docker compose … --profile regions up -d space-west space-nord space-ost space-sued
+docker compose … --profile regions run --rm --no-deps -e SPACES_MMO_DATA=/data \
+  -e SPACES_MMO_REGIONS=west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950 \
+  world-west node --experimental-strip-types server/migrate-regions.ts
+npm --prefix spaces-mmo run docker:regions:up                      # Welt-Worker, NPCs, Modelle, Web
+```
+
+Zurück zu einem Space: `docker:regions:down`, dann `docker:single:up` (es liest wieder `world.sqlite`, den Stand vor dem
+Umzug).
+
 ## Lasttest gegen die laufende Welt
 
 `tests/perf/live-load.ts` lässt `LOAD_BOTS` Gastfiguren (Standard 100) `LOAD_SECONDS` lang (Standard 600) über den

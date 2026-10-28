@@ -1,8 +1,38 @@
-# Die Welt aufteilen (Entwurf)
+# Die Welt aufteilen
 
-Stand 2026-10-28, nach dem [Lasttest](lasttest-2026-10-28.md) und den Änderungen in [betrieb.md](betrieb.md)
-(„Last und Latenz“). Noch nicht gebaut: erst messen, was Index, `batch`, transiente Nachrichten und der Umzug des
-Space auf big bringen; dieser Entwurf lohnt erst, wenn ein Kern auch danach nicht reicht.
+Stand 2026-10-28 (abends): **gebaut**, nach dem dritten [Lasttest](lasttest-2026-10-28.md) mit 200 Figuren, bei dem ein
+Kern nicht mehr reichte. Was davon wie gebaut ist, steht im Abschnitt [So ist es gebaut](#so-ist-es-gebaut); der Entwurf
+darunter ist die Überlegung davor.
+
+## So ist es gebaut
+
+- **Vier Regionen** in `worlds/leuchtfeuer/world.ts` (`regions`): West (Graue Insel, Nebelholm), Nord (Möwenfels,
+  Schären), Ost (Kupferhafen, Tangriff, Rauchholm), Süd (Krabbensand). Nur Fähren führen von einer in die andere
+  (`tests/regions.test.ts` prüft das). Jede Region hat eine Startbucht mit Feuer und Hüter.
+- **Ein Space je Region**, jeder in seinem eigenen Space-Prozess (`SPACES_MMO_REGION`, Datei `world-<region>.sqlite`),
+  also auf einem eigenen Kern; dazu je Region ein Welt-Worker, ein NPC- und ein Modell-Prozess. Ohne
+  `SPACES_MMO_REGIONS` ist die Welt ein Space wie bisher.
+- **Der Teil der Welt einer Region** (`regionWorld` in `server/engine/regions.ts`): ihre Räume, die Ausgänge aus ihnen
+  (auch die Fähren hinaus), ihre Dinge, Feuer, Strände, Märkte und Tafeln. Prototypen, Rezepte, Hilfe und die Uhr hat
+  jede Region ganz. Die NPCs kennt jede Region alle (ein Händler fährt über die Grenze); angelegt wird ein NPC nur in
+  der Region, in der er beginnt, mit einer Geburtsmarke (`NpcBorn`), damit keine Region ihn ein zweites Mal macht.
+- **Übergabe an der Fähre** (`server/engine/handover.ts`), in drei Schritten wie unten im Entwurf: in der Transaktion
+  des Befehls nimmt Region A die Figur, ihr Gepäck, ihre Zelle und ihr Konto und schreibt eine `Handover`; ein
+  Welt-Worker von A nimmt sie in einer Transaktion, schreibt die Figur in einer Transaktion von B (freie Zelle am Steg,
+  Gepäck, Konto, Token) und schreibt dann die Transaktion von A fest. Stirbt er dazwischen, kommt die `Handover` zurück;
+  eine Figur, die B schon hat, wird nicht noch einmal geschrieben.
+- **Der Web-Prozess** folgt dem Änderungsstrom jeder Region (Einträge als „Region:ID“), schreibt Befehle und die
+  Sitzung einer Figur in die Region, in der sie steht (nach einer Überfahrt sofort), und verteilt neue Gäste reihum auf
+  die Startbuchten (`server/region-spaces.ts`). Einstellungen und Modellwahl schreibt er in jede Region.
+- **Umzug einer Welt aus einem Space** in die Regionen: `server/migrate-regions.ts` (jeder Eintrag in die Region seines
+  Raums; `tests/migrate-regions.test.ts`: jede Figur genau einmal, keine Münze verloren).
+- **Betrieb:** Compose-Profil `regions` (`npm --prefix spaces-mmo run docker:regions:up`), [betrieb.md](betrieb.md),
+  „Regionen“.
+
+Noch offen: `wer` zeigt nur die eigene Region; die Tageszähler der Übersetzungen gelten je Region; ein Befehl, der
+während der Überfahrt getippt wird, wartet bis zu 3 s auf die Ankunft.
+
+## Entwurf (vor dem Bau)
 
 ## Warum
 

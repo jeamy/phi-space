@@ -7,6 +7,9 @@
 #                  npc and model are the only roles with model credentials (the host's pi CLI login)
 #   both at once:  the big/nano pair on one machine (local test bed): the same TCP connections as between two hosts,
 #                  NANO_CPUS caps nano's CPUs like the smaller machine
+#   profile regions: the world split into its regions (server/engine/regions.ts, docs/welt-aufteilen.md): per region a
+#                  space process (world-<region>.sqlite), a world worker, an npc and a model process, each region's space
+#                  on a core of its own; with the web process on big; the accounts space stays where it is (nano)
 #   profile dev:   all roles in one container with the checkout mounted, recompiled and restarted on every change
 #   profile test:  the test suite
 #
@@ -93,12 +96,14 @@ services:
   # ---- big: web, a world worker for the dates, the npc process ----
   web:
     <<: *big
-    profiles: [big]
+    profiles: [big, regions]
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/index.ts"]
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
       SPACES_MMO_ACCOUNTS: "${SPACES_MMO_ACCOUNTS:-tcp:space:3951}"
+      # with the regions profile: every region's space as the web process reaches it (empty: one world space)
+      SPACES_MMO_REGIONS: "${SPACES_MMO_WEB_REGIONS:-}"
       SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
       SPACES_MMO_BIND: 0.0.0.0
       PORT: "3900"
@@ -150,6 +155,279 @@ services:
       SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     volumes:
       # the same login as npc
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  # ---- regions: per region a space, a world worker and an npc process ----
+  space-west:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/space-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACES: world
+      SPACES_MMO_REGION: west
+      SPACES_MMO_LISTEN: tcp:0.0.0.0:3950
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    ports:
+      # loopback: the web and model processes (host network) reach it here
+      - "127.0.0.1:3950:3950"
+    volumes:
+      - mmo-space-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3950,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  world-west:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/world-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-west:3950
+      SPACES_MMO_REGION: west
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-west:
+        condition: service_healthy
+
+  # a region's translations (its world worker asks in its own space; the counts are per region)
+  model-west:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-west:3950
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-west:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  npc-west:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-west:3950
+      SPACES_MMO_REGION: west
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-west:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  space-nord:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/space-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACES: world
+      SPACES_MMO_REGION: nord
+      SPACES_MMO_LISTEN: tcp:0.0.0.0:3950
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    ports:
+      # loopback: the web and model processes (host network) reach it here
+      - "127.0.0.1:3952:3950"
+    volumes:
+      - mmo-space-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3950,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  world-nord:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/world-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-nord:3950
+      SPACES_MMO_REGION: nord
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-nord:
+        condition: service_healthy
+
+  # a region's translations (its world worker asks in its own space; the counts are per region)
+  model-nord:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-nord:3950
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-nord:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  npc-nord:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-nord:3950
+      SPACES_MMO_REGION: nord
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-nord:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  space-ost:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/space-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACES: world
+      SPACES_MMO_REGION: ost
+      SPACES_MMO_LISTEN: tcp:0.0.0.0:3950
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    ports:
+      # loopback: the web and model processes (host network) reach it here
+      - "127.0.0.1:3953:3950"
+    volumes:
+      - mmo-space-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3950,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  world-ost:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/world-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-ost:3950
+      SPACES_MMO_REGION: ost
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-ost:
+        condition: service_healthy
+
+  # a region's translations (its world worker asks in its own space; the counts are per region)
+  model-ost:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-ost:3950
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-ost:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  npc-ost:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-ost:3950
+      SPACES_MMO_REGION: ost
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-ost:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  space-sued:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/space-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACES: world
+      SPACES_MMO_REGION: sued
+      SPACES_MMO_LISTEN: tcp:0.0.0.0:3950
+      SPACES_MMO_DATA: /data
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    ports:
+      # loopback: the web and model processes (host network) reach it here
+      - "127.0.0.1:3954:3950"
+    volumes:
+      - mmo-space-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('net').connect(3950,'127.0.0.1');s.once('connect',()=>{s.end();process.exit(0)});s.once('error',()=>process.exit(1));setTimeout(()=>process.exit(1),4000)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  world-sued:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/world-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-sued:3950
+      SPACES_MMO_REGION: sued
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-sued:
+        condition: service_healthy
+
+  # a region's translations (its world worker asks in its own space; the counts are per region)
+  model-sued:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/model-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-sued:3950
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-sued:
+        condition: service_healthy
+    volumes:
+      - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+
+  npc-sued:
+    <<: *role
+    profiles: [regions]
+    command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
+    environment:
+      NODE_ENV: production
+      SPACES_MMO_SPACE: tcp:space-sued:3950
+      SPACES_MMO_REGION: sued
+      SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
+    depends_on:
+      space-sued:
+        condition: service_healthy
+    volumes:
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   # ---- tests in Docker ----
