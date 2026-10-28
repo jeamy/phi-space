@@ -68,7 +68,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	let systemCache: { at: number; value: Promise<Awaited<ReturnType<typeof systemInfo>>> } | null = null;
 	const system = () => {
 		if (!systemCache || Date.now() - systemCache.at > 5_000) {
-			const value = systemInfo(world.space);
+			const value = systemInfo([...regions.entries().map(([, s]) => s), store.space]);
 			value.catch(() => { systemCache = null; });
 			systemCache = { at: Date.now(), value };
 		}

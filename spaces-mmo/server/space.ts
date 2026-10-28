@@ -299,10 +299,12 @@ export function announce(space: Pick<SpaceLike, "write" | "renew" | "cancel">, r
 const ROLE_ORDER: ProcessRole[] = ["space", "world", "npc", "model", "web"];
 export type SystemHost = { name: string; roles: ProcessRole[]; host: ProcessInfo };
 
-/** The hosts the game runs on, from the Process entries: one per host name, its roles in launch order. A snapshot read
- *  (readAll), which holds nothing and leaves no claim. */
-export async function systemInfo(space: SpaceLike): Promise<{ hosts: SystemHost[]; entries: number }> {
-	const procs = (await space.readAll({ type: "Process" }, { limit: 200 })).map((e) => e.fields as unknown as ProcessInfo);
+/** The hosts the game runs on, from the Process entries of every space given (each region's, the accounts space): one
+ *  per host name, its roles in launch order; `entries` counts them all. A snapshot read (readAll), which holds nothing
+ *  and leaves no claim. */
+export async function systemInfo(spaces: SpaceLike | SpaceLike[]): Promise<{ hosts: SystemHost[]; entries: number }> {
+	const all = Array.isArray(spaces) ? spaces : [spaces];
+	const procs = (await Promise.all(all.map(async (s) => (await s.readAll({ type: "Process" }, { limit: 200 })).map((e) => e.fields as unknown as ProcessInfo)))).flat();
 	const hosts = new Map<string, { host: ProcessInfo; roles: Set<ProcessRole> }>();
 	for (const p of procs.sort((a, b) => a.startedAt - b.startedAt)) {
 		const h = hosts.get(p.name) ?? { host: p, roles: new Set<ProcessRole>() };
@@ -310,6 +312,6 @@ export async function systemInfo(space: SpaceLike): Promise<{ hosts: SystemHost[
 	}
 	return {
 		hosts: [...hosts.values()].map(({ host, roles }) => ({ name: host.name, roles: ROLE_ORDER.filter((r) => roles.has(r)), host })),
-		entries: await space.count(null),
+		entries: (await Promise.all(all.map((s) => s.count(null)))).reduce((a, b) => a + b, 0),
 	};
 }

@@ -77,8 +77,9 @@ export async function startSpaceHost(o: { listen?: string; accountsListen?: stri
 	// and the lock a world worker takes while it loads the world definition
 	if (world && !(await world.local.count(WORLD_LOCK))) await world.local.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER);
 	if (world && !(await world.local.count(NPC_LOCK))) await world.local.write({ type: NPC_LOCK.type, fields: { ...NPC_LOCK.fields } }, null, FOREVER);
-	// the system bar lists the processes of the world space: one that serves only the accounts is not in it
-	const proc = world ? announce(world.local, "space") : null;
+	// the system bar lists the processes of the world's spaces and of the accounts space: one that serves only the
+	// accounts (nano) announces itself there
+	const proc = world ? announce(world.local, "space") : accounts ? announce(accounts.local, "space") : null;
 	return { listen: world ? listen : null, accountsListen: accounts ? accountsListen : null, async close() { await proc?.stop(); await world?.close(); await accounts?.close(); } };
 }
 
