@@ -25,8 +25,8 @@ export type ViewState =
 	| { kind: "intro"; app: IntroApp };
 
 /** The apps that get a short introduction before their link (client/components/AppIntro.tsx). */
-export type IntroApp = "swarm" | "codemode" | "space-chat" | "mmo";
-const INTRO_APPS: readonly string[] = ["swarm", "codemode", "space-chat", "mmo"];
+export type IntroApp = "swarm" | "codemode" | "space-chat" | "mmo" | "stats";
+const INTRO_APPS: readonly string[] = ["swarm", "codemode", "space-chat", "mmo", "stats"];
 
 export function parseHelpView(search: string): ViewState {
 	const params = new URLSearchParams(search);

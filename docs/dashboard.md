@@ -102,9 +102,11 @@ lokale Ende des SSH-Tunnels nach nano, wo die Spaces der Produktion liegen.
 | Help · Hub (`@*`) | `unix:/tmp/help-space.sock` | – | `tcp:127.0.0.1:3520` (der Hub selbst, kein Tunnel) |
 
 **Öffentlich auf big:** nginx leitet `https://spaces-stats.eibrain.org` (IPv6 `2a0a:4cc0:c0:62f2:8000::1002`, IPv4
-gemeinsam) an `127.0.0.1:8787` weiter, mit Let's-Encrypt-Zertifikat (Webroot `/var/www/acme`, wie spaces-mmo) und Basic
-Auth davor (`/etc/nginx/spaces-stats.htpasswd`, Benutzer `admin`), weil das Dashboard selbst keinen Login hat und alle
-Entries zeigt; `/api/live` ohne Pufferung. Site: `/etc/nginx/sites-available/spaces-stats.eibrain.org`.
+gemeinsam) an `127.0.0.1:8787` weiter, mit Let's-Encrypt-Zertifikat (Webroot `/var/www/acme`, wie spaces-mmo), ohne
+Login (seit 2026-10-28; das Dashboard hat nur GET-Endpunkte, der Hub der Hilfeseite liefert nur Kennzahlen, der
+Konten-Store von spaces-mmo fehlt). Die Entries von Codemode-Chat, spaces-mmo-Welt und Swarm-Shard sind damit
+öffentlich lesbar, auch Kontonamen und Nachrichten an einzelne Figuren. `/api/live` ohne Pufferung. Site:
+`/etc/nginx/sites-available/spaces-stats.eibrain.org`; die Hilfeseite verlinkt die Seite mit einer Einführung.
 
 Bewusst nicht dabei: der Accounts-Space von spaces-mmo (Zugangsdaten, Sitzungen). Der Store der Hilfeseite liegt im
 Web-Prozess; mit `HELP_SPACE_LISTEN` (in der Produktion `tcp:127.0.0.1:3520`, Loopback, nie hinter nginx) serviert er

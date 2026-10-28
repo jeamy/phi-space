@@ -97,6 +97,27 @@ const INTROS: Record<IntroApp, Intro> = {
 		],
 		open: { de: "spaces-mmo öffnen", en: "Open spaces-mmo" },
 	},
+	stats: {
+		icon: "▤",
+		title: { de: "Space-Statistik: alle Spaces live", en: "Space stats: every space live" },
+		lead: {
+			de: "Ein Dashboard, das die Spaces aller Apps live zeigt: wie viele Entries welchen Typs, wie viel Speicher, wie viele Commits pro Minute.",
+			en: "A dashboard that shows the spaces of every app live: how many entries of which type, how much storage, how many commits per minute.",
+		},
+		what: [
+			{ de: "Je App Kennzahlen, Verlauf und Balken nach Typ und Speicher; bei Codemode-Chat, spaces-mmo und Swarm-Shard auch die Entries selbst.", en: "Per app figures, history and bars by type and storage; for codemode chat, spaces-mmo and the swarm shard also the entries themselves." },
+			{ de: "Nur lesend: das Dashboard schreibt nichts und hat keinen Login.", en: "Read-only: the dashboard writes nothing and has no login." },
+		],
+		spaces: [
+			{ de: "Es fragt jeden Space über seinen Socket ab, wie jeder andere Client (stats, readAll); Lesen hinterlässt dort keine Claims.", en: "It asks every space over its socket like any other client (stats, readAll); reading leaves no claims there." },
+			{ de: "Die Commits pro Minute kommen aus der Revision, die jede Statistik mitliefert.", en: "Commits per minute come from the revision every stats call carries." },
+			{ de: "Der Hub der Hilfeseite zeigt nur Kennzahlen (seine Spaces enthalten Schlüssel und Chat-Nachrichten); der Konten-Store von spaces-mmo fehlt ganz.", en: "The help site's hub shows figures only (its spaces hold keys and chat messages); the spaces-mmo accounts store is left out." },
+		],
+		where: [
+			{ de: "Läuft auf big als systemd-Dienst und erreicht die Spaces auf nano über dieselben Tunnel wie die Apps.", en: "Runs on big as a systemd service and reaches the spaces on nano through the same tunnels as the apps." },
+		],
+		open: { de: "Space-Statistik öffnen", en: "Open space stats" },
+	},
 };
 
 export function introTitle(app: IntroApp, locale: "de" | "en"): string {

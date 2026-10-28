@@ -5,7 +5,7 @@ import { applyThemeToDocument, PALETTES } from "./lib/palettes.ts";
 import { scoreArticle, searchAreas, searchArticles } from "./lib/search.ts";
 import { renderMarkdownToHtml } from "./lib/markdown.ts";
 import { startArticleLoad } from "./lib/article-load.ts";
-import { helpUrl, parseHelpView, resourceView, type ViewState } from "./lib/help-navigation.ts";
+import { helpUrl, parseHelpView, resourceView, type IntroApp, type ViewState } from "./lib/help-navigation.ts";
 import { startIndexLoad } from "./lib/index-load.ts";
 import { SpaceChatWorkbench } from "./components/SpaceChatWorkbench.tsx";
 import { AdminSpacesView } from "./components/AdminSpacesView.tsx";
@@ -16,6 +16,7 @@ import { SystemBar } from "./components/SystemBar.tsx";
 /** The codemode chat (its own site: agents and people write code into a shared space, a sandbox judges it). */
 const CODEMODE_CHAT_URL = "https://codemode.eibrain.org";
 const SPACES_MMO_URL = "https://spaces-mmo.eibrain.org";
+const SPACES_STATS_URL = "https://spaces-stats.eibrain.org";
 
 const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
 
@@ -193,10 +194,11 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 	}
 
 	// an app's entries are active on its introduction and on the app itself
-	const isApp = (app: "swarm" | "codemode" | "space-chat" | "mmo") =>
+	const isApp = (app: IntroApp) =>
 		(view.kind === "intro" && view.app === app) || (app === "swarm" && view.kind === "feed") || (app === "space-chat" && view.kind === "space-chat");
-	const introTarget = (app: "swarm" | "codemode" | "space-chat" | "mmo") =>
+	const introTarget = (app: IntroApp) =>
 		app === "codemode" ? { href: CODEMODE_CHAT_URL, external: true }
+			: app === "stats" ? { href: SPACES_STATS_URL, external: true }
 			: app === "mmo" ? { href: SPACES_MMO_URL, external: true }
 				: { href: helpUrl(app === "swarm" ? { kind: "feed" } : { kind: "space-chat", sessionId: "lobby" }, locale), external: false };
 
@@ -399,6 +401,14 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						</button>
 						<button
 							type="button"
+							className={isApp("stats") ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "intro", app: "stats" })}
+						>
+							<span>{locale === "de" ? "Space-Statistik (alle Spaces live)" : "Space stats (every space live)"}</span>
+							<span className="nav-link__badge">STATS</span>
+						</button>
+						<button
+							type="button"
 							className={view.kind === "admin" ? "nav-link is-active" : "nav-link"}
 							onClick={() => navigate({ kind: "admin" })}
 						>
@@ -539,6 +549,17 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 											{locale === "de"
 												? "⚓ spaces-mmo: Rollenspiel im Nebel"
 												: "⚓ spaces-mmo: role-playing in the fog"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "intro", app: "stats" })}
+									>
+										<span>
+											{locale === "de"
+												? "▤ Space-Statistik: alle Spaces live"
+												: "▤ Space stats: every space live"}
 										</span>
 									</button>
 									<button

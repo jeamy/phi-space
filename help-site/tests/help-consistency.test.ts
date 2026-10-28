@@ -177,7 +177,7 @@ test("help live sync: actual PhiSpaces puts/deletes converge without mutating th
 });
 
 test("every app has an introduction before its link: ?view=intro&app=… round-trips, an unknown app falls back home", () => {
-	for (const app of ["swarm", "codemode", "space-chat", "mmo"] as const) {
+	for (const app of ["swarm", "codemode", "space-chat", "mmo", "stats"] as const) {
 		const url = helpUrl({ kind: "intro", app }, "de");
 		assert.deepEqual(parseHelpView(url), { kind: "intro", app });
 	}
