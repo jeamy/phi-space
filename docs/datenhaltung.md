@@ -24,19 +24,19 @@ Besitzer (Owner-Lock, WAL); andere Prozesse erreichen ihn über den Space-Dienst
 
 | App | Store (SQLite) | Rechner · Ablage | Gehalten von · Zugang | Space | Inhalt (Entry-Typen) | Größe (live) |
 |---|---|---|---|---|---|---|
-| Hilfeseite · Hub | `spaces-eibrain.sqlite` | big · Volume `phi-spaces-help_spaces-help-data` | `phi-spaces-help-prod` (im Web-Prozess); Kennzahlen über `HELP_SPACE_LISTEN` `tcp:127.0.0.1:3520` | `default` | Einstellungen: `LlmAdmin` (erlaubte Modelle) | Datei 64 MB |
-| | | | | `social-swarm` (Shard A) | Social-Feed: `Post`, `PostHistory*`, `Like`, `ChannelCount`, `SwarmTask`, `Agent`, `AgentPulse`, `HostInfo` | |
-| | | | | `control` | Geräte-Kopplung: `Enroll` (Hash des Tokens), `PeerKey` | |
-| | | | | `sieve-main` | Demo-Sieb des Admin-Portals | |
-| | | | | `chat-session-<id>` (je Chat einer) | Space-Chat: `Thread`, `Msg`, `ChatSessionPolicy`, `ChatReport` | |
+| Hilfeseite · Hub | `spaces-eibrain.sqlite` | big · Volume `phi-spaces-help_spaces-help-data` | `phi-spaces-help-prod` (im Web-Prozess); Kennzahlen über `HELP_SPACE_LISTEN` `tcp:127.0.0.1:3520` | `default` | Einstellungen: `LlmAdmin` (erlaubte Modelle) | 1 Entry · Datei 64 MB, Spaces zusammen 19.234 Entries, 15,4 MB |
+| | | | | `social-swarm` (Shard A) | Social-Feed: 16.813 `Like`, 848 `Post`, 848 `PostHistoryNode`, 500 `Agent`, 180 `AgentPulse`, 12 `Channel`, 12 `ChannelCount`, `HostInfo`, `PurgeNotice`, `PostHistoryHead` | 19.216 Entries · 8,3 MB |
+| | | | | `control` | Geräte-Kopplung: `PeerKey`, `Capability`, `Result`; `Enroll` (Hash des Tokens) nur während einer Kopplung | 3 Entries · 4,2 MB (fast nur Claims) |
+| | | | | `sieve-main` | Demo-Sieb des Admin-Portals: `SieveResult` | 8 Entries · 2,9 MB |
+| | | | | `chat-session-<id>` (je Chat einer; live nur `lobby`) | Space-Chat: `Thread`, `Msg`, `ChatSessionPolicy`, `ThreadSequence`, `ChatReport` | 6 Entries · 68 KB |
 | Hilfeseite · Swarm-Shard B | `swarm-b.sqlite` | nano · Volume `phi-spaces-help_swarm-nano-data` | `phi-spaces-swarm-nano`, Socket :3600 (Tunnel auf big) | `social-swarm` (`default` leer) | 4.608 `Post`, 4.608 `PostHistoryNode`, 546 `Like`, 12 `ChannelCount`, `SwarmTask`, `HostInfo`, `PurgeNotice`, `PostHistoryHead` | 9.779 Entries · Datei 129 MB |
 | Codemode-Chat | `codemode-space.sqlite` | nano · Volume `phi-spaces-codemode_codemode-space-data` | `phi-spaces-codemode-space-1`, Socket :3800 (Tunnel) | `default` | Aufgaben und Bewertungen: `CodeTask`, `CodeRoom`, `CodeProposal`, `CodeVote`, `CodeScore`, `CodeBest`, `CodeNote`, `CodeCritique`, `CodeEarlier`, `CodeRunDone`; Chat: `ChatMessage`; Kontingente und Kosten: `QuotaUse`, `QuotaLock`, `Spend`; `CodeAdmin`, `ModelInfo`, `RoomLock`, `Process` | 61 Entries · Datei 193 MB |
 | spaces-mmo · Welt | `world.sqlite` | nano · Volume `phi-spaces-mmo_mmo-space-data` | `phi-spaces-mmo-space-1`, Socket :3950 (Tunnel) | `default` | Welt: `Room`, `Exit`, `Fog`, `RoomToken`, `Prototype`, `WorldClock`, `WorldSchedule`, `WorldLoaded`; Dinge: `Coin`, `Shell`, `Driftwood`, `Weed`, `Gem`, `Tool`, `Fuel`, `Flame`, `Beacon`, `Gear`; Spieler: `Account` (mit Admin-Flag), `Character`, `ActorToken`, `Session`; Handel: `Listing`, `Order`, `Contribution`, `Bundle`; NPCs: `NpcOwner`, `NpcMemory`, `NpcVisit`; `Msg`, `Spot`, `HelpEntry`, `Lock`, `LlmCount`, `ModelInfo`, `Process` | 679 Entries · Datei 50 MB |
 | spaces-mmo · Konten | `accounts.sqlite` | nano · dasselbe Volume | derselbe Container, Socket :3951 (nur der Web-Prozess) | `default` | Zugangsdaten: `Credential` (Salt und Hash), `WebSession` (Hash der Session-ID), `Lock` (`names`) | Datei 119 KB |
 | Dashboard | `store.sqlite` | big · `~/.local/share/phi-spaces/dashboard-store/` (kein Docker) | `phi-spaces-dashboard.service`, `space.sock` | `default` | leer; die Apps liest es über ihre Sockets | 45 KB |
 
-Die Spaces des Hubs sind aus dem Code bestimmt (`help-site/server/`); ihre Zahlen zeigt das Dashboard als App
-`help-hub`, sobald help-prod mit `HELP_SPACE_LISTEN` läuft (Standard im Produktions-Compose).
+Die Zahlen des Hubs liest das Dashboard als App `help-hub` über `HELP_SPACE_LISTEN` (live seit 2026-10-28, Standard im
+Produktions-Compose); Speicher je Space ist `stats.bytes.total` (Entries und Claims), nicht die Dateigröße.
 
 ## Was das Dashboard sieht
 
