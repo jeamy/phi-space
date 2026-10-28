@@ -42,6 +42,45 @@ absichtlich nur Loopback), `--socket <pfad>` (Standard `<store>/space.sock`, mit
 
 Aufruf im Browser: **http://127.0.0.1:8787** (bzw. der gewählte Port).
 
+### Dauerhaft als Dienst (übersteht Neustarts)
+
+`dashboard.sh start` startet den Prozess mit `nohup`: Er läuft weiter, wenn das Terminal geht, aber nach einem Neustart
+des Rechners nicht wieder an. Wer das Dashboard dauerhaft betreiben will (so auf big hinter `spaces-stats.eibrain.org`),
+legt eine systemd-User-Unit an, nach demselben Muster wie die Tunnel `codemode-nano-tunnel.service` und
+`mmo-nano-tunnel.service`. Voraussetzung: Linger für den Benutzer (`loginctl show-user $USER -p Linger` zeigt `yes`;
+sonst einmal `sudo loginctl enable-linger $USER`), damit User-Units ohne Anmeldung starten.
+
+```bash
+cat > ~/.config/systemd/user/phi-spaces-dashboard.service <<'EOF'
+[Unit]
+Description=phi-spaces read-only dashboard (127.0.0.1:8787; settings: DASHBOARD_* in the checkout's .env)
+After=network-online.target codemode-nano-tunnel.service mmo-nano-tunnel.service swarm-nano-tunnel.service
+
+[Service]
+WorkingDirectory=/media/docker/spaces
+ExecStart=/usr/local/bin/node --no-warnings --experimental-strip-types src/dashboard.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+bash scripts/dashboard.sh stop          # ein per Skript gestarteter Prozess hält sonst Port und Store
+systemctl --user daemon-reload
+systemctl --user enable --now phi-spaces-dashboard.service
+```
+
+`WorkingDirectory` ist der Checkout (auf big `/media/docker/spaces`), `ExecStart` der Pfad von `command -v node`. Die
+Unit startet `src/dashboard.ts` direkt im Vordergrund; die Einstellungen liest es selbst aus den `DASHBOARD_*`-Zeilen der
+`.env` im Checkout (Store, Port, App-Adressen). Danach:
+
+- Neustart nach `git pull` oder einer Änderung der `.env`: `systemctl --user restart phi-spaces-dashboard`
+- Zustand und Log: `systemctl --user status phi-spaces-dashboard`, `journalctl --user -u phi-spaces-dashboard -f`
+- Abschalten: `systemctl --user disable --now phi-spaces-dashboard`
+
+Mit der Unit nicht zusätzlich `npm run dashboard:start` benutzen: Zwei Prozesse wollen denselben Port und dieselbe
+Besitzersperre des Stores, der zweite bricht ab.
+
 ## Apps: die Spaces der Projekte
 
 Die Projekte auf phi-spaces betreiben ihre Spaces in eigenen Prozessen, die jeweils die Besitzersperre ihres Stores
