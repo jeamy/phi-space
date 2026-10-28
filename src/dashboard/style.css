@@ -136,6 +136,23 @@ button.hbar:focus-visible { outline: 2px solid var(--accent); }
 .legend__item b { color: var(--text-strong); font: 600 11.5px var(--font-mono); }
 .spark-svg { display: block; width: 100%; height: 30px; }
 
+/* right: activity per app */
+.act { padding: 6px 0 8px; border-bottom: 1px solid var(--line); }
+.act:last-child { border-bottom: 0; padding-bottom: 0; }
+.act__head { display: flex; align-items: center; gap: 8px; }
+.act__head .state { margin-top: 0; }
+.act__head b { color: var(--text-strong); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act__rate { margin-left: auto; font: 700 14px/1 var(--font-mono); color: var(--text-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.act__rate small { font: 400 10.5px var(--font-sans); color: var(--muted); }
+.act .spark-svg { height: 28px; margin: 4px 0 2px; }
+.act__meta { font-size: 11.5px; color: var(--muted); }
+.act.is-offline b { color: var(--muted); }
+details.metrics > summary { list-style: none; cursor: pointer; }
+details.metrics > summary::-webkit-details-marker { display: none; }
+details.metrics > summary h2::before { content: "▸"; color: var(--muted); margin-right: 2px; }
+details.metrics[open] > summary h2::before { content: "▾"; }
+details.metrics:not([open]) > summary h2 { margin-bottom: 0; }
+
 /* right: metrics */
 .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 12.5px; margin-bottom: 12px; }
 .kv span:nth-child(odd) { color: var(--muted); }

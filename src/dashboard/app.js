@@ -5,7 +5,7 @@ import "./components.js";
 import { applyThemeToDocument, PALETTES } from "./palettes.js";
 
 const $ = (s) => document.querySelector(s);
-const appsEl = $("#apps"), spaces = $("#spaces"), appDetail = $("#app-detail"), detail = $("#detail"), compare = $("#compare"),
+const appsEl = $("#apps"), spaces = $("#spaces"), appDetail = $("#app-detail"), detail = $("#detail"), compare = $("#compare"), activity = $("#activity"),
 	metricsEl = $("#metrics"), conn = $("#conn"), connLabel = $("#conn-label");
 
 // ---- theme: mode and palette like the projects (same palettes, same controls), remembered in this browser
@@ -64,6 +64,7 @@ const select = (kind, id) => {
 const showApps = () => {
 	appsEl.apps = apps;
 	compare.apps = apps;
+	activity.apps = apps;
 	if (selection?.kind === "app") appDetail.app = apps.find((a) => a.id === selection.id) ?? null;
 };
 

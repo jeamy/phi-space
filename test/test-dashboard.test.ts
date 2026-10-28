@@ -141,6 +141,16 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 			entries = (await (await fetch(`${dash.url}/api/apps`)).json()).apps.find((a: { id: string }) => a.id === "chat").stats.entries;
 		}
 		assert.equal(entries, 5);
+		// activity: commits per minute between polls, from the revision the stats carry; the dashboard's own polls (stats,
+		// readAll pages) commit nothing, so a quiet space settles at 0
+		const chatNow = async () => (await (await fetch(`${dash.url}/api/apps`)).json()).apps.find((a: { id: string }) => a.id === "chat");
+		let c = await chatNow();
+		assert.ok(c.activity.some((n: number) => n > 0), `a commit shows as activity: ${JSON.stringify(c.activity)}`);
+		for (let i = 0; i < 100 && !(c.activity.length >= 3 && c.activity.slice(-2).every((n: number) => n === 0)); i++) {
+			await new Promise((r) => setTimeout(r, 20));
+			c = await chatNow();
+		}
+		assert.deepEqual(c.activity.slice(-2), [0, 0], `quiet polls: ${JSON.stringify(c.activity)}`);
 
 		const js = await fetch(`${dash.url}/palettes.js`);
 		assert.match(js.headers.get("content-type")!, /javascript/);

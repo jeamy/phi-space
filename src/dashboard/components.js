@@ -107,9 +107,10 @@ class AppDetail extends HTMLElement {
 	connectedCallback() { this._app = null; this._page = null; this._type = null; this._cursors = [null]; this.render(); }
 	set app(a) {
 		const first = !this._app || this._app.id !== a?.id;
+		const changed = JSON.stringify([this._app?.online, this._app?.stats]) !== JSON.stringify([a?.online, a?.stats]);
 		this._app = a;
 		if (first) { this._type = null; this._cursors = [null]; this._page = null; this.load(); }
-		else if (this._cursors.length === 1) this.load(); // on the first page a change refreshes the rows too
+		else if (changed && this._cursors.length === 1) this.load(); // on the first page a change refreshes the rows too
 		defer(this);
 	}
 	get app() { return this._app; }
@@ -222,7 +223,31 @@ ${on.length ? `<h3>Entries</h3>${hbars(on.map((a) => ({ label: a.label, value: a
 }
 customElements.define("apps-compare", AppsCompare);
 
-/** Right panel: process meter with sparklines from the pushed history. */
+/** Right panel, top: how busy each app's space is — commits per minute (from the revision its stats carry), the change
+ *  of its entries per minute, open transactions and waiters. */
+class AppsActivity extends HTMLElement {
+	set apps(v) { this._apps = v ?? []; defer(this); }
+	connectedCallback() { this._apps = []; this.render(); }
+	render() {
+		const all = this._apps ?? [];
+		if (!all.length) { this.innerHTML = ""; return; }
+		const signed = (n) => `${n > 0 ? "+" : ""}${String(n).replace(".", ",")}`;
+		const rows = all.map((a) => {
+			if (!a.online) return `<div class="act is-offline"><div class="act__head"><i class="state off"></i><b>${esc(a.label)}</b><span class="muted">offline</span></div></div>`;
+			const rate = a.activity?.at(-1);
+			const busyNow = (rate ?? 0) > 0;
+			return `<div class="act"><div class="act__head"><i class="state ${busyNow ? "busy" : "on"}" title="${busyNow ? "schreibt gerade" : "ruhig"}"></i><b>${esc(a.label)}</b>
+<span class="act__rate" title="Commits pro Minute seit der letzten Abfrage">${rate == null ? "–" : String(rate).replace(".", ",")} <small>Commits/min</small></span></div>
+${sparkline(a.activity?.length ? a.activity : [0], 272, 28, "var(--bar)", "Commits pro Minute")}
+<div class="act__meta">Entries ${signed(a.entriesPerMin ?? 0)}/min · ${num(a.stats?.txns ?? 0)} Txn · ${num(a.stats?.waiters ?? 0)} wartend</div></div>`;
+		}).join("");
+		this.innerHTML = `<div class="panel"><h2>Aktivität je App <span class="muted">· alle 2 s</span></h2>${rows}</div>`;
+	}
+}
+customElements.define("apps-activity", AppsActivity);
+
+/** Right panel: process meter with sparklines from the pushed history. It only counts the dashboard's own store and
+ *  socket, so it stays folded while nothing happens there. */
 class LiveMetrics extends HTMLElement {
 	set metrics(m) { this._m = m; defer(this); }
 	get metrics() { return this._m; }
@@ -238,7 +263,11 @@ class LiveMetrics extends HTMLElement {
 			const values = this._h?.[name] ?? [];
 			return `<div class="spark"><div class="label">${label} · ${Number((m.rates?.[name] ?? 0)).toFixed(1).replace(".", ",")}/s · gesamt ${num(m.totals?.[name] ?? 0)}</div>${sparkline(values, 272, 30, "var(--bar)", `${label} pro Sekunde`)}</div>`;
 		};
-		this.innerHTML = `<div class="panel"><h2>Metriken <span class="muted">· dieser Prozess</span></h2>
+		const t = m.totals ?? {};
+		const quiet = !(m.connections > 0) && !["writes", "reads", "takes", "events", "failures"].some((k) => (t[k] ?? 0) > 0);
+		if (this._open === undefined || this._quiet !== quiet) this._open = !quiet;
+		this._quiet = quiet;
+		this.innerHTML = `<details class="panel metrics"${this._open ? " open" : ""}><summary><h2>Dashboard-Prozess <span class="muted">· eigener Store und Socket${quiet ? " · kein Verkehr" : ""}</span></h2></summary>
 <div class="kv">
 <span>Uptime</span><span>${uptime}</span>
 <span>Socket-Verbindungen</span><span>${num(m.connections ?? 0)}</span>
@@ -248,7 +277,8 @@ class LiveMetrics extends HTMLElement {
 <span>Wiederholungen</span><span>${num(m.totals?.retries ?? 0)}</span>
 </div>
 ${line("writes", "Writes")}${line("reads", "Reads")}${line("takes", "Takes")}
-</div>`;
+</details>`;
+		this.querySelector("details").ontoggle = (e) => { this._open = e.target.open; };
 	}
 }
 customElements.define("live-metrics", LiveMetrics);

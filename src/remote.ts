@@ -418,9 +418,11 @@ export class RemoteSpace implements SpaceLike {
 		await this.info();
 		return ((await this.send({ method: "count", args: { template: tmpl as unknown as Json, txn } })) as { value: number }).value;
 	}
-	async stats(): Promise<core.SpaceStats> {
+	async stats(): Promise<core.SpaceStats> { return (await this.statsWithRevision()).stats; }
+	/** The stats with the revision they were read at (like the local PhiSpaces): two reads tell how many commits came between. */
+	async statsWithRevision(): Promise<{ stats: core.SpaceStats; rev: number; streamId: string }> {
 		await this.info();
-		return ((await this.send({ method: "stats" })) as unknown as { stats: core.SpaceStats }).stats;
+		return (await this.send({ method: "stats" })) as unknown as { stats: core.SpaceStats; rev: number; streamId: string };
 	}
 	async createTransaction(lease: number = core.ANY, o: Req = {}): Promise<Lease> { return (await this.mutate("txn", { action: "begin", leaseMs: leaseArg(lease) }, o)) as unknown as Lease; }
 	async commit(txn: string, o: Req = {}): Promise<void> { await this.mutate("txn", { action: "commit", id: txn }, o); }

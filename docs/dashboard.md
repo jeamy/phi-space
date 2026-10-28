@@ -161,8 +161,8 @@ Palettenfarben ab.
 
 **SSE-Vertrag.** Nach dem Verbinden sendet der Server sofort `hello` (vollständiger Space-Zustand), danach
 bei jeder Commits `space` (Gauges des betroffenen Spaces, gebündelt über `flushMs`=200 ms), bei Registry-Änderungen
-`spaces`, alle paar Sekunden `metrics` und `apps` (nur die Apps, deren Stand sich seit der letzten Abfrage geändert hat;
-`hello` enthält alle). `EventSource` verbindet nach einem Abriss selbst neu; nach dem
+`spaces`, alle paar Sekunden `metrics` und nach jeder App-Abfrage `apps` (alle Apps mit Stand, Verlauf und Aktivität;
+`hello` enthält sie ebenso). `EventSource` verbindet nach einem Abriss selbst neu; nach dem
 Reconnect liefert `hello` wieder den vollen Stand — es gibt kein Event-Replay und dadurch keine verlorene
 Aktualisierung. Watches (`watchDoc`) wecken den Server, die Korrektheit hängt nicht von einem Signal ab
 (siehe Umstellungsplan 4.2): ein Neustart rekonstruiert alles aus Snapshots.

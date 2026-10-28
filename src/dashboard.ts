@@ -77,6 +77,10 @@ type AppState = AppSource & {
 	stats: core.SpaceStats | null;
 	/** Visible entries per poll, oldest first (sparkline). */
 	history: number[];
+	/** Commits per minute between two polls, oldest first: the space's revision read with its stats. */
+	activity: number[];
+	/** Change of the visible entries per minute between the last two polls. */
+	entriesPerMin: number;
 	checkedAt: number;
 };
 
@@ -191,11 +195,12 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	}
 
 	// ---- app sources: one connection per app, one `stats` call per poll; a failed call drops the connection
-	const apps = new Map<string, AppState & { conn: ReturnType<typeof connectSpace> | null }>();
-	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], checkedAt: 0, conn: null });
-	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, history: a.history, checkedAt: a.checkedAt });
+	type AppEntry = AppState & { conn: ReturnType<typeof connectSpace> | null; last: { rev: number; streamId: string; entries: number; at: number } | null };
+	const apps = new Map<string, AppEntry>();
+	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null });
+	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
 	const appList = (): AppState[] => [...apps.values()].map(appView);
-	const connectApp = async (a: AppState & { conn: ReturnType<typeof connectSpace> | null }) => {
+	const connectApp = async (a: AppEntry) => {
 		if (!a.conn) {
 			// the address that answered last first, then the others in their order
 			const order = [a.address, ...a.addresses.filter((x) => x !== a.address)];
@@ -218,7 +223,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		}
 		return a.conn.space;
 	};
-	const dropApp = (a: AppState & { conn: ReturnType<typeof connectSpace> | null }, e: unknown) => {
+	const dropApp = (a: AppEntry, e: unknown) => {
 		a.conn?.close();
 		a.conn = null;
 		a.online = false;
@@ -231,17 +236,28 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		try {
 			const changed: AppState[] = [];
 			await Promise.all([...apps.values()].map(async (a) => {
-				const before = JSON.stringify([a.online, a.error, a.stats]);
 				try {
-					const st = await (await connectApp(a)).stats();
+					const { stats: st, rev, streamId } = await (await connectApp(a)).statsWithRevision();
+					const t = now();
+					// commits and entry change per minute since the poll before; a new stream (the space restarted) starts over
+					const prev = a.last && a.last.streamId === streamId && rev >= a.last.rev ? a.last : null;
+					const minutes = prev ? Math.max(t - prev.at, 1) / 60_000 : 0;
+					if (prev) {
+						a.activity.push(Math.round(((rev - prev.rev) / minutes) * 10) / 10);
+						if (a.activity.length > APP_HISTORY) a.activity.shift();
+						a.entriesPerMin = Math.round(((st.entries - prev.entries) / minutes) * 10) / 10;
+					}
+					a.last = { rev, streamId, entries: st.entries, at: t };
 					a.stats = st;
 					a.online = true;
 					a.error = null;
 					a.history.push(st.entries);
 					if (a.history.length > APP_HISTORY) a.history.shift();
-				} catch (e) { dropApp(a, e); }
+				} catch (e) { dropApp(a, e); a.last = null; }
 				a.checkedAt = now();
-				if (JSON.stringify([a.online, a.error, a.stats]) !== before) changed.push(appView(a));
+				// every poll goes out (the activity curve moves on while a space is quiet); the page refetches entries
+				// only when the stats changed
+				changed.push(appView(a));
 			}));
 			if (changed.length > 0) for (const res of sse) push(res, { type: "apps", apps: changed });
 		} finally { polling = false; }
