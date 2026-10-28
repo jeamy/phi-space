@@ -7,7 +7,7 @@ import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
-import { cellKey, claimSpot, freeCellNear, occupiedIn, solidIn } from "../occupancy.ts";
+import { cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot, solidIn } from "../occupancy.ts";
 import { findPath, walkable, wayTo } from "../world.ts";
 import { handOff } from "../handover.ts";
 import { regionOfRoom } from "../regions.ts";
@@ -31,18 +31,22 @@ export async function online(c: Pick<CommandCtx, "space">, room: string | null):
  *  must get around them). An exit on the target cell is taken at once. Nothing is locked: the Spot written with the
  *  space's unique check is what refuses a second character on the cell (engine/occupancy.ts). */
 async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: boolean; room?: RoomFields } = {}): Promise<void> {
-	const exit = (await exitsHere(c)).find((x) => x.f.x === to.x && x.f.y === to.y);
-	if (exit) return traverse(c, exit.f);
+	const exits = (await exitsHere(c)).map((x) => x.f);
+	const exit = exits.find((x) => x.x === to.x && x.y === to.y);
+	if (exit) return traverse(c, exit);
 	const room = o.room ?? (await roomOf(c));
 	const solid = solidIn(c.world, room.roomId);
 	if (solid.has(cellKey(to))) throw new CommandError("Dort brennt das Leuchtfeuer; da läuft man nicht hinein.");
+	// at a door nobody holds a cell (isPassage): one walks onto it and through whoever stands there
+	const passage = isPassage(exits, to);
 	if (o.path) {
 		const occ = await occupiedIn(c.space, room.roomId, c.actor.charId);
 		const there = occ.get(cellKey(to));
-		if (there) throw new CommandError(`Dort steht schon ${there}.`);
-		if (!findPath(c.world, room.ground, c.actor, to, 40, new Set([...occ.keys(), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
+		if (there && !passage) throw new CommandError(`Dort steht schon ${there}.`);
+		if (!findPath(c.world, room.ground, c.actor, to, 40, new Set([...[...occ.keys()].filter((k) => { const [x, y] = k.split(",").map(Number); return !isPassage(exits, { x: x!, y: y! }); }), ...solid]))) throw new CommandError("Dorthin führt kein freier Weg.");
 	}
-	await relocate(c, { room: room.roomId, x: to.x, y: to.y });
+	if (passage) await releaseSpot(c.space, c.txn, c.actor.charId);
+	await relocate(c, { room: room.roomId, x: to.x, y: to.y }, { spot: !passage });
 }
 
 /** Takes the actor's character and writes it at a new place; its Spot goes along (`spot` false: the place is known to
@@ -62,6 +66,12 @@ async function relocate(c: CommandCtx, to: { room: string; x: number; y: number 
 /** Onto a free cell of `room`, starting at `at`: the nearest cell no online character holds, no exit and no fire is on,
  *  claimed with the space's unique check (a few tries: someone may take one meanwhile). */
 async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean } = {}): Promise<{ x: number; y: number }> {
+	// arriving through a door: its landing is a passage, free whoever stands there
+	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
+	if (o.exits !== false && isPassage(exits, at) && !exits.some((x) => x.x === at.x && x.y === at.y) && walkable(c.world, room.ground, at.x, at.y) && !solidIn(c.world, room.roomId).has(cellKey(at))) {
+		await releaseSpot(c.space, c.txn, c.actor.charId);
+		return at;
+	}
 	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...solidIn(c.world, room.roomId), ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f)))]);
 	for (let tries = 0; tries < 4; tries++) {
 		const cell = freeCellNear(c.world, room.ground, at, avoid);

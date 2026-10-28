@@ -31,7 +31,8 @@ test("every island in exactly one region, each region starts in a bay of its own
 
 const serve = async (sock: string) => {
 	const host = openOwnMemoryHost(), stop = await startService(host, ctx, { watchDebounceMs: 10 });
-	const server = await serveSpace(new SpaceService({ host, ctx, identity: new StaticIdentity({ p: { principal: { peerId: "p" }, roles: ["member"] } }), wakeOnCommit: true }), { listen: parseTarget(sock), connection: () => ({ peerId: "p" }) });
+	// limits as the game's space process sets them (space-host.ts): loading a world is many calls at once
+	const server = await serveSpace(new SpaceService({ host, ctx, identity: new StaticIdentity({ p: { principal: { peerId: "p" }, roles: ["member"] } }), wakeOnCommit: true, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(sock), connection: () => ({ peerId: "p" }) });
 	const conn = connectSpace(sock);
 	return { space: conn.space, async close() { conn.close(); await server.close(); await stop(); } };
 };
@@ -74,4 +75,24 @@ test("a character crosses to another region with its pack and account, exactly o
 		halt.abort();
 		await running;
 	} finally { halt.abort(); await a.close(); await b.close(); }
+});
+
+test("the tide brings more where more people are: with nine on the island a tide washes up four things, without them one", async () => {
+	const { loadIntoSpace } = await import("../server/engine/loader.ts");
+	const { floodTick } = await import("../server/engine/fire.ts");
+	const s = await serve(`unix:/tmp/mmo-flood-${process.pid}.sock`);
+	try {
+		await s.space.write({ type: "Lock", fields: { name: "world" } }, null, FOREVER);
+		const one = { ...world, flood: { ...world.flood, rooms: world.flood.rooms.filter((f) => f.room === "graue-bucht") } };
+		await loadIntoSpace(s.space, one);
+		const lying = async () => s.space.count({ type: "Item", fields: { location: "graue-bucht", flotsam: true } });
+		await floodTick(s.space, one, 60_000);
+		assert.equal(await lying(), 1, "nobody online: one piece");
+		for (let i = 0; i < 9; i++) {
+			await s.space.write({ type: "Character", fields: { charId: `c-${i}`, accountId: `a-${i}`, name: `P${i}`, room: "klippenpfad", x: 5, y: 9, skin: 0, guest: true } }, null, FOREVER);
+			await s.space.write({ type: "Session", fields: { sessionId: `s-${i}`, charId: `c-${i}`, accountId: `a-${i}` } }, null, 60_000);
+		}
+		await floodTick(s.space, one, 60_000);
+		assert.equal(await lying(), 1 + 4, "nine people on the Graue Insel: three more may lie there, four come at once");
+	} finally { await s.close(); }
 });

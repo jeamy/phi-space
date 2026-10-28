@@ -61,6 +61,16 @@ Bucht bekommt einen Skript-Hüter (Hinnerk): Ines ist eine Modellrolle und legt 
 lag die Startbucht deshalb im Nebel ([lasttest-2026-10-28.md](lasttest-2026-10-28.md)). Der Loader schreibt Räume und
 Ausgänge in Transaktionen zu je zwölf Räumen: eine ganze Welt in einer überschritt `maxCommitBytes`.
 
+**Später am 2026-10-28:**
+- Zwei weitere Modellrollen, die immer da sind: Merle, Kartenzeichnerin auf dem Markt von Kupferhafen (kennt Wege,
+  Fähren, Strandgut und Preise), und Hark, ein alter Kapitän in Schärenhafen. Mit Ines sind es drei, je eine in West,
+  Ost und Nord; der Fremde kommt dazu, wenn der Nebel dicht wird. Zusammen 31 Figuren der Welt.
+- **Türen sind Durchgänge:** auf einer Ausgangszelle und den Zellen daneben hält niemand eine Zelle
+  (`isPassage` in `server/engine/occupancy.ts`): man läuft auf und durch andere hindurch, und wer ankommt, landet auf der
+  Ankunftszelle, auch wenn dort schon jemand steht. Sonst sperrte eine Menge an einer Tür den Weg für die Pfeiltasten.
+- **Mehr Strandgut bei mehr Leuten:** je drei Menschen online auf einer Insel darf an jedem ihrer Strände ein Stück
+  mehr liegen, und mit jeder Flut kommt eins mehr (`flood.perPlayers`, Standard 3).
+
 ## Die Bewohner
 
 16 neue Skript-NPCs (`server/npc/economy.ts`), ohne Modellaufrufe. Sie handeln nur über die Befehle eines Spielers

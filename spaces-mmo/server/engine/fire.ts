@@ -131,16 +131,37 @@ const weighted = (protos: Array<{ proto: string; weight: number }>) => {
  *  own things, else the world's), with the world's lifetime as `expiresWorldMs` (the sweep takes it away then; picked up, it
  *  is written anew without the date and stays). */
 export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<void> {
+	// more people on an island, more flotsam on its beaches: every `perPlayers` people online there one more piece may
+	// lie on each beach, and one more comes with each tide (else, with many players, hardly anyone finds anything)
+	const people = await peopleByIsland(space, w), per = Math.max(1, w.flood.perPlayers ?? 3);
 	for (const fr of w.flood.rooms) {
-		if ((await space.count({ type: "Item", fields: { location: fr.room, flotsam: true } })) >= fr.max) continue;
+		const extra = Math.ceil((people.get(w.rooms.find((r) => r.roomId === fr.room)?.island ?? "") ?? 0) / per);
+		const lying = await space.count({ type: "Item", fields: { location: fr.room, flotsam: true } });
+		const n = Math.min(fr.max + extra - lying, 1 + extra);
+		if (n <= 0) continue;
 		const cells = await freeCells(space, w, fr.room, fr.tile);
-		if (!cells.length) continue;
-		const proto = await resolvePrototype(space, weighted(fr.protos ?? w.flood.protos));
-		if (!proto) continue;
-		const at = cells[randomInt(0, cells.length)]!;
-		const item = await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + w.flood.lifetimeMs });
-		await say(space, leaseMs, [fr.room], "info", `Die Flut spült ${item.name} an.`);
+		const names: string[] = [];
+		for (let i = 0; i < n && cells.length; i++) {
+			const proto = await resolvePrototype(space, weighted(fr.protos ?? w.flood.protos));
+			if (!proto) continue;
+			const at = cells.splice(randomInt(0, cells.length), 1)[0]!;
+			names.push((await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + w.flood.lifetimeMs })).name);
+		}
+		if (names.length) await say(space, leaseMs, [fr.room], "info", names.length === 1 ? `Die Flut spült ${names[0]} an.` : `Die Flut spült ${names.length} Dinge an: ${[...new Set(names)].join(", ")}.`);
 	}
+}
+
+/** People (not NPCs) online, by the island they stand on. */
+async function peopleByIsland(space: SpaceLike, w: WorldDef): Promise<Map<string, number>> {
+	const live = new Set((await space.readAll({ type: "Session" })).map((s) => String(s.fields.charId)).filter((id) => !id.startsWith("npc-")));
+	const out = new Map<string, number>();
+	if (!live.size) return out;
+	for (const c of await space.readAll({ type: "Character" })) {
+		if (!live.has(String(c.fields.charId))) continue;
+		const island = w.rooms.find((r) => r.roomId === c.fields.room)?.island ?? "";
+		out.set(island, (out.get(island) ?? 0) + 1);
+	}
+	return out;
 }
 
 /** A storm surge: on the beach of one of the storm's rooms `count` things at once (leased like flotsam), and everyone

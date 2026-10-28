@@ -11,7 +11,7 @@ import { FOREVER, NO_WAIT, StillHeld, takeExisting, type SpaceLike, type Taken }
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type RoomFields } from "../model.ts";
 import { awaitWork, envMs, peek, readExisting } from "../space.ts";
 import { CommandError, type CommandCtx } from "./context.ts";
-import { claimSpot, freeCellNear, occupiedIn, solidIn } from "./occupancy.ts";
+import { claimSpot, freeCellNear, isPassage, occupiedIn, solidIn } from "./occupancy.ts";
 import type { WorldDef } from "./world.ts";
 
 /** A guest account's lease, as the accounts write it (accounts.ts). */
@@ -58,7 +58,9 @@ export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): 
 		if (h.account && !(await readExisting(space, { type: "Account", fields: { accountId: h.account.accountId } }, { txn }))) await space.write({ type: "Account", fields: h.account as never }, txn, h.account.guest ? GUEST_MS() : FOREVER);
 		const room = (await peek(space, { type: "Room", fields: { roomId: h.character.room } }))?.fields as unknown as RoomFields | undefined;
 		let at = { x: h.character.x, y: h.character.y };
-		if (room) {
+		// the ferry's landing is a passage (occupancy.ts): the character lands there whoever stands on it
+		const landing = room ? isPassage((await space.readAll({ type: "Exit", fields: { location: room.roomId } })).map((e) => e.fields as unknown as { x: number; y: number }), at) : false;
+		if (room && !landing) {
 			const avoid = new Set([...(await occupiedIn(space, room.roomId, h.charId)).keys(), ...solidIn(w, room.roomId)]);
 			for (let tries = 0; tries < 4; tries++) {
 				const cell = freeCellNear(w, room.ground, at, avoid);

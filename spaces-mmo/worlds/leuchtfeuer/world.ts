@@ -243,6 +243,24 @@ const NPCS: NpcDef[] = [
 	// Nebelholm
 	{ npcId: "eske", name: "Eske", skin: 3, room: "moorwald", ...near("moorwald", 12, 10), script: "plauderer", home: ["moorwald", "verlorener-hain"],
 		lines: ["Der Nebel hat Ohren.", "Im Steinkreis brannte einst ein Feuer, das nie ausging.", "Wer im Verlorenen Hain sucht, findet, was andere verloren haben."] },
+	// two more model roles, always there (Ines in the west; these in the east and the north): someone to talk with and
+	// ask in every busy region. Without model calls they doze and speak their lines.
+	{
+		npcId: "merle", name: "Merle", skin: 1, room: "kupferhafen-markt", ...near("kupferhafen-markt", 14, 4), script: "waerter",
+		model: {
+			persona: "Merle zeichnet Seekarten in Kupferhafen und kennt jeden Weg im Archipel: welche Fähre wohin fährt (am Klippenkopf nach Möwenfels und Kupferhafen, am Anleger nach Tangriff, im Fischerdorf nach Nebelholm, im Hafenviertel nach Tangriff, an der Alten Warte zu den Schären, am Speicher nach Rauchholm, am Perlengrund nach Krabbensand), wo welches Strandgut liegt (Holz im Köhlerwald, Tang am Torfmoor und Tangstrand, Bernstein in der Wrackbucht und am Schwarzen Strand, Perlen im Perlengrund und an der Muschelbank) und wer was kauft (Marta zahlt für Perlen und Bernstein am besten, die Hüter für Holz). Sie ist freundlich, neugierig und tauscht gern Geschichten gegen Neuigkeiten. Sie erfindet keine Orte, die es nicht gibt.",
+			wake: ["spoken", "person.enters", "offer"], budgetDay: 40,
+			dozing: ["Merle zeichnet an einer Küstenlinie.", "Merle misst mit dem Zirkel eine Entfernung.", "Merle rollt eine Karte zusammen."],
+		},
+	},
+	{
+		npcId: "hark", name: "Hark", skin: 3, room: "schaerenhafen", ...near("schaerenhafen", 15, 11), script: "waerter",
+		model: {
+			persona: "Hark ist ein alter Kapitän, der nicht mehr fährt und in Schärenhafen auf der Kaimauer sitzt. Er hat den Nebel kommen sehen, kennt die Schären, Möwenfels und die Alte Warte, und erzählt gern, knapp und bärbeißig, von Stürmen, verlorenen Booten und davon, dass nur ein brennendes Feuer die Wege offen hält. Wer ihm zuhört, bekommt Rat: wo Holz zu finden ist, dass Arne das Schärenfeuer hütet und für Holz zahlt, dass Hauke am Markt kauft. Er erfindet keine Orte, die es nicht gibt.",
+			wake: ["spoken", "person.enters", "offer"], budgetDay: 40,
+			dozing: ["Hark stopft seine Pfeife.", "Hark schaut aufs Wasser.", "Hark brummt ein altes Seemannslied."],
+		},
+	},
 	// Schären
 	{ npcId: "arne", name: "Arne", skin: 0, room: "schaerenhafen", ...near("schaerenhafen", 11, 11), script: "huter", beacon: "feuer-schaeren", home: ["schaerenhafen", "leuchtklippe"],
 		prices: { treibholz: [2, 0], holzbuendel: [5, 0], tran: [6, 0] }, carry: [{ proto: "treibholz", count: 2 }, { proto: "muenze", count: 4 }],

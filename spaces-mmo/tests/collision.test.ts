@@ -40,6 +40,23 @@ test("a step onto someone is refused, a walk goes around them", async () => {
 	} finally { await srv.close(); }
 });
 
+test("at a door nobody blocks: a step goes onto the cell before the exit where someone stands, and on through the exit", async () => {
+	const srv = await startServer();
+	try {
+		const space = srv.stack.space;
+		const a = await player(srv.url, "Anna"), b = await player(srv.url, "Bert");
+		await walk(b.p, space, b.me, 22, 8); // the cell before the way east (23,8)
+		await walk(a.p, space, a.me, 21, 8);
+		a.p.send("step 1 0");
+		await eventually(async () => { const c = await charAt(space, a.me); return c.x === 22 && c.y === 8; }, 10_000, "Anna next to Bert's cell");
+		assert.equal((await space.readAll({ type: "Spot", fields: { charId: a.me } })).length, 0, "a passage holds no cell");
+		const n = a.p.frames.length;
+		a.p.send("step 1 0");
+		await a.p.until((f) => f.t === "hello" && f.room.roomId === "klippenpfad", 10_000, n);
+		await a.p.leave(); await b.p.leave();
+	} finally { await srv.close(); }
+});
+
 test("ten players walk onto one cell at once across two world workers: exactly one arrives", async () => {
 	const srv = await startServer();
 	try {
@@ -56,7 +73,7 @@ test("ten players walk onto one cell at once across two world workers: exactly o
 	} finally { await srv.close(); }
 });
 
-test("arriving through an exit onto an occupied cell lands next to it, not on the exit", async () => {
+test("arriving through an exit where someone stands lands on the arrival cell too (a door is a passage), never on the exit", async () => {
 	const srv = await startServer();
 	try {
 		const space = srv.stack.space;
@@ -69,9 +86,8 @@ test("arriving through an exit onto an occupied cell lands next to it, not on th
 		a.p.send("go ost");
 		await a.p.until((f) => f.t === "hello" && f.room.roomId === "klippenpfad", 10_000, m);
 		const pa = await charAt(space, a.me);
-		assert.notDeepEqual([pa.x, pa.y], [1, 8]);
-		assert.notDeepEqual([pa.x, pa.y], [0, 8], "not on the exit cell");
-		assert.ok(Math.abs(pa.x - 1) + Math.abs(pa.y - 8) <= 2, `next to the arrival cell (${pa.x},${pa.y})`);
+		assert.deepEqual([pa.x, pa.y], [1, 8], "on the arrival cell, with Wache: nobody holds a cell at a door");
+		assert.equal((await space.readAll({ type: "Spot", fields: { room: "klippenpfad", x: 1, y: 8 } })).length, 0, "no Spot at a door");
 		await a.p.leave(); await b.p.leave();
 	} finally { await srv.close(); }
 });

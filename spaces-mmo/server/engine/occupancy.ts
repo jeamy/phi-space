@@ -27,6 +27,18 @@ export async function occupiedIn(space: SpaceLike, room: string, except?: string
 	return out;
 }
 
+/** A passage: an exit's cell or one next to it (where one arrives and from where one leaves). Nobody holds such a cell:
+ *  several stand on it and walk through each other, so a crowd at a door does not close the way (arrow keys walk only
+ *  cell by cell, they cannot go round). */
+export function isPassage(exits: ReadonlyArray<{ x: number; y: number }>, cell: { x: number; y: number }): boolean {
+	return exits.some((e) => Math.max(Math.abs(e.x - cell.x), Math.abs(e.y - cell.y)) <= 1);
+}
+
+/** Leaves the character's cell without taking another (it stands on a passage now). */
+export async function releaseSpot(space: SpaceLike, txn: string, charId: string): Promise<void> {
+	await space.takeIfExists({ type: "Spot", fields: { charId } }, NO_WAIT, { txn });
+}
+
 /** Cells nobody may stand on, whoever is online: the beacons of `room` (one does not walk into a fire). Beacons stand
  *  where the world definition puts them. */
 export function solidIn(w: WorldDef, room: string): Set<string> {

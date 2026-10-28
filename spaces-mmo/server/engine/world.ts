@@ -51,7 +51,10 @@ export type WorldDef = {
 	fog: { max: number; start: number; stepMs: number };
 	/** The tide: every `everyMs` one piece of flotsam per room (up to `max` lying there) on a cell of `tile`; a room
 	 *  may wash up its own things (`protos`) instead of the world's. */
-	flood: { everyMs: number; lifetimeMs: number; rooms: Array<{ room: string; tile: string; max: number; protos?: Array<{ proto: string; weight: number }> }>; protos: Array<{ proto: string; weight: number }> };
+	flood: { everyMs: number; lifetimeMs: number; rooms: Array<{ room: string; tile: string; max: number; protos?: Array<{ proto: string; weight: number }> }>; protos: Array<{ proto: string; weight: number }>;
+		/** Every this many people online on an island, one more piece may lie on each of its beaches and one more comes with
+		 *  each tide (default 3). */
+		perPlayers?: number };
 	/** A storm surge now and then: `count` things at once on a beach of one of `rooms`, announced on `channel`. */
 	storm?: { everyMs: number; count: number; rooms: string[]; protos: Array<{ proto: string; weight: number }>; channel: string };
 	/** Channels everyone hears, across rooms. */

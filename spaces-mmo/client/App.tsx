@@ -410,8 +410,11 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		if (!from || !hello) return;
 		const s = ws.current;
 		if (!s || s.readyState !== WebSocket.OPEN) return;
-		// walkable and nobody standing there (the server checks again and answers either way)
-		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
+		// walkable and nobody standing there (the server checks again and answers either way); at a door (an exit's cell or
+		// one next to it) others do not block: one walks through them, as the server lets one (engine/occupancy.ts)
+		const exits = [...objs.values()].filter((o) => o.kind === "exit" && o.location === hello.room.roomId);
+		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= 1);
+		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 		let moves: Array<[number, number]>;
 		if (Array.isArray(d)) moves = [d];
