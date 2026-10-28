@@ -60,7 +60,8 @@ test("a character crosses to another region with its pack and account, exactly o
 		assert.equal(await arrive(b.space, nord, h!.fields as unknown as HandoverFields), true);
 		const regions = new Map<string, SpaceLike>([["nord", b.space]]);
 		const running = deliver(a.space, regions, west, halt.signal);
-		for (let i = 0; i < 100 && (await a.space.readAll({ type: "Handover" })).length; i++) await new Promise((r) => setTimeout(r, 50));
+		// done when the old token is gone: that is the last step (the Handover is out of sight while a worker holds it)
+		for (let i = 0; i < 200 && (await a.space.readIfExists(actorToken("c-1"), NO_WAIT)); i++) await new Promise((r) => setTimeout(r, 50));
 		assert.equal((await a.space.readAll({ type: "Handover" })).length, 0, "delivered");
 		assert.equal(await a.space.readIfExists(actorToken("c-1"), NO_WAIT), null, "the old token is gone");
 		const there = await b.space.readAll({ type: "Character" });
