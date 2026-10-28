@@ -183,6 +183,26 @@ Die NPC-Skripte schauen in eigenem Takt: Händler und Arbeiter alle 8 s, ein Wan
 Wanderer alle 3 s. Im Dev-Container lassen sich NPCs auswählen: `SPACES_MMO_DEV_NPCS=ines,bo npm --prefix spaces-mmo run
 docker:dev:up`.
 
+## Lasttest gegen die laufende Welt
+
+`tests/perf/live-load.ts` lässt `LOAD_BOTS` Gastfiguren (Standard 100) `LOAD_SECONDS` lang (Standard 600) über den
+Web-Prozess spielen, wie Seiten es tun: Gast-Login per HTTP, Befehle über den Spiel-Socket. Sie heben Treibholz und
+Muscheln auf, tragen das Holz zum Feuer und legen nach, verkaufen Muscheln an Kalle, schauen auf den Markt und gehen
+durch die Ausgänge, mit 1 bis 3 s Pause zwischen zwei Befehlen. Gemessen wird jeder Befehl vom Senden bis zur ersten
+Antwort für die Figur (eigene Position, eigene Ausgabe, Fehler, nächster Raum), in `LOAD_OUT/commands.jsonl`.
+Die Figuren sprechen nie frei (kein Satz für das Modell); Modell-NPCs können aber aufwachen, wenn sie einen Raum
+betreten (Tagesbudget). Jede Figur schickt ein eigenes `x-forwarded-for` aus 198.18.0.0/15, sonst stoppt die
+Gast-Quote je Adresse; das wirkt nur über den Loopback-Port (Peer 127.0.0.1), nicht von außen.
+
+```sh
+# auf big, neben dem Web-Prozess (Node ohne node_modules genügt)
+cd /media/docker/spaces/spaces-mmo && LOAD_OUT=/tmp/mmo-load node tests/perf/live-load.ts
+# danach: die Figuren entfernen (Münzen zurück an Kalle, Gastkonten weg, den Rest räumt die Welt selbst)
+docker cp tests/perf/live-load-cleanup.ts phi-spaces-mmo-web-1:/opt/phi-spaces/spaces-mmo/live-load-cleanup.ts
+docker cp /tmp/mmo-load/bots.json phi-spaces-mmo-web-1:/tmp/bots.json
+docker exec -w /opt/phi-spaces/spaces-mmo phi-spaces-mmo-web-1 node --experimental-strip-types live-load-cleanup.ts /tmp/bots.json
+```
+
 ## Nicht enthalten
 
 - Kein Backup-Skript wie `docker:backup` im Chat; der Speicher liegt im Volume, die Sicherung des Verzeichnisses
