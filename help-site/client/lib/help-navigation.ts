@@ -21,7 +21,12 @@ export type ViewState =
 	  }
 	| { kind: "space-chat"; sessionId: string; stage?: string }
 	| { kind: "feed" }
-	| { kind: "admin" };
+	| { kind: "admin" }
+	| { kind: "intro"; app: IntroApp };
+
+/** The apps that get a short introduction before their link (client/components/AppIntro.tsx). */
+export type IntroApp = "swarm" | "codemode" | "space-chat" | "mmo";
+const INTRO_APPS: readonly string[] = ["swarm", "codemode", "space-chat", "mmo"];
 
 export function parseHelpView(search: string): ViewState {
 	const params = new URLSearchParams(search);
@@ -34,6 +39,9 @@ export function parseHelpView(search: string): ViewState {
 	}
 	if (view === "admin") {
 		return { kind: "admin" };
+	}
+	if (view === "intro" && INTRO_APPS.includes(params.get("app") ?? "")) {
+		return { kind: "intro", app: params.get("app") as IntroApp };
 	}
 	if (view === "api-finder" || params.get("area") === "step_by_step_and_api_reference" && params.get("tab") === "api") {
 		return {
@@ -74,6 +82,7 @@ export function helpUrl(view: ViewState, locale: "de" | "en", hash = ""): string
   p.set("view","space-chat"); p.set("session",view.sessionId);
   if(validStage(view.stage)) p.set("stage",view.stage!);
  } else if(view.kind==="feed" || view.kind==="admin") p.set("view",view.kind);
+ else if(view.kind==="intro") { p.set("view","intro"); p.set("app",view.app); }
  return `?${p}${hash ? "#"+hash.replace(/^#/,"") : ""}`;
 }
 

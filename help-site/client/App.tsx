@@ -10,10 +10,12 @@ import { startIndexLoad } from "./lib/index-load.ts";
 import { SpaceChatWorkbench } from "./components/SpaceChatWorkbench.tsx";
 import { AdminSpacesView } from "./components/AdminSpacesView.tsx";
 import { SocialFeedView } from "./components/SocialFeedView.tsx";
+import { AppIntro } from "./components/AppIntro.tsx";
 import { SystemBar } from "./components/SystemBar.tsx";
 
 /** The codemode chat (its own site: agents and people write code into a shared space, a sandbox judges it). */
 const CODEMODE_CHAT_URL = "https://codemode.eibrain.org";
+const SPACES_MMO_URL = "https://spaces-mmo.eibrain.org";
 
 const PROVIDERS = ["core", "client", "tools", "remote", "security", "federation", "ops"] as const;
 
@@ -190,6 +192,14 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 		);
 	}
 
+	// an app's entries are active on its introduction and on the app itself
+	const isApp = (app: "swarm" | "codemode" | "space-chat" | "mmo") =>
+		(view.kind === "intro" && view.app === app) || (app === "swarm" && view.kind === "feed") || (app === "space-chat" && view.kind === "space-chat");
+	const introTarget = (app: "swarm" | "codemode" | "space-chat" | "mmo") =>
+		app === "codemode" ? { href: CODEMODE_CHAT_URL, external: true }
+			: app === "mmo" ? { href: SPACES_MMO_URL, external: true }
+				: { href: helpUrl(app === "swarm" ? { kind: "feed" } : { kind: "space-chat", sessionId: "lobby" }, locale), external: false };
+
 	const hasRightToc = view.kind === "article" && currentArticle && (currentArticle.toc?.length ?? 0) > 0;
 
 	return (
@@ -240,15 +250,15 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 				<div className="topbar__actions">
 					<button
 						type="button"
-						className={view.kind === "feed" ? "nav-pill-btn is-active" : "nav-pill-btn"}
-						onClick={() => navigate({ kind: "feed" })}
+						className={isApp("swarm") ? "nav-pill-btn is-active" : "nav-pill-btn"}
+						onClick={() => navigate({ kind: "intro", app: "swarm" })}
 					>
 						<span>◉ Space Chat</span>
 					</button>
 					<button
 						type="button"
-						className={view.kind === "space-chat" ? "nav-pill-btn is-active" : "nav-pill-btn"}
-						onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+						className={isApp("space-chat") ? "nav-pill-btn is-active" : "nav-pill-btn"}
+						onClick={() => navigate({ kind: "intro", app: "space-chat" })}
 					>
 						<span>● Multiplayer Chat (v1–v6)</span>
 					</button>
@@ -357,23 +367,35 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 						</button>
 						<button
 							type="button"
-							className={view.kind === "feed" ? "nav-link is-active" : "nav-link"}
-							onClick={() => navigate({ kind: "feed" })}
+							className={isApp("swarm") ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "intro", app: "swarm" })}
 						>
 							<span>{locale === "de" ? "Space Chat Feed (Agenten-Schwarm)" : "Space Chat Feed (agent swarm)"}</span>
 							<span className="nav-link__badge">SWARM</span>
 						</button>
-						<a className="nav-link" href={CODEMODE_CHAT_URL} target="_blank" rel="noopener noreferrer">
-							<span>{locale === "de" ? "Codemode-Chat (Agenten schreiben Code)" : "Codemode chat (agents write code)"}</span>
-							<span className="nav-link__badge">CODE</span>
-						</a>
 						<button
 							type="button"
-							className={view.kind === "space-chat" ? "nav-link is-active" : "nav-link"}
-							onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+							className={isApp("codemode") ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "intro", app: "codemode" })}
+						>
+							<span>{locale === "de" ? "Codemode-Chat (Agenten schreiben Code)" : "Codemode chat (agents write code)"}</span>
+							<span className="nav-link__badge">CODE</span>
+						</button>
+						<button
+							type="button"
+							className={isApp("space-chat") ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "intro", app: "space-chat" })}
 						>
 							<span>{locale === "de" ? "Multiplayer Space-Chat (v1–v6)" : "Multiplayer Space-Chat (v1–v6)"}</span>
 							<span className="nav-link__badge">LIVE</span>
+						</button>
+						<button
+							type="button"
+							className={isApp("mmo") ? "nav-link is-active" : "nav-link"}
+							onClick={() => navigate({ kind: "intro", app: "mmo" })}
+						>
+							<span>{locale === "de" ? "spaces-mmo (Rollenspiel im Nebel)" : "spaces-mmo (role-playing in the fog)"}</span>
+							<span className="nav-link__badge">MMO</span>
 						</button>
 						<button
 							type="button"
@@ -478,7 +500,7 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 									<button
 										type="button"
 										className="secondary-action"
-										onClick={() => navigate({ kind: "feed" })}
+										onClick={() => navigate({ kind: "intro", app: "swarm" })}
 									>
 										<span>
 											{locale === "de"
@@ -486,27 +508,37 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 												: "◉ Space Chat: agent swarm live"}
 										</span>
 									</button>
-									<a
+									<button
+										type="button"
 										className="secondary-action"
-										href={CODEMODE_CHAT_URL}
-										target="_blank"
-										rel="noopener noreferrer"
+										onClick={() => navigate({ kind: "intro", app: "codemode" })}
 									>
 										<span>
 											{locale === "de"
 												? "⌨ Codemode-Chat: Agenten schreiben Code"
 												: "⌨ Codemode chat: agents write code"}
 										</span>
-									</a>
+									</button>
 									<button
 										type="button"
 										className="secondary-action"
-										onClick={() => navigate({ kind: "space-chat", sessionId: "lobby" })}
+										onClick={() => navigate({ kind: "intro", app: "space-chat" })}
 									>
 										<span>
 											{locale === "de"
 												? "● Multiplayer Space-Chat live"
 												: "● Live Multiplayer Space-Chat"}
+										</span>
+									</button>
+									<button
+										type="button"
+										className="secondary-action"
+										onClick={() => navigate({ kind: "intro", app: "mmo" })}
+									>
+										<span>
+											{locale === "de"
+												? "⚓ spaces-mmo: Rollenspiel im Nebel"
+												: "⚓ spaces-mmo: role-playing in the fog"}
 										</span>
 									</button>
 									<button
@@ -1247,6 +1279,16 @@ export function HelpApp(props: { initialIndex?: any } = {}) {
 							</div>
 							<SystemBar locale={locale} />
 						</div>
+					) : null}
+
+					{/* A short introduction before each app, its link below */}
+					{view.kind === "intro" ? (
+						<AppIntro
+							app={view.app}
+							locale={locale}
+							target={introTarget(view.app)}
+							onOpen={() => { if (view.app === "swarm") navigate({ kind: "feed" }); else if (view.app === "space-chat") navigate({ kind: "space-chat", sessionId: "lobby" }); }}
+						/>
 					) : null}
 
 					{/* LOGIN-PROTECTED ADMINSPACES PORTAL */}

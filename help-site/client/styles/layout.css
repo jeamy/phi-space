@@ -1556,3 +1556,20 @@ a.secondary-action, a.primary-action { text-decoration: none; }
   .sf-root[data-pane="channels"] .sf-col--center { display: none; }
 }
 
+
+/* ---- short introduction before each app (AppIntro) */
+.app-intro {
+  border: 1px solid var(--line-strong);
+  background: radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 46%),
+              linear-gradient(135deg, var(--surface) 0%, var(--card-surface) 100%);
+  padding: clamp(24px, 4vw, 48px);
+  max-width: 1100px;
+}
+.app-intro__kicker { color: var(--accent-readable); font: 650 10px/1 var(--font-geist-mono); letter-spacing: 0.13em; text-transform: uppercase; margin: 0 0 14px; }
+.app-intro h1 { color: var(--text-strong); font-size: clamp(28px, 4vw, 44px); line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 14px; }
+.app-intro__lead { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 760px; margin: 0 0 26px; }
+.app-intro__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 26px; }
+.app-intro__grid section { border: 1px solid var(--line); background: var(--surface); padding: 16px 18px; }
+.app-intro__grid h2 { color: var(--text-strong); font-size: 14px; margin: 0 0 10px; }
+.app-intro__grid ul { margin: 0; padding-left: 18px; color: var(--text); font-size: 13.5px; line-height: 1.55; }
+.app-intro__grid li + li { margin-top: 6px; }
