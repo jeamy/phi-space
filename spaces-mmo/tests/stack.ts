@@ -95,7 +95,7 @@ export async function startStack(o: { dataDir?: string; worldEnv?: Record<string
 
 /** The world split into its regions (engine/regions.ts): per region a space process and a world worker, an accounts
  *  space, and the address list (SPACES_MMO_REGIONS) every process gets. */
-export async function startRegions(o: { worldEnv?: Record<string, string>; workers?: boolean } = {}) {
+export async function startRegions(o: { worldEnv?: Record<string, string>; workers?: boolean; dataDir?: string } = {}) {
 	const base = `/tmp/mmo-test-${process.pid}-${seq++}`, accounts = `unix:${base}-accounts.sock`;
 	const w = (await import("../worlds/leuchtfeuer/world.ts")).world;
 	const ids = (w.regions ?? []).map((g) => g.regionId);
@@ -103,7 +103,8 @@ export async function startRegions(o: { worldEnv?: Record<string, string>; worke
 	const list = ids.map((id) => `${id}=${addr(id)}`).join(",");
 	const procs: ChildProcess[] = [];
 	procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "accounts", SPACES_MMO_ACCOUNTS_LISTEN: accounts, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
-	for (const id of ids) procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_MEM: "1" }, (l) => l.startsWith("[space] ready")));
+	const store: Record<string, string> = o.dataDir ? { SPACES_MMO_DATA: o.dataDir, SPACES_MMO_MEM: "" } : { SPACES_MMO_MEM: "1" };
+	for (const id of ids) procs.push(await run("server/space-host.ts", { SPACES_MMO_SPACES: "world", SPACES_MMO_LISTEN: addr(id), SPACES_MMO_REGION: id, ...store }, (l) => l.startsWith("[space] ready")));
 	const env = (id: string) => ({ SPACES_MMO_SPACE: addr(id), SPACES_MMO_REGION: id, SPACES_MMO_REGIONS: list, ...o.worldEnv });
 	const workers = async () => { for (const id of ids) procs.push(await run("server/world-host.ts", env(id), (l) => l.startsWith("[world] ready"))); };
 	if (o.workers !== false) await workers();
