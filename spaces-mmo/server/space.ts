@@ -89,7 +89,8 @@ export function bufferedTxn(space: Batching, txn: string, mirror: Mirror | null 
  */
 export class Mirror {
 	readonly #space: SpaceLike;
-	readonly #entries = new Map<string, Taken & { expires?: number }>();
+	/** The copy: every entry by id, and by each of its types (a read with a type walks only those). */
+	#copy = emptyCopy();
 	#rev = -1;
 	/** The space's change stream the copy follows: a restarted space may start another one, with other revisions. */
 	#stream = "";
@@ -97,40 +98,57 @@ export class Mirror {
 	#closed = false;
 	#ready: Promise<void>;
 	readonly #waitMs: number;
-	/** `waitMs`: how long one call for changes waits for a commit. */
-	constructor(space: SpaceLike, o: { waitMs?: number } = {}) {
+	readonly #freshMs: number;
+	/** `waitMs`: how long one call for changes waits for a commit; `freshMs`: how long fresh() waits for the copy. */
+	constructor(space: SpaceLike, o: { waitMs?: number; freshMs?: number } = {}) {
 		this.#space = space;
 		this.#waitMs = o.waitMs ?? 20_000;
+		this.#freshMs = o.freshMs ?? 10_000;
 		this.#ready = new Promise((ok) => void this.#follow(ok));
 	}
 	/** Resolves once the first copy is complete. */
 	ready(): Promise<void> { return this.#ready; }
 	close(): void { this.#closed = true; for (const w of this.#waiting.splice(0)) w.ok(); }
 
-	/** Waits until the copy holds everything the space had committed when this was called. */
+	/** Waits until the copy holds everything the space had committed when this was called; throws when the copy does
+	 *  not get there within `freshMs` (the command then fails and its intent is tried again). */
 	async fresh(): Promise<void> {
 		await this.#ready;
 		const { rev, streamId: stream } = await this.#space.readPage({ type: "-" });
 		if ((this.#stream === stream && this.#rev >= rev) || this.#closed) return;
-		await new Promise<void>((ok) => this.#waiting.push({ rev, stream, ok }));
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const w = { rev, stream, ok: () => {} };
+		try {
+			await new Promise<void>((ok, fail) => {
+				w.ok = ok;
+				this.#waiting.push(w);
+				timer = setTimeout(() => fail(new Error(`the copy of the world is behind (revision ${this.#rev} of ${rev})`)), this.#freshMs);
+			});
+		} finally { clearTimeout(timer); this.#waiting = this.#waiting.filter((x) => x !== w); }
 	}
 
 	readAll(tmpl: Template, limit = Number.MAX_SAFE_INTEGER): Taken[] {
-		const now = Date.now(), out: Array<Taken & { expires?: number }> = [];
-		for (const e of this.#entries.values()) if ((e.expires ?? Infinity) > now && matches(tmpl, e)) out.push(e);
+		const now = Date.now(), out: Entry[] = [];
+		for (const e of this.#candidates(tmpl)) if ((e.expires ?? Infinity) > now && matches(tmpl, e)) out.push(e);
 		// the space lists in the order the entries were written (their ids count up)
 		return out.sort((a, b) => seqOf(a.id) - seqOf(b.id)).slice(0, limit).map(({ expires: _, ...e }) => structuredClone(e));
 	}
 	count(tmpl: Template): number {
 		const now = Date.now();
 		let n = 0;
-		for (const e of this.#entries.values()) if ((e.expires ?? Infinity) > now && matches(tmpl, e)) n++;
+		for (const e of this.#candidates(tmpl)) if ((e.expires ?? Infinity) > now && matches(tmpl, e)) n++;
 		return n;
+	}
+
+	#candidates(tmpl: Template): Iterable<Entry> {
+		if (tmpl?.id != null) { const e = this.#copy.byId.get(tmpl.id); return e ? [e] : []; }
+		return tmpl?.type != null ? (this.#copy.byType.get(tmpl.type)?.values() ?? []) : this.#copy.byId.values();
 	}
 
 	#advance(rev: number): void {
 		this.#rev = rev;
-		this.#waiting = this.#waiting.filter((w) => (w.stream === this.#stream && w.rev <= rev ? (w.ok(), false) : true));
+		// a command that waits for another stream (the space restarted under it) goes on with this copy: it is newer
+		this.#waiting = this.#waiting.filter((w) => ((w.stream === this.#stream ? w.rev <= rev : true) ? (w.ok(), false) : true));
 	}
 
 	async #follow(ready: () => void): Promise<void> {
@@ -138,38 +156,54 @@ export class Mirror {
 		while (!this.#closed) {
 			try {
 				if (rev < 0) {
-					this.#entries.clear();
+					// into a new copy; the old one answers until this one is complete
+					const copy = emptyCopy();
 					const head = await this.#space.readPage({ type: "-" });
-					rev = head.rev; this.#stream = head.streamId;
 					let after: string | null = null;
 					do {
 						const p = await this.#space.readPage(null, { after });
 						// without `gid` (the change stream does not carry it; the game does not use it)
-						for (const { gid: _, ...e } of p.items) this.#entries.set(e.id, e);
+						for (const { gid: _, ...e } of p.items) put(copy, e);
 						after = p.next;
 					} while (after !== null);
+					if (this.#stream) console.error(`[mirror] copied the world again: ${copy.byId.size} entries at revision ${head.rev}`);
+					this.#copy = copy; this.#stream = head.streamId; rev = head.rev;
 					this.#advance(rev);
 					ready();
 				}
 				// RemoteSpace.changes takes the stream and answers `resync` when the space follows another one
 				const follow = this.#space as unknown as { changes(after: number, o: { waitMs: number; streamId: string }): Promise<Awaited<ReturnType<SpaceLike["changes"]>> & { resync?: boolean }> };
 				const ch = await follow.changes(rev, { waitMs: this.#waitMs, streamId: this.#stream });
-				if (ch.resync) { rev = -1; continue; } // another stream (the space restarted): copy everything again
+				if (ch.resync) { console.error("[mirror] the space follows another change stream (restarted)"); rev = -1; continue; }
 				for (const b of ch.batches) for (const op of b.ops) {
-					if (op.op === "del") this.#entries.delete(op.id);
-					else if (!op.transient) this.#entries.set(op.id, { id: op.id, type: op.type, types: op.types, fields: op.fields, owner: op.owner, expires: op.expires });
+					if (op.op === "del") del(this.#copy, op.id);
+					else if (!op.transient) put(this.#copy, { id: op.id, type: op.type, types: op.types, fields: op.fields, owner: op.owner, expires: op.expires });
 				}
 				rev = ch.next;
 				this.#advance(rev);
 			} catch (e) {
 				if (this.#closed) break;
 				// the history moved past the cursor (or the space restarted): copy everything again
-				if (e instanceof SnapshotExpired || e instanceof RevisionAhead) { rev = -1; continue; }
+				if (e instanceof SnapshotExpired || e instanceof RevisionAhead) { console.error(`[mirror] change stream: ${(e as Error).message}; copying the world again`); rev = -1; continue; }
 				console.error("[mirror] change stream:", (e as Error).message);
 				await new Promise((r) => setTimeout(r, 1000));
 			}
 		}
 	}
+}
+type Entry = Taken & { expires?: number };
+type Copy = { byId: Map<string, Entry>; byType: Map<string, Map<string, Entry>> };
+const emptyCopy = (): Copy => ({ byId: new Map(), byType: new Map() });
+function put(c: Copy, e: Entry): void {
+	del(c, e.id);
+	c.byId.set(e.id, e);
+	for (const t of e.types) { let m = c.byType.get(t); if (!m) c.byType.set(t, (m = new Map())); m.set(e.id, e); }
+}
+function del(c: Copy, id: string): void {
+	const e = c.byId.get(id);
+	if (!e) return;
+	c.byId.delete(id);
+	for (const t of e.types) c.byType.get(t)?.delete(id);
 }
 const seqOf = (id: string): number => { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; };
 

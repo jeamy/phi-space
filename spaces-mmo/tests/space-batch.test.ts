@@ -47,7 +47,7 @@ test("the mirror answers a command's snapshot reads as the space would, and fres
 	const { space, close } = connectSpace(sock);
 	try {
 		for (const room of ["a", "b", "a"]) await space.write({ type: "Item", fields: { room } }, null, FOREVER);
-		const m = new Mirror(space, { waitMs: 200 });
+		const m = new Mirror(space, { waitMs: 200, freshMs: 5_000 });
 		await m.ready();
 		const plain = async (tmpl: Template) => (await space.readAll(tmpl)).map(({ gid: _, ...e }) => e); // the mirror keeps no gid
 		assert.deepEqual(m.readAll({ type: "Item", fields: { room: "a" } }), await plain({ type: "Item", fields: { room: "a" } }));
@@ -68,6 +68,18 @@ test("the mirror answers a command's snapshot reads as the space would, and fres
 		await new Promise((r) => setTimeout(r, 400));
 		assert.equal(m.count({ type: "Msg" }), 0, "its lease lapsed");
 		assert.deepEqual(m.readAll({ type: "Item" }), await plain({ type: "Item" }), "the same entries in the same order");
-		m.close();
-	} finally { close(); await server.close(); await stop(); }
+		// the space restarts with another store (another change stream): the copy keeps answering until the new one is
+		// complete, and fresh() waits for it
+		await server.close(); await stop();
+		const host2 = openOwnMemoryHost(), stop2 = await startService(host2, ctx, { watchDebounceMs: 10 });
+		const server2 = await serveSpace(new SpaceService({ host: host2, ctx, identity: new StaticIdentity({ p: { principal: { peerId: "p" }, roles: ["member"] } }), wakeOnCommit: true }), { listen: parseTarget(sock), connection: () => ({ peerId: "p" }) });
+		try {
+			assert.equal(m.count({ type: "Item" }), 4, "the old copy still answers");
+			const other = connectSpace(sock); // a new client: the old one keeps the old space's request generation
+			await other.space.write({ type: "Item", fields: { room: "new" } }, null, FOREVER);
+			other.close();
+			await m.fresh();
+			assert.deepEqual(m.readAll({ type: "Item" }).map((e) => e.fields.room), ["new"], "the new space's entries only");
+		} finally { m.close(); await server2.close(); await stop2(); }
+	} finally { close(); }
 });
