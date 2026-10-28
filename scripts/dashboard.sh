@@ -5,7 +5,8 @@
 # Usage:  scripts/dashboard.sh start|stop|status|logs [extra flags for src/dashboard.ts]
 #         scripts/dashboard.sh start --no-socket        # example: extra flags are passed through
 #
-# Config via environment:
+# Config via environment, or the DASHBOARD_* lines of the repository's .env (set values win):
+#   DASHBOARD_APPS    app spaces to show: id=address[|address…], comma separated (src/dashboard.ts --help)
 #   DASHBOARD_DIR     store directory, holds store.sqlite (default: ~/.local/share/phi-spaces/dashboard-store)
 #   DASHBOARD_SQLITE  store file; set this instead of DASHBOARD_DIR
 #   DASHBOARD_PORT    HTTP port (default 8787)
@@ -13,6 +14,14 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -f "$root/.env" ]]; then
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		[[ "$line" =~ ^[[:space:]]*(DASHBOARD_[A-Z_]+)[[:space:]]*=(.*)$ ]] || continue
+		key="${BASH_REMATCH[1]}"
+		val="$(sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]+|[[:space:]]+$//g; s/^["'"'"']|["'"'"']$//g' <<<"${BASH_REMATCH[2]}")"
+		if [[ -z "${!key+x}" ]]; then export "$key=$val"; fi
+	done <"$root/.env"
+fi
 store="${DASHBOARD_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/phi-spaces/dashboard-store}"
 port="${DASHBOARD_PORT:-8787}"
 bind="${DASHBOARD_BIND:-127.0.0.1}"

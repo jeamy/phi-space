@@ -23,7 +23,9 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
   docs in `docs/testumgebung-big.md`; `scenario sieve-mobile create|run|evaluate|all` is the phone-simulating sieve test. Starting containers or shipping artifacts changes a shared server: ask before the first real run.
 - TUI: `npm run tui` (read-only spaces/objects and test-bed controls); `--dry-run` previews without server access, `--local-dir DIR` inspects local JSONL state. Docs: `docs/tui.md`.
 - Dashboard (read-only live UI): `npm run dashboard -- --dir <store>` in the foreground;
-  `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background. Docs: `docs/dashboard.md`.
+  `npm run dashboard:start|stop|status` (via `scripts/dashboard.sh`) in the background; it also shows the projects'
+  spaces over their sockets (`DASHBOARD_APPS` / `--app`, read from the root `.env`; defaults: unix socket, then the
+  docker:local port, then the tunnel port on big; public on big as spaces-stats.eibrain.org). Docs: `docs/dashboard.md`.
 - Codemode chat (`codemode-chat/`: Next.js; every role its own process around one space, see
   `docs/codemode-space-architektur.md` and its README): `npm --prefix codemode-chat run dev` (space, judge, agents, model, web; port 3700),
   `npm run codemode-chat` (after `npm --prefix codemode-chat run build`), tests `npm run test:codemode-chat` (they start

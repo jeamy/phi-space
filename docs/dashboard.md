@@ -27,7 +27,9 @@ bash scripts/dashboard.sh logs   # Log live verfolgen
 Das Dashboard öffnet den eigenen SQLite-Speicher und hält dessen Besitzersperre, denn es bedient auch den
 Space-Socket. Alte JSONL- oder pi-durable-Bestände im Verzeichnis liest es nicht (Entscheidung D6).
 
-Das Skript konfiguriert sich über Umgebungsvariablen: `DASHBOARD_DIR` (Verzeichnis mit `store.sqlite`, Standard
+Das Skript konfiguriert sich über Umgebungsvariablen oder die `DASHBOARD_*`-Zeilen der `.env` im Repository-Wurzelverzeichnis
+(gesetzte Variablen haben Vorrang; `src/dashboard.ts` liest dieselbe `.env` auch im Vordergrund): `DASHBOARD_APPS`
+(App-Quellen, siehe unten), `DASHBOARD_DIR` (Verzeichnis mit `store.sqlite`, Standard
 `~/.local/share/phi-spaces/dashboard-store`), `DASHBOARD_SQLITE` (Speicherdatei stattdessen), `DASHBOARD_PORT`
 (Standard 8787), `DASHBOARD_BIND` (Standard 127.0.0.1). Weitere Flags nach dem Kommando werden an
 `src/dashboard.ts` durchgereicht, z.B. `bash scripts/dashboard.sh start --no-socket`. PID- und Log-Datei
@@ -49,15 +51,27 @@ Entry-Liste — kein `read`/`take`, also keine Request-Claims und keine Sperren.
 `after + limit + 1` Entries in einem Aufruf und schneidet im Dashboard (Obergrenze 2000), damit im Space der App kein
 Seiten-Snapshot liegen bleibt.
 
-| App | Standardadresse |
-|---|---|
-| Codemode Chat | `unix:/tmp/codemode-space.sock` |
-| spaces-mmo · Welt | `unix:/tmp/spaces-mmo-world.sock` |
-| Help · Swarm-Shard | `unix:/tmp/swarm-b.sock` |
+Jede App hat mehrere Standardadressen, versucht in dieser Reihenfolge (die zuletzt erfolgreiche zuerst): der Unix-Socket
+eines normalen Starts (`npm start`, `dev`), der Loopback-Port, den `docker:local:up` veröffentlicht, und auf big das
+lokale Ende des SSH-Tunnels nach nano, wo die Spaces der Produktion liegen.
+
+| App | normaler Start | `docker:local:up` | big (Tunnel nach nano) |
+|---|---|---|---|
+| Codemode Chat | `unix:/tmp/codemode-space.sock` | `tcp:127.0.0.1:3810` | `tcp:127.0.0.1:3800` |
+| spaces-mmo · Welt | `unix:/tmp/spaces-mmo-world.sock` | `tcp:127.0.0.1:3960` | `tcp:127.0.0.1:3950` |
+| Help · Swarm-Shard | `unix:/tmp/swarm-b.sock` | `tcp:127.0.0.1:3600` | `tcp:127.0.0.1:3600` |
+
+**Öffentlich auf big:** nginx leitet `https://spaces-stats.eibrain.org` (IPv6 `2a0a:4cc0:c0:62f2:8000::1002`, IPv4
+gemeinsam) an `127.0.0.1:8787` weiter, mit Let's-Encrypt-Zertifikat (Webroot `/var/www/acme`, wie spaces-mmo) und Basic
+Auth davor (`/etc/nginx/spaces-stats.htpasswd`, Benutzer `admin`), weil das Dashboard selbst keinen Login hat und alle
+Entries zeigt; `/api/live` ohne Pufferung. Site: `/etc/nginx/sites-available/spaces-stats.eibrain.org`.
 
 Bewusst nicht dabei: der Accounts-Space von spaces-mmo (Zugangsdaten, Sitzungen). Der eigene Space der Hilfeseite liegt im
 Web-Prozess ohne Socket; sichtbar ist von ihr nur der Swarm-Shard (`nano-host.ts`). Läuft eine App nicht, erscheint sie
-als „offline" mit ihrer Adresse. Andere Adressen: `--app chat=tcp:nano:3800 --app welt=unix:/pfad.sock`.
+als „offline" mit ihrer Adresse. Andere Adressen: `--app chat=tcp:nano:3800 --app welt=unix:/pfad.sock`, oder in der `.env`
+`DASHBOARD_APPS=spaces-mmo=tcp:127.0.0.1:3960|unix:/tmp/spaces-mmo-world.sock,codemode-chat=tcp:127.0.0.1:3810`
+(Einträge durch Komma, Alternativen durch `|`; `--app` ersetzt `DASHBOARD_APPS`, beide ersetzen die Standard-Apps; eine
+Standard-ID behält ihren Namen).
 
 Der Daemon öffnet den Store **exklusiv**: kein zweiter Prozess darf denselben Store halten
 (single-owner, siehe [Umstellungsplan](umstellung-ohne-pi-durable.md) 5.2). Ohne `--no-socket` serviert er
@@ -96,7 +110,7 @@ Palettenfarben ab.
 | `GET /api/spaces/{id-oder-alias}` | Detail: Gauges, aktive Transaktionen, wartende Operationen |
 | `GET /api/spaces/{id}/entries?after&limit` | Entries neueste zuerst, Cursor `next` (max 100/Seite, 500 Ceiling) |
 | `GET /api/metrics` | `Meter.snapshot(10)`, Uptime, Socket-Verbindungen |
-| `GET /api/apps` | die App-Quellen: online, Fehler, Alias, `stats`, Verlauf der Entry-Zahl |
+| `GET /api/apps` | die App-Quellen: Adressen, benutzte Adresse, online, Fehler, Alias, `stats`, Verlauf der Entry-Zahl |
 | `GET /api/apps/{id}/entries?after&limit&type` | Entries einer App, älteste zuerst; `after`/`next` sind Positionen (max 200/Seite, bis 2000) |
 | `GET /palettes.js` | die geteilten Paletten ohne Typen |
 | `GET /api/live` | Server-Sent Events |

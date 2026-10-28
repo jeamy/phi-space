@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
-import { startDashboard } from "../src/dashboard.ts";
+import { parseApps, startDashboard } from "../src/dashboard.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
 
@@ -101,12 +101,14 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 	const h = await memory();
 	const dash = await startDashboard({
 		host: h, ctx, port: 0, appPollMs: 50,
-		apps: [{ id: "chat", label: "Chat", address: `unix:${join(dir, "app.sock")}` }, { id: "gone", label: "Gone", address: `unix:${join(dir, "missing.sock")}` }],
+		// the first address of "chat" is not there: the second one answers
+		apps: [{ id: "chat", label: "Chat", addresses: [`unix:${join(dir, "missing.sock")}`, `unix:${join(dir, "app.sock")}`] }, { id: "gone", label: "Gone", addresses: [`unix:${join(dir, "missing.sock")}`] }],
 	});
 	try {
 		const { apps } = await (await fetch(`${dash.url}/api/apps`)).json();
 		const chat = apps.find((a: { id: string }) => a.id === "chat");
 		assert.equal(chat.online, true);
+		assert.equal(chat.address, `unix:${join(dir, "app.sock")}`);
 		assert.equal(chat.alias, "default");
 		assert.equal(chat.stats.entries, 4);
 		assert.deepEqual(chat.stats.byType, { Task: 3, Result: 1 });
@@ -145,4 +147,12 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 		await app.close(ctx);
 		rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+test("dashboard: app specs (DASHBOARD_APPS, --app) take alternatives; a default id keeps its label", () => {
+	assert.deepEqual(parseApps("spaces-mmo=unix:/a.sock|tcp:127.0.0.1:3960, mine=tcp:nano:3800"), [
+		{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/a.sock", "tcp:127.0.0.1:3960"] },
+		{ id: "mine", label: "mine", addresses: ["tcp:nano:3800"] },
+	]);
+	assert.throws(() => parseApps("nothing"), /id=address/);
 });

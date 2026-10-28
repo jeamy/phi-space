@@ -68,7 +68,7 @@ class AppsPanel extends HTMLElement {
 <li class="item${a.id === this.selected ? " selected" : ""}${a.online ? "" : " is-offline"}" data-id="${esc(a.id)}" role="button" tabindex="0">
 	<i class="state ${a.online ? (busy(a.stats) ? "busy" : "on") : "off"}" title="${a.online ? (busy(a.stats) ? "offene Transaktionen oder Waiter" : "online") : esc(`offline: ${a.error ?? "nicht erreichbar"}`)}"></i>
 	<div class="item__body"><div class="name">${esc(a.label)}</div>
-	<div class="meta">${a.online ? `${num(a.stats?.entries)} Entries · ${num(Object.keys(a.stats?.byType ?? {}).length)} Typen · ${bytes(a.stats?.bytes?.total)}` : `offline · ${esc(a.address)}`}</div>
+	<div class="meta">${a.online ? `${num(a.stats?.entries)} Entries · ${num(Object.keys(a.stats?.byType ?? {}).length)} Typen · ${bytes(a.stats?.bytes?.total)}` : `offline · ${esc((a.addresses ?? [a.address]).join(" · "))}`}</div>
 	${a.online ? sparkline(a.history, 200, 22, "var(--bar)", "Entries im Verlauf") : ""}</div>
 </li>`).join("");
 		this.innerHTML = `<div class="panel"><h2>Apps</h2><ul class="list">${items || '<div class="empty">keine App-Quellen konfiguriert</div>'}</ul></div>`;
@@ -130,7 +130,7 @@ class AppDetail extends HTMLElement {
 		const head = `<h2>${esc(a.label)} <span class="muted">· ${esc(a.alias ?? "–")} · ${esc(a.address)}</span>
 <span class="chip ${a.online ? "chip--ok" : "chip--bad"}">${a.online ? "online" : "offline"}</span></h2>`;
 		if (!a.online || !a.stats) {
-			this.innerHTML = `<div class="panel">${head}<div class="empty">Der Space dieser App ist nicht erreichbar${a.error ? `: ${esc(a.error)}` : ""}.<br>Läuft ihr Space-Prozess? Adresse: <code>${esc(a.address)}</code></div></div>`;
+			this.innerHTML = `<div class="panel">${head}<div class="empty">Der Space dieser App ist nicht erreichbar${a.error ? `: ${esc(a.error)}` : ""}.<br>Läuft ihr Space-Prozess? Versucht: ${(a.addresses ?? [a.address]).map((x) => `<code>${esc(x)}</code>`).join(", ")}</div></div>`;
 			return;
 		}
 		const st = a.stats, p = this._page;
