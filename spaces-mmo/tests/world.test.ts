@@ -11,13 +11,13 @@ import { startStack } from "./stack.ts";
 const w = await loadWorld();
 const roomOf = (id: string) => w.rooms.find((r) => r.roomId === id)!;
 
-test("the archipelago: at least ten times the first two rooms, five islands, every room on the overview", () => {
+test("the archipelago: at least ten times the first two rooms, eight islands, every room on the overview", () => {
 	const cells = w.rooms.reduce((s, r) => s + r.ground.length * r.ground[0]!.length, 0);
 	assert.ok(cells >= 10 * 2 * 24 * 16, `${cells} cells`);
-	assert.equal(new Set(w.rooms.map((r) => r.island)).size, 5);
+	assert.equal(new Set(w.rooms.map((r) => r.island)).size, 8);
 	for (const r of w.rooms) assert.ok(r.map && r.island, r.roomId);
 	assert.ok(w.npcs.length >= 15, `${w.npcs.length} NPCs`);
-	assert.equal(w.market.rooms.length, 3);
+	assert.equal(w.market.rooms.length, 6);
 });
 
 test("every room is reached from the start over exits, and every exit leads back", () => {

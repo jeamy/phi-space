@@ -66,6 +66,12 @@ export type WorldDef = {
 	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string }>;
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
 	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
+	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
+	 *  whole world is one space. */
+	regions?: RegionDef[];
+	/** Set on the part of the world one region runs (regionWorld): its id and every room of the whole world. */
+	region?: string;
+	allRooms?: RoomDef[];
 };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
@@ -83,6 +89,8 @@ export type NpcDef = {
 	home?: string[]; market?: string; route?: string[]; prices?: Record<string, [number, number]>; crafts?: string[];
 	carry?: Array<{ proto: string; count: number }>; lines?: string[];
 };
+
+import type { RegionDef } from "./regions.ts";
 
 const WORLD_ID = /^[a-z0-9-]{1,40}$/;
 

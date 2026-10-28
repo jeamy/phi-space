@@ -36,27 +36,53 @@ export async function ensureTokens(space: SpaceLike): Promise<number> {
 	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
 }
 
+/** Rooms (and exits) one transaction of the load writes at most: a whole world in one would outgrow a commit
+ *  (maxCommitBytes, which a frame of the change stream must carry). */
+const ROOMS_PER_TXN = 12;
+
+/** `fn` in a transaction of its own that holds the world lock. */
+async function underLock<T>(space: SpaceLike, txnMs: number, fn: (txn: string) => Promise<T>): Promise<T> {
+	const txn = (await space.createTransaction(txnMs)).id;
+	try {
+		if (!(await space.take(WORLD_LOCK, 20_000, { txn }))) throw new Error("the world lock stayed taken");
+		const v = await fn(txn);
+		await space.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, txn, FOREVER);
+		await space.commit(txn);
+		return v;
+	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
+}
+
 export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?: boolean; txnMs?: number } = {}): Promise<LoadResult> {
-	const txn = (await space.createTransaction(o.txnMs ?? 30_000)).id;
+	const txnMs = o.txnMs ?? 30_000;
+	/** Writes `draft` keyed by `key` in `txn`: when missing, or (replacing) instead of what is there. */
+	const upsert = async (txn: string, replace: boolean, type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => {
+		const old = await peek(space, { type, fields: key }, { txn });
+		if (old && !replace) return;
+		if (old) await space.take({ type, id: old.id }, NO_WAIT, { txn });
+		await space.write(draft, txn, FOREVER);
+	};
+	// whether this load replaces: the marker of the version loaded, which only the last transaction writes (a load cut
+	// off half way is done again in full by the next start)
+	const replace = await underLock(space, txnMs, async (txn) => {
+		const marker = await peek(space, { type: "WorldLoaded", fields: { worldId: w.id } }, { txn });
+		return !!o.replace || (marker ? fieldsOf<WorldLoadedFields>(marker).version : 0) < w.version;
+	});
+	for (let i = 0; i < w.rooms.length; i += ROOMS_PER_TXN) await underLock(space, txnMs, async (txn) => {
+		for (const r of w.rooms.slice(i, i + ROOMS_PER_TXN)) await upsert(txn, replace, "Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: r.ground, ...(r.decor ? { decor: r.decor } : {}), spawn: r.spawn, ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
+	});
+	for (let i = 0; i < w.exits.length; i += ROOMS_PER_TXN * 4) await underLock(space, txnMs, async (txn) => {
+		for (const e of w.exits.slice(i, i + ROOMS_PER_TXN * 4)) {
+			const { room, ...rest } = e;
+			await upsert(txn, replace, "Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, location: room, locks: e.locks ?? "" } satisfies ExitFields));
+		}
+	});
+	const txn = (await space.createTransaction(txnMs)).id;
 	try {
 		if (!(await space.take(WORLD_LOCK, 20_000, { txn }))) throw new Error("the world lock stayed taken");
 		const marker = await peek(space, { type: "WorldLoaded", fields: { worldId: w.id } }, { txn });
-		const have = marker ? fieldsOf<WorldLoadedFields>(marker).version : 0;
-		const replace = !!o.replace || have < w.version;
-		/** Writes `draft` keyed by `key`: when missing, or (replacing) instead of what is there. */
-		const upsert = async (type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => {
-			const old = await peek(space, { type, fields: key }, { txn });
-			if (old && !replace) return;
-			if (old) await space.take({ type, id: old.id }, NO_WAIT, { txn });
-			await space.write(draft, txn, FOREVER);
-		};
-		for (const r of w.rooms) await upsert("Room", { roomId: r.roomId }, draftOf("Room", w.typeclasses, { roomId: r.roomId, name: r.name, desc: r.desc, ground: r.ground, ...(r.decor ? { decor: r.decor } : {}), spawn: r.spawn, ...(r.map ? { map: r.map } : {}), ...(r.island ? { island: r.island } : {}) } satisfies RoomFields));
-		for (const e of w.exits) {
-			const { room, ...rest } = e;
-			await upsert("Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, location: room, locks: e.locks ?? "" } satisfies ExitFields));
-		}
-		for (const p of w.prototypes) await upsert("Prototype", { key: p.key }, { type: "Prototype", fields: p as never });
-		for (const h of w.help) await upsert("HelpEntry", { key: h.key }, { type: "HelpEntry", fields: h as never });
+		const upsertHere = (type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => upsert(txn, replace, type, key, draft);
+		for (const p of w.prototypes) await upsertHere("Prototype", { key: p.key }, { type: "Prototype", fields: p as never });
+		for (const h of w.help) await upsertHere("HelpEntry", { key: h.key }, { type: "HelpEntry", fields: h as never });
 		// placed items, when the definition is (re)loaded: only those that exist nowhere (one held right now, being picked
 		// up, counts as existing). Between reloads an item a player used up stays gone.
 		const spawned: string[] = [];

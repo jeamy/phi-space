@@ -78,11 +78,15 @@ export async function fireTick(space: SpaceLike, w: WorldDef, leaseMs: number): 
 	}
 }
 
-/** Fog tick: each room a beacon covers gets one step clearer while it burns, one step denser while it is out. */
+/** Fog tick: each room a beacon covers gets one step clearer while it burns, one step denser while it is out. A room
+ *  whose fog stays (clear and lit, or at its densest and dark) is not written: a world of many rooms would otherwise
+ *  rewrite all of them every step. */
 export async function fogTick(space: SpaceLike, w: WorldDef, leaseMs: number): Promise<void> {
 	for (const def of w.beacons) {
 		const lit = isLit(await flameOf(space, def.beaconId), await worldNowOf(space));
 		for (const room of def.covers) {
+			const seen = await peek(space, { type: "Fog", fields: { room } });
+			if (seen && fieldsOf<FogFields>(seen).level === (lit ? 0 : w.fog.max)) continue;
 			const txn = (await space.createTransaction(10_000)).id;
 			try {
 				const e = await space.takeIfExists({ type: "Fog", fields: { room } }, NO_WAIT, { txn });

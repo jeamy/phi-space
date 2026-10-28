@@ -1,7 +1,8 @@
-// Leuchtfeuer, the first world on spaces-mmo (docs/spielidee.md): an archipelago in the fog. Five islands of 25 rooms:
+// Leuchtfeuer, the first world on spaces-mmo (docs/spielidee.md): an archipelago in the fog. Eight islands of 37 rooms:
 // the Graue Insel where every character starts (the grey bay and the cliff path are drawn by hand, the other rooms by
 // the seeded generator in islands.ts), Möwenfels in the north, the trading town Kupferhafen in the east, Tangriff with
-// its wrecks and pearls in the south, and Nebelholm in the west, where nobody keeps the fire. Ferries join the islands;
+// its wrecks and pearls in the south, and Nebelholm in the west, where nobody keeps the fire; beyond them the Schären,
+// Rauchholm and Krabbensand, each with a bay where newcomers can start. Ferries join the islands;
 // every island has a beacon, three have a market and an order board, and its people gather, keep fires, craft and
 // trade (server/npc/economy.ts). Graphics: assets/CREDITS.md; items are drawn as glyphs until licensed item graphics
 // exist.
@@ -18,6 +19,9 @@ const ISLANDS: Record<string, { name: string; ferry: string; aliases: string[]; 
 	kupfer: { name: "Kupferhafen", ferry: "kupferhafen", aliases: ["kupfer", "hafen"], flora: { flowers: 0.5, bushes: 0.4, trees: 0.3 } },
 	tang: { name: "Tangriff", ferry: "tangriff", aliases: ["riff", "tang"], flora: { flowers: 0.4, bushes: 0.3, trees: 0 } },
 	nebel: { name: "Nebelholm", ferry: "nebelholm", aliases: ["holm", "nebel"], flora: { flowers: 0.3, bushes: 1, trees: 2 } },
+	schaer: { name: "Schären", ferry: "schären", aliases: ["schaeren", "schaer", "robben"], flora: { flowers: 0.5, bushes: 0.3, trees: 0 } },
+	rauch: { name: "Rauchholm", ferry: "rauchholm", aliases: ["rauch", "koehler", "köhler"], flora: { flowers: 0.3, bushes: 0.8, trees: 1.5 } },
+	krabbe: { name: "Krabbensand", ferry: "krabbensand", aliases: ["krabben", "krabbe", "watt"], flora: { flowers: 0.8, bushes: 0.4, trees: 0.2 } },
 };
 
 type Place = { roomId: string; name: string; island: keyof typeof ISLANDS; at: [number, number]; desc: string; sea?: Side[]; beach?: number; soil?: LandSpec["soil"]; plaza?: LandSpec["plaza"]; ground?: string[]; spawn?: Cell; flora?: Flora };
@@ -97,6 +101,22 @@ const PLACES: Place[] = [
 	{ roomId: "moorwald", name: "Moorwald", island: "nebel", at: [-3, 1], sea: ["n", "w"], flora: { flowers: 0.2, bushes: 1, trees: 3 }, desc: "Krumme Birken im Moor, Flechten wie Bärte. Man hört Schritte, wo keine sind." },
 	{ roomId: "steinkreis", name: "Steinkreis", island: "nebel", at: [-2, 2], sea: ["e", "s"], plaza: { x: 8, y: 5, r: 2 }, desc: "Ein Kreis aus hohen Steinen um eine alte Feuerstelle. Niemand hütet sie; wer sie entzündet, vertreibt den Nebel von ganz Nebelholm." },
 	{ roomId: "verlorener-hain", name: "Verlorener Hain", island: "nebel", at: [-3, 2], sea: ["w", "s"], flora: { flowers: 0.6, bushes: 1, trees: 3 }, desc: "Ein Hain, der auf keiner Karte steht. Zwischen den Wurzeln liegt, was andere verloren haben." },
+	// Schären (north-east, beyond the Alte Warte): every new island group has a bay where newcomers can start, with its
+	// own fire, keeper, market and board
+	{ roomId: "schaerenhafen", name: "Schärenhafen", island: "schaer", at: [6, -2], sea: ["w", "s"], plaza: { x: 9, y: 9, r: 2 }, desc: "Ein kleiner Hafen zwischen glatt geschliffenen Felsen. Ein Feuerring auf dem Platz, ein Marktbrett, und im Westen ein Steg zur Alten Warte." },
+	{ roomId: "robbenbank", name: "Robbenbank", island: "schaer", at: [7, -2], sea: ["e", "s"], beach: 3, desc: "Eine flache Sandbank, auf der Robben dösen. Sie schauen jedem nach, der vorbeigeht." },
+	{ roomId: "leuchtklippe", name: "Leuchtklippe", island: "schaer", at: [6, -3], sea: ["n", "w"], desc: "Ein kahler Fels hoch über dem Wasser. Von hier sieht man die Feuer von Möwenfels." },
+	{ roomId: "seehundstrand", name: "Seehundstrand", island: "schaer", at: [7, -3], sea: ["n", "e"], beach: 3, desc: "Ein Kiesstrand voller Muscheln. Was die Robben übrig lassen, holt die Flut." },
+	// Rauchholm (east, beyond the Speicher of Kupferhafen)
+	{ roomId: "rauchhafen", name: "Rauchhafen", island: "rauch", at: [9, 1], sea: ["n", "w"], plaza: { x: 9, y: 9, r: 2 }, desc: "Ein rußiger Hafen, über dem immer eine Rauchfahne steht. Köhler bringen hier ihr Holz zum Markt; ein Steg im Westen führt nach Kupferhafen." },
+	{ roomId: "koehlerwald", name: "Köhlerwald", island: "rauch", at: [10, 1], sea: ["n", "e"], flora: { flowers: 0.2, bushes: 1, trees: 3 }, desc: "Dichter Wald mit Meilern, die schwelen. Hier ist Holz nicht knapp." },
+	{ roomId: "schwarzer-strand", name: "Schwarzer Strand", island: "rauch", at: [9, 2], sea: ["w", "s"], beach: 3, desc: "Schwarzer Sand, warm unter den Füßen. Zwischen den Steinen glänzt manchmal Bernstein." },
+	{ roomId: "kraterhang", name: "Kraterhang", island: "rauch", at: [10, 2], sea: ["e", "s"], desc: "Ein alter Krater, mit Heidekraut bewachsen. Aus Spalten steigt warme Luft." },
+	// Krabbensand (south, beyond the Perlengrund of Tangriff)
+	{ roomId: "krabbenbucht", name: "Krabbenbucht", island: "krabbe", at: [2, 8], sea: ["n", "e"], plaza: { x: 9, y: 9, r: 2 }, desc: "Eine Bucht mit Pfahlhütten und Krabbenkörben. Auf dem Platz ein Feuerring und ein Marktbrett; im Norden der Kahn zum Perlengrund." },
+	{ roomId: "salzgarten", name: "Salzgarten", island: "krabbe", at: [1, 8], sea: ["n", "w"], soil: ".", flora: { flowers: 1, bushes: 0.3, trees: 0 }, desc: "Flache Becken, in denen das Meerwasser verdunstet. Weiße Krusten, rosa Strandnelken." },
+	{ roomId: "watt", name: "Watt", island: "krabbe", at: [1, 9], sea: ["w", "s"], beach: 4, desc: "Bei Ebbe ein weites, glänzendes Watt. Es knistert, wenn die Krabben graben." },
+	{ roomId: "muschelbank", name: "Muschelbank", island: "krabbe", at: [2, 9], sea: ["e", "s"], beach: 3, desc: "Eine Bank aus Miesmuscheln, schwarz und blau. Manchmal steckt eine Perle darin." },
 ];
 
 /** Ferries (a pier on each side): [room, side of its pier, room, side of its pier]. */
@@ -106,6 +126,9 @@ const FERRIES: Array<[string, Side, string, Side]> = [
 	["anleger", "s", "tang-strand", "n"],
 	["fischerdorf", "w", "nebelholm-ufer", "e"],
 	["hafenviertel", "s", "riffdorf", "e"],
+	["alte-warte", "e", "schaerenhafen", "w"],
+	["speicher", "e", "rauchhafen", "w"],
+	["perlengrund", "s", "krabbenbucht", "n"],
 ];
 
 const STEP: Record<Side, [number, number]> = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] };
@@ -161,6 +184,11 @@ const NPCS: NpcDef[] = [
 		},
 	},
 	{ npcId: "bo", name: "Bo", skin: 0, room: "graue-bucht", x: 20, y: 8, script: "faehrmann", route: ["graue-bucht", "klippenpfad"] },
+	// Ines is a model role (she feeds nothing without the model, and goes home at night): Hinnerk keeps the bay's fire,
+	// so the bay where people start does not lie in the fog when nobody plays (docs/lasttest-2026-10-28.md)
+	{ npcId: "hinnerk", name: "Hinnerk", skin: 2, room: "graue-bucht", x: 7, y: 12, script: "huter", beacon: "feuer-bucht", home: ["graue-bucht", "klippenpfad"],
+		prices: { treibholz: [2, 0], holzbuendel: [5, 0], tran: [6, 0] }, carry: [{ proto: "treibholz", count: 2 }, { proto: "muenze", count: 4 }],
+		lines: ["Hier fangen alle an. Also muss hier Licht sein.", "Ein Scheit für das Feuer, eine Münze für dich."] },
 	{
 		npcId: "fremder", name: "Fremder", skin: 3, room: "klippenpfad", x: 14, y: 10, script: "wanderer",
 		model: { persona: "Ein Fremder, der sich im dichten Nebel verlaufen hat. Er ist müde, misstrauisch und will nur wissen, wo das nächste Licht brennt. Er erzählt bruchstückhaft von einer Insel, die im Nebel verschwunden ist.", wake: ["fog.dense", "spoken"], budgetDay: 20, dozing: ["Der Fremde starrt in den Nebel."] },
@@ -215,12 +243,42 @@ const NPCS: NpcDef[] = [
 	// Nebelholm
 	{ npcId: "eske", name: "Eske", skin: 3, room: "moorwald", ...near("moorwald", 12, 10), script: "plauderer", home: ["moorwald", "verlorener-hain"],
 		lines: ["Der Nebel hat Ohren.", "Im Steinkreis brannte einst ein Feuer, das nie ausging.", "Wer im Verlorenen Hain sucht, findet, was andere verloren haben."] },
+	// Schären
+	{ npcId: "arne", name: "Arne", skin: 0, room: "schaerenhafen", ...near("schaerenhafen", 11, 11), script: "huter", beacon: "feuer-schaeren", home: ["schaerenhafen", "leuchtklippe"],
+		prices: { treibholz: [2, 0], holzbuendel: [5, 0], tran: [6, 0] }, carry: [{ proto: "treibholz", count: 2 }, { proto: "muenze", count: 4 }],
+		lines: ["Zwischen den Schären verliert man sich schnell, wenn das Feuer aus ist.", "Holz kommt hier nur mit der Flut."] },
+	{ npcId: "wiebke", name: "Wiebke", skin: 1, room: "robbenbank", ...near("robbenbank", 10, 6), script: "sammler", home: ["robbenbank", "seehundstrand", "leuchtklippe"], market: "schaerenhafen",
+		prices: { muschel: [0, 2], treibholz: [0, 2], tang: [0, 1] },
+		lines: ["Die Robben wissen, wo die Flut am meisten bringt.", "Auf dem Seehundstrand liegen die schönsten Muscheln."] },
+	{ npcId: "hauke", name: "Hauke", skin: 3, room: "schaerenhafen", ...near("schaerenhafen", 16, 6), script: "haendler", route: ["schaerenhafen"],
+		prices: { treibholz: [2, 3], muschel: [1, 3], tangseil: [3, 5], perle: [4, 7], netz: [8, 11] }, carry: [{ proto: "muenze", count: 10 }],
+		lines: ["Was die Schären hergeben, kaufe ich.", "Nach Möwenfels ist es nur ein Kahn weit."] },
+	// Rauchholm
+	{ npcId: "frida", name: "Frida", skin: 4, room: "rauchhafen", ...near("rauchhafen", 11, 11), script: "huter", beacon: "feuer-rauch", home: ["rauchhafen", "koehlerwald"],
+		prices: { treibholz: [1, 0], holzbuendel: [4, 0], tran: [5, 0] }, carry: [{ proto: "treibholz", count: 3 }, { proto: "muenze", count: 4 }],
+		lines: ["Holz haben wir genug. Hände, die es tragen, nicht.", "Der Rauch hält den Nebel nicht ab, nur das Feuer."] },
+	{ npcId: "okke", name: "Okke", skin: 2, room: "schwarzer-strand", ...near("schwarzer-strand", 12, 6), script: "sammler", home: ["schwarzer-strand", "kraterhang", "koehlerwald"], market: "rauchhafen",
+		prices: { treibholz: [0, 2], bernstein: [0, 4], muschel: [0, 1] },
+		lines: ["Am schwarzen Strand findet man Bernstein, wenn man Geduld hat.", "Im Köhlerwald liegt mehr Holz als irgendwo sonst."] },
+	{ npcId: "bente", name: "Bente", skin: 1, room: "rauchhafen", ...near("rauchhafen", 16, 6), script: "haendler", route: ["rauchhafen"],
+		prices: { treibholz: [1, 2], holzbuendel: [3, 5], bernstein: [3, 6], tran: [4, 6], muschel: [1, 2] }, carry: [{ proto: "muenze", count: 10 }, { proto: "holzbuendel", count: 1 }],
+		lines: ["Holzbündel aus dem Köhlerwald, die besten im Archipel.", "In Kupferhafen zahlen sie für Holz das Doppelte."] },
+	// Krabbensand
+	{ npcId: "thies", name: "Thies", skin: 0, room: "krabbenbucht", ...near("krabbenbucht", 11, 11), script: "huter", beacon: "feuer-krabbe", home: ["krabbenbucht", "salzgarten"],
+		prices: { treibholz: [3, 0], holzbuendel: [6, 0], tran: [7, 0] }, carry: [{ proto: "treibholz", count: 2 }, { proto: "muenze", count: 6 }],
+		lines: ["Ohne Feuer finden die Krabbenkutter nicht heim.", "Holz ist hier so selten wie auf dem Riff."] },
+	{ npcId: "imke", name: "Imke", skin: 4, room: "watt", ...near("watt", 12, 6), script: "sammler", home: ["watt", "muschelbank", "salzgarten"], market: "krabbenbucht",
+		prices: { muschel: [0, 1], perle: [0, 5], tang: [0, 1], treibholz: [0, 3] },
+		lines: ["Bei Ebbe gehört das Watt den Sammlern.", "In der Muschelbank stecken Perlen, aber selten."] },
+	{ npcId: "momme", name: "Momme", skin: 3, room: "krabbenbucht", ...near("krabbenbucht", 16, 6), script: "haendler", route: ["krabbenbucht"],
+		prices: { muschel: [1, 2], perle: [4, 7], tang: [1, 2], tangseil: [3, 5], treibholz: [2, 4] }, carry: [{ proto: "muenze", count: 10 }],
+		lines: ["Krabben gegen Münzen, Muscheln gegen Holz.", "Der Kahn zum Perlengrund fährt, solange das Feuer brennt."] },
 ];
 
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 12,
+	version: 13,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -248,6 +306,14 @@ export const world: WorldDef = {
 	skins: ["Misc_George", "Misc_PixelFox", "Misc_Zetasis", "Misc_jcsnider", "Misc_Kibbelz"].map((n) => ({ sheet: `entities/${n}.png`, frameW: 32, frameH: 48 })),
 	rooms: ROOMS,
 	start: "graue-bucht",
+	// with SPACES_MMO_REGIONS each region is a space of its own (server/engine/regions.ts): only ferries cross between
+	// them, and each has a bay where newcomers start
+	regions: [
+		{ regionId: "west", islands: ["Graue Insel", "Nebelholm"], start: "graue-bucht" },
+		{ regionId: "nord", islands: ["Möwenfels", "Schären"], start: "schaerenhafen" },
+		{ regionId: "ost", islands: ["Kupferhafen", "Tangriff", "Rauchholm"], start: "rauchhafen" },
+		{ regionId: "sued", islands: ["Krabbensand"], start: "krabbenbucht" },
+	],
 	guestName: "Strandläufer",
 	typeclasses: { Driftwood: "Item", Coin: "Item", Shell: "Item", Bundle: "Driftwood", Tool: "Item", Weed: "Item", Gem: "Item", Gear: "Item", Fuel: "Item" },
 	prototypes: [
@@ -281,7 +347,7 @@ export const world: WorldDef = {
 	exits: EXITS,
 	help: [
 		{ key: "intro", category: "Allgemein", text: "Willkommen im Archipel. Sieh dich mit „look“ (schau) um, sprich mit „say“ (sag), geh mit Klicks auf die Karte, den Pfeiltasten oder „go <richtung>“ (geh). Was am Strand liegt, hebst du mit „get <ding>“ (nimm) auf. Alle Befehle gelten auf Englisch und Deutsch. Oben links zeigt die Übersichtskarte alle Inseln." },
-		{ key: "inseln", category: "Welt", text: "Fünf Inseln liegen im Nebel: die Graue Insel (hier beginnt jeder), Möwenfels im Norden, die Handelsstadt Kupferhafen im Osten, Tangriff mit Wrack und Perlen im Süden und Nebelholm im Westen, wo niemand das Feuer hütet. Fähren (Kähne) verbinden sie: am Klippenkopf nach Möwenfels und Kupferhafen, am Anleger nach Tangriff, im Fischerdorf nach Nebelholm, im Hafenviertel nach Tangriff. Ist der Nebel zu dicht, fährt kein Kahn – brennende Feuer halten die Wege offen." },
+		{ key: "inseln", category: "Welt", text: "Acht Inseln liegen im Nebel: die Graue Insel, Möwenfels im Norden und dahinter die Schären, die Handelsstadt Kupferhafen im Osten und dahinter Rauchholm mit seinem Köhlerwald, Tangriff mit Wrack und Perlen im Süden und dahinter Krabbensand mit dem Watt, und Nebelholm im Westen, wo niemand das Feuer hütet. Fähren (Kähne) verbinden sie: am Klippenkopf nach Möwenfels und Kupferhafen, am Anleger nach Tangriff, im Fischerdorf nach Nebelholm, im Hafenviertel nach Tangriff, an der Alten Warte zu den Schären, am Speicher nach Rauchholm, am Perlengrund nach Krabbensand. Ist der Nebel zu dicht, fährt kein Kahn – brennende Feuer halten die Wege offen." },
 		{ key: "leuchtfeuer", category: "Welt", text: "Wo ein Leuchtfeuer brennt, ist der Nebel licht. Jede Insel hat eines; das erste steht im Kopfsteinring der Grauen Bucht. Treibholz ins Feuer legen (put treibholz in feuer, oder: lege holz ins feuer) hält es am Brennen; jedes Scheit gibt zehn Minuten, ein Holzbündel vierzig, ein Fass Tran eine Stunde (Tran gibt es bei Marta auf dem Markt von Kupferhafen). Ohne Feuer steigt der Nebel, bis er die Wege verschluckt; nur den Weg zum Feuer der eigenen Insel findet man immer. Die Hüterinnen und Hüter zahlen für Holz. „ruf“ zeigt, was du beigetragen hast; „kanal hafen <text>“ hören alle." },
 		{ key: "handel", category: "Welt", text: "Tauschen: offer <dinge> an <person> [für <dinge>] (z. B. offer treibholz an Jorin für münze); die andere Seite nimmt mit accept an oder lehnt mit decline ab. Auch die Leute der Inseln tauschen: sprich sie an, sie sagen dir, was sie kaufen und verkaufen, und manche bieten dir von selbst etwas an. Märkte stehen an der Grauen Bucht, in Kupferhafen und im Riffdorf: markt zeigt die Angebote, markt biete <ding> für <n>, markt kaufe <nr>, markt zurück <nr>; die Preise sind auf jeder Insel andere. Handwerk: craft zeigt die Rezepte, craft <rezept> stellt her. Aufträge hängen an denselben Orten: auftrag, auftrag nimm <nr>, auftrag liefere. Gäste können nicht tauschen oder handeln." },
 		{ key: "sturmflut", category: "Welt", text: "Ab und zu wirft eine Sturmflut viel Strandgut auf einen Strand, manchmal Bernstein und Perlen. Der Hafenkanal meldet, wo; wer schnell ist, findet am meisten." },
@@ -294,6 +360,9 @@ export const world: WorldDef = {
 		{ beaconId: "feuer-kai", name: "Hafenfeuer", aliases: FIRE_ALIASES, room: "kupferhafen-markt", x: 9, y: 6, covers: ["kupferhafen-markt", "kupferhafen-kai", "werft", "speicher", "hafenviertel"] },
 		{ beaconId: "feuer-riff", name: "Rifffeuer", aliases: FIRE_ALIASES, room: "riffdorf", x: plazaOf("riffdorf").x, y: plazaOf("riffdorf").y, covers: ["riffdorf", "tang-strand", "wrackbucht", "perlengrund"] },
 		{ beaconId: "feuer-steinkreis", name: "Feuer im Steinkreis", aliases: FIRE_ALIASES, room: "steinkreis", x: plazaOf("steinkreis").x, y: plazaOf("steinkreis").y, covers: ["steinkreis", "nebelholm-ufer", "moorwald", "verlorener-hain"] },
+		{ beaconId: "feuer-schaeren", name: "Schärenfeuer", aliases: FIRE_ALIASES, room: "schaerenhafen", x: plazaOf("schaerenhafen").x, y: plazaOf("schaerenhafen").y, covers: ["schaerenhafen", "robbenbank", "leuchtklippe", "seehundstrand"] },
+		{ beaconId: "feuer-rauch", name: "Feuer von Rauchhafen", aliases: FIRE_ALIASES, room: "rauchhafen", x: plazaOf("rauchhafen").x, y: plazaOf("rauchhafen").y, covers: ["rauchhafen", "koehlerwald", "schwarzer-strand", "kraterhang"] },
+		{ beaconId: "feuer-krabbe", name: "Feuer der Krabbenbucht", aliases: FIRE_ALIASES, room: "krabbenbucht", x: plazaOf("krabbenbucht").x, y: plazaOf("krabbenbucht").y, covers: ["krabbenbucht", "salzgarten", "watt", "muschelbank"] },
 	],
 	fire: { fuel: { treibholz: 10 * 60_000, holzbuendel: 40 * 60_000, tran: 60 * 60_000 }, maxMs: 2 * 3600_000 },
 	fog: { max: 3, start: 2, stepMs: 2 * 60_000 },
@@ -314,18 +383,26 @@ export const world: WorldDef = {
 			{ room: "perlengrund", tile: ".", max: 2, protos: [{ proto: "muschel", weight: 5 }, { proto: "perle", weight: 1 }] },
 			{ room: "nebelholm-ufer", tile: ".", max: 2 },
 			{ room: "verlorener-hain", tile: ".", max: 1, protos: [{ proto: "treibholz", weight: 3 }, { proto: "bernstein", weight: 1 }] },
+			{ room: "schaerenhafen", tile: ".", max: 3 },
+			{ room: "robbenbank", tile: ".", max: 3, protos: [{ proto: "treibholz", weight: 2 }, { proto: "muschel", weight: 2 }] },
+			{ room: "seehundstrand", tile: ".", max: 3, protos: [{ proto: "muschel", weight: 3 }, { proto: "treibholz", weight: 2 }, { proto: "tang", weight: 1 }] },
+			{ room: "rauchhafen", tile: ".", max: 3 },
+			{ room: "schwarzer-strand", tile: ".", max: 3, protos: [{ proto: "treibholz", weight: 4 }, { proto: "bernstein", weight: 1 }] },
+			{ room: "krabbenbucht", tile: ".", max: 3 },
+			{ room: "watt", tile: ".", max: 3, protos: [{ proto: "muschel", weight: 3 }, { proto: "tang", weight: 2 }, { proto: "treibholz", weight: 2 }] },
+			{ room: "muschelbank", tile: ".", max: 2, protos: [{ proto: "muschel", weight: 5 }, { proto: "perle", weight: 1 }] },
 		],
 		protos: [{ proto: "treibholz", weight: 3 }, { proto: "muschel", weight: 1 }],
 	},
 	storm: {
 		everyMs: 20 * 60_000, count: 6, channel: "hafen",
-		rooms: ["wrackbucht", "tang-strand", "moewenfels-strand", "salzwiesen", "nebelholm-ufer", "fischerdorf", "perlengrund"],
+		rooms: ["wrackbucht", "tang-strand", "moewenfels-strand", "salzwiesen", "nebelholm-ufer", "fischerdorf", "perlengrund", "seehundstrand", "schwarzer-strand", "watt"],
 		protos: [{ proto: "treibholz", weight: 5 }, { proto: "tang", weight: 3 }, { proto: "muschel", weight: 3 }, { proto: "bernstein", weight: 1 }, { proto: "perle", weight: 1 }, { proto: "tran", weight: 1 }],
 	},
 	channels: ["hafen"],
 	npcs: NPCS,
 	currency: "muenze",
-	market: { rooms: ["graue-bucht", "kupferhafen-markt", "riffdorf"], listMs: 24 * 3600_000 },
+	market: { rooms: ["graue-bucht", "kupferhafen-markt", "riffdorf", "schaerenhafen", "rauchhafen", "krabbenbucht"], listMs: 24 * 3600_000 },
 	recipes: [
 		{ key: "muschelmesser", name: "Muschelmesser", needs: [{ proto: "muschel", count: 2 }, { proto: "treibholz", count: 1 }], makes: "muschelmesser" },
 		{ key: "holzbuendel", name: "Holzbündel", needs: [{ proto: "treibholz", count: 3 }], tool: "muschelmesser", makes: "holzbuendel" },
@@ -334,7 +411,7 @@ export const world: WorldDef = {
 		{ key: "kette", name: "Bernsteinkette", needs: [{ proto: "bernstein", count: 1 }, { proto: "muschel", count: 2 }, { proto: "tangseil", count: 1 }], tool: "muschelmesser", makes: "kette" },
 	],
 	orders: {
-		rooms: ["graue-bucht", "kupferhafen-markt", "riffdorf"], max: 3, everyMs: 5 * 60_000, leaseMs: 30 * 60_000,
+		rooms: ["graue-bucht", "kupferhafen-markt", "riffdorf", "schaerenhafen", "rauchhafen", "krabbenbucht"], max: 3, everyMs: 5 * 60_000, leaseMs: 30 * 60_000,
 		kinds: [
 			{ key: "holz", text: "Ines braucht 2 Treibholz für die Nacht.", needs: [{ proto: "treibholz", count: 2 }], reward: { proto: "muenze", count: 1 }, rooms: ["graue-bucht"] },
 			{ key: "muscheln", text: "Bo sammelt Muscheln für Netzgewichte: 2 Stück.", needs: [{ proto: "muschel", count: 2 }], reward: { proto: "muenze", count: 1 }, rooms: ["graue-bucht"] },
@@ -347,6 +424,12 @@ export const world: WorldDef = {
 			{ key: "riffholz", text: "Holz für das Rifffeuer: 2 Treibholz.", needs: [{ proto: "treibholz", count: 2 }], reward: { proto: "muenze", count: 3 }, rooms: ["riffdorf"] },
 			{ key: "warte", text: "Für die Alte Warte: ein Fass Tran, das die ganze Nacht brennt.", needs: [{ proto: "tran", count: 1 }], reward: { proto: "muenze", count: 8 }, rooms: ["kupferhafen-markt"] },
 			{ key: "bernstein", text: "Ein Sammler sucht Bernstein.", needs: [{ proto: "bernstein", count: 1 }], reward: { proto: "muenze", count: 5 }, rooms: ["riffdorf"] },
+			{ key: "schaerenholz", text: "Arne braucht 2 Treibholz für das Schärenfeuer.", needs: [{ proto: "treibholz", count: 2 }], reward: { proto: "muenze", count: 2 }, rooms: ["schaerenhafen"] },
+			{ key: "schaerenmuscheln", text: "Für die Netzgewichte der Robbenfänger: 3 Muscheln.", needs: [{ proto: "muschel", count: 3 }], reward: { proto: "muenze", count: 2 }, rooms: ["schaerenhafen"] },
+			{ key: "rauchbuendel", text: "Kupferhafen bestellt 2 Holzbündel aus dem Köhlerwald.", needs: [{ proto: "holzbuendel", count: 2 }], reward: { proto: "muenze", count: 5 }, rooms: ["rauchhafen"] },
+			{ key: "rauchbernstein", text: "Ein Händler aus Kupferhafen sucht Bernstein vom Schwarzen Strand.", needs: [{ proto: "bernstein", count: 1 }], reward: { proto: "muenze", count: 5 }, rooms: ["rauchhafen"] },
+			{ key: "krabbenholz", text: "Holz für das Feuer der Krabbenbucht: 2 Treibholz.", needs: [{ proto: "treibholz", count: 2 }], reward: { proto: "muenze", count: 3 }, rooms: ["krabbenbucht"] },
+			{ key: "krabbenseil", text: "Momme braucht ein Tangseil für die Krabbenkörbe.", needs: [{ proto: "tangseil", count: 1 }], reward: { proto: "muenze", count: 4 }, rooms: ["krabbenbucht"] },
 		],
 	},
 	dig: {

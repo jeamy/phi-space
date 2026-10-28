@@ -21,7 +21,7 @@ Unterschied.
 
 ## Der Archipel
 
-25 Räume zu je 24 × 16 Zellen (9 600 Zellen, gut das Zwölffache der ersten beiden Räume) auf fünf Inseln:
+37 Räume zu je 24 × 16 Zellen (14 208 Zellen) auf acht Inseln (bis Weltversion 12 waren es 25 Räume auf fünf):
 
 | Insel | Räume | Besonderes |
 | --- | --- | --- |
@@ -30,6 +30,9 @@ Unterschied.
 | Kupferhafen | Kai, Markt, Werft, Speicher, Hafenviertel | der größte Markt; Holz ist knapp, Perlen und Netze bringen viel |
 | Tangriff | Tangstrand, Riffdorf, Wrackbucht, Perlengrund | Tang, Bernstein, Perlen; Markt und Tafel im Riffdorf |
 | Nebelholm | Ufer, Moorwald, Steinkreis, Verlorener Hain | niemand hütet das Feuer; wer es entzündet, lichtet die ganze Insel |
+| Schären | Schärenhafen, Robbenbank, Leuchtklippe, Seehundstrand | hinter der Alten Warte; Startbucht mit Feuer, Markt und Tafel; Muscheln |
+| Rauchholm | Rauchhafen, Köhlerwald, Schwarzer Strand, Kraterhang | hinter dem Speicher von Kupferhafen; Startbucht; Holz ist hier reichlich, Bernstein am schwarzen Strand |
+| Krabbensand | Krabbenbucht, Salzgarten, Watt, Muschelbank | hinter dem Perlengrund; Startbucht; Watt und Muschelbank mit Perlen |
 
 - **Gelände aus einem Generator** (`worlds/leuchtfeuer/islands.ts`): Meer an den Seiten, die ein Raum nennt, Strand,
   Gras oder Dünensand, ein Pflasterplatz, Pflasterwege von jeder Tür zur Mitte (ein Weg ins Meer ist ein Steg).
@@ -51,6 +54,12 @@ Unterschied.
   Messer → Bernsteinkette. Perle und Bernstein sind Funde.
 - **Märkte und Tafeln** an der Grauen Bucht, in Kupferhafen und im Riffdorf; jedes Brett hat seine eigenen Angebote
   und Aufträge (Aufträge gelten je Ort, `kinds[].rooms`). Den eigenen Auftrag liefert man an jeder Tafel ab.
+
+**Weltversion 13 (2026-10-28):** drei neue Inselgruppen, jede mit einer Bucht, in der Neue beginnen können, mit Feuer,
+Hüter (Arne, Frida, Thies), Sammlerin und Sammler (Wiebke, Okke, Imke), Händler (Hauke, Bente, Momme), Markt und Tafel. Die Graue
+Bucht bekommt einen Skript-Hüter (Hinnerk): Ines ist eine Modellrolle und legt ohne Modell nichts nach; beim Lasttest
+lag die Startbucht deshalb im Nebel ([lasttest-2026-10-28.md](lasttest-2026-10-28.md)). Der Loader schreibt Räume und
+Ausgänge in Transaktionen zu je zwölf Räumen: eine ganze Welt in einer überschritt `maxCommitBytes`.
 
 ## Die Bewohner
 
