@@ -6,6 +6,8 @@
 //   SPACES_MMO_ACCOUNTS_LISTEN=unix:/tmp/spaces-mmo-accounts.sock (default) or tcp:127.0.0.1:3901
 //   SPACES_MMO_DATA=…/.local                                      directory of world.sqlite and accounts.sqlite
 //   SPACES_MMO_MEM=1                                              in memory, throwaway (tests)
+//   SPACES_MMO_SPACES=world,accounts                              which of the two this process serves (default both):
+//                                                                 on two hosts, one each (docs/betrieb.md)
 import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -48,26 +50,35 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	return { local, async close() { await server.close(); await stopService(); await harness.close(ctx); } };
 }
 
-export async function startSpaceHost(o: { listen?: string; accountsListen?: string; dataDir?: string | null } = {}) {
+export async function startSpaceHost(o: { listen?: string; accountsListen?: string; dataDir?: string | null; spaces?: readonly ("world" | "accounts")[] } = {}) {
 	if (o.dataDir) await mkdir(o.dataDir, { recursive: true });
 	const listen = o.listen ?? DEFAULT_SPACE, accountsListen = o.accountsListen ?? DEFAULT_ACCOUNTS;
-	const world = await serveStore(listen, o.dataDir ? join(o.dataDir, "world.sqlite") : null, "peer-mmo-world");
-	const accounts = await serveStore(accountsListen, o.dataDir ? join(o.dataDir, "accounts.sqlite") : null, "peer-mmo-web");
+	const serves = o.spaces ?? ["world", "accounts"];
+	const world = serves.includes("world") ? await serveStore(listen, o.dataDir ? join(o.dataDir, "world.sqlite") : null, "peer-mmo-world") : null;
+	const accounts = serves.includes("accounts") ? await serveStore(accountsListen, o.dataDir ? join(o.dataDir, "accounts.sqlite") : null, "peer-mmo-web") : null;
 	// the lock every registration takes while it claims a name; written once, when the store is new
-	if (!(await accounts.local.count({ type: NAMES_LOCK.type }))) await accounts.local.write({ type: NAMES_LOCK.type, fields: { ...NAMES_LOCK.fields } }, null, FOREVER);
+	if (accounts && !(await accounts.local.count({ type: NAMES_LOCK.type }))) await accounts.local.write({ type: NAMES_LOCK.type, fields: { ...NAMES_LOCK.fields } }, null, FOREVER);
 	// and the lock a world worker takes while it loads the world definition
-	if (!(await world.local.count(WORLD_LOCK))) await world.local.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER);
-	if (!(await world.local.count(NPC_LOCK))) await world.local.write({ type: NPC_LOCK.type, fields: { ...NPC_LOCK.fields } }, null, FOREVER);
-	const proc = announce(world.local, "space");
-	return { listen, accountsListen, async close() { await proc.stop(); await world.close(); await accounts.close(); } };
+	if (world && !(await world.local.count(WORLD_LOCK))) await world.local.write({ type: WORLD_LOCK.type, fields: { ...WORLD_LOCK.fields } }, null, FOREVER);
+	if (world && !(await world.local.count(NPC_LOCK))) await world.local.write({ type: NPC_LOCK.type, fields: { ...NPC_LOCK.fields } }, null, FOREVER);
+	// the system bar lists the processes of the world space: one that serves only the accounts is not in it
+	const proc = world ? announce(world.local, "space") : null;
+	return { listen: world ? listen : null, accountsListen: accounts ? accountsListen : null, async close() { await proc?.stop(); await world?.close(); await accounts?.close(); } };
+}
+
+/** SPACES_MMO_SPACES: the spaces this process serves (world, accounts; default both). */
+export function servedSpaces(v = process.env.SPACES_MMO_SPACES): ("world" | "accounts")[] {
+	const list = (v || "world,accounts").split(",").map((x) => x.trim()).filter(Boolean);
+	if (!list.length || list.some((x) => x !== "world" && x !== "accounts")) throw new Error(`SPACES_MMO_SPACES is world, accounts or both, not ${v}`);
+	return list as ("world" | "accounts")[];
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const mem = process.env.SPACES_MMO_MEM === "1";
 	const dataDir = mem ? null : process.env.SPACES_MMO_DATA || join(ROOT, ".local");
-	const host = await startSpaceHost({ listen: process.env.SPACES_MMO_LISTEN || DEFAULT_SPACE, accountsListen: process.env.SPACES_MMO_ACCOUNTS_LISTEN || DEFAULT_ACCOUNTS, dataDir });
+	const host = await startSpaceHost({ listen: process.env.SPACES_MMO_LISTEN || DEFAULT_SPACE, accountsListen: process.env.SPACES_MMO_ACCOUNTS_LISTEN || DEFAULT_ACCOUNTS, dataDir, spaces: servedSpaces() });
 	// the starter and the tests wait for this line
-	console.log(`[space] ready: world on ${host.listen}, accounts on ${host.accountsListen} (${dataDir ?? "memory"})`);
+	console.log(`[space] ready: world on ${host.listen ?? "-"}, accounts on ${host.accountsListen ?? "-"} (${dataDir ?? "memory"})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await host.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());

@@ -1,0 +1,17 @@
+# User unit for big (~/.config/systemd/user/mmo-accounts-tunnel.service): with two spaces on two hosts the world space runs on
+# big and the accounts space on nano (docs/betrieb.md, "Zwei Spaces auf zwei Rechnern"); the web process on big reaches the
+# accounts through this tunnel on big's loopback, port 3951.
+#
+#   cp spaces-mmo/deploy/mmo-accounts-tunnel.service ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now mmo-accounts-tunnel
+[Unit]
+Description=SSH tunnel to the spaces-mmo accounts space on nano (127.0.0.1:3951 -> nano)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ssh -N -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o BatchMode=yes -L 127.0.0.1:3951:127.0.0.1:3951 nano
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

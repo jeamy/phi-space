@@ -125,6 +125,22 @@ Prozesse fragen das beim Verbinden ab und schreiben dann wie vorher (der Rückwe
 Zurück: `docker:single:down` auf big, `systemctl --user enable --now mmo-nano-tunnel`, auf nano `docker:nano:up`,
 auf big `docker:big:up`.
 
+### Zwei Spaces auf zwei Rechnern (Stand seit 2026-10-28)
+
+Die Testumgebung soll beide Rechner nutzen, und der Welt-Space braucht den schnellen Kern. Deshalb dient jeder Rechner
+einen der beiden Spaces (`SPACES_MMO_SPACES` des Space-Prozesses):
+
+| Rechner | Prozesse | `.env` |
+| --- | --- | --- |
+| big | Welt-Space und der Welt-Worker, der die Befehle ausführt (Profil `nano`), web, world-big (Termine, Aufräumen), npc, model (Profil `big`): `docker:single:up` | `SPACES_MMO_SPACES=world`, `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_ACCOUNTS_PORT=3971` (der unbenutzte Konten-Port des Containers, 3951 gehört dem Tunnel), `NANO_HOST_NAME=big` |
+| nano | Konten-Space (Zugangsdaten, Web-Sitzungen): `docker:accounts:up` | `SPACES_MMO_SPACES=accounts` |
+
+Das Web auf big erreicht den Konten-Space über die Benutzer-Unit `mmo-accounts-tunnel` (`deploy/`, nur Port 3951). Jeder
+Befehl bleibt neben dem Welt-Space; über das Netz gehen Anmeldung, Registrierung und das Prüfen einer Web-Sitzung.
+
+Der Wechsel von „alles auf big“ dazu: auf big `docker:single:down`, den Konten-Store von big nach nano kopieren (er ist
+der neuere), auf nano `docker:accounts:up`, auf big die Tunnel-Unit einschalten und `docker:single:up`.
+
 Das Image wird auf dem Rechner selbst gebaut (`docker build --network host`: auf dem rootless Docker von nano erreicht ein
 Build im Standardnetz die npm-Registry nicht). Der Speicher bleibt beim Neustart der Container im Volume erhalten.
 
