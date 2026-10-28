@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
+import { createSpace, PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
 import { parseApps, startDashboard } from "../src/dashboard.ts";
 import { ctx } from "./support/persistent.ts";
@@ -98,11 +98,15 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 	const local = new PhiSpaces(app, ctx);
 	for (let n = 0; n < 3; n++) await local.write({ type: "Task", fields: { n } });
 	await local.write({ type: "Result", fields: { ok: true } });
+	// a named space on the same service (like the help system's "social-swarm" shard)
+	await app.commit((tx) => createSpace(tx, "posts", Date.now()), ctx);
+	await new PhiSpaces(app, ctx, Date.now, undefined, undefined, { space: "posts" }).write({ type: "Post", fields: { text: "hi" } });
 	const h = await memory();
 	const dash = await startDashboard({
 		host: h, ctx, port: 0, appPollMs: 50,
 		// the first address of "chat" is not there: the second one answers
-		apps: [{ id: "chat", label: "Chat", addresses: [`unix:${join(dir, "missing.sock")}`, `unix:${join(dir, "app.sock")}`] }, { id: "gone", label: "Gone", addresses: [`unix:${join(dir, "missing.sock")}`] }],
+		apps: [{ id: "chat", label: "Chat", addresses: [`unix:${join(dir, "missing.sock")}`, `unix:${join(dir, "app.sock")}`] }, { id: "gone", label: "Gone", addresses: [`unix:${join(dir, "missing.sock")}`] },
+			{ id: "posts", label: "Posts", addresses: [`unix:${join(dir, "app.sock")}`], space: "posts" }],
 	});
 	try {
 		const { apps } = await (await fetch(`${dash.url}/api/apps`)).json();
@@ -112,6 +116,9 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 		assert.equal(chat.alias, "default");
 		assert.equal(chat.stats.entries, 4);
 		assert.deepEqual(chat.stats.byType, { Task: 3, Result: 1 });
+		const posts = apps.find((a: { id: string }) => a.id === "posts");
+		assert.equal(posts.alias, "posts");
+		assert.deepEqual(posts.stats.byType, { Post: 1 });
 		const gone = apps.find((a: { id: string }) => a.id === "gone");
 		assert.equal(gone.online, false);
 		assert.ok(gone.error);
@@ -150,9 +157,10 @@ test("dashboard: an app's space over its socket shows stats and entry pages; a m
 });
 
 test("dashboard: app specs (DASHBOARD_APPS, --app) take alternatives; a default id keeps its label", () => {
-	assert.deepEqual(parseApps("spaces-mmo=unix:/a.sock|tcp:127.0.0.1:3960, mine=tcp:nano:3800"), [
+	assert.deepEqual(parseApps("spaces-mmo=unix:/a.sock|tcp:127.0.0.1:3960, mine@posts=tcp:nano:3800, help-swarm=tcp:127.0.0.1:3600"), [
 		{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/a.sock", "tcp:127.0.0.1:3960"] },
-		{ id: "mine", label: "mine", addresses: ["tcp:nano:3800"] },
+		{ id: "mine", label: "mine", addresses: ["tcp:nano:3800"], space: "posts" },
+		{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["tcp:127.0.0.1:3600"], space: "social-swarm" },
 	]);
-	assert.throws(() => parseApps("nothing"), /id=address/);
+	assert.throws(() => parseApps("nothing"), /id\[@space\]=address/);
 });

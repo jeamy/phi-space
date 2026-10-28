@@ -35,8 +35,9 @@ import * as core from "./core.ts";
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png" };
 
 /** A space served by another process. `addresses` (`unix:/path` or `tcp:host:port`, parseTarget) are tried in order
- *  until one answers; the one that answered is tried first next time. */
-export type AppSource = { id: string; label: string; addresses: string[] };
+ *  until one answers; the one that answered is tried first next time. `space` names a space of that service by id or
+ *  alias (omitted: its default space). */
+export type AppSource = { id: string; label: string; addresses: string[]; space?: string };
 
 /** The default addresses of the projects' space processes: the unix socket of a plain start (`npm start`, `dev`), the
  *  port `docker:local:up` publishes on loopback, then the loopback end of the tunnel to nano on big (docs/dashboard.md). The spaces-mmo accounts space (credentials, sessions) is left out on
@@ -44,17 +45,21 @@ export type AppSource = { id: string; label: string; addresses: string[] };
 export const DEFAULT_APPS: AppSource[] = [
 	{ id: "codemode-chat", label: "Codemode Chat", addresses: ["unix:/tmp/codemode-space.sock", "tcp:127.0.0.1:3810", "tcp:127.0.0.1:3800"] },
 	{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/tmp/spaces-mmo-world.sock", "tcp:127.0.0.1:3960", "tcp:127.0.0.1:3950"] },
-	{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["unix:/tmp/swarm-b.sock", "tcp:127.0.0.1:3600"] },
+	// the shard keeps its posts in the named space "social-swarm" (help-site SWARM_ALIAS), its default space stays empty
+	{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["unix:/tmp/swarm-b.sock", "tcp:127.0.0.1:3600"], space: "social-swarm" },
 ];
 
-/** `id=address[|address…]` entries, comma separated (DASHBOARD_APPS, `--app`); a default id keeps its label. */
+/** `id[@space]=address[|address…]` entries, comma separated (DASHBOARD_APPS, `--app`); a default id keeps its label,
+ *  and its space unless one is given. */
 export function parseApps(spec: string): AppSource[] {
 	return spec.split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
-		const m = /^([^=\s]+)=(.+)$/.exec(part);
-		if (!m) throw new Error(`an app is id=address[|address…], not ${part}`);
-		const addresses = m[2]!.split("|").map((a) => a.trim()).filter(Boolean);
+		const m = /^([^=@\s]+)(?:@([^=\s]+))?=(.+)$/.exec(part);
+		if (!m) throw new Error(`an app is id[@space]=address[|address…], not ${part}`);
+		const addresses = m[3]!.split("|").map((a) => a.trim()).filter(Boolean);
 		if (!addresses.length) throw new Error(`app ${m[1]} has no address`);
-		return { id: m[1]!, label: DEFAULT_APPS.find((d) => d.id === m[1])?.label ?? m[1]!, addresses };
+		const known = DEFAULT_APPS.find((d) => d.id === m[1]);
+		const space = m[2] ?? known?.space;
+		return { id: m[1]!, label: known?.label ?? m[1]!, addresses, ...(space ? { space } : {}) };
 	});
 }
 
@@ -188,7 +193,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	// ---- app sources: one connection per app, one `stats` call per poll; a failed call drops the connection
 	const apps = new Map<string, AppState & { conn: ReturnType<typeof connectSpace> | null }>();
 	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], checkedAt: 0, conn: null });
-	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, history: a.history, checkedAt: a.checkedAt });
+	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, history: a.history, checkedAt: a.checkedAt });
 	const appList = (): AppState[] => [...apps.values()].map(appView);
 	const connectApp = async (a: AppState & { conn: ReturnType<typeof connectSpace> | null }) => {
 		if (!a.conn) {
@@ -196,7 +201,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 			const order = [a.address, ...a.addresses.filter((x) => x !== a.address)];
 			const errors: string[] = [];
 			for (const address of order) {
-				const conn = connectSpace(address, { callTimeoutMs: 5_000, connectTimeoutMs: 1_000, attempts: 1 });
+				const conn = connectSpace(address, { callTimeoutMs: 5_000, connectTimeoutMs: 1_000, attempts: 1, ...(a.space ? { space: a.space } : {}) });
 				try {
 					const hello = await conn.space.info();
 					a.conn = conn;
@@ -361,10 +366,11 @@ const usage = `phi-spaces dashboard (read-only Phase 1)
   --bind <addr>     bind address (default 127.0.0.1; loopback only by design)
   --socket <path>   unix socket for the space service (default: <store>/space.sock)
   --no-socket       do not serve the space service; the dashboard then shows a quiet store
-  --app id=address[|address…]
+  --app id[@space]=address[|address…]
                     show the space of another process (repeatable; replaces the defaults and DASHBOARD_APPS);
                     the defaults: codemode-chat, spaces-mmo world, help swarm shard, each on its unix socket,
-                    else the loopback port of docker:local, else the tunnel port on big
+                    else the loopback port of docker:local, else the tunnel port on big; @space picks a named
+                    space of that service (default: its default space; help-swarm: social-swarm)
   --no-apps         show no app spaces
 
 Environment (also read from the repository's .env; set values win): DASHBOARD_APPS (as --app, comma separated),

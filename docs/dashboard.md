@@ -110,7 +110,12 @@ Web-Prozess ohne Socket; sichtbar ist von ihr nur der Swarm-Shard (`nano-host.ts
 als „offline" mit ihrer Adresse. Andere Adressen: `--app chat=tcp:nano:3800 --app welt=unix:/pfad.sock`, oder in der `.env`
 `DASHBOARD_APPS=spaces-mmo=tcp:127.0.0.1:3960|unix:/tmp/spaces-mmo-world.sock,codemode-chat=tcp:127.0.0.1:3810`
 (Einträge durch Komma, Alternativen durch `|`; `--app` ersetzt `DASHBOARD_APPS`, beide ersetzen die Standard-Apps; eine
-Standard-ID behält ihren Namen).
+Standard-ID behält ihren Namen und ihren Space).
+
+**Benannte Spaces.** Ohne Angabe fragt das Dashboard den Default-Space des Dienstes ab. Liegen die Daten in einem
+benannten Space, kommt er mit `@` an die ID: `id@space=adresse`. Der Swarm-Shard der Hilfeseite hält seine Posts im Space
+`social-swarm` (`SWARM_ALIAS`, angelegt in `help-site/server/nano-host.ts`), sein Default-Space bleibt leer; die
+Standard-App `help-swarm` fragt deshalb `social-swarm` ab, auch wenn sie in `DASHBOARD_APPS` ohne `@` steht.
 
 Der Daemon öffnet den Store **exklusiv**: kein zweiter Prozess darf denselben Store halten
 (single-owner, siehe [Umstellungsplan](umstellung-ohne-pi-durable.md) 5.2). Ohne `--no-socket` serviert er
