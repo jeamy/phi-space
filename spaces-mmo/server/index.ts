@@ -52,11 +52,11 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 	return undefined;
 };
 
-export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; accountOptions?: AccountOptions; build?: string | null } = {}) {
+export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; accountOptions?: AccountOptions; build?: string | null; regions?: string } = {}) {
 	const w = await loadWorld();
 	// the world's space, or with SPACES_MMO_REGIONS one per region (engine/regions.ts): the first region holds the
 	// settings, the model's entries and the system bar; the settings are written to every region
-	const regions = RegionSpaces.connect(w, o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
+	const regions = RegionSpaces.connect(w, o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE), o.regions);
 	const world = { space: regions.homeSpace, close: () => regions.close() };
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
 	const accounts = new Accounts(regions, store.space, w, o.accountOptions);

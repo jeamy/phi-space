@@ -20,10 +20,10 @@ export class RegionSpaces {
 		this.home = [...spaces.keys()][0]!;
 	}
 
-	/** Clients of every region SPACES_MMO_REGIONS names, or of the one space `whole`. */
-	static connect(w: WorldDef, whole: string): RegionSpaces {
+	/** Clients of every region SPACES_MMO_REGIONS (or `raw`) names, or of the one space `whole`. */
+	static connect(w: WorldDef, whole: string, raw?: string): RegionSpaces {
 		const spaces = new Map<string, SpaceLike>(), closers: Array<() => void> = [];
-		for (const [id, address] of regionAddresses(w, whole)) { const c = connectSpace(address); spaces.set(id, c.space); closers.push(c.close); }
+		for (const [id, address] of regionAddresses(w, whole, raw)) { const c = connectSpace(address); spaces.set(id, c.space); closers.push(c.close); }
 		return new RegionSpaces(w, spaces, closers);
 	}
 
