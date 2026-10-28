@@ -2,7 +2,9 @@
 // listSpaces/snapshotSpace/core.stats and the process meter — no mutation endpoint exists.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PhiSpaces } from "../src/index.ts";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
 import { startDashboard } from "../src/dashboard.ts";
 import { ctx } from "./support/persistent.ts";
@@ -85,5 +87,62 @@ test("dashboard: SSE says hello, then pushes space and metrics events after a co
 		await pump;
 		await dash.close();
 		await h.close(ctx);
+	}
+});
+
+test("dashboard: an app's space over its socket shows stats and entry pages; a missing socket is an offline app", async () => {
+	const dir = mkdtempSync("/tmp/phi-dash-");
+	const app = await memory();
+	const identity = new StaticIdentity({ "peer-app": { principal: { peerId: "peer-app" }, roles: ["member"] } });
+	const server = await serveSpace(new SpaceService({ host: app, ctx, identity }), { listen: { path: join(dir, "app.sock") }, connection: () => ({ peerId: "peer-app" }) });
+	const local = new PhiSpaces(app, ctx);
+	for (let n = 0; n < 3; n++) await local.write({ type: "Task", fields: { n } });
+	await local.write({ type: "Result", fields: { ok: true } });
+	const h = await memory();
+	const dash = await startDashboard({
+		host: h, ctx, port: 0, appPollMs: 50,
+		apps: [{ id: "chat", label: "Chat", address: `unix:${join(dir, "app.sock")}` }, { id: "gone", label: "Gone", address: `unix:${join(dir, "missing.sock")}` }],
+	});
+	try {
+		const { apps } = await (await fetch(`${dash.url}/api/apps`)).json();
+		const chat = apps.find((a: { id: string }) => a.id === "chat");
+		assert.equal(chat.online, true);
+		assert.equal(chat.alias, "default");
+		assert.equal(chat.stats.entries, 4);
+		assert.deepEqual(chat.stats.byType, { Task: 3, Result: 1 });
+		const gone = apps.find((a: { id: string }) => a.id === "gone");
+		assert.equal(gone.online, false);
+		assert.ok(gone.error);
+
+		const all = await (await fetch(`${dash.url}/api/apps/chat/entries?limit=2`)).json();
+		assert.equal(all.entries.length, 2);
+		assert.equal(all.next, 2);
+		const rest = await (await fetch(`${dash.url}/api/apps/chat/entries?limit=2&after=2`)).json();
+		assert.deepEqual(rest.entries.map((e: { type: string }) => e.type), ["Task", "Result"]);
+		assert.equal(rest.next, null);
+		const results = await (await fetch(`${dash.url}/api/apps/chat/entries?type=Result`)).json();
+		assert.deepEqual(results.entries.map((e: { type: string }) => e.type), ["Result"]);
+		assert.equal((await fetch(`${dash.url}/api/apps/nope/entries`)).status, 404);
+
+		// a later write shows up with the next poll
+		await local.write({ type: "Task", fields: { n: 3 } });
+		let entries = 0;
+		for (let i = 0; i < 100 && entries !== 5; i++) {
+			await new Promise((r) => setTimeout(r, 20));
+			entries = (await (await fetch(`${dash.url}/api/apps`)).json()).apps.find((a: { id: string }) => a.id === "chat").stats.entries;
+		}
+		assert.equal(entries, 5);
+
+		const js = await fetch(`${dash.url}/palettes.js`);
+		assert.match(js.headers.get("content-type")!, /javascript/);
+		const text = await js.text();
+		assert.match(text, /export const PALETTES/);
+		assert.doesNotMatch(text, /interface PaletteModeColors/);
+	} finally {
+		await dash.close();
+		await server.close();
+		await h.close(ctx);
+		await app.close(ctx);
+		rmSync(dir, { recursive: true, force: true });
 	}
 });

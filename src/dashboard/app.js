@@ -1,14 +1,37 @@
-// Bootstrap: a tiny store (plain object + property pushes into the components), one EventSource for
-// /api/live, and the server-push handlers. Reconnect is EventSource's own; after a reconnect the server
-// sends `hello` again, which re-baselines everything — no replay needed.
+// Bootstrap: one EventSource for /api/live, the server-push handlers, the selection (an app or a space of the own
+// store) and the theme. Reconnect is EventSource's own; after a reconnect the server sends `hello` again, which
+// re-baselines everything — no replay needed.
 import "./components.js";
+import { applyThemeToDocument, PALETTES } from "./palettes.js";
 
 const $ = (s) => document.querySelector(s);
-const spaces = $("#spaces"), detail = $("#detail"), metricsEl = $("#metrics"), conn = $("#conn"), connLabel = $("#conn-label");
+const appsEl = $("#apps"), spaces = $("#spaces"), appDetail = $("#app-detail"), detail = $("#detail"), compare = $("#compare"),
+	metricsEl = $("#metrics"), conn = $("#conn"), connLabel = $("#conn-label");
 
+// ---- theme: mode and palette like the projects (same palettes, same controls), remembered in this browser
+const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage may be blocked */ } };
+let mode = read("dashboard.mode") ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+if (mode !== "dark" && mode !== "light") mode = "dark";
+let palette = read("dashboard.palette");
+if (!PALETTES.some((p) => p.id === palette)) palette = PALETTES[0].id;
+const paletteSelect = $("#palette");
+paletteSelect.innerHTML = PALETTES.map((p) => `<option value="${p.id}">${p.label.de}</option>`).join("");
+const applyTheme = () => {
+	applyThemeToDocument(mode, palette);
+	paletteSelect.value = palette;
+	document.querySelectorAll(".mode-switch button").forEach((b) => b.classList.toggle("is-active", b.dataset.mode === mode));
+};
+document.querySelectorAll(".mode-switch button").forEach((b) => { b.onclick = () => { mode = b.dataset.mode; write("dashboard.mode", mode); applyTheme(); }; });
+paletteSelect.onchange = () => { palette = paletteSelect.value; write("dashboard.palette", palette); applyTheme(); };
+applyTheme();
+
+// ---- live data
 const HISTORY_MAX = 60;
 const history = {};
 let rev = 0;
+let apps = [];
+let selection = null; // { kind: "app" | "space", id }
 
 const setConn = (state, label) => { conn.className = `conn ${state}`; if (label) connLabel.textContent = label; };
 
@@ -27,19 +50,39 @@ const remember = (m) => {
 	metricsEl.history = history;
 };
 
-const select = (id) => {
-	spaces.selected = id;
-	detail.spaceId = id;
+const select = (kind, id) => {
+	selection = id ? { kind, id } : null;
+	appsEl.selected = kind === "app" ? id : null;
+	spaces.selected = kind === "space" ? id : null;
+	appsEl.render(); spaces.render();
+	appDetail.hidden = kind !== "app";
+	detail.hidden = kind !== "space";
+	if (kind === "app") appDetail.app = apps.find((a) => a.id === id) ?? null;
+	else detail.spaceId = id;
+};
+
+const showApps = () => {
+	appsEl.apps = apps;
+	compare.apps = apps;
+	if (selection?.kind === "app") appDetail.app = apps.find((a) => a.id === selection.id) ?? null;
 };
 
 const onMessage = (msg) => {
 	if (msg.type === "hello" || msg.type === "spaces") {
 		spaces.spaces = msg.spaces ?? [];
-		if (!spaces.selected || !msg.spaces?.some((s) => s.spaceId === spaces.selected)) select(msg.spaces?.[0]?.spaceId ?? null);
-		else spaces.render();
+		if (msg.apps) { apps = msg.apps; showApps(); }
+		if (!selection) {
+			// first view: the first app that is online, else the first space of the own store
+			const app = apps.find((a) => a.online);
+			if (app) select("app", app.id); else select("space", msg.spaces?.[0]?.spaceId ?? null);
+		} else if (selection.kind === "space" && !msg.spaces?.some((s) => s.spaceId === selection.id)) select("space", msg.spaces?.[0]?.spaceId ?? null);
 	} else if (msg.type === "space") {
 		spaces.spaces = (spaces.spaces ?? []).map((s) => (s.spaceId === msg.spaceId ? { ...s, stats: msg.stats } : s));
-		if (msg.spaceId === spaces.selected) { rev++; detail.rev = rev; }
+		if (selection?.kind === "space" && msg.spaceId === selection.id) { rev++; detail.rev = rev; }
+	} else if (msg.type === "apps") {
+		const changed = new Map(msg.apps.map((a) => [a.id, a]));
+		apps = apps.map((a) => changed.get(a.id) ?? a);
+		showApps();
 	} else if (msg.type === "metrics") {
 		metricsEl.metrics = msg;
 		remember(msg);
@@ -55,12 +98,5 @@ es.onmessage = (e) => { try { onMessage(JSON.parse(e.data)); } catch { /* ignore
 // initial metrics (SSE pushes the next ones every few seconds)
 fetch("/api/metrics").then((r) => r.json()).then((m) => { metricsEl.metrics = m; remember(m); active(); }).catch(() => {});
 
-spaces.addEventListener("select", (e) => select(e.detail));
-
-// theme: stored choice wins, else the system preference
-const root = document.documentElement;
-root.dataset.theme = localStorage.getItem("dashboard-theme") ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
-$("#theme").onclick = () => {
-	root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
-	localStorage.setItem("dashboard-theme", root.dataset.theme);
-};
+appsEl.addEventListener("select-app", (e) => select("app", e.detail));
+spaces.addEventListener("select", (e) => select("space", e.detail));
