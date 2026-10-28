@@ -9,7 +9,7 @@ import { useTheme } from "./lib/theme.ts";
 import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
-import { appendLine } from "./log.ts";
+import { appendLine, isComing } from "./log.ts";
 import { screenToGrid, WALK_MS, Walker } from "./walk.ts";
 import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
@@ -300,6 +300,9 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [more, setMore] = useState(false);
 	const [stale, setStale] = useState(false);
 	// Text, established 2D or optional 3D: remembered per browser. The old text-only preference migrates forward.
+	// coming and going in the log ("… geht nach ost.", "… kommt an."): hidden unless asked for, remembered in the browser
+	const [comings, setComingsState] = useState(() => { try { return localStorage.getItem("mmo.comings") === "1"; } catch { return false; } });
+	const setComings = (on: boolean) => { setComingsState(on); try { localStorage.setItem("mmo.comings", on ? "1" : "0"); } catch { /* private window */ } };
 	const [mapMode, setMapModeState] = useState<MapMode>(() => {
 		try { const saved = localStorage.getItem("mmo.renderer"); return saved === "text" || saved === "2d" || saved === "3d" ? saved : localStorage.getItem("mmo.textOnly") === "1" ? "text" : "2d"; }
 		catch { return "2d"; }
@@ -609,8 +612,9 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 							{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
 						</div>
 					)}
+					<label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>
 					<div className="log" role="log" aria-live="polite">
-						{log.map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
+						{(comings ? log : log.filter((l) => !isComing(l))).map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
 						<div ref={logEnd} />
 					</div>
 					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>

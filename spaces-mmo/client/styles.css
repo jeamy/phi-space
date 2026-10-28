@@ -105,6 +105,7 @@ a { color: var(--accent); }
 .map { background: var(--map-bg); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; }
 .map canvas { width: 100%; height: auto; max-height: 100%; object-fit: contain; image-rendering: pixelated; display: block; touch-action: none; }
 .side { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-height: 0; }
+.log-filter { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted, inherit); align-self: flex-end; cursor: pointer; }
 .log { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; overflow-y: auto; font: 13px/1.45 var(--font-mono); white-space: pre-wrap; min-height: 160px; }
 .log .say { color: var(--text-strong); }
 .log .error { color: var(--danger); }

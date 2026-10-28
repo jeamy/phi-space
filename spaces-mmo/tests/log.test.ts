@@ -27,3 +27,9 @@ test("the log keeps the last lines", () => {
 	assert.equal(log.length, LOG_LINES);
 	assert.equal(log.at(-1)!.text, `z${LOG_LINES + 19}`);
 });
+
+test("coming and going is told apart from the rest of the log", async () => {
+	const { isComing } = await import("../client/log.ts");
+	for (const t of ["Strandläufer-5535 geht nach ost.", "Strandläufer-3559 kommt an.", "Kai kommt mit dem Kahn an.", "Du gehst nach möwenfels.", "Du kommst an."]) assert.ok(isComing(line("info", t)), t);
+	for (const t of ["Die Flut spült Treibholz an.", "Bo: ich geht nach ost.", "Kai legt Treibholz ins Feuer."]) assert.ok(!isComing(line(t.startsWith("Bo") ? "say" : "info", t)), t);
+});
