@@ -27,6 +27,7 @@ umgesetzt; siehe [phasen.md](phasen.md).
 | [betrieb.md](betrieb.md) | Docker: Image, Profile nano/big, lokaler Testaufbau, Produktion auf big und nano |
 | [lasttest-2026-10-28.md](lasttest-2026-10-28.md) | Lasttest mit 100 Figuren auf big und nano: Antwortzeiten, Engpass, Vorschläge |
 | [welt-aufteilen.md](welt-aufteilen.md) | Entwurf: die Welt in Regionen-Spaces aufteilen, damit das Spiel mehrere Kerne nutzt |
+| [siedeln.md](siedeln.md) | Entwurf: Siedeln und Bauen (Hütten, Gärten, Werkstätten, Kirchen, Kaufhäuser, Straßen, Inselbahn), gemeinsame Aufbausimulation statt Civilization oder Age of Empires |
 | [automaten.md](automaten.md) | Phase 6: Spielerprogramme, Beispielautomaten, kleines Hilfesystem |
 | [phasen.md](phasen.md) | Umsetzung in Phasen mit Abnahmekriterien |
 
