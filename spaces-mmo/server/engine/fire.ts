@@ -54,7 +54,8 @@ export async function feed(c: CommandCtx, item: { e: Taken; f: ItemFields }, bea
 
 /** A message from the world itself to everyone in `rooms`. */
 async function say(space: SpaceLike, leaseMs: number, rooms: string[], kind: "world" | "info", text: string, txn: string | null = null): Promise<void> {
-	for (const room of rooms) await space.write({ type: "Msg", fields: { room, to: "*", kind, text, from: "", at: Date.now() } as never }, txn, leaseMs, msgOptions({ to: "*", kind }));
+	const o = await msgOptions(space, { to: "*", kind });
+	for (const room of rooms) await space.write({ type: "Msg", fields: { room, to: "*", kind, text, from: "", at: Date.now() } as never }, txn, leaseMs, o);
 }
 
 /** Fire tick: a beacon whose flame lapsed (or came back) is marked so, and its rooms hear it. Only a change takes the

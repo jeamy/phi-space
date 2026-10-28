@@ -114,12 +114,14 @@ cd /home/mux/spaces && npm --prefix spaces-mmo run docker:nano:down
 # big: Tunnel aus (er belegt 3950/3951), Dateien herüber, alles starten
 systemctl --user disable --now mmo-nano-tunnel
 docker volume create phi-spaces-mmo_mmo-space-data
-ssh nano "tar -C /home/mux/.local/share/docker/volumes/phi-spaces-mmo_mmo-space-data/_data --exclude='*.owner*' -cf - ." \
+ssh nano "tar -C /home/mux/.local/share/docker/volumes/phi-spaces-mmo_mmo-space-data/_data --exclude='*.owner*' --exclude='*-shm' -cf - ." \
   | docker run --rm -i -v phi-spaces-mmo_mmo-space-data:/data phi-spaces-mmo:prod tar -xf - -C /data
 npm --prefix spaces-mmo run docker:single:up
 ```
 
-Kopiert werden die Stores mit ihrem WAL, ohne die Besitzer-Sperren (`*.owner*`, sie gehören dem angehaltenen Prozess).
+Kopiert werden die Stores mit ihrem WAL, ohne die Besitzer-Sperren (`*.owner*`, sie gehören dem angehaltenen Prozess)
+und ohne `-shm`. Ein Space einer älteren phi-spaces-Version bietet `batch` und transientes Schreiben nicht an; die
+Prozesse fragen das beim Verbinden ab und schreiben dann wie vorher (der Rückweg auf nano mit altem Stand geht also).
 Zurück: `docker:single:down` auf big, `systemctl --user enable --now mmo-nano-tunnel`, auf nano `docker:nano:up`,
 auf big `docker:big:up`.
 

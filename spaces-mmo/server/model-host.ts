@@ -57,7 +57,7 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space, halt = new AbortController();
 	const msgLeaseMs = envMs("SPACES_MMO_MSG_LEASE_MS", 2 * 60_000);
-	const say = (t: TranslateFields, text: string, txn: string) => space.write({ type: "Msg", fields: { room: t.room, to: t.charId, kind: "error", text, from: "", at: Date.now() } as never }, txn, msgLeaseMs, msgOptions({ to: t.charId, kind: "error" }));
+	const say = async (t: TranslateFields, text: string, txn: string) => space.write({ type: "Msg", fields: { room: t.room, to: t.charId, kind: "error", text, from: "", at: Date.now() } as never }, txn, msgLeaseMs, await msgOptions(space, { to: t.charId, kind: "error" }));
 
 	const step = async (): Promise<boolean> => {
 		const [next] = await space.readAll({ type: "Translate" }, { limit: 1 });

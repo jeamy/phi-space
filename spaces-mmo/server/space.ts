@@ -18,10 +18,23 @@ export function connectSpace(spec: string, o: { callTimeoutMs?: number } = {}): 
 	return { space: process.env.SPACES_MMO_TRACE ? traced(space) : space, close };
 }
 
+/** Whether the space's server offers `feature` (its hello, asked once per connection by RemoteSpace); a space without
+ *  a hello (a local one) offers none of the newer ones. A space of an older phi-spaces refuses a batch or a transient
+ *  write, so they are used only where offered (a rollback to an older space keeps working). */
+export async function supports(space: SpaceLike, feature: string): Promise<boolean> {
+	const info = (space as { info?: () => Promise<{ features: string[] }> }).info;
+	if (typeof info !== "function") return false;
+	try { return (await info.call(space)).features.includes(feature); } catch { return false; }
+}
+
 /** A space that takes several steps in one call (RemoteSpace.batch); SPACES_MMO_BATCH=0 turns the use off. */
 export type Batching = SpaceLike & { batch(ops: readonly BatchOp[]): Promise<BatchResult[]> };
-export const batching = (space: SpaceLike): space is Batching =>
-	process.env.SPACES_MMO_BATCH !== "0" && typeof (space as Partial<Batching>).batch === "function";
+export async function batching(space: SpaceLike): Promise<Batching | null> {
+	if (process.env.SPACES_MMO_BATCH === "0" || typeof (space as Partial<Batching>).batch !== "function") return null;
+	return (await supports(space, "batch")) ? (space as Batching) : null;
+}
+/** The most steps the service takes in one batch (service.ts). */
+const MAX_STEPS = 64;
 
 /**
  * The space as one command's transaction `txn` sees it. Its plain writes under `txn` (no `unique`: a taken cell must be
@@ -32,14 +45,18 @@ export const batching = (space: SpaceLike): space is Batching =>
  */
 export function bufferedTxn(space: Batching, txn: string): { space: SpaceLike; commit(more?: BatchOp[]): Promise<void> } {
 	const waiting: BatchOp[] = [];
-	const flush = async () => { if (waiting.length) await space.batch(waiting.splice(0)); };
+	const flush = async () => { while (waiting.length) await space.batch(waiting.splice(0, MAX_STEPS)); };
 	const plainRead = (prop: string | symbol, args: unknown[]) =>
-		(prop === "readAll" && !(args[1] as { txn?: unknown } | undefined)?.txn) || (prop === "count" && (args[1] ?? null) === null);
+		prop === "info" || (prop === "readAll" && !(args[1] as { txn?: unknown } | undefined)?.txn) || (prop === "count" && (args[1] ?? null) === null);
 	const view = new Proxy(space, {
 		get(target, prop, receiver) {
 			const v = Reflect.get(target, prop, receiver);
 			if (prop === "write") return async (entry: never, t: string | null = null, lease: number = ANY, o: { unique?: string[]; request?: unknown; transient?: boolean } = {}) => {
-				if (t === txn && !o.unique && !o.request) { waiting.push({ op: "write", entry, txn, lease, ...(o.transient ? { transient: true } : {}) }); return { id: "", expires: lease }; }
+				if (t === txn && !o.unique && !o.request) {
+					if (waiting.length >= MAX_STEPS) await flush(); // a command that writes a lot sends them in full batches
+					waiting.push({ op: "write", entry, txn, lease, ...(o.transient ? { transient: true } : {}) });
+					return { id: "", expires: lease };
+				}
 				await flush();
 				return target.write(entry, t, lease, o as never);
 			};
@@ -47,7 +64,14 @@ export function bufferedTxn(space: Batching, txn: string): { space: SpaceLike; c
 			return async (...args: unknown[]) => { if (!plainRead(prop, args)) await flush(); return v.apply(target, args); };
 		},
 	});
-	return { space: view, async commit(more = []) { await space.batch([...waiting.splice(0), ...more, { op: "commit", txn }]); } };
+	return {
+		space: view,
+		async commit(more = []) {
+			const last = [...waiting.splice(0), ...more, { op: "commit" as const, txn }];
+			while (last.length > MAX_STEPS) await space.batch(last.splice(0, MAX_STEPS)); // the commit goes in the last one
+			await space.batch(last);
+		},
+	};
 }
 
 /** SPACES_MMO_TRACE=1: every ten seconds this process logs how many calls it made to the space, per method and the

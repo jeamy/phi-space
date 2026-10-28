@@ -69,16 +69,19 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 
 	/** A new transaction holding the character's token and its oldest intent (claim): with batching one call and one
 	 *  commit for the three steps; the intent is null when either is missing (the transaction is then only aborted). */
+	// Batching needs a space that offers it (an older one refuses): asked once. With batching the intent is taken even
+	// when the token is held elsewhere; the abort then puts it back at once.
+	const batch = await batching(space);
 	const begin = async (charId: string): Promise<{ txn: string; intent: IntentFields | null }> => {
-		if (!batching(space)) { const txn = (await space.createTransaction(TXN_MS)).id; return { txn, intent: await claim(txn, charId) }; }
-		const [t, token, intent] = (await space.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }, { op: "take", template: { type: "Intent", fields: { charId } }, txn: "$" }])) as [{ id: string }, { entry: Taken | null }, { entry: Taken | null }];
+		if (!batch) { const txn = (await space.createTransaction(TXN_MS)).id; return { txn, intent: await claim(txn, charId) }; }
+		const [t, token, intent] = (await batch.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }, { op: "take", template: { type: "Intent", fields: { charId } }, txn: "$" }])) as [{ id: string }, { entry: Taken | null }, { entry: Taken | null }];
 		return { txn: t.id, intent: token.entry && intent.entry ? fieldsOf<IntentFields>(intent.entry) : null };
 	};
 	/** The space for the rest of a command under `txn`, and how it ends: with batching its writes go with the commit (the
 	 *  character's token written back last) in one call. */
 	const finishing = (txn: string, charId: string): { space: SpaceLike; commit(): Promise<void> } => {
-		if (!batching(space)) return { space, async commit() { await space.write(actorToken(charId), txn, FOREVER); await space.commit(txn); } };
-		const b = bufferedTxn(space, txn);
+		if (!batch) return { space, async commit() { await space.write(actorToken(charId), txn, FOREVER); await space.commit(txn); } };
+		const b = bufferedTxn(batch, txn);
 		return { space: b.space, commit: () => b.commit([{ op: "write", entry: actorToken(charId), txn, lease: FOREVER }]) };
 	};
 
