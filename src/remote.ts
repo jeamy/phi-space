@@ -424,6 +424,8 @@ export class RemoteSpace implements SpaceLike {
 		await this.info();
 		return (await this.send({ method: "stats" })) as unknown as { stats: core.SpaceStats; rev: number; streamId: string };
 	}
+	/** The spaces of the service (alias, id, creation); a viewer finds the ones created at runtime with it. */
+	async spaces(): Promise<{ spaceId: string; alias: string; createdAt: number }[]> { return await this.send({ method: "spaces" }) as unknown as { spaceId: string; alias: string; createdAt: number }[]; }
 	async createTransaction(lease: number = core.ANY, o: Req = {}): Promise<Lease> { return (await this.mutate("txn", { action: "begin", leaseMs: leaseArg(lease) }, o)) as unknown as Lease; }
 	async commit(txn: string, o: Req = {}): Promise<void> { await this.mutate("txn", { action: "commit", id: txn }, o); }
 	async abort(txn: string, o: Req = {}): Promise<void> { await this.mutate("txn", { action: "abort", id: txn }, o); }

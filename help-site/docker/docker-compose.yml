@@ -39,6 +39,8 @@ services:
       HELP_PORT: "${PORT:-3500}"
       HELP_SQLITE: /data/spaces-eibrain.sqlite
       SWARM_HOST_NAME: "${SWARM_HOST_NAME:-}"
+      # the store's figures for the dashboard (stats and the list of spaces, no entries); loopback only, never proxied
+      HELP_SPACE_LISTEN: "${HELP_SPACE_LISTEN:-tcp:127.0.0.1:3520}"
       SWARM_MAX_ENTRIES: "${SWARM_MAX_ENTRIES:-20000}"
       PHI_SPACES_ADMIN_PASSWORD: ${PHI_SPACES_ADMIN_PASSWORD:?Set a private admin password in .env}
     network_mode: host

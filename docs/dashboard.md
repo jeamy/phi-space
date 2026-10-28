@@ -99,14 +99,18 @@ lokale Ende des SSH-Tunnels nach nano, wo die Spaces der Produktion liegen.
 | Codemode Chat | `unix:/tmp/codemode-space.sock` | `tcp:127.0.0.1:3810` | `tcp:127.0.0.1:3800` |
 | spaces-mmo · Welt | `unix:/tmp/spaces-mmo-world.sock` | `tcp:127.0.0.1:3960` | `tcp:127.0.0.1:3950` |
 | Help · Swarm-Shard | `unix:/tmp/swarm-b.sock` | `tcp:127.0.0.1:3600` | `tcp:127.0.0.1:3600` |
+| Help · Hub (`@*`) | `unix:/tmp/help-space.sock` | – | `tcp:127.0.0.1:3520` (der Hub selbst, kein Tunnel) |
 
 **Öffentlich auf big:** nginx leitet `https://spaces-stats.eibrain.org` (IPv6 `2a0a:4cc0:c0:62f2:8000::1002`, IPv4
 gemeinsam) an `127.0.0.1:8787` weiter, mit Let's-Encrypt-Zertifikat (Webroot `/var/www/acme`, wie spaces-mmo) und Basic
 Auth davor (`/etc/nginx/spaces-stats.htpasswd`, Benutzer `admin`), weil das Dashboard selbst keinen Login hat und alle
 Entries zeigt; `/api/live` ohne Pufferung. Site: `/etc/nginx/sites-available/spaces-stats.eibrain.org`.
 
-Bewusst nicht dabei: der Accounts-Space von spaces-mmo (Zugangsdaten, Sitzungen). Der eigene Space der Hilfeseite liegt im
-Web-Prozess ohne Socket; sichtbar ist von ihr nur der Swarm-Shard (`nano-host.ts`). Läuft eine App nicht, erscheint sie
+Bewusst nicht dabei: der Accounts-Space von spaces-mmo (Zugangsdaten, Sitzungen). Der Store der Hilfeseite liegt im
+Web-Prozess; mit `HELP_SPACE_LISTEN` (in der Produktion `tcp:127.0.0.1:3520`, Loopback, nie hinter nginx) serviert er
+nur Kennzahlen: seine Rolle darf `hello`, `stats` und `spaces`, kein `readAll`. Er hält den Space `control`
+(`PeerKey`, `Enroll`) und die Nachrichten der Chat-Sessions, deshalb zeigt das Dashboard dort keine Entries
+(„Einträge nicht freigegeben“), wohl aber jeden Space mit Anzahl je Typ und Speicher. Läuft eine App nicht, erscheint sie
 als „offline" mit ihrer Adresse. Andere Adressen: `--app chat=tcp:nano:3800 --app welt=unix:/pfad.sock`, oder in der `.env`
 `DASHBOARD_APPS=spaces-mmo=tcp:127.0.0.1:3960|unix:/tmp/spaces-mmo-world.sock,codemode-chat=tcp:127.0.0.1:3810`
 (Einträge durch Komma, Alternativen durch `|`; `--app` ersetzt `DASHBOARD_APPS`, beide ersetzen die Standard-Apps; eine
@@ -116,6 +120,12 @@ Standard-ID behält ihren Namen und ihren Space).
 benannten Space, kommt er mit `@` an die ID: `id@space=adresse`. Der Swarm-Shard der Hilfeseite hält seine Posts im Space
 `social-swarm` (`SWARM_ALIAS`, angelegt in `help-site/server/nano-host.ts`), sein Default-Space bleibt leer; die
 Standard-App `help-swarm` fragt deshalb `social-swarm` ab, auch wenn sie in `DASHBOARD_APPS` ohne `@` steht.
+
+**Alle Spaces eines Dienstes.** `id@*=adresse` fragt die Liste des Dienstes ab (Methode `spaces`, [API](api.md)) und
+liest die Kennzahlen jedes Spaces (die 100 neuesten), summiert für die App und einzeln in der Tabelle „Spaces“.
+Aliase `präfix-<id>` fasst es ab drei gleichen Präfixen zu einer Zeile zusammen (`chat-session-*` mit ihrer Anzahl).
+Weil das je Space einen Aufruf kostet, liest es eine solche App nur jede fünfte Runde (bei 2 s also alle 10 s). Die
+Standard-App `help-hub` ist so eine App. Welche Daten in welchem Store und Space liegen: [Datenhaltung](datenhaltung.md).
 
 Der Daemon öffnet den Store **exklusiv**: kein zweiter Prozess darf denselben Store halten
 (single-owner, siehe [Umstellungsplan](umstellung-ohne-pi-durable.md) 5.2). Ohne `--no-socket` serviert er

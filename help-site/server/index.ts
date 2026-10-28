@@ -32,7 +32,7 @@ function loadDotEnvIfPresent(): void {
 }
 loadDotEnvIfPresent();
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, parseTarget } from "phi-spaces";
+import { FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, parseTarget, serveSpace, SpaceService, StaticIdentity } from "phi-spaces";
 import { WebAdminController } from "./admin/admin-controller.ts";
 import { SpaceChatHub, type StageId } from "./space-chat/stage-runner.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
@@ -159,6 +159,17 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	// Every commit notifies the doc watch; without debouncing that costs a full settle scan per
 	// commit (~30/s under swarm load). 400ms collapses the storm – expiry stays lazy-correct.
 	const stopService = await startService(host, ctx, { watchDebounceMs: 400 });
+	// Optional: the store's figures for the dashboard (HELP_SPACE_LISTEN=tcp:127.0.0.1:3520 or unix:/path). Its one role
+	// lists the spaces and reads their stats (counts per type, bytes), never an entry: the store holds the control
+	// space's keys and the chat sessions' messages.
+	const statsServer = process.env.HELP_SPACE_LISTEN
+		? await serveSpace(new SpaceService({
+				host, ctx,
+				identity: new StaticIdentity({ dashboard: { principal: { peerId: "dashboard" }, roles: ["stats"] } }),
+				policy: { roles: { stats: { methods: ["hello", "stats", "spaces"] } } },
+			}), { listen: parseTarget(process.env.HELP_SPACE_LISTEN), connection: () => ({ peerId: "dashboard" }) })
+		: null;
+	if (statsServer) console.log(`[space] stats for the dashboard on ${process.env.HELP_SPACE_LISTEN}`);
 	const llmChat = await chatReplyGenerator();
 	const llmSwarm = await swarmReplyGenerator();
 	const llmSwarmPost = await swarmPostGenerator();
@@ -516,6 +527,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 			await chatHub.close();
 			await admin.close();
 			await new Promise<void>((r) => server.close(() => r()));
+			await statsServer?.close();
 			await stopService();
 			await host.close(ctx);
 		},

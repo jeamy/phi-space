@@ -2,7 +2,7 @@
 // the small helpers every project built on phi-spaces wrote for itself (codemode-chat, spaces-mmo, the help system):
 // telling a missing entry from a held one, waiting for work without holding anything, keeping a transaction alive,
 // and taking every match. The values that differ between projects (wait times, timeouts) are parameters.
-import { RemoteSpace, UnsupportedOperation, type RemoteOptions } from "./remote.ts";
+import { RemoteSpace, UnsupportedOperation, type RemoteOptions, type Transport } from "./remote.ts";
 import { socketTransport, type ListenTarget } from "./socket.ts";
 import { NO_WAIT, type SpaceLike, type Taken } from "./client.ts";
 import type { Template } from "./core.ts";
@@ -23,10 +23,10 @@ export type ConnectOptions = { callTimeoutMs?: number; connectTimeoutMs?: number
 
 /** A client of the space at `spec` (parseTarget). One call may take `callTimeoutMs` (default 30 s); a blocking wait must
  *  stay below it, or it ends as "outcome unknown". `close()` frees the connection. */
-export function connectSpace(spec: string, o: ConnectOptions = {}): { space: RemoteSpace; close: () => void } {
+export function connectSpace(spec: string, o: ConnectOptions = {}): { space: RemoteSpace; transport: Transport; close: () => void } {
 	const { callTimeoutMs = 30_000, connectTimeoutMs = 5_000, attempts = 3, ...rest } = o;
 	const transport = socketTransport(parseTarget(spec), { connectTimeoutMs, requestTimeoutMs: callTimeoutMs + 5_000 });
-	return { space: new RemoteSpace(transport, { ...rest, callTimeoutMs, attempts }), close: () => transport.close() };
+	return { space: new RemoteSpace(transport, { ...rest, callTimeoutMs, attempts }), transport, close: () => transport.close() };
 }
 
 /** A check ran out while a match stayed held by another transaction: the entry is not gone, it may come back. */

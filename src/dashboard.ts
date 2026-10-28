@@ -24,29 +24,33 @@ import { openSqliteHost } from "./store/sqlite.ts";
 import type { Context } from "./context.ts";
 import type { SpaceHost } from "./client.ts";
 import { meter as processMeter, type Meter, type MeterSnapshot } from "./meter.ts";
-import { NamedSpace, Registry, listSpaces, snapshotSpace, spaceDoc, type RegistryState, type SpaceInfo } from "./spaces.ts";
+import { NamedSpace, Registry, UnknownSpaceError, listSpaces, snapshotSpace, spaceDoc, type RegistryState, type SpaceInfo } from "./spaces.ts";
 import { Space } from "./doc.ts";
 import { GateIdentity } from "./gate.ts";
 import { DEFAULT_POLICY, SpaceService, type Connection } from "./service.ts";
 import { serveSpace, type SpaceServer } from "./socket.ts";
 import { connectSpace } from "./space-client.ts";
+import { RemoteSpace } from "./remote.ts";
 import * as core from "./core.ts";
 
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png" };
 
 /** A space served by another process. `addresses` (`unix:/path` or `tcp:host:port`, parseTarget) are tried in order
  *  until one answers; the one that answered is tried first next time. `space` names a space of that service by id or
- *  alias (omitted: its default space). */
+ *  alias (omitted: its default space); `*` takes every space the service lists (`spaces`), each with its stats. */
 export type AppSource = { id: string; label: string; addresses: string[]; space?: string };
 
 /** The default addresses of the projects' space processes: the unix socket of a plain start (`npm start`, `dev`), the
  *  port `docker:local:up` publishes on loopback, then the loopback end of the tunnel to nano on big (docs/dashboard.md). The spaces-mmo accounts space (credentials, sessions) is left out on
- *  purpose; the help system's own space lives inside its web process without a socket, only its swarm shard has one. */
+ *  purpose. The help system's hub serves only figures (stats and its list of spaces, HELP_SPACE_LISTEN), no entries. */
+export const ALL_SPACES = "*";
+
 export const DEFAULT_APPS: AppSource[] = [
 	{ id: "codemode-chat", label: "Codemode Chat", addresses: ["unix:/tmp/codemode-space.sock", "tcp:127.0.0.1:3810", "tcp:127.0.0.1:3800"] },
 	{ id: "spaces-mmo", label: "spaces-mmo · Welt", addresses: ["unix:/tmp/spaces-mmo-world.sock", "tcp:127.0.0.1:3960", "tcp:127.0.0.1:3950"] },
 	// the shard keeps its posts in the named space "social-swarm" (help-site SWARM_ALIAS), its default space stays empty
 	{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["unix:/tmp/swarm-b.sock", "tcp:127.0.0.1:3600"], space: "social-swarm" },
+	{ id: "help-hub", label: "Help · Hub", addresses: ["unix:/tmp/help-space.sock", "tcp:127.0.0.1:3520"], space: ALL_SPACES },
 ];
 
 /** `id[@space]=address[|address…]` entries, comma separated (DASHBOARD_APPS, `--app`); a default id keeps its label,
@@ -64,6 +68,12 @@ export function parseApps(spec: string): AppSource[] {
 }
 
 const APP_HISTORY = 90;
+/** An app source of every space its service lists; polled every APP_ALL_EVERY-th round (one stats call per space). */
+const APP_ALL_EVERY = 5;
+/** At most this many spaces of one app are read per poll, the newest first. */
+const APP_MAX_SPACES = 100;
+/** Aliases `prefix-<id>` with at least this many of one prefix fold into one row (a chat's sessions). */
+const APP_GROUP_MIN = 3;
 /** How far the dashboard pages into an app's entries (by position, oldest first). */
 const APP_PAGE_CEILING = 2000;
 
@@ -74,7 +84,10 @@ type AppState = AppSource & {
 	error: string | null;
 	alias: string | null;
 	spaceId: string | null;
+	/** Summed over its spaces for an app of every space. */
 	stats: core.SpaceStats | null;
+	/** An app of every space: each space (or folded group) with its stats, most entries first. */
+	spaces?: AppSpace[];
 	/** Visible entries per poll, oldest first (sparkline). */
 	history: number[];
 	/** Commits per minute between two polls, oldest first: the space's revision read with its stats. */
@@ -83,6 +96,35 @@ type AppState = AppSource & {
 	entriesPerMin: number;
 	checkedAt: number;
 };
+
+export type AppSpace = { alias: string; spaces: number; stats: core.SpaceStats };
+
+/** The sum of several spaces' stats (counts, types, bytes). */
+export function sumStats(all: readonly core.SpaceStats[]): core.SpaceStats {
+	const r: core.SpaceStats = { entries: 0, byType: {}, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: 0, returned: 0, bytes: { entries: 0, outbox: 0, claims: 0, waiters: 0, registrations: 0, txns: 0, total: 0 } };
+	for (const st of all) {
+		for (const k of ["entries", "locked", "uncommitted", "expired", "txns", "waiters", "registrations", "outbox", "returned"] as const) r[k] += st[k] ?? 0;
+		for (const [t, n] of Object.entries(st.byType)) r.byType[t] = (r.byType[t] ?? 0) + n;
+		for (const k of Object.keys(r.bytes!) as (keyof NonNullable<core.SpaceStats["bytes"]>)[]) r.bytes![k] += st.bytes?.[k] ?? 0;
+	}
+	return r;
+}
+
+/** Spaces `prefix-<id>` fold into `prefix-*` when APP_GROUP_MIN or more share the prefix; most entries first. */
+export function groupSpaces(list: readonly { alias: string; stats: core.SpaceStats }[]): AppSpace[] {
+	const prefix = (alias: string) => { const i = alias.lastIndexOf("-"); return i > 0 ? alias.slice(0, i + 1) : null; };
+	const counts = new Map<string, number>();
+	for (const x of list) { const p = prefix(x.alias); if (p) counts.set(p, (counts.get(p) ?? 0) + 1); }
+	const rows = new Map<string, { alias: string; members: core.SpaceStats[] }>();
+	for (const x of list) {
+		const p = prefix(x.alias);
+		const key = p && (counts.get(p) ?? 0) >= APP_GROUP_MIN ? `${p}*` : x.alias;
+		const row = rows.get(key) ?? rows.set(key, { alias: key, members: [] }).get(key)!;
+		row.members.push(x.stats);
+	}
+	return [...rows.values()].map((r) => ({ alias: r.alias, spaces: r.members.length, stats: r.members.length === 1 ? r.members[0]! : sumStats(r.members) }))
+		.sort((a, b) => b.stats.entries - a.stats.entries || a.alias.localeCompare(b.alias));
+}
 
 export type DashboardOptions = {
 	host: SpaceHost;
@@ -195,10 +237,12 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	}
 
 	// ---- app sources: one connection per app, one `stats` call per poll; a failed call drops the connection
-	type AppEntry = AppState & { conn: ReturnType<typeof connectSpace> | null; last: { rev: number; streamId: string; entries: number; at: number } | null };
+	type AppEntry = AppState & { conn: ReturnType<typeof connectSpace> | null; last: { rev: number; streamId: string; entries: number; at: number } | null;
+		/** An app of every space: one RemoteSpace per space on the same connection, and the revision each was read at. */
+		views: Map<string, RemoteSpace>; revs: Map<string, { rev: number; streamId: string }>; round: number };
 	const apps = new Map<string, AppEntry>();
-	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null });
-	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
+	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null, views: new Map(), revs: new Map(), round: 0 });
+	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, ...(a.spaces ? { spaces: a.spaces } : {}), history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
 	const appList = (): AppState[] => [...apps.values()].map(appView);
 	const connectApp = async (a: AppEntry) => {
 		if (!a.conn) {
@@ -206,7 +250,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 			const order = [a.address, ...a.addresses.filter((x) => x !== a.address)];
 			const errors: string[] = [];
 			for (const address of order) {
-				const conn = connectSpace(address, { callTimeoutMs: 5_000, connectTimeoutMs: 1_000, attempts: 1, ...(a.space ? { space: a.space } : {}) });
+				const conn = connectSpace(address, { callTimeoutMs: 5_000, connectTimeoutMs: 1_000, attempts: 1, ...(a.space && a.space !== ALL_SPACES ? { space: a.space } : {}) });
 				try {
 					const hello = await conn.space.info();
 					a.conn = conn;
@@ -226,8 +270,32 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	const dropApp = (a: AppEntry, e: unknown) => {
 		a.conn?.close();
 		a.conn = null;
+		a.views.clear();
 		a.online = false;
 		a.error = e instanceof Error ? e.message : String(e);
+	};
+	/** Every space of the app's service: stats per space, summed; commits are counted per space (its own stream). */
+	const statsOfAll = async (a: AppEntry): Promise<{ stats: core.SpaceStats; commits: number | null }> => {
+		const service = await connectApp(a);
+		const listed = (await service.spaces()).sort((x, y) => y.createdAt - x.createdAt).slice(0, APP_MAX_SPACES);
+		const read = await Promise.all(listed.map(async (s) => {
+			let view = a.views.get(s.spaceId);
+			if (!view) a.views.set(s.spaceId, view = new RemoteSpace(a.conn!.transport, { space: s.spaceId, callTimeoutMs: 5_000, attempts: 1 }));
+			try { return { ...s, ...(await view.statsWithRevision()) }; }
+			catch (e) { if (e instanceof UnknownSpaceError || /unknown space/i.test(String(e))) return null; throw e; } // deleted meanwhile
+		}));
+		const live = read.filter((x) => x !== null);
+		let commits: number | null = a.revs.size > 0 ? 0 : null;
+		const revs = new Map<string, { rev: number; streamId: string }>();
+		for (const x of live) {
+			const before = a.revs.get(x.spaceId);
+			if (commits !== null && before && before.streamId === x.streamId && x.rev >= before.rev) commits += x.rev - before.rev;
+			revs.set(x.spaceId, { rev: x.rev, streamId: x.streamId });
+		}
+		a.revs = revs;
+		for (const id of a.views.keys()) if (!revs.has(id)) a.views.delete(id);
+		a.spaces = groupSpaces(live.map((x) => ({ alias: x.alias, stats: x.stats })));
+		return { stats: sumStats(live.map((x) => x.stats)), commits };
 	};
 	let polling = false;
 	const pollApps = async (): Promise<void> => {
@@ -236,8 +304,18 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		try {
 			const changed: AppState[] = [];
 			await Promise.all([...apps.values()].map(async (a) => {
+				const all = a.space === ALL_SPACES;
+				// an app of every space costs its service a stats call per space: it is read every few rounds only
+				if (all && a.round++ % APP_ALL_EVERY !== 0 && a.online) return;
 				try {
-					const { stats: st, rev, streamId } = await (await connectApp(a)).statsWithRevision();
+					let st: core.SpaceStats, rev: number, streamId: string;
+					if (all) {
+						const r = await statsOfAll(a);
+						st = r.stats;
+						// the commits since the poll before, counted per space, carried on as one running revision
+						rev = (a.last?.rev ?? 0) + (r.commits ?? 0);
+						streamId = r.commits === null ? `restart:${now()}` : a.last?.streamId ?? "all";
+					} else ({ stats: st, rev, streamId } = await (await connectApp(a)).statsWithRevision());
 					const t = now();
 					// commits and entry change per minute since the poll before; a new stream (the space restarted) starts over
 					const prev = a.last && a.last.streamId === streamId && rev >= a.last.rev ? a.last : null;
@@ -253,7 +331,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 					a.error = null;
 					a.history.push(st.entries);
 					if (a.history.length > APP_HISTORY) a.history.shift();
-				} catch (e) { dropApp(a, e); a.last = null; }
+				} catch (e) { dropApp(a, e); a.last = null; a.revs.clear(); a.spaces = undefined; }
 				a.checkedAt = now();
 				// every poll goes out (the activity curve moves on while a space is quiet); the page refetches entries
 				// only when the stats changed
@@ -299,6 +377,8 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		if (appEntries) {
 			const a = apps.get(decodeURIComponent(appEntries[1]!));
 			if (!a) return send(res, 404, { error: "unknown app" });
+			// an app of every space shows its figures only (the help hub's service allows no reads)
+			if (a.space === ALL_SPACES) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a) });
 			const type = url.searchParams.get("type");
 			const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
 			const after = Math.min(APP_PAGE_CEILING, Math.max(0, Number.parseInt(url.searchParams.get("after") ?? "0", 10) || 0));
@@ -311,6 +391,8 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 				const more = p.next !== null || p.items.length > after + limit;
 				return send(res, 200, { app: appView(a), after, next: more && after + limit <= APP_PAGE_CEILING ? after + limit : null, entries: items.map((e) => ({ id: e.id, type: e.type, types: e.types, fields: e.fields, owner: e.owner })) });
 			} catch (e) {
+				// a service that allows no reads is still online
+				if (/not allowed|PermissionDenied/.test(String(e))) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a) });
 				dropApp(a, e);
 				return send(res, 502, { error: a.error, app: appView(a) });
 			}
@@ -384,9 +466,10 @@ const usage = `phi-spaces dashboard (read-only Phase 1)
   --no-socket       do not serve the space service; the dashboard then shows a quiet store
   --app id[@space]=address[|address…]
                     show the space of another process (repeatable; replaces the defaults and DASHBOARD_APPS);
-                    the defaults: codemode-chat, spaces-mmo world, help swarm shard, each on its unix socket,
-                    else the loopback port of docker:local, else the tunnel port on big; @space picks a named
-                    space of that service (default: its default space; help-swarm: social-swarm)
+                    the defaults: codemode-chat, spaces-mmo world, help swarm shard, help hub, each on its unix
+                    socket, else the loopback port of docker:local, else the tunnel port on big; @space picks a
+                    named space of that service (default: its default space; help-swarm: social-swarm), @* every
+                    space it lists (stats only; help-hub)
   --no-apps         show no app spaces
 
 Environment (also read from the repository's .env; set values win): DASHBOARD_APPS (as --app, comma separated),

@@ -110,6 +110,7 @@ table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--line-strong); }
 td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
 tr:hover td { background: color-mix(in srgb, var(--raised) 70%, transparent); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.fields { white-space: normal; word-break: break-all; font: 11.5px/1.45 var(--font-mono); color: var(--muted); }
 td.fields summary { cursor: pointer; }
 td.fields pre { margin: 6px 0 0; padding: 8px; background: var(--code-bg); border-radius: 6px; white-space: pre-wrap; color: var(--text); max-height: 320px; overflow: auto; }

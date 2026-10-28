@@ -51,6 +51,18 @@ const charts = (st, activeType) => `
 		<h3>Speicher nach Teil</h3>${hbars(byteRows(st), { color: "var(--bar-2)", format: bytes }) || '<div class="empty">leer</div>'}</div>
 </div>`;
 
+/** An app of every space: entries and storage per space (a folded group names its count), then the table. */
+const spacesSection = (list) => {
+	const label = (x) => (x.spaces > 1 ? `${x.alias} (${x.spaces})` : x.alias);
+	const rows = list.map((x) => `<tr><td>${esc(label(x))}</td><td class="num">${num(x.stats.entries)}</td><td class="num">${num(Object.keys(x.stats.byType ?? {}).length)}</td><td class="num">${bytes(x.stats.bytes?.total)}</td><td class="fields">${esc(Object.entries(x.stats.byType ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t, n]) => `${t} ${n}`).join(" · "))}</td></tr>`).join("");
+	return `<div class="grid2">
+	<div class="card"><h3>Entries je Space</h3>${hbars(list.map((x) => ({ label: label(x), value: x.stats.entries }))) || '<div class="empty">keine Entries</div>'}</div>
+	<div class="card"><h3>Speicher je Space</h3>${hbars(list.map((x) => ({ label: label(x), value: x.stats.bytes?.total ?? 0 })), { color: "var(--bar-2)", format: bytes }) || '<div class="empty">leer</div>'}</div>
+</div>
+<h3>Spaces <span class="muted">· ${num(list.reduce((n, x) => n + x.spaces, 0))} im Store</span></h3>
+${table(["Space", "Entries", "Typen", "Speicher", "größte Typen"], rows)}`;
+};
+
 const fieldsCell = (fields) => {
 	const text = JSON.stringify(fields);
 	return text.length <= 160 ? `<td class="fields">${esc(text)}</td>`
@@ -68,7 +80,7 @@ class AppsPanel extends HTMLElement {
 <li class="item${a.id === this.selected ? " selected" : ""}${a.online ? "" : " is-offline"}" data-id="${esc(a.id)}" role="button" tabindex="0">
 	<i class="state ${a.online ? (busy(a.stats) ? "busy" : "on") : "off"}" title="${a.online ? (busy(a.stats) ? "offene Transaktionen oder Waiter" : "online") : esc(`offline: ${a.error ?? "nicht erreichbar"}`)}"></i>
 	<div class="item__body"><div class="name">${esc(a.label)}</div>
-	<div class="meta">${a.online ? `${num(a.stats?.entries)} Entries · ${num(Object.keys(a.stats?.byType ?? {}).length)} Typen · ${bytes(a.stats?.bytes?.total)}` : `offline · ${esc((a.addresses ?? [a.address]).join(" · "))}`}</div>
+	<div class="meta">${a.online ? `${num(a.stats?.entries)} Entries · ${a.spaces ? `${num(a.spaces.reduce((n, x) => n + x.spaces, 0))} Spaces` : `${num(Object.keys(a.stats?.byType ?? {}).length)} Typen`} · ${bytes(a.stats?.bytes?.total)}` : `offline · ${esc((a.addresses ?? [a.address]).join(" · "))}`}</div>
 	${a.online ? sparkline(a.history, 200, 22, "var(--bar)", "Entries im Verlauf") : ""}</div>
 </li>`).join("");
 		this.innerHTML = `<div class="panel"><h2>Apps</h2><ul class="list">${items || '<div class="empty">keine App-Quellen konfiguriert</div>'}</ul></div>`;
@@ -116,7 +128,7 @@ class AppDetail extends HTMLElement {
 	get app() { return this._app; }
 	async load() {
 		const a = this._app;
-		if (!a?.online) { this._page = null; defer(this); return; }
+		if (!a?.online || a.spaces) { this._page = null; defer(this); return; } // an app of every space serves figures only
 		const after = this._cursors[this._cursors.length - 1];
 		const q = new URLSearchParams({ limit: "50", ...(after ? { after: String(after) } : {}), ...(this._type ? { type: this._type } : {}) });
 		try {
@@ -128,13 +140,23 @@ class AppDetail extends HTMLElement {
 	render() {
 		const a = this._app;
 		if (!a) { this.innerHTML = ""; return; }
-		const head = `<h2>${esc(a.label)} <span class="muted">· ${esc(a.alias ?? "–")} · ${esc(a.address)}</span>
+		const head = `<h2>${esc(a.label)} <span class="muted">· ${esc(a.spaces ? "alle Spaces" : a.alias ?? "–")} · ${esc(a.address)}</span>
 <span class="chip ${a.online ? "chip--ok" : "chip--bad"}">${a.online ? "online" : "offline"}</span></h2>`;
 		if (!a.online || !a.stats) {
 			this.innerHTML = `<div class="panel">${head}<div class="empty">Der Space dieser App ist nicht erreichbar${a.error ? `: ${esc(a.error)}` : ""}.<br>Läuft ihr Space-Prozess? Versucht: ${(a.addresses ?? [a.address]).map((x) => `<code>${esc(x)}</code>`).join(", ")}</div></div>`;
 			return;
 		}
 		const st = a.stats, p = this._page;
+		if (a.spaces) {
+			this.innerHTML = `<div class="panel">${head}
+${kpis(st)}
+<div class="card trend"><h3>Entries im Verlauf <span class="muted">· ${num(a.history?.length ?? 0)} Messungen</span></h3>${sparkline(a.history, 600, 54, "var(--bar)", "sichtbare Entries je Messung")}</div>
+${spacesSection(a.spaces)}
+${charts(st, null)}
+<div class="empty">Einträge nicht freigegeben: dieser Dienst liefert nur Kennzahlen (Spaces, Anzahl je Typ, Speicher).</div>
+</div>`;
+			return;
+		}
 		const rows = (p?.entries ?? []).map((x) => `<tr><td title="Entry-ID">${esc(x.id)}</td><td><span class="badge">${esc(x.type)}</span></td>${fieldsCell(x.fields)}</tr>`).join("");
 		this.innerHTML = `<div class="panel">${head}
 ${kpis(st)}

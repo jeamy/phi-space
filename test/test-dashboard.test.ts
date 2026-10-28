@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createSpace, PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
-import { parseApps, startDashboard } from "../src/dashboard.ts";
+import { groupSpaces, parseApps, startDashboard } from "../src/dashboard.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
 
@@ -173,4 +173,43 @@ test("dashboard: app specs (DASHBOARD_APPS, --app) take alternatives; a default 
 		{ id: "help-swarm", label: "Help · Swarm-Shard", addresses: ["tcp:127.0.0.1:3600"], space: "social-swarm" },
 	]);
 	assert.throws(() => parseApps("nothing"), /id\[@space\]=address/);
+});
+
+test("dashboard: an app of every space (@*) lists its service's spaces with stats, folds session spaces, refuses entries", async () => {
+	const dir = mkdtempSync("/tmp/phi-dash-");
+	const app = await memory();
+	// like the help hub: a role that lists spaces and reads stats, nothing else
+	const identity = new StaticIdentity({ dashboard: { principal: { peerId: "dashboard" }, roles: ["stats"] } });
+	const policy = { roles: { stats: { methods: ["hello", "stats", "spaces"] as const } } };
+	const server = await serveSpace(new SpaceService({ host: app, ctx, identity, policy }), { listen: { path: join(dir, "hub.sock") }, connection: () => ({ peerId: "dashboard" }) });
+	await new PhiSpaces(app, ctx).write({ type: "LlmAdmin", fields: {} });
+	for (const alias of ["control", "chat-session-a", "chat-session-b", "chat-session-c"]) {
+		await app.commit((tx) => createSpace(tx, alias, Date.now()), ctx);
+		await new PhiSpaces(app, ctx, Date.now, undefined, undefined, { space: alias }).write({ type: alias === "control" ? "PeerKey" : "Msg", fields: {} });
+	}
+	const h = await memory();
+	const dash = await startDashboard({ host: h, ctx, port: 0, appPollMs: 50, apps: parseApps(`hub@*=unix:${join(dir, "hub.sock")}`) });
+	try {
+		const hub = (await (await fetch(`${dash.url}/api/apps`)).json()).apps[0];
+		assert.equal(hub.online, true);
+		assert.equal(hub.stats.entries, 5);
+		assert.deepEqual(hub.stats.byType, { LlmAdmin: 1, PeerKey: 1, Msg: 3 });
+		assert.deepEqual(hub.spaces.map((s: { alias: string; spaces: number }) => [s.alias, s.spaces]), [["chat-session-*", 3], ["control", 1], ["default", 1]]);
+		const refused = await fetch(`${dash.url}/api/apps/hub/entries`);
+		assert.equal(refused.status, 403);
+		assert.equal((await (await fetch(`${dash.url}/api/apps`)).json()).apps[0].online, true, "a refused read leaves the app online");
+	} finally {
+		await dash.close();
+		await server.close();
+		await h.close(ctx);
+		await app.close(ctx);
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("dashboard: groupSpaces folds a prefix only from three spaces on", () => {
+	const st = (entries: number) => ({ entries, byType: { T: entries }, locked: 0, uncommitted: 0, expired: 0, txns: 0, waiters: 0, registrations: 0, outbox: 0, returned: 0 });
+	assert.deepEqual(groupSpaces([{ alias: "sieve-main", stats: st(2) }, { alias: "sieve-b", stats: st(1) }]).map((r) => r.alias), ["sieve-main", "sieve-b"]);
+	const rows = groupSpaces([{ alias: "x-1", stats: st(1) }, { alias: "x-2", stats: st(2) }, { alias: "x-3", stats: st(3) }]);
+	assert.deepEqual(rows.map((r) => [r.alias, r.spaces, r.stats.entries, r.stats.byType.T]), [["x-*", 3, 6, 6]]);
 });

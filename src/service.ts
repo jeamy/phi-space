@@ -23,7 +23,7 @@ import { encodedBytes } from "./paging.ts";
 import { principalId, MailboxEpochMismatch, InvalidAck } from "./mailbox.ts";
 
 export const PROTOCOL_VERSION = 1;
-export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
+export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "spaces", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
 export type Method = (typeof METHODS)[number];
 /** Without wakeOnCommit: look again every 50 ms, as before. */
 const sleepSignal = { wait: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(50, Math.max(1, ms)))), stop: async () => {} };
@@ -55,7 +55,7 @@ export const DEFAULT_POLICY: Policy = {
 		host: { methods: METHODS },
 		member: { methods: METHODS },
 		resolution: { methods: ["hello", "pollOperation", "resolveOperation", "cancelOperation", "txn", "lease"] },
-		observer: { methods: ["hello", "generation", "read", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "changes", "notify", "events", "ack"] }, // own read and notify results, never a write
+		observer: { methods: ["hello", "generation", "read", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "spaces", "changes", "notify", "events", "ack"] }, // own read and notify results, never a write
 		unpaired: { methods: ["hello", "generation"] }, // a device in the enrollment group: nothing but its own pairing (enroll.ts handles `enroll` and `enrollStatus` before the service)
 	},
 };
@@ -347,6 +347,11 @@ export class SpaceService {
 			case "stats": {
 				if (grant.types !== "*") throw new Denied("aggregate stats need a role without type restrictions");
 				return await client.statsWithRevision() as unknown as Json;
+			}
+			case "spaces": {
+				// the spaces this host serves (alias, id, creation), so a viewer can find the ones created at runtime
+				if (grant.types !== "*") throw new Denied("listing spaces needs a role without type restrictions");
+				return (await listSpaces(this.o.host, this.o.ctx)).map((i) => ({ spaceId: i.spaceId, alias: i.alias, createdAt: i.createdAt })) as unknown as Json;
 			}
 			case "txn": {
 				const action = str(a.action, "action");

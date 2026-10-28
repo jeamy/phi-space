@@ -149,6 +149,7 @@ danach neue erste Seite lesen. Änderungen nach der Snapshot-Revision werden üb
 `RemoteSpace` implementiert die selben Kernmethoden über einen `Transport`.
 `statsWithRevision()` liefert wie beim lokalen `PhiSpaces` die Kennzahlen mit der Revision und `streamId`, zu der sie
 gelesen wurden; zwei Abfragen ergeben so die Commits dazwischen (das Dashboard leitet daraus „Commits/min“ ab).
+`spaces()` listet die Spaces des Dienstes (`spaceId`, `alias`, `createdAt`).
 `inProcessTransport(service, connection)` ist für lokale Tests;
 `socketTransport({ path })` und `socketTransport({ host, port })` stellen
 Unix- bzw. TCP-Verbindungen her. Der Server wird mit
@@ -181,8 +182,9 @@ Was jeder Prozess braucht, der einen Space woanders nutzt; die Werte, die sich j
 | `keepAlive(space, lease, leaseMs)` | Erneuert eine Lease alle `leaseMs / 3`, solange lange Arbeit darin läuft; liefert die Stopp-Funktion |
 
 Der Service akzeptiert die Methoden `hello`, `generation`, `write`, `read`,
-`take`, `pollOperation`, `resolveOperation`, `cancelOperation`, `readAll`, `count`, `stats`, `txn`,
-`lease` und `changes`. Mutationen benötigen `{ generation, requestId }`.
+`take`, `pollOperation`, `resolveOperation`, `cancelOperation`, `readAll`, `count`, `stats`, `spaces`, `txn`,
+`lease` und `changes`. `spaces` listet die Spaces des Hosts (`spaceId`, `alias`, `createdAt`), auch die zur Laufzeit
+angelegten; die Rolle `observer` darf es. Mutationen benötigen `{ generation, requestId }`.
 `read` und `take` können `{ state: "pending" }` zurückgeben und werden über
 `pollOperation` fortgesetzt. `readAll` ist der paginierte Seitenaufruf.
 

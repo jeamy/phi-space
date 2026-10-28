@@ -450,3 +450,23 @@ test("5. Multi-Shard Social Swarm distribution (big + nano): attachRemoteShard, 
 	}
 });
 
+
+test("HELP_SPACE_LISTEN serves the store's figures for the dashboard: every space with its stats, never an entry", async () => {
+	const { tmpdir } = await import("node:os");
+	const path = `${tmpdir()}/help-stats-${process.pid}.sock`;
+	process.env.HELP_SPACE_LISTEN = `unix:${path}`;
+	const srv = await startHelpServer({ port: 0 });
+	delete process.env.HELP_SPACE_LISTEN;
+	try {
+		const remote = new RemoteSpace(socketTransport({ path }), {});
+		const aliases = (await remote.spaces()).map((s) => s.alias);
+		assert.ok(aliases.includes("default"));
+		assert.ok(aliases.some((a) => a.startsWith("chat-session-")), "the lobby chat session is listed");
+		const lobby = aliases.find((a) => a.startsWith("chat-session-"))!;
+		const stats = await new RemoteSpace(socketTransport({ path }), { space: lobby }).stats();
+		assert.ok(stats.entries > 0 && Object.keys(stats.byType).length > 0, "counts per type come through");
+		await assert.rejects(new RemoteSpace(socketTransport({ path }), { space: lobby }).readAll(null, { limit: 1 }), /not allowed/);
+	} finally {
+		await srv.close();
+	}
+});

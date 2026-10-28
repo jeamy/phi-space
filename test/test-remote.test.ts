@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
 	PhiSpaces, SpaceService, StaticIdentity, RemoteSpace, inProcessTransport, OutcomeUnknown, UnsupportedOperation, FOREVER, core, RequestConflict, OperationCancelled,
+	createSpace,
 	type Transport,
 } from "../src/index.ts";
 import { forEachBackend, ctx } from "./support/persistent.ts";
@@ -188,4 +189,18 @@ test("generations are renewed before they stop admitting, and a known request is
 	await r.write({ type: "Job", fields: { n: 3 } }, null, FOREVER);
 	assert.equal(methods.filter((m) => m === "generation").length, 2, "renewed shortly before the admission ends");
 	assert.equal(await r.count({ type: "Job" }), 3);
+});
+
+test("spaces lists the host's spaces, also those created at runtime; an observer may ask, a role without it may not", async () => {
+	const h = await memory();
+	const sv = service(h);
+	const obs = new RemoteSpace(inProcessTransport(sv, { peerId: "peer-obs" }), fast);
+	await obs.stats(); // the first hello registers the default space
+	await h.commit((tx) => createSpace(tx, "chat-session-1", Date.now()), ctx);
+	const listed = await obs.spaces();
+	assert.deepEqual(listed.map((s) => s.alias), ["default", "chat-session-1"]);
+	assert.ok(listed.every((s) => typeof s.spaceId === "string" && typeof s.createdAt === "number"));
+	const viewer = new SpaceService({ host: h, ctx, identity: new StaticIdentity({ v: { principal: { peerId: "v" }, roles: ["viewer"] } }), policy: { roles: { viewer: { methods: ["hello", "stats"] } } } });
+	await assert.rejects(new RemoteSpace(inProcessTransport(viewer, { peerId: "v" }), fast).spaces(), /not allowed/);
+	await h.close(ctx);
 });
