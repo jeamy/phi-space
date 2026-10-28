@@ -9,7 +9,7 @@
 // record changes by being replaced. An array part is copied on its first write; a map part is changed in place with an
 // undo log (copying a map of 150 000 claims per commit is what made drafts slow), and reports the keys it changed.
 
-import { diskMapOf } from "./types.ts";
+import { COMMITTED, diskMapOf } from "./types.ts";
 
 type Obj = Record<string | symbol, unknown> | unknown[];
 
@@ -113,6 +113,7 @@ export function draftOf<T>(base: T, parts: readonly DraftPart[] = [], o: { skipU
 	const objectHandler = (s: State): ProxyHandler<object> => ({
 		get(_t, k) {
 			if (k === STATE) return s;
+			if (k === COMMITTED) return s.kind === "array" && s.copy === null ? s.base : undefined;
 			if (s.kind === "array" && (readMethods.has(k) || writeMethods.has(k))) return partMethod(s, k);
 			const cur = latest(s), v = Reflect.get(cur, k);
 			if (typeof k === "symbol" || !isObject(v)) return v;

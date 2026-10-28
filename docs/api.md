@@ -110,6 +110,22 @@ Singletons erfolgt anschließend mit normalem `write` in derselben Transaktion.
 ab, statt die Eindeutigkeitsprüfung stillschweigend wegzulassen. Die Zusage gilt
 je Space, nicht über voneinander unabhängige Federation-Members hinweg.
 
+**Transientes Schreiben.** `write(entry, txn, lease, { transient: true })` legt keinen Entry an: der Änderungsstrom
+trägt ihn als `put` mit `transient: true` (sofort, oder beim Commit von `txn`; ein Abort kündigt nichts an), und kein
+`read`, `take`, `wait`, `count` oder Abo sieht ihn je. Gedacht für Ausgaben, die nur Leser des Stroms brauchen (eine
+Nachricht auf einem Bildschirm): kein Eintrag, kein Ablauf, kein Abräumen danach. Wer den Space aus dem Strom
+spiegelt, legt einen solchen `put` nicht ab; ein `del` folgt nicht. Nicht zusammen mit `unique`. `RemoteSpace`
+verlangt das Feature `write.transient`.
+
+**Mehrere Schritte in einem Aufruf.** `batch(ops, { request? })` (lokal und `RemoteSpace`, Feature `batch`) führt
+Schritte in einem Commit unter einem Request aus, alle oder (wirft einer) keiner: `{ op: "begin", lease? }`,
+`{ op: "write", entry, txn?, lease?, unique?, transient? }`, `{ op: "take" | "read", template, txn? }` und
+`{ op: "commit" | "abort", txn }`. `txn: "$"` meint die Transaktion, die ein `begin` weiter vorn im selben Batch
+geöffnet hat. Ergebnis je Schritt: eine `Lease` (begin, write), `{ entry, locked? }` (take, read; sie warten nie) oder
+`null`. Jeder Schritt braucht das Recht, das sein eigener Aufruf bräuchte, mit denselben Typprüfungen; höchstens 64
+Schritte. So kosten etwa die Schreibvorgänge einer Transaktion samt Commit eine Runde und einen Commit statt einen je
+Schritt. Ein Space mit Merge-Typen (Entry-Replikation) bietet `batch` nicht an.
+
 ## Benannte Spaces und Hintergrunddienst
 
 `createSpace(tx, alias, now)` erzeugt einen benannten Space im Harness-Commit;
@@ -183,7 +199,7 @@ Was jeder Prozess braucht, der einen Space woanders nutzt; die Werte, die sich j
 
 Der Service akzeptiert die Methoden `hello`, `generation`, `write`, `read`,
 `take`, `pollOperation`, `resolveOperation`, `cancelOperation`, `readAll`, `count`, `stats`, `spaces`, `txn`,
-`lease` und `changes`. `spaces` listet die Spaces des Hosts (`spaceId`, `alias`, `createdAt`), auch die zur Laufzeit
+`lease`, `changes` und `batch`. `spaces` listet die Spaces des Hosts (`spaceId`, `alias`, `createdAt`), auch die zur Laufzeit
 angelegten; die Rolle `observer` darf es. Mutationen benötigen `{ generation, requestId }`.
 `read` und `take` können `{ state: "pending" }` zurückgeben und werden über
 `pollOperation` fortgesetzt. `readAll` ist der paginierte Seitenaufruf.

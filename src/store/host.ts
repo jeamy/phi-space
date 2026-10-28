@@ -10,7 +10,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { awaitWithContext, type Context } from "../context.ts";
 import { detach, draftOf, isDraft, type Draft, type PartChanges } from "./draft.ts";
 import { partAt } from "./parts.ts";
-import { deepFreeze, diskMapOf } from "./types.ts";
+import { deepFreeze, diskMapOf, markCommitted } from "./types.ts";
 import type { ClosableStoreHost, DocDef, DocFamilyDef, DocWatch, StoreTx, WatchEnd } from "./types.ts";
 
 type AnyDef = DocDef<any> | DocFamilyDef<any, any>;
@@ -254,6 +254,11 @@ export class OwnStoreHost implements ClosableStoreHost {
 		revoke();
 		// a record of a part is a value from now on: whoever still changes one in place gets an error, not a silent change
 		for (const r of records) deepFreeze(r);
+		// so is a part array: the next commit copies it on its first write, and a published one may be indexed (core.ts)
+		for (const d of set.put) for (const part of d.parts ?? []) if (part.kind === "array") {
+			const arr = part.path.reduce<unknown>((v, k) => (typeof v === "object" && v !== null ? (v as Record<string, unknown>)[k] : undefined), d.value);
+			if (Array.isArray(arr)) markCommitted(arr);
+		}
 		// the next commit builds on this one at once; readers and watches see it once it is durable
 		const touched: string[] = [];
 		for (const d of set.put) { const a = addr(d.kind, d.key), doc = { kind: d.kind, key: d.key, version: d.version, value: d.value }; this.#docs.delete(a); this.#docs.set(a, doc); this.#usedAt.set(a, Date.now()); this.#weigh(a, doc, d.parts ?? drafts.get(a)?.def.parts); touched.push(a); }

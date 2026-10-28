@@ -204,3 +204,61 @@ test("spaces lists the host's spaces, also those created at runtime; an observer
 	await assert.rejects(new RemoteSpace(inProcessTransport(viewer, { peerId: "v" }), fast).spaces(), /not allowed/);
 	await h.close(ctx);
 });
+
+test("batch: begin, takes, writes and commit in one call and one commit; all or nothing; a retried request runs once", async () => {
+	const h = await memory();
+	const sv = service(h);
+	const r = new RemoteSpace(inProcessTransport(sv, { peerId: "peer-a" }), fast);
+	await r.write({ type: "Token", fields: { c: 1 } }, null, FOREVER);
+	await r.write({ type: "Intent", fields: { c: 1, line: "look" } }, null, FOREVER);
+	const local = new PhiSpaces(h, ctx);
+	const rev0 = (await local.revision()).rev;
+	const [t, token, intent] = await r.batch([{ op: "begin", lease: 30_000 }, { op: "take", template: { type: "Token" }, txn: "$" }, { op: "take", template: { type: "Intent", fields: { c: 1 } }, txn: "$" }]);
+	assert.ok(t && "id" in t);
+	assert.equal((token as unknown as { entry: { type: string } }).entry.type, "Token");
+	assert.equal((intent as unknown as { entry: { fields: { line: string } } }).entry.fields.line, "look");
+	assert.equal((await local.revision()).rev, rev0 + 1, "one commit for the three steps");
+	const txn = (t as { id: string }).id;
+	const done = await r.batch([{ op: "write", entry: { type: "Msg", fields: { text: "Du schaust." } }, txn, lease: 60_000 }, { op: "write", entry: { type: "Token", fields: { c: 1 } }, txn, lease: FOREVER }, { op: "commit", txn }]);
+	assert.equal(done.length, 3);
+	assert.deepEqual((await local.readAll(null)).map((e) => e.type).sort(), ["Msg", "Token"]);
+	// a step that fails undoes the steps before it
+	await r.write({ type: "Spot", fields: { x: 1 } }, null, FOREVER);
+	await assert.rejects(r.batch([{ op: "write", entry: { type: "Note", fields: {} }, lease: FOREVER }, { op: "write", entry: { type: "Spot", fields: { x: 1 } }, lease: FOREVER, unique: ["x"] }]), /unique/);
+	assert.equal(await local.count({ type: "Note" }), 0, "nothing of a failed batch stays");
+	// "$" without a begin is refused
+	await assert.rejects(r.batch([{ op: "take", template: { type: "Token" }, txn: "$" }]), /begin/);
+	// exactly once: the same request again gives the stored answer and writes nothing more
+	const g = await local.issueGeneration({ peerId: "peer-a" });
+	const request = { principal: { peerId: "peer-a" }, generation: g.generation, requestId: "b-1" };
+	const first = await local.batch([{ op: "write", entry: { type: "Once", fields: {} }, lease: FOREVER }], { request });
+	const again = await local.batch([{ op: "write", entry: { type: "Once", fields: {} }, lease: FOREVER }], { request });
+	assert.deepEqual(again, first);
+	assert.equal(await local.count({ type: "Once" }), 1);
+	// an observer may not batch
+	await assert.rejects(new RemoteSpace(inProcessTransport(sv, { peerId: "peer-obs" }), fast).batch([{ op: "write", entry: { type: "X", fields: {} } }]), /not allowed/);
+	await h.close(ctx);
+});
+
+test("transient writes: announced in the change stream (a put marked transient), never kept; under a transaction at its commit only", async () => {
+	const h = await memory();
+	const r = new RemoteSpace(inProcessTransport(service(h), { peerId: "peer-a" }), fast);
+	const local = new PhiSpaces(h, ctx);
+	const ops = async (after: number) => (await local.changes(after)).batches.flatMap((b) => b.ops.map((o) => o.op === "put" ? `put ${o.type}${o.transient ? " transient" : ""}` : "del"));
+	const r0 = (await local.revision()).rev;
+	await r.write({ type: "Msg", fields: { text: "hallo" } }, null, FOREVER, { transient: true });
+	assert.deepEqual(await ops(r0), ["put Msg transient"]);
+	assert.equal(await local.count({ type: "Msg" }), 0, "nothing is kept");
+	const t = await r.createTransaction(30_000);
+	const r1 = (await local.revision()).rev;
+	await r.write({ type: "Msg", fields: { text: "später" } }, t.id, FOREVER, { transient: true });
+	assert.deepEqual(await ops(r1), [], "not before the commit");
+	await r.commit(t.id);
+	assert.deepEqual(await ops(r1), ["put Msg transient"]);
+	const t2 = await r.createTransaction(30_000);
+	const r2 = (await local.revision()).rev;
+	await r.batch([{ op: "write", entry: { type: "Msg", fields: { text: "nie" } }, txn: t2.id, transient: true }, { op: "abort", txn: t2.id }]);
+	assert.deepEqual(await ops(r2), [], "an abort announces nothing");
+	await assert.rejects(r.write({ type: "Msg", fields: {} }, null, FOREVER, { transient: true, unique: ["x"] }), /transient/);
+	await h.close(ctx);
+});

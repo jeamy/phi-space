@@ -410,3 +410,30 @@ test("a memory budget drops the documents untouched for longest and reads them a
 	assert.equal(await space(5).count({ type: "Mark" }), 3);
 	await h.close(ctx);
 });
+
+test("reads by type use a bucket of the committed entries: subtypes, order, takes and writes of later commits, a txn's own writes", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "phi-bucket-"));
+	const host = await openSqliteHost(join(dir, "s.sqlite"));
+	try {
+		const p = new PhiSpaces(host, ctx);
+		await p.write({ type: "Item", fields: { n: 1 } });
+		await p.write({ type: "Coin", types: ["Item"], fields: { n: 2 } });
+		await p.write({ type: "Exit", fields: { n: 3 } });
+		const items = async (txn: string | null = null) => (await p.readAll({ type: "Item" }, { txn })).map((e) => e.fields.n);
+		assert.deepEqual(await items(), [1, 2], "a subtype is in its supertype's bucket, in order");
+		assert.deepEqual(await items(), [1, 2], "the same committed array answers again from its bucket");
+		await p.take({ type: "Coin" }, 0);
+		assert.deepEqual(await items(), [1], "a take makes a new array: the bucket of the old one is not used");
+		await p.write({ type: "Item", fields: { n: 4 } });
+		assert.deepEqual(await items(), [1, 4]);
+		const t = await p.createTransaction(FOREVER);
+		await p.write({ type: "Item", fields: { n: 5 } }, t.id);
+		assert.deepEqual(await items(t.id), [1, 4, 5], "a transaction sees its own write");
+		assert.deepEqual(await items(), [1, 4], "others do not");
+		await p.commit(t.id);
+		assert.equal(await p.count({ type: "Item" }), 3);
+	} finally {
+		await host.close(ctx);
+		rmSync(dir, { recursive: true, force: true });
+	}
+});

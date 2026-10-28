@@ -15,7 +15,7 @@ import type { Context } from "./context.ts";
 import * as core from "./core.ts";
 import * as claims from "./claims.ts";
 import {rpcDomain} from "./rpc-domain.ts";
-import { PhiSpaces, type SpaceHost } from "./client.ts";
+import { PhiSpaces, type BatchOp, type SpaceHost } from "./client.ts";
 import { listSpaces, snapshotSpace, spaceDoc, UnknownSpaceError, DEFAULT_ALIAS, Registry } from "./spaces.ts";
 import type { Principal, RequestRef } from "./claims.ts";
 import type { Json } from "./core.ts";
@@ -23,7 +23,7 @@ import { encodedBytes } from "./paging.ts";
 import { principalId, MailboxEpochMismatch, InvalidAck } from "./mailbox.ts";
 
 export const PROTOCOL_VERSION = 1;
-export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "spaces", "txn", "lease", "changes", "wait", "notify", "events", "ack"] as const;
+export const METHODS = ["hello", "generation", "write", "read", "take", "pollOperation", "resolveOperation", "cancelOperation", "readAll", "count", "stats", "spaces", "txn", "lease", "changes", "wait", "notify", "events", "ack", "batch"] as const;
 export type Method = (typeof METHODS)[number];
 /** Without wakeOnCommit: look again every 50 ms, as before. */
 const sleepSignal = { wait: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(50, Math.max(1, ms)))), stop: async () => {} };
@@ -32,7 +32,9 @@ const POLL_FALLBACK_MS = 1000;
 /** A waiting call looks again at the first commit, then at most this often: every look costs the space a read, and a busy
  *  space with many waiting calls would spend its time on them (the 50 ms the service looked before, halved). */
 const POLL_GAP_MS = 25;
-const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack"];
+/** A reply's JSON as `handle` measured it, so `handleText` sends it without encoding it a second time. */
+const encoded = new WeakMap<object, string>();
+const MUTATING: readonly Method[] = ["write", "read", "take", "cancelOperation", "txn", "lease", "wait", "notify", "ack", "batch"];
 
 // ---- identity and rights
 
@@ -176,8 +178,8 @@ export class SpaceService {
 		let call: unknown;
 		try { call = JSON.parse(text); } catch { return JSON.stringify(fail("BadRequest", "the call is not JSON")); }
 		const reply = await this.handle(call, conn, maxFrameBytes, bytes);
-		const textReply = JSON.stringify(reply);
-		if (encodedBytes(reply) > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", "the transport frame cannot carry this response"));
+		const textReply = encoded.get(reply) ?? JSON.stringify(reply);
+		if (Buffer.byteLength(textReply) > maxFrameBytes) return JSON.stringify(fail("ResourceExhausted", "the transport frame cannot carry this response"));
 		return textReply;
 	}
 
@@ -234,7 +236,10 @@ export class SpaceService {
                     if(hostId)reply.claimReceipt={protocol:'phi-spaces-claim-receipt-v1',hostId,...record};
                 }catch{/* Effect may already be committed. Leave the witness absent; never fabricate completion. */}
             }
-			if (encodedBytes(reply) > frameBytes) throw new core.ResourceExhausted("the configured frame cannot carry the result; use a compatible transport frame");
+			// encoded once: handleText sends this text instead of encoding the reply again
+			const text = JSON.stringify(reply);
+			if (Buffer.byteLength(text) > frameBytes) throw new core.ResourceExhausted("the configured frame cannot carry the result; use a compatible transport frame");
+			encoded.set(reply, text);
 			return reply;
 		} catch (e) {
 			if (e instanceof core.ResponseBudgetTooSmall && e.requiredBytes > responseFrame - 21) return fail("ResourceExhausted", "the configured frame cannot hold the next whole element");
@@ -293,7 +298,7 @@ export class SpaceService {
 				if (!isObj(a.entry.fields)) throw new Bad("entry.fields must be an object");
 				this.checkTypes(grant, [type, ...(types ?? [])], `type ${type}`);
 				if (a.unique !== undefined && (!Array.isArray(a.unique) || !a.unique.every(k => typeof k === "string"))) throw new Bad("unique must be field names");
-				const lease = await client.write({ type, ...(types ? { types } : {}), fields: a.entry.fields }, (a.txn as string | null | undefined) ?? null, duration(a.leaseMs, "leaseMs", core.ANY), { request, ...(a.unique === undefined ? {} : { unique: a.unique as string[] }) });
+				const lease = await client.write({ type, ...(types ? { types } : {}), fields: a.entry.fields }, (a.txn as string | null | undefined) ?? null, duration(a.leaseMs, "leaseMs", core.ANY), { request, ...(a.unique === undefined ? {} : { unique: a.unique as string[] }), ...(a.transient === true ? { transient: true } : {}) });
 				return lease as unknown as Json;
 			}
 			case "read":
@@ -347,6 +352,33 @@ export class SpaceService {
 			case "stats": {
 				if (grant.types !== "*") throw new Denied("aggregate stats need a role without type restrictions");
 				return await client.statsWithRevision() as unknown as Json;
+			}
+			case "batch": {
+				// every step needs the right its own call would need (write, take, read, txn), with the same type checks
+				if (this.o.merge?.(c.space)) throw new Bad("batch is not offered on a space with merged entry types (each write is merged on its own)");
+				if (!Array.isArray(a.ops) || a.ops.length === 0 || a.ops.length > 64) throw new Bad("ops must be 1 to 64 steps");
+				const ops: BatchOp[] = a.ops.map((x) => {
+					if (!isObj(x) || typeof x.op !== "string") throw new Bad("a step is an object with an op");
+					const txn = x.txn === undefined || x.txn === null ? null : str(x.txn, "txn");
+					if (x.op === "begin") { this.allowed(c.id, "txn"); return { op: "begin", lease: duration(x.leaseMs, "leaseMs", core.ANY) }; }
+					if (x.op === "commit" || x.op === "abort") { this.allowed(c.id, "txn"); if (txn === null) throw new Bad(`${x.op} needs a txn`); return { op: x.op, txn }; }
+					if (x.op === "write") {
+						const g = this.allowed(c.id, "write");
+						if (!isObj(x.entry) || !isObj(x.entry.fields)) throw new Bad("entry with fields is required");
+						const type = str(x.entry.type, "entry.type");
+						const types = x.entry.types === undefined ? undefined : (Array.isArray(x.entry.types) && x.entry.types.every((t) => typeof t === "string") ? (x.entry.types as string[]) : (() => { throw new Bad("entry.types must be strings"); })());
+						this.checkTypes(g, [type, ...(types ?? [])], `type ${type}`);
+						if (x.unique !== undefined && (!Array.isArray(x.unique) || !x.unique.every((k) => typeof k === "string"))) throw new Bad("unique must be field names");
+						return { op: "write", entry: { type, ...(types ? { types } : {}), fields: x.entry.fields }, txn, lease: duration(x.leaseMs, "leaseMs", core.ANY), ...(x.unique === undefined ? {} : { unique: x.unique as string[] }), ...(x.transient === true ? { transient: true } : {}) };
+					}
+					if (x.op === "take" || x.op === "read") {
+						const g = this.allowed(c.id, x.op), t = template(x.template);
+						if (g.types !== "*") this.checkTypes(g, t?.type ? [t.type] : undefined, "this template");
+						return { op: x.op, template: t, txn };
+					}
+					throw new Bad(`unknown batch step ${x.op}`);
+				});
+				return await client.batch(ops, { request }) as unknown as Json;
 			}
 			case "spaces": {
 				// the spaces this host serves (alias, id, creation), so a viewer can find the ones created at runtime
@@ -418,7 +450,7 @@ export class SpaceService {
 			spaceId: info.spaceId, alias: info.alias, incarnation: info.incarnation, streamId: core.streamIdOf(s ?? core.initialState()), rev: core.revision(s ?? core.initialState()),
 			authorityId: this.o.authorityId, primaryEpoch: await this.o.epochForSpace?.(info.spaceId) ?? this.o.primaryEpoch, role: "single",
 			principal: principalKey(c.id.principal), roles: c.id.roles,
-			features: [...METHODS, "write.unique", "read.chain", "read.locked"],
+			features: [...METHODS, "write.unique", "write.transient", "read.chain", "read.locked"],
 			limits: { maxFrameBytes: Math.min(lim.maxFrameBytes, c.frameBytes), maxCommitBytes: lim.maxCommitBytes, maxEventBytes: lim.maxEventBytes, maxEntryBytes: lim.maxEntryBytes, maxPollMs: this.o.maxPollMs, maxPendingPerPrincipal: this.o.maxPendingPerPrincipal, maxPendingPerPeer: this.o.maxPendingPerPeer },
 			capabilities: { snapshotPagination: true, mailboxes: true, completionProfiles: true, transactions: true, blockingTake: true, mode: "single" },
 		} as Json;

@@ -43,6 +43,19 @@ export interface DiskMapQuery<V> {
 	/** Every record: reads the whole map (audits and tests ask for it on purpose; enumerating the map may throw). */
 	entries(): Array<[string, V]>;
 }
+/** A draft of a part array answers this symbol with the committed array it drafts while the commit has not changed it
+ *  (store/draft.ts): a value that stays as it is, so an index of it (core.ts, by type) holds for the whole commit. */
+export const COMMITTED = Symbol("phi-spaces.committed");
+/** Part arrays a host published: values from then on (the next commit copies one on its first write). Not frozen:
+ *  freezing a big array made every later copy and walk of it slower than the index saves. */
+const published = new WeakSet<object>();
+export const markCommitted = (a: readonly unknown[]): void => { published.add(a); };
+/** The committed array behind `v`: `v` itself when a host published it, the base of an unchanged draft of one, else
+ *  undefined (a plain array may change in place: no index may be kept of it). */
+export function committedArray<T>(v: readonly T[]): readonly T[] | undefined {
+	if (published.has(v)) return v;
+	return (v as unknown as Record<symbol, readonly T[] | undefined>)[COMMITTED];
+}
 export const diskMapOf = <V>(m: unknown): DiskMapQuery<V> | undefined => (typeof m === "object" && m !== null ? (m as Record<symbol, DiskMapQuery<V> | undefined>)[DISK_MAP] : undefined);
 /** Freezes a value and everything in it (records read or written are values: the host, the SQLite store and the disk
  *  map hand out frozen ones). */

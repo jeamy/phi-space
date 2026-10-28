@@ -8,7 +8,7 @@ import { bytePage } from "./paging.ts";
 import { appendMail, assertMailboxCapacity, assertMailboxBatch, sweepMailboxes, type MailboxState } from "./mailbox.ts";
 import type { Principal } from "./claims.ts";
 import { jsonBytes, jsonCopy } from "./json.ts";
-import { diskMapOf } from "./store/types.ts";
+import { committedArray, diskMapOf } from "./store/types.ts";
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 export type Fields = { [k: string]: Json };
@@ -103,7 +103,7 @@ export type EntryRec = {
 	size?: number; // JSON bytes of `fields`, for the space-wide limit
 };
 /** `owner`: the only conversation that may use, commit, abort, renew or cancel it; null: host code only. */
-export type TxnRec = { completion?: CompletionAllowance; completionDeadline?: number; originRequestKey?: string; id: string; expires: number; owner: Target | null; reserved?: number; takenTasks?: Array<{ id: string; types: string[]; fields: Fields }>; runs?: Record<string, number> };
+export type TxnRec = { completion?: CompletionAllowance; completionDeadline?: number; originRequestKey?: string; id: string; expires: number; owner: Target | null; reserved?: number; takenTasks?: Array<{ id: string; types: string[]; fields: Fields }>; runs?: Record<string, number>; /** announce() under this transaction: put into the stream at its commit */ announced?: EntryRec[] };
 /** `gateField`: tasks name their run in this field; they are takeable only while that run's RunGate is running. */
 export type CompletionProfile = { taskType: string; resultTypes: string[]; equalFields: string[]; maxResultCount: number; maxResultBytes?: number; maxLeaseMs?: number; gateField?: string };
 export type RunGateState = "preparing" | "running" | "paused" | "stopped";
@@ -274,8 +274,16 @@ export function overheadBytes(s: Readonly<SpaceState>): number {
 export function outboxBytes(s: Readonly<SpaceState>): number { return s.outboxBytes ?? jsonBytes(s.outbox); }
 /** An event joins the outbox: it and its JSON separator are counted at once. */
 function pushOutbox(s: SpaceState, event: SpaceEvent): void { s.outboxBytes = outboxBytes(s) + jsonBytes(event) + 1; s.outbox.push(event); }
-/** Bytes of all entries' fields (the space-wide limits count these). */
-const entryBytes = (s: Readonly<SpaceState>): number => s.entries.reduce((n, e) => n + (e.size ?? jsonBytes(e.fields)), 0);
+/** Bytes of all entries' fields (the space-wide limits count these); of a committed array summed once (store/types.ts). */
+const entrySums = new WeakMap<readonly EntryRec[], number>();
+const entryBytes = (s: Readonly<SpaceState>): number => {
+	const base = committedArray(s.entries);
+	const known = base && entrySums.get(base);
+	if (known !== undefined && known !== null) return known;
+	const n = s.entries.reduce((n, e) => n + (e.size ?? jsonBytes(e.fields)), 0);
+	if (base) entrySums.set(base, n);
+	return n;
+};
 /** The waiter leaves the array in place (document drafts track changes in place). */
 const dropWaiter = (s: SpaceState, w: WaiterRec): void => { s.waiters.splice(s.waiters.indexOf(w), 1); };
 /**
@@ -458,6 +466,26 @@ export function deepEqual(a: Json, b: Json): boolean {
 	return ka.length === kb.length && ka.every((k) => k in (b as object) && deepEqual((a as Fields)[k]!, (b as Fields)[k]!));
 }
 
+/** Buckets of a committed entries array by type (a template's type matches subtypes), in the array's order. A bucket
+ *  is made the first time a full walk asks for its type (list, count, a page: they walk every entry anyway) and then
+ *  serves every later read of the same array, as long as no commit changed it (store/types.ts). */
+const typeBuckets = new WeakMap<readonly EntryRec[], Map<string, readonly EntryRec[]>>();
+/** The entries `t` can match, in the space's order: the bucket of its type when the array is a committed one; else, or
+ *  without a type, all of them (the caller still checks `matches`). `walk`: the caller reads every match, so a missing
+ *  bucket is made (a lookup that stops at the first match uses only one that is there). */
+function candidates(s: Readonly<SpaceState>, t: Template, walk: boolean): readonly EntryRec[] {
+	if (t == null || t.type == null) return s.entries;
+	const base = committedArray(s.entries);
+	if (!base) return s.entries;
+	let buckets = typeBuckets.get(base);
+	const known = buckets?.get(t.type);
+	if (known || !walk) return known ?? s.entries;
+	const bucket = base.filter((e) => e.types.includes(t.type!));
+	if (!buckets) typeBuckets.set(base, (buckets = new Map()));
+	buckets.set(t.type, bucket);
+	return bucket;
+}
+
 export function matches(t: Template, e: { id?: string; types: string[]; fields: Fields }): boolean {
 	if (t === null) return true;
 	if (t.id != null && t.id !== e.id) return false; // exact entry id
@@ -585,6 +613,34 @@ function expire(s: SpaceState, at: number): boolean {
  * leases it owns (never ownerless ones: those are the host's), it owns what it creates, and the limits apply.
  */
 const directoryEntry = (e: {types?:string[];type:string}) => [e?.type,...(Array.isArray(e?.types)?e.types:[])].some(t=>t==="Capability"||t==="MemberStatus");
+/**
+ * A write that is announced, not kept: the change stream carries it as a put marked `transient` (at once, or at the
+ * commit of `txn`; nothing on an abort), and no read, take, wait, count or subscription ever sees it. For output that
+ * only those who follow the stream need (a message on a screen): it costs no entry, no expiry and no removal later.
+ */
+export function announce(s: SpaceState, now: number, entry: EntryDraft, txn: string | null, as?: Target): Lease {
+	assertNotArchived(s);
+	assertMemberAdmission(s, "write");
+	settle(s, now);
+	if (typeof entry?.type !== "string" || entry.type === "") throw new IllegalArgumentError("entry needs a type");
+	if (entry.fields === null || typeof entry.fields !== "object" || Array.isArray(entry.fields)) throw new IllegalArgumentError("entry fields must be an object");
+	if (directoryEntry(entry)) throw new PermissionError("directory entries require trusted publication");
+	if (txn !== null) requireTxn(s, txn, as);
+	const lim = limitsOf(s);
+	if (as !== undefined) {
+		if (entry.type.length > lim.maxTypeChars) throw new LimitError(`type name longer than ${lim.maxTypeChars} characters`);
+		if ((entry.types?.length ?? 0) + 1 > lim.maxTypes) throw new LimitError(`more than ${lim.maxTypes} types`);
+		for (const t of entry.types ?? []) if (typeof t !== "string" || t.length > lim.maxTypeChars) throw new LimitError("bad or too long supertype name");
+	}
+	checkSize("entry", entry.fields, lim);
+	const rec: EntryRec = { id: peekId(s, "e"), type: entry.type, types: [...new Set([entry.type, ...(entry.types ?? [])])], fields: clone(entry.fields), expires: now, writtenUnder: null, takenBy: null, readBy: [], owner: as ?? null };
+	s.nextId++;
+	touch(s, now);
+	if (txn === null) record(s, now, transientOp(rec), lim.maxLogBytes);
+	else (s.txns[txn]!.announced ??= []).push(rec);
+	return { id: rec.id, expires: now };
+}
+
 export function write(s: SpaceState, now: number, entry: EntryDraft, txn: string | null, lease: number, as?: Target): Lease {
 	assertNotArchived(s);
 	if (directoryEntry(entry)) { if(as!==undefined || txn!==null) throw new PermissionError("directory entries require trusted publication"); assertMemberAdmission(s,"write"); if(s.membership && s.membership.state!=="active") throw new PermissionError("directory publication requires active Member"); } else assertMemberWrite(s, entry, txn, now);
@@ -707,7 +763,7 @@ export const view = (e: EntryRec, spaceId?: string): EntryView => ({ id: e.id, .
 
 function find(s: SpaceState, tmpl: Template, txn: string | null, take: boolean): { status: "found"; rec: EntryRec } | { status: "none" } | { status: "locked" } {
 	let locked = false;
-	for (const e of s.entries) {
+	for (const e of candidates(s, tmpl, false)) {
 		if (!matches(tmpl, e) || (e.restoredUnverified && (take || txn !== null))) continue;
 		if (take) { const run = runOf(s, e.types, e.fields); if (run !== undefined && !takeableRun(s, run)) continue; } // gated: invisible to takes, not a conflict
 		const mine = txn !== null && e.writtenUnder === txn;
@@ -930,14 +986,15 @@ export function parkOperation(s: SpaceState, key: string, tmpl: Template, take: 
 
 function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 	touch(s, now);
-	const runs = s.txns[id]?.runs;
+	const runs = s.txns[id]?.runs, announced = s.txns[id]?.announced;
 	delete s.txns[id];
 	for (const run of Object.keys(runs ?? {})) completeFence(s, run, now);
 	for (const r of s.regs) if (r.txn === id && r.consumer) queueEvent(s, now, { kind: "registrationClosed", eventId: r.id, seq: ++r.seq, handback: r.handback, target: r.target, reason: "transactionEnded" }, r.consumer, true);
 	prune(s.regs, (r) => r.txn === id); // registrations under a txn are dropped when it completes
 	const published: EntryRec[] = [];
-	for (let i = s.entries.length - 1; i >= 0; i--) { // backwards: removals do not shift what is still to visit
-		let e = s.entries[i]!;
+	const all = s.entries.slice(); // one copy instead of a draft lookup per index; the records are the same
+	for (let i = all.length - 1; i >= 0; i--) { // backwards: removals do not shift what is still to visit
+		let e = all[i]!;
 		if (e.readBy.includes(id)) e = setEntry(s, e, { readBy: e.readBy.filter((t) => t !== id) });
 		if (commit) {
 			if (e.takenBy === id) { s.entries.splice(i, 1); continue; } // removal commits (also covers written-and-taken)
@@ -949,6 +1006,7 @@ function finish(s: SpaceState, id: string, commit: boolean, now: number): void {
 	}
 	published.reverse(); // announced in write order
 	for (const e of published) { logPut(s, now, e); notifyWrite(s, e, null, now, true); }
+	if (commit) for (const e of announced ?? []) record(s, now, transientOp(e), limitsOf(s).maxLogBytes);
 }
 
 export function notify(s: SpaceState, now: number, tmpl: Template, txn: string | null, lease: number, handback: Json, target: Target | null, as?: Target, consumer?: Principal): { eventId: string; lease: Lease } {
@@ -1073,7 +1131,7 @@ export function count(s: Readonly<SpaceState>, now: number, tmpl: Template = nul
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
 	let n = 0;
-	for (const e of s.entries) {
+	for (const e of candidates(s, tmpl, true)) {
 		if (e.restoredUnverified && txn !== null) continue;
 		const st = standing(s, e, now); // what `txn` itself took is "locked": a transaction does not see its own takes
 		if ((st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) && matches(tmpl, e)) n++;
@@ -1093,7 +1151,7 @@ export function list(s: Readonly<SpaceState>, now: number, tmpl: Template = null
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
 	const out: EntryView[] = [];
-	for (const e of s.entries) {
+	for (const e of candidates(s, tmpl, true)) {
 		if (e.restoredUnverified && txn !== null) continue;
 		if (out.length >= limit) break;
 		const st = standing(s, e, now); // the same view of the space as count() has
@@ -1124,7 +1182,7 @@ export function listPage(s: Readonly<SpaceState>, now: number, tmpl: Template = 
 	if (txn !== null) requireTxn(s as SpaceState, txn, as);
 	const mine = active(s, txn, now);
 	const eligible: EntryView[] = [];
-	for (const e of s.entries) {
+	for (const e of candidates(s, tmpl, true)) {
 		if (seqOf(e.id) <= after || (e.restoredUnverified && txn !== null)) continue;
 		const st = standing(s, e, now);
 		if (st === "visible" || (st === "uncommitted" && mine && e.writtenUnder === txn)) if (matches(tmpl, e)) eligible.push(view(e, s.spaceId));
@@ -1135,6 +1193,7 @@ export function listPage(s: Readonly<SpaceState>, now: number, tmpl: Template = 
 // ---- revisions and the change stream (src/stream.ts)
 
 const putOp = (e: EntryRec): Op => ({ op: "put", id: e.id, type: e.type, types: [...e.types], fields: clone(e.fields), expires: e.expires, owner: e.owner, ...(e.restoredUnverified ? { restoredUnverified: true as const } : {}) });
+const transientOp = (e: EntryRec): Op => ({ ...(putOp(e) as Extract<Op, { op: "put" }>), transient: true });
 function logPut(s: SpaceState, now: number, e: EntryRec): void { record(s, now, putOp(e), limitsOf(s).maxLogBytes); }
 export function importRestoredEntry(s: SpaceState, now: number, e: EntryRec): boolean {
 	const cost = jsonBytes(e) + jsonBytes(putOp(e)) + 256;

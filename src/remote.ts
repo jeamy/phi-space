@@ -10,7 +10,7 @@ import { PROTOCOL_VERSION, MergeTypeNotExclusive, type Call, type ErrorCode, typ
 import { AUTH_PROTOCOL, signedBytes, type Challenge, type Signer } from "./auth.ts";
 import type { EntryDraft, Json, Lease, Template } from "./core.ts";
 import type { ClaimView, RequestRef } from "./claims.ts";
-import type { OpOptions, Req, SpaceLike, Taken, ChainOptions, ChainPage } from "./client.ts";
+import type { BatchOp, BatchResult, OpOptions, Req, SpaceLike, Taken, ChainOptions, ChainPage } from "./client.ts";
 import { MailboxEpochMismatch, InvalidAck, type MailboxPage } from "./mailbox.ts";
 import { performance } from "node:perf_hooks";
 
@@ -311,7 +311,18 @@ export class RemoteSpace implements SpaceLike {
 
 	async write(entry: EntryDraft, txn: string | null = null, lease: number = core.ANY, o: Req = {}): Promise<Lease> {
 		if (o.unique && !(await this.info()).features.includes("write.unique")) throw new UnsupportedOperation("server does not support atomic unique writes");
-		return (await this.mutate("write", { entry: entry as unknown as Json, txn, leaseMs: leaseArg(lease), ...(o.unique ? { unique: o.unique } : {}) }, o)) as unknown as Lease;
+		if (o.transient && !(await this.info()).features.includes("write.transient")) throw new UnsupportedOperation("server does not support transient writes");
+		return (await this.mutate("write", { entry: entry as unknown as Json, txn, leaseMs: leaseArg(lease), ...(o.unique ? { unique: o.unique } : {}), ...(o.transient ? { transient: true } : {}) }, o)) as unknown as Lease;
+	}
+	/** Several steps in one call and one commit (PhiSpaces.batch): all happen, or none. Throws UnsupportedOperation on a
+	 *  server without it. */
+	async batch(ops: readonly BatchOp[], o: Req = {}): Promise<BatchResult[]> {
+		if (!(await this.info()).features.includes("batch")) throw new UnsupportedOperation("server does not support batch");
+		const wire: Json[] = ops.map((x): Json => x.op === "begin" ? { op: "begin", leaseMs: leaseArg(x.lease ?? core.ANY) }
+			: x.op === "write" ? { op: "write", entry: x.entry as unknown as Json, txn: x.txn ?? null, leaseMs: leaseArg(x.lease ?? core.ANY), ...(x.unique ? { unique: x.unique } : {}), ...(x.transient ? { transient: true } : {}) }
+			: x.op === "take" || x.op === "read" ? { op: x.op, template: x.template as unknown as Json, txn: x.txn ?? null }
+			: { op: x.op, txn: x.txn ?? null });
+		return (await this.mutate("batch", { ops: wire }, o)) as unknown as BatchResult[];
 	}
 	read(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, false).then((r) => r.entry); }
 	readIfExists(tmpl: Template, timeout: number, o: OpOptions = {}) { return this.blocking("read", tmpl, timeout, o, true).then((r) => r.entry); }

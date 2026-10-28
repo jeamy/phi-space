@@ -41,10 +41,19 @@ export type OpOptions = {
 	resultBudget?: number;
 };
 /** Request identity for an immediate mutation. */
-export type Req = { request?: RequestRef; /** Atomically reject another physical entry of this type with these key fields, including reservations. */ unique?: string[] };
+export type Req = { request?: RequestRef; /** Atomically reject another physical entry of this type with these key fields, including reservations. */ unique?: string[]; /** Announced in the change stream, never kept (core.announce): no read sees it. */ transient?: boolean };
 
 const view = core.view;
 export type Taken = ReturnType<typeof view>;
+/** One step of a `batch`. `txn: "$"` names the transaction a `begin` earlier in the same batch opened. A take or read
+ *  never waits: it finds a match now or answers null (`locked` when only matches held by another transaction exist). */
+export type BatchOp =
+	| { op: "begin"; lease?: number }
+	| { op: "write"; entry: EntryDraft; txn?: string | null; lease?: number; unique?: string[]; transient?: boolean }
+	| { op: "take" | "read"; template: Template; txn?: string | null }
+	| { op: "commit" | "abort"; txn: string };
+/** What each step gave: a lease (begin, write), the entry or null (take, read; `locked` as for probe), null (commit, abort). */
+export type BatchResult = Lease | { entry: Taken | null; locked?: true } | null;
 /** Pause (plus up to as much again of jitter) between a change waking a blocked read/take and its next probe. */
 export const WAKE_DEBOUNCE_MS = 20;
 
@@ -144,16 +153,64 @@ export class PhiSpaces implements SpaceLike {
 	async configuration(): Promise<{ spaceId?: string; limits: core.Limits }> { const s = await this.snap(); return { spaceId: s?.spaceId, limits: core.limitsOf(s ?? core.initialState()) }; }
 
 	async write(entry: EntryDraft, txn: string | null = null, lease: number = core.ANY, o: Req = {}): Promise<Lease> {
-		const r = await this.mutate("write", { entry, txn, lease, ...(o.unique ? { unique: o.unique } : {}) } as unknown as Json, o.request, (s, now) => {
-			if (o.unique !== undefined) {
-				if (!Array.isArray(o.unique) || !o.unique.length || o.unique.some(k => typeof k !== "string" || !Object.hasOwn(entry.fields, k))) throw new core.IllegalArgumentError("unique needs existing field names");
-				core.settle(s, now);
-				if (s.entries.some(e => e.type === entry.type && o.unique!.every(k => core.deepEqual(e.fields[k] ?? null, entry.fields[k]!)))) throw new core.UniqueConflict("unique entry already exists");
-			}
-			return core.write(s, now, entry, txn, lease, this.as);
-		});
+		const r = await this.mutate("write", { entry, txn, lease, ...(o.unique ? { unique: o.unique } : {}), ...(o.transient ? { transient: true } : {}) } as unknown as Json, o.request, (s, now) => this.writeIn(s, now, entry, txn, lease, o.unique, o.transient));
 		if (r.fresh) this.meter.inc("writes");
 		return r.value;
+	}
+	private writeIn(s: core.SpaceState, now: number, entry: EntryDraft, txn: string | null, lease: number, unique: string[] | undefined, transient = false): Lease {
+		if (transient) { if (unique !== undefined) throw new core.IllegalArgumentError("a transient write cannot be unique"); return core.announce(s, now, entry, txn, this.as); }
+		if (unique !== undefined) {
+			if (!Array.isArray(unique) || !unique.length || unique.some(k => typeof k !== "string" || !Object.hasOwn(entry.fields, k))) throw new core.IllegalArgumentError("unique needs existing field names");
+			core.settle(s, now);
+			if (s.entries.some(e => e.type === entry.type && unique.every(k => core.deepEqual(e.fields[k] ?? null, entry.fields[k]!)))) throw new core.UniqueConflict("unique entry already exists");
+		}
+		return core.write(s, now, entry, txn, lease, this.as);
+	}
+
+	/**
+	 * Several steps in one commit under one request: all of them happen, or (one throws) none. A transaction's writes and
+	 * its commit, or its begin and first takes, cost one round and one commit instead of one each. Takes and reads do not
+	 * wait (a batch holds no waiter); a step that needs to wait is a call of its own.
+	 */
+	async batch(ops: readonly BatchOp[], o: Req = {}): Promise<BatchResult[]> {
+		if (!Array.isArray(ops) || ops.length === 0) throw new core.IllegalArgumentError("a batch needs steps");
+		await this.maintain();
+		const r = await this.host.commit(async (tx) => {
+			const s = await this.doc(tx), now = this.now();
+			this.options.authorization?.check();
+			let key: string | undefined;
+			if (o.request) {
+				if (!s.rpc?.claims[claims.keyOf(s, o.request)]) assertMemberAdmission(s, "batch");
+				const lim = core.limitsOf(s), reads = ops.filter((x) => x.op === "take" || x.op === "read").length;
+				const ad = claims.admit(s, now, o.request, "batch", core.plain(ops as unknown as Json), core.FOREVER, 1024 * ops.length + reads * (lim.maxEntryBytes + 4 * lim.maxTypeChars * lim.maxTypes + 4096));
+				if (ad.kind === "done") return { results: core.plain(ad.result) as unknown as BatchResult[], fresh: false };
+				if (ad.kind === "cancelled") throw new claims.OperationCancelled(`request ${o.request.requestId} was cancelled`);
+				this.claimMetadata(s, ad.key);
+				key = ad.key;
+			}
+			let begun: string | null = null;
+			const txnOf = (t: string | null | undefined): string | null => {
+				if (t !== "$") return t ?? null;
+				if (begun === null) throw new core.IllegalArgumentError("txn \"$\" needs a begin earlier in the batch");
+				return begun;
+			};
+			const results: BatchResult[] = [];
+			for (const x of ops) {
+				if (x.op === "begin") { const l = core.createTxn(s, now, x.lease ?? core.ANY, this.as); begun = l.id; results.push(l); }
+				else if (x.op === "write") results.push(this.writeIn(s, now, x.entry, txnOf(x.txn), x.lease ?? core.ANY, x.unique, x.transient === true));
+				else if (x.op === "take" || x.op === "read") {
+					const p = core.probe(s, now, x.template, txnOf(x.txn), x.op === "take", this.as);
+					results.push(p.status === "found" ? { entry: core.view(p.entry, s.spaceId) } : { entry: null, ...(p.status === "locked" ? { locked: true as const } : {}) });
+				} else if (x.op === "commit") { const t = txnOf(x.txn)!; this.checkTransactionRights(s, t); core.commitTxn(s, now, t, this.as); results.push(null); }
+				else if (x.op === "abort") { core.abortTxn(s, now, txnOf(x.txn)!, this.as); results.push(null); }
+				else throw new core.IllegalArgumentError(`unknown batch step ${(x as { op?: unknown }).op}`);
+			}
+			const plain = core.plain(results as unknown as Json) as unknown as BatchResult[];
+			if (key !== undefined) claims.decide(s, now, key, { state: "done", result: plain as unknown as Json });
+			return { results: plain, fresh: true };
+		}, this.ctx);
+		if (r.fresh) for (const x of ops) if (x.op === "write") this.meter.inc("writes"); else if (x.op === "take") this.meter.inc("takes"); else if (x.op === "read") this.meter.inc("reads");
+		return r.results;
 	}
 
 	/**
