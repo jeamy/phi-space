@@ -3,7 +3,7 @@
 import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { BatchOp, SpaceLike } from "phi-spaces";
+import type { BatchOp, SpaceLike, Template } from "phi-spaces";
 import { batching, bufferedTxn, supports } from "../server/space.ts";
 import { msgOptions } from "../server/engine/context.ts";
 
@@ -34,4 +34,40 @@ test("a command that writes a lot sends full batches of at most 64 steps, the co
 	assert.equal(f.batches.flat().filter((x) => x.op === "write").length, 71);
 	assert.deepEqual(f.batches.at(-1)!.at(-1), { op: "commit", txn: "t1" });
 	assert.equal(f.batches.flat().filter((x) => x.op === "commit").length, 1);
+});
+
+test("the mirror answers a command's snapshot reads as the space would, and fresh() waits for what was just committed", async () => {
+	const { FOREVER, NO_WAIT, serveSpace, SpaceService, startService, StaticIdentity } = await import("phi-spaces");
+	const { BACKGROUND_CONTEXT: ctx } = await import("phi-spaces/context");
+	const { openOwnMemoryHost } = await import("phi-spaces/store/host");
+	const { connectSpace, Mirror, parseTarget } = await import("../server/space.ts");
+	const host = openOwnMemoryHost(), stop = await startService(host, ctx, { watchDebounceMs: 10 });
+	const sock = `unix:/tmp/mmo-mirror-${process.pid}.sock`;
+	const server = await serveSpace(new SpaceService({ host, ctx, identity: new StaticIdentity({ p: { principal: { peerId: "p" }, roles: ["member"] } }), wakeOnCommit: true }), { listen: parseTarget(sock), connection: () => ({ peerId: "p" }) });
+	const { space, close } = connectSpace(sock);
+	try {
+		for (const room of ["a", "b", "a"]) await space.write({ type: "Item", fields: { room } }, null, FOREVER);
+		const m = new Mirror(space, { waitMs: 200 });
+		await m.ready();
+		const plain = async (tmpl: Template) => (await space.readAll(tmpl)).map(({ gid: _, ...e }) => e); // the mirror keeps no gid
+		assert.deepEqual(m.readAll({ type: "Item", fields: { room: "a" } }), await plain({ type: "Item", fields: { room: "a" } }));
+		// written, taken in a transaction (gone from the snapshot), a lease that lapses: fresh() sees each at once
+		const w = await space.write({ type: "Item", fields: { room: "c" } }, null, FOREVER);
+		await m.fresh();
+		assert.equal(m.count({ type: "Item", fields: { room: "c" } }), 1);
+		const t = await space.createTransaction(10_000);
+		await space.take({ id: w.id }, NO_WAIT, { txn: t.id });
+		await m.fresh();
+		assert.equal(m.count({ type: "Item", fields: { room: "c" } }), 0, "taken under a transaction: not in the snapshot");
+		await space.abort(t.id);
+		await m.fresh();
+		assert.equal(m.count({ type: "Item", fields: { room: "c" } }), 1, "the abort puts it back");
+		await space.write({ type: "Msg", fields: { n: 1 } }, null, 300);
+		await m.fresh();
+		assert.equal(m.count({ type: "Msg" }), 1);
+		await new Promise((r) => setTimeout(r, 400));
+		assert.equal(m.count({ type: "Msg" }), 0, "its lease lapsed");
+		assert.deepEqual(m.readAll({ type: "Item" }), await plain({ type: "Item" }), "the same entries in the same order");
+		m.close();
+	} finally { close(); await server.close(); await stop(); }
 });

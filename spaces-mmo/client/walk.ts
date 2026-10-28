@@ -8,8 +8,10 @@
 export const WALK_MS = 150;
 /** Steps the page may walk ahead of the answers: a guard against running away from a server that stopped answering. */
 export const MAX_AHEAD = 8;
-/** No answer for this long while steps are on their way (an intent lost): the page takes the server's place again. */
-export const RESYNC_MS = 3000;
+/** No answer for this long while steps are on their way (an intent lost): the page takes the server's place again.
+ *  Longer than a busy world takes to answer (2 to 9 s with 200 figures, docs/lasttest-2026-10-28.md): sooner, the
+ *  figure jumped back to where the answers stood and forward again when they came. A lost intent lapses after 30 s. */
+export const RESYNC_MS = 15_000;
 
 type Cell = { x: number; y: number };
 export type Step = { seq: number; dx: number; dy: number };

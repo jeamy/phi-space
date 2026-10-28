@@ -29,7 +29,7 @@ import { sweepSpots } from "./engine/occupancy.ts";
 import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
-import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
+import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
 
 export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
@@ -72,6 +72,10 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	// Batching needs a space that offers it (an older one refuses): asked once. With batching the intent is taken even
 	// when the token is held elsewhere; the abort then puts it back at once.
 	const batch = await batching(space);
+	// a copy of the world in this process answers the commands' snapshot reads (Mirror); it needs batching (the reads go
+	// through bufferedTxn)
+	const mirror = batch && process.env.SPACES_MMO_WORLD_INTENTS !== "0" && process.env.SPACES_MMO_MIRROR !== "0" ? new Mirror(space) : null;
+	await mirror?.ready();
 	const begin = async (charId: string): Promise<{ txn: string; intent: IntentFields | null }> => {
 		if (!batch) { const txn = (await space.createTransaction(TXN_MS)).id; return { txn, intent: await claim(txn, charId) }; }
 		const [t, token, intent] = (await batch.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }, { op: "take", template: { type: "Intent", fields: { charId } }, txn: "$" }])) as [{ id: string }, { entry: Taken | null }, { entry: Taken | null }];
@@ -81,14 +85,14 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	 *  character's token written back last) in one call. */
 	const finishing = (txn: string, charId: string): { space: SpaceLike; commit(): Promise<void> } => {
 		if (!batch) return { space, async commit() { await space.write(actorToken(charId), txn, FOREVER); await space.commit(txn); } };
-		const b = bufferedTxn(batch, txn);
+		const b = bufferedTxn(batch, txn, mirror);
 		return { space: b.space, commit: () => b.commit([{ op: "write", entry: actorToken(charId), txn, lease: FOREVER }]) };
 	};
 
 	/** One entry by template from the snapshot (no commit); only when none is visible, a read that waits while another
 	 *  transaction holds it (a character being moved by a give, an account in the middle of its registration). */
 	const one = async (tmpl: { type: string; fields: Record<string, unknown> }, waitMs: number) =>
-		(await space.readAll(tmpl as never, { limit: 1 }))[0] ?? (await space.readIfExists(tmpl as never, waitMs));
+		(mirror ? mirror.readAll(tmpl as never, 1) : await space.readAll(tmpl as never, { limit: 1 }))[0] ?? (await space.readIfExists(tmpl as never, waitMs));
 
 	/** A refusal: in a transaction of its own (again holding the token), the intent is consumed and the actor told. */
 	const refuse = async (actor: CharacterFields, text: string) => {
@@ -111,6 +115,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 			// another worker serves this character right now (tokens are written with every character, and for older
 			// ones when a worker starts)
 			if (!intent) { await space.abort(txn); return "held"; }
+			await mirror?.fresh();
 			const a = await one({ type: "Character", fields: { charId } }, 5_000);
 			const end = finishing(txn, charId);
 			if (a) {
@@ -218,7 +223,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; await proc.stop(); conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; mirror?.close(); await proc.stop(); conn.close(); },
 	};
 }
 

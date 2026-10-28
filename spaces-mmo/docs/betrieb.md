@@ -236,6 +236,11 @@ ein Kern trägt; die Antwortzeit auf einem schnellen, nicht gesättigten Rechner
   schickt am Ende alle Schreibvorgänge des Befehls mit dem Commit in einem zweiten (`bufferedTxn` in `server/space.ts`).
   Nur ein `write` mit `unique` (eine Zelle belegen) geht sofort, damit „besetzt“ gleich zurückkommt.
   `SPACES_MMO_BATCH=0` schaltet es ab.
+- **Lesen aus dem Spiegel.** Der Befehls-Worker hält eine Kopie der Welt (`Mirror` in `server/space.ts`, aus dem
+  Änderungsstrom wie der Web-Prozess) und beantwortet die Lesezugriffe eines Befehls ohne Transaktion selbst, auf seinem
+  eigenen Kern; je Befehl fragt er den Space nur nach der Revision. Mit 200 Figuren lokal: 1.043 statt 1.818 Aufrufe je
+  Sekunde, Median 125 statt 445 ms ([lasttest-2026-10-28.md](lasttest-2026-10-28.md), dritter Lauf).
+  `SPACES_MMO_MIRROR=0` schaltet ihn ab.
 - **Nachrichten ohne Entry.** Was nur auf Bildschirmen erscheint, geht als transientes Schreiben in den Änderungsstrom
   und wird nie gespeichert (`msgOptions` in `engine/context.ts`). Entries bleiben, was jemand später liest: Gesprochenes
   im Raum (die NPC-Skripte hören zu), Kanäle, alles an eine NPC. Ein neu gestarteter Web-Prozess hat dafür keinen

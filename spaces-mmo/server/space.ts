@@ -3,7 +3,8 @@
 // of. Both are served by the space process (space-host.ts), each from its own store on its own socket.
 import os from "node:os";
 import { randomBytes } from "node:crypto";
-import { ANY, awaitWork as awaitWorkFor, connectSpace as connect, readExisting as readHeld, type BatchOp, type BatchResult, type SpaceLike, type Taken, type Template } from "phi-spaces";
+import { ANY, awaitWork as awaitWorkFor, connectSpace as connect, readExisting as readHeld, RevisionAhead, SnapshotExpired, type BatchOp, type BatchResult, type SpaceLike, type Taken, type Template } from "phi-spaces";
+import { matches } from "phi-spaces/core";
 
 export { parseTarget, peek, StillHeld } from "phi-spaces";
 
@@ -43,7 +44,7 @@ const MAX_STEPS = 64;
  * `count` without `txn`) never see a transaction's writes anyway and go as they are. A buffered write answers a lease
  * without an id: the engine does not use the ids of what it writes in a command.
  */
-export function bufferedTxn(space: Batching, txn: string): { space: SpaceLike; commit(more?: BatchOp[]): Promise<void> } {
+export function bufferedTxn(space: Batching, txn: string, mirror: Mirror | null = null): { space: SpaceLike; commit(more?: BatchOp[]): Promise<void> } {
 	const waiting: BatchOp[] = [];
 	const flush = async () => { while (waiting.length) await space.batch(waiting.splice(0, MAX_STEPS)); };
 	const plainRead = (prop: string | symbol, args: unknown[]) =>
@@ -61,6 +62,9 @@ export function bufferedTxn(space: Batching, txn: string): { space: SpaceLike; c
 				return target.write(entry, t, lease, o as never);
 			};
 			if (typeof v !== "function") return v;
+			// a snapshot read from the copy (Mirror): a command's reads cost the space nothing
+			if (mirror && prop === "readAll") return async (tmpl: Template = null, o: { limit?: number; txn?: string | null } = {}) => { if (o.txn) { await flush(); return target.readAll(tmpl, o); } return mirror.readAll(tmpl, o.limit); };
+			if (mirror && prop === "count") return async (tmpl: Template = null, t: string | null = null) => { if (t !== null) { await flush(); return target.count(tmpl, t); } return mirror.count(tmpl); };
 			return async (...args: unknown[]) => { if (!plainRead(prop, args)) await flush(); return v.apply(target, args); };
 		},
 	});
@@ -73,6 +77,101 @@ export function bufferedTxn(space: Batching, txn: string): { space: SpaceLike; c
 		},
 	};
 }
+
+/**
+ * The space's visible entries, copied into this process: read once, then kept by the change stream (the web process
+ * does the same, gateway.ts). It answers the snapshot reads of a command (`readAll` and `count` without `txn`) here, on
+ * this process's core, instead of a call each to the space process, which runs every command of the world on one core
+ * (docs/lasttest-2026-10-28.md, 200 figures). `fresh()` asks the space for its revision once and waits until the copy has
+ * reached it, so a command sees at least what was committed before it began (its own character's last command too).
+ * Takes, writes and reads under a transaction still go to the space: they decide, the copy only informs.
+ * SPACES_MMO_MIRROR=0 turns it off.
+ */
+export class Mirror {
+	readonly #space: SpaceLike;
+	readonly #entries = new Map<string, Taken & { expires?: number }>();
+	#rev = -1;
+	/** The space's change stream the copy follows: a restarted space may start another one, with other revisions. */
+	#stream = "";
+	#waiting: Array<{ rev: number; stream: string; ok: () => void }> = [];
+	#closed = false;
+	#ready: Promise<void>;
+	readonly #waitMs: number;
+	/** `waitMs`: how long one call for changes waits for a commit. */
+	constructor(space: SpaceLike, o: { waitMs?: number } = {}) {
+		this.#space = space;
+		this.#waitMs = o.waitMs ?? 20_000;
+		this.#ready = new Promise((ok) => void this.#follow(ok));
+	}
+	/** Resolves once the first copy is complete. */
+	ready(): Promise<void> { return this.#ready; }
+	close(): void { this.#closed = true; for (const w of this.#waiting.splice(0)) w.ok(); }
+
+	/** Waits until the copy holds everything the space had committed when this was called. */
+	async fresh(): Promise<void> {
+		await this.#ready;
+		const { rev, streamId: stream } = await this.#space.readPage({ type: "-" });
+		if ((this.#stream === stream && this.#rev >= rev) || this.#closed) return;
+		await new Promise<void>((ok) => this.#waiting.push({ rev, stream, ok }));
+	}
+
+	readAll(tmpl: Template, limit = Number.MAX_SAFE_INTEGER): Taken[] {
+		const now = Date.now(), out: Array<Taken & { expires?: number }> = [];
+		for (const e of this.#entries.values()) if ((e.expires ?? Infinity) > now && matches(tmpl, e)) out.push(e);
+		// the space lists in the order the entries were written (their ids count up)
+		return out.sort((a, b) => seqOf(a.id) - seqOf(b.id)).slice(0, limit).map(({ expires: _, ...e }) => structuredClone(e));
+	}
+	count(tmpl: Template): number {
+		const now = Date.now();
+		let n = 0;
+		for (const e of this.#entries.values()) if ((e.expires ?? Infinity) > now && matches(tmpl, e)) n++;
+		return n;
+	}
+
+	#advance(rev: number): void {
+		this.#rev = rev;
+		this.#waiting = this.#waiting.filter((w) => (w.stream === this.#stream && w.rev <= rev ? (w.ok(), false) : true));
+	}
+
+	async #follow(ready: () => void): Promise<void> {
+		let rev = -1;
+		while (!this.#closed) {
+			try {
+				if (rev < 0) {
+					this.#entries.clear();
+					const head = await this.#space.readPage({ type: "-" });
+					rev = head.rev; this.#stream = head.streamId;
+					let after: string | null = null;
+					do {
+						const p = await this.#space.readPage(null, { after });
+						// without `gid` (the change stream does not carry it; the game does not use it)
+						for (const { gid: _, ...e } of p.items) this.#entries.set(e.id, e);
+						after = p.next;
+					} while (after !== null);
+					this.#advance(rev);
+					ready();
+				}
+				// RemoteSpace.changes takes the stream and answers `resync` when the space follows another one
+				const follow = this.#space as unknown as { changes(after: number, o: { waitMs: number; streamId: string }): Promise<Awaited<ReturnType<SpaceLike["changes"]>> & { resync?: boolean }> };
+				const ch = await follow.changes(rev, { waitMs: this.#waitMs, streamId: this.#stream });
+				if (ch.resync) { rev = -1; continue; } // another stream (the space restarted): copy everything again
+				for (const b of ch.batches) for (const op of b.ops) {
+					if (op.op === "del") this.#entries.delete(op.id);
+					else if (!op.transient) this.#entries.set(op.id, { id: op.id, type: op.type, types: op.types, fields: op.fields, owner: op.owner, expires: op.expires });
+				}
+				rev = ch.next;
+				this.#advance(rev);
+			} catch (e) {
+				if (this.#closed) break;
+				// the history moved past the cursor (or the space restarted): copy everything again
+				if (e instanceof SnapshotExpired || e instanceof RevisionAhead) { rev = -1; continue; }
+				console.error("[mirror] change stream:", (e as Error).message);
+				await new Promise((r) => setTimeout(r, 1000));
+			}
+		}
+	}
+}
+const seqOf = (id: string): number => { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; };
 
 /** SPACES_MMO_TRACE=1: every ten seconds this process logs how many calls it made to the space, per method and the
  *  template's type, with their time (to find who keeps the space busy). */

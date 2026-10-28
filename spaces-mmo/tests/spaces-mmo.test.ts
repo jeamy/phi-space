@@ -113,8 +113,11 @@ test("on SQLite the world and the logins survive a restart of the space process"
 		const a = new Player(srv.url);
 		await a.post("/api/register", { name: "Kai", password: "geheim-123" });
 		const h = await a.play();
-		a.send("move 7 9");
-		await a.until((f) => f.t === "char" && f.c.charId === h.me.charId && f.c.x === 7 && f.c.y === 9);
+		// a new character starts on a random cell near the spawn: a move to where it stands would change nothing
+		const start = h.chars.find((c: { charId: string }) => c.charId === h.me.charId);
+		const to = start?.x === 7 && start?.y === 9 ? { x: 8, y: 9 } : { x: 7, y: 9 };
+		a.send(`move ${to.x} ${to.y}`);
+		await a.until((f) => f.t === "char" && f.c.charId === h.me.charId && f.c.x === to.x && f.c.y === to.y);
 		await a.leave();
 		await stack.restartSpace();
 		const again = await eventually(async () => (await a.me().catch(() => null))?.account, 15_000, "the login after the restart");
@@ -123,7 +126,7 @@ test("on SQLite the world and the logins survive a restart of the space process"
 		assert.equal((await back.post("/api/login", { name: "kai", password: "geheim-123" })).status, 200, "names are case-insensitive");
 		await eventually(async () => {
 			const c = await stack.space.readIfExists({ type: "Character", fields: { charId: h.me.charId } }, 0).catch(() => null);
-			return c && c.fields.x === 7 && c.fields.y === 9;
+			return c && c.fields.x === to.x && c.fields.y === to.y;
 		}, 15_000, "the position after the restart");
 	} finally { await srv.close(); await stack.close(); await rm(dataDir, { recursive: true, force: true }); }
 });
