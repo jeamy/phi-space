@@ -52,8 +52,11 @@ async function underLock<T>(space: SpaceLike, txnMs: number, fn: (txn: string) =
 	} catch (e) { await space.abort(txn).catch(() => {}); throw e; }
 }
 
-export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?: boolean; txnMs?: number } = {}): Promise<LoadResult> {
+/** `elsewhere`: whether a thing exists outside this space (in a region: in another region's space, or in a character
+ *  crossing on a ferry). A placed thing or an NPC's purse is spawned only where it exists nowhere at all. */
+export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?: boolean; txnMs?: number; elsewhere?: (itemId: string) => Promise<boolean> } = {}): Promise<LoadResult> {
 	const txnMs = o.txnMs ?? 30_000;
+	const elsewhere = o.elsewhere ?? (async () => false);
 	/** Writes `draft` keyed by `key` in `txn`: when missing, or (replacing) instead of what is there. */
 	const upsert = async (txn: string, replace: boolean, type: string, key: Record<string, string>, draft: Parameters<SpaceLike["write"]>[0]) => {
 		const old = await peek(space, { type, fields: key }, { txn });
@@ -89,7 +92,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 		if (replace) for (const obj of w.objects) {
 			let there: unknown;
 			try { there = await readExisting(space, { type: "Item", fields: { itemId: obj.itemId } }, { txn }); } catch (e) { if (e instanceof StillHeld) continue; throw e; }
-			if (there) continue;
+			if (there || (await elsewhere(obj.itemId))) continue;
 			// resolved from the definition: the prototypes written above are not visible outside this transaction
 			await spawn(space, txn, w, resolveFrom(w.prototypes, obj.proto)!, { itemId: obj.itemId, location: obj.room, x: obj.x, y: obj.y });
 			spawned.push(obj.itemId);
@@ -127,6 +130,7 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			if (!exists || replace) for (const c of n.carry ?? []) for (let i = 0; i < c.count; i++) {
 				const itemId = `${charId}-${c.proto}-${i + 1}`;
 				try { if (await readExisting(space, { type: "Item", fields: { itemId } }, { txn })) continue; } catch (e) { if (e instanceof StillHeld) continue; throw e; }
+				if (await elsewhere(itemId)) continue;
 				await spawn(space, txn, w, resolveFrom(w.prototypes, c.proto)!, { itemId, location: charId, x: -1, y: -1 });
 			}
 		}

@@ -58,11 +58,20 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		storm: async () => { await stormTick(space, w, msgLeaseMs); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
-	const loaded = await loadIntoSpace(space, w).catch((e) => { conn.close(); throw e; });
-	const proc = announce(space, "world");
-	// a region's world worker delivers the characters that took a ferry out of it (engine/handover.ts)
+	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it
+	// (engine/handover.ts), and so its loader spawns no thing that exists in another region already
 	const others = new Map<string, SpaceLike>(), otherConns: Array<{ close: () => void }> = [];
 	if (region) for (const [id, address] of regionAddresses(full, "")) if (id !== region) { const c = connectSpace(address); others.set(id, c.space); otherConns.push(c); }
+	const elsewhere = async (itemId: string) => {
+		for (const s of [space, ...others.values()]) {
+			if (s !== space && (await s.readAll({ type: "Item", fields: { itemId } }, { limit: 1 })).length) return true;
+			// a thing on a ferry: in a Handover, in neither region's things
+			if ((await s.readAll({ type: "Handover" })).some((h) => (h.fields.items as Array<{ fields: { itemId?: unknown } }>).some((i) => i.fields.itemId === itemId))) return true;
+		}
+		return false;
+	};
+	const loaded = await loadIntoSpace(space, w, region ? { elsewhere } : {}).catch((e) => { conn.close(); for (const c of otherConns) c.close(); throw e; });
+	const proc = announce(space, "world");
 	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
 	const tokens = await ensureTokens(space);

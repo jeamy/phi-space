@@ -14,6 +14,8 @@ import { CommandError, type CommandCtx } from "./context.ts";
 import { claimSpot, freeCellNear, occupiedIn, solidIn } from "./occupancy.ts";
 import type { WorldDef } from "./world.ts";
 
+const GUEST_MS = () => Number(process.env.SPACES_MMO_GUEST_TTL_MS ?? 7 * 24 * 3600_000);
+
 export type HandoverFields = {
 	handoverId: string; charId: string; from: string; to: string;
 	/** The character as it arrives: in the room of the other region, at the ferry's landing (moved to a free cell there). */
@@ -47,7 +49,8 @@ export async function arrive(space: SpaceLike, w: WorldDef, h: HandoverFields): 
 	const txn = (await space.createTransaction(30_000)).id;
 	try {
 		if (await readExisting(space, { type: "Character", fields: { charId: h.charId } }, { txn })) { await space.abort(txn); return false; }
-		if (h.account && !(await readExisting(space, { type: "Account", fields: { accountId: h.account.accountId } }, { txn }))) await space.write({ type: "Account", fields: h.account as never }, txn, FOREVER);
+		// a guest's account lapses as before (the lapsed guests' cleanup goes by it); a registered one stays
+		if (h.account && !(await readExisting(space, { type: "Account", fields: { accountId: h.account.accountId } }, { txn }))) await space.write({ type: "Account", fields: h.account as never }, txn, h.account.guest ? GUEST_MS() : FOREVER);
 		const room = (await peek(space, { type: "Room", fields: { roomId: h.character.room } }))?.fields as unknown as RoomFields | undefined;
 		let at = { x: h.character.x, y: h.character.y };
 		if (room) {

@@ -9,6 +9,7 @@
 // exits, prototypes, help, tokens, dates, locks) and what lapses anyway (sessions, cells, messages, intents) is left out.
 // Each NPC gets its birth marker in the region it starts in, so no region makes a second one. The old file stays.
 import "./env.ts";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { FOREVER, PhiSpaces, type Taken } from "phi-spaces";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
@@ -20,8 +21,13 @@ import { ROOT } from "./env.ts";
 
 const w = await loadWorld();
 const file = join(process.env.SPACES_MMO_DATA || join(ROOT, ".local"), "world.sqlite");
+// a missing file would be made empty here, and an empty world moves nothing (and would say so as if it had)
+if (!existsSync(file)) throw new Error(`${file} does not exist (is the volume mounted?)`);
 const host = await openSqliteHost(file);
 const old = new PhiSpaces(host, ctx);
+const before = await old.stats();
+console.log(`[migrate] ${file}: ${before.entries} entries; characters ${await old.count({ type: "Character" })}, accounts ${await old.count({ type: "Account" })}, things ${await old.count({ type: "Item" })}, coins ${await old.count({ type: "Coin" })}`);
+if (!(await old.count({ type: "Character" }))) throw new Error(`${file} holds no character: nothing to move`);
 const regions = RegionSpaces.connect(w, "");
 if (regions.size < 2) throw new Error("SPACES_MMO_REGIONS must name the region spaces");
 for (const [id, s] of regions.entries()) if ((await s.count({ type: "Character" })) || (await s.count({ type: "Item" }))) throw new Error(`the region ${id} is not empty: moved already?`);

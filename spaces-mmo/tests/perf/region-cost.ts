@@ -1,5 +1,5 @@
 // What 200 figures (LOAD_BOTS) cost the world split into its regions (tests/stack.ts startRegions, SQLite): a space
-// process and a world worker per region, the web part in this process, LOAD_SECONDS of tests/perf/live-load.ts. Prints
+// process, a world worker and an npc process per region (LOAD_NPCS=0: none), the web part in this process, LOAD_SECONDS of tests/perf/live-load.ts. Prints
 // one JSON line: commands, commands per second, p50/p95, and the CPU share of each process by role and region (the
 // share of one core, in percent).
 //
@@ -16,6 +16,9 @@ const cpu = () => { const out: Record<string, number> = {}; for (const pid of re
 const dataDir = await mkdtemp(join(tmpdir(), "mmo-rc-data-"));
 const r = await startRegions({ worldEnv: { SPACES_MMO_GUESTS_PER_HOUR: "1000" }, dataDir });
 process.env.SPACES_MMO_GUESTS_PER_HOUR = "1000";
+// every region's npc process, as on the servers (each plays every role, a role only where its NPC stands)
+// (the roles of SPACES_MMO_NPCS, as tests/perf/space-cost.ts; LOAD_NPC_ROLES=all: every role of the world)
+if (process.env.LOAD_NPCS !== "0") for (const id of r.ids) await r.npcProcess(id, process.env.LOAD_NPC_ROLES === "all" ? { SPACES_MMO_NPCS: "" } : {});
 const srv = await startWeb({ port: 0, space: "unix:/nowhere", accounts: r.accounts, regions: r.list });
 const out = await mkdtemp(join(tmpdir(), "mmo-rc-"));
 await new Promise((ok) => setTimeout(ok, 3000));
