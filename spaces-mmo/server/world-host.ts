@@ -17,7 +17,7 @@
 //   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.md); an existing clock keeps its rate
 import "./env.ts";
 import { pathToFileURL } from "node:url";
-import { FOREVER, NO_WAIT } from "phi-spaces";
+import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { CommandError, execute } from "./engine/commands.ts";
 import { msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
@@ -29,7 +29,7 @@ import { sweepSpots } from "./engine/occupancy.ts";
 import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
-import { announce, awaitWork, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
+import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
 
 export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
@@ -67,6 +67,21 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 		return e ? fieldsOf<IntentFields>(e) : null;
 	};
 
+	/** A new transaction holding the character's token and its oldest intent (claim): with batching one call and one
+	 *  commit for the three steps; the intent is null when either is missing (the transaction is then only aborted). */
+	const begin = async (charId: string): Promise<{ txn: string; intent: IntentFields | null }> => {
+		if (!batching(space)) { const txn = (await space.createTransaction(TXN_MS)).id; return { txn, intent: await claim(txn, charId) }; }
+		const [t, token, intent] = (await space.batch([{ op: "begin", lease: TXN_MS }, { op: "take", template: actorToken(charId), txn: "$" }, { op: "take", template: { type: "Intent", fields: { charId } }, txn: "$" }])) as [{ id: string }, { entry: Taken | null }, { entry: Taken | null }];
+		return { txn: t.id, intent: token.entry && intent.entry ? fieldsOf<IntentFields>(intent.entry) : null };
+	};
+	/** The space for the rest of a command under `txn`, and how it ends: with batching its writes go with the commit (the
+	 *  character's token written back last) in one call. */
+	const finishing = (txn: string, charId: string): { space: SpaceLike; commit(): Promise<void> } => {
+		if (!batching(space)) return { space, async commit() { await space.write(actorToken(charId), txn, FOREVER); await space.commit(txn); } };
+		const b = bufferedTxn(space, txn);
+		return { space: b.space, commit: () => b.commit([{ op: "write", entry: actorToken(charId), txn, lease: FOREVER }]) };
+	};
+
 	/** One entry by template from the snapshot (no commit); only when none is visible, a read that waits while another
 	 *  transaction holds it (a character being moved by a give, an account in the middle of its registration). */
 	const one = async (tmpl: { type: string; fields: Record<string, unknown> }, waitMs: number) =>
@@ -74,25 +89,27 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 
 	/** A refusal: in a transaction of its own (again holding the token), the intent is consumed and the actor told. */
 	const refuse = async (actor: CharacterFields, text: string) => {
-		const txn = (await space.createTransaction(TXN_MS)).id;
+		let txn: string | null = null;
 		try {
-			if (!(await claim(txn, actor.charId))) { await space.abort(txn); return; }
-			await msg({ space, txn, actor, msgLeaseMs }, actor.charId, "error", text);
-			await space.write(actorToken(actor.charId), txn, FOREVER);
-			await space.commit(txn);
-		} catch { await space.abort(txn).catch(() => {}); }
+			const b = await begin(actor.charId);
+			txn = b.txn;
+			if (!b.intent) { await space.abort(txn); return; }
+			const end = finishing(txn, actor.charId);
+			await msg({ space: end.space, txn, actor, msgLeaseMs }, actor.charId, "error", text);
+			await end.commit();
+		} catch { if (txn) await space.abort(txn).catch(() => {}); }
 	};
 
 	/** Runs the oldest intent of one character. "ran"; "held": another worker serves this character right now. */
 	const serve = async (charId: string): Promise<"ran" | "held"> => {
-		const t0 = Date.now(), txn = (await space.createTransaction(TXN_MS)).id;
+		const t0 = Date.now(), { txn, intent } = await begin(charId);
 		let actor: CharacterFields | null = null;
 		try {
-			const intent = await claim(txn, charId);
 			// another worker serves this character right now (tokens are written with every character, and for older
 			// ones when a worker starts)
 			if (!intent) { await space.abort(txn); return "held"; }
 			const a = await one({ type: "Character", fields: { charId } }, 5_000);
+			const end = finishing(txn, charId);
 			if (a) {
 				actor = fieldsOf<CharacterFields>(a);
 				// a step reads the account only if a lock asks (no command sets, no lock of its own): one read less on the
@@ -100,10 +117,9 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 				const accountId = actor.accountId;
 				const loadAccount = async () => { const e = await one({ type: "Account", fields: { accountId } }, 2_000); return e ? fieldsOf<AccountFields>(e) : null; };
 				const account = /^step\s/.test(intent.line) ? null : await loadAccount();
-				await execute({ space, txn, world: w, actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
+				await execute({ space: end.space, txn, world: w, actor, account, ...(account ? {} : { loadAccount }), msgLeaseMs, cache: {}, ...(intent.asked ? { asked: intent.asked } : {}), ...(intent.step ? { step: intent.step } : {}) }, intent.line);
 			}
-			await space.write(actorToken(charId), txn, FOREVER);
-			await space.commit(txn);
+			await end.commit();
 			if (SLOW_MS && Date.now() - intent.at > SLOW_MS) console.error(`[world] slow: ${charId} "${intent.line.slice(0, 40)}" ${Date.now() - intent.at} ms after it was typed, ${Date.now() - t0} ms to run`);
 			return "ran";
 		} catch (e) {

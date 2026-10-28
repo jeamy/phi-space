@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { DEFAULT_COMMANDS, helpLine } from "./engine/commands/default.ts";
 import { TRADE_COMMANDS } from "./engine/commands/trade.ts";
+import { msgOptions } from "./engine/context.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { availableModels, complete, llmEnabled } from "./llm.ts";
 import { setting, type ModelInfoFields } from "./settings.ts";
@@ -56,7 +57,7 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space, halt = new AbortController();
 	const msgLeaseMs = envMs("SPACES_MMO_MSG_LEASE_MS", 2 * 60_000);
-	const say = (t: TranslateFields, text: string, txn: string) => space.write({ type: "Msg", fields: { room: t.room, to: t.charId, kind: "error", text, from: "", at: Date.now() } as never }, txn, msgLeaseMs);
+	const say = (t: TranslateFields, text: string, txn: string) => space.write({ type: "Msg", fields: { room: t.room, to: t.charId, kind: "error", text, from: "", at: Date.now() } as never }, txn, msgLeaseMs, msgOptions({ to: t.charId, kind: "error" }));
 
 	const step = async (): Promise<boolean> => {
 		const [next] = await space.readAll({ type: "Translate" }, { limit: 1 });

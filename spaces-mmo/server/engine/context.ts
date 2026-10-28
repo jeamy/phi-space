@@ -117,11 +117,18 @@ export async function exitsHere(c: CommandCtx, roomId = c.actor.room): Promise<A
 /** Chebyshev distance: 1 means on a neighbouring cell (diagonals count). */
 export const reach = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 
+/** Whether a message is kept as an entry. Only what someone reads later is: speech in a room (the NPC scripts listen to
+ *  it), a channel, and anything said to an NPC (its script counts its refusals). The rest goes to the screens through
+ *  the change stream alone (a transient write, core.announce): no entry, no expiry and no removal afterwards; a web
+ *  process that starts anew has no backlog of it. SPACES_MMO_MSG_TRANSIENT=0 keeps every message. */
+export const msgOptions = (m: Pick<MsgFields, "to" | "kind">): { transient?: true } =>
+	process.env.SPACES_MMO_MSG_TRANSIENT === "0" || m.kind === "say" || m.to.startsWith("#") || m.to.startsWith("npc-") ? {} : { transient: true };
+
 /** A message from the actor in `room` (default its room). `templ`: the text holds $you()/$conj() and is rendered per
  *  reader. `txn` null writes it at once (a refusal after the abort). */
 export async function msg(c: Pick<CommandCtx, "space" | "actor" | "msgLeaseMs"> & { txn: string | null }, to: string, kind: MsgKind, text: string, o: { templ?: boolean; room?: string } = {}): Promise<void> {
 	const m: MsgFields = { room: o.room ?? c.actor.room, to, kind, text, from: c.actor.name, fromId: c.actor.charId, at: Date.now(), ...(o.templ ? { actor: c.actor.charId } : {}) };
-	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs);
+	await c.space.write({ type: "Msg", fields: m as never }, c.txn, c.msgLeaseMs, msgOptions(m));
 }
 
 export { LEVELS };

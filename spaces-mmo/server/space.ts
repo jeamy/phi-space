@@ -3,7 +3,7 @@
 // of. Both are served by the space process (space-host.ts), each from its own store on its own socket.
 import os from "node:os";
 import { randomBytes } from "node:crypto";
-import { awaitWork as awaitWorkFor, connectSpace as connect, readExisting as readHeld, type SpaceLike, type Taken, type Template } from "phi-spaces";
+import { ANY, awaitWork as awaitWorkFor, connectSpace as connect, readExisting as readHeld, type BatchOp, type BatchResult, type SpaceLike, type Taken, type Template } from "phi-spaces";
 
 export { parseTarget, peek, StillHeld } from "phi-spaces";
 
@@ -18,13 +18,45 @@ export function connectSpace(spec: string, o: { callTimeoutMs?: number } = {}): 
 	return { space: process.env.SPACES_MMO_TRACE ? traced(space) : space, close };
 }
 
+/** A space that takes several steps in one call (RemoteSpace.batch); SPACES_MMO_BATCH=0 turns the use off. */
+export type Batching = SpaceLike & { batch(ops: readonly BatchOp[]): Promise<BatchResult[]> };
+export const batching = (space: SpaceLike): space is Batching =>
+	process.env.SPACES_MMO_BATCH !== "0" && typeof (space as Partial<Batching>).batch === "function";
+
+/**
+ * The space as one command's transaction `txn` sees it. Its plain writes under `txn` (no `unique`: a taken cell must be
+ * refused at once) wait in a buffer and go with the commit in one batch (`commit`), instead of one call and one commit
+ * each; any other call that names `txn` sends them first, so it sees them. Reads of the snapshot (`readAll` and
+ * `count` without `txn`) never see a transaction's writes anyway and go as they are. A buffered write answers a lease
+ * without an id: the engine does not use the ids of what it writes in a command.
+ */
+export function bufferedTxn(space: Batching, txn: string): { space: SpaceLike; commit(more?: BatchOp[]): Promise<void> } {
+	const waiting: BatchOp[] = [];
+	const flush = async () => { if (waiting.length) await space.batch(waiting.splice(0)); };
+	const plainRead = (prop: string | symbol, args: unknown[]) =>
+		(prop === "readAll" && !(args[1] as { txn?: unknown } | undefined)?.txn) || (prop === "count" && (args[1] ?? null) === null);
+	const view = new Proxy(space, {
+		get(target, prop, receiver) {
+			const v = Reflect.get(target, prop, receiver);
+			if (prop === "write") return async (entry: never, t: string | null = null, lease: number = ANY, o: { unique?: string[]; request?: unknown; transient?: boolean } = {}) => {
+				if (t === txn && !o.unique && !o.request) { waiting.push({ op: "write", entry, txn, lease, ...(o.transient ? { transient: true } : {}) }); return { id: "", expires: lease }; }
+				await flush();
+				return target.write(entry, t, lease, o as never);
+			};
+			if (typeof v !== "function") return v;
+			return async (...args: unknown[]) => { if (!plainRead(prop, args)) await flush(); return v.apply(target, args); };
+		},
+	});
+	return { space: view, async commit(more = []) { await space.batch([...waiting.splice(0), ...more, { op: "commit", txn }]); } };
+}
+
 /** SPACES_MMO_TRACE=1: every ten seconds this process logs how many calls it made to the space, per method and the
  *  template's type, with their time (to find who keeps the space busy). */
 function traced(space: SpaceLike): SpaceLike {
 	const calls = new Map<string, { n: number; ms: number }>();
 	const who = (process.argv[1] ?? "").split("/").pop();
 	setInterval(() => {
-		const top = [...calls].sort((a, b) => b[1].n - a[1].n).slice(0, 12).map(([k, v]) => `${k}:${v.n}/${Math.round(v.ms / Math.max(1, v.n))}ms`);
+		const top = [...calls].sort((a, b) => b[1].n - a[1].n).slice(0, Number(process.env.SPACES_MMO_TRACE_TOP) || 12).map(([k, v]) => `${k}:${v.n}/${Math.round(v.ms / Math.max(1, v.n))}ms`);
 		console.error(`[trace] ${who} ${[...calls.values()].reduce((s, v) => s + v.n, 0)} calls in 10 s: ${top.join(" ")}`);
 		calls.clear();
 	}, 10_000).unref();

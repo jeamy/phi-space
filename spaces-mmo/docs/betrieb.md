@@ -93,7 +93,35 @@ Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann da
    und `codemode-nano-tunnel`) von 127.0.0.1:3950 und :3951 nach nano. Dann
    `npm --prefix spaces-mmo run docker:big:up` (Host-Netzwerk über `docker-compose.hostnet.yml`, web nur auf der
    Loopback-Adresse, davor nginx).
-3. `docker:prod:up` ist absichtlich gesperrt, damit nicht beide Profile auf einem Rechner laufen.
+3. `docker:prod:up` ist absichtlich gesperrt: beide Profile auf einem Rechner startet nur `docker:single:up` (unten).
+
+### Alles auf einem Rechner (Space auf big)
+
+Der Space-Prozess braucht einen schnellen Kern, nicht viele: auf nano (kleine VM) rechnete ein Kern im Vergleich
+(JSON kodieren und lesen) etwa dreimal so lange wie auf big ([lasttest-2026-10-28.md](lasttest-2026-10-28.md)), und der
+Lasttest sättigte genau diesen Kern. `docker:single:up` startet beide Profile auf einem Rechner: `space` und `world-nano`
+im Docker-Netz (der Space nur auf `127.0.0.1:3950`/`3951`), web, world-big, npc und model im Host-Netz wie bisher, die
+den Space jetzt ohne Tunnel auf demselben Port erreichen. In der `.env` von big dazu `NANO_HOST_NAME=big` (die
+Systemleiste nennt sonst „nano“).
+
+Umzug von nano nach big (Auszeit wenige Minuten; nano behält seine Dateien für den Rückweg):
+
+```sh
+# big: vorher, ohne Auszeit
+cd /media/docker/spaces && git pull --ff-only && npm --prefix spaces-mmo run docker:image
+# nano: anhalten (Space und Welt-Worker; das Volume bleibt)
+cd /home/mux/spaces && npm --prefix spaces-mmo run docker:nano:down
+# big: Tunnel aus (er belegt 3950/3951), Dateien herüber, alles starten
+systemctl --user disable --now mmo-nano-tunnel
+docker volume create phi-spaces-mmo_mmo-space-data
+ssh nano "tar -C /home/mux/.local/share/docker/volumes/phi-spaces-mmo_mmo-space-data/_data --exclude='*.owner*' -cf - ." \
+  | docker run --rm -i -v phi-spaces-mmo_mmo-space-data:/data phi-spaces-mmo:prod tar -xf - -C /data
+npm --prefix spaces-mmo run docker:single:up
+```
+
+Kopiert werden die Stores mit ihrem WAL, ohne die Besitzer-Sperren (`*.owner*`, sie gehören dem angehaltenen Prozess).
+Zurück: `docker:single:down` auf big, `systemctl --user enable --now mmo-nano-tunnel`, auf nano `docker:nano:up`,
+auf big `docker:big:up`.
 
 Das Image wird auf dem Rechner selbst gebaut (`docker build --network host`: auf dem rootless Docker von nano erreicht ein
 Build im Standardnetz die npm-Registry nicht). Der Speicher bleibt beim Neustart der Container im Volume erhalten.
@@ -172,6 +200,32 @@ das Aufräumen.
 er auf dem Entwicklungsrechner voll; darüber staut es sich. Weitere Schritte wären im Kern: ein Index der Entries nach Typ
 (jedes `readAll` durchläuft heute alle Entries) und mehrere Operationen in einem Aufruf.
 
+**Stand 2026-10-28 (nach dem Lasttest).** Gemessen mit `tests/perf/space-cost.ts`: die CPU-Zeit des Space-Prozesses je
+Spielerbefehl (50 Figuren aus `live-load.ts`, 45 s, SQLite, alle NPCs, Entwicklungsrechner). Sie sagt, wie viele Befehle
+ein Kern trägt; die Antwortzeit auf einem schnellen, nicht gesättigten Rechner sagt das nicht.
+
+| Stand | CPU je Befehl | Median |
+| --- | --- | --- |
+| vorher | 26,2 ms | 31 ms |
+| Index nach Typ im Kern | 24,3 ms | 31 ms |
+| dazu `batch` im Welt-Worker | 18,7 ms | 21 ms |
+| dazu transiente Nachrichten | 16,0 ms | 21 ms |
+| dazu weniger Arbeit je Commit | 15,0 ms | 20 ms |
+
+- **Index nach Typ.** Ein Lesen mit Typ (`readAll`, `count`, Seiten) geht über die Entries dieses Typs, nicht über alle;
+  der Kern hält die Liste je Typ für einen festgeschriebenen Stand, bis ein Commit ihn ändert.
+- **Ein Befehl, zwei Aufrufe.** Der Welt-Worker öffnet die Transaktion und nimmt Token und Befehl in einem `batch`, und
+  schickt am Ende alle Schreibvorgänge des Befehls mit dem Commit in einem zweiten (`bufferedTxn` in `server/space.ts`).
+  Nur ein `write` mit `unique` (eine Zelle belegen) geht sofort, damit „besetzt“ gleich zurückkommt.
+  `SPACES_MMO_BATCH=0` schaltet es ab.
+- **Nachrichten ohne Entry.** Was nur auf Bildschirmen erscheint, geht als transientes Schreiben in den Änderungsstrom
+  und wird nie gespeichert (`msgOptions` in `engine/context.ts`). Entries bleiben, was jemand später liest: Gesprochenes
+  im Raum (die NPC-Skripte hören zu), Kanäle, alles an eine NPC. Ein neu gestarteter Web-Prozess hat dafür keinen
+  Rückblick auf andere Nachrichten. `SPACES_MMO_MSG_TRANSIENT=0` behält jede.
+- **Weniger Arbeit je Commit.** Eine Antwort wird einmal in JSON gewandelt (vorher zweimal), die Größe aller Entries
+  einmal je festgeschriebenem Stand gezählt (vorher bei jedem Schreiben), das Ende einer Transaktion geht über eine Kopie
+  der Liste statt über den Entwurf. Wartende Commits schrieb der Store schon vorher gebündelt.
+
 **Gegen Fluten:** Das Gateway begrenzt je Konto (über alle offenen Seiten zusammen) Schritte auf 8 auf einmal und 10 je
 Sekunde und getippte Befehle auf `SPACES_MMO_CMD_BURST` (20) auf einmal und `SPACES_MMO_CMD_PER_SEC` (5) je Sekunde; ein
 Konto hat höchstens vier Seiten offen, eine fünfte schließt die älteste.
@@ -205,7 +259,9 @@ docker exec -w /opt/phi-spaces/spaces-mmo phi-spaces-mmo-web-1 node --experiment
 docker exec phi-spaces-mmo-web-1 rm -f /opt/phi-spaces/spaces-mmo/live-load-cleanup.ts /opt/phi-spaces/spaces-mmo/load-bots.json
 ```
 
-Ergebnis eines Laufs mit 100 Figuren: [lasttest-2026-10-28.md](lasttest-2026-10-28.md).
+Ergebnis eines Laufs mit 100 Figuren: [lasttest-2026-10-28.md](lasttest-2026-10-28.md). Die Kosten je Befehl ohne
+Server: `LOAD_BOTS=50 LOAD_SECONDS=60 node --no-warnings --experimental-strip-types --import ./tests/test-env.ts
+tests/perf/space-cost.ts` (ein Stack wie auf den Servern, eine JSON-Zeile mit CPU-ms des Space-Prozesses je Befehl).
 
 ## Nicht enthalten
 
