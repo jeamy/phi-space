@@ -199,9 +199,13 @@ Gast-Quote je Adresse; das wirkt nur über den Loopback-Port (Peer 127.0.0.1), n
 cd /media/docker/spaces/spaces-mmo && LOAD_OUT=/tmp/mmo-load node tests/perf/live-load.ts
 # danach: die Figuren entfernen (Münzen zurück an Kalle, Gastkonten weg, den Rest räumt die Welt selbst)
 docker cp tests/perf/live-load-cleanup.ts phi-spaces-mmo-web-1:/opt/phi-spaces/spaces-mmo/live-load-cleanup.ts
-docker cp /tmp/mmo-load/bots.json phi-spaces-mmo-web-1:/tmp/bots.json
-docker exec -w /opt/phi-spaces/spaces-mmo phi-spaces-mmo-web-1 node --experimental-strip-types live-load-cleanup.ts /tmp/bots.json
+# (nicht nach /tmp im Container: das ist ein tmpfs, docker cp landet darunter)
+docker cp /tmp/mmo-load/bots.json phi-spaces-mmo-web-1:/opt/phi-spaces/spaces-mmo/load-bots.json
+docker exec -w /opt/phi-spaces/spaces-mmo phi-spaces-mmo-web-1 node --experimental-strip-types live-load-cleanup.ts load-bots.json
+docker exec phi-spaces-mmo-web-1 rm -f /opt/phi-spaces/spaces-mmo/live-load-cleanup.ts /opt/phi-spaces/spaces-mmo/load-bots.json
 ```
+
+Ergebnis eines Laufs mit 100 Figuren: [lasttest-2026-10-28.md](lasttest-2026-10-28.md).
 
 ## Nicht enthalten
 
