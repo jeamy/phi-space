@@ -8,7 +8,7 @@
 // Questions that would scan the whole map go to `map[DISK_MAP]` (store/types.ts), answered from the store's indexes.
 // Enumerating the map still works (it reads every key from the store), but in strict mode (tests) it throws, so code that
 // would scan a day of claims on every operation fails loudly instead of slowly.
-import { DISK_MAP, type DiskMapQuery } from "./types.ts";
+import { deepFreeze, DISK_MAP, type DiskMapQuery } from "./types.ts";
 
 /** What the store answers about one map part on its disk. Values are JSON text. */
 export interface DiskMapSource {
@@ -31,11 +31,6 @@ export interface DiskMapSource {
 const GONE = Symbol("gone");
 type Held = { v: unknown; stamp: number };
 
-function deepFreeze(v: unknown): void {
-	if (typeof v !== "object" || v === null || Object.isFrozen(v)) return;
-	Object.freeze(v);
-	for (const x of Object.values(v)) deepFreeze(x);
-}
 const parse = (json: string): unknown => { const v = JSON.parse(json); deepFreeze(v); return v; };
 
 export class DiskMap {

@@ -2,7 +2,9 @@
 // to it, how long a room's entries live, and the Process entry each process keeps there while it runs.
 import os from "node:os";
 import { randomBytes } from "node:crypto";
-import { FOREVER, RemoteSpace, socketTransport, type ListenTarget, type SpaceLike, type Taken, type Template } from "phi-spaces";
+import { awaitWork as awaitWorkFor, connectSpace as connect, FOREVER, readExisting as readHeld, takeExisting as takeHeld, type RemoteSpace, type SpaceLike, type Taken, type Template } from "phi-spaces";
+
+export { keepAlive, parseTarget, StillHeld, takeAll } from "phi-spaces";
 
 /** Where the space host listens and every other process connects, unless CODEMODE_LISTEN / CODEMODE_SPACE say else. */
 export const DEFAULT_SPACE = "unix:/tmp/codemode-space.sock";
@@ -15,22 +17,10 @@ export function entryLeaseMs(raw = process.env.CODEMODE_TTL_HOURS): number {
 	return hours === 0 ? FOREVER : Math.max(60_000, Math.round(hours * 3600_000));
 }
 
-/** `tcp:host:port` or `unix:/path` (the same notation as SWARM_REMOTE / SWARM_LISTEN in the help system). */
-export function parseTarget(spec: string): ListenTarget {
-	if (spec.startsWith("tcp:")) {
-		const [host, port] = spec.slice(4).split(":");
-		if (!host || !Number.isSafeInteger(Number(port))) throw new Error(`tcp target expects host:port, got ${spec}`);
-		return { host, port: Number(port) };
-	}
-	return { path: spec.replace(/^unix:/, "") };
-}
-
 /** A client of the shared space (CODEMODE_SPACE). One call may take `callTimeoutMs` (default 30 s); a blocking wait
  *  must stay below it, or it ends as "outcome unknown". `close()` frees the connection. */
-export function connectSpace(spec = process.env.CODEMODE_SPACE || DEFAULT_SPACE, o: { callTimeoutMs?: number } = {}): { space: SpaceLike; close: () => void } {
-	const callTimeoutMs = o.callTimeoutMs ?? Number(process.env.CODEMODE_SPACE_CALL_TIMEOUT ?? 30_000);
-	const transport = socketTransport(parseTarget(spec), { connectTimeoutMs: Number(process.env.CODEMODE_SPACE_CONNECT_TIMEOUT ?? 5_000), requestTimeoutMs: callTimeoutMs + 5_000 });
-	return { space: new RemoteSpace(transport, { callTimeoutMs, attempts: 3 }), close: () => transport.close() };
+export function connectSpace(spec = process.env.CODEMODE_SPACE || DEFAULT_SPACE, o: { callTimeoutMs?: number } = {}): { space: RemoteSpace; close: () => void } {
+	return connect(spec, { callTimeoutMs: o.callTimeoutMs ?? Number(process.env.CODEMODE_SPACE_CALL_TIMEOUT ?? 30_000), connectTimeoutMs: Number(process.env.CODEMODE_SPACE_CONNECT_TIMEOUT ?? 5_000) });
 }
 
 export type HostFacts = { name: string; cpu: string; cores: number; memGiB: number; platform: string; startedAt: number };
@@ -87,36 +77,16 @@ export const IDLE_WAIT_MS = Math.max(1000, Number(process.env.CODEMODE_IDLE_WAIT
  *  request (one claim, kept for a day) per wait, not a transaction begun, a take and an abort every few seconds
  *  (docs/umstellung-ohne-pi-durable.md, U2d). True when one is there to take; false when the wait ran out or `halt`
  *  ended it (a role that stops does not wait for the read; the space drops it at its deadline). */
-export async function awaitWork(space: SpaceLike, tmpl: Template, halt?: AbortSignal, waitMs = IDLE_WAIT_MS): Promise<boolean> {
-	if (halt?.aborted) return false;
-	const read = space.read(tmpl, waitMs).then((e) => e !== null);
-	if (!halt) return read;
-	read.catch(() => {}); // after a halt nobody waits for it
-	return Promise.race([read, new Promise<boolean>((r) => halt.addEventListener("abort", () => r(false), { once: true }))]);
+export function awaitWork(space: SpaceLike, tmpl: Template, halt?: AbortSignal, waitMs = IDLE_WAIT_MS): Promise<boolean> {
+	return awaitWorkFor(space, tmpl, waitMs, halt);
 }
 
-/** An entry another transaction held for longer than the wait: it may still be there. */
-export class StillHeld extends Error {}
-
-/** readIfExists that tells a missing entry from a held one: null means gone. A null that came only when the wait ran
- *  out (a match stayed held all along) throws StillHeld instead; a holder that removes the entry ends the wait early. */
+/** readIfExists that tells a missing entry from a held one (phi-spaces readExisting): null means gone; matches held
+ *  for all of `waitMs` throw StillHeld. */
 export function readExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
-	return existing(space, tmpl, o, waitMs, false);
+	return readHeld(space, tmpl, waitMs, o);
 }
 /** takeIfExists with the same distinction (see readExisting). */
 export function takeExisting(space: SpaceLike, tmpl: Template, o: { txn?: string | null } = {}, waitMs = HELD_WAIT_MS): Promise<Taken | null> {
-	return existing(space, tmpl, o, waitMs, true);
-}
-async function existing(space: SpaceLike, tmpl: Template, o: { txn?: string | null }, waitMs: number, take: boolean): Promise<Taken | null> {
-	const p = await (space.probe ? space.probe(tmpl, waitMs, { txn: o.txn ?? null, take }) : Promise.resolve({ entry: await (take ? space.takeIfExists(tmpl, waitMs, o) : space.readIfExists(tmpl, waitMs, o)), locked: false }));
-	if (!p.entry && p.locked) throw new StillHeld(`${String((tmpl as { type?: unknown }).type ?? "an entry")} stayed held for ${waitMs} ms`);
-	return p.entry;
-}
-
-/** Renews a transaction's lease while long work runs in it (a model call, a judgement), so a process that dies lets
- *  it lapse within `leaseMs`. */
-export function keepAlive(space: SpaceLike, txn: string, leaseMs: number): () => void {
-	const timer = setInterval(() => void space.renew(txn, leaseMs).catch(() => {}), Math.max(1000, Math.floor(leaseMs / 3)));
-	timer.unref?.();
-	return () => clearInterval(timer);
+	return takeHeld(space, tmpl, waitMs, o);
 }

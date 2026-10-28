@@ -18,7 +18,8 @@ import {
 	type SpaceHost,
 	type SpaceLike,
 } from "phi-spaces";
-import type { WsConnection } from "../ws.ts";
+import type { WsConnection } from "phi-spaces/ws";
+import { RemoteShard } from "./remote-shard.ts";
 import { appendHistory, ensureHistoryHead, initializeHistory, mergedHistory, historyRead } from "./history.ts";
 import { ResourceExhausted, SnapshotExpired, RevisionAhead, type Fields } from "phi-spaces/core";
 import { abortBatch, boundedPreparation, finishBatch, reserveBatch, type BatchWrite } from "./batch.ts";
@@ -353,44 +354,16 @@ export class SocialSwarmHub {
 	#produce: boolean;
 	#pulses: boolean;
 	#seedContent: boolean;
-	/** Remote shard space (RemoteSpace to a shard host such as `nano`); null = single-space mode. */
-	#remote: SpaceLike | null = null;
-	#remotePrefix = "b-";
-	#remoteRev = 0;
-	#remoteDownUntil = 0;
-	#remoteSyncing = false;
-	#remoteConnected = false;
-	#remoteLabel: string | null = null;
+	/** The remote shard (a RemoteSpace to a shard host such as `nano`); null = single-space mode. */
+	#shard: RemoteShard | null = null;
+	get #remote(): SpaceLike | null { return this.#shard?.space ?? null; }
 	#lastShardWarn = 0;
 	/** Durable per-channel post totals on THIS shard (ChannelCount entries). */
 	#channelTotals = new Map<string, number>();
-	/** ChannelCount entries streamed in from the remote shard. */
-	#remoteChannelTotals = new Map<string, number>();
-
 	#shardWarn(msg: string, err: unknown): void {
 		if (Date.now() - this.#lastShardWarn < 30_000) return;
 		this.#lastShardWarn = Date.now();
 		console.warn(`[swarm] ${msg}:`, (err as Error).message);
-	}
-
-	/** Remote shard came up: log the connect once per up-transition. */
-	#markRemoteUp(detail?: string): void {
-		this.#remoteDownUntil = 0;
-		if (!this.#remoteConnected) {
-			this.#remoteConnected = true;
-			const target = this.#remoteLabel ? ` ${this.#remoteLabel}` : "";
-			console.log(`[swarm] remote shard connected${target}${detail ? ` — ${detail}` : ""}`);
-		}
-	}
-
-	/** Remote shard failed: back off and log the loss once per down-transition. */
-	#markRemoteDown(): void {
-		this.#remoteDownUntil = Date.now() + 5_000;
-		if (this.#remoteConnected) {
-			this.#remoteConnected = false;
-			const target = this.#remoteLabel ? ` ${this.#remoteLabel}` : "";
-			console.warn(`[swarm] remote shard lost${target} — retrying`);
-		}
 	}
 
 	#adminCheck: ((password: string) => boolean) | null = null;
@@ -414,24 +387,15 @@ export class SocialSwarmHub {
 
 	/** Attach a second shard space (primary hub only): task routing, delta merge and queries fan out to it. */
 	attachRemoteShard(space: SpaceLike, prefix = "b-", label?: string): void {
-		this.#remote = space;
-		this.#remotePrefix = prefix;
-		this.#remoteLabel = label ?? null;
+		this.#shard = new RemoteShard(space, prefix, label ?? null, (msg, err) => this.#shardWarn(msg, err));
 		if (this.spaceId) {
 			void this.#syncRemoteShard();
 		}
 	}
 
+	/** Joins the remote shard: the newest 300 of its posts go into the index, the older ones only count replies. */
 	async #syncRemoteShard(): Promise<void> {
-		if (!this.#remote || this.#remoteSyncing) return;
-		this.#remoteSyncing = true;
-		try {
-			for (const e of await this.#remote.readAll({ type: "ChannelCount" }, { limit: 500 }).catch(() => [])) {
-				const f = e.fields as { channel?: string; count?: number };
-				if (f.channel) this.#remoteChannelTotals.set(f.channel, Number(f.count) || 0);
-			}
-			const remotePosts = await this.#remote.readAll({ type: "Post" }, { limit: 4_000 });
-			const allRemote = remotePosts.map((x) => x.fields as unknown as SwarmPost).sort((a, b) => a.at - b.at);
+		await this.#shard?.sync((allRemote) => {
 			const windowPosts = allRemote.slice(-300);
 			const inWindow = new Set(windowPosts.map((p) => p.postId));
 			for (const p of allRemote) {
@@ -442,54 +406,30 @@ export class SocialSwarmHub {
 			for (const e of windowPosts) {
 				this.#indexPost(e);
 			}
-			this.#remoteRev = (await this.#remote.readPage(null, { maxBytes: 1_000 })).rev;
-			this.#markRemoteUp(`${allRemote.length} posts, rev ${this.#remoteRev}`);
-		} catch (e) {
-			this.#markRemoteDown();
-			this.#shardWarn("remote shard sync failed", e);
-		} finally {
-			this.#remoteSyncing = false;
-		}
+		});
 	}
 
 	/** The space that owns a post: ids carry the shard prefix, so routing is stateless. */
 	#shardSpaceFor(postId: string): SpaceLike {
-		return this.#remote && postId.startsWith(this.#remotePrefix) ? this.#remote : this.space;
+		return this.#shard?.owns(postId) ? this.#shard.space : this.space;
 	}
 
 	#remoteDown(): boolean {
-		return this.#remote !== null && Date.now() < this.#remoteDownUntil;
+		return this.#shard?.down() ?? false;
 	}
 
 	#pickShardForNew(): SpaceLike {
-		return this.#remote && Date.now() >= this.#remoteDownUntil && this.#rng() < 0.5 ? this.#remote : this.space;
+		return this.#shard && !this.#shard.down() && this.#rng() < 0.5 ? this.#shard.space : this.space;
 	}
 
-	/** Remote calls get a hard timeout: a dead/half-open shard socket must never hang a query. */
-	async #remoteCall<T>(p: Promise<T>, ms = 15_000): Promise<T> {
-		let timer: ReturnType<typeof setTimeout>;
-		try {
-			return await Promise.race([
-				p,
-				new Promise<never>((_r, rej) => { timer = setTimeout(() => rej(new Error(`remote shard timeout after ${ms}ms`)), ms); }),
-			]);
-		} finally {
-			clearTimeout(timer!);
-		}
-	}
+	/** Remote calls get a hard timeout: a dead/half-open shard socket must never hang a query (RemoteShard.call). */
+	#remoteCall<T>(p: Promise<T>, ms?: number): Promise<T> { return this.#shard ? this.#shard.call(p, ms) : p; }
+	#markRemoteUp(): void { this.#shard?.markUp(); }
+	#markRemoteDown(): void { this.#shard?.markDown(); }
 
 	/** readAll on one shard; remote reads are bounded and failures mark the shard down. */
 	async #shardReadAll(space: SpaceLike, tmpl: Parameters<SpaceLike["readAll"]>[0], opts?: { limit?: number }) {
-		if (space !== this.#remote) return space.readAll(tmpl, opts);
-		try {
-			const out = await this.#remoteCall(space.readAll(tmpl, opts), 20_000);
-			this.#markRemoteUp();
-			return out;
-		} catch (e) {
-			this.#markRemoteDown();
-			this.#shardWarn("remote readAll failed", e);
-			throw e;
-		}
+		return this.#shard && space === this.#shard.space ? this.#shard.readAll(tmpl, opts) : space.readAll(tmpl, opts);
 	}
 
 	#historyReady = false;
@@ -682,7 +622,7 @@ export class SocialSwarmHub {
 
 	#shardLabels(): { local: string; remote: string } {
 		const clean = (tag: string, fallback: string) => tag.replace(/-+$/, "") || fallback;
-		return { local: clean(this.#shardTag, "a"), remote: clean(this.#remotePrefix, "b") };
+		return { local: clean(this.#shardTag, "a"), remote: clean(this.#shard?.prefix ?? "b-", "b") };
 	}
 
 	/** What the test-system bar shows: per shard the host (CPU, memory), entry count and the cap. */
@@ -878,7 +818,7 @@ export class SocialSwarmHub {
 	/** Channel totals across shards: local durable counters + the remote shard's. */
 	#mergedChannelTotals(): Map<string, number> {
 		const m = new Map(this.#channelTotals);
-		for (const [ch, n] of this.#remoteChannelTotals) m.set(ch, (m.get(ch) ?? 0) + n);
+		for (const [ch, n] of this.#shard?.channelTotals ?? []) m.set(ch, (m.get(ch) ?? 0) + n);
 		return m;
 	}
 
@@ -1408,43 +1348,29 @@ export class SocialSwarmHub {
 				}
 			}
 			// Remote shard: pull its committed deltas and merge them into the same broadcast.
-			if (this.#remote) {
-				if (this.#remoteRev === 0) {
-					if (Date.now() >= this.#remoteDownUntil) {
-						await this.#syncRemoteShard();
-					}
+			if (this.#shard) {
+				if (this.#shard.rev === 0) {
+					if (!this.#shard.down()) await this.#syncRemoteShard();
 				} else {
-					try {
-						const rpage = await this.#remote.changes(this.#remoteRev, { maxBytes: 300_000 });
-						this.#remoteRev = rpage.next;
-						this.#markRemoteUp();
-						for (const b of rpage.batches) {
-							for (const op of b.ops) {
-								if (op.op !== "put") continue;
-								if (op.type === "Post") {
-									const p = op.fields as unknown as SwarmPost;
-									this.#indexPost(p);
-									pushPost(p);
-								} else if (op.type === "Like" && !op.fields.dedup) {
-									const postId = String(op.fields.postId);
-									const agentId = String(op.fields.agentId);
-									likeDeltas.push({ postId, agentId });
-									if (!this.#likeSets.has(postId)) this.#likeSets.set(postId, new Set());
-									this.#likeSets.get(postId)!.add(agentId);
-									const t = this.#postById.get(postId);
-									if (t) {
-										t.likes = this.#likeSets.get(postId)!.size;
-										likedPosts.set(postId, t.likes);
-									}
-								} else if (op.type === "ChannelCount") {
-									this.#remoteChannelTotals.set(String(op.fields.channel), Number(op.fields.count) || 0);
+					for (const b of (await this.#shard.pull(() => void this.#syncRemoteShard())) ?? []) {
+						for (const op of b.ops) {
+							if (op.op !== "put") continue;
+							if (op.type === "Post") {
+								const p = op.fields as unknown as SwarmPost;
+								this.#indexPost(p);
+								pushPost(p);
+							} else if (op.type === "Like" && !op.fields.dedup) {
+								const postId = String(op.fields.postId);
+								const agentId = String(op.fields.agentId);
+								likeDeltas.push({ postId, agentId });
+								if (!this.#likeSets.has(postId)) this.#likeSets.set(postId, new Set());
+								this.#likeSets.get(postId)!.add(agentId);
+								const t = this.#postById.get(postId);
+								if (t) {
+									t.likes = this.#likeSets.get(postId)!.size;
+									likedPosts.set(postId, t.likes);
 								}
 							}
-						}
-					} catch (e) {
-						this.#markRemoteDown();
-						if (historyGone(e)) {
-							void this.#syncRemoteShard();
 						}
 					}
 				}

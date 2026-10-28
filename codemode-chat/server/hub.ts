@@ -28,8 +28,8 @@ import { taskWaitMs } from "./limits.ts";
 import { spentToday } from "./model-host.ts";
 import type { TaskReady } from "./task-agent.ts";
 import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
-import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeExisting, type ProcessInfo } from "./space.ts";
-import type { WsConnection } from "./ws.ts";
+import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
+import type { WsConnection } from "phi-spaces/ws";
 
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
@@ -57,7 +57,15 @@ type Session = {	id: string; task: Task; blockId: string; clients: Set<WsConnect
 	pushTimer?: ReturnType<typeof setTimeout>; pushing: boolean; pushAgain: boolean; loading: Promise<void>; lastUsed: number;
 	/** Serializes the operations that change the room's blocks or run (setTask, startRun, deleteBlock) and CodeBest. */
 	tail: Promise<unknown>; bestTail: Promise<unknown>;
+	/** The CodeTask rows session() read last: snapshot() builds on them instead of reading them again. */
+	taskRows: Array<Record<string, any>>;
+	/** The last snapshot, keyed by the space revision read before its reads (snapshot()). */
+	snap?: { rev: number; at: number; value: Promise<Snapshot> };
 };
+
+/** How long a snapshot may be served again while the space has not changed: a run's "agents wait for a slot" note
+ *  depends on the clock, not only on the space. */
+const SNAPSHOT_REUSE_MS = 2_000;
 
 /** How long the slots of a new run may wait for an agents process before the page says so. */
 const SLOT_GRACE_MS = 15_000;
@@ -65,6 +73,9 @@ const SLOT_GRACE_MS = 15_000;
 const ROOM_LOCK_LEASE_MS = 30_000, ROOM_LOCK_WAIT_MS = 60_000;
 
 const clip = (s: unknown, max: number) => String(s ?? "").slice(0, max);
+
+/** What snapshot() answers (the room as the page shows it). */
+export type Snapshot = Awaited<ReturnType<CodeChatHub["buildSnapshot"]>>;
 
 export class CodeChatHub {
 	/** The shared space of all processes (a RemoteSpace on the space host's socket). */
@@ -169,7 +180,7 @@ export class CodeChatHub {
 		if (!s) {
 			if (this.#sessions.size >= LIMITS.sessions) this.#evictIdle();
 			if (this.#sessions.size >= LIMITS.sessions) throw new Error("Too many sessions");
-			s = { id, task: TASKS[0]!, blockId: "", clients: new Set(), buckets: new Map(), pushing: false, pushAgain: false, loading: Promise.resolve(), lastUsed: Date.now(), tail: Promise.resolve(), bestTail: Promise.resolve() };
+			s = { id, task: TASKS[0]!, blockId: "", taskRows: [], clients: new Set(), buckets: new Map(), pushing: false, pushAgain: false, loading: Promise.resolve(), lastUsed: Date.now(), tail: Promise.resolve(), bestTail: Promise.resolve() };
 			this.#sessions.set(id, s);
 			// every caller waits for the same load: a second request during the first load never sees a room without a block
 			s.loading = this.#load(s);
@@ -178,7 +189,8 @@ export class CodeChatHub {
 		const first = s.loading;
 		try { await first; } catch (e) { if (this.#sessions.get(id) === s) this.#sessions.delete(id); throw e; }
 		// the active block as the space has it now (another web process may have opened or deleted one)
-		const last = (await this.#taskEntries(id)).at(-1), task = last ? taskFromSpec(last) : null;
+		s.taskRows = await this.#taskEntries(id);
+		const last = s.taskRows.at(-1), task = last ? taskFromSpec(last) : null;
 		if (last && task) { s.task = task; s.blockId = String(last.blockId ?? `t${last.ts}`); }
 		else if (!last) { s.task = TASKS[0]!; s.blockId = ""; }
 		return s;
@@ -228,7 +240,7 @@ export class CodeChatHub {
 	/** The admin's switch and default model, kept in the space for the model process (CodeAdmin "llm"). */
 	async saveLlmChoice(o: { on?: unknown; model?: unknown }): Promise<void> {
 		const cur = (await this.host.readIfExists({ type: "CodeAdmin", fields: { key: "llm" } }, NO_WAIT))?.fields as Record<string, unknown> | undefined;
-		while (await this.host.take({ type: "CodeAdmin", fields: { key: "llm" } }, NO_WAIT));
+		await takeAll(this.host, { type: "CodeAdmin", fields: { key: "llm" } });
 		await this.host.write({ type: "CodeAdmin", fields: { key: "llm", ...(typeof (o.on ?? cur?.on) === "boolean" ? { on: (o.on ?? cur?.on) as boolean } : {}), ...(typeof (o.model ?? cur?.model) === "string" ? { model: (o.model ?? cur?.model) as string } : {}), ts: Date.now() } }, null, FOREVER);
 	}
 
@@ -263,7 +275,7 @@ export class CodeChatHub {
 		if (!f) throw new Error("Unknown contribution");
 		const by = plain(clip(o.by, 40)).trim() || "guest", reason = plain(clip(o.reason, 200)).trim();
 		const tmpl = { type: "CodeVeto", fields: { session: s.id, candidateId } };
-		while (await this.host.take(tmpl, NO_WAIT));
+		await takeAll(this.host, tmpl);
 		if (o.undo !== true) await this.host.write({ type: "CodeVeto", fields: { session: s.id, ...(typeof f.blockId === "string" ? { blockId: f.blockId } : {}), candidateId, by, reason, ts: Date.now() } }, null, this.#ttl);
 		if (typeof f.blockId === "string") {
 			if (typeof f.answerId === "string") await this.#refreshAnswer(s, f.blockId);
@@ -315,15 +327,32 @@ export class CodeChatHub {
 		if (announce) await this.#write(s, "system", `Task: ${task.title.en} (${task.fn})`, s.blockId);
 	}
 
-	/** The room as the page shows it: the task blocks (each with its own contributions, best code and log) and free chat. */
-	async snapshot(id: string) {
+	/** The room as the page shows it: the task blocks (each with its own contributions, best code and log) and free chat.
+	 *  For a page that attaches or loads it: many at once (every page after a restart of the web process, reloads) get
+	 *  the same one while the space stays at the revision it was built at, for at most SNAPSHOT_REUSE_MS. The revision is
+	 *  read before the reads, so a snapshot is never older than the revision it is kept under. A push comes because
+	 *  something changed and builds its own (push()). */
+	async snapshot(id: string): Promise<Snapshot> {
+		const rev = await this.#currentRev();
 		const s = await this.session(id);
+		if (s.snap && s.snap.rev === rev && Date.now() - s.snap.at < SNAPSHOT_REUSE_MS) return s.snap.value;
+		const snap = { rev, at: Date.now(), value: this.buildSnapshot(s) };
+		s.snap = snap;
+		const drop = () => { if (s.snap === snap) s.snap = undefined; };
+		snap.value.catch(drop);
+		setTimeout(drop, SNAPSHOT_REUSE_MS).unref(); // a room's snapshot can be large: not kept beyond its reuse
+		return snap.value;
+	}
+
+	/** Builds the room's snapshot (snapshot() decides when). Public for its type only. */
+	async buildSnapshot(s: Session) {
+		const id = s.id;
 		// the run first: a run shown as ended was ended by a commit that also wrote its closing line, which the reads
 		// below then see
 		const shownRun = await this.#runShown(s);
 		const cand = { type: "CodeCandidate", fields: { session: id } };
 		const [entries, msgs, scores, pendingLocal, pendingRemote, noteRows, critiqueRows, proposalRows, voteRows, findingRows, judgementRows] = await Promise.all([
-			this.#taskEntries(id),
+			s.taskRows,
 			this.host.readAll({ type: "ChatMessage", fields: { session: id } }, { limit: LIMITS.messages + 5 }),
 			this.#scores(s),
 			this.host.readAll(cand, { limit: LIMITS.contributions }),
@@ -554,7 +583,7 @@ export class CodeChatHub {
 			s.pushing = true;
 			try {
 				if (this.#closed || !s.clients.size) return;
-				const frame = { type: "snapshot", ...(await this.snapshot(s.id)) };
+				const frame = { type: "snapshot", ...(await this.buildSnapshot(await this.session(s.id))) };
 				for (const c of s.clients) c.send(frame);
 			} catch (e) {
 				if (!this.#closed) console.error("[codemode] snapshot push failed", e);
@@ -683,7 +712,7 @@ export class CodeChatHub {
 		const f = await this.#contribution(s, answerId);
 		if (!f || typeof f.blockId !== "string" || !(await this.host.readIfExists({ type: "TextAnswer", fields: { session: s.id, answerId } }, NO_WAIT))) throw new Error("Unknown answer");
 		const by = plain(clip(o.by, 40)).trim() || "guest", reason = plain(clip(o.reason, 300)).trim();
-		while (await this.host.take({ type: "CodeAccept", fields: { session: s.id, answerId } }, NO_WAIT));
+		await takeAll(this.host, { type: "CodeAccept", fields: { session: s.id, answerId } });
 		if (o.undo !== true) {
 			await this.host.write({ type: "CodeAccept", fields: { session: s.id, blockId: f.blockId, answerId, by, reason, ts: Date.now() } }, null, this.#ttl);
 			if (reason) await this.#addNote(s, f.blockId, by, "human", 0, `Accepted ${String(f.author)}'s answer: ${reason}`, true);
@@ -856,7 +885,7 @@ export class CodeChatHub {
 
 	/** The admin's choice of models, kept in the space (CodeAdmin) so it outlives a restart; null: the default choice. */
 	async saveAllowedModels(labels: string[] | null): Promise<void> {
-		while (await this.host.take({ type: "CodeAdmin", fields: { key: "models" } }, NO_WAIT));
+		await takeAll(this.host, { type: "CodeAdmin", fields: { key: "models" } });
 		if (labels) await this.host.write({ type: "CodeAdmin", fields: { key: "models", allowed: labels, ts: Date.now() } }, null, FOREVER);
 	}
 

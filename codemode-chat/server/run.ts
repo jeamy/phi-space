@@ -26,7 +26,7 @@ import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
 import { crossWaitMs, FATAL_LLM, modelWaitMs, verdictWaitOr } from "./limits.ts";
 import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandidate, isSolved, rankedProposals, rid, scoresOf, systemLine, teamView, planTurn } from "./room.ts";
 import { archive } from "./results.ts";
-import { HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeExisting } from "./space.ts";
+import { HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
 import { isText, type Task } from "./tasks.ts";
 
 export type RunMode = "scripted" | "llm";
@@ -197,7 +197,7 @@ export async function endRun(space: SpaceLike, txn: string, ttl: number, session
 	if (r.board) r.info.board = { ...(r.info.board ?? { open: 0, done: 0, critiques: 0 }), open: 0 };
 	for (let n = 0; n < 2000 && (await space.take({ type: "WorkItem", fields: { session, runId } }, NO_WAIT, { txn })); n++);
 	for (let n = 0; n < 200 && (await space.take({ type: "AgentSlot", fields: { session, runId } }, NO_WAIT, { txn })); n++);
-	while (await space.take({ type: "CodeRunDone", fields: { session } }, NO_WAIT, { txn }));
+	await takeAll(space, { type: "CodeRunDone", fields: { session } }, { txn });
 	await space.write({ type: "CodeRunDone", fields: { session, runId, blockId: r.blockId, info: { ...r.info, active: false }, ts: Date.now() } as never }, txn, ttl);
 	await systemLine(space, txn, ttl, session, await closingLine(space, r, how), r.blockId);
 	return true;

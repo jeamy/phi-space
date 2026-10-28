@@ -15,8 +15,9 @@ import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { Worker } from "node:worker_threads";
 import { headOf, joinParts, partAt, partChanges, type PartRow, type PartSpec } from "./parts.ts";
-import { deepFreeze, OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
+import { OwnStoreHost, type CommitSet, type Ledger, type StoreStats, type StoredDoc } from "./host.ts";
 import { DiskMap, isDiskMap, type DiskMapSource } from "./disk-map.ts";
+import { deepFreeze } from "./types.ts";
 import { writerSource, type WriteOp, type WriterReply, type WriterRequest } from "./sqlite-writer.ts";
 
 /** The format of the file; a newer one is refused, an older one is migrated (1 to 2: the index columns of parts). */

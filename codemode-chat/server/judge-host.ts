@@ -12,7 +12,7 @@ import { NO_WAIT, TransactionError, type SpaceLike } from "phi-spaces";
 import { judgeInSlot, loadCodemode, maxTimeoutMs, sandboxSlot, TIMEOUT_MS, verdictFields, type Codemode, type Verdict } from "./judge.ts";
 import { setBest, trimArchive } from "./results.ts";
 import { serveExec } from "./exec.ts";
-import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld } from "./space.ts";
+import { announce, awaitWork, connectSpace, entryLeaseMs, hostFacts, keepAlive, readExisting, StillHeld, takeAll } from "./space.ts";
 import { taskFromSpec } from "./tasks.ts";
 
 /** A judge's transaction lease, renewed while it judges: a dead judge's candidate is back within this time
@@ -57,7 +57,7 @@ export async function judgeOne(space: SpaceLike, cm: Codemode, host: string, ttl
 		if (deaths >= MAX_DEATHS) {
 			if (await alive()) await space.write({ type: "CodeScore", fields: failedVerdict(f, host, `the judge stopped ${deaths} times while judging it`) as never }, t.id, ttl);
 			await space.commit(t.id);
-			while (await space.take({ type: "JudgeStart", fields: { session, candidateId } }, NO_WAIT));
+			await takeAll(space, { type: "JudgeStart", fields: { session, candidateId } });
 			return true;
 		}
 		// cancelled when this round ends in any way but a hard death of this process

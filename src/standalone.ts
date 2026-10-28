@@ -8,6 +8,7 @@
 import { pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "./context.ts";
 import { serveSpace, type ListenTarget } from "./socket.ts";
+import { parseTarget } from "./space-client.ts";
 import { SpaceService, StaticIdentity } from "./service.ts";
 import { startService } from "./index.ts";
 import { openOwnMemoryHost } from "./store/host.ts";
@@ -22,13 +23,8 @@ export type StandaloneOptions = {
 	peerId?: string;
 };
 
-/** `unix:/path` or `tcp:host:port`. */
-export function parseListen(spec: string): ListenTarget {
-	if (spec.startsWith("unix:")) return { path: spec.slice(5) };
-	const m = /^tcp:([^:]+):(\d+)$/.exec(spec);
-	if (m) return { host: m[1]!, port: Number(m[2]) };
-	throw new Error(`listen must be unix:/path or tcp:host:port, not ${spec}`);
-}
+/** `unix:/path` or `tcp:host:port` (space-client.ts parseTarget). */
+export const parseListen = parseTarget;
 
 /** Opens the store and serves it; `close()` stops serving and closes the store (what was acknowledged is on the disk). */
 export async function startStandalone(o: StandaloneOptions): Promise<{ address: string; host: ClosableStoreHost; close(): Promise<void> }> {

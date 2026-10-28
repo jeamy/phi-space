@@ -34,7 +34,7 @@ umgesetzt; siehe [phasen.md](phasen.md).
 | --- | --- | --- |
 | 1 | Name | Verzeichnis `spaces-mmo/`, Paket `phi-spaces-mmo`; „Leuchtfeuer“ ist die erste Welt |
 | 2 | Grafik | PixiJS `8.22.0` rendert die 2D-Karte; die optionale 2,5D-Ansicht verwendet Three.js `0.186.1`. Beide sind nur Ansichten desselben autoritativen Rasters und exakt gepinnt. Tilesets stammen aus Intersect-Assets (CC BY 4.0, mit Namensnennung). |
-| 3 | Space und Spiel | Bleiben getrennt: kein Spiel- oder Webcode in `src/`; Gateway-Helfer wie `ws.ts` bekommt spaces-mmo als eigene Kopie, wie help-site und codemode-chat |
+| 3 | Space und Spiel | Bleiben getrennt: kein Spielcode in `src/`. Was alle Projekte gleich brauchen, liegt einmal in der Bibliothek statt als Kopie: das WebSocket-Gateway (`phi-spaces/ws`) und die Space-Helfer (`connectSpace`, `readExisting`/`StillHeld`, `awaitWork`, `keepAlive`, `takeAll` aus `phi-spaces`); geändert am 27.10.2026, weil die Kopien auseinanderliefen |
 | 4 | Einbindung | phi-spaces wird **vor Phase 0** ein richtiges Paket (`exports`), und alle Projekte, die darauf aufbauen, importieren `phi-spaces` statt `../../src/…` ([paket.md](paket.md)) |
 | 5 | Konten | Ab Phase 0 Gastzugang und Login (Benutzername + Passwort); bei der Registrierung wird der Gast-Fortschritt übernommen ([architektur.md](architektur.md#gastzugang)) |
 | 6 | Kampf | Optional: ein abschaltbares Modul, pro Zone eingeschaltet, standardmäßig aus |

@@ -17,5 +17,8 @@
     "examples",
     "test",
     "scripts/bootstrap-spaces.ts"
+  ],
+  "exclude": [
+    "src/dashboard/palettes.ts"
   ]
 }

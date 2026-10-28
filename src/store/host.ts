@@ -10,7 +10,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { awaitWithContext, type Context } from "../context.ts";
 import { detach, draftOf, isDraft, type Draft, type PartChanges } from "./draft.ts";
 import { partAt } from "./parts.ts";
-import { diskMapOf } from "./types.ts";
+import { deepFreeze, diskMapOf } from "./types.ts";
 import type { ClosableStoreHost, DocDef, DocFamilyDef, DocWatch, StoreTx, WatchEnd } from "./types.ts";
 
 type AnyDef = DocDef<any> | DocFamilyDef<any, any>;
@@ -323,12 +323,6 @@ export class OwnStoreHost implements ClosableStoreHost {
 		this.#watches.clear();
 		await this.#ledger.close();
 	}
-}
-
-export function deepFreeze(v: unknown): void {
-	if (typeof v !== "object" || v === null || Object.isFrozen(v)) return;
-	Object.freeze(v);
-	for (const x of Object.values(v)) deepFreeze(x);
 }
 
 /** Whether a value holds a draft somewhere (results are usually plain data made in the commit). */

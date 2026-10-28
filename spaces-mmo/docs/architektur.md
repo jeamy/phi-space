@@ -11,7 +11,7 @@ Wie in codemode-chat ist jede Rolle ein eigener Prozess rund um einen Space (vgl
 | `world` | Nimmt `Intent`s, führt Befehle aus, Welt-Ticks (Flut, Feuer, Nebel), Spawner | `codemode-chat/server/judge-host.ts` (take unter Transaktion) |
 | `npc` | Skript-NPCs, später Modell-NPCs; schreiben nur `Intent`s | `codemode-chat/server/agent-host.ts`, `model-host.ts` |
 | `automaton` | Spielerprogramme im Sandbox (Phase 6); schreiben nur `Intent`s | `codemode-chat/server/judge-host.ts` |
-| `web` | Next.js-App, HTTP-API, WebSocket-Gateway, Login, Sessions, Kontingente | `codemode-chat/server/index.ts`, `hub.ts`, `ws.ts`, `quota.ts` |
+| `web` | Next.js-App, HTTP-API, WebSocket-Gateway, Login, Sessions, Kontingente | `codemode-chat/server/index.ts`, `hub.ts`, `quota.ts`, `phi-spaces/ws` |
 
 Alle außer `space` sprechen über `RemoteSpace` + `socketTransport` mit dem Space. `world` und `npc` lassen sich
 mehrfach starten. Der Browser lädt keinen Space-Code; `src/` bleibt reiner Server-Code.
@@ -30,7 +30,7 @@ Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──R
 - **Raus:** `changes(afterRev)` liefert einen globalen Strom aller Commits. Das Gateway liest ihn einmal und filtert pro
   Session nach Interessensbereich (aktueller Raum, Inventar, abonnierte Kanäle). Ein neu verbundener Client bekommt
   zuerst einen Snapshot des Raums (`readAll({fields:{location}})`), danach nur Deltas.
-- **Rahmengröße:** `ws.ts` begrenzt Frames auf 1 MiB; das Gateway schickt Räume klein (Kachelkarte komprimiert,
+- **Rahmengröße:** `phi-spaces/ws` begrenzt Frames auf 1 MiB; das Gateway schickt Räume klein (Kachelkarte komprimiert,
   Beschreibungen nachladbar), wie `hub.ts` bei Code-Snapshots.
 - Läuft der `changes`-Cursor hinter die Aufbewahrung, startet das Gateway mit Snapshot neu (wie der Feed-Hub der
   help-site, Commit b85073d).
@@ -365,7 +365,6 @@ spaces-mmo/
     npc-host.ts         Skript-NPCs (später Agenten)
     automaton-host.ts   Automaten im Sandbox (Phase 6)
     index.ts            Web-Prozess, Gateway, Login
-    ws.ts               eigene Kopie des Gateways (wie help-site und codemode-chat)
     engine/             typeclasses/, commands/, cmdsets.ts, locks.ts, prototypes.ts, funcparser.ts, combat/ (optional)
   client/               React-Oberfläche, MapView (PixiJS), Textlog, Login
   app/                  Next.js-Routen
@@ -378,9 +377,12 @@ spaces-mmo/
 Die Engine lädt genau eine Welt (`SPACES_MMO_WORLD=leuchtfeuer`). Eine Welt bringt Daten (Räume, Prototypen, Hilfe,
 Grafiken) und kann Typklassen und Befehle ergänzen, aber keine Engine-Regeln (Transaktionen, Locks, Rechte) ändern.
 
-**Getrennt von phi-spaces:** In `src/` kommt kein Spiel- und kein Webcode. Hilfscode, den auch codemode-chat hat
-(`ws.ts`, Helfer wie `keepAlive`, `takeExisting` aus `codemode-chat/server/space.ts`), bekommt spaces-mmo als eigene
-Kopie; help-site und codemode-chat machen es heute genauso.
+**Getrennt von phi-spaces:** In `src/` kommt kein Spielcode. Hilfscode, den alle Projekte gleich brauchen, liegt
+einmal in der Bibliothek: das WebSocket-Gateway (`phi-spaces/ws`, das Nachrichtenlimit als Option, spaces-mmo 600 je
+Minute) und die Space-Helfer (`connectSpace`, `readExisting`/`StillHeld`, `peek`, `awaitWork`, `keepAlive`, `takeAll`
+aus `phi-spaces`, `src/space-client.ts`). `server/space.ts` setzt nur noch die Werte von spaces-mmo ein (Adressen,
+Wartezeiten, Trace). Reine Oberfläche (`client/lib/palettes.ts`, `markdown.ts`) bleibt eine Kopie je Projekt, weil
+Next.js nichts außerhalb des Projektverzeichnisses bündelt; `test/test-shared-copies.test.ts` hält die Kopien gleich.
 
 ## Einbindung von phi-spaces
 

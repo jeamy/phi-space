@@ -17,22 +17,13 @@ import { dirname, join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, type ListenTarget, openOwnMemoryHost, openSqliteHost } from "phi-spaces";
+import { Meter, startService, SpaceService, StaticIdentity, serveSpace, createSpace, parseTarget, openOwnMemoryHost, openSqliteHost } from "phi-spaces";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
 import { swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-function parseListen(spec: string): ListenTarget {
-	if (spec.startsWith("tcp:")) {
-		const [host, port] = spec.slice(4).split(":");
-		if (!host || !Number.isSafeInteger(Number(port))) throw new Error(`SWARM_LISTEN tcp expects host:port, got ${spec}`);
-		return { host, port: Number(port) };
-	}
-	return { path: spec.replace(/^unix:/, "") };
-}
-
-const listen = parseListen(process.env.SWARM_LISTEN ?? "unix:/tmp/swarm-b.sock");
+const listen = parseTarget(process.env.SWARM_LISTEN ?? "unix:/tmp/swarm-b.sock");
 const dbPath = process.env.SWARM_DB ?? join(ROOT, ".local", "swarm-b.phi.sqlite");
 const shardTag = process.env.SWARM_TAG ?? "b-";
 const produce = process.env.SWARM_PRODUCE === "1";

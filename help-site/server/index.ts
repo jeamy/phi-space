@@ -32,12 +32,12 @@ function loadDotEnvIfPresent(): void {
 }
 loadDotEnvIfPresent();
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, type ListenTarget } from "phi-spaces";
+import { FOREVER, Meter, NO_WAIT, PhiSpaces, startService, RemoteSpace, socketTransport, openOwnMemoryHost, openSqliteHost, parseTarget } from "phi-spaces";
 import { WebAdminController } from "./admin/admin-controller.ts";
 import { SpaceChatHub, type StageId } from "./space-chat/stage-runner.ts";
 import { SocialSwarmHub, SWARM_ALIAS } from "./social/swarm.ts";
 import { adminLlmModels, chatReplyGenerator, isLlmActive, listLlmModels, restoreAllowedModels, setAllowedModels, setLlmActive, setLlmModel, sharedLlm, swarmPostGenerator, swarmReplyGenerator } from "./llm.ts";
-import { upgradeWebSocket } from "./ws.ts";
+import { upgradeWebSocket } from "phi-spaces/ws";
 import { UploadStore } from "./uploads.ts";
 
 const MIME: Record<string, string> = {
@@ -174,9 +174,7 @@ export async function startHelpServer(options: HelpServerOptions = {}): Promise<
 	// Optional second shard on another host (plan: big + nano). SWARM_REMOTE=tcp:host:port or unix:/path.
 	if (process.env.SWARM_REMOTE) {
 		const spec = process.env.SWARM_REMOTE;
-		const target: ListenTarget = spec.startsWith("tcp:")
-			? { host: spec.slice(4).split(":")[0]!, port: Number(spec.slice(4).split(":")[1]) }
-			: { path: spec.replace(/^unix:/, "") };
+		const target = parseTarget(spec);
 		// requestTimeoutMs: an unanswered call on a cut socket fails fast and the
 		// transport reconnects on the next call — without it shard reads hang forever.
 		swarm.attachRemoteShard(new RemoteSpace(socketTransport(target, {

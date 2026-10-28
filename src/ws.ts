@@ -1,6 +1,6 @@
-// Bounded RFC-6455 text gateway (a copy of codemode-chat/server/ws.ts: spaces-mmo keeps its own, docs/architektur.md).
-// Client frames are masked; handlers receive queued messages in order. MESSAGES_PER_MIN is higher than in the chat:
-// a player holding an arrow key sends a command per step.
+// Bounded RFC-6455 text gateway for the web processes of projects built on phi-spaces (phi-spaces/ws). Client frames
+// are masked; handlers receive queued messages in order. A connection that sends more than `maxMessagesPerMin` text
+// messages in a minute is closed (1008).
 import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
@@ -12,8 +12,8 @@ export interface WsConnection {
  onMessage(handler: (text: string) => void | Promise<void>): void;
  onClose(handler: () => void): void;
 }
+export type WsOptions = { maxMessagesPerMin?: number };
 const MAX_BYTES = 1_048_576;
-const MESSAGES_PER_MIN = 600;
 function frame(opcode: number, payload: Buffer): Buffer {
  const n = payload.length;
  const h = Buffer.alloc(n < 126 ? 2 : n < 65536 ? 4 : 10);
@@ -23,7 +23,8 @@ function frame(opcode: number, payload: Buffer): Buffer {
  else { h[1] = 127; h.writeBigUInt64BE(BigInt(n), 2); }
  return Buffer.concat([h, payload]);
 }
-export function upgradeWebSocket(req: IncomingMessage, socket: Duplex, head: Buffer): WsConnection | null {
+export function upgradeWebSocket(req: IncomingMessage, socket: Duplex, head: Buffer, o: WsOptions = {}): WsConnection | null {
+ const maxMessagesPerMin = o.maxMessagesPerMin ?? 120;
  const key = req.headers["sec-websocket-key"];
  if (req.method !== "GET" || req.headers["sec-websocket-version"] !== "13" ||
   String(req.headers.upgrade).toLowerCase() !== "websocket" ||
@@ -110,7 +111,7 @@ export function upgradeWebSocket(req: IncomingMessage, socket: Duplex, head: Buf
    let text: string;
    try { text = decoder.decode(Buffer.concat(parts, fragBytes)); } catch { stop(1007); return; }
    if (Date.now() - messageWindow >= 60_000) { messageWindow = Date.now(); messageCount = 0; }
-   if (++messageCount > MESSAGES_PER_MIN) { stop(1008); return; }
+   if (++messageCount > maxMessagesPerMin) { stop(1008); return; }
    parts.length = 0; queuedBytes += fragBytes; fragBytes = 0;
    queued.push(text);
    if (queued.length > 64 || queuedBytes > MAX_BYTES) { stop(1009); return; }

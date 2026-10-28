@@ -15,9 +15,9 @@ import { loadCodemode } from "./judge.ts";
 import { MAX_CALL_CHARS, type ExecEvent } from "./runner.ts";
 import { requestExec } from "./exec.ts";
 import { CodeChatHub } from "./hub.ts";
-import { announce, connectSpace } from "./space.ts";
+import { announce, connectSpace, takeAll } from "./space.ts";
 import { NO_WAIT } from "phi-spaces";
-import { upgradeWebSocket } from "./ws.ts";
+import { upgradeWebSocket } from "phi-spaces/ws";
 import { TASKS } from "./tasks.ts";
 
 const ID = /^[a-zA-Z0-9._-]{1,48}$/;
@@ -132,7 +132,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			}
 			if (p === "/api/admin/logout" && req.method === "POST") {
 				const sid = cookieOf(req, ADMIN_COOKIE);
-				if (sid) while (await conn.space.take({ type: "AdminSession", fields: { key: sessionKey(sid) } }, NO_WAIT));
+				if (sid) await takeAll(conn.space, { type: "AdminSession", fields: { key: sessionKey(sid) } });
 				res.writeHead(200, { "content-type": "application/json; charset=utf-8", "set-cookie": `${ADMIN_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` });
 				return res.end(JSON.stringify({ admin: false }));
 			}

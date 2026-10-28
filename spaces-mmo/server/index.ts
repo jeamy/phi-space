@@ -20,7 +20,7 @@ import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts
 import { loadWorld, worldAsset } from "./engine/world.ts";
 import { Gateway } from "./gateway.ts";
 import { connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE } from "./space.ts";
-import { upgradeWebSocket } from "./ws.ts";
+import { upgradeWebSocket } from "phi-spaces/ws";
 import { chosen } from "./llm.ts";
 import { saveModelChoice, saveSettings, SETTINGS, settingsOf, type ModelInfoFields } from "./settings.ts";
 
@@ -202,7 +202,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 		if (sockets >= 1024 || !allowed(clientIp(req))) return void socket.destroy();
 		void accounts.resolve(cookieOf(req, COOKIE)).then((me) => {
 			if (!me) return void socket.destroy();
-			const ws = upgradeWebSocket(req, socket, head);
+			const ws = upgradeWebSocket(req, socket, head, { maxMessagesPerMin: 600 });
 			if (!ws) return;
 			sockets++; ws.onClose(() => { sockets--; });
 			void gateway.attach(ws, me).catch((e) => { console.error("[web] websocket attach failed:", (e as Error).message); ws.close(); });

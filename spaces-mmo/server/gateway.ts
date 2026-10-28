@@ -13,7 +13,7 @@ import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/wor
 import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { envMs } from "./space.ts";
 import { setting } from "./settings.ts";
-import type { WsConnection } from "./ws.ts";
+import type { WsConnection } from "phi-spaces/ws";
 
 /** What a client sees of a character. */
 export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true };
@@ -260,6 +260,16 @@ export class Gateway {
 		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set(this.#protoIcons.values())] }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
+	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
+	async #readPaged(tmpl: { type: string; fields?: Record<string, string> }, msgs: MsgFields[]): Promise<void> {
+		let after: string | null = null, token: string | undefined;
+		do {
+			const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await this.space.readPage(tmpl, { after, token, maxBytes: 256 * 1024 });
+			for (const e of page.items) this.#put(e.id, e.type, e.types, e.fields, msgs);
+			after = page.next; token = page.token;
+		} while (after !== null);
+	}
+
 	/** Reads the world once (from a revision taken before the reads) and then follows the change stream. Replaying ops
 	 *  that the reads already showed is harmless: a put replaces, a del removes. */
 	async #follow(ready: () => void): Promise<void> {
@@ -269,8 +279,8 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await this.space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing"]) for (const e of await this.space.readAll({ type })) this.#put(e.id, e.type, e.types, e.fields, msgs);
-					for (const e of await this.space.readAll({ type: "Msg", fields: { to: "*" } })) this.#put(e.id, e.type, e.types, e.fields, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing"]) await this.#readPaged({ type }, msgs);
+					await this.#readPaged({ type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(rev);
 					ready();
 					for (const c of this.#clients) this.#hello(c); // after a restart of the stream

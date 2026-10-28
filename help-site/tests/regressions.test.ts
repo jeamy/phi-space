@@ -13,7 +13,7 @@ import { renderMarkdownToHtml } from "../client/lib/markdown.ts";
 import { WebAdminController, WebAdminState } from "../server/admin/admin-controller.ts";
 import { SpaceChatHub } from "../server/space-chat/stage-runner.ts";
 import { dispatchChatCommand } from "../server/space-chat/commands.ts";
-import { upgradeWebSocket } from "../server/ws.ts";
+import { upgradeWebSocket } from "phi-spaces/ws";
 import { appendHistory, initializeHistory, mergedHistory, historyPage } from "../server/social/history.ts";
 import type { SwarmPost } from "../server/social/swarm.ts";
 import { SocialSwarmHub } from "../server/social/swarm.ts";

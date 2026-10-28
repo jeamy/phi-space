@@ -9,7 +9,7 @@ import { runStageV4 } from "../../examples/v4-gated-auth/run.ts";
 import { runStageV5 } from "../../examples/v5-federated-cluster/run.ts";
 import { runStageV6 } from "../../examples/v6-mobile-control/run.ts";
 import { dispatchChatCommand } from "./commands.ts";
-import type { WsConnection } from "../ws.ts";
+import type { WsConnection } from "phi-spaces/ws";
 
 export type StageId = "v1" | "v2" | "v3" | "v4" | "v5" | "v6";
 type Session = { sessionId: string; spaceId: string; engine: SpaceChatEngine; clients: Set<WsConnection>; expiresAt: number; readOnly: boolean; work?: Promise<void>; error?: string };

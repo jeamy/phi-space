@@ -57,7 +57,7 @@ export interface SpaceLike {
 	readIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
 	take(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
 	takeIfExists(tmpl: Template, timeout: number, o?: OpOptions): Promise<Taken | null>;
-	/** takeIfExists by default (`take: false` = readIfExists); `locked` is true when the miss saw only locked matches. */
+	/** readIfExists by default (`take: true` = takeIfExists); `locked` is true when the miss saw only locked matches. */
 	probe?(tmpl: Template, timeout: number, o?: OpOptions & { take?: boolean }): Promise<{ entry: Taken | null; locked: boolean }>;
 	notify(tmpl: Template, o: { target: core.Target; txn?: string | null; lease?: number; handback?: Json } & Req): Promise<{ eventId: string; lease: Lease }>;
 	wait(tmpl: Template, o: { take?: boolean; target: core.Target; timeout: number; txnLeaseMs?: number; handback?: Json } & Req): Promise<string>;

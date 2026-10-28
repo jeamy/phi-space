@@ -2,7 +2,7 @@ import "./test-env.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKGROUND_CONTEXT as ctx } from "phi-spaces/context";
-import { FOREVER, Meter, openOwnMemoryHost } from "phi-spaces";
+import { FOREVER, Meter, openOwnMemoryHost, SnapshotExpired } from "phi-spaces";
 import { SocialSwarmHub, type SwarmPost } from "../server/social/swarm.ts";
 import { appendHistory, historyPage } from "../server/social/history.ts";
 import { purgeOldest, retentionConfig, SWARM_CLAIM_RESULT_MS } from "../server/social/retention.ts";
@@ -142,7 +142,7 @@ test("the feed goes on when the change history has moved past the hub's cursor: 
 		const floor = (await f.hub.space.readPage(null, { maxBytes: 1_000 })).rev;
 		const changes = f.hub.space.changes.bind(f.hub.space);
 		// the retained history now starts at `floor`: asking for anything older fails, as a trimmed log does
-		(f.hub.space as any).changes = async (rev: number, o: any) => { if (rev < floor) throw new Error("history dropped"); return changes(rev, o); };
+		(f.hub.space as any).changes = async (rev: number, o: any) => { if (rev < floor) throw new SnapshotExpired("history dropped"); return changes(rev, o); };
 		const inits = () => sent.filter((m) => m.type === "feed.init").length;
 		const deadline = Date.now() + 8_000;
 		while (inits() < 2) { assert.ok(Date.now() < deadline, "the hub sent the state again"); await new Promise((r) => setTimeout(r, 50)); }

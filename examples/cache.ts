@@ -5,7 +5,7 @@ import { BACKGROUND_CONTEXT as ctx } from "../src/context.ts";
 import { defineDoc } from "../src/store/documents.ts";
 import { openOwnMemoryHost } from "../src/store/host.ts";
 import { parseListen } from "../src/standalone.ts";
-import { core, Space, FOREVER, RemoteSpace, socketTransport, canonicalJson, type SpaceHost, type SpaceLike } from "../src/index.ts";
+import { core, Space, FOREVER, RemoteSpace, socketTransport, canonicalJson, readExisting, StillHeld, takeExisting, type SpaceHost, type SpaceLike } from "../src/index.ts";
 import type { Json, SpaceState } from "../src/core.ts";
 
 const Versions = defineDoc<{ next: number }>({
@@ -101,10 +101,8 @@ export class RemoteCache {
   }
   /** takeIfExists/readIfExists that throws when a match stayed held for the whole wait (null then means nothing). */
   private async existing(take: boolean, tmpl: { type: string; fields: Record<string, Json> }, txn?: string) {
-    const p = this.space.probe ? await this.space.probe(tmpl, HELD_WAIT_MS, { txn: txn ?? null, take }) : { entry: await (take ? this.space.takeIfExists(tmpl, HELD_WAIT_MS, { txn: txn ?? null }) : this.space.readIfExists(tmpl, HELD_WAIT_MS, { txn: txn ?? null })), locked: false };
-    if (!p.entry && p.locked) throw new Error("Cache key is locked by an external transaction");
-    const e = p.entry;
-    return e;
+    try { return await (take ? takeExisting : readExisting)(this.space, tmpl, HELD_WAIT_MS, { txn: txn ?? null }); }
+    catch (e) { if (e instanceof StillHeld) throw new Error("Cache key is locked by an external transaction"); throw e; }
   }
   async get(key: string): Promise<CacheHit | null> {
     const e = await this.existing(false, this.template(key));

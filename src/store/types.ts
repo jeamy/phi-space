@@ -44,6 +44,13 @@ export interface DiskMapQuery<V> {
 	entries(): Array<[string, V]>;
 }
 export const diskMapOf = <V>(m: unknown): DiskMapQuery<V> | undefined => (typeof m === "object" && m !== null ? (m as Record<symbol, DiskMapQuery<V> | undefined>)[DISK_MAP] : undefined);
+/** Freezes a value and everything in it (records read or written are values: the host, the SQLite store and the disk
+ *  map hand out frozen ones). */
+export function deepFreeze(v: unknown): void {
+	if (typeof v !== "object" || v === null || Object.isFrozen(v)) return;
+	Object.freeze(v);
+	for (const x of Object.values(v)) deepFreeze(x);
+}
 
 /** One document of a kind per store. */
 export type DocDef<T> = DocCommon<T> & { readonly family?: false; readonly initial: () => T };

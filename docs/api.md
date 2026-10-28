@@ -20,6 +20,7 @@ Projekte, die auf phi-spaces aufbauen (codemode-chat, help-site, künftige), bin
 | `phi-spaces/store/host` | `src/store/host.ts` | Eigener Store im Speicher (`openOwnMemoryHost`) |
 | `phi-spaces/store/sqlite` | `src/store/sqlite.ts` | Eigener SQLite-Store (`openSqliteHost`) |
 | `phi-spaces/store/documents` | `src/store/documents.ts` | Dokument-Helfer des Stores |
+| `phi-spaces/ws` | `src/ws.ts` | WebSocket-Gateway der Web-Prozesse (`upgradeWebSocket(req, socket, head, { maxMessagesPerMin })`, RFC 6455, nur Text, Rahmen bis 1 MiB) |
 
 Nur diese Unterpfade sind Vertrag; ein neuer Unterpfad ist eine API-Änderung und gehört in diese Tabelle.
 `npm run check:package` (auch Teil von `npm test`) lehnt in solchen Projekten relative Importe nach `src/` und
@@ -162,6 +163,20 @@ gibt jeder Mutation eine Request-ID. Bei verlorener Antwort wiederholt er mit
 derselben Identität. `OutcomeUnknown` heißt deshalb nicht, dass die Wirkung
 fehlgeschlagen ist: mit `pollOperation` dieselbe Request-ID weiter verfolgen
 oder gezielt `cancelOperation` verwenden.
+
+### Client-Helfer (`src/space-client.ts`)
+
+Was jeder Prozess braucht, der einen Space woanders nutzt; die Werte, die sich je Projekt unterscheiden, sind Parameter.
+
+| Funktion | Inhalt |
+| --- | --- |
+| `parseTarget(spec)` | `unix:/pfad`, `tcp:host:port` oder ein bloßer Pfad → `ListenTarget` (`parseListen` in `src/standalone.ts` ist dieselbe Funktion) |
+| `connectSpace(spec, { callTimeoutMs = 30 s, connectTimeoutMs = 5 s, attempts = 3, … })` | `{ space: RemoteSpace, close }`; die Socket-Anfrage darf 5 s länger dauern als der Aufruf |
+| `readExisting` / `takeExisting(space, tmpl, waitMs, { txn })` | `readIfExists`/`takeIfExists`, das ein fehlendes von einem gehaltenen Entry unterscheidet: `null` heißt weg, ein Fehlschlag nur wegen gehaltener Treffer wirft `StillHeld` (über `probe`; ohne `probe` gilt `null` als weg) |
+| `peek(space, tmpl, { txn })` | Der erste Treffer als Schnappschuss (`readAll` mit `limit: 1`), ohne Claim |
+| `takeAll(space, tmpl, { txn })` | Nimmt jeden jetzt freien Treffer, liefert die Anzahl (ein `take` je Entry; gehaltene bleiben) |
+| `awaitWork(space, tmpl, waitMs, halt?)` | Ein blockierendes `read` ohne Transaktion: `true`, sobald Arbeit da ist; `false` nach Ablauf oder `halt` |
+| `keepAlive(space, lease, leaseMs)` | Erneuert eine Lease alle `leaseMs / 3`, solange lange Arbeit darin läuft; liefert die Stopp-Funktion |
 
 Der Service akzeptiert die Methoden `hello`, `generation`, `write`, `read`,
 `take`, `pollOperation`, `resolveOperation`, `cancelOperation`, `readAll`, `count`, `stats`, `txn`,

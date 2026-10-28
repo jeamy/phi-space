@@ -199,10 +199,9 @@ help-site/
 │   ├── v5-federated-cluster/        # Stufe 5: FederatedSpace, Router, HRW-Sharding & Membership
 │   └── v6-mobile-control/           # Stufe 6: Web-Admin & Mobile App Steuerung (QR-Pairing, Worker, RunGate, Alerts)
 ├── server/                          # Node.js HTTP + WebSocket Server (Custom Server um Next.js)
-│   ├── index.ts                     # Einstieg: Next-Handler, /api/feed/*, /api/llm/*, Admin-API, WS-Routing
+│   ├── index.ts                     # Einstieg: Next-Handler, /api/feed/*, /api/llm/*, Admin-API, WS-Routing (Gateway: phi-spaces/ws)
 │   ├── llm.ts                       # pi-ai-Anbindung: Modell-Discovery, Picker-API, ON/OFF-Toggle, Generatoren
 │   ├── nano-host.ts                 # Optionaler Headless-Worker-Shard mit eigenem Store
-│   ├── ws.ts                        # RFC-6455 WebSocket-Upgrade (/ws/chat/:session, /ws/feed)
 │   ├── admin/                       # Login-geschütztes Web-Admin-Backend (analog MobileSpaces)
 │   │   └── admin-controller.ts      # ADMIN_KINDS, QR-Enroll, Objekt-Inspektion, Deployment-Panel
 │   ├── space-chat/                  # Stufen-Orchestrator (wechselt live zwischen v1 bis v6)

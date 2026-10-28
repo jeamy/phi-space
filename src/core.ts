@@ -877,7 +877,7 @@ function serve(s: SpaceState, now: number): void {
 			const found = find(s, w.template, txn, w.take);
 			const miss = found.status !== "found" && (w.deadline <= now || (w.ifExists && found.status === "none"));
 			if (found.status === "found") {
-				if (directoryEntry(found.rec) && w.target !== null && (w.take || txn !== null)) { decideClaim(s,now,w.claimKey,{state:"done",result:null,error:{code:"PermissionDenied",message:"directory entries cannot be consumed or locked"}}); s.waiters.splice(s.waiters.indexOf(w),1); continue; }
+				if (directoryEntry(found.rec) && w.target !== null && (w.take || txn !== null)) { decideClaim(s,now,w.claimKey,{state:"done",result:null,error:{code:"PermissionDenied",message:"directory entries cannot be consumed or locked"}}); dropWaiter(s,w); continue; }
 				if(w.take) {try{assertMemberTake(s,found.rec,txn,now);}catch(e){if(s.membership?.state!=="draining")throw e;continue;}}
 				if (w.take && txn === null && (s.completionProfiles ?? []).some(p => found.rec.types.includes(p.taskType))) {
 					decideClaim(s, now, w.claimKey, { state: "done", result: null, error: { code: "CompletionViolation", message: "profiled tasks require a transaction" } });
