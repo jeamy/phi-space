@@ -1,7 +1,7 @@
 // Web Components without framework or build step (decision for the dashboard plan: zero dependencies).
 // Light DOM on purpose: one global stylesheet carries the palette tokens; components receive data via
 // properties and re-render scheduled on one animation frame.
-import { bytes, esc, hbars, num, sparkline, stackbar } from "./charts.js";
+import { bytes, esc, hbars, num, sparkline, stackbar, timeChart } from "./charts.js";
 
 const FOREVER = 9007199254740991; // core.FOREVER = Number.MAX_SAFE_INTEGER
 const TOP_TYPES = 12;
@@ -61,6 +61,28 @@ const spacesSection = (list) => {
 </div>
 <h3>Spaces <span class="muted">· ${num(list.reduce((n, x) => n + x.spaces, 0))} im Store</span></h3>
 ${table(["Space", "Entries", "Typen", "Speicher", "größte Typen"], rows)}`;
+};
+
+/** The live curves of an app (its last polls): answer time, the space process's CPU and memory, bytes, entries, commits. */
+const ms1 = (v) => `${(Math.round(v * 10) / 10).toLocaleString("de-DE")} ms`;
+const liveCard = (title, note, pts, series, fmt) => {
+	const chart = timeChart(pts, series, { fmt });
+	const legend = series.length > 1 ? `<div class="legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.label)}</span>`).join("")}</div>` : "";
+	return `<div class="card live"><h3>${esc(title)}</h3><p class="note">${note}</p>${legend}${chart || '<div class="empty">sammle Messwerte…</div>'}</div>`;
+};
+const liveSection = (a) => {
+	const pts = a.series ?? [], c = ["var(--bar)", "var(--bar-2)", "var(--success)"];
+	const noProc = pts.length > 1 && pts.every((p) => p.rssMb == null);
+	const proc = noProc ? '<div class="empty">Der Space-Prozess meldet keine CPU- und Speicherwerte (ältere phi-spaces-Version).</div>' : null;
+	return `<h3>Live <span class="muted">· letzte ${num(Math.round(((pts.at(-1)?.at ?? 0) - (pts[0]?.at ?? 0)) / 60000))} min, jede Messung ein Punkt</span></h3>
+<div class="grid3">
+	${liveCard("Antwortzeit des Space", "Dauer des stats-Aufrufs des Dashboards", pts, [{ key: "ms", label: "Antwortzeit", color: c[0] }], ms1)}
+	${proc ? `<div class="card live"><h3>CPU des Space-Prozesses</h3>${proc}</div>` : liveCard("CPU des Space-Prozesses", "100 % ist ein voller Kern", pts, [{ key: "cpu", label: "CPU", color: c[0] }], (v) => `${Math.round(v)} %`)}
+	${proc ? `<div class="card live"><h3>Arbeitsspeicher</h3>${proc}</div>` : liveCard("Arbeitsspeicher", "des Space-Prozesses, in MB", pts, [{ key: "rssMb", label: "RSS", color: c[0] }, { key: "heapMb", label: "Heap", color: c[1] }], (v) => `${Math.round(v)} MB`)}
+	${liveCard("Speicher im Space", "Claims und alles zusammen, in MB", pts, [{ key: "totalMb", label: "gesamt", color: c[0] }, { key: "claimsMb", label: "Claims", color: c[1] }], (v) => `${Math.round(v)} MB`)}
+	${liveCard("Entries", "sichtbare Entries und davon Nachrichten (Msg)", pts, [{ key: "entries", label: "Entries", color: c[0] }, { key: "msg", label: "Msg", color: c[1] }], num)}
+	${liveCard("Commits je Minute", "aus der Revision zwischen zwei Messungen", pts, [{ key: "commitsMin", label: "Commits/min", color: c[0] }], (v) => num(Math.round(v)))}
+</div>`;
 };
 
 const fieldsCell = (fields) => {
@@ -150,7 +172,7 @@ class AppDetail extends HTMLElement {
 		if (a.spaces) {
 			this.innerHTML = `<div class="panel">${head}
 ${kpis(st)}
-<div class="card trend"><h3>Entries im Verlauf <span class="muted">· ${num(a.history?.length ?? 0)} Messungen</span></h3>${sparkline(a.history, 600, 54, "var(--bar)", "sichtbare Entries je Messung")}</div>
+${liveSection(a)}
 ${spacesSection(a.spaces)}
 ${charts(st, null)}
 <div class="empty">Einträge nicht freigegeben: dieser Dienst liefert nur Kennzahlen (Spaces, Anzahl je Typ, Speicher).</div>
@@ -160,7 +182,7 @@ ${charts(st, null)}
 		const rows = (p?.entries ?? []).map((x) => `<tr><td title="Entry-ID">${esc(x.id)}</td><td><span class="badge">${esc(x.type)}</span></td>${fieldsCell(x.fields)}</tr>`).join("");
 		this.innerHTML = `<div class="panel">${head}
 ${kpis(st)}
-<div class="card trend"><h3>Entries im Verlauf <span class="muted">· ${num(a.history?.length ?? 0)} Messungen</span></h3>${sparkline(a.history, 600, 54, "var(--bar)", "sichtbare Entries je Messung")}</div>
+${liveSection(a)}
 ${charts(st, this._type)}
 <h3>Entries <span class="muted">(älteste zuerst · Seite ${this._cursors.length})</span>
 	${this._type ? `<button class="chip chip--filter" type="button" data-clear>${esc(this._type)} ✕</button>` : ""}</h3>

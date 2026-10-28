@@ -351,7 +351,9 @@ export class SpaceService {
 			}
 			case "stats": {
 				if (grant.types !== "*") throw new Denied("aggregate stats need a role without type restrictions");
-				return await client.statsWithRevision() as unknown as Json;
+				// with the figures of the process that serves the space (a dashboard draws its CPU and memory over time)
+				const cpu = process.cpuUsage(), mem = process.memoryUsage();
+				return { ...(await client.statsWithRevision()), process: { cpuMs: Math.round((cpu.user + cpu.system) / 1000), rssBytes: mem.rss, heapBytes: mem.heapUsed, at: Date.now() } } as unknown as Json;
 			}
 			case "batch": {
 				// every step needs the right its own call would need (write, take, read, txn), with the same type checks

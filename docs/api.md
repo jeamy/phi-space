@@ -165,7 +165,9 @@ danach neue erste Seite lesen. Änderungen nach der Snapshot-Revision werden üb
 `RemoteSpace` implementiert die selben Kernmethoden über einen `Transport`.
 `statsWithRevision()` liefert wie beim lokalen `PhiSpaces` die Kennzahlen mit der Revision und `streamId`, zu der sie
 gelesen wurden; zwei Abfragen ergeben so die Commits dazwischen (das Dashboard leitet daraus „Commits/min“ ab).
-`spaces()` listet die Spaces des Dienstes (`spaceId`, `alias`, `createdAt`).
+`spaces()` listet die Spaces des Dienstes (`spaceId`, `alias`, `createdAt`). Über den Dienst trägt `statsWithRevision()`
+zusätzlich `process: { cpuMs, rssBytes, heapBytes, at }`: CPU-Zeit und Speicher des Prozesses, der den Space bedient
+(ältere Server lassen es weg).
 `inProcessTransport(service, connection)` ist für lokale Tests;
 `socketTransport({ path })` und `socketTransport({ host, port })` stellen
 Unix- bzw. TCP-Verbindungen her. Der Server wird mit

@@ -30,7 +30,7 @@ import { GateIdentity } from "./gate.ts";
 import { DEFAULT_POLICY, SpaceService, type Connection } from "./service.ts";
 import { serveSpace, type SpaceServer } from "./socket.ts";
 import { connectSpace } from "./space-client.ts";
-import { RemoteSpace } from "./remote.ts";
+import { RemoteSpace, type ServiceProcess } from "./remote.ts";
 import * as core from "./core.ts";
 
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png" };
@@ -94,10 +94,18 @@ type AppState = AppSource & {
 	activity: number[];
 	/** Change of the visible entries per minute between the last two polls. */
 	entriesPerMin: number;
+	/** The live curves, oldest first (APP_SERIES points): sent whole with the app list, one point with each poll. */
+	series?: AppPoint[];
 	checkedAt: number;
 };
 
 export type AppSpace = { alias: string; spaces: number; stats: core.SpaceStats };
+/** One poll of an app: when, how long its stats call took, the serving process's CPU share (from the CPU time it
+ *  reports, null without two reports) and memory, the space's entries (and messages), bytes and commits per minute. */
+export type AppPoint = { at: number; ms: number; cpu: number | null; rssMb: number | null; heapMb: number | null; entries: number; msg: number; claimsMb: number; totalMb: number; commitsMin: number | null };
+/** How many polls the live curves keep (15 minutes at the default 2 s). */
+const APP_SERIES = 450;
+const mb = (b: number | undefined) => Math.round(((b ?? 0) / 1e6) * 10) / 10;
 
 /** The sum of several spaces' stats (counts, types, bytes). */
 export function sumStats(all: readonly core.SpaceStats[]): core.SpaceStats {
@@ -239,11 +247,12 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 	// ---- app sources: one connection per app, one `stats` call per poll; a failed call drops the connection
 	type AppEntry = AppState & { conn: ReturnType<typeof connectSpace> | null; last: { rev: number; streamId: string; entries: number; at: number } | null;
 		/** An app of every space: one RemoteSpace per space on the same connection, and the revision each was read at. */
-		views: Map<string, RemoteSpace>; revs: Map<string, { rev: number; streamId: string }>; round: number };
+		views: Map<string, RemoteSpace>; revs: Map<string, { rev: number; streamId: string }>; round: number;
+		points: AppPoint[]; proc: ServiceProcess | null };
 	const apps = new Map<string, AppEntry>();
-	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null, views: new Map(), revs: new Map(), round: 0 });
-	const appView = (a: AppState): AppState => ({ id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, ...(a.spaces ? { spaces: a.spaces } : {}), history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
-	const appList = (): AppState[] => [...apps.values()].map(appView);
+	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null, views: new Map(), revs: new Map(), round: 0, points: [], proc: null });
+	const appView = (a: AppEntry, full = true): AppState => ({ ...(full ? { series: a.points } : {}), id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, ...(a.spaces ? { spaces: a.spaces } : {}), history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
+	const appList = (): AppState[] => [...apps.values()].map((a) => appView(a));
 	const connectApp = async (a: AppEntry) => {
 		if (!a.conn) {
 			// the address that answered last first, then the others in their order
@@ -275,7 +284,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		a.error = e instanceof Error ? e.message : String(e);
 	};
 	/** Every space of the app's service: stats per space, summed; commits are counted per space (its own stream). */
-	const statsOfAll = async (a: AppEntry): Promise<{ stats: core.SpaceStats; commits: number | null }> => {
+	const statsOfAll = async (a: AppEntry): Promise<{ stats: core.SpaceStats; commits: number | null; process?: ServiceProcess }> => {
 		const service = await connectApp(a);
 		const listed = (await service.spaces()).sort((x, y) => y.createdAt - x.createdAt).slice(0, APP_MAX_SPACES);
 		const read = await Promise.all(listed.map(async (s) => {
@@ -295,7 +304,8 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		a.revs = revs;
 		for (const id of a.views.keys()) if (!revs.has(id)) a.views.delete(id);
 		a.spaces = groupSpaces(live.map((x) => ({ alias: x.alias, stats: x.stats })));
-		return { stats: sumStats(live.map((x) => x.stats)), commits };
+		const proc = live.find((x) => x.process)?.process;
+		return { stats: sumStats(live.map((x) => x.stats)), commits, ...(proc ? { process: proc } : {}) };
 	};
 	let polling = false;
 	const pollApps = async (): Promise<void> => {
@@ -307,15 +317,18 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 				const all = a.space === ALL_SPACES;
 				// an app of every space costs its service a stats call per space: it is read every few rounds only
 				if (all && a.round++ % APP_ALL_EVERY !== 0 && a.online) return;
+				let point: AppPoint | undefined;
 				try {
-					let st: core.SpaceStats, rev: number, streamId: string;
+					let st: core.SpaceStats, rev: number, streamId: string, proc: ServiceProcess | undefined, calls = 1;
+					const t0 = performance.now();
 					if (all) {
 						const r = await statsOfAll(a);
-						st = r.stats;
+						st = r.stats; proc = r.process; calls = Math.max(1, a.revs.size);
 						// the commits since the poll before, counted per space, carried on as one running revision
 						rev = (a.last?.rev ?? 0) + (r.commits ?? 0);
 						streamId = r.commits === null ? `restart:${now()}` : a.last?.streamId ?? "all";
-					} else ({ stats: st, rev, streamId } = await (await connectApp(a)).statsWithRevision());
+					} else ({ stats: st, rev, streamId, process: proc } = await (await connectApp(a)).statsWithRevision());
+					const ms = Math.round(((performance.now() - t0) / calls) * 10) / 10;
 					const t = now();
 					// commits and entry change per minute since the poll before; a new stream (the space restarted) starts over
 					const prev = a.last && a.last.streamId === streamId && rev >= a.last.rev ? a.last : null;
@@ -331,11 +344,18 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 					a.error = null;
 					a.history.push(st.entries);
 					if (a.history.length > APP_HISTORY) a.history.shift();
-				} catch (e) { dropApp(a, e); a.last = null; a.revs.clear(); a.spaces = undefined; }
+					// the CPU share between two reports of the serving process (its own clock); a restart starts over
+					const before = a.proc;
+					const cpu = proc && before && proc.at > before.at && proc.cpuMs >= before.cpuMs ? Math.round(((proc.cpuMs - before.cpuMs) / (proc.at - before.at)) * 1000) / 10 : null;
+					a.proc = proc ?? null;
+					point = { at: t, ms, cpu, rssMb: proc ? mb(proc.rssBytes) : null, heapMb: proc ? mb(proc.heapBytes) : null, entries: st.entries, msg: st.byType.Msg ?? 0, claimsMb: mb(st.bytes?.claims), totalMb: mb(st.bytes?.total), commitsMin: prev ? a.activity.at(-1) ?? null : null };
+					a.points.push(point);
+					if (a.points.length > APP_SERIES) a.points.shift();
+				} catch (e) { dropApp(a, e); a.last = null; a.revs.clear(); a.spaces = undefined; a.proc = null; }
 				a.checkedAt = now();
 				// every poll goes out (the activity curve moves on while a space is quiet); the page refetches entries
 				// only when the stats changed
-				changed.push(appView(a));
+				changed.push({ ...appView(a, false), ...(point ? { point } : {}) } as AppState);
 			}));
 			if (changed.length > 0) for (const res of sse) push(res, { type: "apps", apps: changed });
 		} finally { polling = false; }
@@ -378,7 +398,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 			const a = apps.get(decodeURIComponent(appEntries[1]!));
 			if (!a) return send(res, 404, { error: "unknown app" });
 			// an app of every space shows its figures only (the help hub's service allows no reads)
-			if (a.space === ALL_SPACES) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a) });
+			if (a.space === ALL_SPACES) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a, false) });
 			const type = url.searchParams.get("type");
 			const limit = Math.min(200, Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
 			const after = Math.min(APP_PAGE_CEILING, Math.max(0, Number.parseInt(url.searchParams.get("after") ?? "0", 10) || 0));
@@ -389,12 +409,12 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 				const p = await (await connectApp(a)).readPage(type ? { type } : null, { limit: after + limit + 1 });
 				const items = p.items.slice(after, after + limit);
 				const more = p.next !== null || p.items.length > after + limit;
-				return send(res, 200, { app: appView(a), after, next: more && after + limit <= APP_PAGE_CEILING ? after + limit : null, entries: items.map((e) => ({ id: e.id, type: e.type, types: e.types, fields: e.fields, owner: e.owner })) });
+				return send(res, 200, { app: appView(a, false), after, next: more && after + limit <= APP_PAGE_CEILING ? after + limit : null, entries: items.map((e) => ({ id: e.id, type: e.type, types: e.types, fields: e.fields, owner: e.owner })) });
 			} catch (e) {
 				// a service that allows no reads is still online
-				if (/not allowed|PermissionDenied/.test(String(e))) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a) });
+				if (/not allowed|PermissionDenied/.test(String(e))) return send(res, 403, { error: "Einträge nicht freigegeben", app: appView(a, false) });
 				dropApp(a, e);
-				return send(res, 502, { error: a.error, app: appView(a) });
+				return send(res, 502, { error: a.error, app: appView(a, false) });
 			}
 		}
 		const detail = /^\/api\/spaces\/([^/]+)$/.exec(path);

@@ -213,3 +213,33 @@ test("dashboard: groupSpaces folds a prefix only from three spaces on", () => {
 	const rows = groupSpaces([{ alias: "x-1", stats: st(1) }, { alias: "x-2", stats: st(2) }, { alias: "x-3", stats: st(3) }]);
 	assert.deepEqual(rows.map((r) => [r.alias, r.spaces, r.stats.entries, r.stats.byType.T]), [["x-*", 3, 6, 6]]);
 });
+
+test("dashboard: every poll of an app adds a live point (answer time, the space process's CPU and memory, bytes, entries)", async () => {
+	const dir = mkdtempSync("/tmp/phi-dash-");
+	const app = await memory();
+	const identity = new StaticIdentity({ "peer-app": { principal: { peerId: "peer-app" }, roles: ["member"] } });
+	const server = await serveSpace(new SpaceService({ host: app, ctx, identity }), { listen: { path: join(dir, "app.sock") }, connection: () => ({ peerId: "peer-app" }) });
+	await new PhiSpaces(app, ctx).write({ type: "Msg", fields: { text: "hi" } });
+	const h = await memory();
+	const dash = await startDashboard({ host: h, ctx, port: 0, appPollMs: 40, apps: [{ id: "chat", label: "Chat", addresses: [`unix:${join(dir, "app.sock")}`] }] });
+	try {
+		let series: Array<Record<string, number | null>> = [];
+		for (let i = 0; i < 100 && series.length < 3; i++) {
+			await new Promise((r) => setTimeout(r, 30));
+			series = (await (await fetch(`${dash.url}/api/apps`)).json()).apps[0].series;
+		}
+		assert.ok(series.length >= 3, "points come with the polls");
+		const last = series.at(-1)!;
+		assert.equal(last.entries, 1);
+		assert.equal(last.msg, 1);
+		assert.ok(typeof last.ms === "number" && last.ms >= 0);
+		assert.ok(typeof last.rssMb === "number" && last.rssMb > 0, "the serving process reports its memory");
+		assert.ok(series.slice(1).some((p) => typeof p.cpu === "number"), "and from the second report on its CPU share");
+	} finally {
+		await dash.close();
+		await server.close();
+		await h.close(ctx);
+		await app.close(ctx);
+		rmSync(dir, { recursive: true, force: true });
+	}
+});

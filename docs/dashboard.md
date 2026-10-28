@@ -140,6 +140,15 @@ hat selbst **keinen schreibenden Endpunkt**.
 
 ## Oberfläche
 
+**Live je App.** Jede Messung (alle 2 s, eine App mit `@*` alle 10 s) wird ein Punkt; das Dashboard hält die letzten 450
+(15 Minuten) und zeigt sie in der Detailansicht der App als sechs Kurven: die Antwortzeit des Space (Dauer des
+`stats`-Aufrufs), CPU und Arbeitsspeicher des Space-Prozesses, Speicher im Space (gesamt, Claims), Entries und davon
+Nachrichten (`Msg`), Commits je Minute. CPU und Speicher meldet der Space-Dienst selbst mit jeder `stats`-Antwort
+(`process: { cpuMs, rssBytes, heapBytes, at }`, [API](api.md)); ein Space-Prozess einer älteren phi-spaces-Version meldet
+sie nicht, dann sagt die Karte das. Die Kurven kommen einmal mit der App-Liste (`/api/apps`, `hello`), danach mit jeder
+Messung nur der neue Punkt (`point` im SSE-Ereignis `apps`).
+
+
 Links die Apps (Status-Punkt online/beschäftigt/offline, Entries, Typen, Speicher, Verlauf als Sparkline) und darunter
 die Spaces des eigenen Stores. In der Mitte die Detailansicht der Auswahl: Kennzahlen (Entries, Typen, Txn, Wartend,
 Outbox, Speicher), der Verlauf der Entry-Zahl, Balken „Entries nach Typ" (die größten 12, der Rest zusammengefasst; ein

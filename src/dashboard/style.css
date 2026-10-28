@@ -161,3 +161,12 @@ details.metrics:not([open]) > summary h2 { margin-bottom: 0; }
 .spark { display: block; margin: 2px 0 10px; }
 .spark .label { font-size: 11px; color: var(--muted); margin-bottom: 1px; }
 @media (prefers-reduced-motion: reduce) { .hbar__track i, .stackbar i { transition: none; } .conn.live.pulse .dot { animation: none; } }
+
+/* live curves of an app (components.js liveSection) */
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; margin: 8px 0 12px; }
+.card.live { min-width: 0; }
+.card.live .note { margin: 2px 0 4px; font-size: 12px; color: var(--muted); }
+.card.live .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.card.live .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; }
+.time-svg { display: block; width: 100%; height: auto; margin-top: 6px; overflow: visible; }
+.time-svg text { fill: var(--muted); font: 10.5px var(--font-mono); font-variant-numeric: tabular-nums; }

@@ -16,6 +16,8 @@ import { performance } from "node:perf_hooks";
 
 /** One round trip: the encoded call out, the encoded reply back. It may fail or hang; the caller decides what that means. */
 export interface Transport { request(text: string): Promise<string> }
+/** What a service reports of its own process with `stats`: CPU time (user + system) so far, memory, its clock. */
+export type ServiceProcess = { cpuMs: number; rssBytes: number; heapBytes: number; at: number };
 
 // The server keeps one open challenge per connection. Separate clients sharing a transport
 // must complete challenge/sign/prove in order; no successful proof or principal is cached here.
@@ -431,9 +433,10 @@ export class RemoteSpace implements SpaceLike {
 	}
 	async stats(): Promise<core.SpaceStats> { return (await this.statsWithRevision()).stats; }
 	/** The stats with the revision they were read at (like the local PhiSpaces): two reads tell how many commits came between. */
-	async statsWithRevision(): Promise<{ stats: core.SpaceStats; rev: number; streamId: string }> {
+	/** `process`: the serving process's CPU time and memory (servers since 2026-10-28; absent from older ones). */
+	async statsWithRevision(): Promise<{ stats: core.SpaceStats; rev: number; streamId: string; process?: ServiceProcess }> {
 		await this.info();
-		return (await this.send({ method: "stats" })) as unknown as { stats: core.SpaceStats; rev: number; streamId: string };
+		return (await this.send({ method: "stats" })) as unknown as { stats: core.SpaceStats; rev: number; streamId: string; process?: ServiceProcess };
 	}
 	/** The spaces of the service (alias, id, creation); a viewer finds the ones created at runtime with it. */
 	async spaces(): Promise<{ spaceId: string; alias: string; createdAt: number }[]> { return await this.send({ method: "spaces" }) as unknown as { spaceId: string; alias: string; createdAt: number }[]; }

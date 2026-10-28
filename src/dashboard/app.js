@@ -28,6 +28,7 @@ applyTheme();
 
 // ---- live data
 const HISTORY_MAX = 60;
+const SERIES_MAX = 450; // as many as the server keeps (src/dashboard.ts, APP_SERIES)
 const history = {};
 let rev = 0;
 let apps = [];
@@ -81,8 +82,14 @@ const onMessage = (msg) => {
 		spaces.spaces = (spaces.spaces ?? []).map((s) => (s.spaceId === msg.spaceId ? { ...s, stats: msg.stats } : s));
 		if (selection?.kind === "space" && msg.spaceId === selection.id) { rev++; detail.rev = rev; }
 	} else if (msg.type === "apps") {
+		// a poll sends its one new point; the curves themselves came with the app list
 		const changed = new Map(msg.apps.map((a) => [a.id, a]));
-		apps = apps.map((a) => changed.get(a.id) ?? a);
+		apps = apps.map((a) => {
+			const c = changed.get(a.id);
+			if (!c) return a;
+			const { point, ...rest } = c;
+			return { ...rest, series: point ? [...(a.series ?? []), point].slice(-SERIES_MAX) : a.series ?? [] };
+		});
 		showApps();
 	} else if (msg.type === "metrics") {
 		metricsEl.metrics = msg;
