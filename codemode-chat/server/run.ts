@@ -210,7 +210,9 @@ async function inTxn<T>(space: SpaceLike, open: Set<string>, fn: (txn: string) =
 	open.add(t.id);
 	const stop = keepAlive(space, t.id, ITEM_LEASE_MS);
 	try { const v = await fn(t.id); await space.commit(t.id); return v; }
-	catch (e) { await space.abort(t.id).catch(() => {}); throw e; }
+	// a refused abort (the space's call rate) is tried once more after its window: else the transaction keeps what it took
+	// (the run entry, the item) until its lease lapses
+	catch (e) { await space.abort(t.id).catch(() => pause(1100).then(() => space.abort(t.id)).catch(() => {})); throw e; }
 	finally { stop(); open.delete(t.id); }
 }
 

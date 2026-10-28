@@ -26,7 +26,9 @@ export async function startSpaceHost(o: { listen?: string; dbPath?: string | nul
 	// every client is the same peer: the socket is internal (a unix socket, or TCP bound to an internal address)
 	const identity = new StaticIdentity({ "peer-codemode": { principal: { peerId: "peer-codemode" }, roles: ["member"] } });
 	const listen = o.listen ?? DEFAULT_SPACE;
-	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity }), { listen: parseTarget(listen), connection: () => ({ peerId: "peer-codemode" }) });
+	// the per-peer limits (default 1024 calls/s, 128 waiting calls) are meant for one remote peer; here they cover every role
+	// at once, and a refused call can be the abort that frees an item's transaction (it then holds the run for its lease)
+	const server = await serveSpace(new SpaceService({ host: harness, ctx, identity, maxCallsPerWindow: 50_000, maxPendingPerPrincipal: 4096, maxPendingPerPeer: 4096 }), { listen: parseTarget(listen), connection: () => ({ peerId: "peer-codemode" }) });
 	const local = new PhiSpaces(harness, ctx);
 	// every process connects as the same peer: the per-owner caps must cover all of them together (judges and agents
 	// each hold a transaction and a waiting take). On the disk the claims of a day (24 h are kept) live there, not in
