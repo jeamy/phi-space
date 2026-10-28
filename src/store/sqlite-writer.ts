@@ -11,8 +11,10 @@ import type { MessagePort } from "node:worker_threads";
 import { applyOps, prepareOps, type OpStatements, type WriteOp } from "./sqlite-ops.ts";
 
 export type { WriteOp };
-export type WriterRequest = { type: "open"; path: string; synchronous: "FULL" | "NORMAL"; maxPages?: number } | { type: "write"; batch: number; ops: WriteOp[] } | { type: "close" };
-export type WriterReply = { type: "opened" } | { type: "written"; batch: number } | { type: "failed"; batch: number | null; error: string } | { type: "closed" };
+export type WriterRequest = { type: "open"; path: string; synchronous: "FULL" | "NORMAL"; maxPages?: number } | { type: "write"; batch: number; ops: WriteOp[] } | { type: "compact"; batch: number } | { type: "close" };
+/** `compacted`: the free pages given back to the file system, and whether the file was first switched to incremental
+ *  auto-vacuum (one full VACUUM); a failed compaction changes nothing and the store goes on (`compactFailed`). */
+export type WriterReply = { type: "opened" } | { type: "written"; batch: number } | { type: "compacted"; batch: number; freedPages: number; converted: boolean } | { type: "compactFailed"; batch: number; error: string } | { type: "failed"; batch: number | null; error: string } | { type: "closed" };
 
 /** The writer thread's code. */
 export function writerMain(parentPort: MessagePort, DatabaseSync: typeof import("node:sqlite").DatabaseSync, writeFileSync: typeof import("node:fs").writeFileSync, prepareOps: (db: DatabaseSync) => OpStatements, applyOps: (stmts: OpStatements, ops: readonly WriteOp[]) => void): void {
@@ -41,6 +43,20 @@ export function writerMain(parentPort: MessagePort, DatabaseSync: typeof import(
 		}
 		if (m.type === "close") { try { db?.close(); } finally { db = null; reply({ type: "closed" }); } return; }
 		if (!db || !stmts) { reply({ type: "failed", batch: m.batch, error: "the store is not open" }); return; }
+		if (m.type === "compact") {
+			// the pages that expired claims and removed entries left free go back to the file system: a store file
+			// otherwise only grows. The first time the file is switched to incremental auto-vacuum (a VACUUM rewrites it
+			// once); from then on a compaction only cuts the free pages off the end.
+			try {
+				const free = (db.prepare("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count;
+				const converted = (db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum !== 2;
+				if (converted) db.exec("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;");
+				else db.exec("PRAGMA incremental_vacuum;");
+				try { db.exec("PRAGMA wal_checkpoint(TRUNCATE);"); } catch { /* a reader holds the WAL: the next checkpoint */ }
+				reply({ type: "compacted", batch: m.batch, freedPages: free, converted });
+			} catch (e) { reply({ type: "compactFailed", batch: m.batch, error: (e as Error).message }); }
+			return;
+		}
 		try {
 			db.exec("BEGIN IMMEDIATE");
 			applyOps(stmts, m.ops);

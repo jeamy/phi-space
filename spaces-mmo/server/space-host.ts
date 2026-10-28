@@ -6,6 +6,9 @@
 //   SPACES_MMO_ACCOUNTS_LISTEN=unix:/tmp/spaces-mmo-accounts.sock (default) or tcp:127.0.0.1:3901
 //   SPACES_MMO_DATA=…/.local                                      directory of world.sqlite and accounts.sqlite
 //   SPACES_MMO_MEM=1                                              in memory, throwaway (tests)
+//   SPACES_MMO_COMPACT_MS=600000                                  how often the store file gives its free pages back
+//                                                                 (expired claims, removed entries; 0: never; also once
+//                                                                 at the start, before serving)
 //   SPACES_MMO_SPACES=world,accounts                              which of the two this process serves (default both):
 //                                                                 on two hosts, one each (docs/betrieb.md)
 import { ROOT } from "./env.ts";
@@ -24,6 +27,17 @@ const MiB = 1024 * 1024;
 /** One store served on one socket; every client of the socket is the same internal peer. */
 async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	const harness = dbPath ? await openSqliteHost(dbPath) : openOwnMemoryHost();
+	// the file only grows without this (the claims of ten minutes of calls come and go): once now, before anyone waits
+	// (the first time it rewrites the file), then at a regular interval, between two of the writer's batches
+	const compactMs = Number(process.env.SPACES_MMO_COMPACT_MS ?? 10 * 60_000);
+	const compact = async (when: string) => {
+		const r = await harness.compact().catch((e: Error) => ({ freedPages: 0, converted: false, error: e.message }));
+		if (r?.error) console.error(`[space] compaction (${when}) of ${dbPath}: ${r.error}`);
+		else if (r && (r.freedPages || r.converted)) console.log(`[space] compaction (${when}) of ${dbPath}: ${r.freedPages} free pages back${r.converted ? ", switched to incremental auto-vacuum" : ""}`);
+	};
+	if (dbPath && compactMs > 0) await compact("start");
+	const compacting = dbPath && compactMs > 0 ? setInterval(() => void compact("interval"), compactMs) : null;
+	compacting?.unref();
 	const stopService = await startService(harness, ctx, { watchDebounceMs: 50 });
 	const identity = new StaticIdentity({ [peer]: { principal: { peerId: peer }, roles: ["member"] } });
 	// every process of the game is this one peer: the service's limits per peer (calls per second, blocking calls at once)
@@ -47,7 +61,7 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	// the world again.
 	const logBytes = Number(process.env.SPACES_MMO_LOG_BYTES) > 0 ? Number(process.env.SPACES_MMO_LOG_BYTES) : 512 * 1024;
 	await local.setLimits({ maxTxnsPerOwner: 1000, maxWaitersPerOwner: 1000, maxRegsPerOwner: 1000, claimResultMs, generationAdmitMs: claimResultMs, maxLogBytes: logBytes, ...(dbPath ? { maxClaimBytes: 512 * MiB, maxDocBytes: 640 * MiB } : {}) });
-	return { local, async close() { await server.close(); await stopService(); await harness.close(ctx); } };
+	return { local, async close() { if (compacting) clearInterval(compacting); await server.close(); await stopService(); await harness.close(ctx); } };
 }
 
 export async function startSpaceHost(o: { listen?: string; accountsListen?: string; dataDir?: string | null; spaces?: readonly ("world" | "accounts")[] } = {}) {

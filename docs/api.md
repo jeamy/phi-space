@@ -117,6 +117,12 @@ Nachricht auf einem Bildschirm): kein Eintrag, kein Ablauf, kein Abräumen danac
 spiegelt, legt einen solchen `put` nicht ab; ein `del` folgt nicht. Nicht zusammen mit `unique`. `RemoteSpace`
 verlangt das Feature `write.transient`.
 
+**Die Datei verdichten.** `OwnStoreHost.compact()` gibt die freien Seiten der SQLite-Datei zurück (abgelaufene Claims,
+entfernte Entries; ohne das wächst die Datei nur). Der erste Aufruf schreibt die Datei mit `VACUUM` einmal neu und stellt
+sie auf inkrementelles Auto-Vacuum um, danach schneidet er nur die freien Seiten ab. Er läuft im Schreib-Thread zwischen
+zwei Batches; Commits warten so lange. Ein Fehler dabei legt den Store nicht still, das Ergebnis trägt ihn
+(`{ freedPages, converted, error? }`); ein Store im Speicher antwortet `null`.
+
 **Mehrere Schritte in einem Aufruf.** `batch(ops, { request? })` (lokal und `RemoteSpace`, Feature `batch`) führt
 Schritte in einem Commit unter einem Request aus, alle oder (wirft einer) keiner: `{ op: "begin", lease? }`,
 `{ op: "write", entry, txn?, lease?, unique?, transient? }`, `{ op: "take" | "read", template, txn? }` und

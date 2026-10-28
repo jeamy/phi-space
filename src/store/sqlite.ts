@@ -255,9 +255,16 @@ class SqliteLedger implements Ledger {
 	 *  batch would outgrow its journal entry. One batch at a time (a primary has at most one unresolved candidate). */
 	#send(): void {
 		if (!this.#queued.length || this.#failure) return;
+		if (this.#queued[0]!.compact) { // a compaction goes alone, between two batches
+			const done = this.#queued.splice(0, 1), batch = ++this.#batch;
+			this.#writing = { batch, done, lost: null };
+			this.#worker.ref();
+			this.#worker.postMessage({ type: "compact", batch } satisfies WriterRequest);
+			return;
+		}
 		const limit = this.replication?.maxBatchBytes ?? Infinity;
 		let n = 0, bytes = 0;
-		while (n < this.#queued.length && (n === 0 || bytes + this.#queued[n]!.bytes <= limit)) bytes += this.#queued[n++]!.bytes;
+		while (n < this.#queued.length && !this.#queued[n]!.compact && (n === 0 || bytes + this.#queued[n]!.bytes <= limit)) bytes += this.#queued[n++]!.bytes;
 		const done = this.#queued.splice(0, n), batch = ++this.#batch;
 		this.#writing = { batch, done, lost: null };
 		this.#worker.ref(); // a write in flight keeps the process alive until it is durable
@@ -282,6 +289,15 @@ class SqliteLedger implements Ledger {
 
 	#reply(r: WriterReply): void {
 		if (r.type === "closed") { this.#closing?.(); return; }
+		if ((r.type === "compacted" || r.type === "compactFailed") && this.#writing?.batch === r.batch) {
+			const [d] = this.#writing.done;
+			this.#writing = null;
+			d!.compact!(r.type === "compacted" ? { freedPages: r.freedPages, converted: r.converted } : { freedPages: 0, converted: false, error: r.error });
+			for (const w of this.#idleWaiters.splice(0)) w();
+			this.#send();
+			if (!this.#writing) this.#worker.unref();
+			return;
+		}
 		if (r.type === "written" && this.#writing?.batch === r.batch) {
 			this.#stats.writeMs += performance.now() - this.#sentAt;
 			const { done, lost } = this.#writing;
@@ -312,6 +328,18 @@ class SqliteLedger implements Ledger {
 		this.#writing = null;
 		this.#queued = [];
 		for (const w of this.#idleWaiters.splice(0)) w();
+	}
+
+	/** Gives the file's free pages back (sqlite-writer.ts, `compact`), in the writer's order between two batches: the
+	 *  commits that come meanwhile wait for it. The first one rewrites the whole file once (switching it to incremental
+	 *  auto-vacuum), so do it at a quiet time, best before the store is served. Never throws for a failed compaction:
+	 *  the result carries its error and the store goes on. */
+	compact(): Promise<Compaction> {
+		if (this.#failure) return Promise.reject(this.#failure);
+		return new Promise((resolve, reject) => {
+			this.#queued.push({ ops: [], bytes: 0, resolve: () => {}, reject, compact: resolve });
+			if (!this.#writing) this.#send();
+		});
 	}
 
 	/** Waits for everything queued to be written. */
@@ -348,7 +376,9 @@ class SqliteLedger implements Ledger {
 	}
 }
 
-type Waiting = { ops: WriteOp[]; bytes: number; resolve: () => void; reject: (e: Error) => void };
+type Waiting = { ops: WriteOp[]; bytes: number; resolve: () => void; reject: (e: Error) => void; compact?: (r: Compaction) => void };
+/** What a compaction did (SqliteLedger.compact). */
+export type Compaction = { freedPages: number; converted: boolean; error?: string };
 const rowBytes = (ops: readonly WriteOp[]) => ops.reduce((n, op) => n + ("value" in op ? op.value.length : 0) + 64, 0);
 
 /** What a primary/sync replication does to the batches of a store (store/sync-sqlite.ts). */

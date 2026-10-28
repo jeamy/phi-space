@@ -244,6 +244,11 @@ ein Kern trägt; die Antwortzeit auf einem schnellen, nicht gesättigten Rechner
   einmal je festgeschriebenem Stand gezählt (vorher bei jedem Schreiben), das Ende einer Transaktion geht über eine Kopie
   der Liste statt über den Entwurf. Wartende Commits schrieb der Store schon vorher gebündelt.
 
+**Die Datei klein halten.** Der Space-Prozess gibt die freien Seiten seiner Dateien zurück (`OwnStoreHost.compact`):
+einmal beim Start, bevor er bedient (beim ersten Mal schreibt ein `VACUUM` die Datei einmal neu und stellt sie auf
+inkrementelles Auto-Vacuum um, bei 350 MB einige Sekunden), danach alle `SPACES_MMO_COMPACT_MS` (10 Minuten, 0 aus)
+zwischen zwei Schreib-Batches. Commits in dieser Zeit warten kurz. Das Log sagt, wie viele Seiten zurückgingen.
+
 **Gegen Fluten:** Das Gateway begrenzt je Konto (über alle offenen Seiten zusammen) Schritte auf 8 auf einmal und 10 je
 Sekunde und getippte Befehle auf `SPACES_MMO_CMD_BURST` (20) auf einmal und `SPACES_MMO_CMD_PER_SEC` (5) je Sekunde; ein
 Konto hat höchstens vier Seiten offen, eine fünfte schließt die älteste.

@@ -41,6 +41,8 @@ export interface Ledger {
 	readonly failure?: Error | null;
 	/** How writing goes (plan 5.2: queue, sync latency): batches written, commits in them, time spent writing. */
 	stats?(): StoreStats;
+	/** Gives the free pages of its file back (the SQLite store); see OwnStoreHost.compact. */
+	compact?(): Promise<{ freedPages: number; converted: boolean; error?: string }>;
 }
 export type StoreStats = { batches: number; commits: number; rows: number; writeMs: number; maxBatch: number; queued: number };
 
@@ -318,6 +320,10 @@ export class OwnStoreHost implements ClosableStoreHost {
 
 	/** How the ledger writes (absent for one that keeps nothing). */
 	stats(): StoreStats | undefined { return this.#ledger.stats?.(); }
+	/** The SQLite store gives the free pages of its file back (expired claims, removed entries): it otherwise only grows.
+	 *  The first call rewrites the file once (the switch to incremental auto-vacuum); commits wait for it meanwhile, so
+	 *  make it at a quiet moment, best before serving. null: a store without a file (memory). */
+	async compact(): Promise<{ freedPages: number; converted: boolean; error?: string } | null> { return this.#ledger.compact ? await this.#ledger.compact() : null; }
 
 	async close(_context: Context): Promise<void> {
 		if (this.#closed) return;

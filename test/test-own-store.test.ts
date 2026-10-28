@@ -437,3 +437,33 @@ test("reads by type use a bucket of the committed entries: subtypes, order, take
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("compact gives the free pages of the file back: the first time by one VACUUM, then incrementally; the space stays as it was", async () => {
+	const { statSync } = await import("node:fs");
+	const dir = mkdtempSync(join(tmpdir(), "phi-compact-"));
+	const file = join(dir, "s.sqlite");
+	try {
+		let host = await openSqliteHost(file);
+		const p = new PhiSpaces(host, ctx);
+		const big = "x".repeat(4000);
+		for (let i = 0; i < 300; i++) await p.write({ type: "Blob", fields: { i, big } }, null, FOREVER);
+		await p.write({ type: "Keep", fields: { n: 1 } }, null, FOREVER);
+		for (let i = 0; i < 300; i++) await p.take({ type: "Blob" }, 0);
+		const before = statSync(file).size;
+		const first = await host.compact();
+		assert.equal(first?.converted, true, "the first compaction switches the file to incremental auto-vacuum");
+		assert.ok(first!.freedPages > 0 && !first!.error);
+		const after = statSync(file).size;
+		assert.ok(after < before * 0.75, `the file shrinks: ${before} -> ${after}`); // the calls' claims stay
+		for (let i = 0; i < 100; i++) await p.write({ type: "Blob", fields: { i, big } }, null, FOREVER);
+		for (let i = 0; i < 100; i++) await p.take({ type: "Blob" }, 0);
+		const second = await host.compact();
+		assert.equal(second?.converted, false, "afterwards only the free pages are cut off");
+		await p.write({ type: "Keep", fields: { n: 2 } }, null, FOREVER); // commits go on after a compaction
+		await host.close(ctx);
+		host = await openSqliteHost(file);
+		assert.deepEqual((await new PhiSpaces(host, ctx).readAll({ type: "Keep" })).map((e) => e.fields.n), [1, 2]);
+		assert.equal(await new PhiSpaces(host, ctx).count({ type: "Blob" }), 0);
+		await host.close(ctx);
+	} finally { rmSync(dir, { recursive: true, force: true }); }
+});
