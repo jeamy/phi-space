@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts";
 import { loadWorld, worldAsset } from "./engine/world.ts";
 import { Gateway } from "./gateway.ts";
-import { connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE } from "./space.ts";
+import { announce, connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE, systemInfo } from "./space.ts";
 import { upgradeWebSocket } from "phi-spaces/ws";
 import { chosen } from "./llm.ts";
 import { saveModelChoice, saveSettings, SETTINGS, settingsOf, type ModelInfoFields } from "./settings.ts";
@@ -59,6 +59,17 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
 	const build = o.build !== undefined ? o.build : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
 	const gateway = new Gateway(world.space, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build);
+	const proc = announce(world.space, "web");
+	// the system bar's hosts (GET /api/system): every page asks every few seconds, the space at most once in five
+	let systemCache: { at: number; value: Promise<Awaited<ReturnType<typeof systemInfo>>> } | null = null;
+	const system = () => {
+		if (!systemCache || Date.now() - systemCache.at > 5_000) {
+			const value = systemInfo(world.space);
+			value.catch(() => { systemCache = null; });
+			systemCache = { at: Date.now(), value };
+		}
+		return systemCache.value;
+	};
 
 	let nextHandler: ((req: http.IncomingMessage, res: http.ServerResponse) => Promise<void>) | null = null;
 	let nextUpgrade: ((req: http.IncomingMessage, socket: any, head: Buffer) => void) | null = null;
@@ -151,6 +162,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				const ip = clientIp(req);
 				if (!allowed(ip)) return json(res, 429, { error: "Zu viele Anfragen; bitte in einer Minute noch einmal" });
 				if (p === "/api/me" && req.method === "GET") return json(res, 200, meView(await accounts.resolve(cookieOf(req, COOKIE))));
+				if (p === "/api/system" && req.method === "GET") return json(res, 200, await system());
 				if (p === "/api/admin/settings" && req.method === "GET") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), null));
 				if (req.method !== "POST") return json(res, 405, { error: "POST erwartet" });
 				if (req.headers["x-mmo"] !== "1") return json(res, 403, { error: "Header x-mmo fehlt" });
@@ -214,7 +226,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const actual = typeof addr === "object" && addr ? addr.port : port;
 	return {
 		url: `http://127.0.0.1:${actual}`, port: actual, accounts, gateway,
-		async close() { await gateway.close(); await new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections?.(); for (const s of conns) s.destroy(); }); world.close(); store.close(); },
+		async close() { await proc.stop(); await gateway.close(); await new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections?.(); for (const s of conns) s.destroy(); }); world.close(); store.close(); },
 	};
 }
 

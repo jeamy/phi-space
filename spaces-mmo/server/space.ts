@@ -1,6 +1,8 @@
 // How the processes of spaces-mmo reach their spaces (docs/architektur.md): the world space, which every process
 // shares, and the accounts space with the credentials and web sessions, which only the web process knows the address
 // of. Both are served by the space process (space-host.ts), each from its own store on its own socket.
+import os from "node:os";
+import { randomBytes } from "node:crypto";
 import { awaitWork as awaitWorkFor, connectSpace as connect, readExisting as readHeld, type SpaceLike, type Taken, type Template } from "phi-spaces";
 
 export { parseTarget, peek, StillHeld } from "phi-spaces";
@@ -61,4 +63,64 @@ export function awaitWork(space: SpaceLike, tmpl: Template, halt: AbortSignal, w
 export function envMs(name: string, fallback: number): number {
 	const v = Number(process.env[name]);
 	return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+/** The machine a process runs on, as the system bar at the bottom of the page shows it (like codemode-chat). */
+export type HostFacts = { name: string; cpu: string; cores: number; memGiB: number; platform: string; startedAt: number };
+export function hostFacts(): HostFacts {
+	const cpus = os.cpus();
+	return {
+		name: process.env.SPACES_MMO_HOST_NAME || os.hostname(),
+		cpu: (cpus[0]?.model ?? "unknown CPU").replace(/\s+/g, " ").trim(),
+		cores: os.availableParallelism?.() ?? cpus.length,
+		memGiB: Math.round((os.totalmem() / 2 ** 30) * 10) / 10,
+		platform: `${os.type()} ${os.arch()}`,
+		startedAt: Date.now(),
+	};
+}
+
+/** The roles of the game's processes (launch.ts). */
+export type ProcessRole = "space" | "world" | "npc" | "model" | "web";
+/** What a Process entry in the world space says: the role, the host it runs on, its pid. */
+export type ProcessInfo = HostFacts & { procId: string; role: ProcessRole; pid: number };
+const PROCESS_LEASE_MS = 30_000, PROCESS_BEAT_MS = 10_000;
+
+/** Keeps a Process entry for this process in the world space while it runs: its lease is renewed every 10 s (a process
+ *  that dies drops out within 30 s); when the entry is gone (the space restarted) it is written again. */
+export function announce(space: Pick<SpaceLike, "write" | "renew" | "cancel">, role: ProcessRole): { stop: () => Promise<void> } {
+	const info: ProcessInfo = { ...hostFacts(), procId: randomBytes(6).toString("hex"), role, pid: process.pid };
+	let lease: string | null = null, stopped = false;
+	const beat = async () => {
+		try {
+			if (lease) { try { await space.renew(lease, PROCESS_LEASE_MS); return; } catch { lease = null; } }
+			lease = (await space.write({ type: "Process", fields: info as never }, null, PROCESS_LEASE_MS)).id;
+		} catch { /* the space is not reachable now: the next beat tries again */ }
+	};
+	void beat();
+	const timer = setInterval(() => { if (!stopped) void beat(); }, PROCESS_BEAT_MS);
+	timer.unref?.();
+	return {
+		async stop() {
+			stopped = true; clearInterval(timer);
+			if (lease) await space.cancel(lease).catch(() => {});
+		},
+	};
+}
+
+const ROLE_ORDER: ProcessRole[] = ["space", "world", "npc", "model", "web"];
+export type SystemHost = { name: string; roles: ProcessRole[]; host: ProcessInfo };
+
+/** The hosts the game runs on, from the Process entries: one per host name, its roles in launch order. A snapshot read
+ *  (readAll), which holds nothing and leaves no claim. */
+export async function systemInfo(space: SpaceLike): Promise<{ hosts: SystemHost[]; entries: number }> {
+	const procs = (await space.readAll({ type: "Process" }, { limit: 200 })).map((e) => e.fields as unknown as ProcessInfo);
+	const hosts = new Map<string, { host: ProcessInfo; roles: Set<ProcessRole> }>();
+	for (const p of procs.sort((a, b) => a.startedAt - b.startedAt)) {
+		const h = hosts.get(p.name) ?? { host: p, roles: new Set<ProcessRole>() };
+		h.roles.add(p.role); hosts.set(p.name, h);
+	}
+	return {
+		hosts: [...hosts.values()].map(({ host, roles }) => ({ name: host.name, roles: ROLE_ORDER.filter((r) => roles.has(r)), host })),
+		entries: await space.count(null),
+	};
 }

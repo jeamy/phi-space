@@ -76,7 +76,11 @@ a { color: var(--accent); }
 .form details { font-size: 13px; color: var(--muted); }
 
 /* game */
-.game { display: grid; grid-template-rows: auto 1fr; height: 100vh; height: 100dvh; }
+.game { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; height: 100dvh; }
+/* the hosts below the game (like codemode-chat and the help system) */
+.system-bar { display: flex; flex-wrap: wrap; gap: 2px 18px; padding: 4px max(16px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--header-bg); color: var(--muted); font: 500 11px/1.5 var(--font-mono); }
+.system-bar b { color: var(--text-strong); }
+.system-bar__host { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 /* the safe-area insets keep the content out of a notch and the rounded corners (app/layout.tsx: viewport-fit=cover) */
 .bar { display: flex; align-items: center; gap: 12px; padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--header-bg); backdrop-filter: blur(16px); flex-wrap: wrap; }
 .bar { position: relative; }

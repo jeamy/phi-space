@@ -29,7 +29,7 @@ import { sweepSpots } from "./engine/occupancy.ts";
 import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
-import { awaitWork, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
+import { announce, awaitWork, connectSpace, DEFAULT_SPACE, envMs, readExisting, StillHeld } from "./space.ts";
 
 export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const w = o.world ?? (await loadWorld());
@@ -53,6 +53,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	const loaded = await loadIntoSpace(space, w).catch((e) => { conn.close(); throw e; });
+	const proc = announce(space, "world");
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
 	const tokens = await ensureTokens(space);
 	if (tokens) console.log(`[world] wrote ${tokens} missing tokens`);
@@ -198,7 +199,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; await proc.stop(); conn.close(); },
 	};
 }
 

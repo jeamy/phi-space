@@ -259,3 +259,19 @@ test("requests: POSTs need the x-mmo header, names and passwords are checked, as
 		await assert.rejects(new Promise((ok, fail) => { foreign.onopen = ok; foreign.onerror = () => fail(new Error("refused")); }), /refused/);
 	} finally { await srv.close(); }
 });
+
+test("the system bar lists the hosts the processes announced, with their roles and the world's entries", async () => {
+	const srv = await startServer();
+	try {
+		// one host here: the space process, the world worker and this web process all run on it (the answer is cached for
+		// five seconds, so a first look may come before every process wrote its entry)
+		const sys = await eventually(async () => {
+			const s = await (await fetch(`${srv.url}/api/system`)).json();
+			return s.hosts?.[0]?.roles?.length === 3 ? s : null;
+		}, 20_000, "all three roles");
+		assert.equal(sys.hosts.length, 1);
+		assert.deepEqual(sys.hosts[0].roles, ["space", "world", "web"]);
+		assert.ok(sys.hosts[0].host.cores >= 1 && sys.hosts[0].host.memGiB > 0 && sys.hosts[0].host.cpu);
+		assert.ok(sys.entries > 0);
+	} finally { await srv.close(); }
+});

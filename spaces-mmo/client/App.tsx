@@ -40,6 +40,31 @@ async function post(path: string, body: unknown = {}): Promise<{ account: Accoun
 	return d;
 }
 
+type SystemHost = { name: string; roles: string[]; host: { name: string; cpu: string; cores: number; memGiB: number } };
+const shortCpu = (cpu: string) => cpu.replace(/\((R|TM)\)/g, "").replace(/\b(\d+-Core )?Processor\b/i, "").replace(/\s+/g, " ").trim();
+
+/** The bar below the game, like in the codemode chat and the help system: which hosts the game runs on (roles, CPU,
+ *  cores, memory) and how many entries the world space holds. From GET /api/system, every 15 s. */
+function SystemBar() {
+	const [info, setInfo] = useState<{ hosts: SystemHost[]; entries: number } | null>(null);
+	useEffect(() => {
+		let dead = false;
+		const load = () => void fetch("/api/system").then((r) => (r.ok ? r.json() : null)).then((d) => { if (!dead) setInfo(d); }, () => {});
+		load();
+		const t = setInterval(load, 15_000);
+		return () => { dead = true; clearInterval(t); };
+	}, []);
+	if (!info?.hosts.length) return null;
+	return (
+		<div className="system-bar" role="contentinfo">
+			<span>Testsystem</span>
+			{info.hosts.map((h) => (
+				<span key={h.name} className="system-bar__host"><b>{h.name}</b>{h.roles.length ? ` (${h.roles.join(", ")})` : ""} · {shortCpu(h.host.cpu)} · {h.host.cores} vCPU · {h.host.memGiB.toLocaleString("de-DE")} GiB{h.roles.includes("space") ? ` · ${info.entries.toLocaleString("de-DE")} Entries` : ""}</span>
+			))}
+		</div>
+	);
+}
+
 export function MmoApp() {
 	const [account, setAccount] = useState<Account | null | undefined>(undefined);
 	const theme = useTheme();
@@ -567,6 +592,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 					<About />
 				</aside>
 			</div>
+			<SystemBar />
 		</div>
 	);
 }

@@ -59,6 +59,7 @@ services:
       SPACES_MMO_LISTEN: tcp:0.0.0.0:3950
       SPACES_MMO_ACCOUNTS_LISTEN: tcp:0.0.0.0:3951
       SPACES_MMO_DATA: /data
+      SPACES_MMO_HOST_NAME: "${NANO_HOST_NAME:-nano}"
     cpus: "${NANO_CPUS:-0}"
     ports:
       # loopback by default; on the nano host set SPACES_MMO_SPACE_BIND to its internal address for big
@@ -80,6 +81,7 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: tcp:space:3950
+      SPACES_MMO_HOST_NAME: "${NANO_HOST_NAME:-nano}"
     cpus: "${NANO_CPUS:-0}"
     depends_on:
       space:
@@ -94,6 +96,7 @@ services:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
       SPACES_MMO_ACCOUNTS: "${SPACES_MMO_ACCOUNTS:-tcp:space:3951}"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
       SPACES_MMO_BIND: 0.0.0.0
       PORT: "3900"
       # where the browser reaches it (the published port; the log line names it)
@@ -118,6 +121,7 @@ services:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
       SPACES_MMO_WORLD_INTENTS: "0"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
 
   npc:
     <<: *big
@@ -126,6 +130,7 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     volumes:
       # model NPCs: the host's pi CLI login, read-only (or API keys such as ANTHROPIC_API_KEY in .env); model calls
       # only with SPACES_MMO_LLM=1
@@ -139,6 +144,7 @@ services:
     environment:
       NODE_ENV: production
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:space:3950}"
+      SPACES_MMO_HOST_NAME: "${BIG_HOST_NAME:-big}"
     volumes:
       # the same login as npc
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
@@ -179,6 +185,7 @@ services:
     environment:
       NODE_ENV: development
       SPACES_MMO_BIND: 0.0.0.0
+      SPACES_MMO_HOST_NAME: "${SPACES_MMO_HOST_NAME:-dev}"
       PORT: "3900"
       SPACES_MMO_PUBLIC_URL: "http://127.0.0.1:${SPACES_MMO_DEV_PORT:-3920}"
       SPACES_MMO_DATA: /data

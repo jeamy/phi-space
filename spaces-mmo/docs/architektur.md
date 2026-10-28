@@ -16,6 +16,13 @@ Wie in codemode-chat ist jede Rolle ein eigener Prozess rund um einen Space (vgl
 Alle außer `space` sprechen über `RemoteSpace` + `socketTransport` mit dem Space. `world` und `npc` lassen sich
 mehrfach starten. Der Browser lädt keinen Space-Code; `src/` bleibt reiner Server-Code.
 
+Jeder Prozess meldet sich wie im Codemode-Chat mit einem `Process`-Entry im Welt-Space an (`announce` in
+`server/space.ts`: Rolle, Rechnername, CPU, vCPU, Arbeitsspeicher, pid; Lease 30 s, alle 10 s erneuert, ein beendeter
+Prozess fällt nach spätestens 30 s heraus). `GET /api/system` des Web-Prozesses fasst sie je Rechner zusammen (höchstens
+eine Abfrage des Spaces je 5 s), und die Leiste unter dem Spiel zeigt daraus „Testsystem: big (web, world, npc, model) ·
+CPU · vCPU · GiB · nano (space, world) · … · N Entries“. Den Rechnernamen setzt `SPACES_MMO_HOST_NAME` (Docker:
+`NANO_HOST_NAME`/`BIG_HOST_NAME`, Standard `nano` und `big`), sonst gilt der Name der Maschine.
+
 ```
 Browser ──WebSocket──▶ web ──RemoteSpace──▶ space ◀──RemoteSpace── world (1..n)
                                               ▲

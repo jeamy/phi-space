@@ -14,7 +14,7 @@ import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { availableModels, complete, llmEnabled } from "./llm.ts";
 import { setting, type ModelInfoFields } from "./settings.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type IntentFields, type ItemFields, type ListingFields, type TranslateFields } from "./model.ts";
-import { awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space.ts";
+import { announce, awaitWork, connectSpace, DEFAULT_SPACE, envMs } from "./space.ts";
 
 const COMMANDS = [...DEFAULT_COMMANDS, ...TRADE_COMMANDS].filter((c) => !c.hidden);
 const VERBS = new Set(COMMANDS.flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
@@ -100,7 +100,8 @@ export async function startModel(o: { space?: string; world?: WorldDef } = {}) {
 			catch (e) { if (halt.signal.aborted) break; console.error("[model] loop:", (e as Error).message); await new Promise((r) => setTimeout(r, 1000)); }
 		}
 	})();
-	return { async close() { halt.abort(); clearInterval(beat); await loop; conn.close(); } };
+	const proc = announce(conn.space, "model");
+	return { async close() { halt.abort(); clearInterval(beat); await loop; await proc.stop(); conn.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

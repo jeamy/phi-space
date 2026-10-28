@@ -17,7 +17,7 @@ import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
-import { connectSpace, DEFAULT_SPACE } from "./space.ts";
+import { announce, connectSpace, DEFAULT_SPACE } from "./space.ts";
 
 const SESSION_LEASE_MS = 30_000;
 /** How long a role stays with a process that stopped renewing it (SPACES_MMO_NPC_ROLE_LEASE_MS): then another takes over. */
@@ -113,7 +113,8 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	// The launcher and integration tests treat "ready" as usable: every role has either established its initial
 	// session or found that another npc process already owns it.
 	await Promise.all(starting);
-	return { async close() { halt.abort(); await Promise.all(runs); conn.close(); } };
+	const proc = announce(conn.space, "npc");
+	return { async close() { halt.abort(); await Promise.all(runs); await proc.stop(); conn.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
