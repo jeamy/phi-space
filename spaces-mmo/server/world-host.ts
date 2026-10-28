@@ -15,6 +15,8 @@
 //                                 a dozen calls to the space one after another, so it belongs next to the space (nano)
 //   SPACES_MMO_SLOW_MS            log commands answered later than this after they were typed (default off)
 //   SPACES_MMO_TIME_SCALE         the starting rate of a new world's clock (docs/weltzeit.md); an existing clock keeps its rate
+//   SPACES_MMO_REGION             the region this worker runs (engine/regions.ts): SPACES_MMO_SPACE is its space, and
+//                                 SPACES_MMO_REGIONS names every region's (a ferry to another hands the character over)
 import "./env.ts";
 import { pathToFileURL } from "node:url";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
@@ -28,11 +30,15 @@ import { ClockGuard, runSchedules } from "./engine/schedule.ts";
 import { sweepSpots } from "./engine/occupancy.ts";
 import { SCHEDULE_HANDLERS, tickHandler } from "./engine/worldevents.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
+import { regionAddresses, regionWorld } from "./engine/regions.ts";
+import { deliver } from "./engine/handover.ts";
 import { actorToken, fieldsOf, type AccountFields, type CharacterFields, type IntentFields } from "./model.ts";
 import { announce, awaitWork, batching, bufferedTxn, connectSpace, DEFAULT_SPACE, envMs, Mirror, readExisting, StillHeld } from "./space.ts";
 
-export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
-	const w = o.world ?? (await loadWorld());
+export async function startWorld(o: { space?: string; world?: WorldDef; region?: string } = {}) {
+	const full = o.world ?? (await loadWorld());
+	const region = o.region ?? (process.env.SPACES_MMO_REGION || "");
+	const w = region ? regionWorld(full, region) : full;
 	const conn = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
 	const space = conn.space;
 	const msgLeaseMs = envMs("SPACES_MMO_MSG_LEASE_MS", 2 * 60_000);
@@ -54,6 +60,10 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	const loaded = await loadIntoSpace(space, w).catch((e) => { conn.close(); throw e; });
 	const proc = announce(space, "world");
+	// a region's world worker delivers the characters that took a ferry out of it (engine/handover.ts)
+	const others = new Map<string, SpaceLike>(), otherConns: Array<{ close: () => void }> = [];
+	if (region) for (const [id, address] of regionAddresses(full, "")) if (id !== region) { const c = connectSpace(address); others.set(id, c.space); otherConns.push(c); }
+	const delivering = region ? deliver(space, others, full, halt.signal) : Promise.resolve();
 	if (loaded.loaded) console.log(`[world] loaded ${w.id} version ${w.version}${loaded.spawned.length ? `, placed ${loaded.spawned.join(", ")}` : ""}`);
 	const tokens = await ensureTokens(space);
 	if (tokens) console.log(`[world] wrote ${tokens} missing tokens`);
@@ -223,7 +233,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef } = {}) {
 	return {
 		space,
 		cleanup,
-		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; mirror?.close(); await proc.stop(); conn.close(); },
+		async close() { halt.abort(); clearInterval(sweep); clearInterval(spots); await loop; await scheduling; await delivering; mirror?.close(); await proc.stop(); for (const c of otherConns) c.close(); conn.close(); },
 	};
 }
 
@@ -239,7 +249,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 		}
 	}
 	// the starter and the tests wait for this line
-	console.log(`[world] ready (${process.env.SPACES_MMO_WORLD || "leuchtfeuer"})`);
+	console.log(`[world] ready (${process.env.SPACES_MMO_WORLD || "leuchtfeuer"}${process.env.SPACES_MMO_REGION ? `, region ${process.env.SPACES_MMO_REGION}` : ""})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await world.close(); process.exit(0); };
 	process.on("SIGINT", () => void shutdown());
 	process.on("SIGTERM", () => void shutdown());

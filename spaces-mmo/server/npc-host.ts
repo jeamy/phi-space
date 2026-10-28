@@ -8,6 +8,8 @@
 //   SPACES_MMO_SPACE        the world space (default unix:/tmp/spaces-mmo-world.sock)
 //   (the rhythm of the scripts and their timers follow the world clock's rate, not an environment variable)
 //   SPACES_MMO_NPCS         the roles this process plays, by npcId with commas (default: all of the world)
+//   SPACES_MMO_REGION       this process plays in that region's space (SPACES_MMO_SPACE): every role, but each only while
+//                           its NPC stands there (it walks by the whole world's map, also across a ferry)
 import "./env.ts";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -47,6 +49,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 		return want;
 	};
 	const only = (process.env.SPACES_MMO_NPCS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+	const regional = !!process.env.SPACES_MMO_REGION;
 	for (const def of w.npcs) {
 		if (only.length && !only.includes(def.npcId)) continue;
 		if (!scriptFor(def.script)) { console.error(`[npc] ${def.npcId}: unknown script ${def.script}`); continue; }
@@ -57,7 +60,9 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 		const ready = () => { if (!startingDone) { startingDone = true; started(); } };
 		const keep = async () => {
 			try {
-				if (!online) { if (lease) { await space.cancel(lease).catch(() => {}); lease = null; } return; }
+				// with regions every region's npc process plays every role, and an NPC is online only in the region it stands in
+				const here = !regional || (await space.count({ type: "Character", fields: { charId } })) > 0;
+				if (!online || !here) { if (lease) { await space.cancel(lease).catch(() => {}); lease = null; } return; }
 				if (lease) { try { await space.renew(lease, SESSION_LEASE_MS); return; } catch { lease = null; } }
 				lease = (await space.write({ type: "Session", fields: asFields<SessionFields>({ sessionId: `npc-${randomBytes(4).toString("hex")}`, charId, accountId: charId }) }, null, SESSION_LEASE_MS)).id;
 			} catch { /* the space is not reachable now: the next beat tries again */ }

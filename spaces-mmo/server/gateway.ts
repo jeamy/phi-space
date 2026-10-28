@@ -12,6 +12,7 @@ import type { WorldDef } from "./engine/world.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
 import { asFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { envMs } from "./space.ts";
+import { RegionSpaces } from "./region-spaces.ts";
 import { setting } from "./settings.ts";
 import type { WsConnection } from "phi-spaces/ws";
 
@@ -79,7 +80,7 @@ function spend(b: Bucket, burst: number, refillMs: number): boolean {
 	return true;
 }
 
-type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
+type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | null; leaseRegion?: string; keep?: () => Promise<void>; timer: ReturnType<typeof setInterval> | null; atlas?: boolean; limits: { steps: Bucket; cmds: Bucket }; warned: number;
 	/** The client's commands, one after another (a step counts the ones waiting before it). */ chain: Promise<void> };
 /** At most this often the overview's state goes out after a change (people walk, fires burn down, fog moves). */
 const ATLAS_MS = 1_000;
@@ -123,9 +124,13 @@ export class Gateway {
 	readonly #offers = new Map<string, OfferFields>(); // entry id -> offer
 	readonly #orders = new Map<string, OrderFields>(); // entry id -> order
 	readonly #listings = new Map<string, ListingFields>(); // entry id -> listing
-	#applied = -1; // the revision the state above reflects
+	// the revision of each region's stream the state above reflects; entries are kept by "region:id" (two spaces may
+	// number their entries alike), and each character by the region whose stream showed it last
+	readonly #applied = new Map<string, number>();
+	readonly #charRegion = new Map<string, string>();
+	readonly #regions: RegionSpaces;
 	#atlasDue: ReturnType<typeof setTimeout> | null = null;
-	readonly #waiting = new Set<{ rev: number; ok: () => void }>();
+	readonly #waiting = new Set<{ region: string; rev: number; ok: () => void }>();
 	#watch: Promise<void>;
 	#modelChars!: Set<string>; #modelNames!: Set<string>; #protoIcons!: Map<string, string>;
 
@@ -134,14 +139,17 @@ export class Gateway {
 	private readonly onActivity: (accountId: string) => void;
 	private readonly build: string | null;
 
-	constructor(space: SpaceLike, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null) {
-		this.space = space; this.w = w; this.onActivity = onActivity; this.build = build;
+	/** `space`: the world's one space, or its region spaces (each followed; a character's intents and session go to the
+	 *  region it stands in). */
+	constructor(space: SpaceLike | RegionSpaces, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null) {
+		this.#regions = space instanceof RegionSpaces ? space : RegionSpaces.single(w, space);
+		this.space = this.#regions.homeSpace; this.w = w; this.onActivity = onActivity; this.build = build;
 		this.#modelChars = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
 		this.#protoIcons = new Map(w.prototypes.filter((p) => p.icon).map((p) => [p.key, `/assets/${w.id}/${p.icon}`]));
 		this.#modelNames = new Set(w.npcs.filter((n) => n.model).map((n) => n.name));
-		let ready!: () => void;
-		this.#ready = new Promise((r) => (ready = r));
-		this.#watch = this.#follow(ready);
+		const follows = this.#regions.entries().map(([region, s]) => { let ready!: () => void; const p = new Promise<void>((r) => (ready = r)); return { p, run: this.#follow(region, s, ready) }; });
+		this.#ready = Promise.all(follows.map((f) => f.p)).then(() => {});
+		this.#watch = Promise.all(follows.map((f) => f.run)).then(() => {});
 		// a regular reminder, so a browser that was hidden or lost frames shows the same hour again
 		this.#clockTimer = setInterval(() => this.#broadcastTime(), 30_000);
 		this.#clockTimer.unref?.();
@@ -158,18 +166,25 @@ export class Gateway {
 		ws.onClose(() => {
 			this.#clients.delete(c);
 			if (c.timer) clearInterval(c.timer);
-			if (c.lease) void this.space.cancel(c.lease).catch(() => {});
+			if (c.lease) void this.#regions.get(c.leaseRegion ?? this.#regions.home)?.cancel(c.lease).catch(() => {});
 		});
 		ws.onMessage((text) => this.#inbound(c, text));
 		await this.#ready;
+		// the session lives in the character's region: after a crossing the next beat (or the crossing itself, #put)
+		// writes it there and ends the old one
 		const keep = async () => {
 			try {
-				if (c.lease) { try { await this.space.renew(c.lease, this.sessionLeaseMs); return; } catch { c.lease = null; } }
+				const region = await this.#regionOf(me.charId);
+				if (c.lease && c.leaseRegion !== region) { void this.#regions.get(c.leaseRegion ?? this.#regions.home)?.cancel(c.lease).catch(() => {}); c.lease = null; }
+				const space = this.#regions.get(region)!;
+				if (c.lease) { try { await space.renew(c.lease, this.sessionLeaseMs); return; } catch { c.lease = null; } }
 				if (!this.#clients.has(c)) return;
-				c.lease = (await this.space.write({ type: "Session", fields: asFields<SessionFields>({ sessionId: ws.id, charId: me.charId, accountId: me.accountId }) }, null, this.sessionLeaseMs)).id;
-				if (!this.#clients.has(c)) await this.space.cancel(c.lease).catch(() => {}); // closed while writing
+				c.lease = (await space.write({ type: "Session", fields: asFields<SessionFields>({ sessionId: ws.id, charId: me.charId, accountId: me.accountId }) }, null, this.sessionLeaseMs)).id;
+				c.leaseRegion = region;
+				if (!this.#clients.has(c)) await space.cancel(c.lease).catch(() => {}); // closed while writing
 			} catch (e) { console.error("[gateway] session:", (e as Error).message); }
 		};
+		c.keep = keep;
 		await keep();
 		// online now: if someone else stands on this character's cell meanwhile, the world moves it to a free one
 		await this.#intent(c, "arrive");
@@ -177,23 +192,34 @@ export class Gateway {
 		c.timer.unref?.();
 		// read your writes: the hello is built from the stream, so it waits until the stream has caught up with the space
 		// as it is now (the player's own session, a registration that just renamed its character)
-		await this.#reach((await this.space.readPage({ type: "-" })).rev).catch(() => {});
+		await Promise.all(this.#regions.entries().map(async ([region, s]) => this.#reach(region, (await s.readPage({ type: "-" })).rev))).catch(() => {});
 		this.#hello(c);
 	}
 
-	/** Resolves once the change stream has been applied up to `rev` (rejects after `ms`). */
-	#reach(rev: number, ms = 5_000): Promise<void> {
-		if (this.#applied >= rev) return Promise.resolve();
+	/** The region a character stands in; on a ferry it is in none for a moment, and the one it lands in is waited for. */
+	async #regionOf(charId: string): Promise<string> {
+		if (this.#regions.size === 1) return this.#regions.home;
+		for (let i = 0; i < 30 && !this.#closed; i++) {
+			const r = this.#charRegion.get(charId);
+			if (r && this.#chars.has(charId)) return r;
+			await new Promise((ok) => setTimeout(ok, 100));
+		}
+		return this.#charRegion.get(charId) ?? this.#regions.home;
+	}
+
+	/** Resolves once the region's change stream has been applied up to `rev` (rejects after `ms`). */
+	#reach(region: string, rev: number, ms = 5_000): Promise<void> {
+		if ((this.#applied.get(region) ?? -1) >= rev) return Promise.resolve();
 		return new Promise((ok, fail) => {
-			const w = { rev, ok: () => { clearTimeout(timer); ok(); } };
+			const w = { region, rev, ok: () => { clearTimeout(timer); ok(); } };
 			const timer = setTimeout(() => { this.#waiting.delete(w); fail(new Error(`change stream behind revision ${rev}`)); }, ms);
 			this.#waiting.add(w);
 		});
 	}
 
-	#advance(rev: number): void {
-		this.#applied = rev;
-		for (const w of this.#waiting) if (w.rev <= rev) { this.#waiting.delete(w); w.ok(); }
+	#advance(region: string, rev: number): void {
+		this.#applied.set(region, rev);
+		for (const w of this.#waiting) if (w.region === region && w.rev <= rev) { this.#waiting.delete(w); w.ok(); }
 	}
 
 	/** The clock as a browser is told it (null in a world that has none yet). */
@@ -240,7 +266,7 @@ export class Gateway {
 
 	async #intent(c: Client, line: string, step?: { conn: string; seq: number }): Promise<void> {
 		const intent: IntentFields = { intentId: randomBytes(8).toString("hex"), charId: c.me.charId, line, at: Date.now(), ...(step ? { step } : {}) };
-		try { await this.space.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
+		try { await this.#regions.get(await this.#regionOf(c.me.charId))!.write({ type: "Intent", fields: asFields(intent) }, null, INTENT_LEASE_MS); }
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
 	}
 
@@ -261,31 +287,32 @@ export class Gateway {
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
-	async #readPaged(tmpl: { type: string; fields?: Record<string, string> }, msgs: MsgFields[]): Promise<void> {
+	async #readPaged(region: string, space: SpaceLike, tmpl: { type: string; fields?: Record<string, string> }, msgs: MsgFields[]): Promise<void> {
 		let after: string | null = null, token: string | undefined;
 		do {
-			const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await this.space.readPage(tmpl, { after, token, maxBytes: 256 * 1024 });
-			for (const e of page.items) this.#put(e.id, e.type, e.types, e.fields, msgs);
+			const page: Awaited<ReturnType<SpaceLike["readPage"]>> = await space.readPage(tmpl, { after, token, maxBytes: 256 * 1024 });
+			for (const e of page.items) this.#put(`${region}:${e.id}`, e.type, e.types, e.fields, msgs);
 			after = page.next; token = page.token;
 		} while (after !== null);
 	}
 
 	/** Reads the world once (from a revision taken before the reads) and then follows the change stream. Replaying ops
 	 *  that the reads already showed is harmless: a put replaces, a del removes. */
-	async #follow(ready: () => void): Promise<void> {
+	async #follow(region: string, space: SpaceLike, ready: () => void): Promise<void> {
 		let rev = -1;
+		const key = (id: string) => `${region}:${id}`;
 		while (!this.#closed) {
 			try {
 				if (rev < 0) {
-					rev = (await this.space.readPage({ type: "-" })).rev;
+					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing"]) await this.#readPaged({ type }, msgs);
-					await this.#readPaged({ type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
-					this.#advance(rev);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing"]) await this.#readPaged(region, space, { type }, msgs);
+					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
+					this.#advance(region, rev);
 					ready();
 					for (const c of this.#clients) this.#hello(c); // after a restart of the stream
 				}
-				const ch = await this.space.changes(rev, { waitMs: 20_000 });
+				const ch = await space.changes(rev, { waitMs: 20_000 });
 				for (const b of ch.batches) {
 					const chars = new Map<string, string | null>(); // charId -> room before the batch
 					const objs = new Map<string, string | null>(); // objId -> location before the batch
@@ -294,6 +321,7 @@ export class Gateway {
 					let trade = false; // offers, orders or listings changed
 					let clock = false; // the world clock was written
 					const touch = (entryId: string, fields?: Record<string, unknown>, types?: string[]) => {
+						entryId = key(entryId);
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
 						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : undefined);
@@ -302,8 +330,9 @@ export class Gateway {
 					};
 					for (const op of b.ops) {
 						// a renewed session is the same session: the character did not change, nothing to announce
-						if (op.op === "put") { clock ||= op.type === "WorldClock"; if (!(op.type === "Session" && this.#sessions.has(op.id))) touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(op.id, op.type, op.types, op.fields, msgs); }
-						else { touch(op.id); trade ||= this.#offers.has(op.id) || this.#orders.has(op.id) || this.#listings.has(op.id); this.#del(op.id); }
+						const id = key(op.id);
+						if (op.op === "put") { clock ||= op.type === "WorldClock"; if (!(op.type === "Session" && this.#sessions.has(id))) touch(op.id, op.fields, op.types); trade ||= ["Offer", "Order", "Listing"].includes(op.type); this.#put(id, op.type, op.types, op.fields, msgs); }
+						else { touch(op.id); trade ||= this.#offers.has(id) || this.#orders.has(id) || this.#listings.has(id); this.#del(id); }
 					}
 					// first where everyone and everything is now (a client whose own room changed gets its hello), then what was said
 					for (const [charId, roomBefore] of chars) this.#announce(charId, roomBefore);
@@ -317,21 +346,27 @@ export class Gateway {
 					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#modelNames, this.#chars.get(c.me.charId)?.name) } satisfies ServerFrame);
 				}
 				rev = ch.next;
-				this.#advance(rev);
+				this.#advance(region, rev);
 			} catch (e) {
 				if (this.#closed) break;
 				const m = (e as Error).message;
 				// the history moved past the cursor (or the space restarted): read everything again from now
-				if (e instanceof SnapshotExpired || e instanceof RevisionAhead) { console.error(`[gateway] change stream: ${m}; reading the world again`); this.#reset(); rev = -1; continue; }
+				if (e instanceof SnapshotExpired || e instanceof RevisionAhead) { console.error(`[gateway] change stream of ${region}: ${m}; reading it again`); this.#reset(region); rev = -1; continue; }
 				console.error("[gateway] change stream:", m);
 				await new Promise((r) => setTimeout(r, 1000));
 			}
 		}
 	}
 
-	#reset(): void {
-		this.#clock = null;
-		for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
+	/** Forgets what the region's stream showed (it is read again): the other regions' entries stay. */
+	#reset(region: string): void {
+		if (this.#regions.size === 1) {
+			this.#clock = null;
+			for (const m of [this.#chars, this.#charOf, this.#charEntry, this.#sessions, this.#online, this.#rooms, this.#objs, this.#objOf, this.#objEntry, this.#recent, this.#flames, this.#flameOf, this.#fog, this.#offers, this.#orders, this.#listings]) m.clear();
+			return;
+		}
+		const mine = (id: string) => id.startsWith(`${region}:`);
+		for (const m of [this.#charOf, this.#objOf, this.#sessions, this.#flameOf, this.#offers, this.#orders, this.#listings] as Array<Map<string, unknown>>) for (const id of [...m.keys()]) if (mine(id)) this.#del(id);
 	}
 
 	/** Applies a put; a message is collected in `msgs` to be sent after the batch. */
@@ -343,6 +378,12 @@ export class Gateway {
 			const prev = this.#charEntry.get(c.charId);
 			if (prev !== undefined && prev !== id) this.#charOf.delete(prev);
 			this.#chars.set(c.charId, c); this.#charOf.set(id, c.charId); this.#charEntry.set(c.charId, id);
+			// a character that crossed into another region: its pages' sessions follow it now, not at the next beat
+			const region = id.slice(0, id.indexOf(":"));
+			if (this.#charRegion.get(c.charId) !== region) {
+				this.#charRegion.set(c.charId, region);
+				for (const cl of this.#clients) if (cl.me.charId === c.charId && cl.leaseRegion && cl.leaseRegion !== region) void cl.keep?.();
+			}
 		}
 		else if (type === "Session") {
 			if (this.#sessions.has(id)) return; // a renewal

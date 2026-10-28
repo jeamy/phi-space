@@ -11,6 +11,8 @@
 //                                                                 at the start, before serving)
 //   SPACES_MMO_SPACES=world,accounts                              which of the two this process serves (default both):
 //                                                                 on two hosts, one each (docs/betrieb.md)
+//   SPACES_MMO_REGION=west                                        the world space is this region's (world-west.sqlite):
+//                                                                 one space process per region, each on a core of its own
 import { ROOT } from "./env.ts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -64,11 +66,11 @@ async function serveStore(listen: string, dbPath: string | null, peer: string) {
 	return { local, async close() { if (compacting) clearInterval(compacting); await server.close(); await stopService(); await harness.close(ctx); } };
 }
 
-export async function startSpaceHost(o: { listen?: string; accountsListen?: string; dataDir?: string | null; spaces?: readonly ("world" | "accounts")[] } = {}) {
+export async function startSpaceHost(o: { listen?: string; accountsListen?: string; dataDir?: string | null; spaces?: readonly ("world" | "accounts")[]; region?: string } = {}) {
 	if (o.dataDir) await mkdir(o.dataDir, { recursive: true });
 	const listen = o.listen ?? DEFAULT_SPACE, accountsListen = o.accountsListen ?? DEFAULT_ACCOUNTS;
 	const serves = o.spaces ?? ["world", "accounts"];
-	const world = serves.includes("world") ? await serveStore(listen, o.dataDir ? join(o.dataDir, "world.sqlite") : null, "peer-mmo-world") : null;
+	const world = serves.includes("world") ? await serveStore(listen, o.dataDir ? join(o.dataDir, o.region ? `world-${o.region}.sqlite` : "world.sqlite") : null, "peer-mmo-world") : null;
 	const accounts = serves.includes("accounts") ? await serveStore(accountsListen, o.dataDir ? join(o.dataDir, "accounts.sqlite") : null, "peer-mmo-web") : null;
 	// the lock every registration takes while it claims a name; written once, when the store is new
 	if (accounts && !(await accounts.local.count({ type: NAMES_LOCK.type }))) await accounts.local.write({ type: NAMES_LOCK.type, fields: { ...NAMES_LOCK.fields } }, null, FOREVER);
@@ -90,7 +92,8 @@ export function servedSpaces(v = process.env.SPACES_MMO_SPACES): ("world" | "acc
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const mem = process.env.SPACES_MMO_MEM === "1";
 	const dataDir = mem ? null : process.env.SPACES_MMO_DATA || join(ROOT, ".local");
-	const host = await startSpaceHost({ listen: process.env.SPACES_MMO_LISTEN || DEFAULT_SPACE, accountsListen: process.env.SPACES_MMO_ACCOUNTS_LISTEN || DEFAULT_ACCOUNTS, dataDir, spaces: servedSpaces() });
+	const region = process.env.SPACES_MMO_REGION || undefined;
+	const host = await startSpaceHost({ listen: process.env.SPACES_MMO_LISTEN || DEFAULT_SPACE, accountsListen: process.env.SPACES_MMO_ACCOUNTS_LISTEN || DEFAULT_ACCOUNTS, dataDir, spaces: servedSpaces(), ...(region ? { region } : {}) });
 	// the starter and the tests wait for this line
 	console.log(`[space] ready: world on ${host.listen ?? "-"}, accounts on ${host.accountsListen ?? "-"} (${dataDir ?? "memory"})`);
 	const shutdown = async () => { setTimeout(() => process.exit(0), 3000).unref(); await host.close(); process.exit(0); };

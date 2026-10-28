@@ -20,6 +20,7 @@ import { Accounts, AuthError, type AccountOptions, type Me } from "./accounts.ts
 import { loadWorld, worldAsset } from "./engine/world.ts";
 import { Gateway } from "./gateway.ts";
 import { announce, connectSpace, DEFAULT_ACCOUNTS, DEFAULT_SPACE, systemInfo } from "./space.ts";
+import { RegionSpaces } from "./region-spaces.ts";
 import { upgradeWebSocket } from "phi-spaces/ws";
 import { chosen } from "./llm.ts";
 import { saveModelChoice, saveSettings, SETTINGS, settingsOf, type ModelInfoFields } from "./settings.ts";
@@ -53,12 +54,15 @@ const cookieOf = (req: http.IncomingMessage, name: string): string | undefined =
 
 export async function startServer(o: { port?: number; bind?: string; space?: string; accounts?: string; useNext?: boolean; dev?: boolean; accountOptions?: AccountOptions; build?: string | null } = {}) {
 	const w = await loadWorld();
-	const world = connectSpace(o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
+	// the world's space, or with SPACES_MMO_REGIONS one per region (engine/regions.ts): the first region holds the
+	// settings, the model's entries and the system bar; the settings are written to every region
+	const regions = RegionSpaces.connect(w, o.space ?? (process.env.SPACES_MMO_SPACE || DEFAULT_SPACE));
+	const world = { space: regions.homeSpace, close: () => regions.close() };
 	const store = connectSpace(o.accounts ?? (process.env.SPACES_MMO_ACCOUNTS || DEFAULT_ACCOUNTS));
-	const accounts = new Accounts(world.space, store.space, w, o.accountOptions);
+	const accounts = new Accounts(regions, store.space, w, o.accountOptions);
 	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
 	const build = o.build !== undefined ? o.build : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
-	const gateway = new Gateway(world.space, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build);
+	const gateway = new Gateway(regions, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build);
 	const proc = announce(world.space, "web");
 	// the system bar's hosts (GET /api/system): every page asks every few seconds, the space at most once in five
 	let systemCache: { at: number; value: Promise<Awaited<ReturnType<typeof systemInfo>>> } | null = null;
@@ -121,11 +125,11 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 			try {
 				if (change.values !== undefined) {
 					if (!change.values || typeof change.values !== "object" || Array.isArray(change.values)) throw new RangeError("values: Schlüssel und Zahlen");
-					await saveSettings(world.space, change.values);
+					for (const [, s] of regions.entries()) await saveSettings(s, change.values);
 				}
 				if (change.models !== undefined) {
 					const m = change.models;
-					if (m === null) await saveModelChoice(world.space, null);
+					if (m === null) for (const [, s] of regions.entries()) await saveModelChoice(s, null);
 					else {
 						if (typeof m !== "object" || typeof m.on !== "boolean" || !(m.allowed === null || (Array.isArray(m.allowed) && m.allowed.every((l: unknown) => typeof l === "string"))) || !(m.model === null || typeof m.model === "string")) throw new RangeError("models: {on, allowed, model}");
 						const known = new Set(available.map((x) => x.label));
@@ -133,7 +137,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 						if (unknown.length) throw new RangeError(`Unbekannte Modelle: ${unknown.slice(0, 5).join(", ")}`);
 						if (m.allowed && !m.allowed.length) throw new RangeError("Mindestens ein Modell erlauben (oder Standard)");
 						if (m.model && m.allowed && !m.allowed.includes(m.model)) throw new RangeError("Das verwendete Modell muss erlaubt sein");
-						await saveModelChoice(world.space, { on: m.on, allowed: m.allowed, model: m.model });
+						for (const [, s] of regions.entries()) await saveModelChoice(s, { on: m.on, allowed: m.allowed, model: m.model });
 					}
 				}
 			} catch (e) { if (e instanceof RangeError) throw new AuthError(400, e.message); throw e; }

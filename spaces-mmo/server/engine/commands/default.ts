@@ -9,6 +9,8 @@ import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { cellKey, claimSpot, freeCellNear, occupiedIn, solidIn } from "../occupancy.ts";
 import { findPath, walkable, wayTo } from "../world.ts";
+import { handOff } from "../handover.ts";
+import { regionOfRoom } from "../regions.ts";
 
 const MAX_SAY = 300;
 
@@ -97,9 +99,24 @@ async function throughFog(c: CommandCtx, exit: ExitFields): Promise<void> {
 		: `Der Nebel ist zu dicht; den Weg nach ${exit.name} findest du nicht. Ein Leuchtfeuer würde helfen.`);
 }
 
+/** The region a room of another region lies in, seen from the part of the world `w` runs; null when it is here (or the
+ *  world runs as one space). */
+function crossing(w: CommandCtx["world"], room: string): string | null {
+	if (!w.region || w.rooms.some((r) => r.roomId === room)) return null;
+	return regionOfRoom({ ...w, rooms: w.allRooms ?? w.rooms }, room);
+}
+
 export async function traverse(c: CommandCtx, exit: ExitFields): Promise<void> {
 	await check(c, exit.locks, "traverse", `Der Weg nach ${exit.name} ist dir versperrt.`);
 	if (exit.fogMax !== undefined && (await fogOf(c.space, c.actor.room)) > exit.fogMax) await throughFog(c, exit);
+	// a ferry into another region: the character leaves this space and a world worker brings it over (handover.ts)
+	const toRegion = crossing(c.world, exit.destination);
+	if (toRegion) {
+		await dropOffers(c);
+		await msg(c, "*", "info", `$you() $conj(gehst|geht) nach ${exit.name}.`, { templ: true });
+		await handOff(c, c.world.region!, toRegion, { room: exit.destination, ...exit.arrive });
+		return;
+	}
 	const dest = await roomOf(c, exit.destination);
 	// arriving: the exit's arrival cell, or the nearest free one when someone stands there (never on an exit cell)
 	const at = await placeIn(c, dest, exit.arrive);

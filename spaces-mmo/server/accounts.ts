@@ -7,6 +7,7 @@
 // credential. A run that stops after step 1 leaves a pending credential whose lease frees the name again; one that
 // stops after step 2 is completed by the next login.
 import { createHash, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import { RegionSpaces } from "./region-spaces.ts";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { cellKey, freeCellNear, occupiedIn } from "./engine/occupancy.ts";
 import { walkable, type WorldDef } from "./engine/world.ts";
@@ -50,12 +51,15 @@ export class Accounts {
 	/** Test hook: runs between step 1 and step 2 of a registration (a throw stands for a web process that died there). */
 	faults: { afterPendingCredential?: () => Promise<void> | void } = {};
 
-	private readonly world: SpaceLike;
+	/** The world's spaces (one, or one per region): an account and its character are in the region the character stands
+	 *  in (they cross together, engine/handover.ts); a new one starts in the regions in turn. */
+	readonly #regions: RegionSpaces;
 	private readonly store: SpaceLike;
 	private readonly w: WorldDef;
 
-	constructor(world: SpaceLike, store: SpaceLike, w: WorldDef, o: AccountOptions = {}) {
-		this.world = world; this.store = store; this.w = w;
+	constructor(world: SpaceLike | RegionSpaces, store: SpaceLike, w: WorldDef, o: AccountOptions = {}) {
+		this.#regions = world instanceof RegionSpaces ? world : RegionSpaces.single(w, world);
+		this.store = store; this.w = w;
 		this.guestTtlMs = o.guestTtlMs ?? envMs("SPACES_MMO_GUEST_TTL_MS", 7 * 24 * 3600_000);
 		this.pendingMs = o.pendingMs ?? envMs("SPACES_MMO_PENDING_MS", 120_000);
 		this.webSessionMs = o.webSessionMs ?? envMs("SPACES_MMO_WEB_SESSION_MS", 12 * 3600_000);
@@ -66,17 +70,18 @@ export class Accounts {
 	async createGuest(): Promise<Me> {
 		const now = Date.now();
 		const account: AccountFields = { accountId: id("a"), name: `${this.w.guestName}-${randomInt(1000, 10000)}`, guest: true, admin: false, createdAt: now, touchedAt: now };
-		const txn = (await this.world.createTransaction(10_000)).id;
+		const start = this.#regions.nextStart(), world = start.space;
+		const txn = (await world.createTransaction(10_000)).id;
 		let char: CharacterFields;
 		try {
-			const made = await this.#newCharacter(account, txn);
+			const made = await this.#newCharacter(account, start.room, world);
 			char = made.char;
 			await made.release();
-			await this.world.write({ type: "Account", fields: asFields(account) }, txn, this.guestTtlMs);
-			await this.world.write({ type: "Character", fields: asFields(char) }, txn, FOREVER);
-			await this.world.write(actorToken(char.charId), txn, FOREVER);
-			await this.world.commit(txn);
-		} catch (e) { await this.world.abort(txn).catch(() => {}); throw e; }
+			await world.write({ type: "Account", fields: asFields(account) }, txn, this.guestTtlMs);
+			await world.write({ type: "Character", fields: asFields(char) }, txn, FOREVER);
+			await world.write(actorToken(char.charId), txn, FOREVER);
+			await world.commit(txn);
+		} catch (e) { await world.abort(txn).catch(() => {}); throw e; }
 		return { ...pick(account), charId: char.charId };
 	}
 
@@ -92,7 +97,7 @@ export class Accounts {
 		const guest = o.guestAccountId ? await this.#account(o.guestAccountId) : null;
 		if (o.guestAccountId && !guest?.guest) throw new AuthError(409, "Dieses Gastkonto gibt es nicht mehr; bitte neu als Gast beginnen oder ohne Gast registrieren");
 		const accountId = guest?.accountId ?? id("a");
-		const admin = !!o.setupToken && this.#tokenOk(o.setupToken) && !(await peek(this.world, { type: "Account", fields: { admin: true } }));
+		const admin = !!o.setupToken && this.#tokenOk(o.setupToken) && !(await this.#regions.find({ type: "Account", fields: { admin: true } }));
 		const salt = randomBytes(16);
 		const hash = await scrypt(password, salt);
 
@@ -117,30 +122,32 @@ export class Accounts {
 		await this.faults.afterPendingCredential?.();
 
 		// step 2: the account in the world becomes (or is created as) a registered one
-		const t2 = (await this.world.createTransaction(15_000)).id;
+		const start = guest ? null : this.#regions.nextStart();
+		const world = start?.space ?? (await this.#spaceOf(accountId));
+		const t2 = (await world.createTransaction(15_000)).id;
 		let charId: string;
 		try {
 			if (guest) {
-				const a = await this.world.take({ type: "Account", fields: { accountId, guest: true } }, 5_000, { txn: t2 });
+				const a = await world.take({ type: "Account", fields: { accountId, guest: true } }, 5_000, { txn: t2 });
 				if (!a) throw new AuthError(409, "Dieses Gastkonto gibt es nicht mehr");
-				await this.world.write({ type: "Account", fields: asFields<AccountFields>({ ...fieldsOf<AccountFields>(a), name, guest: false, admin, touchedAt: Date.now() }) }, t2, FOREVER);
-				const c = await this.world.take({ type: "Character", fields: { accountId } }, 5_000, { txn: t2 });
+				await world.write({ type: "Account", fields: asFields<AccountFields>({ ...fieldsOf<AccountFields>(a), name, guest: false, admin, touchedAt: Date.now() }) }, t2, FOREVER);
+				const c = await world.take({ type: "Character", fields: { accountId } }, 5_000, { txn: t2 });
 				if (!c) throw new AuthError(409, "Zu diesem Gastkonto gibt es keine Figur mehr");
 				const char = { ...fieldsOf<CharacterFields>(c), name, guest: false };
-				await this.world.write({ type: "Character", fields: asFields(char) }, t2, FOREVER);
+				await world.write({ type: "Character", fields: asFields(char) }, t2, FOREVER);
 				charId = char.charId;
 			} else {
 				const now = Date.now();
 				const account: AccountFields = { accountId, name, guest: false, admin, createdAt: now, touchedAt: now };
-				const { char, release } = await this.#newCharacter(account, t2);
+				const { char, release } = await this.#newCharacter(account, start!.room, world);
 				await release();
-				await this.world.write({ type: "Account", fields: asFields(account) }, t2, FOREVER);
-				await this.world.write({ type: "Character", fields: asFields(char) }, t2, FOREVER);
-				await this.world.write(actorToken(char.charId), t2, FOREVER);
+				await world.write({ type: "Account", fields: asFields(account) }, t2, FOREVER);
+				await world.write({ type: "Character", fields: asFields(char) }, t2, FOREVER);
+				await world.write(actorToken(char.charId), t2, FOREVER);
 				charId = char.charId;
 			}
-			await this.world.commit(t2);
-		} catch (e) { await this.world.abort(t2).catch(() => {}); throw e; }
+			await world.commit(t2);
+		} catch (e) { await world.abort(t2).catch(() => {}); throw e; }
 
 		// step 3: the credential becomes permanent
 		await this.#activate(key, accountId);
@@ -172,15 +179,16 @@ export class Accounts {
 	}
 
 	async #makeAdmin(accountId: string): Promise<AccountFields> {
-		const txn = (await this.world.createTransaction(10_000)).id;
+		const world = await this.#spaceOf(accountId);
+		const txn = (await world.createTransaction(10_000)).id;
 		try {
-			const a = await this.world.take({ type: "Account", fields: { accountId, guest: false } }, 5_000, { txn });
+			const a = await world.take({ type: "Account", fields: { accountId, guest: false } }, 5_000, { txn });
 			if (!a) throw new AuthError(409, "Dieses Konto ist gerade nicht greifbar; bitte noch einmal");
 			const f: AccountFields = { ...fieldsOf<AccountFields>(a), admin: true };
-			await this.world.write({ type: "Account", fields: asFields(f) }, txn, FOREVER);
-			await this.world.commit(txn);
+			await world.write({ type: "Account", fields: asFields(f) }, txn, FOREVER);
+			await world.commit(txn);
 			return f;
-		} catch (e) { await this.world.abort(txn).catch(() => {}); throw e; }
+		} catch (e) { await world.abort(txn).catch(() => {}); throw e; }
 	}
 
 	/** A web session for an account: the cookie value (only its hash is stored). */
@@ -218,14 +226,15 @@ export class Accounts {
 		if (last !== undefined && now - last < 60_000) return;
 		if (this.#looked.size >= 10_000) for (const [k, t] of this.#looked) if (now - t >= 60_000) this.#looked.delete(k);
 		this.#looked.set(accountId, now);
-		const e = await peek(this.world, { type: "Account", fields: { accountId, guest: true } });
-		if (!e || Date.now() - fieldsOf<AccountFields>(e).touchedAt < this.guestTtlMs / 4) return;
-		const txn = (await this.world.createTransaction(10_000)).id;
+		const world = (await this.#regions.find({ type: "Account", fields: { accountId, guest: true } }))?.space;
+		const e = world ? await peek(world, { type: "Account", fields: { accountId, guest: true } }) : null;
+		if (!world || !e || Date.now() - fieldsOf<AccountFields>(e).touchedAt < this.guestTtlMs / 4) return;
+		const txn = (await world.createTransaction(10_000)).id;
 		try {
-			const a = await this.world.takeIfExists({ type: "Account", id: e.id }, NO_WAIT, { txn });
-			if (a) await this.world.write({ type: "Account", fields: asFields<AccountFields>({ ...fieldsOf<AccountFields>(a), touchedAt: Date.now() }) }, txn, this.guestTtlMs);
-			await this.world.commit(txn);
-		} catch { await this.world.abort(txn).catch(() => {}); }
+			const a = await world.takeIfExists({ type: "Account", id: e.id }, NO_WAIT, { txn });
+			if (a) await world.write({ type: "Account", fields: asFields<AccountFields>({ ...fieldsOf<AccountFields>(a), touchedAt: Date.now() }) }, txn, this.guestTtlMs);
+			await world.commit(txn);
+		} catch { await world.abort(txn).catch(() => {}); }
 	}
 
 	async #activate(key: string, accountId: string): Promise<void> {
@@ -237,13 +246,19 @@ export class Accounts {
 		} catch (e) { await this.store.abort(txn).catch(() => {}); throw e; }
 	}
 
+	/** The space of the region the account is in (one on a ferry is waited for a moment); the home region when none
+	 *  holds it, where a read then says it is not there. */
+	async #spaceOf(accountId: string): Promise<SpaceLike> {
+		return (await this.#regions.find({ type: "Account", fields: { accountId } }, this.#regions.size > 1 ? 3_000 : 0))?.space ?? this.#regions.homeSpace;
+	}
+
 	async #account(accountId: string): Promise<AccountFields | null> {
-		const e: Taken | null = await readExisting(this.world, { type: "Account", fields: { accountId } });
+		const e: Taken | null = await readExisting(await this.#spaceOf(accountId), { type: "Account", fields: { accountId } });
 		return e ? fieldsOf<AccountFields>(e) : null;
 	}
 
 	async #me(account: AccountFields): Promise<Me> {
-		const c = await readExisting(this.world, { type: "Character", fields: { accountId: account.accountId } });
+		const c = await readExisting(await this.#spaceOf(account.accountId), { type: "Character", fields: { accountId: account.accountId } });
 		if (!c) throw new AuthError(409, "Zu diesem Konto gibt es keine Figur");
 		return { ...pick(account), charId: fieldsOf<CharacterFields>(c).charId };
 	}
@@ -251,9 +266,9 @@ export class Accounts {
 	/** A new character at the start, on a cell near the spawn that no one online stands on. Two new characters may pick
 	 *  the same one: the character holds no cell until it comes online, and then `arrive` (engine/commands/default.ts)
 	 *  moves the later one aside. */
-	async #newCharacter(account: AccountFields, _txn: string): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
-		const room = this.w.rooms.find((r) => r.roomId === this.w.start)!;
-		const avoid = new Set([...(await occupiedIn(this.world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...this.w.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
+	async #newCharacter(account: AccountFields, start: string, world: SpaceLike): Promise<{ char: CharacterFields; release: () => Promise<void> }> {
+		const room = this.w.rooms.find((r) => r.roomId === start)!;
+		const avoid = new Set([...(await occupiedIn(world, room.roomId)).keys(), ...this.w.exits.filter((e) => e.room === room.roomId).map((e) => cellKey(e)), ...this.w.beacons.filter((b) => b.room === room.roomId).map((b) => cellKey(b))]);
 		// a little scatter around the spawn, then the nearest free cell from there
 		const near = { x: room.spawn.x + randomInt(-3, 4), y: room.spawn.y + randomInt(-2, 3) };
 		const at = freeCellNear(this.w, room.ground, walkable(this.w, room.ground, near.x, near.y) ? near : room.spawn, avoid) ?? room.spawn;

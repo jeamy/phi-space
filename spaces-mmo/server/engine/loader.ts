@@ -105,10 +105,16 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 		for (const room of new Set(w.beacons.flatMap((b) => b.covers))) {
 			if (!(await space.readIfExists({ type: "Fog", fields: { room } }, 2_000, { txn }))) await space.write({ type: "Fog", fields: { room, level: w.fog.start } satisfies FogFields as never }, txn, FOREVER);
 		}
+		// in a region (engine/regions.ts) an NPC is created where it starts, once: a marker stays when it walks on into
+		// another region, so this region does not make it a second time
+		const here = new Set(w.rooms.map((r) => r.roomId));
 		for (const n of w.npcs) {
+			if (w.region && !here.has(n.room)) continue;
 			const charId = `npc-${n.npcId}`;
 			let exists: boolean;
 			try { exists = !!(await readExisting(space, { type: "Character", fields: { charId } }, { txn })); } catch (e) { if (e instanceof StillHeld) continue; throw e; }
+			if (!exists && w.region && (await peek(space, { type: "NpcBorn", fields: { charId } }, { txn }))) continue;
+			if (!exists && w.region) await space.write({ type: "NpcBorn", fields: { charId } }, txn, FOREVER);
 			if (!exists) {
 				const now = Date.now();
 				await space.write({ type: "Account", fields: { accountId: charId, name: n.name, guest: false, admin: false, npc: true, createdAt: now, touchedAt: now } satisfies AccountFields as never }, txn, FOREVER);
