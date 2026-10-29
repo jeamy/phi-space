@@ -93,6 +93,7 @@ Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann da
 
 Jeder Region-Space braucht einen schnellen Kern; auf nano (kleine VM) rechnete ein Kern etwa dreimal so lange wie auf big
 ([lasttest-2026-10-28.md](lasttest-2026-10-28.md)). Deshalb liegt die Welt auf big und nur der Konten-Space auf nano.
+vpsc ist ähnlich langsam ([messung-vpsc-2026-10-29.md](messung-vpsc-2026-10-29.md)).
 Das Web auf big erreicht ihn über die Benutzer-Unit `mmo-accounts-tunnel` (`deploy/`, nur Port 3951); über das Netz gehen
 Anmeldung, Registrierung und das Prüfen einer Web-Sitzung, jeder Befehl bleibt neben dem Space seiner Region.
 `web` läuft im Host-Netz (`docker-compose.hostnet.yml`, nur auf der Loopback-Adresse, davor nginx).
