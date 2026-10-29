@@ -1,5 +1,5 @@
 // Building, step 1 (docs/siedeln.md, "Wie ein Bau entsteht", engine/commands/build.ts): a site is staked out only in
-// the light and never on a way; ten people delivering at once fill it exactly (what it does not need stays in their
+// the light and never on a way; twenty people delivering at once, up to two cells away, fill it exactly (what it does not need stays in their
 // packs); shared work finishes it exactly once; nobody walks into it; a fire's light carries only so many buildings.
 import "./test-env.ts";
 import { test } from "node:test";
@@ -37,7 +37,7 @@ async function clear(space: SpaceLike, cells: Array<[number, number]>): Promise<
 	for (const e of await space.readAll({ type: "Item", fields: { location: "graue-bucht" } })) if (cells.some(([x, y]) => e.fields.x === x && e.fields.y === y)) await space.takeIfExists({ id: e.id }, 0);
 }
 
-test("building: a hut is staked out only in the light and not on a way, filled exactly by ten at once, finished once by shared work", { timeout: 240_000 }, async () => {
+test("building: a hut is staked out only in the light and not on a way, filled exactly by twenty at once, finished once by shared work", { timeout: 240_000 }, async () => {
 	// 0.001: a world hour (the rest after work) is 3.6 s
 	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001" } });
 	try {
@@ -66,24 +66,31 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		// nobody walks into it
 		assert.match(await does(boss.p, "step 0 1", "Bau"), /Dort steht ein Bau/);
 
-		// ten people beside it, each with one piece of driftwood; they deliver at once: exactly six are taken
-		const ring: Array<[number, number]> = [[15, 11], [17, 11], [18, 11], [15, 14], [16, 14], [17, 14], [18, 14], [15, 12], [18, 12], [18, 13]];
+		// twenty people around it, beside it and two cells away (SITE_REACH: the 12 cells beside a 2×2 hut would not hold
+		// them), each with one piece of driftwood; they deliver at once: exactly six are taken
+		const ring: Array<[number, number]> = [[15, 11], [17, 11], [18, 11], [15, 12], [18, 12], [15, 13], [18, 13], [15, 14], [16, 14], [17, 14], [18, 14],
+			[14, 10], [15, 10], [16, 10], [17, 10], [18, 10], [19, 11], [19, 12], [19, 13], [19, 14]];
 		const crew: P[] = [];
 		for (let i = 0; i < ring.length; i++) { const a = await player(srv.url, `Helfer${i}`); await walk(a, s, ring[i]![0], ring[i]![1]); await give(s, a.me, "treibholz", 1); crew.push(a); }
 		await give(s, boss.me, "tangseil", 3);
-		const answers = await Promise.all(crew.map((a) => does(a.p, "liefere treibholz", /Du lieferst|genug/)));
+		const answers = await Promise.all(crew.map((a) => does(a.p, "liefere treibholz", /Du lieferst|genug|keine Baustelle|greifbar/)));
 		assert.equal(answers.filter((t) => t.startsWith("Du lieferst")).length, 6, answers.join("\n"));
+		// and nobody is told there is no site while another's delivery holds it
+		assert.equal(answers.filter((t) => /keine Baustelle|greifbar/.test(t)).length, 0, answers.join("\n"));
 		let left = 0;
 		for (const a of crew) left += await pack(s, a.me, "treibholz");
-		assert.equal(left, 4, "what it did not need stayed in the packs");
+		assert.equal(left, 14, "what it did not need stayed in the packs");
+		// three cells away is too far
+		assert.match(await does(guest, "arbeite", "näher"), /höchstens zwei Schritte/);
 		// more than it needs stays with the one who brings it
 		assert.match(await does(boss.p, "liefere 3 tangseil", "Du lieferst"), /2 Stück Tangseil/);
 		assert.equal(await pack(s, boss.me, "tangseil"), 1);
 
-		// shared work: eleven hands, twice each (a world hour's rest between), finish it once
+		// shared work: twenty-one hands finish it once (twenty points; whoever comes late finds it done)
 		const hands = [boss, ...crew];
-		const work = async () => Promise.all(hands.map((a) => does(a.p, "arbeite", /arbeitet an der Hütte|Arbeit getan|müde|keine Baustelle/)));
-		await work();
+		const work = async (some = hands) => Promise.all(some.map((a) => does(a.p, "arbeite", /arbeitet an der Hütte|Arbeit getan|müde|keine Baustelle/)));
+		// half of them first, so the rest after work shows before the hut stands
+		await work(hands.slice(0, 10));
 		assert.match(await does(boss.p, "arbeite", "müde"), /noch müde/);
 		// rounds after a rest until it stands (under load a hand may still be tired: its point comes a round later)
 		for (let i = 0; i < 6 && !(await s.readAll({ type: "Building" })).length; i++) { await new Promise((ok) => setTimeout(ok, 4_000)); await work(); }
@@ -161,7 +168,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		// demolition: half the material back, the chest into the pack, the land and the light free
 		await hut("b2");
 		await does(boss.p, "verstaue muschel", "Truhe");
-		assert.match(await does(boss.p, "reiße die hütte ab", "reißt"), /Siedlerin reißt die Hütte ab; die Fläche ist frei\. Zurück: 3 Treibholz, 1 Tangseil\. Aus der Truhe: 1 Dinge/);
+		assert.match(await does(boss.p, "reiße die hütte ab", "reißt die Hütte ab"), /Siedlerin reißt die Hütte ab; die Fläche ist frei\. Zurück: 3 Treibholz, 1 Tangseil\. Aus der Truhe: 1 Dinge/);
 		assert.equal(await plots(), 0);
 		assert.equal(await light(), 0);
 		assert.equal(await pack(s, boss.me, "treibholz"), 3);

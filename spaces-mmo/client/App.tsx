@@ -170,14 +170,16 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }:
 	// a site or building covers more than one cell: its entries on every one of them
 	for (const o of objs.values()) {
 		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
-		const beside = !!self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 1;
+		const dist = self ? Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) : Infinity;
+		// a site is worked on from two cells away (server: build.ts SITE_REACH), a building only from beside it
+		const beside = dist <= 1, nearSite = dist <= 2;
 		entries.push({ label: o.kind === "site" ? `Baustelle ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: "baustelle" });
 		if (o.kind === "building" && beside) {
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}
 		if (o.kind === "ruin" && o.owner === self?.name) entries.push({ label: "Nachlass abholen", line: "nachlass" });
-		if (o.kind === "site" && beside) {
+		if (o.kind === "site" && nearSite) {
 			entries.push({ label: "Mitarbeiten", line: "arbeite" });
 			// what one carries that it still needs
 			const carried = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name))];

@@ -89,7 +89,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const allowed = quota(Number(process.env.SPACES_MMO_REQ_PER_MIN ?? 120));
 	const loginByIp = quota(10), loginByName = quota(10);
 	const guestsByIp = quota(Number(process.env.SPACES_MMO_GUESTS_PER_HOUR ?? 5), 3600_000);
-	const registrationsByIp = quota(20, 24 * 3600_000);
+	const registrationsByIp = quota(Number(process.env.SPACES_MMO_REGISTRATIONS_PER_DAY ?? 20), 24 * 3600_000);
 
 	const json = (res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
 		res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });

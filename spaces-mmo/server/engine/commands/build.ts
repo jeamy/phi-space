@@ -14,7 +14,7 @@
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type PlotFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { worldNowOf } from "../clock.ts";
@@ -118,14 +118,31 @@ async function useLight(c: CommandCtx, beaconId: string, use: LightUseFields, de
 	catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal."); throw e; }
 }
 
-/** The site beside the actor (by plan name when given), taken in the transaction. */
+/** How far from a site one still delivers and works on it: two cells, so a crowd fits (a hut of 2×2 has 12 cells beside
+ *  it, 32 within two; one figure per cell). Chest, repair and demolition stay beside the building. */
+export const SITE_REACH = 2;
+
+/** The site within SITE_REACH of the actor (by plan name when given), taken in the transaction. */
 async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFields }> {
 	const sites = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e));
-	const near = sites.filter((s) => distTo(c.actor, s) <= 1 && (!name || planOf(c.world, name)?.key === s.plan || s.name.toLowerCase() === name.toLowerCase()));
-	if (!near.length) throw new NotUnderstood(sites.length ? "Geh näher an die Baustelle heran (direkt daneben)." : "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab.");
-	const e = await c.space.take({ type: "Site", fields: { buildId: near[0]!.buildId } }, 5_000, { txn: c.txn });
-	if (!e) throw new CommandError("Die Baustelle ist gerade nicht greifbar; bitte noch einmal.");
-	return { s: fieldsOf<SiteFields>(e) };
+	const named = (s: SiteFields) => !name || planOf(c.world, name)?.key === s.plan || s.name.toLowerCase() === name.toLowerCase();
+	const near = sites.filter((s) => distTo(c.actor, s) <= SITE_REACH && named(s));
+	if (near.length) {
+		const e = await c.space.take({ type: "Site", fields: { buildId: near[0]!.buildId } }, 5_000, { txn: c.txn });
+		if (!e) throw new CommandError("Die Baustelle ist gerade nicht greifbar; bitte noch einmal.");
+		return { s: fieldsOf<SiteFields>(e) };
+	}
+	// a site another delivery holds right now is not read (it is taken in that transaction); its cells are: wait for it
+	const plots = (await c.space.readAll({ type: "Plot", fields: { room: c.actor.room } })).map((e) => fieldsOf<PlotFields>(e));
+	const held = new Set(plots.filter((p) => distTo(c.actor, { x: p.x, y: p.y, w: 1, h: 1 }) <= SITE_REACH && !sites.some((s) => s.buildId === p.of)).map((p) => p.of));
+	for (const buildId of held) {
+		const e = await c.space.takeIfExists({ type: "Site", fields: { buildId } }, 5_000, { txn: c.txn });
+		if (!e) continue; // a building's cells, or the site was finished meanwhile
+		const s = fieldsOf<SiteFields>(e);
+		if (named(s)) return { s };
+		await c.space.write({ type: e.type, types: e.types.slice(1), fields: e.fields as never }, c.txn, FOREVER);
+	}
+	throw new NotUnderstood(sites.length ? "Geh näher an die Baustelle heran (höchstens zwei Schritte entfernt)." : "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab.");
 }
 
 /** Writes the site back, or, when nothing is missing, the building in its place. */
@@ -192,7 +209,7 @@ export const bau: Command = {
 
 const liefere: Command = {
 	key: "liefere", aliases: ["deliver"],
-	help: "liefere [n] <ding> – an die Baustelle neben dir liefern, was sie braucht (zu viel bleibt bei dir)",
+	help: "liefere [n] <ding> – an die Baustelle neben dir (bis zwei Schritte) liefern, was sie braucht (zu viel bleibt bei dir)",
 	async func(c, arg) {
 		const m = /^(?:(\d+)\s+)?(.+?)(?:\s+(?:an|zur|zu|to|für|fuer)\s+(?:die\s+|der\s+)?(.+))?$/i.exec(arg.trim());
 		if (!m) throw new NotUnderstood("Was lieferst du? Zum Beispiel: liefere 3 treibholz");
@@ -217,7 +234,7 @@ const liefere: Command = {
 
 const arbeite: Command = {
 	key: "arbeite", aliases: ["work"],
-	help: "arbeite – an der Baustelle neben dir mitarbeiten (danach ruhst du eine Weile)",
+	help: "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)",
 	async func(c, arg) {
 		const now = await worldNowOf(c.space, c.txn);
 		const rest = await peek(c.space, { type: "WorkRest", fields: { charId: c.actor.charId } });

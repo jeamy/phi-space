@@ -350,6 +350,7 @@ wieder gilt die `.env`. Das Fenster zeigt je Feld, woher der Wert gerade kommt.
 | Codewechsel eines Modell-NPC: Wartezeit (Minuten) | `SPACES_MMO_NPC_CODE_COOLDOWN_MIN` | 10 |
 | Anfragen je Minute und Verbindung | `SPACES_MMO_REQ_PER_MIN` | 120 |
 | Gäste je Stunde | `SPACES_MMO_GUESTS_PER_HOUR` | 5 |
+| Registrierungen je Tag | `SPACES_MMO_REGISTRATIONS_PER_DAY` | 20 |
 | Lebensdauer von Gästen | `SPACES_MMO_GUEST_TTL_MS` | 7 Tage |
 
 Die Höchstzahlen zählen die laufenden Figuren; ist die Grenze erreicht, wird ein weiterer Modell-NPC nicht gestartet

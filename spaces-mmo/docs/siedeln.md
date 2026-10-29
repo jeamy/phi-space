@@ -1,6 +1,7 @@
 # Siedeln, Bauen und Gärtnern (Entwurf)
 
-Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung). Noch nicht gebaut; ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
+Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung). Gebaut sind der Chat zwischen
+Spielern und Schritt 1 (Hütte und Baustelle, siehe „Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
 Gärten, Häuser, Werkstätten, Straßen, Kirchen, Kaufhäuser, später Eisenbahn. Er baut auf [spielidee.md](spielidee.md),
 [welt.md](welt.md), [goetter.md](goetter.md) und [automaten.md](automaten.md) auf.
 
@@ -430,7 +431,8 @@ Kein Spieler baut allein ein Haus in einem Befehl. Eine Baustelle ist ein Ort, a
 
 1. `bau hütte` auf freier, lichter Fläche legt eine **Baustelle** an: eine Entry mit dem Plan (was fehlt) und einer
    Lease (bleibt sie leer, verschwindet sie).
-2. Jeder kann liefern (`liefere 3 treibholz an baustelle`) oder Arbeit leisten (`arbeite an baustelle`). Lieferung und
+2. Jeder kann liefern (`liefere 3 treibholz an baustelle`) oder Arbeit leisten (`arbeite an baustelle`), auch aus zwei
+   Zellen Abstand, damit eine Menge um die Baustelle Platz hat. Lieferung und
    Fortschritt sind eine Transaktion: die Ware ist weg, der Fortschritt steht, nie halb. **Arbeit ist eine Ressource
    wie Material:** `arbeite` setzt Arbeitspunkte (mit Abklingzeit je Figur und Spieltag); eine Hütte braucht etwa
    zwanzig — eine einzelne Figur schafft sie in Tagen, viele Hände in Stunden.
@@ -635,8 +637,13 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Spawn und eine Seite jedes Feuers erreichbar bleiben; Lichtpunkte je Feuer (`LightUse`, 20 je Feuer, die Hütte
      1); höchstens die Hälfte von Nicht-Menschen; eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen. Die
      Karte zeigt Baustelle (mit Fortschritt) und Haus in 2D und 3D, die rechte Maustaste bietet Liefern und
-     Mitarbeiten an. Abnahme: zehn liefern gleichzeitig (der Fußabdruck der Hütte hat zwölf Nachbarzellen), genau
-     sechs Treibholz werden genommen, der Rest bleibt in den Taschen; elf Hände bauen sie genau einmal fertig.
+     Mitarbeiten an. Liefern und Mitarbeiten gehen aus bis zu zwei Zellen Abstand (`SITE_REACH`): direkt neben einer
+     2×2-Hütte liegen nur zwölf Zellen, mit einer Figur je Zelle zu wenig für zwanzig; im Abstand zwei sind es 32.
+     Truhe, Ausbessern und Abriss bleiben direkt am Bau. Hält gerade eine andere Lieferung die Baustelle (sie ist in
+     deren Transaktion genommen und darum nicht lesbar), wartet `liefere` auf sie über ihre Zellen, statt „keine
+     Baustelle“ zu melden. Abnahme: zwanzig liefern gleichzeitig, genau sechs Treibholz werden genommen, der Rest
+     bleibt in den Taschen, niemand hört „keine Baustelle“; einundzwanzig Hände bauen sie genau einmal fertig; aus drei
+     Zellen Abstand heißt es „Geh näher“.
    - **Teil 2, gebaut 2026-10-29:** die **Truhe** der Hütte (12 Plätze, nur der Besitzer: `truhe`, `verstaue`,
      `entnimm`, auch „leg … in die truhe“, „nimm … aus der truhe“); **Verfall**: ein Bau hält eine Woche, `repariere`
      (1 Treibholz, jeder darf) setzt die Frist neu; ein nicht gehaltener Bau wird zur **Ruine** (zehn Welttage, deckt
