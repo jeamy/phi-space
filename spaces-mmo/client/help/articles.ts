@@ -158,7 +158,7 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | Eingabe | Wirkung |
 | --- | --- |
 | Klick oder Tipp auf ein Feld | Dorthin gehen (\`move x y\`), der Server findet den Weg |
-| Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen, auf einer Figur „Chat mit …“, auf einer Baustelle liefern und mitarbeiten … |
+| Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen, auf einer Figur „Chat mit …“, auf einer Baustelle liefern und mitarbeiten, auf einem freien Feld **Bauen …** (Plan wählen, dann OK: die Baustelle beginnt an diesem Feld nach rechts unten) oder mit Spaten ein Beet umgraben; auf der eigenen Figur Umsehen, Inventar, wer spielt, Uhrzeit, Ruf, Baupläne, Samen sammeln |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
 | 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
 | 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
@@ -203,7 +203,7 @@ Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neb
 | Input | Effect |
 | --- | --- |
 | Click or tap a cell | Walk there (\`move x y\`), the server finds the way |
-| Right click or long press | Menu for that cell: look, pick up, add fuel, on a figure “Chat with …”, on a site deliver and help … |
+| Right click or long press | Menu for that cell: look, pick up, add fuel, on a figure “Chat with …”, on a site deliver and help, on a free cell **Build …** (pick a plan, then OK: the site starts at that cell towards the bottom right) or dig a bed with a spade; on your own figure look, inventory, who plays, time, reputation, plans, gather seeds |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
 | 2D: drag (zoomed in) | Move the view |
 | 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |

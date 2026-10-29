@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ThemeControls } from "./ThemeControls.tsx";
 import { AdminPanel } from "./AdminPanel.tsx";
 import { useTheme } from "./lib/theme.ts";
-import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
+import type { AtlasState, AtlasView, CharView, MsgView, ObjView, PlanView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { CommandHelp } from "./CommandHelp.tsx";
@@ -151,13 +151,16 @@ function About() {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; close: () => void; offer?: (name: string) => void;
+function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, offer, chat }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; plans: PlanView[]; guest: boolean; send: (line: string) => void; close: () => void; offer?: (name: string) => void;
 	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
 		window.addEventListener("keydown", key);
 		return () => window.removeEventListener("keydown", key);
 	}, [close]);
+	// building goes in steps: "Bauen …" → the plans → a plan with what it needs and OK
+	const [step, setStep] = useState<"plans" | PlanView | null>(null);
+	useEffect(() => setStep(null), [at]);
 	const reach = !!self && Math.max(Math.abs(at.x - self.x), Math.abs(at.y - self.y)) <= 1;
 	const fuel = fuelIn(objs, me);
 	const entries: Array<{ label: string; line: string; run?: () => void }> = [];
@@ -209,12 +212,31 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }:
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.name} gehen`, line: `go ${o.name}` });
 	}
 	if (!(self && self.x === at.x && self.y === at.y)) entries.push({ label: "Hierhin gehen", line: `move ${at.x} ${at.y}` });
+	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)
+	const covered = [...objs.values()].some((o) => o.location === room && o.kind !== "item" && at.x >= o.x && at.y >= o.y && at.x < o.x + (o.w ?? 1) && at.y < o.y + (o.h ?? 1));
+	if (!guest && plans.length && !covered) entries.push({ label: "Bauen …", line: "#bau", run: () => setStep("plans") });
+	if (!guest && !covered && [...objs.values()].some((o) => o.kind === "item" && o.location === me && o.name === "Spaten")) entries.push({ label: "Hier ein Beet umgraben", line: `umgraben ${at.x} ${at.y}` });
+	// on the own figure: what works without anything more
+	if (self && self.x === at.x && self.y === at.y) {
+		entries.push({ label: "Umsehen", line: "look" }, { label: "Was trage ich?", line: "inventory" }, { label: "Wer spielt?", line: "who" }, { label: "Uhrzeit", line: "time" }, { label: "Mein Ruf", line: "reputation" });
+		if (plans.length) entries.push({ label: "Baupläne", line: "bau" });
+		entries.push({ label: "Samen sammeln", line: "sammle samen" });
+	}
+	if (step === "plans") {
+		entries.length = 0;
+		for (const p of plans) entries.push({ label: `${p.name} (${p.w}×${p.h})`, line: `#plan ${p.key}`, run: () => setStep(p) });
+		entries.push({ label: "Zurück", line: "#zurück", run: () => setStep(null) });
+	} else if (step) {
+		entries.length = 0;
+		entries.push({ label: `OK: ${step.name} hier abstecken`, line: `bau ${step.key} ${at.x} ${at.y}` }, { label: "Zurück", line: "#zurück", run: () => setStep("plans") });
+	}
 	const left = Math.min(at.left, window.innerWidth - 220), top = Math.min(at.top, window.innerHeight - 40 * (entries.length + 1));
 	return (
 		<>
 			<div className="menu-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
 			<ul className="cell-menu" role="menu" style={{ left, top }}>
-				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (e.run) e.run(); else send(e.line); close(); }}>{e.label}</button></li>)}
+				{step && typeof step === "object" && <li className="menu-note">{step.name} ({step.w}×{step.h}) ab hier nach rechts unten: {step.needs}, {step.work} Arbeit</li>}
+				{entries.map((e) => <li key={e.line} role="menuitem"><button onClick={() => { if (e.run) { e.run(); if (!e.line.startsWith("#bau") && !e.line.startsWith("#plan") && !e.line.startsWith("#zurück")) close(); } else { send(e.line); close(); } }}>{e.label}</button></li>)}
 			</ul>
 		</>
 	);
@@ -266,29 +288,48 @@ function NameMenu({ at, name, groups, talk, invite, ignore, close }: { at: { lef
 function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }: { trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string) => void }) {
 	const carried = [...objs.values()].filter((o) => o.kind === "item" && o.location === me);
 	const others = [...chars.values()].filter((c) => c.charId !== me);
-	const [give, setGive] = useState<string[]>([]);
+	const [give, setGive] = useState("");
+	// what one carries, one line per kind with its count
+	const kinds = [...carried.reduce((m, o) => m.set(o.name, (m.get(o.name) ?? 0) + 1), new Map<string, number>())].sort(([a], [b]) => a.localeCompare(b));
+	// a click on a kind adds one of it to "Du gibst" ("muschel" → "2 muschel"), up to what one carries
+	const addGive = (name: string, max: number) => setGive((g) => {
+		const parts = g.split(",").map((p) => p.trim()).filter(Boolean);
+		const key = name.toLowerCase();
+		const i = parts.findIndex((p) => (/^(\d+)\s*x?\s+(.+)$/i.exec(p)?.[2] ?? p).toLowerCase() === key);
+		if (i < 0) return [...parts, `1 ${key}`].join(", ");
+		const n = Number(/^(\d+)/.exec(parts[i]!)?.[1] ?? 1);
+		parts[i] = `${Math.min(max, n + 1)} ${key}`;
+		return parts.join(", ");
+	});
 	const [want, setWant] = useState("");
 	const [sell, setSell] = useState(""), [price, setPrice] = useState("2");
-	const wants = (w: Array<{ name: string; count: number }>) => (w.length ? ` für ${w.map((x) => `${x.count}× ${x.name}`).join(", ")}` : " als Geschenk");
+	// things by kind with their count ("4× Münze für Perle"), as the server's messages say it
+	const counted = (xs: string[] | Array<{ name: string; count: number }>) => {
+		const m = new Map<string, number>();
+		for (const x of xs) { const [n, k] = typeof x === "string" ? [x, 1] : [x.name.charAt(0).toUpperCase() + x.name.slice(1), x.count]; m.set(n, (m.get(n) ?? 0) + k); }
+		return [...m].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n)).join(", ");
+	};
+	const wants = (w: Array<{ name: string; count: number }>) => (w.length ? ` für ${counted(w)}` : " als Geschenk");
 	const has = trade.offersIn.length || trade.offersOut.length || trade.orders || trade.myOrder || trade.listings || offerTo;
 	if (!has) return null;
 	return (
 		<div className="things trade">
 			{trade.offersIn.length > 0 && <><h3>Angebote an dich</h3><ul>{trade.offersIn.map((o) => (
-				<li key={o.offerId}><span>{o.fromName}: {o.giveNames.join(", ")}{wants(o.want)}</span><button onClick={() => send(`accept ${o.fromName}`)}>Annehmen</button><button onClick={() => send(`decline ${o.fromName}`)}>Ablehnen</button></li>
+				<li key={o.offerId}><span>{o.fromName}: {counted(o.giveNames)}{wants(o.want)}</span><button onClick={() => send(`accept ${o.fromName}`)}>Annehmen</button><button onClick={() => send(`decline ${o.fromName}`)}>Ablehnen</button></li>
 			))}</ul></>}
 			{trade.offersOut.length > 0 && <><h3>Deine Angebote</h3><ul>{trade.offersOut.map((o) => (
-				<li key={o.offerId}><span>an {o.toName}: {o.giveNames.join(", ")}{wants(o.want)}</span><button onClick={() => send("offer zurück")}>Zurücknehmen</button></li>
+				<li key={o.offerId}><span>an {o.toName}: {counted(o.giveNames)}{wants(o.want)}</span><button onClick={() => send("offer zurück")}>Zurücknehmen</button></li>
 			))}</ul></>}
 			{offerTo !== null && !guest && (
-				<form className="trade-form" onSubmit={(e) => { e.preventDefault(); if (!offerTo || !give.length) return; send(`offer ${give.map((g) => g.replace(/#\d+$/, "")).join(", ")} an ${offerTo}${want.trim() ? ` für ${want.trim()}` : ""}`); setGive([]); setWant(""); setOfferTo(null); }}>
+				<form className="trade-form" onSubmit={(e) => { e.preventDefault(); if (!offerTo || !give.trim()) return; send(`offer ${give.trim()} an ${offerTo}${want.trim() ? ` für ${want.trim()}` : ""}`); setGive(""); setWant(""); setOfferTo(null); }}>
 					<h3>Tausch anbieten</h3>
 					<label>An <select value={offerTo} onChange={(e) => setOfferTo(e.target.value)}><option value="">wählen …</option>{others.map((c) => <option key={c.charId} value={c.name}>{c.name}</option>)}</select></label>
-					<div className="checks">{carried.length ? carried.map((o, i) => (
-						<label key={o.id}><input type="checkbox" checked={give.includes(`${o.name}#${i}`)} onChange={(e) => setGive((g) => (e.target.checked ? [...g, `${o.name}#${i}`] : g.filter((x) => x !== `${o.name}#${i}`)))} />{o.name}</label>
-					)) : <span className="muted">Du trägst nichts.</span>}</div>
+					{kinds.length ? <ul className="carried" aria-label="Was du trägst">{kinds.map(([name, n]) => (
+						<li key={name}><button type="button" onClick={() => addGive(name, n)} title={`1 ${name} dazugeben`}><span>{name}</span><span className="count">{n}×</span></button></li>
+					))}</ul> : <span className="muted">Du trägst nichts.</span>}
+					<label>Du gibst <input value={give} onChange={(e) => setGive(e.target.value)} placeholder="z. B. 2 muschel, tang" /></label>
 					<label>Dafür (leer: Geschenk) <input value={want} onChange={(e) => setWant(e.target.value)} placeholder="z. B. 2 münze" /></label>
-					<div className="row"><button className="primary" disabled={!offerTo || !give.length}>Anbieten</button><button type="button" onClick={() => setOfferTo(null)}>Abbrechen</button></div>
+					<div className="row"><button className="primary" disabled={!offerTo || !give.trim()}>Anbieten</button><button type="button" onClick={() => setOfferTo(null)}>Abbrechen</button></div>
 				</form>
 			)}
 			{offerTo === null && !guest && others.length > 0 && carried.length > 0 && <button className="link" onClick={() => setOfferTo("")}>Tausch anbieten …</button>}
@@ -726,7 +767,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
 						onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 				) : <div className="map"><p className="muted">Verbinde …</p></div>}
-				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }}
+				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} plans={hello.world.plans ?? []} guest={account.guest} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }}
 					chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 				{nameMenu && <NameMenu at={nameMenu} name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
 					talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}

@@ -22,6 +22,8 @@ import type { WsConnection } from "phi-spaces/ws";
 export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
+/** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
+export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number };
 /** A site or building (docs/siedeln.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
@@ -51,7 +53,7 @@ export type TradeView = {
 };
 /** Frames to the browser. */
 export type ServerFrame =
-	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[] }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
+	| { t: "hello"; build: string | null; world: Pick<WorldDef, "id" | "title" | "tileSize" | "tiles" | "skins" | "decor"> & { fuels: string[]; icons: string[]; plans: PlanView[] }; me: { charId: string; name: string; guest: boolean; admin: boolean }; room: RoomFields; chars: CharView[]; objs: ObjView[]; log: MsgView[]; fog: number; now: number; worldTime: WorldTimeView | null }
 	| { t: "fog"; level: number }
 	/** The world clock changed (or the regular reminder): the browser interpolates from it; it decides nothing by it. */
 	| { t: "time"; time: WorldTimeView }
@@ -331,6 +333,11 @@ export class Gateway {
 		catch { c.ws.send({ t: "msg", m: { kind: "error", text: "Die Welt ist gerade nicht erreichbar; bitte gleich noch einmal.", from: "", at: Date.now() } } satisfies ServerFrame); }
 	}
 
+	/** The building plans for the page's cell menu, with what each needs as text. */
+	#plans(): PlanView[] {
+		const name = (k: string) => this.w.prototypes.find((p) => p.key === k)?.name ?? k;
+		return (this.w.building?.plans ?? []).map((p) => ({ key: p.key, name: p.name, w: p.w, h: p.h, needs: p.needs.map((n) => `${n.count} ${name(n.proto)}`).join(", "), work: p.work }));
+	}
 	#hello(c: Client): void {
 		const self = this.#chars.get(c.me.charId);
 		const room = self ? this.#rooms.get(self.room) : undefined;
@@ -344,7 +351,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set(this.#protoIcons.values())] }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set(this.#protoIcons.values())], plans: this.#plans() }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */

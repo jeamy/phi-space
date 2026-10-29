@@ -44,7 +44,7 @@ test("a trader offers coins for what one carries, takes a fair offer, turns down
 		await stack.npcProcess();
 		// he sees the wood and offers for it
 		// meant for her: the page sets it apart
-		assert.equal((await msg(a.p, (t) => t.startsWith("Kalle bietet dir Münze, Münze für 1× treibholz"), 0, 20_000)).m.toMe, true, "an offer to her");
+		assert.equal((await msg(a.p, (t) => t.startsWith("Kalle bietet dir 2× Münze für Treibholz"), 0, 20_000)).m.toMe, true, "an offer to her");
 		a.p.send("accept Kalle");
 		await eventually(async () => (await pack(s, a.me, "muenze")) === 2, 10_000, "two coins for the wood");
 		assert.equal(await pack(s, "npc-kalle", "treibholz"), 1, "the wood is his");

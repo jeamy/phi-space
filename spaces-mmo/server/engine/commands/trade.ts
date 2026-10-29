@@ -59,6 +59,12 @@ function noGuest(c: CommandCtx): void {
 	if (!c.account || c.account.guest) throw new CommandError("Gäste können nicht tauschen oder handeln; registriere dich dafür.");
 }
 const list = (xs: string[]) => xs.join(", ");
+/** Things by kind with their count: ["Münze", "Münze", "Perle"] → "2× Münze, Perle"; `want` specs likewise. */
+export function counted(xs: string[] | Array<{ name: string; count: number }>): string {
+	const m = new Map<string, number>();
+	for (const x of xs) { const [n, k] = typeof x === "string" ? [x, 1] : [x.name.charAt(0).toUpperCase() + x.name.slice(1), x.count]; m.set(n, (m.get(n) ?? 0) + k); }
+	return list([...m].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n)));
+}
 
 const offer: Command = {
 	key: "offer", aliases: ["biete", "tausche"],
@@ -79,9 +85,9 @@ const offer: Command = {
 		const want = m[3] ? parseSpec(m[3]) : [];
 		const o: OfferFields = { offerId: `o-${randomBytes(5).toString("hex")}`, from: c.actor.charId, fromName: c.actor.name, to: who.charId, toName: who.name, give: got.items.map((i) => i.f.itemId), giveNames: got.items.map((i) => i.f.name), want, room: c.actor.room, at: Date.now() };
 		await c.space.write({ type: "Offer", fields: o as never }, c.txn, OFFER_MS);
-		const wants = want.length ? ` für ${list(want.map((w) => `${w.count}× ${w.name}`))}` : " als Geschenk";
-		await msg(c, who.charId, "info", `${c.actor.name} bietet dir ${list(o.giveNames)}${wants} an. „accept ${c.actor.name}“ nimmt an, „decline ${c.actor.name}“ lehnt ab.`);
-		await msg(c, c.actor.charId, "info", `Du bietest ${who.name} ${list(o.giveNames)}${wants} an.`);
+		const wants = want.length ? ` für ${counted(want)}` : " als Geschenk";
+		await msg(c, who.charId, "info", `${c.actor.name} bietet dir ${counted(o.giveNames)}${wants} an. „accept ${c.actor.name}“ nimmt an, „decline ${c.actor.name}“ lehnt ab.`);
+		await msg(c, c.actor.charId, "info", `Du bietest ${who.name} ${counted(o.giveNames)}${wants} an.`);
 	},
 };
 
@@ -114,9 +120,9 @@ const accept: Command = {
 		const got = pick(await inventory(c), o.f.want);
 		if ("missing" in got) throw new CommandError(`Dir fehlt für diesen Tausch: ${got.missing}.`);
 		for (const i of got.items) await move(c, i.f, c.actor.charId, o.f.from);
-		const back = got.items.length ? ` gegen ${list(got.items.map((i) => i.f.name))}` : "";
-		await msg(c, o.f.from, "info", `${c.actor.name} nimmt dein Angebot an: ${list(o.f.giveNames)}${back}.`);
-		await msg(c, c.actor.charId, "info", `Tausch mit ${o.f.fromName}: du bekommst ${list(o.f.giveNames)}${back}.`);
+		const back = got.items.length ? ` gegen ${counted(got.items.map((i) => i.f.name))}` : "";
+		await msg(c, o.f.from, "info", `${c.actor.name} nimmt dein Angebot an: ${counted(o.f.giveNames)}${back}.`);
+		await msg(c, c.actor.charId, "info", `Tausch mit ${o.f.fromName}: du bekommst ${counted(o.f.giveNames)}${back}.`);
 	},
 };
 

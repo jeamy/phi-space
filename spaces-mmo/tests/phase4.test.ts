@@ -40,8 +40,8 @@ test("trade: an offer moves both sides at once on accept; a stale one moves noth
 		const a = await player(srv.url, "Anbieter"), b = await player(srv.url, "Nehmer");
 		const [wood] = await give(s, a.me, "treibholz", 1);
 		const [shell] = await give(s, b.me, "muschel", 1);
-		await does(a.p, "offer treibholz an Nehmer für muschel", "Du bietest Nehmer Treibholz für 1× muschel an.");
-		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Anbieter bietet dir Treibholz für 1× muschel an."));
+		await does(a.p, "offer treibholz an Nehmer für muschel", "Du bietest Nehmer Treibholz für Muschel an.");
+		await b.p.until((f) => f.t === "msg" && f.m.text.startsWith("Anbieter bietet dir Treibholz für Muschel an."));
 		await does(b.p, "accept", "Tausch mit Anbieter");
 		assert.equal((await pack(s, b.me)).map((i) => i.itemId).join(), wood);
 		assert.equal((await pack(s, a.me)).map((i) => i.itemId).join(), shell);

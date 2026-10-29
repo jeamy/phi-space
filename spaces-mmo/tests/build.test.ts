@@ -144,7 +144,7 @@ test("building, part 2: the chest is the owner's; anyone repairs; a building not
 		assert.match(await does(boss.p, "nimm 1 muschel aus der truhe", "aus der Truhe"), /Du nimmst 1 Muschel/);
 		assert.equal(await pack(s, boss.me, "muschel"), 2);
 		// anyone repairs, with material
-		assert.match(await does(other.p, "repariere", "Treibholz"), /brauchst du 1 Treibholz/);
+		assert.match(await does(other.p, "repariere", "brauchst du"), /brauchst du 1 Treibholz/);
 		await give(s, other.me, "treibholz", 1);
 		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 7 Tage/);
 
