@@ -23,8 +23,8 @@ export type Codemode = { CodemodeSandbox: new (o: { timeoutMs: number; tools: []
 
 /** The default time a contribution has for all its cases and the bench; a custom task may set its own (timeoutMs). */
 export const TIMEOUT_MS = 5000;
-/** The most a custom task may allow per contribution: CODEMODE_MAX_TIMEOUT_S, default 60 s. */
-export const maxTimeoutMs = (): number => { const s = Number(process.env.CODEMODE_MAX_TIMEOUT_S ?? 60); return Number.isFinite(s) && s >= 1 ? Math.round(s * 1000) : 60_000; };
+/** The most a custom task may allow per contribution: CODEMODE_MAX_TIMEOUT_S, default 600 s. */
+export const maxTimeoutMs = (): number => { const s = Number(process.env.CODEMODE_MAX_TIMEOUT_S || 600); return Number.isFinite(s) && s >= 1 ? Math.round(s * 1000) : 600_000; };
 /** The time limit of a task's contributions. */
 export const limitOf = (task: Task): number => task.timeoutMs ?? TIMEOUT_MS;
 export const MAX_SOURCE_CHARS = 16_000;

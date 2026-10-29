@@ -225,6 +225,17 @@ t("deleting a task block removes its entries; the active block moves on; a runni
 		// unknown block
 		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: "nope" })).status, 400);
 
+		// a block stays a year (CODEMODE_TTL_HOURS) and a person extends it from now: the CodeTask notes the new end
+		const yearMs = 8760 * 3600_000, kept = afterFirst.blocks[0].until as number;
+		assert.ok(Math.abs(kept - (Date.now() + yearMs)) < 120_000, `until ${kept}`);
+		const ext = await post(srv.url, "/api/sessions/del1/extend", { blockId: second });
+		assert.equal(ext.status, 200);
+		const ends = ext.body.until as number;
+		assert.ok(ends >= kept && Math.abs(ends - (Date.now() + yearMs)) < 120_000, `extended ${ends}`);
+		assert.equal((await get()).blocks[0].until, ends);
+		assert.equal(await judged(), 1); // its score stays
+		assert.equal((await post(srv.url, "/api/sessions/del1/extend", { blockId: "nope" })).status, 400);
+
 		// delete the last block: the room is empty and stays empty (no replacement block, also not when it loads again)
 		assert.equal((await post(srv.url, "/api/sessions/del1/delete", { blockId: second })).status, 200);
 		const afterAll = await get();
@@ -405,8 +416,8 @@ t("code full of control characters does not blow the frame up (JSON escapes coun
 test("CODEMODE_TTL_HOURS: hours to a lease, 0 = no expiry, garbage refused", async () => {
 	const { entryLeaseMs } = await import("../server/space.ts");
 	const { FOREVER } = await import("phi-spaces");
-	assert.equal(entryLeaseMs(undefined), 24 * 3600_000);
-	assert.equal(entryLeaseMs(""), 24 * 3600_000);
+	assert.equal(entryLeaseMs(undefined), 8760 * 3600_000);
+	assert.equal(entryLeaseMs(""), 8760 * 3600_000);
 	assert.equal(entryLeaseMs("168"), 168 * 3600_000);
 	assert.equal(entryLeaseMs("0.5"), 1800_000);
 	assert.equal(entryLeaseMs("0"), FOREVER);
@@ -732,7 +743,7 @@ t("a custom task may allow more time: a slow but right function passes, timed by
 	const v = await judge(cm!, long, slowSrc);
 	assert.equal(v.ok, true, v.error ?? "");
 	assert.ok(v.ms >= 5900 && v.ms < 8000, `ms ${v.ms}`); // one pass, no second bench round that would not fit
-	assert.throws(() => customTask({ fn: "f", prompt: "", cases: [{ args: [], expect: 1 }], timeoutS: 600 }), /1 to 60 seconds/);
+	assert.throws(() => customTask({ fn: "f", prompt: "", cases: [{ args: [], expect: 1 }], timeoutS: 601 }), /1 to 600 seconds/);
 	const { teamPrompt } = await import("../server/llm.ts");
 	assert.ok(teamPrompt({ task: long, lang: "en", agent: 0, gen: 0 }).user.includes("within 9 seconds"));
 });

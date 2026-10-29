@@ -127,7 +127,7 @@ Wähle im Dropdown **„Eigene Aufgabe …"**. Dann erscheinen drei Felder:
 
 - **Funktionsname:** ein gültiger JavaScript-Name, höchstens 40 Zeichen.
 - **Beschreibung:** was die Funktion tun soll (höchstens 600 Zeichen); sie wird den Agenten gezeigt, zusammen mit den Testfällen.
-- **Zeitlimit je Beitrag:** wie lange ein Beitrag für alle Fälle zusammen rechnen darf: ab 1 Sekunde bis zur Obergrenze des Servers, die neben dem Feld steht (Standard 5 Sekunden; die Obergrenze setzt \`CODEMODE_MAX_TIMEOUT_S\`, Standard 60). Schwere Aufgaben brauchen mehr; die Agenten kennen das Limit. Brauchen die Fälle schon mehr als ein Drittel davon, wird nur ihre Zeit gemessen, ohne zweiten Durchgang.
+- **Zeitlimit je Beitrag:** wie lange ein Beitrag für alle Fälle zusammen rechnen darf: ab 1 Sekunde bis zur Obergrenze des Servers, die neben dem Feld steht (Standard 5 Sekunden; die Obergrenze setzt \`CODEMODE_MAX_TIMEOUT_S\`, Standard 600). Schwere Aufgaben brauchen mehr; die Agenten kennen das Limit. Brauchen die Fälle schon mehr als ein Drittel davon, wird nur ihre Zeit gemessen, ohne zweiten Durchgang.
 - **Testfälle:** JSON, zum Beispiel \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 bis 50 Fälle, zusammen höchstens 32 000 Zeichen.
   Du kannst auch **einfachen Text** schreiben; er wird beim Start automatisch in JSON umgewandelt, und das Feld zeigt danach das JSON:
 
@@ -202,7 +202,7 @@ Choose **"Custom task …"** in the dropdown. Three fields appear:
 
 - **Function name:** a valid JavaScript name, at most 40 characters.
 - **Description:** what the function should do (at most 600 characters); it is shown to the agents, together with the test cases.
-- **Time limit per contribution:** how long a contribution may compute for all cases together: from 1 second up to the server's upper bound shown next to the field (default 5 seconds; \`CODEMODE_MAX_TIMEOUT_S\` sets the bound, default 60). Hard tasks need more; the agents know the limit. When the cases alone take more than a third of it, only their time is measured, without a second pass.
+- **Time limit per contribution:** how long a contribution may compute for all cases together: from 1 second up to the server's upper bound shown next to the field (default 5 seconds; \`CODEMODE_MAX_TIMEOUT_S\` sets the bound, default 600). Hard tasks need more; the agents know the limit. When the cases alone take more than a third of it, only their time is measured, without a second pass.
 - **Test cases:** JSON, for example \`[{"args":[2],"expect":4},{"args":[5],"expect":10}]\`. 1 to 50 cases, at most 32,000 characters together.
   You can also write **plain text**; it is turned into JSON automatically when you start, and the field then shows the JSON:
 
@@ -468,7 +468,7 @@ Die Sandbox ist QuickJS (WebAssembly) aus \`@earendil-works/pi-codemode\`. Sie h
 
 | Limit | Wert |
 |---|---|
-| Zeitlimit | 5 Sekunden; eigene Aufgaben wählen es selbst (Feld „Zeitlimit je Beitrag“), höchstens \`CODEMODE_MAX_TIMEOUT_S\` (Standard 60 Sekunden) |
+| Zeitlimit | 5 Sekunden; eigene Aufgaben wählen es selbst (Feld „Zeitlimit je Beitrag“), höchstens \`CODEMODE_MAX_TIMEOUT_S\` (Standard 600 Sekunden) |
 | Arbeitsspeicher | 64 MiB |
 | Quelltext | höchstens 16 000 Zeichen |
 | Parallele Sandboxes | höchstens 2 je Prozess |
@@ -536,7 +536,7 @@ The sandbox is QuickJS (WebAssembly) from \`@earendil-works/pi-codemode\`. It ha
 
 | Limit | Value |
 |---|---|
-| Time limit | 5 seconds; custom tasks choose their own (field "Time limit per contribution"), at most \`CODEMODE_MAX_TIMEOUT_S\` (default 60 seconds) |
+| Time limit | 5 seconds; custom tasks choose their own (field "Time limit per contribution"), at most \`CODEMODE_MAX_TIMEOUT_S\` (default 600 seconds) |
 | Memory | 64 MiB |
 | Source | at most 16,000 characters |
 | Parallel sandboxes | at most 2 per process |
@@ -777,9 +777,9 @@ Die Server lesen \`codemode-chat/.env\` selbst; echte Umgebungsvariablen haben V
 | \`CODEMODE_LLM_PER_DAY\` | Modellaufrufe pro Tag, Standard 500 (Kostendeckel) |
 | \`CODEMODE_JUDGES\` | judge: parallele Bewerter je Prozess, Standard 2 |
 | \`CODEMODE_JUDGE_LEASE_MS\` | judge: Lease der Transaktion eines Bewerters; stirbt er, ist sein Beitrag danach wieder frei, Standard 60 000 |
-| \`CODEMODE_TTL_HOURS\` | Lebensdauer der Einträge eines Raums in Stunden, Standard 24; \`0\` = bis der Block gelöscht wird |
+| \`CODEMODE_TTL_HOURS\` | Lebensdauer der Einträge eines Raums in Stunden, Standard 8760 (ein Jahr); ⟳ am Block verlängert ihn um so viel ab jetzt, 🗑 löscht ihn; \`0\` = bis der Block gelöscht wird |
 | \`CODEMODE_ADMIN_PASSWORD\` | Hub: Passwort des Admin-Logins (Panel links unten; für Skripte als Header \`x-admin-token\`); leer = kein Admin. Älterer Name: \`CODEMODE_ADMIN_TOKEN\` |
-| \`CODEMODE_MAX_TIMEOUT_S\` | höchstes Zeitlimit je Beitrag, das eine eigene Aufgabe wählen darf, Standard 60; das Formularfeld richtet sich danach. Ein langes Limit belegt einen Bewerter entsprechend lange |
+| \`CODEMODE_MAX_TIMEOUT_S\` | höchstes Zeitlimit je Beitrag, das eine eigene Aufgabe wählen darf, Standard 600; das Formularfeld richtet sich danach. Ein langes Limit belegt einen Bewerter entsprechend lange |
 | \`CODEMODE_REQ_PER_MIN\` | Hub: API-Anfragen und WebSocket-Verbindungen je Client-IP und Minute, Standard 120 |
 | \`PI_AUTH_DIR\` | Pfad der pi-Zugangsdaten für den Container |
 | \`CODEMODE_DEV_ORIGINS\` | nur Dev-Modus: weitere Hosts, unter denen die Seite geöffnet wird (z. B. eine LAN-IP); \`localhost\` und \`127.0.0.1\` gehen immer |
@@ -835,9 +835,9 @@ The servers read \`codemode-chat/.env\` themselves; real environment variables w
 | \`CODEMODE_LLM_PER_DAY\` | model calls per day, default 500 (cost cap) |
 | \`CODEMODE_JUDGES\` | judge: parallel judges per process, default 2 |
 | \`CODEMODE_JUDGE_LEASE_MS\` | judge: lease of a judge's transaction; when it dies, its contribution is free again after it, default 60,000 |
-| \`CODEMODE_TTL_HOURS\` | lifetime of a room's entries in hours, default 24; \`0\` = until the block is deleted |
+| \`CODEMODE_TTL_HOURS\` | lifetime of a room's entries in hours, default 8760 (a year); ⟳ on a block extends it by as much from now, 🗑 deletes it; \`0\` = until the block is deleted |
 | \`CODEMODE_ADMIN_PASSWORD\` | hub: password of the admin login (panel at the bottom left; for scripts as the header \`x-admin-token\`); empty = no admin. Older name: \`CODEMODE_ADMIN_TOKEN\` |
-| \`CODEMODE_MAX_TIMEOUT_S\` | the longest time limit per contribution a custom task may choose, default 60; the form's field follows it. A long limit keeps one judge busy that long |
+| \`CODEMODE_MAX_TIMEOUT_S\` | the longest time limit per contribution a custom task may choose, default 600; the form's field follows it. A long limit keeps one judge busy that long |
 | \`CODEMODE_REQ_PER_MIN\` | hub: API requests and WebSocket connects per client IP and minute, default 120 |
 | \`PI_AUTH_DIR\` | path of the pi credentials for the container |
 | \`CODEMODE_DEV_ORIGINS\` | dev mode only: further hosts the page is opened from (e.g. a LAN IP); \`localhost\` and \`127.0.0.1\` always work |
@@ -975,6 +975,7 @@ Die Oberfläche nutzt eine kleine JSON-API. Alle Antworten sind JSON; Fehler hab
 | \`POST /api/sessions/:id/stop\` | Lauf stoppen |
 | \`POST /api/sessions/:id/code\` | Code einreichen: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | Block löschen: \`{blockId}\` |
+| \`POST /api/sessions/:id/extend\` | Block verlängern (alle seine Einträge bleiben wieder \`CODEMODE_TTL_HOURS\` ab jetzt): \`{blockId}\` → \`{until}\` |
 | \`POST /api/sessions/:id/veto\` | Beitrag abwerten: \`{candidateId, by, reason}\`; mit \`undo: true\` zurücknehmen |
 | \`GET /api/admin/session\` · \`POST /api/admin/login\` · \`POST /api/admin/logout\` | Admin-Anmeldung mit \`{token}\` (HttpOnly-Cookie; Änderungen brauchen zusätzlich den Header \`x-codemode-admin: 1\`) |
 | \`GET\`/\`POST /api/admin/models\` | alle Modelle mit Zugangsdaten und die erlaubten; \`{allowed: [labels] | null, on?}\` speichert die Auswahl |
@@ -1028,6 +1029,7 @@ The interface uses a small JSON API. All answers are JSON; errors have status 40
 | \`POST /api/sessions/:id/stop\` | stop the run |
 | \`POST /api/sessions/:id/code\` | hand in code: \`{author,source}\` |
 | \`POST /api/sessions/:id/delete\` | delete a block: \`{blockId}\` |
+| \`POST /api/sessions/:id/extend\` | extend a block (all its entries stay \`CODEMODE_TTL_HOURS\` from now again): \`{blockId}\` → \`{until}\` |
 | \`POST /api/sessions/:id/veto\` | reject a contribution: \`{candidateId, by, reason}\`; \`undo: true\` withdraws it |
 | \`GET /api/admin/session\` · \`POST /api/admin/login\` · \`POST /api/admin/logout\` | admin sign-in with \`{token}\` (HttpOnly cookie; changes also need the header \`x-codemode-admin: 1\`) |
 | \`GET\`/\`POST /api/admin/models\` | every model with credentials and the allowed ones; \`{allowed: [labels] | null, on?}\` saves the choice |

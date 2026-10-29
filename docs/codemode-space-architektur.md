@@ -313,7 +313,9 @@ Der web-Prozess folgt `changes` per Long-Poll und schickt entprellte Snapshots.
   Leseprotokoll bauen, das eine Revision festhält. Vor weiterer Optimierung Bytes, Anzahl der Abfragen und Latenz über TCP
   messen.
 
-Einträge eines Raums leben standardmäßig 24 h (`CODEMODE_TTL_HOURS`); 0 behält sie bis zum Löschen. Ablauf einzelner
+Einträge eines Raums leben standardmäßig ein Jahr (`CODEMODE_TTL_HOURS`, 8760 h); 0 behält sie bis zum Löschen. Ein
+Mensch verlängert einen Block (⟳, `Hub.extendBlock`: jede Lease seiner Einträge wird erneuert, der `CodeTask` trägt das
+neue Ende `until`) oder löscht ihn. Ablauf einzelner
 Einträge ist nicht dasselbe wie Inaktivität des Raums: Aufgaben, Urteile, Verweise auf das beste Ergebnis und die Arbeit
 eines Laufs können zu verschiedenen Zeiten ablaufen.
 

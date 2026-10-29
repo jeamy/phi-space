@@ -204,7 +204,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				}
 				return;
 			}
-			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete|veto|hint|accept))?$/.exec(p);
+			const m = /^\/api\/sessions\/([^/]+)(?:\/(task|run|stop|code|delete|extend|veto|hint|accept))?$/.exec(p);
 			if (m) {
 				const id = m[1]!, action = m[2];
 				if (!ID.test(id)) return json(res, 400, { error: "Invalid session id" });
@@ -227,6 +227,7 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 					await hub.accept(id, String(b.candidateId), b);
 				}
 				else if (action === "delete") await hub.deleteBlock(id, String(b.blockId ?? ""));
+				else if (action === "extend") return json(res, 200, { ok: true, ...(await hub.extendBlock(id, String(b.blockId ?? ""))) }); // another CODEMODE_TTL_HOURS
 				else if (action === "hint") await hub.hint(id, b); // a person's guidance for the agents ({blockId?, text, by})
 				else if (action === "veto") { // a person's "not like this" on a contribution ({candidateId, by, reason, undo})
 					if (!CANDIDATE.test(String(b.candidateId ?? ""))) return json(res, 400, { error: "Invalid id" });

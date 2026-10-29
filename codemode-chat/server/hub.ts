@@ -31,6 +31,8 @@ import { lineDiff, shareOf, type LineDiff } from "./lineage.ts";
 import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting, type ProcessInfo } from "./space.ts";
 import type { WsConnection } from "phi-spaces/ws";
 
+/** The entry types that belong to a task block besides its CodeTask (deleted and extended with it). */
+const BLOCK_TYPES = ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "ChatMessage"];
 const LIMITS = { agents: 8, gens: 10, perAgent: 3, polish: 3, boardDepth: 12, plans: 500, sessions: 50, messages: 500, contributions: 1000, blocks: 60, notes: 300 };
 /** Code a snapshot carries at most, counted as encoded JSON (escapes included); the rest is fetched per contribution
  *  (`source()`), so a frame stays far below the 1 MiB WebSocket limit however many contributions a room holds. */
@@ -322,7 +324,7 @@ export class CodeChatHub {
 	/** Opens a new task block: from now on candidates, scores and the best code belong to it. */
 	async #openBlock(s: Session, task: Task, announce: boolean, extra: Record<string, unknown> = {}): Promise<void> {
 		const blockId = `b${Date.now().toString(36)}${rid()}`;
-		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...(task.id === "custom" ? { custom: customSpec(task) } : {}), ...(isText(task) ? { text: textSpec(task) } : {}), ...extra } as never }, null, this.#ttl);
+		await this.host.write({ type: "CodeTask", fields: { session: s.id, blockId, taskId: task.id, ts: Date.now(), ...this.#until(), ...(task.id === "custom" ? { custom: customSpec(task) } : {}), ...(isText(task) ? { text: textSpec(task) } : {}), ...extra } as never }, null, this.#ttl);
 		s.task = task; s.blockId = blockId; // only once the block exists
 		if (announce) await this.#write(s, "system", `Task: ${task.title.en} (${task.fn})`, s.blockId);
 	}
@@ -442,7 +444,7 @@ export class CodeChatHub {
 			// case results never ride along (details() has them); code within the budget does
 			const slim = <T extends { candidateId: string; source?: string; cases?: unknown }>(c: T): T => { const { cases: _cases, ...rest } = c; return (withCode && keep.has(c.candidateId) ? rest : { ...rest, source: undefined, sourceOmitted: true }) as T; };
 			const blocks = raw.map(({ f, task, blockId, contributions, best, spent }) => ({
-				blockId, ts: f.ts as number, active: blockId === s.blockId,
+				blockId, ts: f.ts as number, active: blockId === s.blockId, ...(typeof f.until === "number" ? { until: f.until } : {}),
 				task: { id: task.id, fn: task.fn, title: task.title, prompt: task.prompt, cases: task.id === "custom" ? task.cases.length : undefined, ...(isText(task) ? { kind: "text", criteria: task.criteria, criteriaBy: task.criteriaBy } : {}), ...(task.check !== undefined ? { check: task.check, checkBy: task.checkBy ?? "user" } : {}), ...(task.id === "custom" ? { timeoutS: limitOf(task) / 1000 } : {}) },
 				...(spent.tokens > 0 ? { usage: spent } : {}),
 				contributions: contributions.map(slim), best: best ? slim<Best>(best) : null, messages: messages.filter((m) => m.blockId === blockId),
@@ -656,7 +658,7 @@ export class CodeChatHub {
 		try {
 			const old = await this.host.takeIfExists({ type: "CodeTask", fields: { session: s.id, blockId: s.blockId } }, HELD_WAIT_MS, { txn: t.id });
 			if (!old) throw new Error("Unknown task block");
-			await this.host.write({ type: "CodeTask", fields: { ...(old.fields as Record<string, unknown>), custom: customSpec(task) } as never }, t.id, this.#ttl);
+			await this.host.write({ type: "CodeTask", fields: { ...(old.fields as Record<string, unknown>), custom: customSpec(task), ...this.#until() } as never }, t.id, this.#ttl);
 			await this.host.commit(t.id);
 		} catch (e) { await this.host.abort(t.id).catch(() => {}); throw e; }
 		s.task = task;
@@ -828,6 +830,35 @@ export class CodeChatHub {
 		this.push(s);
 	}
 
+	/** Until when an entry written now stays (the block shows it); nothing when entries never expire. */
+	#until(): { until?: number } { return this.#ttl === FOREVER ? {} : { until: Date.now() + this.#ttl }; }
+
+	/** Keeps a block CODEMODE_TTL_HOURS from now: every entry of it gets its lease anew, and its CodeTask notes the new
+	 *  end. An entry whose lease this process may not renew (written under another conversation) keeps its own. */
+	async extendBlock(id: string, blockId: string): Promise<{ until?: number }> {
+		const s = await this.session(id);
+		if (!this.allow(s, "extend", 20)) throw new Error("Too many extensions, slow down");
+		const out = await this.#exclusive(s, async () => {
+			if (!(await this.#taskEntries(id)).some((f) => f.blockId === blockId)) throw new Error("Unknown task block");
+			// CodeEarlier keeps its own lease (CODEMODE_EARLIER_DAYS)
+			for (const type of BLOCK_TYPES.filter((x) => x !== "CodeEarlier"))
+				for (const e of await this.host.readAll({ type, fields: { session: id, blockId } }, { limit: LIMITS.contributions * 2 }))
+					await this.host.renew(e.id, this.#ttl).catch(() => {});
+			// the CodeTask is rewritten with its new end (in one transaction: a judge checking the block waits)
+			const until = this.#until(), t = await this.host.createTransaction(30_000);
+			try {
+				const old = await this.host.takeIfExists({ type: "CodeTask", fields: { session: id, blockId } }, HELD_WAIT_MS, { txn: t.id });
+				if (!old) throw new Error("Unknown task block");
+				const { until: _old, ...rest } = old.fields as Record<string, unknown>;
+				await this.host.write({ type: "CodeTask", fields: { ...rest, ...until } as never }, t.id, this.#ttl);
+				await this.host.commit(t.id);
+			} catch (e) { await this.host.abort(t.id).catch(() => {}); throw e; }
+			return until;
+		});
+		this.push(s);
+		return out;
+	}
+
 	/** Removes a task block with everything that belongs to it (here and on the shard). A running block cannot be deleted. */
 	async deleteBlock(id: string, blockId: string): Promise<void> {
 		const s = await this.session(id);
@@ -848,7 +879,7 @@ export class CodeChatHub {
 		// the task first: a judge checks it before it writes a verdict, so nothing new comes for this block meanwhile. A judge
 		// at work reads it under its transaction, which keeps it from being taken: that one is waited for, not skipped
 		while (await takeExisting(this.host, tmplOf("CodeTask")));
-		for (const type of ["CodeScore", "CodeCandidate", "CodeJudging", "CodeBest", "CodeEarlier", "CodeNote", "CodeVeto", "CodeCritique", "CodeProposal", "CodeVote", "CodeFinding", "TextAnswer", "TextJudgement", "CodeAccept", "WorkItem", "CodeRunDone", "ChatMessage"])
+		for (const type of BLOCK_TYPES)
 			for (let n = 0; n < 2000 && (await this.host.take(tmplOf(type), NO_WAIT)); n++);
 		// the last old-style block is gone: the old entries that never belonged to a block go with it
 		if (legacy && !(await this.#taskEntries(id)).some((f) => f.blockId === undefined)) {

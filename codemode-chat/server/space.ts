@@ -9,10 +9,11 @@ export { keepAlive, parseTarget, StillHeld, takeAll } from "phi-spaces";
 /** Where the space host listens and every other process connects, unless CODEMODE_LISTEN / CODEMODE_SPACE say else. */
 export const DEFAULT_SPACE = "unix:/tmp/codemode-space.sock";
 
-/** How long the entries of a room (blocks, contributions, verdicts, log lines) live: CODEMODE_TTL_HOURS, default 24;
- *  0 keeps them until their block is deleted. The room caps (blocks, contributions, lines) bound them either way. */
+/** How long the entries of a room (blocks, contributions, verdicts, log lines) live: CODEMODE_TTL_HOURS, default 8760 (a
+ *  year); 0 keeps them until their block is deleted. A person can extend a block by the same again (Hub.extendBlock).
+ *  The room caps (blocks, contributions, lines) bound them either way. */
 export function entryLeaseMs(raw = process.env.CODEMODE_TTL_HOURS): number {
-	const hours = raw === undefined || raw.trim() === "" ? 24 : Number(raw);
+	const hours = raw === undefined || raw.trim() === "" ? 8760 : Number(raw);
 	if (!Number.isFinite(hours) || hours < 0) throw new Error(`CODEMODE_TTL_HOURS must be a number of hours >= 0, got ${raw}`);
 	return hours === 0 ? FOREVER : Math.max(60_000, Math.round(hours * 3600_000));
 }

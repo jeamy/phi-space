@@ -33,7 +33,7 @@ phi-space, started together locally like the help system's shards. It does not i
   belongs to it (task, contributions, verdicts of every judge, best code, log lines). A block with a running
   run cannot be deleted; deleting the active block makes the newest remaining one active; deleting the last one leaves the room empty.
 - Every contribution is a `CodeCandidate` entry. A judge takes it under a transaction, runs it in a QuickJS sandbox
-  (`@earendil-works/pi-codemode`: no tools, 5 s timeout (custom tasks choose their own, up to `CODEMODE_MAX_TIMEOUT_S`, default 60 s), 64 MiB heap, at most 2 sandboxes at a time per process) and
+  (`@earendil-works/pi-codemode`: no tools, 5 s timeout (custom tasks choose their own, up to `CODEMODE_MAX_TIMEOUT_S`, default 600 s), 64 MiB heap, at most 2 sandboxes at a time per process) and
   writes a `CodeScore` entry with the verdict (every case: result, expected, error; cases passed), time, judging host
   and the code. `CodeBest` holds the fastest correct
   one of its block. The page shows the code of every contribution, wrong ones included.
