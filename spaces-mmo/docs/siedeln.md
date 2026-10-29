@@ -1,8 +1,9 @@
 # Siedeln, Bauen und Gärtnern (Entwurf)
 
 Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung). Gebaut sind der Chat zwischen
-Spielern, Schritt 1 (Hütte und Baustelle) und von Schritt 2 die ersten zwei Teile (Beete, Samen, Gießen, Ernte,
-Patenschaft; Zier- und Gemeinschaftsbeete, Kreuzen und Benennen, die Gärtnerin; siehe „Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
+Spielern, Schritt 1 (Hütte und Baustelle) und Schritt 2 in drei Teilen (Beete, Samen, Gießen, Ernte,
+Patenschaft; Zier- und Gemeinschaftsbeete, Kreuzen und Benennen, die Gärtnerin; Hasen, Zaun und Vogelscheuche; siehe
+„Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
 Gärten, Häuser, Werkstätten, Straßen, Kirchen, Kaufhäuser, später Eisenbahn. Er baut auf [spielidee.md](spielidee.md),
 [welt.md](welt.md), [goetter.md](goetter.md) und [automaten.md](automaten.md) auf.
 
@@ -716,7 +717,32 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      - Der Name ist nur je Region `unique`, denn es gibt keinen weltweiten Space dafür. Eine Pflanze, die vor dem
        Benennen gesetzt wurde, erhält den Namen bei ihrer Ernte.
 
-     Noch nicht: das Wild mit Zaun und Vogelscheuche (Teil 3), Sträuße als Geschenke und Opfer, die Blumenschau.
+   - **Teil 3, gebaut 2026-10-29** (`server/engine/commands/wild.ts`, Test `tests/wild.test.ts`, Weltversion 19): das
+     erste **Wild**, die **Hasen**. Der Wild-Ticker (Job `wild`, alle 20 Weltminuten) sieht nur Räume mit Beeten. Nach
+     ihrer Nebelstufe würfelt er für einen Hasen: Stufe 0 (das Feuer brennt) nie, sonst 4, 12 oder 25 Prozent, nachts
+     doppelt, höchstens zwei je Raum. Ein Hase ist ein `Animal`-Entry neben einem Beet. Nach einer halben Weltstunde
+     frisst er: Eine Pflanze fällt eine Stufe zurück, ein Setzling ist weg, die letzte lebende Pflanze bleibt. Dann geht
+     er. `scheuche hase` nimmt ihn aus bis zu drei Feldern weg: Wer zuerst kommt, rettet das Beet, und ein
+     verscheuchter Hase frisst nichts. Dauerhaften Schutz geben der **Zaun** (`zäune`, 2 Treibholz, 1 Tangseil, für ein
+     Beet, das man pflegen darf) und die **Vogelscheuche** (Bauplan 1×1, 2 Treibholz, 1 Tangseil, 3 Arbeit, schützt
+     die Beete in bis zu drei Feldern, hält drei Tage). Schreibvorgänge gibt es nur, wenn ein Hase kommt oder frisst.
+     Die Karte zeigt den Hasen (Icon von `items-src/garden.py`) und den Zaun in 2D und 3D; das Zellmenü bietet
+     Verscheuchen und Zaunsetzen an.
+     Abnahme (`tests/wild.test.ts`):
+     - Bei brennendem Feuer kommt kein Hase, bei Stufe 3 kommt einer an jedes Beet.
+     - Ein verscheuchter Hase frisst nichts.
+     - Ein umzäuntes Beet und eins bei der Vogelscheuche verlieren nichts.
+     - Das letzte Pflänzchen bleibt.
+     - Nur das offene Beet verliert eine Stufe.
+     - Es sind nie mehr als zwei Hasen je Raum.
+
+     Abweichungen vom Entwurf:
+     - Der Zaun ist keine Zellenreihe mit Pforte, sondern gehört zum Beet: Er steht um dessen Rand und kostet
+       einmal Material. Zäune um ganze Fluren kommen mit den Äckern (Schritt 3).
+     - Der Hase erscheint gleich am Beet, statt vom Rand des Raums zu laufen.
+     - Ein Klick auf den Hasen öffnet das Zellmenü mit „Verscheuchen“.
+
+     Noch nicht: Hecke und Hund als Schutz, Sträuße als Geschenke und Opfer, die Blumenschau.
 3. **Äcker und Mühlen** (der große Strang der Gärten): Flur-Entries über Zellbereiche, eine Frucht je Flur,
    Bestellen und Ernteeinsatz als Arbeitspunkte, Fruchtfolge, Windmühle und die Kette Korn → Mehl → Brot,
    Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren);

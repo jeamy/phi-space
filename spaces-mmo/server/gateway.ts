@@ -11,7 +11,7 @@ import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, ty
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
-import { asFields, type BedFields, type BuildingFields, type RuinFields, type SiteFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
+import { asFields, type AnimalFields, type BedFields, type BuildingFields, type RuinFields, type SiteFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { bedPlantsView } from "./engine/commands/garden.ts";
 import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
@@ -26,11 +26,11 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 export type PlanView = { key: string; name: string; w: number; h: number; needs: string; work: number };
 /** A site or building (docs/siedeln.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
-export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
+export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed" | "animal"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
 	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
-	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed. */
-	bedKind?: "zier" | "gemein"; plants?: Array<{ x: number; y: number; stage: number; color: string }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[] };
+	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed; `fenced`: hares keep out. An animal: the bed it came to (`target`). */
+	bedKind?: "zier" | "gemein"; fenced?: boolean; plants?: Array<{ x: number; y: number; stage: number; color: string }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[]; target?: string };
 /** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them.
  *  `player`: the speaker is a player (not an NPC: the page offers a chat with them); `players`: in the list of who plays,
  *  the names that are players. */
@@ -351,7 +351,7 @@ export class Gateway {
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
 			c.ws.send({ t: "atlasState", state: this.#atlasState(c) } satisfies ServerFrame);
 		});
-		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set(this.#protoIcons.values())], plans: this.#plans() }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
+		c.ws.send({ t: "hello", build: this.build, world: { id: this.w.id, title: this.w.title, tileSize: this.w.tileSize, tiles: this.w.tiles, skins: this.w.skins, ...(this.w.decor ? { decor: this.w.decor } : {}), fuels: Object.keys(this.w.fire.fuel).map((k) => this.w.prototypes.find((p) => p.key === k)?.name ?? k), icons: [...new Set([...this.#protoIcons.values(), ...(this.w.wild ? [`/assets/${this.w.id}/${this.w.wild.hare.icon}`] : [])])], plans: this.#plans() }, me: { charId: self.charId, name: self.name, guest: c.me.guest, admin: c.me.admin }, room, chars, objs, log, fog: this.#fog.get(self.room) ?? 0, now: Date.now(), worldTime: this.#worldTime() } satisfies ServerFrame);
 	}
 
 	/** Puts every entry `tmpl` matches, read in pages of bounded size (one snapshot: the pages share its token). */
@@ -374,7 +374,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Site", "Building", "Ruin", "Bed"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Site", "Building", "Ruin", "Bed", "Animal"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -392,7 +392,7 @@ export class Gateway {
 						entryId = key(entryId);
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
-						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : undefined);
+						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : fields && types?.includes("Bed") ? String(fields.bedId) : fields && types?.includes("Animal") ? String(fields.animalId) : undefined);
 						if (fields && types?.includes("Fog")) fogs.add(String(fields.room));
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
@@ -469,7 +469,11 @@ export class Gateway {
 		}
 		else if (type === "Bed") {
 			const b = fields as unknown as BedFields;
-			this.#setObj(id, { id: b.bedId, kind: "bed", name: b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet", ...(b.kind ? { bedKind: b.kind } : {}), location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plants: bedPlantsView(this.w, b), wateredWorldMs: b.wateredWorldMs, thirstMs: this.w.garden?.thirstWorldMs ?? 0, weedy: b.weedy, sponsors: b.sponsors.map((x) => x.name) });
+			this.#setObj(id, { id: b.bedId, kind: "bed", name: b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet", ...(b.kind ? { bedKind: b.kind } : {}), ...(b.fenced ? { fenced: true } : {}), location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plants: bedPlantsView(this.w, b), wateredWorldMs: b.wateredWorldMs, thirstMs: this.w.garden?.thirstWorldMs ?? 0, weedy: b.weedy, sponsors: b.sponsors.map((x) => x.name) });
+		}
+		else if (type === "Animal") {
+			const a = fields as unknown as AnimalFields;
+			this.#setObj(id, { id: a.animalId, kind: "animal", name: a.name, location: a.room, x: a.x, y: a.y, target: a.bedId, glyph: { shape: "circle", color: "#a08a6a" }, ...(this.w.wild ? { icon: `/assets/${this.w.id}/${this.w.wild.hare.icon}` } : {}) });
 		}
 		else if (type === "Site" || type === "Building") {
 			const b = fields as unknown as SiteFields & BuildingFields;

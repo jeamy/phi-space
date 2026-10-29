@@ -18,7 +18,7 @@ type T = typeof import("three");
 type O3 = import("three").Object3D;
 type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
 /** What a bed shows: rebuilt when its plants or weeds change. */
-const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage}`).join(";")}` : undefined);
+const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}${o.fenced ? "f" : ""}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage},${p.color}`).join(";")}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;

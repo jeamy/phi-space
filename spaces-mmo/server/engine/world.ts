@@ -73,6 +73,7 @@ export type WorldDef = {
 	building?: BuildingDef;
 	/** Gardens (docs/siedeln.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
 	garden?: GardenDef;
+	wild?: WildDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
 	regions?: RegionDef[];
@@ -101,6 +102,13 @@ export type SortDef = { key: string; name: string; aliases: string[]; kind: "nut
  *  seed of a crossing. */
 export type GardenDef = { bed: { w: number; h: number; points: number; keepWorldMs: number }; commons: { w: number; h: number; points: number }; crossChance: number; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
 	thirstWorldMs: number; seedRestWorldMs: number; seedChance: number; decor: { flowers: string[]; herbs: string[] }; sorts: SortDef[] };
+/** The wild from the fog (docs/siedeln.md "Wild im Nebel"), first the hares in the beds: every `checkWorldMs` a room
+ *  with beds rolls `chance[fog]` (by its fog level 0 to 3; `nightFactor` times that at night) for a hare, at most
+ *  `maxPerRoom` at once. A hare eats `eatAfterWorldMs` after it came unless someone within `scareReach` scared it off;
+ *  a bed with a fence (it costs `fence`) or within `scarecrowReach` of a scarecrow (the building plan `scarecrow`)
+ *  loses nothing. */
+export type WildDef = { checkWorldMs: number; chance: [number, number, number, number]; nightFactor: number; maxPerRoom: number; eatAfterWorldMs: number; scareReach: number;
+	hare: { name: string; icon: string }; fence: Array<{ proto: string; count: number }>; scarecrow: string; scarecrowReach: number };
 export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;

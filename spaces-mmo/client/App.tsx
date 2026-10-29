@@ -189,6 +189,7 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 				if (carried.includes("Kanne Wasser")) entries.push({ label: "Gießen", line: "gieße" });
 				if (o.weedy || (o.plants ?? []).some((pl) => pl.stage === 3)) entries.push({ label: "Jäten", line: "jäte" });
 				if ((o.plants ?? []).some((pl) => pl.stage === 2)) entries.push({ label: "Ernten", line: "ernte" });
+				if (beside && !o.fenced) entries.push({ label: "Zaun setzen (2 Treibholz, 1 Tangseil)", line: "zäune" });
 				if (mine && (o.plants ?? []).length < (o.w ?? 1) * (o.h ?? 1)) for (const n of [...new Set(carried.filter((n) => /samen$/i.test(n)))]) entries.push({ label: `${n} pflanzen`, line: `pflanze ${n}` });
 			}
 			continue;
@@ -214,6 +215,8 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
 		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.name} gehen`, line: `go ${o.name}` });
+		// a hare at a bed: anyone scares it off from three cells (server: wild.ts)
+		if (o.kind === "animal") entries.push({ label: `${o.name}n verscheuchen`, line: "scheuche hase" });
 	}
 	if (!(self && self.x === at.x && self.y === at.y)) entries.push({ label: "Hierhin gehen", line: `move ${at.x} ${at.y}` });
 	// a cell nothing covers: build here (the plan's top left corner; the server says why not when it does not fit)

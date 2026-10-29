@@ -164,7 +164,7 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
 | 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom) |
 | 3D: Ziehen mit Maus oder Finger | Die Ansicht verschieben (links, rechts, hoch, runter) |
-| 3D: Ziehen mit gedrückter Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
+| 3D: Ziehen mit gedrücktem Mausrad oder mit Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
 
 ## Am Handy und Tablet {#touch}
 
@@ -209,7 +209,7 @@ Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neb
 | 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |
 | 3D: mouse wheel or two fingers | Zoom in and out |
 | 3D: drag with mouse or finger | Move the view (left, right, up, down) |
-| 3D: drag with Shift held, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
+| 3D: drag with the mouse wheel held down or with Shift, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
 
 ## On a phone or tablet {#touch}
 
@@ -321,6 +321,8 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
 | \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
+| \`scheuche hase\` | \`scare\` | Einen Hasen bis drei Schritte von dir in den Nebel zurückjagen |
+| \`zäune\` | \`fence\` | Einen Zaun um ein Beet neben dir setzen (2 Treibholz, 1 Tangseil) |
 
 ## Handel und Ruf {#tradecmds}
 
@@ -411,6 +413,8 @@ In detail under [Gardens](help.game.garden).
 | \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds |
 | \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
 | \`benenne <name>\` | \`taufe\` | Give your crossing a name (\`benenne 2 <name>\` when you carry several) |
+| \`scheuche hase\` | \`scare\` | Chase a hare up to three cells from you back into the fog |
+| \`zäune\` | \`fence\` | Put a fence round a bed beside you (2 driftwood, 1 kelp rope) |
 
 ## Trade and reputation {#tradecmds}
 
@@ -569,7 +573,7 @@ The Grey Bay has a market board, prices in **coins**:
 
 ## Baustelle abstecken {#stake}
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden).
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern.
 
 Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
 
@@ -598,7 +602,7 @@ Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) set
 
 ## Staking out a site {#stake}
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden).
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them.
 
 Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
 
@@ -682,6 +686,12 @@ Wer sie gezogen hat, gibt ihr mit \`benenne <name>\` einen Namen, einmal und fü
 
 **Gesa** in Kupferhafen sammelt selbst Samen in der Flora des Hafens und verkauft sie am Markt; sie kauft Blumen und Gemüse. Ihre Suchaufträge hängen an der Tafel („Gesa sucht eine Nebelblume“). Wer sie anspricht, erfährt ihre Preise.
 
+## Hasen aus dem Nebel {#hares}
+
+Wo das Feuer nicht brennt, kommen aus dem Nebel **Hasen** an die Beete: je dichter der Nebel, desto öfter, nachts doppelt so oft, nie mehr als zwei auf einmal in einem Ort. Solange das Feuer brennt, bleibt jeder Hase fort. Ein Hase sitzt eine halbe Weltstunde am Beet, dann frisst er: Eine Pflanze fällt eine Stufe zurück, ein Setzling ist weg. Die letzte lebende Pflanze eines Beets lässt er stehen.
+
+\`scheuche hase\` jagt ihn aus bis zu drei Schritten fort, bevor er frisst; das darf jeder, auch ein Gast, und wer zuerst kommt, rettet das Beet. Dauerhaft schützt ein **Zaun**: \`zäune\` setzt neben dem Beet für **2 Treibholz und 1 Tangseil** einen um dein Beet (oder eins, das du pflegen darfst). Auch eine **Vogelscheuche** (\`bau vogelscheuche\`: 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von allen Beeten in bis zu drei Feldern ab; sie steht drei Tage, dann will sie ausgebessert werden (1 Tang).
+
 ## Patenschaft {#sponsor}
 
 \`pate <name>\` lässt jemanden dein Beet gießen, jäten und ernten, ohne dass es ihm gehört; auch einen Gast. So bleibt es gepflegt, wenn du ein paar Tage nicht spielst. \`pate weg <name>\` beendet es, \`pate\` allein zeigt die Paten.
@@ -734,6 +744,12 @@ Whoever bred it names it with \`benenne <name>\`, once and for good. Its seeds a
 ## The gardener {#gardener}
 
 **Gesa** in Kupferhafen gathers seeds herself in the harbour's flora and sells them at the market; she buys flowers and vegetables. Her search orders hang on the board ("Gesa sucht eine Nebelblume"). Speak to her to learn her prices.
+
+## Hares from the fog {#hares}
+
+Where the fire does not burn, **hares** come out of the fog to the beds: the thicker the fog, the more often, twice as often at night, never more than two at once in one place. While the fire burns, every hare stays away. A hare sits at the bed for half a world hour, then it eats: one plant falls back a stage, a seedling is gone. It leaves the bed's last living plant standing.
+
+\`scheuche hase\` (\`scare\`) chases it off from up to three cells before it eats; anyone may, a guest too, and whoever comes first saves the bed. A **fence** protects for good: \`zäune\` (\`fence\`) beside the bed puts one round your bed (or one you may tend) for **2 driftwood and 1 kelp rope**. A **scarecrow** (\`bau vogelscheuche\`: 2 driftwood, 1 kelp rope, 3 work) keeps the hares from every bed within three cells too; it stands three days, then it wants repairing (1 kelp).
 
 ## Sponsorship {#sponsor}
 

@@ -30,19 +30,19 @@ import type { GardenDef, SortDef, WorldDef } from "../world.ts";
 import { ARTICLE, besides, buildingHere, cells, freeCells, giveBack, human, lightFor, plural, putBack, refusal, releaseLight, SITE_REACH, takeNear, useLight, type Rect } from "./build.ts";
 
 const STAGES = ["Saat", "Keim", "reif", "welk"] as const;
-const garden = (c: CommandCtx): GardenDef => {
+export const garden = (c: CommandCtx): GardenDef => {
 	const g = c.world.garden;
 	if (!g) throw new CommandError("In dieser Welt wächst nichts in Beeten.");
 	return g;
 };
-const sortOf = (g: GardenDef, key: string): SortDef | undefined => g.sorts.find((s) => s.key === key);
-const protoName = (c: CommandCtx, key: string) => c.world.prototypes.find((p) => p.key === key)?.name ?? key;
+export const sortOf = (g: GardenDef, key: string): SortDef | undefined => g.sorts.find((s) => s.key === key);
+export const protoName = (c: CommandCtx, key: string) => c.world.prototypes.find((p) => p.key === key)?.name ?? key;
 const mine = (c: CommandCtx, b: BedFields) => b.accountId === c.account?.accountId;
 /** Watering, weeding, harvesting: the owner, the sponsors, and everyone at a community bed. */
-const mayTend = (c: CommandCtx, b: BedFields) => b.kind === "gemein" || mine(c, b) || b.sponsors.some((s) => s.charId === c.actor.charId);
+export const mayTend = (c: CommandCtx, b: BedFields) => b.kind === "gemein" || mine(c, b) || b.sponsors.some((s) => s.charId === c.actor.charId);
 /** Planting: the owner, and at a community bed everyone with an account. */
 const mayPlant = (c: CommandCtx, b: BedFields) => mine(c, b) || (b.kind === "gemein" && !!c.account && !c.account.guest);
-const bedName = (b: BedFields) => (b.kind === "gemein" ? "Gemeinschaftsbeet" : `${b.kind === "zier" ? "Zierbeet" : "Beet"} von ${b.ownerName}`);
+export const bedName = (b: BedFields) => (b.kind === "gemein" ? "Gemeinschaftsbeet" : `${b.kind === "zier" ? "Zierbeet" : "Beet"} von ${b.ownerName}`);
 /** What a plant is: its variety, else its sort (two plants of one sort but different varieties cross). */
 const strain = (p: BedPlant) => p.variety?.id ?? p.sort;
 const plantName = (g: GardenDef, p: BedPlant) => p.variety?.name || (p.variety ? `Kreuzung (${sortOf(g, p.sort)?.name ?? p.sort})` : sortOf(g, p.sort)?.name ?? p.sort);
@@ -51,7 +51,7 @@ const hours = (ms: number) => { const h = Math.round(ms / 3600_000); return h >=
 
 /** How much slower things grow: fog (0 to 3) and weeds. Taken when the bed is written anyway. */
 export const growFactor = (fog: number, weedy: boolean) => (1 + 0.5 * Math.max(0, fog)) * (weedy ? 1.5 : 1);
-const nextDue = (plants: BedPlant[]) => plants.reduce((m, p) => Math.min(m, p.dueWorldMs), FOREVER);
+export const nextDue = (plants: BedPlant[]) => plants.reduce((m, p) => Math.min(m, p.dueWorldMs), FOREVER);
 
 /** The plants whose date has come move on (or wilt, dry or past their time); true when anything changed. Each plant that
  *  sprouts or ripens may bring weeds. */
@@ -79,12 +79,12 @@ export function barrelWater(g: GardenDef, b: BuildingFields, now: number): { can
 }
 
 /** A bed within reach (`own`: one's own; `may`: one this figure may do something at), taken in the transaction. */
-async function bedHere(c: CommandCtx, o: { own?: boolean; may?: (b: BedFields) => boolean; reach?: number } = {}): Promise<BedFields> {
+export async function bedHere(c: CommandCtx, o: { own?: boolean; may?: (b: BedFields) => boolean; reach?: number } = {}): Promise<BedFields> {
 	const r = await takeNear<BedFields>(c, "Bed", "bedId", o.reach ?? SITE_REACH, (b) => (!o.own || mine(c, b)) && (!o.may || o.may(b)));
 	if ("f" in r) return r.f;
 	throw new NotUnderstood(r.far ? (o.own ? "Geh näher an dein Beet heran." : "Geh näher an das Beet heran (höchstens zwei Schritte entfernt).") : "Hier ist kein Beet. „umgraben“ legt eins an (mit einem Spaten).");
 }
-const writeBed = (c: CommandCtx, b: BedFields) => c.space.write({ type: "Bed", fields: b as never }, c.txn, FOREVER);
+export const writeBed = (c: CommandCtx, b: BedFields) => c.space.write({ type: "Bed", fields: b as never }, c.txn, FOREVER);
 const describe = (c: CommandCtx, g: GardenDef, b: BedFields, now: number) => {
 	const count = new Map<string, number>();
 	for (const p of b.plants) { const k = `${plantName(g, p)} (${STAGES[p.stage]})`; count.set(k, (count.get(k) ?? 0) + 1); }

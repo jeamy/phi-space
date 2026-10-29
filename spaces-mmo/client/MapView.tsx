@@ -320,6 +320,12 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			// a bed: dug soil with furrows, each plant at its cell by its stage (seed, sprout, ripe in the sort's colour, wilted)
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
 			const g = new p.Graphics().rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#3e2a18" });
+			// a fence: a light rail around it with posts at the corners and between the cells
+			if (o.fenced) {
+				g.rect(x + 0.5, y + 0.5, w - 1, h - 1).stroke({ width: 1.5, color: "#c9a46a" });
+				for (let fx = 0; fx <= (o.w ?? 1); fx++) for (const fy of [0, o.h ?? 1]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
+				for (let fy = 1; fy < (o.h ?? 1); fy++) for (const fx of [0, o.w ?? 1]) g.rect(x + fx * ts - 1.5, y + fy * ts - 1.5, 3, 3).fill({ color: "#8a6a3a" });
+			}
 			for (let fy = y + 6; fy < y + h - 4; fy += 6) g.rect(x + 4, fy, w - 8, 1).fill({ color: "#4e3520" });
 			if (o.weedy) for (const [wx, wy] of [[0.2, 0.3], [0.7, 0.2], [0.45, 0.75], [0.85, 0.8]] as const) g.rect(x + w * wx, y + h * wy, 2, 3).fill({ color: "#5f8a3a" });
 			for (const pl of o.plants ?? []) {

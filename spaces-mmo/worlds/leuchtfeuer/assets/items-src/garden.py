@@ -1,5 +1,6 @@
 # The garden's things in the style of Shikashi's icons (32x32, dark outline, a light edge on top, shade below):
-# spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage and a carrot.
+# spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage and a carrot; and the hare that
+# comes from the fog for them (wild.ts).
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -156,13 +157,30 @@ def carrot():
     return outline(img)
 
 
+def hare():
+    img = new(); px = img.load()
+    F, FD, FL = rgb("#a08a6a"), rgb("#6a5640"), rgb("#d8c8a8")
+    disc(px, 15, 21, 7.5, F)               # the body, sitting
+    disc(px, 22, 14, 4.6, F)               # the head
+    for i in range(9):                      # two long ears, leaning back
+        disc(px, 20.5 - i * 0.35, 9 - i, 1.4, F, light=False)
+        disc(px, 23.5 - i * 0.15, 9.5 - i, 1.3, FD, light=False)
+    for i in range(6):
+        px[int(20.5 - i * 0.35), int(8 - i)] = FL
+    disc(px, 8.5, 21, 2.3, FL, light=False)  # the white tail
+    rect(px, 17, 27, 21, 28, FD)            # a hind foot
+    px[24, 13] = OUT                        # the eye
+    px[26, 15] = rgb("#e88fb0")             # the nose
+    return outline(img)
+
+
 out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
     "samen-strandnelke": seeds("#e88fb0"), "samen-duenenrose": seeds("#d9476b"), "samen-nebelblume": seeds("#9fb6e8"),
     "samen-strandkohl": seeds("#7fae6a"), "samen-moehre": seeds("#e8902c"),
     "strandnelke": flower("#e88fb0", 6), "duenenrose": flower("#d9476b", 5), "nebelblume": flower("#9fb6e8", 4),
-    "kohl": cabbage(), "moehre": carrot(),
+    "kohl": cabbage(), "moehre": carrot(), "hase": hare(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")
