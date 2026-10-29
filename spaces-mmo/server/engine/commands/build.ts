@@ -14,7 +14,8 @@
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type ItemFields, type LightUseFields, type RoomFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
@@ -239,29 +240,226 @@ const baustelle: Command = {
 	async func(c) {
 		const sites = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e));
 		const built = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
-		if (!sites.length && !built.length) return msg(c, c.actor.charId, "info", "Hier wird nichts gebaut. „bau“ zeigt die Baupläne.");
-		const lines = [...sites.map((s) => `Baustelle ${s.name} von ${s.ownerName}: es fehlen ${missing(s).join(", ")}.`), ...built.map((b) => `${b.name} von ${b.ownerName}.`)];
+		const ruins = (await c.space.readAll({ type: "Ruin", fields: { room: c.actor.room } })).map((e) => fieldsOf<RuinFields>(e));
+		if (!sites.length && !built.length && !ruins.length) return msg(c, c.actor.charId, "info", "Hier wird nichts gebaut. „bau“ zeigt die Baupläne.");
+		const now = await worldNowOf(c.space, c.txn);
+		const lines = [...sites.map((s) => `Baustelle ${s.name} von ${s.ownerName}: es fehlen ${missing(s).join(", ")}.`), ...built.map((b) => `${b.name} von ${b.ownerName}: hält noch ${days(b.untilWorldMs - now)} („repariere“ bessert sie aus).`), ...ruins.map((r) => `Ruine einer ${r.name} von ${r.ownerName}.`)];
 		await msg(c, c.actor.charId, "look", lines.join("\n"));
 	},
 };
 
-export const BUILD_COMMANDS: Command[] = [bau, liefere, arbeite, baustelle];
+/** A building beside the actor (by plan name when given; only one's own with `own`), taken in the transaction. */
+async function buildingHere(c: CommandCtx, name: string, o: { own: boolean }): Promise<BuildingFields> {
+	const all = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
+	const n = name.trim().replace(ARTICLE, "");
+	const near = all.filter((b) => distTo(c.actor, b) <= 1 && (!n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n.toLowerCase()));
+	const mine = near.filter((b) => b.accountId === c.account?.accountId);
+	const b = (o.own ? mine : [...mine, ...near])[0];
+	if (!b) throw new NotUnderstood(o.own ? (near.length ? "Das ist nicht dein Bau." : "Geh direkt neben deinen Bau.") : "Geh direkt neben den Bau.");
+	const e = await c.space.take({ type: "Building", fields: { buildId: b.buildId } }, 5_000, { txn: c.txn });
+	if (!e) throw new CommandError("Der Bau ist gerade nicht greifbar; bitte noch einmal.");
+	return fieldsOf<BuildingFields>(e);
+}
+const putBack = (c: CommandCtx, b: BuildingFields) => c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
+/** Moves a thing (taken in the transaction) to `location`. */
+async function moveItem(space: SpaceLike, txn: string | null, itemId: string, from: string, to: string): Promise<boolean> {
+	const e = await space.takeIfExists({ type: "Item", fields: { itemId, location: from } }, NO_WAIT, txn ? { txn } : {});
+	if (!e) return false;
+	await space.write({ type: e.type, types: e.types.slice(1), fields: { ...e.fields, location: to, x: -1, y: -1 } as never }, txn, FOREVER);
+	return true;
+}
+/** "3 holz", "alle muscheln", "tang": how many (null: all) and what. */
+const amount = (arg: string): { n: number | null; name: string } => {
+	const m = /^(?:(\d+|alle?|all)\s+)?(.+)$/i.exec(arg.trim().replace(/\s+(?:in|aus|from|into)\s+(?:die\s+|der\s+)?(?:truhe|kiste|chest)$/i, ""));
+	if (!m) return { n: 1, name: "" };
+	return { n: !m[1] ? 1 : /^\d+$/.test(m[1]) ? Number(m[1]) : null, name: m[2]!.replace(ARTICLE, "") };
+};
+const days = (ms: number) => { const d = Math.round(ms / (24 * 3600_000)); return d >= 1 ? `etwa ${d} ${d === 1 ? "Tag" : "Tage"}` : `etwa ${Math.max(1, Math.round(ms / 3600_000))} Stunden`; };
 
-/** The sweep's part (engine/sweep.ts): sites whose world time is up lapse with their cells and give their light back;
- *  rests that are over go. Each in a transaction of its own. */
-export async function buildSweep(space: SpaceLike): Promise<void> {
+const truhe: Command = {
+	key: "truhe", aliases: ["kiste", "chest"],
+	help: "truhe – was in der Truhe deines Baus neben dir liegt (verstaue <ding>, entnimm <ding>)",
+	async func(c) {
+		const b = await buildingHere(c, "", { own: true });
+		await putBack(c, b);
+		const cap = planOf(c.world, b.plan)?.chest ?? 0;
+		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
+		const items = (await c.space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => fieldsOf<ItemFields>(e).name);
+		const count = new Map<string, number>(); for (const n of items) count.set(n, (count.get(n) ?? 0) + 1);
+		await msg(c, c.actor.charId, "look", items.length ? `In der Truhe (${items.length}/${cap}): ${[...count].map(([n, k]) => `${k} ${n}`).join(", ")}.` : `Die Truhe ist leer (Platz für ${cap}).`);
+	},
+};
+const verstaue: Command = {
+	key: "verstaue", aliases: ["einlagern", "store"],
+	help: "verstaue [n|alle] <ding> – etwas in die Truhe deines Baus neben dir legen",
+	async func(c, arg) {
+		const { n, name } = amount(arg);
+		const hits = byName(await inventory(c), name);
+		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${name.slice(0, 30)}“ heißt.`);
+		const b = await buildingHere(c, "", { own: true });
+		const cap = planOf(c.world, b.plan)?.chest ?? 0;
+		if (!cap) throw new CommandError(`Die ${b.name} hat keine Truhe.`);
+		const room = cap - (await c.space.count({ type: "Item", fields: { location: b.buildId } }));
+		if (room <= 0) throw new CommandError(`Die Truhe ist voll (${cap}).`);
+		const proto = hits[0]!.f.proto, all = (await inventory(c)).filter((i) => i.f.proto === proto);
+		const k = Math.min(n ?? all.length, all.length, room);
+		let moved = 0;
+		for (const it of all.slice(0, k)) if (await moveItem(c.space, c.txn, it.f.itemId, c.actor.charId, b.buildId)) moved++;
+		await putBack(c, b);
+		await msg(c, c.actor.charId, "info", `Du legst ${moved} ${hits[0]!.f.name} in die Truhe.${(n ?? all.length) > k && k === room ? " Mehr passt nicht hinein." : ""}`);
+	},
+};
+const entnimm: Command = {
+	key: "entnimm", aliases: ["hole", "retrieve"],
+	help: "entnimm [n|alle] <ding> – etwas aus der Truhe deines Baus neben dir nehmen",
+	async func(c, arg) {
+		const { n, name } = amount(arg);
+		const b = await buildingHere(c, "", { own: true });
+		const inside = (await c.space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => ({ e, f: fieldsOf<ItemFields>(e) }));
+		const hits = byName(inside, name);
+		if (!hits.length) throw new NotUnderstood(`In der Truhe ist nichts, was „${name.slice(0, 30)}“ heißt.`);
+		const proto = hits[0]!.f.proto, all = inside.filter((i) => i.f.proto === proto);
+		let moved = 0;
+		for (const it of all.slice(0, Math.min(n ?? all.length, all.length))) if (await moveItem(c.space, c.txn, it.f.itemId, b.buildId, c.actor.charId)) moved++;
+		await putBack(c, b);
+		await msg(c, c.actor.charId, "info", `Du nimmst ${moved} ${hits[0]!.f.name} aus der Truhe.`);
+	},
+};
+
+const repariere: Command = {
+	key: "repariere", aliases: ["repair", "ausbessern"],
+	help: "repariere – einen Bau neben dir ausbessern (kostet etwas Material; jeder darf helfen)",
+	async func(c, arg) {
+		const b = await buildingHere(c, arg, { own: false });
+		const plan = planOf(c.world, b.plan);
+		const now = await worldNowOf(c.space, c.txn);
+		const cost = plan?.repair ?? [];
+		const inv = await inventory(c);
+		for (const r of cost) if (inv.filter((i) => i.f.proto === r.proto).length < r.count) throw new CommandError(`Zum Ausbessern brauchst du ${r.count} ${c.world.prototypes.find((p) => p.key === r.proto)?.name ?? r.proto}.`);
+		for (const r of cost) for (const it of inv.filter((i) => i.f.proto === r.proto).slice(0, r.count)) await c.space.takeIfExists({ type: "Item", fields: { itemId: it.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
+		const until = now + (plan?.keepWorldMs ?? 7 * 24 * 3600_000);
+		await putBack(c, { ...b, untilWorldMs: until });
+		await msg(c, "*", "emote", `${c.actor.name} bessert die ${b.name} von ${b.ownerName} aus; sie hält wieder ${days(until - now)}.`);
+	},
+};
+
+/** Gives back `count` of each prototype into the actor's pack. */
+async function giveBack(c: CommandCtx, what: Array<{ proto: string; count: number }>): Promise<string[]> {
+	const out: string[] = [];
+	for (const w of what) {
+		if (w.count <= 0) continue;
+		const p = await resolvePrototype(c.space, w.proto);
+		if (!p) continue;
+		for (let i = 0; i < w.count; i++) await spawn(c.space, c.txn, c.world, p, { location: c.actor.charId, x: -1, y: -1 });
+		out.push(`${w.count} ${p.name}`);
+	}
+	return out;
+}
+/** Gives a fire back the light a site or building took. */
+async function releaseLight(space: SpaceLike, txn: string, beaconId: string, points: number): Promise<void> {
+	const light = await space.takeIfExists({ type: "LightUse", fields: { beaconId } }, 5_000, { txn });
+	if (light) await space.write({ type: "LightUse", fields: { beaconId, used: Math.max(0, fieldsOf<LightUseFields>(light).used - points) } as never }, txn, FOREVER);
+}
+
+const abriss: Command = {
+	key: "abriss", aliases: ["reisse", "reiße", "demolish"],
+	help: "abriss – deinen Bau oder deine Baustelle neben dir abreißen (reisse … ab): die Fläche wird frei, ein Teil des Materials kommt zurück",
+	async func(c, arg) {
+		const name = arg.replace(/\s+ab$/i, "").replace(/^(?:die|den|das|meine?n?)\s+/i, "").replace(/^baustelle$/i, "");
+		const site = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e)).find((s) => distTo(c.actor, s) <= 1 && s.accountId === c.account?.accountId);
+		if (site && (!name || /baustelle/i.test(arg) || planOf(c.world, name)?.key === site.plan)) {
+			if (!(await c.space.takeIfExists({ type: "Site", fields: { buildId: site.buildId } }, 5_000, { txn: c.txn }))) throw new CommandError("Die Baustelle ist gerade nicht greifbar; bitte noch einmal.");
+			const back = await giveBack(c, site.needs.map((n) => ({ proto: n.proto, count: n.have })));
+			await freeCells(c.space, c.txn, site.room, site.buildId);
+			await releaseLight(c.space, c.txn, site.beaconId, site.points ?? 1);
+			await msg(c, "*", "info", `${c.actor.name} gibt die Baustelle ${site.name} auf.${back.length ? ` Zurück an ${c.actor.name}: ${back.join(", ")}.` : ""}`);
+			return;
+		}
+		const b = await buildingHere(c, name, { own: true });
+		const plan = planOf(c.world, b.plan);
+		// half of the material comes back; what lay in the chest goes into the pack
+		const back = await giveBack(c, (plan?.needs ?? []).map((n) => ({ proto: n.proto, count: Math.floor(n.count / 2) })));
+		let kept = 0;
+		for (const it of await c.space.readAll({ type: "Item", fields: { location: b.buildId } })) if (await moveItem(c.space, c.txn, String(it.fields.itemId), b.buildId, c.actor.charId)) kept++;
+		await freeCells(c.space, c.txn, b.room, b.buildId);
+		await releaseLight(c.space, c.txn, b.beaconId, b.points ?? 1);
+		await msg(c, "*", "info", `${c.actor.name} reißt die ${b.name} ab; die Fläche ist frei.${back.length ? ` Zurück: ${back.join(", ")}.` : ""}${kept ? ` Aus der Truhe: ${kept} Dinge.` : ""}`);
+	},
+};
+
+const nachlass: Command = {
+	key: "nachlass", aliases: ["estate"],
+	help: "nachlass – was in der Truhe eines verfallenen Baus von dir lag, hier abholen",
+	async func(c) {
+		const mine = (await c.space.readAll({ type: "Estate", fields: { room: c.actor.room } })).filter((e) => e.fields.accountId === c.account?.accountId);
+		if (!mine.length) throw new CommandError("Hier liegt kein Nachlass von dir.");
+		let got = 0;
+		for (const e of mine) {
+			const est = await c.space.takeIfExists({ id: e.id }, NO_WAIT, { txn: c.txn });
+			if (!est) continue;
+			for (const it of await c.space.readAll({ type: "Item", fields: { location: String(est.fields.estateId) } })) if (await moveItem(c.space, c.txn, String(it.fields.itemId), String(est.fields.estateId), c.actor.charId)) got++;
+		}
+		await msg(c, c.actor.charId, "info", got ? `Du holst deinen Nachlass ab: ${got} Dinge.` : "Der Nachlass war leer.");
+	},
+};
+
+export const BUILD_COMMANDS: Command[] = [bau, liefere, arbeite, baustelle, truhe, verstaue, entnimm, repariere, abriss, nachlass];
+
+/** The sweep's part (engine/sweep.ts), each in a transaction of its own: sites whose world time is up lapse with their
+ *  cells and give their light back; a building nobody kept becomes a ruin (its light goes back, what lay in its chest
+ *  waits as an estate for its owner); a ruin whose time is up goes with its cells; an estate nobody fetched goes with its
+ *  things; rests that are over go. */
+export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> {
 	const now = await worldNowOf(space);
+	const inTxn = async (run: (txn: string) => Promise<boolean>) => {
+		const txn = (await space.createTransaction(10_000)).id;
+		try { if (await run(txn)) await space.commit(txn); else await space.abort(txn); }
+		catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+	};
 	for (const e of await space.readAll({ type: "Site" })) {
 		const s = fieldsOf<SiteFields>(e);
 		if (s.untilWorldMs > now) continue;
-		const txn = (await space.createTransaction(10_000)).id;
-		try {
-			if (!(await space.takeIfExists({ type: "Site", fields: { buildId: s.buildId } }, NO_WAIT, { txn }))) { await space.abort(txn); continue; }
+		await inTxn(async (txn) => {
+			if (!(await space.takeIfExists({ type: "Site", fields: { buildId: s.buildId } }, NO_WAIT, { txn }))) return false;
 			await freeCells(space, txn, s.room, s.buildId);
-			const light = await space.takeIfExists({ type: "LightUse", fields: { beaconId: s.beaconId } }, 5_000, { txn });
-			if (light) await space.write({ type: "LightUse", fields: { beaconId: s.beaconId, used: Math.max(0, fieldsOf<LightUseFields>(light).used - (s.points ?? 1)) } as never }, txn, FOREVER);
-			await space.commit(txn);
-		} catch (err) { await space.abort(txn).catch(() => {}); throw err; }
+			await releaseLight(space, txn, s.beaconId, s.points ?? 1);
+			return true;
+		});
+	}
+	for (const e of await space.readAll({ type: "Building" })) {
+		const b = fieldsOf<BuildingFields>(e);
+		if (b.untilWorldMs > now) continue;
+		await inTxn(async (txn) => {
+			if (!(await space.takeIfExists({ type: "Building", fields: { buildId: b.buildId } }, NO_WAIT, { txn }))) return false;
+			const ruin: RuinFields = { buildId: b.buildId, plan: b.plan, name: b.name, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.owner, ownerName: b.ownerName, accountId: b.accountId, untilWorldMs: now + (w?.building?.ruinWorldMs ?? 10 * 24 * 3600_000) };
+			await space.write({ type: "Ruin", fields: ruin as never }, txn, FOREVER);
+			await releaseLight(space, txn, b.beaconId, b.points ?? 1);
+			const inside = await space.readAll({ type: "Item", fields: { location: b.buildId } });
+			if (inside.length) {
+				const est: EstateFields = { estateId: `est-${b.buildId}`, accountId: b.accountId, ownerName: b.ownerName, room: b.room, name: b.name, untilWorldMs: now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
+				await space.write({ type: "Estate", fields: est as never }, txn, FOREVER);
+				for (const it of inside) await moveItem(space, txn, String(it.fields.itemId), b.buildId, est.estateId);
+			}
+			return true;
+		});
+	}
+	for (const e of await space.readAll({ type: "Ruin" })) {
+		const r = fieldsOf<RuinFields>(e);
+		if (r.untilWorldMs > now) continue;
+		await inTxn(async (txn) => {
+			if (!(await space.takeIfExists({ type: "Ruin", fields: { buildId: r.buildId } }, NO_WAIT, { txn }))) return false;
+			await freeCells(space, txn, r.room, r.buildId);
+			return true;
+		});
+	}
+	for (const e of await space.readAll({ type: "Estate" })) {
+		const est = fieldsOf<EstateFields>(e);
+		if (est.untilWorldMs > now) continue;
+		await inTxn(async (txn) => {
+			if (!(await space.takeIfExists({ id: e.id }, NO_WAIT, { txn }))) return false;
+			for (const it of await space.readAll({ type: "Item", fields: { location: est.estateId } })) await space.takeIfExists({ id: it.id }, NO_WAIT, { txn });
+			return true;
+		});
 	}
 	for (const e of await space.readAll({ type: "WorkRest" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
 }
@@ -269,4 +467,3 @@ export async function buildSweep(space: SpaceLike): Promise<void> {
 export async function freeCells(space: SpaceLike, txn: string, room: string, of: string): Promise<void> {
 	for (const p of await space.readAll({ type: "Plot", fields: { room, of } })) await space.takeIfExists({ id: p.id }, NO_WAIT, { txn });
 }
-export type { ItemFields };

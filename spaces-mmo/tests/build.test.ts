@@ -85,9 +85,9 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		const work = async () => Promise.all(hands.map((a) => does(a.p, "arbeite", /arbeitet an der Hütte|Arbeit getan|müde|keine Baustelle/)));
 		await work();
 		assert.match(await does(boss.p, "arbeite", "müde"), /noch müde/);
-		await new Promise((ok) => setTimeout(ok, 4_000));
-		await work();
-		await eventually(async () => (await s.readAll({ type: "Building" })).length === 1, 15_000, "the hut stands");
+		// rounds after a rest until it stands (under load a hand may still be tired: its point comes a round later)
+		for (let i = 0; i < 6 && !(await s.readAll({ type: "Building" })).length; i++) { await new Promise((ok) => setTimeout(ok, 4_000)); await work(); }
+		await eventually(async () => (await s.readAll({ type: "Building" })).length === 1, 30_000, "the hut stands");
 		assert.equal((await s.readAll({ type: "Site" })).length, 0);
 		const hut = (await s.readAll({ type: "Building" }))[0]!.fields as Record<string, any>;
 		assert.equal(hut.ownerName, "Baumeisterin");
@@ -105,5 +105,74 @@ test("building: a hut is staked out only in the light and not on a way, filled e
 		assert.match(await does(other.p, "bau hütte", /Licht|passt keine/), /Licht des Feuers reicht/);
 		for (const a of [boss, ...crew]) await a.p.leave();
 		await guest.leave();
+	} finally { await srv.close(); }
+});
+
+test("building, part 2: the chest is the owner's; anyone repairs; a building not kept falls into ruin and its chest waits as an estate; demolition frees the land", { timeout: 240_000 }, async () => {
+	const { worldNowOf } = await import("../server/engine/clock.ts");
+	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001" } });
+	try {
+		const s = srv.stack.space;
+		const boss = await player(srv.url, "Siedlerin"), other = await player(srv.url, "Nachbar");
+		await lightFire(s, 600_000, "feuer-bucht");
+		await walk(boss, s, 16, 11);
+		await walk(other, s, 18, 12);
+		const accountId = String((await s.readAll({ type: "Character", fields: { charId: boss.me } }))[0]!.fields.accountId);
+		/** A hut of Siedlerin at 16,12 as a finished build leaves it. */
+		const hut = async (buildId: string) => {
+			const now = await worldNowOf(s);
+			for (const [x, y] of [[16, 12], [17, 12], [16, 13], [17, 13]]) await s.write({ type: "Plot", fields: { room: "graue-bucht", x, y, of: buildId } }, null, FOREVER);
+			await s.takeIfExists({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }, 0);
+			await s.write({ type: "LightUse", fields: { beaconId: "feuer-bucht", used: 1 } }, null, FOREVER);
+			await s.write({ type: "Building", fields: { buildId, plan: "huette", name: "Hütte", room: "graue-bucht", x: 16, y: 12, w: 2, h: 2, owner: boss.me, ownerName: "Siedlerin", accountId, beaconId: "feuer-bucht", points: 1, by: { Siedlerin: 28 }, untilWorldMs: now + 7 * 24 * 3600_000, builtAt: now } as never }, null, FOREVER);
+		};
+		const light = async () => Number((await s.readAll({ type: "LightUse", fields: { beaconId: "feuer-bucht" } }))[0]?.fields.used ?? 0);
+		const plots = async () => (await s.readAll({ type: "Plot", fields: { room: "graue-bucht" } })).length;
+		await hut("b1");
+		await give(s, boss.me, "muschel", 3);
+		// the chest: the owner's alone
+		assert.match(await does(boss.p, "leg 2 muscheln in die truhe", "Truhe"), /Du legst 2 Muschel in die Truhe/);
+		assert.match(await does(boss.p, "truhe", "Truhe"), /In der Truhe \(2\/12\): 2 Muschel/);
+		assert.match(await does(other.p, "truhe", /nicht dein Bau|neben deinen Bau/), /nicht dein Bau/);
+		assert.match(await does(boss.p, "nimm 1 muschel aus der truhe", "aus der Truhe"), /Du nimmst 1 Muschel/);
+		assert.equal(await pack(s, boss.me, "muschel"), 2);
+		// anyone repairs, with material
+		assert.match(await does(other.p, "repariere", "Treibholz"), /brauchst du 1 Treibholz/);
+		await give(s, other.me, "treibholz", 1);
+		assert.match(await does(other.p, "repariere", "bessert"), /Nachbar bessert die Hütte von Siedlerin aus; sie hält wieder etwa 7 Tage/);
+
+		// not kept: its time runs out, it becomes a ruin; the light goes back, the chest waits as an estate
+		const b = (await s.readAll({ type: "Building" }))[0]!;
+		await s.takeIfExists({ id: b.id }, 0);
+		await s.write({ type: "Building", fields: { ...b.fields, untilWorldMs: (await worldNowOf(s)) - 1 } }, null, FOREVER);
+		await eventually(async () => (await s.readAll({ type: "Ruin" })).length === 1, 20_000, "a ruin");
+		assert.equal((await s.readAll({ type: "Building" })).length, 0);
+		assert.equal(await light(), 0, "the light went back");
+		assert.equal(await plots(), 4, "the ruin still covers its cells");
+		assert.match(await does(other.p, "nachlass", "Nachlass"), /kein Nachlass von dir/);
+		assert.match(await does(boss.p, "nachlass", "Nachlass"), /Du holst deinen Nachlass ab: 1 Dinge/);
+		assert.equal(await pack(s, boss.me, "muschel"), 3);
+		// the ruin's time runs out: the land is free
+		const r = (await s.readAll({ type: "Ruin" }))[0]!;
+		await s.takeIfExists({ id: r.id }, 0);
+		await s.write({ type: "Ruin", fields: { ...r.fields, untilWorldMs: (await worldNowOf(s)) - 1 } }, null, FOREVER);
+		await eventually(async () => (await plots()) === 0 && !(await s.readAll({ type: "Ruin" })).length, 20_000, "the ruin is gone");
+
+		// demolition: half the material back, the chest into the pack, the land and the light free
+		await hut("b2");
+		await does(boss.p, "verstaue muschel", "Truhe");
+		assert.match(await does(boss.p, "reiße die hütte ab", "reißt"), /Siedlerin reißt die Hütte ab; die Fläche ist frei\. Zurück: 3 Treibholz, 1 Tangseil\. Aus der Truhe: 1 Dinge/);
+		assert.equal(await plots(), 0);
+		assert.equal(await light(), 0);
+		assert.equal(await pack(s, boss.me, "treibholz"), 3);
+		assert.equal(await pack(s, boss.me, "muschel"), 3);
+		// a site given up gives back all that was delivered
+		await clear(s, [[16, 12], [17, 12], [16, 13], [17, 13]]);
+		await does(boss.p, "bau hütte 16 12", "steckt eine Baustelle ab");
+		await does(boss.p, "liefere 2 treibholz", "Du lieferst");
+		assert.match(await does(boss.p, "abriss baustelle", "gibt die Baustelle"), /Zurück an Siedlerin: 2 Treibholz/);
+		assert.equal(await pack(s, boss.me, "treibholz"), 3);
+		assert.equal(await plots(), 0);
+		await boss.p.leave(); await other.p.leave();
 	} finally { await srv.close(); }
 });

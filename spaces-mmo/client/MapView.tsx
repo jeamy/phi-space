@@ -316,6 +316,16 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			s.objs.addChild(label);
 			continue;
 		}
+		if (o.kind === "ruin") {
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
+			const g = new p.Graphics().rect(x + 3, y + h * 0.45, w - 6, h * 0.55 - 3).fill({ color: "#6b6f73", alpha: 0.8 }).stroke({ width: 2, color: "#2b2f33" });
+			g.poly([x + 3, y + h * 0.45, x + w * 0.3, y + h * 0.3, x + w * 0.45, y + h * 0.45]).fill({ color: "#55595d" });
+			const label = new p.Text({ text: `Ruine (${o.name})`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#c0c6cc", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(x + w / 2, y + h);
+			s.objs.addChild(g, label);
+			continue;
+		}
 		if (o.kind === "site" || o.kind === "building") {
 			// a building as a house of its footprint (walls, a roof, a door at the bottom); a site as staked-out ground with
 			// posts at the corners and a bar of how far it is

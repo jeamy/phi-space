@@ -244,6 +244,12 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 function object(t: T, obj: ObjView): Entry {
 	const group = new t.Group(); group.userData.owned = true;
 	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}) };
+	if (obj.kind === "ruin") {
+		const w = obj.w ?? 1, d = obj.h ?? 1;
+		const rest = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.3, d * 0.9), new t.MeshStandardMaterial({ color: 0x6b6f73, roughness: 1 })); rest.position.y = 0.15; group.add(rest);
+		const wall = new t.Mesh(new t.BoxGeometry(w * 0.4, 0.6, 0.12), new t.MeshStandardMaterial({ color: 0x55595d, roughness: 1 })); wall.position.set(-w * 0.2, 0.3, -d * 0.4); group.add(wall);
+		return e;
+	}
 	if (obj.kind === "building" || obj.kind === "site") {
 		const w = obj.w ?? 1, d = obj.h ?? 1, color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
 		if (obj.kind === "building") {

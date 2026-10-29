@@ -11,7 +11,7 @@ import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, ty
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
-import { asFields, type BuildingFields, type SiteFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
+import { asFields, type BuildingFields, type RuinFields, type SiteFields, type ListingFields, type OfferFields, type OrderFields, type BeaconFields, type FlameFields, type FogFields, type CharacterFields, type ExitFields, type Glyph, type IntentFields, type ItemFields, type MsgFields, type RoomFields, type SessionFields, type WorldClockFields } from "./model.ts";
 import { envMs } from "./space.ts";
 import { RegionSpaces } from "./region-spaces.ts";
 import { setting } from "./settings.ts";
@@ -23,7 +23,7 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A site or building (docs/siedeln.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
-export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
+export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
 	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string };
 /** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them.
  *  `player`: the speaker is a player (not an NPC: the page offers a chat with them); `players`: in the list of who plays,
@@ -362,7 +362,7 @@ export class Gateway {
 				if (rev < 0) {
 					rev = (await space.readPage({ type: "-" })).rev;
 					const msgs: MsgFields[] = [];
-					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Site", "Building"]) await this.#readPaged(region, space, { type }, msgs);
+					for (const type of ["Room", "Character", "Session", "Item", "Exit", "Beacon", "Flame", "Fog", "WorldClock", "Offer", "Order", "Listing", "Site", "Building", "Ruin"]) await this.#readPaged(region, space, { type }, msgs);
 					await this.#readPaged(region, space, { type: "Msg", fields: { to: "*" } }, msgs); // #put keeps the last RECENT of each room
 					this.#advance(region, rev);
 					ready();
@@ -380,7 +380,7 @@ export class Gateway {
 						entryId = key(entryId);
 						const charId = this.#charOf.get(entryId) ?? this.#sessions.get(entryId) ?? (fields && (types?.includes("Character") || types?.includes("Session")) ? String(fields.charId) : undefined);
 						if (charId && !chars.has(charId)) chars.set(charId, this.#chars.get(charId)?.room ?? null);
-						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && (types?.includes("Site") || types?.includes("Building")) ? String(fields.buildId) : undefined);
+						const objId = this.#objOf.get(entryId) ?? this.#flameOf.get(entryId) ?? (fields && types?.includes("Item") ? String(fields.itemId) : fields && types?.includes("Exit") ? String(fields.exitId) : fields && (types?.includes("Beacon") || types?.includes("Flame")) ? String(fields.beaconId) : fields && (types?.includes("Site") || types?.includes("Building") || types?.includes("Ruin")) ? String(fields.buildId) : undefined);
 						if (fields && types?.includes("Fog")) fogs.add(String(fields.room));
 						if (objId && !objs.has(objId)) objs.set(objId, this.#objs.get(objId)?.location ?? null);
 					};
@@ -450,6 +450,10 @@ export class Gateway {
 			const b = fields as unknown as BeaconFields;
 			const o: ObjView = { id: b.beaconId, kind: "beacon", name: b.name, location: b.room, x: b.x, y: b.y };
 			this.#setObj(id, o);
+		}
+		else if (type === "Ruin") {
+			const r = fields as unknown as RuinFields;
+			this.#setObj(id, { id: r.buildId, kind: "ruin", name: r.name, location: r.room, x: r.x, y: r.y, w: r.w, h: r.h, owner: r.ownerName });
 		}
 		else if (type === "Site" || type === "Building") {
 			const b = fields as unknown as SiteFields & BuildingFields;

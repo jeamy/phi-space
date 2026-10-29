@@ -637,7 +637,14 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Karte zeigt Baustelle (mit Fortschritt) und Haus in 2D und 3D, die rechte Maustaste bietet Liefern und
      Mitarbeiten an. Abnahme: zehn liefern gleichzeitig (der Fußabdruck der Hütte hat zwölf Nachbarzellen), genau
      sechs Treibholz werden genommen, der Rest bleibt in den Taschen; elf Hände bauen sie genau einmal fertig.
-   - **Teil 2, offen:** Truhe, Verfall und `repariere`, Ruine, Nachlass, Abriss (gibt Fläche und Licht frei).
+   - **Teil 2, gebaut 2026-10-29:** die **Truhe** der Hütte (12 Plätze, nur der Besitzer: `truhe`, `verstaue`,
+     `entnimm`, auch „leg … in die truhe“, „nimm … aus der truhe“); **Verfall**: ein Bau hält eine Woche, `repariere`
+     (1 Treibholz, jeder darf) setzt die Frist neu; ein nicht gehaltener Bau wird zur **Ruine** (zehn Welttage, deckt
+     ihre Zellen weiter, gibt das Licht frei), was in der Truhe lag, wartet als **Nachlass** einen Monat auf den
+     Besitzer (`nachlass` an der Ruine); **Abriss** (`abriss`, „reiß die hütte ab“): Fläche und Licht frei, die Hälfte
+     des Materials und die Truhe zurück, eine aufgegebene Baustelle gibt alles Gelieferte zurück. Die Karte zeigt die
+     Ruine, das Zellmenü bietet Ausbessern, Truhe und Nachlass an. Noch nicht: schnellerer Verfall im Nebel (kommt mit
+     dem Wild), Wiederaufbau einer Ruine, die Hütte als Rückkehrpunkt.
 2. **Gärten** (der gleichwertige Strang, parallel zu allen Bauten): Spaten, Regentonne, Beet-Arten (Nutz, Zier,
    Gemeinschaft), Samen aus der wilden Flora, Pflanzen mit Wachstumsstufen, Gießen und Jäten,
    Patenschaft, Ernte, Kreuzen und Benennen, Gärtnerin mit Samenhandel und Suchaufträgen. Abnahme: 1 000 Pflanzen

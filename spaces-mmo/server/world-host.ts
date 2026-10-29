@@ -52,7 +52,7 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		fire: () => fireTick(space, w, msgLeaseMs),
 		fog: () => fogTick(space, w, msgLeaseMs),
 		flood: () => floodTick(space, w, msgLeaseMs),
-		sweep: () => sweepTick(space),
+		sweep: () => sweepTick(space, w),
 		orders: () => ordersTick(space, w),
 		market: () => marketTick(space),
 		storm: async () => { await stormTick(space, w, msgLeaseMs); },

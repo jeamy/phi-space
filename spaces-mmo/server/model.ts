@@ -114,6 +114,11 @@ export type SiteFields = { buildId: string; plan: string; name: string; room: st
 	needs: Array<{ proto: string; name: string; count: number; have: number }>; work: number; workNeed: number; human: number; other: number; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; at: number };
 /** A finished building; it stands while it is kept (`untilWorldMs`, renewed by repairs). `by`: who built it, with what they gave. */
 export type BuildingFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; builtAt: number };
+/** What is left of a building that was not kept: it still covers its cells until `untilWorldMs` (the sweep removes it). */
+export type RuinFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; untilWorldMs: number };
+/** What lay in a chest of a building that fell into ruin: its things wait (location `estateId`) for their owner until
+ *  `untilWorldMs`, then they are gone. */
+export type EstateFields = { estateId: string; accountId: string; ownerName: string; room: string; name: string; untilWorldMs: number };
 /** One cell a site or building stands on, written with the space's `unique` check on room and cell: two never share one. */
 export type PlotFields = { room: string; x: number; y: number; of: string };
 /** How much of a fire's light the sites and buildings that use it take (engine/build.ts, "Lichtpunkte"). */

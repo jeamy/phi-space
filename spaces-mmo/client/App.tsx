@@ -169,9 +169,14 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }:
 	}
 	// a site or building covers more than one cell: its entries on every one of them
 	for (const o of objs.values()) {
-		if ((o.kind !== "site" && o.kind !== "building") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
+		if ((o.kind !== "site" && o.kind !== "building" && o.kind !== "ruin") || o.location !== room || at.x < o.x || at.y < o.y || at.x >= o.x + (o.w ?? 1) || at.y >= o.y + (o.h ?? 1)) continue;
 		const beside = !!self && Math.max(Math.max(o.x - self.x, 0, self.x - (o.x + (o.w ?? 1) - 1)), Math.max(o.y - self.y, 0, self.y - (o.y + (o.h ?? 1) - 1))) <= 1;
-		entries.push({ label: o.kind === "site" ? `Baustelle ${o.name}: was fehlt?` : `${o.name} von ${o.owner ?? ""} ansehen`, line: "baustelle" });
+		entries.push({ label: o.kind === "site" ? `Baustelle ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: "baustelle" });
+		if (o.kind === "building" && beside) {
+			entries.push({ label: "Ausbessern", line: "repariere" });
+			if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
+		}
+		if (o.kind === "ruin" && o.owner === self?.name) entries.push({ label: "Nachlass abholen", line: "nachlass" });
 		if (o.kind === "site" && beside) {
 			entries.push({ label: "Mitarbeiten", line: "arbeite" });
 			// what one carries that it still needs
@@ -180,7 +185,7 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }:
 		}
 	}
 	for (const o of objs.values()) {
-		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "site" || o.kind === "building") continue;
+		if (o.location !== room || o.x !== at.x || o.y !== at.y || o.kind === "site" || o.kind === "building" || o.kind === "ruin") continue;
 		if (o.kind === "item") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach) entries.push({ label: `${o.name} aufheben`, line: `get ${o.name}` }); }
 		if (o.kind === "beacon") { entries.push({ label: `${o.name} ansehen`, line: `look ${o.name}` }); if (reach && fuel) entries.push({ label: "Treibholz nachlegen", line: `put ${fuel.name} in ${o.name}` }); }
 		if (o.kind === "exit") entries.push({ label: `Nach ${o.name} gehen`, line: `go ${o.name}` });
@@ -518,7 +523,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		const passage = (c: { x: number; y: number }) => exits.some((e) => Math.max(Math.abs(e.x - c.x), Math.abs(e.y - c.y)) <= 1);
 		const taken = new Set([...[...chars.values()].filter((c) => c.charId !== meRef.current && !passage(c)), ...[...objs.values()].filter((o) => o.kind === "beacon" && o.location === hello.room.roomId)].map((c) => `${c.x},${c.y}`));
 		// sites and buildings cover their cells: nobody walks into them (server: occupancy.ts blockedIn)
-		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building") && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
+		for (const o of objs.values()) if ((o.kind === "site" || o.kind === "building" || o.kind === "ruin") && o.location === hello.room.roomId) for (let dy = 0; dy < (o.h ?? 1); dy++) for (let dx = 0; dx < (o.w ?? 1); dx++) taken.add(`${o.x + dx},${o.y + dy}`);
 		const free = (x: number, y: number) => !!hello.world.tiles[hello.room.ground[y]?.[x] ?? ""]?.walk && !taken.has(`${x},${y}`);
 		let moves: Array<[number, number]>;
 		if (Array.isArray(d)) moves = [d];

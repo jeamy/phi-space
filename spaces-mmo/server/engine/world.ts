@@ -80,10 +80,12 @@ export type WorldDef = {
 };
 /** A plan (docs/siedeln.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
  *  counts towards the epoch and takes of a fire's light (`points`), how long it stands without repair. */
-export type PlanDef = { key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string };
+/** `chest`: how many things its chest holds (none without); `repair`: what a repair costs (it then stands `keepWorldMs` again). */
+export type PlanDef = { key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `restWorldMs`: how long a
  *  figure rests after a work point; `maxSites`/`maxBuildings`: per account. */
-export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number };
+/** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
+export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */
