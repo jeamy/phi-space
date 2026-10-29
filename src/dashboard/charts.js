@@ -61,8 +61,20 @@ export function stackbar(parts, { format = num } = {}) {
 	return `<div class="stackbar">${segs || '<i class="stackbar__empty"></i>'}</div><div class="legend">${legend}</div>`;
 }
 
+/** How long ago, short: "42 s", "12 min", "3 h", "2 d". */
+export const ago = (ms) => {
+	const s = Math.max(0, Math.round(ms / 1000));
+	if (s < 120) return `${s} s`;
+	if (s < 7200) return `${Math.round(s / 60)} min`;
+	if (s < 2 * 86400) return `${Math.round(s / 3600)} h`;
+	return `${(s / 86400).toFixed(1).replace(".", ",")} d`;
+};
+// steps of the time axis, in minutes: the first that leaves at most about `w / 90` labels
+const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880];
+const tickLabel = (m) => (m === 0 ? "jetzt" : m < 60 ? `−${m} min` : m < 1440 ? `−${m / 60} h` : `−${m / 1440} d`);
+
 /** A line chart over time with axes: `points` ({ at, ...values }), `series` ([{ key, label, color }]), `fmt` for the
- *  value axis and the hover text. Times read as minutes before now; a missing value leaves a gap. */
+ *  value axis and the hover text. Times read as minutes, hours or days before now; a missing value leaves a gap. */
 export function timeChart(points, series, { fmt = num, w = 520, h = 170, now = Date.now() } = {}) {
 	const pts = points ?? [];
 	const vals = pts.flatMap((p) => series.map((s) => p[s.key])).filter((v) => typeof v === "number");
@@ -72,9 +84,9 @@ export function timeChart(points, series, { fmt = num, w = 520, h = 170, now = D
 	const t0 = pts[0].at, t1 = Math.max(pts[pts.length - 1].at, t0 + 1);
 	const x = (t) => left + ((t - t0) / (t1 - t0)) * (w - left - right), y = (v) => top + (1 - v / max) * (h - top - bottom);
 	const grid = [0, max / 2, max].map((v) => `<line x1="${left}" x2="${w - right}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--line)"></line><text x="${left - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${esc(fmt(v))}</text>`).join("");
-	const span = (now - t0) / 60000, step = span > 10 ? 5 : span > 4 ? 2 : 1;
+	const span = (now - t0) / 60000, step = TICK_STEPS.find((m) => span / m <= Math.max(3, w / 90)) ?? TICK_STEPS.at(-1);
 	let ticks = "";
-	for (let m = 0; m <= span; m += step) { const t = now - m * 60000; if (t < t0) break; ticks += `<text x="${x(t).toFixed(1)}" y="${h - 5}" text-anchor="middle">${m === 0 ? "jetzt" : `−${m} min`}</text>`; }
+	for (let m = 0; m <= span; m += step) { const t = now - m * 60000; if (t < t0) break; ticks += `<text x="${x(t).toFixed(1)}" y="${h - 5}" text-anchor="middle">${tickLabel(m)}</text>`; }
 	const lines = series.map((s) => {
 		let d = "", open = false;
 		for (const p of pts) { const v = p[s.key]; if (typeof v !== "number") { open = false; continue; } d += `${open ? "L" : "M"}${x(p.at).toFixed(1)},${y(v).toFixed(1)}`; open = true; }
@@ -83,8 +95,7 @@ export function timeChart(points, series, { fmt = num, w = 520, h = 170, now = D
 	// hover: one invisible column per point with the values at that time
 	const cols = pts.map((p, i) => {
 		const x0 = i === 0 ? left : (x(pts[i - 1].at) + x(p.at)) / 2, x1 = i === pts.length - 1 ? w - right : (x(p.at) + x(pts[i + 1].at)) / 2;
-		const ago = Math.round((now - p.at) / 1000);
-		const text = `vor ${ago} s · ${series.map((s) => `${s.label}: ${typeof p[s.key] === "number" ? fmt(p[s.key]) : "–"}`).join(" · ")}`;
+		const text = `vor ${ago(now - p.at)} · ${series.map((s) => `${s.label}: ${typeof p[s.key] === "number" ? fmt(p[s.key]) : "–"}`).join(" · ")}`;
 		return `<rect x="${x0.toFixed(1)}" y="${top}" width="${Math.max(0.5, x1 - x0).toFixed(1)}" height="${h - top - bottom}" fill="transparent"><title>${esc(text)}</title></rect>`;
 	}).join("");
 	return `<svg class="time-svg" viewBox="0 0 ${w} ${h}" role="img">${grid}${ticks}${lines}${cols}</svg>`;

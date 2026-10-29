@@ -148,6 +148,18 @@ Nachrichten (`Msg`), Commits je Minute. CPU und Speicher meldet der Space-Dienst
 sie nicht, dann sagt die Karte das. Die Kurven kommen einmal mit der App-Liste (`/api/apps`, `hello`), danach mit jeder
 Messung nur der neue Punkt (`point` im SSE-Ereignis `apps`).
 
+**Kurve vergrößern, 7 Tage Verlauf.** Ein Klick auf eine der sechs Kurven (oder Enter) öffnet sie groß in einem Dialog,
+mit den Zeiträumen 15 min · 1 h · 6 h · 24 h · 7 Tage; Esc, ✕ oder ein Klick daneben schließt ihn. 15 min sind die
+Live-Punkte und laufen mit. Für die längeren Zeiträume fasst das Dashboard die Messungen jeder App zu einem Mittel je
+Minute zusammen (`src/dashboard-history.ts`) und behält davon 7 Tage; der Dialog holt sie von
+`/api/apps/{id}/history?range=<ms>` und frischt jede Minute auf. Die Antwort hat höchstens 720 Punkte: Bei 24 h und
+7 Tagen werden benachbarte Minuten gemittelt, die jüngsten 15 Minuten sind die einzelnen Messungen. Eine Pause (das
+Dashboard lief nicht, die App war offline) unterbricht die Kurve, statt sie zu überbrücken. Der Standardstart schreibt
+die Minuten nach `<store>/history.jsonl` (eine JSON-Zeile je Minute und App, auf big im `DASHBOARD_DIR`): Ein Neustart
+verliert höchstens die laufende Minute; beim Öffnen und alle 6 Stunden wird die Datei ohne die abgelaufenen Zeilen neu
+geschrieben (etwa 10.000 Zeilen je App, wenige MB). `startDashboard` ohne `historyFile` (die Tests) hält sie nur im
+Speicher.
+
 
 Links die Apps (Status-Punkt online/beschäftigt/offline, Entries, Typen, Speicher, Verlauf als Sparkline) und darunter
 die Spaces des eigenen Stores. In der Mitte die Detailansicht der Auswahl: Kennzahlen (Entries, Typen, Txn, Wartend,
@@ -176,6 +188,7 @@ Palettenfarben ab.
 | `GET /api/spaces/{id}/entries?after&limit` | Entries neueste zuerst, Cursor `next` (max 100/Seite, 500 Ceiling) |
 | `GET /api/metrics` | `Meter.snapshot(10)`, Uptime, Socket-Verbindungen |
 | `GET /api/apps` | die App-Quellen: Adressen, benutzte Adresse, online, Fehler, Alias, `stats`, Verlauf der Entry-Zahl |
+| `GET /api/apps/{id}/history?range` | Verlauf einer App für `range` ms (1 min bis 7 Tage, Standard 15 min): `points` mit denselben Feldern wie die Live-Punkte, höchstens 720 |
 | `GET /api/apps/{id}/entries?after&limit&type` | Entries einer App, älteste zuerst; `after`/`next` sind Positionen (max 200/Seite, bis 2000) |
 | `GET /palettes.js` | die geteilten Paletten ohne Typen |
 | `GET /api/live` | Server-Sent Events |
@@ -204,7 +217,8 @@ Aktualisierung. Watches (`watchDoc`) wecken den Server, die Korrektheit hängt n
 `test/test-dashboard.test.ts` (läuft mit in `npm test`): HTTP-Projektion (Spaces, Detail, Entries, Metrics,
 405/404, Statische UI) und der SSE-Vertrag (`hello`, `space` nach einem Commit, `metrics`-Push) gegen einen
 In-Memory-Host, dazu eine App über einen echten Unix-Socket (Stats, Typen, Seiten, Typfilter, eine spätere Änderung)
-und eine fehlende App als „offline". Einzel: `node --experimental-strip-types --test test/test-dashboard.test.ts`.
+und eine fehlende App als „offline"; der Verlauf (Mittel je Minute, Datei übersteht einen Neustart, nach 7 Tagen weg,
+Ausdünnen und Lücken) und der Endpunkt `/history`. Einzel: `node --experimental-strip-types --test test/test-dashboard.test.ts`.
 
 ## Nächste Phasen (Vorschlag)
 

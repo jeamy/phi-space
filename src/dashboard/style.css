@@ -170,3 +170,17 @@ details.metrics:not([open]) > summary h2 { margin-bottom: 0; }
 .card.live .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; }
 .time-svg { display: block; width: 100%; height: auto; margin-top: 6px; overflow: visible; }
 .time-svg text { fill: var(--muted); font: 10.5px var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* a live curve opened large (components.js ChartZoom) */
+.card.live.is-zoomable { cursor: zoom-in; }
+.card.live.is-zoomable:hover, .card.live.is-zoomable:focus-visible { border-color: var(--line-strong); outline: none; }
+dialog.zoom { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px); box-sizing: border-box; padding: 14px 16px; background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); border-radius: 12px; }
+dialog.zoom::backdrop { background: rgb(0 0 0 / 0.55); }
+.zoom__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.zoom__head h3 { margin: 0; }
+.zoom__head .spacer { flex: 1; }
+.zoom__ranges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.btn.is-active { color: var(--accent-ink); background: var(--accent-fill); border-color: var(--accent-fill); }
+dialog.zoom .note { margin: 6px 0; font-size: 12px; color: var(--muted); }
+dialog.zoom .legend span { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; }
+dialog.zoom .legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; }

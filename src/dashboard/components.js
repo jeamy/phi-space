@@ -63,26 +63,30 @@ const spacesSection = (list) => {
 ${table(["Space", "Entries", "Typen", "Speicher", "größte Typen"], rows)}`;
 };
 
-/** The live curves of an app (its last polls): answer time, the space process's CPU and memory, bytes, entries, commits. */
+/** The live curves of an app (its last polls): answer time, the space process's CPU and memory, bytes, entries, commits.
+ *  A click on one opens it large with the week the dashboard keeps (ChartZoom). */
 const ms1 = (v) => `${(Math.round(v * 10) / 10).toLocaleString("de-DE")} ms`;
-const liveCard = (title, note, pts, series, fmt) => {
-	const chart = timeChart(pts, series, { fmt });
-	const legend = series.length > 1 ? `<div class="legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.label)}</span>`).join("")}</div>` : "";
-	return `<div class="card live"><h3>${esc(title)}</h3><p class="note">${note}</p>${legend}${chart || '<div class="empty">sammle Messwerte…</div>'}</div>`;
-};
+const C = ["var(--bar)", "var(--bar-2)", "var(--success)"];
+export const LIVE_CHARTS = [
+	{ title: "Antwortzeit des Space", note: "Dauer des stats-Aufrufs des Dashboards", series: [{ key: "ms", label: "Antwortzeit", color: C[0] }], fmt: ms1 },
+	{ title: "CPU des Space-Prozesses", note: "100 % ist ein voller Kern", series: [{ key: "cpu", label: "CPU", color: C[0] }], fmt: (v) => `${Math.round(v)} %`, proc: true },
+	{ title: "Arbeitsspeicher", note: "des Space-Prozesses, in MB", series: [{ key: "rssMb", label: "RSS", color: C[0] }, { key: "heapMb", label: "Heap", color: C[1] }], fmt: (v) => `${Math.round(v)} MB`, proc: true },
+	{ title: "Speicher im Space", note: "Claims und alles zusammen, in MB", series: [{ key: "totalMb", label: "gesamt", color: C[0] }, { key: "claimsMb", label: "Claims", color: C[1] }], fmt: (v) => `${Math.round(v)} MB` },
+	{ title: "Entries", note: "sichtbare Entries und davon Nachrichten (Msg)", series: [{ key: "entries", label: "Entries", color: C[0] }, { key: "msg", label: "Msg", color: C[1] }], fmt: num },
+	{ title: "Commits je Minute", note: "aus der Revision zwischen zwei Messungen", series: [{ key: "commitsMin", label: "Commits/min", color: C[0] }], fmt: (v) => num(Math.round(v)) },
+];
+const legendOf = (series) => (series.length > 1 ? `<div class="legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.label)}</span>`).join("")}</div>` : "");
 const liveSection = (a) => {
-	const pts = a.series ?? [], c = ["var(--bar)", "var(--bar-2)", "var(--success)"];
+	const pts = a.series ?? [];
 	const noProc = pts.length > 1 && pts.every((p) => p.rssMb == null);
-	const proc = noProc ? '<div class="empty">Der Space-Prozess meldet keine CPU- und Speicherwerte (ältere phi-spaces-Version).</div>' : null;
-	return `<h3>Live <span class="muted">· letzte ${num(Math.round(((pts.at(-1)?.at ?? 0) - (pts[0]?.at ?? 0)) / 60000))} min, jede Messung ein Punkt</span></h3>
-<div class="grid3">
-	${liveCard("Antwortzeit des Space", "Dauer des stats-Aufrufs des Dashboards", pts, [{ key: "ms", label: "Antwortzeit", color: c[0] }], ms1)}
-	${proc ? `<div class="card live"><h3>CPU des Space-Prozesses</h3>${proc}</div>` : liveCard("CPU des Space-Prozesses", "100 % ist ein voller Kern", pts, [{ key: "cpu", label: "CPU", color: c[0] }], (v) => `${Math.round(v)} %`)}
-	${proc ? `<div class="card live"><h3>Arbeitsspeicher</h3>${proc}</div>` : liveCard("Arbeitsspeicher", "des Space-Prozesses, in MB", pts, [{ key: "rssMb", label: "RSS", color: c[0] }, { key: "heapMb", label: "Heap", color: c[1] }], (v) => `${Math.round(v)} MB`)}
-	${liveCard("Speicher im Space", "Claims und alles zusammen, in MB", pts, [{ key: "totalMb", label: "gesamt", color: c[0] }, { key: "claimsMb", label: "Claims", color: c[1] }], (v) => `${Math.round(v)} MB`)}
-	${liveCard("Entries", "sichtbare Entries und davon Nachrichten (Msg)", pts, [{ key: "entries", label: "Entries", color: c[0] }, { key: "msg", label: "Msg", color: c[1] }], num)}
-	${liveCard("Commits je Minute", "aus der Revision zwischen zwei Messungen", pts, [{ key: "commitsMin", label: "Commits/min", color: c[0] }], (v) => num(Math.round(v)))}
-</div>`;
+	const proc = '<div class="empty">Der Space-Prozess meldet keine CPU- und Speicherwerte (ältere phi-spaces-Version).</div>';
+	const cards = LIVE_CHARTS.map((d, i) => {
+		if (d.proc && noProc) return `<div class="card live"><h3>${esc(d.title)}</h3>${proc}</div>`;
+		const chart = timeChart(pts, d.series, { fmt: d.fmt });
+		return `<div class="card live is-zoomable" data-chart="${i}" role="button" tabindex="0" title="Klick: groß, mit Verlauf bis 7 Tage"><h3>${esc(d.title)}</h3><p class="note">${d.note}</p>${legendOf(d.series)}${chart || '<div class="empty">sammle Messwerte…</div>'}</div>`;
+	}).join("");
+	return `<h3>Live <span class="muted">· letzte ${num(Math.round(((pts.at(-1)?.at ?? 0) - (pts[0]?.at ?? 0)) / 60000))} min, jede Messung ein Punkt · Klick auf eine Kurve vergrößert sie</span></h3>
+<div class="grid3">${cards}</div>`;
 };
 
 const fieldsCell = (fields) => {
@@ -193,6 +197,11 @@ ${charts(st, this._type)}
 ${table(["ID", "Typ", "Felder"], rows) || `<div class="empty">${p ? "keine Entries" : "lade…"}</div>`}
 </div>`;
 		this.querySelectorAll(".hbar[data-key]").forEach((b) => { b.onclick = () => { this._type = this._type === b.dataset.key ? null : b.dataset.key; this._cursors = [null]; this.load(); defer(this); }; });
+		this.querySelectorAll(".card.live[data-chart]").forEach((c) => {
+			const open = () => this.dispatchEvent(new CustomEvent("zoom-chart", { bubbles: true, detail: { app: this._app.id, chart: Number(c.dataset.chart) } }));
+			c.onclick = open;
+			c.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } };
+		});
 		this.querySelector("[data-clear]")?.addEventListener("click", () => { this._type = null; this._cursors = [null]; this.load(); });
 		this.querySelector("button.first").onclick = () => { this._cursors = [null]; this.load(); };
 		this.querySelector("button.next").onclick = () => { if (p?.next != null) { this._cursors.push(p.next); this.load(); } };
@@ -335,3 +344,51 @@ class EmptyPanel extends HTMLElement {
 	}
 }
 customElements.define("empty-panel", EmptyPanel);
+
+/** One live curve of an app, large, in a modal dialog: the last 15 minutes from the live polls, or up to a week of
+ *  per-minute means from /api/apps/<id>/history (refetched every minute while open). Esc or the button closes it. */
+const RANGES = [["15 min", 15 * 60_000], ["1 h", 3600_000], ["6 h", 6 * 3600_000], ["24 h", 24 * 3600_000], ["7 Tage", 7 * 24 * 3600_000]];
+class ChartZoom extends HTMLElement {
+	connectedCallback() {
+		this._app = null; this._chart = 0; this._range = RANGES[0][1]; this._points = null; this._timer = null;
+		this.innerHTML = '<dialog class="zoom"><div class="zoom__body"></div></dialog>';
+		this._dialog = this.querySelector("dialog");
+		this._dialog.addEventListener("close", () => { clearInterval(this._timer); this._timer = null; });
+		this._dialog.addEventListener("click", (ev) => { if (ev.target === this._dialog) this._dialog.close(); });
+	}
+	/** The app's state as the page has it now (its live series); redraws while the 15-minute view is open. */
+	set app(a) { if (a && this._app && a.id === this._app.id) { this._app = a; if (this._dialog.open && this._range <= RANGES[0][1]) defer(this); } }
+	show(app, chart) {
+		this._app = app; this._chart = chart; this._points = null;
+		if (!this._dialog.open) this._dialog.showModal();
+		this.pick(this._range);
+	}
+	pick(range) {
+		this._range = range;
+		clearInterval(this._timer); this._timer = null;
+		if (range > RANGES[0][1]) { this.load(); this._timer = setInterval(() => this.load(), 60_000); }
+		this.render();
+	}
+	async load() {
+		const id = this._app?.id, range = this._range;
+		try {
+			const r = await (await fetch(`/api/apps/${encodeURIComponent(id)}/history?range=${range}`)).json();
+			if (id === this._app?.id && range === this._range) { this._points = r.points ?? []; this.render(); }
+		} catch { /* the next minute tries again */ }
+	}
+	render() {
+		const d = LIVE_CHARTS[this._chart], a = this._app;
+		if (!d || !a) return;
+		const live = this._range <= RANGES[0][1];
+		const pts = live ? a.series ?? [] : this._points;
+		const chart = pts === null ? '<div class="empty">lade…</div>' : timeChart(pts, d.series, { fmt: d.fmt, w: 1000, h: 380 }) || '<div class="empty">für diesen Zeitraum noch keine Messwerte</div>';
+		const buttons = RANGES.map(([label, ms]) => `<button type="button" class="btn${ms === this._range ? " is-active" : ""}" data-range="${ms}">${label}</button>`).join("");
+		this.querySelector(".zoom__body").innerHTML = `<header class="zoom__head"><h3>${esc(a.label)} · ${esc(d.title)}</h3><span class="spacer"></span>
+<div class="zoom__ranges" role="group" aria-label="Zeitraum">${buttons}</div><button type="button" class="btn zoom__close" aria-label="schließen">✕</button></header>
+<p class="note">${d.note} · ${live ? "jede Messung ein Punkt (alle 2 s)" : "Mittel je Minute, bei langen Zeiträumen mehrerer Minuten; das Dashboard behält 7 Tage"}</p>
+${legendOf(d.series)}${chart}`;
+		this.querySelectorAll("[data-range]").forEach((b) => { b.onclick = () => this.pick(Number(b.dataset.range)); });
+		this.querySelector(".zoom__close").onclick = () => this._dialog.close();
+	}
+}
+customElements.define("chart-zoom", ChartZoom);

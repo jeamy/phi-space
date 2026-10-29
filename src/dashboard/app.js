@@ -6,7 +6,7 @@ import { applyThemeToDocument, PALETTES } from "./palettes.js";
 
 const $ = (s) => document.querySelector(s);
 const appsEl = $("#apps"), spaces = $("#spaces"), appDetail = $("#app-detail"), detail = $("#detail"), compare = $("#compare"), activity = $("#activity"),
-	metricsEl = $("#metrics"), conn = $("#conn"), connLabel = $("#conn-label");
+	metricsEl = $("#metrics"), zoom = $("#zoom"), conn = $("#conn"), connLabel = $("#conn-label");
 
 // ---- theme: mode and palette like the projects (same palettes, same controls), remembered in this browser
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -67,6 +67,7 @@ const showApps = () => {
 	compare.apps = apps;
 	activity.apps = apps;
 	if (selection?.kind === "app") appDetail.app = apps.find((a) => a.id === selection.id) ?? null;
+	for (const a of apps) zoom.app = a;
 };
 
 const onMessage = (msg) => {
@@ -106,5 +107,6 @@ es.onmessage = (e) => { try { onMessage(JSON.parse(e.data)); } catch { /* ignore
 // initial metrics (SSE pushes the next ones every few seconds)
 fetch("/api/metrics").then((r) => r.json()).then((m) => { metricsEl.metrics = m; remember(m); active(); }).catch(() => {});
 
+appDetail.addEventListener("zoom-chart", (e) => { const a = apps.find((x) => x.id === e.detail.app); if (a) zoom.show(a, e.detail.chart); });
 appsEl.addEventListener("select-app", (e) => select("app", e.detail));
 spaces.addEventListener("select", (e) => select("space", e.detail));

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createSpace, PhiSpaces, serveSpace, SpaceService, StaticIdentity } from "../src/index.ts";
 import { Meter } from "../src/meter.ts";
 import { groupSpaces, parseApps, startDashboard } from "../src/dashboard.ts";
+import { StatsHistory, thin } from "../src/dashboard-history.ts";
 import { ctx } from "./support/persistent.ts";
 import { openTestHost } from "./support/host.ts";
 
@@ -235,6 +236,11 @@ test("dashboard: every poll of an app adds a live point (answer time, the space 
 		assert.ok(typeof last.ms === "number" && last.ms >= 0);
 		assert.ok(typeof last.rssMb === "number" && last.rssMb > 0, "the serving process reports its memory");
 		assert.ok(series.slice(1).some((p) => typeof p.cpu === "number"), "and from the second report on its CPU share");
+		// a click on a curve asks for a longer range: the polls themselves where they reach back
+		const hist = await (await fetch(`${dash.url}/api/apps/chat/history?range=3600000`)).json();
+		assert.equal(hist.range, 3_600_000);
+		assert.ok(hist.points.length >= 3 && hist.points.at(-1).entries === 1, JSON.stringify(hist.points.at(-1)));
+		assert.equal((await fetch(`${dash.url}/api/apps/nope/history`)).status, 404);
 	} finally {
 		await dash.close();
 		await server.close();
@@ -242,4 +248,31 @@ test("dashboard: every poll of an app adds a live point (answer time, the space 
 		await app.close(ctx);
 		rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+test("dashboard: the history folds the polls into one mean per minute, keeps a week in its file and breaks the curve at a pause", () => {
+	const dir = mkdtempSync("/tmp/phi-dash-hist-");
+	const file = join(dir, "history.jsonl");
+	const DAY = 24 * 3600_000;
+	let t = Date.UTC(2026, 9, 1);
+	try {
+		const h = new StatsHistory({ file, now: () => t });
+		h.add("a", { at: t, ms: 2, cpu: null });
+		h.add("a", { at: t + 10_000, ms: 4, cpu: 50 });
+		assert.equal(h.minutes("a", DAY).length, 0, "the open minute is not yet a point");
+		t += 60_000;
+		h.add("a", { at: t, ms: 10, cpu: 10 });
+		assert.deepEqual(h.minutes("a", DAY), [{ at: t - 30_000, ms: 3, cpu: 50 }]);
+		// the file holds it: a restart reads it back
+		assert.deepEqual(new StatsHistory({ file, now: () => t }).minutes("a", DAY), [{ at: t - 30_000, ms: 3, cpu: 50 }]);
+		// eight days later it has lapsed, in memory and in the file
+		t += 8 * DAY;
+		assert.deepEqual(new StatsHistory({ file, now: () => t }).minutes("a", 7 * DAY), []);
+		assert.deepEqual(new StatsHistory({ file, now: () => t }).minutes("a", 30 * DAY), []);
+	} finally { rmSync(dir, { recursive: true, force: true }); }
+	// thinning: means of neighbours, a pause becomes a point without values
+	const pts = Array.from({ length: 10 }, (_, i) => ({ at: i * 60_000, v: i }));
+	assert.deepEqual(thin(pts, 5).map((p) => p.v), [0.5, 2.5, 4.5, 6.5, 8.5]);
+	const paused = thin([{ at: 0, v: 1 }, { at: 60_000, v: 2 }, { at: 3_600_000, v: 3 }], 10);
+	assert.deepEqual(paused.map((p) => p.v ?? null), [1, 2, null, 3]);
 });

@@ -21,6 +21,7 @@ import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BACKGROUND_CONTEXT } from "./context.ts";
 import { openSqliteHost } from "./store/sqlite.ts";
+import { HISTORY_KEEP_MS, StatsHistory, thin, type HistoryPoint } from "./dashboard-history.ts";
 import type { Context } from "./context.ts";
 import type { SpaceHost } from "./client.ts";
 import { meter as processMeter, type Meter, type MeterSnapshot } from "./meter.ts";
@@ -105,6 +106,8 @@ export type AppSpace = { alias: string; spaces: number; stats: core.SpaceStats }
 export type AppPoint = { at: number; ms: number; cpu: number | null; rssMb: number | null; heapMb: number | null; entries: number; msg: number; claimsMb: number; totalMb: number; commitsMin: number | null };
 /** How many polls the live curves keep (15 minutes at the default 2 s). */
 const APP_SERIES = 450;
+/** At most this many points per curve of the history endpoint. */
+const HISTORY_POINTS = 720;
 const mb = (b: number | undefined) => Math.round(((b ?? 0) / 1e6) * 10) / 10;
 
 /** The sum of several spaces' stats (counts, types, bytes). */
@@ -154,6 +157,8 @@ export type DashboardOptions = {
 	apps?: AppSource[];
 	/** Cadence of the app polls (default 2000 ms). */
 	appPollMs?: number;
+	/** The week of per-minute statistics goes to this file too (one JSON line per minute and app); without it, memory only. */
+	historyFile?: string | null;
 };
 
 export type Dashboard = {
@@ -250,6 +255,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 		views: Map<string, RemoteSpace>; revs: Map<string, { rev: number; streamId: string }>; round: number;
 		points: AppPoint[]; proc: ServiceProcess | null };
 	const apps = new Map<string, AppEntry>();
+	const history = new StatsHistory({ file: o.historyFile ?? null, now });
 	for (const a of o.apps ?? []) apps.set(a.id, { ...a, addresses: [...a.addresses], address: a.addresses[0]!, online: false, error: null, alias: null, spaceId: null, stats: null, history: [], activity: [], entriesPerMin: 0, checkedAt: 0, conn: null, last: null, views: new Map(), revs: new Map(), round: 0, points: [], proc: null });
 	const appView = (a: AppEntry, full = true): AppState => ({ ...(full ? { series: a.points } : {}), id: a.id, label: a.label, addresses: a.addresses, ...(a.space ? { space: a.space } : {}), address: a.address, online: a.online, error: a.error, alias: a.alias, spaceId: a.spaceId, stats: a.stats, ...(a.spaces ? { spaces: a.spaces } : {}), history: a.history, activity: a.activity, entriesPerMin: a.entriesPerMin, checkedAt: a.checkedAt });
 	const appList = (): AppState[] => [...apps.values()].map((a) => appView(a));
@@ -351,6 +357,7 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 					point = { at: t, ms, cpu, rssMb: proc ? mb(proc.rssBytes) : null, heapMb: proc ? mb(proc.heapBytes) : null, entries: st.entries, msg: st.byType.Msg ?? 0, claimsMb: mb(st.bytes?.claims), totalMb: mb(st.bytes?.total), commitsMin: prev ? a.activity.at(-1) ?? null : null };
 					a.points.push(point);
 					if (a.points.length > APP_SERIES) a.points.shift();
+					history.add(a.id, point);
 				} catch (e) { dropApp(a, e); a.last = null; a.revs.clear(); a.spaces = undefined; a.proc = null; }
 				a.checkedAt = now();
 				// every poll goes out (the activity curve moves on while a space is quiet); the page refetches entries
@@ -393,6 +400,18 @@ export async function startDashboard(o: DashboardOptions): Promise<Dashboard> {
 			return;
 		}
 		if (path === "/api/apps") return send(res, 200, { now: now(), apps: appList() });
+		const appHistory = /^\/api\/apps\/([^/]+)\/history$/.exec(path);
+		if (appHistory) {
+			const a = apps.get(decodeURIComponent(appHistory[1]!));
+			if (!a) return send(res, 404, { error: "unknown app" });
+			const range = Math.min(HISTORY_KEEP_MS, Math.max(60_000, Number(url.searchParams.get("range")) || 15 * 60_000));
+			// the polls themselves where they reach back (APP_SERIES), the minutes before them
+			const since = now() - range;
+			const fine = (a.points as unknown as HistoryPoint[]).filter((p) => p.at >= since);
+			const first = fine[0]?.at ?? Infinity;
+			const points = thin([...history.minutes(a.id, range).filter((p) => p.at < first), ...fine], HISTORY_POINTS);
+			return send(res, 200, { now: now(), range, points });
+		}
 		const appEntries = /^\/api\/apps\/([^/]+)\/entries$/.exec(path);
 		if (appEntries) {
 			const a = apps.get(decodeURIComponent(appEntries[1]!));
@@ -540,6 +559,7 @@ async function main(argv: string[]): Promise<void> {
 		bind: a.get("--bind") ?? (env.DASHBOARD_BIND || "127.0.0.1"),
 		port: Number.parseInt(a.get("--port") ?? env.DASHBOARD_PORT ?? "8787", 10) || 8787,
 		serve: a.has("no-socket") ? null : { socket: a.get("--socket") ?? `${store.replace(/\/+$/, "")}/space.sock` },
+		historyFile: join(store, "history.jsonl"),
 		apps: a.has("no-apps") ? [] : appArgs.length > 0 ? appArgs : env.DASHBOARD_APPS ? parseApps(env.DASHBOARD_APPS) : DEFAULT_APPS,
 	});
 	console.log(`dashboard: ${dashboard.url} (read-only)`);
