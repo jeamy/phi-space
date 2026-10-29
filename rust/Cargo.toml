@@ -2,7 +2,7 @@
 # stays the reference, and test/vectors/ is what both must agree on.
 [workspace]
 resolver = "2"
-members = ["phi-json"]
+members = ["phi-json", "phi-core"]
 
 [workspace.package]
 edition = "2021"

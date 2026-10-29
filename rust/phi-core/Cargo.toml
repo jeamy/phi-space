@@ -1,0 +1,9 @@
+[package]
+name = "phi-core"
+description = "The semantics of a phi-space (src/core.ts and its helpers): entries, templates, leases, transactions, waiters, claims, mailboxes and the change stream over one space state"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+phi-json = { path = "../phi-json" }

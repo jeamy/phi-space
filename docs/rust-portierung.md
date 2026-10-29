@@ -276,6 +276,40 @@ brauchen; das ist der zweite Hebel aus R-D2 (Speicher), besonders auf nano mit 8
 - Der Differenz-Harness spielt die aufgezeichneten Folgen fehlerfrei nach.
 - `proptest` findet in 10⁶ Zufallsschritten keine Abweichung zum TS-Kern.
 
+**Schnitt (2026-10-29):** R1 läuft über mehrere Sitzungen, in Scheiben. Jede Scheibe wird committet, wenn die
+Vergleichstests gegen den TS-Treiber grün sind.
+
+| Scheibe | Inhalt | Stand |
+|---|---|---|
+| 0 | `phi-json`; TS-Treiber `test/support/core-driver.ts`; Zustandsmodell `phi-core::state` mit Round-Trip-Prüfung | erledigt |
+| 1 | Entries, Templates, Leases, `settle`, Ablauf, Stream-Einträge, Budgets (`charge`, `jsonBytes`-Summen) | offen |
+| 2 | Transaktionen | offen |
+| 3 | Wartende, geparkte Operationen, Claims und Generationen | offen |
+| 4 | Notify und Mailboxen | offen |
+| 5 | Stream, `changes`, Seiten | offen |
+
+**Bewusst zurückgestellt:** Restore, Wechsel der Autorität, Member-Admission, Löschung, Admin-Wartung, `purgeTasks`,
+Abschlussprofile und RunGate. Der Standalone-Server braucht sie für R3 nicht. Ihre Felder führt `phi-core::state`
+unverändert mit (`rest`). Ist eines davon in einem Dokument aktiv, verweigert der Rust-Kern Operationen, statt zu
+raten.
+
+**Treiber und Zustand:**
+
+- **Ein Commit je Zeile:** Der Treiber nimmt eine Operation je Zeile und klammert sie wie `spaces.ts` mit
+  `core.beginCommit`.
+- **Feste Uhr:** Die Uhr ist das `now` der Zeile, auch für `Date.now`.
+- **Fester Zufall:** `crypto.randomBytes` ist ein Zählerstrom aus dem Startwert. Er wird über
+  `syncBuiltinESMExports` auch in die benannten Importe gereicht, so dass Nonces, Schlüssel und Mailbox-Epochen auf
+  beiden Seiten gleich sind.
+- **Antwort:** Je Schritt kommt der SHA-256 des kanonischen Zustands zurück, auf Wunsch auch der ganze Zustand.
+- **Rust-Modell:** Jedes noch nicht portierte Feld steht in `rest`. Fehlende und `null`-Felder bleiben
+  unterschieden, weil die Budgets auf `JSON.stringify`-Bytes rechnen. Die Prüfung `state_round_trip` hält
+  kanonische Form und Bytezahl jedes Zustands gleich.
+
+**Befund aus Scheibe 0:** `parkOperation` (`core.ts`, `touch(s, Date.now())`) und `ackMailbox` (`mailbox.ts`) lesen
+die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parameter. Im TS-Kern sollten beide Stellen
+`now` bekommen, damit Wiederholungen mit fester Uhr deterministisch sind.
+
 ### R2: `phi-store`
 
 **Arbeit:**

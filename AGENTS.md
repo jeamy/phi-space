@@ -16,6 +16,8 @@ phi-spaces as a `@earendil-works/pi-durable` extension. TypeScript, ESM, run dir
 - Native pi-server acceptance: `npm run test:pi-server`; uses packages from the sibling mobile runtime
   (`PI_SERVER_RUNTIME_DIR` overrides the path); skips if not installed, never installs dependencies.
 - Single test: `node --experimental-strip-types --test --test-name-pattern=<pattern> test/integration.test.ts`
+- Rust port (`rust/`, cargo workspace; docs/rust-portierung.md): `cd rust && cargo test` and `cargo clippy --all-targets`;
+  `phi-core`'s tests start the TypeScript core as `test/support/core-driver.ts` (node on PATH) and hold every state against it.
 - Space-server probe: `node --experimental-strip-types --no-warnings scripts/server-probe.ts [--store memory|sqlite] [--rate 300] [--cmd "..."]`
   (server CPU per call, RSS, answer times of the standalone service or another implementation; docs/rust-portierung.md R0).
 - Branding: `npm run check:branding` (read-only; rejects obsolete project names in tracked text, generated output
