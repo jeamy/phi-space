@@ -76,7 +76,10 @@ export type TranslateFields = { reqId: string; charId: string; accountId: string
  *  (`to` = "#hafen"). With `actor` (a charId) the text
  *  holds FuncParser calls ($you(), $conj(a|b)) that the gateway renders for each reader. */
 /** `fromId`: the speaker's charId (NPCs start with "npc-"), so model NPCs answer people, not each other. */
-export type MsgFields = { room: string; to: string; kind: MsgKind; text: string; from: string; at: number; actor?: string; fromId?: string };
+export type MsgFields = { room: string; to: string; kind: MsgKind; text: string; from: string; at: number; actor?: string; fromId?: string; help?: HelpView };
+/** The answer of `help` in parts, for the page's command window (the text stays for the log and text mode): the intro,
+ *  the commands (every name, the arguments, what it does), the topics, or one topic. */
+export type HelpView = { intro?: string; commands?: Array<{ names: string[]; usage: string; text: string }>; topics?: string[]; topic?: { key: string; category: string; text: string } };
 export type MsgKind = "say" | "emote" | "system" | "look" | "error" | "help" | "who" | "info" | "channel" | "world";
 
 /** Accounts space. `key` is the lower-cased name; a `pending` credential belongs to a registration in progress. */

@@ -66,7 +66,8 @@ export type ChatHooks = {
 class ChatError extends Error {}
 
 /** The words a chat line starts with; everything else goes to the world. */
-const LINE = /^(chat|tell|whisper|flüstere|fluestere|flüster|gruppe|group|ignoriere|ignore|erlaube|unignore|melde|report)(?=\s|$)/i;
+/** The first words of a chat line, caught by the gateway before the world sees it (also the help's command table). */
+export const LINE = /^(chat|tell|whisper|flüstere|fluestere|flüster|gruppe|group|ignoriere|ignore|erlaube|unignore|melde|report)(?=\s|$)/i;
 const SUB = new Set(["neu", "new", "lade", "invite", "annehmen", "accept", "ablehnen", "decline", "verlasse", "leave", "entferne", "remove"]);
 const GROUP_NAME = /^[\p{L}\p{N}_-]{2,20}$/u;
 const MAX_BOX = 4000;

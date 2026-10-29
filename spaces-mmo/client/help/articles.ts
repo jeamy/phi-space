@@ -81,7 +81,8 @@ Wer viel ins Feuer legt, steht im **Ruf** (\`ruf\` zeigt, was du beigetragen has
 2. **Verarbeiten:** Aus Strandgut wird Brennstoff und Werkzeug (\`craft\`, siehe [Handel und Handwerk](help.game.trade)).
 3. **Feuer halten:** Brennholz ins Leuchtfeuer legen verlängert, wie lange es brennt. Brennt es nicht, steigt der Nebel Stufe für Stufe ([Feuer, Nebel, Flut](help.game.fire)).
 4. **Handeln:** Mit anderen tauschen, am Marktbrett kaufen und verkaufen, Aufträge der Auftragstafel erfüllen.
-5. **Erkunden:** Von einem brennenden Feuer aus lassen sich weitere Orte im Nebel erreichen. Was dort liegt, wird mit der Welt größer.
+5. **Bauen:** Im Licht eines Feuers baut ihr gemeinsam Hütten, jede mit einer Truhe ([Bauen](help.game.build)). Absprechen geht im [Chat](help.game.chat), auch über die Inseln.
+6. **Erkunden:** Von einem brennenden Feuer aus lassen sich weitere Orte im Nebel erreichen. Was dort liegt, wird mit der Welt größer.
 
 ## Zielkonflikt {#conflict}
 
@@ -98,7 +99,8 @@ Whoever puts a lot into the fire gains **reputation** (\`reputation\` shows what
 2. **Process:** flotsam becomes fuel and tools (\`craft\`, see [Trade and crafting](help.game.trade)).
 3. **Keep the fire:** putting fuel into a beacon extends how long it burns. If it does not burn, the fog rises step by step ([Fire, fog, tide](help.game.fire)).
 4. **Trade:** swap with others, buy and sell at the market board, fulfil jobs from the job board.
-5. **Explore:** from a burning beacon further places in the fog can be reached. What lies there grows with the world.
+5. **Build:** in a fire's light you build huts together, each with a chest ([Building](help.game.build)). Agree on it in the [chat](help.game.chat), also across the islands.
+6. **Explore:** from a burning beacon further places in the fog can be reached. What lies there grows with the world.
 
 ## The conflict {#conflict}
 
@@ -116,11 +118,11 @@ You can **use fuel yourself** (build tools, trade) or **put it into the shared f
 		body: {
 			de: `## So fängst du an {#start}
 
-1. **Losspielen:** Auf der Startseite „Als Gast spielen“ wählen. Du erscheinst in der **Grauen Bucht**, einem Strand mit einem Steinring in der Mitte.
+1. **Losspielen:** Auf der Startseite „Als Gast spielen“ wählen. Du erscheinst in einer der vier Buchten, an denen Neue ankommen: **Graue Bucht**, **Schärenhafen**, **Rauchhafen** oder **Krabbenbucht**, jede mit einem Leuchtfeuer im Steinring.
 2. **Umsehen:** Tippe \`look\` (oder \`schau\`). Rechts im Seitenfeld steht, was neben dir liegt.
 3. **Treibholz aufheben:** Geh zu einem braunen Quadrat auf dem Sand (Klick auf die Karte oder Pfeiltasten) und drücke die **Leertaste** oder den Knopf „Aufheben“, oder doppelklicke einfach darauf.
 4. **Feuer anzünden:** Geh neben das Leuchtfeuer im Steinring und drücke wieder die Leertaste. Das Scheit brennt zehn Minuten. Der Nebel weicht.
-5. **Weiter:** Sammle mehr Holz, sag Ines Hallo (\`say Hallo\`), nimm den Pfad nach **Osten** zum Klippenpfad (\`go ost\` oder einfach \`ost\`).
+5. **Weiter:** Sammle mehr Holz, sag Hallo (\`say Hallo\`; in jeder Bucht hütet jemand das Feuer), und nimm einen Weg hinaus: \`look\` zeigt sie, \`go <name>\` oder der Name allein nimmt einen (in der Grauen Bucht etwa \`ost\` zum Klippenpfad).
 
 > Du hast dich verlaufen? \`help\` zeigt alle Befehle, diese Hilfe erklärt den Rest. Mit \`who\` siehst du, wer sonst da ist.
 
@@ -129,11 +131,11 @@ You can **use fuel yourself** (build tools, trade) or **put it into the shared f
 Gäste können sofort spielen, aber noch nicht tauschen oder handeln, und ihre Figur verfällt nach einigen Tagen ohne Spiel. Oben in der Kopfzeile kannst du dich registrieren und behältst alles ([Gast und Konto](help.game.account)).`,
 			en: `## How to begin {#start}
 
-1. **Play:** on the start page choose “Play as guest”. You appear in the **Grey Bay**, a beach with a stone ring in the middle.
+1. **Play:** on the start page choose “Play as guest”. You appear in one of the four bays where newcomers arrive: **Graue Bucht**, **Schärenhafen**, **Rauchhafen** or **Krabbenbucht**, each with a beacon in a stone ring.
 2. **Look around:** type \`look\` (or \`schau\`). The side panel shows what lies next to you.
-3. **Pick up driftwood:** walk to a brown square on the sand (click the map or use the arrow keys) and press the **space bar** or the “Pick up” button.
+3. **Pick up driftwood:** walk to a brown square on the sand (click the map or use the arrow keys) and press the **space bar** or the “Pick up” button, or simply double-click it.
 4. **Light the fire:** stand next to the beacon in the stone ring and press space again. One log burns ten minutes. The fog retreats.
-5. **Go on:** collect more wood, talk to Ines (\`say Hello\`), take the path **east** to the cliff path (\`go east\` or just \`east\`).
+5. **Go on:** collect more wood, say hello (\`say Hello\`; in every bay someone keeps the fire), and take a way out: \`look\` lists them, \`go <name>\` or the name alone takes one (in Graue Bucht for instance \`east\` to the cliff path).
 
 > Lost? \`help\` lists all commands, this help explains the rest. \`who\` shows who else is there.
 
@@ -156,7 +158,7 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | Eingabe | Wirkung |
 | --- | --- |
 | Klick oder Tipp auf ein Feld | Dorthin gehen (\`move x y\`), der Server findet den Weg |
-| Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen … |
+| Rechtsklick oder langes Drücken | Menü zu diesem Feld: ansehen, aufheben, nachlegen, auf einer Figur „Chat mit …“, auf einer Baustelle liefern und mitarbeiten … |
 | Klick auf ein Ausgangsfeld | Zum Ausgang gehen; im Menü des Feldes steht „Nach … gehen“ (\`go\`, von überall im Raum) |
 | 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
 | 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
@@ -185,7 +187,7 @@ Die Tasten gelten, solange die Befehlszeile nicht den Fokus hat.
 
 ## Seitenfeld {#side}
 
-Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter das **Protokoll** mit allem, was du siehst und hörst, und die **Befehlszeile**.
+Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neben dir**, **Du trägst** und das **Leuchtfeuer** mit Restzeit, jeweils mit Knöpfen. Darunter das **Protokoll** mit allem, was du siehst und hörst, daneben die Reiter des [Chats](help.game.chat) (je Gespräch einer, „Chats“ als Übersicht), und die **Befehlszeile**. „Kommen und Gehen“ blendet die Meldungen ein, wer kommt und geht.
 
 ## Kopfzeile {#bar}
 
@@ -200,7 +202,7 @@ Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neb
 | Input | Effect |
 | --- | --- |
 | Click or tap a cell | Walk there (\`move x y\`), the server finds the way |
-| Right click or long press | Menu for that cell: look, pick up, add fuel … |
+| Right click or long press | Menu for that cell: look, pick up, add fuel, on a figure “Chat with …”, on a site deliver and help … |
 | Click an exit cell | Walk to the exit; the cell's menu has “Go to …” (\`go\`, from anywhere in the room) |
 | 2D: drag (zoomed in) | Move the view |
 | 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |
@@ -219,6 +221,7 @@ A tablet held upright shows the map on top and the side panel below it, held sid
 | --- | --- |
 | Arrow keys | Take one step (\`step dx dy\`) |
 | Space | Pick up what lies next to you; otherwise feed the fire next to you |
+| Double click on a thing | Walk there and pick it up (wood, shell, kelp …); on a phone double tap |
 | Enter | Jump to the command line |
 | Letters, digits | Just start typing: the text goes to the command line |
 | Arrow keys in the command line | Back to the map and one step: up and down always, left and right while the line is empty (with text they move the cursor) |
@@ -228,7 +231,7 @@ The keys work as long as the command line does not have the focus.
 
 ## Side panel {#side}
 
-On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons. Below that the **log** with everything you see and hear, and the **command line**.
+On the right (below the map on a phone and an upright tablet) you find **Next to you**, **You carry** and the **beacon** with its time left, each with buttons. Below that the **log** with everything you see and hear, beside it the tabs of the [chat](help.game.chat) (one per talk, “Chats” as the overview), and the **command line**. “Kommen und Gehen” shows the lines about who comes and goes.
 
 ## Header bar {#bar}
 
@@ -281,6 +284,24 @@ Tippe sie einfach los, sie landen in der Befehlszeile (oder Enter). Jeder Befehl
 | \`say <text>\` | \`sag\`, \`'text\` | Etwas sagen; alle im Raum hören es |
 | \`emote <tut etwas>\` | \`geste\`, \`:winkt\` | Eine Handlung zeigen |
 | \`channel <name> <text>\` | \`kanal\` | Auf einem Kanal sprechen, den alle hören (z. B. \`kanal hafen Hallo\`); ohne Text listet er die Kanäle |
+| \`chat <name> <text>\` | \`tell\`, \`flüstere\` | Verschlüsseltes Gespräch zu zweit, auch über Inseln ([Chat](help.game.chat)) |
+| \`gruppe …\` | \`group\` | Gruppen: gründen, einladen, schreiben, verlassen ([Chat](help.game.chat#groups)) |
+| \`ignoriere <name>\` / \`erlaube <name>\` | \`ignore\` / \`unignore\` | Einen Spieler im Chat sperren oder wieder zulassen |
+
+## Bauen {#buildcmds}
+
+Ausführlich unter [Bauen](help.game.build).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
+| \`bau <plan> [x y]\` | \`build\`, \`errichte\` | Im Licht eines Feuers eine Baustelle abstecken; ohne Plan die Baupläne |
+| \`liefere [n] <ding>\` | \`deliver\` | An die Baustelle liefern (bis zwei Felder entfernt) |
+| \`arbeite\` | \`work\` | An der Baustelle mitarbeiten (bis zwei Felder entfernt) |
+| \`baustelle\` | \`site\` | Was hier gebaut wird und was fehlt |
+| \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Die Truhe deiner Hütte |
+| \`repariere\` | \`repair\` | Einen Bau ausbessern |
+| \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
+| \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
 
 ## Handel und Ruf {#tradecmds}
 
@@ -299,7 +320,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help bauen\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -336,6 +357,24 @@ Just start typing, they go to the command line (or Enter). Every command works *
 | \`say <text>\` | \`sag\`, \`'text\` | Say something; everyone in the room hears it |
 | \`emote <does something>\` | \`geste\`, \`:waves\` | Show an action |
 | \`channel <name> <text>\` | \`kanal\` | Speak on a channel everyone hears (e.g. \`channel hafen Hello\`); without text it lists the channels |
+| \`chat <name> <text>\` | \`tell\`, \`whisper\` | Encrypted talk between two, also across islands ([Chat](help.game.chat)) |
+| \`gruppe …\` | \`group\` | Groups: found, invite, write, leave ([Chat](help.game.chat#groups)) |
+| \`ignoriere <name>\` / \`erlaube <name>\` | \`ignore\` / \`unignore\` | Block a player in the chat or allow them again |
+
+## Building {#buildcmds}
+
+In detail under [Building](help.game.build).
+
+| Command | Also | Effect |
+| --- | --- | --- |
+| \`bau <plan> [x y]\` | \`build\`, \`errichte\` | Stake out a site in a fire's light; without a plan the list of plans |
+| \`liefere [n] <thing>\` | \`deliver\` | Deliver to the site (up to two cells away) |
+| \`arbeite\` | \`work\` | Help build (up to two cells away) |
+| \`baustelle\` | \`site\` | What is being built here and what is missing |
+| \`truhe\`, \`verstaue\`, \`entnimm\` | \`chest\`, \`store\`, \`retrieve\` | Your hut's chest |
+| \`repariere\` | \`repair\` | Repair a building |
+| \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
+| \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |
 
 ## Trade and reputation {#tradecmds}
 
@@ -354,7 +393,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help bauen\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -482,6 +521,156 @@ The Grey Bay has a market board, prices in **coins**:
 		},
 	},
 	{
+		id: "help.game.build",
+		section: "play",
+		title: { de: "Bauen: Hütte und Baustelle", en: "Building: hut and site" },
+		short: {
+			de: "Im Licht eines Feuers gemeinsam eine Hütte bauen, mit Truhe, Ausbessern und Abriss.",
+			en: "Build a hut together in a fire's light, with a chest, repairs and demolition.",
+		},
+		body: {
+			de: `Bauen geht nur im **Licht eines Leuchtfeuers**: Wo kein Feuer brennt, steckt niemand eine Baustelle ab. Jedes Feuer trägt nur so viele Bauten, wie sein Licht reicht. Abstecken und besitzen braucht ein Konto; mitbauen dürfen auch Gäste ([Gast und Konto](help.game.account)).
+
+## Baustelle abstecken {#stake}
+
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**.
+
+Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
+
+## Liefern und mitarbeiten {#help}
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
+| \`liefere [n] <ding>\` | \`deliver\` | Liefern, was die Baustelle braucht; zu viel bleibt bei dir |
+| \`arbeite\` | \`work\` | Einen Arbeitspunkt beitragen; danach ruhst du eine Stunde Weltzeit |
+| \`baustelle\` | \`site\` | Was hier gebaut wird und was noch fehlt |
+
+Liefern und arbeiten geht **aus bis zu zwei Feldern Abstand**, so haben viele um eine Baustelle Platz. Das Menü der rechten Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Höchstens die Hälfte darf von NPCs oder Automaten kommen. Fehlt nichts mehr, steht der Bau; an ihm steht, wer mitgebaut hat. Eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen.
+
+## Die Truhe {#chest}
+
+Die Hütte hat eine Truhe mit 12 Plätzen, die **nur dir** gehört: \`truhe\` zeigt sie, \`verstaue 3 muscheln\` (oder „leg die muscheln in die truhe“) legt etwas hinein, \`entnimm 2 muscheln\` (oder „nimm … aus der truhe“) holt es heraus. Dafür stehst du direkt neben der Hütte.
+
+## Verfall, Ruine und Nachlass {#decay}
+
+Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) setzt die Frist neu. Wer ihn verfallen lässt, hat eine **Ruine**: Sie steht noch zehn Welttage und gibt das Licht des Feuers frei. Was in der Truhe lag, wartet einen Monat als **Nachlass**; \`nachlass\` an der Ruine holt es ab.
+
+## Abriss {#demolish}
+
+\`abriss\` (oder „reiß die hütte ab“) an deinem Bau gibt die Fläche und das Licht frei, die Hälfte des Materials und den Inhalt der Truhe zurück. Eine aufgegebene Baustelle gibt alles Gelieferte zurück.`,
+			en: `Building is possible only in a **beacon's light**: where no fire burns, nobody stakes out a site. Each fire carries only as many buildings as its light reaches. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)).
+
+## Staking out a site {#stake}
+
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**.
+
+Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
+
+## Delivering and helping {#help}
+
+| Command | Also | Effect |
+| --- | --- | --- |
+| \`liefere [n] <thing>\` | \`deliver\` | Deliver what the site needs; anything extra stays with you |
+| \`arbeite\` | \`work\` | Add one point of work; afterwards you rest for a world hour |
+| \`baustelle\` | \`site\` | What is being built here and what is still missing |
+
+Delivering and working work **from up to two cells away**, so many fit around a site. The right-click menu on a site offers delivering and helping. At most half may come from NPCs or automata. When nothing is missing, the building stands, naming who helped. A site without progress lapses after two world days.
+
+## The chest {#chest}
+
+The hut has a chest with 12 places that is **yours alone**: \`truhe\` (\`chest\`) shows it, \`verstaue 3 muscheln\` (\`store\`, or “leg die muscheln in die truhe”) puts something in, \`entnimm 2 muscheln\` (\`retrieve\`) takes it out. You stand right next to the hut for that.
+
+## Decay, ruin and estate {#decay}
+
+A building lasts **a week**. \`repariere\` (\`repair\`; 1 driftwood, anyone may help) sets the time anew. Let it decay and it becomes a **ruin**: it stands ten more world days and frees the fire's light. What lay in the chest waits a month as an **estate**; \`nachlass\` (\`estate\`) at the ruin collects it.
+
+## Demolition {#demolish}
+
+\`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.`,
+		},
+	},
+	{
+		id: "help.game.chat",
+		section: "play",
+		title: { de: "Chat zwischen Spielern", en: "Chat between players" },
+		short: {
+			de: "Gespräche zu zweit und in Gruppen, Ende-zu-Ende verschlüsselt, über alle Inseln.",
+			en: "Talks between two and in groups, end-to-end encrypted, across all islands.",
+		},
+		body: {
+			de: `\`say\` hört nur der Raum, \`kanal hafen\` alle. Der **Chat** ist das Gespräch zu zweit oder in einer kleinen Gruppe, auch mit jemandem auf einer anderen Insel.
+
+## Einrichten {#setup}
+
+Im Reiter **„Chats“** neben dem Protokoll richtest du den Chat mit einem eigenen **Chat-Passwort** ein. Es ist nicht dein Login-Passwort und geht nie an den Server; mit ihm entsperrst du den Chat auch an einem anderen Gerät.
+
+**Vergisst du das Chat-Passwort, sind deine Verläufe verloren.** Niemand kann sie wiederherstellen. **„Verlauf sichern“** speichert die geöffneten Gespräche als Textdatei. Das Passwort lässt sich ändern, solange du es kennst.
+
+## Zu zweit {#two}
+
+\`chat <name> <text>\` (auch \`tell\`, \`flüstere\`) schreibt jemandem; \`chat <name>\` öffnet nur das Gespräch. Oder die rechte Maustaste (langes Tippen) auf eine Figur, auf einen Namen im Protokoll oder in der Liste von \`who\`: **„Chat mit …“**. Jedes Gespräch hat einen eigenen Reiter mit Zähler für Ungelesenes.
+
+Ist der andere nicht da, wartet die Nachricht **sieben Tage** und erscheint bei seinem nächsten Anmelden (die letzten 50 je Gespräch). Mit NPCs sprichst du mit \`say\`, nicht im Chat.
+
+## Gruppen {#groups}
+
+| Befehl | Wirkung |
+| --- | --- |
+| \`gruppe neu <name>\` | Eine Gruppe gründen; du verwaltest sie |
+| \`gruppe lade <spieler> in <gruppe>\` | Einladen (jedes Mitglied darf; die Einladung gilt einen Welttag) |
+| \`gruppe annehmen <gruppe>\` / \`gruppe ablehnen <gruppe>\` | Eine Einladung annehmen oder ablehnen (auch im Reiter „Chats“) |
+| \`gruppe <gruppe> <text>\` | In die Gruppe schreiben (oder im Reiter der Gruppe) |
+| \`gruppe verlasse <gruppe>\` | Austreten |
+| \`gruppe entferne <spieler> aus <gruppe>\` | Jemanden entfernen (nur wer verwaltet) |
+| \`gruppe\` | Deine Gruppen |
+
+Höchstens 20 Mitglieder je Gruppe, höchstens zehn Gruppen je Konto. Gäste chatten, gründen aber keine Gruppe und laden niemanden ein.
+
+## Verschlüsselung {#e2e}
+
+Nur die Mitglieder eines Gesprächs können es lesen, nicht der Server und kein Admin. Jede Nachricht wird im Browser für jeden Leser einzeln versiegelt. Jedes Gespräch zeigt den **Fingerabdruck** beider Schlüssel: Vergleicht ihr sie außerhalb des Spiels, wisst ihr, dass niemand dazwischen sitzt. Der Server sieht trotzdem, wer mit wem wann schreibt, und Gruppennamen und Mitglieder.
+
+## Schutz {#safety}
+
+\`ignoriere <name>\` sperrt Nachrichten und Einladungen eines Spielers, \`erlaube <name>\` hebt es auf, \`ignoriere\` allein listet die Gesperrten. **Melden** an einer Nachricht schickt ihren Text mit Absender an die Admins; sonst sehen Admins keine Gespräche. Gespräche erscheinen nie im Protokoll des Raums.`,
+			en: `\`say\` is heard by the room only, \`channel hafen\` by everyone. The **chat** is the talk between two or in a small group, also with someone on another island.
+
+## Setting up {#setup}
+
+In the **“Chats”** tab beside the log you set up the chat with a **chat password** of its own. It is not your login password and never reaches the server; with it you unlock the chat on another device too.
+
+**Forget the chat password and your history is lost.** Nobody can restore it. **“Save history”** stores the open talks as a text file. You can change the password as long as you know it.
+
+## Between two {#two}
+
+\`chat <name> <text>\` (also \`tell\`, \`whisper\`) writes to someone; \`chat <name>\` only opens the talk. Or right-click (long press) a figure, a name in the log or in the list of \`who\`: **“Chat with …”**. Every talk has its own tab with a count of unread lines.
+
+If the other is away, the message waits **seven days** and appears at their next sign-in (the last 50 per talk). You talk to NPCs with \`say\`, not in the chat.
+
+## Groups {#groups}
+
+| Command | Effect |
+| --- | --- |
+| \`gruppe neu <name>\` (\`group\`) | Found a group; you manage it |
+| \`gruppe lade <player> in <group>\` | Invite (any member may; the invitation lasts a world day) |
+| \`gruppe annehmen <group>\` / \`gruppe ablehnen <group>\` | Accept or decline an invitation (also in the “Chats” tab) |
+| \`gruppe <group> <text>\` | Write to the group (or in the group's tab) |
+| \`gruppe verlasse <group>\` | Leave |
+| \`gruppe entferne <player> aus <group>\` | Remove someone (only who manages it) |
+| \`gruppe\` | Your groups |
+
+At most 20 members per group, at most ten groups per account. Guests chat but found no group and invite nobody.
+
+## Encryption {#e2e}
+
+Only the members of a talk can read it, not the server and no admin. Each message is sealed in the browser for every reader separately. Every talk shows the **fingerprint** of both keys: compare them outside the game and you know nobody sits in between. The server still sees who writes to whom and when, and group names and members.
+
+## Safety {#safety}
+
+\`ignoriere <name>\` (\`ignore\`) blocks a player's messages and invitations, \`erlaube <name>\` (\`unignore\`) lifts it, \`ignoriere\` alone lists whom you block. **Report** on a message sends its text with the sender to the admins; otherwise admins see no talks. Talks never appear in the room's log.`,
+		},
+	},
+	{
 		id: "help.game.account",
 		section: "play",
 		title: { de: "Gast und Konto", en: "Guest and account" },
@@ -492,7 +681,7 @@ The Grey Bay has a market board, prices in **coins**:
 		body: {
 			de: `## Gast {#guest}
 
-Als **Gast** spielst du sofort, ohne Konto. Du kannst laufen, sammeln, das Feuer nachlegen, reden und alles ansehen. **Nicht möglich:** tauschen, handeln, Dinge weitergeben. Eine Gastfigur verfällt nach einigen Tagen ohne Spiel.
+Als **Gast** spielst du sofort, ohne Konto. Du kannst laufen, sammeln, das Feuer nachlegen, reden, chatten, an Baustellen mitbauen und alles ansehen. **Nicht möglich:** tauschen, handeln, Dinge weitergeben, selbst bauen oder besitzen, Chat-Gruppen gründen. Eine Gastfigur verfällt nach einigen Tagen ohne Spiel.
 
 ## Konto {#account}
 
@@ -507,7 +696,7 @@ Mit **„Registrieren, um den Fortschritt zu behalten“** in der Kopfzeile legs
 Das Spiel speichert nur, was es braucht: Benutzername, ein gesalzener Passwort-Hash, deine Figur und ihren Fortschritt. Alle Texte der Welt werden als reiner Text angezeigt, nie als Code ausgeführt.`,
 			en: `## Guest {#guest}
 
-As a **guest** you play at once, without an account. You can walk, collect, feed the fire, talk and look at everything. **Not possible:** swapping, trading, handing things on. A guest character lapses after some days without play.
+As a **guest** you play at once, without an account. You can walk, collect, feed the fire, talk, chat, help at building sites and look at everything. **Not possible:** swapping, trading, handing things on, building or owning yourself, founding chat groups. A guest character lapses after some days without play.
 
 ## Account {#account}
 

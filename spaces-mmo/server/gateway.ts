@@ -28,7 +28,7 @@ export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | 
 /** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them.
  *  `player`: the speaker is a player (not an NPC: the page offers a chat with them); `players`: in the list of who plays,
  *  the names that are players. */
-export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at"> & { ai?: true; toMe?: true; player?: true; players?: string[] };
+export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at" | "help"> & { ai?: true; toMe?: true; player?: true; players?: string[] };
 /** What a client sees of trade: offers it made or got, the order board and the market board (the boards only in their
  *  room), its own taken order. */
 /** The overview of the world (top left in the page): every room placed on it, with its ground, its fires and the
@@ -99,7 +99,8 @@ const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjVi
 const exitView = (f: ExitFields): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
 	...(["say", "emote", "channel"].includes(m.kind) && m.fromId && !m.fromId.startsWith("npc-") ? { player: true as const } : {}),
-	...(m.kind === "who" ? { players: whoNames(m.text).filter((n) => players.has(n)) } : {}) });
+	...(m.kind === "who" ? { players: whoNames(m.text).filter((n) => players.has(n)) } : {}),
+	...(m.kind === "help" && m.help ? { help: m.help } : {}) });
 /** The names in the list of who plays ("Gerade spielen 3: Anna (Graue Bucht), Bo (Fischerdorf)"). */
 const whoNames = (text: string) => (text.split(": ").slice(1).join(": ")).split(", ").map((x) => x.replace(/\s*\([^)]*\)\s*$/, "").trim()).filter(Boolean);
 /** Whether a message is meant for the viewer: written to them alone by someone else (not the answer to their own

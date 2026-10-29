@@ -9,6 +9,8 @@ import { useTheme } from "./lib/theme.ts";
 import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, TradeView } from "../server/gateway.ts";
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
+import { CommandHelp } from "./CommandHelp.tsx";
+import type { HelpView } from "../server/model.ts";
 import { appendLine, isComing } from "./log.ts";
 import type { ChatState } from "../server/chat.ts";
 import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
@@ -374,6 +376,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [line, setLine] = useState("");
 	const [panel, setPanel] = useState<null | "account" | "leave" | "admin">(null);
 	const [help, setHelp] = useState(false);
+	// the answer of `help` laid out in a window like the help (CommandHelp); a topic keeps the list it came from
+	const [cmdHelp, setCmdHelp] = useState<HelpView | null>(null);
 	// on a phone the map modes and logging out sit behind "⋯" in the header bar (styles.css, `.bar-tools`)
 	const [more, setMore] = useState(false);
 	const [stale, setStale] = useState(false);
@@ -472,6 +476,12 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				else if (f.t === "atlas") setAtlas(f.atlas);
 				else if (f.t === "atlasState") setAtlasState(f.state);
 				else if (f.t === "objgone") { pickups.current.delete(f.id); setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; }); }
+				else if (f.t === "msg" && f.m.kind === "help" && f.m.help) {
+					const h = f.m.help;
+					setCmdHelp((old) => (h.topic ? { intro: old?.intro, commands: old?.commands, topics: old?.topics, topic: h.topic } : h));
+					setHelp(false);
+					append({ ...f.m, text: h.topic ? `Hilfe zu „${h.topic.key}“ im Fenster links.` : "Die Befehle stehen im Fenster links (help)." });
+				}
 				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
 				else if (f.t === "chatme" || f.t === "chatkeys") keysRef.current.onFrame(f);
 				else if (f.t === "chatlog") { keysRef.current.onFrame(f); setTalks(fromLog(f.msgs, tabRef.current)); }
@@ -671,7 +681,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		<div className="game">
 			<header className="bar">
 				<span className="title">{hello?.world.title ?? "Leuchtfeuer"}</span>
-				<button className="help-btn" onClick={() => setHelp((h) => !h)} aria-expanded={help} aria-label="Hilfe / Help" title="Hilfe / Help">?</button>
+				<button className="help-btn" onClick={() => { setCmdHelp(null); setHelp((h) => !h); }} aria-expanded={help} aria-label="Hilfe / Help" title="Hilfe / Help">?</button>
 				<span className={`live${live ? " on" : ""}`} title={live ? "verbunden" : "getrennt"} />
 				<span>{hello?.room.name ?? ""}</span>
 				{worldTime && <span className="worldtime" title="Weltzeit (Tag und Uhrzeit in der Welt)">{formatWorldTime(shownWorldMs(worldTime.v, worldTime.at, Date.now()))}{worldTime.v.paused ? " ⏸" : ""}</span>}
@@ -691,6 +701,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				</div>
 			</header>
 			{help && <HelpPanel onClose={() => setHelp(false)} />}
+			{cmdHelp && !help && <CommandHelp view={cmdHelp} onTopic={(key) => (key ? send(`help ${key}`, false) : setCmdHelp((old) => (old ? { ...old, topic: undefined } : old)))} onArticles={() => { setCmdHelp(null); setHelp(true); }} onClose={() => setCmdHelp(null)} />}
 			{stale && <div className="stale" role="status">Neue Version des Spiels – die Seite lädt neu …</div>}
 			<div className={`main${mapMode === "text" ? " text-only" : ""}`}>
 				{atlas && atlas.rooms.length > 1 && <Atlas atlas={atlas} state={atlasState} />}

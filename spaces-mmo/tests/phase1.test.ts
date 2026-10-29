@@ -200,6 +200,14 @@ test("builders shape the world: dig, open, create, set, lock, tag, examine, dest
 		assert.match(await does(bert.p, "dig Insel = nord", "Unbekannter Befehl"), /dig/);
 		assert.doesNotMatch(await does(bert.p, "help", "Befehle:"), /dig\//);
 		assert.match(await does(admin.p, "help", "Befehle:"), /dig\/grabe\/grab <name>/);
+		// the page lays the answer out: every command in parts (names, arguments, what it does), the topics; a topic alone
+		const shown = admin.p.frames.findLast((f) => f.t === "msg" && f.m.kind === "help");
+		const parts = shown?.t === "msg" ? shown.m.help : undefined;
+		assert.deepEqual(parts?.commands?.find((c) => c.names[0] === "get"), { names: ["get", "nimm", "heb", "take"], usage: "<ding>", text: "etwas aufheben, das neben dir liegt" });
+		assert.ok(parts?.topics?.includes("siedeln") && parts.topics.includes("chat"), JSON.stringify(parts?.topics));
+		await does(admin.p, "help siedeln", "Bauen im Licht");
+		const topic = admin.p.frames.findLast((f) => f.t === "msg" && f.m.kind === "help");
+		assert.equal(topic?.t === "msg" ? topic.m.help?.topic?.key : null, "siedeln");
 		// a new room with a way there and back
 		await does(admin.p, "dig Nebelinsel = nord, süd", "Raum „Nebelinsel“");
 		const n = admin.p.frames.length;

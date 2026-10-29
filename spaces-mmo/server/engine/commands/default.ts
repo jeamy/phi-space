@@ -328,8 +328,16 @@ const inv: Command = {
 /** A command's help line with every word it answers to, English and German: "get/nimm/heb/take <ding> – …". The
  *  names come from key and aliases, so the list cannot drift from what the parser accepts. */
 export function helpLine(cmd: Command): string {
+	const { names, usage, text } = helpParts(cmd);
+	return `${names.join("/")}${usage ? ` ${usage}` : ""} – ${text}`;
+}
+
+/** A command's help in parts: every word it answers to, its arguments ("<ding>", "[n] <ding>") and what it does. */
+export function helpParts(cmd: Command): { names: string[]; usage: string; text: string } {
 	const names = [cmd.key, ...(cmd.aliases ?? []).filter((a) => /^\p{L}{2,}$/u.test(a))];
-	return `${names.join("/")}${cmd.help.startsWith(cmd.key) ? cmd.help.slice(cmd.key.length) : ` – ${cmd.help}`}`;
+	const rest = cmd.help.startsWith(cmd.key) ? cmd.help.slice(cmd.key.length) : ` – ${cmd.help}`;
+	const dash = rest.indexOf(" – ");
+	return dash < 0 ? { names, usage: "", text: rest.trim() } : { names, usage: rest.slice(0, dash).trim(), text: rest.slice(dash + 3).trim() };
 }
 
 /** The help: without a topic the intro, the commands this actor has, the topics; with one, the command or topic.
@@ -342,15 +350,17 @@ export function helpCommand(commands: () => Command[]): Command {
 			const topics = (await c.space.readAll({ type: "HelpEntry" })).map((e) => fieldsOf<HelpEntryFields>(e));
 			if (!arg) {
 				const intro = topics.find((t) => t.key === "intro")?.text ?? "";
-				const lines = commands().filter((cmd) => !cmd.hidden).map((cmd) => `  ${helpLine(cmd)}`);
+				const shown = commands().filter((cmd) => !cmd.hidden);
+				const lines = shown.map((cmd) => `  ${helpLine(cmd)}`);
 				const more = topics.filter((t) => t.key !== "intro").map((t) => t.key).sort();
-				return msg(c, c.actor.charId, "help", [intro, "Befehle:", ...lines, ...(more.length ? [`Themen: ${more.join(", ")} (help <thema>)`] : [])].filter(Boolean).join("\n"));
+				return msg(c, c.actor.charId, "help", [intro, "Befehle:", ...lines, ...(more.length ? [`Themen: ${more.join(", ")} (help <thema>)`] : [])].filter(Boolean).join("\n"),
+					{ help: { intro, commands: shown.map(helpParts), topics: more } });
 			}
 			const a = arg.toLowerCase();
 			const cmd = commands().find((x) => x.key === a || x.aliases?.includes(a));
 			if (cmd) return msg(c, c.actor.charId, "help", helpLine(cmd));
 			const t = topics.find((x) => x.key === a);
-			if (t) return msg(c, c.actor.charId, "help", `${t.key} (${t.category})\n${t.text}`);
+			if (t) return msg(c, c.actor.charId, "help", `${t.key} (${t.category})\n${t.text}`, { help: { topic: { key: t.key, category: t.category, text: t.text } } });
 			throw new NotUnderstood(`Zu „${arg.slice(0, 20)}“ gibt es keine Hilfe. „help“ zeigt alles.`);
 		},
 	};

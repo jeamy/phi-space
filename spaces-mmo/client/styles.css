@@ -153,7 +153,7 @@ a { color: var(--accent); }
 /* the help sidebar (opened by the "?" in the header bar), after the phi-spaces help systems */
 .help-btn { width: 28px; height: 28px; padding: 0; border-radius: 50%; font-weight: 700; line-height: 1; }
 .help-btn[aria-expanded="true"] { background: var(--accent-fill); color: var(--accent-ink); border-color: transparent; }
-.help { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(440px, 100vw); padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left); display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line-strong); box-shadow: 6px 0 28px rgba(0,0,0,.35); }
+aside.help { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(440px, 100vw); padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left); display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line-strong); box-shadow: 6px 0 28px rgba(0,0,0,.35); }
 .help-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .help-head .spacer { flex: 1; }
 .help-head strong { color: var(--text-strong); letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; }
@@ -180,6 +180,16 @@ a { color: var(--accent); }
 .help-body { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
 .help-body h2 { margin: 18px 0 6px; font-size: 16px; color: var(--text-strong); scroll-margin-top: 8px; }
 .help-body h3 { margin: 14px 0 4px; font-size: 14px; color: var(--text-strong); scroll-margin-top: 8px; }
+/* the answer of `help` (CommandHelp.tsx), in the help's window */
+.help-more { font-size: 12px; padding: 2px 10px; }
+.cmd-help-intro { margin: 0 0 12px; font-size: 14px; line-height: 1.55; }
+.cmd-help-cat { margin: -4px 0 10px; color: var(--muted); font-size: 12px; }
+.cmd-help-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cmd-help-list li { padding: 8px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 2px; }
+.cmd-help-sig code { color: var(--text-strong); font: 600 13px/1.4 var(--font-mono); }
+.cmd-help-also { color: var(--muted); font-size: 12px; }
+.cmd-help-also code { font: 12px var(--font-mono); }
+.cmd-help-text { font-size: 13.5px; line-height: 1.45; }
 .help-body p { margin: 0 0 10px; }
 .help-body ul, .help-body ol { margin: 0 0 10px; padding-left: 20px; }
 .help-body a { color: var(--accent); }
