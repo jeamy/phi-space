@@ -135,7 +135,7 @@ export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 	// lie on each beach, and one more comes with each tide (else, with many players, hardly anyone finds anything)
 	const people = await peopleByIsland(space, w), per = Math.max(1, w.flood.perPlayers ?? 3);
 	for (const fr of w.flood.rooms) {
-		const extra = Math.ceil((people.get(w.rooms.find((r) => r.roomId === fr.room)?.island ?? "") ?? 0) / per);
+		const extra = Math.floor((people.get(w.rooms.find((r) => r.roomId === fr.room)?.island ?? "") ?? 0) / per); // one or two people: none extra
 		const lying = await space.count({ type: "Item", fields: { location: fr.room, flotsam: true } });
 		const n = Math.min(fr.max + extra - lying, 1 + extra);
 		if (n <= 0) continue;

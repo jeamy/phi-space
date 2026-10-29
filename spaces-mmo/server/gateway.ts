@@ -22,8 +22,10 @@ export type CharView = { charId: string; name: string; x: number; y: number; ski
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number };
-/** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them. */
-export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at"> & { ai?: true; toMe?: true };
+/** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them.
+ *  `player`: the speaker is a player (not an NPC: the page offers a chat with them); `players`: in the list of who plays,
+ *  the names that are players. */
+export type MsgView = Pick<MsgFields, "kind" | "text" | "from" | "at"> & { ai?: true; toMe?: true; player?: true; players?: string[] };
 /** What a client sees of trade: offers it made or got, the order board and the market board (the boards only in their
  *  room), its own taken order. */
 /** The overview of the world (top left in the page): every room placed on it, with its ground, its fires and the
@@ -92,7 +94,11 @@ const ATLAS_MS = 1_000;
 const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}) });
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
 const exitView = (f: ExitFields): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, location: f.location, x: f.x, y: f.y });
-const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = ""): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}) });
+const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),
+	...(["say", "emote", "channel"].includes(m.kind) && m.fromId && !m.fromId.startsWith("npc-") ? { player: true as const } : {}),
+	...(m.kind === "who" ? { players: whoNames(m.text).filter((n) => players.has(n)) } : {}) });
+/** The names in the list of who plays ("Gerade spielen 3: Anna (Graue Bucht), Bo (Fischerdorf)"). */
+const whoNames = (text: string) => (text.split(": ").slice(1).join(": ")).split(", ").map((x) => x.replace(/\s*\([^)]*\)\s*$/, "").trim()).filter(Boolean);
 /** Whether a message is meant for the viewer: written to them alone by someone else (not the answer to their own
  *  command, not an error), or someone else's words that name them. */
 function forViewer(m: MsgFields, viewer: string, name: string): boolean {
@@ -168,6 +174,9 @@ export class Gateway {
 			online: (accountId) => [...this.#clients].some((c) => c.me.accountId === accountId),
 		}) : null;
 	}
+
+	/** The names of the players' characters (not NPCs), for the list of who plays. */
+	#playerNames(): Set<string> { return new Set([...this.#chars.values()].filter((c) => !c.charId.startsWith("npc-")).map((c) => c.name)); }
 
 	/** Chat messages players reported, newest first (for the admins; empty without chat). */
 	async chatReports() { return this.#chat ? await this.#chat.reports() : []; }
@@ -321,7 +330,7 @@ export class Gateway {
 		c.room = self.room;
 		const chars = [...this.#chars.values()].filter((ch) => ch.room === self.room && (ch.charId === self.charId || this.#online.get(ch.charId))).map((ch) => charView(ch, this.#modelChars));
 		const objs = [...this.#objs.values()].filter((o) => o.location === self.room || o.location === self.charId).map((o) => this.#view(o));
-		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, this.#modelNames, self.name));
+		const log = (this.#recent.get(self.room) ?? []).map((m) => msgView(m, self.charId, this.#modelNames, self.name, this.#playerNames()));
 		queueMicrotask(() => {
 			c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 			if (!c.atlas) { c.atlas = true; c.ws.send({ t: "atlas", atlas: this.#atlas() } satisfies ServerFrame); }
@@ -387,7 +396,7 @@ export class Gateway {
 					if (trade) for (const c of this.#clients) if (c.room !== null) c.ws.send({ t: "trade", trade: this.#trade(c) } satisfies ServerFrame);
 					if (chars.size || fogs.size || [...objs.keys()].some((id) => this.#objs.get(id)?.kind === "beacon")) this.#atlasChanged();
 					for (const room of fogs) for (const c of this.#clients) if (c.room === room) c.ws.send({ t: "fog", level: this.#fog.get(room) ?? 0 } satisfies ServerFrame);
-					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#modelNames, this.#chars.get(c.me.charId)?.name) } satisfies ServerFrame);
+					for (const m of msgs) for (const c of this.#clients) if (m.to.startsWith("#") || (m.to === "*" ? c.room === m.room : c.me.charId === m.to)) c.ws.send({ t: "msg", m: msgView(m, c.me.charId, this.#modelNames, this.#chars.get(c.me.charId)?.name, m.kind === "who" ? this.#playerNames() : undefined) } satisfies ServerFrame);
 				}
 				rev = ch.next;
 				this.#advance(region, rev);

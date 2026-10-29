@@ -152,6 +152,17 @@ test("chat: end-to-end encrypted talks across regions, waiting for the next logi
 		guest.send("chat Ines");
 		assert.match(await note(guest, "keine Spielerin", from), /mit NPCs sprichst du mit „say“/);
 
+		// what a player says and the list of who plays mark the players (the page makes their names a menu: chat, invite,
+		// ignore); `who` lists the guest's region
+		from = guest.frames.length;
+		guest.send("who");
+		const who = ((await guest.until((f) => f.t === "msg" && f.m.kind === "who", 10_000, from)) as Extract<ServerFrame, { t: "msg" }>).m;
+		const gname = who.from;
+		assert.deepEqual(who.players, [gname], JSON.stringify(who));
+		guest.send("say hallo zusammen");
+		const said = ((await guest.until((f) => f.t === "msg" && f.m.kind === "say" && f.m.text.endsWith("hallo zusammen"), 10_000, from)) as Extract<ServerFrame, { t: "msg" }>).m;
+		assert.equal(said.player, true);
+
 		// no text of a message in any space: the accounts space keeps sealed copies, the world never saw the talk
 		const stored = JSON.stringify(await accounts.space.readAll({ type: "ChatMsg" }));
 		for (const t of ["Treffen am Feuer", "Bring Holz", "Tangseile", "ganz offen"]) assert.ok(!stored.includes(t), t);

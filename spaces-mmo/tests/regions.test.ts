@@ -91,8 +91,10 @@ test("the tide brings more where more people are: with nine on the island a tide
 		for (let i = 0; i < 9; i++) {
 			await s.space.write({ type: "Character", fields: { charId: `c-${i}`, accountId: `a-${i}`, name: `P${i}`, room: "klippenpfad", x: 5, y: 9, skin: 0, guest: true } }, null, FOREVER);
 			await s.space.write({ type: "Session", fields: { sessionId: `s-${i}`, charId: `c-${i}`, accountId: `a-${i}` } }, null, 60_000);
+			// one or two people are no "three": still one piece per tide
+			if (i === 0) { await floodTick(s.space, one, 60_000); assert.equal(await lying(), 2, "one person: one piece more, as without anyone"); }
 		}
 		await floodTick(s.space, one, 60_000);
-		assert.equal(await lying(), 1 + 4, "nine people on the Graue Insel: three more may lie there, four come at once");
+		assert.equal(await lying(), 2 + 4, "nine people on the Graue Insel: three more may lie there, four come at once");
 	} finally { await s.close(); }
 });

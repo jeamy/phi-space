@@ -185,6 +185,47 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }:
 	);
 }
 
+/** A log line with the names of players as buttons (they open the name menu): the speaker of what was said, every player
+ *  in the list of who plays; never one's own name. */
+function LogText({ l, self, onName }: { l: Line; self: string; onName: (name: string, left: number, top: number) => void }) {
+	const names = "players" in l && l.players ? l.players : "player" in l && l.player ? [l.from] : [];
+	const wanted = names.filter((n) => n && n !== self);
+	if (!wanted.length) return <>{l.text}</>;
+	const parts: ReactNode[] = [];
+	let rest = l.text, k = 0;
+	for (;;) {
+		let at = -1, hit = "";
+		for (const n of wanted) { const i = rest.indexOf(n); if (i >= 0 && (at < 0 || i < at)) { at = i; hit = n; } }
+		if (at < 0) break;
+		parts.push(rest.slice(0, at));
+		const name = hit;
+		parts.push(<button key={k++} className="name-link" onClick={(e) => onName(name, e.clientX, e.clientY)} title={`${name}: Chat, Gruppe, ignorieren`}>{name}</button>);
+		rest = rest.slice(at + hit.length);
+		if (!("players" in l && l.players)) break; // the speaker once
+	}
+	parts.push(rest);
+	return <>{parts}</>;
+}
+
+/** The menu of a player's name in the log: chat, invite into one's groups, ignore. */
+function NameMenu({ at, name, groups, talk, invite, ignore, close }: { at: { left: number; top: number }; name: string; groups: string[]; talk: () => void; invite: (group: string) => void; ignore: () => void; close: () => void }) {
+	useEffect(() => {
+		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+		window.addEventListener("keydown", key);
+		return () => window.removeEventListener("keydown", key);
+	}, [close]);
+	const entries = [{ label: `Chat mit ${name}`, run: talk }, ...groups.slice(0, 4).map((g) => ({ label: `${name} in „${g}“ einladen`, run: () => invite(g) })), { label: `${name} ignorieren`, run: ignore }];
+	const left = Math.min(at.left, window.innerWidth - 220), top = Math.min(at.top, window.innerHeight - 40 * (entries.length + 1));
+	return (
+		<>
+			<div className="menu-backdrop" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
+			<ul className="cell-menu" role="menu" style={{ left, top }}>
+				{entries.map((e) => <li key={e.label} role="menuitem"><button onClick={() => { e.run(); close(); }}>{e.label}</button></li>)}
+			</ul>
+		</>
+	);
+}
+
 /** Trade as buttons: offers to and from the player, a form for a new offer, the order board and the market board when
  *  standing at them. Every button sends the text command the help names. */
 function TradePanel({ trade, chars, objs, me, guest, offerTo, setOfferTo, send }: { trade: TradeView; chars: Map<string, CharView>; objs: Map<string, ObjView>; me: string; guest: boolean; offerTo: string | null; setOfferTo: (n: string | null) => void; send: (line: string) => void }) {
@@ -326,6 +367,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		catch { return "2d"; }
 	});
 	const [menu, setMenu] = useState<null | { x: number; y: number; left: number; top: number }>(null);
+	const [nameMenu, setNameMenu] = useState<null | { name: string; left: number; top: number }>(null);
 	const setMapMode = (mode: MapMode) => { setMenu(null); setMapModeState(mode); try { localStorage.setItem("mmo.renderer", mode); localStorage.setItem("mmo.textOnly", mode === "text" ? "1" : "0"); } catch { /* private window */ } };
 	const ws = useRef<WebSocket | null>(null);
 	// the end-to-end keys of the chat (client/useChat.ts): its frames go through the same socket
@@ -640,6 +682,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				) : <div className="map"><p className="muted">Verbinde …</p></div>}
 				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }}
 					chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
+				{nameMenu && <NameMenu at={nameMenu} name={nameMenu.name} groups={account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? [])} close={() => setNameMenu(null)}
+					talk={() => send(`chat ${nameMenu.name}`, false)} invite={(g) => send(`gruppe lade ${nameMenu.name} in ${g}`)} ignore={() => send(`ignoriere ${nameMenu.name}`)} />}
 				<aside className="side">
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
@@ -664,7 +708,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 					</div>
 					{tab === "log" ? (
 						<div className="log" role="log" aria-live="polite">
-							{(comings ? log : log.filter((l) => !isComing(l))).map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
+							{(comings ? log : log.filter((l) => !isComing(l))).map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}><LogText l={l} self={chars.get(me)?.name ?? account.name} onName={(name, left, top) => setNameMenu({ name, left, top })} />{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
 							<div ref={logEnd} />
 						</div>
 					) : tab === "chats" || !talks.get(tab) ? (

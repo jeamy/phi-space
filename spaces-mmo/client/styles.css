@@ -303,3 +303,5 @@ img.icon { image-rendering: pixelated; display: inline-block; vertical-align: mi
 .chat-key input { flex: 1 1 140px; min-width: 0; }
 .chat-warn { font-size: 12px; }
 .chat-e2e { font-size: 11px; }
+.name-link { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; border-radius: 0; }
+.name-link:hover { transform: none; color: var(--accent); }
