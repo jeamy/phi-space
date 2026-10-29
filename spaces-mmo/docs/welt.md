@@ -82,7 +82,7 @@ geht verloren oder doppelt. Ein Befehl gilt als erledigt, wenn der Welt-Worker s
 | --- | --- | --- |
 | `sammler` | Hanne, Henning, Jan | sammelt in seinen Räumen, was die Flut bringt, und stellt es auf seinem Markt ein |
 | `huter` | Mats, Svea, Greta, Nele | hält das Feuer seiner Insel am Brennen; sammelt oder kauft Holz dafür |
-| `haendler` | Kalle, Ruben, Marta | reist zwischen den Märkten seiner Route (Marta bleibt), kauft billig, verkauft teurer |
+| `haendler` | Kalle, Ruben, Marta | reist zwischen den Märkten seiner Route (Marta bleibt), kauft billig, verkauft teurer; unterwegs bleibt er drei Runden, wo Spieler sind (nach einer Antwort wieder), damit man ihn ansprechen kann |
 | `handwerker` | Jorin, Piet | sammelt und kauft Zutaten, stellt her (und ersetzt sein Werkzeug), verkauft das Ergebnis |
 | `plauderer` | Tilde, Lotte, Kaspar, Eske | geht umher, erzählt Geschichten und Wahres: Preise, erloschene Feuer, gute Aufträge, auch auf dem Hafenkanal |
 

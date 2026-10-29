@@ -266,15 +266,26 @@ async function nextTo(n: Npc, l: Look, at: { x: number; y: number }): Promise<vo
 	}
 }
 
+/** The rounds a trader on its way stays where people are. */
+const LINGER = 3;
+
 function haendler(): Script {
 	const talk = social(), say = chatter(3 * 60_000), offer = pitcher();
-	let at = 0, rounds = 0;
+	let at = 0, rounds = 0, stay = { room: "", rounds: 0 };
 	return async (n) => {
 		const l = await look(n);
 		if (!l) { await n.sleep(1000); return; }
 		const route = n.def.route ?? [l.me.room];
 		const target = route[at % route.length]!;
-		if (l.me.room !== target) { if (!(await talk(n, l))) await travel(n, l, target); await n.sleep(await rest(n, l.me.room)); return; }
+		if (l.me.room !== target) {
+			// on its way it stays a few rounds where people are (and again after it answered), so one can speak to it
+			// before it walks on: one round is soon over, and its leaving is easily missed
+			if (stay.room !== l.me.room) stay = { room: l.me.room, rounds: 0 };
+			if (await talk(n, l)) stay.rounds = 0;
+			else if (!((await humansIn(n, l.me.room)).length && stay.rounds++ < LINGER)) await travel(n, l, target);
+			await n.sleep(await rest(n, l.me.room));
+			return;
+		}
 		// at a market of its route: buys below its price, asks more than it paid; after a while it moves on
 		const acted = (await talk(n, l)) || (await buy(n, l)) || (await sell(n, l)) || (await offer(n, l)) || (await say(n, l));
 		rounds++;

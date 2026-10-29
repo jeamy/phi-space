@@ -110,7 +110,7 @@ Wer statt eines Befehls einen Satz tippt, wird in zwei Stufen verstanden:
    Antwort, die nicht mit einem bekannten Befehl beginnt, wird verworfen; eine Übersetzung wird nie erneut übersetzt.
    Kontingente: je Konto und Tag (Gäste weniger), dazu die gemeinsamen Grenzen pro Minute und Tag.
 
-Der Spieler sieht jedes Mal, wie er verstanden wurde: „gehe nach osten“ → go ost.
+Der Spieler sieht jedes Mal, wie er verstanden wurde: „gehe nach osten“ → go ost. Nur Gesagtes nicht: „hallo kalle“ wird zu `say hallo kalle`, die gesagte Zeile zeigt es schon (eine Zeile „→ say …“ danach las sich, als stünde das Sagen noch aus).
 
 ## Konten und Login
 
