@@ -26,7 +26,7 @@ darunter ist die Überlegung davor.
   die Startbuchten (`server/region-spaces.ts`). Einstellungen und Modellwahl schreibt er in jede Region.
 - **Umzug einer Welt aus einem Space** in die Regionen: `server/migrate-regions.ts` (jeder Eintrag in die Region seines
   Raums; `tests/migrate-regions.test.ts`: jede Figur genau einmal, keine Münze verloren).
-- **Betrieb:** Compose-Profil `regions` (`npm --prefix spaces-mmo run docker:regions:up`), [betrieb.md](betrieb.md),
+- **Betrieb:** Compose-Profil `big` (`npm --prefix spaces-mmo run docker:big:up`), [betrieb.md](betrieb.md),
   „Regionen“.
 
 Noch offen: `wer` zeigt nur die eigene Region; die Tageszähler der Übersetzungen gelten je Region; ein Befehl, der

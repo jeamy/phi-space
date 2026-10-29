@@ -1,7 +1,7 @@
 # Override for the `big` host (docker compose -f docker-compose.yml -f docker-compose.hostnet.yml --profile big ...): the
-# roles share the host network, so they reach the nano spaces through SSH tunnels on the host's loopback
-# (SPACES_MMO_SPACE=tcp:127.0.0.1:3950 and SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951 in .env, user units on big as for the
-# help system and the chat). The web process listens on the loopback only, for the reverse proxy in front.
+# web process shares the host network: it reaches the region spaces on their loopback ports (SPACES_MMO_WEB_REGIONS in .env)
+# and nano's accounts space through an SSH tunnel (SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951, the user unit
+# mmo-accounts-tunnel). It listens on the loopback only, for the reverse proxy in front.
 services:
   web:
     network_mode: host
@@ -10,19 +10,5 @@ services:
     environment:
       SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:127.0.0.1:3950}"
       SPACES_MMO_ACCOUNTS: "${SPACES_MMO_ACCOUNTS:-tcp:127.0.0.1:3951}"
+      SPACES_MMO_REGIONS: "${SPACES_MMO_WEB_REGIONS:-west=tcp:127.0.0.1:3950,nord=tcp:127.0.0.1:3952,ost=tcp:127.0.0.1:3953,sued=tcp:127.0.0.1:3954}"
       SPACES_MMO_BIND: 127.0.0.1
-  world-big:
-    network_mode: host
-    networks: !reset []
-    environment:
-      SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:127.0.0.1:3950}"
-  npc:
-    network_mode: host
-    networks: !reset []
-    environment:
-      SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:127.0.0.1:3950}"
-  model:
-    network_mode: host
-    networks: !reset []
-    environment:
-      SPACES_MMO_SPACE: "${SPACES_MMO_SPACE:-tcp:127.0.0.1:3950}"

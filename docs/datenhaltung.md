@@ -12,12 +12,13 @@ Besitzer (Owner-Lock, WAL); andere Prozesse erreichen ihn über den Space-Dienst
  │ help-prod  ── spaces-eibrain.sqlite          │  :3600   │ swarm-nano ── swarm-b.sqlite           │
  │   (Kennzahlen für das Dashboard auf :3520) ──┼─────────▶│                                        │
  │ codemode: web, judge-big, agents, model ─────┼──:3800──▶│ codemode-space ── codemode-space.sqlite│
- │ mmo: web, world-big, npc, model ─────────────┼──:3950──▶│ mmo-space ── world.sqlite              │
- │                     (nur web) ───────────────┼──:3951──▶│              accounts.sqlite           │
- │ dashboard (systemd) ── store.sqlite (leer)   │          │ codemode-judge-nano, mmo-world-nano    │
+ │ mmo: je Region (west, nord, ost, sued)       │          │                                        │
+ │   space, world, npc, model ─ world-<r>.sqlite│          │                                        │
+ │ mmo-web ─────────────────────────────────────┼──:3951──▶│ mmo-space ── accounts.sqlite           │
+ │ dashboard (systemd) ── store.sqlite (leer)   │          │ codemode-judge-nano                    │
  │ nginx → spaces / codemode / spaces-mmo /     │          └────────────────────────────────────────┘
  │         spaces-stats .eibrain.org            │   SSH-Tunnel als User-Units auf big:
- └──────────────────────────────────────────────┘   swarm-/codemode-/mmo-nano-tunnel (127.0.0.1:Port → nano)
+ └──────────────────────────────────────────────┘   swarm-/codemode-nano-tunnel, mmo-accounts-tunnel
 ```
 
 ## Matrix
@@ -31,8 +32,8 @@ Besitzer (Owner-Lock, WAL); andere Prozesse erreichen ihn über den Space-Dienst
 | | | | | `chat-session-<id>` (je Chat einer; live nur `lobby`) | Space-Chat: `Thread`, `Msg`, `ChatSessionPolicy`, `ThreadSequence`, `ChatReport` | 6 Entries · 68 KB |
 | Hilfeseite · Swarm-Shard B | `swarm-b.sqlite` | nano · Volume `phi-spaces-help_swarm-nano-data` | `phi-spaces-swarm-nano`, Socket :3600 (Tunnel auf big) | `social-swarm` (`default` leer) | 4.608 `Post`, 4.608 `PostHistoryNode`, 546 `Like`, 12 `ChannelCount`, `SwarmTask`, `HostInfo`, `PurgeNotice`, `PostHistoryHead` | 9.779 Entries · Datei 129 MB |
 | Codemode-Chat | `codemode-space.sqlite` | nano · Volume `phi-spaces-codemode_codemode-space-data` | `phi-spaces-codemode-space-1`, Socket :3800 (Tunnel) | `default` | Aufgaben und Bewertungen: `CodeTask`, `CodeRoom`, `CodeProposal`, `CodeVote`, `CodeScore`, `CodeBest`, `CodeNote`, `CodeCritique`, `CodeEarlier`, `CodeRunDone`; Chat: `ChatMessage`; Kontingente und Kosten: `QuotaUse`, `QuotaLock`, `Spend`; `CodeAdmin`, `ModelInfo`, `RoomLock`, `Process` | 61 Entries · Datei 193 MB |
-| spaces-mmo · Welt | `world.sqlite` | nano · Volume `phi-spaces-mmo_mmo-space-data` | `phi-spaces-mmo-space-1`, Socket :3950 (Tunnel) | `default` | Welt: `Room`, `Exit`, `Fog`, `RoomToken`, `Prototype`, `WorldClock`, `WorldSchedule`, `WorldLoaded`; Dinge: `Coin`, `Shell`, `Driftwood`, `Weed`, `Gem`, `Tool`, `Fuel`, `Flame`, `Beacon`, `Gear`; Spieler: `Account` (mit Admin-Flag), `Character`, `ActorToken`, `Session`; Handel: `Listing`, `Order`, `Contribution`, `Bundle`; NPCs: `NpcOwner`, `NpcMemory`, `NpcVisit`; `Msg`, `Spot`, `HelpEntry`, `Lock`, `LlmCount`, `ModelInfo`, `Process` | 679 Entries · Datei 50 MB |
-| spaces-mmo · Konten | `accounts.sqlite` | nano · dasselbe Volume | derselbe Container, Socket :3951 (nur der Web-Prozess) | `default` | Zugangsdaten: `Credential` (Salt und Hash), `WebSession` (Hash der Session-ID), `Lock` (`names`) | Datei 119 KB |
+| spaces-mmo · Welt | `world-<region>.sqlite` (west, nord, ost, sued) | big · Volume `phi-spaces-mmo_mmo-space-data` | `phi-spaces-mmo-space-<region>-1`, Sockets :3950/:3952/:3953/:3954 (Loopback) | `default` | Welt: `Room`, `Exit`, `Fog`, `RoomToken`, `Prototype`, `WorldClock`, `WorldSchedule`, `WorldLoaded`; Dinge: `Coin`, `Shell`, `Driftwood`, `Weed`, `Gem`, `Tool`, `Fuel`, `Flame`, `Beacon`, `Gear`; Spieler: `Account` (mit Admin-Flag), `Character`, `ActorToken`, `Session`; Handel: `Listing`, `Order`, `Contribution`, `Bundle`; NPCs: `NpcOwner`, `NpcMemory`, `NpcVisit`; `Msg`, `Spot`, `HelpEntry`, `Lock`, `LlmCount`, `ModelInfo`, `Process` | 679 Entries · Datei 50 MB |
+| spaces-mmo · Konten | `accounts.sqlite` | nano · Volume `phi-spaces-mmo_mmo-space-data` | `phi-spaces-mmo-space-1`, Socket :3951 (Tunnel, nur der Web-Prozess) | `default` | Zugangsdaten: `Credential` (Salt und Hash), `WebSession` (Hash der Session-ID), `Lock` (`names`) | Datei 119 KB |
 | Dashboard | `store.sqlite` | big · `~/.local/share/phi-spaces/dashboard-store/` (kein Docker) | `phi-spaces-dashboard.service`, `space.sock` | `default` | leer; die Apps liest es über ihre Sockets | 45 KB |
 
 Die Zahlen des Hubs liest das Dashboard als App `help-hub` über `HELP_SPACE_LISTEN` (live seit 2026-10-28, Standard im

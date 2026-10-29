@@ -8,15 +8,15 @@ Rolle, alle sprechen nur über den Space und TCP. Dateien: `spaces-mmo/docker/Do
 
 | Profil | Container | Wo |
 | --- | --- | --- |
-| `nano` | `space` (Welt- und Kontenspeicher als SQLite im Volume `mmo-space-data`), `world-nano` (führt alle Befehle aus) | der Rechner, der den Zustand hält |
-| `big` | `web`, `world-big` (nur Termine der Welt und Aufräumen, `SPACES_MMO_WORLD_INTENTS=0`), `npc`, `model` (übersetzt freie Sätze in Befehle) | der Rechner, der die Arbeit macht |
+| `nano` | `space`: der Konten-Space (Zugangsdaten, Web-Sitzungen) als SQLite im Volume `mmo-space-data` | nano |
+| `big` | die Welt in ihren vier Regionen ([Regionen](#regionen)): je Region `space-<region>`, `world-<region>` (führt die Befehle aus), `npc-<region>`, `model-<region>` (übersetzt freie Sätze in Befehle); dazu `web` | big |
 | `dev` | `mmo-dev` (alle Rollen in einem Container, Quelltext eingebunden) | lokal |
 | `test` | `mmo-test` (die Testsuite) | überall |
 | nano + big | beides auf einer Maschine | lokaler Testaufbau |
 
-`world` lässt sich mehrfach starten; Befehle führt aber nur der Arbeiter neben dem Space aus (`world-nano`), weil ein
-Befehl rund ein Dutzend Aufrufe nacheinander an den Space macht (siehe [Last und Latenz](#last-und-latenz)). `npc` und
-`model` laufen einmal, auf big.
+Bis 2026-10-28 lief die Welt als ein Space (Profile `nano` mit `world-nano`, `big` mit `world-big`, `npc`, `model`,
+dazu `single`, `regions` und `accounts` als Skripte); diese Container gibt es nicht mehr. `docker:nano:up` und
+`docker:big:up` entfernen übrig gebliebene Container der alten Aufteilung (`--remove-orphans`).
 
 **Modellzugang:** Wie codemode-chat und das Help-System lesen `npc` und `model` die Anmeldung der pi-CLI des Hosts:
 `${PI_AUTH_DIR:-$HOME/.pi/agent}` wird schreibgeschützt nach `/home/node/.pi/agent` eingebunden (alternativ API-Schlüssel
@@ -34,7 +34,7 @@ mkdir -p -m 755 ~/.pi/agent-node && cp ~/.pi/agent/auth.json ~/.pi/agent-node/
 docker run --rm -v ~/.pi/agent-node:/d node:22-bookworm-slim sh -c 'chown 1000:1000 /d/auth.json && chmod 400 /d/auth.json'
 ```
 
-Danach `npm --prefix spaces-mmo run docker:big:up`; `docker exec phi-spaces-mmo-npc-1 cat /home/node/.pi/agent/auth.json
+Danach `npm --prefix spaces-mmo run docker:big:up`; `docker exec phi-spaces-mmo-npc-west-1 cat /home/node/.pi/agent/auth.json
 >/dev/null` prüft, ob `node` die Datei lesen kann.
 
 ## Ports
@@ -42,23 +42,23 @@ Danach `npm --prefix spaces-mmo run docker:big:up`; `docker exec phi-spaces-mmo-
 | Port | Dienst | Veröffentlicht auf |
 | --- | --- | --- |
 | 3900 | web (Browser, WebSocket, `/healthz`) | `HOST_BIND` (Standard 127.0.0.1), davor der Reverse Proxy |
-| 3950 | Weltspace | `SPACES_MMO_SPACE_BIND` (Standard 127.0.0.1) |
-| 3951 | Kontenspeicher (Zugangsdaten, Sitzungen) | `SPACES_MMO_SPACE_BIND` |
+| 3950, 3952, 3953, 3954 | die Spaces der Regionen West, Nord, Ost, Süd | 127.0.0.1 |
+| 3951 | Kontenspeicher (Zugangsdaten, Sitzungen) | `SPACES_MMO_SPACE_BIND` (Standard 127.0.0.1) |
 
-Die beiden Space-Ports haben **kein TLS** und behandeln jede Verbindung als Prozess des Spiels; der Kontenspeicher hält
+Die Space-Ports haben **kein TLS** und behandeln jede Verbindung als Prozess des Spiels; der Kontenspeicher hält
 die Zugangsdaten. Sie gehören nie auf eine öffentliche Schnittstelle, nur auf die interne Adresse (LAN/NetBird) oder auf
 die Loopback-Adresse hinter einem SSH-Tunnel. Codemode-chat belegt 3700/3800, das Help-System 3500/3600.
 
 ## Lokal testen (beide Rollen auf dieser Maschine)
 
 ```
-npm --prefix spaces-mmo run docker:local:up     # baut das Image, startet space, world-nano, web, world-big, npc, model
+npm --prefix spaces-mmo run docker:local:up     # startet den Konten-Space, die vier Regionen und web (Image vorher: docker:image)
 npm --prefix spaces-mmo run docker:local:logs
 npm --prefix spaces-mmo run docker:local:down
 ```
 
-Das Spiel ist dann auf <http://127.0.0.1:3910> erreichbar (Web 3910, Welt 3960, Konten 3961, damit eine laufende
-Entwicklungsinstanz auf 3900 nicht stört). `NANO_CPUS` (Standard 2) begrenzt nano wie den kleineren Rechner. Die Tests in
+Das Spiel ist dann auf <http://127.0.0.1:3910> erreichbar (Web 3910, Regionen 3960/3962/3963/3964, Konten 3961, damit
+eine laufende Entwicklungsinstanz auf 3900 nicht stört; web erreicht die Spaces im Docker-Netz). `NANO_CPUS` (Standard 2) begrenzt nano wie den kleineren Rechner. Die Tests in
 Docker: `npm --prefix spaces-mmo run docker:test`.
 
 ## Entwicklung (kompiliert bei jeder Änderung neu)
@@ -86,60 +86,17 @@ Grenzen stehen in `.env.example`.
 
 Ein Rechner betreibt genau ein Profil. Auf beiden: `git pull --ff-only`, dann das Skript des Rechners.
 
-1. **nano** (hält den Zustand): in `spaces-mmo/.env` `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>`, dann
-   `npm --prefix spaces-mmo run docker:nano:up`.
-2. **big** (Web, Arbeiter, NPCs): in `spaces-mmo/.env` `SPACES_MMO_SPACE=tcp:127.0.0.1:3950` und
-   `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, dazu zwei SSH-Tunnel als Benutzer-Units auf big (wie `swarm-nano-tunnel`
-   und `codemode-nano-tunnel`) von 127.0.0.1:3950 und :3951 nach nano. Dann
-   `npm --prefix spaces-mmo run docker:big:up` (Host-Netzwerk über `docker-compose.hostnet.yml`, web nur auf der
-   Loopback-Adresse, davor nginx).
-3. `docker:prod:up` ist absichtlich gesperrt: beide Profile auf einem Rechner startet nur `docker:single:up` (unten).
+| Rechner | Prozesse | Skript | `.env` |
+| --- | --- | --- | --- |
+| nano | Konten-Space (Zugangsdaten, Web-Sitzungen) | `docker:nano:up` | `SPACES_MMO_SPACE_BIND=<interne Adresse von nano>` |
+| big | die vier Regionen (Space, Welt-Worker, NPCs, Modell je Region) und web | `docker:big:up` | `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_WEB_REGIONS` (unten), `PI_AUTH_DIR` |
 
-### Alles auf einem Rechner (Space auf big)
-
-Der Space-Prozess braucht einen schnellen Kern, nicht viele: auf nano (kleine VM) rechnete ein Kern im Vergleich
-(JSON kodieren und lesen) etwa dreimal so lange wie auf big ([lasttest-2026-10-28.md](lasttest-2026-10-28.md)), und der
-Lasttest sättigte genau diesen Kern. `docker:single:up` startet beide Profile auf einem Rechner: `space` und `world-nano`
-im Docker-Netz (der Space nur auf `127.0.0.1:3950`/`3951`), web, world-big, npc und model im Host-Netz wie bisher, die
-den Space jetzt ohne Tunnel auf demselben Port erreichen. In der `.env` von big dazu `NANO_HOST_NAME=big` (die
-Systemleiste nennt sonst „nano“).
-
-Umzug von nano nach big (Auszeit wenige Minuten; nano behält seine Dateien für den Rückweg):
-
-```sh
-# big: vorher, ohne Auszeit
-cd /media/docker/spaces && git pull --ff-only && npm --prefix spaces-mmo run docker:image
-# nano: anhalten (Space und Welt-Worker; das Volume bleibt)
-cd /home/mux/spaces && npm --prefix spaces-mmo run docker:nano:down
-# big: Tunnel aus (er belegt 3950/3951), Dateien herüber, alles starten
-systemctl --user disable --now mmo-nano-tunnel
-docker volume create phi-spaces-mmo_mmo-space-data
-ssh nano "tar -C /home/mux/.local/share/docker/volumes/phi-spaces-mmo_mmo-space-data/_data --exclude='*.owner*' --exclude='*-shm' -cf - ." \
-  | docker run --rm -i -v phi-spaces-mmo_mmo-space-data:/data phi-spaces-mmo:prod tar -xf - -C /data
-npm --prefix spaces-mmo run docker:single:up
-```
-
-Kopiert werden die Stores mit ihrem WAL, ohne die Besitzer-Sperren (`*.owner*`, sie gehören dem angehaltenen Prozess)
-und ohne `-shm`. Ein Space einer älteren phi-spaces-Version bietet `batch` und transientes Schreiben nicht an; die
-Prozesse fragen das beim Verbinden ab und schreiben dann wie vorher (der Rückweg auf nano mit altem Stand geht also).
-Zurück: `docker:single:down` auf big, `systemctl --user enable --now mmo-nano-tunnel`, auf nano `docker:nano:up`,
-auf big `docker:big:up`.
-
-### Zwei Spaces auf zwei Rechnern (Stand seit 2026-10-28)
-
-Die Testumgebung soll beide Rechner nutzen, und der Welt-Space braucht den schnellen Kern. Deshalb dient jeder Rechner
-einen der beiden Spaces (`SPACES_MMO_SPACES` des Space-Prozesses):
-
-| Rechner | Prozesse | `.env` |
-| --- | --- | --- |
-| big | Welt-Space und der Welt-Worker, der die Befehle ausführt (Profil `nano`), web, world-big (Termine, Aufräumen), npc, model (Profil `big`): `docker:single:up` | `SPACES_MMO_SPACES=world`, `SPACES_MMO_ACCOUNTS=tcp:127.0.0.1:3951`, `SPACES_MMO_ACCOUNTS_PORT=3971` (der unbenutzte Konten-Port des Containers, 3951 gehört dem Tunnel), `NANO_HOST_NAME=big` |
-| nano | Konten-Space (Zugangsdaten, Web-Sitzungen): `docker:accounts:up` | `SPACES_MMO_SPACES=accounts` |
-
-Das Web auf big erreicht den Konten-Space über die Benutzer-Unit `mmo-accounts-tunnel` (`deploy/`, nur Port 3951). Jeder
-Befehl bleibt neben dem Welt-Space; über das Netz gehen Anmeldung, Registrierung und das Prüfen einer Web-Sitzung.
-
-Der Wechsel von „alles auf big“ dazu: auf big `docker:single:down`, den Konten-Store von big nach nano kopieren (er ist
-der neuere), auf nano `docker:accounts:up`, auf big die Tunnel-Unit einschalten und `docker:single:up`.
+Jeder Region-Space braucht einen schnellen Kern; auf nano (kleine VM) rechnete ein Kern etwa dreimal so lange wie auf big
+([lasttest-2026-10-28.md](lasttest-2026-10-28.md)). Deshalb liegt die Welt auf big und nur der Konten-Space auf nano.
+Das Web auf big erreicht ihn über die Benutzer-Unit `mmo-accounts-tunnel` (`deploy/`, nur Port 3951); über das Netz gehen
+Anmeldung, Registrierung und das Prüfen einer Web-Sitzung, jeder Befehl bleibt neben dem Space seiner Region.
+`web` läuft im Host-Netz (`docker-compose.hostnet.yml`, nur auf der Loopback-Adresse, davor nginx).
+`docker:prod:up` ist absichtlich gesperrt.
 
 Das Image wird auf dem Rechner selbst gebaut (`docker build --network host`: auf dem rootless Docker von nano erreicht ein
 Build im Standardnetz die npm-Registry nicht). Der Speicher bleibt beim Neustart der Container im Volume erhalten.
@@ -209,10 +166,9 @@ Was es langsam machte, und was sich geändert hat:
 - **Grenzen des Dienstes.** Alle Prozesse sind gegenüber dem Space ein Teilnehmer; dessen Grenzen (1024 Aufrufe je Sekunde,
   128 wartende Aufrufe, 32 Aufrufe je Verbindung) sind für das ganze Spiel bemessen worden.
 
-**Wo die Welt-Worker laufen:** Ein Befehl macht rund ein Dutzend Aufrufe nacheinander an den Space. Neben dem Space (nano)
-kostet das Millisekunden, über die Verbindung zwischen den Rechnern ein Vielfaches des Pings je Aufruf. Deshalb führt
-`world-nano` alle Befehle aus; `world-big` läuft mit `SPACES_MMO_WORLD_INTENTS=0` und bedient nur die Termine der Welt und
-das Aufräumen.
+**Wo die Welt-Worker laufen:** Ein Befehl macht rund ein Dutzend Aufrufe nacheinander an den Space. Neben dem Space
+kostet das Millisekunden, über die Verbindung zwischen zwei Rechnern ein Vielfaches des Pings je Aufruf. Deshalb läuft
+jeder Welt-Worker auf dem Rechner seines Region-Space.
 
 **Grenze:** Der Space-Prozess ist ein Thread. Bei rund 135 Schritten je Sekunde (etwa 20 Spieler, die ohne Pause laufen) ist
 er auf dem Entwicklungsrechner voll; darüber staut es sich. Weitere Schritte wären im Kern: ein Index der Entries nach Typ
@@ -267,8 +223,7 @@ docker:dev:up`.
 
 ## Regionen
 
-Die Welt läuft auf Wunsch als vier Spaces, je Region einer ([welt-aufteilen.md](welt-aufteilen.md)): Compose-Profil
-`regions`. Je Region ein Space-Prozess (`world-<region>.sqlite` im Volume `mmo-space-data`, Port auf dem Loopback: West
+Die Welt läuft als vier Spaces, je Region einer ([welt-aufteilen.md](welt-aufteilen.md)): Compose-Profil `big`. Je Region ein Space-Prozess (`world-<region>.sqlite` im Volume `mmo-space-data`, Port auf dem Loopback: West
 3950, Nord 3952, Ost 3953, Süd 3954), ein Welt-Worker, ein NPC- und ein Modell-Prozess; dazu der Web-Prozess im
 Host-Netz. Der Konten-Space bleibt, wo er ist (nano, über den Tunnel auf 3951).
 
@@ -278,25 +233,25 @@ Host-Netz. Der Konten-Space bleibt, wo er ist (nano, über den Tunnel auf 3951).
 SPACES_MMO_WEB_REGIONS=west=tcp:127.0.0.1:3950,nord=tcp:127.0.0.1:3952,ost=tcp:127.0.0.1:3953,sued=tcp:127.0.0.1:3954
 ```
 
-Umzug einer Welt, die als ein Space lief (einmal; die alte Datei bleibt):
+Umzug einer Welt, die als ein Space lief (einmal, auf big am 2026-10-28 geschehen; die alte Datei bleibt). Die alte
+Welt vorher anhalten (die Container der alten Aufteilung):
 
 ```sh
-npm --prefix spaces-mmo run docker:single:down                     # die alte Welt anhalten
 cp …/world.sqlite …/world.sqlite.before-regions                     # Sicherung im Volume
-docker compose … --profile regions up -d space-west space-nord space-ost space-sued
+docker compose … --profile big up -d space-west space-nord space-ost space-sued
 # das Volume mit world.sqlite einhängen: ohne verweigert das Skript (die Datei fehlt), statt nichts zu verschieben
-docker compose … --profile regions run --rm --no-deps -v mmo-space-data:/data -e SPACES_MMO_DATA=/data \
+docker compose … --profile big run --rm --no-deps -v mmo-space-data:/data -e SPACES_MMO_DATA=/data \
   -e SPACES_MMO_REGIONS=west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950 \
   world-west node --experimental-strip-types server/migrate-regions.ts
-npm --prefix spaces-mmo run docker:regions:up                      # Welt-Worker, NPCs, Modelle, Web
+npm --prefix spaces-mmo run docker:big:up                          # Welt-Worker, NPCs, Modelle, Web
 ```
 
 Das Skript nennt vorher, was die alte Welt hält, und danach je Region, was es geschrieben hat. Danach über alle vier
 Regionen zusammen nachzählen: Figuren und Münzen wie vorher plus die der NPCs, die die neue Weltversion dazubringt;
 eine andere Zahl heißt, dass etwas fehlt oder doppelt ist.
 
-Zurück zu einem Space: `docker:regions:down`, dann `docker:single:up` (es liest wieder `world.sqlite`, den Stand vor dem
-Umzug).
+`world.sqlite.before-regions` bleibt als Stand vor dem Umzug im Volume; einen Weg zurück zu einem Space gibt es in den
+Skripten nicht mehr.
 
 ## Lasttest gegen die laufende Welt
 
