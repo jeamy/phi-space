@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type ExitFields, type ItemFields, type RoomFields, type TagFields } from "../../model.ts";
 import type { Command } from "../cmdsets.ts";
-import { byName, CommandError, exitsHere, inventory, itemsHere, msg, roomOf, type CommandCtx } from "../context.ts";
+import { byName, CommandError, exitsHere, inventory, itemsHere, msg, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { LEVELS, LockError, parseLocks } from "../locks.ts";
 import { DEFAULT_ITEM_LOCKS, newItemId, resolvePrototype, spawn as spawnItem } from "../prototypes.ts";
 import { draftOf, typeChain } from "../typeclasses.ts";
@@ -26,7 +26,7 @@ async function target(c: CommandCtx, name: string): Promise<Target> {
 		if (!e) throw new CommandError("Dieser Ort ist verschwunden.");
 		return { kind: "room", e, id: c.actor.room, name: String(e.fields.name) };
 	}
-	const item = byName([...(await inventory(c)), ...(await itemsHere(c))], n, c.actor)[0];
+	const item = itemsNamed(c.world, [...(await inventory(c)), ...(await itemsHere(c))], n, c.actor)[0];
 	if (item) return { kind: "item", e: item.e, id: item.f.itemId, name: item.f.name };
 	const exit = byName(await exitsHere(c), n)[0];
 	if (exit) return { kind: "exit", e: exit.e, id: exit.f.exitId, name: exit.f.name };

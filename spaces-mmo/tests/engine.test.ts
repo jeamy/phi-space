@@ -96,3 +96,16 @@ test("plural and umlauts: \"hölzer\" is the wood, \"muscheln\" the shell, \"mü
 	for (const n of ["holzstücke", "holzstück", "holstücke", "holzscheite"]) assert.deepEqual(one(n), ["Treibholz"], n);
 	assert.deepEqual(one("brennstücke"), [], "another word stays unknown (the model may read it)");
 });
+
+test("a name that is a thing of the world means that thing: \"tang\" is never the Tangseil, \"treib\" still the driftwood", async () => {
+	const { itemsNamed } = await import("../server/engine/context.ts");
+	const world = { prototypes: [{ key: "tang", name: "Tang", aliases: ["seetang"] }, { key: "tangseil", name: "Tangseil", aliases: ["seil"] }, { key: "treibholz", name: "Treibholz", aliases: ["holz"] }] } as never;
+	const t = (name: string, proto: string, aliases: string[] = []) => ({ e: {} as never, f: { name, aliases, proto } });
+	const pack = [t("Tangseil", "tangseil", ["seil"]), t("Treibholz", "treibholz", ["holz"])];
+	const one = (n: string) => itemsNamed(world, pack, n).map((x) => x.f.name);
+	assert.deepEqual(one("tang"), [], "only a kelp rope carried: tang is not it");
+	assert.deepEqual(one("seetang"), []);
+	assert.deepEqual(one("tangseil"), ["Tangseil"]);
+	assert.deepEqual(one("treib"), ["Treibholz"], "a beginning that names nothing still finds the thing");
+	assert.deepEqual(itemsNamed(world, [...pack, t("Tang", "tang", ["seetang"])], "tang").map((x) => x.f.name), ["Tang"]);
+});

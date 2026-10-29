@@ -71,7 +71,8 @@ export type SessionFields = { sessionId: string; charId: string; accountId: stri
 /** `step`: a numbered step of a page (its connection and number), acknowledged on the character. */
 export type IntentFields = { intentId: string; charId: string; line: string; at: number; asked?: string; step?: { conn: string; seq: number } };
 /** A sentence no rule understood, for the model process to turn into a command (an Intent with `asked`). */
-export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number };
+/** A line for the model to read; `why`: why the command itself refused it, said when the model cannot read it either. */
+export type TranslateFields = { reqId: string; charId: string; accountId: string; guest: boolean; line: string; room: string; at: number; why?: string };
 /** Output: to one character (`to` = its charId), to everyone in `room` (`to` = "*"), or to everyone on a channel
  *  (`to` = "#hafen"). With `actor` (a charId) the text
  *  holds FuncParser calls ($you(), $conj(a|b)) that the gateway renders for each reader. */

@@ -7,7 +7,7 @@ import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
 import { fieldsOf, type AccountFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
-import { byName, CommandError, NotUnderstood, inventory, msg, type CommandCtx } from "../context.ts";
+import { byName, CommandError, NotUnderstood, inventory, msg, type CommandCtx, itemsNamed } from "../context.ts";
 import { bau, planOf } from "./build.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { worldNowOf } from "../clock.ts";
@@ -28,13 +28,14 @@ export function parseSpec(s: string): Array<{ name: string; count: number }> {
 }
 
 /** Items of `inv` that satisfy `spec` (each item used once), or the name of what is missing (`unknown`: nothing carried
- *  goes by that name). A name is taken as `byName` takes it ("muscheln" are the "Muschel"), of one kind. */
-function pick(inv: Inv, spec: Array<{ name: string; count: number }>): { items: Inv } | { missing: string; unknown: boolean } {
+ *  goes by that name). A name is taken as `byName` takes it ("muscheln" are the "Muschel"), of one kind; a name that is
+ *  exactly a thing of the world means that thing only ("tang" is never the "Tangseil" byName finds by its beginning). */
+function pick(inv: Inv, spec: Array<{ name: string; count: number }>, world: WorldDef): { items: Inv } | { missing: string; unknown: boolean } {
 	const used = new Set<string>(), items: Inv = [];
 	for (const want of spec) {
 		const free = inv.filter((i) => !used.has(i.f.itemId));
 		let hits = free.filter((i) => names(i.f).includes(want.name) || i.f.proto === want.name);
-		const near = hits.length ? undefined : byName(free, want.name)[0];
+		const near = hits.length ? undefined : itemsNamed(world, free, want.name)[0];
 		if (near) hits = free.filter((i) => i.f.proto === near.f.proto);
 		if (hits.length < want.count) return { missing: `${want.count}× ${hits[0]?.f.name ?? want.name}`, unknown: !hits.length };
 		for (const h of hits.slice(0, want.count)) { used.add(h.f.itemId); items.push(h); }
@@ -78,7 +79,7 @@ const offer: Command = {
 		}
 		const m = /^(.+?)\s+(?:an|to)\s+(\S+)(?:\s+(?:für|fuer|for)\s+(.+))?$/i.exec(arg.trim());
 		if (!m) throw new NotUnderstood("So geht es: offer <dinge> an <person> [für <dinge>], z. B. offer treibholz an Bert für münze");
-		const got = pick(await inventory(c), parseSpec(m[1]!));
+		const got = pick(await inventory(c), parseSpec(m[1]!), c.world);
 		if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(`Du hast nicht: ${got.missing}.`);
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e)).find((ch) => ch.charId !== c.actor.charId && ch.name.toLowerCase() === m[2]!.toLowerCase());
 		if (!who) throw new NotUnderstood(`Hier ist niemand namens „${m[2]!.slice(0, 30)}“.`);
@@ -117,7 +118,7 @@ const accept: Command = {
 			await move(c, fieldsOf<ItemFields>(e), o.f.from, c.actor.charId);
 		}
 		// my side: what they want, from my pack
-		const got = pick(await inventory(c), o.f.want);
+		const got = pick(await inventory(c), o.f.want, c.world);
 		if ("missing" in got) throw new CommandError(`Dir fehlt für diesen Tausch: ${got.missing}.`);
 		for (const i of got.items) await move(c, i.f, c.actor.charId, o.f.from);
 		const back = got.items.length ? ` gegen ${counted(got.items.map((i) => i.f.name))}` : "";
@@ -160,7 +161,7 @@ const market: Command = {
 			if (!m) throw new NotUnderstood("So geht es: markt biete <ding> für <n>");
 			const price = Number(m[2]);
 			if (price < 1 || price > 1000) throw new CommandError("Ein Preis liegt zwischen 1 und 1000 Münzen.");
-			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1).map((s) => ({ ...s, count: 1 })));
+			const got = pick(await inventory(c), parseSpec(m[1]!).slice(0, 1).map((s) => ({ ...s, count: 1 })), c.world);
 			if ("missing" in got) throw new (got.unknown ? NotUnderstood : CommandError)(`Du hast nicht: ${got.missing}.`);
 			const item = got.items[0]!.f, listingId = `l-${randomBytes(5).toString("hex")}`;
 			await move(c, item, c.actor.charId, "market", { listing: listingId, seller: c.actor.charId });

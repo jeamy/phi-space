@@ -89,6 +89,15 @@ export function stem(word: string): string {
 	return w;
 }
 
+/** Items named `name` as `byName` finds them, except that a name which is exactly a thing of the world (its name, an
+ *  alias, its key) means that thing only: "tang" is the Tang, never the Tangseil whose name begins so. */
+export function itemsNamed<T extends { name: string; aliases: string[]; proto: string }>(world: WorldDef, list: Array<{ e: Taken; f: T }>, name: string, near?: { x: number; y: number }): Array<{ e: Taken; f: T }> {
+	const n = name.trim().toLowerCase();
+	const protos = new Set(world.prototypes.filter((p) => p.key === n || [p.name, ...p.aliases].some((a) => a.toLowerCase() === n)).map((p) => p.key));
+	const hits = byName(list, name, near);
+	return protos.size ? hits.filter((i) => protos.has(i.f.proto) || [i.f.name, ...i.f.aliases].some((a) => a.toLowerCase() === n)) : hits;
+}
+
 /** Things named `name` (name or alias, case-insensitive; exact matches first, then prefixes, then the same word in
  *  another form ("hölzer" is the "holz"), then names with a typo or two: "feur" is the fire), nearest first. */
 export function byName<T extends { name: string; aliases: string[] }>(list: Array<{ e: Taken; f: T }>, name: string, near?: { x: number; y: number }): Array<{ e: Taken; f: T }> {

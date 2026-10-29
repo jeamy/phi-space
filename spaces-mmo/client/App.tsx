@@ -202,7 +202,9 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 			entries.push({ label: "Mitarbeiten", line: "arbeite" });
 			// what one carries that it still needs
 			const carried = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name))];
-			for (const n of carried.filter((n) => (o.missing ?? "").includes(n))) entries.push({ label: `${n} liefern`, line: `liefere ${n}` });
+			// "2 Tangseil, 5 Arbeit" → the names, matched whole: "Tang" is not the "Tangseil" it needs
+			const needed = new Set((o.missing ?? "").split(",").map((p) => p.trim().replace(/^\d+\s+/, "")).filter(Boolean));
+			for (const n of carried.filter((n) => needed.has(n))) entries.push({ label: `${n} liefern`, line: `liefere ${n}` });
 		}
 	}
 	for (const o of objs.values()) {
@@ -252,7 +254,9 @@ function LogText({ l, self, onName }: { l: Line; self: string; onName: (name: st
 	let rest = l.text, k = 0;
 	for (;;) {
 		let at = -1, hit = "";
-		for (const n of wanted) { const i = rest.indexOf(n); if (i >= 0 && (at < 0 || i < at)) { at = i; hit = n; } }
+		// a whole name only: "Ina" is not the end of "Kalina"
+		const word = /[\p{L}\p{N}_-]/u, whole = (n: string) => { for (let i = rest.indexOf(n); i >= 0; i = rest.indexOf(n, i + 1)) if (!word.test(rest[i - 1] ?? " ") && !word.test(rest[i + n.length] ?? " ")) return i; return -1; };
+		for (const n of wanted) { const i = whole(n); if (i >= 0 && (at < 0 || i < at)) { at = i; hit = n; } }
 		if (at < 0) break;
 		parts.push(rest.slice(0, at));
 		const name = hit;

@@ -4,7 +4,7 @@
 import { FOREVER, NO_WAIT, type Taken } from "phi-spaces";
 import { fieldsOf, type OfferFields, type BeaconFields, type ContributionFields, type CharacterFields, type ExitFields, type HelpEntryFields, type ItemFields, type RoomFields, type SessionFields } from "../../model.ts";
 import type { CmdSet, Command } from "../cmdsets.ts";
-import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx } from "../context.ts";
+import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx, itemsNamed } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
 import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
@@ -160,7 +160,7 @@ const look: Command = {
 	help: "look [ding] – sich umsehen, oder ein Ding, einen Ausgang, eine Person ansehen",
 	async func(c, arg) {
 		if (!arg) return msg(c, c.actor.charId, "look", await describeRoom(c, c.actor.room));
-		const item = byName([...(await inventory(c)), ...(await itemsHere(c))], arg, c.actor)[0];
+		const item = itemsNamed(c.world, [...(await inventory(c)), ...(await itemsHere(c))], arg, c.actor)[0];
 		if (item) return msg(c, c.actor.charId, "look", `${item.f.name}\n${item.f.desc || "Nichts Besonderes."}`);
 		const beacon = byName(await beaconsIn(c, c.actor.room), arg)[0];
 		if (beacon) {
@@ -267,7 +267,7 @@ const get: Command = {
 	help: "get <ding> – etwas aufheben, das neben dir liegt",
 	async func(c, arg) {
 		if (!arg) throw new NotUnderstood("Was möchtest du aufheben? Zum Beispiel: get treibholz");
-		const found = byName(await itemsHere(c), arg, c.actor);
+		const found = itemsNamed(c.world, await itemsHere(c), arg, c.actor);
 		const item = found.find((i) => reach(i.f, c.actor) <= 1);
 		if (!item) throw new (found.length ? CommandError : NotUnderstood)(found.length ? `${found[0]!.f.name} liegt zu weit weg; geh näher heran.` : `Hier liegt nichts, was „${arg.slice(0, 30)}“ heißt.`);
 		await check(c, item.f.locks, "get", `${item.f.name} lässt sich nicht aufheben.`);
@@ -286,7 +286,7 @@ const drop: Command = {
 	help: "drop <ding> – etwas ablegen, wo du stehst (lege <ding> ins feuer: nachlegen)",
 	async func(c, arg) {
 		if (/\s(in|ins|into)\s/i.test(arg)) return put.func(c, arg); // "lege holz ins feuer"
-		const item = byName(await inventory(c), arg)[0];
+		const item = itemsNamed(c.world, await inventory(c), arg)[0];
 		if (!item) throw new NotUnderstood(arg ? `Du trägst nichts, was „${arg.slice(0, 30)}“ heißt.` : "Was möchtest du ablegen?");
 		await check(c, item.f.locks, "drop", `${item.f.name} lässt sich nicht ablegen.`);
 		const e = await c.space.take({ type: "Item", fields: { itemId: item.f.itemId, location: c.actor.charId } }, NO_WAIT, { txn: c.txn });
@@ -302,7 +302,7 @@ const give: Command = {
 	async func(c, arg) {
 		const m = /^(.+?)\s+(?:an|to|zu)\s+(.+)$/i.exec(arg) ?? /^(.+)\s+(\S+)$/.exec(arg);
 		if (!m) throw new NotUnderstood("So geht es: give <ding> an <person>");
-		const item = byName(await inventory(c), m[1]!)[0];
+		const item = itemsNamed(c.world, await inventory(c), m[1]!)[0];
 		if (!item) throw new NotUnderstood(`Du trägst nichts, was „${m[1]!.slice(0, 30)}“ heißt.`);
 		const who = (await c.space.readAll({ type: "Character", fields: { room: c.actor.room } })).map((e) => fieldsOf<CharacterFields>(e))
 			.filter((ch) => ch.charId !== c.actor.charId).find((ch) => ch.name.toLowerCase() === m[2]!.trim().toLowerCase());
@@ -375,7 +375,7 @@ const put: Command = {
 		// how many: "5 holz", "drei scheite", "alle hölzer"; a plural without a number ("hölzer") means all of it
 		const counted = countOf(m ? m[1]! : arg);
 		const what = counted.what;
-		const found = byName(await inventory(c), what);
+		const found = itemsNamed(c.world, await inventory(c), what);
 		if (!found.length) throw new NotUnderstood(what ? `Du trägst nichts, was „${what.slice(0, 30)}“ heißt.` : "Was möchtest du nachlegen? Zum Beispiel: put treibholz in feuer");
 		const beacon = byName(await beaconsIn(c, c.actor.room), where, c.actor)[0];
 		if (!beacon) throw new NotUnderstood(`Hier ist kein ${where.slice(0, 30)}.`);

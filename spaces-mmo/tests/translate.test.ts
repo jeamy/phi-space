@@ -135,10 +135,11 @@ test("what is not understood goes to the model before any refusal: \"lege 2 bren
 		assert.equal(await does(a.p, "lege 2 brennstücke ins feuer", "einen Moment"), "„lege 2 brennstücke ins feuer“ – einen Moment, ich versuche das zu verstehen …", "the model first, no refusal yet");
 		await a.p.until((f) => f.t === "msg" && f.m.text === "„lege 2 brennstücke ins feuer“ → put 2 treibholz in feuer", 15_000, from);
 		await a.p.until((f) => f.t === "msg" && f.m.text.startsWith("Du legst 2 Treibholz ins Leuchtfeuer"), 15_000, from);
-		// what the model cannot read either is refused, once (its answer is not sent to the model again)
-		assert.match(await does(a.p, "put kiesel in feuer", "nicht verstanden"), /help/);
+		// what the model cannot read either is refused, once (its answer is not sent to the model again), with the
+		// command's own reason
+		assert.equal(await does(a.p, "put kiesel in feuer", /^Du trägst/), "Du trägst nichts, was „kiesel“ heißt. „help“ zeigt die Befehle.");
 		// a command without what it needs goes to the model too; "not now" is refused at once, without the model
-		assert.match(await does(a.p, "give holz", "nicht verstanden"), /help/);
+		assert.equal(await does(a.p, "give holz", /^So geht es/), "So geht es: give <ding> an <person> „help“ zeigt die Befehle.");
 		const before = a.p.frames.length;
 		assert.equal(await does(a.p, "accept", "Angebot"), "Dir liegt kein Angebot vor.");
 		assert.ok(!a.p.frames.slice(before).some((f) => f.t === "msg" && /einen Moment/.test(f.m.text)), "no model for a refusal of the moment");

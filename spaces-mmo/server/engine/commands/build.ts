@@ -19,7 +19,7 @@ import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
-import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf, type CommandCtx } from "../context.ts";
+import { byName, CommandError, exitsHere, inventory, msg, NotUnderstood, roomOf, type CommandCtx, itemsNamed } from "../context.ts";
 import { flameOf, isLit } from "../fire.ts";
 import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
@@ -220,7 +220,7 @@ const liefere: Command = {
 	async func(c, arg) {
 		const m = /^(?:(\d+)\s+)?(.+?)(?:\s+(?:an|zur|zu|to|für|fuer)\s+(?:die\s+|der\s+)?(.+))?$/i.exec(arg.trim());
 		if (!m) throw new NotUnderstood("Was lieferst du? Zum Beispiel: liefere 3 treibholz");
-		const hits = byName(await inventory(c), m[2]!.replace(ARTICLE, ""));
+		const hits = itemsNamed(c.world, await inventory(c), m[2]!.replace(ARTICLE, ""));
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${m[2]!.slice(0, 30)}“ heißt.`);
 		const proto = hits[0]!.f.proto;
 		const { s } = await siteHere(c, m[3] && !/^baustelle$/i.test(m[3]) ? m[3] : "");
@@ -318,7 +318,7 @@ const verstaue: Command = {
 	help: "verstaue [n|alle] <ding> – etwas in die Truhe deines Baus neben dir legen",
 	async func(c, arg) {
 		const { n, name } = amount(arg);
-		const hits = byName(await inventory(c), name);
+		const hits = itemsNamed(c.world, await inventory(c), name);
 		if (!hits.length) throw new NotUnderstood(`Du trägst nichts, was „${name.slice(0, 30)}“ heißt.`);
 		const b = await buildingHere(c, "", { own: true });
 		const cap = planOf(c.world, b.plan)?.chest ?? 0;
@@ -340,7 +340,7 @@ const entnimm: Command = {
 		const { n, name } = amount(arg);
 		const b = await buildingHere(c, "", { own: true });
 		const inside = (await c.space.readAll({ type: "Item", fields: { location: b.buildId } })).map((e) => ({ e, f: fieldsOf<ItemFields>(e) }));
-		const hits = byName(inside, name);
+		const hits = itemsNamed(c.world, inside, name);
 		if (!hits.length) throw new NotUnderstood(`In der Truhe ist nichts, was „${name.slice(0, 30)}“ heißt.`);
 		const proto = hits[0]!.f.proto, all = inside.filter((i) => i.f.proto === proto);
 		let moved = 0;
