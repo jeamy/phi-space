@@ -116,7 +116,7 @@ export async function fogOf(space: SpaceLike, room: string): Promise<number> {
 /** Free cells of `tile` in a room (no thing, exit or fire on them). */
 async function freeCells(space: SpaceLike, w: WorldDef, roomId: string, tile: string): Promise<Array<{ x: number; y: number }>> {
 	const room = w.rooms.find((r) => r.roomId === roomId)!;
-	const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: roomId } })), ...(await space.readAll({ type: "Exit", fields: { location: roomId } })), ...(await space.readAll({ type: "Beacon", fields: { room: roomId } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	const taken = new Set([...(await space.readAll({ type: "Item", fields: { location: roomId } })), ...(await space.readAll({ type: "Exit", fields: { location: roomId } })), ...(await space.readAll({ type: "Beacon", fields: { room: roomId } })), ...(await space.readAll({ type: "Plot", fields: { room: roomId } }))].map((e) => `${e.fields.x},${e.fields.y}`));
 	const cells: Array<{ x: number; y: number }> = [];
 	room.ground.forEach((row, y) => [...row].forEach((t, x) => { if (t === tile && walkable(w, room.ground, x, y) && !taken.has(`${x},${y}`)) cells.push({ x, y }); }));
 	return cells;

@@ -45,6 +45,13 @@ export function solidIn(w: WorldDef, room: string): Set<string> {
 	return new Set(w.beacons.filter((b) => b.room === room).map((b) => cellKey(b)));
 }
 
+/** Cells nobody walks onto: the fires (solidIn) and the cells of sites and buildings (Plot entries, engine/commands/build.ts). */
+export async function blockedIn(space: SpaceLike, w: WorldDef, room: string): Promise<Set<string>> {
+	const out = solidIn(w, room);
+	for (const e of await space.readAll({ type: "Plot", fields: { room } })) out.add(cellKey(e.fields as unknown as Cell));
+	return out;
+}
+
 /** The nearest walkable cell to `at` (itself first) that is not in `avoid`, searching outwards; null when there is
  *  none within `radius`. */
 export function freeCellNear(w: WorldDef, ground: string[], at: Cell, avoid: ReadonlySet<string> | ReadonlyMap<string, unknown>, radius = 8): Cell | null {

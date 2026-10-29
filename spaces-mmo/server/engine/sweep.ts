@@ -5,6 +5,7 @@
 import { NO_WAIT, type SpaceLike } from "phi-spaces";
 import { fieldsOf, type ItemFields, type ListingFields, type OrderFields } from "../model.ts";
 import { worldNowOf } from "./clock.ts";
+import { buildSweep } from "./commands/build.ts";
 
 async function takeIfLapsed(space: SpaceLike, id: string, type: string): Promise<void> {
 	const txn = (await space.createTransaction(10_000)).id;
@@ -25,4 +26,5 @@ export async function sweepTick(space: SpaceLike): Promise<void> {
 	for (const e of await space.readAll({ type: "NpcAwake" })) if (Number(e.fields.untilWorldMs ?? 0) <= now) await takeIfLapsed(space, e.id, "NpcAwake"); // a role awake until a world time
 	for (const e of await space.readAll({ type: "Order" })) if ((fieldsOf<OrderFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Order");
 	for (const e of await space.readAll({ type: "Listing" })) if ((fieldsOf<ListingFields>(e).expiresWorldMs ?? Infinity) <= now) await takeIfLapsed(space, e.id, "Listing");
+	await buildSweep(space); // sites without progress, rests that are over (docs/siedeln.md)
 }

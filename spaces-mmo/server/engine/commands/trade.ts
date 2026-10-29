@@ -8,6 +8,7 @@ import { fieldsOf, type AccountFields, type CharacterFields, type ItemFields, ty
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, NotUnderstood, inventory, msg, type CommandCtx } from "../context.ts";
+import { bau, planOf } from "./build.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
@@ -196,6 +197,8 @@ const craft: Command = {
 		}
 		const a = arg.trim().toLowerCase();
 		const r = rs.find((x) => x.key === a || x.name.toLowerCase() === a);
+		// "baue eine hütte": a plan, not a recipe (engine/commands/build.ts)
+		if (!r && planOf(c.world, a.replace(/(?:\s+\d+){2}$/, ""))) return bau.func(c, arg);
 		if (!r) throw new NotUnderstood(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
 		const inv = await inventory(c);
 		const used = new Set<string>(), inputs: Inv = [];

@@ -316,6 +316,26 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			s.objs.addChild(label);
 			continue;
 		}
+		if (o.kind === "site" || o.kind === "building") {
+			// a building as a house of its footprint (walls, a roof, a door at the bottom); a site as staked-out ground with
+			// posts at the corners and a bar of how far it is
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts, color = o.color ?? "#8a6a44";
+			const g = new p.Graphics();
+			if (o.kind === "building") {
+				g.rect(x + 3, y + h * 0.35, w - 6, h * 0.65 - 3).fill({ color }).stroke({ width: 2, color: "#2a1d10" });
+				g.poly([x, y + h * 0.4, x + w / 2, y + 2, x + w, y + h * 0.4]).fill({ color: "#5b3a22" }).stroke({ width: 2, color: "#2a1d10" });
+				g.rect(x + w / 2 - ts * 0.2, y + h - ts * 0.55, ts * 0.4, ts * 0.55 - 3).fill({ color: "#2a1d10" });
+			} else {
+				g.rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#c9a26b", alpha: 0.35 }).stroke({ width: 2, color: "#7a5a36", alpha: 0.9 });
+				for (const [px, py] of [[x + 3, y + 3], [x + w - 7, y + 3], [x + 3, y + h - 7], [x + w - 7, y + h - 7]] as const) g.rect(px, py, 4, 4).fill({ color: "#5b3a22" });
+				g.rect(x + 6, y + h - 10, (w - 12) * Math.min(1, o.progress ?? 0), 4).fill({ color: "#AED83C" });
+			}
+			const label = new p.Text({ text: o.kind === "site" ? `Baustelle ${o.name}` : `${o.name} von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(x + w / 2, y + h);
+			s.objs.addChild(g, label);
+			continue;
+		}
 		if (o.kind === "exit") {
 			const g = new p.Graphics().rect(x + 2, y + 2, ts - 4, ts - 4).fill({ color: "#AED83C", alpha: 0.22 }).stroke({ width: 2, color: "#AED83C" });
 			const label = new p.Text({ text: o.name, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#AED83C", stroke: { color: "#000000", width: 3 } } });

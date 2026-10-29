@@ -15,7 +15,7 @@ import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
-type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 } };
+type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number };
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -226,15 +226,38 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 	for (const [id, obj] of objs) {
 		if (obj.location !== s.room.roomId) continue;
 		let e = s.objs.get(id);
-		if (!e) { e = object(s.t, obj); e.target.copy(at(s, obj.x, obj.y, 0)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
-		e.target.copy(at(s, obj.x, obj.y, 0));
+		// a site that became a building (or got further) is drawn anew
+		if (e && (e.kind !== obj.kind || e.progress !== obj.progress)) { remove(s, s.objs, id); e = undefined; }
+		if (!e) { e = object(s.t, obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
+		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
 }
 
+/** Where an object stands: its cell, or the middle of the cells a site or building covers. */
+function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
+	const v = at(s, obj.x, obj.y, 0);
+	v.x += ((obj.w ?? 1) - 1) / 2; v.z += ((obj.h ?? 1) - 1) / 2;
+	return v;
+}
+
 function object(t: T, obj: ObjView): Entry {
 	const group = new t.Group(); group.userData.owned = true;
-	const e: Entry = { obj: group, target: new t.Vector3() };
+	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}) };
+	if (obj.kind === "building" || obj.kind === "site") {
+		const w = obj.w ?? 1, d = obj.h ?? 1, color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
+		if (obj.kind === "building") {
+			const walls = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.8, d * 0.9), new t.MeshStandardMaterial({ color, roughness: 0.9 })); walls.position.y = 0.4; group.add(walls);
+			const roof = new t.Mesh(new t.ConeGeometry(Math.max(w, d) * 0.72, 0.7, 4), new t.MeshStandardMaterial({ color: 0x5b3a22, roughness: 1 })); roof.position.y = 1.15; roof.rotation.y = Math.PI / 4; group.add(roof);
+			const door = new t.Mesh(new t.BoxGeometry(0.3, 0.5, 0.05), new t.MeshStandardMaterial({ color: 0x2a1d10 })); door.position.set(0, 0.25, d * 0.45 + 0.03); group.add(door);
+		} else {
+			const post = new t.MeshStandardMaterial({ color: 0x5b3a22, roughness: 1 });
+			for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) { const p = new t.Mesh(new t.BoxGeometry(0.08, 0.5, 0.08), post); p.position.set(px * (w / 2 - 0.1), 0.25, pz * (d / 2 - 0.1)); group.add(p); }
+			const done = Math.max(0.02, Math.min(1, obj.progress ?? 0));
+			const frame = new t.Mesh(new t.BoxGeometry(w * 0.85, 0.8 * done, d * 0.85), new t.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 0.55 })); frame.position.y = 0.4 * done; group.add(frame);
+		}
+		return e;
+	}
 	if (obj.kind === "beacon") {
 		const bowl = new t.Mesh(new t.CylinderGeometry(0.2, 0.28, 0.3, 10), new t.MeshStandardMaterial({ color: 0x6e4a2b, roughness: 1 })); bowl.position.y = 0.15; group.add(bowl);
 		const cone = new t.Mesh(new t.ConeGeometry(0.17, 0.5, 10), new t.MeshStandardMaterial({ color: 0xffa23a, emissive: 0xff7a14, emissiveIntensity: 1.6, transparent: true, opacity: 0.92 })); cone.position.y = 0.55; group.add(cone);

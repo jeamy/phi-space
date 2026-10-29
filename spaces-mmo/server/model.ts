@@ -106,5 +106,20 @@ export type NpcAwakeFields = { npcId: string; since: number; untilWorldMs: numbe
 /** What a model NPC remembers (≤ 4 KiB), written by itself with NOTE lines. */
 export type NpcMemoryFields = { npcId: string; text: string };
 
+/** Building (docs/siedeln.md): a site where people deliver and work until its plan is done. `buildId` stays the same
+ *  when the site becomes a building. `needs`: per prototype what the plan asks and what was delivered; `work`/`workNeed`
+ *  the work points; `human`/`other`: what people and what NPCs or automata gave (at most half may come from others).
+ *  `beaconId`: the fire whose light it uses (engine/build.ts). The site lapses at `untilWorldMs` without progress. */
+export type SiteFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string;
+	needs: Array<{ proto: string; name: string; count: number; have: number }>; work: number; workNeed: number; human: number; other: number; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; at: number };
+/** A finished building; it stands while it is kept (`untilWorldMs`, renewed by repairs). `by`: who built it, with what they gave. */
+export type BuildingFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; builtAt: number };
+/** One cell a site or building stands on, written with the space's `unique` check on room and cell: two never share one. */
+export type PlotFields = { room: string; x: number; y: number; of: string };
+/** How much of a fire's light the sites and buildings that use it take (engine/build.ts, "Lichtpunkte"). */
+export type LightUseFields = { beaconId: string; used: number };
+/** A character's work at a site makes it tired until `untilWorldMs` (the sweep removes it). */
+export type WorkRestFields = { charId: string; untilWorldMs: number };
+
 export const asFields = <T extends object>(f: T): Fields => f as unknown as Fields;
 export const fieldsOf = <T>(e: { fields: Fields }): T => e.fields as unknown as T;

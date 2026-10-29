@@ -3,6 +3,7 @@
 // dropped, and the command the first word names runs inside the intent's transaction.
 import { distinct, merge, type CmdSet, type Command } from "./cmdsets.ts";
 import { BUILDER_COMMANDS } from "./commands/builder.ts";
+import { BUILD_COMMANDS } from "./commands/build.ts";
 import { DEFAULT_COMMANDS, exitCmdSet, helpCommand } from "./commands/default.ts";
 import { CLOCK_COMMANDS } from "./commands/clock.ts";
 import { TRADE_COMMANDS } from "./commands/trade.ts";
@@ -24,7 +25,7 @@ export async function commandsOf(c: CommandCtx): Promise<Map<string, Command>> {
 	// the help lists the commands, not the exits (look names those)
 	const help = helpCommand(() => distinct(all).filter((cmd) => !exits.commands.includes(cmd)));
 	const sets: CmdSet[] = [
-		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, help]) },
+		{ key: "default", priority: 0, mergeType: "Union", commands: offered([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...BUILD_COMMANDS, ...CLOCK_COMMANDS, help]) },
 		{ key: "builder", priority: 1, mergeType: "Union", commands: offered(BUILDER_COMMANDS) },
 		exits,
 	];

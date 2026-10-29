@@ -69,6 +69,8 @@ export type WorldDef = {
 	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string }>;
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
 	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
+	/** What can be built (docs/siedeln.md): plans and the rules of building. Without it nothing can be built. */
+	building?: BuildingDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
 	regions?: RegionDef[];
@@ -76,6 +78,12 @@ export type WorldDef = {
 	region?: string;
 	allRooms?: RoomDef[];
 };
+/** A plan (docs/siedeln.md, "Was man baut"): its footprint `w`×`h`, what it needs delivered, the work points, what it
+ *  counts towards the epoch and takes of a fire's light (`points`), how long it stands without repair. */
+export type PlanDef = { key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string };
+/** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `restWorldMs`: how long a
+ *  figure rests after a work point; `maxSites`/`maxBuildings`: per account. */
+export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
 	/** In world hours: the NPC is there from `presentFromHour` to `presentUntilHour` (over midnight too), else away. */

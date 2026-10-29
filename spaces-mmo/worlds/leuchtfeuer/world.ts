@@ -296,7 +296,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 13,
+	version: 14,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -365,6 +365,7 @@ export const world: WorldDef = {
 	exits: EXITS,
 	help: [
 		{ key: "intro", category: "Allgemein", text: "Willkommen im Archipel. Sieh dich mit „look“ (schau) um, sprich mit „say“ (sag), geh mit Klicks auf die Karte, den Pfeiltasten oder „go <richtung>“ (geh). Was am Strand liegt, hebst du mit „get <ding>“ (nimm) auf. Alle Befehle gelten auf Englisch und Deutsch. Oben links zeigt die Übersichtskarte alle Inseln." },
+		{ key: "siedeln", category: "Allgemein", text: "Bauen im Licht: wo ein Leuchtfeuer brennt, steckt „bau hütte“ neben dir eine Baustelle ab (registrierte Spieler; „bau“ zeigt die Pläne). Alle können liefern („liefere 3 treibholz“, zu viel bleibt bei dir) und mitarbeiten („arbeite“, danach ruhst du eine Stunde Weltzeit). Fehlt nichts mehr, steht der Bau, und an ihm steht, wer mitgebaut hat. „baustelle“ zeigt, was hier fehlt; die rechte Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Wege, Ausgänge und der Platz am Feuer werden nie zugebaut, und jedes Feuer trägt nur so viele Bauten, wie sein Licht reicht. Eine Baustelle ohne Fortschritt verfällt nach zwei Tagen." },
 		{ key: "chat", category: "Allgemein", text: "Chat zwischen Spielern, Ende-zu-Ende verschlüsselt: nur die Mitglieder eines Gesprächs können es lesen, auch kein Admin. Richte ihn im Reiter „Chats“ neben dem Log mit einem eigenen Chat-Passwort ein (nicht dein Login-Passwort); vergisst du es, sind deine Verläufe verloren – „Verlauf sichern“ speichert sie als Datei. Ein Gespräch beginnt mit „chat <name> <text>“ (tell, flüstere) oder per rechter Maustaste (langes Tippen) auf eine Figur: „Chat mit …“. Gruppen: „gruppe neu <name>“, „gruppe lade <spieler> in <gruppe>“, „gruppe annehmen <gruppe>“ oder „gruppe ablehnen <gruppe>“, „gruppe verlasse <gruppe>“, „gruppe entferne <spieler> aus <gruppe>“, „gruppe <gruppe> <text>“; „gruppe“ allein zeigt deine Gruppen. „ignoriere <name>“ sperrt Nachrichten und Einladungen, „erlaube <name>“ hebt es auf. Gäste können chatten, aber keine Gruppe gründen oder einladen." },
 		{ key: "inseln", category: "Welt", text: "Acht Inseln liegen im Nebel: die Graue Insel, Möwenfels im Norden und dahinter die Schären, die Handelsstadt Kupferhafen im Osten und dahinter Rauchholm mit seinem Köhlerwald, Tangriff mit Wrack und Perlen im Süden und dahinter Krabbensand mit dem Watt, und Nebelholm im Westen, wo niemand das Feuer hütet. Fähren (Kähne) verbinden sie: am Klippenkopf nach Möwenfels und Kupferhafen, am Anleger nach Tangriff, im Fischerdorf nach Nebelholm, im Hafenviertel nach Tangriff, an der Alten Warte zu den Schären, am Speicher nach Rauchholm, am Perlengrund nach Krabbensand. Ist der Nebel zu dicht, fährt kein Kahn – brennende Feuer halten die Wege offen." },
 		{ key: "leuchtfeuer", category: "Welt", text: "Wo ein Leuchtfeuer brennt, ist der Nebel licht. Jede Insel hat eines; das erste steht im Kopfsteinring der Grauen Bucht. Treibholz ins Feuer legen (put treibholz in feuer, oder: lege holz ins feuer) hält es am Brennen; jedes Scheit gibt zehn Minuten, ein Holzbündel vierzig, ein Fass Tran eine Stunde (Tran gibt es bei Marta auf dem Markt von Kupferhafen). Ohne Feuer steigt der Nebel, bis er die Wege verschluckt; nur den Weg zum Feuer der eigenen Insel findet man immer. Die Hüterinnen und Hüter zahlen für Holz. „ruf“ zeigt, was du beigetragen hast; „kanal hafen <text>“ hören alle." },
@@ -422,6 +423,13 @@ export const world: WorldDef = {
 	npcs: NPCS,
 	currency: "muenze",
 	market: { rooms: ["graue-bucht", "kupferhafen-markt", "riffdorf", "schaerenhafen", "rauchhafen", "krabbenbucht"], listMs: 24 * 3600_000 },
+	// docs/siedeln.md: building, first the hut (step 1)
+	building: {
+		lightPoints: 20, siteWorldMs: 2 * 24 * 3600_000, restWorldMs: 3600_000, maxSites: 1, maxBuildings: 2,
+		plans: [
+			{ key: "huette", name: "Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#8a6a44" },
+		],
+	},
 	recipes: [
 		{ key: "muschelmesser", name: "Muschelmesser", needs: [{ proto: "muschel", count: 2 }, { proto: "treibholz", count: 1 }], makes: "muschelmesser" },
 		{ key: "holzbuendel", name: "Holzbündel", needs: [{ proto: "treibholz", count: 3 }], tool: "muschelmesser", makes: "holzbuendel" },

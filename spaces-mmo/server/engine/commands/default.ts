@@ -7,7 +7,7 @@ import type { CmdSet, Command } from "../cmdsets.ts";
 import { byName, check, CommandError, NotUnderstood, exitsHere, inventory, itemsHere, msg, reach, roomOf, stem, type CommandCtx } from "../context.ts";
 import { worldNowOf } from "../clock.ts";
 import { burnText, feed, flameOf, fogOf } from "../fire.ts";
-import { cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot, solidIn } from "../occupancy.ts";
+import { blockedIn, cellKey, claimSpot, freeCellNear, isPassage, occupiedIn, releaseSpot } from "../occupancy.ts";
 import { findPath, walkable, wayTo } from "../world.ts";
 import { handOff } from "../handover.ts";
 import { regionOfRoom } from "../regions.ts";
@@ -35,8 +35,8 @@ async function moveTo(c: CommandCtx, to: { x: number; y: number }, o: { path?: b
 	const exit = exits.find((x) => x.x === to.x && x.y === to.y);
 	if (exit) return traverse(c, exit);
 	const room = o.room ?? (await roomOf(c));
-	const solid = solidIn(c.world, room.roomId);
-	if (solid.has(cellKey(to))) throw new CommandError("Dort brennt das Leuchtfeuer; da läuft man nicht hinein.");
+	const solid = await blockedIn(c.space, c.world, room.roomId);
+	if (solid.has(cellKey(to))) throw new CommandError(c.world.beacons.some((b) => b.room === room.roomId && b.x === to.x && b.y === to.y) ? "Dort brennt das Leuchtfeuer; da läuft man nicht hinein." : "Dort steht ein Bau; da geht man außen herum.");
 	// at a door nobody holds a cell (isPassage): one walks onto it and through whoever stands there
 	const passage = isPassage(exits, to);
 	if (o.path) {
@@ -68,11 +68,12 @@ async function relocate(c: CommandCtx, to: { room: string; x: number; y: number 
 async function placeIn(c: CommandCtx, room: RoomFields, at: { x: number; y: number }, o: { exits?: boolean } = {}): Promise<{ x: number; y: number }> {
 	// arriving through a door: its landing is a passage, free whoever stands there
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
-	if (o.exits !== false && isPassage(exits, at) && !exits.some((x) => x.x === at.x && x.y === at.y) && walkable(c.world, room.ground, at.x, at.y) && !solidIn(c.world, room.roomId).has(cellKey(at))) {
+	const blocked = await blockedIn(c.space, c.world, room.roomId);
+	if (o.exits !== false && isPassage(exits, at) && !exits.some((x) => x.x === at.x && x.y === at.y) && walkable(c.world, room.ground, at.x, at.y) && !blocked.has(cellKey(at))) {
 		await releaseSpot(c.space, c.txn, c.actor.charId);
 		return at;
 	}
-	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...solidIn(c.world, room.roomId), ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f)))]);
+	const avoid = new Set([...(await occupiedIn(c.space, room.roomId, c.actor.charId)).keys(), ...blocked, ...(o.exits === false ? [] : (await exitsHere(c, room.roomId)).map((x) => cellKey(x.f)))]);
 	for (let tries = 0; tries < 4; tries++) {
 		const cell = freeCellNear(c.world, room.ground, at, avoid);
 		if (!cell) break;

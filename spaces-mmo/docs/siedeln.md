@@ -381,6 +381,41 @@ gegossen wird (das Gießen ist ein `renew`, also auch ein Schreiben), nie je Tic
 **einen** Termin je Beet, nicht je Pflanze. So belasten 10 000 Pflanzen den Space nicht stärker als ein paar Dutzend
 Figuren — gezählt werden muss das Gießen trotzdem (Abnahme unten).
 
+## Wild im Nebel: Mäuse, Hasen, Rehe, Füchse
+
+Der Nebel bedroht nicht nur die Wege. Aus ihm kommt das Wild, das an dem nagt, was eine Siedlung anbaut und hält. Es
+ist kein Gegner, gegen den man kämpft: man vertreibt es, zäunt ein, hält Hund und Katze und vor allem das Feuer. So
+bleibt die Kernidee tragend: **wer das Feuer hält, schützt Hof und Felder.**
+
+| Tier | Ziel | Schaden | Schutz |
+| --- | --- | --- | --- |
+| **Mäuse** | Getreidespeicher, Lagerhaus, Truhen mit Korn oder Mehl | fressen einen Teil des Vorrats (je Besuch wenige Stück) | Katze im Bau, Mausefalle (Rezept), Speicher aus Stein |
+| **Hasen** | Beete, Gemüse, junge Pflanzen | fressen eine Pflanze an: sie fällt eine Wachstumsstufe zurück, ein Setzling ist weg | Zaun, Hecke, Hund |
+| **Rehe** | Felder (Getreide, Rüben), Obstwiese | fressen sich an einer Flur satt: ihr Ertrag sinkt; junge Bäume werden verbissen | Zaun um die Flur, Vogelscheuche (hält eine Weile), Hund |
+| **Füchse** | Hühnerstall | holen ein Huhn (es ist weg, der Stall gibt weniger Eier) | Stall mit Tür und Zaun, Hund, nachts das Feuer |
+| **Möwen** (an der Küste) | Räucherei, Fisch am Steg | stehlen Fisch | Netz über dem Gestell |
+
+- **Der Nebel macht es ihnen leicht.** Wie oft Wild kommt, hängt an der Nebelstufe des Raums: bei Stufe 0 (das Feuer
+  brennt) bleibt es fern, bei 1 kommt es selten, bei 2 öfter, bei 3 oft. Nachts (Weltuhr) mehr als am Tag; Füchse fast
+  nur nachts. Ein erloschenes Feuer kostet also nicht nur den Weg, sondern auch die Ernte.
+- **Sichtbar und verscheuchbar.** Ein Tier ist eine kleine Figur auf der Karte (Skript, kein Modell, kein Konto). Es
+  kommt vom Rand des Raums, läuft zu seinem Ziel und frisst dort nach einer kurzen Frist. Wer vorher bei ihm ist,
+  verscheucht es (`scheuche <tier>`, oder ein Klick auf das Tier): es flieht in den Nebel, nichts ist verloren. Wer
+  zuschaut, kann es retten; wer nicht da ist, braucht Zaun, Hund, Katze oder Licht.
+- **Kein Kampf, keine Strafe für Abwesende über das Maß.** Je Besuch geht wenig verloren, je Raum ist die Zahl der
+  Tiere gedeckelt, und ein geschützter Hof verliert nichts. Ein Tier frisst nie das Letzte (der letzte Setzling, das
+  letzte Huhn bleibt), damit niemand bei Rückkehr vor dem Nichts steht.
+- **Schutzbauten** kommen damit in die Pläne: Zaun und Vogelscheuche (Epoche 1, Holz und Tangseil), Mausefalle
+  (Rezept), Katze und Hund (Tiere, Epoche 2, aus dem Handel oder vom Hof). Ein Zaun ist eine Reihe von Zellen wie ein
+  Weg, mit einer Pforte (Durchgang für Menschen, nicht für Wild).
+- **Die Nebelwesen** ([spielidee.md](spielidee.md)) bleiben das Fernere: in Räumen ohne jedes Feuer bei Stufe 3,
+  nachts, als Hindernis auf den Wegen; Kampf gegen sie nur im optionalen Modul K ([phasen.md](phasen.md)). Das Wild ist
+  der Alltag, die Nebelwesen sind die Ausnahme.
+- **Technik:** Ein Wild-Ticker im Welt-Worker sieht nur Räume mit Gärten, Fluren, Ställen oder Speichern (sonst keine
+  Last) und würfelt je Raum nach Nebelstufe und Tageszeit. Ein Tier ist ein Entry mit Lease (es geht von selbst, wenn
+  niemand es sieht); sein Fressen ist eine Transaktion wie jede Ernte (`take` der Pflanze, des Korns, des Huhns), also
+  nie doppelt und nie halb. Verscheuchen ist ein `take` des Tiers: wer zuerst kommt, rettet.
+
 ## Nahrung (später)
 
 Backhaus, Räucherei, Brot und Eier versprechen einen Nutzen; ohne ihn wären sie nur Handelsware. Vorschlag, bewusst
@@ -592,14 +627,29 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    beliefern dieselbe Baustelle gleichzeitig, sie wird genau einmal fertig, kein Teil geht verloren oder doppelt;
    Überlieferung geht zurück; eine Hütte auf einem Ausgang wird abgelehnt; ein abgerissener Bau gibt die Fläche frei;
    ist das Licht eines Feuers voll, nimmt `bau` keinen Plan mehr an.
+   - **Teil 1, gebaut 2026-10-29** (`server/engine/commands/build.ts`, Test `tests/build.test.ts`): Bauplan „Hütte“
+     in der Weltdatei (`building.plans`), `bau` (neben sich oder `bau hütte <x> <y>`), `liefere`, `arbeite` (eine
+     Weltstunde Ruhe danach), `baustelle`, Fertigstellen in derselben Transaktion; Flächen als `Plot` mit `unique` auf
+     Raum und Zelle, niemand läuft hinein (`blockedIn` in `occupancy.ts`, auch Strandgut, Ankunft und die Seite);
+     Sperrzellen (Ausgang und Tür, Feuer und seine Nachbarzellen, Dinge, Personen) und die Prüfung, dass Ausgänge,
+     Spawn und eine Seite jedes Feuers erreichbar bleiben; Lichtpunkte je Feuer (`LightUse`, 20 je Feuer, die Hütte
+     1); höchstens die Hälfte von Nicht-Menschen; eine Baustelle ohne Fortschritt verfällt nach zwei Welttagen. Die
+     Karte zeigt Baustelle (mit Fortschritt) und Haus in 2D und 3D, die rechte Maustaste bietet Liefern und
+     Mitarbeiten an. Abnahme: zehn liefern gleichzeitig (der Fußabdruck der Hütte hat zwölf Nachbarzellen), genau
+     sechs Treibholz werden genommen, der Rest bleibt in den Taschen; elf Hände bauen sie genau einmal fertig.
+   - **Teil 2, offen:** Truhe, Verfall und `repariere`, Ruine, Nachlass, Abriss (gibt Fläche und Licht frei).
 2. **Gärten** (der gleichwertige Strang, parallel zu allen Bauten): Spaten, Regentonne, Beet-Arten (Nutz, Zier,
    Gemeinschaft), Samen aus der wilden Flora, Pflanzen mit Wachstumsstufen, Gießen und Jäten,
    Patenschaft, Ernte, Kreuzen und Benennen, Gärtnerin mit Samenhandel und Suchaufträgen. Abnahme: 1 000 Pflanzen
    wachsen einen Spieltag lang und werden zweimal gegossen, der Space schreibt nur bei Stufenwechseln und beim Gießen
    (gemessen: Schreibvorgänge je Spieltag); eine Patenschaft gießt ein fremdes Beet, ohne es zu besitzen.
+   Dazu das erste **Wild**: Hasen in den Beeten, der Wild-Ticker nach Nebelstufe, `scheuche`, Zaun und Vogelscheuche.
+   Abnahme: bei brennendem Feuer kommt kein Hase; bei Stufe 3 kommen welche, ein verscheuchter frisst nichts, ein
+   umzäuntes Beet verliert nichts, das letzte Pflänzchen bleibt.
 3. **Äcker und Mühlen** (der große Strang der Gärten): Flur-Entries über Zellbereiche, eine Frucht je Flur,
    Bestellen und Ernteeinsatz als Arbeitspunkte, Fruchtfolge, Windmühle und die Kette Korn → Mehl → Brot,
-   Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren).
+   Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren);
+   **Rehe** an den Fluren, **Füchse** am Hühnerstall, **Mäuse** im Speicher, Hund und Katze als Schutz.
    Abnahme: zehn Figuren im
    Ernteeinsatz bringen eine Flur genau einmal ein; müder Boden gibt weniger.
 4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den
