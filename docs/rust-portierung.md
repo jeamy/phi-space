@@ -202,8 +202,7 @@ Jede Phase endet mit Typecheck und `npm test` (unverändert grün, der TS-Server
 - **Probe:** `scripts/server-probe.ts` misst den Space-Server allein (CPU je Aufruf, RSS, Antwortzeiten); mit
   `--cmd` später den Rust-Server.
 
-**Ausgangswerte** (dieser Rechner: Ryzen 7 3700X, 16 Threads, Node 22.23; big und nano noch nicht gemessen, das
-braucht eine Freigabe):
+**Ausgangswerte** (dieser Rechner: Ryzen 7 3700X, 16 Threads, Node 22.23; big und nano im nächsten Absatz):
 
 | Messung | Ergebnis |
 |---|---|
@@ -216,6 +215,34 @@ braucht eine Freigabe):
 
 Die spaces-mmo-Werte stammen vom Arbeitsstand mit uncommitteten Änderungen in `spaces-mmo/`. Der Latenztest von
 `test:perf` schlug dabei fehl („Zu viele Befehle auf einmal“).
+
+**big und nano (2026-10-29, 23:25 Uhr):** gleiche Probe, gleiche Parameter (SQLite, 8 Clients, 400 Runden, Ziel
+300 Aufrufe/s, 9.600 Aufrufe). Sie lief in einem Wegwerf-Container aus dem Produktions-Image `phi-spaces-mmo:prod`
+(Node 22.23, `--network none`, Store im Container-Dateisystem), neben den laufenden Diensten. Auf big war das Image eine
+Minute alt (Checkout `a0da835`), auf nano 13 Stunden. Probe und Container sind danach entfernt.
+
+| Rechner | CPU | Last vorher | Server-CPU je Aufruf | CPU-Anteil | p50 / p95 / p99 | RSS |
+|---|---|---|---|---|---|---|
+| lokal (zum Vergleich, gleiche Parameter) | Ryzen 7 3700X, 16 Threads | – | 2,24 ms | 0,67 | 1,9 / 7,0 / 12,2 ms | 122 → 235 MB |
+| big | EPYC 9634 (VM), 8 Kerne, 16 GB | 2,4 | **1,47 ms** | 0,44 | 2,3 / 7,7 / 16,2 ms | 121 → 227 MB |
+| nano | QEMU-VM, 4 Kerne, 8 GB | 0,7 | **3,35 ms** | **1,00** | 11,4 / 30,4 / 43,1 ms | 122 → 236 MB |
+
+Auf nano braucht der Space-Server bei 300 Aufrufen/s einen ganzen Kern; mehr trägt er dort nicht. Weil nano
+Accounts-Space und codemode-Space trägt, ist nano der Rechner, auf dem eine Portierung am meisten bringt.
+
+Laufende Space-Prozesse (`docker stats`, nur gelesen; drei Stichproben im Abstand von 20 s, die Regionen auf big etwa
+fünf Minuten nach einem Neustart):
+
+| Container | CPU | Speicher |
+|---|---|---|
+| big `phi-spaces-mmo-space-west` / `-ost` / `-nord` / `-sued` | 12–31 % / 14–18 % / 9–14 % / 9–20 %, zusammen 55–70 % eines Kerns | 145–153 / 175 / 131 / 122 MB |
+| big `phi-spaces-mmo-web` | 2 % | 100 MB |
+| nano `phi-spaces-mmo-space` (Accounts) | 1 % | 72 MB |
+| nano `phi-spaces-codemode-space` | 8 % | 177 MB |
+
+Jeder Space-Prozess startet mit etwa 60 MB (die Prozesse ohne Space: model, npc, world je 58–62 MB, also die
+Node-Grundlast) und wächst mit seinem Space auf 120–180 MB. Ein Rust-Prozess sollte im Leerlauf nur wenige MB
+brauchen; das ist der zweite Hebel aus R-D2 (Speicher), besonders auf nano mit 8 GB.
 
 **Befunde aus R0:**
 
