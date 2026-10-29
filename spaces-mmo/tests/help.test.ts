@@ -61,3 +61,10 @@ test("every command in the command tables exists in the engine, under its Englis
 		}
 	}
 });
+
+test("no help topic of the world is named like a command (help <topic> would answer with the command)", async () => {
+	const { loadWorld } = await import("../server/engine/world.ts");
+	const w = await loadWorld();
+	const words = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...GARDEN_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	for (const t of w.help) assert.ok(!words.has(t.key.toLowerCase()), `help topic ${t.key} is also a command word`);
+});

@@ -312,7 +312,7 @@ Ausführlich unter [Gärten](help.game.garden).
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
 | \`umgraben [x y]\` | \`beet anlegen\` | Mit einem Spaten im Licht ein Beet anlegen |
-| \`beet\` | \`bed\`, \`garten\` | Die Beete hier; \`beet aufgeben\` macht deins wieder zu Gras |
+| \`beet\` | \`bed\`, \`beete\` | Die Beete hier; \`beet aufgeben\` macht deins wieder zu Gras |
 | \`sammle samen\` | \`samen\` | In der wilden Flora nach Samen suchen |
 | \`pflanze <samen> [x y]\` | \`säe\`, \`plant\` | Einen Samen in dein Beet setzen |
 | \`schöpfe\` | \`fill\` | An der Regentonne eine Kanne Wasser füllen |
@@ -401,7 +401,7 @@ In detail under [Gardens](help.game.garden).
 | Command | Also | Effect |
 | --- | --- | --- |
 | \`umgraben [x y]\` | \`beet anlegen\` | Dig a bed in the light with a spade |
-| \`beet\` | \`bed\`, \`garten\` | The beds here; \`beet aufgeben\` turns yours back into grass |
+| \`beet\` | \`bed\`, \`beete\` | The beds here; \`beet aufgeben\` turns yours back into grass |
 | \`sammle samen\` | \`samen\` | Look for seeds in the wild flora |
 | \`pflanze <seed> [x y]\` | \`säe\`, \`plant\` | Put a seed into your bed |
 | \`schöpfe\` | \`fill\` | Fill a can of water at the rain barrel |

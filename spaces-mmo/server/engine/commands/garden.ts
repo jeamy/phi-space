@@ -110,7 +110,7 @@ const umgraben: Command = {
 };
 
 const beet: Command = {
-	key: "beet", aliases: ["beete", "bed", "beds", "garten", "garden"],
+	key: "beet", aliases: ["beete", "bed", "beds"],
 	help: "beet – die Beete hier (beet anlegen [x y]: umgraben; beet aufgeben: dein Beet neben dir wieder zu Gras)",
 	async func(c, arg) {
 		const g = garden(c);
