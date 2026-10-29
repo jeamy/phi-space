@@ -1,7 +1,8 @@
 # Siedeln, Bauen und Gärtnern (Entwurf)
 
 Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung). Gebaut sind der Chat zwischen
-Spielern und Schritt 1 (Hütte und Baustelle, siehe „Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
+Spielern, Schritt 1 (Hütte und Baustelle) und von Schritt 2 der erste Teil (Beete, Samen, Gießen, Ernte, Patenschaft;
+siehe „Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
 Gärten, Häuser, Werkstätten, Straßen, Kirchen, Kaufhäuser, später Eisenbahn. Er baut auf [spielidee.md](spielidee.md),
 [welt.md](welt.md), [goetter.md](goetter.md) und [automaten.md](automaten.md) auf.
 
@@ -660,6 +661,29 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
    Dazu das erste **Wild**: Hasen in den Beeten, der Wild-Ticker nach Nebelstufe, `scheuche`, Zaun und Vogelscheuche.
    Abnahme: bei brennendem Feuer kommt kein Hase; bei Stufe 3 kommen welche, ein verscheuchter frisst nichts, ein
    umzäuntes Beet verliert nichts, das letzte Pflänzchen bleibt.
+   - **Teil 1, gebaut 2026-10-29** (`server/engine/commands/garden.ts`, Test `tests/garden.test.ts`): **Spaten** (Rezept
+     2 Treibholz, 1 Tangseil), **Regentonne** als Bauplan (1×1, 3 Treibholz, 1 Tangseil, 4 Arbeit; `schöpfe` füllt eine
+     Kanne Wasser), **Beete** 2×2 im Licht (`umgraben`, Flächen als `Plot` wie Bauten, ein Lichtpunkt, höchstens drei
+     je Konto, `beet aufgeben`), **Samen** aus der wilden Flora (`sammle samen`: in Räumen mit Blumen oder Kräutern im
+     Dekor, einmal je Weltstunde, jedes zweite Mal ein Fund), fünf Sorten (Strandnelke, Dünenrose, Nebelblume nur auf
+     Nebelholm, Strandkohl, Möhre), `pflanze`, **Stufen** Saat, Keim, reif, welk in Weltzeit, `gieße` (eine Kanne
+     für das ganze Beet), `jäte` (Unkraut und Welkes), `ernte` (Ertrag und ein bis zwei Samen, jede Pflanze genau
+     einmal), **Patenschaft** (`pate <name>`, auch für Gäste; `pate weg`). Die Pflanzen liegen im Eintrag ihres Beets,
+     das Beet trägt einen Termin: den nächsten Stufenwechsel seiner Pflanzen. Der Garten-Ticker (alle 60
+     Weltsekunden) schreibt nur Beete, deren Termin gekommen ist; Nebel (jede Nebelstufe macht eine Stufe um die Hälfte
+     länger: bei Stufe 3 dauert sie 2,5-mal so lang) und Unkraut (1,5-mal so lang) verlangsamen das Wachsen und werden gelesen, wenn das Beet ohnehin geschrieben wird. Wer beim nächsten Schritt
+     länger als 16 Weltstunden ohne Wasser steht, welkt; ein Beet, das zwei Wochen niemand pflegt, wächst zu.
+     Karte: Beete mit ihren Pflanzen je Stufe in 2D und 3D, das Zellmenü bietet Gießen, Jäten, Ernten, Pflanzen und
+     an der Tonne das Schöpfen an. Hilfe: Artikel „Gärten“, Thema `help garten`.
+     Abnahme gemessen: 250 Beete mit 1 000 Pflanzen wachsen einen Welttag und werden zweimal gegossen; der Space
+     schreibt die Beete 750-mal, 500-mal beim Gießen und 250-mal beim Stufenwechsel (in einem Beet wechseln die
+     zusammen gesetzten Pflanzen zusammen), und keinmal, solange kein Termin kommt. Eine Patenschaft gießt ein fremdes
+     Beet, ohne es zu besitzen; zwei ernten zugleich, jede reife Pflanze geht an genau einen.
+     Abweichungen vom Entwurf: der Befehl heißt `umgraben`, nicht `grabe` (das ist der Builder-Befehl `dig`); es gibt
+     eine Beet-Art für Gemüse und Blumen zugleich; die Regentonne füllt sich alle acht Weltstunden um eine Kanne (bis
+     sechs), nicht einmal am Tag, sonst reichte eine Tonne nicht für ein Beet, das zweimal am Tag Wasser braucht.
+     Noch nicht: Gemeinschaftsbeete und Zierbeete als eigene Art, Kreuzen und Benennen, die Gärtnerin mit Samenhandel
+     und Suchaufträgen (Teil 2), das Wild mit Zaun und Vogelscheuche (Teil 3).
 3. **Äcker und Mühlen** (der große Strang der Gärten): Flur-Entries über Zellbereiche, eine Frucht je Flur,
    Bestellen und Ernteeinsatz als Arbeitspunkte, Fruchtfolge, Windmühle und die Kette Korn → Mehl → Brot,
    Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren);

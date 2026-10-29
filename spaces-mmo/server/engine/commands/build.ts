@@ -24,13 +24,13 @@ import { flameOf, isLit } from "../fire.ts";
 import { blockedIn, cellKey, isPassage, occupiedIn } from "../occupancy.ts";
 import { walkable, type PlanDef, type WorldDef } from "../world.ts";
 
-const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
-type Rect = { x: number; y: number; w: number; h: number };
-const cells = (r: Rect) => { const out: Array<{ x: number; y: number }> = []; for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) out.push({ x, y }); return out; };
+export const ARTICLE = /^(?:eine?n?|einem|der|die|das|den|dem|a|an|the)\s+/i;
+export type Rect = { x: number; y: number; w: number; h: number };
+export const cells = (r: Rect) => { const out: Array<{ x: number; y: number }> = []; for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) out.push({ x, y }); return out; };
 /** Chebyshev distance from a cell to a rectangle (0: inside, 1: beside it). */
 export const distTo = (p: { x: number; y: number }, r: Rect) => Math.max(Math.max(r.x - p.x, 0, p.x - (r.x + r.w - 1)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h - 1)));
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const human = (c: CommandCtx) => !!c.account && !c.account.npc && !c.actor.charId.startsWith("npc-");
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+export const human = (c: CommandCtx) => !!c.account && !c.account.npc && !c.actor.charId.startsWith("npc-");
 /** The plan a name means ("hütte", "eine Hütte"). */
 export const planOf = (w: WorldDef, name: string): PlanDef | undefined => {
 	const n = name.trim().toLowerCase().replace(ARTICLE, "");
@@ -55,7 +55,7 @@ function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }
 }
 
 /** Why `rect` cannot be built on (null: it can). */
-async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<string | null> {
+export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
 	const exits = (await exitsHere(c, room.roomId)).map((x) => x.f);
@@ -83,7 +83,7 @@ async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<str
 }
 
 /** The rectangles beside the actor where `plan` could go, nearest sides first (below, right, left, above, corners). */
-function besides(c: CommandCtx, plan: PlanDef): Rect[] {
+export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] {
 	const { x, y } = c.actor, out: Rect[] = [];
 	for (let ry = y - plan.h; ry <= y + 1; ry++) for (let rx = x - plan.w; rx <= x + 1; rx++) {
 		const r = { x: rx, y: ry, w: plan.w, h: plan.h };
@@ -95,7 +95,7 @@ function besides(c: CommandCtx, plan: PlanDef): Rect[] {
 
 /** A burning fire that covers the room and has light left for `points` (its LightUse taken in the transaction); null with
  *  the reason. */
-async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: string; use: LightUseFields; fresh: boolean } | string> {
+export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: string; use: LightUseFields; fresh: boolean } | string> {
 	const now = await worldNowOf(c.space, c.txn);
 	const max = c.world.building?.lightPoints ?? 0;
 	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
@@ -113,7 +113,7 @@ async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: stri
 	return lit ? "Das Licht des Feuers reicht für keinen weiteren Bau; ein Leuchtturm oder ein zweites Feuer würde helfen." : "Das Feuer, das hier Licht gibt, ist aus; gebaut wird nur im Licht.";
 }
 /** Writes the fire's light use back (`fresh`: its first: with the unique check, so two first sites cannot both write one). */
-async function useLight(c: CommandCtx, beaconId: string, use: LightUseFields, delta: number, fresh: boolean): Promise<void> {
+export async function useLight(c: CommandCtx, beaconId: string, use: LightUseFields, delta: number, fresh: boolean): Promise<void> {
 	try { await c.space.write({ type: "LightUse", fields: { beaconId, used: Math.max(0, use.used + delta) } as never }, c.txn, FOREVER, fresh ? { unique: ["beaconId"] } : {}); }
 	catch (e) { if (/unique entry already exists/.test((e as Error).message)) throw new CommandError("Gerade baut jemand anderes im Licht dieses Feuers; bitte gleich noch einmal."); throw e; }
 }
@@ -122,27 +122,34 @@ async function useLight(c: CommandCtx, beaconId: string, use: LightUseFields, de
  *  it, 32 within two; one figure per cell). Chest, repair and demolition stay beside the building. */
 export const SITE_REACH = 2;
 
-/** The site within SITE_REACH of the actor (by plan name when given), taken in the transaction. */
-async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFields }> {
-	const sites = (await c.space.readAll({ type: "Site", fields: { room: c.actor.room } })).map((e) => fieldsOf<SiteFields>(e));
-	const named = (s: SiteFields) => !name || planOf(c.world, name)?.key === s.plan || s.name.toLowerCase() === name.toLowerCase();
-	const near = sites.filter((s) => distTo(c.actor, s) <= SITE_REACH && named(s));
+/** The entry of `type` (a site, a bed) within `reach` of the actor whose cells (Plot `of`) carry `idKey`, taken in the
+ *  transaction; `named` picks among several. One another command holds right now is not read (it is taken in that
+ *  transaction), but its cells are: it is waited for through them. Null: none within reach (`far`: one in the room). */
+export async function takeNear<F extends Rect>(c: CommandCtx, type: string, idKey: keyof F & string, reach: number, named: (f: F) => boolean = () => true): Promise<{ f: F } | { far: boolean }> {
+	const all = (await c.space.readAll({ type, fields: { room: c.actor.room } })).map((e) => fieldsOf<F>(e));
+	const near = all.filter((f) => distTo(c.actor, f) <= reach && named(f));
 	if (near.length) {
-		const e = await c.space.take({ type: "Site", fields: { buildId: near[0]!.buildId } }, 5_000, { txn: c.txn });
-		if (!e) throw new CommandError("Die Baustelle ist gerade nicht greifbar; bitte noch einmal.");
-		return { s: fieldsOf<SiteFields>(e) };
+		const e = await c.space.take({ type, fields: { [idKey]: near[0]![idKey] as never } }, 5_000, { txn: c.txn });
+		if (!e) throw new CommandError("Das ist gerade nicht greifbar; bitte noch einmal.");
+		return { f: fieldsOf<F>(e) };
 	}
-	// a site another delivery holds right now is not read (it is taken in that transaction); its cells are: wait for it
 	const plots = (await c.space.readAll({ type: "Plot", fields: { room: c.actor.room } })).map((e) => fieldsOf<PlotFields>(e));
-	const held = new Set(plots.filter((p) => distTo(c.actor, { x: p.x, y: p.y, w: 1, h: 1 }) <= SITE_REACH && !sites.some((s) => s.buildId === p.of)).map((p) => p.of));
-	for (const buildId of held) {
-		const e = await c.space.takeIfExists({ type: "Site", fields: { buildId } }, 5_000, { txn: c.txn });
-		if (!e) continue; // a building's cells, or the site was finished meanwhile
-		const s = fieldsOf<SiteFields>(e);
-		if (named(s)) return { s };
+	const held = new Set(plots.filter((p) => distTo(c.actor, { x: p.x, y: p.y, w: 1, h: 1 }) <= reach && !all.some((f) => String(f[idKey]) === p.of)).map((p) => p.of));
+	for (const id of held) {
+		const e = await c.space.takeIfExists({ type, fields: { [idKey]: id } }, 5_000, { txn: c.txn });
+		if (!e) continue; // cells of something else, or it is gone meanwhile
+		const f = fieldsOf<F>(e);
+		if (named(f)) return { f };
 		await c.space.write({ type: e.type, types: e.types.slice(1), fields: e.fields as never }, c.txn, FOREVER);
 	}
-	throw new NotUnderstood(sites.length ? "Geh näher an die Baustelle heran (höchstens zwei Schritte entfernt)." : "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab.");
+	return { far: all.length > 0 };
+}
+
+/** The site within SITE_REACH of the actor (by plan name when given), taken in the transaction. */
+async function siteHere(c: CommandCtx, name: string): Promise<{ s: SiteFields }> {
+	const r = await takeNear<SiteFields>(c, "Site", "buildId", SITE_REACH, (s) => !name || planOf(c.world, name)?.key === s.plan || s.name.toLowerCase() === name.toLowerCase());
+	if ("f" in r) return { s: r.f };
+	throw new NotUnderstood(r.far ? "Geh näher an die Baustelle heran (höchstens zwei Schritte entfernt)." : "Hier ist keine Baustelle. „bau <plan>“ steckt eine ab.");
 }
 
 /** Writes the site back, or, when nothing is missing, the building in its place. */
@@ -266,7 +273,7 @@ const baustelle: Command = {
 };
 
 /** A building beside the actor (by plan name when given; only one's own with `own`), taken in the transaction. */
-async function buildingHere(c: CommandCtx, name: string, o: { own: boolean }): Promise<BuildingFields> {
+export async function buildingHere(c: CommandCtx, name: string, o: { own: boolean }): Promise<BuildingFields> {
 	const all = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e));
 	const n = name.trim().replace(ARTICLE, "");
 	const near = all.filter((b) => distTo(c.actor, b) <= 1 && (!n || planOf(c.world, n)?.key === b.plan || b.name.toLowerCase() === n.toLowerCase()));
@@ -277,7 +284,7 @@ async function buildingHere(c: CommandCtx, name: string, o: { own: boolean }): P
 	if (!e) throw new CommandError("Der Bau ist gerade nicht greifbar; bitte noch einmal.");
 	return fieldsOf<BuildingFields>(e);
 }
-const putBack = (c: CommandCtx, b: BuildingFields) => c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
+export const putBack = (c: CommandCtx, b: BuildingFields) => c.space.write({ type: "Building", fields: b as never }, c.txn, FOREVER);
 /** Moves a thing (taken in the transaction) to `location`. */
 async function moveItem(space: SpaceLike, txn: string | null, itemId: string, from: string, to: string): Promise<boolean> {
 	const e = await space.takeIfExists({ type: "Item", fields: { itemId, location: from } }, NO_WAIT, txn ? { txn } : {});
@@ -291,7 +298,7 @@ const amount = (arg: string): { n: number | null; name: string } => {
 	if (!m) return { n: 1, name: "" };
 	return { n: !m[1] ? 1 : /^\d+$/.test(m[1]) ? Number(m[1]) : null, name: m[2]!.replace(ARTICLE, "") };
 };
-const days = (ms: number) => { const d = Math.round(ms / (24 * 3600_000)); return d >= 1 ? `etwa ${d} ${d === 1 ? "Tag" : "Tage"}` : `etwa ${Math.max(1, Math.round(ms / 3600_000))} Stunden`; };
+export const days = (ms: number) => { const d = Math.round(ms / (24 * 3600_000)); return d >= 1 ? `etwa ${d} ${d === 1 ? "Tag" : "Tage"}` : `etwa ${Math.max(1, Math.round(ms / 3600_000))} Stunden`; };
 
 const truhe: Command = {
 	key: "truhe", aliases: ["kiste", "chest"],
@@ -361,7 +368,7 @@ const repariere: Command = {
 };
 
 /** Gives back `count` of each prototype into the actor's pack. */
-async function giveBack(c: CommandCtx, what: Array<{ proto: string; count: number }>): Promise<string[]> {
+export async function giveBack(c: CommandCtx, what: Array<{ proto: string; count: number }>): Promise<string[]> {
 	const out: string[] = [];
 	for (const w of what) {
 		if (w.count <= 0) continue;
@@ -373,7 +380,7 @@ async function giveBack(c: CommandCtx, what: Array<{ proto: string; count: numbe
 	return out;
 }
 /** Gives a fire back the light a site or building took. */
-async function releaseLight(space: SpaceLike, txn: string, beaconId: string, points: number): Promise<void> {
+export async function releaseLight(space: SpaceLike, txn: string, beaconId: string, points: number): Promise<void> {
 	const light = await space.takeIfExists({ type: "LightUse", fields: { beaconId } }, 5_000, { txn });
 	if (light) await space.write({ type: "LightUse", fields: { beaconId, used: Math.max(0, fieldsOf<LightUseFields>(light).used - points) } as never }, txn, FOREVER);
 }

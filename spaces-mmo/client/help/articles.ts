@@ -163,7 +163,8 @@ Guests can play at once, but cannot swap or trade yet, and their character lapse
 | 2D: Ziehen (gezoomt) | Die Ansicht verschieben |
 | 2D: zwei Finger auseinander oder zusammen | Eine Zoomstufe vor oder zurück (1×, 2×, 3×) |
 | 3D: Mausrad oder zwei Finger | Näher heran und weiter weg (Zoom) |
-| 3D: Ziehen mit Maus oder Finger | Die Ansicht nach links oder rechts drehen (die Knöpfe ↶ ↷ drehen in Achtelschritten) |
+| 3D: Ziehen mit Maus oder Finger | Die Ansicht verschieben (links, rechts, hoch, runter) |
+| 3D: Ziehen mit gedrückter Umschalttaste, Knöpfe ↶ ↷ | Die Ansicht drehen (die Knöpfe in Achtelschritten) |
 
 ## Am Handy und Tablet {#touch}
 
@@ -207,7 +208,8 @@ Rechts (auf dem Handy und dem Tablet im Hochformat unter der Karte) stehen **Neb
 | 2D: drag (zoomed in) | Move the view |
 | 2D: two fingers apart or together | One zoom step in or out (1×, 2×, 3×) |
 | 3D: mouse wheel or two fingers | Zoom in and out |
-| 3D: drag with mouse or finger | Turn the view left or right (the ↶ ↷ buttons turn in eighths) |
+| 3D: drag with mouse or finger | Move the view (left, right, up, down) |
+| 3D: drag with Shift held, ↶ ↷ buttons | Turn the view (the buttons in eighths) |
 
 ## On a phone or tablet {#touch}
 
@@ -303,6 +305,22 @@ Ausführlich unter [Bauen](help.game.build).
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Deinen Bau oder deine Baustelle abreißen |
 | \`nachlass\` | \`estate\` | Den Nachlass an der Ruine deines Baus abholen |
 
+## Gärten {#gardencmds}
+
+Ausführlich unter [Gärten](help.game.garden).
+
+| Befehl | Auch | Wirkung |
+| --- | --- | --- |
+| \`umgraben [x y]\` | \`beet anlegen\` | Mit einem Spaten im Licht ein Beet anlegen |
+| \`beet\` | \`bed\`, \`garten\` | Die Beete hier; \`beet aufgeben\` macht deins wieder zu Gras |
+| \`sammle samen\` | \`samen\` | In der wilden Flora nach Samen suchen |
+| \`pflanze <samen> [x y]\` | \`säe\`, \`plant\` | Einen Samen in dein Beet setzen |
+| \`schöpfe\` | \`fill\` | An der Regentonne eine Kanne Wasser füllen |
+| \`gieße\` | \`water\` | Ein Beet gießen (deins oder als Pate) |
+| \`jäte\` | \`weed\` | Unkraut und Welkes herausziehen |
+| \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen |
+| \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
+
 ## Handel und Ruf {#tradecmds}
 
 Ausführlich unter [Handel und Handwerk](help.game.trade).
@@ -320,7 +338,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -376,6 +394,22 @@ In detail under [Building](help.game.build).
 | \`abriss\` | \`demolish\`, \`reiße … ab\` | Tear down your building or site |
 | \`nachlass\` | \`estate\` | Collect the estate at your building's ruin |
 
+## Gardens {#gardencmds}
+
+In detail under [Gardens](help.game.garden).
+
+| Command | Also | Effect |
+| --- | --- | --- |
+| \`umgraben [x y]\` | \`beet anlegen\` | Dig a bed in the light with a spade |
+| \`beet\` | \`bed\`, \`garten\` | The beds here; \`beet aufgeben\` turns yours back into grass |
+| \`sammle samen\` | \`samen\` | Look for seeds in the wild flora |
+| \`pflanze <seed> [x y]\` | \`säe\`, \`plant\` | Put a seed into your bed |
+| \`schöpfe\` | \`fill\` | Fill a can of water at the rain barrel |
+| \`gieße\` | \`water\` | Water a bed (yours or as a sponsor) |
+| \`jäte\` | \`weed\` | Pull weeds and what has wilted |
+| \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds |
+| \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
+
 ## Trade and reputation {#tradecmds}
 
 In detail under [Trade and crafting](help.game.trade).
@@ -393,7 +427,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -533,7 +567,7 @@ The Grey Bay has a market board, prices in **coins**:
 
 ## Baustelle abstecken {#stake}
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**.
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden).
 
 Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
 
@@ -562,7 +596,7 @@ Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) set
 
 ## Staking out a site {#stake}
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**.
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden).
 
 Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
 
@@ -587,6 +621,91 @@ A building lasts **a week**. \`repariere\` (\`repair\`; 1 driftwood, anyone may 
 ## Demolition {#demolish}
 
 \`abriss\` (\`demolish\`, or “reiß die hütte ab”) at your building frees the land and the light and gives back half the material and the chest's contents. A site given up gives back everything delivered.`,
+		},
+	},
+	{
+		id: "help.game.garden",
+		section: "play",
+		title: { de: "Gärten: Beet, Samen, Gießen, Ernte", en: "Gardens: bed, seeds, watering, harvest" },
+		short: {
+			de: "Mit einem Spaten im Licht ein Beet anlegen, Samen aus der wilden Flora pflanzen, gießen, jäten und ernten.",
+			en: "Dig a bed in the light with a spade, plant seeds from the wild flora, water, weed and harvest.",
+		},
+		body: {
+			de: `Gärten zählen so viel wie Bauten. Ein Beet braucht wie eine Hütte das **Licht eines Leuchtfeuers** und belegt einen Lichtpunkt des Feuers. Anlegen braucht ein Konto; als **Pate** gießen und ernten dürfen auch Gäste.
+
+## Spaten und Beet {#bed}
+
+\`craft spaten\` macht aus **2 Treibholz und 1 Tangseil** einen Spaten. Damit gräbt \`umgraben\` neben dir ein Beet um (2×2 Felder), \`umgraben <x> <y>\` an einer bestimmten Stelle. Jeder hat höchstens drei Beete. Wie bei Bauten bleiben Ausgänge, Türen und der Platz am Feuer frei, und niemand läuft durch ein Beet.
+
+\`beet\` zeigt die Beete hier: was wächst, wann zuletzt gegossen wurde, ob Unkraut darin ist. \`beet aufgeben\` macht deins wieder zu Gras. Ein Beet, das zwei Wochen niemand pflegt, wächst von selbst zu.
+
+## Samen {#seeds}
+
+\`sammle samen\` sucht in der wilden Flora des Ortes nach Samen; das klappt nicht jedes Mal, danach wartest du eine Weltstunde.
+
+| Sorte | Wo sie wild wächst | Ernte |
+| --- | --- | --- |
+| Strandnelke | wo Blumen blühen, überall | Strandnelke |
+| Dünenrose | Graue Insel, Krabbensand, Möwenfels | Dünenrose |
+| Nebelblume | nur Nebelholm | Nebelblume (selten) |
+| Strandkohl | wo Kräuter wachsen, überall | 2 Kohl |
+| Möhre | Graue Insel, Kupferhafen, Rauchholm, Krabbensand | 2 Möhren |
+
+\`pflanze strandnelke\` setzt einen Samen in dein Beet, eine Pflanze je Feld (\`pflanze kohl <x> <y>\` in ein bestimmtes). Jede Ernte gibt neue Samen, manchmal zwei.
+
+## Wasser und Pflege {#care}
+
+Wasser kommt aus der **Regentonne** (\`bau regentonne\`: 3 Treibholz, 1 Tangseil, 4 Arbeit). \`schöpfe\` neben der Tonne füllt eine **Kanne Wasser**; die Tonne fasst sechs, bekommt alle acht Weltstunden eine dazu und ist nach einer Sturmflut auf ihrer Insel voll. \`gieße\` gießt mit einer Kanne das ganze Beet.
+
+Eine Pflanze wächst in Stufen: **Saat**, **Keim**, **reif**, **welk**. Steht sie beim nächsten Schritt länger als 16 Weltstunden ohne Wasser, welkt sie. Eine reife Pflanze welkt nach ein bis drei Tagen. **Nebel** und **Unkraut** lassen sie langsamer wachsen: ein brennendes Feuer hilft auch dem Garten. \`jäte\` zieht Unkraut und Welkes heraus.
+
+## Ernten {#harvest}
+
+\`ernte\` holt alles Reife des Beets in deine Tasche, mit Samen. Stehen mehrere am Beet, bekommt jede Pflanze genau einer.
+
+## Patenschaft {#sponsor}
+
+\`pate <name>\` lässt jemanden dein Beet gießen, jäten und ernten, ohne dass es ihm gehört; auch einen Gast. So bleibt es gepflegt, wenn du ein paar Tage nicht spielst. \`pate weg <name>\` beendet es, \`pate\` allein zeigt die Paten.
+
+Gießen, jäten, ernten und pflanzen gehen aus bis zu **zwei Feldern** Abstand. Die rechte Maustaste auf einem Beet bietet an, was du dort tun kannst.`,
+			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
+
+## Spade and bed {#bed}
+
+\`craft spaten\` makes a spade from **2 driftwood and 1 kelp rope**. With it \`umgraben\` digs a bed next to you (2×2 cells), \`umgraben <x> <y>\` at a given spot. Everyone has at most three beds. As with buildings, exits, doors and the place at the fire stay free, and nobody walks through a bed.
+
+\`beet\` (\`bed\`) shows the beds here: what grows, when they were last watered, whether weeds grow. \`beet aufgeben\` turns yours back into grass. A bed nobody tends for two weeks grows over by itself.
+
+## Seeds {#seeds}
+
+\`sammle samen\` looks for seeds in the place's wild flora; it does not work every time, and afterwards you wait a world hour.
+
+| Sort | Where it grows wild | Harvest |
+| --- | --- | --- |
+| Strandnelke (thrift) | where flowers grow, everywhere | thrift |
+| Dünenrose (dune rose) | Graue Insel, Krabbensand, Möwenfels | dune rose |
+| Nebelblume (fog flower) | Nebelholm only | fog flower (rare) |
+| Strandkohl (sea kale) | where herbs grow, everywhere | 2 cabbages |
+| Möhre (carrot) | Graue Insel, Kupferhafen, Rauchholm, Krabbensand | 2 carrots |
+
+\`pflanze strandnelke\` (\`plant\`) puts a seed into your bed, one plant per cell (\`pflanze kohl <x> <y>\` into a given one). Every harvest gives new seeds, sometimes two.
+
+## Water and care {#care}
+
+Water comes from the **rain barrel** (\`bau regentonne\`: 3 driftwood, 1 kelp rope, 4 work). \`schöpfe\` (\`fill\`) next to the barrel fills a **can of water**; the barrel holds six, gains one every eight world hours and is full after a storm surge on its island. \`gieße\` (\`water\`) waters the whole bed with one can.
+
+A plant grows in stages: **seed**, **sprout**, **ripe**, **wilted**. If it has gone without water for more than 16 world hours at its next step, it wilts. A ripe plant wilts after one to three days. **Fog** and **weeds** slow it down: a burning fire helps the garden too. \`jäte\` (\`weed\`) pulls weeds and what has wilted.
+
+## Harvest {#harvest}
+
+\`ernte\` (\`harvest\`) takes everything ripe in the bed into your pack, with seeds. If several stand at the bed, each plant goes to exactly one.
+
+## Sponsorship {#sponsor}
+
+\`pate <name>\` (\`sponsor\`) lets someone water, weed and harvest your bed without it being theirs, a guest too. That keeps it tended while you do not play for a few days. \`pate weg <name>\` ends it, \`pate\` alone shows the sponsors.
+
+Watering, weeding, harvesting and planting work from up to **two cells** away. The right-click menu on a bed offers what you can do there.`,
 		},
 	},
 	{

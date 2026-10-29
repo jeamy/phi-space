@@ -296,7 +296,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 16,
+	version: 17,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -333,7 +333,7 @@ export const world: WorldDef = {
 		{ regionId: "sued", islands: ["Krabbensand"], start: "krabbenbucht" },
 	],
 	guestName: "Strandläufer",
-	typeclasses: { Driftwood: "Item", Coin: "Item", Shell: "Item", Bundle: "Driftwood", Tool: "Item", Weed: "Item", Gem: "Item", Gear: "Item", Fuel: "Item" },
+	typeclasses: { Driftwood: "Item", Coin: "Item", Shell: "Item", Bundle: "Driftwood", Tool: "Item", Weed: "Item", Gem: "Item", Gear: "Item", Fuel: "Item", Seed: "Item", Produce: "Item", Flower: "Item", Water: "Item" },
 	prototypes: [
 		{ key: "ding", parent: null, typeclass: "Item", name: "Ding", desc: "Etwas, das jemand verloren hat.", aliases: ["thing"], glyph: { shape: "square", color: "#9aa3ad" }, locks: ITEM_LOCKS },
 		{ key: "treibholz", parent: "ding", typeclass: "Driftwood", name: "Treibholz", desc: "Ein Stück Holz, von der See glatt geschliffen. Es würde gut brennen.", aliases: ["holz", "driftwood", "wood"], glyph: { shape: "square", color: "#8a5a2b" }, icon: "items/treibholz.png", locks: ITEM_LOCKS },
@@ -347,6 +347,19 @@ export const world: WorldDef = {
 		{ key: "perle", parent: "ding", typeclass: "Gem", name: "Perle", desc: "Eine milchweiße Perle, kaum größer als eine Erbse.", aliases: ["pearl"], glyph: { shape: "circle", color: "#f4f1e8" }, icon: "items/perle.png", locks: ITEM_LOCKS },
 		{ key: "bernstein", parent: "ding", typeclass: "Gem", name: "Bernstein", desc: "Ein honigfarbener Stein, warm in der Hand. In ihm schläft ein Insekt.", aliases: ["amber"], glyph: { shape: "diamond", color: "#e89a2c" }, icon: "items/bernstein.png", locks: ITEM_LOCKS },
 		{ key: "tran", parent: "ding", typeclass: "Fuel", name: "Tran", desc: "Ein kleines Fass Tran aus den Speichern von Kupferhafen. Er brennt lange und hell, riecht aber nach Fisch.", aliases: ["tranfass", "fass", "oel", "öl", "oil"], glyph: { shape: "circle", color: "#b8862b" }, icon: "items/tran.png", locks: ITEM_LOCKS },
+		// gardens (docs/siedeln.md "Gärten"): the spade, a can of water, seeds from the wild flora and what grows from them
+		{ key: "spaten", parent: "ding", typeclass: "Tool", name: "Spaten", desc: "Ein Spaten aus Treibholz, das Blatt mit Tangseil festgezurrt. Damit gräbt man ein Beet um.", aliases: ["schaufel", "spade"], glyph: { shape: "diamond", color: "#a07850" }, icon: "items/spaten.png", locks: ITEM_LOCKS },
+		{ key: "wasserkanne", parent: "ding", typeclass: "Water", name: "Kanne Wasser", desc: "Regenwasser aus der Tonne, genug für ein Beet.", aliases: ["kanne", "wasser", "water", "can"], glyph: { shape: "circle", color: "#5aa0d8" }, icon: "items/wasserkanne.png", locks: ITEM_LOCKS },
+		{ key: "samen-strandnelke", parent: "ding", typeclass: "Seed", name: "Strandnelkensamen", desc: "Winzige Samen einer Strandnelke, in ein Blatt gewickelt.", aliases: ["nelkensamen", "strandnelke", "nelke"], glyph: { shape: "circle", color: "#c98aa0" }, icon: "items/samen-strandnelke.png", locks: ITEM_LOCKS },
+		{ key: "samen-duenenrose", parent: "ding", typeclass: "Seed", name: "Dünenrosensamen", desc: "Harte Kerne aus einer Hagebutte der Dünenrose.", aliases: ["rosensamen", "dünenrose", "duenenrose", "rose"], glyph: { shape: "circle", color: "#b0485e" }, icon: "items/samen-duenenrose.png", locks: ITEM_LOCKS },
+		{ key: "samen-nebelblume", parent: "ding", typeclass: "Seed", name: "Nebelblumensamen", desc: "Blasse, fast durchsichtige Samen. Sie wachsen nur, wo Nebel war.", aliases: ["nebelblume"], glyph: { shape: "circle", color: "#9fb0d0" }, icon: "items/samen-nebelblume.png", locks: ITEM_LOCKS },
+		{ key: "samen-strandkohl", parent: "ding", typeclass: "Seed", name: "Strandkohlsamen", desc: "Runde Samen des wilden Strandkohls.", aliases: ["kohlsamen", "strandkohl", "kohl"], glyph: { shape: "circle", color: "#7a9a66" }, icon: "items/samen-strandkohl.png", locks: ITEM_LOCKS },
+		{ key: "samen-moehre", parent: "ding", typeclass: "Seed", name: "Möhrensamen", desc: "Stachelige Samen der wilden Möhre.", aliases: ["moehrensamen", "möhre", "moehre", "karotte"], glyph: { shape: "circle", color: "#c88a3c" }, icon: "items/samen-moehre.png", locks: ITEM_LOCKS },
+		{ key: "strandnelke", parent: "ding", typeclass: "Flower", name: "Strandnelke", desc: "Ein Büschel rosa Strandnelken. Hält sich lange.", aliases: ["nelken", "blume", "flower"], glyph: { shape: "diamond", color: "#e88fb0" }, icon: "items/strandnelke.png", locks: ITEM_LOCKS },
+		{ key: "duenenrose", parent: "ding", typeclass: "Flower", name: "Dünenrose", desc: "Eine dornige Dünenrose, tiefrot und duftend.", aliases: ["rosen", "rose"], glyph: { shape: "diamond", color: "#d9476b" }, icon: "items/duenenrose.png", locks: ITEM_LOCKS },
+		{ key: "nebelblume", parent: "ding", typeclass: "Flower", name: "Nebelblume", desc: "Eine blasse blaue Blüte, die im Halbdunkel leuchtet. Selten.", aliases: ["nebelblüte"], glyph: { shape: "diamond", color: "#9fb6e8" }, icon: "items/nebelblume.png", locks: ITEM_LOCKS },
+		{ key: "kohl", parent: "ding", typeclass: "Produce", name: "Kohl", desc: "Ein fester Kopf Strandkohl, salzig und gut.", aliases: ["kohlkopf", "cabbage"], glyph: { shape: "circle", color: "#7fae6a" }, icon: "items/kohl.png", locks: ITEM_LOCKS },
+		{ key: "moehre", parent: "ding", typeclass: "Produce", name: "Möhre", desc: "Eine krumme, süße Möhre mit Erde dran.", aliases: ["möhren", "moehren", "karotte", "carrot"], glyph: { shape: "circle", color: "#e8902c" }, icon: "items/moehre.png", locks: ITEM_LOCKS },
 		{ key: "kette", parent: "ding", typeclass: "Gem", name: "Bernsteinkette", desc: "Bernstein und Muscheln an einem Tangseil. Ein Schmuckstück für Kupferhafen.", aliases: ["halskette", "necklace"], glyph: { shape: "diamond", color: "#ffb347" }, icon: "items/kette.png", locks: ITEM_LOCKS },
 	],
 	objects: [
@@ -366,6 +379,7 @@ export const world: WorldDef = {
 	help: [
 		{ key: "intro", category: "Allgemein", text: "Willkommen im Archipel. Sieh dich mit „look“ (schau) um, sprich mit „say“ (sag), geh mit Klicks auf die Karte, den Pfeiltasten oder „go <richtung>“ (geh). Was am Strand liegt, hebst du mit „get <ding>“ (nimm) auf. Alle Befehle gelten auf Englisch und Deutsch. Oben links zeigt die Übersichtskarte alle Inseln." },
 		{ key: "siedeln", category: "Allgemein", text: "Bauen im Licht: wo ein Leuchtfeuer brennt, steckt „bau hütte“ neben dir eine Baustelle ab (registrierte Spieler; „bau“ zeigt die Pläne). Alle können liefern („liefere 3 treibholz“, zu viel bleibt bei dir) und mitarbeiten („arbeite“, danach ruhst du eine Stunde Weltzeit), aus bis zu zwei Schritten Entfernung. Fehlt nichts mehr, steht der Bau, und an ihm steht, wer mitgebaut hat. „baustelle“ zeigt, was hier fehlt; die rechte Maustaste auf einer Baustelle bietet Liefern und Mitarbeiten an. Wege, Ausgänge und der Platz am Feuer werden nie zugebaut, und jedes Feuer trägt nur so viele Bauten, wie sein Licht reicht. Eine Baustelle ohne Fortschritt verfällt nach zwei Tagen. Die Hütte hat eine Truhe, die nur dir gehört („truhe“, „verstaue 3 muscheln“ oder „leg die muscheln in die truhe“, „entnimm 2 muscheln“). Ein Bau hält eine Woche; „repariere“ (1 Treibholz, jeder darf helfen) bessert ihn aus. Wer ihn verfallen lässt, hat eine Ruine; was in der Truhe lag, holt „nachlass“ an der Ruine ab (einen Monat lang). „reiß die hütte ab“ gibt die Fläche frei und die Hälfte des Materials zurück, eine aufgegebene Baustelle alles Gelieferte." },
+		{ key: "garten", category: "Allgemein", text: "Gärten im Licht: mit einem Spaten („craft spaten“: 2 Treibholz, 1 Tangseil) gräbt „umgraben“ neben dir ein Beet um (2×2, registrierte Spieler, höchstens drei, wo ein Feuer brennt). Samen findet „sammle samen“ in der wilden Flora (nicht immer; Strandnelke und Strandkohl fast überall, Dünenrose, Möhre und die Nebelblume nur auf manchen Inseln). „pflanze strandnelke“ setzt einen Samen ins Beet. Wasser gibt die Regentonne („bau regentonne“; „schöpfe“ füllt eine Kanne, sie füllt sich alle acht Stunden um eine, bei Sturmflut ganz); „gieße“ gießt das ganze Beet. Was zu lange trocken steht, welkt; Nebel und Unkraut lassen es langsamer wachsen, „jäte“ zieht Unkraut und Welkes. Reifes holt „ernte“ in die Tasche, mit neuen Samen. „pate <name>“ lässt jemanden – auch einen Gast – dein Beet gießen, jäten und ernten; „pate weg <name>“ beendet es. „beet“ zeigt die Beete hier, „beet aufgeben“ macht deins wieder zu Gras. Ein Beet, das zwei Wochen niemand pflegt, wächst zu." },
 		{ key: "chat", category: "Allgemein", text: "Chat zwischen Spielern, Ende-zu-Ende verschlüsselt: nur die Mitglieder eines Gesprächs können es lesen, auch kein Admin. Richte ihn im Reiter „Chats“ neben dem Log mit einem eigenen Chat-Passwort ein (nicht dein Login-Passwort); vergisst du es, sind deine Verläufe verloren – „Verlauf sichern“ speichert sie als Datei. Ein Gespräch beginnt mit „chat <name> <text>“ (tell, flüstere) oder per rechter Maustaste (langes Tippen) auf eine Figur: „Chat mit …“. Gruppen: „gruppe neu <name>“, „gruppe lade <spieler> in <gruppe>“, „gruppe annehmen <gruppe>“ oder „gruppe ablehnen <gruppe>“, „gruppe verlasse <gruppe>“, „gruppe entferne <spieler> aus <gruppe>“, „gruppe <gruppe> <text>“; „gruppe“ allein zeigt deine Gruppen. „ignoriere <name>“ sperrt Nachrichten und Einladungen, „erlaube <name>“ hebt es auf. Gäste können chatten, aber keine Gruppe gründen oder einladen." },
 		{ key: "inseln", category: "Welt", text: "Acht Inseln liegen im Nebel: die Graue Insel, Möwenfels im Norden und dahinter die Schären, die Handelsstadt Kupferhafen im Osten und dahinter Rauchholm mit seinem Köhlerwald, Tangriff mit Wrack und Perlen im Süden und dahinter Krabbensand mit dem Watt, und Nebelholm im Westen, wo niemand das Feuer hütet. Fähren (Kähne) verbinden sie: am Klippenkopf nach Möwenfels und Kupferhafen, am Anleger nach Tangriff, im Fischerdorf nach Nebelholm, im Hafenviertel nach Tangriff, an der Alten Warte zu den Schären, am Speicher nach Rauchholm, am Perlengrund nach Krabbensand. Ist der Nebel zu dicht, fährt kein Kahn – brennende Feuer halten die Wege offen." },
 		{ key: "leuchtfeuer", category: "Welt", text: "Wo ein Leuchtfeuer brennt, ist der Nebel licht. Jede Insel hat eines; das erste steht im Kopfsteinring der Grauen Bucht. Treibholz ins Feuer legen (put treibholz in feuer, oder: lege holz ins feuer) hält es am Brennen; jedes Scheit gibt zehn Minuten, ein Holzbündel vierzig, ein Fass Tran eine Stunde (Tran gibt es bei Marta auf dem Markt von Kupferhafen). Ohne Feuer steigt der Nebel, bis er die Wege verschluckt; nur den Weg zum Feuer der eigenen Insel findet man immer. Die Hüterinnen und Hüter zahlen für Holz. „ruf“ zeigt, was du beigetragen hast; „kanal hafen <text>“ hören alle." },
@@ -428,12 +442,28 @@ export const world: WorldDef = {
 		lightPoints: 20, siteWorldMs: 2 * 24 * 3600_000, restWorldMs: 3600_000, maxSites: 1, maxBuildings: 2, ruinWorldMs: 10 * 24 * 3600_000, estateWorldMs: 30 * 24 * 3600_000,
 		plans: [
 			{ key: "huette", name: "Hütte", aliases: ["hütte", "hut"], w: 2, h: 2, needs: [{ proto: "treibholz", count: 6 }, { proto: "tangseil", count: 2 }], work: 20, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#8a6a44", chest: 12, repair: [{ proto: "treibholz", count: 1 }] },
+			// water for the beds (garden below): it gains a can every eight world hours, up to six, and is full after a storm surge
+			{ key: "regentonne", name: "Regentonne", aliases: ["tonne", "barrel", "rain-barrel"], w: 1, h: 1, needs: [{ proto: "treibholz", count: 3 }, { proto: "tangseil", count: 1 }], work: 4, points: 1, keepWorldMs: 7 * 24 * 3600_000, color: "#5e7a8a", repair: [{ proto: "treibholz", count: 1 }] },
+		],
+	},
+	// docs/siedeln.md "Gärten", step 2 part 1: beds of 2×2 in the light, five sorts from the wild flora
+	garden: {
+		bed: { w: 2, h: 2, points: 1, keepWorldMs: 14 * 24 * 3600_000 }, maxBeds: 3, spade: "spaten", can: "wasserkanne", barrel: "regentonne", barrelCap: 6, barrelFillWorldMs: 8 * 3600_000,
+		thirstWorldMs: 16 * 3600_000, seedRestWorldMs: 3600_000, seedChance: 0.5,
+		decor: { flowers: ["*", "+", "o", "x"], herbs: ["i", "w", "v"] },
+		sorts: [
+			{ key: "strandnelke", name: "Strandnelke", aliases: ["nelke"], kind: "zier", seed: "samen-strandnelke", grow: [6 * 3600_000, 18 * 3600_000], ripeWorldMs: 2 * 24 * 3600_000, yields: { proto: "strandnelke", count: 1 }, color: "#e88fb0", wild: { decor: "flowers" } },
+			{ key: "duenenrose", name: "Dünenrose", aliases: ["rose"], kind: "zier", seed: "samen-duenenrose", grow: [8 * 3600_000, 24 * 3600_000], ripeWorldMs: 2 * 24 * 3600_000, yields: { proto: "duenenrose", count: 1 }, color: "#d9476b", wild: { decor: "flowers", islands: ["Graue Insel", "Krabbensand", "Möwenfels"] } },
+			{ key: "nebelblume", name: "Nebelblume", aliases: [], kind: "zier", seed: "samen-nebelblume", grow: [12 * 3600_000, 36 * 3600_000], ripeWorldMs: 3 * 24 * 3600_000, yields: { proto: "nebelblume", count: 1 }, color: "#9fb6e8", wild: { decor: "flowers", islands: ["Nebelholm"] } },
+			{ key: "strandkohl", name: "Strandkohl", aliases: ["kohl"], kind: "nutz", seed: "samen-strandkohl", grow: [6 * 3600_000, 24 * 3600_000], ripeWorldMs: 24 * 3600_000, yields: { proto: "kohl", count: 2 }, color: "#7fae6a", wild: { decor: "herbs" } },
+			{ key: "moehre", name: "Möhre", aliases: ["wilde möhre"], kind: "nutz", seed: "samen-moehre", grow: [6 * 3600_000, 18 * 3600_000], ripeWorldMs: 24 * 3600_000, yields: { proto: "moehre", count: 2 }, color: "#e8902c", wild: { decor: "herbs", islands: ["Graue Insel", "Kupferhafen", "Rauchholm", "Krabbensand"] } },
 		],
 	},
 	recipes: [
 		{ key: "muschelmesser", name: "Muschelmesser", needs: [{ proto: "muschel", count: 2 }, { proto: "treibholz", count: 1 }], makes: "muschelmesser" },
 		{ key: "holzbuendel", name: "Holzbündel", needs: [{ proto: "treibholz", count: 3 }], tool: "muschelmesser", makes: "holzbuendel" },
 		{ key: "tangseil", name: "Tangseil", needs: [{ proto: "tang", count: 3 }], makes: "tangseil" },
+		{ key: "spaten", name: "Spaten", needs: [{ proto: "treibholz", count: 2 }, { proto: "tangseil", count: 1 }], makes: "spaten" },
 		{ key: "netz", name: "Netz", needs: [{ proto: "tangseil", count: 2 }], tool: "muschelmesser", makes: "netz" },
 		{ key: "kette", name: "Bernsteinkette", needs: [{ proto: "bernstein", count: 1 }, { proto: "muschel", count: 2 }, { proto: "tangseil", count: 1 }], tool: "muschelmesser", makes: "kette" },
 	],

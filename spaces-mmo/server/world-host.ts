@@ -25,6 +25,7 @@ import { msg } from "./engine/context.ts";
 import { marketTick, ordersTick } from "./engine/commands/trade.ts";
 import { fireTick, floodTick, fogTick, stormTick } from "./engine/fire.ts";
 import { sweepTick } from "./engine/sweep.ts";
+import { gardenTick, stormFillsBarrels } from "./engine/commands/garden.ts";
 import { ensureTokens, loadIntoSpace } from "./engine/loader.ts";
 import { ClockGuard, runSchedules } from "./engine/schedule.ts";
 import { sweepSpots } from "./engine/occupancy.ts";
@@ -55,7 +56,8 @@ export async function startWorld(o: { space?: string; world?: WorldDef; region?:
 		sweep: () => sweepTick(space, w),
 		orders: () => ordersTick(space, w),
 		market: () => marketTick(space),
-		storm: async () => { await stormTick(space, w, msgLeaseMs); },
+		storm: async () => { await stormFillsBarrels(space, w, await stormTick(space, w, msgLeaseMs)); },
+		garden: async () => { await gardenTick(space, w); },
 	};
 	const handlers = { ...SCHEDULE_HANDLERS, tick: tickHandler(runs) };
 	// a region's world worker reaches the other regions: to deliver the characters that took a ferry out of it

@@ -71,6 +71,8 @@ export type WorldDef = {
 	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
 	/** What can be built (docs/siedeln.md): plans and the rules of building. Without it nothing can be built. */
 	building?: BuildingDef;
+	/** Gardens (docs/siedeln.md "Gärten"): beds, what grows in them and how. Without it nothing is planted. */
+	garden?: GardenDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
 	regions?: RegionDef[];
@@ -85,6 +87,18 @@ export type PlanDef = { key: string; name: string; aliases: string[]; w: number;
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `restWorldMs`: how long a
  *  figure rests after a work point; `maxSites`/`maxBuildings`: per account. */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */
+/** A sort that grows in a bed: from seed (`seed`, a prototype) to sprout after `grow[0]`, to ripe after `grow[1]`, ripe
+ *  for `ripeWorldMs`, then it wilts. A harvest gives `yields` and a seed (sometimes two). `wild`: where its seeds are found
+ *  in the wild flora (rooms whose decor has flowers or herbs, on these islands; without islands everywhere). */
+export type SortDef = { key: string; name: string; aliases: string[]; kind: "nutz" | "zier"; seed: string; grow: [number, number]; ripeWorldMs: number; yields: { proto: string; count: number }; color: string;
+	wild?: { decor: "flowers" | "herbs"; islands?: string[] } };
+/** `bed`: the size of a bed, the light it takes, how long it stays without care; `spade`: the tool that digs one;
+ *  `can`: a can of water (from the rain barrel, the building plan `barrel`, which holds `barrelCap` cans and gains one
+ *  every `barrelFillWorldMs`, all at a storm surge on its island); `thirstWorldMs`: how long a bed's plants go
+ *  without water before the next stage finds them dry and they wilt; `seedRestWorldMs`/`seedChance`: how often one
+ *  looks for wild seeds and how often one finds some. */
+export type GardenDef = { bed: { w: number; h: number; points: number; keepWorldMs: number }; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
+	thirstWorldMs: number; seedRestWorldMs: number; seedChance: number; decor: { flowers: string[]; herbs: string[] }; sorts: SortDef[] };
 export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;

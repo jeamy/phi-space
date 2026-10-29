@@ -64,3 +64,7 @@ border cut off (34 → 32 px).
 `items/netz.png` was drawn for this world in the style and with the colours of the pack above, by the script
 `items-src/net.py` (same license as this project).
 
+The garden's things (`items/spaten.png`, `items/wasserkanne.png`, the five `items/samen-*.png`, `items/strandnelke.png`,
+`items/duenenrose.png`, `items/nebelblume.png`, `items/kohl.png`, `items/moehre.png`) were drawn for this world in the
+same way, by the script `items-src/garden.py` (same license as this project).
+

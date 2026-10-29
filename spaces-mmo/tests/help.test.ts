@@ -8,6 +8,7 @@ import { DEFAULT_COMMANDS } from "../server/engine/commands/default.ts";
 import { CLOCK_COMMANDS } from "../server/engine/commands/clock.ts";
 import { TRADE_COMMANDS } from "../server/engine/commands/trade.ts";
 import { BUILD_COMMANDS } from "../server/engine/commands/build.ts";
+import { GARDEN_COMMANDS } from "../server/engine/commands/garden.ts";
 import { LINE as CHAT_LINE } from "../server/chat.ts";
 
 const LANGS = ["de", "en"] as const;
@@ -40,7 +41,7 @@ test("help links point at existing articles and anchors", () => {
 });
 
 test("every command in the command tables exists in the engine, under its English and German names", () => {
-	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
+	const known = new Set([...DEFAULT_COMMANDS, ...TRADE_COMMANDS, ...CLOCK_COMMANDS, ...BUILD_COMMANDS, ...GARDEN_COMMANDS].flatMap((c) => [c.key, ...(c.aliases ?? [])].map((n) => n.toLowerCase())));
 	known.add("help"); known.add("hilfe"); known.add("?"); // helpCommand is built per room
 	// the chat's words never reach the engine: the gateway catches them (server/chat.ts)
 	for (const w of /\^\(([^)]+)\)/.exec(CHAT_LINE.source)![1]!.split("|")) known.add(w);

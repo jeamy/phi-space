@@ -116,7 +116,19 @@ export type NpcMemoryFields = { npcId: string; text: string };
 export type SiteFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string;
 	needs: Array<{ proto: string; name: string; count: number; have: number }>; work: number; workNeed: number; human: number; other: number; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; at: number };
 /** A finished building; it stands while it is kept (`untilWorldMs`, renewed by repairs). `by`: who built it, with what they gave. */
-export type BuildingFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; builtAt: number };
+export type BuildingFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; builtAt: number;
+	/** A rain barrel's cans at `waterAtWorldMs`; it gains one every so often (engine/commands/garden.ts barrelWater). */
+	water?: number; waterAtWorldMs?: number };
+/** A plant in a bed, at a cell of it: its sort, its stage (0 seed, 1 sprout, 2 ripe, 3 wilted) and when the next is due. */
+export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 3; dueWorldMs: number };
+/** A bed (docs/siedeln.md "Gärten"): cells like a building's (Plot entries), its plants inside it, so a stage change or
+ *  a watering is one write of the bed whatever grows in it. `dueWorldMs`: the earliest date of its plants (the garden
+ *  tick looks at nothing else); `wateredWorldMs`: the last watering; `sponsors`: who may tend it besides the owner;
+ *  `untilWorldMs`: a bed nobody tends goes back to grass. */
+export type BedFields = { bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
+	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
+/** How long a figure waits before it looks for wild seeds again (the sweep removes it). */
+export type SeedRestFields = { charId: string; untilWorldMs: number };
 /** What is left of a building that was not kept: it still covers its cells until `untilWorldMs` (the sweep removes it). */
 export type RuinFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; untilWorldMs: number };
 /** What lay in a chest of a building that fell into ruin: its things wait (location `estateId`) for their owner until

@@ -316,6 +316,25 @@ function drawObjs(s: Scene, roomId: string, objs: Map<string, ObjView>): void {
 			s.objs.addChild(label);
 			continue;
 		}
+		if (o.kind === "bed") {
+			// a bed: dug soil with furrows, each plant at its cell by its stage (seed, sprout, ripe in the sort's colour, wilted)
+			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
+			const g = new p.Graphics().rect(x + 2, y + 2, w - 4, h - 4).fill({ color: "#6b4a2e" }).stroke({ width: 2, color: "#3e2a18" });
+			for (let fy = y + 6; fy < y + h - 4; fy += 6) g.rect(x + 4, fy, w - 8, 1).fill({ color: "#4e3520" });
+			if (o.weedy) for (const [wx, wy] of [[0.2, 0.3], [0.7, 0.2], [0.45, 0.75], [0.85, 0.8]] as const) g.rect(x + w * wx, y + h * wy, 2, 3).fill({ color: "#5f8a3a" });
+			for (const pl of o.plants ?? []) {
+				const px = x + pl.x * ts + ts / 2, py = y + pl.y * ts + ts / 2;
+				if (pl.stage === 0) g.circle(px, py + 3, 2).fill({ color: "#2e1e10" });
+				else if (pl.stage === 1) { g.rect(px - 0.5, py - 1, 1.5, 6).fill({ color: "#4f8a3a" }); g.ellipse(px - 3, py - 1, 3, 1.6).fill({ color: "#6fb04a" }); g.ellipse(px + 3, py - 2, 3, 1.6).fill({ color: "#6fb04a" }); }
+				else if (pl.stage === 2) { g.rect(px - 0.5, py, 1.5, 7).fill({ color: "#4f8a3a" }); g.circle(px, py - 2, 5.5).fill({ color: pl.color }).stroke({ width: 1, color: "#1a1410", alpha: 0.6 }); }
+				else g.poly([px - 4, py + 5, px, py - 3, px + 4, py + 5]).fill({ color: "#7a6a4a", alpha: 0.9 });
+			}
+			const label = new p.Text({ text: `Beet von ${o.owner ?? ""}`, resolution: TEXT_RES, style: { fontFamily: "sans-serif", fontSize: 10, fill: "#f0e6d2", stroke: { color: "#000000", width: 3 } } });
+			label.anchor.set(0.5, 0);
+			label.position.set(x + w / 2, y + h);
+			s.objs.addChild(g, label);
+			continue;
+		}
 		if (o.kind === "ruin") {
 			const w = (o.w ?? 1) * ts, h = (o.h ?? 1) * ts;
 			const g = new p.Graphics().rect(x + 3, y + h * 0.45, w - 6, h * 0.55 - 3).fill({ color: "#6b6f73", alpha: 0.8 }).stroke({ width: 2, color: "#2b2f33" });

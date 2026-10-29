@@ -3,8 +3,8 @@
 // only; clicks are converted back to integer grid cells and every action still goes through a server command.
 //
 // The renderer, camera and render loop are made once; a room change swaps only the ground and its things. The camera looks
-// at the middle of the room and stays there (it moves only when the player turns or zooms the view), so a step moves the
-// figure and nothing else: no sliding ground, no rebuilt scene.
+// at the middle of the room and stays there (it moves only when the player drags, turns or zooms the view), so a step moves
+// the figure and nothing else: no sliding ground, no rebuilt scene.
 import { useEffect, useRef, useState } from "react";
 import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
@@ -15,7 +15,9 @@ import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
 type T = typeof import("three");
 type O3 = import("three").Object3D;
-type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number };
+type Entry = { obj: O3; target: import("three").Vector3; fig?: Figure; flame?: { light: import("three").PointLight; cone: O3 }; kind?: string; progress?: number; sig?: string };
+/** What a bed shows: rebuilt when its plants or weeds change. */
+const bedSig = (o: ObjView) => (o.kind === "bed" ? `${o.weedy ? 1 : 0}|${(o.plants ?? []).map((p) => `${p.x},${p.y},${p.stage}`).join(";")}` : undefined);
 type Scene3D = {
 	t: T;
 	renderer: import("three").WebGLRenderer;
@@ -32,6 +34,9 @@ type Scene3D = {
 	objs: Map<string, Entry>;
 	angle: number;
 	zoom: number;
+	/** how far the player dragged the view from the middle of the room, on the ground (world x and z) */
+	panX: number;
+	panZ: number;
 	/** the distance of the camera to the middle of the room, and the fog level: together they give the fog's density */
 	dist: number;
 	level: number;
@@ -79,7 +84,7 @@ export function MapView3D(props: MapRendererProps) {
 				const sun = new t.DirectionalLight(0xfff1cf, 2.2);
 				sun.position.set(-6, 12, 8); scene.add(sun);
 
-				const s: Scene3D = { t, renderer, scene, camera, fog, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: stored("mmo.3d.zoom", 1), dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, scene, camera, fog, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: stored("mmo.3d.zoom", 1), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -113,6 +118,7 @@ export function MapView3D(props: MapRendererProps) {
 		const s = state.current;
 		if (!ready || !s) return;
 		let dead = false;
+		if (s.room.roomId !== props.room.roomId) { s.panX = 0; s.panZ = 0; }
 		s.room = props.room; s.world = props.world;
 		for (const m of [s.chars, s.objs]) for (const id of [...m.keys()]) remove(s, m, id);
 		void (async () => {
@@ -227,7 +233,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		if (obj.location !== s.room.roomId) continue;
 		let e = s.objs.get(id);
 		// a site that became a building (or got further) is drawn anew
-		if (e && (e.kind !== obj.kind || e.progress !== obj.progress)) { remove(s, s.objs, id); e = undefined; }
+		if (e && (e.kind !== obj.kind || e.progress !== obj.progress || e.sig !== bedSig(obj))) { remove(s, s.objs, id); e = undefined; }
 		if (!e) { e = object(s.t, obj); e.target.copy(placeOf(s, obj)); e.obj.position.copy(e.target); s.scene.add(e.obj); s.objs.set(id, e); }
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
@@ -243,7 +249,22 @@ function placeOf(s: Scene3D, obj: ObjView): import("three").Vector3 {
 
 function object(t: T, obj: ObjView): Entry {
 	const group = new t.Group(); group.userData.owned = true;
-	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}) };
+	const e: Entry = { obj: group, target: new t.Vector3(), kind: obj.kind, ...(obj.progress !== undefined ? { progress: obj.progress } : {}), ...(obj.kind === "bed" ? { sig: bedSig(obj) } : {}) };
+	if (obj.kind === "bed") {
+		// dug soil a little above the grass; each plant at its cell by its stage
+		const w = obj.w ?? 1, d = obj.h ?? 1;
+		const soil = new t.Mesh(new t.BoxGeometry(w * 0.92, 0.08, d * 0.92), new t.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 })); soil.position.y = 0.04; group.add(soil);
+		const stem = new t.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 1 });
+		for (const p of obj.plants ?? []) {
+			const px = p.x - (w - 1) / 2, pz = p.y - (d - 1) / 2;
+			if (p.stage === 0) { const s0 = new t.Mesh(new t.SphereGeometry(0.04, 6, 4), new t.MeshStandardMaterial({ color: 0x2e1e10 })); s0.position.set(px, 0.1, pz); group.add(s0); continue; }
+			const tall = p.stage === 1 ? 0.2 : p.stage === 2 ? 0.38 : 0.15;
+			const st = new t.Mesh(new t.CylinderGeometry(0.03, 0.03, tall, 5), p.stage === 3 ? new t.MeshStandardMaterial({ color: 0x7a6a4a }) : stem); st.position.set(px, 0.08 + tall / 2, pz); group.add(st);
+			if (p.stage === 2) { const head = new t.Mesh(new t.SphereGeometry(0.17, 10, 8), new t.MeshStandardMaterial({ color: Number.parseInt(p.color.slice(1), 16), roughness: 0.7 })); head.position.set(px, 0.08 + tall + 0.08, pz); group.add(head); }
+		}
+		if (obj.weedy) for (const [wx, wz] of [[-0.3, 0.25], [0.3, -0.3], [0.1, 0.35]] as const) { const weed = new t.Mesh(new t.ConeGeometry(0.04, 0.14, 4), stem); weed.position.set(wx * w, 0.15, wz * d); group.add(weed); }
+		return e;
+	}
 	if (obj.kind === "ruin") {
 		const w = obj.w ?? 1, d = obj.h ?? 1;
 		const rest = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.3, d * 0.9), new t.MeshStandardMaterial({ color: 0x6b6f73, roughness: 1 })); rest.position.y = 0.15; group.add(rest);
@@ -316,14 +337,16 @@ function at(s: Scene3D, x: number, y: number, above: number): import("three").Ve
 	return new s.t.Vector3(x - w / 2 + 0.5, surface(s.room, s.world, x, y) + above, y - h / 2 + 0.5);
 }
 
-/** The camera looks at the middle of the room from a distance that shows all of it; only turning and zooming move it. */
+/** The camera looks at the middle of the room (moved by the drag) from a distance that shows all of it; only dragging,
+ *  turning and zooming move it. */
 function positionCamera(s: Scene3D): void {
 	const { w, h } = dims(s.room), aspect = s.camera.aspect || 1;
+	s.panX = clamp(s.panX, -w / 2, w / 2); s.panZ = clamp(s.panZ, -h / 2, h / 2);
 	const radius = Math.hypot(w, h) / 2;
 	const half = Math.min(Math.atan(Math.tan((s.camera.fov * Math.PI) / 360) * aspect), (s.camera.fov * Math.PI) / 360);
 	const d = (radius / Math.sin(half)) * 0.74 / s.zoom;
-	s.camera.position.set(Math.cos(s.angle) * Math.cos(ELEVATION) * d, 0.2 + Math.sin(ELEVATION) * d, Math.sin(s.angle) * Math.cos(ELEVATION) * d);
-	s.camera.lookAt(0, 0.2, 0);
+	s.camera.position.set(s.panX + Math.cos(s.angle) * Math.cos(ELEVATION) * d, 0.2 + Math.sin(ELEVATION) * d, s.panZ + Math.sin(s.angle) * Math.cos(ELEVATION) * d);
+	s.camera.lookAt(s.panX, 0.2, s.panZ);
 	s.dist = d; applyFog(s, s.level);
 }
 /** How much of the middle of the room the fog hides, by level (the haze at the camera's distance): 0, 20 %, 35 %, 50 %.
@@ -359,15 +382,24 @@ function pointer(s: Scene3D, latest: { current: MapRendererProps }, view: { curr
 		if (fingers.active) return;
 		const at = cell(e); down = { x: e.clientX, y: e.clientY, at, long: false, timer: setTimeout(() => { if (down?.at) { down.long = true; latest.current.onMenu(down.at.x, down.at.y, e.clientX, e.clientY); } }, LONG_PRESS_MS) };
 	};
-	// dragging turns the view: left and right around the room (the camera follows the pointer live, the state is set when the pointer is lifted)
-	let last = 0, dragged = false;
+	// dragging moves the view over the ground as in 2D, the ground stays under the pointer; with Shift it turns the view
+	// around the room (the camera follows the pointer live, the angle is kept when the pointer is lifted)
+	let last = { x: 0, y: 0 }, dragged = false;
 	const onMove = (e: PointerEvent) => {
 		const spread = fingers.move(e.pointerId, e.clientX, e.clientY);
 		if (spread !== null) { view.current.zoomBy(spread); fingers.rebase(); return; }
 		if (!down) return;
-		if (!dragged && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_PX) { dragged = true; clearTimeout(down.timer); down.at = null; last = down.x; s.canvas.setPointerCapture?.(e.pointerId); }
+		if (!dragged && Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_PX) { dragged = true; clearTimeout(down.timer); down.at = null; last = { x: down.x, y: down.y }; s.canvas.setPointerCapture?.(e.pointerId); }
 		if (!dragged) return;
-		s.angle += (e.clientX - last) * 0.008; last = e.clientX; // the room turns with the pointer
+		const dx = e.clientX - last.x, dy = e.clientY - last.y; last = { x: e.clientX, y: e.clientY };
+		if (e.shiftKey) s.angle += dx * 0.008; // the room turns with the pointer
+		else {
+			// world units per pixel at the point looked at; the ground is foreshortened in depth by the camera's elevation
+			const unit = (2 * s.dist * Math.tan((s.camera.fov * Math.PI) / 360)) / Math.max(1, s.size.h);
+			const fx = -Math.cos(s.angle), fz = -Math.sin(s.angle); // forward on the ground; right is (-fz, fx)
+			const side = dx * unit, depth = (dy * unit) / Math.sin(ELEVATION);
+			s.panX += fz * side + fx * depth; s.panZ += -fx * side + fz * depth;
+		}
 		positionCamera(s);
 	};
 	const onUp = (e: PointerEvent) => { fingers.up(e.pointerId); if (!down) return; clearTimeout(down.timer); if (down.at && !down.long) latest.current.onCell(down.at.x, down.at.y); if (dragged) view.current.turned(s.angle); dragged = false; down = null; };
