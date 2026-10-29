@@ -1,0 +1,13 @@
+[package]
+name = "phi-json"
+description = "JSON as phi-spaces' TypeScript code sees it: JavaScript property order, ECMAScript numbers, RFC 8785 canonical form"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+ryu-js.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+hmac.workspace = true

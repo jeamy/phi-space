@@ -48,6 +48,11 @@ const CANONICAL_INPUTS = [
 	// UTF-16 order: "😀" (the surrogates 0xD83D 0xDE00) sorts before "\ue000" and "\uffff"; by code point or UTF-8 bytes it would sort after them
 	'{"😀":1,"\\uffff":2,"\\ue000":3,"é":4,"z":5,"A":6,"":7,"aa":8,"a":9}',
 	'{"x":-0,"y":[0.30000000000000004,1e-7,2e21]}',
+	// JSON.parse puts array-index keys (0 to 2^32 - 2, no leading zero) first, ascending; the rest keep their order. This
+	// is the order of JSON.stringify (jsonText, jsonBytes, the wire), not of the canonical form
+	'{"b":1,"2":2,"1":3,"a":4,"01":5,"4294967295":6,"4294967294":7,"-1":8,"0":9}',
+	// a repeated key: the last value, at the place of the first
+	'{"a":1,"b":2,"a":3}',
 ];
 /** Doubles by their bits (big-endian hex), for the number form alone: what JSON text cannot pin down (NaN, Infinity). */
 const NUMBER_BITS = [
