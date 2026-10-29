@@ -260,6 +260,17 @@ erhalten dieselben Raum-, Figuren- und Objektansichten und geben Rasterzellen an
 `Map<entryId, Object3D>` für Figuren und Objekte. Godot oder Bevy wären dagegen kein Einbau,
 sondern ein Plattformwechsel, weil ihr Export das ganze Canvas übernimmt.
 
+Die Dinge der Welt zeichnet `client/props3d.ts` als eigene Low-Poly-Modelle aus Three.js-Grundkörpern, ohne Modelldateien
+(im Stil angelehnt an würfelige Dioramen wie mitsuhikos „dungeon-crawler“, aber nichts daraus übernommen): Bäume, Nadelbäume
+und Büsche (`model` an einem Eintrag von `decor` in der Welt; ohne `model` bleibt das Bild), die Hütte und die Regentonne
+nach ihrem Plan (`ObjView.plan`), eine Baustelle, deren Wände und Gerüst mit dem Fortschritt wachsen (eine Geometrie je
+Zehntel) und deren Holzstapel dabei schrumpft, die Ruine, den Steinring des Feuers und einen Wegweiser am Ausgang. Jedes
+Modell ist eine zusammengeführte Geometrie mit Farben an den Ecken (facettiert, jede Fläche etwas heller oder dunkler),
+einmal je Art und Variante gebaut und geteilt (`userData.shared`, das `dispose` der Karte lässt sie stehen); Variante,
+Drehung und Größe kommen aus dem Ort (`stableHash`), ein Raum sieht also bei jedem Aufbau gleich aus. Pflanzen wachsen
+nicht auf Zellen, die ein Bau, eine Baustelle, eine Ruine oder ein Beet belegt: die Pflanzen sind eine eigene Gruppe, die
+neu entsteht, wenn sich diese Zellen ändern. Alles das ist nur Darstellung; Regeln, Wege und Belegung bleiben 2D.
+
 Der Nutzer kann unabhängig vom Server zwischen Text, 2D und 3D wechseln; die Auswahl bleibt im Browser gespeichert.
 Kann Three.js oder WebGL nicht starten, fällt der Client auf 2D zurück. Scheitert auch die 2D-Karte, bleibt der
 Textmodus. Gezeichnet werden instanziierte Kachelquader, einfache Geometrien und Namens-Billboards; Low-Poly-

@@ -14,7 +14,7 @@ export type TileDef = { sheet: string; x: number; y: number; walk: boolean; auto
 /** Something drawn over a ground tile (a flower, a bush, a small tree): a `w`×`h` cut of a sheet, standing on the bottom of
  *  its cell (taller cuts reach into the cell above), optionally tinted; `upright` ones stand among the figures (one behind
  *  it is hidden), the others lie flat under things and figures. Only for the eye: it changes no rule. */
-export type DecorDef = { sheet: string; x: number; y: number; w: number; h: number; tint?: number; upright?: boolean };
+export type DecorDef = { sheet: string; x: number; y: number; w: number; h: number; tint?: number; upright?: boolean; /** the 3D map's model instead of the picture (client/props3d.ts) */ model?: "tree" | "conifer" | "bush" | "berrybush" };
 /** A character sheet: 4 frames per row, rows down, left, right, up. */
 export type SkinDef = { sheet: string; frameW: number; frameH: number };
 /** `map`: where the room lies on the overview of the world (one unit per room; rooms of one island side by side),

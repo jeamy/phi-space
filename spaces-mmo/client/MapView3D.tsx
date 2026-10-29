@@ -10,6 +10,7 @@ import type { CharView, ObjView } from "../server/gateway.ts";
 import { animateFigure, makeFigure, type Figure } from "./figure3d.ts";
 import type { MapRendererProps } from "./MapRenderer.tsx";
 import { pinch } from "./pinch.ts";
+import { buildingGeometry, fireGeometry, PLANT_VARIANTS, placeLook, plantGeometry, propMaterial, propMesh, propShadow, ruinGeometry, signGeometry, siteGeometry, type PlantModel } from "./props3d.ts";
 import { tile3d } from "./terrain3d.ts";
 import { loadDecorLooks, loadTileLooks, type TileLook } from "./tiles3d.ts";
 
@@ -29,6 +30,11 @@ type Scene3D = {
 	room: MapRendererProps["room"];
 	world: MapRendererProps["world"];
 	ground: import("three").Group | null;
+	/** the plants on the ground (built again when a building, site, ruin or bed comes onto them or goes), their pictures,
+	 *  and the covered cells they were built for */
+	plants: import("three").Group | null;
+	plantLooks: Map<string, import("three").Texture>;
+	plantsFor: string;
 	water: Array<{ material: import("three").MeshStandardMaterial; look: TileLook }>;
 	chars: Map<string, Entry>;
 	objs: Map<string, Entry>;
@@ -84,7 +90,7 @@ export function MapView3D(props: MapRendererProps) {
 				const sun = new t.DirectionalLight(0xfff1cf, 2.2);
 				sun.position.set(-6, 12, 8); scene.add(sun);
 
-				const s: Scene3D = { t, renderer, scene, camera, fog, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: stored("mmo.3d.zoom", 1), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
+				const s: Scene3D = { t, renderer, scene, camera, fog, host: host.current, canvas: renderer.domElement, room: props.room, world: props.world, ground: null, plants: null, plantLooks: new Map(), plantsFor: "-", water: [], chars: new Map(), objs: new Map(), angle: stored("mmo.3d.angle", Math.PI / 4), zoom: stored("mmo.3d.zoom", 1), panX: 0, panZ: 0, dist: 30, level: 0, size: { w: 0, h: 0 }, frame: 0, resize: null as unknown as ResizeObserver };
 				s.resize = new ResizeObserver(() => resize(s));
 				s.resize.observe(host.current);
 				pointer(s, latest, view);
@@ -128,8 +134,9 @@ export function MapView3D(props: MapRendererProps) {
 			if (dead || state.current !== s) return;
 			if (s.ground) { s.scene.remove(s.ground); dispose(s.ground); }
 			s.water = [];
-			s.ground = buildTerrain(s, looks, plants);
+			s.ground = buildTerrain(s, looks);
 			s.scene.add(s.ground);
+			s.plantLooks = plants; s.plantsFor = "-"; // sync builds the plants
 			sync(s, latest.current.chars, latest.current.objs, latest.current.me, true);
 			resize(s);
 		})();
@@ -165,7 +172,7 @@ const dims = (room: MapRendererProps["room"]) => ({ w: room.ground[0]?.length ??
 
 /** The ground: one instanced box per tile kind, the tile art on top, plain earth on the sides. Boxes touch (no seams).
  *  The plants stand on it as pictures that face the camera (flat ones smaller). */
-function buildTerrain(s: Scene3D, looks: Map<string, TileLook>, plants: Map<string, import("three").Texture>): import("three").Group {
+function buildTerrain(s: Scene3D, looks: Map<string, TileLook>): import("three").Group {
 	const { t, room, world } = s, { w, h } = dims(room);
 	const group = new t.Group(); group.userData.owned = true;
 	const byTile = new Map<string, Array<{ x: number; y: number }>>();
@@ -185,10 +192,35 @@ function buildTerrain(s: Scene3D, looks: Map<string, TileLook>, plants: Map<stri
 		mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
 		if (look && look.frames.length > 1) s.water.push({ material: top, look });
 	}
+	return group;
+}
+
+/** The plants of the room, never on a cell a building, site, ruin or bed covers: trees and bushes as models, flowers and
+ *  herbs as pictures that face the camera (flat ones smaller). */
+function buildPlants(s: Scene3D, covered: Set<string>): import("three").Group {
+	const { t, room, world } = s, { w, h } = dims(room), plants = s.plantLooks;
+	const group = new t.Group(); group.userData.owned = true;
 	const materials = new Map<string, import("three").SpriteMaterial>();
+	// trees and bushes as models (props3d.ts), one instanced mesh per shape; turn and size come from the cell
+	const models = new Map<string, Array<{ x: number; y: number; turn: number; size: number }>>();
+	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key];
+		if (!d?.model || covered.has(`${x},${y}`)) continue;
+		const look = placeLook(`${room.roomId}:${x}:${y}`), at = `${d.model}:${look.variant}`;
+		const list = models.get(at) ?? []; list.push({ x, y, turn: look.turn, size: look.size }); models.set(at, list);
+	}
+	for (const [at, cells] of models) {
+		const [model, variant] = at.split(":") as [PlantModel, string];
+		const mesh = new t.InstancedMesh(plantGeometry(t, model, Number(variant) % PLANT_VARIANTS), propMaterial(t), cells.length);
+		const matrix = new t.Matrix4(), q = new t.Quaternion(), up = new t.Vector3(0, 1, 0);
+		cells.forEach((c, i) => { matrix.compose(new t.Vector3(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y), c.y - h / 2 + 0.5), q.setFromAxisAngle(up, c.turn), new t.Vector3(c.size, c.size, c.size)); mesh.setMatrixAt(i, matrix); });
+		mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
+		const tall = model === "tree" || model === "conifer";
+		for (const c of cells) { const sh = propShadow(t, tall ? 1.1 : 0.8, tall ? 1.1 : 0.8); sh.position.set(c.x - w / 2 + 0.5, surface(room, world, c.x, c.y) + 0.012, c.y - h / 2 + 0.5); group.add(sh); }
+	}
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
 		const key = room.decor?.[y]?.[x] ?? " ", d = world.decor?.[key], map = plants.get(key);
-		if (!d || !map) continue;
+		if (!d || !map || d.model || covered.has(`${x},${y}`)) continue;
 		let material = materials.get(key);
 		if (!material) { material = new t.SpriteMaterial({ map, color: d.tint ?? 0xffffff, alphaTest: 0.5 }); materials.set(key, material); }
 		const sprite = new t.Sprite(material), size = d.upright ? 1 : 0.6;
@@ -238,6 +270,15 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		e.target.copy(placeOf(s, obj));
 		if (e.flame) { const lit = (obj.until ?? 0) > Date.now(); e.flame.light.userData.lit = lit; e.flame.light.intensity = lit ? 4 : 0; }
 	}
+	// nothing grows where something is built or dug
+	const covered = new Set<string>();
+	for (const o of objs.values()) if (o.location === s.room.roomId && (o.kind === "building" || o.kind === "site" || o.kind === "ruin" || o.kind === "bed"))
+		for (let y = o.y; y < o.y + (o.h ?? 1); y++) for (let x = o.x; x < o.x + (o.w ?? 1); x++) covered.add(`${x},${y}`);
+	const key = [...covered].sort().join(";");
+	if (key !== s.plantsFor) {
+		if (s.plants) { s.scene.remove(s.plants); dispose(s.plants); }
+		s.plants = buildPlants(s, covered); s.scene.add(s.plants); s.plantsFor = key;
+	}
 }
 
 /** Where an object stands: its cell, or the middle of the cells a site or building covers. */
@@ -265,33 +306,25 @@ function object(t: T, obj: ObjView): Entry {
 		if (obj.weedy) for (const [wx, wz] of [[-0.3, 0.25], [0.3, -0.3], [0.1, 0.35]] as const) { const weed = new t.Mesh(new t.ConeGeometry(0.04, 0.14, 4), stem); weed.position.set(wx * w, 0.15, wz * d); group.add(weed); }
 		return e;
 	}
+	// houses, sites, ruins, the fire and exits are models (props3d.ts), a variant per thing (its id)
+	const w = obj.w ?? 1, d = obj.h ?? 1, variant = placeLook(obj.id).variant;
 	if (obj.kind === "ruin") {
-		const w = obj.w ?? 1, d = obj.h ?? 1;
-		const rest = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.3, d * 0.9), new t.MeshStandardMaterial({ color: 0x6b6f73, roughness: 1 })); rest.position.y = 0.15; group.add(rest);
-		const wall = new t.Mesh(new t.BoxGeometry(w * 0.4, 0.6, 0.12), new t.MeshStandardMaterial({ color: 0x55595d, roughness: 1 })); wall.position.set(-w * 0.2, 0.3, -d * 0.4); group.add(wall);
+		group.add(propShadow(t, w * 1.05, d * 1.05), propMesh(t, ruinGeometry(t, w, d, variant)));
 		return e;
 	}
 	if (obj.kind === "building" || obj.kind === "site") {
-		const w = obj.w ?? 1, d = obj.h ?? 1, color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
-		if (obj.kind === "building") {
-			const walls = new t.Mesh(new t.BoxGeometry(w * 0.9, 0.8, d * 0.9), new t.MeshStandardMaterial({ color, roughness: 0.9 })); walls.position.y = 0.4; group.add(walls);
-			const roof = new t.Mesh(new t.ConeGeometry(Math.max(w, d) * 0.72, 0.7, 4), new t.MeshStandardMaterial({ color: 0x5b3a22, roughness: 1 })); roof.position.y = 1.15; roof.rotation.y = Math.PI / 4; group.add(roof);
-			const door = new t.Mesh(new t.BoxGeometry(0.3, 0.5, 0.05), new t.MeshStandardMaterial({ color: 0x2a1d10 })); door.position.set(0, 0.25, d * 0.45 + 0.03); group.add(door);
-		} else {
-			const post = new t.MeshStandardMaterial({ color: 0x5b3a22, roughness: 1 });
-			for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) { const p = new t.Mesh(new t.BoxGeometry(0.08, 0.5, 0.08), post); p.position.set(px * (w / 2 - 0.1), 0.25, pz * (d / 2 - 0.1)); group.add(p); }
-			const done = Math.max(0.02, Math.min(1, obj.progress ?? 0));
-			const frame = new t.Mesh(new t.BoxGeometry(w * 0.85, 0.8 * done, d * 0.85), new t.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 0.55 })); frame.position.y = 0.4 * done; group.add(frame);
-		}
+		const color = Number.parseInt((obj.color ?? "#8a6a44").slice(1), 16);
+		group.add(propShadow(t, w * 1.15, d * 1.15));
+		group.add(propMesh(t, obj.kind === "building" ? buildingGeometry(t, obj.plan, w, d, color, variant) : siteGeometry(t, obj.plan, w, d, color, obj.progress ?? 0)));
 		return e;
 	}
 	if (obj.kind === "beacon") {
-		const bowl = new t.Mesh(new t.CylinderGeometry(0.2, 0.28, 0.3, 10), new t.MeshStandardMaterial({ color: 0x6e4a2b, roughness: 1 })); bowl.position.y = 0.15; group.add(bowl);
-		const cone = new t.Mesh(new t.ConeGeometry(0.17, 0.5, 10), new t.MeshStandardMaterial({ color: 0xffa23a, emissive: 0xff7a14, emissiveIntensity: 1.6, transparent: true, opacity: 0.92 })); cone.position.y = 0.55; group.add(cone);
-		const light = new t.PointLight(0xff9d32, 0, 4); light.position.y = 0.8; group.add(light);
+		group.add(propShadow(t, 1.1, 1.1), propMesh(t, fireGeometry(t)));
+		const cone = new t.Mesh(new t.ConeGeometry(0.17, 0.5, 7), new t.MeshStandardMaterial({ color: 0xffa23a, emissive: 0xff7a14, emissiveIntensity: 1.6, transparent: true, opacity: 0.92, flatShading: true })); cone.position.y = 0.6; group.add(cone);
+		const light = new t.PointLight(0xff9d32, 0, 4); light.position.y = 0.85; group.add(light);
 		e.flame = { light, cone };
 	} else if (obj.kind === "exit") {
-		const ring = new t.Mesh(new t.TorusGeometry(0.2, 0.055, 8, 18), new t.MeshStandardMaterial({ color: 0x91b8d0 })); ring.position.y = 0.2; ring.rotation.x = Math.PI / 2; group.add(ring);
+		const sign = propMesh(t, signGeometry(t)); sign.rotation.y = (variant / 3) * Math.PI * 2; group.add(sign);
 	} else if (obj.icon) {
 		// the thing's picture as a small sign that always faces the camera
 		const sprite = new t.Sprite(new t.SpriteMaterial({ map: iconTexture(t, obj.icon), transparent: true, alphaTest: 0.1 }));
@@ -417,8 +450,9 @@ function remove(s: Scene3D, map: Map<string, Entry>, id: string): void { const e
 function dispose(root: O3): void {
 	root.traverse((o) => {
 		const m = o as import("three").Mesh;
-		m.geometry?.dispose?.();
+		// the models' geometries and materials are made once and shared (props3d.ts): only what an object owns goes
+		if (!m.geometry?.userData.shared) m.geometry?.dispose?.();
 		const materials = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : [];
-		for (const material of materials) { const mm = material as import("three").MeshStandardMaterial; if (mm.map && !mm.map.userData.shared) mm.map.dispose(); material.dispose(); }
+		for (const material of materials) { if (material.userData.shared) continue; const mm = material as import("three").MeshStandardMaterial; if (mm.map && !mm.map.userData.shared) mm.map.dispose(); material.dispose(); }
 	});
 }

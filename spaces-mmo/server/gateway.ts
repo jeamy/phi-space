@@ -27,7 +27,7 @@ export type PlanView = { key: string; name: string; w: number; h: number; needs:
 /** A site or building (docs/siedeln.md) covers `w`×`h` cells from x/y; `owner` built it, `progress` (0..1) of a site,
  *  `missing` what it still needs. */
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
-	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string;
+	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string; /** the plan of a site, building or ruin (the 3D map draws each its own) */ plan?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
 	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed. */
 	bedKind?: "zier" | "gemein"; plants?: Array<{ x: number; y: number; stage: number; color: string }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[] };
@@ -465,7 +465,7 @@ export class Gateway {
 		}
 		else if (type === "Ruin") {
 			const r = fields as unknown as RuinFields;
-			this.#setObj(id, { id: r.buildId, kind: "ruin", name: r.name, location: r.room, x: r.x, y: r.y, w: r.w, h: r.h, owner: r.ownerName });
+			this.#setObj(id, { id: r.buildId, kind: "ruin", name: r.name, location: r.room, x: r.x, y: r.y, w: r.w, h: r.h, owner: r.ownerName, plan: r.plan });
 		}
 		else if (type === "Bed") {
 			const b = fields as unknown as BedFields;
@@ -477,7 +477,7 @@ export class Gateway {
 			const total = site ? b.needs.reduce((a, n) => a + n.count, 0) + b.workNeed : 0, have = site ? b.needs.reduce((a, n) => a + Math.min(n.have, n.count), 0) + b.work : 0;
 			const missing = site ? [...b.needs.filter((n) => n.have < n.count).map((n) => `${n.count - n.have} ${n.name}`), ...(b.work < b.workNeed ? [`${b.workNeed - b.work} Arbeit`] : [])].join(", ") : undefined;
 			const color = this.w.building?.plans.find((p) => p.key === b.plan)?.color;
-			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}) });
+			this.#setObj(id, { id: b.buildId, kind: site ? "site" : "building", name: b.name, location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plan: b.plan, ...(site ? { progress: total ? have / total : 0, missing } : {}), ...(color ? { color } : {}) });
 		}
 		else if (type === "Flame") { const f = fields as unknown as FlameFields; this.#flames.set(f.beaconId, f.until); this.#flameOf.set(id, f.beaconId); }
 		else if (type === "Fog") { const f = fields as unknown as FogFields; this.#fog.set(f.room, f.level); }
