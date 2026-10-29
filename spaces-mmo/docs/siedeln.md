@@ -1,6 +1,6 @@
 # Siedeln, Bauen und Gärtnern (Entwurf)
 
-Stand 2026-10-28. Noch nicht gebaut; ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
+Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung). Noch nicht gebaut; ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
 Gärten, Häuser, Werkstätten, Straßen, Kirchen, Kaufhäuser, später Eisenbahn. Er baut auf [spielidee.md](spielidee.md),
 [welt.md](welt.md), [goetter.md](goetter.md) und [automaten.md](automaten.md) auf.
 
@@ -18,6 +18,54 @@ Dorf und Stadt aus Gärten ebenso wie aus Häusern, und die schönsten Orte des 
 Prunkbauten. Die einen sind das große gemeinsame Werk, die anderen der leise Dauerrhythmus, der auch mit zwei, drei
 Spielern die Welt lebendig hält.
 
+## Chat zwischen Spielern (zuerst)
+
+Gemeinsam bauen heißt sich absprechen, auch über Inseln hinweg und mit jemandem, der gerade woanders steht. `say`
+hört nur der Raum, ein Kanal (`channel hafen`) alle. Was fehlt, ist das Gespräch zu zweit und in einer kleinen Gruppe.
+Es kommt deshalb **vor** allem anderen (Reihenfolge, Schritt 0).
+
+**Zu zweit**
+
+- Befehl `chat <name> <text>` (auch `tell`, `flüstere`). `chat <name>` ohne Text öffnet nur das Gespräch.
+- Auf der Karte öffnet die rechte Maustaste über einer Figur ein Menü: **Chat mit …**, dazu Anschauen und
+  Handel anbieten. Auf dem Telefon geht das mit langem Tippen. Dasselbe Menü haben die Namen in „Wer spielt“ und im
+  Log.
+- Die Seite zeigt jedes Gespräch als eigenen Reiter neben dem Log, mit Zähler für Ungelesenes. Was an einen selbst
+  geht, ist hervorgehoben (wie heute `toMe`).
+- Ein Gespräch geht über Regionen hinweg. Das Web folgt den Strömen aller Regionen und stellt eine Nachricht an eine
+  Figur zu, wo immer sie steht. Ist der andere nicht online, bleibt die Nachricht für ein registriertes Konto liegen
+  (Lease, Beispiel sieben Tage, höchstens 50 je Absender) und erscheint beim nächsten Anmelden. Ein Gast bekommt nur,
+  was ankommt, während er spielt.
+
+**In der Gruppe**
+
+- `gruppe neu <name>` gründet eine Gruppe; wer gründet, verwaltet sie.
+- `gruppe lade <spieler> in <name>` schreibt eine Einladung mit Lease wie ein Angebot (`offer`). Der Eingeladene sieht
+  sie und antwortet mit `gruppe annehmen <name>` oder `gruppe ablehnen <name>`; ohne Antwort läuft sie ab.
+- Weitere Befehle: `gruppe verlasse <name>`, `gruppe entferne <spieler> aus <name>` (nur wer verwaltet),
+  `gruppe <name> <text>` oder der Reiter der Gruppe.
+- Höchstens 20 Mitglieder (Einstellung). Auf der Karte bietet das Menü einer Figur auch „In Gruppe einladen“.
+- Eine Siedlung hat später ihre Gruppe von selbst: wer Siedler wird, ist Mitglied, wer es nicht mehr ist, nicht mehr.
+
+**Wo es liegt**
+
+- Gruppen, Mitgliedschaften und Einladungen gelten über alle Regionen. Deshalb liegen sie in einem eigenen kleinen
+  Space `social`, nicht in einer Region. Er läuft im Space-Prozess neben dem Konten-Space (nano), und nur der
+  Web-Prozess spricht mit ihm.
+- Nachrichten in Gesprächen und Gruppen gehen nicht über den Welt-Worker: sie brauchen keine Transaktion der Welt.
+  Das Web schreibt sie in `social`, liest sie aus dessen Strom und stellt sie zu.
+- Liegengebliebene Nachrichten sind Entries mit Lease an den Empfänger.
+
+**Schutz**
+
+- `ignoriere <name>` sperrt Nachrichten und Einladungen eines Spielers; `ignoriere` allein listet die Gesperrten.
+- Für `chat` und `gruppe` gelten dieselben Grenzen je Konto wie für getippte Befehle (Gateway). Gäste dürfen chatten,
+  aber niemanden in eine Gruppe einladen und keine Gruppe gründen.
+- Gespräche erscheinen nicht im Log des Raums. Kein NPC und kein Modell liest sie, und die Übersetzung lässt
+  `chat`, `tell` und `gruppe` wie `say` unverändert.
+- „Melden“ im Menü einer Nachricht schickt sie mit Absender an die Admins (Admin-Fenster). Admins sehen sonst keine
+  Gespräche.
+
 ## Licht ist Bauland
 
 Gebaut wird nur, wo ein Feuer den Nebel fernhält. Ein Bau braucht Licht, und jeder Bau verbraucht etwas davon:
@@ -26,7 +74,13 @@ Gebaut wird nur, wo ein Feuer den Nebel fernhält. Ein Bau braucht Licht, und je
   brennt länger je Brennstoff.
 - Erlischt das Feuer, verfallen die Bauten in seinem Licht nicht sofort, aber sie **arbeiten nicht** (keine Ware, kein
   Markt), und der Nebel nagt an ihnen (Verfall, unten).
-- Damit bleibt die Kernidee tragend: Wer baut, hat einen Grund, das Feuer zu halten.
+- **Licht reicht für eine bestimmte Menge Bauten.** Jedes Feuer trägt **Lichtpunkte** (Beispiel: 20, ein Leuchtturm 50),
+  verteilt über alle Räume, die es deckt. Jeder Bau und jeder Garten belegt davon so viele, wie er zum Bestand der Epoche
+  zählt (unten, „Epochen“); deckt ein Raum zwei Feuer, zählen beide zusammen. Ist das Licht voll, nimmt `bau` dort
+  keinen neuen Plan an, bis ein Leuchtturm oder ein weiteres Feuer dazukommt. Der Brennstoff des Feuers wird davon
+  nicht schneller verbraucht: der Preis des Bauens ist die Grenze, nicht ein schnelleres Feuer.
+- Damit bleibt die Kernidee tragend: Wer baut, hat einen Grund, das Feuer zu halten — und, wer mehr bauen will, einen
+  Grund für den Leuchtturm.
 
 ## Was man baut und anlegt
 
@@ -40,9 +94,10 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | **Hütte** | 6 Treibholz, 2 Tangseile | eigener Ort: Truhe (Lager), Ausloggen ohne Verlust, Rückkehrpunkt |
 | **Trockengestell** | 4 Holz | macht aus Tang langsam Tangseil |
 | **Räucherei** | 8 Holz, 4 Steine | Fisch → Räucherfisch (Ware, Nahrung für Arbeiter) |
-| **Steg** | 6 Holz | ein neuer Ausgang ins Wasser, Boote legen dort an, von dort wird gefischt |
-| **Nutzgarten** | eine freie Fläche, ein Spaten | das erste Beet: Gemüse und Kräuter, Pflege in Stufen |
-| **Hühnerstall** | 4 Holz | ein paar Hühner: Eier jeden Welttag, fressen Körner und Reste |
+| **Steg** | 6 Holz | eine Anlegestelle am Ufer des Raums (kein neuer Raum und kein Ausgang): Boote legen dort an, von dort wird gefischt |
+| **Regentonne** | 3 Holz, 1 Tangseil | Wasser zum Gießen: füllt sich jeden Welttag um eine Kanne, bei Sturmflut ganz; ohne sie gibt es vor dem Brunnen kein Wasser |
+| **Nutzgarten** | eine freie Fläche, ein Spaten (Rezept: 2 Treibholz, 1 Tangseil) | das erste Beet: Gemüse und Kräuter, Pflege in Stufen |
+| **Hühnerstall** | 4 Holz | ein paar Hühner: Eier jeden Welttag; fressen Tang und Gemüsereste aus dem Nutzgarten, ab Epoche 2 auch Körner |
 
 ### Epoche 2: Dorf (Werkstätten und Wege)
 
@@ -50,11 +105,11 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | --- | --- |
 | **Werkstatt** (Tischlerei, Seilerei, Schmiede) | Rezepte, die es ohne sie nicht gibt; ein Werkzeug hält dort länger |
 | **Steinbruch** (an Felsen), **Lehmgrube**, **Ziegelei** | Stein, Lehm und Ziegel in Menge — Grundstoff der Bauten ab hier |
-| **Pflasterweg** | Zellen, die man schneller begeht; ein Weg zwischen zwei Räumen kürzt den Ausgang |
+| **Pflasterweg** | Zellen, die man schneller begeht (ein Schritt kostet die Hälfte der Zeit) |
 | **Lagerhaus** | gemeinsames Lager eines Dorfs: alle mit Recht legen ein und entnehmen (Treuhand wie beim Markt) |
-| **Brunnen, Backhaus** | Nahrung: wer satt ist, trägt mehr oder arbeitet schneller |
+| **Brunnen, Backhaus** | Wasser in Menge für Gärten und Ställe; Brot (unten, „Nahrung“) |
 | **Äcker** | gemeinsame Fluren am Siedlungsrand: Getreide, Mais, Kartoffeln, Flachs — Bestellen und Ernte in Stößen |
-| **Windmühle** | mahlt Korn zu Mehl für das Backhaus, läuft nur bei Wind |
+| **Windmühle** | mahlt Korn zu Mehl für das Backhaus, in festem Takt, an Sturmtagen schneller (Wind als Wetter kommt erst mit den Jahreszeiten) |
 | **Gemeinschaftsgarten, Obstwiese** | Beete für alle mit Recht; Bäume, die über viele Spieltage wachsen |
 | **Gehege, Stall** | Schafe (Wolle → Tuch), Ziegen (Milch); fressen Heu und Rüben von den Fluren |
 | **Kapelle** | sichtbarer Ort der Götter ([goetter.md](goetter.md)): Opfergaben, Segen (Lease), Fest — freiwillig, die Götter wirken auch ohne |
@@ -64,7 +119,7 @@ gleichwertig sind — die Gartenzeilen führt der Abschnitt „Gärten“ weiter
 | Bau | Wirkung |
 | --- | --- |
 | **Kaufhaus** | ein Laden mit Vorrat und eigenen Preisen (unten, „Siedlungen und Besitz“), Lieferaufträge an die Tafel |
-| **Kontor, Bank** | Wechsel, Kredit mit Frist (eine Schuld ist ein Entry mit Lease: läuft sie ab, verfällt das Pfand) |
+| **Kontor, Bank** | Wechsel, Kredit mit Frist (eine Schuld ist ein Entry mit Lease, das Pfand liegt in Treuhand beim Kontor: wird zurückgezahlt, geht es an den Schuldner zurück; läuft die Frist ab, geht es an den Gläubiger) |
 | **Kirche, Glockenturm** | Fest der ganzen Insel; die Glocke ruft (Nachricht an alle Räume, ein Termin der Weltuhr); kann man bauen, muss man nicht |
 | **Rathaus** | Regeln einer Siedlung: Zonen und Baurecht, Steuern ins Lagerhaus, Abstimmungen (Vorschläge und Stimmen wie auf der Arbeitstafel von codemode-chat) |
 | **Werft** | größere Boote: mehr Ladung, neue Fahrten in den Nebel ([spielidee.md](spielidee.md), „Erkunden“) |
@@ -100,31 +155,45 @@ mit dem Erkunden verzahnt:
 | Torf, Kohle | Torfstich im Torfmoor — Brennstoff wie Baustoff; später Bergbau auf einer Nebeninsel | Epoche 2/4 |
 | Eisenerz | selten in Klippen und alten Wracks; eine Mine ist ein Bau auf einer späteren Insel | Epoche 3 |
 | Sand → Glas | Sand sammeln an Dünen, Glashütte schmilzt ihn | Epoche 3 |
+| Fisch | am Steg mit dem Netz (neues Rezept: 3 Tangseile; heute ist das Netz nur Handelsware) | Epoche 1 |
+| Samen, Setzlinge | die wilde Flora der Räume (`flora`: Blumen, Büsche, Bäume) gibt beim Sammeln selten Samen; dazu Gärtnerin und Handel | Epoche 1 |
 
 Was knapp ist, wandert durch den Handel: Kupferhafen bleibt arm an Holz, eine Bergbau-Insel arm an Nahrung —
 Warenketten laufen über Märkte und Fähren, nicht über Lager aus dem Nichts.
 
 ### Boote und Fischerei
 
-- Am **Steg** wird gefischt (`wirf netz`): das Netz ([welt.md](welt.md), Rezept) holt in Weltzeit-Takten Fisch,
+- Am **Steg** wird gefischt (`wirf netz`): das Netz (Rezept oben) holt in Weltzeit-Takten Fisch,
   selten einen Fund — kleiner, leiser Ertrag neben dem Strandgut.
-- Ein **Ruderboot** ist ein Ding (Epoche 2, Werkstatt), das einen eigenen Ausgang ins Küstenwasser der Insel gibt;
+- Ein **Ruderboot** ist ein Ding (Epoche 2, Werkstatt), das von jedem Steg der Insel zu jedem anderen fährt (ein
+  Ausgang, den nur ein Boot öffnet, wie eine Fähre ohne Fahrplan);
   die **Werft** (Epoche 3) baut Segelboote für weiter und schwerer. Ein Boot hat Besitz wie eine Hütte und eine
   eigene kleine Ladeluke.
 
 ## Epochen: was die Stufe freischaltet
 
-Eine Epoche gilt **je Insel** und zählt den **gehaltenen Bestand**: Bauten mit gepflegtem Zustand und bezahltem
-Unterhalt, gewichtet nach Größe (Hütte 1, Werkstatt 3, Kaufhaus 5; Beispielwerte in der Weltkonfiguration). Bauten
-und Gärten zählen **gleichermaßen**: ein gepflegtes Beet wiegt wie eine Hütte (1), eine bestellte Flur ebenso, eine Obstwiese wie ein größerer
-Bau (2), ein Park wie eine Werkstatt (3). Eine Insel kann die Stadtstufe aus Gärten allein erreichen — ein Archipel
-aus Gartensiedlungen ist ein legitimer Weg. Beispiel-Schwellen: Dorf ab 15 Punkten in einem Siedlungsverbund, Stadt
-ab 40, Netz ab 80 über die ganze Insel.
+Eine Epoche gilt **je Insel** — nicht je Siedlung oder Raum — und zählt den **gehaltenen Bestand** der ganzen Insel:
+Bauten mit gepflegtem Zustand und bezahltem Unterhalt, gewichtet nach Größe. Bauten und Gärten zählen
+**gleichermaßen**. Beispielwerte (Weltkonfiguration):
+
+| Punkte | Bauten | Gärten |
+| --- | --- | --- |
+| 1 | Hütte, Trockengestell, Regentonne, Steg, Hühnerstall | gepflegtes Beet, bestellte Flur |
+| 2 | Räucherei, Brunnen, Backhaus, Windmühle, Gehege | Obstwiese, Hecke, Kräutergarten |
+| 3 | Werkstatt, Steinbruch, Lehmgrube, Ziegelei, Lagerhaus, Kapelle | Gemeinschaftsgarten, Park |
+| 5 | Kaufhaus, Kontor, Kirche, Rathaus, Werft, Brauhaus, Glashütte, Leuchtturm | Gewächshaus, Botanischer Garten |
+
+Eine Insel kann die Stadtstufe aus Gärten allein erreichen — ein Archipel aus Gartensiedlungen ist ein legitimer
+Weg. Beispiel-Schwellen je Insel: Dorf ab 15 Punkten, Stadt ab 40, Netz ab 80. Eine Siedlung ist dafür keine
+Voraussetzung (sie entsteht aus Hütten, unten); die Epoche zählt, was auf der Insel steht und gepflegt wird.
 
 - Ein `Epoch`-Entry je Insel hält die Stufe; Baupläne und Rezepte prüfen sie.
 - **Rückfall von selbst:** Weil nur gehaltener Bestand zählt, verliert eine Insel die Stufe wieder, wenn zu viel
-  verfällt — ohne zweite Mechanik. Bauten der höheren Stufe bleiben stehen, aber neue Pläne dieser Stufe sind
-  gesperrt, bis der Bestand wieder reicht.
+  verfällt — ohne zweite Mechanik. Bauten der höheren Stufe bleiben stehen und arbeiten weiter, solange ihr Zustand
+  und ihr Unterhalt reichen; gesperrt sind nur neue Pläne dieser Stufe, bis der Bestand wieder reicht. So reißt ein
+  Rückfall keine Warenkette ab, er hält nur das Wachsen an.
+- Die Zählung läuft als Ticker im Welt-Worker (einmal je Welttag und nach jedem fertigen oder verfallenen Bau) und
+  schreibt den `Epoch`-Entry nur, wenn sich die Stufe ändert.
 - Die Schwellen stehen in den `Setting`-Entries (Konfigurationsfenster wie in
   [automaten.md](automaten.md#einstellungen-für-betreiber)) und lassen sich je Server an die Spielerzahl anpassen.
 
@@ -139,7 +208,8 @@ ab 40, Netz ab 80 über die ganze Insel.
   Das Rathaus (Epoche 3) kann später Zonen setzen — bebaubar, Grünzone, Wegerecht — und gegen Stimmen auch den
   Abriss einer Fehlstellung anordnen. Bis dahin gilt: bauen, wo es nicht sperrt.
 - **Abriss:** Besitzer (oder Rathaus-Beschluss) reißt ab; ein Teil des Materials geht zurück ins Lager oder an den
-  Abrissenden, der Bau wird zur Ruine ohne Frist.
+  Abrissenden, und die Fläche ist in derselben Transaktion frei (keine Ruine: die gibt es nur beim Verfall). Ein
+  Inhalt (Truhe) geht an den Besitzer oder, fehlt der Platz, in einen Nachlass wie beim Verfall.
 - **Hütte innen oder außen:** Kleine Bauten (Hütte, Gartenhaus, Schuppen) sind Fläche, kein eigener Raum: Truhe und
   Rückkehrpunkt hängen am Bau (`oeffne truhe`, `ruhe`). Erst Bauten mit Publikum — Kaufhaus, Kirche, Rathaus,
   Werfthalle — bekommen einen eigenen Raum hinter einer Tür mit Lock. Sonst hätte jede Insel Dutzende fast leerer
@@ -147,7 +217,8 @@ ab 40, Netz ab 80 über die ganze Insel.
 - **Besitz wechselt:** `uebergib`/`verkaufe` auf eine Fläche ist eine Transaktion wie `offer`: Grund und Bau gehen
   gemeinsam, Mitbewohner laufen über Rechte (Locks). Was verfällt, wird frei — der Claim läuft mit dem Bau.
 - **Räume wachsen, neue entstehen:** Ist ein Raum voll, wächst er um einen Streifen Zellen — die Welt legt neues
-  Bauland an denselben Raum, die Claims bleiben. Und es entstehen neue Räume: die Weltdatei oder ein Gott
+  Bauland an denselben Raum, die Claims bleiben; der Streifen kommt an eine Seite ohne Ausgang und ohne Strand,
+  Ausgänge, Feuer und Strände der Weltdatei bleiben, wo sie sind. Und es entstehen neue Räume: die Weltdatei oder ein Gott
   (Befugnis `insel`, [goetter.md](goetter.md)) schafft neues Bauland, erreichbar von einem brennenden Feuer aus.
   Ein voller Raum ist also beides: Signal zum Wachsen und Signal zum Erweitern.
 
@@ -178,17 +249,20 @@ ernährt.
 
 - **Beet anlegen**: eine Fläche im Licht umgraben (Spaten, `grabe`), mit `unique` auf die Zellen wie jeder Bau. Kleine
   Beete vor der Hütte, Gemeinschaftsgärten an Dorfplatz und Kapelle, Obstwiesen, Parks in der Stadt.
-- **Säen und pflanzen**: Samen, Zwiebeln, Setzlinge und junge Bäume sind Dinge; `pflanze tulpe` setzt sie in eine
+- **Säen und pflanzen**: Samen, Zwiebeln, Setzlinge und junge Bäume sind Dinge (die ersten aus der wilden Flora der
+  Räume, Rohstoffe oben); `pflanze tulpe` setzt sie in eine
   freie Zelle des Beets. Daraus wird eine **Pflanze**, die in Stufen wächst (Saat, Keim, Blüte oder Frucht, verwelkt),
   jede Stufe eine Frist in Weltzeit ([weltzeit.md](weltzeit.md)).
-- **Pflege**: Gießen (`gieße`, Wasser aus Brunnen oder Regentonne) und Jäten erneuern die Lease der Pflanze; wer sie
+- **Pflege**: Gießen (`gieße`, Wasser aus Regentonne oder Brunnen; Meerwasser taugt nicht) und Jäten erneuern die Lease
+  der Pflanze; wer sie
   vergisst, lässt sie welken. Nebel lässt Pflanzen langsamer wachsen, Licht schneller: Gärten sind ein weiterer Grund,
   das Feuer zu halten. Ein Garten ist Teamarbeit wie ein Feuer (Gießdienst, Beiträge sichtbar).
 - **Patenschaft**: `pate` auf einem Beet erlaubt einer anderen Figur — einem Mitspieler oder dem Dorfgärtner
   (Skript-NPC) — das Gießen und Jäten dort; sichtbar am Beet-Schild, jederzeit kündbar. So bleibt ein Beet gepflegt,
   wenn der Besitzer Tage aussetzt: asynchrone Hilfe, ohne dass Besitz wandert.
-- **Ernten**: Ernte ist ein `take`: zehn Leute am selben Apfelbaum, jeder Apfel geht an genau einen. Gemeinschafts-
-  beete erntet, wer Recht hat; die Truhe des Beets hält den Ertrag.
+- **Ernten**: Ernte ist ein `take`: zehn Leute am selben Apfelbaum, jeder Apfel geht an genau einen. Ein privates Beet
+  ernten Besitzer und Pate in die eigene Tasche. Ein Gemeinschaftsbeet ernten alle mit Recht, aber in die Truhe des
+  Beets; aus ihr nimmt jeder nach der Quote des Lagerhauses (unten, „Siedlungen und Besitz“).
 - **Vermehren und züchten**: Blühende Pflanzen geben Samen; zwei Sorten nebeneinander kreuzen sich manchmal zu einer
   neuen Farbe oder Form (seltene Sorten, Züchtung). Wer eine neue Sorte kreuzt, darf sie benennen — ihr Name und der
   des Züchters bleiben im Prototyp. Bäume wachsen über viele Spieltage und bleiben lange; ein alter Baum steht im
@@ -198,7 +272,7 @@ ernährt.
   aus („suche eine Nebelblume“) und ist so eine Quest-Quelle ohne Modellkosten. Sträuße sind Geschenke an NPCs und
   Opfer an der Kapelle.
 - **Wozu**: Gemüse ist Nahrung (Räucherei, Backhaus, Arbeiter), Kräuter sind Zutaten (Heiltrank, **Farbstoffe** für
-  Banner und Feste), Obstbäume liefern Holz, wenn man sie fällt (Zielkonflikt: Holz jetzt oder Äpfel jedes Jahr),
+  Banner und Feste), Obstbäume liefern Holz, wenn man sie fällt (Zielkonflikt: Holz jetzt oder Äpfel jede Reifezeit),
   Blumen schmücken (Ruf einer Siedlung, Feste, Blumenschau mit Preis der Tafel), Hecken und Bäume brechen den Wind
   der Sturmflut.
 
@@ -213,15 +287,16 @@ Stößen statt täglich, und als Gemeinschaftswerk wie eine Baustelle.
   Flachs oder Hopfen.
 - **Bestellen und ernten**: Ein Acker braucht wenig tägliche Pflege, aber zwei Stöße Arbeit: `bestelle` (pflügen,
   säen — Saatgut von der Gärtnerin oder der eigenen Ernte) und die **Ernte** im Erntefenster weniger Spieltage.
+  Bis es Jahreszeiten gibt, öffnet das Erntefenster eine feste Frist nach dem Bestellen (je Frucht).
   Beides sind Arbeitspunkte wie an der Baustelle: der Ernteeinsatz ist ein Gemeinschaftsereignis — Schwengernte,
   bei der zehn Hände in einer Stunde einbringen, was einer Tage bräuchte. Wer das Fenster verpasst, verliert einen
   Teil des Ertrags an die Flur. Tagelöhner und Automaten helfen mit (Arbeitspunkte, derselbe Fremdarbeits-Deckel).
 - **Fruchtfolge**: Dieselbe Frucht zweimal hintereinander auf einer Flur gibt einen müden Boden und wenig Ertrag;
   Getreide – Kartoffel – Brache (oder Rübe) bleibt gesund. Der Zähler steht an der Flur, ein Blick genügt.
-- **Warenketten**: Getreide → **Windmühle** → Mehl → **Backhaus** → Brot (wer satt ist, arbeitet schneller).
+- **Warenketten**: Getreide → **Windmühle** → Mehl → **Backhaus** → Brot (macht satt, unten „Nahrung“).
   Flachs → Leinen → Segel für die Werft und Netze für die Fischerei. Gerste und Hopfen → **Brauhaus** → Bier
-  (Fest, Handelsware). Rüben und Heu → Futter, falls Vieh kommt. Die Mühle mahlt nur bei Wind — Sturmtage sind
-  Mühlentage, Flauten nicht.
+  (Fest, Handelsware). Rüben und Heu → Futter für Schafe und Ziegen, Körner für die Hühner. Die Mühle mahlt in festem
+  Takt und an Sturmtagen schneller; Flauten gibt es erst mit dem Wetter der Jahreszeiten.
 - **Zielkonflikt**: Korn ist Brot, Saatgut und Bier zugleich — was man vermahlt, sät man nicht.
 
 ### Tiere auf dem Hof
@@ -230,7 +305,8 @@ Tiere kommen früh, nicht erst spät: schon der Hühnerstall des Fischerdorfs. E
 Gehege (eigene Zelle oder Fläche), einer **Futter-Lease** — frisst es nichts, gibt es nichts mehr (Eier, Milch,
 Wolle), bis wieder gefüttert wird — und einem Ertrag, den man wie eine Ernte `take`n darf.
 
-- **Hühner** (Epoche 1): Eier jeden Welttag, fressen Körner und Reste — der erste Schritt vom Sammeln zum Halten.
+- **Hühner** (Epoche 1): Eier jeden Welttag, fressen Tang und Gemüsereste, ab Epoche 2 Körner von den Äckern — der
+  erste Schritt vom Sammeln zum Halten.
 - **Schafe, Ziegen** (Epoche 2, Gehege): Wolle → Tuch am Webstuhl in der Werkstatt, Milch → Käse; fressen Heu und
   Rüben von den Fluren — die Äcker füttern den Hof.
 - **Hund** (Epoche 2): folgt einer Figur, warnt vor Nebelwesen — Gesellschaft statt Nutzen.
@@ -243,7 +319,8 @@ zweiten Abnehmer. Ein „Stallknecht“-Automat (füttern, sammeln) ist eine nah
 
 Ein Park ist ein öffentlicher Garten: Alleen aus Bäumen, Beete, ein Brunnen, Bänke. Er arbeitet nichts her, aber er
 zählt dreifach zum gehaltenen Bestand der Epoche, gibt Rufpunkte an die Pflegenden und ist der Platz für Feste —
-die **Blumenschau** (seltene Sorten werden gezeigt, die Tafel vergibt einen Preis), das **Erntefest** im Herbst,
+die **Blumenschau** (seltene Sorten werden gezeigt, die Tafel vergibt einen Preis), das **Erntefest** (nach der Ernte
+der Fluren einer Insel, mit den Jahreszeiten im Herbst),
 Hochzeiten und Markttage. Zwischen Siedlungen ist der schönste Park der gewaltfreie Wettbewerb, den der Archipel
 verträgt.
 
@@ -271,13 +348,23 @@ Ein Gießroboter ist ein naheliegender erster Automat ([automaten.md](automaten.
 | Acker (Flur) | eine Entry über den Zellbereich, `unique` wie ein Bau — nicht eine Entry je Zelle |
 | Bestellen, Ernte | Arbeitspunkte wie an der Baustelle; Erntefenster als Termin der Weltuhr |
 | Fruchtfolge | Zähler an der Flur-Entry (letzte Frucht, letzter Ertrag) |
-| Windmühle | Ticker mahlt nur, wenn das Wetter Wind gibt |
+| Windmühle | Ticker mahlt im festen Takt, schneller während einer Sturmflut |
 | Tier im Gehege | kleine Figur mit Futter-Lease; Ertrag als `take` mit Frist |
 | Fest, Regatta | Termin der Weltuhr; Wertung und Rang als Entries an der Tafel |
 | Automat (Körper) | `craft` aus drei Teilen; Programm läuft im Sandbox, Öl-Lease als Tank |
 
-Viele Gärten heißen viele Entries mit Lease und Termin. Eine Pflanze schreibt nur, wenn sie die Stufe wechselt (nicht
-je Tick), damit 10 000 Pflanzen den Space nicht stärker belasten als ein paar Dutzend Figuren.
+Viele Gärten heißen viele Entries mit Lease und Termin. Eine Pflanze schreibt nur, wenn sie die Stufe wechselt oder
+gegossen wird (das Gießen ist ein `renew`, also auch ein Schreiben), nie je Tick; die Stufen eines Beets laufen über
+**einen** Termin je Beet, nicht je Pflanze. So belasten 10 000 Pflanzen den Space nicht stärker als ein paar Dutzend
+Figuren — gezählt werden muss das Gießen trotzdem (Abnahme unten).
+
+## Nahrung (später)
+
+Backhaus, Räucherei, Brot und Eier versprechen einen Nutzen; ohne ihn wären sie nur Handelsware. Vorschlag, bewusst
+klein: **Sattsein** ist ein Entry mit Lease an der Figur (essen erneuert ihn, Brot länger als ein Ei). Wer satt ist,
+dessen Arbeitspunkte an Baustelle und Flur zählen anderthalbfach und klingen schneller ab. Hunger gibt es nicht:
+niemand verliert etwas, wer nicht isst, arbeitet nur im Grundtakt. Eine Tragegrenze, die Essen anhebt, gibt es heute
+nicht und kommt dafür nicht dazu.
 
 ## Wie ein Bau entsteht: die Baustelle
 
@@ -307,7 +394,7 @@ Ohne Senken wächst die Welt nur noch (mehr Entries, mehr Last, keine Ziele mehr
 - „Steht still“ heißt je Bau: keine Ware, kein Markt, keine Wirkung — aber der Bau bleibt begehbar und reparierbar.
   Ein stiller Pflasterweg ist wieder Weg wie jede Zelle.
 - Ein verfallener Bau wird zur **Ruine** (gibt einen Teil des Materials zurück, kann wieder aufgebaut werden) und
-  verschwindet später ganz; mit dem Bau erlischt der Claim auf die Fläche.
+  verschwindet nach einer Frist (Beispiel: zehn Welttage) ganz; mit ihr erlischt der Claim auf die Fläche.
 - **Inhalt bleibt geschützt:** Verfällt ein Bau mit Inhalt (die Truhe der Hütte, das Lager eines Beets), wandert der
   Inhalt in ein `Nachlass`-Paket, das nur der Besitzer an der Ruine abholen kann — mit langer Lease, danach verfällt
   auch das. Verfall ist spürbar, aber kein Verlust auf einen Schlag.
@@ -316,11 +403,15 @@ Ohne Senken wächst die Welt nur noch (mehr Entries, mehr Last, keine Ziele mehr
 
 ## Siedlungen und Besitz
 
-- Eine **Siedlung** entsteht, wenn in einem Raum genug Hütten stehen; sie hat ein Lagerhaus, einen Namen und Regeln.
+- Eine **Siedlung** entsteht, wenn in einem Raum genug Hütten stehen (Beispiel: drei Hütten von mindestens zwei
+  Besitzern); sie hat einen Namen und Regeln. Ihr erster gemeinsamer Bau ist meist das Lagerhaus (Epoche 2) — die
+  Epoche zählt je Insel, eine Siedlung ist für sie keine Voraussetzung, und das Lagerhaus keine für die Siedlung.
 - **Besitz** ist eine Entry mit `unique` auf die Fläche: zwei Spieler können nie dieselbe Zelle bebauen, auch wenn sie
   zugleich `bau` tippen.
 - **Rechte** (wer im Haus etwas nehmen, auf der Fläche bauen, im Lagerhaus entnehmen darf) sind Locks wie heute an
-  Ausgängen (`locks`, [phasen.md](phasen.md), Phase 1) und haben Stufen: Fremder, Gast der Siedlung, Siedler.
+  Ausgängen (`locks`, [phasen.md](phasen.md), Phase 1) und haben Stufen: **Fremder**, **Helfer** (darf liefern,
+  arbeiten, Gemeinschaftsbeete gießen und in ihre Truhe ernten), **Siedler** (darf bauen und aus dem Lagerhaus
+  entnehmen). Ein Gastkonto (ohne Registrierung) ist höchstens Helfer.
 - Das **Lagerhaus** hält Treuhand, aber nicht blind: `lager log` zeigt die letzten Entnahmen (wer, was, wann — kurze
   Lease je Zeile), und je Recht-Stufe gilt eine Entnahme-Quote je Welttag. Ein Fremder kann das Dorflager nicht
   leerräumen; ein neuer Siedler nur wenig.
@@ -331,7 +422,8 @@ Ohne Senken wächst die Welt nur noch (mehr Entries, mehr Last, keine Ziele mehr
   Preisen, die ein Verwalter setzt oder die eine einfache Regel führt (leerer Vorrat → teurer, voller → billiger).
   Fehlender Vorrat wird über Lieferaufträge an der Tafel gefüllt. Der Laden schließt die Lücke, wenn gerade niemand
   am Brett steht — wichtig mit wenigen Spielern.
-- Gäste können zuarbeiten (liefern, arbeiten), aber nichts besitzen; Besitz braucht ein Konto (wie Handel heute).
+- Gastkonten können zuarbeiten (liefern, arbeiten, als Helfer gießen), aber nichts besitzen; Besitz braucht ein
+  registriertes Konto (wie Handel heute).
 
 ## Feste und Wettbewerb ohne Gewalt
 
@@ -359,7 +451,8 @@ Befehle und die Auftragstafel, nie durch unsichtbare Eingriffe:
   Arbeitsleistung ist der Engpass, und genau den füllt der Tagelöhner — auf den Fluren ist er der Erntehelfer.
 - **Automaten als zweite Hände.** `liefere` und `arbeite` kommen ins `AutomatonCmdSet`
   ([automaten.md](automaten.md)); eine Vorlage „Baustellenhelfer“ (hole aus Lagerhaus oder eigener Truhe, liefere,
-  arbeite) gehört zu den Beispielen. Zwei Spieler mit je zwei Automaten stellen sechs arbeitende Figuren.
+  arbeite) gehört zu den Beispielen. Zwei Spieler mit je zwei Automaten stellen sechs Figuren — der Deckel unten lässt
+  die vier Automaten aber höchstens so viel beitragen wie die beiden Menschen: doppelt so schnell, nicht dreifach.
 - **Siedlungsbevölkerung.** Je fünf fertige Bauten kommt ein dösender Dorfbewohner (Skript, kein Modell) dazu: gießt
   die Gemeinschaftsbeete, legt am Feuer nach, redet auf dem Platz. Siedlungen werden sichtbar lebendiger, je mehr
   gebaut ist — auch wenn nur zwei Menschen spielen.
@@ -377,7 +470,8 @@ Grenzen, damit die KI nicht das Spiel spielt:
 - Hilfe gibt es nur gegen **Auftrag oder Anheuerung**, bezahlt aus Lager oder Tasche. Kein NPC beginnt je selbst eine
   Baustelle; der Anstoß bleibt menschlich (oder Rathaus-Beschluss).
 - Höchstens die **Hälfte** der Lieferungen und der Arbeit je Baustelle darf von Nicht-Menschen stammen; der
-  Baustellen-Eintrag führt beide Zähler. Ein Bau der Spieler bleibt ein Bau der Spieler.
+  Baustellen-Eintrag führt beide Zähler. Nicht-Menschen sind NPCs und Automaten, auch die eines Spielers. Ein Bau der
+  Spieler bleibt ein Bau der Spieler.
 - Hüter- und Dorf-NPCs pflegen Feuer und Gemeinschaftsbauten (Lagerhaus, Wege, Parks, Gemeinschaftsbeete), **nie
   private** Hütten und private Beete — sonst wäre Verfall tot und Abwesenheit folgenlos.
 - Bauten zählen zum gehaltenen Bestand der Epoche, egal wer mithalf — der Halbe-Hände-Deckel sorgt dafür, dass
@@ -409,14 +503,36 @@ Vorstufe der Inselbahn.
 | Fläche belegen | `write` mit `unique` auf (Raum, Zelle); Fußabdruck = alle Zellen der Form in einer Transaktion |
 | Baurecht/Zone | Siedlungs-Entry mit `locks`; `bau` prüft Sperrzellen und Zone vor dem Belegen |
 | Verfall | Lease des Zustands läuft ab; `renew` beim Reparieren |
-| Nachlass | `take` Truhe + `write` Nachlass mit `unique` auf den Besitzer, lange Lease |
+| Nachlass | `take` Truhe + `write` Nachlass mit `unique` auf (Besitzer, Bau), lange Lease — mehrere Nachlässe je Besitzer möglich |
+| Lichtpunkte | Zähler je Feuer (belegte Punkte); `bau` liest ihn und schreibt ihn neu in derselben Transaktion |
+| Sattsein | Entry mit Lease an der Figur; essen ist `renew` oder neues `write` |
 | Unterhalt | Ticker nimmt aus dem Lagerhaus, sonst setzt er den Bau auf „steht still“ |
 | Entnahmelog/Quote | `take` mit Tageszähler je Recht-Stufe; Logzeilen mit kurzer Lease |
 | Karren, Zug, Fähre | Automaten mit Fahrplan (Termine der Weltuhr, [weltzeit.md](weltzeit.md)) |
 | Abstimmung im Rathaus | Vorschläge und Stimmen als Entries, Ende mit Lease |
-| Epoche erreicht | `Epoch`-Entry je Insel; Rezepte und Baupläne prüfen sie |
+| Epoche erreicht | `Epoch`-Entry je Insel, geschrieben vom Zähl-Ticker; Rezepte und Baupläne prüfen sie |
 | Tagelöhner | NPC-`Intent` wie bei Menschen; Auftrag und Lohn an der Tafel |
 | Fremdarbeits-Deckel | zwei Zähler an der Baustelle (eigene/fremde Beiträge) |
+| Chat zu zweit | Nachricht über den Strom an die Figur; für Abwesende ein Entry mit Lease im Space `social` |
+| Gruppe, Einladung | Gruppe und Mitglied als Entries in `social`; Einladung mit Lease wie ein Angebot, annehmen ist `take` + `write` |
+| Sperre | Entry (wer, wen) in `social`; das Web prüft ihn vor dem Zustellen |
+
+## Regionen
+
+Die Welt läuft seit 2026-10-28 als vier Spaces, je Region eine Inselgruppe ([welt-aufteilen.md](welt-aufteilen.md)).
+Fast alles hier bleibt in einer Insel und damit in einem Space: Bauten, Gärten, Fluren, Siedlung, Lagerhaus, Epoche,
+Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder einen eigenen Weg:
+
+- **Rückkehrpunkt:** Die Hütte ist Rückkehrpunkt nur innerhalb ihrer Region; wer anderswo ausloggt, kehrt zur Hütte
+  zurück, wenn sie in der Region der Figur steht, sonst an die Bucht der Region. Eine Rückkehr über Regionen ginge über
+  die Übergabe (`handover.ts`) und ist vorerst nicht vorgesehen.
+- **Fähren** sind die einzigen Wege zwischen Regionen. Fahrplan-Fähren und Boote (Werft) übergeben die Figur samt
+  Ladung wie heute; ein Boot, das zu einer anderen Region fährt, ist eine Fähre.
+- **Glocke, Rang, Feste:** Die Glocke ruft in alle Räume ihrer Insel. Der Rang der Siedlungen und die Feuerkette der
+  Tafel zählen über alle Regionen: jeder Region-Space schreibt seine Zahlen, die Tafel liest alle (wie die Systemleiste
+  die Prozesse aller Regionen).
+- **Kaufhaus und Kontor** handeln in ihrer Region; Waren gehen per Fähre, nicht per Lager über Spaces hinweg. Eine
+  Schuld bleibt in der Region des Kontors.
 
 ## Was das für den Betrieb heißt
 
@@ -427,35 +543,53 @@ Vorstufe der Inselbahn.
   Space-Prozess; ein Ticker, der nichts ändert, schreibt nichts (wie `fireTick`).
 - **Mehr Skript-NPCs**: Tagelöhner, Dorfbewohner, Gärtnerin. Sie kosten keinen Modellaufruf, aber CPU; die Zahl je
   Siedlung ist gedeckelt (Bevölkerung wächst mit den Bauten).
-- **Die Welt aufteilen** ([welt-aufteilen.md](welt-aufteilen.md)) wird mit Städten wahrscheinlicher: eine Insel je
-  Space passt zu Siedlungen, die je Insel wirtschaften; Bahn und Fähre sind dann die Übergaben zwischen Spaces.
+- **Die Welt ist aufgeteilt** (oben, „Regionen“): Siedlungen wirtschaften je Insel und damit in einem Space; die
+  Fähre ist die einzige Übergabe zwischen Spaces, die Inselbahn bleibt in ihrer Insel. Wird eine Region mit Städten
+  zu voll, lässt sie sich weiter teilen (eine Insel je Space).
 - **Karte**: Bauten brauchen Grafik (Sprites je Bauart und Zustand: Baustelle, fertig, verfallen, Ruine), Gärten eine
   Darstellung je Stufe (Saat bis verwelkt); im Client ein Bauplan-Wähler, ein Baustellen-Fortschritt und die Zonen
   des Rathauses als Overlay.
 
 ## Reihenfolge
 
+0. **Chat zwischen Spielern** (oben): `chat`, das Menü der rechten Maustaste auf der Karte, Reiter je Gespräch,
+   liegengebliebene Nachrichten, Gruppen mit Einladung, `ignoriere`, der Space `social`.
+   Abnahme:
+   - Zwei Spieler in verschiedenen Regionen schreiben sich.
+   - Eine Nachricht an einen Abwesenden erscheint bei seinem nächsten Anmelden.
+   - Eine Einladung wird angenommen, eine andere läuft ab.
+   - Ein Gesperrter erreicht niemanden mehr, der ihn sperrt.
+   - Ein Gast kann keine Gruppe gründen.
+   - Kein Gespräch erscheint im Log des Raums.
 1. **Hütte und Baustelle** (Epoche 1, ohne Siedlung): Bauplan als Prototyp, `bau`, `liefere`, `arbeite`, Fertigstellen,
-   Truhe, Verfall, Nachlass. Dazu die Grundregeln: Sperrzellen, Fußabdruck, Claim, Abriss. Abnahme: 20 Spieler
+   Truhe, Verfall, Nachlass. Dazu die Grundregeln: Sperrzellen, Fußabdruck, Claim, Abriss, Lichtpunkte der Feuer.
+   Abnahme: 20 Spieler
    beliefern dieselbe Baustelle gleichzeitig, sie wird genau einmal fertig, kein Teil geht verloren oder doppelt;
-   Überlieferung geht zurück; eine Hütte auf einem Ausgang wird abgelehnt.
-2. **Gärten** (der gleichwertige Strang, parallel zu allen Bauten): Beet-Arten (Nutz, Zier, Gemeinschaft), Samen, Pflanzen mit Wachstumsstufen, Gießen und Jäten,
+   Überlieferung geht zurück; eine Hütte auf einem Ausgang wird abgelehnt; ein abgerissener Bau gibt die Fläche frei;
+   ist das Licht eines Feuers voll, nimmt `bau` keinen Plan mehr an.
+2. **Gärten** (der gleichwertige Strang, parallel zu allen Bauten): Spaten, Regentonne, Beet-Arten (Nutz, Zier,
+   Gemeinschaft), Samen aus der wilden Flora, Pflanzen mit Wachstumsstufen, Gießen und Jäten,
    Patenschaft, Ernte, Kreuzen und Benennen, Gärtnerin mit Samenhandel und Suchaufträgen. Abnahme: 1 000 Pflanzen
-   wachsen einen Spieltag lang, der Space schreibt nur bei Stufenwechseln; eine Patenschaft gießt ein fremdes Beet,
-   ohne es zu besitzen.
+   wachsen einen Spieltag lang und werden zweimal gegossen, der Space schreibt nur bei Stufenwechseln und beim Gießen
+   (gemessen: Schreibvorgänge je Spieltag); eine Patenschaft gießt ein fremdes Beet, ohne es zu besitzen.
 3. **Äcker und Mühlen** (der große Strang der Gärten): Flur-Entries über Zellbereiche, eine Frucht je Flur,
    Bestellen und Ernteeinsatz als Arbeitspunkte, Fruchtfolge, Windmühle und die Kette Korn → Mehl → Brot,
-   Flachs → Leinen; **erste Tiere** (Hühnerstall, Gehege, Futter von den Fluren). Abnahme: zehn Figuren im
+   Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren).
+   Abnahme: zehn Figuren im
    Ernteeinsatz bringen eine Flur genau einmal ein; müder Boden gibt weniger.
-4. **Werkstätten, Steinbruch, Lagerhaus** (mit Entnahmelog und Quote), neue Rezepte, Aufträge der Baustellen an der
+4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den
+   `Setting`-Entries, Rückfall; die Siedlung aus Hütten in einem Raum (Name, Rechte-Stufen Fremder, Helfer, Siedler).
+   Abnahme: eine Insel erreicht das Dorf aus Beeten allein; verfällt genug, fällt sie zurück, ihre Bauten arbeiten weiter,
+   neue Pläne der Stufe sind gesperrt. Ohne diesen Schritt gibt es keine Epoche 2 für Schritt 5.
+5. **Werkstätten, Steinbruch, Lagerhaus** (mit Entnahmelog und Quote), neue Rezepte, Aufträge der Baustellen an der
    Tafel; Skript-NPCs nehmen sie an, die Rolle `bauhelfer` kommt dazu, und `liefere`/`arbeite` ziehen ins
    `AutomatonCmdSet` samt Vorlage „Baustellenhelfer“. **Automaten-Körper** als Werkstatt-Rezept (Tauwerk, Zahnrad,
    Gehäuse).
-5. **Siedlung, Rathaus, Kapelle** (Rechte-Stufen, Zonen, Steuern, Abstimmungen, Feste mit den Göttern),
-   **Siedlungsbevölkerung**, erste **Parks** und die Blumenschau.
-6. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
-   Fischerei und Boote.
-7. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
+6. **Rathaus, Kapelle** (Zonen, Steuern, Abstimmungen, Feste mit den Göttern), **Siedlungsbevölkerung**, erste
+   **Parks** und die Blumenschau.
+7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,
+   Fischerei (Netz-Rezept, Steg) und Boote; **Nahrung** (Sattsein), wenn Brot und Räucherfisch da sind.
+8. **Straßen, Karren, Fahrplan-Fähren**, dann die **Inselbahn** als Automat.
 
 ## Offene Fragen
 
@@ -465,3 +599,7 @@ ist gewaltfrei (Feste, Ruf, Regatta); Tiere kommen früh. Offen bleibt:
 - Wie weit wächst ein Raum, bevor ein neuer entsteht — und wächst er in ganzen Zellstreifen oder abgestuft?
 - Wie viel Vieh verträgt der Ton — Hühner, Schafe und Ziegen auf dem Hof, oder auch Viehhandel und Zucht als eigene
   Kette?
+- Wie viele Lichtpunkte trägt ein Feuer, und reicht eine feste Zahl, oder wächst sie mit der Zahl der Spieler einer
+  Insel (wie das Strandgut, `flood.perPlayers`)?
+- Kommt Wind als Wetter mit den Jahreszeiten, oder bleibt die Sturmflut das einzige Wetter (dann mahlt die Mühle immer
+  im festen Takt)?
