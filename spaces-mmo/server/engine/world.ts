@@ -96,8 +96,10 @@ export type SortDef = { key: string; name: string; aliases: string[]; kind: "nut
  *  `can`: a can of water (from the rain barrel, the building plan `barrel`, which holds `barrelCap` cans and gains one
  *  every `barrelFillWorldMs`, all at a storm surge on its island); `thirstWorldMs`: how long a bed's plants go
  *  without water before the next stage finds them dry and they wilt; `seedRestWorldMs`/`seedChance`: how often one
- *  looks for wild seeds and how often one finds some. */
-export type GardenDef = { bed: { w: number; h: number; points: number; keepWorldMs: number }; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
+ *  looks for wild seeds and how often one finds some. `commons`: a community bed (its size and light; one per fire,
+ *  not counted to anyone's beds); `crossChance`: how often a ripe flower beside another sort in a flower bed gives a
+ *  seed of a crossing. */
+export type GardenDef = { bed: { w: number; h: number; points: number; keepWorldMs: number }; commons: { w: number; h: number; points: number }; crossChance: number; maxBeds: number; spade: string; can: string; barrel: string; barrelCap: number; barrelFillWorldMs: number;
 	thirstWorldMs: number; seedRestWorldMs: number; seedChance: number; decor: { flowers: string[]; herbs: string[] }; sorts: SortDef[] };
 export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {

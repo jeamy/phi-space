@@ -17,6 +17,8 @@ test("the archipelago: at least ten times the first two rooms, eight islands, ev
 	assert.equal(new Set(w.rooms.map((r) => r.island)).size, 8);
 	for (const r of w.rooms) assert.ok(r.map && r.island, r.roomId);
 	assert.ok(w.npcs.length >= 15, `${w.npcs.length} NPCs`);
+	assert.equal(new Set(w.npcs.map((n) => n.npcId)).size, w.npcs.length, "every NPC has its own id");
+	assert.equal(new Set(w.npcs.map((n) => n.name)).size, w.npcs.length, "and its own name");
 	assert.equal(w.market.rooms.length, 6);
 });
 

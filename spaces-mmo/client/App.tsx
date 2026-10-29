@@ -179,9 +179,11 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 		// a site is worked on from two cells away (server: build.ts SITE_REACH), a building only from beside it
 		const beside = dist <= 1, nearSite = dist <= 2;
 		if (o.kind === "bed") {
-			// a bed is tended from two cells away too, by its owner and its sponsors (server: garden.ts)
-			entries.push({ label: `Beet von ${o.owner ?? ""} ansehen`, line: "beet" });
-			const mine = o.owner === self?.name, mayTend = mine || (!!self && (o.sponsors ?? []).includes(self.name));
+			// a bed is tended from two cells away too, by its owner and its sponsors, a community bed by everyone; planting
+			// there needs an account (server: garden.ts)
+			const commons = o.bedKind === "gemein";
+			entries.push({ label: commons ? "Gemeinschaftsbeet ansehen" : `${o.name} von ${o.owner ?? ""} ansehen`, line: "beet" });
+			const mine = o.owner === self?.name || (commons && !guest), mayTend = commons || mine || (!!self && (o.sponsors ?? []).includes(self.name));
 			if (nearSite && mayTend) {
 				const carried = [...objs.values()].filter((i) => i.kind === "item" && i.location === me).map((i) => i.name);
 				if (carried.includes("Kanne Wasser")) entries.push({ label: "Gießen", line: "gieße" });

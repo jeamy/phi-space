@@ -9,6 +9,8 @@
 //   haendler    travels between the markets of its route; buys cheap, sells dear
 //   handwerker  gathers and buys the inputs of its recipes, crafts, sells what it made
 //   plauderer   walks about, tells what it knows: prices, fires, orders, stories, now and then on the harbour channel
+//   gaertnerin  looks for seeds in the wild flora of its rooms like anyone (once a world hour), sells them at its market
+//               and buys flowers and vegetables there; its search orders hang on the board (world orders)
 //
 // All of them answer trade offers by their price list, tell people who speak to them what they buy and sell, and the
 // traders and keepers offer people coins for what they want.
@@ -323,6 +325,27 @@ function handwerker(): Script {
 	};
 }
 
+function gaertnerin(): Script {
+	const talk = social(), say = chatter(3 * 60_000), offer = pitcher();
+	let home = 0;
+	return async (n) => {
+		const l = await look(n);
+		if (!l) { await n.sleep(1000); return; }
+		const homes = n.def.home ?? [l.me.room];
+		let acted = (await talk(n, l)) || (l.me.room === n.def.market && ((await buy(n, l)) || (await sell(n, l))));
+		if (!acted) {
+			// it looks where it is when its rest is over (the garden's sweep removes the rest), then moves on to the next room
+			const resting = !!(await n.space.readIfExists({ type: "SeedRest", fields: { charId: l.me.charId } }, 1_000));
+			if (!resting && homes.includes(l.me.room)) { await n.act("sammle samen"); home = (homes.indexOf(l.me.room) + 1) % homes.length; acted = true; }
+			else if (!resting) acted = !(await travel(n, l, homes[home]!));
+			else if (n.def.market && l.me.room !== n.def.market) acted = !(await travel(n, l, n.def.market));
+		}
+		if (!acted) acted = await offer(n, l);
+		if (!acted) await say(n, l);
+		await n.sleep(await rest(n, l.me.room));
+	};
+}
+
 function plauderer(): Script {
 	const talk = social(), say = chatter(2 * 60_000);
 	let lastGossip: number | null = null, home = 0;
@@ -366,4 +389,4 @@ async function gossip(n: Npc): Promise<string | null> {
 	return pick(told) ?? null;
 }
 
-export const ECONOMY: Record<string, () => Script> = { sammler, huter, haendler, handwerker, plauderer };
+export const ECONOMY: Record<string, () => Script> = { sammler, huter, haendler, handwerker, plauderer, gaertnerin };

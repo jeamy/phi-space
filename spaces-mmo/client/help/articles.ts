@@ -311,7 +311,7 @@ Ausführlich unter [Gärten](help.game.garden).
 
 | Befehl | Auch | Wirkung |
 | --- | --- | --- |
-| \`umgraben [x y]\` | \`beet anlegen\` | Mit einem Spaten im Licht ein Beet anlegen |
+| \`umgraben [zier/gemeinschaft] [x y]\` | \`beet anlegen\` | Mit einem Spaten im Licht ein Beet anlegen, ein Zierbeet oder ein Gemeinschaftsbeet |
 | \`beet\` | \`bed\`, \`beete\` | Die Beete hier; \`beet aufgeben\` macht deins wieder zu Gras |
 | \`sammle samen\` | \`samen\` | In der wilden Flora nach Samen suchen |
 | \`pflanze <samen> [x y]\` | \`säe\`, \`plant\` | Einen Samen in dein Beet setzen |
@@ -320,6 +320,7 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`jäte\` | \`weed\` | Unkraut und Welkes herausziehen |
 | \`ernte\` | \`harvest\`, \`pflücke\` | Reifes ernten, mit Samen |
 | \`pate <name>\` | \`sponsor\` | Jemanden dein Beet pflegen lassen; \`pate weg <name>\` beendet es |
+| \`benenne <name>\` | \`taufe\` | Deiner Kreuzung einen Namen geben (\`benenne 2 <name>\`, wenn du mehrere trägst) |
 
 ## Handel und Ruf {#tradecmds}
 
@@ -400,7 +401,7 @@ In detail under [Gardens](help.game.garden).
 
 | Command | Also | Effect |
 | --- | --- | --- |
-| \`umgraben [x y]\` | \`beet anlegen\` | Dig a bed in the light with a spade |
+| \`umgraben [zier/gemeinschaft] [x y]\` | \`beet anlegen\` | Dig a bed in the light with a spade, a flower bed or a community bed |
 | \`beet\` | \`bed\`, \`beete\` | The beds here; \`beet aufgeben\` turns yours back into grass |
 | \`sammle samen\` | \`samen\` | Look for seeds in the wild flora |
 | \`pflanze <seed> [x y]\` | \`säe\`, \`plant\` | Put a seed into your bed |
@@ -409,6 +410,7 @@ In detail under [Gardens](help.game.garden).
 | \`jäte\` | \`weed\` | Pull weeds and what has wilted |
 | \`ernte\` | \`harvest\`, \`pflücke\` | Harvest what is ripe, with seeds |
 | \`pate <name>\` | \`sponsor\` | Let someone tend your bed; \`pate weg <name>\` ends it |
+| \`benenne <name>\` | \`taufe\` | Give your crossing a name (\`benenne 2 <name>\` when you carry several) |
 
 ## Trade and reputation {#tradecmds}
 
@@ -628,8 +630,8 @@ A building lasts **a week**. \`repariere\` (\`repair\`; 1 driftwood, anyone may 
 		section: "play",
 		title: { de: "Gärten: Beet, Samen, Gießen, Ernte", en: "Gardens: bed, seeds, watering, harvest" },
 		short: {
-			de: "Mit einem Spaten im Licht ein Beet anlegen, Samen aus der wilden Flora pflanzen, gießen, jäten und ernten.",
-			en: "Dig a bed in the light with a spade, plant seeds from the wild flora, water, weed and harvest.",
+			de: "Mit einem Spaten im Licht ein Beet anlegen, Samen aus der wilden Flora pflanzen, gießen, jäten und ernten; im Zierbeet neue Sorten kreuzen, am Gemeinschaftsbeet mit allen gärtnern.",
+			en: "Dig a bed in the light with a spade, plant seeds from the wild flora, water, weed and harvest; cross new sorts in a flower bed, garden with everyone at a community bed.",
 		},
 		body: {
 			de: `Gärten zählen so viel wie Bauten. Ein Beet braucht wie eine Hütte das **Licht eines Leuchtfeuers** und belegt einen Lichtpunkt des Feuers. Anlegen braucht ein Konto; als **Pate** gießen und ernten dürfen auch Gäste.
@@ -663,6 +665,22 @@ Eine Pflanze wächst in Stufen: **Saat**, **Keim**, **reif**, **welk**. Steht si
 ## Ernten {#harvest}
 
 \`ernte\` holt alles Reife des Beets in deine Tasche, mit Samen. Stehen mehrere am Beet, bekommt jede Pflanze genau einer.
+
+## Zierbeet und Gemeinschaftsbeet {#kinds}
+
+\`umgraben\` legt ein **Gartenbeet** an, in dem Gemüse und Blumen wachsen. \`umgraben zier\` gräbt ein **Zierbeet** um: Dort wachsen nur Blumen (Strandnelke, Dünenrose, Nebelblume), und nur dort kreuzen sie sich. Es zählt wie jedes Beet zu deinen dreien.
+
+\`umgraben gemeinschaft\` legt ein **Gemeinschaftsbeet** an: 3×3 Felder, zwei Lichtpunkte, **eins je Feuer**. Es zählt nicht zu deinen Beeten. Pflanzen darf darin jeder mit Konto, gießen, jäten und ernten alle, auch Gäste. Was du erntest, kommt in deine Tasche. Aufgeben kann es nur, wer es angelegt hat.
+
+## Kreuzen und Benennen {#breeding}
+
+Reift im Zierbeet eine Blume, neben der (nicht über Eck) eine Blume einer anderen Sorte steht, ist bei der Ernte manchmal ein **Kreuzungssamen** dabei. Was daraus wächst, hat eine eigene Farbe zwischen den Farben seiner Eltern. Eine Kreuzung kreuzt sich weiter, auch mit ihrer eigenen Ausgangssorte.
+
+Wer sie gezogen hat, gibt ihr mit \`benenne <name>\` einen Namen, einmal und für immer: Dann heißen ihre Samen „<Name>-Samen“ und ihre Blumen wie die Sorte, und wer sie erntet oder geschenkt bekommt, trägt den Namen weiter. Ein Name hat 3 bis 24 Buchstaben, ist noch nicht vergeben und bezeichnet nichts, was es in der Welt oder als Befehl schon gibt.
+
+## Die Gärtnerin {#gardener}
+
+**Gesa** in Kupferhafen sammelt selbst Samen in der Flora des Hafens und verkauft sie am Markt; sie kauft Blumen und Gemüse. Ihre Suchaufträge hängen an der Tafel („Gesa sucht eine Nebelblume“). Wer sie anspricht, erfährt ihre Preise.
 
 ## Patenschaft {#sponsor}
 
@@ -700,6 +718,22 @@ A plant grows in stages: **seed**, **sprout**, **ripe**, **wilted**. If it has g
 ## Harvest {#harvest}
 
 \`ernte\` (\`harvest\`) takes everything ripe in the bed into your pack, with seeds. If several stand at the bed, each plant goes to exactly one.
+
+## Flower bed and community bed {#kinds}
+
+\`umgraben\` digs a **garden bed**, where vegetables and flowers grow. \`umgraben zier\` digs a **flower bed**: only flowers grow there (thrift, dune rose, fog flower), and only there do they cross. It counts towards your three like any bed.
+
+\`umgraben gemeinschaft\` lays out a **community bed**: 3×3 cells, two light points, **one per fire**. It does not count towards your beds. Everyone with an account may plant in it, and everyone, guests too, may water, weed and harvest. What you harvest goes into your pack. Only whoever laid it out can give it up.
+
+## Crossing and naming {#breeding}
+
+When a flower ripens in a flower bed with a flower of another sort beside it (not across a corner), the harvest sometimes brings a **seed of a crossing** (\`Kreuzungssamen\`). What grows from it has a colour of its own, between its parents' colours. A crossing crosses again, with its own parent sort too.
+
+Whoever bred it names it with \`benenne <name>\`, once and for good. Its seeds are then called "<Name>-Samen" and its flowers like the sort, and whoever harvests them or is given them carries the name on. A name has 3 to 24 letters, is not yet taken, and means nothing the world or its commands already mean.
+
+## The gardener {#gardener}
+
+**Gesa** in Kupferhafen gathers seeds herself in the harbour's flora and sells them at the market; she buys flowers and vegetables. Her search orders hang on the board ("Gesa sucht eine Nebelblume"). Speak to her to learn her prices.
 
 ## Sponsorship {#sponsor}
 

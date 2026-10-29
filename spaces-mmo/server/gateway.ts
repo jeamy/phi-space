@@ -29,8 +29,8 @@ export type PlanView = { key: string; name: string; w: number; h: number; needs:
 export type ObjView = { id: string; kind: "item" | "exit" | "beacon" | "site" | "building" | "ruin" | "bed"; name: string; location: string; x: number; y: number; glyph?: Glyph; icon?: string; until?: number;
 	w?: number; h?: number; owner?: string; progress?: number; missing?: string; color?: string;
 	/** A bed: its plants at their cells (relative to the bed), when it was watered and how long its plants go without
-	 *  water, whether weeds grow in it, and who may tend it besides the owner. */
-	plants?: Array<{ x: number; y: number; stage: number; color: string }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[] };
+	 *  water, whether weeds grow in it, and who may tend it besides the owner; `bedKind`: a flower bed or a community bed. */
+	bedKind?: "zier" | "gemein"; plants?: Array<{ x: number; y: number; stage: number; color: string }>; wateredWorldMs?: number; thirstMs?: number; weedy?: boolean; sponsors?: string[] };
 /** `toMe`: meant for the viewer and from someone else: said to them alone (an offer, a sale), or naming them.
  *  `player`: the speaker is a player (not an NPC: the page offers a chat with them); `players`: in the list of who plays,
  *  the names that are players. */
@@ -469,7 +469,7 @@ export class Gateway {
 		}
 		else if (type === "Bed") {
 			const b = fields as unknown as BedFields;
-			this.#setObj(id, { id: b.bedId, kind: "bed", name: "Beet", location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plants: bedPlantsView(this.w, b), wateredWorldMs: b.wateredWorldMs, thirstMs: this.w.garden?.thirstWorldMs ?? 0, weedy: b.weedy, sponsors: b.sponsors.map((x) => x.name) });
+			this.#setObj(id, { id: b.bedId, kind: "bed", name: b.kind === "gemein" ? "Gemeinschaftsbeet" : b.kind === "zier" ? "Zierbeet" : "Beet", ...(b.kind ? { bedKind: b.kind } : {}), location: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.ownerName, plants: bedPlantsView(this.w, b), wateredWorldMs: b.wateredWorldMs, thirstMs: this.w.garden?.thirstWorldMs ?? 0, weedy: b.weedy, sponsors: b.sponsors.map((x) => x.name) });
 		}
 		else if (type === "Site" || type === "Building") {
 			const b = fields as unknown as SiteFields & BuildingFields;

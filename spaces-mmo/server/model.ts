@@ -20,7 +20,13 @@ export type Glyph = { shape: "circle" | "square" | "diamond"; color: string };
  *  type is its typeclass, the supertypes include "Item" and "Object". */
 export type ItemFields = { itemId: string; name: string; aliases: string[]; desc: string; location: string; x: number; y: number; glyph: Glyph; locks: string; proto: string; flotsam?: boolean; expiresWorldMs?: number;
 	/** A tool: uses left (it breaks at 0). */ wear?: number;
-	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string };
+	/** On the market board: `location` is "market", these name the listing and who gets it back. */ listing?: string; seller?: string;
+	/** A bred sort (garden.ts): seeds and flowers of a crossing carry it, so it travels with them to other regions. */ variety?: Variety };
+/** A crossing of two sorts in a flower bed (docs/siedeln.md "Vermehren und züchten"): its own colour and its breeder;
+ *  `name` stays empty until the breeder names it (`benenne`). The thing keeps the prototype of the sort it grew from. */
+export type Variety = { id: string; name: string; color: string; breeder: string; breederName: string };
+/** A name given to a variety, `unique` on `nameKey` within its region's space. */
+export type VarietyFields = { varietyId: string; name: string; nameKey: string; sort: string; color: string; breeder: string; breederName: string; at: number };
 /** A way out of a room, on a cell of it; stepping on the cell or `go <name>` leads to `destination`, arriving at `arrive`. */
 export type ExitFields = { exitId: string; name: string; aliases: string[]; desc: string; location: string; destination: string; x: number; y: number; arrive: { x: number; y: number }; locks: string; fogMax?: number };
 /** A label on an object (Tags cannot be array fields: templates match whole values). */
@@ -121,12 +127,13 @@ export type BuildingFields = { buildId: string; plan: string; name: string; room
 	/** A rain barrel's cans at `waterAtWorldMs`; it gains one every so often (engine/commands/garden.ts barrelWater). */
 	water?: number; waterAtWorldMs?: number };
 /** A plant in a bed, at a cell of it: its sort, its stage (0 seed, 1 sprout, 2 ripe, 3 wilted) and when the next is due. */
-export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 3; dueWorldMs: number };
+export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 3; dueWorldMs: number; variety?: Variety };
 /** A bed (docs/siedeln.md "Gärten"): cells like a building's (Plot entries), its plants inside it, so a stage change or
  *  a watering is one write of the bed whatever grows in it. `dueWorldMs`: the earliest date of its plants (the garden
  *  tick looks at nothing else); `wateredWorldMs`: the last watering; `sponsors`: who may tend it besides the owner;
- *  `untilWorldMs`: a bed nobody tends goes back to grass. */
-export type BedFields = { bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
+ *  `untilWorldMs`: a bed nobody tends goes back to grass. `kind`: a flower bed ("zier": flowers only, and only there
+ *  sorts cross) or a community bed ("gemein": everyone may tend it); without one a garden bed of the owner's. */
+export type BedFields = { kind?: "zier" | "gemein"; bedId: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number;
 	sponsors: Array<{ charId: string; name: string }>; plants: BedPlant[]; wateredWorldMs: number; weedy: boolean; dueWorldMs: number; untilWorldMs: number; at: number };
 /** How long a figure waits before it looks for wild seeds again (the sweep removes it). */
 export type SeedRestFields = { charId: string; untilWorldMs: number };

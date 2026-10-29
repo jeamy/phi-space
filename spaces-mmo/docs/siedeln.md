@@ -1,8 +1,8 @@
 # Siedeln, Bauen und Gärtnern (Entwurf)
 
 Stand 2026-10-28, überarbeitet 2026-10-29 (Logikfehler und Lücken der ersten Fassung). Gebaut sind der Chat zwischen
-Spielern, Schritt 1 (Hütte und Baustelle) und von Schritt 2 der erste Teil (Beete, Samen, Gießen, Ernte, Patenschaft;
-siehe „Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
+Spielern, Schritt 1 (Hütte und Baustelle) und von Schritt 2 die ersten zwei Teile (Beete, Samen, Gießen, Ernte,
+Patenschaft; Zier- und Gemeinschaftsbeete, Kreuzen und Benennen, die Gärtnerin; siehe „Reihenfolge“); alles Weitere ist ein Vorschlag, wie Leuchtfeuer über Sammeln, Feuer und Handel hinaus wächst:
 Gärten, Häuser, Werkstätten, Straßen, Kirchen, Kaufhäuser, später Eisenbahn. Er baut auf [spielidee.md](spielidee.md),
 [welt.md](welt.md), [goetter.md](goetter.md) und [automaten.md](automaten.md) auf.
 
@@ -682,8 +682,41 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
      Abweichungen vom Entwurf: der Befehl heißt `umgraben`, nicht `grabe` (das ist der Builder-Befehl `dig`); es gibt
      eine Beet-Art für Gemüse und Blumen zugleich; die Regentonne füllt sich alle acht Weltstunden um eine Kanne (bis
      sechs), nicht einmal am Tag, sonst reichte eine Tonne nicht für ein Beet, das zweimal am Tag Wasser braucht.
-     Noch nicht: Gemeinschaftsbeete und Zierbeete als eigene Art, Kreuzen und Benennen, die Gärtnerin mit Samenhandel
-     und Suchaufträgen (Teil 2), das Wild mit Zaun und Vogelscheuche (Teil 3).
+   - **Teil 2, gebaut 2026-10-29** (dieselben Dateien, Weltversion 18): drei Arten von Beeten. Das **Gartenbeet**
+     (`umgraben`) trägt Gemüse und Blumen. Das **Zierbeet** (`umgraben zier`) trägt nur Blumen, und nur dort
+     **kreuzen** sie sich: Reift eine Blume, neben der (nicht über Eck) eine andere Sorte steht, gibt die Ernte mit
+     einem Viertel Wahrscheinlichkeit statt eines Samens einen **Kreuzungssamen**. Er trägt eine eigene Farbe zwischen
+     denen der Eltern und den Züchter. Wer ihn gezogen hat, **benennt** die Sorte einmal (`benenne <name>`); dann heißen
+     ihre Samen „<Name>-Samen“ und ihre Blumen „<Name>“. Ein Name hat 3 bis 24 Buchstaben. Er darf nichts sein, was
+     die Welt schon meint (kein Prototyp, keine Sorte, kein Befehl), damit `give kohl` nie eine Blume findet, die
+     jemand „Kohl“ nannte. Er ist `unique` (`Variety`-Entry). Das **Gemeinschaftsbeet** (`umgraben gemeinschaft`) ist
+     3×3 groß, belegt zwei Lichtpunkte und liegt höchstens einmal je Feuer (`BedCommons`, `unique` auf dem Feuer). Es
+     zählt zu niemandes drei Beeten. Pflanzen darf darin jeder mit Konto, gießen, jäten und ernten alle, auch Gäste;
+     aufgeben kann es nur, wer es anlegte. Die **Gärtnerin Gesa** (Skript `gaertnerin`, Kupferhafen) sammelt wie jeder
+     mit `sammle samen` und verkauft die Samen am Markt. Sie kauft Blumen und Gemüse. Ihre **Suchaufträge** hängen an
+     den Tafeln: eine Nebelblume, Dünenrosen, Kohl und Möhren, Strandnelken. Die Karte färbt Pflanzen einer Kreuzung
+     in deren Farbe, das Zellmenü bietet am Gemeinschaftsbeet allen das Gießen, Jäten und Ernten an und mit Konto das
+     Pflanzen. Abnahme (`tests/garden.test.ts`):
+     - Kohl wird im Zierbeet abgelehnt.
+     - Vier reife Blumen zweier Sorten kreuzen sich bei der Ernte.
+     - Der Züchter benennt die Kreuzung. „Kohl“ und „ernte“ werden als Namen abgelehnt, ein vergebener Name ebenso.
+     - Aus den Samen wächst die Sorte unter ihrem Namen und in ihrer Farbe, und sie gibt eine Blume dieses Namens.
+     - Ein zweites Gemeinschaftsbeet am selben Feuer wird abgelehnt.
+     - Ein Gast pflanzt dort nicht, gießt aber.
+     - Der Messtest schreibt weiter 750-mal und bei angehaltener Uhr keinmal.
+
+     Abweichungen vom Entwurf:
+     - Die Ernte des Gemeinschaftsbeets geht in die eigene Tasche statt in eine Beet-Truhe mit der Quote des
+       Lagerhauses; beides kommt erst mit Schritt 5. Pflanzen darf jeder mit Konto statt jeder „mit Recht“, denn
+       Rechte gibt es erst mit der Siedlung in Schritt 4.
+     - Gekreuzt wird bei der Ernte, nicht beim Reifen: Die Ernte schreibt das Beet ohnehin, so bleibt die Zahl der
+       Schreibvorgänge gleich.
+     - Eine Kreuzung ist kein neuer Prototyp. Sie lebt als `variety` an Samen, Pflanze und Blume, behält den Prototyp
+       ihrer Ausgangssorte und reist so mit ihrem Träger in andere Regionen.
+     - Der Name ist nur je Region `unique`, denn es gibt keinen weltweiten Space dafür. Eine Pflanze, die vor dem
+       Benennen gesetzt wurde, erhält den Namen bei ihrer Ernte.
+
+     Noch nicht: das Wild mit Zaun und Vogelscheuche (Teil 3), Sträuße als Geschenke und Opfer, die Blumenschau.
 3. **Äcker und Mühlen** (der große Strang der Gärten): Flur-Entries über Zellbereiche, eine Frucht je Flur,
    Bestellen und Ernteeinsatz als Arbeitspunkte, Fruchtfolge, Windmühle und die Kette Korn → Mehl → Brot,
    Flachs → Leinen; **erste Tiere** (Hühnerstall mit Tang und Resten schon vorher, Gehege, Futter von den Fluren);

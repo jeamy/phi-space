@@ -1,17 +1,19 @@
-// Gardens, step 2 part 1 (docs/siedeln.md "Gärten", engine/commands/garden.ts): a bed is dug only with a spade and in the
+// Gardens, step 2 (docs/siedeln.md "Gärten", engine/commands/garden.ts): a bed is dug only with a spade and in the
 // light; seeds grow in stages when watered and wilt when dry; fog and weeds slow them; a rain barrel gives cans; a
 // sponsor tends a bed without owning it; one harvest takes what is ripe exactly once; and a thousand plants growing
-// for a world day write the space only at their stage changes and waterings.
+// for a world day write the space only at their stage changes and waterings. Part 2: a flower bed takes flowers only and
+// there they cross; a crossing is named once by its breeder, a name unique and none the world means; a community bed,
+// one per fire, is planted by everyone with an account and tended by all.
 import "./test-env.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FOREVER, type SpaceLike } from "phi-spaces";
-import { advance, barrelWater, gardenTick, growFactor } from "../server/engine/commands/garden.ts";
+import { advance, barrelWater, crossings, gardenTick, growFactor, mixColor } from "../server/engine/commands/garden.ts";
 import { resolvePrototype, spawn } from "../server/engine/prototypes.ts";
 import { loadWorld } from "../server/engine/world.ts";
 import { readClock } from "../server/engine/clock.ts";
 import { initialClock, worldNow } from "../server/engine/worldtime.ts";
-import type { BedFields, BuildingFields } from "../server/model.ts";
+import type { BedFields, BedPlant, BuildingFields, ItemFields } from "../server/model.ts";
 import type { ServerFrame } from "../server/gateway.ts";
 import { eventually, lightFire, Player, startServer, startStack } from "./stack.ts";
 
@@ -48,6 +50,30 @@ test("garden rules: stages in their times, slower in fog and weeds, wilting when
 	assert.deepEqual(barrelWater(g, barrel, g.barrelFillWorldMs * 2 + 5), { cans: 3, at: g.barrelFillWorldMs * 2 });
 	assert.equal(barrelWater(g, barrel, g.barrelFillWorldMs * 100).cans, g.barrelCap);
 	assert.equal(barrelWater(g, { ...barrel, water: 0, waterAtWorldMs: g.barrelFillWorldMs * 3 } as BuildingFields, g.barrelFillWorldMs * 3 + 1).cans, 0);
+});
+
+test("crossing: a ripe flower crosses with another strain beside it, not across a corner, not with its own, never a vegetable", () => {
+	const plant = (x: number, y: number, sort: string, stage: BedPlant["stage"] = 2, variety?: string): BedPlant => ({ x, y, sort, stage, dueWorldMs: FOREVER, ...(variety ? { variety: { id: variety, name: "", color: "#ffffff", breeder: "c", breederName: "C" } } : {}) });
+	const bed = (plants: BedPlant[]): BedFields => ({ kind: "zier", bedId: "b", room: "r", x: 0, y: 0, w: 2, h: 2, owner: "o", ownerName: "O", accountId: "a", beaconId: "f", points: 1, sponsors: [], plants, wateredWorldMs: 0, weedy: false, dueWorldMs: FOREVER, untilWorldMs: FOREVER, at: 0 });
+	const always = () => 0, never = () => 0.99;
+	const nelke = plant(0, 0, "strandnelke"), rose = plant(1, 0, "duenenrose");
+	let b = bed([nelke, rose]);
+	assert.equal(crossings(g, b, [nelke, rose], always).get(nelke), rose);
+	assert.equal(crossings(g, b, [nelke, rose], never).size, 0, "at its chance only");
+	// across a corner, the same sort, a wilted neighbour, a vegetable: nothing
+	const corner = plant(1, 1, "duenenrose"), same = plant(0, 1, "strandnelke"), wilted = plant(1, 0, "duenenrose", 3);
+	b = bed([nelke, corner, same]);
+	assert.equal(crossings(g, b, [nelke], always).size, 0);
+	b = bed([nelke, wilted]);
+	assert.equal(crossings(g, b, [nelke], always).size, 0);
+	const kohl = plant(1, 0, "strandkohl"), moehre = plant(0, 0, "moehre");
+	assert.equal(crossings(g, bed([moehre, kohl]), [moehre, kohl], always).size, 0);
+	// a variety of the same sort is another strain
+	const bred = plant(1, 0, "strandnelke", 1, "var-1");
+	assert.equal(crossings(g, bed([nelke, bred]), [nelke], always).get(nelke), bred);
+	// the colour lies between its parents
+	const c = mixColor("#000000", "#ffffff", () => 0.5);
+	assert.equal(c, "#808080");
 });
 
 type P = { p: Player; me: string; name: string };
@@ -204,9 +230,106 @@ test("a thousand plants grow a world day and are watered twice: the space writes
 		assert.equal(waterings, 500);
 		assert.ok(stageChanges >= 1000, "every plant moved on at least once");
 		assert.equal(tickWrites, bedChanges, "the tick wrote each bed once per stage change, and at no other time");
-		// and nothing when no date has come: right after a round that wrote what was due, the next writes nothing
+		// and nothing when no date has come: with the clock stopped (dates keep coming while it runs: the next ripe plants
+		// wilt), a round writes what was due and the next nothing
+		const c = await s.takeIfExists({ type: "WorldClock" }, 5_000);
+		await s.write({ type: "WorldClock", fields: { ...c!.fields, paused: true, worldAnchorMs: worldNow(clock) } as never }, null, FOREVER);
 		await gardenTick(s, w);
 		const quiet = await gardenTick(s, w);
 		assert.equal(quiet, 0);
 	} finally { await stack.close(); }
+});
+
+test("a flower bed takes flowers and they cross; the breeder names the crossing once, the name is unique; a community bed is planted by everyone and tended by all", { timeout: 240_000 }, async () => {
+	const srv = await startServer();
+	try {
+		const s = srv.stack.space;
+		const anna = await player(srv.url, "Anna"), bert = await player(srv.url, "Bert");
+		await lightFire(s, 600_000, "feuer-bucht");
+		await give(s, anna.me, "spaten", 1);
+		await give(s, bert.me, "spaten", 1);
+		await walk(anna, s, 16, 11);
+		let dug = "";
+		for (let i = 0; i < 5 && !dug.includes("Zierbeet"); i++) { await clear(s, [[16, 12], [17, 12], [16, 13], [17, 13]]); dug = await does(anna.p, "umgraben zier 16 12", /Zierbeet|passt kein Beet/); }
+		assert.match(dug, /Anna gräbt ein Zierbeet um \(2×2\)/);
+		const zier = await bedOf(s, anna.me);
+		assert.equal(zier.kind, "zier");
+		await anna.p.until((f) => f.t === "obj" && f.o.kind === "bed" && f.o.bedKind === "zier" && f.o.name === "Zierbeet", 10_000);
+		// flowers only
+		await give(s, anna.me, "samen-strandkohl", 1);
+		await give(s, anna.me, "samen-strandnelke", 1);
+		assert.match(await does(anna.p, "pflanze kohl", "Zierbeet"), /nur Blumen; Strandkohl gehört in ein Gartenbeet/);
+		assert.match(await does(anna.p, "pflanze strandnelke", "setzt"), /setzt Strandnelke ins Zierbeet/);
+
+		// four ripe flowers of two sorts side by side (written directly: growing is tested above); each harvest crosses at
+		// its chance, so harvest until one did
+		const ripen = async () => {
+			const e = await eventually(() => s.takeIfExists({ type: "Bed", fields: { bedId: zier.bedId } }, 1_000), 10_000, "the flower bed");
+			const b = e!.fields as unknown as BedFields, far = FOREVER - 1;
+			b.plants = [[16, 12, "strandnelke"], [17, 12, "duenenrose"], [16, 13, "duenenrose"], [17, 13, "strandnelke"]].map(([x, y, sort]) => ({ x: x as number, y: y as number, sort: sort as string, stage: 2 as const, dueWorldMs: far }));
+			b.dueWorldMs = far;
+			await s.write({ type: "Bed", fields: b as never }, null, FOREVER);
+		};
+		const crossed = async () => (await s.readAll({ type: "Item", fields: { location: anna.me } })).map((e) => e.fields as unknown as ItemFields).filter((i) => i.variety);
+		for (let i = 0; i < 20 && !(await crossed()).length; i++) { await ripen(); await does(anna.p, "ernte", "erntet das Zierbeet"); }
+		const seed = (await crossed())[0]!;
+		assert.ok(seed, "a harvest crossed");
+		// one harvest may cross more than one flower: keep the first crossing only
+		for (const e of await s.readAll({ type: "Item", fields: { location: anna.me } })) if ((e.fields as unknown as ItemFields).variety && (e.fields as unknown as ItemFields).variety!.id !== seed.variety!.id) await s.takeIfExists({ id: e.id }, 0);
+		assert.equal(seed.name, "Kreuzungssamen");
+		assert.equal(seed.variety!.breeder, anna.me);
+		assert.notEqual(seed.variety!.color, g.sorts.find((x) => x.seed === seed.proto)!.color, "a colour of its own");
+
+		// naming: nothing the world means, no command, then once
+		assert.match(await does(anna.p, "benenne Kohl", "Namen"), /heißt schon etwas/);
+		assert.match(await does(anna.p, "benenne ernte", "Befehl"), /ist ein Befehl/);
+		assert.match(await does(anna.p, "benenne abendrot", "nennt"), /Anna nennt die neue Sorte aus (Strandnelke|Dünenrose) „Abendrot“/);
+		await eventually(async () => (await crossed()).every((i) => i.variety!.name === "Abendrot" && (i.name === "Abendrot-Samen" || i.name === "Abendrot")), 10_000, "what Anna carries takes the name");
+		assert.match(await does(anna.p, "benenne Morgenrot", "unbenannte"), /keine unbenannte Kreuzung/);
+		// someone else's crossing may not take a name that is taken
+		const p = (await resolvePrototype(s, "samen-duenenrose"))!;
+		await spawn(s, null, w, p, { location: bert.me, x: -1, y: -1 }, { name: "Kreuzungssamen", aliases: ["kreuzung"], variety: { id: "var-bert", name: "", color: "#aa3355", breeder: bert.me, breederName: "Bert" } });
+		assert.match(await does(bert.p, "benenne Abendrot", "gibt es schon"), /Eine Sorte namens „Abendrot“ gibt es schon/);
+		// it grows as itself and keeps its name in the flower it gives
+		const e0 = await eventually(() => s.takeIfExists({ type: "Bed", fields: { bedId: zier.bedId } }, 1_000), 10_000, "the flower bed");
+		const b0 = e0!.fields as unknown as BedFields;
+		b0.plants = [];
+		await s.write({ type: "Bed", fields: b0 as never }, null, FOREVER);
+		assert.match(await does(anna.p, "pflanze abendrot", "setzt"), /setzt Abendrot ins Zierbeet/);
+		const planted = (await bedOf(s, anna.me)).plants[0]!;
+		assert.equal(planted.variety?.name, "Abendrot");
+		await anna.p.until((f) => f.t === "obj" && f.o.kind === "bed" && f.o.plants?.[0]?.color === planted.variety!.color, 10_000);
+		const e1 = await eventually(() => s.takeIfExists({ type: "Bed", fields: { bedId: zier.bedId } }, 1_000), 10_000, "the flower bed");
+		const b1 = e1!.fields as unknown as BedFields;
+		b1.plants = b1.plants.map((x) => ({ ...x, stage: 2 as const, dueWorldMs: FOREVER - 1 }));
+		await s.write({ type: "Bed", fields: b1 as never }, null, FOREVER);
+		await does(anna.p, "ernte", "erntet");
+		const flower = g.sorts.find((x) => x.key === planted.sort)!.yields.proto;
+		assert.ok((await crossed()).some((i) => i.name === "Abendrot" && i.proto === flower), "the flower is an Abendrot");
+
+		// a community bed: one per fire, no one's
+		await walk(bert, s, 22, 11);
+		let commons = "";
+		for (let i = 0; i < 5 && !commons.includes("Gemeinschaftsbeet an"); i++) {
+			await clear(s, [19, 20, 21].flatMap((x) => [12, 13, 14].map((y) => [x, y] as [number, number])));
+			commons = await does(bert.p, "umgraben gemeinschaft 19 12", /Gemeinschaftsbeet an|passt kein Beet/);
+		}
+		assert.match(commons, /Bert legt ein Gemeinschaftsbeet an \(3×3\)/);
+		assert.match(await does(anna.p, "umgraben gemeinschaft", "Gemeinschaftsbeet"), /liegt schon ein Gemeinschaftsbeet/);
+		// Anna plants there (her flower bed is out of reach), a guest may not plant but waters
+		await walk(anna, s, 22, 14);
+		assert.match(await does(anna.p, "pflanze kohl", "setzt"), /Anna setzt Strandkohl ins Gemeinschaftsbeet/);
+		const guest = new Player(srv.url);
+		assert.equal((await guest.post("/api/guest")).status, 200);
+		const gme = (await guest.play()).me.charId;
+		await walk({ p: guest, me: gme, name: "guest" }, s, 22, 12);
+		await give(s, gme, "samen-strandnelke", 1);
+		await give(s, gme, "wasserkanne", 1);
+		assert.match(await does(guest, "pflanze strandnelke", "Gäste"), /pflanzen darf, wer sich registriert hat/);
+		assert.match(await does(guest, "gieße", "gießt"), /gießt das Gemeinschaftsbeet/);
+		assert.match(await does(guest, "beet", "Gemeinschaftsbeet"), /Gemeinschaftsbeet, angelegt von Bert \(3×3\)/);
+		// it does not count to Bert's beds, and only Bert gives it up
+		assert.match(await does(bert.p, "beet aufgeben", "Gras"), /gibt das Gemeinschaftsbeet auf/);
+		assert.equal(await s.count({ type: "BedCommons" }), 0, "the fire has room for one again");
+	} finally { await srv.close(); }
 });
