@@ -62,7 +62,8 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 	const accounts = new Accounts(regions, store.space, w, o.accountOptions);
 	// the build of the pages (Next writes .next/BUILD_ID): a page from an older build reloads when it meets a newer one
 	const build = o.build !== undefined ? o.build : (() => { try { return readFileSync(join(ROOT, ".next", "BUILD_ID"), "utf8").trim(); } catch { return null; } })();
-	const gateway = new Gateway(regions, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build);
+	// the chat between players keeps its entries in the accounts space: every region shares it, only this process reaches it
+	const gateway = new Gateway(regions, w, (accountId) => void accounts.touchGuest(accountId).catch(() => {}), build, store.space);
 	const proc = announce(world.space, "web");
 	// the system bar's hosts (GET /api/system): every page asks every few seconds, the space at most once in five
 	let systemCache: { at: number; value: Promise<Awaited<ReturnType<typeof systemInfo>>> } | null = null;
@@ -168,6 +169,10 @@ export async function startServer(o: { port?: number; bind?: string; space?: str
 				if (p === "/api/me" && req.method === "GET") return json(res, 200, meView(await accounts.resolve(cookieOf(req, COOKIE))));
 				if (p === "/api/system" && req.method === "GET") return json(res, 200, await system());
 				if (p === "/api/admin/settings" && req.method === "GET") return json(res, 200, await adminSettings(await accounts.resolve(cookieOf(req, COOKIE)), null));
+				if (p === "/api/admin/reports" && req.method === "GET") {
+					if (!(await accounts.resolve(cookieOf(req, COOKIE)))?.admin) return json(res, 403, { error: "Nur für Admins" });
+					return json(res, 200, { reports: await gateway.chatReports() });
+				}
 				if (req.method !== "POST") return json(res, 405, { error: "POST erwartet" });
 				if (req.headers["x-mmo"] !== "1") return json(res, 403, { error: "Header x-mmo fehlt" });
 				const b = await readBody(req);

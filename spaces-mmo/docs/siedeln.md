@@ -18,53 +18,76 @@ Dorf und Stadt aus Gärten ebenso wie aus Häusern, und die schönsten Orte des 
 Prunkbauten. Die einen sind das große gemeinsame Werk, die anderen der leise Dauerrhythmus, der auch mit zwei, drei
 Spielern die Welt lebendig hält.
 
-## Chat zwischen Spielern (zuerst)
+## Chat zwischen Spielern (zuerst, gebaut)
 
 Gemeinsam bauen heißt sich absprechen, auch über Inseln hinweg und mit jemandem, der gerade woanders steht. `say`
-hört nur der Raum, ein Kanal (`channel hafen`) alle. Was fehlt, ist das Gespräch zu zweit und in einer kleinen Gruppe.
-Es kommt deshalb **vor** allem anderen (Reihenfolge, Schritt 0).
+hört nur der Raum, ein Kanal (`channel hafen`) alle. Was fehlte, war das Gespräch zu zweit und in einer kleinen Gruppe.
+Es kam deshalb **vor** allem anderen (Reihenfolge, Schritt 0). Gebaut seit 2026-10-29: `server/chat.ts`,
+`client/chatcrypto.ts`, `client/useChat.ts`, `client/ChatPanel.tsx`, Test `tests/chat.test.ts`.
 
 **Zu zweit**
 
 - Befehl `chat <name> <text>` (auch `tell`, `flüstere`). `chat <name>` ohne Text öffnet nur das Gespräch.
-- Auf der Karte öffnet die rechte Maustaste über einer Figur ein Menü: **Chat mit …**, dazu Anschauen und
-  Handel anbieten. Auf dem Telefon geht das mit langem Tippen. Dasselbe Menü haben die Namen in „Wer spielt“ und im
-  Log.
-- Die Seite zeigt jedes Gespräch als eigenen Reiter neben dem Log, mit Zähler für Ungelesenes. Was an einen selbst
-  geht, ist hervorgehoben (wie heute `toMe`).
-- Ein Gespräch geht über Regionen hinweg. Das Web folgt den Strömen aller Regionen und stellt eine Nachricht an eine
-  Figur zu, wo immer sie steht. Ist der andere nicht online, bleibt die Nachricht für ein registriertes Konto liegen
-  (Lease, Beispiel sieben Tage, höchstens 50 je Absender) und erscheint beim nächsten Anmelden. Ein Gast bekommt nur,
-  was ankommt, während er spielt.
+- Auf der Karte öffnet die rechte Maustaste (auf dem Telefon langes Tippen) über einer Figur ein Menü: **Chat mit …**
+  und **… in „Gruppe“ einladen** (je Gruppe, in der man ist), dazu Anschauen und Handel anbieten. NPCs haben keinen
+  Chat-Eintrag.
+- Die Seite zeigt jedes Gespräch als eigenen Reiter neben dem Log, mit Zähler für Ungelesenes (was gelesen ist, merkt
+  sich der Browser). Der Reiter „Chats“ ist die Übersicht: Verschlüsselung, Einladungen, Gruppen, neues Gespräch,
+  Ignorierte. Ein geschlossener Reiter kommt mit der nächsten Nachricht wieder.
+- Ein Gespräch geht über Regionen hinweg. Ist der andere nicht online, bleibt die Nachricht liegen (Lease sieben Tage,
+  je Leser die letzten 50 eines Gesprächs) und erscheint beim nächsten Anmelden; jede Seite bekommt den Verlauf.
 
 **In der Gruppe**
 
-- `gruppe neu <name>` gründet eine Gruppe; wer gründet, verwaltet sie.
-- `gruppe lade <spieler> in <name>` schreibt eine Einladung mit Lease wie ein Angebot (`offer`). Der Eingeladene sieht
-  sie und antwortet mit `gruppe annehmen <name>` oder `gruppe ablehnen <name>`; ohne Antwort läuft sie ab.
-- Weitere Befehle: `gruppe verlasse <name>`, `gruppe entferne <spieler> aus <name>` (nur wer verwaltet),
-  `gruppe <name> <text>` oder der Reiter der Gruppe.
-- Höchstens 20 Mitglieder (Einstellung). Auf der Karte bietet das Menü einer Figur auch „In Gruppe einladen“.
+- `gruppe neu <name>` gründet eine Gruppe; wer gründet, verwaltet sie (höchstens zehn je Konto).
+- `gruppe lade <spieler> in <name>` (oder das Kartenmenü) schreibt eine Einladung mit Lease (ein Welttag; einladen darf
+  jedes Mitglied). Der Eingeladene sieht sie im Log und im Reiter „Chats“ mit **Annehmen** und **Ablehnen**
+  (`gruppe annehmen <name>`, `gruppe ablehnen <name>`); ohne Antwort läuft sie ab.
+- Weitere Befehle: `gruppe verlasse <name>` (die Verwaltung geht an das älteste Mitglied, die letzte löst die Gruppe
+  auf), `gruppe entferne <spieler> aus <name>` (nur wer verwaltet), `gruppe <name> <text>` oder der Reiter der Gruppe;
+  `gruppe` allein zeigt die eigenen Gruppen. Beitritt, Austritt und Entfernen erscheinen als Hinweis in der Gruppe.
+- Höchstens 20 Mitglieder.
 - Eine Siedlung hat später ihre Gruppe von selbst: wer Siedler wird, ist Mitglied, wer es nicht mehr ist, nicht mehr.
+
+**Ende-zu-Ende verschlüsselt**
+
+- Nur die Mitglieder eines Gesprächs können es lesen, nicht der Server und nicht sein Betreiber.
+- Jedes Konto hat ein Schlüsselpaar (ECDH P-256), im Browser erzeugt. Der private Schlüssel verlässt den Browser nur
+  versiegelt mit dem **Chat-Passwort** (PBKDF2-SHA-256 mit 600 000 Runden, dann AES-GCM); der Server hält diese
+  Sicherung und den öffentlichen Schlüssel (`ChatKey`), damit ein anderes Gerät denselben Schlüssel mit demselben
+  Passwort entsperrt. Das Chat-Passwort ist nicht das Login-Passwort und geht nie an den Server. Auf dem Gerät liegt
+  der Schlüssel nicht exportierbar in IndexedDB; Abmelden vergisst ihn.
+- Eine Nachricht wird für jeden Leser einzeln versiegelt (AES-GCM, Schlüssel aus ECDH zwischen Absender und Leser über
+  HKDF); die Zusatzdaten binden die Kopie an Nachricht, Absender, Leser und Gruppe. Der Server prüft nur, wer lesen
+  darf, und speichert die versiegelten Kopien. Eine getippte Zeile `chat <name> <text>` versiegelt die Seite; eine
+  unverschlüsselte Nachricht nimmt der Server nicht an.
+- **Chat-Passwort vergessen heißt: die Verläufe sind verloren.** Niemand kann sie wiederherstellen. Ein neuer Schlüssel
+  liest nichts, was für den alten versiegelt wurde. Die Seite sagt das beim Einrichten und bietet **Verlauf sichern**
+  (eine Textdatei der geöffneten Gespräche) an; das Chat-Passwort lässt sich ändern, solange man es kennt.
+- Jedes Gespräch zeigt den **Fingerabdruck** des eigenen und des fremden Schlüssels. Wer sie außerhalb des Spiels
+  vergleicht, weiß, dass niemand einen anderen Schlüssel dazwischengeschoben hat.
+- Was der Server trotzdem sieht: wer mit wem wann schreibt, Gruppennamen und Mitglieder, die Hinweise der Gruppen
+  (Beitritt, Austritt). Und er liefert den Code der Seite aus: ein Betreiber, der ihn heimlich ändert, könnte mitlesen —
+  das gilt für jede Verschlüsselung im Browser. WebCrypto braucht HTTPS (oder `localhost`).
 
 **Wo es liegt**
 
-- Gruppen, Mitgliedschaften und Einladungen gelten über alle Regionen. Deshalb liegen sie in einem eigenen kleinen
-  Space `social`, nicht in einer Region. Er läuft im Space-Prozess neben dem Konten-Space (nano), und nur der
-  Web-Prozess spricht mit ihm.
-- Nachrichten in Gesprächen und Gruppen gehen nicht über den Welt-Worker: sie brauchen keine Transaktion der Welt.
-  Das Web schreibt sie in `social`, liest sie aus dessen Strom und stellt sie zu.
-- Liegengebliebene Nachrichten sind Entries mit Lease an den Empfänger.
+- Im **Konten-Space** (nano), als eigene Typen (`ChatMsg`, `ChatKey`, `ChatGroup`, `ChatMember`, `ChatInvite`,
+  `ChatBlock`, `ChatReport`): er gilt über alle Regionen, nur der Web-Prozess erreicht ihn, und das Dashboard lässt ihn
+  bewusst aus. Ein eigener Space `social` hätte einen dritten Socket, Port und Tunnel gebraucht, ohne mehr Schutz.
+- Chat geht nicht über den Welt-Worker: das Gateway fängt Chat-Zeilen und -Frames ab, bevor sie zur Welt gingen.
+  Zugestellt wird über den Änderungsstrom des Konten-Space (auch Einladungen und Mitgliedschaften).
 
 **Schutz**
 
-- `ignoriere <name>` sperrt Nachrichten und Einladungen eines Spielers; `ignoriere` allein listet die Gesperrten.
-- Für `chat` und `gruppe` gelten dieselben Grenzen je Konto wie für getippte Befehle (Gateway). Gäste dürfen chatten,
-  aber niemanden in eine Gruppe einladen und keine Gruppe gründen.
-- Gespräche erscheinen nicht im Log des Raums. Kein NPC und kein Modell liest sie, und die Übersetzung lässt
-  `chat`, `tell` und `gruppe` wie `say` unverändert.
-- „Melden“ im Menü einer Nachricht schickt sie mit Absender an die Admins (Admin-Fenster). Admins sehen sonst keine
-  Gespräche.
+- `ignoriere <name>` sperrt Nachrichten und Einladungen eines Spielers (auch in Gruppen bekommt er keine Kopie mehr);
+  `ignoriere` allein listet die Gesperrten, `erlaube <name>` hebt es auf.
+- Für Chat-Zeilen und -Frames gelten dieselben Grenzen je Konto wie für getippte Befehle (Gateway). Gäste dürfen
+  chatten, aber niemanden in eine Gruppe einladen und keine Gruppe gründen.
+- Gespräche erscheinen nicht im Log des Raums. Kein NPC und kein Modell liest sie, die Übersetzung sieht sie nie.
+- **Melden** an einer Nachricht schickt ihren Text, wie der Leser ihn entschlüsselt hat, mit Absender an die Admins
+  (Admin-Fenster, „Gemeldete Nachrichten“, 30 Tage). Der Server kann den Text nicht gegen die versiegelte Kopie prüfen;
+  Admins sehen sonst keine Gespräche.
 
 ## Licht ist Bauland
 
@@ -513,9 +536,10 @@ Vorstufe der Inselbahn.
 | Epoche erreicht | `Epoch`-Entry je Insel, geschrieben vom Zähl-Ticker; Rezepte und Baupläne prüfen sie |
 | Tagelöhner | NPC-`Intent` wie bei Menschen; Auftrag und Lohn an der Tafel |
 | Fremdarbeits-Deckel | zwei Zähler an der Baustelle (eigene/fremde Beiträge) |
-| Chat zu zweit | Nachricht über den Strom an die Figur; für Abwesende ein Entry mit Lease im Space `social` |
-| Gruppe, Einladung | Gruppe und Mitglied als Entries in `social`; Einladung mit Lease wie ein Angebot, annehmen ist `take` + `write` |
-| Sperre | Entry (wer, wen) in `social`; das Web prüft ihn vor dem Zustellen |
+| Chat-Nachricht | eine versiegelte Kopie je Leser als `ChatMsg` mit Lease im Konten-Space; zugestellt über dessen Strom |
+| Gruppe, Einladung | Gruppe und Mitglied als Entries im Konten-Space; Einladung mit Lease wie ein Angebot, annehmen ist `take` + `write` |
+| Sperre | `ChatBlock` (wer, wen); das Web gibt Gesperrten keine Kopie |
+| Chat-Schlüssel | `ChatKey`: öffentlicher Schlüssel und der mit dem Chat-Passwort versiegelte private |
 
 ## Regionen
 
@@ -552,8 +576,9 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
 
 ## Reihenfolge
 
-0. **Chat zwischen Spielern** (oben): `chat`, das Menü der rechten Maustaste auf der Karte, Reiter je Gespräch,
-   liegengebliebene Nachrichten, Gruppen mit Einladung, `ignoriere`, der Space `social`.
+0. **Chat zwischen Spielern** (oben, gebaut): `chat`, das Menü der rechten Maustaste auf der Karte, Reiter je
+   Gespräch, liegengebliebene Nachrichten, Gruppen mit Einladung, `ignoriere`, Ende-zu-Ende-Verschlüsselung mit
+   Chat-Passwort, Melden.
    Abnahme:
    - Zwei Spieler in verschiedenen Regionen schreiben sich.
    - Eine Nachricht an einen Abwesenden erscheint bei seinem nächsten Anmelden.

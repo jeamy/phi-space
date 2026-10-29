@@ -10,6 +10,10 @@ import type { AtlasState, AtlasView, CharView, MsgView, ObjView, ServerFrame, Tr
 import { Atlas } from "./Atlas.tsx";
 import { HelpPanel } from "./HelpPanel.tsx";
 import { appendLine, isComing } from "./log.ts";
+import type { ChatState } from "../server/chat.ts";
+import { addMsg, fromLog, keyOf, openTalk, readTalk, type Talks } from "./chat.ts";
+import { ChatOverview, ChatTabs, TalkView } from "./ChatPanel.tsx";
+import { forgetDeviceKeys, useChat } from "./useChat.ts";
 import { screenToGrid, WALK_MS, Walker } from "./walk.ts";
 import { formatWorldTime, shownWorldMs, type WorldTimeView } from "../server/engine/worldtime.ts";
 
@@ -145,7 +149,8 @@ function About() {
 
 /** The menu of a long press or a right click on a cell: what stands, lies or burns there, and what one can do with it.
  *  Every entry is a text command. */
-function CellMenu({ at, chars, objs, self, room, me, send, close, offer }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; close: () => void; offer?: (name: string) => void }) {
+function CellMenu({ at, chars, objs, self, room, me, send, close, offer, chat }: { at: { x: number; y: number; left: number; top: number }; chars: Map<string, CharView>; objs: Map<string, ObjView>; self: CharView | undefined; room: string; me: string; send: (line: string) => void; close: () => void; offer?: (name: string) => void;
+	/** Chat with a player (not an NPC), and invite them into one of `groups` (none for a guest). */ chat?: { talk: (name: string) => void; invite: (name: string, group: string) => void; groups: string[] } }) {
 	useEffect(() => {
 		const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
 		window.addEventListener("keydown", key);
@@ -157,6 +162,10 @@ function CellMenu({ at, chars, objs, self, room, me, send, close, offer }: { at:
 	for (const c of chars.values()) if (c.x === at.x && c.y === at.y && c.charId !== me) {
 		entries.push({ label: `${c.name} ansehen`, line: `look ${c.name}` });
 		if (offer) entries.push({ label: `${c.name} einen Tausch anbieten …`, line: `#offer ${c.name}`, run: () => offer(c.name) });
+		if (chat && !c.charId.startsWith("npc-")) {
+			entries.push({ label: `Chat mit ${c.name}`, line: `#chat ${c.name}`, run: () => chat.talk(c.name) });
+			for (const g of chat.groups.slice(0, 4)) entries.push({ label: `${c.name} in „${g}“ einladen`, line: `#invite ${c.name} ${g}`, run: () => chat.invite(c.name, g) });
+		}
 	}
 	for (const o of objs.values()) {
 		if (o.location !== room || o.x !== at.x || o.y !== at.y) continue;
@@ -292,6 +301,15 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [atlasState, setAtlasState] = useState<AtlasState | null>(null);
 	const [offerTo, setOfferTo] = useState<string | null>(null);
 	const [log, setLog] = useState<Line[]>([]);
+	// the chat between players (server/chat.ts): the talks, which tab shows (the log, the overview or a talk), the talks
+	// closed by the player (they come back with a new message), the groups and invitations, the last answer of the server
+	const [talks, setTalks] = useState<Talks>(new Map());
+	const [tab, setTabState] = useState("log");
+	const tabRef = useRef("log");
+	const [hiddenTalks, setHiddenTalks] = useState<Set<string>>(new Set());
+	const [chatState, setChatState] = useState<ChatState | null>(null);
+	const [notice, setNotice] = useState<{ text: string; error: boolean; at: number } | null>(null);
+	const setTab = useCallback((k: string) => { tabRef.current = k; setTabState(k); if (k !== "log" && k !== "chats") setTalks((t) => readTalk(t, k)); }, []);
 	const [live, setLive] = useState(false);
 	const [line, setLine] = useState("");
 	const [panel, setPanel] = useState<null | "account" | "leave" | "admin">(null);
@@ -310,6 +328,20 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 	const [menu, setMenu] = useState<null | { x: number; y: number; left: number; top: number }>(null);
 	const setMapMode = (mode: MapMode) => { setMenu(null); setMapModeState(mode); try { localStorage.setItem("mmo.renderer", mode); localStorage.setItem("mmo.textOnly", mode === "text" ? "1" : "0"); } catch { /* private window */ } };
 	const ws = useRef<WebSocket | null>(null);
+	// the end-to-end keys of the chat (client/useChat.ts): its frames go through the same socket
+	const sendFrame = useCallback((f: unknown) => { const s = ws.current; if (!s || s.readyState !== WebSocket.OPEN) return false; s.send(JSON.stringify(f)); return true; }, []);
+	const keys = useChat(sendFrame);
+	const keysRef = useRef(keys);
+	keysRef.current = keys;
+	/** A message typed as "chat <name> <text>" waits for its talk to open, then is sealed and sent. */
+	const pendingChat = useRef<{ name: string; text: string } | null>(null);
+	/** A message of a talk: sealed for its readers on this page, then sent; what goes wrong shows under the talk. */
+	const sealAndSend = useCallback(async (conv: { kind: "dm" | "group"; id: string; title: string }, text: string) => {
+		try {
+			const missing = await keysRef.current.sendText(conv, text);
+			if (missing.length) setNotice({ text: `Ohne eingerichteten Chat lesen nicht mit: ${missing.join(", ")}.`, error: false, at: Date.now() });
+		} catch (e) { setNotice({ text: (e as Error).message, error: true, at: Date.now() }); }
+	}, []);
 	const logEnd = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLInputElement>(null);
 	const me = hello?.me.charId ?? "";
@@ -379,7 +411,20 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 				else if (f.t === "atlas") setAtlas(f.atlas);
 				else if (f.t === "atlasState") setAtlasState(f.state);
 				else if (f.t === "objgone") { pickups.current.delete(f.id); setObjs((m) => { const n = new Map(m); n.delete(f.id); return n; }); }
-				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); append(f.m); }
+				else if (f.t === "msg") { if (f.m.kind === "error") putBack(); append(f.m); if (tabRef.current !== "log" && (f.m.kind === "error" || f.m.kind === "info")) setNotice({ text: f.m.text, error: f.m.kind === "error", at: Date.now() }); }
+				else if (f.t === "chatme" || f.t === "chatkeys") keysRef.current.onFrame(f);
+				else if (f.t === "chatlog") { keysRef.current.onFrame(f); setTalks(fromLog(f.msgs, tabRef.current)); }
+				else if (f.t === "chat") {
+					keysRef.current.onFrame(f);
+					setTalks((t) => { const n = addMsg(t, f.m, tabRef.current); return tabRef.current === keyOf(f.m.conv) ? readTalk(n, tabRef.current) : n; });
+					setHiddenTalks((h) => { const k = keyOf(f.m.conv); if (!h.has(k)) return h; const n = new Set(h); n.delete(k); return n; });
+				}
+				else if (f.t === "chats") setChatState(f.state);
+				else if (f.t === "chatopen") {
+					setTalks((t) => openTalk(t, f.conv)); setHiddenTalks((h) => { const n = new Set(h); n.delete(keyOf(f.conv)); return n; }); setTab(keyOf(f.conv));
+					const p = pendingChat.current;
+					if (p && p.name.toLowerCase() === f.conv.title.toLowerCase()) { pendingChat.current = null; void sealAndSend(f.conv, p.text); }
+				}
 			};
 			s.onclose = () => {
 				setLive(false);
@@ -390,7 +435,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		};
 		connect();
 		return () => { dead = true; clearTimeout(timer); for (const t of goneTimers.values()) clearTimeout(t); ws.current?.close(); };
-	}, [append, onAccount]);
+	}, [append, onAccount, setTab]);
 
 	useEffect(() => { logEnd.current?.scrollIntoView({ block: "end" }); }, [log]);
 
@@ -557,7 +602,7 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 		return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onUp); };
 	}, [hold, release, action]);
 
-	const logout = async () => { await post("/api/logout").catch(() => {}); onAccount(null); };
+	const logout = async () => { await post("/api/logout").catch(() => {}); await forgetDeviceKeys(); onAccount(null); };
 
 	return (
 		<div className="game">
@@ -593,7 +638,8 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 						onMenu={(x, y, left, top) => { input.current?.blur(); setMenu({ x, y, left, top }); }}
 						onFail={(why) => { setMapMode(mapMode === "3d" ? "2d" : "text"); append({ kind: "error", text: `${why} ${mapMode === "3d" ? "Die 2D-Karte bleibt aktiv." : "Das Spiel läuft als Text weiter."}`, from: "", at: Date.now() }); }} />
 				) : <div className="map"><p className="muted">Verbinde …</p></div>}
-				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }} />}
+				{menu && hello && <CellMenu at={menu} chars={chars} objs={objs} self={chars.get(me)} room={hello.room.roomId} me={me} send={send} close={() => setMenu(null)} offer={account.guest ? undefined : (name) => { setPanel(null); setOfferTo(name); }}
+					chat={{ talk: (name) => send(`chat ${name}`, false), invite: (name, g) => send(`gruppe lade ${name} in ${g}`), groups: account.guest ? [] : (chatState?.groups.map((g) => g.name) ?? []) }} />}
 				<aside className="side">
 					{panel === "account" && (
 						<div className="panel"><h2>Konto anlegen</h2><AccountForm guest onDone={(a) => { setPanel(null); onAccount(a); }} /></div>
@@ -612,13 +658,34 @@ function Game({ account, onAccount, controls }: { account: Account; onAccount: (
 							{trade && hello && <TradePanel trade={trade} chars={chars} objs={objs} me={me} guest={account.guest} offerTo={offerTo} setOfferTo={setOfferTo} send={send} />}
 						</div>
 					)}
-					<label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>
-					<div className="log" role="log" aria-live="polite">
-						{(comings ? log : log.filter((l) => !isComing(l))).map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
-						<div ref={logEnd} />
+					<div className="log-head">
+						<ChatTabs talks={talks} hidden={hiddenTalks} tab={tab} setTab={setTab} state={chatState} close={(k) => { setHiddenTalks((h) => new Set(h).add(k)); if (tab === k) setTab("log"); }} />
+						{tab === "log" && <label className="log-filter"><input type="checkbox" checked={comings} onChange={(e) => setComings(e.target.checked)} /> Kommen und Gehen</label>}
 					</div>
-					<form className="cmd" onSubmit={(e) => { e.preventDefault(); const t = line.trim(); if (t) { send(t); setLine(""); } }}>
-						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder="Einfach lostippen: Befehl oder Satz, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte" maxLength={300} aria-label="Befehl" />
+					{tab === "log" ? (
+						<div className="log" role="log" aria-live="polite">
+							{(comings ? log : log.filter((l) => !isComing(l))).map((l, i) => <div key={i} className={`${l.kind}${"toMe" in l && l.toMe ? " to-me" : ""}`}>{l.text}{"ai" in l && l.ai ? <span className="ai-badge" title="Diese Figur spielt ein Sprachmodell">KI</span> : null}</div>)}
+							<div ref={logEnd} />
+						</div>
+					) : tab === "chats" || !talks.get(tab) ? (
+						<ChatOverview state={chatState} guest={account.guest} talks={talks} open={setTab} send={send} keys={keys} />
+					) : <TalkView talk={talks.get(tab)!} keys={keys} />}
+					{tab !== "log" && notice && Date.now() - notice.at < 10_000 && <p className={`chat-notice${notice.error ? " error" : ""}`} role="status">{notice.text}</p>}
+					<form className="cmd" onSubmit={(e) => {
+						e.preventDefault(); const t = line.trim(); if (!t) return;
+						const talk = talks.get(tab);
+						// in a talk, what is typed is a message of the talk (sealed here); elsewhere a command or a sentence, but
+						// "chat <name> <text>" and "gruppe <name> <text>" are sealed here too: no chat text reaches the server plain
+						const dm = /^(?:chat|tell|whisper|flüstere|fluestere|flüster)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
+						const grp = /^(?:gruppe|group)\s+(\S+)\s+([\s\S]+)$/i.exec(t);
+						const g = grp && chatState?.groups.find((x) => x.name.toLowerCase() === grp[1]!.toLowerCase());
+						if (talk) void sealAndSend(talk.conv, t);
+						else if (dm) { pendingChat.current = { name: dm[1]!, text: dm[2]! }; send(`chat ${dm[1]}`, false); }
+						else if (g) { const conv = { kind: "group" as const, id: g.groupId, title: g.name }; setTalks((x) => openTalk(x, conv)); setTab(keyOf(conv)); void sealAndSend(conv, grp![2]!); }
+						else send(t);
+						setLine("");
+					}}>
+						<input ref={input} value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={onCommandKey} onFocus={() => release()} placeholder={talks.get(tab) ? `Nachricht an ${talks.get(tab)!.conv.kind === "group" ? `die Gruppe ${talks.get(tab)!.conv.title}` : talks.get(tab)!.conv.title} …` : "Einfach lostippen: Befehl oder Satz, z. B. look, say Hallo · Esc oder Pfeiltaste: zurück zur Karte"} maxLength={300} aria-label={talks.get(tab) ? "Nachricht" : "Befehl"} />
 						<button className="primary">Senden</button>
 					</form>
 					<About />

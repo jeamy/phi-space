@@ -272,3 +272,34 @@ img.icon { image-rendering: pixelated; display: inline-block; vertical-align: mi
 /* like the help site's model picker: provider groups, the model id */
 .admin-field select { width: 100%; min-width: 0; font: 600 12px/1.2 var(--font-mono); text-overflow: ellipsis; }
 .admin-msg { font-size: 12px; margin: 0; }
+
+/* chat between players (client/ChatPanel.tsx): tabs beside the log, a talk, the overview */
+.log-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-self: end; min-width: 0; }
+.log-head .log-filter { align-self: auto; }
+.chat-tabs { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.chat-tabs button { padding: 4px 9px; font-size: 12px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; }
+.chat-tabs button[aria-selected="true"] { background: var(--accent-fill); color: var(--accent-ink); border-color: transparent; }
+.chat-tab { display: inline-flex; align-items: center; }
+.chat-tab > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-tabs .chat-close { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; padding: 4px 6px; color: var(--muted); }
+.chat-count { font: 700 10px/1 var(--font-mono); background: var(--danger); color: #fff; border-radius: 999px; padding: 2px 5px; }
+.chat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); display: inline-block; }
+.chat-log .chat-mine { color: color-mix(in srgb, var(--accent) 75%, var(--text)); }
+.chat-time { color: var(--muted); font-size: 11px; }
+.chat-report { font-size: 11px; margin-left: 8px; opacity: .7; }
+.chat-overview { white-space: normal; display: grid; gap: 8px; align-content: start; }
+.chat-overview h3 { margin: 6px 0 0; font: 700 10px/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.chat-overview p { margin: 0; }
+.chat-row { display: flex; gap: 6px; }
+.chat-row input { flex: 1; min-width: 0; }
+.chat-invite { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--line)); border-radius: 10px; }
+.chat-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.chat-notice { margin: 0; font-size: 12px; color: var(--muted); }
+.chat-notice.error { color: var(--danger); }
+.admin-reports { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12px; }
+.chat-keybox { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 10px; }
+.chat-keybox p { margin: 0; }
+.chat-key { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-key input { flex: 1 1 140px; min-width: 0; }
+.chat-warn { font-size: 12px; }
+.chat-e2e { font-size: 11px; }

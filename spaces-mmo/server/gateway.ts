@@ -7,6 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { RevisionAhead, SnapshotExpired, type SpaceLike } from "phi-spaces";
 import type { Me } from "./accounts.ts";
+import { Chat, isChatFrame, isChatLine, type ChatClientFrame, type ChatFrame, type ChatUser } from "./chat.ts";
 import { render } from "./engine/funcparser.ts";
 import type { WorldDef } from "./engine/world.ts";
 import { msUntilWorld, viewOf, worldNow, type WorldTimeView } from "./engine/worldtime.ts";
@@ -53,11 +54,13 @@ export type ServerFrame =
 	| { t: "objgone"; id: string }
 	| { t: "msg"; m: MsgView }
 	| { t: "atlas"; atlas: AtlasView }
-	| { t: "atlasState"; state: AtlasState };
+	| { t: "atlasState"; state: AtlasState }
+	/** Chat between players (server/chat.ts): a message, the talks so far, groups and invitations, a talk to open. */
+	| ChatFrame;
 /** Frames from the browser. */
 /** Frames from the browser: a typed command, or a numbered step of the own character (the page walks ahead of the
  *  server and matches the answers by number, client/walk.ts). */
-export type ClientFrame = { t: "cmd"; line: string } | { t: "step"; seq: number; dx: number; dy: number };
+export type ClientFrame = { t: "cmd"; line: string } | { t: "step"; seq: number; dx: number; dy: number } | ChatClientFrame;
 
 const MAX_LINE = 300;
 const RECENT = 40;
@@ -133,6 +136,7 @@ export class Gateway {
 	readonly #waiting = new Set<{ region: string; rev: number; ok: () => void }>();
 	#watch: Promise<void>;
 	#modelChars!: Set<string>; #modelNames!: Set<string>; #protoIcons!: Map<string, string>;
+	readonly #chat: Chat | null;
 
 	private readonly space: SpaceLike;
 	private readonly w: WorldDef;
@@ -140,8 +144,8 @@ export class Gateway {
 	private readonly build: string | null;
 
 	/** `space`: the world's one space, or its region spaces (each followed; a character's intents and session go to the
-	 *  region it stands in). */
-	constructor(space: SpaceLike | RegionSpaces, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null) {
+	 *  region it stands in). `chatSpace`: where the chat between players keeps its entries (the accounts space). */
+	constructor(space: SpaceLike | RegionSpaces, w: WorldDef, onActivity: (accountId: string) => void = () => {}, build: string | null = null, chatSpace: SpaceLike | null = null) {
 		this.#regions = space instanceof RegionSpaces ? space : RegionSpaces.single(w, space);
 		this.space = this.#regions.homeSpace; this.w = w; this.onActivity = onActivity; this.build = build;
 		this.#modelChars = new Set(w.npcs.filter((n) => n.model).map((n) => `npc-${n.npcId}`));
@@ -153,6 +157,25 @@ export class Gateway {
 		// a regular reminder, so a browser that was hidden or lost frames shows the same hour again
 		this.#clockTimer = setInterval(() => this.#broadcastTime(), 30_000);
 		this.#clockTimer.unref?.();
+		this.#chat = chatSpace ? new Chat(chatSpace, {
+			person: (name) => {
+				const n = name.toLowerCase();
+				const c = [...this.#chars.values()].find((x) => x.name.toLowerCase() === n);
+				return !c ? null : c.charId.startsWith("npc-") ? "npc" : { accountId: c.accountId, name: c.name, guest: c.guest };
+			},
+			nameOf: (accountId) => [...this.#chars.values()].find((x) => x.accountId === accountId)?.name ?? "",
+			send: (accountId, f) => { for (const c of this.#clients) if (c.me.accountId === accountId) c.ws.send(f); },
+			online: (accountId) => [...this.#clients].some((c) => c.me.accountId === accountId),
+		}) : null;
+	}
+
+	/** Chat messages players reported, newest first (for the admins; empty without chat). */
+	async chatReports() { return this.#chat ? await this.#chat.reports() : []; }
+
+	/** The player of a page as chat knows them: the name of their character now (a registration renames a guest's). */
+	#chatUser(c: Client): ChatUser {
+		const ch = this.#chars.get(c.me.charId);
+		return { accountId: c.me.accountId, name: ch?.name ?? c.me.name, guest: c.me.guest };
 	}
 
 	/** A browser of `me` plays now. */
@@ -194,6 +217,7 @@ export class Gateway {
 		// as it is now (the player's own session, a registration that just renamed its character)
 		await Promise.all(this.#regions.entries().map(async ([region, s]) => this.#reach(region, (await s.readPage({ type: "-" })).rev))).catch(() => {});
 		this.#hello(c);
+		await this.#chat?.attach(this.#chatUser(c), (f) => c.ws.send(f)).catch((e) => console.error("[chat] attach:", (e as Error).message));
 	}
 
 	/** The region a character stands in; on a ferry it is in none for a moment, and the one it lands in is waited for. */
@@ -234,6 +258,7 @@ export class Gateway {
 		if (this.#clockTimer) clearInterval(this.#clockTimer);
 		if (this.#atlasDue) clearTimeout(this.#atlasDue);
 		for (const c of [...this.#clients]) c.ws.close();
+		await this.#chat?.close();
 		await this.#watch.catch(() => {});
 	}
 
@@ -250,6 +275,18 @@ export class Gateway {
 			this.onActivity(c.me.accountId);
 			return;
 		}
+		// the end-to-end encrypted chat's frames (server/chat.ts), counted like typed commands
+		if (f && isChatFrame(f) && this.#chat) {
+			if (!spend(c.limits.cmds, await setting(this.space, "cmd.burst"), 1000 / Math.max(1, await setting(this.space, "cmd.perSec")))) {
+				c.ws.send({ t: "msg", m: { kind: "error", text: "Zu viele Nachrichten auf einmal; einen Moment bitte.", from: "", at: Date.now() } } satisfies ServerFrame);
+				return;
+			}
+			const frame = f;
+			c.chain = c.chain.then(() => this.#chat!.frame(this.#chatUser(c), frame, (x) => c.ws.send(x)));
+			await c.chain;
+			this.onActivity(c.me.accountId);
+			return;
+		}
 		if (f?.t !== "cmd" || typeof f.line !== "string") return;
 		const line = f.line.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, MAX_LINE);
 		if (!line) return;
@@ -257,6 +294,13 @@ export class Gateway {
 		const cmdBurst = await setting(this.space, "cmd.burst"), cmdRefillMs = 1000 / Math.max(1, await setting(this.space, "cmd.perSec"));
 		if (!(/^step\s/.test(line) ? spend(c.limits.steps, STEP_BURST, STEP_REFILL_MS) : spend(c.limits.cmds, cmdBurst, cmdRefillMs))) {
 			if (Date.now() - c.warned > 2_000) { c.warned = Date.now(); c.ws.send({ t: "msg", m: { kind: "error", text: "Zu viele Befehle auf einmal; einen Moment bitte.", from: "", at: Date.now() } } satisfies ServerFrame); }
+			return;
+		}
+		// chat between players never reaches the world (server/chat.ts): no world worker, no translation, no NPC reads it
+		if (this.#chat && isChatLine(line)) {
+			c.chain = c.chain.then(async () => { await this.#chat!.handle(this.#chatUser(c), line, (f) => c.ws.send(f)); });
+			await c.chain;
+			this.onActivity(c.me.accountId);
 			return;
 		}
 		c.chain = c.chain.then(() => this.#intent(c, line));

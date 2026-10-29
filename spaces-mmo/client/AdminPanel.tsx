@@ -18,6 +18,24 @@ async function call(body?: unknown): Promise<State> {
 	return d as State;
 }
 
+type Report = { reportId: string; byName: string; fromName: string; text: string; at: number };
+
+/** Chat messages players reported (server/chat.ts), newest first; admins see no other talk. */
+function Reports() {
+	const [reports, setReports] = useState<Report[] | null>(null);
+	useEffect(() => { void fetch("/api/admin/reports").then((r) => r.json()).then((d) => setReports((d as { reports?: Report[] }).reports ?? []), () => setReports([])); }, []);
+	return (
+		<>
+			<h3>Gemeldete Nachrichten</h3>
+			{!reports ? <p className="muted">Lädt …</p> : !reports.length ? <p className="muted">Keine Meldungen.</p> : (
+				<ul className="admin-reports">
+					{reports.map((r) => <li key={r.reportId}><span className="muted">{new Date(r.at).toLocaleString()} · {r.byName} meldet {r.fromName}:</span> {r.text}</li>)}
+				</ul>
+			)}
+		</>
+	);
+}
+
 /** A provider's box: checked when all its models are allowed, indeterminate when some are. */
 function GroupBox({ all, some, onChange, label }: { all: boolean; some: boolean; onChange: (on: boolean) => void; label: string }) {
 	const ref = useRef<HTMLInputElement>(null);
@@ -126,6 +144,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
 				<button className="primary" disabled={busy || !changed.length} onClick={() => void run({ values: Object.fromEntries(changed.map((f) => [f.key, Number(draft[f.key])])) })}>Grenzen speichern{changed.length ? ` (${changed.length})` : ""}</button>
 			</div>
 			{msg && <p className="muted admin-msg" role="status">{msg}</p>}
+			<Reports />
 		</div>
 	);
 }
