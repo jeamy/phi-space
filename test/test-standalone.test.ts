@@ -33,10 +33,15 @@ function run(args: string[]): Promise<{ code: number | null; out: string; err: s
 	});
 }
 
-/** The standalone service under the hook; resolves with its address once it serves. */
+/** Another implementation of the service (docs/rust-portierung.md, R0/R3): PHI_SPACES_SERVER_CMD is its command line (split
+ *  at whitespace), started with the same --store and --listen and expected to print the same ready line. */
+const SERVER_CMD = process.env.PHI_SPACES_SERVER_CMD?.trim() ? process.env.PHI_SPACES_SERVER_CMD.trim().split(/\s+/) : null;
+
+/** The standalone service under the hook (or SERVER_CMD); resolves with its address once it serves. */
 function server(store: string, listen: string): Promise<{ proc: ChildProcess; address: string }> {
 	return new Promise((resolve, reject) => {
-		const proc = spawn(process.execPath, [...NODE, "src/standalone.ts", "--store", store, "--listen", listen], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+		const args = ["--store", store, "--listen", listen];
+		const proc = SERVER_CMD ? spawn(SERVER_CMD[0]!, [...SERVER_CMD.slice(1), ...args], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] }) : spawn(process.execPath, [...NODE, "src/standalone.ts", ...args], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
 		children.add(proc);
 		let out = "";
 		proc.stdout!.on("data", (d: Buffer) => { out += d; const m = /\[phi-spaces\] ready on (\S+)/.exec(out); if (m) resolve({ proc, address: m[1]! }); });

@@ -1,0 +1,424 @@
+{
+	"about": "generations: nonce + '.' + hex HMAC-SHA256(signingKey as UTF-8 text, canonicalJson({nonce, ...rec})) (src/claims.ts); proofs: signature over 'phi-spaces/auth/v1\\n' + canonicalJson(challenge) (src/auth.ts); grants: over 'phi-spaces/grant/v1\\n' + canonicalJson(grant) (src/grants.ts); Ed25519 public keys raw 32 bytes, P-256 SPKI DER, signatures DER, all base64. Ed25519 signatures are deterministic, P-256 ones are not: check them by verifying",
+	"generations": [
+		{
+			"signingKey": "1111111111111111111111111111111111111111111111111111111111111111",
+			"nonce": "gabababababababababababababababab",
+			"rec": {
+				"primaryEpoch": 1,
+				"principal": {
+					"peerId": "local"
+				},
+				"incarnation": "0a1b2c3d",
+				"issuedAt": 1700000000000,
+				"admitUntil": 1700003600000,
+				"spaceId": "sp-00000000-0000-4000-8000-000000000001",
+				"authorityId": "local"
+			},
+			"generation": "gabababababababababababababababab.4033e93299ae6824742f4fe9f92872aff028e69f73f2dc6566820dd6eecb14f9"
+		},
+		{
+			"signingKey": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			"nonce": "g01010101010101010101010101010101",
+			"rec": {
+				"primaryEpoch": 7,
+				"principal": {
+					"peerId": "peer-ä",
+					"agentId": "agent/1"
+				},
+				"incarnation": null,
+				"issuedAt": 0,
+				"admitUntil": 9007199254740991,
+				"spaceId": null,
+				"authorityId": "auth-1"
+			},
+			"generation": "g01010101010101010101010101010101.3a1c89d80a8f6d54bb385126460d0e1336020bcf65209af6720313a592163423"
+		}
+	],
+	"keys": {
+		"ed25519": {
+			"seedHex": "0707070707070707070707070707070707070707070707070707070707070707",
+			"publicKey": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw="
+		},
+		"p256": {
+			"dHex": "0909090909090909090909090909090909090909090909090909090909090909",
+			"publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcTX6T9k6Cdzpi79oG0v89Q58DWNU5ir7C/8qNClheGXtTB8C3bkCPuVqVX5RXWqdxmwR8iCWDeWUM031iHdnJA=="
+		}
+	},
+	"proof": {
+		"challenge": {
+			"gateHostId": "host-vector",
+			"observedPeerId": "peer-vector",
+			"connNonce": "0101010101010101010101010101010101010101010101010101010101010101",
+			"protocol": 1,
+			"issuedAt": 1700000000000
+		},
+		"signedText": "phi-spaces/auth/v1\n{\"connNonce\":\"0101010101010101010101010101010101010101010101010101010101010101\",\"gateHostId\":\"host-vector\",\"issuedAt\":1700000000000,\"observedPeerId\":\"peer-vector\",\"protocol\":1}",
+		"ed25519": "0hY1F5KdOKCIuYSJViLRZ3TSTcwbsUAyNto6I8XY5OkcpQyi5OtZkvevBy3WvrPqVWgb/SahPiAZEzE3opx4DQ==",
+		"p256": "MEUCICss3nbuyvlai0Ig42BLU1qDEUNIyg4pD083EHz/NB4KAiEAppWwSigplXNz7/fLINy6i3466+/CgkFlfZkEEgS+y5E="
+	},
+	"grant": {
+		"grant": {
+			"id": "grant-1",
+			"authorityId": "auth-1",
+			"issuerHostId": "host-vector",
+			"principal": {
+				"peerId": "peer-vector"
+			},
+			"keyId": "key-1",
+			"scope": [
+				"default"
+			],
+			"roles": [
+				"member"
+			],
+			"issuedAt": 1700000000000,
+			"expiresAt": 1700000030000,
+			"purpose": "effect"
+		},
+		"signedText": "phi-spaces/grant/v1\n{\"authorityId\":\"auth-1\",\"expiresAt\":1700000030000,\"id\":\"grant-1\",\"issuedAt\":1700000000000,\"issuerHostId\":\"host-vector\",\"keyId\":\"key-1\",\"principal\":{\"peerId\":\"peer-vector\"},\"purpose\":\"effect\",\"roles\":[\"member\"],\"scope\":[\"default\"]}",
+		"ed25519": "JB+ydzi3X4uYDuASzJOaIaqf4gE90Fl/5EfHTGJI2xnz1WMxGRBVCkuiTbIJXxm8W9Em/wtz2XnCIy9P5VFPAg==",
+		"p256": "MEYCIQCchP7twTnyJIK97yY/2SqoUtmMEif0DRVTqr8TGEXuggIhAO5uQV9KAzJ74q6nBIsYQEBMkyg9aJxP8xO5CTmzen+k"
+	},
+	"derived": {
+		"principalId": [
+			{
+				"principal": {
+					"peerId": "local"
+				},
+				"id": "[\"local\",null]"
+			},
+			{
+				"principal": {
+					"peerId": "p",
+					"agentId": "a"
+				},
+				"id": "[\"p\",\"a\"]"
+			}
+		],
+		"keyFingerprint": [
+			{
+				"publicKey": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=",
+				"fingerprint": "fe812c12f3ab4ce6ac5db69ac352f906"
+			},
+			{
+				"publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEcTX6T9k6Cdzpi79oG0v89Q58DWNU5ir7C/8qNClheGXtTB8C3bkCPuVqVX5RXWqdxmwR8iCWDeWUM031iHdnJA==",
+				"fingerprint": "0ca9bbe6c59d6a770f864ca136e378b3"
+			}
+		],
+		"hashToken": [
+			{
+				"token": "pair-token",
+				"sha256": "1dfb75850495108fbd36ae13e6df8f83a680c99b8e713f518bebec3798560a66"
+			},
+			{
+				"token": "ä€",
+				"sha256": "2fb8a79d88df89f8370b312db3ff68fd6aa857549cc41a685b4022e99e5fc5a2"
+			}
+		],
+		"argumentHash": [
+			{
+				"call": {
+					"method": "write",
+					"args": {
+						"entry": {
+							"type": "Task",
+							"fields": {
+								"n": 1
+							}
+						}
+					}
+				},
+				"domain": {
+					"method": "write",
+					"args": {
+						"entry": {
+							"type": "Task",
+							"fields": {
+								"n": 1
+							}
+						},
+						"txn": null,
+						"lease": -1
+					}
+				},
+				"argumentHash": "c410138b8218eec24e0658b5fdf40318bc7324440c5243b92786b27deb27f4c4"
+			},
+			{
+				"call": {
+					"method": "write",
+					"args": {
+						"entry": {
+							"type": "Task",
+							"fields": {
+								"n": 1
+							}
+						},
+						"leaseMs": "forever",
+						"txn": "t1",
+						"unique": [
+							"n"
+						]
+					}
+				},
+				"domain": {
+					"method": "write",
+					"args": {
+						"entry": {
+							"type": "Task",
+							"fields": {
+								"n": 1
+							}
+						},
+						"txn": "t1",
+						"lease": 9007199254740991,
+						"unique": [
+							"n"
+						]
+					}
+				},
+				"argumentHash": "90759b00fdd8c5098cec3e7f653f846be55788de6d142c86f9f4c76a289cde17"
+			},
+			{
+				"call": {
+					"method": "take",
+					"args": {
+						"template": {
+							"type": "Task"
+						},
+						"timeoutMs": 1000,
+						"ifExists": true
+					}
+				},
+				"domain": {
+					"method": "takeIfExists",
+					"args": {
+						"tmpl": {
+							"type": "Task"
+						},
+						"timeout": 1000,
+						"deadline": null,
+						"txn": null
+					}
+				},
+				"argumentHash": "00ffdd07e2fcae7ab3004d500b2bb42cea79c22ce0b90d5cee3f8c83f7e9375a"
+			},
+			{
+				"call": {
+					"method": "read",
+					"args": {
+						"template": null,
+						"timeoutMs": null,
+						"deadline": 5
+					}
+				},
+				"domain": {
+					"method": "read",
+					"args": {
+						"tmpl": null,
+						"timeout": -1,
+						"deadline": 5,
+						"txn": null
+					}
+				},
+				"argumentHash": "54f22080ef230f24c9ae81ece5eded91898a82c863a16ec86e095b9b6aa17426"
+			},
+			{
+				"call": {
+					"method": "txn",
+					"args": {
+						"action": "begin",
+						"leaseMs": 10000
+					}
+				},
+				"domain": {
+					"method": "txn.begin",
+					"args": {
+						"lease": 10000
+					}
+				},
+				"argumentHash": "47b40d614309a4384745f349f3ca28b9338bcfd8876d345e355c22d0451f49a6"
+			},
+			{
+				"call": {
+					"method": "txn",
+					"args": {
+						"action": "commit",
+						"id": "t1"
+					}
+				},
+				"domain": {
+					"method": "txn.commit",
+					"args": {
+						"txn": "t1"
+					}
+				},
+				"argumentHash": "cfbac1d3e1bd14d2476a7d859c5ed6cd9db73f3e2268c13900183c940b6817c2"
+			},
+			{
+				"call": {
+					"method": "lease",
+					"args": {
+						"action": "renew",
+						"id": "e1",
+						"ms": 1
+					}
+				},
+				"domain": {
+					"method": "lease.renew",
+					"args": {
+						"leaseId": "e1",
+						"ms": 1
+					}
+				},
+				"argumentHash": "58f9eb956643dea25229e576e61a52e4ace379a50381bb6479a0fc85b8fbb238"
+			},
+			{
+				"call": {
+					"method": "lease",
+					"args": {
+						"action": "cancel",
+						"id": "e1"
+					}
+				},
+				"domain": {
+					"method": "lease.cancel",
+					"args": {
+						"leaseId": "e1"
+					}
+				},
+				"argumentHash": "65e386b45248c80a68d29081ed30567c416aabc79407ed7d3d67d7b7c67cacf2"
+			},
+			{
+				"call": {
+					"method": "cancelOperation",
+					"args": {
+						"targetRequest": {
+							"generation": "g",
+							"requestId": "r1"
+						}
+					}
+				},
+				"domain": {
+					"method": "cancelOperation",
+					"args": {
+						"target": {
+							"generation": "g",
+							"requestId": "r1",
+							"principal": {
+								"peerId": "local"
+							}
+						}
+					}
+				},
+				"argumentHash": "34251db7db5ebfe5b99fc8f7fb94bc37e74844861de913d189cb6ca290f36cfe"
+			},
+			{
+				"call": {
+					"method": "notify",
+					"args": {
+						"template": {
+							"type": "Evt"
+						},
+						"leaseMs": 60000,
+						"handback": {
+							"a": 1
+						}
+					}
+				},
+				"domain": {
+					"method": "notify",
+					"args": {
+						"tmpl": {
+							"type": "Evt"
+						},
+						"txn": null,
+						"lease": 60000,
+						"handback": {
+							"a": 1
+						},
+						"target": "[\"local\",null]"
+					}
+				},
+				"argumentHash": "096b43e1ff9ecedf702efb642f4b522edc671d522067444f447a9cc985feb2fe"
+			},
+			{
+				"call": {
+					"method": "wait",
+					"args": {
+						"template": {
+							"type": "Evt"
+						},
+						"timeoutMs": 100,
+						"take": false
+					}
+				},
+				"domain": {
+					"method": "wait",
+					"args": {
+						"template": {
+							"type": "Evt"
+						},
+						"take": false,
+						"target": "[\"local\",null]",
+						"timeout": 100,
+						"txnLeaseMs": -1,
+						"handback": null
+					}
+				},
+				"argumentHash": "329b2aa0a4b3fde2d4090aa0e634c964ca27a37750042abf6bf3e66ac75c6335"
+			},
+			{
+				"call": {
+					"method": "ack",
+					"args": {
+						"mailboxEpoch": "mb1",
+						"upTo": 3
+					}
+				},
+				"domain": {
+					"method": "ack",
+					"args": {
+						"mailboxEpoch": "mb1",
+						"upTo": 3,
+						"principal": {
+							"peerId": "local"
+						}
+					}
+				},
+				"argumentHash": "959952cebdec8807f1e61a6453fc6ce4549153c009b251cf5430bf430efec17c"
+			},
+			{
+				"call": {
+					"method": "batch",
+					"args": {
+						"ops": [
+							{
+								"op": "begin"
+							}
+						]
+					}
+				},
+				"domain": {
+					"method": "batch",
+					"args": {
+						"ops": [
+							{
+								"op": "begin"
+							}
+						]
+					}
+				},
+				"argumentHash": "b30eed1b60d4bda76d0facc6c8a3a053f218e52689a9935a2c505293b54d5675"
+			}
+		],
+		"changeRequestHash": {
+			"principal": {
+				"peerId": "local"
+			},
+			"generation": "gabababababababababababababababab.x",
+			"requestId": "r1",
+			"sha256": "2dd9313b19ff6d7210a54d9370256887780c4845cc5d77dbda891923df024fc0"
+		}
+	}
+}

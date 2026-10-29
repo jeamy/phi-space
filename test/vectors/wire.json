@@ -1,0 +1,1557 @@
+{
+	"about": "a session against SpaceService.handleText (src/service.ts): peer 'local' with role member, clock fixed at T0 and moved by the script, no background service; random values as <kindN> by first appearance (test/vectors/build.ts normalize)",
+	"t0": 1700000000000,
+	"steps": [
+		{
+			"call": {
+				"method": "hello",
+				"args": {
+					"protocol": 1
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"protocol": 1,
+					"hostId": "<host1>",
+					"spaceId": "<space1>",
+					"alias": "default",
+					"incarnation": "<incarnation1>",
+					"streamId": "<space1>:<incarnation1>",
+					"rev": 1,
+					"authorityId": "local",
+					"primaryEpoch": 0,
+					"role": "single",
+					"principal": "local",
+					"roles": [
+						"member"
+					],
+					"features": [
+						"hello",
+						"generation",
+						"write",
+						"read",
+						"take",
+						"pollOperation",
+						"resolveOperation",
+						"cancelOperation",
+						"readAll",
+						"count",
+						"stats",
+						"spaces",
+						"txn",
+						"lease",
+						"changes",
+						"wait",
+						"notify",
+						"events",
+						"ack",
+						"batch",
+						"write.unique",
+						"write.transient",
+						"read.chain",
+						"read.locked"
+					],
+					"limits": {
+						"maxFrameBytes": 262144,
+						"maxCommitBytes": 196608,
+						"maxEventBytes": 163840,
+						"maxEntryBytes": 65536,
+						"maxPollMs": 25000,
+						"maxPendingPerPrincipal": 32,
+						"maxPendingPerPeer": 128
+					},
+					"capabilities": {
+						"snapshotPagination": true,
+						"mailboxes": true,
+						"completionProfiles": true,
+						"transactions": true,
+						"blockingTake": true,
+						"mode": "single"
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "generation",
+				"args": {}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"generation": "<generation1>",
+					"admitUntil": 1700003600000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"fields": {
+							"n": 1,
+							"name": "a",
+							"tags": [
+								"x",
+								"y"
+							]
+						}
+					},
+					"leaseMs": 60000
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r1"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-1",
+					"expires": 1700000060000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"types": [
+							"Job"
+						],
+						"fields": {
+							"n": 2,
+							"nested": {
+								"z": 1,
+								"a": [
+									1.5,
+									null,
+									true
+								]
+							}
+						}
+					},
+					"leaseMs": "forever"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r2"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-2",
+					"expires": 9007199254740991
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"types": [
+							"Job"
+						],
+						"fields": {
+							"n": 2,
+							"nested": {
+								"z": 1,
+								"a": [
+									1.5,
+									null,
+									true
+								]
+							}
+						}
+					},
+					"leaseMs": "forever"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r2"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-2",
+					"expires": 9007199254740991
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"fields": {
+							"n": 3
+						}
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r1"
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "RequestConflict",
+					"message": "request r1 was used for different arguments"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "count",
+				"args": {
+					"template": {
+						"type": "Task"
+					}
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"value": 2,
+					"rev": 4,
+					"streamId": "<space1>:<incarnation1>"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "count",
+				"args": {
+					"template": {
+						"type": "Job"
+					}
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"value": 1,
+					"rev": 4,
+					"streamId": "<space1>:<incarnation1>"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "read",
+				"args": {
+					"template": {
+						"type": "Task",
+						"fields": {
+							"n": 2
+						}
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r3"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"entry": {
+						"id": "e<incarnation1>-2",
+						"gid": "<space1>/e<incarnation1>-2",
+						"type": "Task",
+						"types": [
+							"Task",
+							"Job"
+						],
+						"fields": {
+							"n": 2,
+							"nested": {
+								"z": 1,
+								"a": [
+									1.5,
+									null,
+									true
+								]
+							}
+						},
+						"owner": "[\"local\",null]"
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "readAll",
+				"args": {
+					"template": {
+						"type": "Task"
+					}
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"items": [
+						{
+							"id": "e<incarnation1>-1",
+							"gid": "<space1>/e<incarnation1>-1",
+							"type": "Task",
+							"types": [
+								"Task"
+							],
+							"fields": {
+								"n": 1,
+								"name": "a",
+								"tags": [
+									"x",
+									"y"
+								]
+							},
+							"owner": "[\"local\",null]"
+						},
+						{
+							"id": "e<incarnation1>-2",
+							"gid": "<space1>/e<incarnation1>-2",
+							"type": "Task",
+							"types": [
+								"Task",
+								"Job"
+							],
+							"fields": {
+								"n": 2,
+								"nested": {
+									"z": 1,
+									"a": [
+										1.5,
+										null,
+										true
+									]
+								}
+							},
+							"owner": "[\"local\",null]"
+						}
+					],
+					"next": null,
+					"streamId": "<space1>:<incarnation1>",
+					"rev": 5
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "take",
+				"args": {
+					"template": {
+						"type": "Task",
+						"fields": {
+							"n": 1
+						}
+					},
+					"timeoutMs": 0
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r4"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"entry": {
+						"id": "e<incarnation1>-1",
+						"gid": "<space1>/e<incarnation1>-1",
+						"type": "Task",
+						"types": [
+							"Task"
+						],
+						"fields": {
+							"n": 1,
+							"name": "a",
+							"tags": [
+								"x",
+								"y"
+							]
+						},
+						"owner": "[\"local\",null]"
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "take",
+				"args": {
+					"template": {
+						"type": "Task",
+						"fields": {
+							"n": 9
+						}
+					},
+					"timeoutMs": 0
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r5"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"entry": null
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "txn",
+				"args": {
+					"action": "begin",
+					"leaseMs": 10000
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r6"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "t<incarnation1>-3",
+					"expires": 1700000010000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"fields": {
+							"n": 4
+						}
+					},
+					"txn": "t<incarnation1>-3"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r7"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-4",
+					"expires": 1700003600000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "count",
+				"args": {
+					"template": {
+						"type": "Task"
+					}
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"value": 1,
+					"rev": 9,
+					"streamId": "<space1>:<incarnation1>"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "count",
+				"args": {
+					"template": {
+						"type": "Task"
+					},
+					"txn": "t<incarnation1>-3"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"value": 2,
+					"rev": 9,
+					"streamId": "<space1>:<incarnation1>"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "txn",
+				"args": {
+					"action": "commit",
+					"id": "t<incarnation1>-3"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r8"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "committed"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "txn",
+				"args": {
+					"action": "status",
+					"id": "t<incarnation1>-3"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "inactive"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "lease",
+				"args": {
+					"action": "renew",
+					"id": "e<incarnation1>-2",
+					"ms": 30000
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r9"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"expires": 1700000031000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "lease",
+				"args": {
+					"action": "cancel",
+					"id": "e<incarnation1>-1"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r10"
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "TransactionError",
+					"message": "e<incarnation1>-1"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "lease",
+				"args": {
+					"action": "cancel",
+					"id": "e<incarnation1>-4"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r11"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "cancelled"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "notify",
+				"args": {
+					"template": {
+						"type": "Evt"
+					},
+					"leaseMs": 60000,
+					"handback": {
+						"tag": "h"
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r12"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"eventId": "n<incarnation1>-5",
+					"lease": {
+						"id": "n<incarnation1>-5",
+						"expires": 1700000061000
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Evt",
+						"fields": {
+							"k": 1
+						}
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r13"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-6",
+					"expires": 1700003601000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "events",
+				"args": {
+					"waitMs": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"mailboxEpoch": "<mailbox1>",
+					"events": [
+						{
+							"seq": 1,
+							"at": 1700000001000,
+							"event": {
+								"kind": "entry",
+								"eventId": "n<incarnation1>-5",
+								"seq": 1,
+								"handback": {
+									"tag": "h"
+								},
+								"target": "[\"local\",null]",
+								"entry": {
+									"id": "e<incarnation1>-6",
+									"gid": "<space1>/e<incarnation1>-6",
+									"type": "Evt",
+									"types": [
+										"Evt"
+									],
+									"fields": {
+										"k": 1
+									},
+									"owner": "[\"local\",null]"
+								}
+							}
+						}
+					],
+					"next": 1,
+					"more": false
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "ack",
+				"args": {
+					"mailboxEpoch": "<mailbox1>",
+					"upTo": 1
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r14"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"mailboxEpoch": "<mailbox1>",
+					"acked": 1
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "events",
+				"args": {
+					"waitMs": 0,
+					"after": 1
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"mailboxEpoch": "<mailbox1>",
+					"events": [],
+					"next": 1,
+					"more": false
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "lease",
+				"args": {
+					"action": "cancel",
+					"id": "n<incarnation1>-5"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r15"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "cancelled"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "batch",
+				"args": {
+					"ops": [
+						{
+							"op": "write",
+							"entry": {
+								"type": "Task",
+								"fields": {
+									"n": 5
+								}
+							}
+						},
+						{
+							"op": "take",
+							"template": {
+								"type": "Task",
+								"fields": {
+									"n": 5
+								}
+							}
+						},
+						{
+							"op": "read",
+							"template": {
+								"type": "Task",
+								"fields": {
+									"n": 2
+								}
+							}
+						}
+					]
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r16"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": [
+					{
+						"id": "e<incarnation1>-8",
+						"expires": 1700003601000
+					},
+					{
+						"entry": {
+							"id": "e<incarnation1>-8",
+							"gid": "<space1>/e<incarnation1>-8",
+							"type": "Task",
+							"types": [
+								"Task"
+							],
+							"fields": {
+								"n": 5
+							},
+							"owner": "[\"local\",null]"
+						}
+					},
+					{
+						"entry": {
+							"id": "e<incarnation1>-2",
+							"gid": "<space1>/e<incarnation1>-2",
+							"type": "Task",
+							"types": [
+								"Task",
+								"Job"
+							],
+							"fields": {
+								"n": 2,
+								"nested": {
+									"z": 1,
+									"a": [
+										1.5,
+										null,
+										true
+									]
+								}
+							},
+							"owner": "[\"local\",null]"
+						}
+					}
+				]
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Key",
+						"fields": {
+							"key": "k1",
+							"v": 1
+						}
+					},
+					"unique": [
+						"key"
+					]
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r17"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-9",
+					"expires": 1700003601000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Key",
+						"fields": {
+							"key": "k1",
+							"v": 2
+						}
+					},
+					"unique": [
+						"key"
+					]
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r18"
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "UniqueConflict",
+					"message": "unique entry already exists"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "take",
+				"args": {
+					"template": {
+						"type": "Task",
+						"fields": {
+							"n": 7
+						}
+					},
+					"timeoutMs": 10000,
+					"waitMs": 0
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r19"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "pending",
+					"deadline": 1700000011000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "pollOperation",
+				"args": {
+					"targetRequest": {
+						"generation": "<generation1>",
+						"requestId": "r19"
+					},
+					"waitMs": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "pending",
+					"deadline": 1700000011000,
+					"method": "take"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"fields": {
+							"n": 7
+						}
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r20"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"id": "e<incarnation1>-11",
+					"expires": 1700003602000
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "pollOperation",
+				"args": {
+					"targetRequest": {
+						"generation": "<generation1>",
+						"requestId": "r19"
+					},
+					"waitMs": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"deadline": 1700000011000,
+					"method": "take",
+					"result": {
+						"id": "e<incarnation1>-11",
+						"gid": "<space1>/e<incarnation1>-11",
+						"type": "Task",
+						"types": [
+							"Task"
+						],
+						"fields": {
+							"n": 7
+						},
+						"owner": "[\"local\",null]"
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "take",
+				"args": {
+					"template": {
+						"type": "Task",
+						"fields": {
+							"n": 8
+						}
+					},
+					"timeoutMs": 500,
+					"waitMs": 0
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r21"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "pending",
+					"deadline": 1700000002500
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "pollOperation",
+				"args": {
+					"targetRequest": {
+						"generation": "<generation1>",
+						"requestId": "r21"
+					},
+					"waitMs": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"deadline": 1700000002500,
+					"method": "take",
+					"result": null
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "resolveOperation",
+				"args": {
+					"targetRequest": {
+						"generation": "<generation1>",
+						"requestId": "r19"
+					},
+					"method": "take",
+					"argumentHash": "0000000000000000000000000000000000000000000000000000000000000000",
+					"primaryEpoch": 0
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "RequestConflict",
+					"message": "resolution changed original method/arguments"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "resolveOperation",
+				"args": {
+					"targetRequest": {
+						"generation": "<generation1>",
+						"requestId": "r19"
+					},
+					"method": "take",
+					"argumentHash": "9d8a348aa78466e245bceff3e26a9b9fd5a1d164f65e3823e49f369eb2fcbad3",
+					"primaryEpoch": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"deadline": 1700000011000,
+					"method": "take",
+					"result": {
+						"id": "e<incarnation1>-11",
+						"gid": "<space1>/e<incarnation1>-11",
+						"type": "Task",
+						"types": [
+							"Task"
+						],
+						"fields": {
+							"n": 7
+						},
+						"owner": "[\"local\",null]"
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "changes",
+				"args": {
+					"afterRev": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"streamId": "<space1>:<incarnation1>",
+					"batches": [
+						{
+							"rev": 1,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 2,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 3,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "e<incarnation1>-1",
+									"type": "Task",
+									"types": [
+										"Task"
+									],
+									"fields": {
+										"n": 1,
+										"name": "a",
+										"tags": [
+											"x",
+											"y"
+										]
+									},
+									"expires": 1700000060000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 4,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "e<incarnation1>-2",
+									"type": "Task",
+									"types": [
+										"Task",
+										"Job"
+									],
+									"fields": {
+										"n": 2,
+										"nested": {
+											"z": 1,
+											"a": [
+												1.5,
+												null,
+												true
+											]
+										}
+									},
+									"expires": 9007199254740991,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 5,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 6,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "e<incarnation1>-1"
+								}
+							]
+						},
+						{
+							"rev": 7,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 8,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 9,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 10,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "e<incarnation1>-4",
+									"type": "Task",
+									"types": [
+										"Task"
+									],
+									"fields": {
+										"n": 4
+									},
+									"expires": 1700003600000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 11,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "e<incarnation1>-2",
+									"type": "Task",
+									"types": [
+										"Task",
+										"Job"
+									],
+									"fields": {
+										"n": 2,
+										"nested": {
+											"z": 1,
+											"a": [
+												1.5,
+												null,
+												true
+											]
+										}
+									},
+									"expires": 1700000031000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 12,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "e<incarnation1>-4"
+								}
+							]
+						},
+						{
+							"rev": 13,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 14,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "e<incarnation1>-6",
+									"type": "Evt",
+									"types": [
+										"Evt"
+									],
+									"fields": {
+										"k": 1
+									},
+									"expires": 1700003601000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 15,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 16,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 17,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 18,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 19,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 20,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "e<incarnation1>-8"
+								}
+							]
+						},
+						{
+							"rev": 21,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "e<incarnation1>-9",
+									"type": "Key",
+									"types": [
+										"Key"
+									],
+									"fields": {
+										"key": "k1",
+										"v": 1
+									},
+									"expires": 1700003601000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 22,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 23,
+							"at": 1700000002000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "e<incarnation1>-11"
+								}
+							]
+						},
+						{
+							"rev": 24,
+							"at": 1700000002000,
+							"ops": []
+						},
+						{
+							"rev": 25,
+							"at": 1700000003000,
+							"ops": []
+						}
+					],
+					"next": 25,
+					"rev": 25,
+					"more": false
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "changes",
+				"args": {
+					"afterRev": 0,
+					"maxBytes": 300
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"streamId": "<space1>:<incarnation1>",
+					"batches": [
+						{
+							"rev": 1,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 2,
+							"at": 1700000000000,
+							"ops": []
+						}
+					],
+					"next": 2,
+					"rev": 25,
+					"more": true
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "spaces",
+				"args": {}
+			},
+			"reply": {
+				"ok": true,
+				"result": [
+					{
+						"spaceId": "<space1>",
+						"alias": "default",
+						"createdAt": 1700000000000
+					}
+				]
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r22"
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "BadRequest",
+					"message": "entry is required"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "write",
+				"args": {
+					"entry": {
+						"type": "Task",
+						"fields": {
+							"n": 1
+						}
+					}
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "BadRequest",
+					"message": "write needs a request {generation, requestId}"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "nosuch",
+				"args": {}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "UnsupportedMethod",
+					"message": "unknown method nosuch"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "hello",
+				"args": {
+					"protocol": 2
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "UnsupportedProtocol",
+					"message": "this host speaks protocol 1"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "lease",
+				"args": {
+					"action": "renew",
+					"id": "e-unknown",
+					"ms": 1
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r23"
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "TransactionError",
+					"message": "e-unknown"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "txn",
+				"args": {
+					"action": "commit",
+					"id": "t<incarnation1>-3"
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r24"
+				}
+			},
+			"reply": {
+				"ok": false,
+				"error": {
+					"code": "TransactionError",
+					"message": "transaction t<incarnation1>-3 is not active"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "read",
+				"args": {
+					"template": {
+						"type": "Task"
+					}
+				},
+				"request": {
+					"generation": "<generation1>",
+					"requestId": "r-unknown-generation-is-fine"
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"state": "done",
+					"entry": {
+						"id": "e<incarnation1>-2",
+						"gid": "<space1>/e<incarnation1>-2",
+						"type": "Task",
+						"types": [
+							"Task",
+							"Job"
+						],
+						"fields": {
+							"n": 2,
+							"nested": {
+								"z": 1,
+								"a": [
+									1.5,
+									null,
+									true
+								]
+							}
+						},
+						"owner": "[\"local\",null]"
+					}
+				}
+			}
+		}
+	]
+}

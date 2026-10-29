@@ -1,0 +1,346 @@
+{
+	"about": "canonical JSON (src/canonical.ts): RFC 8785 order by UTF-16 code units, ECMAScript number form, -0 as 0; sha256 is digestJson; jsonBytes the UTF-8 bytes of JSON.stringify (src/json.ts)",
+	"values": [
+		{
+			"input": "null",
+			"canonical": "null",
+			"sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+			"jsonBytes": 4,
+			"jsonText": "null"
+		},
+		{
+			"input": "true",
+			"canonical": "true",
+			"sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+			"jsonBytes": 4,
+			"jsonText": "true"
+		},
+		{
+			"input": "false",
+			"canonical": "false",
+			"sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+			"jsonBytes": 5,
+			"jsonText": "false"
+		},
+		{
+			"input": "0",
+			"canonical": "0",
+			"sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+			"jsonBytes": 1,
+			"jsonText": "0"
+		},
+		{
+			"input": "-0",
+			"canonical": "0",
+			"sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+			"jsonBytes": 1,
+			"jsonText": "0"
+		},
+		{
+			"input": "1",
+			"canonical": "1",
+			"sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+			"jsonBytes": 1,
+			"jsonText": "1"
+		},
+		{
+			"input": "-1",
+			"canonical": "-1",
+			"sha256": "1bad6b8cf97131fceab8543e81f7757195fbb1d36b376ee994ad1cf17699c464",
+			"jsonBytes": 2,
+			"jsonText": "-1"
+		},
+		{
+			"input": "1.5",
+			"canonical": "1.5",
+			"sha256": "9f29a130438b81170b92a42650f9a94291ecad60bd47af2a3886e75f7f728725",
+			"jsonBytes": 3,
+			"jsonText": "1.5"
+		},
+		{
+			"input": "0.1",
+			"canonical": "0.1",
+			"sha256": "14be4b45f18e0d8c67b4f719b5144eee88497e413709d11d85b096d8e2346310",
+			"jsonBytes": 3,
+			"jsonText": "0.1"
+		},
+		{
+			"input": "1e21",
+			"canonical": "1e+21",
+			"sha256": "241c4643fa70b1dcde1205b71be4e3bebb17e9f880c8e1a33d0ead6c27271d3c",
+			"jsonBytes": 5,
+			"jsonText": "1e+21"
+		},
+		{
+			"input": "1e20",
+			"canonical": "100000000000000000000",
+			"sha256": "c344e9487bfbd5c4e03c9fb90d62a5dde5e00b54d55c46e9f4a803aea162b80c",
+			"jsonBytes": 21,
+			"jsonText": "100000000000000000000"
+		},
+		{
+			"input": "123456789012345680000",
+			"canonical": "123456789012345680000",
+			"sha256": "725abf175290195635e55a971cf88e02a46d6d56e964ec2d8bc47614b9559062",
+			"jsonBytes": 21,
+			"jsonText": "123456789012345680000"
+		},
+		{
+			"input": "1e-6",
+			"canonical": "0.000001",
+			"sha256": "159fb29a827ad04b260aa6c8ab6d8637f8f2b38af5c4f3cb49d6a21205e040f8",
+			"jsonBytes": 8,
+			"jsonText": "0.000001"
+		},
+		{
+			"input": "1e-7",
+			"canonical": "1e-7",
+			"sha256": "5b33e02f2c5103a05d32f6ba9cb058294452bfbf393967f68bb30c1bdcbbab22",
+			"jsonBytes": 4,
+			"jsonText": "1e-7"
+		},
+		{
+			"input": "1.5e-7",
+			"canonical": "1.5e-7",
+			"sha256": "bbe54b73760f9025086de0202c3caa81352dc0260869890c9dca3cda39ba767f",
+			"jsonBytes": 6,
+			"jsonText": "1.5e-7"
+		},
+		{
+			"input": "9007199254740991",
+			"canonical": "9007199254740991",
+			"sha256": "f40b423c2dd95ff2b2f027e22208f438cf7242862e5e746860e697308c9add26",
+			"jsonBytes": 16,
+			"jsonText": "9007199254740991"
+		},
+		{
+			"input": "9007199254740993",
+			"canonical": "9007199254740992",
+			"sha256": "c681da39d7273a6a24c15c9cac3a75526ff2ecf8ba4ee60346a0c70c8163bdb2",
+			"jsonBytes": 16,
+			"jsonText": "9007199254740992"
+		},
+		{
+			"input": "-9007199254740991",
+			"canonical": "-9007199254740991",
+			"sha256": "4c933a456bb8f2e9894b2d0b26480439cd72d52fb8a27cbf8fd7f323f22c7815",
+			"jsonBytes": 17,
+			"jsonText": "-9007199254740991"
+		},
+		{
+			"input": "5e-324",
+			"canonical": "5e-324",
+			"sha256": "c46e7ca1be4c8734f373a56530787288fa2058d73d07855e9247e949f811a42a",
+			"jsonBytes": 6,
+			"jsonText": "5e-324"
+		},
+		{
+			"input": "1.7976931348623157e308",
+			"canonical": "1.7976931348623157e+308",
+			"sha256": "c2784e1abd6317452708f3fbf9641c16b959561bc621a1d408c23a20aa2cb585",
+			"jsonBytes": 23,
+			"jsonText": "1.7976931348623157e+308"
+		},
+		{
+			"input": "100",
+			"canonical": "100",
+			"sha256": "ad57366865126e55649ecb23ae1d48887544976efea46a48eb5d85a6eeb4d306",
+			"jsonBytes": 3,
+			"jsonText": "100"
+		},
+		{
+			"input": "1E2",
+			"canonical": "100",
+			"sha256": "ad57366865126e55649ecb23ae1d48887544976efea46a48eb5d85a6eeb4d306",
+			"jsonBytes": 3,
+			"jsonText": "100"
+		},
+		{
+			"input": "0.000001",
+			"canonical": "0.000001",
+			"sha256": "159fb29a827ad04b260aa6c8ab6d8637f8f2b38af5c4f3cb49d6a21205e040f8",
+			"jsonBytes": 8,
+			"jsonText": "0.000001"
+		},
+		{
+			"input": "\"\"",
+			"canonical": "\"\"",
+			"sha256": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+			"jsonBytes": 2,
+			"jsonText": "\"\""
+		},
+		{
+			"input": "\"a\"",
+			"canonical": "\"a\"",
+			"sha256": "ac8d8342bbb2362d13f0a559a3621bb407011368895164b628a54f7fc33fc43c",
+			"jsonBytes": 3,
+			"jsonText": "\"a\""
+		},
+		{
+			"input": "\"\\u0000\\u001f\"",
+			"canonical": "\"\\u0000\\u001f\"",
+			"sha256": "3d27e9c838c2725b91760feaf1456b36aa570a6f3001dae7c8ad772f48429228",
+			"jsonBytes": 14,
+			"jsonText": "\"\\u0000\\u001f\""
+		},
+		{
+			"input": "\"\\\"\\\\/\\b\\f\\n\\r\\t\"",
+			"canonical": "\"\\\"\\\\/\\b\\f\\n\\r\\t\"",
+			"sha256": "11b17be1c38ac0f40c1c36cb58861f9853f04d6702d8edf4c79e6aca6216c346",
+			"jsonBytes": 17,
+			"jsonText": "\"\\\"\\\\/\\b\\f\\n\\r\\t\""
+		},
+		{
+			"input": "\"\\u007f\"",
+			"canonical": "\"\"",
+			"sha256": "6fe76740e12a93d5598fe685cb6ad3d3c94e44609065a56866b69647772026ec",
+			"jsonBytes": 3,
+			"jsonText": "\"\""
+		},
+		{
+			"input": "\"\\u2028\\u2029\"",
+			"canonical": "\"  \"",
+			"sha256": "e3a0e2262ac7790f4df36b522a8fbdd4ee3370d568eb15dc25c5f1775f14ed6c",
+			"jsonBytes": 8,
+			"jsonText": "\"  \""
+		},
+		{
+			"input": "\"é€😀\"",
+			"canonical": "\"é€😀\"",
+			"sha256": "c99965c60975ed0c46a51eed45c4a8100adc6f8cb920916c9c7c18df9ef66274",
+			"jsonBytes": 11,
+			"jsonText": "\"é€😀\""
+		},
+		{
+			"input": "\"\\ud83d\\ude00\"",
+			"canonical": "\"😀\"",
+			"sha256": "7a0c50b92434b015545fe93ab723db2d4b2cdd14a441405624a9ce8be29f1d5a",
+			"jsonBytes": 6,
+			"jsonText": "\"😀\""
+		},
+		{
+			"input": "[]",
+			"canonical": "[]",
+			"sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+			"jsonBytes": 2,
+			"jsonText": "[]"
+		},
+		{
+			"input": "[1,[2,[3]]]",
+			"canonical": "[1,[2,[3]]]",
+			"sha256": "515b8578d7e3f9401f4013b481191a4df6373a4b37fc3e565abd5085344c927f",
+			"jsonBytes": 11,
+			"jsonText": "[1,[2,[3]]]"
+		},
+		{
+			"input": "{}",
+			"canonical": "{}",
+			"sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+			"jsonBytes": 2,
+			"jsonText": "{}"
+		},
+		{
+			"input": "{\"b\":1,\"a\":2}",
+			"canonical": "{\"a\":2,\"b\":1}",
+			"sha256": "d3626ac30a87e6f7a6428233b3c68299976865fa5508e4267c5415c76af7a772",
+			"jsonBytes": 13,
+			"jsonText": "{\"b\":1,\"a\":2}"
+		},
+		{
+			"input": "{\"a\":{\"d\":[{\"z\":1,\"y\":2}],\"c\":null}}",
+			"canonical": "{\"a\":{\"c\":null,\"d\":[{\"y\":2,\"z\":1}]}}",
+			"sha256": "435c9a5e176af91d48e557c9c84a7b19a022c5e175f6e5322eb74662accedab5",
+			"jsonBytes": 36,
+			"jsonText": "{\"a\":{\"d\":[{\"z\":1,\"y\":2}],\"c\":null}}"
+		},
+		{
+			"input": "{\"😀\":1,\"\\uffff\":2,\"\\ue000\":3,\"é\":4,\"z\":5,\"A\":6,\"\":7,\"aa\":8,\"a\":9}",
+			"canonical": "{\"\":7,\"A\":6,\"a\":9,\"aa\":8,\"z\":5,\"é\":4,\"😀\":1,\"\":3,\"￿\":2}",
+			"sha256": "1b4742442f490f00a131c80d8f54171f3dfa7737df86d37ff4d976e0f3353acc",
+			"jsonBytes": 63,
+			"jsonText": "{\"😀\":1,\"￿\":2,\"\":3,\"é\":4,\"z\":5,\"A\":6,\"\":7,\"aa\":8,\"a\":9}"
+		},
+		{
+			"input": "{\"x\":-0,\"y\":[0.30000000000000004,1e-7,2e21]}",
+			"canonical": "{\"x\":0,\"y\":[0.30000000000000004,1e-7,2e+21]}",
+			"sha256": "df26affb7e6310e499771caa30c37916dc0d91aab4c7ada2f6fb0650eead901b",
+			"jsonBytes": 44,
+			"jsonText": "{\"x\":0,\"y\":[0.30000000000000004,1e-7,2e+21]}"
+		}
+	],
+	"numbers": [
+		{
+			"bits": "0000000000000000",
+			"canonical": "0"
+		},
+		{
+			"bits": "8000000000000000",
+			"canonical": "0"
+		},
+		{
+			"bits": "3ff0000000000000",
+			"canonical": "1"
+		},
+		{
+			"bits": "3fd3333333333334",
+			"canonical": "0.30000000000000004"
+		},
+		{
+			"bits": "3fb999999999999a",
+			"canonical": "0.1"
+		},
+		{
+			"bits": "4415af1d78b58c40",
+			"canonical": "100000000000000000000"
+		},
+		{
+			"bits": "444b1ae4d6e2ef50",
+			"canonical": "1e+21"
+		},
+		{
+			"bits": "3eb0c6f7a0b5ed8d",
+			"canonical": "0.000001"
+		},
+		{
+			"bits": "3e7ad7f29abcaf48",
+			"canonical": "1e-7"
+		},
+		{
+			"bits": "433fffffffffffff",
+			"canonical": "9007199254740991"
+		},
+		{
+			"bits": "4340000000000000",
+			"canonical": "9007199254740992"
+		},
+		{
+			"bits": "0000000000000001",
+			"canonical": "5e-324"
+		},
+		{
+			"bits": "7fefffffffffffff",
+			"canonical": "1.7976931348623157e+308"
+		},
+		{
+			"bits": "c08f400000000000",
+			"canonical": "-1000"
+		},
+		{
+			"bits": "7ff0000000000000",
+			"error": "non-finite"
+		},
+		{
+			"bits": "fff0000000000000",
+			"error": "non-finite"
+		},
+		{
+			"bits": "7ff8000000000000",
+			"error": "non-finite"
+		}
+	],
+	"unpairedSurrogate": {
+		"input": "\"a\\ud800b\"",
+		"canonical": "\"a\\ud800b\"",
+		"jsonBytes": 10
+	}
+}

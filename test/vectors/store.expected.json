@@ -1,0 +1,463 @@
+{
+	"about": "the read-only session (runSession only: 'reads') on the store loaded from store.sql",
+	"steps": [
+		{
+			"call": {
+				"method": "hello",
+				"args": {
+					"protocol": 1
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"protocol": 1,
+					"hostId": "host-291c7054-254b-4883-86c8-b4d7009b96b3",
+					"spaceId": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051",
+					"alias": "default",
+					"incarnation": "edb2b62e",
+					"streamId": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051:edb2b62e",
+					"rev": 26,
+					"authorityId": "local",
+					"primaryEpoch": 0,
+					"role": "single",
+					"principal": "local",
+					"roles": [
+						"member"
+					],
+					"features": [
+						"hello",
+						"generation",
+						"write",
+						"read",
+						"take",
+						"pollOperation",
+						"resolveOperation",
+						"cancelOperation",
+						"readAll",
+						"count",
+						"stats",
+						"spaces",
+						"txn",
+						"lease",
+						"changes",
+						"wait",
+						"notify",
+						"events",
+						"ack",
+						"batch",
+						"write.unique",
+						"write.transient",
+						"read.chain",
+						"read.locked"
+					],
+					"limits": {
+						"maxFrameBytes": 262144,
+						"maxCommitBytes": 196608,
+						"maxEventBytes": 163840,
+						"maxEntryBytes": 65536,
+						"maxPollMs": 25000,
+						"maxPendingPerPrincipal": 32,
+						"maxPendingPerPeer": 128
+					},
+					"capabilities": {
+						"snapshotPagination": true,
+						"mailboxes": true,
+						"completionProfiles": true,
+						"transactions": true,
+						"blockingTake": true,
+						"mode": "single"
+					}
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "count",
+				"args": {
+					"template": {
+						"type": "Task"
+					}
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"value": 1,
+					"rev": 26,
+					"streamId": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051:edb2b62e"
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "readAll",
+				"args": {
+					"template": {
+						"type": "Task"
+					}
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"items": [
+						{
+							"id": "eedb2b62e-2",
+							"gid": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051/eedb2b62e-2",
+							"type": "Task",
+							"types": [
+								"Task",
+								"Job"
+							],
+							"fields": {
+								"n": 2,
+								"nested": {
+									"z": 1,
+									"a": [
+										1.5,
+										null,
+										true
+									]
+								}
+							},
+							"owner": "[\"local\",null]"
+						}
+					],
+					"next": null,
+					"streamId": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051:edb2b62e",
+					"rev": 26
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "readAll",
+				"args": {
+					"template": null,
+					"limit": 2
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"items": [
+						{
+							"id": "eedb2b62e-2",
+							"gid": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051/eedb2b62e-2",
+							"type": "Task",
+							"types": [
+								"Task",
+								"Job"
+							],
+							"fields": {
+								"n": 2,
+								"nested": {
+									"z": 1,
+									"a": [
+										1.5,
+										null,
+										true
+									]
+								}
+							},
+							"owner": "[\"local\",null]"
+						},
+						{
+							"id": "eedb2b62e-6",
+							"gid": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051/eedb2b62e-6",
+							"type": "Evt",
+							"types": [
+								"Evt"
+							],
+							"fields": {
+								"k": 1
+							},
+							"owner": "[\"local\",null]"
+						}
+					],
+					"next": null,
+					"streamId": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051:edb2b62e",
+					"rev": 26
+				}
+			}
+		},
+		{
+			"call": {
+				"method": "changes",
+				"args": {
+					"afterRev": 0
+				}
+			},
+			"reply": {
+				"ok": true,
+				"result": {
+					"streamId": "sp-4ae80dbe-bf48-43f9-ad32-832a679db051:edb2b62e",
+					"batches": [
+						{
+							"rev": 1,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 2,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 3,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "eedb2b62e-1",
+									"type": "Task",
+									"types": [
+										"Task"
+									],
+									"fields": {
+										"n": 1,
+										"name": "a",
+										"tags": [
+											"x",
+											"y"
+										]
+									},
+									"expires": 1700000060000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 4,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "eedb2b62e-2",
+									"type": "Task",
+									"types": [
+										"Task",
+										"Job"
+									],
+									"fields": {
+										"n": 2,
+										"nested": {
+											"z": 1,
+											"a": [
+												1.5,
+												null,
+												true
+											]
+										}
+									},
+									"expires": 9007199254740991,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 5,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 6,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "eedb2b62e-1"
+								}
+							]
+						},
+						{
+							"rev": 7,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 8,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 9,
+							"at": 1700000000000,
+							"ops": []
+						},
+						{
+							"rev": 10,
+							"at": 1700000000000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "eedb2b62e-4",
+									"type": "Task",
+									"types": [
+										"Task"
+									],
+									"fields": {
+										"n": 4
+									},
+									"expires": 1700003600000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 11,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "eedb2b62e-2",
+									"type": "Task",
+									"types": [
+										"Task",
+										"Job"
+									],
+									"fields": {
+										"n": 2,
+										"nested": {
+											"z": 1,
+											"a": [
+												1.5,
+												null,
+												true
+											]
+										}
+									},
+									"expires": 1700000031000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 12,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "eedb2b62e-4"
+								}
+							]
+						},
+						{
+							"rev": 13,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 14,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "eedb2b62e-6",
+									"type": "Evt",
+									"types": [
+										"Evt"
+									],
+									"fields": {
+										"k": 1
+									},
+									"expires": 1700003601000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 15,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 16,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 17,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 18,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 19,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 20,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "eedb2b62e-8"
+								}
+							]
+						},
+						{
+							"rev": 21,
+							"at": 1700000001000,
+							"ops": [
+								{
+									"op": "put",
+									"id": "eedb2b62e-9",
+									"type": "Key",
+									"types": [
+										"Key"
+									],
+									"fields": {
+										"key": "k1",
+										"v": 1
+									},
+									"expires": 1700003601000,
+									"owner": "[\"local\",null]"
+								}
+							]
+						},
+						{
+							"rev": 22,
+							"at": 1700000001000,
+							"ops": []
+						},
+						{
+							"rev": 23,
+							"at": 1700000002000,
+							"ops": [
+								{
+									"op": "del",
+									"id": "eedb2b62e-11"
+								}
+							]
+						},
+						{
+							"rev": 24,
+							"at": 1700000002000,
+							"ops": []
+						},
+						{
+							"rev": 25,
+							"at": 1700000003000,
+							"ops": []
+						},
+						{
+							"rev": 26,
+							"at": 1700000005000,
+							"ops": []
+						}
+					],
+					"next": 26,
+					"rev": 26,
+					"more": false
+				}
+			}
+		}
+	]
+}

@@ -1,7 +1,7 @@
 # Portierung von phi-spaces nach Rust
 
-Stand: 2026-10-29. **Ziel- und Arbeitsplan; nichts davon ist umgesetzt.** Es gibt im Repository keinen Rust-Code und
-keine Cargo-Dateien. Die Entscheidungen R-D0 bis R-D9 (Abschnitt 9) sind am 2026-10-29 getroffen, die genannten
+Stand: 2026-10-29. **Ziel- und Arbeitsplan.** R0 ist umgesetzt (Abschnitt 6, „Stand R0“). Es gibt noch keinen
+Rust-Code und keine Cargo-Dateien. Die Entscheidungen R-D0 bis R-D9 (Abschnitt 9) sind am 2026-10-29 getroffen, die genannten
 Crates damit freigegeben.
 
 ## 1. Ergebnis und Abgrenzung
@@ -75,7 +75,7 @@ TypeScript-Implementierung.
 | Zahlen | `core.ts`: `FOREVER = Number.MAX_SAFE_INTEGER`, Zeiten in ms als JS-Zahl | Auf der Leitung und in der Datei sind alle Zahlen IEEE-754-Doubles. Ganzzahlen ≤ 2^53 als `i64`, Rest `f64`. `FOREVER` muss exakt zurückkommen; `until()` darf nicht überlaufen |
 | JSON-Werte | `Json`/`Fields` in `core.ts` | Feldvergleich in Templates (`JSON.stringify`-Gleichheit, `service.ts`); Reihenfolge der Objektschlüssel bleibt beim Durchreichen erhalten (`serde_json` mit `preserve_order`) |
 | Schlüssel | `auth.ts`, `grants.ts`, `enroll.ts` | Ed25519 als rohe 32 Byte; ECDSA P-256 als SPKI-DER mit DER-Signatur (Android-Keystore); Fingerprint = SHA-256 der Base64-dekodierten Bytes, 32 Hex-Zeichen |
-| SQLite-Format | `store/sqlite.ts` | Tabellen `store_meta`, `documents`, `parts` (STRICT), Indizes `parts_order`, `parts_at`, `parts_grp`; `value` ist JSON-Text; Dokumentversion 5; Formatnummer in `store_meta` |
+| SQLite-Format | `store/sqlite.ts` | Tabellen `store_meta`, `documents`, `parts` (STRICT), Indizes `parts_order`, `parts_at`, `parts_grp`, `parts_open`; `value` ist JSON-Text; Dokumentversion 5; Formatnummer 2 in `store_meta`; WAL; Sperrdatei `<datei>.owner` |
 | Fehler | `service.ts` (`fail("StaleEpoch", …)` usw.) | Fehlernamen und -felder sind Vertrag; `RemoteSpace` verzweigt darauf (Retry, `RequestExpired`) |
 | Grenzen | `DEFAULT_LIMITS` in `core.ts` | Rahmengröße, Ergebnisbudget (`frameBytes - 64`), Quoten, `jsonBytes`-Zählung (UTF-8-Bytes des `JSON.stringify`) |
 
@@ -133,11 +133,11 @@ Rust-Server gerichtet.
 
 **Gruppe A: läuft schon über einen Prozess oder Socket.** Hier genügt ein Schalter für die Server-Kommandozeile:
 
-- `test/test-standalone.test.ts` startet heute `src/standalone.ts` mit `spawn`.
-- Neu: Steht `PHI_SPACES_SERVER_CMD` (z. B. `rust/target/release/phi-space-server`), startet der Test dieses
-  Kommando.
-- Ebenso `test/test-socket.test.ts`, `test/test-space-client.test.ts` und die Beispiele `examples/sieve.ts` und
-  `examples/cache.ts` mit `--remote`.
+- `test/test-standalone.test.ts` startet `src/standalone.ts` mit `spawn`. Steht `PHI_SPACES_SERVER_CMD` (z. B.
+  `rust/target/release/phi-space-server`), startet er stattdessen dieses Kommando (seit R0). Darin laufen auch die
+  Beispiele `examples/sieve.ts` und `examples/cache.ts` mit `--remote`.
+- `test/test-socket.test.ts` startet seinen Server dagegen im Testprozess (`serveSpace`). Er gehört damit zu
+  Gruppe B und bekommt die Fixture aus R3.
 
 **Gruppe B: Dienst in-process, Client über `RemoteSpace`.** Dazu gehören `test-remote`, `test-service`, `test-gate`,
 `test-auth`, `test-enroll` und `test-scenario`.
@@ -184,6 +184,56 @@ Jede Phase endet mit Typecheck und `npm test` (unverändert grün, der TS-Server
   Space-Prozess), Speicherbedarf des Space-Prozesses auf big und nano.
 
 **Abnahme:** Die Vektoren sind eingecheckt und reproduzierbar, und die Baseline-Zahlen stehen in diesem Dokument.
+
+**Stand R0 (2026-10-29):**
+
+- **Protokoll:** [wire-protokoll.md](wire-protokoll.md) beschreibt Kommandozeile, Rahmen, Umschlag, Rollen,
+  Request-Identität, Werte, alle Methoden aus `METHODS`, Fehlercodes, Grenzen und die Speicherdatei.
+- **Vektoren:** `test/vectors/` mit `canonical.json`, `crypto.json`, `wire.json` (eine Sitzung mit 48 Aufrufen,
+  Zufallswerte als Platzhalter), `store.sql` und `store.expected.json`. `npm run vectors` schreibt sie aus
+  `test/vectors/build.ts`. `test/test-vectors.test.ts` (in `npm test`) prüft sie gegen den Code. `canonical.json`,
+  `wire.json` und `crypto.json` sind bei jedem Lauf gleich; die P-256-Signaturen sind zufällig, werden verifiziert und
+  beim Neuschreiben behalten, solange sie gelten. Die Store-Dateien sind feste Stücke: Jeder neue Store hat neue
+  Zufalls-Ids, deshalb schreibt nur `npm run vectors -- --store` oder eine Schemaänderung sie neu.
+- **Aufzeichner:** Die Sitzung in `wire.json` zeichnet auf Dienstebene auf (`runSession`, Uhr von außen). Der
+  Treiber für den reinen Kern (Operationsfolgen über stdin/stdout) entsteht mit seinem Gegenstück in R1.
+- **Testschalter:** `PHI_SPACES_SERVER_CMD` in `test/test-standalone.test.ts`, geprüft mit dem TS-Server als
+  externem Kommando.
+- **Probe:** `scripts/server-probe.ts` misst den Space-Server allein (CPU je Aufruf, RSS, Antwortzeiten); mit
+  `--cmd` später den Rust-Server.
+
+**Ausgangswerte** (dieser Rechner: Ryzen 7 3700X, 16 Threads, Node 22.23; big und nano noch nicht gemessen, das
+braucht eine Freigabe):
+
+| Messung | Ergebnis |
+|---|---|
+| `server-probe`, SQLite, 8 Clients, Ziel 900 Aufrufe/s, 24.000 Aufrufe (write, read, take) | 666 Aufrufe/s (CPU-gesättigt, 122 %), **1,82 ms Server-CPU je Aufruf**, p50 8,4 ms, p95 24 ms, RSS 120 → 364 MB |
+| dasselbe, Ziel 300/s | 293/s, 2,79 ms CPU je Aufruf (weniger Commits je Schreibstapel), p50 2,6 ms, p95 37 ms, RSS bis 297 MB |
+| `server-probe`, Speicher-Store, Ziel 900/s | **82 Aufrufe/s, 12,9 ms CPU je Aufruf**, p50 80 ms, RSS bis 240 MB |
+| dasselbe, Ziel 300/s | 66/s, 16,1 ms CPU je Aufruf |
+| `space-cost.ts` (spaces-mmo, 50 Bots, 60 s, Space auf SQLite) | 1.383 Kommandos (19,9/s), **15,9 ms Space-CPU je Spielerkommando**, Space-Prozess 32 % eines Kerns, p50 21 ms, p95 43 ms, 27 Zeitüberschreitungen |
+| `test:perf` Last (10 Spieler, spaces-mmo) | 66,5 Schritte/s, Schritt bis Antwort p50 18 ms, p95 38 ms, p99 59 ms |
+
+Die spaces-mmo-Werte stammen vom Arbeitsstand mit uncommitteten Änderungen in `spaces-mmo/`. Der Latenztest von
+`test:perf` schlug dabei fehl („Zu viele Befehle auf einmal“).
+
+**Befunde aus R0:**
+
+1. **Speicher-Store wird mit der Zahl der Requests langsam.** Nach 2.400 Aufrufen kostet ein Aufruf 1,7 ms CPU,
+   nach 24.000 Aufrufen 12,9 bis 16 ms. Mit SQLite bleibt es bei etwa 2 ms. Vermutlich wachsen die 24 h gespeicherten
+   Request-Ergebnisse im Space-Dokument mit, während SQLite sie als Teile auf der Platte hält. Das betrifft
+   `--store memory` und `SPACES_MMO_MEM=1` heute schon und ist vor R2 zu klären: Der Rust-Store soll es nicht erben.
+2. **`timeoutMs: null`** gibt im Dienst den Standard 0, in `rpcDomain` aber −1, also einen anderen Argument-Hash
+   ([wire-protokoll.md](wire-protokoll.md), Abschnitt 5). `RemoteSpace` sendet `null` nicht; die Rust-Seite folgt
+   vorerst dem TS-Verhalten.
+3. **R-D2 ist ein Messverfahren, keine feste Zahl.** Der Lauf mit 900/s war CPU-gesättigt, und ein gesättigter
+   Server fasst mehr Commits zusammen; das senkt die CPU je Aufruf (1,82 ms gegen 2,79 ms bei 300/s). Für R-D2 gilt
+   deshalb:
+   - gleicher Rechner, gleicher Commit, SQLite-Store;
+   - feste, ungesättigte Rate (300/s), `server-probe --cmd` für TS und Rust direkt nacheinander;
+   - die Grenze von 1024 Aufrufen/s je Peer ist Vertrag, Durchsatz darüber kein Maß;
+   - spaces-mmo (`space-cost.ts`) ebenso: TS und Rust nebeneinander neu gemessen, nicht gegen diese Tabelle, weil sich
+     das Spiel bis dahin weiterentwickelt (R-D8).
 
 ### R1: `phi-json` und `phi-core`
 
@@ -386,7 +436,7 @@ Server prüft sie nur.
 |---|---|---|
 | R-D0 | Freigabe der Crates aus Abschnitt 4 | **entschieden 2026-10-29:** freigegeben |
 | R-D1 | Gleiche SQLite-Datei oder eigenes Format | **entschieden 2026-10-29:** gleiche Datei |
-| R-D2 | Weiter nach R3? | **entschieden 2026-10-29:** nur, wenn die CPU je Kommando im Space-Prozess deutlich sinkt (Ziel: mindestens Faktor 2) oder der Speicherbedarf sinkt |
+| R-D2 | Weiter nach R3? | **entschieden 2026-10-29:** nur, wenn die CPU je Kommando im Space-Prozess deutlich sinkt (Ziel: mindestens Faktor 2) oder der Speicherbedarf sinkt; gemessen nach dem Verfahren aus „Stand R0“, Befund 3 |
 | R-D3 | Föderation portieren, neu entwerfen oder in TS lassen | **entschieden 2026-10-29:** erst nach deren Abnahme entscheiden |
 | R-D4 | Space auf dem Handy | **entschieden 2026-10-29:** a), später b) |
 | R-D5 | Bleibt der TS-Server dauerhaft? | **entschieden 2026-10-29:** ja, als Referenz und für In-Process-Nutzung (`PhiSpaces`), bis R-D4 b) umgesetzt ist |
