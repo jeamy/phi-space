@@ -51,11 +51,11 @@ test("a trader offers coins for what one carries, takes a fair offer, turns down
 		// a poor offer: five coins for a shell he pays one for
 		await give(s, a.me, "muschel");
 		let from = a.p.frames.length;
-		a.p.send("offer muschel an Kalle für 5 münze");
+		a.p.send("offer muscheln an Kalle für 5 münzen"); // plurals: the shell, the coins
 		await msg(a.p, (t) => t.startsWith("Kalle: Fischerin, das ist mir zu wenig."), from);
 		// a fair one: the shell for one coin
 		from = a.p.frames.length;
-		a.p.send("offer muschel an Kalle für 1 münze");
+		a.p.send("offer muscheln an kalle für 1 münze");
 		await msg(a.p, (t) => t === "Kalle: Abgemacht, Fischerin.", from);
 		assert.equal(await pack(s, a.me, "muenze"), 3);
 		from = a.p.frames.length;

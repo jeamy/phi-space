@@ -14,6 +14,7 @@
 // traders and keepers offer people coins for what they want.
 import { randomInt } from "node:crypto";
 import { clockOf } from "../engine/clockcache.ts";
+import { stem } from "../engine/context.ts";
 import { flameOf } from "../engine/fire.ts";
 import { wayTo, type WorldDef } from "../engine/world.ts";
 import { fieldsOf, type CharacterFields, type ItemFields, type ListingFields, type MsgFields, type OfferFields, type OrderFields } from "../model.ts";
@@ -48,10 +49,11 @@ const buyPrice = (n: Npc, proto: string) => (proto === n.world.currency ? 1 : (n
 const sellPrice = (n: Npc, proto: string) => (proto === n.world.currency ? 1 : (n.def.prices?.[proto]?.[1] ?? 0));
 const coinsOf = (n: Npc, l: Look) => l.pack.filter((i) => i.proto === n.world.currency);
 const protoName = (w: WorldDef, proto: string) => w.prototypes.find((p) => p.key === proto)?.name ?? proto;
-/** The prototype a player means by a name ("münze", "holz", "Treibholz"). */
+/** The prototype a player means by a name ("münze", "holz", "Treibholz", also another form: "münzen", "muscheln"). */
 const protoOf = (w: WorldDef, name: string) => {
 	const n = name.trim().toLowerCase();
-	return w.prototypes.find((p) => p.key === n || p.name.toLowerCase() === n || p.aliases.includes(n))?.key;
+	const all = (p: WorldDef["prototypes"][number]) => [p.key, p.name.toLowerCase(), ...p.aliases];
+	return (w.prototypes.find((p) => all(p).includes(n)) ?? w.prototypes.find((p) => all(p).some((s) => stem(s) === stem(n))))?.key;
 };
 const roomName = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId === roomId)?.name ?? roomId;
 const islandOf = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId === roomId)?.island ?? w.title;
