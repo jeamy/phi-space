@@ -149,6 +149,33 @@ export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 		}
 		if (names.length) await say(space, leaseMs, [fr.room], "info", names.length === 1 ? `Die Flut spült ${names[0]} an.` : `Die Flut spült ${names.length} Dinge an: ${[...new Set(names)].join(", ")}.`);
 	}
+	await bringStaples(space, w, people);
+}
+
+/** What one builds with never runs out: an island with too little of a staple on its beaches gets more with each tide,
+ *  on any of its beaches, quietly (a tide's messages are about the rest). Writes nothing while enough lies there. */
+async function bringStaples(space: SpaceLike, w: WorldDef, people: Map<string, number>): Promise<void> {
+	const st = w.flood.staples;
+	if (!st || process.env.SPACES_MMO_STAPLES === "0") return;
+	const islands = new Map<string, Array<WorldDef["flood"]["rooms"][number]>>();
+	for (const fr of w.flood.rooms) {
+		const island = w.rooms.find((r) => r.roomId === fr.room)?.island;
+		if (island) islands.set(island, [...(islands.get(island) ?? []), fr]);
+	}
+	for (const [island, rooms] of islands) for (const t of st.things) {
+		let lying = 0;
+		for (const fr of rooms) lying += await space.count({ type: "Item", fields: { location: fr.room, proto: t.proto, flotsam: true } });
+		const n = Math.min(t.perIsland + (people.get(island) ?? 0) - lying, st.perTide);
+		if (n <= 0) continue;
+		const proto = await resolvePrototype(space, t.proto);
+		if (!proto) continue;
+		for (let i = 0; i < n; i++) {
+			const fr = rooms[randomInt(0, rooms.length)]!, cells = await freeCells(space, w, fr.room, fr.tile);
+			if (!cells.length) continue;
+			const at = cells[randomInt(0, cells.length)]!;
+			await spawn(space, null, w, proto, { location: fr.room, x: at.x, y: at.y, flotsam: true, expiresWorldMs: (await worldNowOf(space)) + st.lifetimeMs });
+		}
+	}
 }
 
 /** People online (and the settlers who play in their stead, npc/settlers.ts: they gather like people, so the tide

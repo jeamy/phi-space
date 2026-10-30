@@ -25,3 +25,5 @@ process.env.SPACES_MMO_LLM_MODULE = "";
 process.env.SPACES_MMO_NPCS = "ines,bo,fremder";
 // no settlers (server/npc/settlers.ts) unless a test asks for them: they would play through every test's world
 process.env.SPACES_MMO_SETTLERS_MIN = "0";
+// nor the tide's staples (engine/fire.ts): the tests build on fixed cells and count what the tide brings
+process.env.SPACES_MMO_STAPLES = "0";

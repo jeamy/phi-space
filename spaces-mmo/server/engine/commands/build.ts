@@ -57,6 +57,8 @@ function reachable(w: WorldDef, ground: string[], from: { x: number; y: number }
 }
 
 /** Why `rect` cannot be built on (null: it can). */
+/** The cobbles of paths and plazas: nothing is built or dug on them (docs/siedeln.md "Bebauung"). */
+export const PATH = ":";
 export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Promise<string | null> {
 	const height = room.ground.length, width = room.ground[0]?.length ?? 0;
 	if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height) return "Dort ist der Raum zu Ende.";
@@ -68,6 +70,7 @@ export async function refusal(c: CommandCtx, room: RoomFields, rect: Rect): Prom
 	for (const p of cells(rect)) {
 		const k = cellKey(p);
 		if (!walkable(c.world, room.ground, p.x, p.y)) return "Dort ist kein fester Boden.";
+		if (room.ground[p.y]?.[p.x] === PATH) return "Das ist ein Weg; Wege und Plätze bleiben frei.";
 		if (isPassage(exits, p)) return "Dort ist ein Weg hinaus; den baut niemand zu.";
 		if (fires.some((b) => Math.max(Math.abs(b.x - p.x), Math.abs(b.y - p.y)) <= 1)) return "So nah am Feuer baut man nicht.";
 		if (blocked.has(k)) return "Dort steht schon etwas oder wird gebaut.";

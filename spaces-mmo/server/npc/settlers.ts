@@ -11,6 +11,8 @@
 // - Light: a settler stakes out only while its fire keeps `settlers.reserve` of its light free (build.ts lightFor), so
 //   people who come still find building land.
 // - One command a round, then a rest at the pace of economy.ts (slower while no person is on the island).
+import { randomInt } from "node:crypto";
+import { PATH } from "../engine/commands/build.ts";
 import { regionWorld } from "../engine/regions.ts";
 import { flameOf } from "../engine/fire.ts";
 import { clockOf } from "../engine/clockcache.ts";
@@ -67,6 +69,29 @@ async function besideOf(n: Npc, l: Look, r: Rect & { room: string }, reach = 1):
 	return false;
 }
 
+const onPath = (w: WorldDef, r: Rect & { room: string }) => {
+	const ground = w.rooms.find((x) => x.roomId === r.room)?.ground ?? [];
+	for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (ground[y]?.[x] === PATH) return true;
+	return false;
+};
+/** A free place of w×h in the room: on grass (else sand), off paths, doors and fires, nothing on it, cells to walk round
+ *  it. Picked at random, so settlers spread over the room. */
+async function freeGround(n: Npc, room: string, w: number, h: number): Promise<{ x: number; y: number } | null> {
+	const ground = n.world.rooms.find((r) => r.roomId === room)?.ground ?? [];
+	const busy = new Set([...(await n.space.readAll({ type: "Plot", fields: { room } })), ...(await n.space.readAll({ type: "Item", fields: { location: room } })), ...(await n.space.readAll({ type: "Character", fields: { room } }))].map((e) => `${e.fields.x},${e.fields.y}`));
+	const near = [...n.world.exits.filter((e) => e.room === room), ...n.world.beacons.filter((b) => b.room === room)];
+	const fits = (x0: number, y0: number, tile: string) => {
+		for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (ground[y]?.[x] !== tile || busy.has(`${x},${y}`) || near.some((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) <= 2)) return false;
+		return true;
+	};
+	for (const tile of [",", "."]) {
+		const all: Array<{ x: number; y: number }> = [];
+		for (let y = 1; y < ground.length - h; y++) for (let x = 1; x < (ground[0]?.length ?? 0) - w; x++) if (fits(x, y, tile)) all.push({ x, y });
+		if (all.length) return all[randomInt(0, all.length)]!;
+	}
+	return null;
+}
+
 export function siedler(): Script {
 	// a plan that failed (no light, no room) is not tried again for a while: round counts
 	const backoff = new Map<string, number>();
@@ -109,6 +134,9 @@ export function siedler(): Script {
 		const tired = rested > now;
 		const sites = homes.length ? (await n.space.readAll({ type: "Site" })).map((e) => fieldsOf<SiteFields>(e)).filter((s) => homes.includes(s.room)) : [];
 		const own = sites.find((s) => s.accountId === me.charId);
+		// what it staked out on a path before the paths were closed to building goes: it builds again elsewhere
+		const astray = [own, ...(await n.space.readAll({ type: "Building", fields: { accountId: me.charId } })).map((e) => fieldsOf<BuildingFields>(e))].find((r) => r && onPath(w, r));
+		if (astray) { if (!(await besideOf(n, l, astray))) await n.act(`abriss ${astray === own ? "baustelle" : astray.name}`); return; }
 		// its own site: deliver what it carries of what is missing, then work; what is missing it gathers below
 		if (own && (await atSite(n, l, own, tired))) return;
 		// the sites of others on its island: bring what they need, lend a hand now and then
@@ -131,14 +159,19 @@ export function siedler(): Script {
 		if (!own) for (const plan of PLANS) {
 			if (has(plan) || !may(plan) || !w.building?.plans.some((p) => p.key === plan)) continue;
 			if (!homes.includes(me.room) || !w.beacons.some((b) => b.covers.includes(me.room))) continue;
-			await n.act(`bau ${w.building.plans.find((p) => p.key === plan)!.name.toLowerCase()}`);
+			const def = w.building.plans.find((p) => p.key === plan)!, at = await freeGround(n, me.room, def.w, def.h);
 			later(plan, 20); // seen again in twenty rounds: built, staked or refused
-			return;
+			if (at) { await n.act(`bau ${def.name.toLowerCase()} ${at.x} ${at.y}`); return; }
+			continue;
 		}
 		// a spade and up to its beds
 		if (g && beds.length < (w.settlers?.maxBeds ?? 1) && has("huette")) {
 			if (!count(l, g.spade)) { if (await craft(n, l, w, g.spade)) return; }
-			else if (may("beet")) { later("beet", 15); await n.act("umgraben"); return; }
+			else if (may("beet")) {
+				later("beet", 15);
+				const at = await freeGround(n, me.room, g.bed.w, g.bed.h);
+				if (at) { await n.act(`umgraben ${at.x} ${at.y}`); return; }
+			}
 		}
 		// rope from kelp when it has kelp to spare
 		if (count(l, "tang") >= 3 && count(l, "tangseil") < 2) { await n.act("craft tangseil"); return; }

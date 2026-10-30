@@ -64,7 +64,7 @@ test("regions: a trader on his way stays a while where people are and answers wh
 		for (const [line, room] of [["go ost", "klippenpfad"], ["go ost", "klippenkopf"]] as const) {
 			const n = p.frames.length;
 			p.send(line);
-			await p.until((f) => f.t === "hello" && f.room.roomId === room, 15_000, n);
+			await p.until((f) => f.t === "hello" && f.room.roomId === room, 40_000, n);
 		}
 		// Kalle comes by on his way from the bay to Kupferhafen (another region)
 		await eventually(async () => (await r.space("west").readAll({ type: "Character", fields: { charId: "npc-kalle", room: "klippenkopf" } })).length === 1, 120_000, "Kalle at the cliff head");

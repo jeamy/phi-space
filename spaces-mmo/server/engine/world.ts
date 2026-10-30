@@ -54,7 +54,10 @@ export type WorldDef = {
 	flood: { everyMs: number; lifetimeMs: number; rooms: Array<{ room: string; tile: string; max: number; protos?: Array<{ proto: string; weight: number }> }>; protos: Array<{ proto: string; weight: number }>;
 		/** Every this many people online on an island, one more piece may lie on each of its beaches and one more comes with
 		 *  each tide (default 3). */
-		perPlayers?: number };
+		perPlayers?: number;
+		/** What must always be there to build with: when fewer than `perIsland` of a thing (more by the people on the island)
+		 *  lie on the beaches of an island, the tide brings up to `perTide` more; they lie `lifetimeMs`. */
+		staples?: { lifetimeMs: number; perTide: number; things: Array<{ proto: string; perIsland: number }> } };
 	/** A storm surge now and then: `count` things at once on a beach of one of `rooms`, announced on `channel`. */
 	storm?: { everyMs: number; count: number; rooms: string[]; protos: Array<{ proto: string; weight: number }>; channel: string };
 	/** Channels everyone hears, across rooms. */

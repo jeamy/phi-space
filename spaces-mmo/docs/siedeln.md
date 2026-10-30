@@ -226,7 +226,8 @@ Voraussetzung (sie entsteht aus Hütten, unten); die Epoche zählt, was auf der 
 
 ## Bebauung: Baurecht, Fußabdruck, Abriss
 
-- **Sperrzellen:** Ausgänge, die Zelle eines Feuers, Wege, Stege und Marktplätze sind nie bebaubar; `bau` prüft das,
+- **Sperrzellen** (Wege und Plätze aus Kopfsteinpflaster gesperrt seit Weltversion 27, auch für Beete und Fluren):
+  Ausgänge, die Zelle eines Feuers, Wege, Stege und Marktplätze sind nie bebaubar; `bau` prüft das,
   bevor es die Fläche belegt. Niemand kann eine Tür, ein Feuer oder den Weg zubauen.
 - **Fußabdruck:** Jeder Plan hat eine Form (Hütte 2×2, Kaufhaus 4×3, Kirche 3×5 …) und eine Ausrichtung — die Tür
   zeigt auf Weg oder Platz, wenn einer grenzt. `bau` belegt alle Zellen der Form in einer Transaktion; ein
@@ -543,6 +544,8 @@ Befehle und die Auftragstafel, nie durch unsichtbare Eingriffe:
   koordiniert — bauen darf sie nicht, wie alle Modell-NPCs.
 - **Gieß-Patenschaften** (oben bei den Gärten): der Dorfgärtner oder ein Mitspieler pflegt Beete Abwesender.
 
+- **Baustoff bleibt da** (`flood.staples`, Weltversion 27): Liegen auf den Stränden einer Insel weniger als 8 Treibholz,
+  6 Tang oder 3 Muscheln (mehr, je mehr Menschen dort sind), bringt jede Flut bis zu zwei nach; sie liegen 30 Weltminuten.
 - **Siedler** (gebaut 2026-10-30, `server/npc/settlers.ts`, Test `tests/settlers.test.ts`, Weltversion 26): Damit die
   Welt nie leer wirkt, spielen immer mindestens `settlers.min` Figuren (Einstellung, Standard 30, 0 schaltet sie ab).
   Fehlen Menschen, füllen Siedler auf: 40 Skriptfiguren, je eine feste Insel, kein Modellaufruf. Jeder Mensch, der in

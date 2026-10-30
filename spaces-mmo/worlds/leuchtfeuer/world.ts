@@ -303,7 +303,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 26,
+	version: 27,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -444,6 +444,8 @@ export const world: WorldDef = {
 	fog: { max: 3, start: 2, stepMs: 2 * 60_000 },
 	flood: {
 		everyMs: 60_000, lifetimeMs: 5 * 60_000,
+		// driftwood and kelp are always there to build with, on every island (more with more people on it)
+		staples: { lifetimeMs: 30 * 60_000, perTide: 2, things: [{ proto: "treibholz", perIsland: 8 }, { proto: "tang", perIsland: 6 }, { proto: "muschel", perIsland: 3 }] },
 		rooms: [
 			{ room: "graue-bucht", tile: ".", max: 4 },
 			{ room: "fischerdorf", tile: ".", max: 2 },
