@@ -276,6 +276,22 @@ brauchen; das ist der zweite Hebel aus R-D2 (Speicher), besonders auf nano mit 8
 - Der Differenz-Harness spielt die aufgezeichneten Folgen fehlerfrei nach.
 - `proptest` findet in 10⁶ Zufallsschritten keine Abweichung zum TS-Kern.
 
+**Stand der Abnahme (2026-10-30):** Alle fünf Scheiben sind erledigt.
+
+- **Golden-Vektoren:** `phi-json` reproduziert `canonical.json` und die Hash-Teile von `crypto.json`. `wire.json` und
+  die Store-Dateien prüft erst R3/R2, sie gehören zum Dienst und zum Store, nicht zum Kern.
+- **Aufgezeichnete Folgen:** Es gibt keine eigens aufgezeichneten Folgen. Ihre Rolle übernehmen die festen Folgen von
+  `tests/boundaries.rs` (jede Budgetgrenze, Aufbewahrung, Verdrängung) und `tests/state_round_trip.rs`. Beide laufen
+  gegen den TS-Treiber und sind grün.
+- **10⁶ Zufallsschritte:** Ein gesäter Zufallsgang mit 10⁶ Schritten (`PHI_CORE_WALK_STEPS=1000000`, `--release`,
+  1 364 s) fand keine Abweichung in Antwort, Fehler oder Zustands-Hash. Statt `proptest` läuft ein eigener gesäter
+  Generator: Er erzeugt Folgen mit Zustand (Ids, Generationen, Schlüssel, Cursor aus den Antworten), und jede Saat ist
+  wiederholbar (`PHI_CORE_WALK_SEED`). Das Schrumpfen, das `proptest` brächte, hilft gegen einen Prozess mit Zustand
+  wenig; bei einer Abweichung zeigt der Gang den Schritt und die Pfade, an denen sich die Zustände unterscheiden. Soll
+  es trotzdem `proptest` sein, ist es freigegeben (R-D0).
+- **Nicht im Kern:** Was zurückgestellt ist (siehe unten), verweigert der Rust-Kern mit `NotPorted`, bevor er etwas
+  ändert.
+
 **Schnitt (2026-10-29):** R1 läuft über mehrere Sitzungen, in Scheiben. Jede Scheibe wird committet, wenn die
 Vergleichstests gegen den TS-Treiber grün sind.
 
@@ -325,7 +341,7 @@ raten.
   Ausgänge und schlägt fehl, wenn einer nie vorkam. Bei einer Abweichung spielt er beide Kerne bis zu diesem Schritt
   nach und zeigt die Pfade, an denen sich die Zustände unterscheiden. Vorgabe: 12 000 Schritte,
   `PHI_CORE_WALK_STEPS` für mehr. Ein Lauf mit 200 000 Schritten (`--release`) war abweichungsfrei. Der gesäte Gang
-  steht für den `proptest`-Lauf der Abnahme, bis der eingerichtet ist.
+  steht für den `proptest`-Lauf der Abnahme (siehe „Stand der Abnahme“).
 - **Grenztest `tests/boundaries.rs`:** Ein Zufallsgang trifft selten das eine Byte, an dem ein Limit kippt. Je Budget
   sucht der Rust-Kern den Kipppunkt einer parametrierten Folge (Füllbytes oder das Limit selbst), und beide Kerne laufen
   dort und je zwei Werte daneben. Füllbytes allein reichen nicht, weil ein Feld in Entry und `put` zählt, also in
