@@ -53,7 +53,7 @@ async function besideIt(a: P, space: SpaceLike, cells: Array<[number, number]>):
 	}
 }
 
-test("a mill: five bring grain at once, each gets exactly their own flour; a storm grinds ahead; a fallen mill gives the grain back; bread at the bakery, linen with a spindle", { timeout: 300_000 }, async () => {
+test("a mill: ten bring grain at once, each gets exactly their own flour; a storm grinds ahead; a fallen mill gives the grain back; bread at the bakery, linen with a spindle", { timeout: 300_000 }, async () => {
 	// 0.001: a world hour (one handful at the mill) is 3.6 s
 	const srv = await startServer({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.001" } });
 	try {
@@ -68,24 +68,24 @@ test("a mill: five bring grain at once, each gets exactly their own flour; a sto
 			if ((x < mill.x || x >= mill.x + mill.w || y < mill.y || y >= mill.y + mill.h) && walkable(w, room.ground, x, y) && Math.max(Math.abs(x - fire.x), Math.abs(y - fire.y)) > 1) ring.push([x, y]);
 
 		assert.match(await does(miller.p, "mahle weizen", /trägst nichts|Geh direkt/), /Du trägst nichts/);
-		await give(s, miller.me, "weizen", 2);
+		await give(s, miller.me, "weizen", 1);
 		assert.match(await does(miller.p, "mahle weizen", "Geh direkt"), /Geh direkt neben eine Windmühle/, "far from the mill");
 		const crew: P[] = [miller];
-		for (let i = 0; crew.length < 5; i++) crew.push(await player(srv.url, `Bauer${i}`));
+		for (let i = 0; crew.length < 10; i++) crew.push(await player(srv.url, `Bauer${i}`));
 		for (const a of crew) await besideIt(a, s, ring);
-		for (const a of crew.slice(1)) await give(s, a.me, "weizen", 2);
+		for (const a of crew.slice(1)) await give(s, a.me, "weizen", 1);
 		await give(s, crew[1]!.me, "kohl", 1);
 		assert.match(await does(crew[1]!.p, "mahle kohl", "mahlt nur"), /mahlt nur Korn: Weizen, Gerste, Hafer/);
 
-		// five at once: the loads queue, two hours each, none overlapping
+		// ten at once, each a handful: the loads queue, an hour each, none overlapping, nobody told there is no mill
 		const before = await worldNowOf(s);
 		await Promise.all(crew.map((a) => does(a.p, "mahle alle weizen", "Dein Mehl ist in etwa")));
 		const ls = (await loads(s)).sort((a, b) => a.readyWorldMs - b.readyWorldMs);
-		assert.equal(ls.length, 5);
+		assert.equal(ls.length, 10);
 		assert.deepEqual(new Set(ls.map((l) => l.charId)), new Set(crew.map((a) => a.me)), "one load each");
-		assert.ok(ls.every((l) => l.count === 2 && l.from === "weizen" && l.to === "mehl"));
-		assert.ok(ls[0]!.readyWorldMs >= before + 2 * m.unitWorldMs);
-		for (let i = 1; i < ls.length; i++) assert.ok(ls[i]!.readyWorldMs - ls[i - 1]!.readyWorldMs >= 2 * m.unitWorldMs, "a load starts when the one before is ground");
+		assert.ok(ls.every((l) => l.count === 1 && l.from === "weizen" && l.to === "mehl"));
+		assert.ok(ls[0]!.readyWorldMs >= before + m.unitWorldMs);
+		for (let i = 1; i < ls.length; i++) assert.ok(ls[i]!.readyWorldMs - ls[i - 1]!.readyWorldMs >= m.unitWorldMs, "a load starts when the one before is ground");
 		const millNow = () => s.readAll({ type: "Building", fields: { buildId: mill.buildId } }).then((e) => e[0]!.fields as unknown as BuildingFields);
 		assert.equal((await millNow()).busyUntilWorldMs, ls.at(-1)!.readyWorldMs);
 		for (const a of crew) assert.equal(await pack(s, a.me, "weizen"), 0);
@@ -101,10 +101,10 @@ test("a mill: five bring grain at once, each gets exactly their own flour; a sto
 		await stormTurnsMills(s, w, "kupferhafen-markt");
 		assert.equal((await loads(s)).sort((a, b) => a.readyWorldMs - b.readyWorldMs).at(-1)!.readyWorldMs, after.at(-1)!.readyWorldMs, "a storm elsewhere does not turn it");
 
-		// all ground: everyone fetches at once, exactly their own two
+		// all ground: everyone fetches at once, exactly their own
 		await eventually(async () => (await worldNowOf(s)) >= after.at(-1)!.readyWorldMs, 60_000, "all ground");
-		await Promise.all(crew.map((a) => does(a.p, "abholen", "Du holst 2 Mehl ab")));
-		for (const a of crew) assert.equal(await pack(s, a.me, "mehl"), 2, `${a.name}: two flour`);
+		await Promise.all(crew.map((a) => does(a.p, "abholen", "Du holst 1 Mehl ab")));
+		for (const a of crew) assert.equal(await pack(s, a.me, "mehl"), 1, `${a.name}: one flour`);
 		assert.equal((await loads(s)).length, 0);
 		assert.match(await does(miller.p, "abholen", "kein Mehl"), /Hier wartet kein Mehl auf dich/, "none twice");
 
@@ -130,6 +130,7 @@ test("a mill: five bring grain at once, each gets exactly their own flour; a sto
 
 		// bread: only beside a bakery; anyone bakes there
 		const baker = crew[2]!;
+		await give(s, baker.me, "mehl", 1);
 		await give(s, baker.me, "wasserkanne", 1);
 		await give(s, baker.me, "treibholz", 1);
 		assert.match(await does(baker.p, "backe brot", "nur direkt"), /Brot macht man nur direkt neben einem Backhaus/);

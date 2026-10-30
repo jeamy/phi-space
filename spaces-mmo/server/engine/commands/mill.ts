@@ -16,7 +16,7 @@ import { worldNowOf } from "../clock.ts";
 import type { Command } from "../cmdsets.ts";
 import { CommandError, inventory, itemsNamed, msg, NotUnderstood, type CommandCtx } from "../context.ts";
 import type { MillDef, WorldDef } from "../world.ts";
-import { ARTICLE, buildingHere, distTo, giveBack, plural, planOf, putBack, SITE_REACH } from "./build.ts";
+import { ARTICLE, distTo, giveBack, plural, planOf, putBack, SITE_REACH, takeNear } from "./build.ts";
 import { protoName } from "./garden.ts";
 import { craft } from "./trade.ts";
 
@@ -26,12 +26,12 @@ function millOf(c: CommandCtx): MillDef {
 	return c.world.mill;
 }
 const millName = (c: CommandCtx, m: MillDef) => planOf(c.world, m.plan)?.name ?? m.plan;
-/** The mill beside the actor, taken in the transaction. */
+/** The mill beside the actor, taken in the transaction; one another `mahle` holds right now is waited for through its
+ *  cells (takeNear), so grinders arriving at once queue instead of hearing there is no mill. */
 async function millHere(c: CommandCtx, m: MillDef): Promise<BuildingFields> {
-	const name = millName(c, m);
-	const b = await buildingHere(c, name, { own: false }).catch((e) => { throw e instanceof NotUnderstood ? new NotUnderstood(`Geh direkt neben eine ${name}.`) : e; });
-	if (b.plan !== m.plan) throw new NotUnderstood(`Geh direkt neben eine ${name}.`);
-	return b;
+	const r = await takeNear<BuildingFields>(c, "Building", "buildId", 1, (b) => b.plan === m.plan);
+	if ("f" in r) return r.f;
+	throw new NotUnderstood(`Geh direkt neben eine ${millName(c, m)}.`);
 }
 const grainNames = (c: CommandCtx, m: MillDef) => m.grinds.map((g) => protoName(c, g.from)).join(", ");
 
@@ -43,8 +43,10 @@ const mahle: Command = {
 		const now = await worldNowOf(c.space, c.txn);
 		const a = /^(?:(\d+|alle?|all)\s+)?(.*)$/i.exec(arg.trim().replace(/^(?:mein|meine|meinen|das|den|die)\s+/i, ""))!;
 		if (!a[2]) {
-			const b = await millHere(c, m);
-			await putBack(c, b);
+			// only a look: read, not taken (unless another command holds it right now)
+			const seen = (await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: m.plan } })).map((e) => fieldsOf<BuildingFields>(e)).find((b) => distTo(c.actor, b) <= 1);
+			const b = seen ?? (await millHere(c, m));
+			if (!seen) await putBack(c, b);
 			const mine = (await c.space.readAll({ type: "MillLoad", fields: { buildId: b.buildId, charId: c.actor.charId } })).map((e) => fieldsOf<MillLoadFields>(e));
 			const busy = Math.max(0, (b.busyUntilWorldMs ?? 0) - now);
 			const lines = [busy ? `Die ${b.name} hat noch ${hours(busy)} zu mahlen.` : `Die ${b.name} steht still; sie mahlt, was man ihr bringt (${grainNames(c, m)}), ${hours(m.unitWorldMs)} je Handvoll.`,
