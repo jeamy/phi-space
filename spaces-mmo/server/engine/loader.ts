@@ -79,10 +79,39 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 			await upsert(txn, replace, "Exit", { exitId: e.exitId }, draftOf("Exit", w.typeclasses, { ...rest, location: room, locks: e.locks ?? "" } satisfies ExitFields));
 		}
 	});
-	// prototypes and help topics each in a transaction of their own too: with the things, NPCs and dates below they
+	// prototypes and help topics each in a transaction of their own too: with the things and dates below they
 	// outgrow one commit
 	await underLock(space, txnMs, async (txn) => { for (const p of w.prototypes) await upsert(txn, replace, "Prototype", { key: p.key }, { type: "Prototype", fields: p as never }); });
 	await underLock(space, txnMs, async (txn) => { for (const h of w.help) await upsert(txn, replace, "HelpEntry", { key: h.key }, { type: "HelpEntry", fields: h as never }); });
+	// the NPCs in transactions of their own as well, a dozen at a time: with what they carry they outgrow one commit
+	// in a region (engine/regions.ts) an NPC is created where it starts, once: a marker stays when it walks on into
+	// another region, so this region does not make it a second time
+	const here = new Set(w.rooms.map((r) => r.roomId));
+	for (let i = 0; i < w.npcs.length; i += ROOMS_PER_TXN) await underLock(space, txnMs, async (txn) => {
+		for (const n of w.npcs.slice(i, i + ROOMS_PER_TXN)) {
+			if (w.region && !here.has(n.room)) continue;
+			const charId = `npc-${n.npcId}`;
+			let exists: boolean;
+			try { exists = !!(await readExisting(space, { type: "Character", fields: { charId } }, { txn })); } catch (e) { if (e instanceof StillHeld) continue; throw e; }
+			if (!exists && w.region && (await peek(space, { type: "NpcBorn", fields: { charId } }, { txn }))) continue;
+			if (!exists && w.region) await space.write({ type: "NpcBorn", fields: { charId } }, txn, FOREVER);
+			if (!exists) {
+				const now = Date.now();
+				await space.write({ type: "Account", fields: { accountId: charId, name: n.name, guest: false, admin: false, npc: true, ...(n.settler ? { settler: true } : {}), createdAt: now, touchedAt: now } satisfies AccountFields as never }, txn, FOREVER);
+				await space.write({ type: "Character", fields: { charId, accountId: charId, name: n.name, room: n.room, x: n.x, y: n.y, skin: n.skin, guest: false } satisfies CharacterFields as never }, txn, FOREVER);
+				await space.write(actorToken(charId), txn, FOREVER);
+			}
+			// what it has in its pack from the start (a trader's purse), each thing by a fixed itemId: with the character,
+			// and with a newer world version again what exists nowhere any more (sold on and used up, it comes back like a
+			// placed thing), so a new thing in the world file reaches an NPC that is already there
+			if (!exists || replace) for (const c of n.carry ?? []) for (let i = 0; i < c.count; i++) {
+				const itemId = `${charId}-${c.proto}-${i + 1}`;
+				try { if (await readExisting(space, { type: "Item", fields: { itemId } }, { txn })) continue; } catch (e) { if (e instanceof StillHeld) continue; throw e; }
+				if (await elsewhere(itemId)) continue;
+				await spawn(space, txn, w, resolveFrom(w.prototypes, c.proto)!, { itemId, location: charId, x: -1, y: -1 });
+			}
+		}
+	});
 	const txn = (await space.createTransaction(txnMs)).id;
 	try {
 		if (!(await space.take(WORLD_LOCK, 20_000, { txn }))) throw new Error("the world lock stayed taken");
@@ -108,32 +137,6 @@ export async function loadIntoSpace(space: SpaceLike, w: WorldDef, o: { replace?
 		}
 		for (const room of new Set(w.beacons.flatMap((b) => b.covers))) {
 			if (!(await space.readIfExists({ type: "Fog", fields: { room } }, 2_000, { txn }))) await space.write({ type: "Fog", fields: { room, level: w.fog.start } satisfies FogFields as never }, txn, FOREVER);
-		}
-		// in a region (engine/regions.ts) an NPC is created where it starts, once: a marker stays when it walks on into
-		// another region, so this region does not make it a second time
-		const here = new Set(w.rooms.map((r) => r.roomId));
-		for (const n of w.npcs) {
-			if (w.region && !here.has(n.room)) continue;
-			const charId = `npc-${n.npcId}`;
-			let exists: boolean;
-			try { exists = !!(await readExisting(space, { type: "Character", fields: { charId } }, { txn })); } catch (e) { if (e instanceof StillHeld) continue; throw e; }
-			if (!exists && w.region && (await peek(space, { type: "NpcBorn", fields: { charId } }, { txn }))) continue;
-			if (!exists && w.region) await space.write({ type: "NpcBorn", fields: { charId } }, txn, FOREVER);
-			if (!exists) {
-				const now = Date.now();
-				await space.write({ type: "Account", fields: { accountId: charId, name: n.name, guest: false, admin: false, npc: true, createdAt: now, touchedAt: now } satisfies AccountFields as never }, txn, FOREVER);
-				await space.write({ type: "Character", fields: { charId, accountId: charId, name: n.name, room: n.room, x: n.x, y: n.y, skin: n.skin, guest: false } satisfies CharacterFields as never }, txn, FOREVER);
-				await space.write(actorToken(charId), txn, FOREVER);
-			}
-			// what it has in its pack from the start (a trader's purse), each thing by a fixed itemId: with the character,
-			// and with a newer world version again what exists nowhere any more (sold on and used up, it comes back like a
-			// placed thing), so a new thing in the world file reaches an NPC that is already there
-			if (!exists || replace) for (const c of n.carry ?? []) for (let i = 0; i < c.count; i++) {
-				const itemId = `${charId}-${c.proto}-${i + 1}`;
-				try { if (await readExisting(space, { type: "Item", fields: { itemId } }, { txn })) continue; } catch (e) { if (e instanceof StillHeld) continue; throw e; }
-				if (await elsewhere(itemId)) continue;
-				await spawn(space, txn, w, resolveFrom(w.prototypes, c.proto)!, { itemId, location: charId, x: -1, y: -1 });
-			}
 		}
 		// an NPC whose role left the world: its character, account and token go; what it carried lies where it stood
 		if (replace) for (const e of await space.readAll({ type: "Character" })) {

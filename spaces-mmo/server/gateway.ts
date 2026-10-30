@@ -21,7 +21,7 @@ import { setting } from "./settings.ts";
 import type { WsConnection } from "phi-spaces/ws";
 
 /** What a client sees of a character. */
-export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true };
+export type CharView = { charId: string; name: string; x: number; y: number; skin: number; ai?: true; /** a settler (npc/settlers.ts): a script plays it, always marked */ settler?: true };
 /** What a client sees of a thing or an exit: on the map when `location` is its room, in its pack when it is its charId. */
 /** `icon`: the URL of a thing's picture (from its prototype); the map draws the glyph without one. */
 /** A building plan as the page offers it (key for `bau <key> <x> <y>`, what it needs as text). */
@@ -105,7 +105,7 @@ type Client = { ws: WsConnection; me: Me; room: string | null; lease: string | n
 const ATLAS_MS = 1_000;
 
 /** The characters a model plays (docs/modell-npcs.md: marked as AI wherever they appear). */
-const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}) });
+const charView = (c: CharacterFields, modelChars: ReadonlySet<string>): CharView => ({ charId: c.charId, name: c.name, x: c.x, y: c.y, skin: c.skin, ...(modelChars.has(c.charId) ? { ai: true as const } : {}), ...(c.charId.startsWith("npc-siedler-") ? { settler: true as const } : {}) });
 const itemView = (f: ItemFields, protoIcons: ReadonlyMap<string, string>): ObjView => ({ id: f.itemId, kind: "item", name: f.name, location: f.location, x: f.x, y: f.y, glyph: f.glyph, ...(protoIcons.has(f.proto) ? { icon: protoIcons.get(f.proto)! } : {}) });
 const exitView = (f: ExitFields): ObjView => ({ id: f.exitId, kind: "exit", name: f.name, location: f.location, x: f.x, y: f.y });
 const msgView = (m: MsgFields, viewer: string, modelNames: ReadonlySet<string>, viewerName = "", players: ReadonlySet<string> = new Set()): MsgView => ({ kind: m.kind, text: m.actor ? render(m.text, { viewer, actor: m.actor, actorName: m.from }) : m.text, from: m.from, at: m.at, ...(modelNames.has(m.from) ? { ai: true as const } : {}), ...(forViewer(m, viewer, viewerName) ? { toMe: true as const } : {}),

@@ -5,7 +5,9 @@ import type { Fields } from "phi-spaces";
 
 /** World space. `guest` accounts carry a lease (renewed on activity); registered ones live until deleted. `perms`:
  *  levels granted on top (Builder); an admin has every level. */
-export type AccountFields = { accountId: string; name: string; guest: boolean; admin: boolean; createdAt: number; touchedAt: number; perms?: string[]; npc?: boolean };
+export type AccountFields = { accountId: string; name: string; guest: boolean; admin: boolean; createdAt: number; touchedAt: number; perms?: string[]; npc?: boolean;
+	/** An NPC that plays like a person (server/npc/settlers.ts): it may build and sow like one. */
+	settler?: boolean };
 /** One character per account; `guest` mirrors the account so the cleanup can find orphans. A character's location is
  *  always a room (`room`); items use `location`, which may also be a character. */
 /** `ack`: the last numbered step of a page this character took (client/walk.ts): the connection and its step number,

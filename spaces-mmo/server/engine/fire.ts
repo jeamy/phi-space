@@ -151,9 +151,10 @@ export async function floodTick(space: SpaceLike, w: WorldDef, leaseMs: number):
 	}
 }
 
-/** People (not NPCs) online, by the island they stand on. */
+/** People online (and the settlers who play in their stead, npc/settlers.ts: they gather like people, so the tide
+ *  brings for them too), by the island they stand on. */
 async function peopleByIsland(space: SpaceLike, w: WorldDef): Promise<Map<string, number>> {
-	const live = new Set((await space.readAll({ type: "Session" })).map((s) => String(s.fields.charId)).filter((id) => !id.startsWith("npc-")));
+	const live = new Set((await space.readAll({ type: "Session" })).map((s) => String(s.fields.charId)).filter((id) => !id.startsWith("npc-") || id.startsWith("npc-siedler-")));
 	const out = new Map<string, number>();
 	if (!live.size) return out;
 	for (const c of await space.readAll({ type: "Character" })) {

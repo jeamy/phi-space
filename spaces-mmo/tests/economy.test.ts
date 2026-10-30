@@ -118,14 +118,14 @@ test("a storm surge leaves things on a beach and the harbour channel says where"
 });
 
 test("the whole archipelago lives: every NPC plays at once, they trade, and no coin appears or vanishes", async () => {
-	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.02", SPACES_MMO_NPCS: w.npcs.map((n) => n.npcId).filter((id) => id !== "fremder").join(",") } });
+	const stack = await startStack({ worldEnv: { SPACES_MMO_TIME_SCALE: "0.02", SPACES_MMO_NPCS: w.npcs.filter((n) => !n.settler).map((n) => n.npcId).filter((id) => id !== "fremder").join(",") } });
 	try {
 		const s = stack.space;
 		await allFires(s);
 		const coins = async () => (await s.readAll({ type: "Item", fields: { proto: "muenze" } })).length;
 		const before = await coins();
 		await stack.npcProcess();
-		await eventually(async () => (await s.count({ type: "Session" })) >= w.npcs.length - 1, 20_000, "everyone online");
+		await eventually(async () => (await s.count({ type: "Session" })) >= w.npcs.filter((n) => !n.settler).length - 1, 20_000, "everyone online");
 		// a while of island life: people gather, keep fires, list and buy
 		await eventually(async () => (await s.count({ type: "Listing" })) >= 1, 120_000, "something on a board"); // slow under the load of the whole suite
 		await new Promise((r) => setTimeout(r, 5_000));

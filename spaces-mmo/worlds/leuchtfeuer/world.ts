@@ -303,7 +303,7 @@ const NPCS: NpcDef[] = [
 export const world: WorldDef = {
 	id: "leuchtfeuer",
 	title: "Leuchtfeuer",
-	version: 25,
+	version: 26,
 	startHour: 8, // the world's clock starts at 08:00 of day 0 (docs/weltzeit.md)
 	evening: { hour: 20 }, // a daily evening event
 	tileSize: 32,
@@ -646,6 +646,27 @@ export const world: WorldDef = {
 		],
 	},
 };
+
+// The settlers (docs/siedeln.md "Wenige Spieler", server/npc/settlers.ts): figures that play like people where too few
+// people play. Each lives in a room of one fire's light,
+// spread over the nine fires. How many play at once is the setting settlers.min, less the people online.
+const SETTLER_NAMES = ["Fenna", "Tjark", "Swantje", "Frauke", "Talea", "Ubbo", "Gesche", "Enno", "Neele", "Tomke", "Lüder", "Femke", "Keno", "Rieke", "Harm", "Anke",
+	"Jelto", "Hilke", "Sönke", "Telse", "Wübbo", "Ebba", "Fiete", "Thees", "Inken", "Broder", "Hayo", "Silke", "Antje", "Folkert", "Gerda", "Heike", "Tamme", "Mareike", "Remmer", "Dörte",
+	"Eilert", "Hedda", "Onno", "Wenke"];
+// a quarter of the light stays free for people: three quarters of 20 is the 15 points of a village
+world.settlers = { reserve: 0.25, maxBeds: 2 };
+const settlers: NpcDef[] = [];
+world.npcs.push(...SETTLER_NAMES.map((name, i): NpcDef => {
+	const fire = world.beacons[i % world.beacons.length]!, room = fire.covers[Math.floor(i / world.beacons.length) % fire.covers.length]!;
+	const r = world.rooms.find((x) => x.roomId === room)!;
+	// a cell of its own near the room's spawn: nobody and nothing stands there from the start
+	const taken = new Set([...world.npcs, ...settlers, ...world.objects, ...world.beacons, ...world.exits, r.spawn].filter((o) => !("room" in o) || o.room === room).map((o) => `${o.x},${o.y}`));
+	let at = near(room, r.spawn.x, r.spawn.y + 1);
+	for (let d = 1; taken.has(`${at.x},${at.y}`); d++) at = near(room, r.spawn.x + (d % 7) - 3, r.spawn.y + 1 + Math.floor(d / 7));
+	const s: NpcDef = { npcId: `siedler-${i + 1}`, name, skin: i % 5, room, ...at, script: "siedler", beacon: fire.beaconId, home: fire.covers, settler: true };
+	settlers.push(s);
+	return s;
+}));
 
 // The plants come last: they keep clear of everything placed above (the spawn, the ways in and out, people, fires,
 // things). Ground stays as it is, the hand-drawn rooms included.

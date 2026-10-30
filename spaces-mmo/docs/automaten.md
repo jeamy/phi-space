@@ -327,6 +327,7 @@ nur zusätzlich abschalten. Darunter die **Grenzen**:
 | Modellaufrufe je NPC und Welttag (−1: das Budget der Rolle) | `SPACES_MMO_NPC_BUDGET_DAY` | −1 |
 | Getippte Befehle auf einmal je Konto | `SPACES_MMO_CMD_BURST` | 20 |
 | Getippte Befehle je Sekunde je Konto | `SPACES_MMO_CMD_PER_SEC` | 5 |
+| Figuren, die immer spielen (Siedler füllen auf, [siedeln.md](siedeln.md)) | `SPACES_MMO_SETTLERS_MIN` | 30 |
 | Punkte einer Insel für das Dorf (Epoche 2, [siedeln.md](siedeln.md)) | `SPACES_MMO_EPOCH_DORF` | 15 |
 | Punkte einer Insel für die Stadt (Epoche 3) | `SPACES_MMO_EPOCH_STADT` | 40 |
 | Punkte einer Insel für das Netz (Epoche 4) | `SPACES_MMO_EPOCH_NETZ` | 80 |

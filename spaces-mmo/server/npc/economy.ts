@@ -28,7 +28,7 @@ const round = (n: Npc) => n.pace(8_000, 200);
 /** How long a round rests: at the pace above while a person is on the NPC's island (someone could see it), almost four
  *  times longer while nobody is: the island goes on, with a fraction of the calls to the space (every call costs the
  *  space time in proportion to all it holds, so idle islands must not keep it busy). */
-async function rest(n: Npc, room: string): Promise<number> {
+export async function rest(n: Npc, room: string): Promise<number> {
 	const island = (r: unknown) => n.world.rooms.find((x) => x.roomId === r)?.island;
 	const live = new Set((await n.space.readAll({ type: "Session" })).map((e) => String(e.fields.charId)).filter((id) => !id.startsWith("npc-")));
 	if (live.size && (await n.space.readAll({ type: "Character" })).some((e) => live.has(String(e.fields.charId)) && island(e.fields.room) === island(room))) return round(n);
@@ -38,8 +38,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const pick = <T>(xs: T[]): T | undefined => xs[randomInt(0, Math.max(1, xs.length))];
 
 /** What the NPC sees this round: itself, its pack and what lies in its room. */
-type Look = { me: CharacterFields; pack: ItemFields[]; ground: ItemFields[] };
-async function look(n: Npc): Promise<Look | null> {
+export type Look = { me: CharacterFields; pack: ItemFields[]; ground: ItemFields[] };
+export async function look(n: Npc): Promise<Look | null> {
 	const me = await self(n);
 	if (!me) return null;
 	const pack = (await n.space.readAll({ type: "Item", fields: { location: me.charId } })).map((e) => fieldsOf<ItemFields>(e));
@@ -62,7 +62,7 @@ const islandOf = (w: WorldDef, roomId: string) => w.rooms.find((r) => r.roomId =
 
 
 /** One step of the way to `room`: true when the NPC is there already. */
-async function travel(n: Npc, l: Look, room: string): Promise<boolean> {
+export async function travel(n: Npc, l: Look, room: string): Promise<boolean> {
 	if (l.me.room === room) return true;
 	const exit = wayTo(n.world, l.me.room, room);
 	if (exit) await n.act(`go ${exit}`);
@@ -70,7 +70,7 @@ async function travel(n: Npc, l: Look, room: string): Promise<boolean> {
 }
 
 /** Picks up the nearest thing of `protos` lying here (walks to it first): true when it did something. */
-async function gather(n: Npc, l: Look, protos: string[]): Promise<boolean> {
+export async function gather(n: Npc, l: Look, protos: string[]): Promise<boolean> {
 	const d = (i: ItemFields) => Math.max(Math.abs(i.x - l.me.x), Math.abs(i.y - l.me.y));
 	const there = l.ground.filter((i) => protos.includes(i.proto)).sort((a, b) => d(a) - d(b))[0];
 	if (!there) return false;
@@ -259,7 +259,7 @@ function huter(): Script {
 }
 
 /** Walks to a free cell next to `at` (a fire): the first one no one stands on. */
-async function nextTo(n: Npc, l: Look, at: { x: number; y: number }): Promise<void> {
+export async function nextTo(n: Npc, l: Look, at: { x: number; y: number }): Promise<void> {
 	const ground = n.world.rooms.find((r) => r.roomId === l.me.room)?.ground ?? [];
 	const busy = new Set((await n.space.readAll({ type: "Character", fields: { room: l.me.room } })).map((e) => `${e.fields.x},${e.fields.y}`));
 	for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {

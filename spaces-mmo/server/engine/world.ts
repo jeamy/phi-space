@@ -78,6 +78,9 @@ export type WorldDef = {
 	/** The epochs of an island (docs/siedeln.md "Epochen"): their names from the first on (`a`: with the article, "ein
 	 *  Dorf"), and how often the count runs. The thresholds are settings (epoch.dorf, epoch.stadt, epoch.netz). */
 	epochs?: { names: string[]; a: string[]; checkWorldMs: number };
+	/** The settlers (docs/siedeln.md "Wenige Spieler"): what share of a fire's light they leave free for people, and how
+	 *  many beds each digs. How many play at once is the setting settlers.min, less the people online. */
+	settlers?: { reserve: number; maxBeds: number };
 	/** Fields (docs/siedeln.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
 	fields?: FieldDef;
 	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */
@@ -174,6 +177,10 @@ export type NpcDef = {
 	 *  carries when the world creates it, and what it says now and then. */
 	home?: string[]; market?: string; route?: string[]; prices?: Record<string, [number, number]>; crafts?: string[];
 	carry?: Array<{ proto: string; count: number }>; lines?: string[];
+	/** A settler (server/npc/settlers.ts, script "siedler"): plays like a person on its home island, through the same
+	 *  commands; it may build and sow (rules as for people), but only while the fire keeps `settlers.reserve` of its
+	 *  light free for the people who come. Its account is an NPC's (no model calls), marked `settler`. */
+	settler?: boolean;
 };
 
 import type { RegionDef } from "./regions.ts";

@@ -260,7 +260,7 @@ function sync(s: Scene3D, chars: Map<string, CharView>, objs: Map<string, ObjVie
 		let e = s.chars.get(id);
 		if (!e) {
 			const fig = makeFigure(s.t, { id, skin: c.skin, own: id === me, ai: !!c.ai });
-			fig.group.add(label(s.t, c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
+			fig.group.add(label(s.t, c.settler ? `${c.name} (Siedler)` : c.name, id === me ? "#dfff73" : c.ai ? "#9fd3ff" : "#ffffff"));
 			e = { obj: fig.group, target: at(s, c.x, c.y, 0), fig }; e.obj.position.copy(e.target); s.scene.add(e.obj); s.chars.set(id, e);
 		}
 		e.target.copy(at(s, c.x, c.y, 0));

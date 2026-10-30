@@ -168,7 +168,9 @@ test("a bed with a spade in the light; seeds grow when watered; a sponsor waters
 		const left = (await bedOf(s, anna.me)).plants.length;
 		const flowers = (await pack(s, anna.me, "strandnelke")) + (await pack(s, bert.me, "strandnelke")), cabbages = (await pack(s, anna.me, "kohl")) + (await pack(s, bert.me, "kohl"));
 		assert.equal(flowers + cabbages / 2, 4 - left, "every harvested plant gave its yield once");
-		assert.ok((await pack(s, anna.me, "samen-strandnelke")) + (await pack(s, bert.me, "samen-strandnelke")) >= 1, "and seeds with it");
+		const seeds = async (proto: string) => (await pack(s, anna.me, proto)) + (await pack(s, bert.me, proto));
+		// whichever sort was ripe first: its seeds come with it
+		assert.ok((await seeds("samen-strandnelke")) + (await seeds("samen-strandkohl")) >= 1, "and seeds with it");
 
 		// the sponsor's end; afterwards they may not tend it
 		assert.match(await does(anna.p, "pate weg Bert", "beendet"), /beendet die Patenschaft von Bert/);

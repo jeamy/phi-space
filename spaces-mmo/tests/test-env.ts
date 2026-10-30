@@ -23,3 +23,5 @@ process.env.SPACES_MMO_LLM_MODULE = "";
 // the three roles of the earlier phases; the people of the islands (server/npc/economy.ts) would walk through their
 // tests, and tests/economy.test.ts plays them itself
 process.env.SPACES_MMO_NPCS = "ines,bo,fremder";
+// no settlers (server/npc/settlers.ts) unless a test asks for them: they would play through every test's world
+process.env.SPACES_MMO_SETTLERS_MIN = "0";

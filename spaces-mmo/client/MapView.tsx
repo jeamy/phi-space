@@ -441,7 +441,7 @@ function draw(s: Scene, chars: Map<string, CharView>, me: string): void {
 		}
 		if (c.x !== sp.tx || c.y !== sp.ty) sp.row = c.x > sp.tx ? ROW.right : c.x < sp.tx ? ROW.left : c.y < sp.ty ? ROW.up : ROW.down;
 		Object.assign(sp, { tx: c.x, ty: c.y, skin: c.skin });
-		sp.label.text = c.ai ? `${c.name} (KI)` : c.name; // a model plays it: always marked
+		sp.label.text = c.ai ? `${c.name} (KI)` : c.settler ? `${c.name} (Siedler)` : c.name; // a model or a script plays it: always marked
 	}
 	s.fogDirty = true;
 }

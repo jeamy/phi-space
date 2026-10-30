@@ -8,6 +8,7 @@ import { llmEnabled } from "../llm.ts";
 import { isAwake, keepAwake, remember, sleep, think, tryWake } from "./minds.ts";
 import type { NpcDef, WorldDef } from "../engine/world.ts";
 import { ECONOMY } from "./economy.ts";
+import { SETTLER_SCRIPTS } from "./settlers.ts";
 import { gather, requestOf, unclear } from "./requests.ts";
 import { setting } from "../settings.ts";
 import { fieldsOf, type CharacterFields, type ExitFields, type ListingFields, type MsgFields, type OfferFields } from "../model.ts";
@@ -263,7 +264,7 @@ function faehrmann(): Script {
 	};
 }
 
-const MAKERS: Record<string, () => Script> = { waerter, faehrmann, wanderer, ...ECONOMY };
+const MAKERS: Record<string, () => Script> = { waerter, faehrmann, wanderer, ...ECONOMY, ...SETTLER_SCRIPTS };
 
 /** A fresh instance of the named script (state such as "already greeted" is per NPC), or undefined. */
 export const scriptFor = (name: string): Script | undefined => (Object.hasOwn(MAKERS, name) ? MAKERS[name]!() : undefined);

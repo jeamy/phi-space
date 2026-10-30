@@ -198,7 +198,7 @@ const who: Command = {
 	help: "who – wer gerade spielt",
 	async func(c) {
 		const rooms = new Map((await c.space.readAll({ type: "Room" })).map((e) => [String(e.fields.roomId), String(e.fields.name)]));
-		const list = (await online(c, null)).map((ch) => `${ch.name} (${rooms.get(ch.room) ?? ch.room})`).sort();
+		const list = (await online(c, null)).map((ch) => `${ch.name}${ch.charId.startsWith("npc-siedler-") ? ", Siedler" : ""} (${rooms.get(ch.room) ?? ch.room})`).sort();
 		await msg(c, c.actor.charId, "who", `Gerade spielen ${list.length}: ${list.join(", ")}`);
 	},
 };

@@ -646,7 +646,9 @@ Jede Insel steht auf einer Stufe: **Fischerdorf**, **Dorf**, **Stadt**, **Netz**
 | Stadt | 40 | (noch keine Pläne) |
 | Netz | 80 | (noch keine Pläne) |
 
-Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.`,
+Die Schwellen kann der Betreiber ändern, etwa für einen Server mit wenigen Spielern. Gezählt wird jede Weltstunde; ändert sich die Stufe, hören es alle Räume der Insel. Verfällt zu viel, fällt die Insel zurück: was steht, arbeitet weiter (die Mühle mahlt, das Backhaus backt), nur neue Pläne der höheren Stufe warten, bis der Bestand wieder reicht. \`epoche\` zeigt Stufe und Punkte der Insel, auf der du stehst.
+
+Figuren mit dem Zusatz **(Siedler)** spielt ein Skript, kein Mensch: sie sammeln, bauen, säen und handeln, wo gerade wenige Menschen spielen, und werden weniger, wenn mehr Menschen kommen.`,
 			en: `Building is possible only in a **beacon's light**: where no fire burns, nobody stakes out a site. Each fire carries only as many buildings as its light reaches. Staking out and owning need an account; guests may help build ([Guest and account](help.game.account)).
 
 ## Staking out a site {#stake}
@@ -688,7 +690,9 @@ Every island stands at a stage: **fishing village**, **village**, **town**, **ne
 | Town | 40 | (no plans yet) |
 | Net | 80 | (no plans yet) |
 
-The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.`,
+The operator can change the thresholds, say for a server with few players. The count runs every world hour; when the stage changes, every room of the island hears it. If too much decays, the island falls back: what stands goes on working (the mill grinds, the bakery bakes), only new plans of the higher stage wait until the stock is enough again. \`epoche\` shows the stage and points of the island you stand on.
+
+Figures marked **(Siedler)** are played by a script, not a person: they gather, build, sow and trade where few people are playing, and there are fewer of them when more people come.`,
 		},
 	},
 	{

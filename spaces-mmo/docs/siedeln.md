@@ -543,10 +543,20 @@ Befehle und die Auftragstafel, nie durch unsichtbare Eingriffe:
   koordiniert — bauen darf sie nicht, wie alle Modell-NPCs.
 - **Gieß-Patenschaften** (oben bei den Gärten): der Dorfgärtner oder ein Mitspieler pflegt Beete Abwesender.
 
+- **Siedler** (gebaut 2026-10-30, `server/npc/settlers.ts`, Test `tests/settlers.test.ts`, Weltversion 26): Damit die
+  Welt nie leer wirkt, spielen immer mindestens `settlers.min` Figuren (Einstellung, Standard 30, 0 schaltet sie ab).
+  Fehlen Menschen, füllen Siedler auf: 40 Skriptfiguren, je eine feste Insel, kein Modellaufruf. Jeder Mensch, der in
+  einer Region spielt, ersetzt dort einen Siedler; die Region trägt ihren Anteil nach der Zahl ihrer Siedler, und sie
+  gehen in fester Reihenfolge. Sie benutzen nur Spielerbefehle: sammeln, Seil drehen, Hütte, Regentonne und Hühnerstall
+  bauen, auf fremden Baustellen liefern und arbeiten, zwei Beete pflegen, ausbessern, das Feuer nähren, am Markt
+  ihrer Insel verkaufen und kaufen, was ihrer Baustelle fehlt. Karte und `who` zeigen sie als Siedler; Tiere,
+  Fluren, Mühle und Backhaus bedienen sie noch nicht, und sie fahren nicht mit der Fähre.
+
 Grenzen, damit die KI nicht das Spiel spielt:
 
-- Hilfe gibt es nur gegen **Auftrag oder Anheuerung**, bezahlt aus Lager oder Tasche. Kein NPC beginnt je selbst eine
-  Baustelle; der Anstoß bleibt menschlich (oder Rathaus-Beschluss).
+- Hilfe gibt es nur gegen **Auftrag oder Anheuerung**, bezahlt aus Lager oder Tasche. Kein NPC beginnt selbst eine
+  Baustelle; der Anstoß bleibt menschlich (oder Rathaus-Beschluss). Ausnahme sind die Siedler: sie vertreten fehlende
+  Menschen, gelten beim Bauen als Menschen und lassen ein Viertel des Lichts jedes Feuers frei (`settlers.reserve`).
 - Höchstens die **Hälfte** der Lieferungen und der Arbeit je Baustelle darf von Nicht-Menschen stammen; der
   Baustellen-Eintrag führt beide Zähler. Nicht-Menschen sind NPCs und Automaten, auch die eines Spielers. Ein Bau der
   Spieler bleibt ein Bau der Spieler.

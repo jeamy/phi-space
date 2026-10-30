@@ -31,7 +31,8 @@ export const cells = (r: Rect) => { const out: Array<{ x: number; y: number }> =
 /** Chebyshev distance from a cell to a rectangle (0: inside, 1: beside it). */
 export const distTo = (p: { x: number; y: number }, r: Rect) => Math.max(Math.max(r.x - p.x, 0, p.x - (r.x + r.w - 1)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h - 1)));
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-export const human = (c: CommandCtx) => !!c.account && !c.account.npc && !c.actor.charId.startsWith("npc-");
+/** A person, for the rules of building and sowing: a player, or a settler (an NPC that plays like one, server/npc/settlers.ts). */
+export const human = (c: CommandCtx) => !!c.account && (!!c.account.settler || (!c.account.npc && !c.actor.charId.startsWith("npc-")));
 /** The plan a name means ("hütte", "eine Hütte"). */
 export const planOf = (w: WorldDef, name: string): PlanDef | undefined => {
 	const n = name.trim().toLowerCase().replace(ARTICLE, "");
@@ -98,7 +99,8 @@ export function besides(c: CommandCtx, plan: Pick<PlanDef, "w" | "h">): Rect[] {
  *  the reason. */
 export async function lightFor(c: CommandCtx, points: number): Promise<{ beaconId: string; use: LightUseFields; fresh: boolean } | string> {
 	const now = await worldNowOf(c.space, c.txn);
-	const max = c.world.building?.lightPoints ?? 0;
+	// a settler leaves part of the light free for the people who come (world settlers.reserve)
+	const max = (c.world.building?.lightPoints ?? 0) * (c.account?.settler ? 1 - (c.world.settlers?.reserve ?? 0.25) : 1);
 	const fires = c.world.beacons.filter((b) => b.covers.includes(c.actor.room)).sort((a, b) => Number(b.room === c.actor.room) - Number(a.room === c.actor.room));
 	if (!fires.length) return "Hier hält kein Feuer den Nebel fern; gebaut wird nur im Licht.";
 	let lit = false;
@@ -192,7 +194,7 @@ export const bau: Command = {
 		const plan = m && planOf(c.world, m[1]!);
 		if (!plan) throw new NotUnderstood(`Einen Bauplan „${arg.slice(0, 20)}“ gibt es nicht. „bau“ zeigt die Pläne.`);
 		if (!c.account || c.account.guest) throw new CommandError("Gäste können liefern und mitarbeiten, aber nichts besitzen; registriere dich, um selbst zu bauen.");
-		if (c.account.npc || c.actor.charId.startsWith("npc-")) throw new CommandError("Baustellen stecken nur Menschen ab.");
+		if (!human(c)) throw new CommandError("Baustellen stecken nur Menschen ab.");
 		await needEpoch(c, plan.epoch, `Der Bauplan „${plan.name}“`);
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) >= def.maxSites) throw new CommandError("Du hast schon eine offene Baustelle; bau sie erst fertig.");
 		if ((await c.space.count({ type: "Site", fields: { accountId: c.account.accountId } })) + (await c.space.count({ type: "Building", fields: { accountId: c.account.accountId } })) >= def.maxBuildings) throw new CommandError(`Mehr als ${def.maxBuildings} Bauten hat niemand.`);
