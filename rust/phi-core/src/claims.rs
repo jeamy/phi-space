@@ -127,7 +127,8 @@ impl Space {
 		if self.claim_bytes() + added > lim.max_claim_bytes {
 			return Err(error("LimitError", "the generation exceeds maxClaimBytes"));
 		}
-		self.rpc_mut().generations.insert(generation.clone(), rec);
+		self.rpc_mut();
+		self.generation_put(&generation, Some(rec));
 		self.due_at(admit_until + 1.0);
 		self.touch(now);
 		*self.rpc_mut().bytes.as_mut().expect("tally") += added;
@@ -180,7 +181,7 @@ impl Space {
 		if self.claim_bytes() + added + result_bytes > self.limits().max_claim_bytes {
 			return Err(error("LimitError", "the request and its reserved result exceed maxClaimBytes"));
 		}
-		self.rpc_mut().claims.insert(key.clone(), rec);
+		self.claim_put(&key, Some(rec));
 		self.touch(now);
 		let st = self.rpc_mut();
 		*st.bytes.as_mut().expect("tally") += added;
@@ -256,7 +257,7 @@ impl Space {
 		}
 		let next = Json::Object(next);
 		let delta = bytes(&next) - before;
-		self.rpc_mut().claims.insert(key, next);
+		self.claim_put(key, Some(next));
 		let keep = self.limits().claim_result_ms;
 		self.due_at(now + keep);
 		*self.rpc_mut().bytes.as_mut().expect("tally") += delta;
@@ -313,7 +314,36 @@ impl Space {
 		let keep = self.limits().claim_result_ms;
 		let mut next = FOREVER;
 		let admit_until = |g: Option<&Json>| g.and_then(|g| num_of(g, "admitUntil"));
-		let mut eligible: Vec<String> = st
+		// the claims on the disk are asked through their indexes (DiskMap.due, nextAt): the decided ones whose result
+		// retention is over, of a closed or unknown generation when their result is gone already; by key, one more than
+		// a sweep takes
+		let pick = |c: &Json| {
+			let g = str_of(c, "generation").and_then(|id| st.generations.get(id));
+			str_of(c, "state") != Some("pending") && num_of(c, "decidedAt").is_some_and(|d| d + keep <= now) && (c.get("resultExpired").is_none() || admit_until(g).is_none_or(|u| u < now))
+		};
+		let mut eligible: Vec<String> = if self.claims_on_disk {
+			let closed: std::collections::HashSet<&str> = st.generations.iter().filter(|(_, g)| num_of(g, "admitUntil").is_some_and(|u| u < now)).map(|(id, _)| id).collect();
+			let t = now - keep;
+			let flagged = |c: &Json| crate::space::truthy(c.get("resultExpired"));
+			let mut due: Vec<String> = st
+				.claims
+				.iter()
+				.filter(|(_, c)| {
+					let at = num_of(c, "decidedAt");
+					let grp = str_of(c, "generation");
+					at.is_some_and(|a| a <= t) && (!flagged(c) || grp.is_some_and(|g| closed.contains(g) || !st.generations.contains_key(g))) && pick(c)
+				})
+				.map(|(k, _)| k.to_owned())
+				.collect();
+			due.sort_by(|a, b| js_cmp(a, b));
+			due.truncate(MAX_RECORDS + 1);
+			let at = st.claims.iter().filter(|(_, c)| !flagged(c)).filter_map(|(_, c)| num_of(c, "decidedAt")).filter(|&a| a > t).fold(None, |m: Option<f64>, a| Some(m.map_or(a, |m| m.min(a))));
+			if let Some(at) = at {
+				next = next.min(at + keep);
+			}
+			due
+		} else {
+			st
 			.claims
 			.iter()
 			.filter(|(_, c)| {
@@ -328,7 +358,8 @@ impl Space {
 				decided + keep <= now && (!gone || admit_until(g).is_none_or(|u| u < now))
 			})
 			.map(|(k, _)| k.to_owned())
-			.collect();
+			.collect()
+		};
 		eligible.sort_by(|a, b| js_cmp(a, b));
 		let mut changed = false;
 		let mut complete = eligible.len() <= MAX_RECORDS;
@@ -339,19 +370,22 @@ impl Space {
 			}
 			let st = self.state.rpc.as_mut().expect("swept");
 			let c = st.claims.get(k).cloned().expect("eligible");
+			let mut kept = c.clone();
 			if c.get("resultExpired").is_none() {
 				let Json::Object(mut o) = c.clone() else { unreachable!() };
 				o.remove("result");
 				o.insert("resultExpired", Json::Bool(true));
 				let o = Json::Object(o);
 				st.bytes = Some(st.bytes.unwrap_or(0.0) + bytes(&o) - bytes(&c));
-				st.claims.insert(k.clone(), o);
+				kept = o.clone();
+				self.claim_put(k, Some(o));
 			}
+			let st = self.state.rpc.as_mut().expect("swept");
 			let g = str_of(&c, "generation").and_then(|id| st.generations.get(id));
 			if admit_until(g).is_none_or(|u| u < now) {
-				let gone = bytes(st.claims.get(k).expect("kept")) + bytes(&Json::String(k.clone())) + 2.0;
+				let gone = bytes(&kept) + bytes(&Json::String(k.clone())) + 2.0;
 				st.bytes = Some(st.bytes.unwrap_or(0.0) - gone);
-				st.claims.remove(k);
+				self.claim_put(k, None);
 			}
 			changed = true;
 		}
@@ -374,8 +408,9 @@ impl Space {
 				continue;
 			}
 			let st = self.state.rpc.as_mut().expect("swept");
-			let g = st.generations.remove(&id).expect("listed");
+			let g = st.generations.get(&id).cloned().expect("listed");
 			st.bytes = Some(st.bytes.unwrap_or(0.0) - bytes(&g) - bytes(&Json::String(id.clone())) - 2.0);
+			self.generation_put(&id, None);
 			removed += 1;
 			changed = true;
 		}
@@ -390,6 +425,9 @@ impl Space {
 		let st = self.state.rpc.as_ref()?;
 		if let Some(at) = st.sweep_at {
 			return Some(at);
+		}
+		if self.claims_on_disk {
+			return Some(0.0); // claims on the disk are never scanned: a sweep now sets sweepAt
 		}
 		let keep = self.limits().claim_result_ms;
 		let mut min = f64::INFINITY;

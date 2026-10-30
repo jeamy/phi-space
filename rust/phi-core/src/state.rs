@@ -123,6 +123,87 @@ impl EntryRec {
 	}
 }
 
+/// The entries of a space, in their order. They change only through these methods, so a commit knows what it changed:
+/// `track` starts an undo log, `untrack` hands it over (the host writes the changed rows from it, or undoes them).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Entries {
+	items: Vec<EntryRec>,
+	log: Option<Vec<EntryUndo>>,
+}
+
+/// One change of the entries, with what undoes it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum EntryUndo {
+	/// A record was appended (its id).
+	Pushed(String),
+	/// The record at this position was removed.
+	Removed(usize, EntryRec),
+	/// The record at this position was changed; this is how it was.
+	Set(usize, EntryRec),
+}
+
+impl Entries {
+	pub fn push(&mut self, e: EntryRec) {
+		if let Some(log) = &mut self.log {
+			log.push(EntryUndo::Pushed(e.id.clone()));
+		}
+		self.items.push(e);
+	}
+	pub fn remove(&mut self, i: usize) -> EntryRec {
+		let e = self.items.remove(i);
+		if let Some(log) = &mut self.log {
+			log.push(EntryUndo::Removed(i, e.clone()));
+		}
+		e
+	}
+	/// Keeps the records `keep` accepts, in order.
+	pub fn retain(&mut self, mut keep: impl FnMut(&EntryRec) -> bool) {
+		let mut i = 0;
+		while i < self.items.len() {
+			if keep(&self.items[i]) {
+				i += 1;
+			} else {
+				self.remove(i);
+			}
+		}
+	}
+	/// The record at `i`, to change.
+	pub fn get_mut(&mut self, i: usize) -> &mut EntryRec {
+		if let Some(log) = &mut self.log {
+			log.push(EntryUndo::Set(i, self.items[i].clone()));
+		}
+		&mut self.items[i]
+	}
+	pub fn track(&mut self) { self.log = Some(vec![]); }
+	/// The changes since `track`, oldest first; tracking ends.
+	pub fn untrack(&mut self) -> Vec<EntryUndo> { self.log.take().unwrap_or_default() }
+	/// Undoes `changes` (as `untrack` handed them over).
+	pub fn undo(&mut self, changes: Vec<EntryUndo>) {
+		for c in changes.into_iter().rev() {
+			match c {
+				EntryUndo::Pushed(_) => {
+					self.items.pop();
+				}
+				EntryUndo::Removed(i, e) => self.items.insert(i, e),
+				EntryUndo::Set(i, e) => self.items[i] = e,
+			}
+		}
+	}
+	pub fn as_slice(&self) -> &[EntryRec] { &self.items }
+}
+impl std::ops::Deref for Entries {
+	type Target = [EntryRec];
+	fn deref(&self) -> &[EntryRec] { &self.items }
+}
+impl<'a> IntoIterator for &'a Entries {
+	type Item = &'a EntryRec;
+	type IntoIter = std::slice::Iter<'a, EntryRec>;
+	fn into_iter(self) -> Self::IntoIter { self.items.iter() }
+}
+impl From<Vec<EntryRec>> for Entries {
+	fn from(items: Vec<EntryRec>) -> Self { Entries { items, log: None } }
+}
+
 /// `TxnRec`: an open transaction. `owner`: the only conversation that may use, commit, abort, renew or cancel it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TxnRec {
@@ -375,10 +456,12 @@ impl RpcState {
 			rest: f.rest(),
 		})
 	}
-	pub fn to_json(&self) -> Json {
+	pub fn to_json(&self) -> Json { self.to_json_with(false) }
+	/// `head`: with empty claims and generations (rows of their own in a store).
+	pub fn to_json_with(&self, head: bool) -> Json {
 		let mut o = Object::new();
-		o.insert("generations", Json::Object(self.generations.clone()));
-		o.insert("claims", Json::Object(self.claims.clone()));
+		o.insert("generations", Json::Object(if head { Object::new() } else { self.generations.clone() }));
+		o.insert("claims", Json::Object(if head { Object::new() } else { self.claims.clone() }));
 		if let Some(n) = self.bytes { o.insert("bytes", Json::Number(n)); }
 		if let Some(n) = self.sweep_at { o.insert("sweepAt", Json::Number(n)); }
 		if let Some(n) = self.reserved_bytes { o.insert("reservedBytes", Json::Number(n)); }
@@ -436,12 +519,14 @@ impl StreamState {
 		let log = match f.need("log", w)? { Json::Array(a) => a.iter().map(Batch::from_json).collect::<Result<_, _>>()?, _ => return Err(ShapeError("stream.log is not an array".into())) };
 		Ok(StreamState { rev, floor, bytes, log, rest: f.rest() })
 	}
-	pub fn to_json(&self) -> Json {
+	pub fn to_json(&self) -> Json { self.to_json_with(false) }
+	/// `head`: with an empty log (the batches are rows of their own in a store).
+	pub fn to_json_with(&self, head: bool) -> Json {
 		let mut o = Object::new();
 		o.insert("rev", Json::Number(self.rev));
 		o.insert("floor", Json::Number(self.floor));
 		o.insert("bytes", Json::Number(self.bytes));
-		o.insert("log", Json::Array(self.log.iter().map(Batch::to_json).collect()));
+		o.insert("log", Json::Array(if head { vec![] } else { self.log.iter().map(Batch::to_json).collect() }));
 		with_rest(o, &self.rest)
 	}
 }
@@ -450,7 +535,7 @@ impl StreamState {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpaceState {
 	pub next_id: f64,
-	pub entries: Vec<EntryRec>,
+	pub entries: Entries,
 	/// The open transactions in the order they were opened (the document keys them by id).
 	pub txns: Vec<TxnRec>,
 	pub regs: Vec<RegRec>,
@@ -482,14 +567,14 @@ impl SpaceState {
 	pub fn initial() -> Self {
 		let mut rest = Object::new();
 		rest.insert("outbox", Json::Array(vec![]));
-		SpaceState { next_id: 1.0, entries: vec![], txns: vec![], regs: vec![], waiters: vec![], mailboxes: None, rpc: None, returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
+		SpaceState { next_id: 1.0, entries: Entries::default(), txns: vec![], regs: vec![], waiters: vec![], mailboxes: None, rpc: None, returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
 	}
 
 	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
 		let w = "space";
 		let mut f = Fields::of(v, w)?;
 		let next_id = f.number("nextId", w)?;
-		let entries = match f.need("entries", w)? { Json::Array(a) => a.iter().map(EntryRec::from_json).collect::<Result<_, _>>()?, _ => return Err(ShapeError("space.entries is not an array".into())) };
+		let entries = match f.need("entries", w)? { Json::Array(a) => Entries::from(a.iter().map(EntryRec::from_json).collect::<Result<Vec<_>, _>>()?), _ => return Err(ShapeError("space.entries is not an array".into())) };
 		let txns = match f.need("txns", w)? {
 			Json::Object(o) => o.iter().map(|(_, t)| TxnRec::from_json(t)).collect::<Result<_, _>>()?,
 			_ => return Err(ShapeError("space.txns is not an object".into())),
@@ -517,18 +602,20 @@ impl SpaceState {
 		let limits = match f.take("limits") { None => None, Some(Json::Object(o)) => Some(o), Some(_) => return Err(ShapeError("space.limits is not an object".into())) };
 		let stream = f.take("stream").map(|s| StreamState::from_json(&s)).transpose()?;
 		let rest = f.rest();
-		for key in ["outbox"] {
-			if !rest.contains_key(key) { return Err(ShapeError(format!("space.{key} is missing"))); }
-		}
+		if !rest.contains_key("outbox") { return Err(ShapeError("space.outbox is missing".into())); }
 		Ok(SpaceState { next_id, entries, txns, regs, waiters, mailboxes, rpc, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
 	}
 
-	pub fn to_json(&self) -> Json {
+	pub fn to_json(&self) -> Json { self.to_json_with(false) }
+	/// The head of the document as a store keeps it (store/parts.ts `headOf` with the parts of a Space): entries, the
+	/// stream log, claims and generations empty. Never serializes the parts.
+	pub fn to_json_head(&self) -> Json { self.to_json_with(true) }
+	fn to_json_with(&self, head: bool) -> Json {
 		let mut o = Object::new();
 		for key in HEAD {
 			match key {
 				"nextId" => o.insert(key, Json::Number(self.next_id)),
-				"entries" => o.insert(key, Json::Array(self.entries.iter().map(EntryRec::to_json).collect())),
+				"entries" => o.insert(key, Json::Array(if head { vec![] } else { self.entries.iter().map(EntryRec::to_json).collect() })),
 				"outboxBytes" => if let Some(n) = self.outbox_bytes { o.insert(key, Json::Number(n)) },
 				"returned" => o.insert(key, Json::Number(self.returned)),
 				"txns" => o.insert(key, Json::Object(self.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())),
@@ -540,9 +627,9 @@ impl SpaceState {
 		if let Some(l) = &self.limits { o.insert("limits", Json::Object(l.clone())); }
 		if let Some(s) = &self.space_id { o.insert("spaceId", s.as_str().into()); }
 		if let Some(s) = &self.incarnation { o.insert("incarnation", s.as_str().into()); }
-		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json()); }
+		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json_with(head)); }
 		if let Some(m) = &self.mailboxes { o.insert("mailboxes", obj_boxes(m)); }
-		if let Some(s) = &self.stream { o.insert("stream", s.to_json()); }
+		if let Some(s) = &self.stream { o.insert("stream", s.to_json_with(head)); }
 		for (k, v) in self.rest.iter() { if !o.contains_key(k) { o.insert(k, v.clone()); } }
 		Json::Object(o)
 	}

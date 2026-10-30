@@ -175,6 +175,7 @@ dependencies = [
 name = "phi-store"
 version = "0.0.1"
 dependencies = [
+ "phi-core",
  "phi-json",
  "rusqlite",
 ]

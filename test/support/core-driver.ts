@@ -24,6 +24,8 @@ import { digestJson } from "../../src/canonical.ts";
 import type { Json } from "../../src/core.ts";
 
 let seed = "", block = 0, pool = Buffer.alloc(0);
+/** Starts the seeded stream and the clock anew (an init line). */
+export function reseed(text: string, now: number): void { seed = text; block = 0; pool = Buffer.alloc(0); clock = now; }
 /** The next `n` bytes of the seeded stream. */
 export function seeded(n: number): Buffer {
 	while (pool.length < n) { pool = Buffer.concat([pool, createHash("sha256").update(`phi-spaces/driver/v1\n${seed}\n${block++}`).digest()]); }
@@ -31,8 +33,10 @@ export function seeded(n: number): Buffer {
 	return Buffer.from(out);
 }
 let clock = 0;
+/** Sets the clock a line names (Date.now included) and returns the line's now. */
+export function tick(l: { now?: number }): number { if (typeof l.now === "number") clock = l.now; return l.now ?? clock; }
 const realNow = Date.now;
-function install(): void {
+export function install(): void {
 	(crypto as unknown as { randomBytes: (n: number) => Buffer }).randomBytes = (n: number) => seeded(n);
 	syncBuiltinESMExports();
 	Date.now = () => clock;
@@ -44,8 +48,8 @@ let s: core.SpaceState = core.initialState();
 let host = {};
 const opt = <T,>(v: T | undefined, d: T): T => (v === undefined ? d : v);
 
-/** One operation; its result as plain JSON. */
-function apply(l: Line): unknown {
+/** One operation on `s`; its result (the caller makes it plain JSON). `host`: whose entry snapshots it reads. */
+export function apply(l: Line, s: core.SpaceState, host: object): unknown {
 	const now = l.now ?? clock;
 	switch (l.op) {
 		// ---- entries, leases, expiry
@@ -86,6 +90,7 @@ function apply(l: Line): unknown {
 	}
 }
 
+export type { Line };
 export function step(l: Line, dumpAll = false): Record<string, unknown> {
 	if (l.op === "init") {
 		seed = String(l.seed ?? ""); block = 0; pool = Buffer.alloc(0); clock = l.now ?? 0;
@@ -100,7 +105,7 @@ export function step(l: Line, dumpAll = false): Record<string, unknown> {
 	let out: Record<string, unknown>;
 	try {
 		core.beginCommit(s);
-		out = { ok: true, result: core.plain((apply(l) ?? null) as Json) };
+		out = { ok: true, result: core.plain((apply(l, s, host) ?? null) as Json) };
 	} catch (e) {
 		out = { ok: false, error: (e as Error).constructor?.name ?? "Error", message: (e as Error).message };
 	}

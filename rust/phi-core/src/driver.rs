@@ -81,7 +81,22 @@ impl Driver {
 		let now = self.clock;
 		self.space.clock = now; // Date.now() in the TypeScript driver
 		self.space.begin_commit();
-		let s = &mut self.space;
+		apply_line(&mut self.space, &mut self.snapshots, now, l)
+	}
+
+	/// The clock a line sets (its `now`, else the one before), as the driver keeps it.
+	pub fn clock_of(&mut self, l: &Json) -> f64 {
+		if let Some(now) = l.get("now").and_then(Json::as_f64) {
+			self.clock = now;
+		}
+		self.clock
+	}
+}
+
+/// One line's operation on `s` (no commit begun, no clock kept: the caller does both).
+pub fn apply_line(s: &mut Space, snapshots: &mut crate::snapshot::Snapshots, now: f64, l: &Json) -> Result<Json, CoreError> {
+	{
+		let op = l.get("op").and_then(Json::as_str).unwrap_or("");
 		// `opt(v, null)` in the TypeScript driver: absent is null, and null is no transaction
 		let txn = l.get("txn").filter(|t| !t.is_null());
 		let as_ = l.get("as");
@@ -121,7 +136,7 @@ impl Driver {
 			}
 			"events" => s.mailbox_page(now, l.get("principal"), o),
 			"appendMail" => s.append_mail_line(now, l.get("principal"), l.get("event")),
-			"snapshotPage" => self.snapshots.page(s, now, l.get("tmpl").unwrap_or(&Json::Null), o, as_),
+			"snapshotPage" => snapshots.page(s, now, l.get("tmpl").unwrap_or(&Json::Null), o, as_),
 			"ack" => s.ack_mailbox(l.get("principal"), l.get("mailboxEpoch"), l.get("upTo")),
 			"nextExpiry" => s.next_expiry().map(Json::Number),
 			"stats" => s.stats(now),

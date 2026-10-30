@@ -61,6 +61,14 @@ impl Object {
 			None => self.0.push((key, value)),
 		}
 	}
+	/// The position of a key.
+	pub fn position(&self, key: &str) -> Option<usize> { self.0.iter().position(|(k, _)| k == key) }
+	/// Puts a key back where it was (an undo of `remove`: the place it had, not where JavaScript would add it).
+	pub fn insert_at(&mut self, at: usize, key: impl Into<String>, value: Json) {
+		let key = key.into();
+		self.remove(&key);
+		self.0.insert(at.min(self.0.len()), (key, value));
+	}
 	pub fn remove(&mut self, key: &str) -> Option<Json> {
 		let at = self.0.iter().position(|(k, _)| k == key)?;
 		Some(self.0.remove(at).1)
@@ -328,6 +336,7 @@ impl Json {
 	pub fn as_bool(&self) -> Option<bool> { if let Json::Bool(b) = self { Some(*b) } else { None } }
 	pub fn as_array(&self) -> Option<&Vec<Json>> { if let Json::Array(a) = self { Some(a) } else { None } }
 	pub fn as_object(&self) -> Option<&Object> { if let Json::Object(o) = self { Some(o) } else { None } }
+	pub fn as_object_mut(&mut self) -> Option<&mut Object> { if let Json::Object(o) = self { Some(o) } else { None } }
 	pub fn is_null(&self) -> bool { matches!(self, Json::Null) }
 	/// `v[key]` of an object (None for anything else or a missing key).
 	pub fn get(&self, key: &str) -> Option<&Json> { self.as_object()?.get(key) }

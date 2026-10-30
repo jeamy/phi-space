@@ -1,5 +1,6 @@
 // The TypeScript core as a process (test/support/core-driver.ts): one JSON line out, one back.
 #![allow(dead_code)] // each test file uses its own part
+pub mod walk;
 use phi_json::{parse, Json};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -7,10 +8,12 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 pub struct TsDriver { child: Child, input: ChildStdin, output: BufReader<ChildStdout> }
 
 impl TsDriver {
-	pub fn start() -> TsDriver {
+	pub fn start() -> TsDriver { TsDriver::script("test/support/core-driver.ts") }
+	/// Another driver of the same protocol (test/support/store-driver.ts).
+	pub fn script(script: &str) -> TsDriver {
 		let root = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
 		let mut child = Command::new("node")
-			.args(["--experimental-strip-types", "--no-warnings", "test/support/core-driver.ts"])
+			.args(["--experimental-strip-types", "--no-warnings", script])
 			.current_dir(root)
 			.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
 			.spawn().expect("node must be on PATH for the differential tests");

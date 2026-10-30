@@ -355,10 +355,135 @@ pub struct Space {
 	/// The smallest `expires` of the entries that stayed at the last full sweep (core.ts `expiryWatermarks`); can only
 	/// be stale low. `None`: not swept yet. Infinity is a value of its own (nothing stayed).
 	watermark: Option<f64>,
+	/// The claims are a map part on the disk (`DISK_MAP` in the TypeScript store): the core takes the branches it takes
+	/// there. Set by a host for each commit.
+	pub claims_on_disk: bool,
+	/// What the running commit changed, while a host tracks it.
+	pub(crate) tracking: Option<Tracking>,
+}
+
+/// What a tracked commit changed in the parts of a space, and what undoes it.
+#[derive(Debug)]
+pub(crate) struct Tracking {
+	/// The state as the commit found it, without its parts (entries, the stream log and the claims are undone from
+	/// their logs instead of copied).
+	head: SpaceState,
+	stream_rev: f64,
+	dropped: Vec<crate::state::Batch>,
+	/// Claims the commit changed, each with where and how it was before (none: it was not there), in order of first touch.
+	claims: Vec<(String, Option<(usize, Json)>)>,
+	claims_seen: std::collections::HashSet<String>,
+	generations: Vec<String>,
+}
+
+/// What a tracked commit changed, for the rows a store writes (`Space::end_commit`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Changes {
+	/// The entries' changes, oldest first.
+	pub entries: Vec<crate::state::EntryUndo>,
+	/// Stream batches that left the log (their revisions), and the revision the log had before the commit.
+	pub dropped_revs: Vec<f64>,
+	pub stream_rev: f64,
+	/// Keys of the claims and generations it changed (each present now, or deleted).
+	pub claims: Vec<String>,
+	pub generations: Vec<String>,
 }
 
 impl Space {
-	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, clock: 0.0, random, open: None, budget: None, watermark: None } }
+	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, clock: 0.0, random, open: None, budget: None, watermark: None, claims_on_disk: false, tracking: None } }
+
+	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
+	/// anew), with the claims on the disk or not, and with what it changes in the parts recorded (`end_commit`) so that
+	/// it can be written as rows or undone (`rollback`).
+	pub fn begin_tracked_commit(&mut self, claims_on_disk: bool) {
+		self.begin_commit();
+		self.watermark = None;
+		self.claims_on_disk = claims_on_disk;
+		let entries = std::mem::take(&mut self.state.entries);
+		let log = self.state.stream.as_mut().map(|s| std::mem::take(&mut s.log));
+		let claims = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.claims));
+		let head = self.state.clone();
+		self.state.entries = entries;
+		if let (Some(s), Some(l)) = (self.state.stream.as_mut(), log) {
+			s.log = l;
+		}
+		if let (Some(r), Some(c)) = (self.state.rpc.as_mut(), claims) {
+			r.claims = c;
+		}
+		self.state.entries.track();
+		let stream_rev = stream::revision_of(&self.state.stream);
+		self.tracking = Some(Tracking { head, stream_rev, dropped: vec![], claims: vec![], claims_seen: Default::default(), generations: vec![] });
+	}
+	/// What the tracked commit changed; tracking ends.
+	pub fn end_commit(&mut self) -> Changes {
+		let t = self.tracking.take().expect("a tracked commit");
+		let entries = self.state.entries.untrack();
+		Changes { entries, dropped_revs: t.dropped.iter().map(|b| b.rev).collect(), stream_rev: t.stream_rev, claims: t.claims.into_iter().map(|(k, _)| k).collect(), generations: t.generations }
+	}
+	/// Undoes the tracked commit: the state is what it was when the commit began.
+	pub fn rollback(&mut self) {
+		let t = self.tracking.take().expect("a tracked commit");
+		let mut entries = std::mem::take(&mut self.state.entries);
+		let log = entries.untrack();
+		entries.undo(log);
+		let mut head = t.head;
+		head.entries = entries;
+		if let Some(s) = head.stream.as_mut() {
+			// the batches the commit added go, the ones it dropped come back in front
+			let mut log = self.state.stream.take().map(|s| s.log).unwrap_or_default();
+			log.retain(|b| b.rev <= t.stream_rev);
+			let mut restored = t.dropped.into_iter().filter(|b| b.rev <= t.stream_rev).collect::<Vec<_>>();
+			restored.append(&mut log);
+			s.log = restored;
+		}
+		if let Some(r) = head.rpc.as_mut() {
+			let mut claims = self.state.rpc.take().map(|r| r.claims).unwrap_or_default();
+			for (k, before) in t.claims.into_iter().rev() {
+				match before {
+					Some((at, v)) => claims.insert_at(at, k, v),
+					None => {
+						claims.remove(&k);
+					}
+				}
+			}
+			r.claims = claims;
+		}
+		self.state = head;
+		self.open = None;
+		self.budget = None;
+	}
+
+	/// Sets or deletes a claim; a tracked commit records how it was.
+	pub(crate) fn claim_put(&mut self, key: &str, value: Option<Json>) {
+		let st = self.state.rpc.as_mut().expect("rpc made");
+		if let Some(t) = &mut self.tracking {
+			if t.claims_seen.insert(key.to_owned()) {
+				let before = st.claims.position(key).map(|at| (at, st.claims.get(key).cloned().expect("there")));
+				t.claims.push((key.to_owned(), before));
+			}
+		}
+		match value {
+			Some(v) => st.claims.insert(key.to_owned(), v),
+			None => {
+				st.claims.remove(key);
+			}
+		}
+	}
+	/// Sets or deletes a generation; a tracked commit records its key (the generations are part of the head's copy).
+	pub(crate) fn generation_put(&mut self, key: &str, value: Option<Json>) {
+		let st = self.state.rpc.as_mut().expect("rpc made");
+		if let Some(t) = &mut self.tracking {
+			if !t.generations.iter().any(|k| k == key) {
+				t.generations.push(key.to_owned());
+			}
+		}
+		match value {
+			Some(v) => st.generations.insert(key.to_owned(), v),
+			None => {
+				st.generations.remove(key);
+			}
+		}
+	}
 	pub(crate) fn random_bytes(&mut self, n: usize) -> Vec<u8> { (self.random)(n) }
 
 	pub fn limits(&self) -> Limits { Limits::of(self.state.limits.as_ref()) }
@@ -415,11 +540,18 @@ impl Space {
 
 	pub(crate) fn touch(&mut self, now: f64) {
 		let max = self.limits().max_log_bytes;
-		stream::touch(&mut self.state.stream, &mut self.open, now, max);
+		let dropped = stream::touch(&mut self.state.stream, &mut self.open, now, max);
+		self.dropped(dropped);
 	}
 	fn record(&mut self, now: f64, id: &str, op: Json) {
 		let max = self.limits().max_log_bytes;
-		stream::record(&mut self.state.stream, &mut self.open, now, id, op, max);
+		let dropped = stream::record(&mut self.state.stream, &mut self.open, now, id, op, max);
+		self.dropped(dropped);
+	}
+	fn dropped(&mut self, batches: Vec<crate::state::Batch>) {
+		if let Some(t) = &mut self.tracking {
+			t.dropped.extend(batches);
+		}
 	}
 	fn log_put(&mut self, now: f64, i: usize) {
 		let e = self.state.entries[i].clone();
@@ -479,6 +611,19 @@ impl Space {
 		self.state.outbox_bytes = Some(self.outbox_bytes() + bytes(&event) + 1.0);
 		if let Some(Json::Array(a)) = self.state.rest.get_mut("outbox") {
 			a.push(event);
+		}
+	}
+	/// `docBytes`: the JSON bytes of the whole space as stored; claims on the disk by their running tally.
+	fn doc_bytes(&self) -> f64 {
+		match (&self.state.rpc, self.claims_on_disk) {
+			(Some(r), true) => {
+				let mut head = self.state.to_json();
+				if let Some(Json::Object(rpc)) = head.as_object_mut().and_then(|o| o.get_mut("rpc")) {
+					rpc.insert("claims", Json::Object(Object::new()));
+				}
+				bytes(&head) + (r.bytes.unwrap_or(0.0) - bytes(&Json::Object(r.generations.clone()))).max(0.0)
+			}
+			_ => bytes(&self.state.to_json()),
 		}
 	}
 	fn regs_bytes(&self) -> f64 { bytes(&Json::Array(self.state.regs.iter().map(RegRec::to_json).collect())) }
@@ -922,7 +1067,11 @@ impl Space {
 			}
 			let txn = self.new_id("t"); // the receiver commits it
 			let mut t = TxnRec { id: txn.clone(), expires: until(now, w.txn_lease_ms), owner: w.target.clone(), reserved: None, announced: None, rest: Object::new() };
+			// waiters of requests carry their key; the search is for states from before that (claims on the disk are newer)
 			let origin = w.origin_request_key.clone().or_else(|| {
+				if self.claims_on_disk {
+					return None;
+				}
 				let claims = &self.state.rpc.as_ref()?.claims;
 				claims.iter().find(|(_, c)| c.get("method").and_then(Json::as_str) == Some("wait") && c.get("result").and_then(Json::as_str) == Some(w.id.as_str())).map(|(k, _)| k.to_owned())
 			});
@@ -1203,15 +1352,18 @@ impl Space {
 		self.state.regs.retain(|r| r.txn.as_str() != Some(id));
 		let mut published: Vec<EntryRec> = vec![];
 		for i in (0..self.state.entries.len()).rev() {
-			// backwards: removals do not shift what is still to visit
-			let e = &mut self.state.entries[i];
-			e.read_by.retain(|r| r != id);
+			// backwards: removals do not shift what is still to visit; a record is changed only where it changes
+			if self.state.entries[i].read_by.iter().any(|r| r == id) {
+				self.state.entries.get_mut(i).read_by.retain(|r| r != id);
+			}
+			let e = &self.state.entries[i];
 			if commit {
 				if e.taken_by.as_deref() == Some(id) {
 					self.state.entries.remove(i); // removal commits (also covers written-and-taken)
 					continue;
 				}
 				if e.written_under.as_deref() == Some(id) {
+					let e = self.state.entries.get_mut(i);
 					e.written_under = None;
 					published.push(e.clone());
 				}
@@ -1221,11 +1373,12 @@ impl Space {
 					continue;
 				}
 				if e.taken_by.as_deref() == Some(id) {
+					let e = self.state.entries.get_mut(i);
 					e.taken_by = None; // takes are undone: the entry is back
+					let back = e.clone();
 					self.state.returned += 1.0;
-					if e.written_under.is_none() {
-						let e = e.clone();
-						self.log_put_rec(now, &e);
+					if back.written_under.is_none() {
+						self.log_put_rec(now, &back);
 					}
 				}
 			}
@@ -1640,11 +1793,11 @@ impl Space {
 			if txn.is_none() || copy.written_under.as_deref() == txn {
 				self.state.entries.remove(i); // gone, or never visible outside
 			} else {
-				self.state.entries[i].taken_by = txn.map(str::to_owned);
+				self.state.entries.get_mut(i).taken_by = txn.map(str::to_owned);
 			}
 		} else if let Some(t) = txn {
 			if !copy.read_by.iter().any(|r| r == t) {
-				self.state.entries[i].read_by.push(t.to_owned());
+				self.state.entries.get_mut(i).read_by.push(t.to_owned());
 				self.touch(now);
 			}
 		}
@@ -1781,7 +1934,7 @@ impl Space {
 	fn set_lease(&mut self, l: Leased, v: f64) {
 		match l {
 			Leased::Entry(i) => {
-				self.state.entries[i].expires = v;
+				self.state.entries.get_mut(i).expires = v;
 				self.note_expiry(v);
 			}
 			Leased::Txn(t) => self.state.txns[t].expires = v,
@@ -1928,7 +2081,7 @@ impl Space {
 			"waiters" => self.waiters_bytes(),
 			"registrations" => self.regs_bytes(),
 			"txns" => self.txns_bytes(),
-			"total" => bytes(&self.state.to_json()),
+			"total" => self.doc_bytes(),
 		};
 		Ok(obj! {
 			"entries" => entries, "byType" => by_type, "locked" => locked, "uncommitted" => uncommitted, "expired" => expired,

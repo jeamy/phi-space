@@ -6,5 +6,6 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+phi-core = { path = "../phi-core" }
 phi-json = { path = "../phi-json" }
 rusqlite.workspace = true
