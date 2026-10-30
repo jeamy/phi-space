@@ -10,4 +10,4 @@ pub mod state;
 pub mod stream;
 
 pub use space::{CoreError, Limits, Space, Template};
-pub use state::{Batch, EntryRec, ShapeError, SpaceState, RpcState, StreamState, TxnRec, WaiterRec};
+pub use state::{Batch, ClaimSource, Claims, DiskClaims, EntryRec, ShapeError, SpaceState, RpcState, StreamState, TxnRec, WaiterRec};

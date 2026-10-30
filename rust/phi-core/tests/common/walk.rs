@@ -873,7 +873,7 @@ pub fn observe(w: &mut Walk, line: &Json, r: &Result<Json, phi_core::CoreError>,
 			note("a fanout job waits", seen);
 		}
 		if let Some(r) = &s.rpc {
-			for (_, c) in r.claims.iter() {
+			for (_, c) in r.claims.entries().iter() {
 				if c.get("resultExpired").is_some() {
 					note("a claim's result expired", seen);
 				}

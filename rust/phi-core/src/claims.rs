@@ -54,7 +54,7 @@ impl Space {
 	fn rpc_mut(&mut self) -> &mut RpcState {
 		let st = self.state.rpc.get_or_insert_with(|| RpcState {
 			generations: Object::new(),
-			claims: Object::new(),
+			claims: crate::state::Claims::default(),
 			bytes: Some(0.0),
 			reserved_bytes: None,
 			signing_key: None,
@@ -64,7 +64,7 @@ impl Space {
 			rest: Object::new(),
 		});
 		if st.bytes.is_none() {
-			st.bytes = Some(bytes(&Json::Object(st.claims.clone())) + bytes(&Json::Object(st.generations.clone()))); // from before the tally
+			st.bytes = Some(bytes(&Json::Object(st.claims.entries())) + bytes(&Json::Object(st.generations.clone()))); // from before the tally
 		}
 		st
 	}
@@ -74,7 +74,7 @@ impl Space {
 		match &self.state.rpc {
 			None => history,
 			Some(r) => match r.bytes {
-				None => history + bytes(&Json::Object(r.claims.clone())) + bytes(&Json::Object(r.generations.clone())),
+				None => history + bytes(&Json::Object(r.claims.entries())) + bytes(&Json::Object(r.generations.clone())),
 				Some(b) => history + b + r.reserved_bytes.unwrap_or(0.0),
 			},
 		}
@@ -151,6 +151,7 @@ impl Space {
 		let hash = digest_json(&obj! { "method" => method.clone(), "args" => args.clone() }).expect("finite");
 		let keep = self.limits().claim_result_ms;
 		if let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) {
+			let c = &c;
 			if c.get("method") != Some(method) || str_of(c, "argHash") != Some(hash.as_str()) {
 				return Err(error("RequestConflict", format!("request {} was used for different arguments", r.request_id())));
 			}
@@ -222,7 +223,7 @@ impl Space {
 
 	/// Record the outcome in the commit that decides it. `result` absent: a done claim without a result field.
 	pub(crate) fn decide(&mut self, now: f64, key: &str, state: &Json, result: Option<Json>, locked: bool, err: Option<Json>) -> Result<()> {
-		let Some(c) = self.rpc_mut().claims.get(key).cloned() else { return Err(error("Error", format!("no claim {key}"))) };
+		let Some(c) = self.rpc_mut().claims.get(key) else { return Err(error("Error", format!("no claim {key}"))) };
 		if str_of(&c, "state") != Some("pending") {
 			return Ok(());
 		}
@@ -284,6 +285,7 @@ impl Space {
 		let Some(c) = self.state.rpc.as_ref().and_then(|st| st.claims.get(&key)) else {
 			return Err(error("RequestExpired", format!("request {} is unknown", r.request_id())));
 		};
+		let c = &c;
 		let pending = str_of(c, "state") == Some("pending");
 		let keep = self.limits().claim_result_ms;
 		let expired = c.get("resultExpired").is_some() || (!pending && num_of(c, "decidedAt").is_some_and(|d| d + keep <= now));
@@ -305,7 +307,8 @@ impl Space {
 	}
 
 	/// Retention: a decided result is kept `claimResultMs`, then only its hash, until its generation stops admitting;
-	/// then the claim goes, and an unused closed generation with it. Bounded per commit.
+	/// then the claim goes, and an unused closed generation with it. Bounded per commit. Claims on the disk are asked
+	/// through their indexes (`due`, `nextAt`, `hasGroup`), never scanned.
 	pub(crate) fn sweep(&mut self, now: f64) {
 		let Some(st) = &self.state.rpc else { return };
 		if st.sweep_at.is_some_and(|at| now < at) {
@@ -314,53 +317,42 @@ impl Space {
 		let keep = self.limits().claim_result_ms;
 		let mut next = FOREVER;
 		let admit_until = |g: Option<&Json>| g.and_then(|g| num_of(g, "admitUntil"));
-		// the claims on the disk are asked through their indexes (DiskMap.due, nextAt): the decided ones whose result
-		// retention is over, of a closed or unknown generation when their result is gone already; by key, one more than
-		// a sweep takes
 		let pick = |c: &Json| {
 			let g = str_of(c, "generation").and_then(|id| st.generations.get(id));
 			str_of(c, "state") != Some("pending") && num_of(c, "decidedAt").is_some_and(|d| d + keep <= now) && (c.get("resultExpired").is_none() || admit_until(g).is_none_or(|u| u < now))
 		};
-		let mut eligible: Vec<String> = if self.claims_on_disk {
-			let closed: std::collections::HashSet<&str> = st.generations.iter().filter(|(_, g)| num_of(g, "admitUntil").is_some_and(|u| u < now)).map(|(id, _)| id).collect();
-			let t = now - keep;
-			let flagged = |c: &Json| crate::space::truthy(c.get("resultExpired"));
-			let mut due: Vec<String> = st
-				.claims
-				.iter()
-				.filter(|(_, c)| {
-					let at = num_of(c, "decidedAt");
-					let grp = str_of(c, "generation");
-					at.is_some_and(|a| a <= t) && (!flagged(c) || grp.is_some_and(|g| closed.contains(g) || !st.generations.contains_key(g))) && pick(c)
-				})
-				.map(|(k, _)| k.to_owned())
-				.collect();
-			due.sort_by(|a, b| js_cmp(a, b));
-			due.truncate(MAX_RECORDS + 1);
-			let at = st.claims.iter().filter(|(_, c)| !flagged(c)).filter_map(|(_, c)| num_of(c, "decidedAt")).filter(|&a| a > t).fold(None, |m: Option<f64>, a| Some(m.map_or(a, |m| m.min(a))));
-			if let Some(at) = at {
-				next = next.min(at + keep);
-			}
-			due
-		} else {
-			st
-			.claims
-			.iter()
-			.filter(|(_, c)| {
-				let g = str_of(c, "generation").and_then(|id| st.generations.get(id));
-				let Some(decided) = num_of(c, "decidedAt").filter(|_| str_of(c, "state") != Some("pending")) else { return false };
-				let gone = c.get("resultExpired").is_some();
-				let due = if gone { admit_until(g).map_or(now, |u| u + 1.0) } else { decided + keep };
-				if due > now {
-					next = next.min(due);
-					return false;
+		let eligible: Vec<String> = match &st.claims {
+			crate::state::Claims::Disk(disk) => {
+				// the store finds the due ones by its index; a claim whose result is gone waits for its generation, which
+				// the loop over generations below accounts for
+				let gens: Vec<String> = st.generations.keys().map(str::to_owned).collect();
+				let closed: Vec<String> = st.generations.iter().filter(|(_, g)| num_of(g, "admitUntil").is_some_and(|u| u < now)).map(|(id, _)| id.to_owned()).collect();
+				let due = disk.due(now - keep, MAX_RECORDS + 1, &closed, &gens, pick);
+				if let Some(at) = disk.next_at(now - keep) {
+					next = next.min(at + keep);
 				}
-				decided + keep <= now && (!gone || admit_until(g).is_none_or(|u| u < now))
-			})
-			.map(|(k, _)| k.to_owned())
-			.collect()
+				due
+			}
+			crate::state::Claims::Memory(claims) => {
+				let mut eligible: Vec<String> = claims
+					.iter()
+					.filter(|(_, c)| {
+						let g = str_of(c, "generation").and_then(|id| st.generations.get(id));
+						let Some(decided) = num_of(c, "decidedAt").filter(|_| str_of(c, "state") != Some("pending")) else { return false };
+						let gone = c.get("resultExpired").is_some();
+						let due = if gone { admit_until(g).map_or(now, |u| u + 1.0) } else { decided + keep };
+						if due > now {
+							next = next.min(due);
+							return false;
+						}
+						decided + keep <= now && (!gone || admit_until(g).is_none_or(|u| u < now))
+					})
+					.map(|(k, _)| k.to_owned())
+					.collect();
+				eligible.sort_by(|a, b| js_cmp(a, b));
+				eligible
+			}
 		};
-		eligible.sort_by(|a, b| js_cmp(a, b));
 		let mut changed = false;
 		let mut complete = eligible.len() <= MAX_RECORDS;
 		for k in eligible.iter().take(MAX_RECORDS) {
@@ -369,7 +361,7 @@ impl Space {
 				break;
 			}
 			let st = self.state.rpc.as_mut().expect("swept");
-			let c = st.claims.get(k).cloned().expect("eligible");
+			let c = st.claims.get(k).expect("eligible");
 			let mut kept = c.clone();
 			if c.get("resultExpired").is_none() {
 				let Json::Object(mut o) = c.clone() else { unreachable!() };
@@ -391,7 +383,7 @@ impl Space {
 		}
 		let st = self.state.rpc.as_mut().expect("swept");
 		st.rest.remove("sweepCursor"); // a field of earlier versions; no cursor is kept
-		let used: std::collections::HashSet<String> = st.claims.iter().filter_map(|(_, c)| str_of(c, "generation").map(str::to_owned)).collect();
+		let used_in_memory: Option<std::collections::HashSet<String>> = st.claims.memory().map(|m| m.iter().filter_map(|(_, c)| str_of(c, "generation").map(str::to_owned)).collect());
 		let gens: Vec<(String, f64)> = st.generations.iter().map(|(id, g)| (id.to_owned(), num_of(g, "admitUntil").unwrap_or(f64::NAN))).collect();
 		let (mut removed, mut stopped) = (0, false);
 		for (id, until) in gens {
@@ -399,7 +391,13 @@ impl Space {
 				next = next.min(until + 1.0);
 				continue;
 			}
-			if used.contains(&id) {
+			let st = self.state.rpc.as_ref().expect("swept");
+			let used = match (&used_in_memory, &st.claims) {
+				(Some(set), _) => set.contains(&id),
+				(None, crate::state::Claims::Disk(d)) => d.has_group(&id),
+				(None, crate::state::Claims::Memory(_)) => unreachable!("a set for claims in memory"),
+			};
+			if used {
 				continue;
 			}
 			if stopped || removed >= MAX_RECORDS || !self.maintenance_step(SWEEP_COST, now, &format!("generation:{id}")) {
@@ -426,18 +424,18 @@ impl Space {
 		if let Some(at) = st.sweep_at {
 			return Some(at);
 		}
-		if self.claims_on_disk {
+		let Some(claims) = st.claims.memory() else {
 			return Some(0.0); // claims on the disk are never scanned: a sweep now sets sweepAt
-		}
+		};
 		let keep = self.limits().claim_result_ms;
 		let mut min = f64::INFINITY;
-		for (_, c) in st.claims.iter() {
+		for (_, c) in claims.iter() {
 			let Some(decided) = num_of(c, "decidedAt").filter(|_| str_of(c, "state") != Some("pending")) else { continue };
 			let at = decided + keep;
 			let g = str_of(c, "generation").and_then(|id| st.generations.get(id));
 			min = min.min(if c.get("resultExpired").is_some() { at.max(g.and_then(|g| num_of(g, "admitUntil")).unwrap_or(0.0) + 1.0) } else { at });
 		}
-		let used: std::collections::HashSet<&str> = st.claims.iter().filter_map(|(_, c)| str_of(c, "generation")).collect();
+		let used: std::collections::HashSet<&str> = claims.iter().filter_map(|(_, c)| str_of(c, "generation")).collect();
 		for (id, g) in st.generations.iter() {
 			if !used.contains(id) {
 				min = min.min(num_of(g, "admitUntil").unwrap_or(f64::NAN) + 1.0);

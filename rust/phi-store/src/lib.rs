@@ -1,6 +1,7 @@
 //! The own store of phi-spaces, ported from src/store/ (docs/rust-portierung.md, R2): documents in one SQLite file in the
 //! format the TypeScript store writes (a document's head in `documents`, the records of its parts in `parts`), written
 //! in batches by a writer thread and acknowledged once durable; or kept in memory.
+pub mod disk;
 pub mod files;
 pub mod host;
 pub mod ledger;

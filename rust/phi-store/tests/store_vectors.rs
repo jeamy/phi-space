@@ -57,11 +57,16 @@ fn the_rust_store_reads_and_writes_the_typescript_file() {
 	assert!(docs.iter().any(|(k, _)| k == "phi-spaces.space"), "the vector holds a space: {docs:?}");
 	for (kind, key) in &docs {
 		let parts = parts_of(kind);
-		let doc = a.load(kind, key.as_deref(), parts).unwrap().unwrap();
+		let mut doc = a.load(kind, key.as_deref(), parts).unwrap().unwrap();
 		if kind == "phi-spaces.space" {
 			let entries = doc.value.get("entries").and_then(Json::as_array).map_or(0, Vec::len);
-			let claims = doc.value.get("rpc").and_then(|r| r.get("claims")).and_then(Json::as_object).map_or(0, |c| c.len());
-			assert!(entries > 0 && claims > 0, "the space came back with its parts ({entries} entries, {claims} claims)");
+			let empty = doc.value.get("rpc").and_then(|r| r.get("claims")).and_then(Json::as_object).is_some_and(|c| c.is_empty());
+			assert!(entries > 0 && empty, "the space came back with its entries ({entries}) and without its claims (they stay on the disk)");
+			// the claims, read on purpose for a whole copy
+			let claims = a.part_rows(kind, key.as_deref(), "rpc.claims").unwrap();
+			assert!(!claims.is_empty());
+			let Some(Json::Object(rpc)) = doc.value.as_object_mut().and_then(|o| o.get_mut("rpc")) else { panic!("rpc") };
+			rpc.insert("claims", Json::Object(claims.into_iter().collect()));
 		}
 		// the same orders as the file it came from
 		let mut ords = a.ords(kind, key.as_deref()).clone();

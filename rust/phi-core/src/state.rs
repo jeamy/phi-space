@@ -424,12 +424,217 @@ pub fn obj_boxes(m: &[(String, Mailbox)]) -> Json {
 	Json::Object(o)
 }
 
+/// What a store answers about the claims it keeps on its disk (store/disk-map.ts `DiskMapSource`): the durable rows,
+/// asked through the indexes on `at` (decidedAt), `grp` (generation) and `flag` (resultExpired).
+pub trait ClaimSource: Send + Sync {
+	fn get(&self, key: &str) -> Option<Json>;
+	/// Rows with `at <= t` and no flag, or a flag and a group in `in_groups` or none of `known`; by key, at most `limit`.
+	fn due(&self, t: f64, limit: usize, in_groups: &[String], known: &[String]) -> Vec<(String, Json)>;
+	/// The smallest `at` above `t` among rows without flag.
+	fn next_at(&self, t: f64) -> Option<f64>;
+	/// Keys of rows of group `g`, at most `limit`.
+	fn group(&self, g: &str, limit: usize) -> Vec<String>;
+	/// Rows without `at` (the open requests).
+	fn unindexed(&self) -> Vec<(String, Json)>;
+	/// The first keys in key order, at most `limit`.
+	fn first_ids(&self, limit: usize) -> Vec<String>;
+	/// Every key: reads the whole map (only what asks for all of it on purpose).
+	fn ids(&self) -> Vec<String>;
+}
+
+/// The claims of a space: a map in memory, or a map part on the disk (store/disk-map.ts `DiskMap`). The core takes the
+/// branches core.ts takes for each (`diskMapOf`).
+#[derive(Clone, Debug)]
+pub enum Claims {
+	Memory(Object),
+	Disk(DiskClaims),
+}
+impl Default for Claims {
+	fn default() -> Self { Claims::Memory(Object::new()) }
+}
+impl PartialEq for Claims {
+	fn eq(&self, other: &Claims) -> bool {
+		match (self, other) {
+			(Claims::Memory(a), Claims::Memory(b)) => a == b,
+			(Claims::Disk(a), Claims::Disk(b)) => std::sync::Arc::ptr_eq(&a.source, &b.source) && a.held == b.held,
+			_ => false,
+		}
+	}
+}
+
+/// A map part on the disk: memory holds what commits wrote that is not durable yet (`None`: deleted) and the records
+/// without `at` (open requests); everything else is read from the store when asked for.
+#[derive(Clone)]
+pub struct DiskClaims {
+	source: std::sync::Arc<dyn ClaimSource>,
+	held: Vec<(String, Option<Json>)>,
+	/// How often the whole map was read (`entries`): code that scans a day of claims shows here.
+	pub enumerations: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+impl std::fmt::Debug for DiskClaims {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "DiskClaims {{ held: {} }}", self.held.len()) }
+}
+
+fn claim_at(v: &Json) -> Option<f64> { v.get("decidedAt").and_then(Json::as_f64) }
+fn claim_flag(v: &Json) -> bool {
+	match v.get("resultExpired") {
+		None | Some(Json::Null) | Some(Json::Bool(false)) => false,
+		Some(Json::Number(x)) => *x != 0.0 && !x.is_nan(),
+		Some(Json::String(s)) => !s.is_empty(),
+		Some(_) => true,
+	}
+}
+/// `String(v.generation)`, as disk-map.ts compares groups of held records.
+fn claim_group(v: &Json) -> String {
+	match v.get("generation") {
+		None => "undefined".into(),
+		Some(Json::String(s)) => s.clone(),
+		Some(other) => other.to_json_text(),
+	}
+}
+/// JavaScript's default string order (UTF-16 code units).
+fn js_order(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
+
+impl DiskClaims {
+	/// Over the rows of `source`: the open requests are held from the start.
+	pub fn new(source: std::sync::Arc<dyn ClaimSource>) -> DiskClaims {
+		let held = source.unindexed().into_iter().map(|(k, v)| (k, Some(v))).collect();
+		DiskClaims { source, held, enumerations: Default::default() }
+	}
+	/// From a map in memory that its commit is writing to the disk now (`DiskMap.adopt`): every record held until then.
+	pub fn adopt(source: std::sync::Arc<dyn ClaimSource>, from: Object) -> DiskClaims {
+		let mut d = DiskClaims::new(source);
+		for (k, v) in from.iter() {
+			d.write(k, Some(v.clone()));
+		}
+		d
+	}
+	fn held_at(&self, k: &str) -> Option<&Option<Json>> { self.held.iter().find(|(x, _)| x == k).map(|(_, v)| v) }
+	pub fn get(&self, k: &str) -> Option<Json> {
+		match self.held_at(k) {
+			Some(v) => v.clone(),
+			None => self.source.get(k),
+		}
+	}
+	pub fn write(&mut self, k: &str, v: Option<Json>) {
+		match self.held.iter_mut().find(|(x, _)| x == k) {
+			Some(slot) => slot.1 = v,
+			None => self.held.push((k.to_owned(), v)),
+		}
+	}
+	/// The commits so far are durable: what they wrote is read from the store from now on (open requests stay held).
+	pub fn settle(&mut self) { self.held.retain(|(_, v)| v.as_ref().is_some_and(|v| claim_at(v).is_none())); }
+	/// How many records memory holds.
+	pub fn held(&self) -> usize { self.held.len() }
+	/// Every record: reads the whole map (counted in `enumerations`).
+	pub fn entries(&self) -> Object {
+		self.enumerations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+		let mut out = Object::new();
+		for k in self.source.ids() {
+			if self.held_at(&k).is_none() {
+				if let Some(v) = self.source.get(&k) {
+					out.insert(k, v);
+				}
+			}
+		}
+		for (k, v) in &self.held {
+			if let Some(v) = v {
+				out.insert(k.clone(), v.clone());
+			}
+		}
+		out
+	}
+	/// `due`: keys of records with `at <= t` that `pick` accepts, flagged ones only of a group in `in_groups` or none of
+	/// `known`; in JavaScript's string order, at most `limit`.
+	pub fn due(&self, t: f64, limit: usize, in_groups: &[String], known: &[String], pick: impl Fn(&Json) -> bool) -> Vec<String> {
+		let mut out: Vec<String> = vec![];
+		for (k, v) in self.source.due(t, limit + self.held.len(), in_groups, known) {
+			if self.held_at(&k).is_none() && pick(&v) && !out.contains(&k) {
+				out.push(k);
+			}
+		}
+		for (k, v) in &self.held {
+			let Some(v) = v else { continue };
+			let Some(at) = claim_at(v) else { continue };
+			if at > t {
+				continue;
+			}
+			let g = claim_group(v);
+			if claim_flag(v) && !in_groups.contains(&g) && known.contains(&g) {
+				continue;
+			}
+			if pick(v) && !out.contains(k) {
+				out.push(k.clone());
+			}
+		}
+		out.sort_by(|a, b| js_order(a, b));
+		out.truncate(limit);
+		out
+	}
+	/// `nextAt`: the smallest `at` above `t` among records without flag.
+	pub fn next_at(&self, t: f64) -> Option<f64> {
+		let mut min = self.source.next_at(t);
+		for v in self.held.iter().filter_map(|(_, v)| v.as_ref()) {
+			if claim_flag(v) {
+				continue;
+			}
+			if let Some(at) = claim_at(v).filter(|&a| a > t) {
+				if min.is_none_or(|m| at < m) {
+					min = Some(at);
+				}
+			}
+		}
+		min
+	}
+	/// `hasGroup`: whether a record of generation `g` exists.
+	pub fn has_group(&self, g: &str) -> bool {
+		if self.held.iter().any(|(_, v)| v.as_ref().is_some_and(|v| v.get("generation").and_then(Json::as_str) == Some(g))) {
+			return true;
+		}
+		self.source.group(g, self.held.len() + 1).iter().any(|k| self.held_at(k).is_none())
+	}
+}
+
+impl Claims {
+	pub fn get(&self, k: &str) -> Option<Json> {
+		match self {
+			Claims::Memory(o) => o.get(k).cloned(),
+			Claims::Disk(d) => d.get(k),
+		}
+	}
+	/// Sets or deletes a record (in memory: as JavaScript assigns, an existing key keeps its place).
+	pub fn put(&mut self, k: &str, v: Option<Json>) {
+		match (self, v) {
+			(Claims::Memory(o), Some(v)) => o.insert(k.to_owned(), v),
+			(Claims::Memory(o), None) => {
+				o.remove(k);
+			}
+			(Claims::Disk(d), v) => d.write(k, v),
+		}
+	}
+	pub fn on_disk(&self) -> bool { matches!(self, Claims::Disk(_)) }
+	/// Every record (a map on the disk is read whole: only for what asks for all of it).
+	pub fn entries(&self) -> Object {
+		match self {
+			Claims::Memory(o) => o.clone(),
+			Claims::Disk(d) => d.entries(),
+		}
+	}
+	/// The map in memory, for the branches that scan it (none for one on the disk).
+	pub fn memory(&self) -> Option<&Object> {
+		match self {
+			Claims::Memory(o) => Some(o),
+			Claims::Disk(_) => None,
+		}
+	}
+}
+
 /// `RpcState`: request claims and generations (claims.ts). Claims and generations are kept as their JSON records,
 /// keyed as in the document.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RpcState {
 	pub generations: Object,
-	pub claims: Object,
+	pub claims: Claims,
 	/// Running tally of claim and generation bytes; absent in states that predate it.
 	pub bytes: Option<f64>,
 	/// Result bytes reserved by pending claims.
@@ -447,7 +652,7 @@ impl RpcState {
 		let mut f = Fields::of(v, w)?;
 		Ok(RpcState {
 			generations: f.object("generations", w)?,
-			claims: f.object("claims", w)?,
+			claims: Claims::Memory(f.object("claims", w)?),
 			bytes: f.opt_number("bytes", w)?,
 			reserved_bytes: f.opt_number("reservedBytes", w)?,
 			signing_key: f.opt_string("signingKey", w)?,
@@ -458,10 +663,11 @@ impl RpcState {
 	}
 	pub fn to_json(&self) -> Json { self.to_json_with(false) }
 	/// `head`: with empty claims and generations (rows of their own in a store).
-	pub fn to_json_with(&self, head: bool) -> Json {
+	pub fn to_json_with(&self, head: bool) -> Json { self.to_json_parts(head, head) }
+	fn to_json_parts(&self, no_generations: bool, no_claims: bool) -> Json {
 		let mut o = Object::new();
-		o.insert("generations", Json::Object(if head { Object::new() } else { self.generations.clone() }));
-		o.insert("claims", Json::Object(if head { Object::new() } else { self.claims.clone() }));
+		o.insert("generations", Json::Object(if no_generations { Object::new() } else { self.generations.clone() }));
+		o.insert("claims", Json::Object(if no_claims { Object::new() } else { self.claims.entries() }));
 		if let Some(n) = self.bytes { o.insert("bytes", Json::Number(n)); }
 		if let Some(n) = self.sweep_at { o.insert("sweepAt", Json::Number(n)); }
 		if let Some(n) = self.reserved_bytes { o.insert("reservedBytes", Json::Number(n)); }
@@ -606,11 +812,13 @@ impl SpaceState {
 		Ok(SpaceState { next_id, entries, txns, regs, waiters, mailboxes, rpc, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
 	}
 
-	pub fn to_json(&self) -> Json { self.to_json_with(false) }
+	pub fn to_json(&self) -> Json { self.to_json_with(false, false) }
 	/// The head of the document as a store keeps it (store/parts.ts `headOf` with the parts of a Space): entries, the
 	/// stream log, claims and generations empty. Never serializes the parts.
-	pub fn to_json_head(&self) -> Json { self.to_json_with(true) }
-	fn to_json_with(&self, head: bool) -> Json {
+	pub fn to_json_head(&self) -> Json { self.to_json_with(true, false) }
+	/// The whole document but its claims (core.ts docBytes for claims on the disk: they are not read for it).
+	pub fn to_json_without_claims(&self) -> Json { self.to_json_with(false, true) }
+	fn to_json_with(&self, head: bool, no_claims: bool) -> Json {
 		let mut o = Object::new();
 		for key in HEAD {
 			match key {
@@ -627,7 +835,7 @@ impl SpaceState {
 		if let Some(l) = &self.limits { o.insert("limits", Json::Object(l.clone())); }
 		if let Some(s) = &self.space_id { o.insert("spaceId", s.as_str().into()); }
 		if let Some(s) = &self.incarnation { o.insert("incarnation", s.as_str().into()); }
-		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json_with(head)); }
+		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json_parts(head, head || no_claims)); }
 		if let Some(m) = &self.mailboxes { o.insert("mailboxes", obj_boxes(m)); }
 		if let Some(s) = &self.stream { o.insert("stream", s.to_json_with(head)); }
 		for (k, v) in self.rest.iter() { if !o.contains_key(k) { o.insert(k, v.clone()); } }

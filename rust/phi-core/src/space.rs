@@ -355,9 +355,6 @@ pub struct Space {
 	/// The smallest `expires` of the entries that stayed at the last full sweep (core.ts `expiryWatermarks`); can only
 	/// be stale low. `None`: not swept yet. Infinity is a value of its own (nothing stayed).
 	watermark: Option<f64>,
-	/// The claims are a map part on the disk (`DISK_MAP` in the TypeScript store): the core takes the branches it takes
-	/// there. Set by a host for each commit.
-	pub claims_on_disk: bool,
 	/// What the running commit changed, while a host tracks it.
 	pub(crate) tracking: Option<Tracking>,
 }
@@ -392,15 +389,14 @@ pub struct Changes {
 }
 
 impl Space {
-	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, clock: 0.0, random, open: None, budget: None, watermark: None, claims_on_disk: false, tracking: None } }
+	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, clock: 0.0, random, open: None, budget: None, watermark: None, tracking: None } }
 
 	/// A commit as the TypeScript host runs one: on a fresh draft (the watermark, the budget and the open batch start
-	/// anew), with the claims on the disk or not, and with what it changes in the parts recorded (`end_commit`) so that
+	/// anew), and with what it changes in the parts recorded (`end_commit`) so that
 	/// it can be written as rows or undone (`rollback`).
-	pub fn begin_tracked_commit(&mut self, claims_on_disk: bool) {
+	pub fn begin_tracked_commit(&mut self) {
 		self.begin_commit();
 		self.watermark = None;
-		self.claims_on_disk = claims_on_disk;
 		let entries = std::mem::take(&mut self.state.entries);
 		let log = self.state.stream.as_mut().map(|s| std::mem::take(&mut s.log));
 		let claims = self.state.rpc.as_mut().map(|r| std::mem::take(&mut r.claims));
@@ -444,19 +440,21 @@ impl Space {
 		}
 		if let Some(r) = head.rpc.as_mut() {
 			let now = self.state.rpc.take().expect("rpc stays once made");
-			let undo = |mut m: Object, log: Vec<(String, Option<Json>)>| {
-				for (k, before) in log.into_iter().rev() {
-					match before {
-						Some(v) => m.insert(k, v), // assignment: a key that was deleted goes last
-						None => {
-							m.remove(&k);
-						}
+			let mut claims = now.claims;
+			for (k, before) in t.claims.into_iter().rev() {
+				claims.put(&k, before); // assignment: a key that was deleted goes last
+			}
+			let mut generations = now.generations;
+			for (k, before) in t.generations.into_iter().rev() {
+				match before {
+					Some(v) => generations.insert(k, v),
+					None => {
+						generations.remove(&k);
 					}
 				}
-				m
-			};
-			r.claims = undo(now.claims, t.claims);
-			r.generations = undo(now.generations, t.generations);
+			}
+			r.claims = claims;
+			r.generations = generations;
 		}
 		self.state = head;
 		self.open = None;
@@ -468,15 +466,10 @@ impl Space {
 		let st = self.state.rpc.as_mut().expect("rpc made");
 		if let Some(t) = &mut self.tracking {
 			if t.claims_seen.insert(key.to_owned()) {
-				t.claims.push((key.to_owned(), st.claims.get(key).cloned()));
+				t.claims.push((key.to_owned(), st.claims.get(key)));
 			}
 		}
-		match value {
-			Some(v) => st.claims.insert(key.to_owned(), v),
-			None => {
-				st.claims.remove(key);
-			}
-		}
+		st.claims.put(key, value);
 	}
 	/// Sets or deletes a generation; a tracked commit records how it was.
 	pub(crate) fn generation_put(&mut self, key: &str, value: Option<Json>) {
@@ -537,7 +530,7 @@ impl Space {
 			}
 		}
 		if let Some(r) = &self.state.rpc {
-			if r.rest.keys().any(|k| k != "sweepCursor") || r.claims.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()) {
+			if r.rest.keys().any(|k| k != "sweepCursor") || r.claims.memory().is_some_and(|m| m.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none())) {
 				return Err(not_ported("claims of a kind not ported yet (negative claims)"));
 			}
 		}
@@ -624,14 +617,8 @@ impl Space {
 	}
 	/// `docBytes`: the JSON bytes of the whole space as stored; claims on the disk by their running tally.
 	fn doc_bytes(&self) -> f64 {
-		match (&self.state.rpc, self.claims_on_disk) {
-			(Some(r), true) => {
-				let mut head = self.state.to_json();
-				if let Some(Json::Object(rpc)) = head.as_object_mut().and_then(|o| o.get_mut("rpc")) {
-					rpc.insert("claims", Json::Object(Object::new()));
-				}
-				bytes(&head) + (r.bytes.unwrap_or(0.0) - bytes(&Json::Object(r.generations.clone()))).max(0.0)
-			}
+		match &self.state.rpc {
+			Some(r) if r.claims.on_disk() => bytes(&self.state.to_json_without_claims()) + (r.bytes.unwrap_or(0.0) - bytes(&Json::Object(r.generations.clone()))).max(0.0),
 			_ => bytes(&self.state.to_json()),
 		}
 	}
@@ -974,7 +961,7 @@ impl Space {
 
 	/// A served or lapsed parked request: its claim is decided.
 	fn decide_done(&mut self, now: f64, key: &str, result: Json, locked: bool, err: Option<Json>) -> Result<()> { self.decide(now, key, &"done".into(), Some(result), locked, err) }
-	fn claim_pending(&self, key: &str) -> bool { self.state.rpc.as_ref().and_then(|r| r.claims.get(key)).and_then(|c| c.get("state")).and_then(Json::as_str) == Some("pending") }
+	fn claim_pending(&self, key: &str) -> bool { self.state.rpc.as_ref().and_then(|r| r.claims.get(key)).is_some_and(|c| c.get("state").and_then(Json::as_str) == Some("pending")) }
 
 	/// Serve waiters whose match appeared. A take-waiter takes its entry under a fresh transaction, so a lost delivery
 	/// is not a lost job: the entry returns when that transaction lapses unless the receiver commits it.
@@ -1078,10 +1065,7 @@ impl Space {
 			let mut t = TxnRec { id: txn.clone(), expires: until(now, w.txn_lease_ms), owner: w.target.clone(), reserved: None, announced: None, rest: Object::new() };
 			// waiters of requests carry their key; the search is for states from before that (claims on the disk are newer)
 			let origin = w.origin_request_key.clone().or_else(|| {
-				if self.claims_on_disk {
-					return None;
-				}
-				let claims = &self.state.rpc.as_ref()?.claims;
+				let claims = self.state.rpc.as_ref()?.claims.memory()?; // none on the disk
 				claims.iter().find(|(_, c)| c.get("method").and_then(Json::as_str) == Some("wait") && c.get("result").and_then(Json::as_str) == Some(w.id.as_str())).map(|(k, _)| k.to_owned())
 			});
 			if let Some(k) = origin {

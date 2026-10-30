@@ -7,6 +7,12 @@ use crate::ops::WriteOp;
 use crate::parts::{id_of, PartDef, SPACE_PARTS};
 use phi_core::space::{Changes, CoreError, Random, Space};
 use phi_core::state::{EntryUndo, SpaceState};
+use phi_core::{ClaimSource, Claims, DiskClaims};
+use std::sync::Arc;
+
+fn claim_source(l: &SqliteLedger, kind: &str, key: Option<&str>) -> Result<Arc<dyn ClaimSource>> {
+	Ok(Arc::new(crate::disk::SqliteClaims::open(l.path(), kind, key.unwrap_or(""), "rpc.claims")?))
+}
 use phi_json::Json;
 use std::collections::{HashMap, HashSet};
 
@@ -53,8 +59,12 @@ impl SpaceHost {
 					// core.migrate brings older versions up to date in TypeScript; not ported
 					return Err(StoreError::Unavailable(format!("the document {kind} has version {}; the Rust store reads version {SPACE_VERSION} only", doc.version)));
 				}
-				let state = SpaceState::from_json(&doc.value).map_err(|e| StoreError::Unavailable(e.to_string()))?;
+				let mut state = SpaceState::from_json(&doc.value).map_err(|e| StoreError::Unavailable(e.to_string()))?;
 				let head = state.to_json_head().to_json_text();
+				// the claims stay on the disk: a map over their rows takes their place
+				if let (Ledger::Sqlite(l), Some(r)) = (&ledger, state.rpc.as_mut()) {
+					r.claims = Claims::Disk(DiskClaims::new(claim_source(l, kind, key)?));
+				}
 				(state, true, Some(head))
 			}
 		};
@@ -67,8 +77,7 @@ impl SpaceHost {
 		if let Some(f) = &self.failure {
 			return Err(StoreError::Failed(f.clone()));
 		}
-		let on_disk = matches!(self.ledger, Ledger::Sqlite(_)) && self.exists && self.space.state.rpc.is_some();
-		self.space.begin_tracked_commit(on_disk);
+		self.space.begin_tracked_commit();
 		match op(&mut self.space) {
 			Err(e) => {
 				self.space.rollback();
@@ -164,7 +173,7 @@ impl SpaceHost {
 			for k in &c.claims {
 				parts.push(match r.claims.get(k) {
 					Some(v) => {
-						let (at, grp, flag) = claim_index(v);
+						let (at, grp, flag) = claim_index(&v);
 						WriteOp::Part { kind: kind.clone(), key: key.clone(), part: "rpc.claims".into(), id: k.clone(), ord: 0, value: v.to_json_text(), at, grp, flag }
 					}
 					None => WriteOp::PartDel { kind: kind.clone(), key: key.clone(), part: "rpc.claims".into(), id: k.clone() },
@@ -189,11 +198,24 @@ impl SpaceHost {
 				m.remove(&id);
 			}
 		}
-		let mut ops = vec![WriteOp::Doc { kind, key, version: SPACE_VERSION, value: head.clone() }];
+		let mut ops = vec![WriteOp::Doc { kind: kind.clone(), key, version: SPACE_VERSION, value: head.clone() }];
 		ops.extend(parts);
 		ledger.persist(ops).recv().map_err(|_| StoreError::Failed("the writer is gone".into()))?.map_err(StoreError::Failed)?;
 		self.head_text = Some(head);
 		self.exists = true;
+		// durable: the claims are read from the disk from now on (a map still in memory goes there, as DiskMap.adopt)
+		let source = match self.space.state.rpc.as_ref().map(|r| r.claims.on_disk()) {
+			Some(false) => Some(claim_source(ledger, &kind, self.key.as_deref())?),
+			_ => None,
+		};
+		if let Some(r) = self.space.state.rpc.as_mut() {
+			if let (Claims::Memory(m), Some(src)) = (&mut r.claims, source) {
+				r.claims = Claims::Disk(DiskClaims::adopt(src, std::mem::take(m)));
+			}
+			if let Claims::Disk(d) = &mut r.claims {
+				d.settle();
+			}
+		}
 		Ok(())
 	}
 

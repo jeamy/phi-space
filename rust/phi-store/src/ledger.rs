@@ -97,8 +97,8 @@ impl SqliteLedger {
 	/// The orders this ledger knows of a document's array parts (from its load or its writes).
 	pub fn ords(&mut self, kind: &str, key: Option<&str>) -> &mut Ords { self.ords.entry(doc_id(kind, key)).or_default() }
 
-	/// Reads a committed document: its head with the rows of its parts. A map part kept on the disk is read whole for
-	/// now (claims are queried on the disk with a later slice of R2).
+	/// Reads a committed document: its head with the rows of its parts. A map part kept on the disk is not read: the head
+	/// holds an empty map for it, and the caller asks its rows through a `SqliteClaims`.
 	pub fn load(&mut self, kind: &str, key: Option<&str>, parts: &[PartDef]) -> Result<Option<StoredDoc>> {
 		let db = &self.files.read;
 		let row: Option<(i64, String)> = db.query_row("SELECT version, value FROM documents WHERE kind = ? AND key = ?", params![kind, doc_key(key)], |r| Ok((r.get(0)?, r.get(1)?))).ok();
@@ -123,16 +123,9 @@ impl SqliteLedger {
 				ords.entry(part.clone()).or_default().insert(id.clone(), ord);
 				rows.entry(part.clone()).or_default().push(PartRow { part, id, ord, value: v });
 			}
+			// a map part on the disk stays there: the caller puts a map over its rows in its place (SpaceHost)
 			for p in parts.iter().filter(|p| p.disk.is_some() && p.kind == PartKind::Map) {
 				self.index(kind, doc_key(key), p)?;
-				let db = &self.files.read;
-				let mut stmt = db.prepare("SELECT id, value FROM parts WHERE kind = ? AND key = ? AND part = ? ORDER BY id")?;
-				let mut it = stmt.query(params![kind, doc_key(key), p.name()])?;
-				while let Some(r) = it.next()? {
-					let (id, v): (String, String) = (r.get(0)?, r.get(1)?);
-					let v = parse(&v).map_err(|e| StoreError::Unavailable(format!("a row of {kind}: {e}")))?;
-					rows.entry(p.name()).or_default().push(PartRow { part: p.name(), id, ord: 0, value: v });
-				}
 			}
 			join_parts(&mut value, parts, &rows);
 			self.ords.insert(doc_id(kind, key), ords);
@@ -157,6 +150,14 @@ impl SqliteLedger {
 	}
 
 	/// The kinds and keys of every stored document.
+	/// The store file.
+	pub fn path(&self) -> &Path { &self.files.path }
+	/// Every row of one part of a document, by key (what a map part on the disk holds, read on purpose).
+	pub fn part_rows(&self, kind: &str, key: Option<&str>, part: &str) -> Result<Vec<(String, Json)>> {
+		let mut stmt = self.files.read.prepare("SELECT id, value FROM parts WHERE kind = ? AND key = ? AND part = ? ORDER BY id")?;
+		let rows = stmt.query_map(params![kind, doc_key(key), part], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+		rows.into_iter().map(|(k, v)| parse(&v).map(|v| (k, v)).map_err(|e| StoreError::Unavailable(format!("a row of {kind}: {e}")))).collect()
+	}
 	pub fn documents(&self) -> Result<Vec<(String, Option<String>)>> {
 		let mut stmt = self.files.read.prepare("SELECT kind, key FROM documents ORDER BY kind, key")?;
 		let out = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;

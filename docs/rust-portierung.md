@@ -537,7 +537,7 @@ die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parame
 | 0 | Crate `phi-store`: Datei öffnen (Owner-Lock wie TS, WAL, Schema, Format 1→2), Dokument aus Kopf und Teil-Zeilen laden, Zeilen-Ops, Schreib-Thread mit Batches, Speicher-Ledger | erledigt |
 | 1 | Host: ein Commit je Operation mit Rücknahme, Teil-Änderungen mit `ord`; der Rust-Kern im Host-Modus (Wasserstand, Budget und offener Batch je Commit neu; Claims als `DISK_MAP` mit den Plattenzweigen des TS-Kerns); TS-Store-Treiber und Zufallsgang gegen ihn | erledigt |
 | 2 | Absturz und Wiederöffnen an den Commit-Grenzen; Schreibfehler, voller Datenträger, Writer-Ausfall und gesperrter Host nach Persistierungsfehler | erledigt (ohne überlappende Commits, Watches und Schließen mit wartenden Commits: die brauchen den asynchronen Host, siehe unten) |
-| 3 | Claims wirklich auf der Platte (gezielt gelesen statt im Speicher), Speicherbudget des Hosts | offen |
+| 3 | Claims wirklich auf der Platte (gezielt gelesen statt im Speicher), Speicherbudget des Hosts | erledigt bis auf das Speicherbudget (kommt mit dem Host für mehrere Spaces, R3) |
 | 4 | Backup/Restore unter Last, Kompaktierung und Shutdown; wachsender Claim-Bestand in SQLite und `memory` | offen |
 
 **Befunde vor Scheibe 1:**
@@ -620,6 +620,29 @@ Claims und der Zähler je Batch (`commit_seq`) sind eigens geprüft.
 - **Offen für den asynchronen Host** (mit tokio, vor oder mit R3): Commits, die einander überlappen (der nächste sieht
   den vorigen vor dessen Persistierung), Watches nur auf dauerhaften Zustand, Batching mehrerer offener Commits und
   Schließen mit wartenden Commits. Der Host von Scheibe 1 wartet jeden Commit ab, bevor er den nächsten annimmt.
+
+**Stand Scheibe 3 (2026-10-30):**
+
+- **`Claims` in `phi-core`:** Die Claims sind eine Map im Speicher oder ein Plattenteil (`DiskClaims`, wie
+  `disk-map.ts`). Der Plattenteil hält nur, was noch nicht dauerhaft ist, und die offenen Claims (ohne `decidedAt`).
+  Alles andere liest er über eine `ClaimSource` aus dem Store: `get`, `due`, `nextAt`, `group`. Der Kern wählt seine
+  Zweige nach dieser Art, wie `core.ts` nach `diskMapOf`; das Flag aus Scheibe 1 entfällt.
+- **`phi-store::disk::SqliteClaims`:** Die Abfragen von `sqlite.ts` `#source` über eine eigene Leseverbindung, mit
+  denselben SQL-Texten. Ein geladenes Dokument bekommt sofort einen Plattenteil; eine Map, die noch im Speicher ist,
+  wird es nach ihrem ersten dauerhaften Commit (`DiskMap.adopt`). Nach jedem dauerhaften Commit gibt der Plattenteil
+  das Geschriebene frei (`settle`).
+- **Kein Aufzählen:** Wo der Kern die ganze Map lesen müsste (alte Zustände ohne Summe, `assert_ported`, die Suche in
+  `serve`), nimmt er wie TypeScript den Plattenzweig oder liest nur, was im Speicher liegt. `DiskClaims::entries`
+  liest bewusst alles und zählt mit (`enumerations`).
+- **Prüfung `tests/claims_on_disk.rs`:** 600 Claims werden zugelassen und entschieden; der Speicher hält keinen davon,
+  keine Operation liest die ganze Map, der Sweep räumt in Schritten von 40 Datensätzen (Commit-Budget) auf, und
+  dieselben Zeilen durch den TS-Store geben dieselben Zustände. Der Store-Gang läuft mit den Claims auf der Platte.
+- **Speicherbudget:** Der TS-Host verdrängt Dokumente, die am längsten unberührt sind, und lädt sie bei Bedarf neu.
+  Der Rust-Host trägt bisher ein Space-Dokument; das Budget kommt mit dem Host für mehrere Spaces (R3).
+- **Befund:** Ein neu geladenes Dokument hat seine Generationen in der Reihenfolge der SQL-Abfrage (`ORDER BY part,
+  ord`, bei gleichem `ord` nach dem Schlüssel), nicht in Einfügereihenfolge. Reicht ein Sweep nur für einen Teil,
+  hängt es also davon ab, ob der TS-Host das Dokument zwischendurch verdrängt hat. Der Rust-Host muss beim
+  Verdrängen dieselbe Abfrage nehmen, dann gilt dasselbe für ihn.
 
 ### R3: `phi-service`, `phi-wire`, `phi-space-server`
 
