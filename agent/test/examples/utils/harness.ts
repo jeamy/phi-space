@@ -3,7 +3,7 @@
 
 import { 
   BACKGROUND_CONTEXT as ctx
-} from "../../../../src/context.ts";
+} from "@earendil-works/chord/context";
 import { 
   createModels, 
   type Models 

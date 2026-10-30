@@ -9,9 +9,9 @@
     "test": "node --experimental-strip-types --test test/*.test.ts test/examples/*.test.ts"
   },
   "dependencies": {
-    "@earendil-works/chord": "1.0.3",
-    "@earendil-works/pi-ai": "1.0.3",
-    "@earendil-works/pi-durable": "1.0.3"
+    "@earendil-works/chord": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-durable": "1.4.0"
   },
   "license": "MIT"
 }

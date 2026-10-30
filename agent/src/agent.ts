@@ -8,8 +8,9 @@
 // the operation and its outcome together, so a replayed call gets the first outcome. A call replayed after its
 // generation stopped admitting is refused (RequestExpired), never invented anew.
 import { Type } from "@earendil-works/pi-ai";
-import { defineDocFamily, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
-import { PhiSpaces, core, meter as defaultMeter, type Meter, type SpaceHost, type SpaceLike } from "../../src/index.ts";
+import { BACKGROUND_CONTEXT, type Context as AgentContext } from "@earendil-works/chord/context";
+import { defineDocFamily, defineExtension, defineTool, section, type ConversationId, type Harness } from "@earendil-works/pi-durable";
+import { PhiSpaces, core, meter as defaultMeter, withEventSink, type EventSink, type Meter, type SpaceHost, type SpaceLike } from "../../src/index.ts";
 import type { Context } from "../../src/context.ts";
 import type { Principal, RequestRef } from "../../src/claims.ts";
 
@@ -17,6 +18,27 @@ const MAX_WAIT_MS = 60_000; // a blocking tool holds the turn: cap it
 /** A conversation's generation is renewed this long before it stops admitting: a call's request is recorded before its
  *  first space call, and must still be admitted when that call arrives. */
 const GENERATION_MARGIN_MS = 10 * 60_000;
+
+/** Preserve cancellation and application values when the standalone space calls the agent runtime. */
+export function agentContext(context: Context): AgentContext {
+	if ("telemetry" in context) return context as AgentContext;
+	return {
+		abortSignal: context.abortSignal,
+		telemetry: BACKGROUND_CONTEXT.telemetry,
+		value: (key) => context.value(key),
+		toString: () => context.toString(),
+	};
+}
+
+/** The space has its own Context; pi-durable 1.4 also requires a telemetry span. */
+export function withAgentEventSink<H extends SpaceHost>(host: H, harness: Pick<Harness, "conversation">): H & EventSink {
+	return withEventSink(host, {
+		async conversation(id, context) {
+			const conversation = await harness.conversation(id as ConversationId, agentContext(context));
+			return conversation ? { submit: (input, context) => conversation.submit(input, agentContext(context)) } : undefined;
+		},
+	});
+}
 
 /** Where the tools act: the space of each conversation (as that conversation), and its request identities. */
 export interface AgentSpaces {
@@ -49,17 +71,18 @@ const Generation = defineDocFamily<{ generation: string | null; admitUntil: numb
 	scope: "session",
 	family: true,
 	initial: () => ({ generation: null, admitUntil: 0 }),
+	checkpointWhen: () => true,
 });
 
 /** What a tool call needs of pi-durable's tool API. */
 type CallApi = {
 	taskId: unknown; conversationId: number;
-	memo<T extends core.Json>(name: string, context: Context): Promise<T | undefined>;
-	memo<T extends core.Json>(name: string, candidate: T, context: Context): Promise<T>;
-	commit<T>(change: (tx: any) => T | Promise<T>, context: Context): Promise<T>;
+	memo<T extends core.Json>(name: string, context: AgentContext): Promise<T | undefined>;
+	memo<T extends core.Json>(name: string, candidate: T, context: AgentContext): Promise<T>;
+	commit<T>(change: (tx: any) => T | Promise<T>, context: AgentContext): Promise<T>;
 };
 
-const text = (v: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(v ?? null) }] });
+const text = (v: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(v ?? null) }] });
 const Fields = Type.Optional(Type.Record(Type.String(), Type.Any()));
 /** A lease or wait duration: milliseconds, or "forever". */
 const Duration = (description: string) => Type.Optional(Type.Union([Type.Number({ minimum: 0 }), Type.Literal("forever")], { description }));
@@ -81,7 +104,7 @@ const TemplateParams = {
  */
 export function createSpaces(spaces: AgentSpaces) {
 	/** The request identity of this call: recorded before its first space call, the same on every replay. */
-	const requestOf = async (api: CallApi, ctx: Context): Promise<RequestRef> => {
+	const requestOf = async (api: CallApi, ctx: AgentContext): Promise<RequestRef> => {
 		const id = api.conversationId;
 		const known = await api.memo<{ generation: string; requestId: string }>("phi-spaces.request", ctx);
 		if (known) return spaces.request(id, known.generation, known.requestId);
@@ -99,7 +122,7 @@ export function createSpaces(spaces: AgentSpaces) {
 		return spaces.request(id, r.generation, r.requestId);
 	};
 	/** The space of the calling conversation, and the request of this call. */
-	const call = async (api: CallApi, ctx: Context) => ({ s: spaces.space(api.conversationId, ctx), request: await requestOf(api, ctx) });
+	const call = async (api: CallApi, ctx: AgentContext) => ({ s: spaces.space(api.conversationId, ctx), request: await requestOf(api, ctx) });
 	/** How long a blocking call waits. A replay keeps the first deadline: the space's claim of the request holds it. */
 	const waitOf = (timeoutMs: number | undefined) => Math.max(0, Math.min(timeoutMs ?? 0, MAX_WAIT_MS));
 	return defineExtension({

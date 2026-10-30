@@ -132,3 +132,46 @@ Umgesetzt in `server/npc/minds.ts`, `server/npc/scripts.ts`, `server/npc-host.ts
   nicht (die gemeinsame Minutengrenze gilt).
 - **Kennzeichnung:** Figuren und Nachrichten von Modellrollen tragen `ai` und erscheinen als „Name (KI)“ bzw. mit
   „KI“-Marke im Log.
+
+## Dauerhafte Dialoge
+
+Alle Modellrollen behalten standardmäßig ihren Gesprächskontext über einen NPC-Prozessneustart hinweg.
+`SPACES_MMO_DURABLE_NPCS=0` schaltet zurück auf einzelne Modellaufrufe; eine Liste wie `ines,fremder` beschränkt
+die dauerhaften Dialoge auf diese Rollen. Nicht-Modell-NPCs bleiben reine Skriptrollen.
+`SPACES_MMO_LLM=1`, Zugangsdaten und die Modellfreigabe des Admins bleiben erforderlich.
+
+```sh
+SPACES_MMO_LLM=1 node --experimental-strip-types spaces-mmo/server/npc-host.ts
+```
+
+Die [Anbindung](../server/npc/durable.ts) startet den getrennten Agentenprozess erst bei einem ausgewählten
+Modell-NPC. Standardpfad ist `<SPACES_MMO_DATA oder .local>/npc-agents/<Welt-ID>/<Region oder world>.sqlite`.
+`SPACES_MMO_DURABLE_STORE` überschreibt ihn. Jede Welt/Region bekommt damit eine eigene Datei;
+weitere NPC-Prozesse derselben Welt/Region brauchen jeweils einen ausdrücklich anderen Pfad.
+Ein Speicher gehört genau einem Worker. Die Rollenverteilung bleibt die geleaste `NpcOwner`-Verteilung im
+Space; die Agentendatenbank ist keine zweite Rollenverwaltung und wird nicht über Hosts repliziert.
+Sie verwendet WAL/`synchronous=FULL` statt des Upstream-Standards NORMAL.
+[Sync-Policy und Stromausfall-Testgrenzen](../../docs/agenten-stromausfalltest.md) sind separat dokumentiert.
+
+- Eine Sitzung ist nach Welt-ID und NPC-ID getrennt; andere Rollen und Welten sehen deren Dialog nicht.
+- Je Antwort höchstens ein Modellversuch und 200 Ausgabetokens, ohne automatische SDK-/Harness-Retries oder
+  Compaction-Aufrufe. Freigabe und bestehende NPC-/UTC-Budgets werden unmittelbar vor dem wirklichen Modellaufruf
+  geprüft, nicht nur in einem unverbindlichen Harness-Hook.
+- Die letzte Lage ist maßgeblich. Nach einem Neustart wird bei einer neuen Lage ein noch offener alter Turn
+  abgebrochen, statt alte Spielbefehle nachträglich auszuführen.
+- Das Ergebnis geht durch dieselbe Zeilen-/Befehlsprüfung und dann als `Intent` zum World-Worker. Der Agent hat
+  keine direkten Welt-, Shell- oder Dateiwerkzeuge. Abschalten des NPC-Prozesses bricht seine Agentenantwort ab.
+- `NpcMemory` und `NOTE:` bleiben die fachliche Zusammenfassung im Space. Nach 64 abgeschlossenen Dialogantworten
+  beginnt eine neue Conversation mit der aktuellen Lage und dieser Zusammenfassung. Das begrenzt den aktiven
+  Kontext, löscht aber keine früheren Transkripte.
+
+Die bestehende Quotenlogik zählt **Aufrufe, nicht Tokens oder Euro**. Gesprächshistorie erhöht die Eingabetokens
+und kann deshalb auch bei gleicher Aufrufzahl mehr kosten. Transkripte enthalten Spieleräußerungen; Zugriff,
+Aufbewahrung und Sicherung des Agentenspeichers sind separat zu planen.
+Die Compose-NPC-Services mounten dafür `mmo-agent-data` unter `/data` und verwenden getrennte Welt-/Regionsdateien;
+der Dev-Container verwendet sein vorhandenes `/data`-Volume. Eigene abweichende Pfade müssen zusätzlich gemountet
+werden. Kein Deployment erfolgt automatisch.
+
+[Offline-Regressionsprüfung](../tests/durable-npcs.test.ts): Wiederöffnung mit Dialoghistorie, Isolation nach
+Rolle/Welt, unveränderter nicht ausgewählter Pfad, NPC-Budget, Admin-Abschaltung und keine direkt erzeugten Intents.
+`SPACES_MMO_DURABLE_MODELS_MODULE` ist ausschließlich für Fixtures mit `SPACES_MMO_TEST=1` gedacht.

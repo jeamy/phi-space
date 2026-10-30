@@ -25,7 +25,8 @@ FROM deps AS builder
 WORKDIR /opt/phi-spaces
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-COPY agent/src/live-models.ts ./agent/src/live-models.ts
+COPY agent/src ./agent/src
+COPY agent/test/durable-models.ts ./agent/test/
 COPY codemode-chat ./codemode-chat
 RUN npm --prefix codemode-chat run typecheck && npm --prefix codemode-chat run build
 

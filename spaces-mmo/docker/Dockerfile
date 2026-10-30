@@ -25,7 +25,8 @@ FROM deps AS builder
 WORKDIR /opt/phi-spaces
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-COPY agent/src/live-models.ts ./agent/src/live-models.ts
+COPY agent/src ./agent/src
+COPY agent/test/durable-npc-models.ts ./agent/test/
 COPY spaces-mmo ./spaces-mmo
 RUN npm --prefix spaces-mmo run typecheck && npm --prefix spaces-mmo run build
 

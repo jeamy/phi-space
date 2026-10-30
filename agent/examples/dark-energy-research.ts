@@ -17,25 +17,21 @@
 // Note: agents cannot schedule themselves — periodic work (monitoring) is host code,
 // and there is no space_count tool; counting is host-side `count()`.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, PhiSpaces, openSqliteHost, startService, withEventSink } from "../../src/index.ts";
+import { type PhiSpaces } from "../../src/index.ts";
 import { research } from "./arxiv-tool.ts";
 import { pathToFileURL } from "node:url";
-import { claimFreshDirectory, researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
-import { liveModels } from "../src/live-models.ts";
+import { researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
+import { ResearchRun, writeResearchFile } from "./research-run.ts";
 
 export async function runDarkEnergyResearch(options: ResearchOptions = {}) {
-const topic = options.topic ?? "Dunkle Energie und Dunkle Materie: Von ersten Anzeichen bis zum heutigen Stand";
-const dir = options.dir ?? mkdtempSync(join(tmpdir(), "phi-spaces-dark-energy-"));
-claimFreshDirectory(dir);
+const run = await ResearchRun.open("dark-energy", "Dunkle Energie und Dunkle Materie: Von ersten Anzeichen bis zum heutigen Stand", options);
+try {
+const { topic } = run.manifest;
+const dir = run.dir;
 const out = options.out ?? join(dir, "report.md");
 const outJson = options.outJson ?? join(dir, "dashboard.json");
-const query = options.query;
+const query = run.manifest.query ?? undefined;
 // Timeout configurations (in milliseconds)
 const CRAWL_MS = 20 * 60_000;      // 20 minutes for crawling
 const CLASSIFY_MS = 25 * 60_000;   // 25 minutes for classification
@@ -253,44 +249,32 @@ const startMonitor = (host: PhiSpaces, startedAt: string) => {
 // ============================================================================
 
 async function execute() {
-  const { models, model } = options.modelBundle ?? await liveModels();
-  // The space is a store of its own next to the agents' state: it outlives an agent restart.
-  const space = await openSqliteHost(join(dir, "space.sqlite"));
+  const { space, host } = run;
   const spaces = researchSpaces(space);
-  const registry = createRegistry();
-  registry.install(spaces);
-  registry.install(research);
-  
-  const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models, registry }, ctx);
-  h.resume();
-  const host = new PhiSpaces(space, ctx);
-  const stopService = await startService(withEventSink(space, h), ctx);
+  const model = await run.connect([spaces, research], options);
   
   console.log(`model ${model.provider}/${model.modelId}`);
   console.log(`topic ${topic}`);
   console.log(`state ${dir}\n`);
 
   // Create agents
-  const agent = (instructions: string, withResearch = false) =>
-    h.createConversation({ 
-      ownership: { kind: "ownerless" }, 
-      agent: { 
+  const agent = (name: string, instructions: string, withResearch = false) =>
+    run.agent(name, {
         model, 
         extensions: withResearch ? [spaces, research] : [spaces],
         instructions 
-      } 
-    }, ctx);
+    });
 
   // Create all agents. The chat agent only exists when --query was given
   // (it waits on a UserQuery entry that only the host writes).
   const agents: Record<string, Awaited<ReturnType<typeof agent>>> = {
-    crawler: await agent(crawler, true),
-    classifier: await agent(classifier),
-    summarizer: await agent(summarizer),
-    analyst: await agent(analyst),
-    presenter: await agent(presenter)
+    crawler: await agent("crawler", crawler, true),
+    classifier: await agent("classifier", classifier),
+    summarizer: await agent("summarizer", summarizer),
+    analyst: await agent("analyst", analyst),
+    presenter: await agent("presenter", presenter)
   };
-  if (query) agents.chat = await agent(chat);
+  if (query) agents.chat = await agent("chat", chat);
 
   const stopMonitor = startMonitor(host, new Date().toISOString());
   try {
@@ -328,9 +312,8 @@ async function execute() {
   };
 
   // Start all agents
-  for (const [name, agent] of Object.entries(agents)) {
-    await agent.submit({ type: "input", content: "Beginne." }, ctx);
-  }
+  await run.start(agents);
+  await run.trigger("crawl");
 
   // Phase 1: Wait for crawling to complete
   console.log("Phase 1: Crawling...");
@@ -346,7 +329,7 @@ async function execute() {
 
   // Phase 2: Trigger classification
   console.log("\nPhase 2: Classification...");
-  await host.write({ type: "ClassifyTask", fields: { topic } }, null, FOREVER);
+  await run.trigger("classify", { type: "ClassifyTask", fields: { topic } });
   const classifyOk = await until(
     async () => (await n("ClassificationDone")) > 0,
     options.phaseTimeoutMs ?? CLASSIFY_MS,
@@ -360,7 +343,7 @@ async function execute() {
   // Phase 3: Trigger summarization
   console.log("\nPhase 3: Summarization...");
   if ((await n("ClassifiedPaper")) > 0) {
-    await host.write({ type: "SummarizeTask", fields: { topic } }, null, FOREVER);
+    await run.trigger("summarize", { type: "SummarizeTask", fields: { topic } });
     const summarizeOk = await until(
       async () => (await n("SummarizationDone")) > 0,
       options.phaseTimeoutMs ?? SUMMARIZE_MS,
@@ -372,12 +355,12 @@ async function execute() {
     }
   } else {
     console.log("No classified papers to summarize; skipping");
-    await host.write({ type: "SummarizationDone", fields: { summarizer: "skipped", papersSummarized: 0, timestamp: new Date().toISOString() } }, null, FOREVER);
+    await run.trigger("summarize", { type: "SummarizationDone", fields: { summarizer: "skipped", papersSummarized: 0 } });
   }
 
   // Phase 4: Trigger analysis
   console.log("\nPhase 4: Analysis...");
-  await host.write({ type: "AnalyzeTask", fields: { topic } }, null, FOREVER);
+  await run.trigger("analysis", { type: "AnalyzeTask", fields: { topic } });
   const analyzeOk = await until(
     async () => (await host.count({ type: "Analysis", fields: { order: 99 } })) > 0,
     options.phaseTimeoutMs ?? ANALYZE_MS,
@@ -390,7 +373,7 @@ async function execute() {
 
   // Phase 5: Trigger presentation
   console.log("\nPhase 5: Presentation...");
-  await host.write({ type: "PresentTask", fields: { topic } }, null, FOREVER);
+  await run.trigger("present", { type: "PresentTask", fields: { topic } });
   const presentOk = await until(
     async () => (await n("Presentation")) > 0,
     options.phaseTimeoutMs ?? PRESENT_MS,
@@ -401,8 +384,8 @@ async function execute() {
   if (presentOk) {
     const presentation = (await host.readAll({ type: "Presentation" }))[0]?.fields as { title: string; markdown: string; dashboardData: any };
     if (presentation) {
-      writeFileSync(out, presentation.markdown);
-      writeFileSync(outJson, JSON.stringify(presentation.dashboardData, null, 2));
+      writeResearchFile(out, presentation.markdown);
+      writeResearchFile(outJson, JSON.stringify(presentation.dashboardData, null, 2));
       console.log(`\n📄 Report written to ${out}`);
       console.log(`📊 Dashboard data written to ${outJson}`);
       console.log(`\n${presentation.markdown.length > 500 ? presentation.markdown.slice(0, 500) + '...' : presentation.markdown}\n`);
@@ -414,7 +397,7 @@ async function execute() {
   // Phase 6: optional user query answered by the chat agent from the collected data
   if (query && agents.chat) {
     console.log("\nPhase 6: Query...");
-    await host.write({ type: "UserQuery", fields: { queryId: "q1", text: query, askedAt: new Date().toISOString() } }, null, FOREVER);
+    await run.trigger("query", { type: "UserQuery", fields: { queryId: "q1", text: query } });
     const queryOk = await until(async () => (await n("QueryResponse")) > 0, options.phaseTimeoutMs ?? 10 * 60_000, "QUERY");
     if (queryOk) {
       const r = (await host.readAll({ type: "QueryResponse" }))[0]?.fields as { response: string; sources?: string[] };
@@ -429,21 +412,22 @@ async function execute() {
   console.log("\n=== Final Statistics ===");
   console.log(await progress());
   console.log("space:", JSON.stringify(await host.stats()));
+  await run.finish();
 
   // Clean up
   } finally {
     await stopMonitor();
-    await stopService();
-    await h.close(ctx);
-    await space.close(ctx);
   }
 }
 
 await execute();
+} finally {
+  await run.close();
+}
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
  const args=process.argv.slice(2);
  const value=(name: string) => { const i=args.indexOf(name); return i>=0?args[i+1]:undefined; };
- await runDarkEnergyResearch({ topic: args.find((a,i)=>!a.startsWith("--") && !args[i-1]?.startsWith("--")), dir:value("--dir"), out:value("--out"), outJson:value("--out-json"), query:value("--query") });
+ await runDarkEnergyResearch({ topic: args.find((a,i)=>!a.startsWith("--") && !["--dir", "--out", "--out-json", "--query"].includes(args[i-1]!)), dir:value("--dir"), out:value("--out"), outJson:value("--out-json"), query:value("--query"), resume:args.includes("--resume") });
 }

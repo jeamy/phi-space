@@ -20,6 +20,10 @@ process.env.SPACES_MMO_CMD_BURST = "100000"; // likewise for typed commands; tes
 process.env.SPACES_MMO_CMD_PER_SEC = "100000";
 process.env.SPACES_MMO_LLM = ""; // never a real model in the tests: a test that wants one names tests/fake-llm.ts
 process.env.SPACES_MMO_LLM_MODULE = "";
+process.env.SPACES_MMO_TEST = "";
+process.env.SPACES_MMO_DURABLE_NPCS = "0";
+process.env.SPACES_MMO_DURABLE_STORE = "";
+process.env.SPACES_MMO_DURABLE_MODELS_MODULE = "";
 // the three roles of the earlier phases; the people of the islands (server/npc/economy.ts) would walk through their
 // tests, and tests/economy.test.ts plays them itself
 process.env.SPACES_MMO_NPCS = "ines,bo,fremder";

@@ -281,6 +281,49 @@ Störungen.
 - Ungewisse Kosten nach einem Absturz: Stirbt der model-Prozess nach der Antwort des Anbieters und vor seinem Commit,
   wird der Aufruf wiederholt und doppelt bezahlt, aber nur einmal gebucht. Dafür bräuchte es Idempotenz beim Anbieter.
 
+## Dauerhafte Code-Agenten
+
+Code-Beiträge (`contribute`) verwenden standardmäßig einen pi-durable-Worker.
+`CODEMODE_DURABLE_AGENT=0` schaltet auf den bisherigen einzelnen Modellaufruf zurück.
+`CODEMODE_CHAT_LLM=1` bleibt Voraussetzung für echte Modelle; die dauerhafte Laufzeit aktiviert keine
+kostenpflichtigen Modelle. Textantworten, Stimmen, Kritiken und Prüfer-Aufrufe bleiben unverändert.
+
+```sh
+CODEMODE_CHAT_LLM=1 npm --prefix codemode-chat run model
+```
+
+Standardpfad ist `codemode-chat/.local/codemode-agent.sqlite`, bei gesetztem `CODEMODE_SQLITE` stattdessen
+`codemode-agent.sqlite` neben dieser Space-Datei. `CODEMODE_DURABLE_STORE` überschreibt den Pfad.
+Das Compose-model-Service hält `/data/codemode-agent.sqlite` im eigenen Volume `codemode-agent-data`;
+der Dev-Container verwendet sein vorhandenes `/data`-Volume.
+Der Agentenspeicher läuft mit WAL/`synchronous=FULL`; Verzeichniseinträge werden ebenfalls synchronisiert.
+Die [Stromausfall-Abnahme](agenten-stromausfalltest.md) bleibt trotz dieser stärkeren Schreibpolitik separat.
+
+Die Anbindung liegt in [durable-agent.ts](../codemode-chat/server/durable-agent.ts).
+Die Anwendung importiert nur einen [Node-IPC-Client](../agent/src/durable-client.ts);
+pi-durable und Chord bleiben im [Agentenprozess](../agent/src/durable-worker.ts). Die Importgrenze des
+Space-Kerns und seine Tests ohne Earendil-Abhängigkeiten bleiben bestehen.
+
+- `LlmCall`/`LlmResult`, Run-Steuerung und abschließendes Judging bleiben im Space.
+- Conversation und Eingabesnapshot gehören zur stabilen Auftrags-ID. Wiederholung nach einem Absturz verwendet
+  dieselbe Submission und den ersten gespeicherten Kontext, nicht inzwischen veränderte Teamdaten.
+- Der Agent kann mit `verify_code` seine Funktion in der vorhandenen isolierten Sandbox prüfen und korrigieren.
+  Es gibt keine Shell-, Datei- oder allgemeinen Coding-Tools.
+- Höchstens vier Modellversuche pro Auftrag, höchstens 1500 Ausgabetokens pro Versuch. SDK-/Harness-Retries und
+  automatische Compaction sind ausgeschaltet; dadurch entstehen keine ungeprüften zusätzlichen Modellaufrufe.
+- Vor jedem Versuch prüft der model-Prozess erneut Run, Modellfreigabe, Besucherbudget und gemeinsame Aufrufquote.
+  Bei budgetierten Runs wird die vorhandene Work-Item-Reservierung um den noch nicht gebuchten Agentenverbrauch
+  plus eine weitere Aufrufschätzung erweitert. Andere laufende Reservierungen zählen weiter mit.
+- Der Agentenspeicher bewahrt auch den Verbrauch vor einem Fehler/Neustart; `LlmResult` gibt die Gesamtsumme zurück.
+  Gebucht wird weiterhin einmal in der Space-Transaktion des Auftrags.
+
+Ein Speicher hat genau einen Worker-Eigentümer. Mehrere model-Prozesse brauchen jeweils einen eigenen,
+dauerhaft gemounteten Speicherpfad; die Space-Queue bleibt ihre gemeinsame Verteilung.
+Ein lokaler Agentenspeicher ist keine verteilte Conversation-Replikation.
+Abbruch stoppt weitere Versuche, garantiert aber keine Rückerstattung einer bereits versandten Modellanfrage.
+Die Sandbox-Regression und Wiederöffnung sind in [durable.test.ts](../codemode-chat/tests/durable.test.ts) geprüft.
+Testmodelle (`CODEMODE_DURABLE_MODELS_MODULE`) sind nur mit `CODEMODE_TEST=1` zulässig.
+
 ## Interaktives Ausführen (▶)
 
 - **web-Prozess:**

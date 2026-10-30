@@ -7,12 +7,12 @@ Nachweise stehen im [Implementierungsstand](implementierungsstand.md) und den [A
 
 | Beispiel | Implementierung | Nachweis und Grenze |
 |---|---|---|
-| Master/Worker | [workers.ts](../examples/workers.ts) | geskriptete Write/Take-Demonstration; kein Bild-Resize, keine Crash-Wiedervergabe |
-| Blockierendes Take | [blocking-tool.ts](../examples/blocking-tool.ts) | geskripteter Tool-Aufruf; Host schreibt später einen Job im selben Prozess |
+| Master/Worker | [workers.ts](../agent/examples/workers.ts) | geskriptete Write/Take-Demonstration; kein Bild-Resize, keine Crash-Wiedervergabe |
+| Blockierendes Take | [blocking-tool.ts](../agent/examples/blocking-tool.ts) | geskripteter Tool-Aufruf; Host schreibt später einen Job im selben Prozess |
 | Sensor-Pipeline | [sensor-pipeline.ts](../examples/sensor-pipeline.ts) | echte Funktionen, Konkurrenz, Lease-Ablauf und Rollback lokal getestet |
-| Chat | [chat.ts](../examples/chat.ts) | tatsächlicher geskripteter Ring getestet; Live-Modus (`--live`) vorhanden, nicht abgenommen |
-| arXiv-Recherche | [arxiv-research.ts](../examples/arxiv-research.ts) | tatsächlicher Runner mit geskriptetem Modell und JSONL getestet; echte Quellen-/Modellqualität offen |
-| Dark-Energy-Recherche | [dark-energy-research.ts](../examples/dark-energy-research.ts) | tatsächlicher Runner einschließlich Klassifikation und Abstract-Zusammenfassung geskriptet getestet |
+| Chat | [chat.ts](../agent/examples/chat.ts) | tatsächlicher geskripteter Ring getestet; Live-Modus (`--live`) vorhanden, nicht abgenommen |
+| arXiv-Recherche | [arxiv-research.ts](../agent/examples/arxiv-research.ts) | tatsächlicher Runner mit geskriptetem Modell und JSONL getestet; echte Quellen-/Modellqualität offen |
+| Dark-Energy-Recherche | [dark-energy-research.ts](../agent/examples/dark-energy-research.ts) | tatsächlicher Runner einschließlich Klassifikation und Abstract-Zusammenfassung geskriptet getestet |
 | Golomb | [golomb.ts](../examples/golomb.ts) | tatsächliche Ordnung-4-Suche, Ergebnisvalidierung und persistente Wiederaufnahme getestet |
 | Primzahlsieb | [sieve.ts](../examples/sieve.ts) | unabhängiger Referenzvergleich, Txn-Rollback, Lease-Recovery und JSONL-Reopen |
 | Cache | [cache.ts](../examples/cache.ts) | lokaler atomarer Ersatz, CAS, TTL und JSONL-Reopen; keine Replikation |
@@ -71,7 +71,7 @@ LLM-Agent würde den Quelltext selbst schreiben. `@earendil-works/pi-codemode` i
 (`PI_CODEMODE_DIR` wählt einen anderen Pfad); lässt es sich nicht laden, wird übersprungen. Gemessene Zeit ist Wandzeit und schwankt.
 
 Live-Beispiele (`examples/chat.ts --live`, `npm run example:arxiv`) benötigen Zugangsdaten und verursachen
-Modellkosten; [live-models.ts](../examples/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
+Modellkosten; [live-models.ts](../agent/src/live-models.ts) wählt Provider und Modell. Gemäß AGENTS.md werden
 sie erst nach Freigabe ausgeführt. Der arXiv-Netzzugang und wissenschaftliche Ergebnisqualität sind durch
 Faux-Tests nicht validiert. API-Parser und Datenvertrag werden mit lokalen Fixtures geprüft.
 
@@ -88,20 +88,38 @@ externe Wirkungen nicht allgemein exactly-once. Dauerhaftigkeit hängt vom Stora
 
 ## Atomare Forschungsausgaben
 
-[research-support.ts](../examples/research-support.ts) definiert `researchSpaces`. Ergebnis-Entries und
+[research-support.ts](../agent/examples/research-support.ts) definiert `researchSpaces`. Ergebnis-Entries und
 Abschlussmarker benötigen die aktive, dem Agenten gehörende Transaktion mit der passenden reservierten Aufgabe.
 Fehlende/falsche Transaktionen werden serverseitig abgewiesen. Alle Writes einer Phase bleiben bis Commit
 unsichtbar. Die einfache arXiv-Pipeline schreibt auch PresentTask unter der AnalyzeTask-Transaktion.
 
-Die Ausführung verlangt ein frisches, leeres State-Verzeichnis. Ein exklusiver Marker verhindert zwei Starts
-im selben Verzeichnis. Vorhandener JSONL-Zustand kann untersucht werden, wird aber nicht automatisch als neuer
-Lauf verwendet. Ein allgemeiner Resume-Modus für die Forschungsbeispiele ist nicht implementiert.
+Ein neuer Lauf verlangt ein frisches, leeres State-Verzeichnis. Mit `--resume --dir <Verzeichnis>` öffnen
+beide Rechercheprogramme einen kompatiblen vorhandenen Lauf ausdrücklich wieder. Die Topic-/Query-Konfiguration
+wird übernommen; ausdrücklich abweichende Werte oder eine andere Laufart werden abgewiesen.
+[research-run.ts](../agent/examples/research-run.ts) speichert die Laufidentität im Manifest und Team-IDs,
+Modellauswahl und Phase in einem pi-durable-Dokument. Conversation-Erzeugung und ID-Eintrag sind ein Commit;
+Startnachrichten besitzen stabile Request-IDs.
+
+Phasenmarker und neue Aufgaben werden in derselben Space-Transaktion geschrieben. So entsteht bei Wiederaufnahme
+auch dann keine zweite Aufgabe, wenn die erste schon konsumiert wurde. Der exklusive SQLite-Owner-Lock schützt
+auch den Agentenspeicher vor einem zweiten Launcher und wird bei einem Prozessabsturz vom Betriebssystem freigegeben.
+Ein fertiger Lauf kann seine Berichtdateien erneut ausgeben, ohne das Team neu zu starten.
+
+```sh
+node --experimental-strip-types agent/examples/arxiv-research.ts --resume --dir /pfad/zum/lauf
+node --experimental-strip-types agent/examples/dark-energy-research.ts --resume --dir /pfad/zum/lauf
+```
+
+Resume macht abgelaufene Space-Transaktionen oder Request-Generationen nicht rückwirkend gültig.
+Nicht abgeschlossene Phasen bleiben bei Zeitüberschreitung ein Fehler; sie werden nicht durch erfundene
+Ergebnisse oder blind erneut erzeugte Aufgaben übergangen. Externe Modell-/Rechercheanfragen können nach einem
+Absturz erneut ausgeführt werden. Live-Ausführung kostet Tokens und braucht eine eigene Freigabe.
 
 ## Testumfang
 
 Die ältere Suite prüft viele Space-Muster mit eigenen Skripten. Sie ist kein vollständiger Nachweis für die
 jeweiligen CLI-Programme. [recovery.test.ts](../test/examples/recovery.test.ts) ergänzt Aufrufe der tatsächlichen
-Implementierungen, JSONL-Reopen sowie gezielte Fehler. Geskriptete Modelltests filtern Systemnachrichten vor der
+Implementierungen, JSONL-Reopen, Resume nach SIGKILL während der Analyse sowie gezielte Fehler. Geskriptete Modelltests filtern Systemnachrichten vor der
 Prüfung der letzten Nachricht (`m.role !== "system"`, siehe `test/examples/`). [Testübersicht](../test/examples/README.md).
 
 Für die Beispiele selbst liegen keine Skalierungs- oder Produktionsbenchmarks vor. Systemweite NetBird-,

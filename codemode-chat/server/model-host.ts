@@ -20,6 +20,8 @@ import { awaitQuota, takeQuota } from "./quota.ts";
 import { isText, type Task } from "./tasks.ts";
 import { ipTokensPerDay, today } from "./limits.ts";
 import { announce, awaitWork, connectSpace, keepAlive, readExisting } from "./space.ts";
+import { openDurableContributions } from "./durable-agent.ts";
+import { admitAgentAttempt } from "./run.ts";
 
 /** What the model process can be asked for; a test module may stand in for the real models. */
 export type ModelApi = { models: () => Promise<string[]>; contribute: typeof llmContribution; critique: typeof llmCritique; propose: typeof llmPropose; vote: typeof llmVote; judge: typeof llmJudge; research: typeof llmResearch; verify: typeof llmVerifier; criteria: typeof llmCriteria; reviewCriteria: typeof llmReviewCriteria };
@@ -85,6 +87,28 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 	// a fake team answers only what it defines: anything else is an error, not a call to the real models
 	const missing = (session: string) => Object.fromEntries((Object.keys(real) as Array<keyof ModelApi>).filter((k) => k !== "models").map((k) => [k, async () => { throw new Error(`the fake team of room ${session} has no ${k}`); }]));
 	const apiFor = (session: string): ModelApi => (fakes ? { ...missing(session), models: fakes.models, ...fakes.llmFor(session, { space, log: log(session) }) } as ModelApi : real);
+	const resolveModel = async (call: LlmCall, requested?: string) => {
+		if (!fakes) await applyAdmin(space);
+		const labels = await apiFor(call.session).models();
+		const model = requested ?? (fakes ? labels[0] : (await llmInfo()).current);
+		if (!model || !labels.includes(model)) throw new Error(`model ${model ?? "(none)"} is not allowed`);
+		return model;
+	};
+	const durable = openDurableContributions({
+		model: resolveModel,
+		permit: async (call, model, usage, signal) => {
+			signal.throwIfAborted();
+			await resolveModel(call, model);
+			await awaitQuota(space, "llm", callLimits(), "daily model budget used up");
+			signal.throwIfAborted();
+			await resolveModel(call, model); // A full minute's quota may have waited through an admin change.
+			if (call.runId && !(await readExisting(space, { type: "CodeRun", fields: { session: call.session, runId: call.runId } }))) throw new Error("the run is over");
+			const visitor = call.client && !call.client.admin ? call.client.ip : null;
+			if (visitor && ipTokensPerDay() > 0 && (await spentToday(space, visitor)) + usage.total >= ipTokensPerDay()) throw new Error("The model budget of today for your address is used up");
+			await admitAgentAttempt(space, call, usage);
+			signal.throwIfAborted();
+		},
+	});
 	const open = new Set<string>();
 	let stopping = false;
 	const halt = new AbortController();
@@ -134,8 +158,16 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 				// answer (or a fake's error) reports
 				// a call of a run is stopped with it: while the model works, the run is looked for every 2 s
 				const stop = new AbortController();
+				const cancel = () => stop.abort();
+				halt.signal.addEventListener("abort", cancel, { once: true });
 				const watch = call.runId ? setInterval(() => { void readExisting(space, { type: "CodeRun", fields: { session: call.session, runId: call.runId! } }).then((r) => { if (!r) stop.abort(); }, () => {}); }, RUN_WATCH_MS) : undefined;
-				const m = await metered(() => answer(apiFor(call.session), call.kind, args, search), stop.signal).finally(() => clearInterval(watch));
+				const api = apiFor(call.session);
+				const selected = durable && call.kind === "contribute" && !isText((args as { task: Task }).task)
+					? { ...api, contribute: () => durable.contribute(call, args as unknown as Parameters<typeof llmContribution>[0], stop.signal) }
+					: api;
+				const m = await metered(() => answer(selected, call.kind, args, search), stop.signal).finally(() => {
+					clearInterval(watch); halt.signal.removeEventListener("abort", cancel);
+				});
 				const said = m.value?.usage ?? (m.error as { usage?: Usage } | undefined)?.usage;
 				usage = m.usage.total > 0 || m.usage.costUsd > 0 ? m.usage : said;
 				if (m.error !== undefined) throw stop.signal.aborted ? new Error("the run is over") : m.error;
@@ -164,6 +196,7 @@ export async function startModelHost(o: { space?: string; parallel?: number } = 
 			stopping = true; halt.abort(); clearInterval(beat);
 			await Promise.allSettled([...open].map((id) => space.abort(id)));
 			await Promise.race([Promise.allSettled(loops), new Promise((r) => setTimeout(r, 3000))]);
+			await durable?.close();
 			if (infoLease) await space.cancel(infoLease).catch(() => {});
 			await presence.stop(); conn.close();
 		},

@@ -2,12 +2,12 @@
 // Tests: Publish-Subscribe, Ring-Kommunikation, Determinismus
 
 import { describe, test, expect, vi, beforeEach, afterEach } from "./compat.ts";
-import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, openOwnMemoryHost, startService, withEventSink } from "../../../src/index.ts";
-import { createSpaces, localSpaces } from "../../src/agent.ts";
+import { FOREVER, PhiSpaces, openOwnMemoryHost, startService } from "../../../src/index.ts";
+import { createSpaces, localSpaces, withAgentEventSink as withEventSink } from "../../src/agent.ts";
 /** The space tools of the current setup (each setup has its own space host). */
 let spaces: ReturnType<typeof createSpaces>;
 

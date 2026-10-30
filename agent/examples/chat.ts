@@ -5,12 +5,12 @@
 //
 // Run scripted (no model, no network):  node --experimental-strip-types examples/chat.ts
 // Run with a real model:                node --experimental-strip-types examples/chat.ts --live ["topic"]
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { FOREVER, PhiSpaces, openOwnMemoryHost, startService, withEventSink } from "../../src/index.ts";
-import { createSpaces, localSpaces } from "../src/agent.ts";
+import { FOREVER, PhiSpaces, openOwnMemoryHost, startService } from "../../src/index.ts";
+import { createSpaces, localSpaces, withAgentEventSink as withEventSink } from "../src/agent.ts";
 import { liveModels } from "../src/live-models.ts";
 import { pathToFileURL } from "node:url";
 

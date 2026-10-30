@@ -11,6 +11,7 @@ import { complete, llmEnabled } from "../llm.ts";
 import { fieldsOf, NPC_LOCK, type NpcAwakeFields, type NpcMemoryFields, type NpcOwnerFields } from "../model.ts";
 import { readExisting, StillHeld } from "../space.ts";
 import { setting } from "../settings.ts";
+import { npcDialogue } from "./durable.ts";
 
 const MEMORY_MAX = 4096;
 /** What a model NPC may type: every command of a registered player that changes something (its account is one, see
@@ -104,7 +105,7 @@ export type Situation = {
 
 /** One answer of an awake model NPC: its command lines and a note for its memory. "off": model calls are off;
  *  "budget": its day (or the shared limit) is used up. */
-export async function think(space: SpaceLike, npc: { npcId: string; name: string; persona: string; budgetDay: number }, s: Situation): Promise<{ lines: string[]; note?: string } | "off" | "budget"> {
+export async function think(space: SpaceLike, npc: { npcId: string; name: string; persona: string; budgetDay: number; worldId?: string }, s: Situation, signal?: AbortSignal): Promise<{ lines: string[]; note?: string } | "off" | "budget"> {
 	if (!llmEnabled()) return "off";
 	const all = await setting(space, "npc.budgetDay"), budget = all < 0 ? npc.budgetDay : all; // -1: the world's budget of the role
 	const system = [
@@ -130,7 +131,9 @@ export async function think(space: SpaceLike, npc: { npcId: string; name: string
 		`Event: ${s.event}`,
 		`Heard: ${s.heard.join(" | ")}`,
 	].join("\n");
-	const res = await complete(space, system, user, { maxTokens: 200, own: { key: `npc:${npc.npcId}`, perDay: budget, day: (await worldDayKey(space)) ?? undefined } }).catch((e) => { console.error(`[npc] ${npc.npcId} model:`, (e as Error).message); return null; });
+	const execute = npcDialogue(npc.npcId, npc.worldId ?? (process.env.SPACES_MMO_WORLD || "leuchtfeuer"), system, user, signal);
+	const res = await complete(space, system, user, { maxTokens: 200, own: { key: `npc:${npc.npcId}`, perDay: budget, day: (await worldDayKey(space)) ?? undefined }, ...(execute ? { execute } : {}) }).catch((e) => { console.error(`[npc] ${npc.npcId} model:`, (e as Error).message); return null; });
+	if (signal?.aborted) return "off";
 	if (!res) return "budget";
 	const lines: string[] = [];
 	let note: string | undefined;

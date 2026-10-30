@@ -17,6 +17,7 @@ import { ClockCache, paceMs, worldNowMs } from "./engine/clockcache.ts";
 import { loadWorld, type WorldDef } from "./engine/world.ts";
 import { presentAt } from "./engine/worldtime.ts";
 import { claimRole } from "./npc/minds.ts";
+import { closeDurableNpcs } from "./npc/durable.ts";
 import { scriptFor, type Npc } from "./npc/scripts.ts";
 import { actorToken, asFields, type IntentFields, type SessionFields } from "./model.ts";
 import { announce, connectSpace, DEFAULT_SPACE } from "./space.ts";
@@ -120,7 +121,7 @@ export async function startNpcs(o: { space?: string; world?: WorldDef } = {}) {
 	// session or found that another npc process already owns it.
 	await Promise.all(starting);
 	const proc = announce(conn.space, "npc");
-	return { async close() { halt.abort(); await Promise.all(runs); await proc.stop(); conn.close(); } };
+	return { async close() { halt.abort(); await Promise.all(runs); await closeDurableNpcs(); await proc.stop(); conn.close(); } };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

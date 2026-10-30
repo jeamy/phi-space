@@ -3,3 +3,5 @@
 // events through `withEventSink`.
 export * from "../../src/index.ts";
 export * from "./agent.ts";
+export { withAgentEventSink as withEventSink } from "./agent.ts";
+export { openDurableSqliteStorage } from "./storage.ts";

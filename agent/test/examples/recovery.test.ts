@@ -1,10 +1,13 @@
 // The model-driven examples (research runners, chat) under failure: scripted models, the space on its own store.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as ctx } from "../../../src/context.ts";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxProvider, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { openOwnMemoryHost } from "../../../src/index.ts";
@@ -13,6 +16,8 @@ import { runDarkEnergyResearch } from "../../examples/dark-energy-research.ts";
 import { researchSpaces, claimFreshDirectory } from "../../examples/research-support.ts";
 import { parseFeed } from "../../examples/arxiv-tool.ts";
 import { runChat } from "../../examples/chat.ts";
+import { ResearchRun } from "../../examples/research-run.ts";
+import { scriptedResearchModels as scriptedModels } from "./utils/research-models.ts";
 
 test("arXiv parser preserves date, full author list and full abstract", () => {
   const abstract = "A".repeat(700);
@@ -24,40 +29,31 @@ test("arXiv parser preserves date, full author list and full abstract", () => {
   assert.deepEqual(paper.categories, ["cs.CL"]);
 });
 
-function scriptedModels(dark = false) {
-  const models = createModels();
-  const faux = fauxProvider();
-  const respond = (context: any) => {
-    const name = /\[agent:([\w-]+)\]/.exec(JSON.stringify(context.messages))?.[1] ?? "unknown";
-    const last = context.messages.filter((m: any) => m.role !== "system").at(-1);
-    const event = [...context.messages].reverse().find((m: any) => m.role === "user");
-    const text = typeof event?.content === "string" ? event.content : "";
-    const txn = /transaction ([\w-]+)/.exec(text)?.[1];
-    if (last?.role === "toolResult") {
-      if (last.toolName === "space_write" && txn) return fauxAssistantMessage(fauxToolCall("space_txn", { action: "commit", txn }), { stopReason: "toolUse" });
-      return fauxAssistantMessage("done");
+test("SIGKILL during analysis resumes the same research team and finishes its report", { timeout: 20_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "research-crash-"));
+  const child = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./research-child.ts", import.meta.url)), dir], { stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  child.stdout.on("data", data => { output += data; });
+  child.stderr.on("data", data => { output += data; });
+  try {
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(join(dir, "ready"))) {
+      assert.equal(child.exitCode, null, output);
+      assert.ok(Date.now() < deadline, output);
+      await new Promise(resolve => setTimeout(resolve, 20));
     }
-    const write = (type: string, fields: any) => fauxToolCall("space_write", { type, fields, ttlMs: "forever", ...(txn ? { txn } : {}) });
-    if (text.includes("Beginne")) {
-      if (name.startsWith("collector")) return fauxAssistantMessage([write("Paper", { arxivId: name, title: "Scripted fixture" }), write("CollectorDone", { collector: name, papers: 1 })], { stopReason: "toolUse" });
-      if (name === "crawler") return fauxAssistantMessage([write("PaperMetadata", { arxivId: "fixture", abstract: "Scripted abstract", authorNames: ["A"], year: 2020, published: "2020-01-01" }), write("CrawlDone", { papersFound: 1 })], { stopReason: "toolUse" });
-      const types: Record<string, string> = { analyst: "AnalyzeTask", presenter: "PresentTask", classifier: "ClassifyTask", summarizer: "SummarizeTask", chat: "UserQuery" };
-      return fauxAssistantMessage(fauxToolCall("space_wait", { type: types[name] }), { stopReason: "toolUse" });
+    const exited = once(child, "exit");
+    child.kill("SIGKILL");
+    await exited;
+    await runArxivResearch({ dir, resume: true, modelBundle: scriptedModels(), pollMs: 20, phaseTimeoutMs: 3000 });
+    assert.equal(readFileSync(join(dir, "report.md"), "utf8"), "# Scripted report");
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, "exit"); child.kill("SIGKILL"); await exited;
     }
-    if (txn) {
-      const calls = name === "analyst" ? [write("Analysis", { order: 99, summary: "Scripted analysis; no scientific claims" }), ...(!dark ? [write("PresentTask", { topic: "test" })] : [])]
-        : name === "classifier" ? [write("ClassifiedPaper", { paperId: "fixture", relevance: "high" }), write("ClassificationDone", {})]
-        : name === "presenter" ? [dark ? write("Presentation", { title: "test", markdown: "# Scripted report", dashboardData: { citations: null } }) : write("Report", { title: "test", markdown: "# Scripted report" })]
-        : name === "chat" ? [write("QueryResponse", { queryId: "q1", response: "No source papers", sources: [] })]
-        : [write("PaperSummary", { paperId: "fixture", citationCount: null, basis: "abstract", summary: "Scripted summary" }), write("SummarizationDone", {})];
-      return fauxAssistantMessage(calls, { stopReason: "toolUse" });
-    }
-    return fauxAssistantMessage("done");
-  };
-  faux.setResponses(Array.from({ length: 300 }, () => respond));
-  models.setProvider(faux.provider);
-  return { models, model: { provider: "faux", modelId: "faux-1" } };
-}
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("Real research runners produce committed reports with scripted models", { timeout: 15_000 }, async () => {
   for (const run of [runArxivResearch, runDarkEnergyResearch]) {
@@ -66,8 +62,50 @@ test("Real research runners produce committed reports with scripted models", { t
       await run({ dir, topic: "test", modelBundle: scriptedModels(run === runDarkEnergyResearch), pollMs: 20, phaseTimeoutMs: 2000 });
       assert.equal(readFileSync(join(dir, "report.md"), "utf8"), "# Scripted report");
       await assert.rejects(run({ dir, modelBundle: scriptedModels() }), /not empty/);
+      writeFileSync(join(dir, "report.md"), "interrupted export");
+      const bundle = scriptedModels(run === runDarkEnergyResearch);
+      await run({ dir, resume: true, modelBundle: bundle, pollMs: 10, phaseTimeoutMs: 1000 });
+      assert.equal(readFileSync(join(dir, "report.md"), "utf8"), "# Scripted report");
+      await assert.rejects(run({ dir, resume: true, topic: "different", modelBundle: bundle }), /conflicts/);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }
+});
+
+test("research resume reuses team IDs and never recreates a phase task after it was consumed", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "research-resume-"));
+  const bundle = scriptedModels();
+  let run: ResearchRun | undefined;
+  try {
+    run = await ResearchRun.open("test", "topic", { dir });
+    const model = await run.connect([], { modelBundle: bundle });
+    const agent = await run.agent("analyst", { model });
+    const id = agent.id;
+    // The Space commit succeeded, but the process did not checkpoint its phase in the agent store.
+    const txn = await run.host.createTransaction(10_000);
+    await run.host.write({ type: "ResearchPhase", fields: { runId: run.manifest.runId, phase: "analysis" } }, txn.id, Infinity);
+    await run.host.write({ type: "AnalyzeTask", fields: { topic: "topic" } }, txn.id, Infinity);
+    await run.host.commit(txn.id);
+    await run.host.take({ type: "AnalyzeTask" }, 0);
+    await run.close(); run = undefined;
+    run = await ResearchRun.open("test", "ignored default", { dir, resume: true });
+    await run.connect([], { modelBundle: bundle });
+    assert.equal((await run.agent("analyst", { model })).id, id);
+    await run.trigger("analysis", { type: "AnalyzeTask", fields: { topic: "topic" } });
+    assert.equal(await run.host.count({ type: "AnalyzeTask" }), 0);
+    assert.equal((await run.status())?.phase, "analysis");
+    assert.deepEqual(Object.keys((await run.status())!.agents), ["analyst"]);
+  } finally { await run?.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("research resume refuses unknown directories, conflicting kinds and concurrent owners", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "research-ownership-"));
+  let run: ResearchRun | undefined;
+  try {
+    await assert.rejects(ResearchRun.open("test", "topic", { dir, resume: true }), /No compatible/);
+    run = await ResearchRun.open("test", "topic", { dir });
+    await assert.rejects(ResearchRun.open("other", "topic", { dir, resume: true }), /Incompatible/);
+    await assert.rejects(ResearchRun.open("test", "topic", { dir, resume: true }), /locked|owner|busy/i);
+  } finally { await run?.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("Research result enforcement refuses a missing transaction", async () => {

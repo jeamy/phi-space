@@ -133,6 +133,7 @@ services:
     volumes:
       # the only process with model credentials: the host's pi CLI login (or API keys in .env); PI_AUTH_DIR= skips it
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
+      - codemode-agent-data:/data
 
   # ---- tests in Docker ----
   codemode-chat-test:
@@ -197,4 +198,5 @@ networks:
 
 volumes:
   codemode-space-data: {}
+  codemode-agent-data: {}
   codemode-chat-dev-data: {}

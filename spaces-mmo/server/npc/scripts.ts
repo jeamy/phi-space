@@ -86,7 +86,8 @@ function waerter(): Script {
 				} else {
 					pensive = false;
 					await keepAwake(n.space, n.def.npcId, awakeMs);
-					const r = await think(n.space, { npcId: n.def.npcId, name: me.name, persona: m.persona, budgetDay: m.budgetDay }, { room: (await roomName(n, me.room)), people, ...(fireText ? { fire: fireText } : {}), ...(beacon ? { fireAt: { x: beacon.x, y: beacon.y } } : {}), event: wakes.join(", ") || "talk", heard: fromPeople.filter((x) => !asked.includes(x)).map((x) => x.text), ...(await surroundings(n, me)) });
+					const r = await think(n.space, { npcId: n.def.npcId, name: me.name, persona: m.persona, budgetDay: m.budgetDay, worldId: n.world.id }, { room: (await roomName(n, me.room)), people, ...(fireText ? { fire: fireText } : {}), ...(beacon ? { fireAt: { x: beacon.x, y: beacon.y } } : {}), event: wakes.join(", ") || "talk", heard: fromPeople.filter((x) => !asked.includes(x)).map((x) => x.text), ...(await surroundings(n, me)) }, n.halt);
+					if (n.halt.aborted) return;
 					if (r === "budget") { if (!budgetSaid) { budgetSaid = true; await n.act(`emote ${dozeLine(me.name, m.dozing, 0)}`); } }
 					else if (r !== "off") { budgetSaid = false; await actThenSay(n, r.lines); if (r.note) await remember(n.space, n.def.npcId, r.note); }
 				}
@@ -191,7 +192,8 @@ async function speak(n: Npc, name: string, event: string, heard: string[]): Prom
 	const m = n.def.model;
 	if (m && llmEnabled() && (await tryWake(n.space, n.def.npcId, await npcMax(n), AWAKE_WORLD_MS))) {
 		const me = await self(n);
-		const r = await think(n.space, { npcId: n.def.npcId, name, persona: m.persona, budgetDay: m.budgetDay }, { room: await roomName(n, me?.room ?? n.def.room), people: await humansIn(n, me?.room ?? n.def.room), event, heard, ...(me ? await surroundings(n, me) : {}) });
+		const r = await think(n.space, { npcId: n.def.npcId, name, persona: m.persona, budgetDay: m.budgetDay, worldId: n.world.id }, { room: await roomName(n, me?.room ?? n.def.room), people: await humansIn(n, me?.room ?? n.def.room), event, heard, ...(me ? await surroundings(n, me) : {}) }, n.halt);
+		if (n.halt.aborted) return;
 		if (typeof r === "object") { await actThenSay(n, r.lines); if (r.note) await remember(n.space, n.def.npcId, r.note); return; }
 	}
 	await n.act(event === "spoken" ? "say Licht … wo brennt das nächste Licht?" : "say Wo geht es hier aus dem Nebel?");

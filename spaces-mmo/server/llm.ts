@@ -90,17 +90,28 @@ async function admit(space: SpaceLike, key: string, limit: number, leaseMs: numb
 }
 
 /** A model call, or null: calls off, no model, or a limit reached (`own`: the caller's key and its limit per day). */
-export async function complete(space: SpaceLike, system: string, user: string, o: { maxTokens: number; own?: { key: string; perDay: number; day?: string } }): Promise<Completion | null> {
+export async function complete(space: SpaceLike, system: string, user: string, o: {
+	maxTokens: number; own?: { key: string; perDay: number; day?: string };
+	execute?: (model: string, permit: () => Promise<boolean>) => Promise<Completion | null>;
+}): Promise<Completion | null> {
 	const r = await load();
 	if (!r) return null;
 	const s = await settingsOf(space);
 	if (!s.models.on) return null; // the admin switched model calls off
 	const model = chosen(await r.available(), s.models).model;
 	if (!model) return null;
-	const now = new Date(), day = now.toISOString().slice(0, 10), minute = now.toISOString().slice(0, 16);
-	if (o.own && !(await admit(space, `${o.own.key}:${o.own.day ?? day}`, o.own.perDay, 26 * 3600_000))) return null;
-	if (!(await admit(space, `day:${day}`, await setting(space, "llm.perDay"), 26 * 3600_000))) return null;
-	if (!(await admit(space, `min:${minute}`, await setting(space, "llm.perMin"), 120_000))) return null;
+	const permit = async () => {
+		if (o.execute) {
+			const current = await settingsOf(space);
+			if (!llmEnabled() || !current.models.on || chosen(await r.available(), current.models).model?.label !== model.label) return false;
+		}
+		const now = new Date(), day = now.toISOString().slice(0, 10), minute = now.toISOString().slice(0, 16);
+		if (o.own && !(await admit(space, `${o.own.key}:${o.own.day ?? day}`, o.own.perDay, 26 * 3600_000))) return false;
+		if (!(await admit(space, `day:${day}`, await setting(space, "llm.perDay"), 26 * 3600_000))) return false;
+		if (!(await admit(space, `min:${minute}`, await setting(space, "llm.perMin"), 120_000))) return false;
+		return true;
+	};
+	if (o.execute) return o.execute(model.label, permit);
+	if (!(await permit())) return null;
 	return r.complete(model.label, system, user, o.maxTokens);
 }
-

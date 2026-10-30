@@ -1,5 +1,5 @@
 // One conversation puts jobs in the space, another takes one. Scripted with the faux provider.
-import { BACKGROUND_CONTEXT as context } from "../../src/context.ts";
+import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";

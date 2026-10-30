@@ -7,23 +7,18 @@
 //
 // Run: node --experimental-strip-types examples/arxiv-research.ts ["topic"] [--dir <state dir>] [--out report.md]
 // Model: PI_PROVIDER + PI_MODEL, otherwise the first available (see live-models.ts). The state is a JSONL store in
-// --dir, so an interrupted run can be inspected; the report is also written to --out (default <dir>/report.md).
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+// --dir; --resume reopens the same team and phase handoffs. The report is written to --out (default <dir>/report.md).
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { createRegistry, Harness } from "@earendil-works/pi-durable";
-import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { FOREVER, PhiSpaces, openSqliteHost, startService, withEventSink } from "../../src/index.ts";
 import { research } from "./arxiv-tool.ts";
 import { pathToFileURL } from "node:url";
-import { claimFreshDirectory, researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
-import { liveModels } from "../src/live-models.ts";
+import { researchSpaces, TRANSACTION_RULE, type ResearchOptions } from "./research-support.ts";
+import { ResearchRun, writeResearchFile } from "./research-run.ts";
 
 export async function runArxivResearch(options: ResearchOptions = {}) {
-const topic = options.topic ?? "Die Entwicklung großer Sprachmodelle (LLMs): Ansätze vom Beginn bis zum heutigen Stand";
-const dir = options.dir ?? mkdtempSync(join(tmpdir(), "phi-spaces-arxiv-"));
-claimFreshDirectory(dir);
+const run = await ResearchRun.open("arxiv", "Die Entwicklung großer Sprachmodelle (LLMs): Ansätze vom Beginn bis zum heutigen Stand", options);
+try {
+const { topic } = run.manifest;
+const dir = run.dir;
 const out = options.out ?? join(dir, "report.md");
 const outJson = options.outJson ?? join(dir, "dashboard.json");
 const query = options.query;
@@ -68,24 +63,16 @@ Wenn die Meldung kommt, dass dein Wait bedient wurde:
 3. space_write {"type": "Report", "ttlMs": "forever", "fields": {"title": "<Titel>", "markdown": "<der ganze Bericht>"}}.
 4. Committe die Transaktion aus der Wait-Meldung mit space_txn {"action": "commit", "txn": "<id>"}.`;
 
-const { models, model } = options.modelBundle ?? await liveModels();
-// The space is a store of its own next to the agents' state: it outlives an agent restart.
-const space = await openSqliteHost(join(dir, "space.sqlite"));
+const { space, host } = run;
 const spaces = researchSpaces(space);
-const registry = createRegistry();
-registry.install(spaces);
-registry.install(research);
-const h = await Harness.open(await openNodeJsonlStorage(dir, ctx), { models, registry }, ctx);
-h.resume();
-const host = new PhiSpaces(space, ctx);
-const stopService = await startService(withEventSink(space, h), ctx);
-try {
+const model = await run.connect([spaces, research], options);
 console.log(`model ${model.provider}/${model.modelId}\ntopic ${topic}\nstate ${dir}\n`);
 
-const agent = (instructions: string, withResearch = false) =>
-	h.createConversation({ ownership: { kind: "ownerless" }, agent: { model, extensions: withResearch ? [spaces, research] : [spaces], instructions } }, ctx);
-const team = [await agent(analyst), await agent(presenter), ...(await Promise.all(COLLECTORS.map((c) => agent(collector(c), true))))];
-for (const c of team) await c.submit({ type: "input", content: "Beginne." }, ctx); // waiters first, then collectors
+const agent = (name: string, instructions: string, withResearch = false) =>
+	run.agent(name, { model, extensions: withResearch ? [spaces, research] : [spaces], instructions });
+const team = { analyst: await agent("analyst", analyst), presenter: await agent("presenter", presenter) };
+await run.start({ ...team, ...Object.fromEntries(await Promise.all(COLLECTORS.map(async c => [c.name, await agent(c.name, collector(c), true)]))) });
+await run.trigger("collect");
 
 const progress = async () => {
 	const n = async (type: string) => host.count({ type });
@@ -98,24 +85,23 @@ const until = async (cond: () => Promise<boolean>, ms: number) => {
 };
 
 if (!(await until(async () => (await host.count({ type: "CollectorDone" })) >= COLLECTORS.length, options.phaseTimeoutMs ?? COLLECT_MS))) throw new Error("Collection timed out; incomplete state retained for inspection");
-await host.write({ type: "AnalyzeTask", fields: { topic } }, null, FOREVER);
+await run.trigger("analysis", { type: "AnalyzeTask", fields: { topic } });
 const ok = await until(async () => (await host.count({ type: "Report" })) > 0, options.phaseTimeoutMs ?? REPORT_MS);
 
 if (ok) {
 	const report = (await host.readAll({ type: "Report" }))[0]!.fields as { title: string; markdown: string };
-	writeFileSync(out, report.markdown);
+	writeResearchFile(out, report.markdown);
+	await run.finish();
 	console.log(`\n${report.markdown}\n\nreport written to ${out}`);
 } else throw new Error(`Report timed out; incomplete state retained in ${dir}`);
 console.log("space:", JSON.stringify(await host.stats()));
 } finally {
-await stopService();
-await h.close(ctx);
-await space.close(ctx);
+await run.close();
 }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
  const args=process.argv.slice(2);
  const value=(name: string) => { const i=args.indexOf(name); return i>=0?args[i+1]:undefined; };
- await runArxivResearch({ topic: args.find((a,i)=>!a.startsWith("--") && !args[i-1]?.startsWith("--")), dir:value("--dir"), out:value("--out"), outJson:value("--out-json"), query:value("--query") });
+ await runArxivResearch({ topic: args.find((a,i)=>!a.startsWith("--") && !["--dir", "--out", "--out-json", "--query"].includes(args[i-1]!)), dir:value("--dir"), out:value("--out"), outJson:value("--out-json"), query:value("--query"), resume:args.includes("--resume") });
 }

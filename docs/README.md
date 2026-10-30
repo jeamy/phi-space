@@ -4,6 +4,9 @@
 |---|---|---|
 | [implementierungsstand.md](implementierungsstand.md) | implementierter Umfang, Nachweise und Grenzen | **aktuell** |
 | [api.md](api.md) | TypeScript-, Dienst- und Remote-API | **aktuell** |
+| [vergleich-pi-durable.md](vergleich-pi-durable.md) | Gemeinsamkeiten und Unterschiede zu Earendils pi-durable; Release 1.4.0 und neuerer main-Stand getrennt | Vergleich vom 2026-10-30, mit Quellen und Upgrade-Grenzen |
+| [upgrade-pi-1.4.0.md](upgrade-pi-1.4.0.md) | Earendil-Upgrade, Kontextbrücke, Transport-Ausnahme und Datenbank-/Rollback-Grenzen | Paketstand 1.4.0; Server/Client separat 1.1.0 |
+| [agenten-stromausfalltest.md](agenten-stromausfalltest.md) | FULL/fsync, JSONL-Markerbarriere, Regressionen und vorbereiteter Wegwerf-VM-Test | Sync-Policy implementiert; echter Stromausfall und VM-End-to-End noch offen |
 | [Vollständige Namensumstellung](namensumstellung-2026-10-18.md) | einheitliche Namen, Speicher-/Bundle-Formatbruch, Prüfnachweise und Betriebsgrenzen | lokal umgesetzt; bestehende Stores/externes Deployment separat |
 | [umstellung-ohne-pi-durable.md](umstellung-ohne-pi-durable.md) | eigenständiger Space-Host, Haltbarkeit, Datenmigration und Abnahme ohne pi-durable | detaillierter Ziel- und Arbeitsplan; U0 erhoben, U1 weitgehend umgesetzt |
 | [umstellung-u0-bestand.md](umstellung-u0-bestand.md) | U0: Importgraph, Dokumentkatalog, Ausgangstests, Lastprofil, Grenzwerte | Bestand vom 2026-10-22; Entscheidungen D1–D4 offen |

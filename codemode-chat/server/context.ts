@@ -13,6 +13,8 @@ export type CallKind = "contribute" | "critique" | "propose" | "vote" | "judge" 
 /** A request for a model call, as an agent writes it (and the model process takes it). */
 export type LlmCall = {
 	callId: string; session: string; blockId?: string; runId?: string; kind: CallKind;
+	/** Budget reservation of a work item; a durable agent extends it before each additional model attempt. */
+	itemId?: string;
 	agent: number; gen: number; model?: string; lang: "de" | "en";
 	/** contribute: what the agent does, the attempt it works on, a merge partner, the critique and plan it follows. */
 	role?: Role; targetId?: string; partnerId?: string; critiqueId?: string; proposalId?: string;

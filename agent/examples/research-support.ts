@@ -9,13 +9,13 @@ import type { liveModels } from "../src/live-models.ts";
 export type ModelBundle = Awaited<ReturnType<typeof liveModels>>;
 export type ResearchOptions = {
   topic?: string; dir?: string; out?: string; outJson?: string; query?: string;
-  modelBundle?: ModelBundle; pollMs?: number; phaseTimeoutMs?: number;
+  modelBundle?: ModelBundle; pollMs?: number; phaseTimeoutMs?: number; resume?: boolean;
 };
 
-/** A research execution is deliberately fresh. Persistent data can be inspected, not blindly replayed. */
+/** Fresh-only guard; ResearchRun handles explicitly requested, validated resume. */
 export function claimFreshDirectory(dir: string): void {
   mkdirSync(dir, { recursive: true });
-  if (readdirSync(dir).length) throw new Error("Research state directory is not empty; use a fresh directory (automatic resume is unsupported)");
+  if (readdirSync(dir).length) throw new Error("Research state directory is not empty; use an explicit compatible --resume");
   closeSync(openSync(join(dir, ".research-run"), "wx"));
 }
 

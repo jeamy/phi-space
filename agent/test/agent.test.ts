@@ -9,9 +9,10 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 import { openNodeJsonlStorage } from "@earendil-works/pi-durable/storage/jsonl/node";
-import { BACKGROUND_CONTEXT as ctx } from "../../src/context.ts";
-import { FOREVER, Meter, PhiSpaces, Space, deliverEvents, openOwnMemoryHost, openSqliteHost, startService, withEventSink, type SpaceLike } from "../../src/index.ts";
-import { createSpaces, localSpaces, type AgentSpaces } from "../src/agent.ts";
+import { BACKGROUND_CONTEXT as ctx, createContextKey } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT as spaceContext, withAbortSignal, withContextValue } from "../../src/context.ts";
+import { FOREVER, Meter, PhiSpaces, Space, deliverEvents, openOwnMemoryHost, openSqliteHost, startService, type SpaceLike } from "../../src/index.ts";
+import { agentContext, createSpaces, localSpaces, withAgentEventSink as withEventSink, type AgentSpaces } from "../src/agent.ts";
 
 const job = (n: number) => ({ type: "Job", fields: { n } });
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -28,7 +29,7 @@ async function fixture(o: { meter?: Meter; spaces?: (s: AgentSpaces) => AgentSpa
 		faux, h, space, ext,
 		agent: { model: { provider: "faux", modelId: "faux-1" }, extensions: [ext] },
 		/** The space with the agents' conversations as its event sink. */
-		service: withEventSink(space, h as any),
+		service: withEventSink(space, h),
 		host: new PhiSpaces(space, ctx),
 		snapshot: async () => (await space.snapshot(Space, ctx))!,
 		close: async () => { await h.close(ctx); await space.close(ctx); },
@@ -41,11 +42,43 @@ test("tools + notify delivery run end to end with the faux provider", async () =
 	await f.host.notify({ type: "Job" }, { lease: FOREVER, handback: "jobs", target: boss.id });
 	f.faux.setResponses([fauxAssistantMessage("saw the event")]);
 	await f.host.write(job(1), null, FOREVER);
-	assert.equal(await deliverEvents(f.service, ctx), 1);
+	assert.equal(await deliverEvents(f.service, spaceContext), 1);
 	await boss.waitForIdle(ctx);
 	assert.equal((await f.snapshot()).outbox.length, 0);
-	assert.equal(await deliverEvents(f.service, ctx), 0);
+	assert.equal(await deliverEvents(f.service, spaceContext), 0);
 	await f.close();
+});
+
+test("the 1.4 agent context bridge preserves values, cancellation and existing telemetry", () => {
+	const key = createContextKey<string>("test.agent-context");
+	const abort = new AbortController();
+	const original = withAbortSignal(abort.signal, withContextValue(key, "kept", spaceContext));
+	const adapted = agentContext(original);
+	assert.equal(adapted.value(key), "kept");
+	assert.equal(adapted.abortSignal, abort.signal);
+	assert.equal(adapted.telemetry, ctx.telemetry);
+	assert.equal(agentContext(ctx), ctx);
+	abort.abort();
+	assert.equal(adapted.abortSignal?.aborted, true);
+});
+
+test("space tool output reaches the model through pi-durable 1.4's output channel", async t => {
+	const f = await fixture();
+	t.after(() => f.close());
+	await f.host.write(job(42), null, FOREVER);
+	const root = await f.h.root(ctx, { agent: f.agent });
+	let output = "";
+	f.faux.setResponses([
+		fauxAssistantMessage(fauxToolCall("space_list", { type: "Job" }), { stopReason: "toolUse" }),
+		context => {
+			const result = context.messages.filter(m => m.role === "toolResult").at(-1);
+			output = result?.content.filter(c => c.type === "text").map(c => c.text).join("") ?? "";
+			return fauxAssistantMessage("read the result");
+		},
+	]);
+	const result = await (await root.submit({ type: "input", content: "list jobs" }, ctx)).wait(ctx);
+	assert.equal(result.status, "done");
+	assert.equal(JSON.parse(output)[0].fields.n, 42);
 });
 
 test("space_wait: tool returns at once; entry arrives later as a message and is committed by the agent", async () => {

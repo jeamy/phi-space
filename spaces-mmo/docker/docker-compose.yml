@@ -159,6 +159,7 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
+      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-west:3950
       SPACES_MMO_REGION: west
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -167,6 +168,7 @@ services:
       space-west:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   space-nord:
@@ -227,6 +229,7 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
+      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-nord:3950
       SPACES_MMO_REGION: nord
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -235,6 +238,7 @@ services:
       space-nord:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   space-ost:
@@ -295,6 +299,7 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
+      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-ost:3950
       SPACES_MMO_REGION: ost
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -303,6 +308,7 @@ services:
       space-ost:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   space-sued:
@@ -363,6 +369,7 @@ services:
     command: ["node", "--no-warnings", "--experimental-strip-types", "server/npc-host.ts"]
     environment:
       NODE_ENV: production
+      SPACES_MMO_DATA: /data
       SPACES_MMO_SPACE: tcp:space-sued:3950
       SPACES_MMO_REGION: sued
       SPACES_MMO_REGIONS: "west=tcp:space-west:3950,nord=tcp:space-nord:3950,ost=tcp:space-ost:3950,sued=tcp:space-sued:3950"
@@ -371,6 +378,7 @@ services:
       space-sued:
         condition: service_healthy
     volumes:
+      - mmo-agent-data:/data
       - "${PI_AUTH_DIR:-${HOME}/.pi/agent}:/home/node/.pi/agent:ro"
 
   # ---- tests in Docker ----
@@ -443,4 +451,5 @@ networks:
 
 volumes:
   mmo-space-data: {}
+  mmo-agent-data: {}
   mmo-dev-data: {}

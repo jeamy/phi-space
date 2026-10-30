@@ -26,7 +26,7 @@ import type { CallKind, LlmCall, LlmResultEntry } from "./context.ts";
 import { crossWaitMs, FATAL_LLM, modelWaitMs, verdictWaitOr } from "./limits.ts";
 import { addNote, answersOf, attemptOf, blockTask, enqueueAnswer, enqueueCandidate, isSolved, rankedProposals, rid, scoresOf, systemLine, teamView, planTurn } from "./room.ts";
 import { archive } from "./results.ts";
-import { HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
+import { entryLeaseMs, HELD_WAIT_MS, keepAlive, readExisting, StillHeld, takeAll, takeExisting } from "./space.ts";
 import { isText, type Task } from "./tasks.ts";
 
 export type RunMode = "scripted" | "llm";
@@ -164,6 +164,23 @@ async function admit(d: AgentDeps, it: WorkItem): Promise<void> {
 	}));
 	if (verdict === "wait") throw new Wait();
 	if (verdict === "over") throw new ModelFailed("the run's budget is used up");
+}
+
+/** Extend an item's reservation to cover its agent's unbooked usage plus one more model attempt. */
+export async function admitAgentAttempt(space: SpaceLike, call: LlmCall, usage: Usage): Promise<void> {
+	if (!call.runId) return;
+	await inTxn(space, new Set(), t => updateRun(space, t, entryLeaseMs(), call.session, call.runId!, r => {
+		if (r.info.ended) throw new ModelFailed("the run's budget is used up");
+		const b = r.info.budget;
+		if (!b) return;
+		if (!call.itemId || !r.reserved?.[call.itemId]) throw new ModelFailed("durable agent has no work-item budget reservation");
+		const held = Object.entries(r.reserved).filter(([id]) => id !== call.itemId).map(([, value]) => value);
+		const tokens = r.info.usage.tokens + usage.total + held.reduce((n, x) => n + x.tokens, 0);
+		const usd = r.info.usage.costUsd + usage.costUsd + held.reduce((n, x) => n + x.usd, 0);
+		if (b.tokens !== undefined && tokens >= b.tokens || b.usd !== undefined && usd >= b.usd) throw new ModelFailed("the run's budget is used up");
+		const next = estimate(r);
+		r.reserved[call.itemId] = { tokens: usage.total + next.tokens, usd: usage.costUsd + next.usd };
+	}));
 }
 
 /** The closing line of a run (how it ended, how far it got). */
@@ -343,7 +360,7 @@ async function ask(d: AgentDeps, txn: string, it: WorkItem, slot: Slot, run: Run
 	if (deaths >= MAX_DEATHS) throw new ModelFailed(`the agents process stopped ${deaths} times while working on this item`);
 	const start = await d.space.write({ type: "ItemStart", fields: k }, null, modelWaitMs() + 120_000);
 	let res: LlmResultEntry;
-	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, blockId: it.blockId, runId: it.runId, kind, agent: slot.agent, gen: it.depth ?? it.gen, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more }); }
+	try { res = await callModel(d.space, txn, { callId: `${it.itemId}-t${it.tries ?? 0}-c${n}`, session: it.session, blockId: it.blockId, runId: it.runId, itemId: it.itemId, kind, agent: slot.agent, gen: it.depth ?? it.gen, model: slot.model, lang: run.params.lang, ...(run.params.client ? { client: run.params.client } : {}), ts: Date.now(), ...more }); }
 	finally { await d.space.cancel(start.id).catch(() => {}); }
 	if (!res.ok || !res.value) throw new ModelFailed(res.error ?? "the model call failed", res.usage);
 	paid.set(it, res.usage ?? (res.value.usage as Usage | undefined));
