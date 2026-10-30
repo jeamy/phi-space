@@ -125,7 +125,13 @@ export type SiteFields = { buildId: string; plan: string; name: string; room: st
 /** A finished building; it stands while it is kept (`untilWorldMs`, renewed by repairs). `by`: who built it, with what they gave. */
 export type BuildingFields = { buildId: string; plan: string; name: string; room: string; x: number; y: number; w: number; h: number; owner: string; ownerName: string; accountId: string; beaconId: string; points: number; by: Record<string, number>; untilWorldMs: number; builtAt: number;
 	/** A rain barrel's cans at `waterAtWorldMs`; it gains one every so often (engine/commands/garden.ts barrelWater). */
-	water?: number; waterAtWorldMs?: number };
+	water?: number; waterAtWorldMs?: number;
+	/** A mill's: when the last load waiting is ground (engine/commands/mill.ts); a new load starts there. */
+	busyUntilWorldMs?: number };
+/** A load of grain at a mill (`buildId`, its place kept so it is found when the mill is gone): `count` of `from`, ground
+ *  to `to` at `readyWorldMs` for the figure that brought it. A load whose mill fell before it was ground gives its grain
+ *  back (`to` = `from`). It goes, unfetched, at `untilWorldMs`. */
+export type MillLoadFields = { loadId: string; buildId: string; room: string; x: number; y: number; w: number; h: number; charId: string; name: string; from: string; to: string; count: number; readyWorldMs: number; untilWorldMs: number };
 /** A plant in a bed, at a cell of it: its sort, its stage (0 seed, 1 sprout, 2 ripe, 3 wilted) and when the next is due. */
 export type BedPlant = { x: number; y: number; sort: string; stage: 0 | 1 | 2 | 3; dueWorldMs: number; variety?: Variety };
 /** A bed (docs/siedeln.md "Gärten"): cells like a building's (Plot entries), its plants inside it, so a stage change or

@@ -1,4 +1,4 @@
-// Models for the 3D map: trees and bushes, the hut and the rain barrel, a site that grows with its progress, a ruin, the
+// Models for the 3D map: trees and bushes, the hut, the rain barrel, the windmill and the bakery, a site that grows with its progress, a ruin, the
 // fire's stone ring, a signpost at an exit. Built from primitives in a chunky low-poly style (faceted faces, a few warm
 // colours, every face a shade lighter or darker), so they need no model file. Each model is one merged geometry with
 // vertex colours, made once per kind and variant and shared (userData.shared: the map's dispose keeps it); where it
@@ -172,9 +172,51 @@ function scarecrow(t: T, variant: number): Geo {
 	});
 }
 
-/** A building by its plan: the hut, the rain barrel, the scarecrow, any other plan a hut in its colour. */
+/** The windmill: a tapering eight-sided tower of planks on a stone plinth, a thatched cap, and four linen sails on a hub
+ *  towards +z (one turned a little per variant), a door at the foot. About 2.6 units high. */
+function windmill(t: T, variant: number): Geo {
+	return cached(`windmill:${variant}`, () => {
+		const LINEN = 0xe8e0cc, parts: Part[] = [
+			{ g: new t.CylinderGeometry(0.85, 0.9, 0.14, 8), c: STONE, p: [0, 0.07, 0] },
+			{ g: new t.CylinderGeometry(0.42, 0.7, 1.6, 8), c: WOOD, p: [0, 0.94, 0] },
+			{ g: new t.CylinderGeometry(0.6, 0.6, 0.05, 8), c: WOOD_DARK, p: [0, 0.6, 0] },
+			{ g: new t.CylinderGeometry(0.5, 0.5, 0.05, 8), c: WOOD_DARK, p: [0, 1.2, 0] },
+			{ g: new t.ConeGeometry(0.58, 0.55, 8), c: THATCH[variant % 3]!, p: [0, 2.0, 0] },
+			{ g: new t.BoxGeometry(0.28, 0.46, 0.06), c: 0x3a2a18, p: [0, 0.37, 0.66], r: [-0.12, 0, 0] },
+			{ g: new t.CylinderGeometry(0.07, 0.07, 0.36, 6), c: WOOD_DARK, p: [0, 1.85, 0.5], r: [Math.PI / 2, 0, 0] },
+		];
+		const turn = (variant * Math.PI) / 7;
+		for (let i = 0; i < 4; i++) {
+			const a = turn + (i * Math.PI) / 2, cx = Math.cos(a), cy = Math.sin(a), y = 1.85, z = 0.7;
+			parts.push({ g: new t.BoxGeometry(0.05, 1.05, 0.04), c: WOOD_DARK, p: [-cy * 0.52, y + cx * 0.52, z], r: [0, 0, a] }); // the stock
+			parts.push({ g: new t.BoxGeometry(0.24, 0.8, 0.02), c: LINEN, p: [-cy * 0.6 + cx * 0.13, y + cx * 0.6 + cy * 0.13, z + 0.02], r: [0, 0, a] }); // the sail
+		}
+		return merge(t, parts, `windmill:${variant}`);
+	});
+}
+
+/** The bakery: a squat stone house with a plank roof, and beside it the round clay oven with its mouth and chimney.
+ *  About 1.5 units high for 2×2. */
+function bakery(t: T, w: number, d: number, variant: number): Geo {
+	return cached(`bakery:${w}x${d}:${variant}`, () => {
+		const CLAY = 0xb0604a, ww = w * 0.55, dd = d * 0.75, wh = 0.62, parts: Part[] = [
+			{ g: new t.BoxGeometry(w * 0.92, 0.1, d * 0.9), c: STONE, p: [0, 0.05, 0] },
+			{ g: new t.BoxGeometry(ww, wh, dd), c: STONE_DARK, p: [-w * 0.18, 0.1 + wh / 2, 0] },
+			{ g: new t.BoxGeometry(ww + 0.16, 0.08, dd + 0.16), c: WOOD_DARK, p: [-w * 0.18, 0.1 + wh + 0.04, 0], r: [0, 0, 0.12] },
+			{ g: new t.BoxGeometry(0.26, 0.42, 0.04), c: 0x3a2a18, p: [-w * 0.18, 0.1 + 0.21, dd / 2 + 0.015] },
+			{ g: new t.SphereGeometry(0.42, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), c: CLAY, p: [w * 0.27, 0.1, 0.05] },
+			{ g: new t.BoxGeometry(0.2, 0.16, 0.06), c: 0x2a1a10, p: [w * 0.27, 0.18, 0.46] },
+			{ g: new t.BoxGeometry(0.14, 0.12, 0.05), c: 0xf2a04a, p: [w * 0.27, 0.17, 0.47] }, // embers
+			{ g: new t.CylinderGeometry(0.07, 0.09, 0.4, 6), c: STONE_DARK, p: [w * 0.27, 0.62, -0.1] },
+		];
+		for (let i = 0; i < 3; i++) parts.push({ g: new t.CylinderGeometry(0.04, 0.04, 0.3, 6), c: i % 2 ? BARK : WOOD, p: [w * 0.27 + (i - 1) * 0.09, 0.14, -0.42], r: [0, 0, Math.PI / 2] });
+		return merge(t, parts, `bakery:${variant}`);
+	});
+}
+
+/** A building by its plan: the hut, the rain barrel, the scarecrow, the windmill, the bakery, any other plan a hut in its colour. */
 export function buildingGeometry(t: T, plan: string | undefined, w: number, d: number, color: number, variant: number): Geo {
-	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : hut(t, w, d, color, variant % 3);
+	return plan === "regentonne" ? barrel(t) : plan === "vogelscheuche" ? scarecrow(t, variant % 3) : plan === "windmuehle" ? windmill(t, variant % 3) : plan === "backhaus" ? bakery(t, w, d, variant % 3) : hut(t, w, d, color, variant % 3);
 }
 
 /** A hare, sitting up a little, its nose towards +z: body, haunches, head, long ears, a white scut. About 0.4 high. */

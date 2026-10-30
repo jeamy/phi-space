@@ -14,7 +14,7 @@
 // - A site without progress lapses at its world time (the sweep, buildSweep); work makes a figure rest a while (WorkRest).
 import { randomBytes } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike } from "phi-spaces";
-import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type PlotFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
+import { fieldsOf, type BuildingFields, type EstateFields, type ItemFields, type LightUseFields, type MillLoadFields, type PlotFields, type RoomFields, type RuinFields, type SiteFields, type WorkRestFields } from "../../model.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { peek } from "../../space.ts";
 import { worldNowOf } from "../clock.ts";
@@ -407,7 +407,8 @@ const abriss: Command = {
 		for (const it of await c.space.readAll({ type: "Item", fields: { location: b.buildId } })) if (await moveItem(c.space, c.txn, String(it.fields.itemId), b.buildId, c.actor.charId)) kept++;
 		await freeCells(c.space, c.txn, b.room, b.buildId);
 		await releaseLight(c.space, c.txn, b.beaconId, b.points ?? 1);
-		await msg(c, "*", "info", `${c.actor.name} reißt die ${b.name} ab; die Fläche ist frei.${back.length ? ` Zurück: ${back.join(", ")}.` : ""}${kept ? ` Aus der Truhe: ${kept} Dinge.` : ""}`);
+		const stopped = await stopLoads(c.space, c.txn, b.buildId, await worldNowOf(c.space, c.txn));
+		await msg(c, "*", "info", `${c.actor.name} reißt die ${b.name} ab; die Fläche ist frei.${back.length ? ` Zurück: ${back.join(", ")}.` : ""}${kept ? ` Aus der Truhe: ${kept} Dinge.` : ""}${stopped ? " Das Korn, das noch nicht gemahlen war, holen die, die es brachten, hier ab („abholen“)." : ""}`);
 	},
 };
 
@@ -458,6 +459,7 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 			const ruin: RuinFields = { buildId: b.buildId, plan: b.plan, name: b.name, room: b.room, x: b.x, y: b.y, w: b.w, h: b.h, owner: b.owner, ownerName: b.ownerName, accountId: b.accountId, untilWorldMs: now + (w?.building?.ruinWorldMs ?? 10 * 24 * 3600_000) };
 			await space.write({ type: "Ruin", fields: ruin as never }, txn, FOREVER);
 			await releaseLight(space, txn, b.beaconId, b.points ?? 1);
+			await stopLoads(space, txn, b.buildId, now);
 			const inside = await space.readAll({ type: "Item", fields: { location: b.buildId } });
 			if (inside.length) {
 				const est: EstateFields = { estateId: `est-${b.buildId}`, accountId: b.accountId, ownerName: b.ownerName, room: b.room, name: b.name, untilWorldMs: now + (w?.building?.estateWorldMs ?? 30 * 24 * 3600_000) };
@@ -486,6 +488,20 @@ export async function buildSweep(space: SpaceLike, w?: WorldDef): Promise<void> 
 		});
 	}
 	for (const e of await space.readAll({ type: "WorkRest" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
+	// flour (or grain back) nobody fetched
+	for (const e of await space.readAll({ type: "MillLoad" })) if (Number(e.fields.untilWorldMs) <= now) await space.takeIfExists({ id: e.id }, NO_WAIT);
+}
+/** A mill that falls stops grinding: its loads not yet ground give their grain back, ready now, at the mill's place
+ *  (engine/commands/mill.ts). How many it stopped. */
+export async function stopLoads(space: SpaceLike, txn: string, buildId: string, now: number): Promise<number> {
+	let n = 0;
+	for (const e of await space.readAll({ type: "MillLoad", fields: { buildId } })) {
+		const l = fieldsOf<MillLoadFields>(e);
+		if (l.readyWorldMs <= now || !(await space.takeIfExists({ type: "MillLoad", fields: { loadId: l.loadId } }, 5_000, { txn }))) continue;
+		await space.write({ type: "MillLoad", fields: { ...l, to: l.from, readyWorldMs: now } as never }, txn, FOREVER);
+		n++;
+	}
+	return n;
 }
 /** Takes the cells of a site or building. */
 export async function freeCells(space: SpaceLike, txn: string, room: string, of: string): Promise<void> {

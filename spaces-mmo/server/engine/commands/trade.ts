@@ -4,11 +4,11 @@
 // or lost however many trades race each other.
 import { randomBytes, randomInt } from "node:crypto";
 import { FOREVER, NO_WAIT, type SpaceLike, type Taken } from "phi-spaces";
-import { fieldsOf, type AccountFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
+import { fieldsOf, type AccountFields, type BuildingFields, type CharacterFields, type ItemFields, type ListingFields, type OfferFields, type OrderFields } from "../../model.ts";
 import { readExisting, StillHeld, peek } from "../../space.ts";
 import type { Command } from "../cmdsets.ts";
 import { byName, CommandError, NotUnderstood, inventory, msg, type CommandCtx, itemsNamed } from "../context.ts";
-import { bau, planOf } from "./build.ts";
+import { bau, distTo, planOf } from "./build.ts";
 import { resolvePrototype, spawn } from "../prototypes.ts";
 import { worldNowOf } from "../clock.ts";
 import type { WorldDef } from "../world.ts";
@@ -193,13 +193,13 @@ const market: Command = {
 	},
 };
 
-const craft: Command = {
+export const craft: Command = {
 	key: "craft", aliases: ["baue", "herstellen", "fertige"],
 	help: "craft [rezept] – etwas herstellen; ohne Rezept die Liste",
 	async func(c, arg) {
 		const rs = c.world.recipes;
 		if (!arg) {
-			const show = (r: (typeof rs)[number]) => `  ${r.key}: ${list(r.needs.map((n) => `${n.count}× ${n.proto}`))}${r.tool ? `, Werkzeug: ${r.tool}` : ""}`;
+			const show = (r: (typeof rs)[number]) => `  ${r.key}: ${list(r.needs.map((n) => `${n.count}× ${n.proto}`))}${r.tool ? `, Werkzeug: ${r.tool}` : ""}${r.at ? `, nur am Bau: ${planOf(c.world, r.at)?.name ?? r.at}` : ""}${(r.count ?? 1) > 1 ? ` (gibt ${r.count})` : ""}`;
 			return msg(c, c.actor.charId, "info", ["Rezepte:", ...rs.map(show)].join("\n"));
 		}
 		const a = arg.trim().toLowerCase();
@@ -207,6 +207,9 @@ const craft: Command = {
 		// "baue eine hütte": a plan, not a recipe (engine/commands/build.ts)
 		if (!r && planOf(c.world, a.replace(/(?:\s+\d+){2}$/, ""))) return bau.func(c, arg);
 		if (!r) throw new NotUnderstood(`Ein Rezept „${arg.slice(0, 30)}“ gibt es nicht. „craft“ zeigt die Rezepte.`);
+		// a recipe of a building (the bakery's oven) is made beside one of its plan, anyone's
+		if (r.at && !(await c.space.readAll({ type: "Building", fields: { room: c.actor.room, plan: r.at } })).some((e) => distTo(c.actor, fieldsOf<BuildingFields>(e)) <= 1))
+			throw new CommandError(`${r.name} macht man nur direkt neben einem ${planOf(c.world, r.at)?.name ?? r.at}.`);
 		const inv = await inventory(c);
 		const used = new Set<string>(), inputs: Inv = [];
 		for (const n of r.needs) {
@@ -225,8 +228,9 @@ const craft: Command = {
 		}
 		const p = await resolvePrototype(c.space, r.makes);
 		if (!p) throw new CommandError("Das Rezept ist kaputt.");
-		await spawn(c.space, c.txn, c.world, p, { location: c.actor.charId, x: -1, y: -1 });
-		await msg(c, "*", "info", `$you() $conj(stellst|stellt) ${p.name} her.${broke ? ` Das ${tool!.f.name} zerbricht dabei.` : ""}`, { templ: true });
+		const n = r.count ?? 1;
+		for (let i = 0; i < n; i++) await spawn(c.space, c.txn, c.world, p, { location: c.actor.charId, x: -1, y: -1 });
+		await msg(c, "*", "info", `$you() $conj(stellst|stellt) ${n > 1 ? `${n} ${p.name}` : p.name} her.${broke ? ` Das ${tool!.f.name} zerbricht dabei.` : ""}`, { templ: true });
 	},
 };
 

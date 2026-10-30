@@ -1,7 +1,8 @@
 # The garden's things in the style of Shikashi's icons (32x32, dark outline, a light edge on top, shade below):
 # spade, can of water, seed bags in the colour of their sort, three flowers, a cabbage and a carrot; and the hare that
 # comes from the fog for them (wild.ts). The field crops (field.ts): three ears of grain, a potato, a beet and a bundle
-# of flax.
+# of flax. What the mill and the bakery make of them (mill.ts): a sack of flour and a loaf; and the spindle and the
+# linen spun from the flax.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -224,6 +225,61 @@ def flax():
     return outline(img)
 
 
+def sack():
+    img = new(); px = img.load()
+    S, SD = rgb("#d8ccb0"), rgb("#9a8a6a")
+    for y in range(10, 30):                 # a sack, wider below, tied at the neck
+        half = 6 + (y - 10) * 0.35 if y < 26 else 13 - (y - 26) * 1.2
+        for x in range(round(16 - half), round(16 + half) + 1):
+            px[x, y] = shade(S, 1.15 if x < 13 and y < 18 else 0.8 if y > 25 or x > 21 else 1.0)
+    rect(px, 13, 7, 19, 9, S)
+    line(px, 12, 10, 20, 10, ROPE, 1)
+    for (x, y) in ((14, 4), (17, 3), (19, 5), (15, 6)):  # flour dusting out of the open neck
+        px[x, y] = rgb("#f4f1e8")
+    line(px, 13, 20, 19, 20, SD)            # the miller's mark: a little wheel
+    line(px, 16, 17, 16, 23, SD)
+    return outline(img)
+
+
+def loaf():
+    img = new(); px = img.load()
+    B, BD, BL = rgb("#c88a3a"), rgb("#7a4a1a"), rgb("#f0c070")
+    for x in range(4, 28):                  # a round-topped loaf on a flat bottom
+        top = 14 - ((1 - ((x - 16) / 12.5) ** 2) ** 0.5) * 7
+        for y in range(round(top), 26):
+            px[x, y] = shade(B, 1.2 if y < top + 3 and x < 16 else 0.75 if y > 22 else 1.0)
+    for i in range(3):                      # the baker's cuts
+        line(px, 9 + i * 6, 11 - (1 if i == 1 else 0), 13 + i * 6, 16 - (1 if i == 1 else 0), BD)
+        line(px, 10 + i * 6, 11 - (1 if i == 1 else 0), 14 + i * 6, 16 - (1 if i == 1 else 0), BL)
+    return outline(img)
+
+
+def linen():
+    img = new(); px = img.load()
+    L, LD, LL = rgb("#e8e0cc"), rgb("#a89c80"), rgb("#fbf8f0")
+    for y in range(9, 25):                  # a roll of cloth, its end hanging down in front
+        for x in range(5, 25):
+            px[x, y] = shade(L, 1.1 if y < 12 else 0.8 if y > 21 else 1.0)
+    for y in range(9, 25): disc(px, 25.5, y + 0.5, 3.2, LD, light=False)
+    disc(px, 25.5, 16.5, 4, LD, light=False)
+    disc(px, 25.5, 16.5, 1.4, LL, light=False)
+    rect(px, 7, 24, 18, 29, L)              # the loose end
+    for x in range(7, 19, 3): line(px, x, 25, x, 29, LD)
+    for y in range(12, 24, 3): line(px, 6, y, 23, y, LL)  # the weave
+    return outline(img)
+
+
+def spindle():
+    img = new(); px = img.load()
+    line(px, 16, 2, 16, 29, WOOD, 2)        # the shaft
+    line(px, 17, 3, 17, 28, WOODD)
+    disc(px, 16.5, 22.5, 6, WOODD)          # the whorl, a flat disc near the foot
+    disc(px, 16.5, 21.5, 5, WOOD)
+    for i in range(5):                      # flax thread wound on above it
+        line(px, 13, 9 + i * 2, 20, 8 + i * 2, rgb("#c9b88a"))
+    return outline(img)
+
+
 out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
@@ -233,6 +289,7 @@ things = {
     "kohl": cabbage(), "moehre": carrot(), "hase": hare(),
     "weizen": ears("#d9b44a"), "gerste": ears("#c8b06a", awns=True), "hafer": ears("#cdbf8a", loose=True),
     "kartoffel": potato(), "ruebe": beet(), "samen-ruebe": seeds("#9a3a5a"), "flachs": flax(), "leinsamen": seeds("#6a8fd0"),
+    "mehl": sack(), "brot": loaf(), "leinen": linen(), "spindel": spindle(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

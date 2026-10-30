@@ -802,8 +802,47 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
        Anteil; eine Scheune gibt es noch nicht.
      - Das Erntefenster öffnet eine feste Frist nach dem Bestellen; es gibt noch keine Jahreszeiten.
 
-     Noch nicht: Windmühle, Backhaus und die Ketten Korn → Mehl → Brot und Flachs → Leinen (Teil 2), Tiere (Teil 3),
-     Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
+   - **Teil 2, gebaut 2026-10-30** (`server/engine/commands/mill.ts`, Test `tests/mill.test.ts`, Weltversion 21):
+     **Windmühle, Backhaus** und die Ketten Korn → Mehl → Brot und Flachs → Leinen.
+     - **Windmühle** (Bauplan 2×2: 8 Treibholz, 2 Tangseil, 2 Leinen für die Flügel, 16 Arbeit, zwei Lichtpunkte).
+       Mahlen darf jeder an jeder Mühle: `mahle [n|alle] <korn>` nimmt Weizen, Gerste oder Hafer (bis 12 auf
+       einmal, höchstens drei wartende Säcke je Figur). Jede Ladung ist ein eigener `MillLoad`-Entry mit der Zeit, zu
+       der sie fertig ist. Sie beginnt, wenn die Ladung davor gemahlen ist (`busyUntilWorldMs` an der Mühle, die
+       `mahle` in seiner Transaktion nimmt), und braucht eine Weltstunde je Handvoll. Während die Mühle mahlt, schreibt
+       niemand. `abholen` (bis zwei Felder Abstand) nimmt nur die eigenen fertigen Ladungen, nie die Mühle.
+       `mahle` allein sagt, wie lange sie noch mahlt.
+     - **Sturmflut:** Auf ihrer Insel rücken die wartenden Ladungen und die Warteschlange sechs Stunden vor. Das ist
+       der einzige Schreibvorgang eines Tickers, im Sturm-Job neben den Regentonnen.
+     - **Nichts geht verloren:** Fällt eine Mühle (Abriss oder Ruine), geben die Ladungen, die noch nicht gemahlen
+       waren, ihr Korn zurück, sofort abholbar an der Stelle der Mühle. Was zwei Wochen niemand abholt, räumt der
+       Sweep ab.
+     - **Backhaus** (Bauplan 2×2: 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit). Rezepte können jetzt an einen Bau
+       gebunden sein (`at` im Rezept, die Welt prüft den Plan). `craft brot` oder `backe brot` macht direkt neben einem
+       Backhaus, wem es auch gehört, aus 2 Mehl, einer Kanne Wasser und einem Treibholz drei Brote (`count` im Rezept).
+     - **Leinen:** `craft spindel` (1 Treibholz, 1 Muschel; ein Werkzeug, das sich abnutzt), dann `craft leinen`
+       (3 Flachs).
+     - **Nutzen:** Marta in Kupferhafen kauft und verkauft Mehl, Brot und Leinen. Vier neue Aufträge fragen danach:
+       Brot für die Schenke und die Riffischer, Mehl für Ines, Leinen für ein Segel der Werft.
+     - **Bauten je Konto:** höchstens fünf statt zwei, denn Regentonne und Vogelscheuche zählen mit, und eine
+       Hütte mit Tonne hätte sonst keinen Platz mehr für Mühle oder Backhaus.
+     - **Karte und Hilfe:** Mühle (Turm, Kappe, vier Leinenflügel) und Backhaus (Steinhaus mit Lehmofen) in 3D. Das
+       Zellmenü bietet Mahlen je getragenem Korn, Abholen und Backen an. Hilfe: Abschnitt „Mühle und Backhaus“ im
+       Artikel „Gärten“, Thema `help brot`, die Rezepte im Artikel „Handel und Handwerk“.
+
+     Abnahme (`tests/mill.test.ts`):
+     - Fünf Figuren mahlen zugleich: fünf Ladungen, keine überlappt die davor, und keine ist vor ihrer Zeit
+       abholbar. Alle holen zugleich ab, jede bekommt genau ihre zwei Mehl, und keine Ladung bleibt übrig.
+     - Eine Sturmflut auf der Insel rückt alles sechs Stunden vor, eine auf einer anderen Insel nicht.
+     - Ein Abriss und eine Ruine geben das ungemahlene Korn zurück.
+     - Brot gibt es nur neben einem Backhaus; Leinen nur mit einer Spindel, die dabei nicht verbraucht wird.
+
+     Abweichungen vom Entwurf:
+     - Mühle und Backhaus sind nicht an Epoche 2 gebunden; Epochen kommen erst mit Schritt 4.
+     - Leinen spinnt man ohne Webstuhl, denn die Werkstatt fehlt noch (Schritt 5).
+     - Wind gibt es nur als Sturmflut; Flauten kommen mit den Jahreszeiten.
+     - Brot macht noch nicht satt („Nahrung“ ist später); es ist Handels- und Auftragsware.
+
+     Noch nicht: Tiere (Teil 3), Rehe, Füchse, Mäuse, Hund und Katze (Teil 4).
 4. **Epochen und Siedlung**: Punkte je Bau und Garten, der Zähl-Ticker, `Epoch` je Insel, Schwellen in den
    `Setting`-Entries, Rückfall; die Siedlung aus Hütten in einem Raum (Name, Rechte-Stufen Fremder, Helfer, Siedler).
    Abnahme: eine Insel erreicht das Dorf aus Beeten allein; verfällt genug, fällt sie zurück, ihre Bauten arbeiten weiter,

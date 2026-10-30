@@ -325,6 +325,9 @@ Ausführlich unter [Gärten](help.game.garden).
 | \`zäune\` | \`fence\` | Einen Zaun um ein Beet neben dir setzen (2 Treibholz, 1 Tangseil) |
 | \`flur anlegen [x y]\` | \`acker anlegen\` | Mit einem Spaten im Licht eine Flur umbrechen (4×4); \`flur\` zeigt die Fluren hier, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [frucht]\` | \`pflüge\`, \`plough\` | Die Flur bestellen: Frucht wählen, Saatgut und einen Arbeitspunkt bringen |
+| \`mahle [n oder alle] <korn>\` | \`mühle\`, \`grind\` | An einer Windmühle neben dir Korn zu Mehl mahlen lassen; \`mahle\` allein: wie lange sie noch mahlt |
+| \`abholen\` | \`pickup\` | Dein fertiges Mehl an der Mühle abholen |
+| \`backe [brot]\` | \`bake\` | Am Backhaus neben dir Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz) |
 
 ## Handel und Ruf {#tradecmds}
 
@@ -343,7 +346,7 @@ Ausführlich unter [Handel und Handwerk](help.game.trade).
 
 | Befehl | Wirkung |
 | --- | --- |
-| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help chat\` |
+| \`help [befehl oder thema]\` (auch \`hilfe\`, \`?\`) | Hilfe im Spiel; Themen wie \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help chat\` |
 
 ## Für Builder {#builder}
 
@@ -419,6 +422,9 @@ In detail under [Gardens](help.game.garden).
 | \`zäune\` | \`fence\` | Put a fence round a bed beside you (2 driftwood, 1 kelp rope) |
 | \`flur anlegen [x y]\` | \`acker anlegen\`, \`field\` | Break a field (4×4) with a spade in the light; \`flur\` shows the fields here, \`flur offen\`/\`flur zu\`, \`flur aufgeben\` |
 | \`bestelle [crop]\` | \`pflüge\`, \`plough\` | Sow the field: choose the crop, bring seed and a work point |
+| \`mahle [n or alle] <grain>\` | \`mühle\`, \`grind\` | Have grain ground to flour at a windmill beside you; \`mahle\` alone: how long it still grinds |
+| \`abholen\` | \`pickup\` | Fetch your flour at the mill |
+| \`backe [brot]\` | \`bake\` | Bake bread at a bakery beside you (2 flour, 1 can of water, 1 driftwood) |
 
 ## Trade and reputation {#tradecmds}
 
@@ -437,7 +443,7 @@ In detail under [Trade and crafting](help.game.trade).
 
 | Command | Effect |
 | --- | --- |
-| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help chat\` |
+| \`help [command or topic]\` (also \`hilfe\`, \`?\`) | In-game help; topics such as \`help leuchtfeuer\`, \`help handel\`, \`help siedeln\`, \`help garten\`, \`help ackerbau\`, \`help brot\`, \`help chat\` |
 
 ## For builders {#builder}
 
@@ -531,6 +537,9 @@ An der Grauen Bucht gibt es ein Marktbrett, Preise in **Münzen**:
 | --- | --- | --- |
 | Muschelmesser | 2 Muscheln, 1 Treibholz | Werkzeug, stumpft nach einigen Einsätzen ab |
 | Holzbündel | 3 Treibholz und ein Muschelmesser | Brennt vier Mal so lange wie ein Scheit |
+| Spindel | 1 Treibholz, 1 Muschel | Werkzeug zum Spinnen, nutzt sich ab |
+| Leinen | 3 Flachs und eine Spindel | Ein Ballen Leinen ([Äcker](help.game.garden#mill)) |
+| Brot | 2 Mehl, 1 Kanne Wasser, 1 Treibholz, nur am Backhaus | 3 Brote |
 
 ## Auftragstafel {#orders}
 
@@ -558,6 +567,9 @@ The Grey Bay has a market board, prices in **coins**:
 | --- | --- | --- |
 | Shell knife | 2 shells, 1 driftwood | A tool; it blunts after a few uses |
 | Wood bundle | 3 driftwood and a shell knife | Burns four times as long as one log |
+| Spindle | 1 driftwood, 1 shell | A tool for spinning; it wears |
+| Linen | 3 flax and a spindle | A bolt of linen ([fields](help.game.garden#mill)) |
+| Bread | 2 flour, 1 can of water, 1 driftwood, only at a bakery | 3 loaves |
 
 ## Job board {#orders}
 
@@ -577,7 +589,7 @@ The Grey Bay has a market board, prices in **coins**:
 
 ## Baustelle abstecken {#stake}
 
-\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern.
+\`bau hütte\` steckt neben dir eine Baustelle ab, \`bau hütte <x> <y>\` an einer bestimmten Stelle. \`bau\` allein zeigt die Baupläne. Eine Hütte braucht 2×2 Felder, **6 Treibholz, 2 Tangseil und 20 Arbeit**. Die **Regentonne** (1 Feld, 3 Treibholz, 1 Tangseil, 4 Arbeit) gibt Wasser für die [Gärten](help.game.garden), die **Vogelscheuche** (1 Feld, 2 Treibholz, 1 Tangseil, 3 Arbeit) hält die Hasen von ihnen fern. **Windmühle** und **Backhaus** machen aus Korn Mehl und Brot ([Mühle und Backhaus](help.game.garden#mill)).
 
 Nicht gebaut wird auf Ausgängen und Türen, direkt am Feuer, auf Dingen oder Personen. Wege bleiben frei: Ausgänge, der Startplatz und eine Seite jedes Feuers bleiben erreichbar. In einen Bau läuft niemand hinein.
 
@@ -606,7 +618,7 @@ Ein Bau hält **eine Woche**. \`repariere\` (1 Treibholz, jeder darf helfen) set
 
 ## Staking out a site {#stake}
 
-\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them.
+\`bau hütte\` (or \`build hut\`) stakes out a site next to you, \`bau hütte <x> <y>\` at a given spot. \`bau\` alone lists the plans. A hut takes 2×2 cells, **6 driftwood, 2 kelp rope and 20 work**. The **rain barrel** (1 cell, 3 driftwood, 1 kelp rope, 4 work) gives water for the [gardens](help.game.garden), the **scarecrow** (1 cell, 2 driftwood, 1 kelp rope, 3 work) keeps the hares from them. The **windmill** and the **bakery** turn grain into flour and bread ([Mill and bakery](help.game.garden#mill)).
 
 Nothing is built on exits and doors, right at a fire, on things or people. Ways stay open: exits, the starting place and one side of every fire stay reachable. Nobody walks into a building.
 
@@ -721,7 +733,19 @@ Größer als ein Beet ist die **Flur**: 4×4 Felder, eine je Konto, im Licht ein
 
 \`flur offen\` lässt jeden mitsäen und miternten, auch Gäste, und jeder behält seinen Anteil; \`flur zu\` schließt sie wieder.
 
-**Fruchtfolge:** Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Eine Flur, an der zwei Wochen niemand arbeitet, verwildert.`,
+**Fruchtfolge:** Dieselbe Art zweimal hintereinander macht den Boden müde, er gibt nur noch 60 %, beim dritten Mal 35 %. Eine andere Art oder drei Tage Brache heilen ihn: Getreide, dann Kartoffeln, dann Rüben oder Ruhe. \`flur\` zeigt den Boden. Eine Flur, an der zwei Wochen niemand arbeitet, verwildert.
+
+## Mühle und Backhaus {#mill}
+
+Aus der Ernte wird mehr: **Korn → Mehl → Brot** und **Flachs → Leinen**.
+
+**Windmühle** (\`bau windmühle\`: 2×2 Felder, 8 Treibholz, 2 Tangseil, **2 Leinen** für die Flügel, 16 Arbeit). Mahlen darf jeder an jeder Mühle: \`mahle alle weizen\` schüttet dein Korn hinein (Weizen, Gerste oder Hafer, bis 12 auf einmal, höchstens drei Säcke je Figur). Sie mahlt eine Weltstunde je Handvoll, was vor dir kam, zuerst. \`mahle\` allein sagt, wie lange sie noch zu tun hat; ist dein Mehl fertig, holt \`abholen\` es (bis zwei Felder Abstand). Bei **Sturmflut** auf ihrer Insel dreht sie schneller und mahlt sechs Stunden voraus. Fällt die Mühle, bevor dein Korn gemahlen ist, holst du an ihrer Stelle dein Korn zurück. Was zwei Wochen niemand abholt, ist verloren.
+
+**Backhaus** (\`bau backhaus\`: 2×2 Felder, 6 Treibholz, 6 Muscheln, 1 Tangseil, 12 Arbeit). Daneben bäckt \`backe brot\` aus **2 Mehl, einer Kanne Wasser und einem Scheit Treibholz** drei Brote, an jedem Backhaus, wem es auch gehört.
+
+**Leinen** spinnt man aus Flachs: \`craft spindel\` (1 Treibholz, 1 Muschel), dann \`craft leinen\` (3 Flachs). Leinen braucht die Mühle für ihre Flügel; die Werft zahlt dafür.
+
+Brot, Mehl und Leinen kauft Marta am Markt von Kupferhafen, und die Auftragstafeln fragen danach. Was man vermahlt, sät man nicht: Korn ist Brot und Saatgut zugleich.`,
 			en: `Gardens count as much as buildings. Like a hut, a bed needs a **beacon's light** and takes one of the fire's light points. Digging one needs an account; as a **sponsor** guests may water and harvest too.
 
 ## Spade and bed {#bed}
@@ -801,7 +825,19 @@ Bigger than a bed is the **field**: 4×4 cells, one per account, in a fire's lig
 
 \`flur offen\` lets anyone sow and harvest along, guests too, and each keeps their share; \`flur zu\` closes it again.
 
-**Rotation:** the same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`flur\` shows the soil. A field nobody works for two weeks runs wild.`,
+**Rotation:** the same kind twice in a row tires the soil, it gives only 60 %, the third time 35 %. Another kind or three days of rest heal it: grain, then potatoes, then beets or rest. \`flur\` shows the soil. A field nobody works for two weeks runs wild.
+
+## Mill and bakery {#mill}
+
+The harvest becomes more: **grain → flour → bread** and **flax → linen**.
+
+**Windmill** (\`bau windmühle\`: 2×2 cells, 8 driftwood, 2 kelp rope, **2 linen** for the sails, 16 work). Anyone may grind at any mill: \`mahle alle weizen\` (\`grind\`) pours your grain in (wheat, barley or oats, up to 12 at once, at most three sacks per figure). It grinds a world hour per handful, what came before you first. \`mahle\` alone says how long it still has to go; when your flour is ready, \`abholen\` (\`pickup\`) fetches it (from up to two cells away). In a **storm surge** on its island it turns faster and grinds six hours ahead. If the mill falls before your grain is ground, you fetch your grain back at its place. What nobody fetches in two weeks is lost.
+
+**Bakery** (\`bau backhaus\`: 2×2 cells, 6 driftwood, 6 shells, 1 kelp rope, 12 work). Beside it \`backe brot\` (\`bake\`) bakes three loaves from **2 flour, a can of water and a log of driftwood**, at any bakery, whoever owns it.
+
+**Linen** is spun from flax: \`craft spindel\` (1 driftwood, 1 shell), then \`craft leinen\` (3 flax). The mill needs linen for its sails; the shipyard pays for it.
+
+Marta at the Kupferhafen market buys and sells bread, flour and linen, and the job boards ask for them. What you grind you do not sow: grain is bread and seed at once.`,
 		},
 	},
 	{

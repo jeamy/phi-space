@@ -209,10 +209,18 @@ function CellMenu({ at, chars, objs, self, room, me, plans, guest, send, close, 
 		entries.push({ label: o.kind === "site" ? `Baustelle ${o.name}: was fehlt?` : o.kind === "ruin" ? `Ruine (${o.name} von ${o.owner ?? ""})` : `${o.name} von ${o.owner ?? ""} ansehen`, line: "baustelle" });
 		if (o.kind === "building" && beside) {
 			if (o.name === "Regentonne") entries.push({ label: "Wasser schöpfen", line: "schöpfe" });
+			// anyone grinds at a mill and bakes at a bakery (server: mill.ts, the recipes "at" a plan)
+			if (o.plan === "windmuehle") {
+				entries.push({ label: "Mühle: wie lange noch?", line: "mahle" });
+				const grain = [...new Set([...objs.values()].filter((i) => i.kind === "item" && i.location === me && ["Weizen", "Gerste", "Hafer"].includes(i.name)).map((i) => i.name))];
+				for (const n of grain) entries.push({ label: `${n} mahlen`, line: `mahle alle ${n}` });
+			}
+			if (o.plan === "backhaus") entries.push({ label: "Brot backen (2 Mehl, 1 Kanne Wasser, 1 Treibholz)", line: "backe brot" });
 			entries.push({ label: "Ausbessern", line: "repariere" });
 			if (o.owner === self?.name) entries.push({ label: "Truhe ansehen", line: "truhe" });
 		}
 		if (o.kind === "ruin" && o.owner === self?.name) entries.push({ label: "Nachlass abholen", line: "nachlass" });
+		if ((o.kind === "building" || o.kind === "ruin") && o.plan === "windmuehle" && nearSite) entries.push({ label: "Mehl abholen", line: "abholen" });
 		if (o.kind === "site" && nearSite) {
 			entries.push({ label: "Mitarbeiten", line: "arbeite" });
 			// what one carries that it still needs

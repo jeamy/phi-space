@@ -65,8 +65,9 @@ export type WorldDef = {
 	currency: string;
 	/** Where market boards stand (each its own listings) and how long a listing stays. */
 	market: { rooms: string[]; listMs: number };
-	/** Recipes: what goes in (used up), which tool is needed (it wears by one), what comes out. */
-	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string }>;
+	/** Recipes: what goes in (used up), which tool is needed (it wears by one), what comes out (`count` of it, one without);
+	 *  `at`: only beside a building of that plan (the bakery's oven). */
+	recipes: Array<{ key: string; name: string; needs: Array<{ proto: string; count: number }>; tool?: string; makes: string; count?: number; at?: string }>;
 	/** The order board: jobs the world posts (up to `max` open), each lasting `leaseMs` once posted. */
 	orders: { rooms: string[]; max: number; everyMs: number; leaseMs: number; kinds: Array<{ key: string; text: string; needs: Array<{ proto: string; count: number }>; reward: { proto: string; count: number }; rooms?: string[] }> };
 	/** What can be built (docs/siedeln.md): plans and the rules of building. Without it nothing can be built. */
@@ -76,6 +77,8 @@ export type WorldDef = {
 	wild?: WildDef;
 	/** Fields (docs/siedeln.md "Äcker und Getreide"): one crop on a larger area, sown and brought in by many hands. */
 	fields?: FieldDef;
+	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */
+	mill?: MillDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
 	 *  whole world is one space. */
 	regions?: RegionDef[];
@@ -122,6 +125,10 @@ export type CropDef = { key: string; name: string; aliases: string[]; group: str
  *  factor by how often its crop's group came before it in a row (rest for `fallowWorldMs` heals the soil). */
 export type FieldDef = { w: number; h: number; points: number; maxFields: number; keepWorldMs: number; seedPerCells: number; sowPerCells: number; harvestPerCells: number;
 	windowWorldMs: number; lateLoss: number; tired: number[]; fallowWorldMs: number; crops: CropDef[] };
+/** The mill is the building plan `plan`; it grinds one unit of grain (`grinds`: what becomes what) per `unitWorldMs`, one
+ *  load after the other, at most `maxLoad` units a load and `maxLoads` waiting loads per figure; a storm surge on its
+ *  island grinds `stormWorldMs` ahead. Flour nobody fetches goes after `keepWorldMs`. */
+export type MillDef = { plan: string; grinds: Array<{ from: string; to: string }>; unitWorldMs: number; maxLoad: number; maxLoads: number; stormWorldMs: number; keepWorldMs: number };
 export type BuildingDef = { plans: PlanDef[]; lightPoints: number; siteWorldMs: number; restWorldMs: number; maxSites: number; maxBuildings: number; ruinWorldMs: number; estateWorldMs: number };
 export type NpcDef = {
 	npcId: string; name: string; skin: number; room: string; x: number; y: number; script: string; beacon?: string;
@@ -204,7 +211,14 @@ export async function loadWorld(id = process.env.SPACES_MMO_WORLD || "leuchtfeue
 	for (const r of [...w.market.rooms, ...w.orders.rooms, ...w.orders.kinds.flatMap((k) => k.rooms ?? [])]) if (!room(r)) throw new Error(`market or order board: unknown room ${r}`);
 	for (const p of [...w.flood.rooms.flatMap((r) => r.protos ?? []), ...(w.storm?.protos ?? [])]) proto(p.proto, "flood or storm");
 	for (const r of w.storm?.rooms ?? []) if (!room(r)) throw new Error(`storm: unknown room ${r}`);
-	for (const r of w.recipes) { r.needs.forEach((n) => proto(n.proto, `recipe ${r.key}`)); proto(r.makes, `recipe ${r.key}`); if (r.tool) proto(r.tool, `recipe ${r.key}`); }
+	for (const r of w.recipes) {
+		r.needs.forEach((n) => proto(n.proto, `recipe ${r.key}`)); proto(r.makes, `recipe ${r.key}`); if (r.tool) proto(r.tool, `recipe ${r.key}`);
+		if (r.at && !w.building?.plans.some((p) => p.key === r.at)) throw new Error(`recipe ${r.key}: unknown plan ${r.at}`);
+	}
+	if (w.mill) {
+		if (!w.building?.plans.some((p) => p.key === w.mill!.plan)) throw new Error(`mill: unknown plan ${w.mill.plan}`);
+		for (const g of w.mill.grinds) { proto(g.from, "mill"); proto(g.to, "mill"); }
+	}
 	for (const k of w.orders.kinds) { k.needs.forEach((n) => proto(n.proto, `order ${k.key}`)); proto(k.reward.proto, `order ${k.key}`); }
 	for (const o of w.objects) {
 		const r = room(o.room);

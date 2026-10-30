@@ -67,6 +67,7 @@ border cut off (34 → 32 px).
 The garden's things (`items/spaten.png`, `items/wasserkanne.png`, the five `items/samen-*.png`, `items/strandnelke.png`,
 `items/duenenrose.png`, `items/nebelblume.png`, `items/kohl.png`, `items/moehre.png`), the hare (`items/hase.png`) and the field crops
 (`items/weizen.png`, `items/gerste.png`, `items/hafer.png`, `items/kartoffel.png`, `items/ruebe.png`,
-`items/samen-ruebe.png`, `items/flachs.png`, `items/leinsamen.png`) were drawn for this world in the
+`items/samen-ruebe.png`, `items/flachs.png`, `items/leinsamen.png`) and what mill, bakery and spindle make of them
+(`items/mehl.png`, `items/brot.png`, `items/spindel.png`, `items/leinen.png`) were drawn for this world in the
 same way, by the script `items-src/garden.py` (same license as this project).
 
