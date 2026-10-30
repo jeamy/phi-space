@@ -231,3 +231,108 @@ fn transactions_lapsing_together_and_their_joint_reservations() {
 		lines
 	});
 }
+
+/// Lines with `$gen` and `$key` (the newest generation and claim key the answers named), resolved by running them.
+fn resolve(lines: &[Json]) -> Vec<Json> {
+	fn fill(v: &Json, g: &str, k: &str) -> Json {
+		match v {
+			Json::String(s) if s == "$gen" => g.into(),
+			Json::String(s) if s == "$key" => k.into(),
+			Json::Array(a) => Json::Array(a.iter().map(|x| fill(x, g, k)).collect()),
+			Json::Object(o) => Json::Object(o.iter().map(|(n, x)| (n, fill(x, g, k))).collect()),
+			other => other.clone(),
+		}
+	}
+	let mut d = Driver::new();
+	let (mut g, mut k) = (String::new(), String::new());
+	lines
+		.iter()
+		.map(|l| {
+			let l = fill(l, &g, &k);
+			if let Ok(v) = d.step(&l) {
+				if let Some(x) = v.get("generation").and_then(Json::as_str) {
+					g = x.to_owned();
+				}
+				if let Some(x) = v.get("key").and_then(Json::as_str) {
+					k = x.to_owned();
+				}
+			}
+			l
+		})
+		.collect()
+}
+fn request(id: &str) -> Json { obj! { "principal" => obj! { "peerId" => "p1" }, "generation" => "$gen", "requestId" => id } }
+
+#[test]
+fn waiters_and_claims_at_the_commit_budget() {
+	// waits lapsing together cost their handback and 256 each; the rest is deferred
+	edge("waits lapsing in one commit", 1400, 3000, |max| {
+		let mut lines = vec![init(obj! { "maxCommitBytes" => max as f64 })];
+		for i in 0..5 {
+			lines.push(obj! { "op" => "addWaiter", "now" => 1000.0, "w" => obj! { "template" => obj! { "type" => "None" }, "take" => false, "target" => "a", "timeout" => 100.0, "handback" => obj! { "h" => i as f64 } } });
+		}
+		lines.push(obj! { "op" => "settle", "now" => 1100.0 });
+		lines.push(obj! { "op" => "nextExpiry", "now" => 1100.0 });
+		lines.push(obj! { "op" => "settle", "now" => 1100.0 });
+		lines
+	});
+	// claims are swept in key order (not the order they came in), 128 bytes each
+	edge("claims swept in one commit", 1100, 2000, |max| {
+		let mut lines = vec![init(obj! { "maxCommitBytes" => max as f64, "claimResultMs" => 500.0, "generationAdmitMs" => 200.0 }), obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } }];
+		for id in ["r5", "r3", "r4", "r1", "r2"] {
+			lines.push(obj! { "op" => "admit", "now" => 1000.0, "request" => request(id), "method" => "take", "args" => obj! {} });
+			lines.push(obj! { "op" => "decide", "now" => 1000.0, "key" => "$key", "outcome" => obj! { "state" => "done", "result" => Json::Null } });
+		}
+		lines.push(obj! { "op" => "settle", "now" => 1600.0 });
+		lines.push(obj! { "op" => "nextExpiry", "now" => 1600.0 });
+		lines.push(obj! { "op" => "settle", "now" => 1600.0 });
+		lines.push(obj! { "op" => "lookup", "now" => 1600.0, "request" => request("r1") });
+		lines.push(obj! { "op" => "lookup", "now" => 1600.0, "request" => request("r5") });
+		resolve(&lines)
+	});
+}
+
+#[test]
+fn claim_retention_at_its_edges() {
+	// the result goes at decidedAt + claimResultMs; the hash stays while the generation admits (to admitUntil
+	// inclusive), then claim and generation go
+	let mut lines = vec![init(obj! { "claimResultMs" => 500.0, "generationAdmitMs" => 1000.0 }), obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } }];
+	lines.push(obj! { "op" => "admit", "now" => 1000.0, "request" => request("r1"), "method" => "take", "args" => obj! {} });
+	lines.push(obj! { "op" => "decide", "now" => 1000.0, "key" => "$key", "outcome" => obj! { "state" => "done", "result" => obj! { "v" => 1.0 } } });
+	// a second claim whose result expires exactly when its generation stops admitting
+	lines.push(obj! { "op" => "admit", "now" => 1000.0, "request" => request("r2"), "method" => "take", "args" => obj! {} });
+	for now in [1499.0, 1500.0, 1999.0, 2000.0, 2001.0, 2002.0] {
+		lines.push(obj! { "op" => "settle", "now" => now });
+		if now == 1500.0 {
+			lines.push(obj! { "op" => "decide", "now" => now, "key" => "$key", "outcome" => obj! { "state" => "done", "result" => obj! { "v" => 2.0 } } });
+		}
+		for id in ["r1", "r2"] {
+			lines.push(obj! { "op" => "lookup", "now" => now, "request" => request(id) });
+			lines.push(obj! { "op" => "admit", "now" => now, "request" => request(id), "method" => "take", "args" => obj! {} });
+		}
+		lines.push(obj! { "op" => "nextExpiry", "now" => now });
+	}
+	compare(&resolve(&lines), "claim retention");
+}
+
+#[test]
+fn a_served_wait_remembers_its_request() {
+	// a wait admitted as a request ("wait", decided with the waiter's id) gives the transaction of its served take the
+	// request's key
+	let lines = vec![
+		init(obj! {}),
+		obj! { "op" => "issueGeneration", "now" => 1000.0, "principal" => obj! { "peerId" => "p1" } },
+		obj! { "op" => "admit", "now" => 1000.0, "request" => request("r1"), "method" => "wait", "args" => obj! {} },
+		obj! { "op" => "addWaiter", "now" => 1000.0, "w" => obj! { "template" => obj! { "type" => "Task" }, "take" => true, "target" => "a", "timeout" => 5000.0 } },
+		obj! { "op" => "decide", "now" => 1000.0, "key" => "$key", "outcome" => obj! { "state" => "done", "result" => "w0a0b0c0d-1" } },
+		write(1, 5000.0, 1100.0),
+		obj! { "op" => "stats", "now" => 1100.0, "dump" => true },
+	];
+	let lines = resolve(&lines);
+	compare(&lines, "a served wait");
+	let mut d = Driver::new();
+	for l in &lines {
+		let _ = d.step(l);
+	}
+	assert!(d.space.state.txns.iter().any(|t| t.rest.get("originRequestKey").is_some()), "the served take's transaction carries the request's key");
+}

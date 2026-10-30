@@ -7,3 +7,5 @@ version.workspace = true
 
 [dependencies]
 phi-json = { path = "../phi-json" }
+hmac.workspace = true
+sha2.workspace = true

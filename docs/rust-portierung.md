@@ -284,7 +284,7 @@ Vergleichstests gegen den TS-Treiber grün sind.
 | 0 | `phi-json`; TS-Treiber `test/support/core-driver.ts`; Zustandsmodell `phi-core::state` mit Round-Trip-Prüfung | erledigt |
 | 1 | Entries, Templates, Leases, `settle`, Ablauf, Stream-Einträge, Budgets (`charge`, `jsonBytes`-Summen); dazu `count`, `list`, `listPage`, `changes`, `stats`, `nextExpiry` ohne Txn | erledigt |
 | 2 | Transaktionen: `createTxn`, `commitTxn`, `abortTxn`, Ablauf in `settle`, Txn-Leases, Schreiben, `announce`, Lesen und Nehmen unter einer Txn, Reservierungen | erledigt |
-| 3 | Wartende, geparkte Operationen, Claims und Generationen | offen |
+| 3 | Wartende, geparkte Operationen, Claims und Generationen; ihre Ereignisse in der Outbox und Fanout-Jobs ohne Consumer | erledigt |
 | 4 | Notify und Mailboxen | offen |
 | 5 | Stream und Seiten unter Txns, Snapshots (`snapshot.ts`), Seiten-Token | offen |
 
@@ -355,6 +355,34 @@ raten.
   Commit-Kosten, `<=` bei gleichzeitigem Ablauf, ohne Summe der Reservierungen, Abbruch zur falschen Zeit, Id nach dem
   Lease, kein `announced`, Reservierung auch für eigene Writes. Unentdeckt bleibt nur ein Fall, der nicht eintreten
   kann: ein Take auf einen Entry, den eine andere Txn schrieb.
+
+**Stand Scheibe 3 (2026-10-30):**
+
+- **Modell:** `WaiterRec` und `RpcState` sind typisiert. Claims und Generationen bleiben die JSON-Sätze des TS-Kerns,
+  in der Reihenfolge, in der sie kamen.
+- **`phi-core::claims`:** `issueGeneration` (HMAC über die kanonische Form, Schlüssel und Nonce aus der Zufallsquelle
+  des Space), `admit`, `decide`, `lookup` und der begrenzte Sweep (128 Bytes je Satz, Schlüssel in UTF-16-Ordnung,
+  `sweepAt`).
+- **Zufall:** Der Space bekommt eine Zufallsquelle. Der Treiber gibt ihm denselben gesäten Strom wie `core-driver.ts`,
+  so dass Schlüssel, Nonces und Generationen auf beiden Seiten gleich sind.
+- **Wartende:** `addWaiter` mit `refreshReservations`, `cancelWaiter`, Leases auf Wartende, `serve` für Wartende mit
+  und ohne Claim (ein Take unter frischer Txn, die sich den Schlüssel einer `wait`-Anfrage merkt), Ablauf mit
+  Timeout-Ereignis oder Entscheidung, `publishCost` mit den Ereignissen passender Wartender, Ereignisgrenzen beim
+  Schreiben (`checkEventSize`, `preflightFanout`).
+- **Outbox und Jobs:** Ereignisse gehen in die Outbox. Ein abschließendes Ereignis, das nicht mehr passt, wartet in
+  einem Fanout-Job, und `runJobs` setzt ihn fort. Consumer und Mailboxen kommen mit Scheibe 4.
+- **`settle`** kann jetzt scheitern (ein Ergebnis über seiner Reservierung, ein zu großes Ereignis). Der Fehler geht
+  wie im TS-Kern an die Operation, nach dem, was bis dahin geschah.
+- **Treiber:** `core-driver.ts` hat die Zeile `park` (`parkOperation`) bekommen, die Rust-Seite dieselbe.
+- **Tests:** Der Zufallsgang stellt Wartende, parkt Anfragen und spielt kurze Episoden einer Anfrage (Generation,
+  Zulassung, Parken oder Entscheiden, Wiederholung, Abfrage). Die Generationen sind meist die des eigenen Prinzipals
+  und frisch, sonst läuft fast alles in `RequestExpired`. Grenzfälle: gleichzeitig ablaufende Wartende und Claims am
+  Commit-Budget, Aufbewahrung an ihren Rändern (das Ergebnis läuft genau bei `admitUntil` ab) und die Txn eines
+  bedienten `wait`. Ein Lauf mit 200 000 Schritten (`--release`) war abweichungsfrei.
+- **Gegenprobe:** Eingebaute Fehler in Kosten, Ablaufreihenfolge, `ifExists`, `serve` nach Abbruch, Jobs,
+  Reservierungen, Lease-Dauer, Sweep-Ordnung und -Grenzen, Claim-Bytes und Zulassungsende schlagen fehl. Gleichwertig
+  und unentdeckt bleiben `sweepAt` `now` statt `now + 1` (Zeiten sind ganze Millisekunden) und das Nachzählen von
+  Txns ohne Reservierung (sie schreiben nichts).
 
 **Befund aus Scheibe 0:** `parkOperation` (`core.ts`, `touch(s, Date.now())`) und `ackMailbox` (`mailbox.ts`) lesen
 die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parameter. Im TS-Kern sollten beide Stellen

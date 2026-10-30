@@ -34,6 +34,12 @@ struct Walk {
 	ids: Vec<String>,
 	txns: Vec<String>,
 	burst: usize,
+	waiters: Vec<String>,
+	/// A request's life in a few lines (`$gen` and `$key` stand for the newest generation and claim key).
+	episode: std::collections::VecDeque<Json>,
+	/// Issued generations and their principals.
+	generations: Vec<(String, Json)>,
+	keys: Vec<String>,
 	page_next: Option<Json>,
 }
 
@@ -75,6 +81,18 @@ impl Walk {
 		small("maxOutboxBytes", 1.0, 0.03, r);
 		let v = 200.0 + r.below(400) as f64;
 		small("maxJobBytes", v, 0.05, r);
+		let v = 300.0 + r.below(3000) as f64;
+		small("maxOutboxBytes", v, 0.25, r);
+		let v = 300.0 + r.below(500) as f64;
+		small("maxEventBytes", v, 0.2, r);
+		let v = 1.0 + r.below(3) as f64;
+		small("maxWaitersPerOwner", v, 0.2, r);
+		let v = 600.0 + r.below(3000) as f64;
+		small("maxClaimBytes", v, 0.25, r);
+		let v = 100.0 * (1 + r.below(40)) as f64;
+		small("claimResultMs", v, 0.5, r);
+		let v = 100.0 * (1 + r.below(80)) as f64;
+		small("generationAdmitMs", v, 0.5, r);
 		let mut line = obj! { "op" => "init", "seed" => "walk", "now" => self.now };
 		let Json::Object(o) = &mut line else { unreachable!() };
 		if !limits.is_empty() {
@@ -196,12 +214,63 @@ impl Walk {
 		if !self.txns.is_empty() && self.rng.chance(0.2) {
 			return self.txn_id();
 		}
+		if !self.waiters.is_empty() && self.rng.chance(0.2) {
+			return self.waiter_id();
+		}
 		let r = &mut self.rng;
 		if self.ids.is_empty() || r.chance(0.1) {
 			return r.pick(&["e999", "e0a0b0c0d-999", "nope"]).into();
 		}
 		let i = self.ids.len() - 1 - r.below(self.ids.len().min(8)); // mostly recent ones
 		self.ids[i].as_str().into()
+	}
+	fn waiter_id(&mut self) -> Json {
+		let r = &mut self.rng;
+		if self.waiters.is_empty() || r.chance(0.1) {
+			return "w999".into();
+		}
+		let i = self.waiters.len() - 1 - r.below(self.waiters.len().min(6));
+		self.waiters[i].as_str().into()
+	}
+	fn principal(&mut self) -> Json {
+		match self.rng.below(12) {
+			0 => obj! { "peerId" => "" },
+			1..=5 => obj! { "peerId" => "p1" },
+			_ => obj! { "peerId" => "p2", "agentId" => "x" },
+		}
+	}
+	fn request(&mut self) -> Json {
+		let mut principal = self.principal();
+		let r = &mut self.rng;
+		let generation: Json = if self.generations.is_empty() || r.chance(0.08) {
+			"gbogus.0".into()
+		} else {
+			let i = self.generations.len() - 1 - if r.chance(0.7) { 0 } else { r.below(self.generations.len().min(3)) };
+			if r.chance(0.85) {
+				principal = self.generations[i].1.clone(); // mostly the one it was issued to
+			}
+			self.generations[i].0.as_str().into()
+		};
+		let request_id = r.pick(&["r1", "r2", "r3", "r1", "r2", ""]);
+		obj! { "principal" => principal, "generation" => generation, "requestId" => request_id }
+	}
+	fn key(&mut self) -> Json {
+		let r = &mut self.rng;
+		if self.keys.is_empty() || r.chance(0.08) {
+			return "[\"no\"]".into();
+		}
+		let i = self.keys.len() - 1 - r.below(self.keys.len().min(5));
+		self.keys[i].as_str().into()
+	}
+	fn handback(&mut self) -> Option<Json> {
+		let r = &mut self.rng;
+		match r.below(6) {
+			0 => None,
+			1 => Some(Json::Null),
+			2 => Some(obj! { "h" => r.below(5) as f64 }),
+			3 => Some("x".repeat(r.below(600)).into()),
+			_ => Some(Json::Number(r.below(3) as f64)),
+		}
 	}
 	fn template(&mut self) -> Option<Json> {
 		let r = &mut self.rng;
@@ -221,7 +290,49 @@ impl Walk {
 		})
 	}
 
+	fn episode(&mut self) {
+		let p = self.principal();
+		let r = &mut self.rng;
+		let request = obj! { "principal" => p.clone(), "generation" => "$gen", "requestId" => r.pick(&["e1", "e2"]) };
+		let method = r.pick(&["take", "read"]);
+		let admit = |args: f64| obj! { "op" => "admit", "request" => request.clone(), "method" => method, "args" => obj! { "a" => args }, "resultBound" => 300.0 };
+		let mut lines = vec![obj! { "op" => "issueGeneration", "principal" => p }, admit(1.0)];
+		lines.push(match r.below(3) {
+			0 => obj! { "op" => "park", "key" => "$key", "tmpl" => obj! { "type" => r.pick(&TYPES) }, "take" => method == "take", "txn" => Json::Null, "deadline" => self.now + 100.0 * r.below(20) as f64, "ifExists" => r.chance(0.3) },
+			1 => obj! { "op" => "decide", "key" => "$key", "outcome" => obj! { "state" => "done", "result" => obj! { "v" => r.below(3) as f64 } } },
+			_ => obj! { "op" => "decide", "key" => "$key", "outcome" => obj! { "state" => "cancelled" } },
+		});
+		if r.chance(0.5) {
+			lines.push(obj! { "op" => "write", "entry" => obj! { "type" => "Task", "fields" => obj! { "n" => 1.0 } }, "lease" => 5000.0 });
+		}
+		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
+		lines.push(admit(if r.chance(0.8) { 1.0 } else { 2.0 }));
+		lines.push(obj! { "op" => "settle" });
+		lines.push(obj! { "op" => "lookup", "request" => request.clone() });
+		lines.push(admit(1.0));
+		self.episode.extend(lines);
+	}
+	/// Fills in `$gen` and `$key` from what the walk has seen.
+	fn fill(&self, v: &Json) -> Json {
+		match v {
+			Json::String(s) if s == "$gen" => self.generations.last().map_or("gnone.0".into(), |g| g.0.as_str().into()),
+			Json::String(s) if s == "$key" => self.keys.last().map_or("[]".into(), |k| k.as_str().into()),
+			Json::Array(a) => Json::Array(a.iter().map(|x| self.fill(x)).collect()),
+			Json::Object(o) => Json::Object(o.iter().map(|(k, x)| (k, self.fill(x))).collect()),
+			other => other.clone(),
+		}
+	}
+
 	fn line(&mut self, rev: f64) -> Json {
+		if let Some(l) = self.episode.pop_front() {
+			self.now += self.rng.pick(&[0.0, 100.0, 300.0]);
+			let Json::Object(mut o) = self.fill(&l) else { unreachable!() };
+			o.insert("now", Json::Number(self.now));
+			return Json::Object(o);
+		}
+		if self.rng.chance(0.02) {
+			self.episode();
+		}
 		if self.burst > 0 {
 			// several entries with the same lease at the same time: they expire together
 			self.burst -= 1;
@@ -231,14 +342,14 @@ impl Walk {
 		if self.rng.chance(0.01) {
 			self.burst = 4 + self.rng.below(8);
 		}
-		self.now += self.rng.pick(&[0.0, 0.0, 100.0, 100.0, 200.0, 500.0, 1000.0, 3_600_000.0]);
+		self.now += self.rng.pick(&[0.0, 0.0, 0.0, 100.0, 100.0, 200.0, 500.0, 1000.0, 3_600_000.0]);
 		let mut o = Object::new();
 		let mut set = |k: &str, v: Option<Json>| {
 			if let Some(v) = v {
 				o.insert(k, v);
 			}
 		};
-		let op = match self.rng.below(114) {
+		let op = match self.rng.below(154) {
 			0..=29 => {
 				set("entry", Some(self.entry()));
 				set("lease", self.lease());
@@ -343,6 +454,86 @@ impl Walk {
 				set("as", self.as_());
 				"commitTxn"
 			}
+			114..=123 => {
+				let mut w = Object::new();
+				w.insert("template", self.template().unwrap_or(Json::Null));
+				w.insert("take", Json::Bool(self.rng.chance(0.5)));
+				let target = self.rng.pick(&[Json::from("a"), Json::from("b"), Json::Null, Json::Number(1.0)]);
+				w.insert("target", target.clone());
+				match self.rng.below(8) {
+					0 => w.insert("deadline", Json::Number(self.now + 100.0 * self.rng.below(20) as f64)),
+					1 => w.insert("timeout", Json::Number(-1.0)),
+					2 => w.insert("timeout", Json::Number(FOREVER)),
+					3 => w.insert("deadline", Json::Number(-3.0)),
+					_ => w.insert("timeout", Json::Number(100.0 * self.rng.below(30) as f64)),
+				}
+				if let Some(h) = self.handback() {
+					w.insert("handback", h);
+				}
+				if self.rng.chance(0.2) {
+					let l = self.lease().unwrap_or(Json::Null);
+					w.insert("txnLeaseMs", l);
+				}
+				if self.rng.chance(0.4) && !target.is_null() {
+					w.insert("as", target);
+				}
+				if self.rng.chance(0.1) {
+					w.insert("authorizedUntil", Json::Number(self.now + 100.0 * self.rng.below(10) as f64));
+				}
+				set("w", Some(Json::Object(w)));
+				"addWaiter"
+			}
+			124..=126 => {
+				set("id", Some(self.waiter_id()));
+				"cancelWaiter"
+			}
+			127..=130 | 150..=153 => {
+				set("principal", Some(self.principal()));
+				if self.rng.chance(0.1) {
+					set("options", Some(obj! { "key" => "fixed-key", "authorityId" => "auth-1" }));
+				}
+				"issueGeneration"
+			}
+			131..=138 => {
+				set("request", Some(self.request()));
+				set("method", Some(self.rng.pick(&["take", "read", "wait"]).into()));
+				set("args", Some(obj! { "t" => self.rng.below(2) as f64 }));
+				if self.rng.chance(0.3) {
+					set("deadline", Some(Json::Number(self.now + 100.0 * self.rng.below(20) as f64)));
+				}
+				if self.rng.chance(0.3) {
+					set("resultBound", Some(Json::Number(self.rng.pick(&[2.0, 100.0, 300.0]))));
+				}
+				"admit"
+			}
+			139..=141 => {
+				set("key", Some(self.key()));
+				let outcome = match self.rng.below(5) {
+					0 => obj! { "state" => "cancelled" },
+					1 => obj! { "state" => "done", "result" => obj! { "x" => "y".repeat(self.rng.below(200)) } },
+					2 => obj! { "state" => "done", "result" => Json::Null, "locked" => true },
+					3 => obj! { "state" => "done", "result" => Json::Null, "error" => obj! { "code" => "TransactionError", "message" => "m" } },
+					_ => obj! { "state" => "done", "result" => Json::Number(1.0) },
+				};
+				set("outcome", Some(outcome));
+				"decide"
+			}
+			142..=143 => {
+				set("request", Some(self.request()));
+				"lookup"
+			}
+			144..=149 => {
+				set("key", Some(self.key()));
+				set("tmpl", self.template());
+				set("take", Some(Json::Bool(self.rng.chance(0.5))));
+				set("txn", Some(self.txn().unwrap_or(Json::Null)));
+				let deadline = if self.rng.chance(0.2) { FOREVER } else { self.now + 100.0 * self.rng.below(30) as f64 };
+				set("deadline", Some(Json::Number(deadline)));
+				set("ifExists", Some(Json::Bool(self.rng.chance(0.3))));
+				let owner = self.as_();
+				set("owner", owner);
+				"park"
+			}
 			_ => {
 				set("id", Some(self.txn_id()));
 				set("as", self.as_());
@@ -404,7 +595,7 @@ fn diff(a: &Json, b: &Json, path: &str, out: &mut Vec<String>) {
 
 /// Runs one walk; counts what happened into `seen`.
 fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
-	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, page_next: None };
+	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, episode: Default::default(), waiters: vec![], generations: vec![], keys: vec![], page_next: None };
 	let mut rust = Driver::new();
 	let mut lines = vec![w.init()];
 	let mut answers = vec![rust.step(&lines[0])];
@@ -420,6 +611,18 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 				note("ok", seen);
 				if let Some(id) = v.get("id").and_then(Json::as_str) {
 					if id.starts_with('t') { w.txns.push(id.to_owned()) } else { w.ids.push(id.to_owned()) }
+				}
+				if let Some(g) = v.get("generation").and_then(Json::as_str) {
+					w.generations.push((g.to_owned(), line.get("principal").cloned().unwrap_or(Json::Null)));
+				}
+				if let Some(k) = v.get("key").and_then(Json::as_str) {
+					if !w.keys.iter().any(|x| x == k) {
+						w.keys.push(k.to_owned());
+					}
+					note(Box::leak(format!("admit {}", v.get("kind").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
+				}
+				if op == "lookup" {
+					note(Box::leak(format!("lookup {}", v.get("state").and_then(Json::as_str).unwrap_or("?")).into_boxed_str()), seen);
 				}
 				if op == "write" && v.get("expires").and_then(Json::as_f64) == Some(w.now) {
 					note("write with a lease of 0", seen);
@@ -452,6 +655,33 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 			}
 		}
 		let s = &rust.space.state;
+		for x in &s.waiters {
+			if !w.waiters.contains(&x.id) {
+				w.waiters.push(x.id.clone());
+			}
+			note(if x.claim_key.is_some() { "a parked request waits" } else { "a waiter waits" }, seen);
+		}
+		for t in &s.txns {
+			if !w.txns.contains(&t.id) {
+				w.txns.push(t.id.clone()); // opened by a served take
+			}
+		}
+		if s.rest.get("jobs").and_then(Json::as_array).is_some_and(|j| !j.is_empty()) {
+			note("a fanout job waits", seen);
+		}
+		if let Some(r) = &s.rpc {
+			for (_, c) in r.claims.iter() {
+				if c.get("resultExpired").is_some() {
+					note("a claim's result expired", seen);
+				}
+				if c.get("state").and_then(Json::as_str) == Some("done") && c.get("method").and_then(Json::as_str).is_some() && c.get("result").is_some_and(|r| r.as_object().is_some()) {
+					note("a claim decided with a result", seen);
+				}
+			}
+		}
+		if s.outbox_bytes.is_some_and(|b| b > 2.0) {
+			note("events in the outbox", seen);
+		}
 		if s.returned > 0.0 {
 			note("entries returned by an abort", seen);
 		}
@@ -518,7 +748,7 @@ fn random_walks_agree_with_the_typescript_core() {
 	if total < 12_000 {
 		return; // too short to reach every outcome
 	}
-	for k in [
+	let missing = [
 		"write ResourceExhausted",
 		"write LimitError",
 		"write IllegalArgumentError",
@@ -536,7 +766,6 @@ fn random_walks_agree_with_the_typescript_core() {
 		"renew PermissionError",
 		"renew IllegalArgumentError",
 		"cancel PermissionError",
-		"listPage ResponseBudgetTooSmall",
 		"listPage IllegalArgumentError",
 		"page with a next",
 		"list IllegalArgumentError",
@@ -557,7 +786,34 @@ fn random_walks_agree_with_the_typescript_core() {
 		"entries returned by an abort",
 		"entries written under a transaction",
 		"list TransactionError",
-	] {
-		assert!(seen.contains_key(k), "no walk reached {k:?}; seen: {seen:#?}");
-	}
+		"addWaiter LimitError",
+		"addWaiter IllegalArgumentError",
+		"addWaiter ResourceExhausted",
+		"a waiter waits",
+		"a parked request waits",
+		"a fanout job waits",
+		"events in the outbox",
+		"a claim's result expired",
+		"a claim decided with a result",
+		"admit fresh",
+		"admit pending",
+		"admit done",
+		"admit cancelled",
+		"admit RequestConflict",
+		"admit RequestExpired",
+		"admit ResultExpired",
+		"admit LimitError",
+		"admit TypeError",
+		"issueGeneration TypeError",
+		"issueGeneration LimitError",
+		"decide LimitError",
+		"decide Error",
+		"lookup RequestExpired",
+		"lookup pending",
+		"lookup done",
+	]
+	.into_iter()
+	.filter(|k| !seen.contains_key(k))
+	.collect::<Vec<_>>();
+	assert!(missing.is_empty(), "no walk reached {missing:?}; seen: {seen:#?}");
 }

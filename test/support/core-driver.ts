@@ -64,6 +64,7 @@ function apply(l: Line): unknown {
 		// ---- waiters, subscriptions
 		case "addWaiter": return core.addWaiter(s, now, l.w);
 		case "cancelWaiter": return core.cancelWaiter(s, l.id, now);
+		case "park": core.parkOperation(s, l.key, opt(l.tmpl, null), !!l.take, opt(l.txn, null), l.deadline, !!l.ifExists, l.owner); return null;
 		case "notify": return core.notify(s, now, opt(l.tmpl, null), opt(l.txn, null), opt(l.lease, core.ANY), opt(l.handback, null), opt(l.target, null), l.as, l.consumer);
 		// ---- stream
 		case "changes": return core.changes(s, l.afterRev, l.o ?? {});

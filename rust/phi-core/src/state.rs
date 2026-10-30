@@ -5,8 +5,9 @@
 //! models keeps the difference between absent and `null` (the byte budgets count `JSON.stringify` output, where an
 //! absent field costs nothing and a `null` one costs its key).
 //!
-//! Modelled so far (R1, slices 1 and 2): the scalars, the entries, the transactions and the change stream. The rest of
-//! the document (regs, waiters, outbox, rpc, mailboxes, …) is carried as JSON until its slice is ported.
+//! Modelled so far (R1, slices 1 to 3): the scalars, the entries, the transactions, the waiters, the request claims and
+//! generations (`rpc`) and the change stream. The rest of the document (regs, outbox, jobs, mailboxes, …) is carried as
+//! JSON until its slice is ported.
 use phi_json::{Json, Object};
 
 /// A state that is not the TypeScript document shape.
@@ -164,6 +165,109 @@ impl TxnRec {
 	}
 }
 
+/// `WaiterRec`: a parked read or take, served by the space when a match appears. With `claimKey` it is the durable
+/// state of a blocking request (parkOperation); without, its outcome is an event for `target`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WaiterRec {
+	pub origin_request_key: Option<String>,
+	pub id: String,
+	pub template: Json,
+	pub take: bool,
+	pub target: Json,
+	pub deadline: f64,
+	pub txn_lease_ms: f64,
+	pub handback: Json,
+	pub claim_key: Option<String>,
+	/// The transaction of a parked request: absent, `null` or its id.
+	pub request_txn: Option<Json>,
+	pub if_exists: Option<bool>,
+	pub authorized_until: Option<f64>,
+	/// The consumer, …: carried as read.
+	pub rest: Object,
+}
+
+impl WaiterRec {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+		let w = "waiter";
+		let mut f = Fields::of(v, w)?;
+		let origin_request_key = f.opt_string("originRequestKey", w)?;
+		let id = f.string("id", w)?;
+		let template = f.need("template", w)?;
+		let take = match f.need("take", w)? { Json::Bool(b) => b, _ => return Err(ShapeError("waiter.take is not a boolean".into())) };
+		let target = f.need("target", w)?;
+		let deadline = f.number("deadline", w)?;
+		let txn_lease_ms = f.number("txnLeaseMs", w)?;
+		let handback = f.need("handback", w)?;
+		let claim_key = f.opt_string("claimKey", w)?;
+		let request_txn = f.take("requestTxn");
+		let if_exists = match f.take("ifExists") { None => None, Some(Json::Bool(b)) => Some(b), Some(_) => return Err(ShapeError("waiter.ifExists is not a boolean".into())) };
+		let authorized_until = f.opt_number("authorizedUntil", w)?;
+		Ok(WaiterRec { origin_request_key, id, template, take, target, deadline, txn_lease_ms, handback, claim_key, request_txn, if_exists, authorized_until, rest: f.rest() })
+	}
+	/// The record in the order addWaiter (or parkOperation, for the claim fields) writes it.
+	pub fn to_json(&self) -> Json {
+		let mut o = Object::new();
+		if let Some(k) = &self.origin_request_key { o.insert("originRequestKey", k.as_str().into()); }
+		o.insert("id", self.id.as_str().into());
+		o.insert("template", self.template.clone());
+		o.insert("take", Json::Bool(self.take));
+		o.insert("target", self.target.clone());
+		o.insert("deadline", Json::Number(self.deadline));
+		o.insert("txnLeaseMs", Json::Number(self.txn_lease_ms));
+		o.insert("handback", self.handback.clone());
+		if let Some(k) = &self.claim_key { o.insert("claimKey", k.as_str().into()); }
+		if let Some(t) = &self.request_txn { o.insert("requestTxn", t.clone()); }
+		if let Some(b) = self.if_exists { o.insert("ifExists", Json::Bool(b)); }
+		if let Some(t) = self.authorized_until { o.insert("authorizedUntil", Json::Number(t)); }
+		with_rest(o, &self.rest)
+	}
+}
+
+/// `RpcState`: request claims and generations (claims.ts). Claims and generations are kept as their JSON records,
+/// keyed as in the document.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RpcState {
+	pub generations: Object,
+	pub claims: Object,
+	/// Running tally of claim and generation bytes; absent in states that predate it.
+	pub bytes: Option<f64>,
+	/// Result bytes reserved by pending claims.
+	pub reserved_bytes: Option<f64>,
+	pub signing_key: Option<String>,
+	pub authority_id: Option<String>,
+	/// The earliest time a sweep can find something to drop.
+	pub sweep_at: Option<f64>,
+	pub rest: Object,
+}
+
+impl RpcState {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+		let w = "rpc";
+		let mut f = Fields::of(v, w)?;
+		Ok(RpcState {
+			generations: f.object("generations", w)?,
+			claims: f.object("claims", w)?,
+			bytes: f.opt_number("bytes", w)?,
+			reserved_bytes: f.opt_number("reservedBytes", w)?,
+			signing_key: f.opt_string("signingKey", w)?,
+			authority_id: f.opt_string("authorityId", w)?,
+			sweep_at: f.opt_number("sweepAt", w)?,
+			rest: f.rest(),
+		})
+	}
+	pub fn to_json(&self) -> Json {
+		let mut o = Object::new();
+		o.insert("generations", Json::Object(self.generations.clone()));
+		o.insert("claims", Json::Object(self.claims.clone()));
+		if let Some(n) = self.bytes { o.insert("bytes", Json::Number(n)); }
+		if let Some(n) = self.sweep_at { o.insert("sweepAt", Json::Number(n)); }
+		if let Some(n) = self.reserved_bytes { o.insert("reservedBytes", Json::Number(n)); }
+		if let Some(k) = &self.signing_key { o.insert("signingKey", k.as_str().into()); }
+		if let Some(k) = &self.authority_id { o.insert("authorityId", k.as_str().into()); }
+		with_rest(o, &self.rest)
+	}
+}
+
 /// One operation of a change batch (stream.ts `Op`). Kept as its JSON: it is written once and only ever read back.
 pub type StreamOp = Json;
 
@@ -229,6 +333,9 @@ pub struct SpaceState {
 	pub entries: Vec<EntryRec>,
 	/// The open transactions in the order they were opened (the document keys them by id).
 	pub txns: Vec<TxnRec>,
+	pub waiters: Vec<WaiterRec>,
+	/// Request claims and generations; created by the first request.
+	pub rpc: Option<RpcState>,
 	/// Entries given back by aborted or expired transactions, ever.
 	pub returned: f64,
 	/// Running tally of the outbox's JSON bytes; absent in states that predate it.
@@ -252,9 +359,8 @@ impl SpaceState {
 	pub fn initial() -> Self {
 		let mut rest = Object::new();
 		rest.insert("regs", Json::Array(vec![]));
-		rest.insert("waiters", Json::Array(vec![]));
 		rest.insert("outbox", Json::Array(vec![]));
-		SpaceState { next_id: 1.0, entries: vec![], txns: vec![], returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
+		SpaceState { next_id: 1.0, entries: vec![], txns: vec![], waiters: vec![], rpc: None, returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
 	}
 
 	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
@@ -266,6 +372,11 @@ impl SpaceState {
 			Json::Object(o) => o.iter().map(|(_, t)| TxnRec::from_json(t)).collect::<Result<_, _>>()?,
 			_ => return Err(ShapeError("space.txns is not an object".into())),
 		};
+		let waiters = match f.need("waiters", w)? {
+			Json::Array(a) => a.iter().map(WaiterRec::from_json).collect::<Result<_, _>>()?,
+			_ => return Err(ShapeError("space.waiters is not an array".into())),
+		};
+		let rpc = f.take("rpc").map(|r| RpcState::from_json(&r)).transpose()?;
 		let returned = f.number("returned", w)?;
 		let outbox_bytes = f.opt_number("outboxBytes", w)?;
 		let space_id = f.opt_string("spaceId", w)?;
@@ -273,10 +384,10 @@ impl SpaceState {
 		let limits = match f.take("limits") { None => None, Some(Json::Object(o)) => Some(o), Some(_) => return Err(ShapeError("space.limits is not an object".into())) };
 		let stream = f.take("stream").map(|s| StreamState::from_json(&s)).transpose()?;
 		let rest = f.rest();
-		for key in ["regs", "waiters", "outbox"] {
+		for key in ["regs", "outbox"] {
 			if !rest.contains_key(key) { return Err(ShapeError(format!("space.{key} is missing"))); }
 		}
-		Ok(SpaceState { next_id, entries, txns, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
+		Ok(SpaceState { next_id, entries, txns, waiters, rpc, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
 	}
 
 	pub fn to_json(&self) -> Json {
@@ -288,12 +399,14 @@ impl SpaceState {
 				"outboxBytes" => if let Some(n) = self.outbox_bytes { o.insert(key, Json::Number(n)) },
 				"returned" => o.insert(key, Json::Number(self.returned)),
 				"txns" => o.insert(key, Json::Object(self.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())),
+				"waiters" => o.insert(key, Json::Array(self.waiters.iter().map(WaiterRec::to_json).collect())),
 				_ => if let Some(v) = self.rest.get(key) { o.insert(key, v.clone()) },
 			}
 		}
 		if let Some(l) = &self.limits { o.insert("limits", Json::Object(l.clone())); }
 		if let Some(s) = &self.space_id { o.insert("spaceId", s.as_str().into()); }
 		if let Some(s) = &self.incarnation { o.insert("incarnation", s.as_str().into()); }
+		if let Some(r) = &self.rpc { o.insert("rpc", r.to_json()); }
 		if let Some(s) = &self.stream { o.insert("stream", s.to_json()); }
 		for (k, v) in self.rest.iter() { if !o.contains_key(k) { o.insert(k, v.clone()); } }
 		Json::Object(o)

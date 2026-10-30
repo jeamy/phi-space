@@ -1,6 +1,7 @@
-//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slices 1 and 2):
-//! entries, templates, leases, `settle` and expiry, transactions, the change stream records, the commit budget, reads,
-//! counts, pages and `changes`.
+//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slices 1 to 3):
+//! entries, templates, leases, `settle` and expiry, transactions, waiters and parked requests with their events in the
+//! outbox (and fanout jobs when it is full), the change stream records, the commit budget, reads, counts, pages and
+//! `changes`. Claims and generations are in `claims`.
 //!
 //! The statement order is the TypeScript one, also where it is not the obvious one: an operation that fails after
 //! `settle` keeps what `settle` did (a store rolls the commit back; the core does not), so a check moved before or after
@@ -10,16 +11,18 @@
 //! running commit, its byte budget and the expiry watermark. The watermark is not only a speed-up: `nextExpiry` answers
 //! from it, and it can be stale low.
 //!
-//! A space with anything not ported yet (registrations, waiters, claims, mailboxes, jobs, membership, restore,
-//! completion profiles, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
+//! A space with anything not ported yet (registrations, mailboxes, consumers, membership, restore, completion
+//! profiles, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
 //! ported so far.
-use crate::state::{EntryRec, SpaceState, TxnRec};
+use crate::state::{EntryRec, SpaceState, TxnRec, WaiterRec};
 use crate::stream::{self, Collected, Open};
 use phi_json::{number_text, obj, Json, Object, FOREVER};
 
 /// Lease.ANY: the space picks the duration.
 pub const ANY: f64 = -1.0;
 pub const DEFAULT_LEASE_MS: f64 = 3_600_000.0;
+/// Kind, ids, sequence, target, count of an event.
+const EVENT_OVERHEAD: f64 = 256.0;
 /// Claim and result, batch envelope, bookkeeping of one commit.
 const COMMIT_FIXED: f64 = 1024.0;
 /// What expiring one entry may write.
@@ -36,7 +39,7 @@ impl std::fmt::Display for CoreError {
 }
 impl std::error::Error for CoreError {}
 
-fn error(class: &'static str, message: impl Into<String>) -> CoreError { CoreError { class, message: message.into() } }
+pub(crate) fn error(class: &'static str, message: impl Into<String>) -> CoreError { CoreError { class, message: message.into() } }
 fn limit(m: impl Into<String>) -> CoreError { error("LimitError", m) }
 fn exhausted(m: impl Into<String>) -> CoreError { error("ResourceExhausted", m) }
 fn illegal(m: impl Into<String>) -> CoreError { error("IllegalArgumentError", m) }
@@ -50,7 +53,7 @@ pub type Result<T> = std::result::Result<T, CoreError>;
 /// A number as a JavaScript template literal writes it.
 fn n(x: f64) -> String { number_text(x) }
 /// A value as `${v}` writes it (ids and transaction ids in messages).
-fn js_string(v: &Json) -> String {
+pub(crate) fn js_string(v: &Json) -> String {
 	match v {
 		Json::String(s) => s.clone(),
 		Json::Number(x) => n(*x),
@@ -59,7 +62,9 @@ fn js_string(v: &Json) -> String {
 		other => other.to_json_text(),
 	}
 }
-fn bytes(v: &Json) -> f64 { v.json_bytes() as f64 }
+pub(crate) fn bytes(v: &Json) -> f64 { v.json_bytes() as f64 }
+/// JavaScript's default string order (`Array.prototype.sort`): by UTF-16 code units.
+pub(crate) fn js_cmp(a: &str, b: &str) -> std::cmp::Ordering { a.encode_utf16().cmp(b.encode_utf16()) }
 /// `Number.isInteger`.
 fn is_integer(v: Option<&Json>) -> Option<f64> {
 	match v {
@@ -127,6 +132,18 @@ limits! {
 
 /// Absolute time `ms` after `now`; FOREVER (or anything reaching it) stays FOREVER instead of overflowing.
 pub fn until(now: f64, ms: f64) -> f64 { if ms >= FOREVER - now { FOREVER } else { now + ms } }
+
+/// A timeout (duration) into an absolute deadline; FOREVER never passes.
+fn deadline_of(now: f64, timeout: Option<&Json>) -> Result<f64> {
+	let Some(Json::Number(t)) = timeout else { return Err(illegal("bad timeout")) };
+	if *t < 0.0 {
+		return Err(illegal("negative timeout"));
+	}
+	Ok(until(now, *t))
+}
+fn num_of(v: &Json, k: &str) -> Option<f64> { v.get(k).and_then(Json::as_f64) }
+/// A stored wait's template (`assert_ported` checked that it parses).
+fn waiter_template(w: &WaiterRec) -> Template { Template::from_json(Some(&w.template)).unwrap_or(Template::Any) }
 
 /// Leases are granted as requested: FOREVER never expires, ANY gets the default.
 fn grant(requested: Option<&Json>, now: f64) -> Result<f64> {
@@ -300,6 +317,7 @@ enum Standing {
 
 #[derive(Clone, Copy)]
 enum Leased {
+	Waiter(usize),
 	Entry(usize),
 	Txn(usize),
 }
@@ -310,10 +328,13 @@ enum Found {
 	Locked,
 }
 
+/// A source of random bytes (generation nonces and the signing key).
+pub type Random = Box<dyn FnMut(usize) -> Vec<u8> + Send>;
+
 /// One space: its document and what core.ts keeps beside it.
-#[derive(Clone, Debug)]
 pub struct Space {
 	pub state: SpaceState,
+	random: Random,
 	/// The batch of the running commit (stream.ts `open`).
 	open: Option<Open>,
 	/// Bytes the running commit has charged (core.ts `commitBudgets`); none outside a commit.
@@ -324,7 +345,8 @@ pub struct Space {
 }
 
 impl Space {
-	pub fn new(state: SpaceState) -> Space { Space { state, open: None, budget: None, watermark: None } }
+	pub fn new(state: SpaceState, random: Random) -> Space { Space { state, random, open: None, budget: None, watermark: None } }
+	pub(crate) fn random_bytes(&mut self, n: usize) -> Vec<u8> { (self.random)(n) }
 
 	pub fn limits(&self) -> Limits { Limits::of(self.state.limits.as_ref()) }
 
@@ -341,19 +363,33 @@ impl Space {
 
 	/// Refuses a space with parts the Rust core does not port yet. An allowlist: what is not named here is refused.
 	pub fn assert_ported(&self) -> Result<()> {
+		let local = |events: &[Json]| events.iter().all(|e| e.get("consumer").is_none());
 		for (k, v) in self.state.rest.iter() {
 			let fine = match k {
-				"regs" | "waiters" | "outbox" => v.as_array().is_some_and(Vec::is_empty),
+				"regs" => v.as_array().is_some_and(Vec::is_empty),
+				"outbox" => v.as_array().is_some(),
+				// fanout jobs for the local outbox (consumers' mailboxes come with slice 4)
+				"jobs" => v.as_array().is_some_and(|jobs| jobs.iter().all(|j| j.get("events").and_then(Json::as_array).is_some_and(|e| local(e)))),
 				"maintenance" => v.get("at").and_then(Json::as_f64).is_some(),
 				_ => false,
 			};
 			if !fine {
-				return Err(not_ported(format!("the space's {k} (R1 ports entries and transactions so far, no registrations or waiters)")));
+				return Err(not_ported(format!("the space's {k} (R1 ports entries, transactions, waiters and claims so far, no registrations)")));
 			}
 		}
-		if let Some(t) = self.state.txns.iter().find(|t| !t.rest.is_empty()) {
+		if let Some(t) = self.state.txns.iter().find(|t| t.rest.keys().any(|k| k != "originRequestKey")) {
 			let keys: Vec<&str> = t.rest.keys().collect();
 			return Err(not_ported(format!("transaction {} carries {}", t.id, keys.join(", "))));
+		}
+		for w in &self.state.waiters {
+			if !w.rest.is_empty() || Template::from_json(Some(&w.template)).is_err() || w.request_txn.as_ref().is_some_and(|t| !t.is_null() && t.as_str().is_none()) {
+				return Err(not_ported(format!("waiter {} (consumers come with slice 4)", w.id)));
+			}
+		}
+		if let Some(r) = &self.state.rpc {
+			if r.rest.keys().any(|k| k != "sweepCursor") || r.claims.iter().any(|(_, c)| c.get("notCommitted").is_some() || c.as_object().is_none()) {
+				return Err(not_ported("claims of a kind not ported yet (negative claims)"));
+			}
 		}
 		if self.state.limits.as_ref().is_some_and(|l| l.iter().any(|(_, v)| v.as_f64().is_none())) {
 			return Err(not_ported("a limit that is not a number"));
@@ -361,7 +397,7 @@ impl Space {
 		Ok(())
 	}
 
-	fn touch(&mut self, now: f64) {
+	pub(crate) fn touch(&mut self, now: f64) {
 		let max = self.limits().max_log_bytes;
 		stream::touch(&mut self.state.stream, &mut self.open, now, max);
 	}
@@ -387,6 +423,20 @@ impl Space {
 	}
 	fn can_charge(&self, cost: f64) -> bool { self.budget.is_none_or(|used| used + cost + COMMIT_FIXED <= self.limits().max_commit_bytes) }
 	fn defer_maintenance(&mut self, at: f64, cursor: &str) { self.state.rest.insert("maintenance", obj! { "at" => at, "cursor" => cursor }); }
+	/// Reserve one bounded maintenance mutation; persist where to go on when the commit is full.
+	pub(crate) fn maintenance_step(&mut self, cost: f64, now: f64, cursor: &str) -> bool {
+		if !self.can_charge(cost) {
+			self.defer_maintenance(now, cursor);
+			return false;
+		}
+		self.charge(cost).expect("checked");
+		true
+	}
+	fn new_id(&mut self, p: &str) -> String {
+		let id = self.peek_id(p);
+		self.state.next_id += 1.0;
+		id
+	}
 
 	/// Ids of an incarnation never repeat; ids from before the space had an incarnation keep the form `e<n>`.
 	fn peek_id(&self, p: &str) -> String {
@@ -407,6 +457,23 @@ impl Space {
 	fn entry_bytes(&self) -> f64 { self.state.entries.iter().map(|e| e.size.unwrap_or_else(|| bytes(&Json::Object(e.fields.clone())))).sum() }
 	fn rest_bytes(&self, key: &str, absent: f64) -> f64 { self.state.rest.get(key).map_or(absent, bytes) }
 	fn outbox_bytes(&self) -> f64 { self.state.outbox_bytes.unwrap_or_else(|| self.rest_bytes("outbox", 2.0)) }
+	fn outbox_len(&self) -> usize { self.state.rest.get("outbox").and_then(Json::as_array).map_or(0, Vec::len) }
+	/// An event joins the outbox: it and its JSON separator are counted at once.
+	fn push_outbox(&mut self, event: Json) {
+		self.state.outbox_bytes = Some(self.outbox_bytes() + bytes(&event) + 1.0);
+		if let Some(Json::Array(a)) = self.state.rest.get_mut("outbox") {
+			a.push(event);
+		}
+	}
+	fn waiters_bytes(&self) -> f64 { bytes(&Json::Array(self.state.waiters.iter().map(WaiterRec::to_json).collect())) }
+	fn jobs(&self) -> Vec<Json> { self.state.rest.get("jobs").and_then(Json::as_array).cloned().unwrap_or_default() }
+	fn jobs_bytes(&self) -> f64 { self.rest_bytes("jobs", 2.0) }
+	fn waiter_at(&self, id: &str) -> Option<usize> { self.state.waiters.iter().position(|w| w.id == id) }
+	fn drop_waiter(&mut self, id: &str) {
+		if let Some(i) = self.waiter_at(id) {
+			self.state.waiters.remove(i);
+		}
+	}
 	/// `overheadBytes`: the parts of the document that are not entries. Term by term as core.ts adds them; the parts
 	/// `assert_ported` refuses are their empty values (`{}` or `[]`, 2 bytes), claims and restore none.
 	fn overhead_bytes(&self) -> f64 {
@@ -416,12 +483,12 @@ impl Space {
 		let authority_transition = 2.0;
 		let authority_counters = 2.0;
 		let restore = 0.0;
-		let claims = 0.0;
+		let claims = self.claim_bytes();
 		let stream = self.state.stream.as_ref().map_or(0.0, |s| s.bytes);
-		let jobs = 2.0;
+		let jobs = self.jobs_bytes();
 		let mailboxes = 2.0;
 		let run_gates = 2.0;
-		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.rest_bytes("waiters", 2.0) + self.rest_bytes("regs", 2.0) + self.txns_bytes() + jobs + mailboxes + run_gates
+		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.waiters_bytes() + self.rest_bytes("regs", 2.0) + self.txns_bytes() + jobs + mailboxes + run_gates
 	}
 
 	fn txns_bytes(&self) -> f64 { bytes(&Json::Object(self.state.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())) }
@@ -445,7 +512,7 @@ impl Space {
 			let what = match txn { None => "this commit".to_owned(), Some(i) => format!("completing transaction {}", self.state.txns[i].id) };
 			return Err(exhausted(format!("{what} could write {} bytes; the limit is {}", n(have + cost + COMMIT_FIXED), n(lim.max_commit_bytes))));
 		}
-		let jobs = 2.0;
+		let jobs = self.jobs_bytes();
 		let obligations: f64 = self.state.txns.iter().map(|t| t.reserved.unwrap_or(0.0)).sum();
 		if jobs + obligations + cost > lim.max_job_bytes {
 			return Err(exhausted("the durable completion backlog is full"));
@@ -459,22 +526,411 @@ impl Space {
 		}
 	}
 
+	/// `publishCost`: a bound of what making `e` visible writes, its put and an event for every wait that matches it
+	/// now (registrations: none yet). `extra`: a wait about to be added.
+	fn publish_cost(&self, e: &EntryRec, extra: Option<&WaiterRec>) -> f64 {
+		let v = bytes(&view(e, self.state.space_id.as_deref()));
+		let mut cost = bytes(&put_op(e)) + 1.0;
+		for w in self.state.waiters.iter().chain(extra) {
+			if waiter_template(w).matches(e) {
+				cost += v + bytes(&w.handback) + EVENT_OVERHEAD;
+			}
+		}
+		cost
+	}
+
+	// ---- events
+
+	/// Whether a fanout job still holds an undelivered event for this outbox target.
+	fn pending_fanout(&self, target: &Json) -> bool {
+		self.jobs().iter().any(|j| {
+			let cursor = num_of(j, "cursor").unwrap_or(0.0) as usize;
+			j.get("events").and_then(Json::as_array).is_some_and(|ev| ev.iter().skip(cursor).any(|x| x.get("consumer").is_none() && x.get("event").and_then(|e| e.get("target")).is_some_and(|t| strict_eq(t, target))))
+		})
+	}
+	/// `queueEvent` for the local outbox (consumers' mailboxes come with slice 4). `completing`: the event of something
+	/// that must not fail (a timeout); when the outbox is full it waits in a fanout job.
+	fn queue_event(&mut self, now: f64, event: Json, completing: bool) -> Result<()> {
+		let lim = self.limits();
+		let size = bytes(&event);
+		if size > lim.max_event_bytes {
+			return Err(exhausted("the event exceeds maxEventBytes"));
+		}
+		let target = event.get("target").cloned().unwrap_or(Json::Null);
+		if !completing {
+			if self.pending_fanout(&target) {
+				return Err(exhausted("the consumer has a pending durable fanout backlog"));
+			}
+			if self.outbox_bytes() + size + 1.0 > lim.max_outbox_bytes {
+				return Err(exhausted("the local outbox is full"));
+			}
+			self.push_outbox(event);
+			self.touch(now);
+			return Ok(());
+		}
+		if self.outbox_bytes() + size + 1.0 <= lim.max_outbox_bytes && !self.pending_fanout(&target) {
+			self.push_outbox(event);
+			self.touch(now);
+			return Ok(());
+		}
+		let id = self.new_id("j");
+		let job = obj! { "id" => id, "at" => now, "cursor" => 0.0, "events" => Json::Array(vec![obj! { "event" => event }]) };
+		match self.state.rest.get_mut("jobs") {
+			Some(Json::Array(a)) => a.push(job),
+			_ => self.state.rest.insert("jobs", Json::Array(vec![job])),
+		}
+		self.touch(now);
+		Ok(())
+	}
+	/// Resume fanout from the jobs' cursors into the outbox as it has room.
+	fn run_jobs(&mut self, now: f64) {
+		let Some(Json::Array(mut jobs)) = self.state.rest.get("jobs").cloned() else { return };
+		let lim = self.limits();
+		let mut stopped = false;
+		'jobs: for job in jobs.iter_mut() {
+			if num_of(job, "retryAt").unwrap_or(0.0) > now {
+				continue;
+			}
+			let Json::Object(o) = job else { continue };
+			let events = o.get("events").and_then(Json::as_array).cloned().unwrap_or_default();
+			let mut cursor = o.get("cursor").and_then(Json::as_f64).unwrap_or(0.0) as usize;
+			while cursor < events.len() {
+				let event = events[cursor].get("event").cloned().unwrap_or(Json::Null);
+				let size = bytes(&event);
+				if self.outbox_bytes() + size + 1.0 > lim.max_outbox_bytes {
+					o.insert("retryAt", Json::Number(until(now, 1000.0)));
+					break;
+				}
+				if !self.can_charge(size + EVENT_OVERHEAD) {
+					let id = o.get("id").and_then(Json::as_str).unwrap_or("").to_owned();
+					o.insert("cursor", Json::Number(cursor as f64));
+					self.defer_maintenance(now, &id);
+					stopped = true;
+					break 'jobs;
+				}
+				self.charge(size + EVENT_OVERHEAD).expect("checked");
+				self.push_outbox(event);
+				self.touch(now);
+				o.remove("retryAt");
+				cursor += 1;
+				o.insert("cursor", Json::Number(cursor as f64));
+			}
+		}
+		if !stopped {
+			jobs.retain(|j| num_of(j, "cursor").unwrap_or(0.0) as usize != j.get("events").and_then(Json::as_array).map_or(0, Vec::len));
+		}
+		self.state.rest.insert("jobs", Json::Array(jobs));
+	}
+
+	// ---- waiters
+
+	/// A served or lapsed parked request: its claim is decided.
+	fn decide_done(&mut self, now: f64, key: &str, result: Json, locked: bool, err: Option<Json>) -> Result<()> { self.decide(now, key, &"done".into(), Some(result), locked, err) }
+	fn claim_pending(&self, key: &str) -> bool { self.state.rpc.as_ref().and_then(|r| r.claims.get(key)).and_then(|c| c.get("state")).and_then(Json::as_str) == Some("pending") }
+
+	/// Serve waiters whose match appeared. A take-waiter takes its entry under a fresh transaction, so a lost delivery
+	/// is not a lost job: the entry returns when that transaction lapses unless the receiver commits it.
+	fn serve(&mut self, now: f64) -> Result<()> {
+		let ids: Vec<String> = self.state.waiters.iter().map(|w| w.id.clone()).collect();
+		for id in ids {
+			let Some(wi) = self.waiter_at(&id) else { continue };
+			let w = self.state.waiters[wi].clone();
+			let tmpl = waiter_template(&w);
+			if let Some(key) = &w.claim_key {
+				if !self.claim_pending(key) {
+					self.drop_waiter(&id);
+					continue;
+				}
+				if w.authorized_until.is_some_and(|u| now >= u) {
+					if w.deadline <= now {
+						self.decide_done(now, key, Json::Null, false, None)?;
+						self.drop_waiter(&id);
+					}
+					continue;
+				}
+				let txn = w.request_txn.as_ref().and_then(Json::as_str).map(str::to_owned);
+				if txn.is_some() && !self.active(txn.as_deref(), now) {
+					let message = format!("transaction {} is not active", txn.as_deref().unwrap_or(""));
+					self.decide_done(now, key, Json::Null, false, Some(obj! { "code" => "TransactionError", "message" => message }))?;
+					self.drop_waiter(&id);
+					continue;
+				}
+				let found = self.find(&tmpl, txn.as_deref(), w.take);
+				let miss = !matches!(found, Found::At(_)) && (w.deadline <= now || (w.if_exists == Some(true) && matches!(found, Found::None)));
+				match found {
+					Found::At(i) => {
+						let e = &self.state.entries[i];
+						if directory_rec(e) && !w.target.is_null() && (w.take || txn.is_some()) {
+							let err = obj! { "code" => "PermissionDenied", "message" => "directory entries cannot be consumed or locked" };
+							self.decide_done(now, key, Json::Null, false, Some(err))?;
+							self.drop_waiter(&id);
+							continue;
+						}
+						let cost = bytes(&view(e, self.state.space_id.as_deref())) + 256.0;
+						if !self.can_charge(cost) {
+							self.defer_maintenance(now, &id);
+							continue;
+						}
+						// the request's transaction may not be able to reserve the publication of an abort: the waiter
+						// stays and is looked at again (the caller's unrelated operation must not fail)
+						if w.take && txn.is_some() && e.written_under != txn {
+							let c = self.publish_cost(e, None);
+							let lim = self.limits();
+							let t = self.txn_at(txn.as_deref().expect("some"));
+							match self.reserve(t, c, &lim) {
+								Err(e) if e.class == "ResourceExhausted" => continue,
+								other => other?,
+							}
+						}
+						self.charge(cost)?;
+						let copy = self.apply(now, i, txn.as_deref(), w.take);
+						let result = view(&copy, self.state.space_id.as_deref());
+						self.decide_done(now, key, result, false, None)?;
+					}
+					_ if miss => self.decide_done(now, key, Json::Null, matches!(found, Found::Locked), None)?,
+					_ => continue,
+				}
+				self.drop_waiter(&id);
+				continue;
+			}
+			if w.authorized_until.is_some_and(|u| now >= u) {
+				continue;
+			}
+			let Found::At(i) = self.find(&tmpl, None, w.take) else { continue };
+			if directory_rec(&self.state.entries[i]) && !w.target.is_null() && w.take {
+				continue;
+			}
+			let entry = view(&self.state.entries[i], self.state.space_id.as_deref());
+			let event = obj! { "kind" => "waiter", "eventId" => w.id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone(), "entry" => entry };
+			let cost = bytes(&event) + 256.0;
+			if !self.can_charge(cost) {
+				self.defer_maintenance(now, &id);
+				continue;
+			}
+			if self.outbox_bytes() + bytes(&event) + 1.0 > self.limits().max_outbox_bytes {
+				continue;
+			}
+			if !w.take {
+				self.charge(cost)?;
+				self.drop_waiter(&id);
+				self.queue_event(now, event, false)?;
+				continue;
+			}
+			let txn = self.new_id("t"); // the receiver commits it
+			let mut t = TxnRec { id: txn.clone(), expires: until(now, w.txn_lease_ms), owner: w.target.clone(), reserved: None, announced: None, rest: Object::new() };
+			let origin = w.origin_request_key.clone().or_else(|| {
+				let claims = &self.state.rpc.as_ref()?.claims;
+				claims.iter().find(|(_, c)| c.get("method").and_then(Json::as_str) == Some("wait") && c.get("result").and_then(Json::as_str) == Some(w.id.as_str())).map(|(k, _)| k.to_owned())
+			});
+			if let Some(k) = origin {
+				t.rest.insert("originRequestKey", k.into());
+			}
+			self.state.txns.push(t);
+			// the reservation of the abort's publication may be refused: the fresh transaction goes, the waiter stays
+			let c = self.publish_cost(&self.state.entries[i], None);
+			let lim = self.limits();
+			if let Err(e) = self.reserve(Some(self.state.txns.len() - 1), c, &lim) {
+				self.state.txns.pop();
+				if e.class == "ResourceExhausted" {
+					continue;
+				}
+				return Err(e);
+			}
+			self.charge(cost)?;
+			self.drop_waiter(&id);
+			let copy = self.apply(now, i, Some(&txn), true);
+			let Json::Object(mut o) = event else { unreachable!() };
+			o.insert("entry", view(&copy, self.state.space_id.as_deref()));
+			o.insert("txn", txn.as_str().into());
+			self.queue_event(now, Json::Object(o), false)?;
+		}
+		Ok(())
+	}
+
+	/// Re-counts what completing each transaction may write once the wait `extra` exists (`refreshReservations`):
+	/// transactions without a reservation, and those whose entries the new wait matches.
+	fn refresh_reservations(&self, extra: &WaiterRec) -> Result<Vec<(usize, f64)>> {
+		let lim = self.limits();
+		let tmpl = waiter_template(extra);
+		let mut recount: std::collections::HashSet<String> = self.state.txns.iter().filter(|t| t.reserved.is_none()).map(|t| t.id.clone()).collect();
+		for e in &self.state.entries {
+			if e.written_under != e.taken_by && tmpl.matches(e) {
+				recount.extend(e.written_under.iter().chain(&e.taken_by).cloned());
+			}
+		}
+		let mut published: std::collections::HashMap<String, f64> = Default::default();
+		if !recount.is_empty() {
+			for e in &self.state.entries {
+				if e.written_under == e.taken_by {
+					continue; // written and taken in one transaction (or neither): nothing to publish
+				}
+				if !e.written_under.as_ref().is_some_and(|t| recount.contains(t)) && !e.taken_by.as_ref().is_some_and(|t| recount.contains(t)) {
+					continue;
+				}
+				let cost = self.publish_cost(e, Some(extra));
+				for id in e.written_under.iter().chain(&e.taken_by) {
+					*published.entry(id.clone()).or_default() += cost;
+				}
+			}
+		}
+		let mut updated = vec![];
+		for (i, t) in self.state.txns.iter().enumerate() {
+			let mut cost = t.reserved.unwrap_or(0.0);
+			if recount.contains(&t.id) {
+				let full = published.get(&t.id).copied().unwrap_or(0.0); // registrations under it: none yet
+				cost = full.max(cost);
+			}
+			if cost + COMMIT_FIXED > lim.max_commit_bytes {
+				return Err(exhausted("the new subscription would invalidate a transaction's completion reservation"));
+			}
+			updated.push((i, cost));
+		}
+		if self.jobs_bytes() + updated.iter().map(|(_, c)| c).sum::<f64>() > lim.max_job_bytes {
+			return Err(exhausted("the new subscription exceeds reserved completion storage"));
+		}
+		Ok(updated)
+	}
+
+	/// Park a read or take for `target`; the space serves it later (or reports a timeout) through the outbox.
+	pub fn add_waiter(&mut self, now: f64, w: &Json) -> Result<Json> {
+		self.assert_ported()?;
+		if w.get("consumer").is_some() {
+			return Err(not_ported("a wait for a consumer (mailboxes come with slice 4)"));
+		}
+		let Some(template) = w.get("template") else { return Err(not_ported("a wait without a template")) };
+		let tmpl = Template::from_json(Some(template))?;
+		let (Some(Json::Bool(take)), Some(target)) = (w.get("take"), w.get("target")) else { return Err(not_ported("a wait without a boolean take and a target")) };
+		let authorized_until = match w.get("authorizedUntil") {
+			None => None,
+			Some(Json::Number(x)) => Some(*x),
+			Some(_) => return Err(not_ported("authorizedUntil that is not a number")),
+		};
+		let origin = match w.get("originRequestKey") {
+			None | Some(Json::Null) => None,
+			Some(Json::String(k)) if !k.is_empty() => Some(k.clone()),
+			Some(Json::String(_)) => None,
+			Some(_) => return Err(not_ported("originRequestKey that is not a string")),
+		};
+		let deadline = match w.get("deadline") {
+			None | Some(Json::Null) => deadline_of(now, w.get("timeout"))?,
+			Some(Json::Number(d)) => *d,
+			Some(_) => f64::NAN,
+		};
+		if (!deadline.is_finite() && deadline != FOREVER) || deadline < 0.0 || deadline.is_nan() {
+			return Err(illegal("invalid waiter deadline")); // FOREVER: waits until served or cancelled
+		}
+		self.settle(now)?;
+		let lim = self.limits();
+		let handback = w.get("handback").filter(|h| !h.is_null()).cloned().unwrap_or(Json::Null);
+		if let Some(as_) = w.get("as") {
+			if self.state.waiters.iter().filter(|x| strict_eq(&x.target, as_)).count() as f64 >= lim.max_waiters_per_owner {
+				return Err(limit(format!("you already have {} waits", n(lim.max_waiters_per_owner))));
+			}
+			check_json_size("handback", &handback, &lim)?;
+		}
+		if self.outbox_len() > 0 && self.outbox_bytes() > lim.max_outbox_bytes {
+			return Err(limit(format!("{} bytes of events wait for delivery; try again later", n(lim.max_outbox_bytes))));
+		}
+		if bytes(&handback) + EVENT_OVERHEAD > lim.max_event_bytes {
+			return Err(exhausted("the wait's metadata exceeds maxEventBytes"));
+		}
+		let lease = w.get("txnLeaseMs").filter(|l| !l.is_null()).cloned().unwrap_or(Json::Number(ANY));
+		let txn_lease_ms = grant(Some(&lease), now)? - now; // the same rules as every other lease
+		let rec = WaiterRec {
+			origin_request_key: origin,
+			id: self.new_id("w"),
+			template: template.clone(),
+			take: *take,
+			target: target.clone(),
+			deadline,
+			txn_lease_ms,
+			handback: handback.clone(),
+			claim_key: None,
+			request_txn: None,
+			if_exists: None,
+			authorized_until,
+			rest: Object::new(),
+		};
+		let updated = self.refresh_reservations(&rec)?;
+		for e in &self.state.entries {
+			if tmpl.matches(e) && bytes(&view(e, self.state.space_id.as_deref())) + bytes(&handback) + EVENT_OVERHEAD > lim.max_event_bytes {
+				return Err(exhausted("the wait would create an oversized event"));
+			}
+		}
+		let id = rec.id.clone();
+		self.state.waiters.push(rec);
+		self.touch(now);
+		for (i, cost) in updated {
+			self.state.txns[i].reserved = Some(cost);
+		}
+		self.serve(now)?;
+		Ok(id.into())
+	}
+
+	/// Cancels a wait (no timeout event); a parked request's claim is cancelled with it.
+	pub fn cancel_waiter(&mut self, now: f64, id: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		let id = id.and_then(Json::as_str).unwrap_or("");
+		let Some(i) = self.waiter_at(id) else { return Ok(Json::Bool(false)) };
+		if let Some(key) = self.state.waiters[i].claim_key.clone() {
+			if self.claim_pending(&key) {
+				self.decide(now, &key, &"cancelled".into(), None, false, None)?;
+			}
+		}
+		self.touch(now);
+		self.drop_waiter(id);
+		Ok(Json::Bool(true))
+	}
+
+	/// The durable execution state of a blocking request (`parkOperation`): an ordinary waiter carrying its claim.
+	#[allow(clippy::too_many_arguments)]
+	pub fn park(&mut self, now: f64, key: &str, tmpl: &Json, take: bool, txn: &Json, deadline: f64, if_exists: bool, owner: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		Template::from_json(Some(tmpl))?;
+		if !txn.is_null() && txn.as_str().is_none() {
+			return Err(not_ported("a parked request's transaction that is not a string"));
+		}
+		if self.state.waiters.iter().any(|w| w.claim_key.as_deref() == Some(key)) {
+			return Ok(Json::Null);
+		}
+		let rec = WaiterRec {
+			origin_request_key: None,
+			id: self.new_id("w"),
+			template: tmpl.clone(),
+			take,
+			target: owner.cloned().filter(|o| !o.is_null()).unwrap_or(Json::Null),
+			deadline,
+			txn_lease_ms: 0.0,
+			handback: Json::Null,
+			claim_key: Some(key.to_owned()),
+			request_txn: Some(txn.clone()),
+			if_exists: Some(if_exists),
+			authorized_until: None,
+			rest: Object::new(),
+		};
+		self.state.waiters.push(rec);
+		self.touch(now);
+		Ok(Json::Null)
+	}
+
 	// ---- settle and expiry
 
 	/// Drop expired entries (in time order). Every operation starts with this.
-	pub fn settle(&mut self, now: f64) {
+	pub fn settle(&mut self, now: f64) -> Result<()> {
 		let own = self.budget.is_none();
 		if own {
 			self.budget = Some(0.0);
 		}
-		self.settle_batch(now);
+		let r = self.settle_batch(now);
 		if own {
 			self.budget = None;
 		}
+		r
 	}
-	fn settle_batch(&mut self, now: f64) {
+	fn settle_batch(&mut self, now: f64) -> Result<()> {
 		self.state.rest.remove("maintenance");
-		// claims, mailboxes and the release queue: none in a space R1 runs so far
+		self.sweep(now);
+		// mailboxes and the release queue: none in a space R1 runs so far
 		loop {
 			// the transaction that lapsed first (the first of equals, in the order they were opened)
 			let mut t: Option<usize> = None;
@@ -485,19 +941,24 @@ impl Space {
 			}
 			let Some(t) = t else { break };
 			let (at, reserved, id) = (self.state.txns[t].expires, self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
-			if !self.expire(at) {
-				return;
+			if !self.expire(at)? {
+				return Ok(());
 			}
 			if !self.can_charge(reserved) {
 				self.defer_maintenance(now, &id);
-				return;
+				return Ok(());
 			}
 			self.charge(reserved).expect("checked");
 			self.finish(&id, false, at);
-			// serving waiters: none yet
+			self.serve(at)?; // the abort may have returned entries that a waiter is waiting for
 		}
-		self.expire(now);
-		// serving waiters, bundled notify events and fanout jobs: none yet
+		if !self.expire(now)? {
+			return Ok(());
+		}
+		self.serve(now)?;
+		// bundled notify events: none yet
+		self.run_jobs(now);
+		Ok(())
 	}
 
 	/// Ends transaction `id`: a commit makes its writes visible and its takes final, an abort the other way round.
@@ -546,7 +1007,7 @@ impl Space {
 		}
 	}
 	/// Expires what lapsed at `at`; false when the commit budget ran out and the rest was deferred.
-	fn expire(&mut self, at: f64) -> bool {
+	fn expire(&mut self, at: f64) -> Result<bool> {
 		// A reopened document has no watermark: its entries must be scanned once.
 		if self.watermark.unwrap_or(f64::NEG_INFINITY) <= at {
 			let mut min = f64::INFINITY;
@@ -591,11 +1052,38 @@ impl Space {
 				self.touch(at);
 			}
 			if deferred {
-				return false;
+				return Ok(false);
 			}
 		}
-		// registrations and waiters past their time: none in a space this slice runs
-		true
+		// registrations past their time: none yet
+		let mut lapsed: Vec<(f64, String)> = self.state.waiters.iter().filter(|w| w.deadline <= at).map(|w| (w.deadline, w.id.clone())).collect();
+		lapsed.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+		for (_, id) in lapsed {
+			let Some(i) = self.waiter_at(&id) else { continue };
+			let w = self.state.waiters[i].clone();
+			let cost = bytes(&w.handback) + 256.0;
+			if !self.can_charge(cost) {
+				self.defer_maintenance(at, &id);
+				return Ok(false);
+			}
+			self.charge(cost).expect("checked");
+			match &w.claim_key {
+				Some(key) => {
+					if self.claim_pending(key) {
+						let txn = w.request_txn.as_ref().and_then(Json::as_str).map(str::to_owned);
+						let locked = matches!(self.find(&waiter_template(&w), txn.as_deref(), w.take), Found::Locked);
+						self.decide_done(at, key, Json::Null, locked, None)?;
+					}
+				}
+				None => {
+					let event = obj! { "kind" => "timeout", "eventId" => id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone() };
+					self.queue_event(at, event, true)?;
+				}
+			}
+			self.drop_waiter(&id);
+			self.touch(at);
+		}
+		Ok(true)
 	}
 
 	/// Earliest time something can change without a commit. Initialises the watermark when there is none.
@@ -619,7 +1107,18 @@ impl Space {
 				min = t.expires;
 			}
 		}
-		// registrations, waiters, mailboxes, jobs, claims and the release queue: none yet
+		for w in &self.state.waiters {
+			if w.deadline < min {
+				min = w.deadline;
+			}
+		}
+		for j in self.jobs() {
+			min = min.min(num_of(&j, "retryAt").unwrap_or(0.0));
+		}
+		if let Some(at) = self.claims_due() {
+			min = min.min(at);
+		}
+		// registrations, mailboxes and the release queue: none yet
 		if let Some(at) = self.state.rest.get("maintenance").and_then(|m| m.get("at")).and_then(Json::as_f64) {
 			min = min.min(at);
 		}
@@ -635,7 +1134,7 @@ impl Space {
 		if directory_draft(entry) && (as_.is_some() || txn.is_some()) {
 			return Err(permission("directory entries require trusted publication"));
 		}
-		self.settle(now);
+		self.settle(now)?;
 		let (type_, fields) = draft_parts(entry)?;
 		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?;
 		// run gates: no completion profiles yet
@@ -692,11 +1191,10 @@ impl Space {
 			self.touch(now);
 			return Ok(lease(&rec.id, expires));
 		}
-		// events for registrations and waiters: none in this slice; what is left of preflightFanout is the outbox check
-		if self.outbox_bytes() > lim.max_outbox_bytes {
-			return Err(exhausted("the local outbox cannot hold this fanout"));
-		}
-		let cost = bytes(&put_op(&rec)) + 1.0;
+		let view_bytes = bytes(&view(&rec, self.state.space_id.as_deref()));
+		self.check_event_size(view_bytes, &lim)?;
+		self.preflight_fanout(&rec, txn.is_some(), &lim)?;
+		let cost = self.publish_cost(&rec, None);
 		let rec_bytes = bytes(&rec.to_json());
 		if !self.can_charge(rec_bytes + if txn.is_none() { cost } else { 0.0 }) {
 			return Err(exhausted("the write exceeds the remaining commit budget"));
@@ -711,14 +1209,52 @@ impl Space {
 		if txn.is_none() {
 			self.log_put(now, self.state.entries.len() - 1); // visible at once; under a transaction it appears at commit
 		}
+		// notify: no registrations yet
+		if txn.is_none() {
+			self.serve(now)?;
+		}
 		Ok(lease(&id, expires))
+	}
+
+	/// An event carries the entry, a handback and metadata: a bound with the largest handback of any wait is checked
+	/// before a write is accepted, so no event can exceed `maxEventBytes`.
+	fn check_event_size(&self, view_bytes: f64, lim: &Limits) -> Result<()> {
+		if self.state.waiters.is_empty() {
+			return Ok(()); // registrations: none yet
+		}
+		let handback = self.state.waiters.iter().map(|w| bytes(&w.handback)).fold(0.0, f64::max);
+		let bound = view_bytes + handback + EVENT_OVERHEAD;
+		if bound > lim.max_event_bytes {
+			return Err(exhausted(format!("an event for this entry could take {} bytes; the limit is {}", n(bound), n(lim.max_event_bytes))));
+		}
+		Ok(())
+	}
+	/// The events a visible write would send now must fit the event limit and the outbox.
+	fn preflight_fanout(&self, rec: &EntryRec, under_txn: bool, lim: &Limits) -> Result<()> {
+		let entry = view(rec, self.state.space_id.as_deref());
+		let mut local = 0.0;
+		if !under_txn {
+			for w in &self.state.waiters {
+				if w.claim_key.is_none() && waiter_template(w).matches(rec) {
+					let event = obj! { "kind" => "waiter", "eventId" => w.id.as_str(), "seq" => 1.0, "handback" => w.handback.clone(), "target" => w.target.clone(), "entry" => entry.clone() };
+					if bytes(&event) > lim.max_event_bytes {
+						return Err(exhausted("the event exceeds maxEventBytes"));
+					}
+					local += bytes(&event) + 1.0;
+				}
+			}
+		}
+		if self.outbox_bytes() + local > lim.max_outbox_bytes {
+			return Err(exhausted("the local outbox cannot hold this fanout"));
+		}
+		Ok(())
 	}
 
 	/// A write that is announced, not kept: the change stream carries it as a transient put.
 	pub fn announce(&mut self, now: f64, entry: &Json, txn: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		let supertypes = draft_types(entry)?;
-		self.settle(now);
+		self.settle(now)?;
 		let (type_, fields) = draft_parts(entry)?;
 		if directory_draft(entry) {
 			return Err(permission("directory entries require trusted publication"));
@@ -757,7 +1293,7 @@ impl Space {
 	/// One non-waiting read or take.
 	pub fn probe(&mut self, now: f64, tmpl: &Template, txn: Option<&Json>, take: bool, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
-		self.settle(now);
+		self.settle(now)?;
 		let at = txn.map(|t| self.require_txn(t, as_)).transpose()?;
 		let id = at.map(|t| self.state.txns[t].id.clone());
 		let txn = id.as_deref();
@@ -767,7 +1303,7 @@ impl Space {
 					return Err(permission("directory entries cannot be consumed or locked"));
 				}
 				if take && txn.is_some() && self.state.entries[i].written_under.as_deref() != txn {
-					let cost = bytes(&put_op(&self.state.entries[i])) + 1.0; // an abort puts it back
+					let cost = self.publish_cost(&self.state.entries[i], None); // an abort puts it back
 					let lim = self.limits();
 					self.reserve(at, cost, &lim)?;
 				}
@@ -943,10 +1479,11 @@ impl Space {
 		if e.is_some_and(|i| directory_rec(&self.state.entries[i])) && as_.is_some() {
 			return Err(permission("directory leases require trusted publication"));
 		}
-		let (l, owner) = match (e, self.txn_at(id)) {
-			(Some(i), _) => (Leased::Entry(i), &self.state.entries[i].owner),
-			(None, Some(t)) => (Leased::Txn(t), &self.state.txns[t].owner),
-			(None, None) => return Err(error("UnknownLeaseError", id)),
+		let (l, owner) = match (self.waiter_at(id), e, self.txn_at(id)) {
+			(Some(w), _, _) => (Leased::Waiter(w), &self.state.waiters[w].target), // a wait's deadline behaves like a lease
+			(None, Some(i), _) => (Leased::Entry(i), &self.state.entries[i].owner),
+			(None, None, Some(t)) => (Leased::Txn(t), &self.state.txns[t].owner),
+			(None, None, None) => return Err(error("UnknownLeaseError", id)),
 		};
 		if !may_use(owner, as_) {
 			return Err(permission(format!("lease {id} belongs to another conversation")));
@@ -960,12 +1497,13 @@ impl Space {
 				self.note_expiry(v);
 			}
 			Leased::Txn(t) => self.state.txns[t].expires = v,
+			Leased::Waiter(w) => self.state.waiters[w].deadline = v,
 		}
 	}
 
 	pub fn renew(&mut self, now: f64, id: Option<&Json>, ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
-		self.settle(now);
+		self.settle(now)?;
 		let l = self.leased(id, as_)?;
 		let v = grant(ms, now)?;
 		// completion deadlines and run fences: none yet
@@ -982,10 +1520,13 @@ impl Space {
 
 	pub fn cancel(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
-		self.settle(now);
+		self.settle(now)?;
 		let l = self.leased(id, as_)?;
+		if let Leased::Waiter(_) = l {
+			return self.cancel_waiter(now, id).map(|_| Json::Null); // cancelled waits send no timeout event
+		}
 		self.set_lease(l, now); // settle removes it; a cancelled txn lease aborts the transaction
-		self.settle(now);
+		self.settle(now)?;
 		Ok(Json::Null)
 	}
 
@@ -993,7 +1534,7 @@ impl Space {
 
 	pub fn create_txn(&mut self, now: f64, lease_ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
-		self.settle(now);
+		self.settle(now)?;
 		let lim = self.limits();
 		if let Some(as_) = as_ {
 			if self.state.txns.iter().filter(|t| strict_eq(&t.owner, as_)).count() as f64 >= lim.max_txns_per_owner {
@@ -1013,13 +1554,13 @@ impl Space {
 	pub fn abort_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> { self.complete_txn(now, id, as_, false) }
 	fn complete_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>, commit: bool) -> Result<Json> {
 		self.assert_ported()?;
-		self.settle(now);
+		self.settle(now)?;
 		let t = self.require_txn(id.unwrap_or(&Json::Null), as_)?;
 		// completion profiles and run bindings: none yet
 		let (reserved, id) = (self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
 		self.charge(reserved)?;
 		self.finish(&id, commit, now);
-		// serving waiters: none yet
+		self.serve(now)?;
 		Ok(Json::Null)
 	}
 
@@ -1080,26 +1621,28 @@ impl Space {
 			}
 		}
 		let txns = self.state.txns.iter().filter(|t| t.expires > now).count() as f64;
-		// waiters and registrations: none yet; the outbox is empty
-		let outbox = self.state.rest.get("outbox").and_then(Json::as_array).map_or(0, Vec::len) as f64;
+		let waiters = self.state.waiters.iter().filter(|w| w.deadline > now).count() as f64;
+		// registrations: none yet
+		let outbox = self.outbox_len() as f64;
 		let parts = obj! {
 			"entries" => entry_bytes,
 			"outbox" => self.outbox_bytes(),
-			"claims" => 0.0,
-			"waiters" => self.rest_bytes("waiters", 2.0),
+			"claims" => self.claim_bytes(),
+			"waiters" => self.waiters_bytes(),
 			"registrations" => self.rest_bytes("regs", 2.0),
 			"txns" => self.txns_bytes(),
 			"total" => bytes(&self.state.to_json()),
 		};
 		Ok(obj! {
 			"entries" => entries, "byType" => by_type, "locked" => locked, "uncommitted" => uncommitted, "expired" => expired,
-			"txns" => txns, "waiters" => 0.0, "registrations" => 0.0, "outbox" => outbox, "returned" => returned, "bytes" => parts,
+			"txns" => txns, "waiters" => waiters, "registrations" => 0.0, "outbox" => outbox, "returned" => returned, "bytes" => parts,
 		})
 	}
 }
 
-fn check_size(what: &str, fields: &Object, lim: &Limits) -> Result<()> {
-	let size = bytes(&Json::Object(fields.clone()));
+fn check_size(what: &str, fields: &Object, lim: &Limits) -> Result<()> { check_json_size(what, &Json::Object(fields.clone()), lim) }
+fn check_json_size(what: &str, v: &Json, lim: &Limits) -> Result<()> {
+	let size = bytes(v);
 	if size > lim.max_entry_bytes {
 		return Err(limit(format!("{what} is {} bytes; the limit is {}", n(size), n(lim.max_entry_bytes))));
 	}
