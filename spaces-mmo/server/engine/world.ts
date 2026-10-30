@@ -90,6 +90,8 @@ export type WorldDef = {
 	fields?: FieldDef;
 	/** The windmill (docs/siedeln.md "Warenketten"): grain brought to it becomes flour in its own time. */
 	mill?: MillDef;
+	/** A quarry: `plan` beside one, with `tool`, a work gives `count` of `makes` and a rest (docs/siedeln.md "Stoffe"). */
+	quarry?: { plan: string; tool: string; makes: string; count: number };
 	/** Animals on the farm (docs/siedeln.md "Tiere auf dem Hof"): kept in a building of their plan, fed, giving yields. */
 	animals?: AnimalsDef;
 	/** How the world splits into region spaces when SPACES_MMO_REGIONS names them (engine/regions.ts); without it the
@@ -104,7 +106,8 @@ export type WorldDef = {
 /** `chest`: how many things its chest holds (none without); `repair`: what a repair costs (it then stands `keepWorldMs` again). */
 /** `dative`: the plan with its article as one says "neben einer Hütte" (default "einem <name>"). `epoch`: the island's
  *  epoch from which a new one may be staked out (default 1; docs/siedeln.md "Epochen"). */
-export type PlanDef = { store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
+/** `sparesTools`: a recipe made beside it wears a tool half as fast. */
+export type PlanDef = { sparesTools?: boolean; store?: boolean; epoch?: number; dative?: string; key: string; name: string; aliases: string[]; w: number; h: number; needs: Array<{ proto: string; count: number }>; work: number; points: number; keepWorldMs: number; color: string; chest?: number; repair: Array<{ proto: string; count: number }> };
 /** `lightPoints`: what a fire's light carries; `siteWorldMs`: how long a site waits for progress; `restWorldMs`: how long a
  *  figure rests after a work point; `maxSites`/`maxBuildings`: per account. */
 /** `ruinWorldMs`: how long a ruin stays; `estateWorldMs`: how long what lay in its chest waits for its owner. */

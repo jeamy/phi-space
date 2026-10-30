@@ -1013,6 +1013,15 @@ Straße, Karren und Inselbahn. Was Regionen kreuzt, braucht die Übergabe oder e
        Inhalt lässt sich dort nicht abreißen. Verfällt es, geht der Inhalt wie bei jedem Bau an den Besitzer
        (`nachlass`); `reisse baustelle ab` gibt noch nichts ins Lager. Offen bleiben Steinbruch, Werkstätten,
        Baustellen-Aufträge und `bauhelfer`.
+   - **Teil 2, Stein und Werkstatt (gebaut, `server/engine/commands/quarry.ts`):** Stein liegt als Geröll an den Stränden
+     (eine Tide-Grundlast von 2 je Insel). Aus ihm entsteht die Spitzhacke (6 Benutzungen).
+     - **Steinbruch** (ab Dorf, 2×2, 3 Punkte): `breche` gibt neben ihm mit der Hacke 3 Stein und danach dieselbe Ruhe
+       wie `arbeite`. Jeder darf an jedem Steinbruch brechen, in einer geschlossenen Siedlung Helfer und Siedler.
+     - **Werkstatt** (ab Dorf, 3×2, 3 Punkte, 8 Stein): Rezepte Bohle, Tauwerk, Gehäuse (Gehäuse und Tauwerk sind zwei der
+       drei Teile des Automaten-Körpers). Neben ihr nutzt sich ein Werkzeug nur halb so schnell ab.
+     - Abweichungen vom Entwurf: Das Geröll kommt mit der Tide an die Strände statt nur an Klippen; der Steinbruch braucht
+       noch keine Felsen im Raum; eine Werkstatt statt Tischlerei, Seilerei und Schmiede. Zahnräder fehlen, weil es
+       noch kein Eisen gibt. Offen bleiben Lehm und Ziegel, Baustellen-Aufträge, `bauhelfer` und der Automaten-Körper.
 6. **Rathaus, Kapelle** (Zonen, Steuern, Abstimmungen, Feste mit den Göttern), **Siedlungsbevölkerung**, erste
    **Parks** und die Blumenschau.
 7. **Kaufhaus** (Laden mit Vorrat), **Kontor**, **Leuchtturm**, **Brauhaus**, **Glashütte und Gewächshaus**,

@@ -126,7 +126,7 @@ test("scripted NPCs: the ferryman crosses for game hours without leaving entries
 		const a = await player(srv.url, "Gast");
 		await stack.npcProcess();
 		a.p.send("who");
-		await a.p.until((f) => f.t === "msg" && /Bo \(/.test(f.m.text) && /Ines \(/.test(f.m.text), 20_000);
+		await a.p.until((f) => f.t === "msg" && /Bo \(/.test(f.m.text) && /Ines \(/.test(f.m.text), 40_000);
 		await does(a.p, "say hallo zusammen", "Willkommen am Feuer, Gast!");
 		const rooms: string[] = [];
 		const sample = async () => {

@@ -23,7 +23,8 @@ async function player(url: string, name: string, s: SpaceLike): Promise<P> {
 	const p = new Player(url);
 	assert.equal((await p.post("/api/register", { name, password: "geheim-123" })).status, 200);
 	const me = (await p.play()).me.charId;
-	return { p, me, acc: String((await s.readAll({ type: "Character", fields: { charId: me } }))[0]!.fields.accountId) };
+	const ch = await eventually(async () => (await s.readAll({ type: "Character", fields: { charId: me } }))[0], 10_000, name);
+	return { p, me, acc: String(ch!.fields.accountId) };
 }
 const give = async (s: SpaceLike, charId: string, proto: string, count: number) => { const p = (await eventually(() => resolvePrototype(s, proto), 10_000, proto))!; for (let i = 0; i < count; i++) await spawn(s, null, w, p, { location: charId, x: -1, y: -1 }); };
 const carried = async (s: SpaceLike, charId: string, proto: string) => s.count({ type: "Item", fields: { location: charId, proto } });

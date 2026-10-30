@@ -45,14 +45,14 @@ function pick(inv: Inv, spec: Array<{ name: string; count: number }>, world: Wor
 const byProto = (inv: Inv, proto: string, count: number): Inv | null => { const hits = inv.filter((i) => i.f.proto === proto); return hits.length >= count ? hits.slice(0, count) : null; };
 
 /** Takes an item where it is and writes it at `location` (a pack, or the market's escrow). */
-async function move(c: CommandCtx, item: ItemFields, from: string, to: string, extra: Partial<ItemFields> = {}): Promise<void> {
+export async function move(c: CommandCtx, item: ItemFields, from: string, to: string, extra: Partial<ItemFields> = {}): Promise<void> {
 	const e = await c.space.take({ type: "Item", fields: { itemId: item.itemId, location: from } }, NO_WAIT, { txn: c.txn });
 	if (!e) throw new CommandError(`${item.name} ist nicht mehr da.`);
 	const { listing: _l, seller: _s, ...rest } = fieldsOf<ItemFields>(e);
 	await c.space.write({ type: e.type, types: e.types.slice(1), fields: { ...rest, location: to, x: -1, y: -1, ...extra } as never }, c.txn, FOREVER);
 }
 /** Takes an item for good (used up). */
-async function consume(c: CommandCtx, item: ItemFields, from: string): Promise<void> {
+export async function consume(c: CommandCtx, item: ItemFields, from: string): Promise<void> {
 	if (!(await c.space.take({ type: "Item", fields: { itemId: item.itemId, location: from } }, NO_WAIT, { txn: c.txn }))) throw new CommandError(`${item.name} ist nicht mehr da.`);
 }
 
@@ -235,6 +235,9 @@ export const craft: Command = {
 		const inv = await inventory(c);
 		const used = new Set<string>(), inputs: Inv = [], wear = new Map<string, number>();
 		const tools = r.tool ? inv.filter((i) => i.f.proto === r.tool) : [];
+		// a workshop beside one: a tool wears half as fast there (docs/siedeln.md "Epoche 2")
+		const near = r.tool ? (await c.space.readAll({ type: "Building", fields: { room: c.actor.room } })).map((e) => fieldsOf<BuildingFields>(e)).filter((b) => distTo(c.actor, b) <= 1) : [];
+		const wearing = near.some((b) => planOf(c.world, b.plan)?.sparesTools) ? 0.5 : 1;
 		let made = 0, lack = "";
 		rounds: while (made < want) {
 			const round: Inv = [];
@@ -245,7 +248,7 @@ export const craft: Command = {
 			}
 			const tool = tools.find((i) => !round.includes(i) && !used.has(i.f.itemId) && (wear.get(i.f.itemId) ?? i.f.wear ?? 1) > 0);
 			if (r.tool && !tool) { lack = `Dafür brauchst du ein Werkzeug: ${r.tool}.`; break; }
-			if (tool) wear.set(tool.f.itemId, (wear.get(tool.f.itemId) ?? tool.f.wear ?? 1) - 1);
+			if (tool) wear.set(tool.f.itemId, (wear.get(tool.f.itemId) ?? tool.f.wear ?? 1) - wearing);
 			round.forEach((i) => { used.add(i.f.itemId); inputs.push(i); });
 			made++;
 		}

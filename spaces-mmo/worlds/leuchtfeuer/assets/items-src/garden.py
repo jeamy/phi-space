@@ -5,6 +5,7 @@
 # linen spun from the flax. The farm's animals (animals.ts): a hen, a sheep and a goat, and what they give: an egg, a
 # ball of wool and a jug of milk; a duck, a goose and its down; cloth woven of the wool, a down blanket and a cheese.
 # The other wild from the fog (wild.ts): a deer, a fox and a mouse; and the guards against it: a dog, a cat, a mousetrap.
+# Stone and what the workshop makes (quarry.ts): a stone, a pickaxe, a plank, a coil of rigging and a casing.
 # Usage: python3 garden.py <items dir>
 import sys
 from PIL import Image
@@ -523,6 +524,56 @@ def trap():
     return outline(img)
 
 
+def stone():
+    img = new(); px = img.load()
+    S = rgb("#8d8f93")
+    disc(px, 15, 17, 9, S)
+    disc(px, 21, 20, 5, shade(S, 0.85))
+    line(px, 11, 13, 17, 16, shade(S, 0.6))   # a crack
+    return outline(img)
+
+
+def pickaxe():
+    img = new(); px = img.load()
+    line(px, 8, 26, 21, 9, WOOD, 2)           # the handle
+    line(px, 7, 8, 16, 7, METAL, 2)           # the head of stone, two points
+    line(px, 16, 7, 26, 13, METAL, 2)
+    line(px, 7, 8, 11, 7, METALL)
+    rect(px, 17, 10, 19, 12, ROPE)            # lashed with rope
+    return outline(img)
+
+
+def plank():
+    img = new(); px = img.load()
+    for y in range(13, 20):                   # a straight board, its end grain to the right
+        rect(px, 4, y, 25, y, WOODL if y == 13 else WOODD if y == 19 else WOOD)
+    rect(px, 25, 13, 27, 19, WOODD)
+    line(px, 7, 15, 16, 15, WOODD)            # the grain
+    line(px, 12, 17, 23, 17, WOODD)
+    return outline(img)
+
+
+def rigging():
+    img = new(); px = img.load()
+    D = shade(ROPE, 0.6)
+    disc(px, 16, 16, 10, ROPE)
+    disc(px, 16, 16, 7, D, light=False)
+    disc(px, 16, 16, 5, ROPE)
+    disc(px, 16, 16, 2, D, light=False)
+    line(px, 24, 22, 28, 27, ROPE, 2)         # the loose end
+    return outline(img)
+
+
+def casing():
+    img = new(); px = img.load()
+    rect(px, 6, 10, 25, 24, WOOD)
+    rect(px, 6, 10, 25, 11, WOODL)
+    rect(px, 6, 23, 25, 24, WOODD)
+    for x in (12, 19): line(px, x, 12, x, 22, WOODD)
+    for x, y in ((6, 10), (23, 10), (6, 22), (23, 22)): rect(px, x, y, x + 2, y + 2, rgb("#8d8f93"))  # stone at the corners
+    return outline(img)
+
+
 out = sys.argv[1]
 things = {
     "spaten": spade(), "wasserkanne": can(),
@@ -537,6 +588,7 @@ things = {
     "ente": bird("#8a7a5a", "#2f6a4a", "#e8b030", ring="#f0ece0"), "gans": bird("#f0ece0", "#f0ece0", "#e8902c", neck=3), "daunen": down(),
     "tuch": cloth("#8a6a9a"), "decke": blanket(), "kaese": cheese(),
     "reh": deer(), "fuchs": fox(), "maus": mouse(), "hund": dog(), "katze": cat(), "mausefalle": trap(),
+    "stein": stone(), "spitzhacke": pickaxe(), "bohle": plank(), "tauwerk": rigging(), "gehaeuse": casing(),
 }
 for key, img in things.items():
     img.save(f"{out}/{key}.png")

@@ -250,21 +250,31 @@ const liefere: Command = {
 	},
 };
 
+/** Throws while the actor is tired from the last work. */
+export async function rested(c: CommandCtx) {
+	const now = await worldNowOf(c.space, c.txn);
+	const rest = await peek(c.space, { type: "WorkRest", fields: { charId: c.actor.charId } });
+	const until = rest ? fieldsOf<WorkRestFields>(rest).untilWorldMs : 0;
+	if (until > now) throw new CommandError(`Du bist noch müde von der letzten Arbeit; in etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten wieder.`);
+	return { now, rest };
+}
+/** The actor worked: it rests for a while. */
+export async function tire(c: CommandCtx, now: number, rest: Awaited<ReturnType<typeof rested>>["rest"]): Promise<void> {
+	if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
+	await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + (c.world.building?.restWorldMs ?? 3600_000) } satisfies WorkRestFields as never }, c.txn, FOREVER);
+}
+
 const arbeite: Command = {
 	key: "arbeite", aliases: ["work"],
 	help: "arbeite – an der Baustelle neben dir (bis zwei Schritte) mitarbeiten (danach ruhst du eine Weile)",
 	async func(c, arg) {
 		await needRank(c, "helfer", "Mitarbeiten");
-		const now = await worldNowOf(c.space, c.txn);
-		const rest = await peek(c.space, { type: "WorkRest", fields: { charId: c.actor.charId } });
-		const until = rest ? fieldsOf<WorkRestFields>(rest).untilWorldMs : 0;
-		if (until > now) throw new CommandError(`Du bist noch müde von der letzten Arbeit; in etwa ${Math.max(1, Math.round((until - now) / 60_000))} Minuten wieder.`);
+		const { now, rest } = await rested(c);
 		const { s } = await siteHere(c, arg.replace(/^(?:an|auf)\s+(?:der\s+)?/i, "").replace(/^baustelle$/i, ""));
 		if (s.work >= s.workNeed) throw new CommandError(`An der ${s.name} ist die Arbeit getan; es fehlen nur noch ${missing(s).join(", ")}.`);
 		credit(c, s, 1);
 		s.work += 1;
-		if (rest) await c.space.takeIfExists({ id: rest.id }, NO_WAIT, { txn: c.txn });
-		await c.space.write({ type: "WorkRest", fields: { charId: c.actor.charId, untilWorldMs: now + (c.world.building?.restWorldMs ?? 3600_000) } satisfies WorkRestFields as never }, c.txn, FOREVER);
+		await tire(c, now, rest);
 		await msg(c, "*", "emote", `${c.actor.name} arbeitet an der ${s.name} (${s.work}/${s.workNeed}).`);
 		await settle(c, s);
 	},
