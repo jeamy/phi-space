@@ -5,8 +5,8 @@
 //! models keeps the difference between absent and `null` (the byte budgets count `JSON.stringify` output, where an
 //! absent field costs nothing and a `null` one costs its key).
 //!
-//! Modelled so far (R1, slice 1): the scalars, the entries and the change stream. The rest of the document (txns,
-//! regs, waiters, outbox, rpc, mailboxes, …) is carried as JSON until its slice is ported.
+//! Modelled so far (R1, slices 1 and 2): the scalars, the entries, the transactions and the change stream. The rest of
+//! the document (regs, waiters, outbox, rpc, mailboxes, …) is carried as JSON until its slice is ported.
 use phi_json::{Json, Object};
 
 /// A state that is not the TypeScript document shape.
@@ -122,6 +122,48 @@ impl EntryRec {
 	}
 }
 
+/// `TxnRec`: an open transaction. `owner`: the only conversation that may use, commit, abort, renew or cancel it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TxnRec {
+	pub id: String,
+	pub expires: f64,
+	pub owner: Json,
+	/// Bytes its completion may write, reserved when its writes and takes were admitted.
+	pub reserved: Option<f64>,
+	/// announce() under this transaction: put into the stream at its commit.
+	pub announced: Option<Vec<EntryRec>>,
+	/// Completion allowances, taken tasks, run bindings, …: carried as read.
+	pub rest: Object,
+}
+
+impl TxnRec {
+	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
+		let w = "txn";
+		let mut f = Fields::of(v, w)?;
+		let id = f.string("id", w)?;
+		let expires = f.number("expires", w)?;
+		let owner = f.need("owner", w)?;
+		let reserved = f.opt_number("reserved", w)?;
+		let announced = match f.take("announced") {
+			None => None,
+			Some(Json::Array(a)) => Some(a.iter().map(EntryRec::from_json).collect::<Result<_, _>>()?),
+			Some(_) => return Err(ShapeError("txn.announced is not an array".into())),
+		};
+		Ok(TxnRec { id, expires, owner, reserved, announced, rest: f.rest() })
+	}
+	/// The record in core.ts's order (`createTxn`; `reserved` and `announced` are added later, in either order: the
+	/// order here is one of them, the same bytes).
+	pub fn to_json(&self) -> Json {
+		let mut o = Object::new();
+		o.insert("id", self.id.as_str().into());
+		o.insert("expires", Json::Number(self.expires));
+		o.insert("owner", self.owner.clone());
+		if let Some(n) = self.reserved { o.insert("reserved", Json::Number(n)); }
+		if let Some(a) = &self.announced { o.insert("announced", Json::Array(a.iter().map(EntryRec::to_json).collect())); }
+		with_rest(o, &self.rest)
+	}
+}
+
 /// One operation of a change batch (stream.ts `Op`). Kept as its JSON: it is written once and only ever read back.
 pub type StreamOp = Json;
 
@@ -185,6 +227,8 @@ impl StreamState {
 pub struct SpaceState {
 	pub next_id: f64,
 	pub entries: Vec<EntryRec>,
+	/// The open transactions in the order they were opened (the document keys them by id).
+	pub txns: Vec<TxnRec>,
 	/// Entries given back by aborted or expired transactions, ever.
 	pub returned: f64,
 	/// Running tally of the outbox's JSON bytes; absent in states that predate it.
@@ -207,11 +251,10 @@ impl SpaceState {
 	/// `initialState()`.
 	pub fn initial() -> Self {
 		let mut rest = Object::new();
-		rest.insert("txns", Json::Object(Object::new()));
 		rest.insert("regs", Json::Array(vec![]));
 		rest.insert("waiters", Json::Array(vec![]));
 		rest.insert("outbox", Json::Array(vec![]));
-		SpaceState { next_id: 1.0, entries: vec![], returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
+		SpaceState { next_id: 1.0, entries: vec![], txns: vec![], returned: 0.0, outbox_bytes: Some(2.0), space_id: None, incarnation: None, limits: None, stream: None, rest }
 	}
 
 	pub fn from_json(v: &Json) -> Result<Self, ShapeError> {
@@ -219,6 +262,10 @@ impl SpaceState {
 		let mut f = Fields::of(v, w)?;
 		let next_id = f.number("nextId", w)?;
 		let entries = match f.need("entries", w)? { Json::Array(a) => a.iter().map(EntryRec::from_json).collect::<Result<_, _>>()?, _ => return Err(ShapeError("space.entries is not an array".into())) };
+		let txns = match f.need("txns", w)? {
+			Json::Object(o) => o.iter().map(|(_, t)| TxnRec::from_json(t)).collect::<Result<_, _>>()?,
+			_ => return Err(ShapeError("space.txns is not an object".into())),
+		};
 		let returned = f.number("returned", w)?;
 		let outbox_bytes = f.opt_number("outboxBytes", w)?;
 		let space_id = f.opt_string("spaceId", w)?;
@@ -226,10 +273,10 @@ impl SpaceState {
 		let limits = match f.take("limits") { None => None, Some(Json::Object(o)) => Some(o), Some(_) => return Err(ShapeError("space.limits is not an object".into())) };
 		let stream = f.take("stream").map(|s| StreamState::from_json(&s)).transpose()?;
 		let rest = f.rest();
-		for key in ["txns", "regs", "waiters", "outbox"] {
+		for key in ["regs", "waiters", "outbox"] {
 			if !rest.contains_key(key) { return Err(ShapeError(format!("space.{key} is missing"))); }
 		}
-		Ok(SpaceState { next_id, entries, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
+		Ok(SpaceState { next_id, entries, txns, returned, outbox_bytes, space_id, incarnation, limits, stream, rest })
 	}
 
 	pub fn to_json(&self) -> Json {
@@ -240,6 +287,7 @@ impl SpaceState {
 				"entries" => o.insert(key, Json::Array(self.entries.iter().map(EntryRec::to_json).collect())),
 				"outboxBytes" => if let Some(n) = self.outbox_bytes { o.insert(key, Json::Number(n)) },
 				"returned" => o.insert(key, Json::Number(self.returned)),
+				"txns" => o.insert(key, Json::Object(self.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())),
 				_ => if let Some(v) = self.rest.get(key) { o.insert(key, v.clone()) },
 			}
 		}

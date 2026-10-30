@@ -283,7 +283,7 @@ Vergleichstests gegen den TS-Treiber grün sind.
 |---|---|---|
 | 0 | `phi-json`; TS-Treiber `test/support/core-driver.ts`; Zustandsmodell `phi-core::state` mit Round-Trip-Prüfung | erledigt |
 | 1 | Entries, Templates, Leases, `settle`, Ablauf, Stream-Einträge, Budgets (`charge`, `jsonBytes`-Summen); dazu `count`, `list`, `listPage`, `changes`, `stats`, `nextExpiry` ohne Txn | erledigt |
-| 2 | Transaktionen | offen |
+| 2 | Transaktionen: `createTxn`, `commitTxn`, `abortTxn`, Ablauf in `settle`, Txn-Leases, Schreiben, `announce`, Lesen und Nehmen unter einer Txn, Reservierungen | erledigt |
 | 3 | Wartende, geparkte Operationen, Claims und Generationen | offen |
 | 4 | Notify und Mailboxen | offen |
 | 5 | Stream und Seiten unter Txns, Snapshots (`snapshot.ts`), Seiten-Token | offen |
@@ -316,7 +316,7 @@ raten.
 - **`phi-core::driver`:** dieselben Zeilen wie `core-driver.ts`, auf dem Rust-Kern.
 - **Reihenfolge:** Die Prüfungen stehen in der Reihenfolge des TS-Kerns, auch nach `settle`. Der Treiber rollt nichts
   zurück, ein Fehler behält also, was `settle` schon getan hat (Ablauf, `del`, Batch, `maintenance`).
-- **Verweigerung:** Ein Dokument, dessen `rest` mehr hält als leere `txns`, `regs`, `waiters`, `outbox` und
+- **Verweigerung:** Ein Dokument, dessen `rest` mehr hält als leere `regs`, `waiters`, `outbox` (seit Scheibe 2 auch `txns`) und
   `maintenance`, und Argumente in Formen, die JavaScript über Umwandlungen läse (nicht-Strings in `types`, Templates
   ohne Objekt), beantwortet der Rust-Kern mit `NotPorted`, bevor er etwas ändert. Die Liste ist eine Positivliste.
 - **Differenztest `tests/differential.rs`:** Zufallsgänge mit eigener Saat und je Gang kleinen Limits
@@ -334,6 +334,27 @@ raten.
   `maxSpaceBytes`, Outbox, Seitenbudget, `maxLogBytes`; 127 statt 128 Ablaufkosten; das Komma im Batch) schlagen
   in mindestens einem Test fehl. Unentdeckt bleibt die exakte Neuberechnung bei genau `maxLogBytes`. Die ist
   gleichwertig, solange die laufende Summe stimmt.
+
+**Stand Scheibe 2 (2026-10-30):**
+
+- **Modell:** `phi-core::state` führt die Transaktionen typisiert (`TxnRec`: Lease, Eigentümer, `reserved`,
+  `announced`), in der Reihenfolge, in der sie geöffnet wurden. Das ist die Reihenfolge von `Object.values` und damit
+  die, in der gleichzeitig abgelaufene Txns abgebrochen werden.
+- **Ports:** `finish` (Commit und Abbruch, rückwärts über die Entries, veröffentlichte Writes in Schreibreihenfolge,
+  zurückgegebene Takes in umgekehrter), der Txn-Ablauf in `settle` (erst die Entries bis zum Ablauf der Txn, dann ihr
+  Abbruch zu deren Zeit), `reserve` gegen eine Txn und die Summe aller Reservierungen gegen `maxJobBytes`.
+- **Eine Feinheit:** `createTxn` zieht die Id vor dem Lease; eine ungültige Lease verbraucht sie trotzdem.
+- **Verweigerung:** Eine Txn mit Abschlussprofil, genommenen Aufgaben, Run-Bindung oder Herkunfts-Claim
+  (`completion`, `takenTasks`, `runs`, `originRequestKey`, `completionDeadline`) beantwortet der Rust-Kern mit
+  `NotPorted`.
+- **Tests:** Der Zufallsgang öffnet, nutzt, verlängert, bricht ab und committet Txns. Der Grenztest prüft die
+  Reservierung von Writes und Takes, einen Commit, dessen eigenes `settle` erst Entries ablaufen lässt (er scheitert
+  dann an `maxCommitBytes`), eine abgelaufene Txn am Commit-Budget, zwei gleichzeitig ablaufende Txns und
+  `maxJobBytes` über mehrere Txns. Ein Lauf mit 200 000 Schritten (`--release`) war abweichungsfrei.
+- **Gegenprobe:** Eingebaute Fehler werden erkannt: keine Umkehr der Writes, `returned` nicht gezählt, ohne
+  Commit-Kosten, `<=` bei gleichzeitigem Ablauf, ohne Summe der Reservierungen, Abbruch zur falschen Zeit, Id nach dem
+  Lease, kein `announced`, Reservierung auch für eigene Writes. Unentdeckt bleibt nur ein Fall, der nicht eintreten
+  kann: ein Take auf einen Entry, den eine andere Txn schrieb.
 
 **Befund aus Scheibe 0:** `parkOperation` (`core.ts`, `touch(s, Date.now())`) und `ackMailbox` (`mailbox.ts`) lesen
 die Uhr selbst, statt `now` zu übernehmen. Der Rust-Kern nimmt `now` als Parameter. Im TS-Kern sollten beide Stellen

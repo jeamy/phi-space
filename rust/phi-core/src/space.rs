@@ -1,6 +1,6 @@
-//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slice 1): entries,
-//! templates, leases, `settle` and expiry, the change stream records, the commit budget, reads, counts, pages and
-//! `changes`.
+//! The operations of src/core.ts on one space, as far as R1 has come (docs/rust-portierung.md, slices 1 and 2):
+//! entries, templates, leases, `settle` and expiry, transactions, the change stream records, the commit budget, reads,
+//! counts, pages and `changes`.
 //!
 //! The statement order is the TypeScript one, also where it is not the obvious one: an operation that fails after
 //! `settle` keeps what `settle` did (a store rolls the commit back; the core does not), so a check moved before or after
@@ -10,10 +10,10 @@
 //! running commit, its byte budget and the expiry watermark. The watermark is not only a speed-up: `nextExpiry` answers
 //! from it, and it can be stale low.
 //!
-//! A space with anything this slice does not port (transactions, registrations, waiters, claims, mailboxes, jobs,
-//! membership, restore, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
+//! A space with anything not ported yet (registrations, waiters, claims, mailboxes, jobs, membership, restore,
+//! completion profiles, …) is refused with `NotPorted` before anything happens, and so is an argument outside the shapes
 //! ported so far.
-use crate::state::{EntryRec, SpaceState};
+use crate::state::{EntryRec, SpaceState, TxnRec};
 use crate::stream::{self, Collected, Open};
 use phi_json::{number_text, obj, Json, Object, FOREVER};
 
@@ -298,6 +298,12 @@ enum Standing {
 	Visible,
 }
 
+#[derive(Clone, Copy)]
+enum Leased {
+	Entry(usize),
+	Txn(usize),
+}
+
 enum Found {
 	At(usize),
 	None,
@@ -337,14 +343,17 @@ impl Space {
 	pub fn assert_ported(&self) -> Result<()> {
 		for (k, v) in self.state.rest.iter() {
 			let fine = match k {
-				"txns" => v.as_object().is_some_and(Object::is_empty),
 				"regs" | "waiters" | "outbox" => v.as_array().is_some_and(Vec::is_empty),
 				"maintenance" => v.get("at").and_then(Json::as_f64).is_some(),
 				_ => false,
 			};
 			if !fine {
-				return Err(not_ported(format!("the space's {k} (R1 slice 1 ports entries without transactions, registrations or waiters)")));
+				return Err(not_ported(format!("the space's {k} (R1 ports entries and transactions so far, no registrations or waiters)")));
 			}
+		}
+		if let Some(t) = self.state.txns.iter().find(|t| !t.rest.is_empty()) {
+			let keys: Vec<&str> = t.rest.keys().collect();
+			return Err(not_ported(format!("transaction {} carries {}", t.id, keys.join(", "))));
 		}
 		if self.state.limits.as_ref().is_some_and(|l| l.iter().any(|(_, v)| v.as_f64().is_none())) {
 			return Err(not_ported("a limit that is not a number"));
@@ -361,10 +370,10 @@ impl Space {
 		stream::record(&mut self.state.stream, &mut self.open, now, id, op, max);
 	}
 	fn log_put(&mut self, now: f64, i: usize) {
-		let op = put_op(&self.state.entries[i]);
-		let id = self.state.entries[i].id.clone();
-		self.record(now, &id, op);
+		let e = self.state.entries[i].clone();
+		self.log_put_rec(now, &e);
 	}
+	fn log_put_rec(&mut self, now: f64, e: &EntryRec) { self.record(now, &e.id, put_op(e)); }
 	fn log_del(&mut self, now: f64, id: &str) { self.record(now, id, obj! { "op" => "del", "id" => id }); }
 
 	fn charge(&mut self, cost: f64) -> Result<()> {
@@ -412,26 +421,42 @@ impl Space {
 		let jobs = 2.0;
 		let mailboxes = 2.0;
 		let run_gates = 2.0;
-		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.rest_bytes("waiters", 2.0) + self.rest_bytes("regs", 2.0) + self.rest_bytes("txns", 2.0) + jobs + mailboxes + run_gates
+		admin_maintenance + membership + completion + authority_transition + authority_counters + restore + claims + stream + self.outbox_bytes() + self.rest_bytes("waiters", 2.0) + self.rest_bytes("regs", 2.0) + self.txns_bytes() + jobs + mailboxes + run_gates
 	}
 
-	/// `requireTxn`. No transaction is open in a space this slice runs (`assert_ported`), so every id is not active.
-	fn require_txn(&self, id: &Json, _as: Option<&Json>) -> Result<()> { Err(error("TransactionError", format!("transaction {} is not active", js_string(id)))) }
-	/// Whether transaction `id` is active at `now`; none is (see `require_txn`).
-	fn active(&self, _id: Option<&str>, _now: f64) -> bool { false }
+	fn txns_bytes(&self) -> f64 { bytes(&Json::Object(self.state.txns.iter().map(|t| (t.id.clone(), t.to_json())).collect())) }
+	fn txn_at(&self, id: &str) -> Option<usize> { self.state.txns.iter().position(|t| t.id == id) }
+	/// `requireTxn`: the transaction exists and `as` may use it; its index.
+	fn require_txn(&self, id: &Json, as_: Option<&Json>) -> Result<usize> {
+		let Some(i) = id.as_str().and_then(|id| self.txn_at(id)) else { return Err(error("TransactionError", format!("transaction {} is not active", js_string(id)))) };
+		if !may_use(&self.state.txns[i].owner, as_) {
+			return Err(permission(format!("transaction {} belongs to another conversation", js_string(id))));
+		}
+		Ok(i)
+	}
+	/// A transaction past its lease is as good as aborted (the next operation aborts it).
+	fn active(&self, id: Option<&str>, now: f64) -> bool { id.and_then(|id| self.txn_at(id)).is_some_and(|i| self.state.txns[i].expires > now) }
 
-	/// Reserve room for the commit that makes an entry visible in this very commit (`reserve` with txn null).
-	fn reserve_now(&mut self, cost: f64, lim: &Limits) -> Result<()> {
-		let have = 0.0;
+	/// Reserve room for the commit that makes an entry visible (`txn` none: this very commit) or for completing `txn`
+	/// either way, before the mutation; over the budget nothing has changed.
+	fn reserve(&mut self, txn: Option<usize>, cost: f64, lim: &Limits) -> Result<()> {
+		let have = txn.and_then(|i| self.state.txns[i].reserved).unwrap_or(0.0);
 		if have + cost + COMMIT_FIXED > lim.max_commit_bytes {
-			return Err(exhausted(format!("this commit could write {} bytes; the limit is {}", n(have + cost + COMMIT_FIXED), n(lim.max_commit_bytes))));
+			let what = match txn { None => "this commit".to_owned(), Some(i) => format!("completing transaction {}", self.state.txns[i].id) };
+			return Err(exhausted(format!("{what} could write {} bytes; the limit is {}", n(have + cost + COMMIT_FIXED), n(lim.max_commit_bytes))));
 		}
 		let jobs = 2.0;
-		let obligations = 0.0;
+		let obligations: f64 = self.state.txns.iter().map(|t| t.reserved.unwrap_or(0.0)).sum();
 		if jobs + obligations + cost > lim.max_job_bytes {
 			return Err(exhausted("the durable completion backlog is full"));
 		}
-		self.charge(cost)
+		match txn {
+			Some(i) => {
+				self.state.txns[i].reserved = Some(have + cost);
+				Ok(())
+			}
+			None => self.charge(cost),
+		}
 	}
 
 	// ---- settle and expiry
@@ -449,9 +474,76 @@ impl Space {
 	}
 	fn settle_batch(&mut self, now: f64) {
 		self.state.rest.remove("maintenance");
-		// claims, mailboxes, the release queue and expiring transactions: none in a space this slice runs
+		// claims, mailboxes and the release queue: none in a space R1 runs so far
+		loop {
+			// the transaction that lapsed first (the first of equals, in the order they were opened)
+			let mut t: Option<usize> = None;
+			for (i, x) in self.state.txns.iter().enumerate() {
+				if x.expires <= now && t.is_none_or(|t| x.expires < self.state.txns[t].expires) {
+					t = Some(i);
+				}
+			}
+			let Some(t) = t else { break };
+			let (at, reserved, id) = (self.state.txns[t].expires, self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
+			if !self.expire(at) {
+				return;
+			}
+			if !self.can_charge(reserved) {
+				self.defer_maintenance(now, &id);
+				return;
+			}
+			self.charge(reserved).expect("checked");
+			self.finish(&id, false, at);
+			// serving waiters: none yet
+		}
 		self.expire(now);
-		// serving waiters, bundled notify events and fanout jobs: none either
+		// serving waiters, bundled notify events and fanout jobs: none yet
+	}
+
+	/// Ends transaction `id`: a commit makes its writes visible and its takes final, an abort the other way round.
+	fn finish(&mut self, id: &str, commit: bool, now: f64) {
+		self.touch(now);
+		let Some(at) = self.txn_at(id) else { return };
+		let t = self.state.txns.remove(at);
+		// run fences and registrations under the transaction: none yet
+		let mut published: Vec<EntryRec> = vec![];
+		for i in (0..self.state.entries.len()).rev() {
+			// backwards: removals do not shift what is still to visit
+			let e = &mut self.state.entries[i];
+			e.read_by.retain(|r| r != id);
+			if commit {
+				if e.taken_by.as_deref() == Some(id) {
+					self.state.entries.remove(i); // removal commits (also covers written-and-taken)
+					continue;
+				}
+				if e.written_under.as_deref() == Some(id) {
+					e.written_under = None;
+					published.push(e.clone());
+				}
+			} else {
+				if e.written_under.as_deref() == Some(id) {
+					self.state.entries.remove(i); // aborted writes are discarded
+					continue;
+				}
+				if e.taken_by.as_deref() == Some(id) {
+					e.taken_by = None; // takes are undone: the entry is back
+					self.state.returned += 1.0;
+					if e.written_under.is_none() {
+						let e = e.clone();
+						self.log_put_rec(now, &e);
+					}
+				}
+			}
+		}
+		published.reverse(); // announced in write order
+		for e in &published {
+			self.log_put_rec(now, e);
+		}
+		if commit {
+			for e in t.announced.unwrap_or_default() {
+				self.record(now, &e.id, transient_op(&e));
+			}
+		}
 	}
 	/// Expires what lapsed at `at`; false when the commit budget ran out and the rest was deferred.
 	fn expire(&mut self, at: f64) -> bool {
@@ -522,7 +614,12 @@ impl Space {
 				min
 			}
 		};
-		// registrations, transactions, waiters, mailboxes, jobs, claims and the release queue: none in this slice
+		for t in &self.state.txns {
+			if t.expires < min {
+				min = t.expires;
+			}
+		}
+		// registrations, waiters, mailboxes, jobs, claims and the release queue: none yet
 		if let Some(at) = self.state.rest.get("maintenance").and_then(|m| m.get("at")).and_then(Json::as_f64) {
 			min = min.min(at);
 		}
@@ -531,7 +628,7 @@ impl Space {
 
 	// ---- entries
 
-	/// Writes an entry under a lease; visible at once (transactions come with slice 2).
+	/// Writes an entry under a lease: visible at once, or under `txn` when it commits.
 	pub fn write(&mut self, now: f64, entry: &Json, txn: Option<&Json>, lease_ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		let supertypes = draft_types(entry)?;
@@ -540,9 +637,8 @@ impl Space {
 		}
 		self.settle(now);
 		let (type_, fields) = draft_parts(entry)?;
-		if let Some(t) = txn {
-			self.require_txn(t, as_)?;
-		}
+		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?;
+		// run gates: no completion profiles yet
 		let expires = grant(lease_ms, now)?;
 		let lim = self.limits();
 		if let Some(as_) = as_ {
@@ -576,7 +672,7 @@ impl Space {
 			types,
 			fields,
 			expires,
-			written_under: None,
+			written_under: txn.map(|t| self.state.txns[t].id.clone()),
 			taken_by: None,
 			read_by: vec![],
 			owner: as_.cloned().unwrap_or(Json::Null),
@@ -602,17 +698,19 @@ impl Space {
 		}
 		let cost = bytes(&put_op(&rec)) + 1.0;
 		let rec_bytes = bytes(&rec.to_json());
-		if !self.can_charge(rec_bytes + cost) {
+		if !self.can_charge(rec_bytes + if txn.is_none() { cost } else { 0.0 }) {
 			return Err(exhausted("the write exceeds the remaining commit budget"));
 		}
-		self.reserve_now(cost, &lim)?; // before any change: a refusal leaves everything as it was
+		self.reserve(txn, cost, &lim)?; // before any change: a refusal leaves everything as it was
 		self.charge(rec_bytes)?;
 		self.state.next_id += 1.0;
 		let id = rec.id.clone();
 		self.state.entries.push(rec);
 		self.note_expiry(expires);
 		self.touch(now);
-		self.log_put(now, self.state.entries.len() - 1);
+		if txn.is_none() {
+			self.log_put(now, self.state.entries.len() - 1); // visible at once; under a transaction it appears at commit
+		}
 		Ok(lease(&id, expires))
 	}
 
@@ -625,9 +723,7 @@ impl Space {
 		if directory_draft(entry) {
 			return Err(permission("directory entries require trusted publication"));
 		}
-		if let Some(t) = txn {
-			self.require_txn(t, as_)?;
-		}
+		let txn = txn.map(|t| self.require_txn(t, as_)).transpose()?;
 		let lim = self.limits();
 		if as_.is_some() {
 			if js_len(&type_) > lim.max_type_chars {
@@ -650,22 +746,30 @@ impl Space {
 		let rec = EntryRec { id: self.peek_id("e"), type_, types, fields, expires: now, written_under: None, taken_by: None, read_by: vec![], owner: as_.cloned().unwrap_or(Json::Null), size: None, restored_unverified: false, rest: Object::new() };
 		self.state.next_id += 1.0;
 		self.touch(now);
-		self.record(now, &rec.id, transient_op(&rec));
-		Ok(lease(&rec.id, now))
+		let id = rec.id.clone();
+		match txn {
+			None => self.record(now, &rec.id, transient_op(&rec)),
+			Some(t) => self.state.txns[t].announced.get_or_insert_with(Vec::new).push(rec),
+		}
+		Ok(lease(&id, now))
 	}
 
 	/// One non-waiting read or take.
 	pub fn probe(&mut self, now: f64, tmpl: &Template, txn: Option<&Json>, take: bool, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		self.settle(now);
-		if let Some(t) = txn {
-			self.require_txn(t, as_)?;
-		}
-		let txn: Option<&str> = None;
+		let at = txn.map(|t| self.require_txn(t, as_)).transpose()?;
+		let id = at.map(|t| self.state.txns[t].id.clone());
+		let txn = id.as_deref();
 		match self.find(tmpl, txn, take) {
 			Found::At(i) => {
 				if as_.is_some() && directory_rec(&self.state.entries[i]) && (take || txn.is_some()) {
 					return Err(permission("directory entries cannot be consumed or locked"));
+				}
+				if take && txn.is_some() && self.state.entries[i].written_under.as_deref() != txn {
+					let cost = bytes(&put_op(&self.state.entries[i])) + 1.0; // an abort puts it back
+					let lim = self.limits();
+					self.reserve(at, cost, &lim)?;
 				}
 				let copy = self.apply(now, i, txn, take);
 				let space_id = self.state.space_id.clone();
@@ -745,10 +849,9 @@ impl Space {
 	/// How many entries match, as a read would see them. Changes nothing.
 	pub fn count(&self, now: f64, tmpl: &Template, txn: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
-		if let Some(t) = txn {
-			self.require_txn(t, as_)?;
-		}
-		let (txn, mine) = (None, false);
+		let id = txn.map(|t| self.require_txn(t, as_)).transpose()?.map(|t| self.state.txns[t].id.clone());
+		let txn = id.as_deref();
+		let mine = self.active(txn, now);
 		let mut count = 0.0;
 		for e in &self.state.entries {
 			if e.restored_unverified && txn.is_some() {
@@ -768,10 +871,9 @@ impl Space {
 			None => FOREVER,
 			l => is_integer(l).filter(|&l| l >= 1.0).ok_or_else(|| illegal("limit must be a positive integer"))?,
 		};
-		if let Some(t) = txn {
-			self.require_txn(t, as_)?;
-		}
-		let (txn, mine) = (None, false);
+		let id = txn.map(|t| self.require_txn(t, as_)).transpose()?.map(|t| self.state.txns[t].id.clone());
+		let txn = id.as_deref();
+		let mine = self.active(txn, now);
 		let mut out = vec![];
 		for e in &self.state.entries {
 			if e.restored_unverified && txn.is_some() {
@@ -810,10 +912,9 @@ impl Space {
 				text.parse::<f64>().expect("digits")
 			}
 		};
-		if let Some(t) = txn {
-			self.require_txn(t, as_)?;
-		}
-		let (txn, mine) = (None, false);
+		let id = txn.map(|t| self.require_txn(t, as_)).transpose()?.map(|t| self.state.txns[t].id.clone());
+		let txn = id.as_deref();
+		let mine = self.active(txn, now);
 		let mut eligible = vec![];
 		let mut seqs = vec![];
 		for e in &self.state.entries {
@@ -831,37 +932,50 @@ impl Space {
 		})
 	}
 
-	/// The lease of entry `id`, checked against `as` (`leased` in core.ts: waiters, transactions and registrations,
-	/// the other leased things, are none in this slice).
-	fn leased(&self, id: Option<&Json>, as_: Option<&Json>) -> Result<usize> {
+	/// The leased thing behind `id`, checked against `as` (`leased` in core.ts; waiters and registrations, the other
+	/// leased things, are none yet).
+	fn leased(&self, id: Option<&Json>, as_: Option<&Json>) -> Result<Leased> {
 		let id = match id {
 			Some(Json::String(s)) => s.as_str(),
 			_ => return Err(not_ported("a lease id that is not a string")),
 		};
-		let i = self.state.entries.iter().position(|e| e.id == id);
-		if let Some(i) = i {
-			if directory_rec(&self.state.entries[i]) && as_.is_some() {
-				return Err(permission("directory leases require trusted publication"));
-			}
+		let e = self.state.entries.iter().position(|e| e.id == id);
+		if e.is_some_and(|i| directory_rec(&self.state.entries[i])) && as_.is_some() {
+			return Err(permission("directory leases require trusted publication"));
 		}
-		let Some(i) = i else { return Err(error("UnknownLeaseError", id)) };
-		if !may_use(&self.state.entries[i].owner, as_) {
+		let (l, owner) = match (e, self.txn_at(id)) {
+			(Some(i), _) => (Leased::Entry(i), &self.state.entries[i].owner),
+			(None, Some(t)) => (Leased::Txn(t), &self.state.txns[t].owner),
+			(None, None) => return Err(error("UnknownLeaseError", id)),
+		};
+		if !may_use(owner, as_) {
 			return Err(permission(format!("lease {id} belongs to another conversation")));
 		}
-		Ok(i)
+		Ok(l)
+	}
+	fn set_lease(&mut self, l: Leased, v: f64) {
+		match l {
+			Leased::Entry(i) => {
+				self.state.entries[i].expires = v;
+				self.note_expiry(v);
+			}
+			Leased::Txn(t) => self.state.txns[t].expires = v,
+		}
 	}
 
 	pub fn renew(&mut self, now: f64, id: Option<&Json>, ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		self.settle(now);
-		let i = self.leased(id, as_)?;
+		let l = self.leased(id, as_)?;
 		let v = grant(ms, now)?;
-		self.state.entries[i].expires = v;
-		self.note_expiry(v);
+		// completion deadlines and run fences: none yet
+		self.set_lease(l, v);
 		self.touch(now);
-		let e = &self.state.entries[i];
-		if e.written_under.is_none() && e.taken_by.is_none() {
-			self.log_put(now, i); // the lease is part of the visible state
+		if let Leased::Entry(i) = l {
+			let e = &self.state.entries[i];
+			if e.written_under.is_none() && e.taken_by.is_none() {
+				self.log_put(now, i); // the lease is part of the visible state
+			}
 		}
 		Ok(Json::Number(v))
 	}
@@ -869,10 +983,43 @@ impl Space {
 	pub fn cancel(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
 		self.assert_ported()?;
 		self.settle(now);
-		let i = self.leased(id, as_)?;
-		self.state.entries[i].expires = now; // settle removes it
-		self.note_expiry(now);
+		let l = self.leased(id, as_)?;
+		self.set_lease(l, now); // settle removes it; a cancelled txn lease aborts the transaction
 		self.settle(now);
+		Ok(Json::Null)
+	}
+
+	// ---- transactions
+
+	pub fn create_txn(&mut self, now: f64, lease_ms: Option<&Json>, as_: Option<&Json>) -> Result<Json> {
+		self.assert_ported()?;
+		self.settle(now);
+		let lim = self.limits();
+		if let Some(as_) = as_ {
+			if self.state.txns.iter().filter(|t| strict_eq(&t.owner, as_)).count() as f64 >= lim.max_txns_per_owner {
+				return Err(limit(format!("you already have {} open transactions", n(lim.max_txns_per_owner))));
+			}
+		}
+		// the id is drawn before the lease is granted: a bad lease still uses it up
+		let id = self.peek_id("t");
+		self.state.next_id += 1.0;
+		let expires = grant(lease_ms, now)?;
+		self.state.txns.push(TxnRec { id: id.clone(), expires, owner: as_.cloned().unwrap_or(Json::Null), reserved: None, announced: None, rest: Object::new() });
+		self.touch(now);
+		Ok(lease(&id, expires))
+	}
+
+	pub fn commit_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> { self.complete_txn(now, id, as_, true) }
+	pub fn abort_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>) -> Result<Json> { self.complete_txn(now, id, as_, false) }
+	fn complete_txn(&mut self, now: f64, id: Option<&Json>, as_: Option<&Json>, commit: bool) -> Result<Json> {
+		self.assert_ported()?;
+		self.settle(now);
+		let t = self.require_txn(id.unwrap_or(&Json::Null), as_)?;
+		// completion profiles and run bindings: none yet
+		let (reserved, id) = (self.state.txns[t].reserved.unwrap_or(0.0), self.state.txns[t].id.clone());
+		self.charge(reserved)?;
+		self.finish(&id, commit, now);
+		// serving waiters: none yet
 		Ok(Json::Null)
 	}
 
@@ -932,7 +1079,8 @@ impl Space {
 				Standing::Expired => expired += 1.0,
 			}
 		}
-		// transactions, waiters and registrations: none in this slice; the outbox is empty
+		let txns = self.state.txns.iter().filter(|t| t.expires > now).count() as f64;
+		// waiters and registrations: none yet; the outbox is empty
 		let outbox = self.state.rest.get("outbox").and_then(Json::as_array).map_or(0, Vec::len) as f64;
 		let parts = obj! {
 			"entries" => entry_bytes,
@@ -940,12 +1088,12 @@ impl Space {
 			"claims" => 0.0,
 			"waiters" => self.rest_bytes("waiters", 2.0),
 			"registrations" => self.rest_bytes("regs", 2.0),
-			"txns" => self.rest_bytes("txns", 2.0),
+			"txns" => self.txns_bytes(),
 			"total" => bytes(&self.state.to_json()),
 		};
 		Ok(obj! {
 			"entries" => entries, "byType" => by_type, "locked" => locked, "uncommitted" => uncommitted, "expired" => expired,
-			"txns" => 0.0, "waiters" => 0.0, "registrations" => 0.0, "outbox" => outbox, "returned" => returned, "bytes" => parts,
+			"txns" => txns, "waiters" => 0.0, "registrations" => 0.0, "outbox" => outbox, "returned" => returned, "bytes" => parts,
 		})
 	}
 }

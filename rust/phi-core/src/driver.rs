@@ -70,6 +70,9 @@ impl Driver {
 			"listPage" => s.list_page(now, &Template::from_json(l.get("tmpl"))?, txn, o, as_),
 			"renew" => s.renew(now, l.get("id"), l.get("ms"), as_),
 			"cancel" => s.cancel(now, l.get("id"), as_),
+			"createTxn" => s.create_txn(now, Some(l.get("lease").unwrap_or(&Json::Number(ANY))), as_),
+			"commitTxn" => s.commit_txn(now, l.get("id"), as_),
+			"abortTxn" => s.abort_txn(now, l.get("id"), as_),
 			"settle" => s.assert_ported().map(|_| {
 				s.settle(now);
 				Json::Null

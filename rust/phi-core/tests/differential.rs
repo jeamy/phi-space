@@ -32,6 +32,8 @@ struct Walk {
 	rng: Rng,
 	now: f64,
 	ids: Vec<String>,
+	txns: Vec<String>,
+	burst: usize,
 	page_next: Option<Json>,
 }
 
@@ -47,8 +49,11 @@ impl Walk {
 				limits.insert(k, Json::Number(v));
 			}
 		};
-		let v = 1300.0 + r.below(1500) as f64;
-		small("maxCommitBytes", v, 0.4, r);
+		// from about 1400 bytes a small write fits; up to 2200 a commit expires only a few entries and defers the rest
+		let v = if r.chance(0.5) { 1300.0 + r.below(1500) as f64 } else { 1400.0 + r.below(800) as f64 };
+		small("maxCommitBytes", v, 0.5, r);
+		let v = 1.0 + r.below(3) as f64;
+		small("maxTxnsPerOwner", v, 0.3, r);
 		let v = 250.0 + r.below(3000) as f64;
 		small("maxLogBytes", v, 0.4, r);
 		let v = 150.0 + r.below(400) as f64;
@@ -174,7 +179,23 @@ impl Walk {
 			_ => Some("1".into()),
 		}
 	}
+	/// A transaction for an operation: mostly none, else a recent one or one that never was.
+	fn txn(&mut self) -> Option<Json> {
+		let r = &mut self.rng;
+		if self.txns.is_empty() || r.chance(0.5) {
+			return None;
+		}
+		if r.chance(0.05) {
+			return Some("t-bogus".into());
+		}
+		let i = self.txns.len() - 1 - r.below(self.txns.len().min(4));
+		Some(self.txns[i].as_str().into())
+	}
+	fn txn_id(&mut self) -> Json { self.txn().unwrap_or_else(|| "t-bogus".into()) }
 	fn id(&mut self) -> Json {
+		if !self.txns.is_empty() && self.rng.chance(0.2) {
+			return self.txn_id();
+		}
 		let r = &mut self.rng;
 		if self.ids.is_empty() || r.chance(0.1) {
 			return r.pick(&["e999", "e0a0b0c0d-999", "nope"]).into();
@@ -201,6 +222,15 @@ impl Walk {
 	}
 
 	fn line(&mut self, rev: f64) -> Json {
+		if self.burst > 0 {
+			// several entries with the same lease at the same time: they expire together
+			self.burst -= 1;
+			let entry = obj! { "type" => "Task", "fields" => obj! { "n" => self.burst as f64 } };
+			return obj! { "op" => "write", "now" => self.now, "entry" => entry, "lease" => 300.0 };
+		}
+		if self.rng.chance(0.01) {
+			self.burst = 4 + self.rng.below(8);
+		}
 		self.now += self.rng.pick(&[0.0, 0.0, 100.0, 100.0, 200.0, 500.0, 1000.0, 3_600_000.0]);
 		let mut o = Object::new();
 		let mut set = |k: &str, v: Option<Json>| {
@@ -208,32 +238,31 @@ impl Walk {
 				o.insert(k, v);
 			}
 		};
-		let op = match self.rng.below(100) {
+		let op = match self.rng.below(114) {
 			0..=29 => {
 				set("entry", Some(self.entry()));
 				set("lease", self.lease());
 				set("as", self.as_());
-				if self.rng.chance(0.03) {
-					set("txn", Some("t-bogus".into()));
-				}
+				set("txn", self.txn());
 				"write"
 			}
 			30..=34 => {
 				set("entry", Some(self.entry()));
 				set("as", self.as_());
+				set("txn", self.txn());
 				"announce"
 			}
 			35..=49 => {
 				set("tmpl", self.template());
 				set("take", Some(Json::Bool(self.rng.chance(0.5))));
 				set("as", self.as_());
-				if self.rng.chance(0.03) {
-					set("txn", Some("t-bogus".into()));
-				}
+				set("txn", self.txn());
 				"probe"
 			}
 			50..=53 => {
 				set("tmpl", self.template());
+				set("txn", self.txn());
+				set("as", self.as_());
 				"count"
 			}
 			54..=58 => {
@@ -245,6 +274,7 @@ impl Walk {
 					_ => None,
 				};
 				set("limit", limit);
+				set("txn", self.txn());
 				"list"
 			}
 			59..=66 => {
@@ -266,6 +296,7 @@ impl Walk {
 					_ => {}
 				}
 				set("o", Some(Json::Object(p)));
+				set("txn", self.txn());
 				"listPage"
 			}
 			67..=74 => {
@@ -295,7 +326,28 @@ impl Walk {
 				}
 				"changes"
 			}
-			_ => "revision",
+			99 => "revision",
+			100..=105 => {
+				// transactions mostly live long enough to be used
+				let lease = match self.rng.below(4) {
+					0 => self.lease(),
+					1 => Some(Json::Number(3_600_000.0 * 2.0)),
+					_ => Some(Json::Number(1000.0 * (1 + self.rng.below(20)) as f64)),
+				};
+				set("lease", lease);
+				set("as", self.as_());
+				"createTxn"
+			}
+			106..=110 => {
+				set("id", Some(self.txn_id()));
+				set("as", self.as_());
+				"commitTxn"
+			}
+			_ => {
+				set("id", Some(self.txn_id()));
+				set("as", self.as_());
+				"abortTxn"
+			}
 		};
 		o.insert("op", op.into());
 		o.insert("now", Json::Number(self.now));
@@ -352,7 +404,7 @@ fn diff(a: &Json, b: &Json, path: &str, out: &mut Vec<String>) {
 
 /// Runs one walk; counts what happened into `seen`.
 fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
-	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], page_next: None };
+	let mut w = Walk { rng: Rng(seed), now: 1000.0, ids: vec![], txns: vec![], burst: 0, page_next: None };
 	let mut rust = Driver::new();
 	let mut lines = vec![w.init()];
 	let mut answers = vec![rust.step(&lines[0])];
@@ -367,7 +419,7 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 			Ok(v) => {
 				note("ok", seen);
 				if let Some(id) = v.get("id").and_then(Json::as_str) {
-					w.ids.push(id.to_owned());
+					if id.starts_with('t') { w.txns.push(id.to_owned()) } else { w.ids.push(id.to_owned()) }
 				}
 				if op == "write" && v.get("expires").and_then(Json::as_f64) == Some(w.now) {
 					note("write with a lease of 0", seen);
@@ -384,6 +436,12 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 						note("page with a next", seen);
 					}
 				}
+				if op == "probe" && v.get("status").and_then(Json::as_str) == Some("locked") {
+					note("probe locked", seen);
+				}
+				if line.get("txn").is_some() && op != "probe" {
+					note("ok under a transaction", seen);
+				}
 				if op == "changes" && v.get("more") == Some(&Json::Bool(true)) {
 					note("changes with more", seen);
 				}
@@ -394,6 +452,12 @@ fn walk(seed: u64, steps: usize, seen: &mut BTreeMap<&'static str, usize>) {
 			}
 		}
 		let s = &rust.space.state;
+		if s.returned > 0.0 {
+			note("entries returned by an abort", seen);
+		}
+		if s.entries.iter().any(|e| e.written_under.is_some()) {
+			note("entries written under a transaction", seen);
+		}
 		if s.rest.contains_key("maintenance") {
 			note("expiry deferred", seen);
 		}
@@ -482,6 +546,17 @@ fn random_walks_agree_with_the_typescript_core() {
 		"changes ResponseBudgetTooSmall",
 		"changes with more",
 		"announce LimitError",
+		"createTxn LimitError",
+		"createTxn IllegalArgumentError",
+		"commitTxn TransactionError",
+		"commitTxn PermissionError",
+		"abortTxn PermissionError",
+		"probe locked",
+		"probe PermissionError",
+		"ok under a transaction",
+		"entries returned by an abort",
+		"entries written under a transaction",
+		"list TransactionError",
 	] {
 		assert!(seen.contains_key(k), "no walk reached {k:?}; seen: {seen:#?}");
 	}

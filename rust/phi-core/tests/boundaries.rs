@@ -152,3 +152,82 @@ fn pages_and_changes_at_their_byte_budgets() {
 		lines
 	});
 }
+
+fn txn_write(pad: usize, lease: f64, now: f64, txn: &str) -> Json {
+	obj! { "op" => "write", "now" => now, "entry" => obj! { "type" => "Task", "fields" => obj! { "pad" => "x".repeat(pad) } }, "lease" => lease, "as" => "a", "txn" => txn }
+}
+
+#[test]
+fn transactions_at_the_commit_budget() {
+	// ids under incarnation 0a0b0c0d: the transaction is t…-1, the entries follow
+	let txn = "t0a0b0c0d-1";
+	let open = |max: f64| vec![init(obj! { "maxCommitBytes" => max }), obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 60_000.0, "as" => "a" }];
+	// what completing the transaction may write is reserved write by write, against one commit
+	edge("the reservation of a transaction", 0, 1500, |pad| {
+		let mut lines = open(3000.0);
+		lines.push(txn_write(300, 5000.0, 1000.0, txn));
+		lines.push(txn_write(pad, 5000.0, 1000.0, txn));
+		lines.push(obj! { "op" => "commitTxn", "now" => 1000.0, "id" => txn, "as" => "a" });
+		lines.push(obj! { "op" => "changes", "now" => 1000.0, "afterRev" => 0.0 });
+		lines
+	});
+	edge("the reservation of a take", 0, 1500, |pad| {
+		let mut lines = open(2600.0);
+		lines.push(write(pad, 5000.0, 1000.0));
+		lines.push(obj! { "op" => "probe", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => txn, "as" => "a" });
+		lines.push(obj! { "op" => "abortTxn", "now" => 1000.0, "id" => txn, "as" => "a" });
+		lines.push(obj! { "op" => "count", "now" => 1000.0 });
+		lines
+	});
+	// the commit's own settle expires entries first: the reservation may then no longer fit
+	edge("a commit after expiry in its commit", 0, 1500, |pad| {
+		let mut lines = open(2600.0);
+		for _ in 0..4 {
+			lines.push(write(1, 100.0, 1000.0));
+		}
+		lines.push(txn_write(pad, 5000.0, 1000.0, txn));
+		lines.push(obj! { "op" => "commitTxn", "now" => 1100.0, "id" => txn, "as" => "a" });
+		lines.push(obj! { "op" => "count", "now" => 1100.0 });
+		lines
+	});
+	// a transaction that lapses is aborted by the next operation, after the entries that lapsed before it
+	edge("a lapsed transaction at the commit budget", 1400, 3000, |max| {
+		let mut lines = vec![init(obj! { "maxCommitBytes" => max as f64 }), obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 500.0 }];
+		lines.push(write(1, 300.0, 1000.0));
+		lines.push(obj! { "op" => "probe", "now" => 1000.0, "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => txn });
+		for _ in 0..3 {
+			lines.push(write(1, 200.0, 1000.0));
+		}
+		lines.push(obj! { "op" => "settle", "now" => 2000.0 });
+		lines.push(obj! { "op" => "nextExpiry", "now" => 2000.0 });
+		lines.push(obj! { "op" => "settle", "now" => 2000.0 });
+		lines.push(obj! { "op" => "stats", "now" => 2000.0 });
+		lines
+	});
+}
+
+#[test]
+fn transactions_lapsing_together_and_their_joint_reservations() {
+	// two transactions lapse at the same moment, each holding a take: they are aborted in the order they were opened,
+	// and the returned entries enter the batch in that order
+	let mut lines = vec![init(obj! {})];
+	for _ in 0..2 {
+		lines.push(write(1, 60_000.0, 1000.0));
+	}
+	for (i, txn) in ["t0a0b0c0d-3", "t0a0b0c0d-4"].iter().enumerate() {
+		lines.push(obj! { "op" => "createTxn", "now" => 1000.0 + i as f64, "lease" => 500.0 - i as f64 });
+		lines.push(obj! { "op" => "probe", "now" => 1001.0, "tmpl" => obj! { "type" => "Task" }, "take" => true, "txn" => *txn });
+	}
+	lines.push(obj! { "op" => "settle", "now" => 2000.0 });
+	lines.push(obj! { "op" => "changes", "now" => 2000.0, "afterRev" => 0.0 });
+	compare(&lines, "two transactions lapsing together");
+	// every open transaction's reservation counts against maxJobBytes
+	edge("maxJobBytes across transactions", 300, 1500, |max| {
+		let mut lines = vec![init(obj! { "maxJobBytes" => max as f64 })];
+		for (i, txn) in ["t0a0b0c0d-1", "t0a0b0c0d-3"].iter().enumerate() {
+			lines.push(obj! { "op" => "createTxn", "now" => 1000.0, "lease" => 60_000.0, "as" => "a" });
+			lines.push(txn_write(100 + 50 * i, 5000.0, 1000.0, txn));
+		}
+		lines
+	});
+}
